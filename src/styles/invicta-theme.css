@@ -1,0 +1,65 @@
+/* Invicta Platform — Tema Visual Oficial */
+
+:root {
+  /* Cores primárias extraídas da logo */
+  --invicta-green-dark:   #2d7a2d;
+  --invicta-green:        #3d9a3d;
+  --invicta-green-light:  #5cb85c;
+  --invicta-blue-dark:    #0f2240;
+  --invicta-blue:         #1a3a6b;
+  --invicta-blue-mid:     #2e5fa3;
+  --invicta-blue-light:   #4a7fc1;
+
+  /* Superfícies — modo claro */
+  --bg-app:               #f4f6f9;
+  --bg-surface:           #ffffff;
+  --bg-surface-hover:     #f0f4f8;
+  --border-color:         #e2e8f0;
+
+  /* Sidebar */
+  --sidebar-bg:           #0f2240;
+  --sidebar-text:         #c8d8ec;
+  --sidebar-text-active:  #ffffff;
+  --sidebar-item-active:  #1a3a6b;
+  --sidebar-item-hover:   #162d52;
+  --sidebar-section:      #4a7fc1;
+  --sidebar-width:        260px;
+
+  /* Textos */
+  --text-primary:         #0f2240;
+  --text-secondary:       #4a5568;
+  --text-muted:           #a0aec0;
+
+  /* Status */
+  --status-active:        #3d9a3d;
+  --status-active-bg:     #e8f5e9;
+  --status-warning:       #d97706;
+  --status-warning-bg:    #fef3c7;
+  --status-error:         #dc2626;
+  --status-error-bg:      #fee2e2;
+  --status-info:          #2e5fa3;
+  --status-info-bg:       #dbeafe;
+  --status-processing:    #7c3aed;
+  --status-processing-bg: #ede9fe;
+
+  /* Mock indicator */
+  --mock-color:           #d97706;
+  --mock-bg:              #fef3c7;
+
+  /* Mapa */
+  --map-bg:               #1a2744;
+
+  /* Zonas de manejo */
+  --zone-1:               #2166ac;
+  --zone-2:               #74add1;
+  --zone-3:               #fee090;
+  --zone-4:               #f46d43;
+  --zone-5:               #d73027;
+
+  /* Fertilidade */
+  --fertility-muito-baixo: #d73027;
+  --fertility-baixo:       #f46d43;
+  --fertility-medio:       #fee090;
+  --fertility-alto:        #74add1;
+  --fertility-muito-alto:  #2166ac;
+}
