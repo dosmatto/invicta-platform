@@ -74,6 +74,7 @@ const menu = [
   {
     section: 'SISTEMA',
     items: [
+      { label: 'Usuários', href: '/painel/usuarios', icon: Users },
       { label: 'Configurações', href: '/painel/configuracoes', icon: Settings },
     ],
   },

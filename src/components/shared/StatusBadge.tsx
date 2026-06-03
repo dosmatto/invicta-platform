@@ -1,4 +1,4 @@
-type Status = 'ativo' | 'incompleto' | 'processando' | 'concluido' | 'aguardando' | 'erro' | 'rascunho' | 'inativo';
+type Status = 'ativo' | 'incompleto' | 'processando' | 'concluido' | 'aguardando' | 'erro' | 'rascunho' | 'inativo' | 'arquivado';
 
 const config: Record<Status, { label: string; bg: string; color: string }> = {
   ativo:        { label: 'Ativo',        bg: 'var(--status-active-bg)',      color: 'var(--status-active)' },
@@ -9,6 +9,7 @@ const config: Record<Status, { label: string; bg: string; color: string }> = {
   erro:         { label: 'Erro',         bg: 'var(--status-error-bg)',       color: 'var(--status-error)' },
   rascunho:     { label: 'Rascunho',     bg: '#f1f5f9',                      color: '#64748b' },
   inativo:      { label: 'Inativo',      bg: '#f1f5f9',                      color: '#64748b' },
+  arquivado:    { label: 'Arquivado',    bg: '#f1f5f9',                      color: '#64748b' },
 };
 
 export function StatusBadge({ status }: { status: Status }) {
