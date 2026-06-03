@@ -7,6 +7,7 @@ import {
   Settings, Shield,
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
+import { APP_VERSION } from '@/constants/version';
 
 const MENU = [
   { id: 'dashboard',       label: 'Início',       icon: LayoutDashboard },
@@ -82,6 +83,12 @@ export function IconSidebar() {
           </button>
         );
       })}
+
+      {/* Version */}
+      <div className="py-2 text-center text-[9px] font-mono flex-shrink-0"
+        style={{ color: '#2e5fa3', borderTop: '1px solid #1a3a6b' }}>
+        v{APP_VERSION}
+      </div>
     </aside>
   );
 }
