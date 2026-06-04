@@ -1,6 +1,10 @@
-export const APP_VERSION = '0.9.8';
+export const APP_VERSION = '0.9.9';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.9.9': [
+    'Base Agronômica movida para dentro do painel "Cadastros"',
+    'Ícone separado "Base Ag." removido da barra lateral (consolidação dos cadastros)',
+  ],
   '0.9.8': [
     'Amostragem Fase 1 — novo painel "Cadastros" na barra lateral',
     'Cadastro de Padrões de Elementos (conjuntos nomeados de elementos: Rotina, Micros…)',

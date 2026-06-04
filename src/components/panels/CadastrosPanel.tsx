@@ -9,10 +9,11 @@ import {
 } from '@/lib/store';
 import {
   ChevronLeft, ChevronRight, Plus, X, Save, Trash2, Pencil,
-  TestTube, Grid3x3, AlertTriangle,
+  TestTube, Grid3x3, AlertTriangle, FlaskConical,
 } from 'lucide-react';
+import { BaseAgronomicaPanel } from './BaseAgronomicaPanel';
 
-type View = 'menu' | 'elementos' | 'amostragem';
+type View = 'menu' | 'elementos' | 'amostragem' | 'base';
 
 // ── Painel raiz: menu de cadastros ──────────────────────────────────────────
 export function CadastrosPanel() {
@@ -20,10 +21,17 @@ export function CadastrosPanel() {
 
   if (view === 'elementos') return <PadroesElementos onVoltar={() => setView('menu')} />;
   if (view === 'amostragem') return <PadroesAmostragem onVoltar={() => setView('menu')} />;
+  if (view === 'base') return (
+    <div className="flex flex-col h-full">
+      <VoltarBar onVoltar={() => setView('menu')} titulo="Cadastros" />
+      <div className="flex-1 overflow-y-auto"><BaseAgronomicaPanel /></div>
+    </div>
+  );
 
   const itens = [
     { id: 'elementos', label: 'Padrões de Elementos', desc: 'Conjuntos de elementos a analisar (Rotina, Micros…)', icon: TestTube, color: '#a78bfa' },
     { id: 'amostragem', label: 'Padrões de Amostragem', desc: 'Densidade + profundidades por padrão', icon: Grid3x3, color: '#60a5fa' },
+    { id: 'base', label: 'Base Agronômica', desc: 'Legendas, classes e metodologias por nutriente', icon: FlaskConical, color: '#4ade80' },
   ] as const;
 
   return (
