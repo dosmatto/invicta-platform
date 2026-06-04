@@ -115,6 +115,41 @@ export function anguloMaiorDimensao(fc: GeoJSON.FeatureCollection): number {
   return ang;
 }
 
+// ── Validador de posição (para edição manual de pontos) ──────────────────────
+export interface Validador {
+  valido(lng: number, lat: number): boolean;
+  // dado um movimento de orig (válido) para novo (talvez inválido), retorna a
+  // posição válida mais próxima de "novo" ao longo do segmento.
+  ajustar(origLng: number, origLat: number, novoLng: number, novoLat: number): { lng: number; lat: number };
+}
+
+export function criarValidador(geojson: GeoJSON.FeatureCollection, distanciaBordaM: number): Validador {
+  const aneisLL = coletarAneis(geojson);
+  let minLng = Infinity, minLat = Infinity, maxLng = -Infinity, maxLat = -Infinity;
+  for (const r of aneisLL) for (const [lng, lat] of r) {
+    if (lng < minLng) minLng = lng; if (lat < minLat) minLat = lat;
+    if (lng > maxLng) maxLng = lng; if (lat > maxLat) maxLat = lat;
+  }
+  const lat0 = (minLat + maxLat) / 2, lng0 = (minLng + maxLng) / 2;
+  const { mLat, mLng } = fatores(lat0);
+  const aneis: Ring[] = aneisLL.map(r => r.map(([lng, lat]) => [(lng - lng0) * mLng, (lat - lat0) * mLat] as [number, number]));
+
+  const val = (lng: number, lat: number) => {
+    const x = (lng - lng0) * mLng, y = (lat - lat0) * mLat;
+    return dentro(x, y, aneis) && distBorda(x, y, aneis) >= distanciaBordaM;
+  };
+  const ajustar = (oLng: number, oLat: number, nLng: number, nLat: number) => {
+    if (val(nLng, nLat)) return { lng: nLng, lat: nLat };
+    let lo = 0, hi = 1; // lo válido (orig), hi inválido (novo)
+    for (let i = 0; i < 22; i++) {
+      const mid = (lo + hi) / 2;
+      if (val(oLng + (nLng - oLng) * mid, oLat + (nLat - oLat) * mid)) lo = mid; else hi = mid;
+    }
+    return { lng: oLng + (nLng - oLng) * lo, lat: oLat + (nLat - oLat) * lo };
+  };
+  return { valido: val, ajustar };
+}
+
 // ── Geração da grade ─────────────────────────────────────────────────────────
 export function gerarGrid(params: GridParams): GridPoint[] {
   const { geojson, densidadeHaPonto, distanciaBordaM, rotacaoGraus, aleatoriedade, seed } = params;

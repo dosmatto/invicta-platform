@@ -3,8 +3,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useApp } from '@/context/AppContext';
 import { getPadroesAmostragem, getPadroesElementos, getSafras, getGrades, saveGrade, updateGrade, deleteGrade, marcarParaProcessar, PadraoElementos, ProfundidadeConfig, GradeAmostragem, PontoAmostragem } from '@/lib/store';
-import { gerarGrid, anguloMaiorDimensao } from '@/lib/grid';
-import { AlertTriangle, RotateCcw, Shuffle, Layers, MapPin, Save, Trash2, CheckCircle2, Circle, Pencil } from 'lucide-react';
+import { gerarGrid, anguloMaiorDimensao, criarValidador } from '@/lib/grid';
+import { AlertTriangle, RotateCcw, Shuffle, Layers, MapPin, Save, Trash2, CheckCircle2, Circle, Pencil, Move, Plus, Eraser, X, Check } from 'lucide-react';
 
 // PRNG simples para shuffle determinístico
 function shuffleSeed<T>(arr: T[], seed: number): T[] {
@@ -29,8 +29,26 @@ function selecionar(n: number, percentual: number, modo: 'regular' | 'aleatorio'
 
 const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
 
+// Reatribui ordem 0..N-1 (labels sem buracos) mantendo a ordem do array
+function resequenciar(pontos: PontoAmostragem[]): PontoAmostragem[] {
+  return pontos.map((p, i) => ({ ...p, ordem: i }));
+}
+
+// Monta o FeatureCollection (com ordem/label/profs) a partir dos pontos
+function fcDePontos(pontos: PontoAmostragem[]): GeoJSON.FeatureCollection {
+  return {
+    type: 'FeatureCollection',
+    features: pontos.map(p => ({
+      type: 'Feature',
+      properties: { ordem: p.ordem, label: String(p.ordem + 1), profs: p.profs },
+      geometry: { type: 'Point', coordinates: [p.lng, p.lat] },
+    })),
+  };
+}
+
 export function SimuladorAmostragem() {
-  const { nav, uploadedGeo, setPontosSimulados } = useApp();
+  const { nav, uploadedGeo, setPontosSimulados,
+          edicaoAtiva, setEdicaoAtiva, edicaoModo, setEdicaoModo, pontoEvent, setPontoEvent } = useApp();
 
   const padroes = useMemo(() => getPadroesAmostragem(), []);
   const padroesElem = useMemo<PadraoElementos[]>(() => getPadroesElementos(), []);
@@ -50,6 +68,10 @@ export function SimuladorAmostragem() {
   const [grades, setGrades] = useState<GradeAmostragem[]>([]);
   const [renomeando, setRenomeando] = useState<string | null>(null);
   const [nomeTemp, setNomeTemp] = useState('');
+  // Edição manual: pontos "congelados" + ponto extra pendente (aguardando escolha de profundidades)
+  const [pontosManuais, setPontosManuais] = useState<PontoAmostragem[] | null>(null);
+  const [addPendente, setAddPendente] = useState<{ lng: number; lat: number } | null>(null);
+  const [profsExtra, setProfsExtra] = useState<boolean[]>([]);
 
   const padrao = padroes.find(p => p.id === padraoId) ?? null;
 
@@ -58,46 +80,91 @@ export function SimuladorAmostragem() {
     if (!padrao) return;
     setDensidade(padrao.densidadeHaPonto);
     setProfs(padrao.profundidades.map(p => ({ ...p })));
-  }, [padrao]);
+    setPontosManuais(null);
+    setEdicaoAtiva(false);
+  }, [padrao, setEdicaoAtiva]);
 
   // Ângulo automático (recalcula quando geometria muda ou liga o auto)
   const anguloAuto = useMemo(() => uploadedGeo ? Math.round(anguloMaiorDimensao(uploadedGeo)) : 0, [uploadedGeo]);
   const rotacaoEfetiva = rotacaoAuto ? anguloAuto : rotacaoGraus;
 
-  // Geração da grade + atribuição de profundidades (ao vivo)
-  const resultado = useMemo(() => {
-    if (!uploadedGeo) return null;
+  // Geração da grade + atribuição de profundidades (ao vivo, a partir dos parâmetros)
+  const gerados = useMemo<PontoAmostragem[]>(() => {
+    if (!uploadedGeo) return [];
     const pts = gerarGrid({ geojson: uploadedGeo, densidadeHaPonto: densidade, distanciaBordaM: distanciaBorda, rotacaoGraus: rotacaoEfetiva, aleatoriedade, seed: seedPos });
     const n = pts.length;
-    // conjuntos de seleção por profundidade
     const selecoes = profs.map(p => selecionar(n, p.percentual, modoSel, seedSel + p.rotulo.length));
-    const pontos: PontoAmostragem[] = pts.map((pt, i) => ({
+    return pts.map((pt, i) => ({
       ordem: i, lng: pt.lng, lat: pt.lat,
       profs: profs.filter((_, pi) => selecoes[pi].has(i)).length,
     }));
-    const features: GeoJSON.Feature[] = pontos.map(p => ({
-      type: 'Feature', properties: { label: String(p.ordem + 1), profs: p.profs },
-      geometry: { type: 'Point', coordinates: [p.lng, p.lat] },
-    }));
-    return { n, pontos, fc: { type: 'FeatureCollection', features } as GeoJSON.FeatureCollection };
   }, [uploadedGeo, densidade, distanciaBorda, rotacaoEfetiva, aleatoriedade, seedPos, profs, modoSel, seedSel]);
+
+  // Pontos efetivos: edição manual (se houver) tem prioridade sobre os gerados
+  const pontosEfetivos = pontosManuais ?? gerados;
 
   // Envia pontos ao mapa
   useEffect(() => {
-    setPontosSimulados(resultado?.fc ?? null);
+    setPontosSimulados(pontosEfetivos.length ? fcDePontos(pontosEfetivos) : null);
     return () => setPontosSimulados(null);
-  }, [resultado, setPontosSimulados]);
+  }, [pontosEfetivos, setPontosSimulados]);
 
-  // Detecta customização
-  const customizado = padrao ? (
+  // Aplica eventos de edição vindos do mapa (arrastar / adicionar / remover)
+  useEffect(() => {
+    if (!pontoEvent || !uploadedGeo) return;
+    const validador = criarValidador(uploadedGeo, distanciaBorda);
+    setPontosManuais(prev => {
+      const base = prev ?? gerados;
+      if (pontoEvent.tipo === 'mover') {
+        const orig = base.find(p => p.ordem === pontoEvent.ordem);
+        if (!orig) return base;
+        const dest = validador.ajustar(orig.lng, orig.lat, pontoEvent.lng, pontoEvent.lat);
+        return base.map(p => p.ordem === pontoEvent.ordem ? { ...p, lng: dest.lng, lat: dest.lat, manual: true } : p);
+      }
+      if (pontoEvent.tipo === 'remover') {
+        return resequenciar(base.filter(p => p.ordem !== pontoEvent.ordem));
+      }
+      return base; // 'add' é tratado pelo fluxo de profundidades (addPendente)
+    });
+    if (pontoEvent.tipo === 'add') setAddPendente({ lng: pontoEvent.lng, lat: pontoEvent.lat });
+    setPontoEvent(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pontoEvent]);
+
+  // Detecta customização (parâmetros divergentes OU edições manuais)
+  const customizado = (padrao ? (
     densidade !== padrao.densidadeHaPonto ||
     profs.some((p, i) => p.percentual !== padrao.profundidades[i]?.percentual)
-  ) : false;
+  ) : false) || pontosManuais !== null;
 
+  // Ao mudar qualquer parâmetro, descarta a edição manual (a grade é regerada)
+  function alterarParam<T>(setter: (v: T) => void, v: T) {
+    if (pontosManuais) setPontosManuais(null);
+    setter(v);
+  }
   function setProfPct(i: number, v: number) {
+    if (pontosManuais) setPontosManuais(null);
     setProfs(prev => prev.map((p, idx) => idx === i ? { ...p, percentual: v } : p));
   }
   const nomeElem = (id: string) => padroesElem.find(p => p.id === id)?.nome ?? '—';
+
+  // ── Edição manual ──
+  function iniciarEdicao() { setPontosManuais(gerados.map(p => ({ ...p }))); setEdicaoModo('mover'); setEdicaoAtiva(true); }
+  function concluirEdicao() { setEdicaoAtiva(false); }
+  function descartarEdicao() { setPontosManuais(null); setEdicaoAtiva(false); }
+  function confirmarAddPonto() {
+    if (!addPendente) return;
+    const nProfs = profsExtra.filter(Boolean).length || 1;
+    setPontosManuais(prev => {
+      const base = prev ?? gerados;
+      const novo: PontoAmostragem = { ordem: base.length, lng: addPendente.lng, lat: addPendente.lat, profs: nProfs, manual: true };
+      return resequenciar([...base, novo]);
+    });
+    setAddPendente(null);
+    setProfsExtra([]);
+  }
+  // Encerra o modo edição ao desmontar o componente
+  useEffect(() => () => setEdicaoAtiva(false), [setEdicaoAtiva]);
 
   // ── Grades salvas ──
   const safraNome = safraAtiva?.nome ?? '';
@@ -107,16 +174,18 @@ export function SimuladorAmostragem() {
   useEffect(() => { recarregarGrades(); /* eslint-disable-next-line */ }, [nav.talhaoId, safraNome]);
 
   function salvarGrade() {
-    if (!padrao || !resultado || !nav.talhaoId || !safraAtiva) return;
+    if (!padrao || pontosEfetivos.length === 0 || !nav.talhaoId || !safraAtiva) return;
     const n = getGrades(nav.talhaoId, safraNome).length + 1;
     const primeira = getGrades(nav.talhaoId, safraNome).length === 0;
     saveGrade({
       talhaoId: nav.talhaoId, safra: safraNome, epoca, nome: `Grade ${n}`,
       padraoAmostragemId: padrao.id, padraoNome: padrao.nome, customizado,
       densidade, distanciaBorda, rotacao: rotacaoEfetiva, aleatoriedade, modoSel,
-      profundidades: profs, pontos: resultado.pontos,
-      paraProcessar: primeira, // primeira grada da safra já vira a "a processar"
+      profundidades: profs, pontos: pontosEfetivos,
+      paraProcessar: primeira, // primeira grade da safra já vira a "a processar"
     });
+    setPontosManuais(null);
+    setEdicaoAtiva(false);
     recarregarGrades();
   }
 
@@ -180,13 +249,15 @@ export function SimuladorAmostragem() {
 
       {padrao && (
         <>
+          {!edicaoAtiva && (
+          <>
           {/* Densidade */}
           <div>
             <label className="text-[10px] font-semibold block mb-0.5" style={{ color: '#64748b' }}>
               Densidade (ha / ponto) {densidade !== padrao.densidadeHaPonto && <span style={{ color: '#fbbf24' }}>• alterado</span>}
             </label>
             <input type="number" step="0.1" min="0.1" value={densidade}
-              onChange={e => setDensidade(Number(e.target.value.replace(',', '.')) || 0)}
+              onChange={e => alterarParam(setDensidade, Number(e.target.value.replace(',', '.')) || 0)}
               className="w-full rounded px-2 py-1.5 text-xs outline-none" style={inputStyle} />
           </div>
 
@@ -194,7 +265,7 @@ export function SimuladorAmostragem() {
           <div>
             <label className="text-[10px] font-semibold block mb-0.5" style={{ color: '#64748b' }}>Distância da borda (m)</label>
             <input type="number" step="5" min="0" value={distanciaBorda}
-              onChange={e => setDistanciaBorda(Number(e.target.value))}
+              onChange={e => alterarParam(setDistanciaBorda, Number(e.target.value))}
               className="w-full rounded px-2 py-1.5 text-xs outline-none" style={inputStyle} />
           </div>
 
@@ -202,7 +273,7 @@ export function SimuladorAmostragem() {
           <div>
             <div className="flex items-center justify-between mb-0.5">
               <label className="text-[10px] font-semibold" style={{ color: '#64748b' }}>Rotação: {rotacaoEfetiva}°</label>
-              <button onClick={() => setRotacaoAuto(a => !a)}
+              <button onClick={() => alterarParam(setRotacaoAuto, !rotacaoAuto)}
                 className="text-[9px] px-1.5 py-0.5 rounded font-semibold"
                 style={{ background: rotacaoAuto ? '#166534' : '#1a3a6b', color: rotacaoAuto ? '#86efac' : '#93c5fd' }}>
                 {rotacaoAuto ? 'Auto (maior dimensão)' : 'Manual'}
@@ -210,7 +281,7 @@ export function SimuladorAmostragem() {
             </div>
             {!rotacaoAuto && (
               <input type="range" min="0" max="180" value={rotacaoGraus}
-                onChange={e => setRotacaoGraus(Number(e.target.value))} className="w-full accent-blue-500" />
+                onChange={e => alterarParam(setRotacaoGraus, Number(e.target.value))} className="w-full accent-blue-500" />
             )}
           </div>
 
@@ -221,14 +292,14 @@ export function SimuladorAmostragem() {
                 Aleatoriedade: {aleatoriedade}% {aleatoriedade === 0 ? '(grid exato)' : ''}
               </label>
               {aleatoriedade > 0 && (
-                <button onClick={() => setSeedPos(s => s + 1)} title="Refazer posições"
+                <button onClick={() => alterarParam(setSeedPos, seedPos + 1)} title="Refazer posições"
                   className="flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded font-semibold" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
                   <RotateCcw size={9} /> Refazer
                 </button>
               )}
             </div>
             <input type="range" min="0" max="100" value={aleatoriedade}
-              onChange={e => setAleatoriedade(Number(e.target.value))} className="w-full accent-blue-500" />
+              onChange={e => alterarParam(setAleatoriedade, Number(e.target.value))} className="w-full accent-blue-500" />
           </div>
 
           {/* Profundidades */}
@@ -239,14 +310,14 @@ export function SimuladorAmostragem() {
               </label>
               <div className="flex gap-1">
                 {(['regular', 'aleatorio'] as const).map(m => (
-                  <button key={m} onClick={() => setModoSel(m)}
+                  <button key={m} onClick={() => alterarParam(setModoSel, m)}
                     className="text-[9px] px-1.5 py-0.5 rounded font-semibold"
                     style={{ background: modoSel === m ? 'var(--invicta-blue-mid)' : '#1a3a6b', color: modoSel === m ? '#fff' : '#64748b' }}>
                     {m === 'regular' ? 'Regular' : 'Aleatório'}
                   </button>
                 ))}
                 {modoSel === 'aleatorio' && (
-                  <button onClick={() => setSeedSel(s => s + 1)} title="Refazer sorteio"
+                  <button onClick={() => alterarParam(setSeedSel, seedSel + 1)} title="Refazer sorteio"
                     className="flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded font-semibold" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
                     <Shuffle size={9} />
                   </button>
@@ -266,13 +337,15 @@ export function SimuladorAmostragem() {
               ))}
             </div>
           </div>
+          </>
+          )}
 
           {/* Resumo */}
           <div className="p-2.5 rounded-lg" style={{ background: '#0f2a1a', border: '1px solid #166534' }}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <MapPin size={14} style={{ color: '#86efac' }} />
-                <span className="text-sm font-bold" style={{ color: '#86efac' }}>{resultado?.n ?? 0} pontos</span>
+                <span className="text-sm font-bold" style={{ color: '#86efac' }}>{pontosEfetivos.length} pontos</span>
               </div>
               {customizado && (
                 <span className="text-[9px] px-2 py-0.5 rounded-full font-bold" style={{ background: '#78350f', color: '#fde68a' }}>
@@ -280,13 +353,72 @@ export function SimuladorAmostragem() {
                 </span>
               )}
             </div>
-            {/* Legenda de cores */}
             <div className="flex items-center gap-3 mt-2 text-[9px]" style={{ color: '#94a3b8' }}>
               <span className="flex items-center gap-1"><Dot c="#f59e0b" /> 1 prof.</span>
               <span className="flex items-center gap-1"><Dot c="#3b82f6" /> 2 prof.</span>
               <span className="flex items-center gap-1"><Dot c="#a855f7" /> 3+ prof.</span>
             </div>
           </div>
+
+          {/* Edição manual */}
+          {!edicaoAtiva ? (
+            <button onClick={iniciarEdicao}
+              className="w-full py-2 rounded text-xs font-semibold flex items-center justify-center gap-2"
+              style={{ background: '#1a3a6b', color: '#93c5fd' }}>
+              <Move size={13} /> Editar pontos no mapa
+            </button>
+          ) : (
+            <div className="p-2.5 rounded-lg space-y-2" style={{ background: '#0a1f33', border: '1px solid #2e5fa3' }}>
+              <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: '#93c5fd' }}>Edição manual</p>
+              <div className="grid grid-cols-3 gap-1">
+                {([['mover', 'Mover', Move], ['adicionar', 'Add', Plus], ['remover', 'Remover', Eraser]] as const).map(([m, lbl, Ic]) => (
+                  <button key={m} onClick={() => setEdicaoModo(m)}
+                    className="py-1.5 rounded text-[10px] font-semibold flex flex-col items-center gap-0.5"
+                    style={{ background: edicaoModo === m ? 'var(--invicta-blue-mid)' : '#1a3a6b', color: edicaoModo === m ? '#fff' : '#93c5fd' }}>
+                    <Ic size={12} /> {lbl}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[9px]" style={{ color: '#64748b' }}>
+                {edicaoModo === 'mover' && 'Arraste os pontos no mapa. Não saem do talhão nem da borda.'}
+                {edicaoModo === 'adicionar' && 'Clique no mapa para adicionar um ponto extra.'}
+                {edicaoModo === 'remover' && 'Clique num ponto para removê-lo.'}
+              </p>
+              <div className="flex gap-2">
+                <button onClick={descartarEdicao}
+                  className="flex-1 py-1.5 rounded text-[10px] font-semibold flex items-center justify-center gap-1" style={{ background: '#1a3a6b', color: '#94a3b8' }}>
+                  <X size={11} /> Descartar
+                </button>
+                <button onClick={concluirEdicao}
+                  className="flex-1 py-1.5 rounded text-[10px] font-bold text-white flex items-center justify-center gap-1" style={{ background: 'var(--invicta-blue-mid)' }}>
+                  <Check size={11} /> Concluir
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Seletor de profundidades do ponto extra */}
+          {addPendente && (
+            <div className="p-2.5 rounded-lg space-y-2" style={{ background: '#061525', border: '1px solid #2e5fa3' }}>
+              <p className="text-[10px] font-bold" style={{ color: '#93c5fd' }}>Profundidades do ponto extra</p>
+              <div className="space-y-1">
+                {profs.map((p, i) => (
+                  <label key={i} className="flex items-center gap-2 text-xs cursor-pointer" style={{ color: '#e2e8f0' }}>
+                    <input type="checkbox" checked={profsExtra[i] ?? false}
+                      onChange={e => setProfsExtra(prev => { const n = [...prev]; n[i] = e.target.checked; return n; })}
+                      className="accent-blue-500" />
+                    {p.rotulo} · {nomeElem(p.padraoElementosId)}
+                  </label>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => { setAddPendente(null); setProfsExtra([]); }}
+                  className="flex-1 py-1.5 rounded text-[10px] font-semibold" style={{ background: '#1a3a6b', color: '#94a3b8' }}>Cancelar</button>
+                <button onClick={confirmarAddPonto}
+                  className="flex-1 py-1.5 rounded text-[10px] font-bold text-white" style={{ background: 'var(--invicta-green-dark)' }}>Adicionar</button>
+              </div>
+            </div>
+          )}
 
           {/* Salvar grade */}
           <button onClick={salvarGrade}

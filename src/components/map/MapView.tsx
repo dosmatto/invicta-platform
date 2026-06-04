@@ -58,9 +58,16 @@ export function MapView() {
   const { mapMode, setMapMode, nav,
           uploadedGeo, setUploadedGeo,
           uploadedBbox, setUploadedBbox,
-          pontosSimulados } = useApp();
+          pontosSimulados,
+          edicaoAtiva, edicaoModo, setPontoEvent } = useApp();
 
   const [kmlLoading, setKmlLoading] = useState(false);
+
+  // refs para os handlers de edição acessarem valores atuais sem re-registrar
+  const pontosRef = useRef<GeoJSON.FeatureCollection | null>(null);
+  const edicaoModoRef = useRef(edicaoModo);
+  useEffect(() => { pontosRef.current = pontosSimulados; }, [pontosSimulados]);
+  useEffect(() => { edicaoModoRef.current = edicaoModo; }, [edicaoModo]);
 
   // ── 1. Inicializa o mapa UMA VEZ ──────────────────────────────────────────
   useEffect(() => {
@@ -200,6 +207,81 @@ export function MapView() {
 
     src.setData(pontosSimulados ?? EMPTY_FC);
   }, [pontosSimulados, mapReady]);
+
+  // ── 7. Edição manual de pontos (arrastar / adicionar / remover) ───────────
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady || !edicaoAtiva) return;
+
+    const canvas = map.getCanvas();
+    let dragOrdem: number | null = null;
+
+    const setHoverCursor = () => { if (!dragOrdem) canvas.style.cursor = edicaoModoRef.current === 'adicionar' ? 'crosshair' : 'pointer'; };
+    const clearCursor = () => { if (!dragOrdem) canvas.style.cursor = edicaoModoRef.current === 'adicionar' ? 'crosshair' : ''; };
+
+    const onMove = (e: maplibregl.MapMouseEvent) => {
+      if (dragOrdem == null || !pontosRef.current) return;
+      const fc: GeoJSON.FeatureCollection = {
+        type: 'FeatureCollection',
+        features: pontosRef.current.features.map(f =>
+          f.properties?.ordem === dragOrdem
+            ? { ...f, geometry: { type: 'Point', coordinates: [e.lngLat.lng, e.lngLat.lat] } as GeoJSON.Point }
+            : f),
+      };
+      (map.getSource('pontos-amos') as maplibregl.GeoJSONSource).setData(fc);
+    };
+    const onUp = (e: maplibregl.MapMouseEvent) => {
+      if (dragOrdem == null) return;
+      const ordem = dragOrdem;
+      dragOrdem = null;
+      canvas.style.cursor = '';
+      map.dragPan.enable();
+      map.off('mousemove', onMove);
+      setPontoEvent({ tipo: 'mover', ordem, lng: e.lngLat.lng, lat: e.lngLat.lat });
+    };
+    const onDownPonto = (e: maplibregl.MapLayerMouseEvent) => {
+      const modo = edicaoModoRef.current;
+      const ordem = e.features?.[0]?.properties?.ordem;
+      if (ordem == null) return;
+      if (modo === 'mover') {
+        e.preventDefault();
+        dragOrdem = ordem;
+        canvas.style.cursor = 'grabbing';
+        map.dragPan.disable();
+        map.on('mousemove', onMove);
+        map.once('mouseup', onUp);
+      }
+    };
+    const onClickPonto = (e: maplibregl.MapLayerMouseEvent) => {
+      if (edicaoModoRef.current !== 'remover') return;
+      const ordem = e.features?.[0]?.properties?.ordem;
+      if (ordem != null) { e.preventDefault(); setPontoEvent({ tipo: 'remover', ordem }); }
+    };
+    const onClickMapa = (e: maplibregl.MapMouseEvent) => {
+      if (edicaoModoRef.current !== 'adicionar') return;
+      // ignora se clicou sobre um ponto existente
+      const hits = map.queryRenderedFeatures(e.point, { layers: ['pontos-circle'] });
+      if (hits.length === 0) setPontoEvent({ tipo: 'add', lng: e.lngLat.lng, lat: e.lngLat.lat });
+    };
+
+    canvas.style.cursor = edicaoModo === 'adicionar' ? 'crosshair' : '';
+    map.on('mouseenter', 'pontos-circle', setHoverCursor);
+    map.on('mouseleave', 'pontos-circle', clearCursor);
+    map.on('mousedown', 'pontos-circle', onDownPonto);
+    map.on('click', 'pontos-circle', onClickPonto);
+    map.on('click', onClickMapa);
+
+    return () => {
+      canvas.style.cursor = '';
+      map.dragPan.enable();
+      map.off('mouseenter', 'pontos-circle', setHoverCursor);
+      map.off('mouseleave', 'pontos-circle', clearCursor);
+      map.off('mousedown', 'pontos-circle', onDownPonto);
+      map.off('click', 'pontos-circle', onClickPonto);
+      map.off('click', onClickMapa);
+      map.off('mousemove', onMove);
+    };
+  }, [edicaoAtiva, edicaoModo, mapReady, setPontoEvent]);
 
   return (
     <div className="absolute inset-0">

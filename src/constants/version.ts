@@ -1,6 +1,14 @@
-export const APP_VERSION = '0.11.1';
+export const APP_VERSION = '0.12.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.12.0': [
+    'Amostragem Fase 3b — edição manual dos pontos no mapa',
+    'Arrastar pontos (não saem do talhão nem da faixa de borda — encaixa na posição válida mais próxima)',
+    'Adicionar pontos extras (clique no mapa) escolhendo as profundidades de cada um',
+    'Remover pontos (clique no ponto)',
+    'Mexer nos parâmetros descarta a edição manual e regera a grade',
+    'Numeração re-sequenciada após editar; grade salva guarda os pontos editados',
+  ],
   '0.11.1': [
     'Seed: Padrão de Amostragem fixo "Padrão Invicta 2 ha" (00-20 100% + 20-40 25%) para testes',
   ],

@@ -5,6 +5,12 @@ import { seedIfEmpty } from '@/lib/seed';
 
 export type MapMode = 'street' | 'satellite';
 
+export type EdicaoModo = 'mover' | 'adicionar' | 'remover';
+export type PontoEvent =
+  | { tipo: 'mover'; ordem: number; lng: number; lat: number }
+  | { tipo: 'add'; lng: number; lat: number }
+  | { tipo: 'remover'; ordem: number };
+
 interface NavContext {
   produtorId: string | null;
   produtor: string;
@@ -31,6 +37,13 @@ interface AppContextType {
   setUploadedBbox: (bb: [number, number, number, number] | null) => void;
   pontosSimulados: GeoJSON.FeatureCollection | null;
   setPontosSimulados: (fc: GeoJSON.FeatureCollection | null) => void;
+  // Edição manual de pontos de amostragem
+  edicaoAtiva: boolean;
+  setEdicaoAtiva: (v: boolean) => void;
+  edicaoModo: EdicaoModo;
+  setEdicaoModo: (m: EdicaoModo) => void;
+  pontoEvent: PontoEvent | null;
+  setPontoEvent: (e: PontoEvent | null) => void;
 }
 
 const AppContext = createContext<AppContextType>({
@@ -48,6 +61,12 @@ const AppContext = createContext<AppContextType>({
   setUploadedBbox: () => {},
   pontosSimulados: null,
   setPontosSimulados: () => {},
+  edicaoAtiva: false,
+  setEdicaoAtiva: () => {},
+  edicaoModo: 'mover',
+  setEdicaoModo: () => {},
+  pontoEvent: null,
+  setPontoEvent: () => {},
 });
 
 export function AppProvider({ children }: { children: ReactNode }) {
@@ -60,6 +79,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [uploadedGeo, setUploadedGeo] = useState<GeoJSON.FeatureCollection | null>(null);
   const [uploadedBbox, setUploadedBbox] = useState<[number, number, number, number] | null>(null);
   const [pontosSimulados, setPontosSimulados] = useState<GeoJSON.FeatureCollection | null>(null);
+  const [edicaoAtiva, setEdicaoAtiva] = useState(false);
+  const [edicaoModo, setEdicaoModo] = useState<EdicaoModo>('mover');
+  const [pontoEvent, setPontoEvent] = useState<PontoEvent | null>(null);
   const [nav, setNavState] = useState<NavContext>({
     produtorId: null, produtor: '',
     fazendaId: null, fazenda: '',
@@ -80,6 +102,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       uploadedGeo, setUploadedGeo,
       uploadedBbox, setUploadedBbox,
       pontosSimulados, setPontosSimulados,
+      edicaoAtiva, setEdicaoAtiva,
+      edicaoModo, setEdicaoModo,
+      pontoEvent, setPontoEvent,
     }}>
       {children}
     </AppContext.Provider>
