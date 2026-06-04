@@ -179,11 +179,13 @@ export function MapView() {
 
   // Auto-carrega KML de talhões com URL pré-definida
   useEffect(() => {
-    const map = mapRef.current;
     if (!nav.talhaoId) return;
-
     const kmlUrl = TALHAO_KML_URLS[nav.talhaoId];
-    if (!kmlUrl || uploadedGeo) return; // só carrega se não há upload manual
+    if (!kmlUrl) return;
+
+    // Limpa geo anterior antes de carregar o novo
+    setUploadedGeo(null);
+    setUploadedBbox(null);
 
     fetch(kmlUrl)
       .then(r => r.blob())
@@ -192,62 +194,60 @@ export function MapView() {
         return parseKML(file);
       })
       .then(result => {
+        setMapMode('satellite');
         setUploadedGeo(result.geojson);
         setUploadedBbox(result.bbox);
-        setMapMode('satellite');
-        // Zoom para o talhão
-        if (map && result.bbox) {
-          map.fitBounds(
-            [[result.bbox[0], result.bbox[1]], [result.bbox[2], result.bbox[3]]],
-            { padding: 60, duration: 1000 }
-          );
-        }
       })
       .catch(e => console.error('Erro ao carregar KML:', e));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nav.talhaoId]);
 
-  // Geometria carregada (KML/GeoJSON upload)
+  // Geometria carregada (KML/GeoJSON upload) — aguarda estilo pronto
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !map.isStyleLoaded()) return;
+    if (!map) return;
 
-    try { map.removeLayer('upload-fill'); } catch {}
-    try { map.removeLayer('upload-line'); } catch {}
-    try { map.removeLayer('upload-points'); } catch {}
-    try { map.removeSource('upload-geo'); } catch {}
+    function addGeoLayers() {
+      if (!map) return;
+      try { map.removeLayer('upload-fill'); } catch {}
+      try { map.removeLayer('upload-line'); } catch {}
+      try { map.removeLayer('upload-points'); } catch {}
+      try { map.removeSource('upload-geo'); } catch {}
 
-    if (uploadedGeo) {
+      if (!uploadedGeo) return;
+
       map.addSource('upload-geo', { type: 'geojson', data: uploadedGeo });
-
-      // Polígonos
       map.addLayer({ id: 'upload-fill', type: 'fill', source: 'upload-geo',
         filter: ['in', ['geometry-type'], ['literal', ['Polygon', 'MultiPolygon']]],
-        paint: { 'fill-color': '#f59e0b', 'fill-opacity': 0.3 } });
-
+        paint: { 'fill-color': '#f59e0b', 'fill-opacity': 0.35 } });
       map.addLayer({ id: 'upload-line', type: 'line', source: 'upload-geo',
         filter: ['in', ['geometry-type'], ['literal', ['Polygon', 'MultiPolygon', 'LineString', 'MultiLineString']]],
-        paint: { 'line-color': '#fde68a', 'line-width': 2 } });
-
-      // Pontos
+        paint: { 'line-color': '#fde68a', 'line-width': 2.5 } });
       map.addLayer({ id: 'upload-points', type: 'circle', source: 'upload-geo',
         filter: ['in', ['geometry-type'], ['literal', ['Point', 'MultiPoint']]],
         paint: { 'circle-radius': 5, 'circle-color': '#f59e0b', 'circle-stroke-color': '#fff', 'circle-stroke-width': 1 } });
 
-      // Zoom para o bbox
       if (uploadedBbox) {
         map.fitBounds(
           [[uploadedBbox[0], uploadedBbox[1]], [uploadedBbox[2], uploadedBbox[3]]],
-          { padding: 60, duration: 800 }
+          { padding: 60, duration: 900 }
         );
       }
+    }
+
+    if (map.isStyleLoaded()) {
+      addGeoLayers();
+    } else {
+      map.once('styledata', addGeoLayers);
+      return () => { map.off('styledata', addGeoLayers); };
     }
   }, [uploadedGeo, uploadedBbox]);
 
   // Camada de pontos de amostragem
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !map.isStyleLoaded()) return;
+    if (!map) return;
+    if (!map.isStyleLoaded()) return;
 
     const showPoints = activeModule === 'amostragem' && nav.talhaoId;
     const pontos = nav.talhaoId ? PONTOS_AMOSTRAGEM[nav.talhaoId] : null;
