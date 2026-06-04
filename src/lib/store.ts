@@ -65,8 +65,36 @@ export interface ProfundidadeConfig {
 export interface PadraoAmostragem {
   id: string;
   nome: string;                       // ex: "Padrão 1 Invicta — 2 ha"
-  densidadeHaPonto: number;           // ha por ponto (ex: 2)
+  densidadeHaPonto: number;           // ha por ponto (ex: 2 ou 1.5)
   profundidades: ProfundidadeConfig[];
+  criadoEm: string;
+}
+
+export interface PontoAmostragem {
+  ordem: number;       // índice serpentina (0-based)
+  lng: number;
+  lat: number;
+  profs: number;       // nº de profundidades (define a cor)
+  manual?: boolean;    // movido/adicionado manualmente
+}
+
+export interface GradeAmostragem {
+  id: string;
+  talhaoId: string;
+  safra: string;                      // nome da safra (ex "25/26")
+  epoca: '1' | '2';
+  nome: string;                       // "Grade 1"
+  padraoAmostragemId: string;
+  padraoNome: string;                 // snapshot
+  customizado: boolean;               // divergiu do padrão original
+  densidade: number;
+  distanciaBorda: number;
+  rotacao: number;
+  aleatoriedade: number;
+  modoSel: 'regular' | 'aleatorio';
+  profundidades: ProfundidadeConfig[];
+  pontos: PontoAmostragem[];
+  paraProcessar: boolean;
   criadoEm: string;
 }
 
@@ -228,7 +256,48 @@ export function deletePadraoAmostragem(id: string) {
   save('inv_padroes_amos', load<PadraoAmostragem>('inv_padroes_amos').filter(p => p.id !== id));
 }
 
+// ── Grades de Amostragem ────────────────────────────────────────────────────
+// Várias grades por talhão+safra; uma marcada como "para processar".
+
+export function getGrades(talhaoId?: string, safra?: string): GradeAmostragem[] {
+  let all = load<GradeAmostragem>('inv_grades');
+  if (talhaoId) all = all.filter(g => g.talhaoId === talhaoId);
+  if (safra) all = all.filter(g => g.safra === safra);
+  return all.sort((a, b) => a.criadoEm.localeCompare(b.criadoEm));
+}
+
+export function saveGrade(g: Omit<GradeAmostragem, 'id' | 'criadoEm'>): GradeAmostragem {
+  const lista = load<GradeAmostragem>('inv_grades');
+  const nova: GradeAmostragem = { ...g, id: uid(), criadoEm: new Date().toISOString() };
+  lista.push(nova);
+  save('inv_grades', lista);
+  return nova;
+}
+
+export function updateGrade(id: string, data: Partial<GradeAmostragem>) {
+  const lista = load<GradeAmostragem>('inv_grades');
+  const idx = lista.findIndex(g => g.id === id);
+  if (idx >= 0) { lista[idx] = { ...lista[idx], ...data }; save('inv_grades', lista); }
+}
+
+export function deleteGrade(id: string) {
+  save('inv_grades', load<GradeAmostragem>('inv_grades').filter(g => g.id !== id));
+}
+
+// Marca uma grade para processar, desmarcando as outras do mesmo talhão+safra.
+export function marcarParaProcessar(id: string) {
+  const lista = load<GradeAmostragem>('inv_grades');
+  const alvo = lista.find(g => g.id === id);
+  if (!alvo) return;
+  lista.forEach(g => {
+    if (g.talhaoId === alvo.talhaoId && g.safra === alvo.safra) {
+      g.paraProcessar = g.id === id;
+    }
+  });
+  save('inv_grades', lista);
+}
+
 export function clearAll() {
-  ['inv_clientes','inv_fazendas','inv_talhoes','inv_safras','inv_padroes_elem','inv_padroes_amos']
+  ['inv_clientes','inv_fazendas','inv_talhoes','inv_safras','inv_padroes_elem','inv_padroes_amos','inv_grades']
     .forEach(k => localStorage.removeItem(k));
 }

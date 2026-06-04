@@ -289,7 +289,7 @@ function PadroesAmostragem({ onVoltar }: { onVoltar: () => void }) {
           </div>
           <div>
             <label className="text-[10px] font-semibold block mb-0.5" style={{ color: '#64748b' }}>Densidade (ha / ponto) *</label>
-            <input type="number" step="0.5" min="0.1" value={densidade} onChange={e => setDensidade(e.target.value)}
+            <input type="number" step="0.1" min="0.1" value={densidade} onChange={e => setDensidade(e.target.value.replace(',', '.'))}
               className="w-full rounded px-3 py-2 text-xs outline-none" style={inputStyle} />
           </div>
 

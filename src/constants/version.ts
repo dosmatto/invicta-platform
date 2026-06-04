@@ -1,6 +1,12 @@
-export const APP_VERSION = '0.10.1';
+export const APP_VERSION = '0.11.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.11.0': [
+    'Amostragem Fase 3a — salvar e gerenciar grades',
+    'Várias grades por safra/talhão; marcar qual será processada (uma por safra)',
+    'Grades com nome auto (renomeável), badge CUSTOM, excluir',
+    'Densidade aceita decimais (ex: 1,5 ha) no simulador e no cadastro',
+  ],
   '0.10.1': [
     'Aleatoriedade agora é radial e limitada a metade do espaçamento (L/2) — pontos nunca se cruzam',
   ],

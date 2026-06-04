@@ -2,9 +2,9 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useApp } from '@/context/AppContext';
-import { getPadroesAmostragem, getPadroesElementos, getSafras, PadraoAmostragem, PadraoElementos, ProfundidadeConfig } from '@/lib/store';
+import { getPadroesAmostragem, getPadroesElementos, getSafras, getGrades, saveGrade, updateGrade, deleteGrade, marcarParaProcessar, PadraoElementos, ProfundidadeConfig, GradeAmostragem, PontoAmostragem } from '@/lib/store';
 import { gerarGrid, anguloMaiorDimensao } from '@/lib/grid';
-import { AlertTriangle, RotateCcw, Shuffle, Layers, MapPin } from 'lucide-react';
+import { AlertTriangle, RotateCcw, Shuffle, Layers, MapPin, Save, Trash2, CheckCircle2, Circle, Pencil } from 'lucide-react';
 
 // PRNG simples para shuffle determinístico
 function shuffleSeed<T>(arr: T[], seed: number): T[] {
@@ -47,6 +47,9 @@ export function SimuladorAmostragem() {
   const [modoSel, setModoSel] = useState<'regular' | 'aleatorio'>('regular');
   const [seedPos, setSeedPos] = useState(1);
   const [seedSel, setSeedSel] = useState(1);
+  const [grades, setGrades] = useState<GradeAmostragem[]>([]);
+  const [renomeando, setRenomeando] = useState<string | null>(null);
+  const [nomeTemp, setNomeTemp] = useState('');
 
   const padrao = padroes.find(p => p.id === padraoId) ?? null;
 
@@ -68,11 +71,15 @@ export function SimuladorAmostragem() {
     const n = pts.length;
     // conjuntos de seleção por profundidade
     const selecoes = profs.map(p => selecionar(n, p.percentual, modoSel, seedSel + p.rotulo.length));
-    const features: GeoJSON.Feature[] = pts.map((pt, i) => {
-      const profsDoPonto = profs.filter((_, pi) => selecoes[pi].has(i)).length;
-      return { type: 'Feature', properties: { label: String(i + 1), profs: profsDoPonto }, geometry: { type: 'Point', coordinates: [pt.lng, pt.lat] } };
-    });
-    return { n, fc: { type: 'FeatureCollection', features } as GeoJSON.FeatureCollection };
+    const pontos: PontoAmostragem[] = pts.map((pt, i) => ({
+      ordem: i, lng: pt.lng, lat: pt.lat,
+      profs: profs.filter((_, pi) => selecoes[pi].has(i)).length,
+    }));
+    const features: GeoJSON.Feature[] = pontos.map(p => ({
+      type: 'Feature', properties: { label: String(p.ordem + 1), profs: p.profs },
+      geometry: { type: 'Point', coordinates: [p.lng, p.lat] },
+    }));
+    return { n, pontos, fc: { type: 'FeatureCollection', features } as GeoJSON.FeatureCollection };
   }, [uploadedGeo, densidade, distanciaBorda, rotacaoEfetiva, aleatoriedade, seedPos, profs, modoSel, seedSel]);
 
   // Envia pontos ao mapa
@@ -91,6 +98,32 @@ export function SimuladorAmostragem() {
     setProfs(prev => prev.map((p, idx) => idx === i ? { ...p, percentual: v } : p));
   }
   const nomeElem = (id: string) => padroesElem.find(p => p.id === id)?.nome ?? '—';
+
+  // ── Grades salvas ──
+  const safraNome = safraAtiva?.nome ?? '';
+  function recarregarGrades() {
+    if (nav.talhaoId && safraNome) setGrades(getGrades(nav.talhaoId, safraNome));
+  }
+  useEffect(() => { recarregarGrades(); /* eslint-disable-next-line */ }, [nav.talhaoId, safraNome]);
+
+  function salvarGrade() {
+    if (!padrao || !resultado || !nav.talhaoId || !safraAtiva) return;
+    const n = getGrades(nav.talhaoId, safraNome).length + 1;
+    const primeira = getGrades(nav.talhaoId, safraNome).length === 0;
+    saveGrade({
+      talhaoId: nav.talhaoId, safra: safraNome, epoca, nome: `Grade ${n}`,
+      padraoAmostragemId: padrao.id, padraoNome: padrao.nome, customizado,
+      densidade, distanciaBorda, rotacao: rotacaoEfetiva, aleatoriedade, modoSel,
+      profundidades: profs, pontos: resultado.pontos,
+      paraProcessar: primeira, // primeira grada da safra já vira a "a processar"
+    });
+    recarregarGrades();
+  }
+
+  function confirmarRenome(id: string) {
+    if (nomeTemp.trim()) updateGrade(id, { nome: nomeTemp.trim() });
+    setRenomeando(null); recarregarGrades();
+  }
 
   // ── Validações ──
   if (!uploadedGeo) {
@@ -152,8 +185,8 @@ export function SimuladorAmostragem() {
             <label className="text-[10px] font-semibold block mb-0.5" style={{ color: '#64748b' }}>
               Densidade (ha / ponto) {densidade !== padrao.densidadeHaPonto && <span style={{ color: '#fbbf24' }}>• alterado</span>}
             </label>
-            <input type="number" step="0.5" min="0.1" value={densidade}
-              onChange={e => setDensidade(Number(e.target.value))}
+            <input type="number" step="0.1" min="0.1" value={densidade}
+              onChange={e => setDensidade(Number(e.target.value.replace(',', '.')) || 0)}
               className="w-full rounded px-2 py-1.5 text-xs outline-none" style={inputStyle} />
           </div>
 
@@ -255,10 +288,52 @@ export function SimuladorAmostragem() {
             </div>
           </div>
 
-          <p className="text-[9px] text-center" style={{ color: '#475569' }}>
-            Ajuste os parâmetros e veja os pontos no mapa em tempo real. Finalizar/gerar QR — próxima etapa.
-          </p>
+          {/* Salvar grade */}
+          <button onClick={salvarGrade}
+            className="w-full py-2.5 rounded text-sm font-bold text-white flex items-center justify-center gap-2"
+            style={{ background: 'var(--invicta-green-dark)' }}>
+            <Save size={14} /> Salvar grade
+          </button>
         </>
+      )}
+
+      {/* Grades salvas desta safra */}
+      {grades.length > 0 && (
+        <div className="pt-1">
+          <p className="text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: '#475569' }}>
+            Grades salvas — Safra {safraNome}
+          </p>
+          <div className="space-y-1.5">
+            {grades.map(g => (
+              <div key={g.id} className="p-2 rounded-lg" style={{ background: '#061525', border: `1px solid ${g.paraProcessar ? '#166534' : '#1a3a6b'}` }}>
+                <div className="flex items-center gap-2">
+                  {/* marcar para processar */}
+                  <button onClick={() => { marcarParaProcessar(g.id); recarregarGrades(); }} title="Marcar para processar">
+                    {g.paraProcessar
+                      ? <CheckCircle2 size={15} style={{ color: '#4ade80' }} />
+                      : <Circle size={15} style={{ color: '#475569' }} />}
+                  </button>
+                  {renomeando === g.id ? (
+                    <input autoFocus value={nomeTemp} onChange={e => setNomeTemp(e.target.value)}
+                      onBlur={() => confirmarRenome(g.id)} onKeyDown={e => e.key === 'Enter' && confirmarRenome(g.id)}
+                      className="flex-1 rounded px-1.5 py-0.5 text-xs outline-none" style={inputStyle} />
+                  ) : (
+                    <span className="text-xs font-bold flex-1" style={{ color: '#e2e8f0' }}>{g.nome}</span>
+                  )}
+                  {g.customizado && <span className="text-[8px] px-1 py-0.5 rounded" style={{ background: '#78350f', color: '#fde68a' }}>CUSTOM</span>}
+                  <button onClick={() => { setRenomeando(g.id); setNomeTemp(g.nome); }} title="Renomear"
+                    className="p-1 rounded" style={{ color: '#93c5fd' }}><Pencil size={11} /></button>
+                  <button onClick={() => { deleteGrade(g.id); recarregarGrades(); }} title="Excluir"
+                    className="p-1 rounded" style={{ color: '#f87171' }}><Trash2 size={11} /></button>
+                </div>
+                <p className="text-[9px] mt-1 pl-6" style={{ color: '#64748b' }}>
+                  {g.pontos.length} pontos · {g.densidade} ha/pt · {g.epoca}ª época
+                  {g.paraProcessar && <span style={{ color: '#86efac' }}> · a processar</span>}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   );
