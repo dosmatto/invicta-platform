@@ -1,11 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useApp } from '@/context/AppContext';
+import { parseGeoFile } from '@/lib/geo';
 import {
   Upload, Play, CheckCircle2, Circle, AlertTriangle,
   Grid3x3, MapPin, FileUp, MousePointer2, QrCode,
-  Download, ChevronRight, Info,
+  Download, ChevronRight, Info, Loader2,
 } from 'lucide-react';
 import { MockIndicator } from '@/components/shared/MockIndicator';
 
@@ -28,14 +29,35 @@ const PONTOS_MOCK = Array.from({ length: 12 }, (_, i) => ({
 }));
 
 export function AmostragemSection() {
-  const { nav, setActiveModule, activeModule } = useApp();
+  const { nav, setActiveModule, activeModule, setUploadedGeo, setUploadedBbox, uploadedGeo, setMapMode } = useApp();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [etapa, setEtapa] = useState<1 | 2 | 3 | 4>(1);
   const [metodo, setMetodo] = useState<Metodo>('grid-fixo');
   const [espacamento, setEspacamento] = useState('2.5');
   const [profsSelecionadas, setProfsSelecionadas] = useState(['0–20 cm', '20–40 cm']);
   const [gerado, setGerado] = useState(false);
-  const temLimite = nav.talhaoId !== null && nav.talhaoId !== '3'; // Talhão Norte não tem limite (mock)
+  const [uploading, setUploading] = useState(false);
+  const [uploadInfo, setUploadInfo] = useState<{ features: number; area?: number; nome: string } | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
+  const temLimite = uploadedGeo !== null || (nav.talhaoId !== null && nav.talhaoId !== '3');
+
+  async function handleFileUpload(file: File) {
+    setUploading(true);
+    setUploadError(null);
+    try {
+      const result = await parseGeoFile(file);
+      setUploadedGeo(result.geojson);
+      setUploadedBbox(result.bbox);
+      setUploadInfo({ features: result.featureCount, area: result.areaHa, nome: file.name });
+      setMapMode('satellite'); // troca para satélite ao carregar geometria
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : 'Erro ao processar arquivo');
+    } finally {
+      setUploading(false);
+    }
+  }
 
   // Ativa a camada de pontos no mapa ao abrir
   const isActive = activeModule === 'amostragem';
@@ -124,25 +146,62 @@ export function AmostragemSection() {
             </div>
           )}
 
-          {!temLimite && (
+          {/* Upload de arquivo */}
+          {!uploadInfo && (
             <div>
               <p className="text-[10px] font-semibold mb-2" style={{ color: '#64748b' }}>
                 Fazer upload do limite:
               </p>
-              <div className="border-2 border-dashed rounded-lg p-5 text-center"
-                style={{ borderColor: '#1a3a6b' }}>
-                <Upload size={20} className="mx-auto mb-2" style={{ color: '#475569' }} />
+              <div
+                className="border-2 border-dashed rounded-lg p-5 text-center cursor-pointer transition-colors"
+                style={{ borderColor: uploading ? 'var(--invicta-green)' : '#1a3a6b' }}
+                onClick={() => fileInputRef.current?.click()}
+                onDragOver={e => e.preventDefault()}
+                onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleFileUpload(f); }}
+              >
+                {uploading ? (
+                  <Loader2 size={20} className="mx-auto mb-2 animate-spin" style={{ color: 'var(--invicta-green)' }} />
+                ) : (
+                  <Upload size={20} className="mx-auto mb-2" style={{ color: '#475569' }} />
+                )}
                 <p className="text-xs font-medium" style={{ color: '#94a3b8' }}>
-                  Shapefile (.zip) · GeoJSON · KML
+                  {uploading ? 'Processando arquivo...' : 'KML · GeoJSON'}
                 </p>
                 <p className="text-[10px] mt-1" style={{ color: '#475569' }}>
-                  O sistema converte automaticamente para PostGIS
+                  Arraste aqui ou clique para selecionar
                 </p>
-                <button className="mt-3 px-4 py-2 rounded text-xs font-semibold text-white"
-                  style={{ background: 'var(--invicta-blue-mid)' }}>
-                  <Upload size={11} className="inline mr-1" /> Selecionar arquivo
-                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".kml,.geojson,.json"
+                  className="hidden"
+                  onChange={e => { const f = e.target.files?.[0]; if (f) handleFileUpload(f); }}
+                />
               </div>
+              {uploadError && (
+                <p className="text-[10px] mt-2 px-1" style={{ color: '#f87171' }}>⚠ {uploadError}</p>
+              )}
+            </div>
+          )}
+
+          {/* Info do arquivo carregado */}
+          {uploadInfo && (
+            <div className="p-3 rounded-lg" style={{ background: '#0f2a1a', border: '1px solid #166534' }}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 size={14} style={{ color: '#86efac' }} />
+                  <p className="text-xs font-semibold" style={{ color: '#86efac' }}>Arquivo carregado</p>
+                </div>
+                <button onClick={() => { setUploadInfo(null); setUploadedGeo(null); setUploadedBbox(null); }}
+                  className="text-[10px] underline" style={{ color: '#64748b' }}>trocar</button>
+              </div>
+              <p className="text-[10px] mt-1" style={{ color: '#475569' }}>{uploadInfo.nome}</p>
+              <p className="text-[10px]" style={{ color: '#475569' }}>
+                {uploadInfo.features} feição(ões) · ~{uploadInfo.area?.toLocaleString('pt-BR')} ha
+              </p>
+              <p className="text-[10px] mt-1 italic" style={{ color: '#3b82f6' }}>
+                Geometria visível no mapa →
+              </p>
             </div>
           )}
 

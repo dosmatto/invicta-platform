@@ -24,6 +24,10 @@ interface AppContextType {
   setMapMode: (mode: MapMode) => void;
   activeModule: string | null;
   setActiveModule: (m: string | null) => void;
+  uploadedGeo: GeoJSON.FeatureCollection | null;
+  setUploadedGeo: (geo: GeoJSON.FeatureCollection | null) => void;
+  uploadedBbox: [number, number, number, number] | null;
+  setUploadedBbox: (bb: [number, number, number, number] | null) => void;
 }
 
 const AppContext = createContext<AppContextType>({
@@ -35,12 +39,18 @@ const AppContext = createContext<AppContextType>({
   setMapMode: () => {},
   activeModule: null,
   setActiveModule: () => {},
+  uploadedGeo: null,
+  setUploadedGeo: () => {},
+  uploadedBbox: null,
+  setUploadedBbox: () => {},
 });
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [activePanel, setActivePanel] = useState<string | null>('dashboard');
   const [mapMode, setMapMode] = useState<MapMode>('street');
   const [activeModule, setActiveModule] = useState<string | null>(null);
+  const [uploadedGeo, setUploadedGeo] = useState<GeoJSON.FeatureCollection | null>(null);
+  const [uploadedBbox, setUploadedBbox] = useState<[number, number, number, number] | null>(null);
   const [nav, setNavState] = useState<NavContext>({
     produtorId: null, produtor: '',
     fazendaId: null, fazenda: '',
@@ -58,6 +68,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       nav, setNav,
       mapMode, setMapMode,
       activeModule, setActiveModule,
+      uploadedGeo, setUploadedGeo,
+      uploadedBbox, setUploadedBbox,
     }}>
       {children}
     </AppContext.Provider>

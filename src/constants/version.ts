@@ -1,6 +1,14 @@
-export const APP_VERSION = '0.7.0';
+export const APP_VERSION = '0.8.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.8.0': [
+    'Upload real de KML e GeoJSON — parser client-side com @tmcw/togeojson',
+    'Suporte a UTF-8 e UTF-16 (Topper 4500, QGIS, Google Earth)',
+    'Geometria carregada exibida no MapLibre — zoom automático para o bbox',
+    'Mapa troca para satélite automaticamente ao carregar arquivo',
+    'Drag & drop ou click para upload',
+    'Exibe número de feições e área estimada',
+  ],
   '0.7.0': [
     'Módulo 08 — Amostragem completo dentro do Talhão',
     'Fluxo em 4 etapas: Limite → Método → Parâmetros → Pontos gerados',

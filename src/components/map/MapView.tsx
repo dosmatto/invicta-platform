@@ -87,7 +87,7 @@ const PONTOS_AMOSTRAGEM: Record<string, GeoJSON.FeatureCollection> = {
 export function MapView() {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
-  const { mapMode, setMapMode, nav, activeModule } = useApp();
+  const { mapMode, setMapMode, nav, activeModule, uploadedGeo, uploadedBbox } = useApp();
 
   // Inicializa o mapa
   useEffect(() => {
@@ -174,6 +174,43 @@ export function MapView() {
       mapRef.current.setFilter('talhao-selected-outline', ['==', ['get', 'id'], id]);
     } catch {}
   }, [nav.talhaoId]);
+
+  // Geometria carregada (KML/GeoJSON upload)
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !map.isStyleLoaded()) return;
+
+    try { map.removeLayer('upload-fill'); } catch {}
+    try { map.removeLayer('upload-line'); } catch {}
+    try { map.removeLayer('upload-points'); } catch {}
+    try { map.removeSource('upload-geo'); } catch {}
+
+    if (uploadedGeo) {
+      map.addSource('upload-geo', { type: 'geojson', data: uploadedGeo });
+
+      // Polígonos
+      map.addLayer({ id: 'upload-fill', type: 'fill', source: 'upload-geo',
+        filter: ['in', ['geometry-type'], ['literal', ['Polygon', 'MultiPolygon']]],
+        paint: { 'fill-color': '#f59e0b', 'fill-opacity': 0.3 } });
+
+      map.addLayer({ id: 'upload-line', type: 'line', source: 'upload-geo',
+        filter: ['in', ['geometry-type'], ['literal', ['Polygon', 'MultiPolygon', 'LineString', 'MultiLineString']]],
+        paint: { 'line-color': '#fde68a', 'line-width': 2 } });
+
+      // Pontos
+      map.addLayer({ id: 'upload-points', type: 'circle', source: 'upload-geo',
+        filter: ['in', ['geometry-type'], ['literal', ['Point', 'MultiPoint']]],
+        paint: { 'circle-radius': 5, 'circle-color': '#f59e0b', 'circle-stroke-color': '#fff', 'circle-stroke-width': 1 } });
+
+      // Zoom para o bbox
+      if (uploadedBbox) {
+        map.fitBounds(
+          [[uploadedBbox[0], uploadedBbox[1]], [uploadedBbox[2], uploadedBbox[3]]],
+          { padding: 60, duration: 800 }
+        );
+      }
+    }
+  }, [uploadedGeo, uploadedBbox]);
 
   // Camada de pontos de amostragem
   useEffect(() => {
