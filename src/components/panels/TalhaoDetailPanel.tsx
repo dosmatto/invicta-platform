@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useApp } from '@/context/AppContext';
-import { getTalhoes, updateTalhao, Talhao } from '@/lib/store';
+import { getTalhoes, getSafras, updateTalhao, Talhao, Safra } from '@/lib/store';
 import { parseGeoFile } from '@/lib/geo';
 import { AmostragemSection } from '@/components/talhao/AmostragemSection';
 import {
@@ -216,15 +216,19 @@ export function TalhaoDetailPanel() {
   const { activePanel, setActivePanel, nav, setNav, setMapMode, setUploadedGeo, setUploadedBbox } = useApp();
 
   const [talhao, setTalhao] = useState<Talhao | null>(null);
-  const [safra, setSafra] = useState('24/25');
-  const SAFRAS = ['24/25', '23/24', '22/23'];
+  const [safras, setSafras] = useState<Safra[]>([]);
+  const [safra, setSafra] = useState('');
 
-  // Carrega talhão do store e restaura geo no mapa
+  // Carrega talhão do store, safras e restaura geo no mapa
   useEffect(() => {
     if (!nav.talhaoId) return;
     const todos = getTalhoes();
     const t = todos.find(x => x.id === nav.talhaoId) ?? null;
     setTalhao(t);
+    const sf = getSafras();
+    setSafras(sf);
+    const ativa = sf.find(s => s.ativa);
+    if (ativa) setSafra(ativa.nome);
 
     if (t?.geojson && t.bbox) {
       try {
@@ -289,20 +293,24 @@ export function TalhaoDetailPanel() {
 
         {/* Seletor de Safra */}
         <div className="flex items-center gap-2 px-4 py-2" style={{ borderTop: '1px solid #0f2240' }}>
-          <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#64748b' }}>Safra</span>
-          <div className="flex gap-1">
-            {SAFRAS.map(s => (
-              <button key={s}
-                onClick={() => setSafra(s)}
-                className="px-2.5 py-1 rounded text-xs font-bold transition-colors"
-                style={{
-                  background: safra === s ? 'var(--invicta-blue-mid)' : '#1a3a6b',
-                  color: safra === s ? '#fff' : '#64748b',
-                }}>
-                {s}
-              </button>
-            ))}
-          </div>
+          <span className="text-[10px] font-semibold uppercase tracking-wider flex-shrink-0" style={{ color: '#64748b' }}>Safra</span>
+          {safras.length === 0 ? (
+            <span className="text-[10px]" style={{ color: '#475569' }}>Nenhuma safra cadastrada</span>
+          ) : (
+            <div className="flex flex-wrap gap-1">
+              {safras.map(s => (
+                <button key={s.id}
+                  onClick={() => setSafra(s.nome)}
+                  className="px-2.5 py-1 rounded text-xs font-bold transition-colors"
+                  style={{
+                    background: safra === s.nome ? 'var(--invicta-blue-mid)' : '#1a3a6b',
+                    color: safra === s.nome ? '#fff' : '#64748b',
+                  }}>
+                  {s.nome}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 

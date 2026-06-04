@@ -1,6 +1,11 @@
-export const APP_VERSION = '0.9.0';
+export const APP_VERSION = '0.9.1';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.9.1': [
+    'Seletor de safra no talhão usa apenas safras cadastradas manualmente',
+    'Safra ativa é pré-selecionada automaticamente ao abrir o talhão',
+    'Exibe aviso quando nenhuma safra foi cadastrada',
+  ],
   '0.9.0': [
     'Upload georreferenciado real no talhão — KML, Shapefile (.zip) e GeoJSON',
     'Geometria persiste no localStorage (geojson + bbox + areaHa) e restaura ao reabrir',
