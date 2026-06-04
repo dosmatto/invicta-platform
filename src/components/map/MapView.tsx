@@ -69,6 +69,7 @@ export function MapView() {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef      = useRef<maplibregl.Map | null>(null);
   const readyRef    = useRef(false); // true depois de 'load'
+  const [mapReady, setMapReady] = useState(false);
 
   const { mapMode, setMapMode, nav, activeModule,
           uploadedGeo, setUploadedGeo,
@@ -123,9 +124,10 @@ export function MapView() {
 
       map.fitBounds([[-54.75,-13.32],[-54.46,-13.16]], { padding: 80 });
       readyRef.current = true;
+      setMapReady(true);
     });
 
-    return () => { map.remove(); mapRef.current = null; readyRef.current = false; };
+    return () => { map.remove(); mapRef.current = null; readyRef.current = false; setMapReady(false); };
   }, []);
 
   // ── 2. Toggle satélite / rua — SEM setStyle, só visibilidade ─────────────
@@ -177,7 +179,7 @@ export function MapView() {
   // ── 5. Atualiza geometria carregada (setData — sem remover camadas) ────────
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !readyRef.current) return;
+    if (!map || !mapReady) return;
 
     const src = map.getSource('upload-geo') as maplibregl.GeoJSONSource | undefined;
     if (!src) return;
@@ -190,7 +192,7 @@ export function MapView() {
         { padding: 60, duration: 900 }
       );
     }
-  }, [uploadedGeo, uploadedBbox]);
+  }, [uploadedGeo, uploadedBbox, mapReady]);
 
   // ── 6. Pontos de amostragem (setData) ────────────────────────────────────
   useEffect(() => {

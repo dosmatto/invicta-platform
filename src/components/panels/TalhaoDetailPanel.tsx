@@ -1,13 +1,15 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useApp } from '@/context/AppContext';
-import { MockIndicator } from './_shared';
+import { getTalhoes, updateTalhao, Talhao } from '@/lib/store';
+import { parseGeoFile } from '@/lib/geo';
 import { AmostragemSection } from '@/components/talhao/AmostragemSection';
 import {
   ChevronLeft, Grid3x3, TestTube, QrCode, Leaf,
   Satellite, Zap, BarChart3, Layers, FileSpreadsheet,
   FileText, ChevronDown, ChevronRight, Play, Upload, Download,
+  CheckCircle2, AlertTriangle, MapPin,
 } from 'lucide-react';
 
 // ── tipos ──────────────────────────────────────────────────────────────────
@@ -65,7 +67,7 @@ function InnerBtn({ label, icon, color }: { label: string; icon?: React.ReactNod
   return (
     <button className="flex items-center gap-2 mx-4 my-2 px-3 py-1.5 rounded text-xs font-semibold text-white transition-opacity hover:opacity-90"
       style={{ background: color ?? 'var(--invicta-blue-mid)' }}>
-      {icon}{label}<MockIndicator />
+      {icon}{label}
     </button>
   );
 }
@@ -77,19 +79,177 @@ function SelectField({ placeholder }: { placeholder: string }) {
   );
 }
 
+// ── seção de limite geográfico ──────────────────────────────────────────────
+function GeoSection({ talhao, onUploaded }: {
+  talhao: Talhao | null;
+  onUploaded: (areaHa: number) => void;
+}) {
+  const { setUploadedGeo, setUploadedBbox } = useApp();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [estado, setEstado] = useState<'idle' | 'loading' | 'ok' | 'erro'>('idle');
+  const [erroMsg, setErroMsg] = useState('');
+  const [dragging, setDragging] = useState(false);
+
+  const temGeo = !!talhao?.geojson;
+
+  async function processar(file: File) {
+    setEstado('loading');
+    setErroMsg('');
+    try {
+      const result = await parseGeoFile(file);
+      // Persiste no store
+      updateTalhao(talhao!.id, {
+        geojson: JSON.stringify(result.geojson),
+        bbox: result.bbox,
+        areaHa: result.areaHa,
+        areaHaSemHoles: result.areaHaBruta,
+        status: 'ativo',
+      });
+      // Exibe no mapa
+      setUploadedGeo(result.geojson);
+      setUploadedBbox(result.bbox);
+      setEstado('ok');
+      onUploaded(result.areaHa);
+    } catch (e: unknown) {
+      setEstado('erro');
+      setErroMsg(e instanceof Error ? e.message : 'Erro ao processar arquivo.');
+    }
+  }
+
+  function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) processar(file);
+    e.target.value = '';
+  }
+
+  function onDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file) processar(file);
+  }
+
+  return (
+    <div style={{ borderBottom: '1px solid #1a3a6b' }}>
+      <div className="px-4 py-2 flex items-center gap-2"
+        style={{ background: '#0a1929', borderBottom: '1px solid #0f2240' }}>
+        <MapPin size={12} style={{ color: '#93c5fd' }} />
+        <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: '#93c5fd' }}>
+          Limite Geográfico
+        </span>
+        {temGeo && (
+          <span className="ml-auto flex items-center gap-1 text-[10px] font-semibold" style={{ color: '#4ade80' }}>
+            <CheckCircle2 size={11} /> {talhao!.areaHa.toLocaleString('pt-BR')} ha
+          </span>
+        )}
+        {!temGeo && (
+          <span className="ml-auto flex items-center gap-1 text-[10px] font-semibold" style={{ color: '#fbbf24' }}>
+            <AlertTriangle size={11} /> Sem limite
+          </span>
+        )}
+      </div>
+
+      <div className="p-3">
+        {/* Zona de drop */}
+        <div
+          onDragOver={e => { e.preventDefault(); setDragging(true); }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={onDrop}
+          onClick={() => inputRef.current?.click()}
+          className="border-2 border-dashed rounded-lg py-5 text-center cursor-pointer transition-colors"
+          style={{
+            borderColor: dragging ? '#60a5fa' : estado === 'ok' ? '#4ade80' : '#1e3a5f',
+            background: dragging ? '#0f2240' : 'transparent',
+          }}>
+          {estado === 'loading' ? (
+            <div className="flex flex-col items-center gap-2">
+              <svg className="animate-spin w-5 h-5" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="12" r="10" stroke="#60a5fa" strokeWidth="3" strokeDasharray="40 20" />
+              </svg>
+              <p className="text-[10px]" style={{ color: '#64748b' }}>Processando arquivo...</p>
+            </div>
+          ) : estado === 'ok' ? (
+            <div className="flex flex-col items-center gap-1">
+              <CheckCircle2 size={20} style={{ color: '#4ade80' }} />
+              <p className="text-[10px] font-semibold" style={{ color: '#4ade80' }}>Carregado com sucesso</p>
+              <p className="text-[9px]" style={{ color: '#475569' }}>Clique para substituir</p>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center gap-1.5">
+              <Upload size={18} style={{ color: '#475569' }} />
+              <p className="text-[10px] font-semibold" style={{ color: '#94a3b8' }}>
+                {temGeo ? 'Substituir geometria' : 'Carregar KML ou Shapefile'}
+              </p>
+              <p className="text-[9px]" style={{ color: '#475569' }}>
+                Arraste ou clique · .kml · .zip (shapefile) · .geojson
+              </p>
+            </div>
+          )}
+        </div>
+
+        {estado === 'erro' && (
+          <p className="mt-2 text-[10px] text-center" style={{ color: '#f87171' }}>{erroMsg}</p>
+        )}
+
+        {temGeo && estado === 'idle' && (
+          <button
+            onClick={() => {
+              const geo = JSON.parse(talhao!.geojson!) as GeoJSON.FeatureCollection;
+              setUploadedGeo(geo);
+              setUploadedBbox(talhao!.bbox!);
+            }}
+            className="mt-2 w-full py-1.5 rounded text-[10px] font-semibold transition-opacity hover:opacity-80"
+            style={{ background: '#1a3a6b', color: '#93c5fd' }}>
+            Mostrar no mapa
+          </button>
+        )}
+
+        <input ref={inputRef} type="file" accept=".kml,.zip,.geojson,.json"
+          className="hidden" onChange={onFileChange} />
+      </div>
+    </div>
+  );
+}
+
 // ── painel principal ────────────────────────────────────────────────────────
 export function TalhaoDetailPanel() {
-  const { activePanel, setActivePanel, nav, setNav, setMapMode } = useApp();
-  const talhaoId = activePanel?.replace('talhao-', '');
+  const { activePanel, setActivePanel, nav, setNav, setMapMode, setUploadedGeo, setUploadedBbox } = useApp();
+
+  const [talhao, setTalhao] = useState<Talhao | null>(null);
+  const [safra, setSafra] = useState('24/25');
+  const SAFRAS = ['24/25', '23/24', '22/23'];
+
+  // Carrega talhão do store e restaura geo no mapa
+  useEffect(() => {
+    if (!nav.talhaoId) return;
+    const todos = getTalhoes();
+    const t = todos.find(x => x.id === nav.talhaoId) ?? null;
+    setTalhao(t);
+
+    if (t?.geojson && t.bbox) {
+      try {
+        const geo = JSON.parse(t.geojson) as GeoJSON.FeatureCollection;
+        setUploadedGeo(geo);
+        setUploadedBbox(t.bbox);
+      } catch {}
+    }
+  }, [nav.talhaoId, setUploadedGeo, setUploadedBbox]);
 
   function voltarFazenda() {
     setNav({ talhaoId: null, talhao: '', area: 0 });
     setMapMode('street');
+    setUploadedGeo(null);
+    setUploadedBbox(null);
     setActivePanel(`fazenda-${nav.fazendaId}`);
   }
 
-  const [safra, setSafra] = useState('24/25');
-  const SAFRAS = ['24/25', '23/24', '22/23'];
+  function handleUploaded(areaHa: number) {
+    // Recarrega do store e atualiza nav.area
+    const todos = getTalhoes();
+    const t = todos.find(x => x.id === nav.talhaoId) ?? null;
+    setTalhao(t);
+    setNav({ area: areaHa });
+  }
 
   return (
     <div className="flex flex-col h-full">
@@ -113,10 +273,17 @@ export function TalhaoDetailPanel() {
             <div>
               <p className="text-base font-bold" style={{ color: '#fff' }}>{nav.talhao}</p>
               <p className="text-xs mt-0.5" style={{ color: '#93c5fd' }}>{nav.fazenda}</p>
-              <p className="text-xs" style={{ color: '#64748b' }}>{nav.area} ha · {nav.produtor}</p>
+              <p className="text-xs" style={{ color: '#64748b' }}>
+                {nav.area > 0 ? `${nav.area.toLocaleString('pt-BR')} ha · ` : ''}{nav.produtor}
+              </p>
             </div>
             <span className="text-[10px] px-2 py-1 rounded-full font-semibold"
-              style={{ background: '#166534', color: '#86efac' }}>Ativo</span>
+              style={{
+                background: talhao?.status === 'ativo' ? '#166534' : '#78350f',
+                color: talhao?.status === 'ativo' ? '#86efac' : '#fde68a',
+              }}>
+              {talhao?.status === 'ativo' ? 'Ativo' : 'Incompleto'}
+            </span>
           </div>
         </div>
 
@@ -139,10 +306,13 @@ export function TalhaoDetailPanel() {
         </div>
       </div>
 
-      {/* Módulos em accordion */}
+      {/* Módulos */}
       <div className="flex-1 overflow-y-auto">
 
-        {/* Amostragem — fluxo completo */}
+        {/* Limite Geográfico — sempre visível no topo */}
+        <GeoSection talhao={talhao} onUploaded={handleUploaded} />
+
+        {/* Amostragem */}
         <AccordionSection title="Amostragem" icon={Grid3x3} color="#60a5fa" moduleId="amostragem">
           <AmostragemSection />
         </AccordionSection>
@@ -216,7 +386,6 @@ export function TalhaoDetailPanel() {
             <InnerBtn label="Importar GeoTIFF" icon={<Upload size={11} />} color="#1d4ed8" />
             <InnerRow label="Jan/2025" value="NDVI 0.71" sub="Sentinel-2 · média" />
             <InnerRow label="Nov/2024" value="NDVI 0.64" sub="Sentinel-2 · média" />
-            <InnerRow label="Jan/2025" value="N: Rev." sub="Sensor Falker · cobertura" />
           </div>
         </AccordionSection>
 
@@ -244,7 +413,7 @@ export function TalhaoDetailPanel() {
               <Upload size={16} className="mx-auto mb-1" style={{ color: '#475569' }} />
               <p className="text-[10px]" style={{ color: '#475569' }}>Shapefile ou CSV da colheitadeira</p>
             </div>
-            <InnerBtn label="Importar e Limpar Outliers (QGIS)" icon={<Play size={11} />} color="#9d174d" />
+            <InnerBtn label="Importar e Limpar Outliers" icon={<Play size={11} />} color="#9d174d" />
             <InnerRow label="Soja 24/25" value="62,4 sc/ha" sub="Mapa limpo · Fev/2025" />
           </div>
         </AccordionSection>
@@ -297,8 +466,7 @@ export function TalhaoDetailPanel() {
             <SelectField placeholder="Tipo de relatório..." />
             <InnerBtn label="Gerar Relatório" icon={<Play size={11} />} color="var(--invicta-blue)" />
             <InnerRow label="Fertilidade — Set/2024" value="PDF" sub="Liberado ao produtor" />
-            <InnerRow label="NDVI — Jan/2025" value="PDF" sub="Liberado ao produtor" />
-            <InnerRow label="Recomendação — Fev/2025" value="Rascunho" sub="Aguardando revisão técnica" />
+            <InnerRow label="NDVI — Jan/2025" value="PDF" sub="Aguardando revisão" />
           </div>
         </AccordionSection>
 

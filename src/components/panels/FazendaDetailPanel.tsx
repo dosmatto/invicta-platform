@@ -1,24 +1,35 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useApp } from '@/context/AppContext';
-import { MOCK_FAZENDAS, MOCK_TALHOES } from '@/constants/mocks';
-import { ChevronLeft, ChevronRight, Plus, Map, AlertTriangle, Edit2 } from 'lucide-react';
-import { PanelSection, PanelButton, MockIndicator, StatusBadge } from './_shared';
+import { getFazendas, getTalhoes, saveTalhao, Fazenda, Talhao } from '@/lib/store';
+import { ChevronLeft, ChevronRight, Plus, Map, AlertTriangle, Save, X } from 'lucide-react';
+import { PanelSection, PanelButton, StatusBadge } from './_shared';
 
 export function FazendaDetailPanel() {
   const { nav, setNav, setActivePanel, setMapMode } = useApp();
   const [tab, setTab] = useState<'talhoes' | 'dados'>('talhoes');
+  const [fazenda, setFazenda] = useState<Fazenda | null>(null);
+  const [talhoes, setTalhoes] = useState<Talhao[]>([]);
+  const [mostraForm, setMostraForm] = useState(false);
+  const [form, setForm] = useState({ nome: '' });
+  const [salvando, setSalvando] = useState(false);
 
-  const fazenda = MOCK_FAZENDAS.find(f => f.id === nav.fazendaId);
-  const talhoes = MOCK_TALHOES.filter(t => t.fazendaId === nav.fazendaId);
-  const incompletos = talhoes.filter(t => t.status === 'incompleto').length;
+  useEffect(() => {
+    if (!nav.fazendaId) return;
+    const todas = getFazendas();
+    setFazenda(todas.find(f => f.id === nav.fazendaId) ?? null);
+    setTalhoes(getTalhoes(nav.fazendaId));
+  }, [nav.fazendaId]);
 
-  if (!fazenda) return null;
+  function reload() {
+    if (!nav.fazendaId) return;
+    setTalhoes(getTalhoes(nav.fazendaId));
+  }
 
-  function abrirTalhao(t: typeof MOCK_TALHOES[0]) {
-    setNav({ talhaoId: t.id, talhao: t.nome, area: t.area });
-    setMapMode('satellite'); // ← troca para satélite ao entrar no talhão
+  function abrirTalhao(t: Talhao) {
+    setNav({ talhaoId: t.id, talhao: t.nome, area: t.areaHa });
+    setMapMode('satellite');
     setActivePanel(`talhao-${t.id}`);
   }
 
@@ -26,6 +37,26 @@ export function FazendaDetailPanel() {
     setNav({ fazendaId: null, fazenda: '', talhaoId: null, talhao: '' });
     setActivePanel(`produtor-${nav.produtorId}`);
   }
+
+  function handleSalvarTalhao() {
+    if (!form.nome.trim() || !nav.fazendaId) return;
+    setSalvando(true);
+    setTimeout(() => {
+      saveTalhao({ fazendaId: nav.fazendaId!, nome: form.nome.trim(), areaHa: 0, status: 'incompleto' });
+      reload();
+      setForm({ nome: '' });
+      setMostraForm(false);
+      setSalvando(false);
+    }, 300);
+  }
+
+  const incompletos = talhoes.filter(t => t.status === 'incompleto').length;
+
+  if (!fazenda) return (
+    <div className="flex items-center justify-center p-8">
+      <p className="text-xs" style={{ color: '#64748b' }}>Carregando...</p>
+    </div>
+  );
 
   return (
     <div className="flex flex-col h-full">
@@ -49,12 +80,10 @@ export function FazendaDetailPanel() {
             <p className="text-base font-bold truncate" style={{ color: '#fff' }}>{fazenda.nome}</p>
             <p className="text-xs mt-0.5" style={{ color: '#64748b' }}>{fazenda.municipio} · {fazenda.estado}</p>
             <p className="text-xs font-semibold mt-1" style={{ color: '#86efac' }}>
-              {fazenda.area_ha.toLocaleString('pt-BR')} ha · {talhoes.length} talhões
+              {talhoes.length} talhão{talhoes.length !== 1 ? 'ões' : ''}
+              {fazenda.car ? ` · CAR: ${fazenda.car}` : ''}
             </p>
           </div>
-          <button className="p-1.5 rounded" style={{ background: '#1a3a6b' }}>
-            <Edit2 size={12} style={{ color: '#93c5fd' }} />
-          </button>
         </div>
 
         {incompletos > 0 && (
@@ -83,43 +112,78 @@ export function FazendaDetailPanel() {
       <div className="flex-1 overflow-y-auto">
         {tab === 'talhoes' && (
           <>
-            <PanelSection>
-              <PanelButton label="Novo Talhão" icon={<Plus size={12} />} color="var(--invicta-green-dark)" />
-            </PanelSection>
-            <PanelSection>
-              <div className="px-4 py-1 flex items-center gap-1"><MockIndicator /></div>
-              {talhoes.length === 0 && (
-                <div className="px-4 py-6 text-center text-xs" style={{ color: '#475569' }}>
-                  Nenhum talhão cadastrado.
+            {mostraForm ? (
+              <div className="p-4 space-y-3">
+                <p className="text-xs font-bold uppercase tracking-wide" style={{ color: '#93c5fd' }}>Novo Talhão</p>
+                <div>
+                  <label className="text-[10px] font-semibold block mb-0.5" style={{ color: '#64748b' }}>Nome do Talhão *</label>
+                  <input value={form.nome} placeholder="Ex: Talhão A1"
+                    onChange={e => setForm({ nome: e.target.value })}
+                    className="w-full rounded px-3 py-2 text-xs outline-none"
+                    style={{ background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' }} />
                 </div>
-              )}
-              {talhoes.map(t => (
-                <button key={t.id} onClick={() => abrirTalhao(t)}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors"
-                  style={{ borderBottom: '1px solid #0f2240' }}
-                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'var(--sidebar-item-hover)'}
-                  onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}>
-                  <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-                    style={{ background: t.status === 'ativo' ? '#166534' : '#78350f' }}>
-                    <Map size={14} style={{ color: t.status === 'ativo' ? '#86efac' : '#fde68a' }} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold truncate" style={{ color: '#e2e8f0' }}>{t.nome}</p>
-                    <p className="text-[11px]" style={{ color: '#64748b' }}>{t.area} ha · Safra {t.safra}</p>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <StatusBadge status={t.status as 'ativo' | 'incompleto'} />
-                    <ChevronRight size={14} style={{ color: '#64748b' }} />
-                  </div>
-                </button>
-              ))}
-            </PanelSection>
-
-            <PanelSection>
-              <div className="mx-4 my-3 p-3 rounded text-xs" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
-                🛰 Ao entrar em um talhão, o mapa troca automaticamente para visão de satélite.
+                <p className="text-[10px]" style={{ color: '#475569' }}>
+                  O limite geográfico pode ser carregado depois via KML / shapefile.
+                </p>
+                <div className="flex gap-2">
+                  <button onClick={() => setMostraForm(false)}
+                    className="flex-1 py-2 rounded text-xs font-semibold flex items-center justify-center gap-1"
+                    style={{ background: '#1a3a6b', color: '#94a3b8' }}>
+                    <X size={12} /> Cancelar
+                  </button>
+                  <button onClick={handleSalvarTalhao} disabled={!form.nome.trim() || salvando}
+                    className="flex-1 py-2 rounded text-xs font-bold text-white flex items-center justify-center gap-1 disabled:opacity-40"
+                    style={{ background: 'var(--invicta-green-dark)' }}>
+                    <Save size={12} /> {salvando ? 'Salvando...' : 'Salvar'}
+                  </button>
+                </div>
               </div>
-            </PanelSection>
+            ) : (
+              <>
+                <div className="p-3">
+                  <button onClick={() => setMostraForm(true)}
+                    className="w-full flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-semibold text-white"
+                    style={{ background: 'var(--invicta-green-dark)' }}>
+                    <Plus size={12} /> Novo Talhão
+                  </button>
+                </div>
+
+                {talhoes.length === 0 ? (
+                  <div className="px-4 py-8 text-center">
+                    <Map size={28} className="mx-auto mb-2" style={{ color: '#2e3f5c' }} />
+                    <p className="text-xs" style={{ color: '#475569' }}>Nenhum talhão cadastrado.</p>
+                    <p className="text-xs mt-1" style={{ color: '#2e3f5c' }}>Clique em "Novo Talhão" acima.</p>
+                  </div>
+                ) : (
+                  talhoes.map(t => (
+                    <button key={t.id} onClick={() => abrirTalhao(t)}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors"
+                      style={{ borderBottom: '1px solid #0f2240' }}
+                      onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'var(--sidebar-item-hover)'}
+                      onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}>
+                      <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                        style={{ background: t.status === 'ativo' ? '#166534' : '#78350f' }}>
+                        <Map size={14} style={{ color: t.status === 'ativo' ? '#86efac' : '#fde68a' }} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold truncate" style={{ color: '#e2e8f0' }}>{t.nome}</p>
+                        <p className="text-[11px]" style={{ color: '#64748b' }}>
+                          {t.areaHa > 0 ? `${t.areaHa.toLocaleString('pt-BR')} ha` : 'Área não definida'}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <StatusBadge status={t.status} />
+                        <ChevronRight size={14} style={{ color: '#64748b' }} />
+                      </div>
+                    </button>
+                  ))
+                )}
+              </>
+            )}
+
+            <div className="mx-4 my-3 p-3 rounded text-xs" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
+              🛰 Ao entrar em um talhão, o mapa troca automaticamente para visão de satélite.
+            </div>
           </>
         )}
 
@@ -127,11 +191,11 @@ export function FazendaDetailPanel() {
           <PanelSection>
             {[
               { label: 'Nome', value: fazenda.nome },
-              { label: 'Município', value: fazenda.municipio },
+              { label: 'Município', value: fazenda.municipio || '—' },
               { label: 'Estado', value: fazenda.estado },
-              { label: 'Área total', value: `${fazenda.area_ha.toLocaleString('pt-BR')} ha` },
-              { label: 'CAR', value: fazenda.car },
-              { label: 'Status', value: 'Ativa' },
+              { label: 'CAR', value: fazenda.car || '—' },
+              { label: 'NIRF', value: fazenda.nirf || '—' },
+              { label: 'Cadastrada em', value: new Date(fazenda.criadoEm).toLocaleDateString('pt-BR') },
             ].map(d => (
               <div key={d.label} className="flex items-center justify-between px-4 py-2.5"
                 style={{ borderBottom: '1px solid #0f2240' }}>
@@ -139,12 +203,6 @@ export function FazendaDetailPanel() {
                 <p className="text-xs font-semibold" style={{ color: '#e2e8f0' }}>{d.value}</p>
               </div>
             ))}
-            <div className="p-4">
-              <button className="w-full py-2 rounded text-xs font-semibold text-white"
-                style={{ background: 'var(--invicta-blue-mid)' }}>
-                Editar Cadastro
-              </button>
-            </div>
           </PanelSection>
         )}
       </div>

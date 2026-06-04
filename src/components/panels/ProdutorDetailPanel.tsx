@@ -1,71 +1,103 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useApp } from '@/context/AppContext';
-import { MOCK_PRODUTORES, MOCK_FAZENDAS } from '@/constants/mocks';
-import { ChevronLeft, ChevronRight, Plus, Building2, Phone, Mail, FileText, Edit2 } from 'lucide-react';
+import { getClientes, getFazendas, saveFazenda, Cliente, Fazenda } from '@/lib/store';
+import { ChevronLeft, ChevronRight, Plus, Building2, Phone, Mail, Edit2, Save, X } from 'lucide-react';
 import { PanelSection, PanelButton, MockIndicator } from './_shared';
+
+const ESTADOS_BR = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'];
 
 export function ProdutorDetailPanel() {
   const { nav, setNav, setActivePanel } = useApp();
   const [tab, setTab] = useState<'fazendas' | 'dados'>('fazendas');
+  const [cliente, setCliente] = useState<Cliente | null>(null);
+  const [fazendas, setFazendas] = useState<Fazenda[]>([]);
+  const [mostraForm, setMostraForm] = useState(false);
+  const [form, setForm] = useState({ nome: '', sigla: '', municipio: '', estado: 'PR', car: '', nirf: '' });
+  const [salvando, setSalvando] = useState(false);
 
-  const produtor = MOCK_PRODUTORES.find(p => p.id === nav.produtorId);
-  const fazendas = MOCK_FAZENDAS.filter(f => f.produtorId === nav.produtorId);
+  useEffect(() => {
+    if (!nav.produtorId) return;
+    const clientes = getClientes();
+    setCliente(clientes.find(c => c.id === nav.produtorId) ?? null);
+    setFazendas(getFazendas(nav.produtorId));
+  }, [nav.produtorId]);
 
-  if (!produtor) return null;
-
-  function abrirFazenda(f: typeof MOCK_FAZENDAS[0]) {
+  function abrirFazenda(f: Fazenda) {
     setNav({ fazendaId: f.id, fazenda: f.nome });
     setActivePanel(`fazenda-${f.id}`);
   }
+
+  function handleSalvarFazenda() {
+    if (!form.nome.trim() || !nav.produtorId) return;
+    setSalvando(true);
+    setTimeout(() => {
+      saveFazenda({ clienteId: nav.produtorId!, ...form });
+      setFazendas(getFazendas(nav.produtorId!));
+      setForm({ nome: '', sigla: '', municipio: '', estado: 'PR', car: '', nirf: '' });
+      setMostraForm(false);
+      setSalvando(false);
+    }, 300);
+  }
+
+  if (!cliente) return (
+    <div className="flex items-center justify-center p-8">
+      <p className="text-xs" style={{ color: '#64748b' }}>Carregando...</p>
+    </div>
+  );
 
   return (
     <div className="flex flex-col h-full">
       {/* Voltar */}
       <button onClick={() => setActivePanel('produtores')}
-        className="flex items-center gap-1.5 px-4 py-2 text-xs w-full text-left transition-colors flex-shrink-0"
+        className="flex items-center gap-1.5 px-4 py-2 text-xs w-full text-left flex-shrink-0 transition-colors"
         style={{ color: '#93c5fd', borderBottom: '1px solid #0f2240' }}
         onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'var(--sidebar-item-hover)'}
         onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}>
-        <ChevronLeft size={12} /> Produtores
+        <ChevronLeft size={12} /> Clientes
       </button>
 
-      {/* Header do produtor */}
+      {/* Header */}
       <div className="px-4 py-4 flex-shrink-0" style={{ borderBottom: '1px solid #1a3a6b', background: '#0a1929' }}>
         <div className="flex items-start gap-3">
           <div className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg flex-shrink-0"
             style={{ background: 'var(--invicta-blue-mid)', color: '#fff' }}>
-            {produtor.nome.charAt(0)}
+            {cliente.nome.charAt(0)}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-base font-bold truncate" style={{ color: '#fff' }}>{produtor.nome}</p>
-            <p className="text-xs mt-0.5" style={{ color: '#64748b' }}>{produtor.documento}</p>
-            <p className="text-xs" style={{ color: '#64748b' }}>{produtor.cidade} · {produtor.estado}</p>
+            <p className="text-base font-bold truncate" style={{ color: '#fff' }}>{cliente.nome}</p>
+            <p className="text-xs mt-0.5" style={{ color: '#64748b' }}>
+              {cliente.tipoPessoa} · {cliente.documento || '—'}
+            </p>
+            <p className="text-xs" style={{ color: '#64748b' }}>{cliente.cidade} · {cliente.estado}</p>
           </div>
-          <button className="p-1.5 rounded" style={{ background: '#1a3a6b' }}>
-            <Edit2 size={12} style={{ color: '#93c5fd' }} />
-          </button>
         </div>
-        <div className="flex gap-3 mt-3">
-          <div className="flex items-center gap-1.5 text-xs" style={{ color: '#64748b' }}>
-            <Phone size={11} />{produtor.telefone}
-          </div>
-          <div className="flex items-center gap-1.5 text-xs truncate" style={{ color: '#64748b' }}>
-            <Mail size={11} />{produtor.email}
-          </div>
+        <div className="flex gap-4 mt-2">
+          {cliente.telefone && (
+            <div className="flex items-center gap-1.5 text-xs" style={{ color: '#64748b' }}>
+              <Phone size={11} />{cliente.telefone}
+            </div>
+          )}
+          {cliente.email && (
+            <div className="flex items-center gap-1.5 text-xs truncate" style={{ color: '#64748b' }}>
+              <Mail size={11} />{cliente.email}
+            </div>
+          )}
         </div>
       </div>
 
       {/* Tabs */}
       <div className="flex flex-shrink-0" style={{ borderBottom: '1px solid #1a3a6b' }}>
-        {[{ id: 'fazendas', label: `Fazendas (${fazendas.length})` }, { id: 'dados', label: 'Dados' }].map(t => (
+        {[
+          { id: 'fazendas', label: `Fazendas (${fazendas.length})` },
+          { id: 'dados',    label: 'Dados' },
+        ].map(t => (
           <button key={t.id} onClick={() => setTab(t.id as typeof tab)}
-            className="flex-1 py-2.5 text-xs font-semibold transition-colors"
+            className="flex-1 py-2.5 text-xs font-semibold"
             style={{
               color: tab === t.id ? '#fff' : '#64748b',
               borderBottom: tab === t.id ? '2px solid var(--invicta-green)' : '2px solid transparent',
-              background: 'transparent',
             }}>
             {t.label}
           </button>
@@ -75,49 +107,99 @@ export function ProdutorDetailPanel() {
       <div className="flex-1 overflow-y-auto">
         {tab === 'fazendas' && (
           <>
-            <PanelSection>
-              <PanelButton label="Nova Fazenda" icon={<Plus size={12} />} color="var(--invicta-green-dark)" />
-            </PanelSection>
-            <PanelSection>
-              <div className="px-4 py-1 flex items-center gap-1"><MockIndicator /></div>
-              {fazendas.length === 0 && (
-                <div className="px-4 py-6 text-center text-xs" style={{ color: '#475569' }}>
-                  Nenhuma fazenda cadastrada.
+            {/* Formulário nova fazenda */}
+            {mostraForm ? (
+              <div className="p-4 space-y-3">
+                <p className="text-xs font-bold uppercase tracking-wide" style={{ color: '#93c5fd' }}>Nova Fazenda</p>
+                {[
+                  { label: 'Nome da Fazenda *', key: 'nome', ph: 'Fazenda São João' },
+                  { label: 'Sigla (opcional)', key: 'sigla', ph: 'Ex: FSJ' },
+                  { label: 'Município', key: 'municipio', ph: 'Cidade' },
+                  { label: 'CAR', key: 'car', ph: 'MT-0000000-00...' },
+                  { label: 'NIRF', key: 'nirf', ph: 'Número NIRF (opcional)' },
+                ].map(f => (
+                  <div key={f.key}>
+                    <label className="text-[10px] font-semibold block mb-0.5" style={{ color: '#64748b' }}>{f.label}</label>
+                    <input value={form[f.key as keyof typeof form]} placeholder={f.ph}
+                      onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))}
+                      className="w-full rounded px-3 py-2 text-xs outline-none"
+                      style={{ background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' }} />
+                  </div>
+                ))}
+                <div>
+                  <label className="text-[10px] font-semibold block mb-0.5" style={{ color: '#64748b' }}>Estado</label>
+                  <select value={form.estado} onChange={e => setForm(p => ({ ...p, estado: e.target.value }))}
+                    className="w-full rounded px-3 py-2 text-xs outline-none"
+                    style={{ background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' }}>
+                    {ESTADOS_BR.map(uf => <option key={uf} value={uf}>{uf}</option>)}
+                  </select>
                 </div>
-              )}
-              {fazendas.map(f => (
-                <button key={f.id} onClick={() => abrirFazenda(f)}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors"
-                  style={{ borderBottom: '1px solid #0f2240' }}
-                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'var(--sidebar-item-hover)'}
-                  onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}>
-                  <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-                    style={{ background: '#166534' }}>
-                    <Building2 size={14} style={{ color: '#86efac' }} />
+                <div className="flex gap-2">
+                  <button onClick={() => setMostraForm(false)}
+                    className="flex-1 py-2 rounded text-xs font-semibold flex items-center justify-center gap-1"
+                    style={{ background: '#1a3a6b', color: '#94a3b8' }}>
+                    <X size={12} /> Cancelar
+                  </button>
+                  <button onClick={handleSalvarFazenda} disabled={!form.nome.trim() || salvando}
+                    className="flex-1 py-2 rounded text-xs font-bold text-white flex items-center justify-center gap-1 disabled:opacity-40"
+                    style={{ background: 'var(--invicta-green-dark)' }}>
+                    <Save size={12} /> {salvando ? 'Salvando...' : 'Salvar'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="p-3">
+                  <button onClick={() => setMostraForm(true)}
+                    className="w-full flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-semibold text-white"
+                    style={{ background: 'var(--invicta-green-dark)' }}>
+                    <Plus size={12} /> Nova Fazenda
+                  </button>
+                </div>
+
+                {fazendas.length === 0 ? (
+                  <div className="px-4 py-8 text-center">
+                    <Building2 size={28} className="mx-auto mb-2" style={{ color: '#2e3f5c' }} />
+                    <p className="text-xs" style={{ color: '#475569' }}>Nenhuma fazenda cadastrada.</p>
+                    <p className="text-xs mt-1" style={{ color: '#2e3f5c' }}>Clique em "Nova Fazenda" acima.</p>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold truncate" style={{ color: '#e2e8f0' }}>{f.nome}</p>
-                    <p className="text-[11px]" style={{ color: '#64748b' }}>
-                      {f.municipio} · {f.area_ha.toLocaleString('pt-BR')} ha
-                    </p>
-                  </div>
-                  <ChevronRight size={14} style={{ color: '#64748b' }} />
-                </button>
-              ))}
-            </PanelSection>
+                ) : (
+                  fazendas.map(f => (
+                    <button key={f.id} onClick={() => abrirFazenda(f)}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors"
+                      style={{ borderBottom: '1px solid #0f2240' }}
+                      onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'var(--sidebar-item-hover)'}
+                      onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}>
+                      <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                        style={{ background: '#166534' }}>
+                        <Building2 size={14} style={{ color: '#86efac' }} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold truncate" style={{ color: '#e2e8f0' }}>{f.nome}</p>
+                        <p className="text-[10px]" style={{ color: '#64748b' }}>
+                          {f.sigla ? `${f.sigla} · ` : ''}{f.municipio} · {f.estado}{f.car ? ` · CAR: ${f.car}` : ''}
+                        </p>
+                      </div>
+                      <ChevronRight size={14} style={{ color: '#64748b' }} />
+                    </button>
+                  ))
+                )}
+              </>
+            )}
           </>
         )}
 
         {tab === 'dados' && (
           <PanelSection>
             {[
-              { label: 'Nome completo', value: produtor.nome },
-              { label: 'CPF / CNPJ', value: produtor.documento },
-              { label: 'Município', value: produtor.cidade },
-              { label: 'Estado', value: produtor.estado },
-              { label: 'Telefone', value: produtor.telefone },
-              { label: 'E-mail', value: produtor.email },
-              { label: 'Status', value: produtor.status === 'ativo' ? 'Ativo' : 'Inativo' },
+              { label: 'Nome', value: cliente.nome },
+              { label: 'Tipo', value: cliente.tipoPessoa === 'PF' ? 'Pessoa Física' : 'Pessoa Jurídica' },
+              { label: 'CPF / CNPJ', value: cliente.documento || '—' },
+              { label: 'Município', value: cliente.cidade || '—' },
+              { label: 'Estado', value: cliente.estado },
+              { label: 'Telefone', value: cliente.telefone || '—' },
+              { label: 'E-mail', value: cliente.email || '—' },
+              { label: 'Cadastrado em', value: new Date(cliente.criadoEm).toLocaleDateString('pt-BR') },
             ].map(d => (
               <div key={d.label} className="flex items-center justify-between px-4 py-2.5"
                 style={{ borderBottom: '1px solid #0f2240' }}>
@@ -125,12 +207,12 @@ export function ProdutorDetailPanel() {
                 <p className="text-xs font-semibold" style={{ color: '#e2e8f0' }}>{d.value}</p>
               </div>
             ))}
-            <div className="p-4">
-              <button className="w-full py-2 rounded text-xs font-semibold text-white"
-                style={{ background: 'var(--invicta-blue-mid)' }}>
-                Editar Cadastro
-              </button>
-            </div>
+            {cliente.observacoes && (
+              <div className="px-4 py-3">
+                <p className="text-[10px] font-semibold mb-1" style={{ color: '#64748b' }}>Observações</p>
+                <p className="text-xs" style={{ color: '#94a3b8' }}>{cliente.observacoes}</p>
+              </div>
+            )}
           </PanelSection>
         )}
       </div>
