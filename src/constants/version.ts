@@ -1,6 +1,9 @@
-export const APP_VERSION = '0.12.0';
+export const APP_VERSION = '0.12.1';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.12.1': [
+    'Changelog recolhível — última versão sempre visível, anteriores ocultas e expansíveis',
+  ],
   '0.12.0': [
     'Amostragem Fase 3b — edição manual dos pontos no mapa',
     'Arrastar pontos (não saem do talhão nem da faixa de borda — encaixa na posição válida mais próxima)',
