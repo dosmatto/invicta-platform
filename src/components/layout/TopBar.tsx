@@ -5,7 +5,7 @@ import { ChevronRight, Wifi, User } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 
 export function TopBar() {
-  const { context } = useApp();
+  const { nav: context } = useApp();
 
   return (
     <header
@@ -23,7 +23,7 @@ export function TopBar() {
           { label: 'Cliente', value: context.produtor },
           { label: 'Fazenda', value: context.fazenda },
           { label: 'Talhão', value: context.talhao },
-          { label: 'Safra', value: context.safra },
+          { label: 'Safra', value: context.safra || '—' },
         ].map((item, i) => (
           <span key={item.label} className="flex items-center gap-1.5">
             {i > 0 && <ChevronRight size={12} className="opacity-40 flex-shrink-0" style={{ color: '#fff' }} />}

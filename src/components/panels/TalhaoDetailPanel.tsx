@@ -67,10 +67,14 @@ function SelectField({ placeholder }: { placeholder: string }) {
 
 // ── painel principal ────────────────────────────────────────────────────────
 export function TalhaoDetailPanel() {
-  const { activePanel, setActivePanel, context } = useApp();
-
-  // extrai o ID do talhão do activePanel (ex: "talhao-1")
+  const { activePanel, setActivePanel, nav, setNav, setMapMode } = useApp();
   const talhaoId = activePanel?.replace('talhao-', '');
+
+  function voltarFazenda() {
+    setNav({ talhaoId: null, talhao: '', area: 0 });
+    setMapMode('street');
+    setActivePanel(`fazenda-${nav.fazendaId}`);
+  }
 
   const [safra, setSafra] = useState('24/25');
   const SAFRAS = ['24/25', '23/24', '22/23'];
@@ -82,22 +86,22 @@ export function TalhaoDetailPanel() {
       <div className="flex-shrink-0" style={{ background: '#0a1929', borderBottom: '1px solid #1a3a6b' }}>
         {/* Voltar */}
         <button
-          onClick={() => setActivePanel('talhoes')}
+          onClick={voltarFazenda}
           className="flex items-center gap-1.5 px-4 py-2 text-xs transition-colors w-full text-left"
           style={{ color: '#93c5fd', borderBottom: '1px solid #0f2240' }}
           onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'var(--sidebar-item-hover)'}
           onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}
         >
-          <ChevronLeft size={12} /> Voltar para Talhões
+          <ChevronLeft size={12} /> {nav.fazenda || 'Fazenda'}
         </button>
 
         {/* Info do talhão */}
         <div className="px-4 py-3">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-base font-bold" style={{ color: '#fff' }}>{context.talhao}</p>
-              <p className="text-xs mt-0.5" style={{ color: '#93c5fd' }}>{context.fazenda}</p>
-              <p className="text-xs" style={{ color: '#64748b' }}>{context.area} ha · Talhão {talhaoId}</p>
+              <p className="text-base font-bold" style={{ color: '#fff' }}>{nav.talhao}</p>
+              <p className="text-xs mt-0.5" style={{ color: '#93c5fd' }}>{nav.fazenda}</p>
+              <p className="text-xs" style={{ color: '#64748b' }}>{nav.area} ha · {nav.produtor}</p>
             </div>
             <span className="text-[10px] px-2 py-1 rounded-full font-semibold"
               style={{ background: '#166534', color: '#86efac' }}>Ativo</span>

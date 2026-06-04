@@ -1,5 +1,6 @@
 import { PanelSection, PanelRow, PanelKpi, MockIndicator } from './_shared';
 import { MOCK_KPIS, MOCK_PROCESSAMENTOS } from '@/constants/mocks';
+// Dashboard — visão geral, não vinculado a talhão
 
 export function DashboardPanel() {
   return (
