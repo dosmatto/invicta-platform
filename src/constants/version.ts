@@ -1,6 +1,9 @@
-export const APP_VERSION = '0.9.9';
+export const APP_VERSION = '0.9.10';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.9.10': [
+    'Textura (granulometria) adicionada como análise selecionável nos Padrões de Elementos',
+  ],
   '0.9.9': [
     'Base Agronômica movida para dentro do painel "Cadastros"',
     'Ícone separado "Base Ag." removido da barra lateral (consolidação dos cadastros)',

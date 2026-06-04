@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { LEGENDAS_PADRAO } from '@/constants/agronomica';
+import { LEGENDAS_PADRAO, ANALISES_FISICAS } from '@/constants/agronomica';
 import {
   getPadroesElementos, savePadraoElementos, updatePadraoElementos, deletePadraoElementos,
   getPadroesAmostragem, savePadraoAmostragem, updatePadraoAmostragem, deletePadraoAmostragem,
@@ -14,6 +14,12 @@ import {
 import { BaseAgronomicaPanel } from './BaseAgronomicaPanel';
 
 type View = 'menu' | 'elementos' | 'amostragem' | 'base';
+
+// Elementos selecionáveis = nutrientes da Base Agronômica + análises físicas (textura)
+const ELEMENTOS_DISPONIVEIS = [
+  ...LEGENDAS_PADRAO.map(l => ({ id: l.id, simbolo: l.simbolo, nome: l.nome })),
+  ...ANALISES_FISICAS,
+];
 
 // ── Painel raiz: menu de cadastros ──────────────────────────────────────────
 export function CadastrosPanel() {
@@ -106,7 +112,7 @@ function PadroesElementos({ onVoltar }: { onVoltar: () => void }) {
 
   function excluir(id: string) { deletePadraoElementos(id); reload(); }
 
-  const nomePorId = (id: string) => LEGENDAS_PADRAO.find(l => l.id === id)?.simbolo ?? id;
+  const nomePorId = (id: string) => ELEMENTOS_DISPONIVEIS.find(l => l.id === id)?.simbolo ?? id;
 
   return (
     <div className="flex flex-col h-full">
@@ -138,7 +144,7 @@ function PadroesElementos({ onVoltar }: { onVoltar: () => void }) {
               Elementos a analisar ({sel.length})
             </label>
             <div className="grid grid-cols-3 gap-1.5">
-              {LEGENDAS_PADRAO.map(el => {
+              {ELEMENTOS_DISPONIVEIS.map(el => {
                 const on = sel.includes(el.id);
                 return (
                   <button key={el.id} onClick={() => toggle(el.id)}

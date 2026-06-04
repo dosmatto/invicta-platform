@@ -274,3 +274,9 @@ export const LEGENDAS_PADRAO: LegendaNutriente[] = [
     ],
   },
 ];
+
+// Análises físicas (não-nutrientes) selecionáveis nos Padrões de Elementos.
+// A textura/granulometria não segue o modelo de classes dos nutrientes.
+export const ANALISES_FISICAS = [
+  { id: 'textura', simbolo: 'Text', nome: 'Textura (granulometria)' },
+];
