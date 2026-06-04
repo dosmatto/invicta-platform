@@ -5,6 +5,7 @@ export const MOCK_PRODUTORES = [
   { id: '2', nome: 'Pedro Alves', documento: '987.654.321-00', cidade: 'Lucas do Rio Verde', estado: 'MT', telefone: '(66) 99999-0002', email: 'pedro@email.com', status: 'ativo' },
   { id: '3', nome: 'Maria Oliveira', documento: '456.789.123-00', cidade: 'Campo Novo do Parecis', estado: 'MT', telefone: '(65) 99999-0003', email: 'maria@email.com', status: 'ativo' },
   { id: '4', nome: 'Carlos Mendes', documento: '321.654.987-00', cidade: 'Primavera do Leste', estado: 'MT', telefone: '(66) 99999-0004', email: 'carlos@email.com', status: 'ativo' },
+  { id: 'jdyta', nome: 'Grupo JDYTA', documento: '00.000.000/0001-00', cidade: 'Jacarezinho', estado: 'PR', telefone: '(43) 99999-0001', email: 'jdyta@email.com', status: 'ativo' },
 ];
 
 export const MOCK_FAZENDAS = [
@@ -13,6 +14,7 @@ export const MOCK_FAZENDAS = [
   { id: '3', produtorId: '2', nome: 'Fazenda Santa Rita', municipio: 'Sorriso', estado: 'MT', area_ha: 430.8, car: 'MT-654321', status: 'ativo' },
   { id: '4', produtorId: '3', nome: 'Fazenda Esperança', municipio: 'Campo Novo do Parecis', estado: 'MT', area_ha: 98.5, car: 'MT-789012', status: 'ativo' },
   { id: '5', produtorId: '4', nome: 'Fazenda Nova Era', municipio: 'Primavera do Leste', estado: 'MT', area_ha: 640.0, car: 'MT-345678', status: 'ativo' },
+  { id: 'jdyta-f1', produtorId: 'jdyta', nome: 'Fazenda JDYTA', municipio: 'Jacarezinho', estado: 'PR', area_ha: 312.5, car: 'PR-JDYTA-001', status: 'ativo' },
 ];
 
 export const MOCK_TALHOES = [
@@ -21,7 +23,14 @@ export const MOCK_TALHOES = [
   { id: '3', fazendaId: '1', nome: 'Talhão Norte', area: 35.0, status: 'incompleto', safra: '—', lat: -13.19, lng: -54.67 },
   { id: '4', fazendaId: '2', nome: 'Gleba A', area: 120.8, status: 'ativo', safra: '24/25', lat: -13.25, lng: -54.52 },
   { id: '5', fazendaId: '3', nome: 'Área 01', area: 95.2, status: 'ativo', safra: '24/25', lat: -13.28, lng: -54.55 },
+  // Talhões JDYTA — carregam KML real de /demo/jdyta.kml
+  { id: 'jdyta-1', fazendaId: 'jdyta-f1', nome: 'JDYTA — Área Total', area: 312.5, status: 'ativo', safra: '24/25', lat: -24.883, lng: -50.277, kmlUrl: '/demo/jdyta.kml' },
 ];
+
+// Talhões com KML real pré-carregado
+export const TALHAO_KML_URLS: Record<string, string> = {
+  'jdyta-1': '/demo/jdyta.kml',
+};
 
 export const MOCK_PROCESSAMENTOS = [
   { id: '1', tipo: 'NDVI Sentinel-2', talhao: 'Talhão 01', data: '2025-05-20', status: 'concluido' },

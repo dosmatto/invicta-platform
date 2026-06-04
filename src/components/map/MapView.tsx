@@ -4,6 +4,8 @@ import { useEffect, useRef } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { useApp } from '@/context/AppContext';
+import { TALHAO_KML_URLS } from '@/constants/mocks';
+import { parseKML } from '@/lib/geo';
 
 const STREET_STYLE = {
   version: 8 as const,
@@ -87,7 +89,7 @@ const PONTOS_AMOSTRAGEM: Record<string, GeoJSON.FeatureCollection> = {
 export function MapView() {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
-  const { mapMode, setMapMode, nav, activeModule, uploadedGeo, uploadedBbox } = useApp();
+  const { mapMode, setMapMode, nav, activeModule, uploadedGeo, setUploadedGeo, uploadedBbox, setUploadedBbox } = useApp();
 
   // Inicializa o mapa
   useEffect(() => {
@@ -173,6 +175,36 @@ export function MapView() {
       mapRef.current.setFilter('talhao-selected', ['==', ['get', 'id'], id]);
       mapRef.current.setFilter('talhao-selected-outline', ['==', ['get', 'id'], id]);
     } catch {}
+  }, [nav.talhaoId]);
+
+  // Auto-carrega KML de talhões com URL pré-definida
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!nav.talhaoId) return;
+
+    const kmlUrl = TALHAO_KML_URLS[nav.talhaoId];
+    if (!kmlUrl || uploadedGeo) return; // só carrega se não há upload manual
+
+    fetch(kmlUrl)
+      .then(r => r.blob())
+      .then(blob => {
+        const file = new File([blob], 'talhao.kml', { type: 'application/vnd.google-earth.kml+xml' });
+        return parseKML(file);
+      })
+      .then(result => {
+        setUploadedGeo(result.geojson);
+        setUploadedBbox(result.bbox);
+        setMapMode('satellite');
+        // Zoom para o talhão
+        if (map && result.bbox) {
+          map.fitBounds(
+            [[result.bbox[0], result.bbox[1]], [result.bbox[2], result.bbox[3]]],
+            { padding: 60, duration: 1000 }
+          );
+        }
+      })
+      .catch(e => console.error('Erro ao carregar KML:', e));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nav.talhaoId]);
 
   // Geometria carregada (KML/GeoJSON upload)
