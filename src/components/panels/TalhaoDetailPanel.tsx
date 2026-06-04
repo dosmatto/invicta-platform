@@ -2,14 +2,14 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useApp } from '@/context/AppContext';
-import { getTalhoes, getSafras, updateTalhao, Talhao, Safra } from '@/lib/store';
+import { getTalhoes, getSafras, saveSafra, updateTalhao, Talhao, Safra } from '@/lib/store';
 import { parseGeoFile } from '@/lib/geo';
 import { AmostragemSection } from '@/components/talhao/AmostragemSection';
 import {
   ChevronLeft, Grid3x3, TestTube, QrCode, Leaf,
   Satellite, Zap, BarChart3, Layers, FileSpreadsheet,
   FileText, ChevronDown, ChevronRight, Play, Upload, Download,
-  CheckCircle2, AlertTriangle, MapPin,
+  CheckCircle2, AlertTriangle, MapPin, Plus, X, Save,
 } from 'lucide-react';
 
 // ── tipos ──────────────────────────────────────────────────────────────────
@@ -218,6 +218,8 @@ export function TalhaoDetailPanel() {
   const [talhao, setTalhao] = useState<Talhao | null>(null);
   const [safras, setSafras] = useState<Safra[]>([]);
   const [safra, setSafra] = useState('');
+  const [mostraFormSafra, setMostraFormSafra] = useState(false);
+  const [novaSafra, setNovaSafra] = useState({ anoInicio: new Date().getFullYear(), anoFim: new Date().getFullYear() + 1 });
 
   // Carrega talhão do store, safras e restaura geo no mapa
   useEffect(() => {
@@ -253,6 +255,23 @@ export function TalhaoDetailPanel() {
     const t = todos.find(x => x.id === nav.talhaoId) ?? null;
     setTalhao(t);
     setNav({ area: areaHa });
+  }
+
+  function handleCriarSafra() {
+    const { anoInicio, anoFim } = novaSafra;
+    if (!anoInicio || !anoFim) return;
+    const nome = `${String(anoInicio).slice(-2)}/${String(anoFim).slice(-2)}`;
+    // Evita duplicar safra já existente
+    const existente = getSafras().find(s => s.nome === nome);
+    if (!existente) {
+      // Primeira safra do sistema vira a ativa
+      const primeira = getSafras().length === 0;
+      saveSafra({ nome, anoInicio, anoFim, ativa: primeira });
+    }
+    const atualizadas = getSafras();
+    setSafras(atualizadas);
+    setSafra(nome);
+    setMostraFormSafra(false);
   }
 
   return (
@@ -292,23 +311,56 @@ export function TalhaoDetailPanel() {
         </div>
 
         {/* Seletor de Safra */}
-        <div className="flex items-center gap-2 px-4 py-2" style={{ borderTop: '1px solid #0f2240' }}>
-          <span className="text-[10px] font-semibold uppercase tracking-wider flex-shrink-0" style={{ color: '#64748b' }}>Safra</span>
-          {safras.length === 0 ? (
-            <span className="text-[10px]" style={{ color: '#475569' }}>Nenhuma safra cadastrada</span>
-          ) : (
-            <div className="flex flex-wrap gap-1">
-              {safras.map(s => (
-                <button key={s.id}
-                  onClick={() => setSafra(s.nome)}
-                  className="px-2.5 py-1 rounded text-xs font-bold transition-colors"
-                  style={{
-                    background: safra === s.nome ? 'var(--invicta-blue-mid)' : '#1a3a6b',
-                    color: safra === s.nome ? '#fff' : '#64748b',
-                  }}>
-                  {s.nome}
-                </button>
-              ))}
+        <div className="px-4 py-2" style={{ borderTop: '1px solid #0f2240' }}>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[10px] font-semibold uppercase tracking-wider flex-shrink-0" style={{ color: '#64748b' }}>Safra</span>
+            {safras.length === 0 && !mostraFormSafra && (
+              <span className="text-[10px]" style={{ color: '#475569' }}>Nenhuma safra cadastrada</span>
+            )}
+            {safras.map(s => (
+              <button key={s.id}
+                onClick={() => setSafra(s.nome)}
+                className="px-2.5 py-1 rounded text-xs font-bold transition-colors"
+                style={{
+                  background: safra === s.nome ? 'var(--invicta-blue-mid)' : '#1a3a6b',
+                  color: safra === s.nome ? '#fff' : '#64748b',
+                }}>
+                {s.nome}
+              </button>
+            ))}
+            {/* Botão criar safra a partir do talhão */}
+            <button onClick={() => setMostraFormSafra(v => !v)}
+              title="Cadastrar safra"
+              className="px-1.5 py-1 rounded text-xs font-bold flex items-center gap-0.5 transition-colors"
+              style={{ background: mostraFormSafra ? '#374151' : 'var(--invicta-green-dark)', color: '#fff' }}>
+              {mostraFormSafra ? <X size={12} /> : <Plus size={12} />}
+            </button>
+          </div>
+
+          {/* Mini-form de nova safra */}
+          {mostraFormSafra && (
+            <div className="mt-2 p-2 rounded space-y-2" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
+              <div className="flex items-center gap-2">
+                <div className="flex-1">
+                  <label className="text-[9px] font-semibold block mb-0.5" style={{ color: '#64748b' }}>Ano início</label>
+                  <input type="number" value={novaSafra.anoInicio} min={2000} max={2100}
+                    onChange={e => setNovaSafra(p => ({ ...p, anoInicio: Number(e.target.value) }))}
+                    className="w-full rounded px-2 py-1 text-xs outline-none"
+                    style={{ background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' }} />
+                </div>
+                <div className="flex-1">
+                  <label className="text-[9px] font-semibold block mb-0.5" style={{ color: '#64748b' }}>Ano fim</label>
+                  <input type="number" value={novaSafra.anoFim} min={2000} max={2100}
+                    onChange={e => setNovaSafra(p => ({ ...p, anoFim: Number(e.target.value) }))}
+                    className="w-full rounded px-2 py-1 text-xs outline-none"
+                    style={{ background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' }} />
+                </div>
+              </div>
+              <button onClick={handleCriarSafra}
+                className="w-full py-1.5 rounded text-xs font-bold text-white flex items-center justify-center gap-1"
+                style={{ background: 'var(--invicta-green-dark)' }}>
+                <Save size={11} /> Cadastrar {String(novaSafra.anoInicio).slice(-2)}/{String(novaSafra.anoFim).slice(-2)}
+              </button>
             </div>
           )}
         </div>

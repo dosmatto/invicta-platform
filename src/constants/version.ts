@@ -1,6 +1,11 @@
-export const APP_VERSION = '0.9.6';
+export const APP_VERSION = '0.9.7';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.9.7': [
+    'Cadastro de safra a partir do próprio talhão (botão + no seletor de safra)',
+    'Safra recém-criada fica selecionada como contexto ativo do talhão',
+    'A safra selecionada é o contexto temporal das operações do talhão',
+  ],
   '0.9.6': [
     'Coordenada exata do Escritório da Invicta definida (Carambeí/PR) — mapa abre nela',
   ],
