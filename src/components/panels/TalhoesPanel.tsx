@@ -6,10 +6,11 @@ import { MOCK_TALHOES } from '@/constants/mocks';
 import { useApp } from '@/context/AppContext';
 
 export function TalhoesPanel() {
-  const { setActivePanel, setContext } = useApp();
+  const { setActivePanel, setNav, setMapMode } = useApp();
 
   function abrirTalhao(t: typeof MOCK_TALHOES[0]) {
-    setContext({ talhao: t.nome, fazenda: t.fazenda, area: t.area });
+    setNav({ talhaoId: t.id, talhao: t.nome, area: t.area });
+    setMapMode('satellite');
     setActivePanel(`talhao-${t.id}`);
   }
 
@@ -38,7 +39,7 @@ export function TalhoesPanel() {
               <div className="min-w-0">
                 <p className="text-sm font-semibold truncate" style={{ color: '#e2e8f0' }}>{t.nome}</p>
                 <p className="text-[11px] truncate" style={{ color: 'var(--sidebar-section)' }}>
-                  {t.fazenda} · {t.area} ha
+                  {t.area} ha
                 </p>
               </div>
             </div>

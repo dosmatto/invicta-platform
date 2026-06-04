@@ -54,7 +54,7 @@ export default function TalhoesPage() {
                 <tr key={t.id} className="border-t"
                   style={{ borderColor: 'var(--border-color)', background: i % 2 === 0 ? 'transparent' : 'var(--bg-app)' }}>
                   <td className="px-4 py-3 font-medium" style={{ color: 'var(--text-primary)' }}>{t.nome}</td>
-                  <td className="px-4 py-3" style={{ color: 'var(--text-secondary)' }}>{t.fazenda}</td>
+                  <td className="px-4 py-3" style={{ color: 'var(--text-secondary)' }}>{t.fazendaId}</td>
                   <td className="px-4 py-3" style={{ color: 'var(--text-secondary)' }}>{t.area} ha</td>
                   <td className="px-4 py-3" style={{ color: 'var(--text-secondary)' }}>{t.safra}</td>
                   <td className="px-4 py-3"><StatusBadge status={t.status as 'ativo' | 'incompleto'} /></td>
