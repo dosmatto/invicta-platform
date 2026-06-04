@@ -1,139 +1,224 @@
-import { Header } from '@/components/layout/Header';
-import { MockIndicator } from '@/components/shared/MockIndicator';
-import { Plus, FlaskConical, Layers, BookOpen, Leaf } from 'lucide-react';
+'use client';
 
-const NUTRIENTES = [
-  { simbolo: 'pH', nome: 'pH do Solo', unidade: '—', metodo: 'CaCl₂' },
-  { simbolo: 'P', nome: 'Fósforo', unidade: 'mg/dm³', metodo: 'Mehlich-1' },
-  { simbolo: 'K', nome: 'Potássio', unidade: 'cmolc/dm³', metodo: 'Mehlich-1' },
-  { simbolo: 'Ca', nome: 'Cálcio', unidade: 'cmolc/dm³', metodo: 'KCl' },
-  { simbolo: 'Mg', nome: 'Magnésio', unidade: 'cmolc/dm³', metodo: 'KCl' },
-  { simbolo: 'Al', nome: 'Alumínio', unidade: 'cmolc/dm³', metodo: 'KCl' },
-  { simbolo: 'S', nome: 'Enxofre', unidade: 'mg/dm³', metodo: 'Fosfato de cálcio' },
-  { simbolo: 'B', nome: 'Boro', unidade: 'mg/dm³', metodo: 'Agua quente' },
-  { simbolo: 'Zn', nome: 'Zinco', unidade: 'mg/dm³', metodo: 'Mehlich-1' },
-  { simbolo: 'Cu', nome: 'Cobre', unidade: 'mg/dm³', metodo: 'Mehlich-1' },
-  { simbolo: 'MO', nome: 'Matéria Orgânica', unidade: 'g/dm³', metodo: 'Walkley-Black' },
-  { simbolo: 'V%', nome: 'Saturação de Bases', unidade: '%', metodo: 'Calculado' },
-];
-
-const PROFUNDIDADES = [
-  { label: '0–10 cm', ativa: true },
-  { label: '0–20 cm', ativa: true },
-  { label: '10–20 cm', ativa: true },
-  { label: '20–40 cm', ativa: true },
-  { label: '40–60 cm', ativa: false },
-];
-
-const METODOLOGIAS = [
-  { nome: 'Embrapa Cerrado', regiao: 'Cerrado / MT / GO', status: 'ativa' },
-  { nome: 'CQFS RS/SC', regiao: 'Sul do Brasil', status: 'ativa' },
-  { nome: 'IAC', regiao: 'São Paulo', status: 'ativa' },
-  { nome: 'Legenda Invicta', regiao: 'Personalizada', status: 'ativa' },
-];
-
-const CULTURAS = [
-  { nome: 'Soja', ciclo: '110–130 dias' },
-  { nome: 'Milho', ciclo: '120–140 dias' },
-  { nome: 'Milho Safrinha', ciclo: '100–115 dias' },
-  { nome: 'Algodão', ciclo: '150–180 dias' },
-  { nome: 'Trigo', ciclo: '90–110 dias' },
-  { nome: 'Feijão', ciclo: '85–100 dias' },
-];
-
-function SectionCard({ title, icon: Icon, color, children }: {
-  title: string; icon: React.ElementType; color: string; children: React.ReactNode;
-}) {
-  return (
-    <div className="rounded-xl border overflow-hidden"
-      style={{ background: 'var(--bg-surface)', borderColor: 'var(--border-color)' }}>
-      <div className="flex items-center justify-between p-4 border-b"
-        style={{ borderColor: 'var(--border-color)' }}>
-        <div className="flex items-center gap-2">
-          <Icon size={16} style={{ color }} />
-          <h2 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{title}</h2>
-          <MockIndicator />
-        </div>
-        <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-white"
-          style={{ background: 'var(--invicta-blue)' }}>
-          <Plus size={12} /> Adicionar
-        </button>
-      </div>
-      <div className="p-4">{children}</div>
-    </div>
-  );
-}
+import { useState } from 'react';
+import { LEGENDAS_PADRAO, LegendaNutriente } from '@/constants/agronomica';
+import { NutrienteCard } from '@/components/agronomica/NutrienteCard';
+import { LegendaBar } from '@/components/agronomica/LegendaBar';
+import { FlaskConical, BookOpen, Layers, Search, Info } from 'lucide-react';
 
 export default function BaseAgronomicaPage() {
+  const [legendas, setLegendas] = useState<LegendaNutriente[]>(LEGENDAS_PADRAO);
+  const [busca, setBusca] = useState('');
+  const [aba, setAba] = useState<'legendas' | 'profundidades' | 'metodologias'>('legendas');
+
+  const legendasFiltradas = legendas.filter(l =>
+    l.nome.toLowerCase().includes(busca.toLowerCase()) ||
+    l.simbolo.toLowerCase().includes(busca.toLowerCase())
+  );
+
+  function handleSave(updated: LegendaNutriente) {
+    setLegendas(prev => prev.map(l => l.id === updated.id ? updated : l));
+  }
+
+  const PROFUNDIDADES = [
+    { label: '0–10 cm', ativa: true },
+    { label: '0–20 cm', ativa: true },
+    { label: '10–20 cm', ativa: true },
+    { label: '20–40 cm', ativa: true },
+    { label: '40–60 cm', ativa: false },
+  ];
+
+  const METODOLOGIAS = [
+    { nome: 'Embrapa Cerrado', regiao: 'Cerrado / MT / GO / MS', culturas: 'Soja, Milho, Algodão', padrao: true },
+    { nome: 'CQFS RS/SC', regiao: 'Sul do Brasil', culturas: 'Soja, Trigo, Milho', padrao: false },
+    { nome: 'IAC', regiao: 'São Paulo', culturas: 'Cana, Citricultura', padrao: false },
+    { nome: 'Legenda Invicta', regiao: 'Personalizada', culturas: 'Todos', padrao: false },
+  ];
+
   return (
-    <>
-      <Header title="Base Agronômica" breadcrumb={['Painel Invicta', 'Base Agronômica']} />
-      <div className="flex-1 p-6 space-y-6">
+    <div className="flex flex-col h-full overflow-hidden" style={{ background: '#060e1a' }}>
 
-        {/* Nutrientes */}
-        <SectionCard title="Nutrientes e Atributos" icon={FlaskConical} color="var(--invicta-blue)">
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-            {NUTRIENTES.map(n => (
-              <div key={n.simbolo} className="rounded-lg border p-3"
-                style={{ borderColor: 'var(--border-color)', background: 'var(--bg-app)' }}>
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="w-8 h-8 rounded-md flex items-center justify-center text-white text-xs font-bold"
-                    style={{ background: 'var(--invicta-blue)' }}>{n.simbolo}</span>
-                  <span className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>{n.nome}</span>
-                </div>
-                <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{n.unidade} · {n.metodo}</p>
-              </div>
-            ))}
+      {/* Header da página */}
+      <div className="flex-shrink-0 px-6 py-4 flex items-center justify-between"
+        style={{ borderBottom: '1px solid #1a3a6b', background: '#0a1929' }}>
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-lg flex items-center justify-center"
+            style={{ background: 'var(--invicta-blue)' }}>
+            <FlaskConical size={18} style={{ color: '#93c5fd' }} />
           </div>
-        </SectionCard>
+          <div>
+            <h1 className="text-base font-bold" style={{ color: '#fff' }}>Base Agronômica</h1>
+            <p className="text-xs" style={{ color: '#475569' }}>
+              Configuração de legendas, classes e parâmetros técnicos
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 text-xs px-3 py-1.5 rounded-lg"
+          style={{ background: '#1a3a6b', color: '#64748b' }}>
+          <Info size={12} />
+          Dados aplicados a todos os processamentos
+        </div>
+      </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Profundidades */}
-          <SectionCard title="Profundidades" icon={Layers} color="var(--invicta-green)">
-            <div className="space-y-2">
-              {PROFUNDIDADES.map(p => (
-                <div key={p.label} className="flex items-center justify-between py-2 border-b last:border-0"
-                  style={{ borderColor: 'var(--border-color)' }}>
-                  <span className="text-sm" style={{ color: 'var(--text-primary)' }}>{p.label}</span>
-                  <span className="text-xs px-2 py-0.5 rounded-full"
+      {/* Abas */}
+      <div className="flex flex-shrink-0 px-6" style={{ borderBottom: '1px solid #1a3a6b', background: '#0a1929' }}>
+        {[
+          { id: 'legendas',      label: 'Legendas e Classes',  icon: Layers },
+          { id: 'profundidades', label: 'Profundidades',       icon: Layers },
+          { id: 'metodologias',  label: 'Metodologias',        icon: BookOpen },
+        ].map(({ id, label, icon: Icon }) => (
+          <button key={id}
+            onClick={() => setAba(id as typeof aba)}
+            className="flex items-center gap-2 px-4 py-3 text-sm font-semibold transition-colors"
+            style={{
+              color: aba === id ? '#fff' : '#475569',
+              borderBottom: aba === id ? '2px solid var(--invicta-green)' : '2px solid transparent',
+              background: 'transparent',
+            }}>
+            <Icon size={14} />{label}
+          </button>
+        ))}
+      </div>
+
+      {/* Conteúdo */}
+      <div className="flex-1 overflow-y-auto px-6 py-5">
+
+        {/* ABA: Legendas */}
+        {aba === 'legendas' && (
+          <div className="space-y-4">
+
+            {/* Paleta padrão */}
+            <div className="rounded-xl p-5 mb-6" style={{ background: '#0a1929', border: '1px solid #1a3a6b' }}>
+              <p className="text-sm font-bold mb-3" style={{ color: '#e2e8f0' }}>
+                Paleta de Cores Padrão — Todos os Nutrientes
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <p className="text-xs font-semibold mb-2" style={{ color: '#64748b' }}>
+                    PADRÃO — pH, P, K, Ca, Mg, MO, S, B, Zn, Cu, Mn, CTC, V%
+                  </p>
+                  <LegendaBar legenda={LEGENDAS_PADRAO[0]} size="lg" />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold mb-2" style={{ color: '#a78bfa' }}>
+                    INVERTIDO — Alumínio (Al) e Saturação de Alumínio (m%)
+                  </p>
+                  <LegendaBar legenda={LEGENDAS_PADRAO[5]} size="lg" />
+                </div>
+              </div>
+              <p className="text-[10px] mt-3 italic" style={{ color: '#475569' }}>
+                Vermelho = Baixo · Laranja = Médio-Baixo · Amarelo = Médio · Verde = Alto · Azul = Muito Alto · Roxo = Máximo.
+                Para Al e m%, a escala é invertida: valores altos indicam toxidez (vermelho = ruim).
+              </p>
+            </div>
+
+            {/* Busca */}
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg mb-4 w-64"
+              style={{ background: '#0a1929', border: '1px solid #1a3a6b' }}>
+              <Search size={14} style={{ color: '#475569' }} />
+              <input
+                type="text"
+                placeholder="Buscar nutriente..."
+                value={busca}
+                onChange={e => setBusca(e.target.value)}
+                className="bg-transparent text-sm flex-1 outline-none"
+                style={{ color: '#e2e8f0' }}
+              />
+            </div>
+
+            {/* Cards de nutrientes */}
+            <div className="space-y-3">
+              {legendasFiltradas.map(l => (
+                <NutrienteCard key={l.id} legenda={l} onSave={handleSave} />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ABA: Profundidades */}
+        {aba === 'profundidades' && (
+          <div className="max-w-lg space-y-3">
+            <p className="text-xs mb-4" style={{ color: '#475569' }}>
+              Profundidades disponíveis para coleta de amostras. Profundidades inativas não aparecem nas campanhas.
+              Não é possível editar uma profundidade após ela ter dados vinculados — apenas inativar.
+            </p>
+            {PROFUNDIDADES.map(p => (
+              <div key={p.label} className="flex items-center justify-between rounded-xl px-5 py-4"
+                style={{ background: '#0a1929', border: '1px solid #1a3a6b' }}>
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center"
+                    style={{ background: p.ativa ? '#166534' : '#1a3a6b' }}>
+                    <Layers size={14} style={{ color: p.ativa ? '#86efac' : '#475569' }} />
+                  </div>
+                  <span className="text-sm font-semibold" style={{ color: '#e2e8f0' }}>{p.label}</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs px-2 py-1 rounded-full font-semibold"
                     style={{
-                      background: p.ativa ? 'var(--status-active-bg)' : '#f1f5f9',
-                      color: p.ativa ? 'var(--status-active)' : '#64748b',
+                      background: p.ativa ? '#166534' : '#1a3a6b',
+                      color: p.ativa ? '#86efac' : '#475569',
                     }}>
                     {p.ativa ? 'Ativa' : 'Inativa'}
                   </span>
+                  <button className="text-xs px-3 py-1.5 rounded font-medium"
+                    style={{ background: '#1a3a6b', color: '#93c5fd' }}>
+                    {p.ativa ? 'Inativar' : 'Ativar'}
+                  </button>
                 </div>
-              ))}
-            </div>
-          </SectionCard>
+              </div>
+            ))}
+            <button className="w-full py-3 rounded-xl text-sm font-semibold mt-4"
+              style={{ background: '#1a3a6b', color: '#93c5fd', border: '1px dashed #2e5fa3' }}>
+              + Nova Profundidade
+            </button>
+          </div>
+        )}
 
-          {/* Metodologias */}
-          <SectionCard title="Metodologias" icon={BookOpen} color="var(--invicta-blue-mid)">
-            <div className="space-y-2">
-              {METODOLOGIAS.map(m => (
-                <div key={m.nome} className="py-2 border-b last:border-0"
-                  style={{ borderColor: 'var(--border-color)' }}>
-                  <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{m.nome}</p>
-                  <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{m.regiao}</p>
+        {/* ABA: Metodologias */}
+        {aba === 'metodologias' && (
+          <div className="max-w-2xl space-y-3">
+            <p className="text-xs mb-4" style={{ color: '#475569' }}>
+              Metodologias disponíveis para classificação de fertilidade. Cada legenda é configurada por metodologia.
+              A metodologia padrão é aplicada automaticamente nos processamentos, mas pode ser sobrescrita por talhão.
+            </p>
+            {METODOLOGIAS.map(m => (
+              <div key={m.nome} className="rounded-xl px-5 py-4"
+                style={{ background: '#0a1929', border: `1px solid ${m.padrao ? 'var(--invicta-green)' : '#1a3a6b'}` }}>
+                <div className="flex items-start justify-between">
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <p className="text-sm font-bold" style={{ color: '#e2e8f0' }}>{m.nome}</p>
+                      {m.padrao && (
+                        <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold"
+                          style={{ background: '#166534', color: '#86efac' }}>Padrão</span>
+                      )}
+                    </div>
+                    <p className="text-xs" style={{ color: '#64748b' }}>Região: {m.regiao}</p>
+                    <p className="text-xs" style={{ color: '#64748b' }}>Culturas: {m.culturas}</p>
+                  </div>
+                  <div className="flex gap-2">
+                    {!m.padrao && (
+                      <button className="text-xs px-3 py-1.5 rounded font-medium"
+                        style={{ background: '#1a3a6b', color: '#93c5fd' }}>
+                        Definir padrão
+                      </button>
+                    )}
+                    <button className="text-xs px-3 py-1.5 rounded font-medium"
+                      style={{ background: '#1a3a6b', color: '#93c5fd' }}>
+                      Editar
+                    </button>
+                  </div>
                 </div>
-              ))}
-            </div>
-          </SectionCard>
+              </div>
+            ))}
+            <button className="w-full py-3 rounded-xl text-sm font-semibold mt-4"
+              style={{ background: '#1a3a6b', color: '#93c5fd', border: '1px dashed #2e5fa3' }}>
+              + Nova Metodologia
+            </button>
+          </div>
+        )}
 
-          {/* Culturas */}
-          <SectionCard title="Culturas" icon={Leaf} color="var(--invicta-green-dark)">
-            <div className="space-y-2">
-              {CULTURAS.map(c => (
-                <div key={c.nome} className="flex items-center justify-between py-2 border-b last:border-0"
-                  style={{ borderColor: 'var(--border-color)' }}>
-                  <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{c.nome}</span>
-                  <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{c.ciclo}</span>
-                </div>
-              ))}
-            </div>
-          </SectionCard>
-        </div>
       </div>
-    </>
+    </div>
   );
 }

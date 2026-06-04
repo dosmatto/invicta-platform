@@ -1,6 +1,15 @@
-export const APP_VERSION = '0.5.0';
+export const APP_VERSION = '0.6.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.6.0': [
+    'Base Agronômica completa — gerador de legendas por nutriente',
+    'Barra de cor com gradiente padrão (vermelho→laranja→amarelo→verde→azul→roxo)',
+    'Editor de limites de classe por nutriente (clique para expandir)',
+    'Al e m% com escala invertida (roxo→vermelho = tóxico)',
+    '15 nutrientes pré-configurados (Embrapa Cerrado)',
+    'Abas: Legendas e Classes / Profundidades / Metodologias',
+    'Preview compacto no painel lateral + link para editor completo',
+  ],
   '0.5.0': [
     'Navegação hierárquica: Produtor → Fazenda → Talhão',
     'ProdutorDetailPanel: dados + lista de fazendas com cadastro',
