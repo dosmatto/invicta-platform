@@ -9,10 +9,9 @@ import { Cliente, Fazenda, Talhao } from './store';
 
 // ── Localização inicial do mapa: Escritório da Invicta (Carambeí/PR) ──────────
 // Formato MapLibre: [longitude, latitude]
-// TODO: substituir pela coordenada exata do escritório fornecida pelo usuário.
 export const ESCRITORIO_INVICTA: { center: [number, number]; zoom: number } = {
-  center: [-50.0978, -24.9487], // Carambeí centro (placeholder)
-  zoom: 13,
+  center: [-50.113887554757035, -24.948709844238678], // Escritório Invicta, Carambeí/PR
+  zoom: 15,
 };
 
 const SEED_FLAG = 'inv_seeded_v1';

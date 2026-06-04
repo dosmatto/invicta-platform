@@ -1,6 +1,9 @@
-export const APP_VERSION = '0.9.5';
+export const APP_VERSION = '0.9.6';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.9.6': [
+    'Coordenada exata do Escritório da Invicta definida (Carambeí/PR) — mapa abre nela',
+  ],
   '0.9.5': [
     'Dados de teste pré-carregados (seed): Frederico Rodolfo Nolte (FRN) › Fazenda Figueira (FRNFI) › Talhão FRNFI 21',
     'Talhão FRNFI 21 já vem com a geometria real (shapefile, 52,9 ha) carregada',
