@@ -1,6 +1,10 @@
-export const APP_VERSION = '0.9.2';
+export const APP_VERSION = '0.9.3';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.9.3': [
+    'Fix mapa branco em produção — CSS MapLibre carregado via CDN jsDelivr no <head>',
+    'MapView: map.resize() após load para garantir dimensões corretas',
+  ],
   '0.9.2': [
     'Fix mapa branco no Vercel — CSS do MapLibre importado no layout raiz (server component)',
   ],

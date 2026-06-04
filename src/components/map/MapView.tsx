@@ -121,6 +121,7 @@ export function MapView() {
         layout: { 'text-field': ['get','id'], 'text-size': 9, 'text-offset': [0,1.4], 'text-font': ['Open Sans Bold'] },
         paint:  { 'text-color': '#fff', 'text-halo-color': '#000', 'text-halo-width': 1 } });
 
+      map.resize(); // garante dimensões corretas após hidratação
       map.fitBounds([[-54.75,-13.32],[-54.46,-13.16]], { padding: 80 });
       readyRef.current = true;
       setMapReady(true);
