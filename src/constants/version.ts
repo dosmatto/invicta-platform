@@ -1,6 +1,13 @@
-export const APP_VERSION = '0.9.4';
+export const APP_VERSION = '0.9.5';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.9.5': [
+    'Dados de teste pré-carregados (seed): Frederico Rodolfo Nolte (FRN) › Fazenda Figueira (FRNFI) › Talhão FRNFI 21',
+    'Talhão FRNFI 21 já vem com a geometria real (shapefile, 52,9 ha) carregada',
+    'Seed roda uma vez em qualquer navegador/plataforma — contorna falta de sincronização do localStorage',
+    'Mapa abre por padrão no modo Satélite',
+    'Mapa abre centralizado na localização do Escritório da Invicta (Carambeí/PR)',
+  ],
   '0.9.4': [
     'FIX DEFINITIVO mapa branco em produção — container do mapa colapsava para altura 0',
     'Causa: CSS do MapLibre força position:relative, anulando o `inset-0` do container',

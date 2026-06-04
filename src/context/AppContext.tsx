@@ -1,6 +1,7 @@
 'use client';
 
-import { createContext, useContext, useState, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { seedIfEmpty } from '@/lib/seed';
 
 export type MapMode = 'street' | 'satellite';
 
@@ -47,7 +48,10 @@ const AppContext = createContext<AppContextType>({
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [activePanel, setActivePanel] = useState<string | null>('dashboard');
-  const [mapMode, setMapMode] = useState<MapMode>('street');
+  const [mapMode, setMapMode] = useState<MapMode>('satellite');
+
+  // Pré-carrega dados de teste (uma vez) em qualquer navegador/plataforma
+  useEffect(() => { seedIfEmpty(); }, []);
   const [activeModule, setActiveModule] = useState<string | null>(null);
   const [uploadedGeo, setUploadedGeo] = useState<GeoJSON.FeatureCollection | null>(null);
   const [uploadedBbox, setUploadedBbox] = useState<[number, number, number, number] | null>(null);

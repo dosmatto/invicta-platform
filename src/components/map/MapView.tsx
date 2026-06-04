@@ -5,6 +5,7 @@ import maplibregl from 'maplibre-gl';
 import { useApp } from '@/context/AppContext';
 import { TALHAO_KML_URLS } from '@/constants/mocks';
 import { parseKML } from '@/lib/geo';
+import { ESCRITORIO_INVICTA } from '@/lib/seed';
 
 // ── Estilo único com OSM + Satélite — toggle de visibilidade, sem setStyle() ──
 const COMBINED_STYLE: maplibregl.StyleSpecification = {
@@ -83,8 +84,8 @@ export function MapView() {
     const map = new maplibregl.Map({
       container: containerRef.current,
       style: COMBINED_STYLE,
-      center: [-54.6, -13.24],
-      zoom: 11,
+      center: ESCRITORIO_INVICTA.center,
+      zoom: ESCRITORIO_INVICTA.zoom,
     });
     mapRef.current = map;
 
@@ -122,7 +123,8 @@ export function MapView() {
         paint:  { 'text-color': '#fff', 'text-halo-color': '#000', 'text-halo-width': 1 } });
 
       map.resize(); // garante dimensões corretas após hidratação
-      map.fitBounds([[-54.75,-13.32],[-54.46,-13.16]], { padding: 80 });
+      // Centro inicial = escritório (definido no construtor). Sem fitBounds aqui
+      // para não pular para a região dos talhões mock.
       readyRef.current = true;
       setMapReady(true);
     });
@@ -131,16 +133,17 @@ export function MapView() {
   }, []);
 
   // ── 2. Toggle satélite / rua — SEM setStyle, só visibilidade ─────────────
+  // Depende de mapReady para aplicar o modo inicial (satélite) após o load.
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !readyRef.current) return;
+    if (!map || !mapReady) return;
     const isSat = mapMode === 'satellite';
     try {
       map.setLayoutProperty('layer-osm',       'visibility', isSat ? 'none'    : 'visible');
       map.setLayoutProperty('layer-sat',       'visibility', isSat ? 'visible' : 'none');
       map.setLayoutProperty('layer-sat-labels','visibility', isSat ? 'visible' : 'none');
     } catch {}
-  }, [mapMode]);
+  }, [mapMode, mapReady]);
 
   // ── 3. Destaca talhão selecionado ─────────────────────────────────────────
   useEffect(() => {
