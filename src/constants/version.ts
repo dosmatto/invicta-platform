@@ -1,6 +1,9 @@
-export const APP_VERSION = '0.9.1';
+export const APP_VERSION = '0.9.2';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.9.2': [
+    'Fix mapa branco no Vercel — CSS do MapLibre importado no layout raiz (server component)',
+  ],
   '0.9.1': [
     'Seletor de safra no talhão usa apenas safras cadastradas manualmente',
     'Safra ativa é pré-selecionada automaticamente ao abrir o talhão',
