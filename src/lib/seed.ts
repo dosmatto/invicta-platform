@@ -5,7 +5,7 @@
 // garantindo os mesmos dados de teste em qualquer plataforma/navegador.
 
 import seedGeo from '@/constants/seedTalhaoGeo.json';
-import { Cliente, Fazenda, Talhao } from './store';
+import { Cliente, Fazenda, Talhao, PadraoElementos } from './store';
 
 // ── Localização inicial do mapa: Escritório da Invicta (Carambeí/PR) ──────────
 // Formato MapLibre: [longitude, latitude]
@@ -14,7 +14,7 @@ export const ESCRITORIO_INVICTA: { center: [number, number]; zoom: number } = {
   zoom: 15,
 };
 
-const SEED_FLAG = 'inv_seeded_v1';
+const SEED_FLAG = 'inv_seeded_v2';
 
 const SEED_CLIENTE: Cliente = {
   id: 'seed-frn',
@@ -51,6 +51,24 @@ const SEED_TALHAO: Talhao = {
   criadoEm: new Date('2024-01-01').toISOString(),
 };
 
+// Padrões de Elementos pré-cadastrados para testes
+const SEED_PADROES_ELEMENTOS: PadraoElementos[] = [
+  {
+    id: 'seed-pe-rotina-tex-micro',
+    nome: 'Rotina + Textura + Micro',
+    // Todos os elementos, exceto S
+    elementos: ['ph', 'p', 'k', 'ca', 'mg', 'al', 'ctc', 'v', 'm', 'mo', 'b', 'zn', 'cu', 'mn', 'textura'],
+    criadoEm: new Date('2024-01-01').toISOString(),
+  },
+  {
+    id: 'seed-pe-rotina-s',
+    nome: 'Rotina + S',
+    // Rotina + Enxofre
+    elementos: ['ph', 'p', 'k', 'ca', 'mg', 'al', 'ctc', 'v', 'm', 'mo', 's'],
+    criadoEm: new Date('2024-01-01').toISOString(),
+  },
+];
+
 function mergeUnique<T extends { id: string }>(key: string, seed: T) {
   const raw = localStorage.getItem(key);
   const list: T[] = raw ? JSON.parse(raw) : [];
@@ -68,6 +86,7 @@ export function seedIfEmpty() {
   mergeUnique('inv_clientes', SEED_CLIENTE);
   mergeUnique('inv_fazendas', SEED_FAZENDA);
   mergeUnique('inv_talhoes', SEED_TALHAO);
+  SEED_PADROES_ELEMENTOS.forEach(pe => mergeUnique('inv_padroes_elem', pe));
 
   localStorage.setItem(SEED_FLAG, '1');
 }

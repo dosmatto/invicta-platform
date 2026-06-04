@@ -1,6 +1,9 @@
-export const APP_VERSION = '0.9.10';
+export const APP_VERSION = '0.9.11';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.9.11': [
+    'Seed: 2 Padrões de Elementos de teste — "Rotina + Textura + Micro" (todos menos S) e "Rotina + S"',
+  ],
   '0.9.10': [
     'Textura (granulometria) adicionada como análise selecionável nos Padrões de Elementos',
   ],
