@@ -1,6 +1,12 @@
-export const APP_VERSION = '0.9.7';
+export const APP_VERSION = '0.9.8';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.9.8': [
+    'Amostragem Fase 1 — novo painel "Cadastros" na barra lateral',
+    'Cadastro de Padrões de Elementos (conjuntos nomeados de elementos: Rotina, Micros…)',
+    'Cadastro de Padrões de Amostragem (densidade + múltiplas profundidades, cada uma com % de pontos e padrão de elementos)',
+    'Base para o simulador de grid (Fase 2)',
+  ],
   '0.9.7': [
     'Cadastro de safra a partir do próprio talhão (botão + no seletor de safra)',
     'Safra recém-criada fica selecionada como contexto ativo do talhão',

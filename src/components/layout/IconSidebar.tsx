@@ -1,7 +1,7 @@
 'use client';
 
 import {
-  LayoutDashboard, Users, CalendarDays, FlaskConical, Settings, Shield,
+  LayoutDashboard, Users, CalendarDays, Database, FlaskConical, Settings, Shield,
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { APP_VERSION } from '@/constants/version';
@@ -12,6 +12,7 @@ const MENU = [
   { id: 'produtores',      label: 'Clientes', icon: Users },
   { id: 'safras',          label: 'Safras',   icon: CalendarDays },
   null,
+  { id: 'cadastros',       label: 'Cadastros', icon: Database },
   { id: 'base-agronomica', label: 'Base Ag.', icon: FlaskConical },
   null,
   { id: 'usuarios',        label: 'Usuários', icon: Shield },

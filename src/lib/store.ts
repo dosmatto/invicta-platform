@@ -49,6 +49,27 @@ export interface Safra {
   criadoEm: string;
 }
 
+export interface PadraoElementos {
+  id: string;
+  nome: string;          // ex: "Rotina", "Rotina + Micros", "Padrão 1 Invicta"
+  elementos: string[];   // ids da Base Agronômica: ['ph','p','k','ca',...]
+  criadoEm: string;
+}
+
+export interface ProfundidadeConfig {
+  rotulo: string;            // ex: "00-10", "10-20", "20-40"
+  percentual: number;        // % dos pontos que recebem esta profundidade (100, 20...)
+  padraoElementosId: string; // FK -> PadraoElementos
+}
+
+export interface PadraoAmostragem {
+  id: string;
+  nome: string;                       // ex: "Padrão 1 Invicta — 2 ha"
+  densidadeHaPonto: number;           // ha por ponto (ex: 2)
+  profundidades: ProfundidadeConfig[];
+  criadoEm: string;
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────
 
 function load<T>(key: string): T[] {
@@ -155,6 +176,59 @@ export function deleteSafra(id: string) {
   save('inv_safras', load<Safra>('inv_safras').filter(s => s.id !== id));
 }
 
+// ── Padrões de Elementos ────────────────────────────────────────────────────
+// Conjunto nomeado de elementos a analisar (ex: "Rotina", "Rotina + Micros").
+// Os elementos referenciam os ids da Base Agronômica (ph, p, k, ca...).
+
+export function getPadroesElementos(): PadraoElementos[] {
+  return load<PadraoElementos>('inv_padroes_elem').sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+}
+
+export function savePadraoElementos(p: Omit<PadraoElementos, 'id' | 'criadoEm'>): PadraoElementos {
+  const lista = load<PadraoElementos>('inv_padroes_elem');
+  const novo: PadraoElementos = { ...p, id: uid(), criadoEm: new Date().toISOString() };
+  lista.push(novo);
+  save('inv_padroes_elem', lista);
+  return novo;
+}
+
+export function updatePadraoElementos(id: string, data: Partial<PadraoElementos>) {
+  const lista = load<PadraoElementos>('inv_padroes_elem');
+  const idx = lista.findIndex(p => p.id === id);
+  if (idx >= 0) { lista[idx] = { ...lista[idx], ...data }; save('inv_padroes_elem', lista); }
+}
+
+export function deletePadraoElementos(id: string) {
+  save('inv_padroes_elem', load<PadraoElementos>('inv_padroes_elem').filter(p => p.id !== id));
+}
+
+// ── Padrões de Amostragem ───────────────────────────────────────────────────
+// Template reutilizável: densidade + profundidades (cada uma com % de pontos
+// e qual padrão de elementos). Distância da borda/rotação ficam no simulador.
+
+export function getPadroesAmostragem(): PadraoAmostragem[] {
+  return load<PadraoAmostragem>('inv_padroes_amos').sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+}
+
+export function savePadraoAmostragem(p: Omit<PadraoAmostragem, 'id' | 'criadoEm'>): PadraoAmostragem {
+  const lista = load<PadraoAmostragem>('inv_padroes_amos');
+  const novo: PadraoAmostragem = { ...p, id: uid(), criadoEm: new Date().toISOString() };
+  lista.push(novo);
+  save('inv_padroes_amos', lista);
+  return novo;
+}
+
+export function updatePadraoAmostragem(id: string, data: Partial<PadraoAmostragem>) {
+  const lista = load<PadraoAmostragem>('inv_padroes_amos');
+  const idx = lista.findIndex(p => p.id === id);
+  if (idx >= 0) { lista[idx] = { ...lista[idx], ...data }; save('inv_padroes_amos', lista); }
+}
+
+export function deletePadraoAmostragem(id: string) {
+  save('inv_padroes_amos', load<PadraoAmostragem>('inv_padroes_amos').filter(p => p.id !== id));
+}
+
 export function clearAll() {
-  ['inv_clientes','inv_fazendas','inv_talhoes','inv_safras'].forEach(k => localStorage.removeItem(k));
+  ['inv_clientes','inv_fazendas','inv_talhoes','inv_safras','inv_padroes_elem','inv_padroes_amos']
+    .forEach(k => localStorage.removeItem(k));
 }
