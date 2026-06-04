@@ -1,6 +1,17 @@
-export const APP_VERSION = '0.8.3';
+export const APP_VERSION = '0.9.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.9.0': [
+    'Upload georreferenciado real no talhão — KML, Shapefile (.zip) e GeoJSON',
+    'Geometria persiste no localStorage (geojson + bbox + areaHa) e restaura ao reabrir',
+    'Status do talhão atualizado para Ativo automaticamente após upload',
+    'Campo Sigla opcional em Cliente e Fazenda',
+    'Cadastro de Safras — criar, ativar/desativar e excluir via SlidePanel',
+    'FazendaDetailPanel migrado de mocks para store real (getFazendas/getTalhoes)',
+    'Fix mapa branco em produção — CSS MapLibre movido para globals.css + ssr:false',
+    'Fix build Vercel — erros TypeScript em páginas com mocks never[] corrigidos',
+    'Fix conteúdo de rotas filhas vazando abaixo do mapa',
+  ],
   '0.8.0': [
     'Upload real de KML e GeoJSON — parser client-side com @tmcw/togeojson',
     'Suporte a UTF-8 e UTF-16 (Topper 4500, QGIS, Google Earth)',
