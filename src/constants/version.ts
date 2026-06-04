@@ -1,6 +1,12 @@
-export const APP_VERSION = '0.3.0';
+export const APP_VERSION = '0.4.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.4.0': [
+    'Fluxo talhão-cêntrico: todos os módulos técnicos dentro do talhão',
+    'Sidebar simplificada: apenas Dashboard, Clientes, Fazendas, Talhões, Base Ag., Usuários, Config',
+    'TalhaoDetailPanel com seletor de safra + 9 módulos em accordion',
+    'Módulos vinculados ao talhão: Amostragem, Lab, QR Code, Fertilidade, NDVI, CE, Produtividade, Zonas, Aplicação, Relatórios',
+  ],
   '0.3.0': [
     'Redesign completo para layout mapa-cêntrico (inspirado InCeres)',
     'Sidebar narrow com ícones (64px)',
