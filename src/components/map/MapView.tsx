@@ -61,10 +61,33 @@ const TALHOES_MOCK = {
   ],
 };
 
+// Gera grade de pontos de amostragem mock dentro de um bbox
+function gerarPontosMock(lng1: number, lat1: number, lng2: number, lat2: number, step: number) {
+  const features: GeoJSON.Feature[] = [];
+  let idx = 1;
+  for (let lat = lat1; lat > lat2; lat -= step) {
+    for (let lng = lng1; lng < lng2; lng += step) {
+      features.push({
+        type: 'Feature',
+        properties: { id: `PT-${String(idx).padStart(2, '0')}`, numero: idx },
+        geometry: { type: 'Point', coordinates: [lng + (Math.random() - 0.5) * step * 0.3, lat + (Math.random() - 0.5) * step * 0.3] },
+      });
+      idx++;
+    }
+  }
+  return { type: 'FeatureCollection' as const, features };
+}
+
+const PONTOS_AMOSTRAGEM: Record<string, GeoJSON.FeatureCollection> = {
+  '1': gerarPontosMock(-54.72, -13.215, -54.68, -13.245, 0.008),
+  '2': gerarPontosMock(-54.63, -13.195, -54.59, -13.235, 0.009),
+  '3': gerarPontosMock(-54.55, -13.225, -54.49, -13.285, 0.012),
+};
+
 export function MapView() {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
-  const { mapMode, setMapMode, nav } = useApp();
+  const { mapMode, setMapMode, nav, activeModule } = useApp();
 
   // Inicializa o mapa
   useEffect(() => {
@@ -151,6 +174,37 @@ export function MapView() {
       mapRef.current.setFilter('talhao-selected-outline', ['==', ['get', 'id'], id]);
     } catch {}
   }, [nav.talhaoId]);
+
+  // Camada de pontos de amostragem
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !map.isStyleLoaded()) return;
+
+    const showPoints = activeModule === 'amostragem' && nav.talhaoId;
+    const pontos = nav.talhaoId ? PONTOS_AMOSTRAGEM[nav.talhaoId] : null;
+
+    try { map.removeLayer('pontos-label'); } catch {}
+    try { map.removeLayer('pontos-circle'); } catch {}
+    try { map.removeSource('pontos-amostragem'); } catch {}
+
+    if (showPoints && pontos) {
+      map.addSource('pontos-amostragem', { type: 'geojson', data: pontos });
+      map.addLayer({
+        id: 'pontos-circle', type: 'circle', source: 'pontos-amostragem',
+        paint: {
+          'circle-radius': 7,
+          'circle-color': '#f59e0b',
+          'circle-stroke-color': '#fff',
+          'circle-stroke-width': 1.5,
+        },
+      });
+      map.addLayer({
+        id: 'pontos-label', type: 'symbol', source: 'pontos-amostragem',
+        layout: { 'text-field': ['get', 'id'], 'text-size': 9, 'text-offset': [0, 1.4] },
+        paint: { 'text-color': '#fff', 'text-halo-color': '#000', 'text-halo-width': 1 },
+      });
+    }
+  }, [activeModule, nav.talhaoId]);
 
   return (
     <div className="absolute inset-0">

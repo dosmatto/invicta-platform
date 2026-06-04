@@ -1,6 +1,16 @@
-export const APP_VERSION = '0.6.0';
+export const APP_VERSION = '0.7.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.7.0': [
+    'Módulo 08 — Amostragem completo dentro do Talhão',
+    'Fluxo em 4 etapas: Limite → Método → Parâmetros → Pontos gerados',
+    'Verificação de limite geográfico do talhão (obrigatório)',
+    '4 métodos: Grid Fixo, Grid Variável, Importar, Manual no mapa',
+    'Seleção de profundidades por campanha',
+    'Pontos de amostragem exibidos no mapa MapLibre (toggle)',
+    'Lista de pontos com status de coleta',
+    'activeModule no contexto — mapa reage ao módulo ativo',
+  ],
   '0.6.0': [
     'Base Agronômica completa — gerador de legendas por nutriente',
     'Barra de cor com gradiente padrão (vermelho→laranja→amarelo→verde→azul→roxo)',

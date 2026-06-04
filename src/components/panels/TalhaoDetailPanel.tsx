@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import { MockIndicator } from './_shared';
+import { AmostragemSection } from '@/components/talhao/AmostragemSection';
 import {
   ChevronLeft, Grid3x3, TestTube, QrCode, Leaf,
   Satellite, Zap, BarChart3, Layers, FileSpreadsheet,
@@ -10,15 +11,26 @@ import {
 } from 'lucide-react';
 
 // ── tipos ──────────────────────────────────────────────────────────────────
-interface SectionProps { title: string; icon: React.ElementType; color: string; children: React.ReactNode; }
+interface SectionProps {
+  title: string; icon: React.ElementType; color: string;
+  children: React.ReactNode; moduleId?: string;
+}
 
 // ── componentes internos ───────────────────────────────────────────────────
-function AccordionSection({ title, icon: Icon, color, children }: SectionProps) {
+function AccordionSection({ title, icon: Icon, color, children, moduleId }: SectionProps) {
   const [open, setOpen] = useState(false);
+  const { setActiveModule } = useApp();
+
+  function toggle() {
+    const next = !open;
+    setOpen(next);
+    if (moduleId) setActiveModule(next ? moduleId : null);
+  }
+
   return (
     <div style={{ borderBottom: '1px solid #0f2240' }}>
       <button
-        onClick={() => setOpen(o => !o)}
+        onClick={toggle}
         className="w-full flex items-center justify-between px-4 py-3 transition-colors"
         style={{ background: open ? '#1a3a6b' : 'transparent' }}
         onMouseEnter={e => { if (!open) (e.currentTarget as HTMLElement).style.background = 'var(--sidebar-item-hover)'; }}
@@ -130,21 +142,9 @@ export function TalhaoDetailPanel() {
       {/* Módulos em accordion */}
       <div className="flex-1 overflow-y-auto">
 
-        {/* Amostragem */}
-        <AccordionSection title="Amostragem" icon={Grid3x3} color="#60a5fa">
-          <div className="py-1">
-            <p className="px-6 py-1 text-[10px] uppercase tracking-wider" style={{ color: '#475569' }}>Método</p>
-            {['Grid Fixo', 'Grid Variável', 'Manual no mapa', 'Importar pontos'].map(m => (
-              <div key={m} className="flex items-center gap-2 px-6 py-1.5 text-xs"
-                style={{ color: '#94a3b8', borderBottom: '1px solid #0f2240' }}>
-                <input type="radio" name="metodo-amos" className="accent-blue-500" defaultChecked={m === 'Grid Fixo'} />
-                {m}
-              </div>
-            ))}
-            <InnerRow label="Espaçamento" value="1 ponto/ha" />
-            <InnerRow label="Pontos estimados" value="48 pontos" sub={`Para ${nav.area} ha`} />
-            <InnerBtn label="Gerar Pontos de Amostragem" icon={<Play size={11} />} color="#1d4ed8" />
-          </div>
+        {/* Amostragem — fluxo completo */}
+        <AccordionSection title="Amostragem" icon={Grid3x3} color="#60a5fa" moduleId="amostragem">
+          <AmostragemSection />
         </AccordionSection>
 
         {/* Laboratório */}

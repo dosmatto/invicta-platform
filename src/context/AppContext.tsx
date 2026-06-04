@@ -22,6 +22,8 @@ interface AppContextType {
   setNav: (partial: Partial<NavContext>) => void;
   mapMode: MapMode;
   setMapMode: (mode: MapMode) => void;
+  activeModule: string | null;
+  setActiveModule: (m: string | null) => void;
 }
 
 const AppContext = createContext<AppContextType>({
@@ -31,11 +33,14 @@ const AppContext = createContext<AppContextType>({
   setNav: () => {},
   mapMode: 'street',
   setMapMode: () => {},
+  activeModule: null,
+  setActiveModule: () => {},
 });
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [activePanel, setActivePanel] = useState<string | null>('dashboard');
   const [mapMode, setMapMode] = useState<MapMode>('street');
+  const [activeModule, setActiveModule] = useState<string | null>(null);
   const [nav, setNavState] = useState<NavContext>({
     produtorId: null, produtor: '',
     fazendaId: null, fazenda: '',
@@ -48,7 +53,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AppContext.Provider value={{ activePanel, setActivePanel, nav, setNav, mapMode, setMapMode }}>
+    <AppContext.Provider value={{
+      activePanel, setActivePanel,
+      nav, setNav,
+      mapMode, setMapMode,
+      activeModule, setActiveModule,
+    }}>
       {children}
     </AppContext.Provider>
   );
