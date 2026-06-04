@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useApp } from '@/context/AppContext';
 import { getTalhoes, getSafras, saveSafra, updateTalhao, Talhao, Safra } from '@/lib/store';
 import { parseGeoFile } from '@/lib/geo';
-import { AmostragemSection } from '@/components/talhao/AmostragemSection';
+import { SimuladorAmostragem } from '@/components/talhao/SimuladorAmostragem';
 import {
   ChevronLeft, Grid3x3, TestTube, QrCode, Leaf,
   Satellite, Zap, BarChart3, Layers, FileSpreadsheet,
@@ -374,7 +374,7 @@ export function TalhaoDetailPanel() {
 
         {/* Amostragem */}
         <AccordionSection title="Amostragem" icon={Grid3x3} color="#60a5fa" moduleId="amostragem">
-          <AmostragemSection />
+          <SimuladorAmostragem />
         </AccordionSection>
 
         {/* Laboratório */}

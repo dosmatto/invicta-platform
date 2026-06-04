@@ -49,31 +49,16 @@ const TALHOES_MOCK: GeoJSON.FeatureCollection = {
   ],
 };
 
-function gerarPontosMock(lng1: number, lat1: number, lng2: number, lat2: number, step: number): GeoJSON.FeatureCollection {
-  const features: GeoJSON.Feature[] = [];
-  let idx = 1;
-  for (let lat = lat1; lat > lat2; lat -= step)
-    for (let lng = lng1; lng < lng2; lng += step)
-      features.push({ type: 'Feature', properties: { id: `PT-${String(idx++).padStart(2,'0')}` },
-        geometry: { type: 'Point', coordinates: [lng + (Math.random()-.5)*step*.3, lat + (Math.random()-.5)*step*.3] } });
-  return { type: 'FeatureCollection', features };
-}
-
-const PONTOS: Record<string, GeoJSON.FeatureCollection> = {
-  '1': gerarPontosMock(-54.72,-13.215,-54.68,-13.245,0.008),
-  '2': gerarPontosMock(-54.63,-13.195,-54.59,-13.235,0.009),
-  '3': gerarPontosMock(-54.55,-13.225,-54.49,-13.285,0.012),
-};
-
 export function MapView() {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef      = useRef<maplibregl.Map | null>(null);
   const readyRef    = useRef(false); // true depois de 'load'
   const [mapReady, setMapReady] = useState(false);
 
-  const { mapMode, setMapMode, nav, activeModule,
+  const { mapMode, setMapMode, nav,
           uploadedGeo, setUploadedGeo,
-          uploadedBbox, setUploadedBbox } = useApp();
+          uploadedBbox, setUploadedBbox,
+          pontosSimulados } = useApp();
 
   const [kmlLoading, setKmlLoading] = useState(false);
 
@@ -114,13 +99,21 @@ export function MapView() {
         filter: ['in',['geometry-type'],['literal',['Point','MultiPoint']]],
         paint: { 'circle-radius': 5, 'circle-color': '#f59e0b', 'circle-stroke-color': '#fff', 'circle-stroke-width': 1.5 } });
 
-      // Pontos de amostragem — fonte persistente
+      // Pontos de amostragem — fonte persistente. Cor por nº de profundidades.
       map.addSource('pontos-amos', { type: 'geojson', data: EMPTY_FC });
       map.addLayer({ id: 'pontos-circle', type: 'circle', source: 'pontos-amos',
-        paint: { 'circle-radius': 7, 'circle-color': '#f59e0b', 'circle-stroke-color': '#fff', 'circle-stroke-width': 1.5 } });
+        paint: {
+          'circle-radius': 6,
+          'circle-color': ['match', ['get', 'profs'],
+            1, '#f59e0b',   // 1 profundidade — laranja
+            2, '#3b82f6',   // 2 profundidades — azul
+            '#a855f7',      // 3+ profundidades — roxo
+          ],
+          'circle-stroke-color': '#fff', 'circle-stroke-width': 1.5,
+        } });
       map.addLayer({ id: 'pontos-label',  type: 'symbol', source: 'pontos-amos',
-        layout: { 'text-field': ['get','id'], 'text-size': 9, 'text-offset': [0,1.4], 'text-font': ['Open Sans Bold'] },
-        paint:  { 'text-color': '#fff', 'text-halo-color': '#000', 'text-halo-width': 1 } });
+        layout: { 'text-field': ['get','label'], 'text-size': 9, 'text-offset': [0,1.3], 'text-font': ['Open Sans Bold'] },
+        paint:  { 'text-color': '#fff', 'text-halo-color': '#000', 'text-halo-width': 1.2 } });
 
       map.resize(); // garante dimensões corretas após hidratação
       // Centro inicial = escritório (definido no construtor). Sem fitBounds aqui
@@ -197,17 +190,16 @@ export function MapView() {
     }
   }, [uploadedGeo, uploadedBbox, mapReady]);
 
-  // ── 6. Pontos de amostragem (setData) ────────────────────────────────────
+  // ── 6. Pontos do simulador de amostragem (setData) ───────────────────────
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !readyRef.current) return;
+    if (!map || !mapReady) return;
 
     const src = map.getSource('pontos-amos') as maplibregl.GeoJSONSource | undefined;
     if (!src) return;
 
-    const mostrar = activeModule === 'amostragem' && nav.talhaoId;
-    src.setData(mostrar && PONTOS[nav.talhaoId!] ? PONTOS[nav.talhaoId!] : EMPTY_FC);
-  }, [activeModule, nav.talhaoId]);
+    src.setData(pontosSimulados ?? EMPTY_FC);
+  }, [pontosSimulados, mapReady]);
 
   return (
     <div className="absolute inset-0">

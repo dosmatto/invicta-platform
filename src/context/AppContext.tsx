@@ -29,6 +29,8 @@ interface AppContextType {
   setUploadedGeo: (geo: GeoJSON.FeatureCollection | null) => void;
   uploadedBbox: [number, number, number, number] | null;
   setUploadedBbox: (bb: [number, number, number, number] | null) => void;
+  pontosSimulados: GeoJSON.FeatureCollection | null;
+  setPontosSimulados: (fc: GeoJSON.FeatureCollection | null) => void;
 }
 
 const AppContext = createContext<AppContextType>({
@@ -44,6 +46,8 @@ const AppContext = createContext<AppContextType>({
   setUploadedGeo: () => {},
   uploadedBbox: null,
   setUploadedBbox: () => {},
+  pontosSimulados: null,
+  setPontosSimulados: () => {},
 });
 
 export function AppProvider({ children }: { children: ReactNode }) {
@@ -55,6 +59,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [activeModule, setActiveModule] = useState<string | null>(null);
   const [uploadedGeo, setUploadedGeo] = useState<GeoJSON.FeatureCollection | null>(null);
   const [uploadedBbox, setUploadedBbox] = useState<[number, number, number, number] | null>(null);
+  const [pontosSimulados, setPontosSimulados] = useState<GeoJSON.FeatureCollection | null>(null);
   const [nav, setNavState] = useState<NavContext>({
     produtorId: null, produtor: '',
     fazendaId: null, fazenda: '',
@@ -74,6 +79,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       activeModule, setActiveModule,
       uploadedGeo, setUploadedGeo,
       uploadedBbox, setUploadedBbox,
+      pontosSimulados, setPontosSimulados,
     }}>
       {children}
     </AppContext.Provider>

@@ -1,6 +1,14 @@
-export const APP_VERSION = '0.9.11';
+export const APP_VERSION = '0.10.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.10.0': [
+    'Amostragem Fase 2 — Simulador de Grid (geração real sobre o polígono do talhão)',
+    'Puxa densidade e profundidades do Padrão de Amostragem, permitindo customizar (marca "CUSTOMIZADO")',
+    'Controles ao vivo: densidade, distância da borda, rotação (auto pela maior dimensão + manual), aleatoriedade 0–100%',
+    'Pontos coloridos por nº de profundidades (1=laranja, 2=azul, 3+=roxo), numeração em serpentina',
+    'Seleção dos pontos das profundidades parciais: Regular ou Aleatório, com refazer sorteio',
+    'Seletor de safra ativa + 1ª/2ª época (até junho / julho–dezembro)',
+  ],
   '0.9.11': [
     'Seed: 2 Padrões de Elementos de teste — "Rotina + Textura + Micro" (todos menos S) e "Rotina + S"',
   ],
