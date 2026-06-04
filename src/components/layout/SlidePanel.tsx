@@ -11,6 +11,7 @@ import { FazendaDetailPanel } from '@/components/panels/FazendaDetailPanel';
 import { TalhaoDetailPanel } from '@/components/panels/TalhaoDetailPanel';
 
 // Painéis auxiliares
+import { SafrasPanel } from '@/components/panels/SafrasPanel';
 import { BaseAgronomicaPanel } from '@/components/panels/BaseAgronomicaPanel';
 import { UsuariosPanel } from '@/components/panels/UsuariosPanel';
 import { ConfiguracoesPanel } from '@/components/panels/ConfiguracoesPanel';
@@ -18,6 +19,7 @@ import { ConfiguracoesPanel } from '@/components/panels/ConfiguracoesPanel';
 const STATIC_PANELS: Record<string, { title: string; component: React.ComponentType }> = {
   dashboard:         { title: 'Início',          component: DashboardPanel },
   produtores:        { title: 'Clientes',        component: ProdutoresPanel },
+  safras:            { title: 'Safras',          component: SafrasPanel },
   'base-agronomica': { title: 'Base Agronômica', component: BaseAgronomicaPanel },
   usuarios:          { title: 'Usuários',        component: UsuariosPanel },
   configuracoes:     { title: 'Configurações',   component: ConfiguracoesPanel },

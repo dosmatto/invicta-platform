@@ -1,23 +1,21 @@
 'use client';
 
 import {
-  LayoutDashboard, Users, Building2, Map,
-  FlaskConical, Settings, Shield,
+  LayoutDashboard, Users, CalendarDays, FlaskConical, Settings, Shield,
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { APP_VERSION } from '@/constants/version';
 
 const MENU = [
-  { id: 'dashboard',        label: 'Início',      icon: LayoutDashboard },
+  { id: 'dashboard',       label: 'Início',   icon: LayoutDashboard },
   null,
-  { id: 'produtores',       label: 'Clientes',    icon: Users },
-  { id: 'fazendas',         label: 'Fazendas',    icon: Building2 },
-  { id: 'talhoes',          label: 'Talhões',     icon: Map },
+  { id: 'produtores',      label: 'Clientes', icon: Users },
+  { id: 'safras',          label: 'Safras',   icon: CalendarDays },
   null,
-  { id: 'base-agronomica',  label: 'Base Ag.',    icon: FlaskConical },
+  { id: 'base-agronomica', label: 'Base Ag.', icon: FlaskConical },
   null,
-  { id: 'usuarios',         label: 'Usuários',    icon: Shield },
-  { id: 'configuracoes',    label: 'Config.',     icon: Settings },
+  { id: 'usuarios',        label: 'Usuários', icon: Shield },
+  { id: 'configuracoes',   label: 'Config.',  icon: Settings },
 ];
 
 export function IconSidebar() {
@@ -33,16 +31,16 @@ export function IconSidebar() {
       style={{ width: '64px', background: 'var(--invicta-blue-dark)', borderRight: '1px solid #1a3a6b' }}
     >
       {MENU.map((item, i) => {
-        if (!item) return <div key={`div-${i}`} className="w-8 my-1" style={{ height: '1px', background: '#1a3a6b' }} />;
-
+        if (!item) return <div key={`d-${i}`} className="w-8 my-1" style={{ height: '1px', background: '#1a3a6b' }} />;
         const Icon = item.icon;
-        const isActive = activePanel === item.id || (item.id === 'talhoes' && activePanel?.startsWith('talhao-'));
-
+        const isActive = activePanel === item.id
+          || (item.id === 'produtores' && (
+            activePanel?.startsWith('produtor-') ||
+            activePanel?.startsWith('fazenda-') ||
+            activePanel?.startsWith('talhao-')
+          ));
         return (
-          <button
-            key={item.id}
-            onClick={() => handleClick(item.id)}
-            title={item.label}
+          <button key={item.id} onClick={() => handleClick(item.id)} title={item.label}
             className="flex flex-col items-center gap-1 w-full px-1 py-2.5 rounded-md transition-all"
             style={{
               background: isActive ? 'var(--invicta-blue)' : 'transparent',
@@ -59,7 +57,6 @@ export function IconSidebar() {
           </button>
         );
       })}
-
       <div className="flex-1" />
       <div className="py-2 text-center text-[9px] font-mono flex-shrink-0"
         style={{ color: '#2e5fa3', borderTop: '1px solid #1a3a6b', width: '100%' }}>

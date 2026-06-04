@@ -40,6 +40,15 @@ export interface Talhao {
   criadoEm: string;
 }
 
+export interface Safra {
+  id: string;
+  nome: string;         // ex: "24/25"
+  anoInicio: number;
+  anoFim: number;
+  ativa: boolean;
+  criadoEm: string;
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────
 
 function load<T>(key: string): T[] {
@@ -122,6 +131,30 @@ export function updateTalhao(id: string, data: Partial<Talhao>) {
   if (idx >= 0) { talhoes[idx] = { ...talhoes[idx], ...data }; save('inv_talhoes', talhoes); }
 }
 
+// ── Safras ────────────────────────────────────────────────────────────────
+
+export function getSafras(): Safra[] {
+  return load<Safra>('inv_safras').sort((a, b) => b.anoInicio - a.anoInicio);
+}
+
+export function saveSafra(s: Omit<Safra, 'id' | 'criadoEm'>): Safra {
+  const safras = load<Safra>('inv_safras');
+  const nova: Safra = { ...s, id: uid(), criadoEm: new Date().toISOString() };
+  safras.push(nova);
+  save('inv_safras', safras);
+  return nova;
+}
+
+export function updateSafra(id: string, data: Partial<Safra>) {
+  const safras = load<Safra>('inv_safras');
+  const idx = safras.findIndex(s => s.id === id);
+  if (idx >= 0) { safras[idx] = { ...safras[idx], ...data }; save('inv_safras', safras); }
+}
+
+export function deleteSafra(id: string) {
+  save('inv_safras', load<Safra>('inv_safras').filter(s => s.id !== id));
+}
+
 export function clearAll() {
-  ['inv_clientes','inv_fazendas','inv_talhoes'].forEach(k => localStorage.removeItem(k));
+  ['inv_clientes','inv_fazendas','inv_talhoes','inv_safras'].forEach(k => localStorage.removeItem(k));
 }

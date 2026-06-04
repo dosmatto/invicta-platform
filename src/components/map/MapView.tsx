@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from 'react';
 import maplibregl from 'maplibre-gl';
-import 'maplibre-gl/dist/maplibre-gl.css';
 import { useApp } from '@/context/AppContext';
 import { TALHAO_KML_URLS } from '@/constants/mocks';
 import { parseKML } from '@/lib/geo';
