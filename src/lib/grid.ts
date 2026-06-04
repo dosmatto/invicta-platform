@@ -161,14 +161,17 @@ export function gerarGrid(params: GridParams): GridPoint[] {
     for (let u = minU + L / 2; u <= maxU; u += L, col++) {
       const [cx, cy] = fromGrid(u, v);
       if (!valido(cx, cy, aneis, distanciaBordaM)) continue;
-      // jitter restrito: tenta deslocar; se inválido, tenta algumas vezes; senão usa centro
+      // jitter RADIAL: deslocamento dentro de um círculo de raio jitterMax (= L/2 a 100%).
+      // Como o raio máx é metade do espaçamento, os círculos de células vizinhas ficam
+      // tangentes e os pontos nunca se cruzam. Se a posição cair inválida (borda),
+      // tenta outras; senão mantém o centro (já válido).
       let px = cx, py = cy;
       if (jitterMax > 0) {
         let ok = false;
-        for (let tent = 0; tent < 8 && !ok; tent++) {
-          const ju = (rng() - 0.5) * 2 * jitterMax;
-          const jv = (rng() - 0.5) * 2 * jitterMax;
-          const [dx, dy] = fromGrid(u + ju, v + jv);
+        for (let tent = 0; tent < 10 && !ok; tent++) {
+          const ang2 = rng() * 2 * Math.PI;
+          const raio = Math.sqrt(rng()) * jitterMax; // sqrt → distribuição uniforme na área
+          const [dx, dy] = fromGrid(u + Math.cos(ang2) * raio, v + Math.sin(ang2) * raio);
           if (valido(dx, dy, aneis, distanciaBordaM)) { px = dx; py = dy; ok = true; }
         }
         // se nenhuma tentativa válida, mantém o centro (já válido)

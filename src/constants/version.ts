@@ -1,6 +1,9 @@
-export const APP_VERSION = '0.10.0';
+export const APP_VERSION = '0.10.1';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.10.1': [
+    'Aleatoriedade agora é radial e limitada a metade do espaçamento (L/2) — pontos nunca se cruzam',
+  ],
   '0.10.0': [
     'Amostragem Fase 2 — Simulador de Grid (geração real sobre o polígono do talhão)',
     'Puxa densidade e profundidades do Padrão de Amostragem, permitindo customizar (marca "CUSTOMIZADO")',
