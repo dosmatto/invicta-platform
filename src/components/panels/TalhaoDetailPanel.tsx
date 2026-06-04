@@ -142,7 +142,7 @@ export function TalhaoDetailPanel() {
               </div>
             ))}
             <InnerRow label="Espaçamento" value="1 ponto/ha" />
-            <InnerRow label="Pontos estimados" value="48 pontos" sub={`Para ${context.area} ha`} />
+            <InnerRow label="Pontos estimados" value="48 pontos" sub={`Para ${nav.area} ha`} />
             <InnerBtn label="Gerar Pontos de Amostragem" icon={<Play size={11} />} color="#1d4ed8" />
           </div>
         </AccordionSection>
