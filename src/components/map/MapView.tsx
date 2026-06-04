@@ -208,7 +208,10 @@ export function MapView() {
 
   return (
     <div className="absolute inset-0">
-      <div ref={containerRef} className="absolute inset-0" />
+      {/* width/height explícitos: o CSS do MapLibre força position:relative no
+          container, o que anula `inset-0` e colapsa a altura para 0. style inline
+          vence por especificidade e garante que o canvas preencha o wrapper. */}
+      <div ref={containerRef} className="absolute inset-0" style={{ width: '100%', height: '100%' }} />
 
       {/* Loading indicator KML */}
       {kmlLoading && (

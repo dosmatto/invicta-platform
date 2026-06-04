@@ -1,6 +1,12 @@
-export const APP_VERSION = '0.9.3';
+export const APP_VERSION = '0.9.4';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.9.4': [
+    'FIX DEFINITIVO mapa branco em produção — container do mapa colapsava para altura 0',
+    'Causa: CSS do MapLibre força position:relative, anulando o `inset-0` do container',
+    'Solução: width/height 100% via style inline (vence o CSS do MapLibre por especificidade)',
+    'Diagnosticado reproduzindo o build de produção localmente',
+  ],
   '0.9.3': [
     'Fix mapa branco em produção — CSS MapLibre carregado via CDN jsDelivr no <head>',
     'MapView: map.resize() após load para garantir dimensões corretas',
