@@ -1,6 +1,14 @@
-export const APP_VERSION = '0.4.0';
+export const APP_VERSION = '0.5.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.5.0': [
+    'Navegação hierárquica: Produtor → Fazenda → Talhão',
+    'ProdutorDetailPanel: dados + lista de fazendas com cadastro',
+    'FazendaDetailPanel: dados + lista de talhões com cadastro',
+    'Mapa troca automaticamente para satélite (Esri) ao entrar no talhão',
+    'Toggle manual Rua / Satélite no mapa',
+    'Talhão selecionado destacado em verde no mapa',
+  ],
   '0.4.0': [
     'Fluxo talhão-cêntrico: todos os módulos técnicos dentro do talhão',
     'Sidebar simplificada: apenas Dashboard, Clientes, Fazendas, Talhões, Base Ag., Usuários, Config',

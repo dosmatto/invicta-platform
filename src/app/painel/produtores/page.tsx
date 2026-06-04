@@ -53,7 +53,7 @@ export default function ProdutoresPage() {
                   <td className="px-4 py-3" style={{ color: 'var(--text-secondary)' }}>{p.documento}</td>
                   <td className="px-4 py-3" style={{ color: 'var(--text-secondary)' }}>{p.cidade}</td>
                   <td className="px-4 py-3" style={{ color: 'var(--text-secondary)' }}>{p.estado}</td>
-                  <td className="px-4 py-3 text-center" style={{ color: 'var(--text-secondary)' }}>{p.fazendas}</td>
+                  <td className="px-4 py-3 text-center" style={{ color: 'var(--text-secondary)' }}>—</td>
                   <td className="px-4 py-3"><StatusBadge status={p.status as 'ativo'} /></td>
                   <td className="px-4 py-3">
                     <a href={`/painel/produtores/${p.id}`} className="text-xs font-medium"
