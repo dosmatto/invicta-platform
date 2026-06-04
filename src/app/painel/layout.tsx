@@ -24,7 +24,8 @@ export default function PainelLayout({ children }: { children: React.ReactNode }
           </div>
         </div>
       </div>
-      {children}
+      {/* Páginas de rota ocultas — navegação via SlidePanel */}
+      <div className="hidden">{children}</div>
     </AppProvider>
   );
 }
