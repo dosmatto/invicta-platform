@@ -5,7 +5,7 @@
 // garantindo os mesmos dados de teste em qualquer plataforma/navegador.
 
 import seedGeo from '@/constants/seedTalhaoGeo.json';
-import { Cliente, Fazenda, Talhao, PadraoElementos } from './store';
+import { Cliente, Fazenda, Talhao, PadraoElementos, PadraoAmostragem } from './store';
 
 // ── Localização inicial do mapa: Escritório da Invicta (Carambeí/PR) ──────────
 // Formato MapLibre: [longitude, latitude]
@@ -14,7 +14,7 @@ export const ESCRITORIO_INVICTA: { center: [number, number]; zoom: number } = {
   zoom: 15,
 };
 
-const SEED_FLAG = 'inv_seeded_v2';
+const SEED_FLAG = 'inv_seeded_v3';
 
 const SEED_CLIENTE: Cliente = {
   id: 'seed-frn',
@@ -69,6 +69,21 @@ const SEED_PADROES_ELEMENTOS: PadraoElementos[] = [
   },
 ];
 
+// Padrão de Amostragem pré-cadastrado para testes (1 ponto / 2 ha):
+// 00-20 em 100% dos pontos (Rotina + Textura + Micro) e 20-40 em 25% (Rotina + S).
+const SEED_PADROES_AMOSTRAGEM: PadraoAmostragem[] = [
+  {
+    id: 'seed-pa-invicta-2ha',
+    nome: 'Padrão Invicta 2 ha',
+    densidadeHaPonto: 2,
+    profundidades: [
+      { rotulo: '00-20', percentual: 100, padraoElementosId: 'seed-pe-rotina-tex-micro' },
+      { rotulo: '20-40', percentual: 25,  padraoElementosId: 'seed-pe-rotina-s' },
+    ],
+    criadoEm: new Date('2024-01-01').toISOString(),
+  },
+];
+
 function mergeUnique<T extends { id: string }>(key: string, seed: T) {
   const raw = localStorage.getItem(key);
   const list: T[] = raw ? JSON.parse(raw) : [];
@@ -87,6 +102,7 @@ export function seedIfEmpty() {
   mergeUnique('inv_fazendas', SEED_FAZENDA);
   mergeUnique('inv_talhoes', SEED_TALHAO);
   SEED_PADROES_ELEMENTOS.forEach(pe => mergeUnique('inv_padroes_elem', pe));
+  SEED_PADROES_AMOSTRAGEM.forEach(pa => mergeUnique('inv_padroes_amos', pa));
 
   localStorage.setItem(SEED_FLAG, '1');
 }

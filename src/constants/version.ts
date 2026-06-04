@@ -1,6 +1,9 @@
-export const APP_VERSION = '0.11.0';
+export const APP_VERSION = '0.11.1';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.11.1': [
+    'Seed: Padrão de Amostragem fixo "Padrão Invicta 2 ha" (00-20 100% + 20-40 25%) para testes',
+  ],
   '0.11.0': [
     'Amostragem Fase 3a — salvar e gerenciar grades',
     'Várias grades por safra/talhão; marcar qual será processada (uma por safra)',
