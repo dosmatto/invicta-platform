@@ -7,7 +7,7 @@ import { ChevronLeft, ChevronRight, Plus, Map, AlertTriangle, Save, X } from 'lu
 import { PanelSection, PanelButton, StatusBadge } from './_shared';
 
 export function FazendaDetailPanel() {
-  const { nav, setNav, setActivePanel, setMapMode } = useApp();
+  const { nav, setNav, setActivePanel, setMapMode, setUploadedGeo, setUploadedBbox, setTalhoesFazenda } = useApp();
   const [tab, setTab] = useState<'talhoes' | 'dados'>('talhoes');
   const [fazenda, setFazenda] = useState<Fazenda | null>(null);
   const [talhoes, setTalhoes] = useState<Talhao[]>([]);
@@ -15,16 +15,45 @@ export function FazendaDetailPanel() {
   const [form, setForm] = useState({ nome: '' });
   const [salvando, setSalvando] = useState(false);
 
+  // Monta a camada de polígonos dos talhões da fazenda para o mapa
+  function publicarTalhoesNoMapa(lista: Talhao[]) {
+    const features: GeoJSON.Feature[] = [];
+    for (const t of lista) {
+      if (!t.geojson) continue;
+      try {
+        const fc = JSON.parse(t.geojson) as GeoJSON.FeatureCollection;
+        for (const f of fc.features) {
+          if (f.geometry && (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon')) {
+            features.push({ type: 'Feature', properties: { talhaoId: t.id, nome: t.nome, area: t.areaHa }, geometry: f.geometry });
+          }
+        }
+      } catch {}
+    }
+    setTalhoesFazenda({ type: 'FeatureCollection', features });
+  }
+
   useEffect(() => {
     if (!nav.fazendaId) return;
     const todas = getFazendas();
     setFazenda(todas.find(f => f.id === nav.fazendaId) ?? null);
-    setTalhoes(getTalhoes(nav.fazendaId));
+    const lista = getTalhoes(nav.fazendaId);
+    setTalhoes(lista);
+    // ao abrir a fazenda, mostra os talhões dela no mapa (limpa geometria de talhão anterior)
+    setUploadedGeo(null);
+    setUploadedBbox(null);
+    setMapMode('satellite');
+    publicarTalhoesNoMapa(lista);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nav.fazendaId]);
+
+  // Ao sair da fazenda, limpa a camada
+  useEffect(() => () => setTalhoesFazenda(null), [setTalhoesFazenda]);
 
   function reload() {
     if (!nav.fazendaId) return;
-    setTalhoes(getTalhoes(nav.fazendaId));
+    const lista = getTalhoes(nav.fazendaId);
+    setTalhoes(lista);
+    publicarTalhoesNoMapa(lista);
   }
 
   function abrirTalhao(t: Talhao) {

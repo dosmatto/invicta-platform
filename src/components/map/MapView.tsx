@@ -40,14 +40,6 @@ const COMBINED_STYLE: maplibregl.StyleSpecification = {
 
 const EMPTY_FC: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
 
-const TALHOES_MOCK: GeoJSON.FeatureCollection = {
-  type: 'FeatureCollection',
-  features: [
-    { type: 'Feature', properties: { id: '1', nome: 'Talhão 01' }, geometry: { type: 'Polygon', coordinates: [[[-54.72,-13.21],[-54.68,-13.21],[-54.68,-13.25],[-54.72,-13.25],[-54.72,-13.21]]] } },
-    { type: 'Feature', properties: { id: '2', nome: 'Talhão 02' }, geometry: { type: 'Polygon', coordinates: [[[-54.63,-13.19],[-54.59,-13.19],[-54.59,-13.24],[-54.63,-13.24],[-54.63,-13.19]]] } },
-    { type: 'Feature', properties: { id: '3', nome: 'Gleba A'  }, geometry: { type: 'Polygon', coordinates: [[[-54.55,-13.22],[-54.49,-13.22],[-54.49,-13.29],[-54.55,-13.29],[-54.55,-13.22]]] } },
-  ],
-};
 
 export function MapView() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -55,10 +47,10 @@ export function MapView() {
   const readyRef    = useRef(false); // true depois de 'load'
   const [mapReady, setMapReady] = useState(false);
 
-  const { mapMode, setMapMode, nav,
+  const { mapMode, setMapMode, nav, setNav, setActivePanel,
           uploadedGeo, setUploadedGeo,
           uploadedBbox, setUploadedBbox,
-          pontosSimulados,
+          pontosSimulados, talhoesFazenda,
           edicaoAtiva, edicaoModo, setPontoEvent } = useApp();
 
   const [kmlLoading, setKmlLoading] = useState(false);
@@ -85,12 +77,10 @@ export function MapView() {
     map.addControl(new maplibregl.ScaleControl(), 'bottom-left');
 
     map.on('load', () => {
-      // Talhões mock
-      map.addSource('talhoes',    { type: 'geojson', data: TALHOES_MOCK });
+      // Talhões da fazenda — fonte persistente (clicáveis). Dados via setData.
+      map.addSource('talhoes',    { type: 'geojson', data: EMPTY_FC });
       map.addLayer({ id: 'talhao-fill',            type: 'fill',   source: 'talhoes', paint: { 'fill-color': '#f59e0b', 'fill-opacity': 0.35 } });
       map.addLayer({ id: 'talhao-outline',         type: 'line',   source: 'talhoes', paint: { 'line-color': '#d97706', 'line-width': 2 } });
-      map.addLayer({ id: 'talhao-selected',        type: 'fill',   source: 'talhoes', filter: ['==',['get','id'],''], paint: { 'fill-color': '#22c55e', 'fill-opacity': 0.45 } });
-      map.addLayer({ id: 'talhao-selected-outline',type: 'line',   source: 'talhoes', filter: ['==',['get','id'],''], paint: { 'line-color': '#16a34a', 'line-width': 3 } });
       map.addLayer({ id: 'talhao-label',           type: 'symbol', source: 'talhoes',
         layout: { 'text-field': ['get','nome'], 'text-size': 12, 'text-font': ['Open Sans Bold'] },
         paint:  { 'text-color': '#fff', 'text-halo-color': '#000', 'text-halo-width': 1.5 } });
@@ -145,16 +135,47 @@ export function MapView() {
     } catch {}
   }, [mapMode, mapReady]);
 
-  // ── 3. Destaca talhão selecionado ─────────────────────────────────────────
+  // ── 3. Talhões da fazenda (setData) + fitBounds + clique p/ abrir talhão ───
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !readyRef.current) return;
-    const id = nav.talhaoId ?? '';
-    try {
-      map.setFilter('talhao-selected',        ['==',['get','id'], id]);
-      map.setFilter('talhao-selected-outline',['==',['get','id'], id]);
-    } catch {}
-  }, [nav.talhaoId]);
+    if (!map || !mapReady) return;
+    const src = map.getSource('talhoes') as maplibregl.GeoJSONSource | undefined;
+    if (!src) return;
+    src.setData(talhoesFazenda ?? EMPTY_FC);
+
+    if (talhoesFazenda && talhoesFazenda.features.length) {
+      let minLng = Infinity, minLat = Infinity, maxLng = -Infinity, maxLat = -Infinity;
+      const walk = (g: GeoJSON.Geometry) => {
+        if (g.type === 'Polygon') g.coordinates.forEach(r => r.forEach(([a, b]) => { if (a < minLng) minLng = a; if (b < minLat) minLat = b; if (a > maxLng) maxLng = a; if (b > maxLat) maxLat = b; }));
+        else if (g.type === 'MultiPolygon') g.coordinates.forEach(p => p.forEach(r => r.forEach(([a, b]) => { if (a < minLng) minLng = a; if (b < minLat) minLat = b; if (a > maxLng) maxLng = a; if (b > maxLat) maxLat = b; })));
+      };
+      talhoesFazenda.features.forEach(f => f.geometry && walk(f.geometry));
+      if (isFinite(minLng)) map.fitBounds([[minLng, minLat], [maxLng, maxLat]], { padding: 70, duration: 800, maxZoom: 16 });
+    }
+  }, [talhoesFazenda, mapReady]);
+
+  // Clique num talhão da fazenda → abre o talhão (como link)
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    const abrir = (e: maplibregl.MapLayerMouseEvent) => {
+      const p = e.features?.[0]?.properties;
+      if (!p?.talhaoId) return;
+      setNav({ talhaoId: String(p.talhaoId), talhao: String(p.nome ?? ''), area: Number(p.area ?? 0) });
+      setMapMode('satellite');
+      setActivePanel(`talhao-${p.talhaoId}`);
+    };
+    const enter = () => { map.getCanvas().style.cursor = 'pointer'; };
+    const leave = () => { map.getCanvas().style.cursor = ''; };
+    map.on('click', 'talhao-fill', abrir);
+    map.on('mouseenter', 'talhao-fill', enter);
+    map.on('mouseleave', 'talhao-fill', leave);
+    return () => {
+      map.off('click', 'talhao-fill', abrir);
+      map.off('mouseenter', 'talhao-fill', enter);
+      map.off('mouseleave', 'talhao-fill', leave);
+    };
+  }, [mapReady, setNav, setActivePanel, setMapMode]);
 
   // ── 4. Auto-carrega KML de talhões com URL pré-definida ───────────────────
   useEffect(() => {

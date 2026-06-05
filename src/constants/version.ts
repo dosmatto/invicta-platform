@@ -1,6 +1,10 @@
-export const APP_VERSION = '0.14.0';
+export const APP_VERSION = '0.15.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.15.0': [
+    'Ao abrir uma Fazenda, todos os talhões com geometria aparecem no mapa (satélite)',
+    'Clicar num talhão no mapa abre o talhão (como link), com zoom automático no conjunto',
+  ],
   '0.14.0': [
     'Fase 4 — Etiquetas com QR Code por amostra (PDF)',
     'Uma etiqueta por amostra (ponto × profundidade); QR codifica "Talhão - Ponto - Profundidade"',
