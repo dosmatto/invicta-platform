@@ -1,6 +1,11 @@
-export const APP_VERSION = '0.15.3';
+export const APP_VERSION = '0.16.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.16.0': [
+    'Zonas de Manejo — campo zonasGeojson no talhão + caso de teste JRABA 01',
+    'Cadastro de teste: Ricardo Arruda (JRA) › Fazenda Barrinha (JRABA) › Talhão JRABA 01 (67,8 ha, 8 zonas)',
+    'Zonas do shapefile reprojetadas de UTM 22S para WGS84 (classes ALTA/MÉDIA/BAIXA)',
+  ],
   '0.15.3': [
     'Etiqueta da amostra sem QR Code — prioriza o número da amostra (grande) + profundidade',
   ],

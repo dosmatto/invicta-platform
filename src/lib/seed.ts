@@ -5,6 +5,7 @@
 // garantindo os mesmos dados de teste em qualquer plataforma/navegador.
 
 import seedGeo from '@/constants/seedTalhaoGeo.json';
+import seedZonas from '@/constants/seedZonasJraba.json';
 import { Cliente, Fazenda, Talhao, PadraoElementos, PadraoAmostragem } from './store';
 
 // ── Localização inicial do mapa: Escritório da Invicta (Carambeí/PR) ──────────
@@ -14,7 +15,7 @@ export const ESCRITORIO_INVICTA: { center: [number, number]; zoom: number } = {
   zoom: 15,
 };
 
-const SEED_FLAG = 'inv_seeded_v3';
+const SEED_FLAG = 'inv_seeded_v4';
 
 const SEED_CLIENTE: Cliente = {
   id: 'seed-frn',
@@ -48,6 +49,43 @@ const SEED_TALHAO: Talhao = {
   status: 'ativo',
   geojson: JSON.stringify(seedGeo.geojson),
   bbox: seedGeo.bbox as [number, number, number, number],
+  criadoEm: new Date('2024-01-01').toISOString(),
+};
+
+// Segundo caso de teste — com Zonas de Manejo (JRABA 01, reprojetado de UTM 22S)
+const SEED_CLIENTE_2: Cliente = {
+  id: 'seed-ricardo',
+  nome: 'Ricardo Arruda',
+  sigla: 'JRA',
+  documento: '',
+  tipoPessoa: 'PF',
+  telefone: '',
+  email: '',
+  cidade: 'Carambeí',
+  estado: 'PR',
+  observacoes: 'Dados de teste — zonas de manejo.',
+  criadoEm: new Date('2024-01-01').toISOString(),
+};
+
+const SEED_FAZENDA_2: Fazenda = {
+  id: 'seed-barrinha',
+  clienteId: 'seed-ricardo',
+  nome: 'Barrinha',
+  sigla: 'JRABA',
+  municipio: 'Carambeí',
+  estado: 'PR',
+  criadoEm: new Date('2024-01-01').toISOString(),
+};
+
+const SEED_TALHAO_2: Talhao = {
+  id: 'seed-jraba-01',
+  fazendaId: 'seed-barrinha',
+  nome: 'JRABA 01',
+  areaHa: seedZonas.areaHa,
+  status: 'ativo',
+  geojson: JSON.stringify(seedZonas.limite),
+  zonasGeojson: JSON.stringify(seedZonas.zonas),
+  bbox: seedZonas.bbox as [number, number, number, number],
   criadoEm: new Date('2024-01-01').toISOString(),
 };
 
@@ -101,6 +139,9 @@ export function seedIfEmpty() {
   mergeUnique('inv_clientes', SEED_CLIENTE);
   mergeUnique('inv_fazendas', SEED_FAZENDA);
   mergeUnique('inv_talhoes', SEED_TALHAO);
+  mergeUnique('inv_clientes', SEED_CLIENTE_2);
+  mergeUnique('inv_fazendas', SEED_FAZENDA_2);
+  mergeUnique('inv_talhoes', SEED_TALHAO_2);
   SEED_PADROES_ELEMENTOS.forEach(pe => mergeUnique('inv_padroes_elem', pe));
   SEED_PADROES_AMOSTRAGEM.forEach(pa => mergeUnique('inv_padroes_amos', pa));
 

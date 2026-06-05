@@ -35,7 +35,8 @@ export interface Talhao {
   areaHa: number;           // calculado do shapefile/kml
   areaHaSemHoles?: number;  // sem descontar holes
   status: 'ativo' | 'incompleto';
-  geojson?: string;         // JSON string do GeoJSON
+  geojson?: string;         // JSON string do GeoJSON (limite do talhão)
+  zonasGeojson?: string;    // JSON string do GeoJSON das zonas de manejo (cada feature: {id, classe, areaHa})
   bbox?: [number, number, number, number];
   criadoEm: string;
 }
