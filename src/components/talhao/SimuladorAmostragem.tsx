@@ -5,7 +5,8 @@ import { useApp } from '@/context/AppContext';
 import { getPadroesAmostragem, getPadroesElementos, getSafras, getGrades, saveGrade, updateGrade, deleteGrade, marcarParaProcessar, PadraoElementos, ProfundidadeConfig, GradeAmostragem, PontoAmostragem } from '@/lib/store';
 import { gerarGrid, anguloMaiorDimensao, criarValidador } from '@/lib/grid';
 import { exportarKML, exportarSHP } from '@/lib/exportGrade';
-import { AlertTriangle, RotateCcw, Shuffle, Layers, MapPin, Save, Trash2, CheckCircle2, Circle, Pencil, Move, Plus, Eraser, X, Check, Download } from 'lucide-react';
+import { gerarEtiquetasPDF } from '@/lib/etiquetas';
+import { AlertTriangle, RotateCcw, Shuffle, Layers, MapPin, Save, Trash2, CheckCircle2, Circle, Pencil, Move, Plus, Eraser, X, Check, Download, QrCode } from 'lucide-react';
 
 // PRNG simples para shuffle determinístico
 function shuffleSeed<T>(arr: T[], seed: number): T[] {
@@ -95,10 +96,10 @@ export function SimuladorAmostragem() {
     const pts = gerarGrid({ geojson: uploadedGeo, densidadeHaPonto: densidade, distanciaBordaM: distanciaBorda, rotacaoGraus: rotacaoEfetiva, aleatoriedade, seed: seedPos });
     const n = pts.length;
     const selecoes = profs.map(p => selecionar(n, p.percentual, modoSel, seedSel + p.rotulo.length));
-    return pts.map((pt, i) => ({
-      ordem: i, lng: pt.lng, lat: pt.lat,
-      profs: profs.filter((_, pi) => selecoes[pi].has(i)).length,
-    }));
+    return pts.map((pt, i) => {
+      const rotulos = profs.filter((_, pi) => selecoes[pi].has(i)).map(p => p.rotulo);
+      return { ordem: i, lng: pt.lng, lat: pt.lat, profs: rotulos.length, profundidades: rotulos };
+    });
   }, [uploadedGeo, densidade, distanciaBorda, rotacaoEfetiva, aleatoriedade, seedPos, profs, modoSel, seedSel]);
 
   // Pontos efetivos: edição manual (se houver) tem prioridade sobre os gerados
@@ -155,10 +156,11 @@ export function SimuladorAmostragem() {
   function descartarEdicao() { setPontosManuais(null); setEdicaoAtiva(false); }
   function confirmarAddPonto() {
     if (!addPendente) return;
-    const nProfs = profsExtra.filter(Boolean).length || 1;
+    const rotulos = profs.filter((_, i) => profsExtra[i]).map(p => p.rotulo);
+    const escolhidos = rotulos.length ? rotulos : (profs[0] ? [profs[0].rotulo] : []);
     setPontosManuais(prev => {
       const base = prev ?? gerados;
-      const novo: PontoAmostragem = { ordem: base.length, lng: addPendente.lng, lat: addPendente.lat, profs: nProfs, manual: true };
+      const novo: PontoAmostragem = { ordem: base.length, lng: addPendente.lng, lat: addPendente.lat, profs: escolhidos.length, profundidades: escolhidos, manual: true };
       return resequenciar([...base, novo]);
     });
     setAddPendente(null);
@@ -200,6 +202,10 @@ export function SimuladorAmostragem() {
     const input = { talhaoNome: nav.talhao || 'Talhao', poligono: uploadedGeo, pontos: g.pontos };
     if (formato === 'kml') exportarKML(input, g.nome);
     else exportarSHP(input, g.nome).catch(err => console.error('Erro ao exportar SHP:', err));
+  }
+
+  function gerarEtiquetas(g: GradeAmostragem) {
+    gerarEtiquetasPDF(nav.talhao || 'Talhao', g).catch(err => console.error('Erro ao gerar etiquetas:', err));
   }
 
   // ── Validações ──
@@ -480,6 +486,10 @@ export function SimuladorAmostragem() {
                   <button onClick={() => exportar(g, 'shp')}
                     className="flex items-center gap-1 text-[9px] px-2 py-0.5 rounded font-semibold" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
                     <Download size={9} /> SHP
+                  </button>
+                  <button onClick={() => gerarEtiquetas(g)} title="Etiquetas com QR Code (PDF)"
+                    className="flex items-center gap-1 text-[9px] px-2 py-0.5 rounded font-semibold" style={{ background: '#065f46', color: '#a7f3d0' }}>
+                    <QrCode size={9} /> Etiquetas
                   </button>
                 </div>
               </div>

@@ -71,11 +71,12 @@ export interface PadraoAmostragem {
 }
 
 export interface PontoAmostragem {
-  ordem: number;       // índice serpentina (0-based)
+  ordem: number;          // índice serpentina (0-based)
   lng: number;
   lat: number;
-  profs: number;       // nº de profundidades (define a cor)
-  manual?: boolean;    // movido/adicionado manualmente
+  profs: number;          // nº de profundidades (define a cor)
+  profundidades?: string[]; // rótulos das profundidades deste ponto (ex: ['00-20','20-40'])
+  manual?: boolean;       // movido/adicionado manualmente
 }
 
 export interface GradeAmostragem {

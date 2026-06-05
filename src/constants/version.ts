@@ -1,6 +1,13 @@
-export const APP_VERSION = '0.13.0';
+export const APP_VERSION = '0.14.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.14.0': [
+    'Fase 4 — Etiquetas com QR Code por amostra (PDF)',
+    'Uma etiqueta por amostra (ponto × profundidade); QR codifica "Talhão - Ponto - Profundidade"',
+    'Etiqueta com QR + texto legível (talhão, ponto, profundidade, safra/época)',
+    'Pontos passam a guardar quais profundidades possuem (para etiquetas corretas)',
+    'Botão "Etiquetas" em cada grade salva (ao lado de KML/SHP)',
+  ],
   '0.13.0': [
     'Exportação da grade pronta em KML ou Shapefile (.zip)',
     'Pontos numerados + polígono do talhão incluídos na exportação',
