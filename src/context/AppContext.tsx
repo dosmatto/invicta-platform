@@ -40,6 +40,9 @@ interface AppContextType {
   // Polígonos dos talhões da fazenda aberta (clicáveis no mapa)
   talhoesFazenda: GeoJSON.FeatureCollection | null;
   setTalhoesFazenda: (fc: GeoJSON.FeatureCollection | null) => void;
+  // Zonas de manejo do talhão (coloridas por classe) exibidas no mapa
+  zonasManejo: GeoJSON.FeatureCollection | null;
+  setZonasManejo: (fc: GeoJSON.FeatureCollection | null) => void;
   // Edição manual de pontos de amostragem
   edicaoAtiva: boolean;
   setEdicaoAtiva: (v: boolean) => void;
@@ -66,6 +69,8 @@ const AppContext = createContext<AppContextType>({
   setPontosSimulados: () => {},
   talhoesFazenda: null,
   setTalhoesFazenda: () => {},
+  zonasManejo: null,
+  setZonasManejo: () => {},
   edicaoAtiva: false,
   setEdicaoAtiva: () => {},
   edicaoModo: 'mover',
@@ -85,6 +90,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [uploadedBbox, setUploadedBbox] = useState<[number, number, number, number] | null>(null);
   const [pontosSimulados, setPontosSimulados] = useState<GeoJSON.FeatureCollection | null>(null);
   const [talhoesFazenda, setTalhoesFazenda] = useState<GeoJSON.FeatureCollection | null>(null);
+  const [zonasManejo, setZonasManejo] = useState<GeoJSON.FeatureCollection | null>(null);
   const [edicaoAtiva, setEdicaoAtiva] = useState(false);
   const [edicaoModo, setEdicaoModo] = useState<EdicaoModo>('mover');
   const [pontoEvent, setPontoEvent] = useState<PontoEvent | null>(null);
@@ -109,6 +115,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       uploadedBbox, setUploadedBbox,
       pontosSimulados, setPontosSimulados,
       talhoesFazenda, setTalhoesFazenda,
+      zonasManejo, setZonasManejo,
       edicaoAtiva, setEdicaoAtiva,
       edicaoModo, setEdicaoModo,
       pontoEvent, setPontoEvent,

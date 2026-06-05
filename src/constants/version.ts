@@ -1,6 +1,10 @@
-export const APP_VERSION = '0.16.0';
+export const APP_VERSION = '0.16.1';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.16.1': [
+    'Amostragem com seletor de método: Grid ou Zona de Manejo',
+    'Z1 Zonas de Manejo — zonas exibidas no mapa coloridas por classe (semáforo) + legenda e lista',
+  ],
   '0.16.0': [
     'Zonas de Manejo — campo zonasGeojson no talhão + caso de teste JRABA 01',
     'Cadastro de teste: Ricardo Arruda (JRA) › Fazenda Barrinha (JRABA) › Talhão JRABA 01 (67,8 ha, 8 zonas)',

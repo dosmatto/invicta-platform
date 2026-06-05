@@ -50,7 +50,7 @@ export function MapView() {
   const { mapMode, setMapMode, nav, setNav, setActivePanel,
           uploadedGeo, setUploadedGeo,
           uploadedBbox, setUploadedBbox,
-          pontosSimulados, talhoesFazenda,
+          pontosSimulados, talhoesFazenda, zonasManejo,
           edicaoAtiva, edicaoModo, setPontoEvent } = useApp();
 
   const [kmlLoading, setKmlLoading] = useState(false);
@@ -84,6 +84,16 @@ export function MapView() {
       map.addLayer({ id: 'talhao-label',           type: 'symbol', source: 'talhoes',
         layout: { 'text-field': ['get','nome'], 'text-size': 12, 'text-font': ['Open Sans Bold'] },
         paint:  { 'text-color': '#fff', 'text-halo-color': '#000', 'text-halo-width': 1.5 } });
+
+      // Zonas de manejo — fonte persistente, cor por classe (property 'cor')
+      map.addSource('zonas', { type: 'geojson', data: EMPTY_FC });
+      map.addLayer({ id: 'zona-fill', type: 'fill', source: 'zonas',
+        paint: { 'fill-color': ['get', 'cor'], 'fill-opacity': 0.5 } });
+      map.addLayer({ id: 'zona-outline', type: 'line', source: 'zonas',
+        paint: { 'line-color': '#ffffff', 'line-width': 1.5 } });
+      map.addLayer({ id: 'zona-label', type: 'symbol', source: 'zonas',
+        layout: { 'text-field': ['get', 'rotulo'], 'text-size': 11, 'text-font': ['Open Sans Bold'] },
+        paint: { 'text-color': '#fff', 'text-halo-color': '#000', 'text-halo-width': 1.4 } });
 
       // Geometria carregada (KML/upload) — fonte persistente, dados atualizados via setData
       map.addSource('upload-geo', { type: 'geojson', data: EMPTY_FC });
@@ -233,6 +243,29 @@ export function MapView() {
 
     src.setData(pontosSimulados ?? EMPTY_FC);
   }, [pontosSimulados, mapReady]);
+
+  // ── 6b. Zonas de manejo (setData) + fitBounds ────────────────────────────
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    const src = map.getSource('zonas') as maplibregl.GeoJSONSource | undefined;
+    if (!src) return;
+    src.setData(zonasManejo ?? EMPTY_FC);
+
+    // Oculta o limite (upload-geo) enquanto as zonas coloridas estão visíveis
+    const temZonas = !!(zonasManejo && zonasManejo.features.length);
+    ['upload-fill', 'upload-line'].forEach(id => { try { map.setLayoutProperty(id, 'visibility', temZonas ? 'none' : 'visible'); } catch {} });
+
+    if (zonasManejo && zonasManejo.features.length) {
+      let minLng = Infinity, minLat = Infinity, maxLng = -Infinity, maxLat = -Infinity;
+      const walk = (g: GeoJSON.Geometry) => {
+        if (g.type === 'Polygon') g.coordinates.forEach(r => r.forEach(([a, b]) => { if (a < minLng) minLng = a; if (b < minLat) minLat = b; if (a > maxLng) maxLng = a; if (b > maxLat) maxLat = b; }));
+        else if (g.type === 'MultiPolygon') g.coordinates.forEach(p => p.forEach(r => r.forEach(([a, b]) => { if (a < minLng) minLng = a; if (b < minLat) minLat = b; if (a > maxLng) maxLng = a; if (b > maxLat) maxLat = b; })));
+      };
+      zonasManejo.features.forEach(f => f.geometry && walk(f.geometry));
+      if (isFinite(minLng)) { map.resize(); map.fitBounds([[minLng, minLat], [maxLng, maxLat]], { padding: 50, duration: 0, maxZoom: 16 }); }
+    }
+  }, [zonasManejo, mapReady]);
 
   // ── 7. Edição manual de pontos (arrastar / adicionar / remover) ───────────
   useEffect(() => {
