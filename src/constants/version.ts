@@ -1,6 +1,10 @@
-export const APP_VERSION = '0.15.0';
+export const APP_VERSION = '0.15.1';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.15.1': [
+    'Fix: ao abrir a fazenda, o mapa enquadra TODOS os talhões (antes parava num zoom afastado)',
+    'fitBounds sem animação (evita voo interrompido) + resize do container antes de enquadrar',
+  ],
   '0.15.0': [
     'Ao abrir uma Fazenda, todos os talhões com geometria aparecem no mapa (satélite)',
     'Clicar num talhão no mapa abre o talhão (como link), com zoom automático no conjunto',

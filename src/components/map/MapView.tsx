@@ -150,7 +150,12 @@ export function MapView() {
         else if (g.type === 'MultiPolygon') g.coordinates.forEach(p => p.forEach(r => r.forEach(([a, b]) => { if (a < minLng) minLng = a; if (b < minLat) minLat = b; if (a > maxLng) maxLng = a; if (b > maxLat) maxLat = b; })));
       };
       talhoesFazenda.features.forEach(f => f.geometry && walk(f.geometry));
-      if (isFinite(minLng)) map.fitBounds([[minLng, minLat], [maxLng, maxLat]], { padding: 70, duration: 800, maxZoom: 16 });
+      // resize garante dimensões corretas do container; jump (duration 0) evita
+      // que o voo animado de longe seja interrompido e pare num zoom afastado.
+      if (isFinite(minLng)) {
+        map.resize();
+        map.fitBounds([[minLng, minLat], [maxLng, maxLat]], { padding: 60, duration: 0, maxZoom: 15 });
+      }
     }
   }, [talhoesFazenda, mapReady]);
 
