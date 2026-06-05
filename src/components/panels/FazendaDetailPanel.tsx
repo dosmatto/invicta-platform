@@ -15,19 +15,31 @@ export function FazendaDetailPanel() {
   const [form, setForm] = useState({ nome: '' });
   const [salvando, setSalvando] = useState(false);
 
-  // Monta a camada de polígonos dos talhões da fazenda para o mapa
+  // Monta a camada de polígonos dos talhões da fazenda para o mapa.
+  // Robusto: aceita o geojson salvo como FeatureCollection, Feature, Geometry
+  // ou GeometryCollection — extrai todos os Polygon/MultiPolygon de qualquer um.
   function publicarTalhoesNoMapa(lista: Talhao[]) {
     const features: GeoJSON.Feature[] = [];
+
     for (const t of lista) {
       if (!t.geojson) continue;
-      try {
-        const fc = JSON.parse(t.geojson) as GeoJSON.FeatureCollection;
-        for (const f of fc.features) {
-          if (f.geometry && (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon')) {
-            features.push({ type: 'Feature', properties: { talhaoId: t.id, nome: t.nome, area: t.areaHa }, geometry: f.geometry });
-          }
-        }
-      } catch {}
+      let obj: unknown;
+      try { obj = JSON.parse(t.geojson); } catch { continue; }
+
+      const geoms: GeoJSON.Geometry[] = [];
+      const visitGeom = (g: GeoJSON.Geometry | null | undefined) => {
+        if (!g) return;
+        if (g.type === 'Polygon' || g.type === 'MultiPolygon') geoms.push(g);
+        else if (g.type === 'GeometryCollection') g.geometries.forEach(visitGeom);
+      };
+      const o = obj as { type?: string; features?: { geometry?: GeoJSON.Geometry }[]; geometry?: GeoJSON.Geometry };
+      if (o?.type === 'FeatureCollection' && Array.isArray(o.features)) o.features.forEach(f => visitGeom(f?.geometry));
+      else if (o?.type === 'Feature') visitGeom(o.geometry);
+      else visitGeom(obj as GeoJSON.Geometry); // geometria direta
+
+      for (const g of geoms) {
+        features.push({ type: 'Feature', properties: { talhaoId: t.id, nome: t.nome, area: t.areaHa }, geometry: g });
+      }
     }
     setTalhoesFazenda({ type: 'FeatureCollection', features });
   }

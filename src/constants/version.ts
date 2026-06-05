@@ -1,6 +1,9 @@
-export const APP_VERSION = '0.15.1';
+export const APP_VERSION = '0.15.2';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.15.2': [
+    'Fix: extração robusta dos polígonos dos talhões (FeatureCollection, Feature, Geometry ou GeometryCollection) — todos os talhões da fazenda aparecem no mapa',
+  ],
   '0.15.1': [
     'Fix: ao abrir a fazenda, o mapa enquadra TODOS os talhões (antes parava num zoom afastado)',
     'fitBounds sem animação (evita voo interrompido) + resize do container antes de enquadrar',
