@@ -29,7 +29,6 @@ export function contarAmostras(talhaoNome: string, grade: GradeAmostragem): numb
 }
 
 export async function gerarEtiquetasPDF(talhaoNome: string, grade: GradeAmostragem) {
-  const QRCode = (await import('qrcode')).default;
   const { jsPDF } = await import('jspdf');
 
   const amostras = montarAmostras(talhaoNome, grade);
@@ -50,22 +49,27 @@ export async function gerarEtiquetasPDF(talhaoNome: string, grade: GradeAmostrag
     const row = Math.floor(idx / cols);
     const x = margin + col * cellW;
     const y = margin + row * cellH;
+    const cx = x + cellW / 2;
 
-    // QR code
-    const qrData = await QRCode.toDataURL(a.id, { margin: 0, width: 220 });
-    const qrSize = cellH - 8;
-    doc.addImage(qrData, 'PNG', x + 2, y + 4, qrSize, qrSize);
+    // Talhão (topo, pequeno)
+    doc.setTextColor(110, 120, 140);
+    doc.setFontSize(8); doc.setFont('helvetica', 'normal');
+    doc.text(talhaoNome, cx, y + 6, { align: 'center' });
 
-    // Texto
-    const tx = x + qrSize + 5;
-    doc.setTextColor(20, 30, 50);
-    doc.setFontSize(10); doc.setFont('helvetica', 'bold');
-    doc.text(talhaoNome, tx, y + 9);
-    doc.setFontSize(9); doc.setFont('helvetica', 'normal');
-    doc.text(`Ponto: ${a.num}`, tx, y + 16);
-    doc.text(`Prof.: ${a.prof} cm`, tx, y + 21);
-    doc.setFontSize(7); doc.setTextColor(110, 120, 140);
-    doc.text(`Safra ${grade.safra} · ${grade.epoca}a época`, tx, y + 27);
+    // NÚMERO da amostra (grande, destaque)
+    doc.setTextColor(15, 25, 45);
+    doc.setFontSize(30); doc.setFont('helvetica', 'bold');
+    doc.text(a.num, cx, y + 19, { align: 'center' });
+
+    // Profundidade (destaque secundário)
+    doc.setFontSize(13); doc.setFont('helvetica', 'bold');
+    doc.setTextColor(30, 60, 110);
+    doc.text(`${a.prof} cm`, cx, y + 27, { align: 'center' });
+
+    // Safra / época (rodapé, pequeno)
+    doc.setFontSize(7); doc.setFont('helvetica', 'normal');
+    doc.setTextColor(140, 150, 165);
+    doc.text(`Safra ${grade.safra} · ${grade.epoca}a época`, cx, y + 32, { align: 'center' });
 
     // Borda da etiqueta
     doc.setDrawColor(210);

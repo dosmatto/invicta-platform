@@ -1,6 +1,9 @@
-export const APP_VERSION = '0.15.2';
+export const APP_VERSION = '0.15.3';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.15.3': [
+    'Etiqueta da amostra sem QR Code — prioriza o número da amostra (grande) + profundidade',
+  ],
   '0.15.2': [
     'Fix: extração robusta dos polígonos dos talhões (FeatureCollection, Feature, Geometry ou GeometryCollection) — todos os talhões da fazenda aparecem no mapa',
   ],
