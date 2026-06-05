@@ -1,6 +1,11 @@
-export const APP_VERSION = '0.12.1';
+export const APP_VERSION = '0.13.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.13.0': [
+    'Exportação da grade pronta em KML ou Shapefile (.zip)',
+    'Pontos numerados + polígono do talhão incluídos na exportação',
+    'Shapefile separa pontos_amostragem e talhao (com .prj WGS84); botões por grade salva',
+  ],
   '0.12.1': [
     'Changelog recolhível — última versão sempre visível, anteriores ocultas e expansíveis',
   ],

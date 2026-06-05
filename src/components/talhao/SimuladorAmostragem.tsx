@@ -4,7 +4,8 @@ import { useState, useEffect, useMemo } from 'react';
 import { useApp } from '@/context/AppContext';
 import { getPadroesAmostragem, getPadroesElementos, getSafras, getGrades, saveGrade, updateGrade, deleteGrade, marcarParaProcessar, PadraoElementos, ProfundidadeConfig, GradeAmostragem, PontoAmostragem } from '@/lib/store';
 import { gerarGrid, anguloMaiorDimensao, criarValidador } from '@/lib/grid';
-import { AlertTriangle, RotateCcw, Shuffle, Layers, MapPin, Save, Trash2, CheckCircle2, Circle, Pencil, Move, Plus, Eraser, X, Check } from 'lucide-react';
+import { exportarKML, exportarSHP } from '@/lib/exportGrade';
+import { AlertTriangle, RotateCcw, Shuffle, Layers, MapPin, Save, Trash2, CheckCircle2, Circle, Pencil, Move, Plus, Eraser, X, Check, Download } from 'lucide-react';
 
 // PRNG simples para shuffle determinístico
 function shuffleSeed<T>(arr: T[], seed: number): T[] {
@@ -192,6 +193,13 @@ export function SimuladorAmostragem() {
   function confirmarRenome(id: string) {
     if (nomeTemp.trim()) updateGrade(id, { nome: nomeTemp.trim() });
     setRenomeando(null); recarregarGrades();
+  }
+
+  function exportar(g: GradeAmostragem, formato: 'kml' | 'shp') {
+    if (!uploadedGeo) return;
+    const input = { talhaoNome: nav.talhao || 'Talhao', poligono: uploadedGeo, pontos: g.pontos };
+    if (formato === 'kml') exportarKML(input, g.nome);
+    else exportarSHP(input, g.nome).catch(err => console.error('Erro ao exportar SHP:', err));
   }
 
   // ── Validações ──
@@ -462,6 +470,18 @@ export function SimuladorAmostragem() {
                   {g.pontos.length} pontos · {g.densidade} ha/pt · {g.epoca}ª época
                   {g.paraProcessar && <span style={{ color: '#86efac' }}> · a processar</span>}
                 </p>
+                {/* Exportar */}
+                <div className="flex items-center gap-1.5 mt-2 pl-6">
+                  <span className="text-[9px]" style={{ color: '#475569' }}>Exportar:</span>
+                  <button onClick={() => exportar(g, 'kml')}
+                    className="flex items-center gap-1 text-[9px] px-2 py-0.5 rounded font-semibold" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
+                    <Download size={9} /> KML
+                  </button>
+                  <button onClick={() => exportar(g, 'shp')}
+                    className="flex items-center gap-1 text-[9px] px-2 py-0.5 rounded font-semibold" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
+                    <Download size={9} /> SHP
+                  </button>
+                </div>
               </div>
             ))}
           </div>

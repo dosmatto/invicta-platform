@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",
+    "@mapbox/shp-write": "^0.4.3",
     "@tmcw/togeojson": "^7.1.2",
     "@turf/area": "^7.3.5",
     "@turf/helpers": "^7.3.5",
