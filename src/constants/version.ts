@@ -1,6 +1,11 @@
-export const APP_VERSION = '0.16.1';
+export const APP_VERSION = '0.16.2';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.16.2': [
+    'Z2 Zonas — geração de pontos por zona (grid dentro de cada zona + aleatoriedade)',
+    'Densidade em pontos/ha; zonas pequenas recebem ao menos 1 ponto',
+    'Modelo A (amostra composta, 1/zona) e Modelo B (pontos individuais ao laboratório)',
+  ],
   '0.16.1': [
     'Amostragem com seletor de método: Grid ou Zona de Manejo',
     'Z1 Zonas de Manejo — zonas exibidas no mapa coloridas por classe (semáforo) + legenda e lista',

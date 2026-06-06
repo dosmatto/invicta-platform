@@ -111,10 +111,13 @@ export function MapView() {
       map.addLayer({ id: 'pontos-circle', type: 'circle', source: 'pontos-amos',
         paint: {
           'circle-radius': 6,
-          'circle-color': ['match', ['get', 'profs'],
-            1, '#f59e0b',   // 1 profundidade — laranja
-            2, '#3b82f6',   // 2 profundidades — azul
-            '#a855f7',      // 3+ profundidades — roxo
+          'circle-color': ['case',
+            ['has', 'cor'], ['get', 'cor'],   // cor explícita (ex: pontos de zona)
+            ['match', ['get', 'profs'],
+              1, '#f59e0b',   // 1 profundidade — laranja
+              2, '#3b82f6',   // 2 profundidades — azul
+              '#a855f7',      // 3+ profundidades — roxo
+            ],
           ],
           'circle-stroke-color': '#fff', 'circle-stroke-width': 1.5,
         } });

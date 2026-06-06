@@ -150,6 +150,30 @@ export function criarValidador(geojson: GeoJSON.FeatureCollection, distanciaBord
   return { valido: val, ajustar };
 }
 
+// Retorna um ponto válido dentro do polígono (para garantir ≥1 ponto em zona
+// pequena). Reduz a distância da borda progressivamente até achar.
+export function pontoInterno(geojson: GeoJSON.FeatureCollection, distanciaBordaM: number): { lng: number; lat: number } | null {
+  const aneisLL = coletarAneis(geojson);
+  if (aneisLL.length === 0) return null;
+  let minLng = Infinity, minLat = Infinity, maxLng = -Infinity, maxLat = -Infinity;
+  for (const r of aneisLL) for (const [lng, lat] of r) {
+    if (lng < minLng) minLng = lng; if (lat < minLat) minLat = lat;
+    if (lng > maxLng) maxLng = lng; if (lat > maxLat) maxLat = lat;
+  }
+  for (const d of [distanciaBordaM, distanciaBordaM / 2, distanciaBordaM / 4, 0]) {
+    const v = criarValidador(geojson, d);
+    const cx = (minLng + maxLng) / 2, cy = (minLat + maxLat) / 2;
+    if (v.valido(cx, cy)) return { lng: cx, lat: cy };
+    const N = 16;
+    for (let i = 1; i < N; i++) for (let j = 1; j < N; j++) {
+      const lng = minLng + ((maxLng - minLng) * i) / N;
+      const lat = minLat + ((maxLat - minLat) * j) / N;
+      if (v.valido(lng, lat)) return { lng, lat };
+    }
+  }
+  return null;
+}
+
 // ── Geração da grade ─────────────────────────────────────────────────────────
 export function gerarGrid(params: GridParams): GridPoint[] {
   const { geojson, densidadeHaPonto, distanciaBordaM, rotacaoGraus, aleatoriedade, seed } = params;
