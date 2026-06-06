@@ -1,6 +1,10 @@
-export const APP_VERSION = '0.16.9';
+export const APP_VERSION = '0.16.10';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.16.10': [
+    'Modelo de folha de etiqueta (Pimaco) agora é um padrão único em Configurações › Etiquetas (com ajuste fino em mm), salvo e reutilizado',
+    'Removido o menu de modelo de dentro da Amostragem (Grid) e das Zonas — os botões Etiquetas usam o padrão das Configurações',
+  ],
   '0.16.9': [
     'Etiquetas: presets de folha adesiva Pimaco (A4361, A4260, A4355, A4356, 6181) + Genérico A4',
     'Seletor de folha + ajuste fino de margem (calibração em mm) no Grid e nas Zonas',

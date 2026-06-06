@@ -299,6 +299,22 @@ export function marcarParaProcessar(id: string) {
   save('inv_grades', lista);
 }
 
+// ── Config de etiquetas (modelo de folha + ajuste fino) ─────────────────────
+export interface ConfigEtiqueta { layoutId: string; dx: number; dy: number; }
+const ETQ_KEY = 'inv_etiqueta_cfg';
+
+export function getConfigEtiqueta(): ConfigEtiqueta {
+  const padrao: ConfigEtiqueta = { layoutId: 'A4361', dx: 0, dy: 0 };
+  if (typeof window === 'undefined') return padrao;
+  try { const raw = localStorage.getItem(ETQ_KEY); if (raw) return { ...padrao, ...JSON.parse(raw) }; } catch {}
+  return padrao;
+}
+
+export function saveConfigEtiqueta(c: ConfigEtiqueta) {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(ETQ_KEY, JSON.stringify(c));
+}
+
 export function clearAll() {
   ['inv_clientes','inv_fazendas','inv_talhoes','inv_safras','inv_padroes_elem','inv_padroes_amos','inv_grades']
     .forEach(k => localStorage.removeItem(k));

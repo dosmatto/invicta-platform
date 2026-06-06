@@ -2,11 +2,10 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useApp } from '@/context/AppContext';
-import { getTalhoes, getPadroesAmostragem, getPadroesElementos, ProfundidadeConfig } from '@/lib/store';
+import { getTalhoes, getPadroesAmostragem, getPadroesElementos, getConfigEtiqueta, ProfundidadeConfig } from '@/lib/store';
 import { classeZona, ORDEM_CLASSES } from '@/lib/zonas';
 import { gerarGrid, pontoInterno, ModoDistribuicao } from '@/lib/grid';
-import { gerarEtiquetasPDF, EtiquetaItem, LAYOUTS_ETIQUETA, LAYOUT_PADRAO } from '@/lib/etiquetas';
-import { EtiquetaLayoutPicker } from './EtiquetaLayoutPicker';
+import { gerarEtiquetasPDF, EtiquetaItem, LAYOUTS_ETIQUETA } from '@/lib/etiquetas';
 import { AlertTriangle, Layers, MapPin, Printer, RotateCcw } from 'lucide-react';
 
 interface ZonaFeat {
@@ -33,9 +32,6 @@ export function SimuladorZonas() {
   const [distanciaBorda, setDistanciaBorda] = useState(15);
   const [seed, setSeed] = useState(1);
   const [modoDist, setModoDist] = useState<ModoDistribuicao>('inteligente');
-  const [layoutEtq, setLayoutEtq] = useState(LAYOUT_PADRAO);
-  const [dxEtq, setDxEtq] = useState(0);
-  const [dyEtq, setDyEtq] = useState(0);
 
   // Clique numa zona (no mapa) seleciona/alterna para ajuste de densidade
   useEffect(() => {
@@ -156,8 +152,9 @@ export function SimuladorZonas() {
         if (i <= cnt) itens.push({ titulo, numero, sub: `${p.rotulo} cm`, rodape: rod });
       }
     }
-    const layout = LAYOUTS_ETIQUETA.find(l => l.id === layoutEtq) ?? LAYOUTS_ETIQUETA[0];
-    gerarEtiquetasPDF(itens, layout, `${titulo}_zonas_etiquetas`, { dx: dxEtq, dy: dyEtq })
+    const cfg = getConfigEtiqueta();
+    const layout = LAYOUTS_ETIQUETA.find(l => l.id === cfg.layoutId) ?? LAYOUTS_ETIQUETA[0];
+    gerarEtiquetasPDF(itens, layout, `${titulo}_zonas_etiquetas`, { dx: cfg.dx, dy: cfg.dy })
       .catch(err => console.error('Erro ao gerar etiquetas:', err));
   }
 
@@ -320,15 +317,12 @@ export function SimuladorZonas() {
         {!padrao && <p className="text-[10px] mt-1" style={{ color: '#fbbf24' }}>Selecione um Padrão de Amostragem para as etiquetas com profundidade.</p>}
       </div>
 
-      {/* Etiquetas */}
+      {/* Etiquetas (modelo de folha em Configurações) */}
       {padrao && numAmostras > 0 && (
-        <div className="p-2.5 rounded-lg space-y-2" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
-          <EtiquetaLayoutPicker layoutId={layoutEtq} setLayoutId={setLayoutEtq} dx={dxEtq} dy={dyEtq} setDx={setDxEtq} setDy={setDyEtq} />
-          <button onClick={gerarEtiquetasZonas}
-            className="w-full py-2 rounded text-xs font-bold text-white flex items-center justify-center gap-2" style={{ background: '#065f46' }}>
-            <Printer size={13} /> Etiquetas (PDF) · {totalEtiquetas}
-          </button>
-        </div>
+        <button onClick={gerarEtiquetasZonas}
+          className="w-full py-2 rounded text-xs font-bold text-white flex items-center justify-center gap-2" style={{ background: '#065f46' }}>
+          <Printer size={13} /> Etiquetas (PDF) · {totalEtiquetas}
+        </button>
       )}
 
       {/* Legenda das classes */}

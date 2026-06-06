@@ -2,11 +2,10 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useApp } from '@/context/AppContext';
-import { getPadroesAmostragem, getPadroesElementos, getSafras, getGrades, saveGrade, updateGrade, deleteGrade, marcarParaProcessar, PadraoElementos, ProfundidadeConfig, GradeAmostragem, PontoAmostragem } from '@/lib/store';
+import { getPadroesAmostragem, getPadroesElementos, getSafras, getGrades, saveGrade, updateGrade, deleteGrade, marcarParaProcessar, getConfigEtiqueta, PadraoElementos, ProfundidadeConfig, GradeAmostragem, PontoAmostragem } from '@/lib/store';
 import { gerarGrid, anguloMaiorDimensao, criarValidador, ModoDistribuicao } from '@/lib/grid';
 import { exportarKML, exportarSHP } from '@/lib/exportGrade';
-import { gerarEtiquetasPDF, itensDeGrade, LAYOUTS_ETIQUETA, LAYOUT_PADRAO } from '@/lib/etiquetas';
-import { EtiquetaLayoutPicker } from './EtiquetaLayoutPicker';
+import { gerarEtiquetasPDF, itensDeGrade, LAYOUTS_ETIQUETA } from '@/lib/etiquetas';
 import { AlertTriangle, RotateCcw, Shuffle, Layers, MapPin, Save, Trash2, CheckCircle2, Circle, Pencil, Move, Plus, Eraser, X, Check, Download, Printer } from 'lucide-react';
 
 // PRNG simples para shuffle determinístico
@@ -70,9 +69,6 @@ export function SimuladorAmostragem() {
   const [seedPos, setSeedPos] = useState(1);
   const [seedSel, setSeedSel] = useState(1);
   const [grades, setGrades] = useState<GradeAmostragem[]>([]);
-  const [layoutEtq, setLayoutEtq] = useState(LAYOUT_PADRAO);
-  const [dxEtq, setDxEtq] = useState(0);
-  const [dyEtq, setDyEtq] = useState(0);
   const [renomeando, setRenomeando] = useState<string | null>(null);
   const [nomeTemp, setNomeTemp] = useState('');
   // Edição manual: pontos "congelados" + ponto extra pendente (aguardando escolha de profundidades)
@@ -210,8 +206,9 @@ export function SimuladorAmostragem() {
   }
 
   function gerarEtiquetas(g: GradeAmostragem) {
-    const layout = LAYOUTS_ETIQUETA.find(l => l.id === layoutEtq) ?? LAYOUTS_ETIQUETA[0];
-    gerarEtiquetasPDF(itensDeGrade(nav.talhao || 'Talhao', g), layout, `${nav.talhao || 'talhao'}_${g.nome}_etiquetas`, { dx: dxEtq, dy: dyEtq })
+    const cfg = getConfigEtiqueta();
+    const layout = LAYOUTS_ETIQUETA.find(l => l.id === cfg.layoutId) ?? LAYOUTS_ETIQUETA[0];
+    gerarEtiquetasPDF(itensDeGrade(nav.talhao || 'Talhao', g), layout, `${nav.talhao || 'talhao'}_${g.nome}_etiquetas`, { dx: cfg.dx, dy: cfg.dy })
       .catch(err => console.error('Erro ao gerar etiquetas:', err));
   }
 
@@ -474,9 +471,6 @@ export function SimuladorAmostragem() {
           <p className="text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: '#475569' }}>
             Grades salvas — Safra {safraNome}
           </p>
-          <div className="mb-2 p-2 rounded-lg" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
-            <EtiquetaLayoutPicker layoutId={layoutEtq} setLayoutId={setLayoutEtq} dx={dxEtq} dy={dyEtq} setDx={setDxEtq} setDy={setDyEtq} />
-          </div>
           <div className="space-y-1.5">
             {grades.map(g => (
               <div key={g.id} className="p-2 rounded-lg" style={{ background: '#061525', border: `1px solid ${g.paraProcessar ? '#166534' : '#1a3a6b'}` }}>

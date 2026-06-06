@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import { PanelSection, PanelRow } from './_shared';
 import { APP_VERSION, CHANGELOG } from '@/constants/version';
+import { EtiquetaLayoutPicker } from '../talhao/EtiquetaLayoutPicker';
+import { getConfigEtiqueta, saveConfigEtiqueta } from '@/lib/store';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 
 export function ConfiguracoesPanel() {
@@ -10,6 +12,13 @@ export function ConfiguracoesPanel() {
   const [atual, ...anteriores] = versoes;          // a primeira é a mais recente
   const [mostrarAnteriores, setMostrarAnteriores] = useState(false);
   const [abertos, setAbertos] = useState<Record<string, boolean>>({});
+  const [etq, setEtq] = useState(() => getConfigEtiqueta());
+
+  function atualizarEtq(patch: Partial<typeof etq>) {
+    const novo = { ...etq, ...patch };
+    setEtq(novo);
+    saveConfigEtiqueta(novo);
+  }
 
   function toggle(ver: string) {
     setAbertos(prev => ({ ...prev, [ver]: !prev[ver] }));
@@ -23,6 +32,16 @@ export function ConfiguracoesPanel() {
       </PanelSection>
       <PanelSection title="Integrações">
         {['Motor QGIS', 'Firebase', 'Laboratórios parceiros', 'Vercel / Deploy'].map(i => <PanelRow key={i} label={i} value="›" />)}
+      </PanelSection>
+
+      <PanelSection title="Etiquetas">
+        <div className="px-4 py-3">
+          <EtiquetaLayoutPicker
+            layoutId={etq.layoutId} setLayoutId={id => atualizarEtq({ layoutId: id })}
+            dx={etq.dx} dy={etq.dy}
+            setDx={v => atualizarEtq({ dx: v })} setDy={v => atualizarEtq({ dy: v })}
+          />
+        </div>
       </PanelSection>
 
       <PanelSection title="Changelog">
