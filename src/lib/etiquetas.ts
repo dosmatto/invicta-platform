@@ -112,11 +112,21 @@ export function desenharEtiquetas(doc: JsPDF, itens: EtiquetaItem[], layout: Lay
   }
 }
 
-// Gera e baixa o PDF (browser).
+// Gera o PDF e abre em nova aba (pronto p/ imprimir). Cai para download se o
+// navegador bloquear o pop-up.
 export async function gerarEtiquetasPDF(itens: EtiquetaItem[], layout: LayoutEtiqueta, nomeArquivo: string, ajuste: { dx: number; dy: number } = { dx: 0, dy: 0 }) {
   if (itens.length === 0) return;
+  // abre a aba JÁ no gesto do clique (antes do await) para não cair no bloqueio de pop-up
+  const aba = typeof window !== 'undefined' ? window.open('', '_blank') : null;
   const { jsPDF } = await import('jspdf');
   const doc = new jsPDF({ unit: 'mm', format: [layout.pageW, layout.pageH] });
   desenharEtiquetas(doc, itens, layout, ajuste);
-  doc.save(`${nomeArquivo.replace(/[^\w.\-]+/g, '_')}.pdf`);
+  const arquivo = `${nomeArquivo.replace(/[^\w.\-]+/g, '_')}.pdf`;
+  if (aba) {
+    const url = URL.createObjectURL(doc.output('blob'));
+    aba.location.href = url;
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } else {
+    doc.save(arquivo); // pop-up bloqueado → baixa o arquivo
+  }
 }

@@ -1,6 +1,10 @@
-export const APP_VERSION = '0.16.10';
+export const APP_VERSION = '0.16.11';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.16.11': [
+    'Etiquetas abrem em nova aba (PDF pronto para impressão, Ctrl+P) em vez de baixar o arquivo',
+    'Se o navegador bloquear o pop-up, cai automaticamente para download do PDF',
+  ],
   '0.16.10': [
     'Modelo de folha de etiqueta (Pimaco) agora é um padrão único em Configurações › Etiquetas (com ajuste fino em mm), salvo e reutilizado',
     'Removido o menu de modelo de dentro da Amostragem (Grid) e das Zonas — os botões Etiquetas usam o padrão das Configurações',
