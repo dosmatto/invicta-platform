@@ -19,15 +19,25 @@ const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid
 const COR_PONTO = '#0f172a';
 
 export function SimuladorZonas() {
-  const { nav, setZonasManejo, setPontosSimulados } = useApp();
+  const { nav, setZonasManejo, setPontosSimulados, zonaEvent, setZonaEvent } = useApp();
 
   const [modelo, setModelo] = useState<'A' | 'B'>('A');
   const [padraoId, setPadraoId] = useState('');
   const [profs, setProfs] = useState<ProfundidadeConfig[]>([]);
   const [densidade, setDensidade] = useState(2);     // ha por ponto (padrão geral) — ex: 1 ponto a cada 2 ha
+  const [densidadePorZona, setDensidadePorZona] = useState<Record<string, number>>({}); // override por zona (ha/ponto)
+  const [zonaSel, setZonaSel] = useState<string | null>(null); // zona selecionada para ajuste
   const [aleatoriedade, setAleatoriedade] = useState(0);
   const [distanciaBorda, setDistanciaBorda] = useState(15);
   const [seed, setSeed] = useState(1);
+
+  // Clique numa zona (no mapa) seleciona/alterna para ajuste de densidade
+  useEffect(() => {
+    if (!zonaEvent) return;
+    const r = zonaEvent.rotulo;
+    setZonaSel(prev => (prev === r ? null : r));
+    setZonaEvent(null);
+  }, [zonaEvent, setZonaEvent]);
 
   const padroes = useMemo(() => getPadroesAmostragem(), []);
   const padroesElem = useMemo(() => getPadroesElementos(), []);
@@ -62,33 +72,36 @@ export function SimuladorZonas() {
     if (zonas.length === 0) { setZonasManejo(null); return; }
     const features = zonas.map(z => ({
       type: 'Feature' as const,
-      properties: { cor: z.cor, rotulo: z.id, classeLabel: z.classeLabel },
+      properties: { cor: z.cor, rotulo: z.id, classeLabel: z.classeLabel, selecionada: z.id === zonaSel },
       geometry: z.geometry,
     }));
     setZonasManejo({ type: 'FeatureCollection', features });
     return () => setZonasManejo(null);
-  }, [zonas, setZonasManejo]);
+  }, [zonas, zonaSel, setZonasManejo]);
 
   // Geração de pontos por zona (grid dentro de cada zona + aleatoriedade)
-  const { pontos, totalPontos } = useMemo(() => {
+  const { pontos, totalPontos, porZona } = useMemo(() => {
     const out: { lng: number; lat: number; label: string }[] = [];
+    const cont: Record<string, number> = {};
     let seq = 0;
     zonas.forEach((z, idxZona) => {
       const zonaFC: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry: z.geometry }] };
-      const haPonto = densidade > 0 ? densidade : 1; // densidade = ha por ponto
+      const dz = densidadePorZona[z.id];
+      const haPonto = dz && dz > 0 ? dz : (densidade > 0 ? densidade : 1); // override da zona ou padrão geral
       let pts = gerarGrid({ geojson: zonaFC, densidadeHaPonto: haPonto, distanciaBordaM: distanciaBorda, rotacaoGraus: 0, aleatoriedade, seed });
       if (pts.length === 0) {
         const pi = pontoInterno(zonaFC, distanciaBorda);
         if (pi) pts = [{ lng: pi.lng, lat: pi.lat, ordem: 0 }];
       }
+      cont[z.id] = pts.length;
       const amostraNum = idxZona + 1; // modelo A: 1 amostra por zona
       pts.forEach(p => {
         seq++;
         out.push({ lng: p.lng, lat: p.lat, label: modelo === 'A' ? String(amostraNum) : String(seq) });
       });
     });
-    return { pontos: out, totalPontos: out.length };
-  }, [zonas, modelo, densidade, aleatoriedade, distanciaBorda, seed]);
+    return { pontos: out, totalPontos: out.length, porZona: cont };
+  }, [zonas, modelo, densidade, densidadePorZona, aleatoriedade, distanciaBorda, seed]);
 
   // Publica os pontos no mapa
   useEffect(() => {
@@ -119,6 +132,11 @@ export function SimuladorZonas() {
   const numAmostras = modelo === 'A' ? zonas.length : totalPontos;
   // Etiquetas = amostras × profundidades (parciais aplicadas a % das amostras)
   const totalEtiquetas = profs.reduce((s, p) => s + (p.percentual >= 100 ? numAmostras : Math.max(1, Math.round((numAmostras * p.percentual) / 100))), 0);
+
+  const zonaSelObj = zonas.find(z => z.id === zonaSel) ?? null;
+  const densidadeEfetiva = (id: string) => densidadePorZona[id] ?? densidade;
+  const temOverride = (id: string) => densidadePorZona[id] != null;
+  const nZonasCustom = Object.keys(densidadePorZona).length;
 
   return (
     <div className="p-3 space-y-3">
@@ -188,6 +206,40 @@ export function SimuladorZonas() {
         <p className="text-[9px] mt-0.5" style={{ color: '#475569' }}>Ex: 2 = 1 ponto a cada 2 ha. Zonas pequenas recebem ao menos 1 ponto.</p>
       </div>
 
+      {/* Ajuste de densidade por zona */}
+      <div className="rounded-lg p-2.5" style={{ background: '#0b1f3a', border: '1px dashed #2e5fa3' }}>
+        <div className="flex items-center justify-between mb-1">
+          <p className="text-[10px] font-semibold" style={{ color: '#93c5fd' }}>Densidade por zona</p>
+          {nZonasCustom > 0 && (
+            <span className="text-[9px]" style={{ color: '#64748b' }}>{nZonasCustom} zona{nZonasCustom !== 1 ? 's' : ''} ajustada{nZonasCustom !== 1 ? 's' : ''}</span>
+          )}
+        </div>
+        {!zonaSelObj ? (
+          <p className="text-[10px]" style={{ color: '#64748b' }}>Clique numa zona (no mapa ou na lista abaixo) para usar uma densidade só dela.</p>
+        ) : (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <span className="inline-block w-3 h-3 rounded-sm flex-shrink-0" style={{ background: zonaSelObj.cor, border: '1px solid #fff' }} />
+              <span className="text-xs font-bold" style={{ color: '#e2e8f0' }}>Zona Z{zonaSelObj.id}</span>
+              <span className="text-[10px]" style={{ color: '#93c5fd' }}>{zonaSelObj.classeLabel}</span>
+              <span className="text-[10px] ml-auto" style={{ color: '#64748b' }}>{zonaSelObj.areaHa} ha · {porZona[zonaSelObj.id] ?? 0} pts</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <input type="number" step="0.5" min="0.1" value={densidadeEfetiva(zonaSelObj.id)}
+                onChange={e => { const v = Number(e.target.value.replace(',', '.')); setDensidadePorZona(prev => ({ ...prev, [zonaSelObj.id]: v > 0 ? v : 0.1 })); }}
+                className="w-20 rounded px-2 py-1 text-xs outline-none" style={inputStyle} />
+              <span className="text-[10px]" style={{ color: '#64748b' }}>ha / ponto</span>
+              {temOverride(zonaSelObj.id) && (
+                <button onClick={() => setDensidadePorZona(prev => { const n = { ...prev }; delete n[zonaSelObj.id]; return n; })}
+                  className="text-[9px] px-1.5 py-0.5 rounded font-semibold ml-auto" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
+                  Usar padrão geral ({densidade})
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Distância da borda */}
       <div>
         <label className="text-[10px] font-semibold block mb-0.5" style={{ color: '#64748b' }}>Distância da borda da zona (m)</label>
@@ -240,23 +292,30 @@ export function SimuladorZonas() {
         </div>
       </div>
 
-      {/* Lista de zonas */}
+      {/* Lista de zonas (clicável p/ ajustar densidade) */}
       <div>
         <p className="text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: '#475569' }}>Zonas</p>
         <div className="space-y-1">
-          {zonas.map(z => (
-            <div key={z.id} className="flex items-center gap-2 px-2 py-1.5 rounded" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
-              <span className="inline-block w-3 h-3 rounded-sm flex-shrink-0" style={{ background: z.cor, border: '1px solid #fff' }} />
-              <span className="text-xs font-bold" style={{ color: '#e2e8f0', minWidth: '34px' }}>Z{z.id}</span>
-              <span className="text-[11px]" style={{ color: '#93c5fd' }}>{z.classeLabel}</span>
-              <span className="text-[10px] ml-auto" style={{ color: '#64748b' }}>{z.areaHa} ha</span>
-            </div>
-          ))}
+          {zonas.map(z => {
+            const sel = z.id === zonaSel;
+            const ov = temOverride(z.id);
+            return (
+              <button key={z.id} onClick={() => setZonaSel(prev => prev === z.id ? null : z.id)}
+                className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-left transition-colors"
+                style={{ background: sel ? '#0f2240' : '#061525', border: `1px solid ${sel ? '#22d3ee' : '#1a3a6b'}` }}>
+                <span className="inline-block w-3 h-3 rounded-sm flex-shrink-0" style={{ background: z.cor, border: '1px solid #fff' }} />
+                <span className="text-xs font-bold" style={{ color: '#e2e8f0', minWidth: '34px' }}>Z{z.id}</span>
+                <span className="text-[11px]" style={{ color: '#93c5fd' }}>{z.classeLabel}</span>
+                {ov && <span className="text-[9px] px-1 py-0.5 rounded font-semibold" style={{ background: '#1e3a8a', color: '#bfdbfe' }}>{densidadePorZona[z.id]} ha/pt</span>}
+                <span className="text-[10px] ml-auto" style={{ color: '#64748b' }}>{porZona[z.id] ?? 0} pts · {z.areaHa} ha</span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
       <p className="text-[9px] text-center" style={{ color: '#475569' }}>
-        Ajuste de densidade por zona, profundidades e salvar — próxima etapa.
+        Salvar a grade de zonas, exportar e etiquetas — próxima etapa.
       </p>
     </div>
   );

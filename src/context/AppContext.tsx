@@ -10,6 +10,8 @@ export type PontoEvent =
   | { tipo: 'mover'; ordem: number; lng: number; lat: number }
   | { tipo: 'add'; lng: number; lat: number }
   | { tipo: 'remover'; ordem: number };
+// Clique numa zona de manejo no mapa (rótulo da zona)
+export type ZonaEvent = { rotulo: string };
 
 interface NavContext {
   produtorId: string | null;
@@ -50,6 +52,9 @@ interface AppContextType {
   setEdicaoModo: (m: EdicaoModo) => void;
   pontoEvent: PontoEvent | null;
   setPontoEvent: (e: PontoEvent | null) => void;
+  // Clique numa zona de manejo (ajuste de densidade por zona)
+  zonaEvent: ZonaEvent | null;
+  setZonaEvent: (e: ZonaEvent | null) => void;
 }
 
 const AppContext = createContext<AppContextType>({
@@ -77,6 +82,8 @@ const AppContext = createContext<AppContextType>({
   setEdicaoModo: () => {},
   pontoEvent: null,
   setPontoEvent: () => {},
+  zonaEvent: null,
+  setZonaEvent: () => {},
 });
 
 export function AppProvider({ children }: { children: ReactNode }) {
@@ -94,6 +101,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [edicaoAtiva, setEdicaoAtiva] = useState(false);
   const [edicaoModo, setEdicaoModo] = useState<EdicaoModo>('mover');
   const [pontoEvent, setPontoEvent] = useState<PontoEvent | null>(null);
+  const [zonaEvent, setZonaEvent] = useState<ZonaEvent | null>(null);
   const [nav, setNavState] = useState<NavContext>({
     produtorId: null, produtor: '',
     fazendaId: null, fazenda: '',
@@ -119,6 +127,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       edicaoAtiva, setEdicaoAtiva,
       edicaoModo, setEdicaoModo,
       pontoEvent, setPontoEvent,
+      zonaEvent, setZonaEvent,
     }}>
       {children}
     </AppContext.Provider>

@@ -51,13 +51,14 @@ export function MapView() {
           uploadedGeo, setUploadedGeo,
           uploadedBbox, setUploadedBbox,
           pontosSimulados, talhoesFazenda, zonasManejo,
-          edicaoAtiva, edicaoModo, setPontoEvent } = useApp();
+          edicaoAtiva, edicaoModo, setPontoEvent, setZonaEvent } = useApp();
 
   const [kmlLoading, setKmlLoading] = useState(false);
 
   // refs para os handlers de edição acessarem valores atuais sem re-registrar
   const pontosRef = useRef<GeoJSON.FeatureCollection | null>(null);
   const edicaoModoRef = useRef(edicaoModo);
+  const zonasSigRef = useRef<string>(''); // assinatura do conjunto de zonas (refit só quando muda)
   useEffect(() => { pontosRef.current = pontosSimulados; }, [pontosSimulados]);
   useEffect(() => { edicaoModoRef.current = edicaoModo; }, [edicaoModo]);
 
@@ -90,7 +91,10 @@ export function MapView() {
       map.addLayer({ id: 'zona-fill', type: 'fill', source: 'zonas',
         paint: { 'fill-color': ['get', 'cor'], 'fill-opacity': 0.5 } });
       map.addLayer({ id: 'zona-outline', type: 'line', source: 'zonas',
-        paint: { 'line-color': '#ffffff', 'line-width': 1.5 } });
+        paint: {
+          'line-color': ['case', ['==', ['get', 'selecionada'], true], '#22d3ee', '#ffffff'],
+          'line-width': ['case', ['==', ['get', 'selecionada'], true], 4, 1.5],
+        } });
       map.addLayer({ id: 'zona-label', type: 'symbol', source: 'zonas',
         layout: { 'text-field': ['get', 'rotulo'], 'text-size': 11, 'text-font': ['Open Sans Bold'] },
         paint: { 'text-color': '#fff', 'text-halo-color': '#000', 'text-halo-width': 1.4 } });
@@ -195,6 +199,26 @@ export function MapView() {
     };
   }, [mapReady, setNav, setActivePanel, setMapMode]);
 
+  // Clique numa zona de manejo → notifica o painel (ajuste de densidade por zona)
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    const onZona = (e: maplibregl.MapLayerMouseEvent) => {
+      const r = e.features?.[0]?.properties?.rotulo;
+      if (r != null) setZonaEvent({ rotulo: String(r) });
+    };
+    const enter = () => { map.getCanvas().style.cursor = 'pointer'; };
+    const leave = () => { map.getCanvas().style.cursor = ''; };
+    map.on('click', 'zona-fill', onZona);
+    map.on('mouseenter', 'zona-fill', enter);
+    map.on('mouseleave', 'zona-fill', leave);
+    return () => {
+      map.off('click', 'zona-fill', onZona);
+      map.off('mouseenter', 'zona-fill', enter);
+      map.off('mouseleave', 'zona-fill', leave);
+    };
+  }, [mapReady, setZonaEvent]);
+
   // ── 4. Auto-carrega KML de talhões com URL pré-definida ───────────────────
   useEffect(() => {
     if (!nav.talhaoId) return;
@@ -259,7 +283,13 @@ export function MapView() {
     const temZonas = !!(zonasManejo && zonasManejo.features.length);
     ['upload-fill', 'upload-line'].forEach(id => { try { map.setLayoutProperty(id, 'visibility', temZonas ? 'none' : 'visible'); } catch {} });
 
-    if (zonasManejo && zonasManejo.features.length) {
+    // Refit só quando o conjunto de zonas muda (selecionar/realçar uma zona
+    // re-publica os dados, mas não deve re-enquadrar o mapa).
+    const sig = (zonasManejo?.features ?? []).map(f => String(f.properties?.rotulo ?? '')).join('|');
+    const mudouConjunto = sig !== zonasSigRef.current;
+    zonasSigRef.current = sig;
+
+    if (mudouConjunto && zonasManejo && zonasManejo.features.length) {
       let minLng = Infinity, minLat = Infinity, maxLng = -Infinity, maxLat = -Infinity;
       const walk = (g: GeoJSON.Geometry) => {
         if (g.type === 'Polygon') g.coordinates.forEach(r => r.forEach(([a, b]) => { if (a < minLng) minLng = a; if (b < minLat) minLat = b; if (a > maxLng) maxLng = a; if (b > maxLat) maxLat = b; }));

@@ -1,6 +1,11 @@
-export const APP_VERSION = '0.16.4';
+export const APP_VERSION = '0.16.5';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.16.5': [
+    'Z2b Zonas — densidade por zona: clique numa zona (mapa ou lista) e ajuste a densidade só dela',
+    'Override por zona sobrepõe o padrão geral; "Usar padrão geral" remove o ajuste',
+    'Zona selecionada destacada no mapa (contorno ciano) + contagem de pontos por zona na lista',
+  ],
   '0.16.4': [
     'Zonas — seletor de Padrão de Amostragem (profundidades) para as etiquetas',
     'Resumo mostra nº de etiquetas (amostras × profundidades) nos modelos A e B',
