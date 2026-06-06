@@ -173,16 +173,16 @@ export function SimuladorAmostragem() {
   // ── Grades salvas ──
   const safraNome = safraAtiva?.nome ?? '';
   function recarregarGrades() {
-    if (nav.talhaoId && safraNome) setGrades(getGrades(nav.talhaoId, safraNome));
+    if (nav.talhaoId && safraNome) setGrades(getGrades(nav.talhaoId, safraNome, 'grid'));
   }
   useEffect(() => { recarregarGrades(); /* eslint-disable-next-line */ }, [nav.talhaoId, safraNome]);
 
   function salvarGrade() {
     if (!padrao || pontosEfetivos.length === 0 || !nav.talhaoId || !safraAtiva) return;
-    const n = getGrades(nav.talhaoId, safraNome).length + 1;
-    const primeira = getGrades(nav.talhaoId, safraNome).length === 0;
+    const n = getGrades(nav.talhaoId, safraNome, 'grid').length + 1;
+    const primeira = getGrades(nav.talhaoId, safraNome, 'grid').length === 0;
     saveGrade({
-      talhaoId: nav.talhaoId, safra: safraNome, epoca, nome: `Grade ${n}`,
+      talhaoId: nav.talhaoId, safra: safraNome, epoca, nome: `Grade ${n}`, metodo: 'grid',
       padraoAmostragemId: padrao.id, padraoNome: padrao.nome, customizado,
       densidade, distanciaBorda, rotacao: rotacaoEfetiva, aleatoriedade, modoSel,
       profundidades: profs, pontos: pontosEfetivos,

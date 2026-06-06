@@ -2,11 +2,12 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useApp } from '@/context/AppContext';
-import { getTalhoes, getPadroesAmostragem, getPadroesElementos, getConfigEtiqueta, ProfundidadeConfig } from '@/lib/store';
+import { getTalhoes, getPadroesAmostragem, getPadroesElementos, getConfigEtiqueta, getSafras, getGrades, saveGrade, updateGrade, deleteGrade, marcarParaProcessar, ProfundidadeConfig, GradeAmostragem, PontoAmostragem } from '@/lib/store';
 import { classeZona, ORDEM_CLASSES } from '@/lib/zonas';
 import { gerarGrid, pontoInterno, ModoDistribuicao } from '@/lib/grid';
 import { gerarEtiquetasPDF, EtiquetaItem, LAYOUTS_ETIQUETA } from '@/lib/etiquetas';
-import { AlertTriangle, Layers, MapPin, Printer, RotateCcw } from 'lucide-react';
+import { exportarKML, exportarSHP } from '@/lib/exportGrade';
+import { AlertTriangle, Layers, MapPin, Printer, RotateCcw, Save, Trash2, CheckCircle2, Circle, Pencil, Download } from 'lucide-react';
 
 interface ZonaFeat {
   id: string;
@@ -47,6 +48,17 @@ export function SimuladorZonas() {
   const nomeElem = (id: string) => padroesElem.find(p => p.id === id)?.nome ?? '—';
 
   const talhao = useMemo(() => getTalhoes().find(t => t.id === nav.talhaoId) ?? null, [nav.talhaoId]);
+
+  const safraAtiva = useMemo(() => getSafras().find(s => s.ativa) ?? null, []);
+  const safraNome = safraAtiva?.nome ?? '';
+  const [grades, setGrades] = useState<GradeAmostragem[]>([]);
+  const [renomeando, setRenomeando] = useState<string | null>(null);
+  const [nomeTemp, setNomeTemp] = useState('');
+
+  function recarregarGrades() {
+    if (nav.talhaoId && safraNome) setGrades(getGrades(nav.talhaoId, safraNome, 'zonas'));
+  }
+  useEffect(() => { recarregarGrades(); /* eslint-disable-next-line */ }, [nav.talhaoId, safraNome]);
 
   // Ao escolher um padrão, herda as profundidades
   useEffect(() => {
@@ -122,7 +134,7 @@ export function SimuladorZonas() {
           <AlertTriangle size={16} style={{ color: '#fbbf24' }} className="flex-shrink-0 mt-0.5" />
           <div>
             <p className="text-xs font-semibold" style={{ color: '#fbbf24' }}>Talhão sem zonas de manejo</p>
-            <p className="text-[10px] mt-1" style={{ color: '#78350f' }}>Carregue um arquivo de zonas (KML/Shapefile) — upload pela interface em breve.</p>
+            <p className="text-[10px] mt-1" style={{ color: '#78350f' }}>Carregue o arquivo de zonas (KML/Shapefile) na seção Zonas de Manejo do talhão.</p>
           </div>
         </div>
       </div>
@@ -156,6 +168,40 @@ export function SimuladorZonas() {
     const layout = LAYOUTS_ETIQUETA.find(l => l.id === cfg.layoutId) ?? LAYOUTS_ETIQUETA[0];
     gerarEtiquetasPDF(itens, layout, `${titulo}_zonas_etiquetas`, { dx: cfg.dx, dy: cfg.dy })
       .catch(err => console.error('Erro ao gerar etiquetas:', err));
+  }
+
+  function pontosParaGrade(): PontoAmostragem[] {
+    const rotulos = profs.map(p => p.rotulo);
+    return pontos.map((p, i) => ({ ordem: i, lng: p.lng, lat: p.lat, profs: rotulos.length, profundidades: rotulos }));
+  }
+
+  function salvarGradeZonas() {
+    if (!padrao || !safraAtiva || pontos.length === 0 || !nav.talhaoId) return;
+    const lista = getGrades(nav.talhaoId, safraNome, 'zonas');
+    saveGrade({
+      talhaoId: nav.talhaoId, safra: safraNome, epoca: '1', nome: `Zonas ${lista.length + 1}`, metodo: 'zonas',
+      modelo, modoDist, densidadePorZona,
+      padraoAmostragemId: padrao.id, padraoNome: padrao.nome,
+      customizado: nZonasCustom > 0 || densidade !== padrao.densidadeHaPonto,
+      densidade, distanciaBorda, rotacao: 0, aleatoriedade, modoSel: 'regular',
+      profundidades: profs, pontos: pontosParaGrade(),
+      paraProcessar: lista.length === 0,
+    });
+    recarregarGrades();
+  }
+
+  function confirmarRenome(id: string) {
+    if (nomeTemp.trim()) updateGrade(id, { nome: nomeTemp.trim() });
+    setRenomeando(null); recarregarGrades();
+  }
+
+  function exportar(g: GradeAmostragem, formato: 'kml' | 'shp') {
+    if (!talhao?.zonasGeojson) return;
+    let poligono: GeoJSON.FeatureCollection;
+    try { poligono = JSON.parse(talhao.zonasGeojson) as GeoJSON.FeatureCollection; } catch { return; }
+    const input = { talhaoNome: talhao.nome || 'Talhao', poligono, pontos: g.pontos, poligonoTipo: 'zona' as const };
+    if (formato === 'kml') exportarKML(input, g.nome);
+    else exportarSHP(input, g.nome).catch(err => console.error('Erro ao exportar SHP:', err));
   }
 
   return (
@@ -360,9 +406,59 @@ export function SimuladorZonas() {
         </div>
       </div>
 
-      <p className="text-[9px] text-center" style={{ color: '#475569' }}>
-        Salvar a grade de zonas, exportar e etiquetas — próxima etapa.
-      </p>
+      {/* Salvar grade de zonas */}
+      {!safraAtiva ? (
+        <p className="text-[10px] text-center" style={{ color: '#fbbf24' }}>Defina uma safra ativa (no topo do talhão) para salvar a grade.</p>
+      ) : (
+        <button onClick={salvarGradeZonas} disabled={!padrao || pontos.length === 0}
+          className="w-full py-2.5 rounded text-sm font-bold text-white flex items-center justify-center gap-2"
+          style={{ background: padrao && pontos.length ? 'var(--invicta-green-dark)' : '#1a3a6b', opacity: padrao && pontos.length ? 1 : 0.6 }}>
+          <Save size={14} /> Salvar grade de zonas
+        </button>
+      )}
+
+      {/* Grades de zonas salvas */}
+      {grades.length > 0 && (
+        <div className="pt-1">
+          <p className="text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: '#475569' }}>
+            Grades de zonas — Safra {safraNome}
+          </p>
+          <div className="space-y-1.5">
+            {grades.map(g => (
+              <div key={g.id} className="p-2 rounded-lg" style={{ background: '#061525', border: `1px solid ${g.paraProcessar ? '#166534' : '#1a3a6b'}` }}>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => { marcarParaProcessar(g.id); recarregarGrades(); }} title="Marcar para processar">
+                    {g.paraProcessar ? <CheckCircle2 size={15} style={{ color: '#4ade80' }} /> : <Circle size={15} style={{ color: '#475569' }} />}
+                  </button>
+                  {renomeando === g.id ? (
+                    <input autoFocus value={nomeTemp} onChange={e => setNomeTemp(e.target.value)}
+                      onBlur={() => confirmarRenome(g.id)} onKeyDown={e => e.key === 'Enter' && confirmarRenome(g.id)}
+                      className="flex-1 rounded px-1.5 py-0.5 text-xs outline-none" style={inputStyle} />
+                  ) : (
+                    <span className="text-xs font-bold flex-1" style={{ color: '#e2e8f0' }}>{g.nome}</span>
+                  )}
+                  <span className="text-[8px] px-1 py-0.5 rounded" style={{ background: '#0f2a1a', color: '#86efac' }}>{g.modelo === 'A' ? 'Composta' : 'Individual'}</span>
+                  <button onClick={() => { setRenomeando(g.id); setNomeTemp(g.nome); }} title="Renomear" className="p-1 rounded" style={{ color: '#93c5fd' }}><Pencil size={11} /></button>
+                  <button onClick={() => { deleteGrade(g.id); recarregarGrades(); }} title="Excluir" className="p-1 rounded" style={{ color: '#f87171' }}><Trash2 size={11} /></button>
+                </div>
+                <p className="text-[9px] mt-1 pl-6" style={{ color: '#64748b' }}>
+                  {g.pontos.length} pontos · {g.modoDist === 'grade' ? 'grade' : 'inteligente'}
+                  {g.paraProcessar && <span style={{ color: '#86efac' }}> · a processar</span>}
+                </p>
+                <div className="flex items-center gap-1.5 mt-2 pl-6">
+                  <span className="text-[9px]" style={{ color: '#475569' }}>Exportar:</span>
+                  <button onClick={() => exportar(g, 'kml')} className="flex items-center gap-1 text-[9px] px-2 py-0.5 rounded font-semibold" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
+                    <Download size={9} /> KML
+                  </button>
+                  <button onClick={() => exportar(g, 'shp')} className="flex items-center gap-1 text-[9px] px-2 py-0.5 rounded font-semibold" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
+                    <Download size={9} /> SHP
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

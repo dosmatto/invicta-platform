@@ -94,6 +94,10 @@ export interface GradeAmostragem {
   rotacao: number;
   aleatoriedade: number;
   modoSel: 'regular' | 'aleatorio';
+  metodo?: 'grid' | 'zonas';                  // default 'grid'
+  modelo?: 'A' | 'B';                         // zonas: composta (A) / individual (B)
+  modoDist?: 'grade' | 'inteligente';         // zonas: distribuição
+  densidadePorZona?: Record<string, number>;  // zonas: override por zona
   profundidades: ProfundidadeConfig[];
   pontos: PontoAmostragem[];
   paraProcessar: boolean;
@@ -261,10 +265,11 @@ export function deletePadraoAmostragem(id: string) {
 // ── Grades de Amostragem ────────────────────────────────────────────────────
 // Várias grades por talhão+safra; uma marcada como "para processar".
 
-export function getGrades(talhaoId?: string, safra?: string): GradeAmostragem[] {
+export function getGrades(talhaoId?: string, safra?: string, metodo?: 'grid' | 'zonas'): GradeAmostragem[] {
   let all = load<GradeAmostragem>('inv_grades');
   if (talhaoId) all = all.filter(g => g.talhaoId === talhaoId);
   if (safra) all = all.filter(g => g.safra === safra);
+  if (metodo) all = all.filter(g => (g.metodo ?? 'grid') === metodo);
   return all.sort((a, b) => a.criadoEm.localeCompare(b.criadoEm));
 }
 
@@ -291,8 +296,9 @@ export function marcarParaProcessar(id: string) {
   const lista = load<GradeAmostragem>('inv_grades');
   const alvo = lista.find(g => g.id === id);
   if (!alvo) return;
+  const metodoAlvo = alvo.metodo ?? 'grid';
   lista.forEach(g => {
-    if (g.talhaoId === alvo.talhaoId && g.safra === alvo.safra) {
+    if (g.talhaoId === alvo.talhaoId && g.safra === alvo.safra && (g.metodo ?? 'grid') === metodoAlvo) {
       g.paraProcessar = g.id === id;
     }
   });

@@ -7,8 +7,9 @@ import type { PontoAmostragem } from './store';
 
 export interface ExportInput {
   talhaoNome: string;                    // ex: "FRNFI 21"
-  poligono: GeoJSON.FeatureCollection;   // geometria do talhão
+  poligono: GeoJSON.FeatureCollection;   // geometria do talhão (ou polígonos das zonas)
   pontos: PontoAmostragem[];
+  poligonoTipo?: 'talhao' | 'zona';      // 'zona' nomeia cada polígono por id/classe
 }
 
 const PRJ_WGS84 =
@@ -21,9 +22,14 @@ function idPonto(talhaoNome: string, numero: number) {
 
 // ── GeoJSON combinado (polígono + pontos) — usado no Shapefile ────────────────
 function geojsonGrade(input: ExportInput): GeoJSON.FeatureCollection {
+  const ehZona = input.poligonoTipo === 'zona';
   const polys: GeoJSON.Feature[] = input.poligono.features
     .filter(f => f.geometry && (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon'))
-    .map(f => ({ type: 'Feature', properties: { nome: input.talhaoNome, tipo: 'talhao' }, geometry: f.geometry }));
+    .map((f, i) => {
+      const pr = (f.properties ?? {}) as { id?: string | number; classe?: string };
+      const nome = ehZona ? `Zona ${pr.id ?? i + 1}` : input.talhaoNome;
+      return { type: 'Feature' as const, properties: ehZona ? { nome, classe: pr.classe ?? '', tipo: 'zona' } : { nome: input.talhaoNome, tipo: 'talhao' }, geometry: f.geometry! };
+    });
   const pts: GeoJSON.Feature[] = input.pontos.map(p => ({
     type: 'Feature',
     properties: { numero: p.ordem + 1, id: idPonto(input.talhaoNome, p.ordem + 1), profs: p.profs },
@@ -53,9 +59,14 @@ function esc(s: string) {
 }
 
 export function gerarKML(input: ExportInput): string {
+  const ehZona = input.poligonoTipo === 'zona';
   const polys = input.poligono.features
     .filter(f => f.geometry && (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon'))
-    .map(f => `<Placemark><name>${esc(input.talhaoNome)}</name><styleUrl>#talhao</styleUrl>${poligonoKML(f.geometry!)}</Placemark>`)
+    .map((f, i) => {
+      const pr = (f.properties ?? {}) as { id?: string | number };
+      const nome = ehZona ? `Zona ${pr.id ?? i + 1}` : input.talhaoNome;
+      return `<Placemark><name>${esc(nome)}</name><styleUrl>#talhao</styleUrl>${poligonoKML(f.geometry!)}</Placemark>`;
+    })
     .join('\n');
 
   const pontos = input.pontos.map(p =>
@@ -106,7 +117,7 @@ export async function exportarSHP(input: ExportInput, grade: string) {
     outputType: 'blob',
     compression: 'DEFLATE',
     prj: PRJ_WGS84,
-    types: { point: 'pontos_amostragem', polygon: 'talhao' },
+    types: { point: 'pontos_amostragem', polygon: input.poligonoTipo === 'zona' ? 'zonas' : 'talhao' },
   });
   baixarBlob(blob, `${nomeBase(input, grade)}_shp.zip`);
 }

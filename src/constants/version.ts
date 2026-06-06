@@ -1,6 +1,11 @@
-export const APP_VERSION = '0.16.12';
+export const APP_VERSION = '0.16.13';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.16.13': [
+    'Z3 Zonas — salvar grades de zonas (várias por safra, uma para processar) e exportar KML/Shapefile',
+    'Exportação inclui os pontos numerados + os polígonos das zonas (nomeados por id/classe)',
+    'Grades separadas por método (Grid × Zonas): cada método tem sua grade "a processar"',
+  ],
   '0.16.12': [
     'Upload de Zonas de Manejo pela interface (KML / Shapefile .zip / GeoJSON) no talhão',
     'Auto-detecção do campo de classe (semáforo) e do id; área por zona calculada; prévia colorida no mapa',
