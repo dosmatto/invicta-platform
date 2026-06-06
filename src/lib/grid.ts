@@ -307,13 +307,14 @@ export function gerarGrid(params: GridParams): GridPoint[] {
   try { areaM2 = turfArea(geojson as Parameters<typeof turfArea>[0]); } catch { areaM2 = 0; }
   let N = Math.max(1, Math.round((areaM2 / 10000) / densidadeHaPonto));
 
-  // ── conjunto de sondas válidas (resolução ~R por lado de célula, com teto) ──
-  const TETO = 9000;
-  const nCellsU = Math.max(1, Math.ceil((maxU - minU) / L));
-  const nCellsV = Math.max(1, Math.ceil((maxV - minV) / L));
-  let R = 4;
-  while (R > 1 && nCellsU * nCellsV * R * R > TETO) R--;
-  const passo = L / R;
+  // ── conjunto de sondas válidas ──
+  // Passo fino o suficiente para RESOLVER a faixa de borda (≤ borda/2); senão a
+  // escada de borda abaixo colapsaria à toa e os pontos encostariam na borda.
+  const TETO = 12000;
+  let passo = Math.max(2, Math.min(L / 4, distanciaBordaM > 0 ? distanciaBordaM / 2 : L / 4));
+  const larguraU = Math.max(passo, maxU - minU), larguraV = Math.max(passo, maxV - minV);
+  while ((larguraU / passo) * (larguraV / passo) > TETO) passo *= 1.4;
+  const probesPorCelula = Math.max(1, (L / passo) * (L / passo));
 
   // escada de borda: reduz a distância só se o polígono não comportar nenhuma sonda
   let probes: Probe[] = [];
@@ -337,27 +338,40 @@ export function gerarGrid(params: GridParams): GridPoint[] {
   // ── seleção dos centros ──
   let centros: Probe[];
   if (modo === 'grade') {
-    // 1 melhor sonda por célula com cobertura ≥ ~50% (alinhado à malha)
+    // Malha ALINHADA: um nó por célula com cobertura suficiente, no CENTRO da
+    // célula. Se o centro cair fora/dentro da faixa de borda, encaixa na sonda
+    // válida mais próxima do centro (mantém a grade, sem furos na borda).
     const celulas = new Map<string, Probe[]>();
     for (const p of probes) {
-      const k = Math.floor((p.u - minU) / L) + '_' + Math.floor((p.v - minV) / L);
+      const ci = Math.floor((p.u - minU) / L), cj = Math.floor((p.v - minV) / L);
+      const k = ci + '_' + cj;
       const arr = celulas.get(k); if (arr) arr.push(p); else celulas.set(k, [p]);
     }
-    const minProbesCelula = R * R * 0.5;
+    const minProbes = Math.max(1, probesPorCelula * 0.18);
     centros = [];
-    for (const arr of celulas.values()) {
-      if (arr.length < minProbesCelula) continue;
-      let best = arr[0]; for (const p of arr) if (p.db > best.db) best = p;
-      centros.push(best);
+    for (const [k, arr] of celulas) {
+      if (arr.length < minProbes) continue;
+      const part = k.split('_');
+      const cu = minU + (Number(part[0]) + 0.5) * L, cv = minV + (Number(part[1]) + 0.5) * L;
+      const [ccx, ccy] = fromGrid(cu, cv);
+      const dbCentro = dentro(ccx, ccy, aneis) ? distBorda(ccx, ccy, aneis) : -1;
+      if (dbCentro >= dUsada) {
+        centros.push({ x: ccx, y: ccy, u: cu, v: cv, db: dbCentro });
+      } else {
+        let best = arr[0], bd = Infinity;
+        for (const p of arr) { const d = sq(p.x - ccx) + sq(p.y - ccy); if (d < bd) { bd = d; best = p; } }
+        centros.push(best);
+      }
     }
-    centros = completarAteN(centros, probes, N);
-    centros = preencherOrfaos(centros, probes, L);
+    // toda zona recebe ao menos N pontos (zona pequena não pode ficar sem ponto)
+    if (centros.length === 0) centros = semearMaisDistante(probes, N);
+    else if (centros.length < N) centros = completarAteN(centros, probes, N);
   } else {
     centros = semearMaisDistante(probes, N);
     centros = preencherOrfaos(centros, probes, L);
     centros = lloyd(centros, probes, 4);
+    if (centros.length < N) { centros = completarAteN(centros, probes, N); centros = lloyd(centros, probes, 2); }
   }
-  if (centros.length < N) centros = completarAteN(centros, probes, N);
 
   // ── jitter RADIAL (aleatoriedade) ≤ L/2; reclampa para dentro ──
   const rng = mulberry32(seed);

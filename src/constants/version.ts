@@ -1,6 +1,11 @@
-export const APP_VERSION = '0.16.6';
+export const APP_VERSION = '0.16.7';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.16.7': [
+    'Fix: modo Grade agora é malha alinhada de verdade (ponto no centro da célula; encaixa para dentro só nas bordas)',
+    'Fix: distância da borda respeitada nas zonas (amostragem fina o bastante; antes colapsava em zonas médias/pequenas)',
+    'Zona pequena sempre recebe ao menos 1 ponto no modo Grade',
+  ],
   '0.16.6': [
     'Distribuição de pontos por cobertura — nº de pontos pela área (mínimo round(área/densidade)) e nenhuma região sem ponto',
     'Encaixa ponto em braços/lóbulos que a malha quadrada perdia (ex: zonas e talhões irregulares)',
