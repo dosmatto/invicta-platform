@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useApp } from '@/context/AppContext';
 import { getPadroesAmostragem, getPadroesElementos, getSafras, getGrades, saveGrade, updateGrade, deleteGrade, marcarParaProcessar, PadraoElementos, ProfundidadeConfig, GradeAmostragem, PontoAmostragem } from '@/lib/store';
-import { gerarGrid, anguloMaiorDimensao, criarValidador } from '@/lib/grid';
+import { gerarGrid, anguloMaiorDimensao, criarValidador, ModoDistribuicao } from '@/lib/grid';
 import { exportarKML, exportarSHP } from '@/lib/exportGrade';
 import { gerarEtiquetasPDF } from '@/lib/etiquetas';
 import { AlertTriangle, RotateCcw, Shuffle, Layers, MapPin, Save, Trash2, CheckCircle2, Circle, Pencil, Move, Plus, Eraser, X, Check, Download, QrCode } from 'lucide-react';
@@ -64,6 +64,7 @@ export function SimuladorAmostragem() {
   const [rotacaoGraus, setRotacaoGraus] = useState(0);
   const [aleatoriedade, setAleatoriedade] = useState(0);
   const [distanciaBorda, setDistanciaBorda] = useState(50);
+  const [modoDist, setModoDist] = useState<ModoDistribuicao>('inteligente');
   const [modoSel, setModoSel] = useState<'regular' | 'aleatorio'>('regular');
   const [seedPos, setSeedPos] = useState(1);
   const [seedSel, setSeedSel] = useState(1);
@@ -93,14 +94,14 @@ export function SimuladorAmostragem() {
   // Geração da grade + atribuição de profundidades (ao vivo, a partir dos parâmetros)
   const gerados = useMemo<PontoAmostragem[]>(() => {
     if (!uploadedGeo) return [];
-    const pts = gerarGrid({ geojson: uploadedGeo, densidadeHaPonto: densidade, distanciaBordaM: distanciaBorda, rotacaoGraus: rotacaoEfetiva, aleatoriedade, seed: seedPos });
+    const pts = gerarGrid({ geojson: uploadedGeo, densidadeHaPonto: densidade, distanciaBordaM: distanciaBorda, rotacaoGraus: rotacaoEfetiva, aleatoriedade, seed: seedPos, modo: modoDist });
     const n = pts.length;
     const selecoes = profs.map(p => selecionar(n, p.percentual, modoSel, seedSel + p.rotulo.length));
     return pts.map((pt, i) => {
       const rotulos = profs.filter((_, pi) => selecoes[pi].has(i)).map(p => p.rotulo);
       return { ordem: i, lng: pt.lng, lat: pt.lat, profs: rotulos.length, profundidades: rotulos };
     });
-  }, [uploadedGeo, densidade, distanciaBorda, rotacaoEfetiva, aleatoriedade, seedPos, profs, modoSel, seedSel]);
+  }, [uploadedGeo, densidade, distanciaBorda, rotacaoEfetiva, aleatoriedade, seedPos, profs, modoSel, seedSel, modoDist]);
 
   // Pontos efetivos: edição manual (se houver) tem prioridade sobre os gerados
   const pontosEfetivos = pontosManuais ?? gerados;
@@ -273,6 +274,24 @@ export function SimuladorAmostragem() {
             <input type="number" step="0.1" min="0.1" value={densidade}
               onChange={e => alterarParam(setDensidade, Number(e.target.value.replace(',', '.')) || 0)}
               className="w-full rounded px-2 py-1.5 text-xs outline-none" style={inputStyle} />
+          </div>
+
+          {/* Distribuição dos pontos */}
+          <div>
+            <label className="text-[10px] font-semibold block mb-1" style={{ color: '#64748b' }}>Distribuição dos pontos</label>
+            <div className="grid grid-cols-2 gap-1">
+              {([['inteligente', 'Inteligente', 'cobertura + relaxação'], ['grade', 'Grade', 'malha alinhada']] as const).map(([m, t, d]) => (
+                <button key={m} onClick={() => alterarParam(setModoDist, m)}
+                  className="py-1.5 px-2 rounded text-left"
+                  style={{ background: modoDist === m ? 'var(--invicta-blue-mid)' : '#1a3a6b', border: `1px solid ${modoDist === m ? '#60a5fa' : '#1a3a6b'}` }}>
+                  <span className="block text-[11px] font-semibold" style={{ color: modoDist === m ? '#fff' : '#93c5fd' }}>{t}</span>
+                  <span className="block text-[9px]" style={{ color: modoDist === m ? '#bfdbfe' : '#64748b' }}>{d}</span>
+                </button>
+              ))}
+            </div>
+            <p className="text-[9px] mt-1" style={{ color: '#475569' }}>
+              Ambas garantem cobertura (sem regiões sem ponto) e o mínimo pela área. &quot;Inteligente&quot; espaça conforme o formato; &quot;Grade&quot; mantém a malha quadrada.
+            </p>
           </div>
 
           {/* Distância da borda */}

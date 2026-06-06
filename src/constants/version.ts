@@ -1,6 +1,12 @@
-export const APP_VERSION = '0.16.5';
+export const APP_VERSION = '0.16.6';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.16.6': [
+    'Distribuição de pontos por cobertura — nº de pontos pela área (mínimo round(área/densidade)) e nenhuma região sem ponto',
+    'Encaixa ponto em braços/lóbulos que a malha quadrada perdia (ex: zonas e talhões irregulares)',
+    'Toggle Inteligente (cobertura + relaxação de Lloyd, conforma ao formato) | Grade (malha alinhada) no Grid e nas Zonas',
+    'Escada de borda: reduz a distância da borda só onde for preciso para encaixar o ponto',
+  ],
   '0.16.5': [
     'Z2b Zonas — densidade por zona: clique numa zona (mapa ou lista) e ajuste a densidade só dela',
     'Override por zona sobrepõe o padrão geral; "Usar padrão geral" remove o ajuste',

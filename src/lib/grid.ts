@@ -2,6 +2,10 @@
 // Trabalha em coordenadas locais (metros) projetadas a partir do centro,
 // o que é preciso o suficiente para a escala de um talhão.
 
+import turfArea from '@turf/area';
+
+export type ModoDistribuicao = 'grade' | 'inteligente';
+
 export interface GridParams {
   geojson: GeoJSON.FeatureCollection;
   densidadeHaPonto: number;   // ha por ponto (ex: 2)
@@ -9,6 +13,7 @@ export interface GridParams {
   rotacaoGraus: number;       // ângulo da grade (0 = N-S)
   aleatoriedade: number;      // 0-100 (% do meio-lado da célula)
   seed: number;               // semente do sorteio de posições
+  modo?: ModoDistribuicao;    // 'grade' (alinhado) | 'inteligente' (cobertura+relaxação). default 'inteligente'
 }
 
 export interface GridPoint {
@@ -174,9 +179,99 @@ export function pontoInterno(geojson: GeoJSON.FeatureCollection, distanciaBordaM
   return null;
 }
 
+// ── Helpers da distribuição por cobertura ────────────────────────────────────
+// Sonda válida do polígono (amostra discreta usada para cobertura e relaxação).
+// x,y = metros locais; u,v = espaço da grade (rotacionado); db = distância da borda.
+type Probe = { x: number; y: number; u: number; v: number; db: number };
+const sq = (n: number) => n * n;
+
+function distSqAoConjunto(p: Probe, cs: Probe[]): number {
+  let min = Infinity;
+  for (const c of cs) { const d = sq(p.x - c.x) + sq(p.y - c.y); if (d < min) min = d; }
+  return min;
+}
+
+// Amostragem por "ponto mais distante" (farthest-point): espalha N centros.
+// Começa pelo mais interno (determinístico) e adiciona sempre o mais distante.
+function semearMaisDistante(probes: Probe[], n: number): Probe[] {
+  if (probes.length === 0 || n <= 0) return [];
+  let start = probes[0];
+  for (const p of probes) if (p.db > start.db) start = p;
+  const chosen: Probe[] = [start];
+  const minD = probes.map(p => sq(p.x - start.x) + sq(p.y - start.y));
+  while (chosen.length < n) {
+    let bi = -1, bd = -1;
+    for (let i = 0; i < probes.length; i++) if (minD[i] > bd) { bd = minD[i]; bi = i; }
+    if (bi < 0 || bd <= 0) break;
+    const np = probes[bi]; chosen.push(np);
+    for (let i = 0; i < probes.length; i++) { const d = sq(probes[i].x - np.x) + sq(probes[i].y - np.y); if (d < minD[i]) minD[i] = d; }
+  }
+  return chosen;
+}
+
+// Completa até n centros pegando sempre o ponto mais distante dos já escolhidos.
+function completarAteN(centros: Probe[], probes: Probe[], n: number): Probe[] {
+  const chosen = centros.slice();
+  if (chosen.length >= n || probes.length === 0) return chosen;
+  const minD = probes.map(p => distSqAoConjunto(p, chosen));
+  while (chosen.length < n) {
+    let bi = -1, bd = -1;
+    for (let i = 0; i < probes.length; i++) if (minD[i] > bd) { bd = minD[i]; bi = i; }
+    if (bi < 0 || bd <= 0) break;
+    const np = probes[bi]; chosen.push(np);
+    for (let i = 0; i < probes.length; i++) { const d = sq(probes[i].x - np.x) + sq(probes[i].y - np.y); if (d < minD[i]) minD[i] = d; }
+  }
+  return chosen;
+}
+
+// Garante cobertura: nenhuma sonda válida fica a mais de ~1,4·L de um ponto.
+// Preenche braços/lóbulos que a malha regular não alcança (pode passar de N).
+function preencherOrfaos(centros: Probe[], probes: Probe[], L: number): Probe[] {
+  const chosen = centros.slice();
+  if (probes.length === 0) return chosen;
+  const limite = sq(1.4 * L);
+  const minD = probes.map(p => chosen.length ? distSqAoConjunto(p, chosen) : Infinity);
+  for (;;) {
+    let bi = -1, bd = limite;
+    for (let i = 0; i < probes.length; i++) if (minD[i] > bd) { bd = minD[i]; bi = i; }
+    if (bi < 0) break;
+    const np = probes[bi]; chosen.push(np);
+    for (let i = 0; i < probes.length; i++) { const d = sq(probes[i].x - np.x) + sq(probes[i].y - np.y); if (d < minD[i]) minD[i] = d; }
+  }
+  return chosen;
+}
+
+// Relaxação de Lloyd discreta (k-means sobre as sondas): move cada centro para
+// a sonda mais próxima do centróide do seu agrupamento → espaçamento uniforme
+// que se conforma ao formato. Não cria nem remove pontos.
+function lloyd(centros: Probe[], probes: Probe[], iters: number): Probe[] {
+  let cs = centros.slice();
+  for (let it = 0; it < iters; it++) {
+    const sumx = new Array(cs.length).fill(0), sumy = new Array(cs.length).fill(0), cnt = new Array(cs.length).fill(0);
+    for (const p of probes) {
+      let bi = 0, bd = Infinity;
+      for (let i = 0; i < cs.length; i++) { const d = sq(p.x - cs[i].x) + sq(p.y - cs[i].y); if (d < bd) { bd = d; bi = i; } }
+      sumx[bi] += p.x; sumy[bi] += p.y; cnt[bi]++;
+    }
+    const used = new Set<Probe>();
+    cs = cs.map((c, i) => {
+      if (cnt[i] === 0) { used.add(c); return c; }
+      const mx = sumx[i] / cnt[i], my = sumy[i] / cnt[i];
+      let best = c, bd = Infinity;
+      for (const p of probes) { if (used.has(p)) continue; const d = sq(p.x - mx) + sq(p.y - my); if (d < bd) { bd = d; best = p; } }
+      used.add(best); return best;
+    });
+  }
+  return cs;
+}
+
 // ── Geração da grade ─────────────────────────────────────────────────────────
+// Distribuição por cobertura: amostra o polígono em "sondas" válidas, fixa o
+// alvo de pontos pela área (mínimo round(área/densidade)), e garante que cada
+// região receba ponto — inclusive braços estreitos que a malha quadrada perde.
 export function gerarGrid(params: GridParams): GridPoint[] {
   const { geojson, densidadeHaPonto, distanciaBordaM, rotacaoGraus, aleatoriedade, seed } = params;
+  const modo: ModoDistribuicao = params.modo ?? 'inteligente';
   const aneisLL = coletarAneis(geojson);
   if (aneisLL.length === 0 || densidadeHaPonto <= 0) return [];
 
@@ -196,7 +291,6 @@ export function gerarGrid(params: GridParams): GridPoint[] {
   const L = Math.sqrt(densidadeHaPonto * 10000); // lado da célula (m)
   const ang = (rotacaoGraus * Math.PI) / 180;
   const cos = Math.cos(ang), sin = Math.sin(ang);
-  // rotaciona ponto para o espaço da grade (inverso) e de volta
   const toGrid = (x: number, y: number): [number, number] => [x * cos + y * sin, -x * sin + y * cos];
   const fromGrid = (u: number, v: number): [number, number] => [u * cos - v * sin, u * sin + v * cos];
 
@@ -208,43 +302,84 @@ export function gerarGrid(params: GridParams): GridPoint[] {
     if (u > maxU) maxU = u; if (v > maxV) maxV = v;
   }
 
+  // alvo de pontos pela área (mínimo 1)
+  let areaM2 = 0;
+  try { areaM2 = turfArea(geojson as Parameters<typeof turfArea>[0]); } catch { areaM2 = 0; }
+  let N = Math.max(1, Math.round((areaM2 / 10000) / densidadeHaPonto));
+
+  // ── conjunto de sondas válidas (resolução ~R por lado de célula, com teto) ──
+  const TETO = 9000;
+  const nCellsU = Math.max(1, Math.ceil((maxU - minU) / L));
+  const nCellsV = Math.max(1, Math.ceil((maxV - minV) / L));
+  let R = 4;
+  while (R > 1 && nCellsU * nCellsV * R * R > TETO) R--;
+  const passo = L / R;
+
+  // escada de borda: reduz a distância só se o polígono não comportar nenhuma sonda
+  let probes: Probe[] = [];
+  let dUsada = distanciaBordaM;
+  for (const d of [distanciaBordaM, distanciaBordaM / 2, distanciaBordaM / 4, 0]) {
+    probes = [];
+    for (let v = minV + passo / 2; v <= maxV; v += passo) {
+      for (let u = minU + passo / 2; u <= maxU; u += passo) {
+        const [x, y] = fromGrid(u, v);
+        if (!dentro(x, y, aneis)) continue;
+        const db = distBorda(x, y, aneis);
+        if (db < d) continue;
+        probes.push({ x, y, u, v, db });
+      }
+    }
+    if (probes.length > 0) { dUsada = d; break; }
+  }
+  if (probes.length === 0) return [];
+  N = Math.min(N, probes.length);
+
+  // ── seleção dos centros ──
+  let centros: Probe[];
+  if (modo === 'grade') {
+    // 1 melhor sonda por célula com cobertura ≥ ~50% (alinhado à malha)
+    const celulas = new Map<string, Probe[]>();
+    for (const p of probes) {
+      const k = Math.floor((p.u - minU) / L) + '_' + Math.floor((p.v - minV) / L);
+      const arr = celulas.get(k); if (arr) arr.push(p); else celulas.set(k, [p]);
+    }
+    const minProbesCelula = R * R * 0.5;
+    centros = [];
+    for (const arr of celulas.values()) {
+      if (arr.length < minProbesCelula) continue;
+      let best = arr[0]; for (const p of arr) if (p.db > best.db) best = p;
+      centros.push(best);
+    }
+    centros = completarAteN(centros, probes, N);
+    centros = preencherOrfaos(centros, probes, L);
+  } else {
+    centros = semearMaisDistante(probes, N);
+    centros = preencherOrfaos(centros, probes, L);
+    centros = lloyd(centros, probes, 4);
+  }
+  if (centros.length < N) centros = completarAteN(centros, probes, N);
+
+  // ── jitter RADIAL (aleatoriedade) ≤ L/2; reclampa para dentro ──
   const rng = mulberry32(seed);
   const jitterMax = (L / 2) * (Math.max(0, Math.min(100, aleatoriedade)) / 100);
-
-  // varre células — linha por linha (serpentina aplicada na ordenação final)
-  type Cand = { x: number; y: number; row: number; col: number };
-  const cands: Cand[] = [];
-  let row = 0;
-  for (let v = minV + L / 2; v <= maxV; v += L, row++) {
-    let col = 0;
-    for (let u = minU + L / 2; u <= maxU; u += L, col++) {
-      const [cx, cy] = fromGrid(u, v);
-      if (!valido(cx, cy, aneis, distanciaBordaM)) continue;
-      // jitter RADIAL: deslocamento dentro de um círculo de raio jitterMax (= L/2 a 100%).
-      // Como o raio máx é metade do espaçamento, os círculos de células vizinhas ficam
-      // tangentes e os pontos nunca se cruzam. Se a posição cair inválida (borda),
-      // tenta outras; senão mantém o centro (já válido).
-      let px = cx, py = cy;
-      if (jitterMax > 0) {
-        let ok = false;
-        for (let tent = 0; tent < 10 && !ok; tent++) {
-          const ang2 = rng() * 2 * Math.PI;
-          const raio = Math.sqrt(rng()) * jitterMax; // sqrt → distribuição uniforme na área
-          const [dx, dy] = fromGrid(u + Math.cos(ang2) * raio, v + Math.sin(ang2) * raio);
-          if (valido(dx, dy, aneis, distanciaBordaM)) { px = dx; py = dy; ok = true; }
-        }
-        // se nenhuma tentativa válida, mantém o centro (já válido)
-      }
-      cands.push({ x: px, y: py, row, col });
+  const pts = centros.map(c => {
+    if (jitterMax <= 0) return { x: c.x, y: c.y };
+    for (let tent = 0; tent < 8; tent++) {
+      const a2 = rng() * 2 * Math.PI;
+      const raio = Math.sqrt(rng()) * jitterMax;
+      const dx = c.x + Math.cos(a2) * raio, dy = c.y + Math.sin(a2) * raio;
+      if (dentro(dx, dy, aneis) && distBorda(dx, dy, aneis) >= dUsada) return { x: dx, y: dy };
     }
-  }
+    return { x: c.x, y: c.y };
+  });
 
-  // ordenação serpentina: linhas alternam direção
-  cands.sort((a, b) => a.row - b.row || (a.row % 2 === 0 ? a.col - b.col : b.col - a.col));
+  // ── numeração serpentina (linhas no espaço da grade alternam direção) ──
+  const arr = pts.map(p => { const [u, v] = toGrid(p.x, p.y); return { p, row: Math.round((v - minV) / L), u }; });
+  arr.sort((a, b) => a.row - b.row || (a.row % 2 === 0 ? a.u - b.u : b.u - a.u));
 
-  return cands.map((c, i) => ({
-    lng: c.x / mLng + lng0,
-    lat: c.y / mLat + lat0,
+  return arr.map((c, i) => ({
+    lng: c.p.x / mLng + lng0,
+    lat: c.p.y / mLat + lat0,
     ordem: i,
   }));
 }

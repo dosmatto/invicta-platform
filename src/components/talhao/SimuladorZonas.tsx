@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import { getTalhoes, getPadroesAmostragem, getPadroesElementos, ProfundidadeConfig } from '@/lib/store';
 import { classeZona, ORDEM_CLASSES } from '@/lib/zonas';
-import { gerarGrid, pontoInterno } from '@/lib/grid';
+import { gerarGrid, pontoInterno, ModoDistribuicao } from '@/lib/grid';
 import { AlertTriangle, Layers, MapPin, RotateCcw } from 'lucide-react';
 
 interface ZonaFeat {
@@ -30,6 +30,7 @@ export function SimuladorZonas() {
   const [aleatoriedade, setAleatoriedade] = useState(0);
   const [distanciaBorda, setDistanciaBorda] = useState(15);
   const [seed, setSeed] = useState(1);
+  const [modoDist, setModoDist] = useState<ModoDistribuicao>('inteligente');
 
   // Clique numa zona (no mapa) seleciona/alterna para ajuste de densidade
   useEffect(() => {
@@ -88,7 +89,7 @@ export function SimuladorZonas() {
       const zonaFC: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry: z.geometry }] };
       const dz = densidadePorZona[z.id];
       const haPonto = dz && dz > 0 ? dz : (densidade > 0 ? densidade : 1); // override da zona ou padrão geral
-      let pts = gerarGrid({ geojson: zonaFC, densidadeHaPonto: haPonto, distanciaBordaM: distanciaBorda, rotacaoGraus: 0, aleatoriedade, seed });
+      let pts = gerarGrid({ geojson: zonaFC, densidadeHaPonto: haPonto, distanciaBordaM: distanciaBorda, rotacaoGraus: 0, aleatoriedade, seed, modo: modoDist });
       if (pts.length === 0) {
         const pi = pontoInterno(zonaFC, distanciaBorda);
         if (pi) pts = [{ lng: pi.lng, lat: pi.lat, ordem: 0 }];
@@ -101,7 +102,7 @@ export function SimuladorZonas() {
       });
     });
     return { pontos: out, totalPontos: out.length, porZona: cont };
-  }, [zonas, modelo, densidade, densidadePorZona, aleatoriedade, distanciaBorda, seed]);
+  }, [zonas, modelo, densidade, densidadePorZona, aleatoriedade, distanciaBorda, seed, modoDist]);
 
   // Publica os pontos no mapa
   useEffect(() => {
@@ -238,6 +239,24 @@ export function SimuladorZonas() {
             </div>
           </div>
         )}
+      </div>
+
+      {/* Distribuição dos pontos */}
+      <div>
+        <label className="text-[10px] font-semibold block mb-1" style={{ color: '#64748b' }}>Distribuição dos pontos</label>
+        <div className="grid grid-cols-2 gap-1">
+          {([['inteligente', 'Inteligente', 'cobertura + relaxação'], ['grade', 'Grade', 'malha alinhada']] as const).map(([m, t, d]) => (
+            <button key={m} onClick={() => setModoDist(m)}
+              className="py-1.5 px-2 rounded text-left"
+              style={{ background: modoDist === m ? 'var(--invicta-blue-mid)' : '#1a3a6b', border: `1px solid ${modoDist === m ? '#60a5fa' : '#1a3a6b'}` }}>
+              <span className="block text-[11px] font-semibold" style={{ color: modoDist === m ? '#fff' : '#93c5fd' }}>{t}</span>
+              <span className="block text-[9px]" style={{ color: modoDist === m ? '#bfdbfe' : '#64748b' }}>{d}</span>
+            </button>
+          ))}
+        </div>
+        <p className="text-[9px] mt-1" style={{ color: '#475569' }}>
+          Cada zona recebe ao menos os pontos do seu tamanho e nenhuma região fica sem ponto.
+        </p>
       </div>
 
       {/* Distância da borda */}
