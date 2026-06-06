@@ -27,5 +27,10 @@ export function classeZona(raw: string): ClasseZona {
   return { label: raw || '—', cor: '#94a3b8' };            // desconhecida: cinza
 }
 
+// true se o texto bate com uma classe conhecida (alto/médio/baixo e combinações)
+export function classeReconhecida(raw: string): boolean {
+  return /MEDI|ALT|BAIX/.test(normaliza(raw));
+}
+
 // Ordem da legenda (alta → baixa)
 export const ORDEM_CLASSES = ['Alta', 'Média-alta', 'Média', 'Média-baixa', 'Baixa'];

@@ -1,5 +1,6 @@
 import { kml } from '@tmcw/togeojson';
 import turfArea from '@turf/area';
+import { classeZona, classeReconhecida } from './zonas';
 
 export interface GeoUploadResult {
   geojson: GeoJSON.FeatureCollection;
@@ -142,6 +143,52 @@ function computeOuterArea(geojson: GeoJSON.FeatureCollection): number {
     }
   });
   return Math.round(total * 100) / 100;
+}
+
+// ── Zonas de manejo ─────────────────────────────────────────────────────────
+// Normaliza um arquivo de zonas (SHP/KML/GeoJSON) para o formato que o app usa:
+// cada feição vira { id, classe, areaHa }. Auto-detecta o campo de classe (o que
+// tem mais valores reconhecidos pelo semáforo) e o campo de id.
+export interface ZonasPreparadas {
+  fc: GeoJSON.FeatureCollection;
+  count: number;
+  classes: string[];   // labels distintas detectadas
+  campoClasse: string; // '' se não detectado
+}
+
+function areaHaFeature(geom: GeoJSON.Geometry): number {
+  const fc: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry: geom }] };
+  return Math.round((turfArea(fc) / 10000) * 100) / 100;
+}
+
+export function normalizarZonas(entrada: GeoJSON.FeatureCollection): ZonasPreparadas {
+  const polis = entrada.features.filter(f => f.geometry && (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon'));
+
+  const chaves = new Set<string>();
+  polis.forEach(f => Object.keys(f.properties ?? {}).forEach(k => chaves.add(k)));
+
+  // campo de classe = o que tem mais valores reconhecidos (+ bônus p/ nome plausível)
+  let campoClasse = '', melhor = 0;
+  for (const k of chaves) {
+    let rec = 0;
+    for (const f of polis) {
+      const v = (f.properties as Record<string, unknown> | null)?.[k];
+      if (v != null && classeReconhecida(String(v))) rec++;
+    }
+    const bonus = /class|zona|manejo|categoria|ugd|nivel|fertil/i.test(k) ? 0.5 : 0;
+    if (rec + bonus > melhor) { melhor = rec + bonus; campoClasse = k; }
+  }
+  const campoId = [...chaves].find(k => /^(id|zona|numero|num|fid|cod|nome|name)$/i.test(k));
+
+  const features: GeoJSON.Feature[] = polis.map((f, i) => {
+    const props = (f.properties ?? {}) as Record<string, unknown>;
+    const classe = campoClasse ? String(props[campoClasse] ?? '') : '';
+    const id = campoId && props[campoId] != null ? String(props[campoId]) : String(i + 1).padStart(2, '0');
+    return { type: 'Feature', properties: { id, classe, areaHa: areaHaFeature(f.geometry!) }, geometry: f.geometry! };
+  });
+
+  const classes = [...new Set(features.map(f => classeZona(String((f.properties as { classe: string }).classe)).label))];
+  return { fc: { type: 'FeatureCollection', features }, count: features.length, classes, campoClasse };
 }
 
 function collectCoords(geojson: GeoJSON.FeatureCollection): [number, number][] {

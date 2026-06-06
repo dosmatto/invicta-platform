@@ -3,7 +3,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { useApp } from '@/context/AppContext';
 import { getTalhoes, getSafras, saveSafra, updateTalhao, Talhao, Safra } from '@/lib/store';
-import { parseGeoFile } from '@/lib/geo';
+import { parseGeoFile, normalizarZonas } from '@/lib/geo';
+import { classeZona } from '@/lib/zonas';
 import { AmostragemModulo } from '@/components/talhao/AmostragemModulo';
 import {
   ChevronLeft, Grid3x3, TestTube, QrCode, Leaf,
@@ -211,9 +212,128 @@ function GeoSection({ talhao, onUploaded }: {
   );
 }
 
+// ── seção de zonas de manejo ────────────────────────────────────────────────
+function ZonasSection({ talhao, onZonas }: { talhao: Talhao | null; onZonas: () => void }) {
+  const { setZonasManejo, setMapMode } = useApp();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [estado, setEstado] = useState<'idle' | 'loading' | 'ok' | 'erro'>('idle');
+  const [erroMsg, setErroMsg] = useState('');
+  const [resumo, setResumo] = useState('');
+  const [dragging, setDragging] = useState(false);
+
+  const temZonas = !!talhao?.zonasGeojson;
+
+  function publicar(fc: GeoJSON.FeatureCollection) {
+    const features = fc.features.filter(f => f.geometry).map(f => {
+      const p = (f.properties ?? {}) as { id?: string; classe?: string };
+      const cz = classeZona(String(p.classe ?? ''));
+      return { type: 'Feature' as const, properties: { cor: cz.cor, rotulo: String(p.id ?? '?'), classeLabel: cz.label, selecionada: false }, geometry: f.geometry! };
+    });
+    setZonasManejo({ type: 'FeatureCollection', features });
+    setMapMode('satellite');
+  }
+
+  async function processar(file: File) {
+    setEstado('loading'); setErroMsg('');
+    try {
+      const result = await parseGeoFile(file);
+      const [a, b, c, d] = result.bbox;
+      if (!(a >= -180 && c <= 180 && b >= -90 && d <= 90)) {
+        throw new Error('Arquivo em coordenadas projetadas. Exporte o shapefile com .prj (ou em WGS84 / lat-long).');
+      }
+      const prep = normalizarZonas(result.geojson);
+      if (prep.count === 0) throw new Error('Nenhum polígono de zona encontrado no arquivo.');
+      updateTalhao(talhao!.id, { zonasGeojson: JSON.stringify(prep.fc) });
+      publicar(prep.fc);
+      setResumo(`${prep.count} zonas · ${prep.classes.join(', ')}${prep.campoClasse ? '' : ' · classe não detectada (cinza)'}`);
+      setEstado('ok');
+      onZonas();
+    } catch (e: unknown) {
+      setEstado('erro');
+      setErroMsg(e instanceof Error ? e.message : 'Erro ao processar arquivo.');
+    }
+  }
+
+  function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) processar(file);
+    e.target.value = '';
+  }
+  function onDrop(e: React.DragEvent) {
+    e.preventDefault(); setDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file) processar(file);
+  }
+
+  return (
+    <div style={{ borderBottom: '1px solid #1a3a6b' }}>
+      <div className="px-4 py-2 flex items-center gap-2" style={{ background: '#0a1929', borderBottom: '1px solid #0f2240' }}>
+        <Layers size={12} style={{ color: '#86efac' }} />
+        <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: '#86efac' }}>Zonas de Manejo</span>
+        {temZonas && (
+          <span className="ml-auto flex items-center gap-1 text-[10px] font-semibold" style={{ color: '#4ade80' }}>
+            <CheckCircle2 size={11} /> carregadas
+          </span>
+        )}
+      </div>
+
+      <div className="p-3">
+        <div
+          onDragOver={e => { e.preventDefault(); setDragging(true); }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={onDrop}
+          onClick={() => inputRef.current?.click()}
+          className="border-2 border-dashed rounded-lg py-5 text-center cursor-pointer transition-colors"
+          style={{ borderColor: dragging ? '#86efac' : estado === 'ok' ? '#4ade80' : '#1e3a5f', background: dragging ? '#0f2240' : 'transparent' }}>
+          {estado === 'loading' ? (
+            <div className="flex flex-col items-center gap-2">
+              <svg className="animate-spin w-5 h-5" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="12" r="10" stroke="#4ade80" strokeWidth="3" strokeDasharray="40 20" />
+              </svg>
+              <p className="text-[10px]" style={{ color: '#64748b' }}>Processando zonas...</p>
+            </div>
+          ) : estado === 'ok' ? (
+            <div className="flex flex-col items-center gap-1">
+              <CheckCircle2 size={20} style={{ color: '#4ade80' }} />
+              <p className="text-[10px] font-semibold" style={{ color: '#4ade80' }}>Zonas carregadas</p>
+              <p className="text-[9px]" style={{ color: '#475569' }}>Clique para substituir</p>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center gap-1.5">
+              <Upload size={18} style={{ color: '#475569' }} />
+              <p className="text-[10px] font-semibold" style={{ color: '#94a3b8' }}>
+                {temZonas ? 'Substituir zonas' : 'Carregar zonas (KML / Shapefile)'}
+              </p>
+              <p className="text-[9px]" style={{ color: '#475569' }}>Arraste ou clique · .kml · .zip (shapefile) · .geojson</p>
+            </div>
+          )}
+        </div>
+
+        {estado === 'ok' && resumo && <p className="mt-2 text-[10px] text-center" style={{ color: '#86efac' }}>{resumo}</p>}
+        {estado === 'erro' && <p className="mt-2 text-[10px] text-center" style={{ color: '#f87171' }}>{erroMsg}</p>}
+
+        {temZonas && estado === 'idle' && (
+          <button
+            onClick={() => { try { publicar(JSON.parse(talhao!.zonasGeojson!) as GeoJSON.FeatureCollection); } catch {} }}
+            className="mt-2 w-full py-1.5 rounded text-[10px] font-semibold transition-opacity hover:opacity-80"
+            style={{ background: '#1a3a6b', color: '#86efac' }}>
+            Mostrar no mapa
+          </button>
+        )}
+
+        <p className="mt-2 text-[9px]" style={{ color: '#475569' }}>
+          Polígonos com a classe (alta/média/baixa) por zona. Use depois em Amostragem › Zona de Manejo.
+        </p>
+
+        <input ref={inputRef} type="file" accept=".kml,.zip,.geojson,.json" className="hidden" onChange={onFileChange} />
+      </div>
+    </div>
+  );
+}
+
 // ── painel principal ────────────────────────────────────────────────────────
 export function TalhaoDetailPanel() {
-  const { activePanel, setActivePanel, nav, setNav, setMapMode, setUploadedGeo, setUploadedBbox } = useApp();
+  const { activePanel, setActivePanel, nav, setNav, setMapMode, setUploadedGeo, setUploadedBbox, setZonasManejo } = useApp();
 
   const [talhao, setTalhao] = useState<Talhao | null>(null);
   const [safras, setSafras] = useState<Safra[]>([]);
@@ -246,6 +366,7 @@ export function TalhaoDetailPanel() {
     setMapMode('street');
     setUploadedGeo(null);
     setUploadedBbox(null);
+    setZonasManejo(null);
     setActivePanel(`fazenda-${nav.fazendaId}`);
   }
 
@@ -255,6 +376,11 @@ export function TalhaoDetailPanel() {
     const t = todos.find(x => x.id === nav.talhaoId) ?? null;
     setTalhao(t);
     setNav({ area: areaHa });
+  }
+
+  function handleZonasUploaded() {
+    const t = getTalhoes().find(x => x.id === nav.talhaoId) ?? null;
+    setTalhao(t);
   }
 
   function handleCriarSafra() {
@@ -371,6 +497,9 @@ export function TalhaoDetailPanel() {
 
         {/* Limite Geográfico — sempre visível no topo */}
         <GeoSection talhao={talhao} onUploaded={handleUploaded} />
+
+        {/* Zonas de Manejo — upload */}
+        <ZonasSection talhao={talhao} onZonas={handleZonasUploaded} />
 
         {/* Amostragem */}
         <AccordionSection title="Amostragem" icon={Grid3x3} color="#60a5fa" moduleId="amostragem">

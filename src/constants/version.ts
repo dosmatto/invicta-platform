@@ -1,6 +1,11 @@
-export const APP_VERSION = '0.16.11';
+export const APP_VERSION = '0.16.12';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.16.12': [
+    'Upload de Zonas de Manejo pela interface (KML / Shapefile .zip / GeoJSON) no talhão',
+    'Auto-detecção do campo de classe (semáforo) e do id; área por zona calculada; prévia colorida no mapa',
+    'Aviso quando o arquivo vem em coordenadas projetadas (exportar com .prj ou em WGS84)',
+  ],
   '0.16.11': [
     'Etiquetas abrem em nova aba (PDF pronto para impressão, Ctrl+P) em vez de baixar o arquivo',
     'Se o navegador bloquear o pop-up, cai automaticamente para download do PDF',
