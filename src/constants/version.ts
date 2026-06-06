@@ -1,6 +1,12 @@
-export const APP_VERSION = '0.16.8';
+export const APP_VERSION = '0.16.9';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.16.9': [
+    'Etiquetas: presets de folha adesiva Pimaco (A4361, A4260, A4355, A4356, 6181) + Genérico A4',
+    'Seletor de folha + ajuste fino de margem (calibração em mm) no Grid e nas Zonas',
+    'Etiquetas agora também nas Zonas de Manejo (a partir do padrão de amostragem)',
+    'Render adaptativo: número e profundidade escalam ao tamanho da etiqueta',
+  ],
   '0.16.8': [
     'Grid: cada pedaço disjunto do limite recebe pontos (≥1, conforme a área) — antes pedaços separados ficavam sem ponto',
     'Partes encostadas (talhão dividido em vários polígonos) viram um campo só: divisas internas não contam como borda (sem vãos internos)',
