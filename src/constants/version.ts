@@ -1,6 +1,10 @@
-export const APP_VERSION = '0.16.3';
+export const APP_VERSION = '0.16.4';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.16.4': [
+    'Zonas — seletor de Padrão de Amostragem (profundidades) para as etiquetas',
+    'Resumo mostra nº de etiquetas (amostras × profundidades) nos modelos A e B',
+  ],
   '0.16.3': [
     'Fix: densidade das zonas em ha/ponto (ex: 2 = 1 ponto a cada 2 ha), default 2 — igual ao grid',
   ],

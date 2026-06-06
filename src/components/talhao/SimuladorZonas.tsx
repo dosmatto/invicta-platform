@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useApp } from '@/context/AppContext';
-import { getTalhoes } from '@/lib/store';
+import { getTalhoes, getPadroesAmostragem, getPadroesElementos, ProfundidadeConfig } from '@/lib/store';
 import { classeZona, ORDEM_CLASSES } from '@/lib/zonas';
 import { gerarGrid, pontoInterno } from '@/lib/grid';
 import { AlertTriangle, Layers, MapPin, RotateCcw } from 'lucide-react';
@@ -22,12 +22,24 @@ export function SimuladorZonas() {
   const { nav, setZonasManejo, setPontosSimulados } = useApp();
 
   const [modelo, setModelo] = useState<'A' | 'B'>('A');
+  const [padraoId, setPadraoId] = useState('');
+  const [profs, setProfs] = useState<ProfundidadeConfig[]>([]);
   const [densidade, setDensidade] = useState(2);     // ha por ponto (padrão geral) — ex: 1 ponto a cada 2 ha
   const [aleatoriedade, setAleatoriedade] = useState(0);
   const [distanciaBorda, setDistanciaBorda] = useState(15);
   const [seed, setSeed] = useState(1);
 
+  const padroes = useMemo(() => getPadroesAmostragem(), []);
+  const padroesElem = useMemo(() => getPadroesElementos(), []);
+  const padrao = padroes.find(p => p.id === padraoId) ?? null;
+  const nomeElem = (id: string) => padroesElem.find(p => p.id === id)?.nome ?? '—';
+
   const talhao = useMemo(() => getTalhoes().find(t => t.id === nav.talhaoId) ?? null, [nav.talhaoId]);
+
+  // Ao escolher um padrão, herda as profundidades
+  useEffect(() => {
+    if (padrao) setProfs(padrao.profundidades.map(p => ({ ...p })));
+  }, [padrao]);
 
   // Zonas com geometria
   const zonas = useMemo<ZonaFeat[]>(() => {
@@ -105,6 +117,8 @@ export function SimuladorZonas() {
   const classesPresentes = ORDEM_CLASSES.filter(c => zonas.some(z => z.classeLabel === c));
   const areaTotal = Math.round(zonas.reduce((s, z) => s + z.areaHa, 0) * 100) / 100;
   const numAmostras = modelo === 'A' ? zonas.length : totalPontos;
+  // Etiquetas = amostras × profundidades (parciais aplicadas a % das amostras)
+  const totalEtiquetas = profs.reduce((s, p) => s + (p.percentual >= 100 ? numAmostras : Math.max(1, Math.round((numAmostras * p.percentual) / 100))), 0);
 
   return (
     <div className="p-3 space-y-3">
@@ -133,6 +147,37 @@ export function SimuladorZonas() {
           ))}
         </div>
       </div>
+
+      {/* Padrão de amostragem (profundidades para as etiquetas) */}
+      <div>
+        <label className="text-[10px] font-semibold block mb-0.5" style={{ color: '#64748b' }}>Padrão de Amostragem</label>
+        <select value={padraoId} onChange={e => setPadraoId(e.target.value)}
+          className="w-full rounded px-2 py-1.5 text-xs outline-none" style={inputStyle}>
+          <option value="">Selecione…</option>
+          {padroes.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
+        </select>
+      </div>
+
+      {/* Profundidades do padrão */}
+      {padrao && profs.length > 0 && (
+        <div>
+          <label className="text-[10px] font-semibold flex items-center gap-1 mb-1" style={{ color: '#64748b' }}>
+            <Layers size={11} /> Profundidades
+          </label>
+          <div className="space-y-1">
+            {profs.map((p, i) => (
+              <div key={i} className="flex items-center gap-2 px-2 py-1.5 rounded" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
+                <span className="text-xs font-bold" style={{ color: '#93c5fd', minWidth: '48px' }}>{p.rotulo}</span>
+                <span className="text-[10px]" style={{ color: '#64748b' }}>{p.percentual}%</span>
+                <span className="text-[10px] truncate flex-1 text-right" style={{ color: '#64748b' }}>{nomeElem(p.padraoElementosId)}</span>
+              </div>
+            ))}
+          </div>
+          <p className="text-[9px] mt-1" style={{ color: '#475569' }}>
+            {modelo === 'A' ? 'Profundidades aplicadas por zona (amostra composta).' : 'Profundidades aplicadas por ponto.'}
+          </p>
+        </div>
+      )}
 
       {/* Densidade */}
       <div>
@@ -177,7 +222,9 @@ export function SimuladorZonas() {
         </div>
         <p className="text-[10px] mt-1" style={{ color: '#64748b' }}>
           {modelo === 'A' ? '1 amostra composta por zona' : 'cada ponto vira uma amostra'}
+          {padrao && ` · ${totalEtiquetas} etiquetas (com profundidades)`}
         </p>
+        {!padrao && <p className="text-[10px] mt-1" style={{ color: '#fbbf24' }}>Selecione um Padrão de Amostragem para as etiquetas com profundidade.</p>}
       </div>
 
       {/* Legenda das classes */}
