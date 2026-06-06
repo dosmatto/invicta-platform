@@ -1,6 +1,9 @@
-export const APP_VERSION = '0.16.2';
+export const APP_VERSION = '0.16.3';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.16.3': [
+    'Fix: densidade das zonas em ha/ponto (ex: 2 = 1 ponto a cada 2 ha), default 2 — igual ao grid',
+  ],
   '0.16.2': [
     'Z2 Zonas — geração de pontos por zona (grid dentro de cada zona + aleatoriedade)',
     'Densidade em pontos/ha; zonas pequenas recebem ao menos 1 ponto',

@@ -22,7 +22,7 @@ export function SimuladorZonas() {
   const { nav, setZonasManejo, setPontosSimulados } = useApp();
 
   const [modelo, setModelo] = useState<'A' | 'B'>('A');
-  const [densidade, setDensidade] = useState(1);     // pontos por ha (padrão geral)
+  const [densidade, setDensidade] = useState(2);     // ha por ponto (padrão geral) — ex: 1 ponto a cada 2 ha
   const [aleatoriedade, setAleatoriedade] = useState(0);
   const [distanciaBorda, setDistanciaBorda] = useState(15);
   const [seed, setSeed] = useState(1);
@@ -63,7 +63,7 @@ export function SimuladorZonas() {
     let seq = 0;
     zonas.forEach((z, idxZona) => {
       const zonaFC: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry: z.geometry }] };
-      const haPonto = densidade > 0 ? 1 / densidade : 1;
+      const haPonto = densidade > 0 ? densidade : 1; // densidade = ha por ponto
       let pts = gerarGrid({ geojson: zonaFC, densidadeHaPonto: haPonto, distanciaBordaM: distanciaBorda, rotacaoGraus: 0, aleatoriedade, seed });
       if (pts.length === 0) {
         const pi = pontoInterno(zonaFC, distanciaBorda);
@@ -136,11 +136,11 @@ export function SimuladorZonas() {
 
       {/* Densidade */}
       <div>
-        <label className="text-[10px] font-semibold block mb-0.5" style={{ color: '#64748b' }}>Densidade (pontos / ha)</label>
-        <input type="number" step="0.1" min="0.1" value={densidade}
+        <label className="text-[10px] font-semibold block mb-0.5" style={{ color: '#64748b' }}>Densidade (ha / ponto)</label>
+        <input type="number" step="0.5" min="0.1" value={densidade}
           onChange={e => setDensidade(Number(e.target.value.replace(',', '.')) || 0)}
           className="w-full rounded px-2 py-1.5 text-xs outline-none" style={inputStyle} />
-        <p className="text-[9px] mt-0.5" style={{ color: '#475569' }}>Padrão geral. Zonas pequenas recebem ao menos 1 ponto.</p>
+        <p className="text-[9px] mt-0.5" style={{ color: '#475569' }}>Ex: 2 = 1 ponto a cada 2 ha. Zonas pequenas recebem ao menos 1 ponto.</p>
       </div>
 
       {/* Distância da borda */}
