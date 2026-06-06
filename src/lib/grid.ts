@@ -2,8 +2,6 @@
 // Trabalha em coordenadas locais (metros) projetadas a partir do centro,
 // o que é preciso o suficiente para a escala de um talhão.
 
-import turfArea from '@turf/area';
-
 export type ModoDistribuicao = 'grade' | 'inteligente';
 
 export interface GridParams {
@@ -89,10 +87,6 @@ function distBorda(x: number, y: number, aneis: Ring[]): number {
     }
   }
   return min;
-}
-
-function valido(x: number, y: number, aneis: Ring[], distMin: number): boolean {
-  return dentro(x, y, aneis) && distBorda(x, y, aneis) >= distMin;
 }
 
 // ── Ângulo da maior dimensão (rotação automática) ────────────────────────────
@@ -265,67 +259,106 @@ function lloyd(centros: Probe[], probes: Probe[], iters: number): Probe[] {
   return cs;
 }
 
-// ── Geração da grade ─────────────────────────────────────────────────────────
-// Distribuição por cobertura: amostra o polígono em "sondas" válidas, fixa o
-// alvo de pontos pela área (mínimo round(área/densidade)), e garante que cada
-// região receba ponto — inclusive braços estreitos que a malha quadrada perde.
-export function gerarGrid(params: GridParams): GridPoint[] {
-  const { geojson, densidadeHaPonto, distanciaBordaM, rotacaoGraus, aleatoriedade, seed } = params;
-  const modo: ModoDistribuicao = params.modo ?? 'inteligente';
-  const aneisLL = coletarAneis(geojson);
-  if (aneisLL.length === 0 || densidadeHaPonto <= 0) return [];
+// ── Componentes e campos ─────────────────────────────────────────────────────
+// Componente = anel externo + buracos (1 polígono). MultiPolygon vira N
+// componentes. Componentes que se TOCAM formam um "campo" (tratado como uma
+// região só, borda = contorno externo). Componentes DISJUNTOS são campos
+// separados, cada um com alvo e borda próprios → todo pedaço recebe ponto.
+type Parte = Ring[]; // [externo, ...buracos]
 
-  // origem local = centro do bbox
-  let minLng = Infinity, minLat = Infinity, maxLng = -Infinity, maxLat = -Infinity;
-  for (const r of aneisLL) for (const [lng, lat] of r) {
-    if (lng < minLng) minLng = lng; if (lat < minLat) minLat = lat;
-    if (lng > maxLng) maxLng = lng; if (lat > maxLat) maxLat = lat;
+function coletarComponentes(fc: GeoJSON.FeatureCollection): [number, number][][][] {
+  const comps: [number, number][][][] = [];
+  for (const f of fc.features) {
+    const g = f.geometry;
+    if (!g) continue;
+    if (g.type === 'Polygon') comps.push(g.coordinates as [number, number][][]);
+    else if (g.type === 'MultiPolygon') (g.coordinates as [number, number][][][]).forEach(p => comps.push(p));
   }
-  const lat0 = (minLat + maxLat) / 2;
-  const lng0 = (minLng + maxLng) / 2;
-  const { mLat, mLng } = fatores(lat0);
+  return comps;
+}
 
-  // anéis em metros locais
-  const aneis: Ring[] = aneisLL.map(r => r.map(([lng, lat]) => [(lng - lng0) * mLng, (lat - lat0) * mLat] as [number, number]));
+// Área planar (m²) de uma parte (externo − buracos), coords locais em metros.
+function areaComponente(aneis: Ring[]): number {
+  const shoelace = (r: Ring) => { let s = 0; for (let i = 0, j = r.length - 1; i < r.length; j = i++) s += r[j][0] * r[i][1] - r[i][0] * r[j][1]; return Math.abs(s) / 2; };
+  if (aneis.length === 0) return 0;
+  let a = shoelace(aneis[0]);
+  for (let i = 1; i < aneis.length; i++) a -= shoelace(aneis[i]);
+  return Math.max(0, a);
+}
 
-  const L = Math.sqrt(densidadeHaPonto * 10000); // lado da célula (m)
-  const ang = (rotacaoGraus * Math.PI) / 180;
-  const cos = Math.cos(ang), sin = Math.sin(ang);
-  const toGrid = (x: number, y: number): [number, number] => [x * cos + y * sin, -x * sin + y * cos];
+// Agrupa partes que se tocam (vértices a < eps) num mesmo campo (union-find).
+function agruparCampos(partes: Parte[], eps: number): Parte[][] {
+  const n = partes.length;
+  const pai = Array.from({ length: n }, (_, i) => i);
+  const find = (a: number): number => { while (pai[a] !== a) { pai[a] = pai[pai[a]]; a = pai[a]; } return a; };
+  const eps2 = eps * eps;
+  const verts = partes.map(p => p.flat());
+  for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) {
+    if (find(i) === find(j)) continue;
+    let toca = false;
+    for (const a of verts[i]) { for (const b of verts[j]) { if (sq(a[0] - b[0]) + sq(a[1] - b[1]) <= eps2) { toca = true; break; } } if (toca) break; }
+    if (toca) pai[find(i)] = find(j);
+  }
+  const grupos = new Map<number, Parte[]>();
+  for (let i = 0; i < n; i++) { const r = find(i); const g = grupos.get(r); if (g) g.push(partes[i]); else grupos.set(r, [partes[i]]); }
+  return [...grupos.values()];
+}
+
+// Segmentos do CONTORNO externo de um campo: arestas que aparecem só 1 vez
+// (as compartilhadas entre partes vizinhas são divisas internas — ignoradas).
+function bordasDoCampo(campo: Parte[]): number[][] {
+  const mapa = new Map<string, { s: number[]; n: number }>();
+  for (const parte of campo) for (const ring of parte) {
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const a = ring[j], b = ring[i];
+      const ka = `${a[0].toFixed(1)},${a[1].toFixed(1)}`, kb = `${b[0].toFixed(1)},${b[1].toFixed(1)}`;
+      const key = ka < kb ? ka + '|' + kb : kb + '|' + ka;
+      const e = mapa.get(key); if (e) e.n++; else mapa.set(key, { s: [a[0], a[1], b[0], b[1]], n: 1 });
+    }
+  }
+  const out: number[][] = [];
+  for (const e of mapa.values()) if (e.n === 1) out.push(e.s);
+  return out;
+}
+
+function distBordas(x: number, y: number, segs: number[][]): number {
+  let min = Infinity;
+  for (const s of segs) { const d = distSeg(x, y, s[0], s[1], s[2], s[3]); if (d < min) min = d; }
+  return min;
+}
+
+interface Frame {
+  minU: number; minV: number; L: number; passo: number; probesPorCelula: number; cos: number; sin: number;
+}
+
+// Centros (já com jitter) de UM campo. dentro = união dos anéis; borda = contorno
+// externo (segs). Escada de borda e alvo N próprios → campo pequeno garante ≥1.
+function centrosDeComponente(aneis: Ring[], segs: number[][], N: number, modo: ModoDistribuicao, distanciaBordaM: number, aleatoriedade: number, rng: () => number, f: Frame): { x: number; y: number }[] {
+  const { minU, minV, L, passo, probesPorCelula, cos, sin } = f;
   const fromGrid = (u: number, v: number): [number, number] => [u * cos - v * sin, u * sin + v * cos];
+  const toGrid = (x: number, y: number): [number, number] => [x * cos + y * sin, -x * sin + y * cos];
 
-  // bbox no espaço da grade
-  let minU = Infinity, minV = Infinity, maxU = -Infinity, maxV = -Infinity;
+  // sub-bbox do campo no espaço da grade, na fase global (células alinhadas)
+  let cMinU = Infinity, cMinV = Infinity, cMaxU = -Infinity, cMaxV = -Infinity;
   for (const r of aneis) for (const [x, y] of r) {
     const [u, v] = toGrid(x, y);
-    if (u < minU) minU = u; if (v < minV) minV = v;
-    if (u > maxU) maxU = u; if (v > maxV) maxV = v;
+    if (u < cMinU) cMinU = u; if (v < cMinV) cMinV = v;
+    if (u > cMaxU) cMaxU = u; if (v > cMaxV) cMaxV = v;
   }
+  const baseU = minU + passo / 2, baseV = minV + passo / 2;
+  const startU = baseU + Math.max(0, Math.ceil((cMinU - baseU) / passo)) * passo;
+  const startV = baseV + Math.max(0, Math.ceil((cMinV - baseV) / passo)) * passo;
 
-  // alvo de pontos pela área (mínimo 1)
-  let areaM2 = 0;
-  try { areaM2 = turfArea(geojson as Parameters<typeof turfArea>[0]); } catch { areaM2 = 0; }
-  let N = Math.max(1, Math.round((areaM2 / 10000) / densidadeHaPonto));
-
-  // ── conjunto de sondas válidas ──
-  // Passo fino o suficiente para RESOLVER a faixa de borda (≤ borda/2); senão a
-  // escada de borda abaixo colapsaria à toa e os pontos encostariam na borda.
-  const TETO = 12000;
-  let passo = Math.max(2, Math.min(L / 4, distanciaBordaM > 0 ? distanciaBordaM / 2 : L / 4));
-  const larguraU = Math.max(passo, maxU - minU), larguraV = Math.max(passo, maxV - minV);
-  while ((larguraU / passo) * (larguraV / passo) > TETO) passo *= 1.4;
-  const probesPorCelula = Math.max(1, (L / passo) * (L / passo));
-
-  // escada de borda: reduz a distância só se o polígono não comportar nenhuma sonda
+  // escada de borda própria do campo (contorno externo)
   let probes: Probe[] = [];
   let dUsada = distanciaBordaM;
   for (const d of [distanciaBordaM, distanciaBordaM / 2, distanciaBordaM / 4, 0]) {
     probes = [];
-    for (let v = minV + passo / 2; v <= maxV; v += passo) {
-      for (let u = minU + passo / 2; u <= maxU; u += passo) {
+    for (let v = startV; v <= cMaxV; v += passo) {
+      for (let u = startU; u <= cMaxU; u += passo) {
         const [x, y] = fromGrid(u, v);
         if (!dentro(x, y, aneis)) continue;
-        const db = distBorda(x, y, aneis);
+        const db = distBordas(x, y, segs);
         if (db < d) continue;
         probes.push({ x, y, u, v, db });
       }
@@ -333,18 +366,15 @@ export function gerarGrid(params: GridParams): GridPoint[] {
     if (probes.length > 0) { dUsada = d; break; }
   }
   if (probes.length === 0) return [];
-  N = Math.min(N, probes.length);
+  const n = Math.min(N, probes.length);
 
-  // ── seleção dos centros ──
   let centros: Probe[];
   if (modo === 'grade') {
-    // Malha ALINHADA: um nó por célula com cobertura suficiente, no CENTRO da
-    // célula. Se o centro cair fora/dentro da faixa de borda, encaixa na sonda
-    // válida mais próxima do centro (mantém a grade, sem furos na borda).
+    // Malha ALINHADA: um nó no CENTRO de cada célula coberta; se o centro cai
+    // fora/na faixa de borda, encaixa na sonda válida mais próxima do centro.
     const celulas = new Map<string, Probe[]>();
     for (const p of probes) {
-      const ci = Math.floor((p.u - minU) / L), cj = Math.floor((p.v - minV) / L);
-      const k = ci + '_' + cj;
+      const k = Math.floor((p.u - minU) / L) + '_' + Math.floor((p.v - minV) / L);
       const arr = celulas.get(k); if (arr) arr.push(p); else celulas.set(k, [p]);
     }
     const minProbes = Math.max(1, probesPorCelula * 0.18);
@@ -354,46 +384,96 @@ export function gerarGrid(params: GridParams): GridPoint[] {
       const part = k.split('_');
       const cu = minU + (Number(part[0]) + 0.5) * L, cv = minV + (Number(part[1]) + 0.5) * L;
       const [ccx, ccy] = fromGrid(cu, cv);
-      const dbCentro = dentro(ccx, ccy, aneis) ? distBorda(ccx, ccy, aneis) : -1;
-      if (dbCentro >= dUsada) {
-        centros.push({ x: ccx, y: ccy, u: cu, v: cv, db: dbCentro });
-      } else {
-        let best = arr[0], bd = Infinity;
-        for (const p of arr) { const d = sq(p.x - ccx) + sq(p.y - ccy); if (d < bd) { bd = d; best = p; } }
-        centros.push(best);
-      }
+      const dbCentro = dentro(ccx, ccy, aneis) ? distBordas(ccx, ccy, segs) : -1;
+      if (dbCentro >= dUsada) centros.push({ x: ccx, y: ccy, u: cu, v: cv, db: dbCentro });
+      else { let best = arr[0], bd = Infinity; for (const p of arr) { const d = sq(p.x - ccx) + sq(p.y - ccy); if (d < bd) { bd = d; best = p; } } centros.push(best); }
     }
-    // toda zona recebe ao menos N pontos (zona pequena não pode ficar sem ponto)
-    if (centros.length === 0) centros = semearMaisDistante(probes, N);
-    else if (centros.length < N) centros = completarAteN(centros, probes, N);
+    if (centros.length === 0) centros = semearMaisDistante(probes, n);
+    else if (centros.length < n) centros = completarAteN(centros, probes, n);
   } else {
-    centros = semearMaisDistante(probes, N);
+    centros = semearMaisDistante(probes, n);
     centros = preencherOrfaos(centros, probes, L);
     centros = lloyd(centros, probes, 4);
-    if (centros.length < N) { centros = completarAteN(centros, probes, N); centros = lloyd(centros, probes, 2); }
+    if (centros.length < n) { centros = completarAteN(centros, probes, n); centros = lloyd(centros, probes, 2); }
   }
 
-  // ── jitter RADIAL (aleatoriedade) ≤ L/2; reclampa para dentro ──
-  const rng = mulberry32(seed);
+  // jitter RADIAL ≤ L/2 (reclampa para dentro do campo)
   const jitterMax = (L / 2) * (Math.max(0, Math.min(100, aleatoriedade)) / 100);
-  const pts = centros.map(c => {
+  return centros.map(c => {
     if (jitterMax <= 0) return { x: c.x, y: c.y };
     for (let tent = 0; tent < 8; tent++) {
       const a2 = rng() * 2 * Math.PI;
       const raio = Math.sqrt(rng()) * jitterMax;
       const dx = c.x + Math.cos(a2) * raio, dy = c.y + Math.sin(a2) * raio;
-      if (dentro(dx, dy, aneis) && distBorda(dx, dy, aneis) >= dUsada) return { x: dx, y: dy };
+      if (dentro(dx, dy, aneis) && distBordas(dx, dy, segs) >= dUsada) return { x: dx, y: dy };
     }
     return { x: c.x, y: c.y };
   });
+}
 
-  // ── numeração serpentina (linhas no espaço da grade alternam direção) ──
-  const arr = pts.map(p => { const [u, v] = toGrid(p.x, p.y); return { p, row: Math.round((v - minV) / L), u }; });
+// ── Geração da grade ─────────────────────────────────────────────────────────
+// Por CAMPO (componentes que se tocam = 1 campo; disjuntos = campos separados):
+// cada campo recebe alvo próprio máx(1, round(área/densidade)), borda = contorno
+// externo (divisas internas entre partes vizinhas não contam) e escada de borda
+// própria → nenhum pedaço fica sem ponto. Grade alinhada de forma contínua.
+export function gerarGrid(params: GridParams): GridPoint[] {
+  const { geojson, densidadeHaPonto, distanciaBordaM, rotacaoGraus, aleatoriedade, seed } = params;
+  const modo: ModoDistribuicao = params.modo ?? 'inteligente';
+  const aneisLL = coletarAneis(geojson);
+  if (aneisLL.length === 0 || densidadeHaPonto <= 0) return [];
+
+  // origem local = centro do bbox (lng/lat)
+  let minLng = Infinity, minLat = Infinity, maxLng = -Infinity, maxLat = -Infinity;
+  for (const r of aneisLL) for (const [lng, lat] of r) {
+    if (lng < minLng) minLng = lng; if (lat < minLat) minLat = lat;
+    if (lng > maxLng) maxLng = lng; if (lat > maxLat) maxLat = lat;
+  }
+  const lat0 = (minLat + maxLat) / 2, lng0 = (minLng + maxLng) / 2;
+  const { mLat, mLng } = fatores(lat0);
+  const projetar = (rings: [number, number][][]): Ring[] => rings.map(r => r.map(([lng, lat]) => [(lng - lng0) * mLng, (lat - lat0) * mLat] as [number, number]));
+
+  const L = Math.sqrt(densidadeHaPonto * 10000); // lado da célula (m)
+  const ang = (rotacaoGraus * Math.PI) / 180;
+  const cos = Math.cos(ang), sin = Math.sin(ang);
+  const toGrid = (x: number, y: number): [number, number] => [x * cos + y * sin, -x * sin + y * cos];
+
+  // componentes (anéis em metros locais)
+  const partes: Parte[] = coletarComponentes(geojson).map(projetar).filter(p => p.length > 0);
+  if (partes.length === 0) return [];
+
+  // bbox global no espaço da grade (referencial compartilhado p/ alinhar a grade)
+  let minU = Infinity, minV = Infinity, maxU = -Infinity, maxV = -Infinity;
+  for (const parte of partes) for (const r of parte) for (const [x, y] of r) {
+    const [u, v] = toGrid(x, y);
+    if (u < minU) minU = u; if (v < minV) minV = v;
+    if (u > maxU) maxU = u; if (v > maxV) maxV = v;
+  }
+
+  // passo fino o bastante para resolver a faixa de borda (≤ borda/2), com teto
+  const TETO = 12000;
+  let passo = Math.max(2, Math.min(L / 4, distanciaBordaM > 0 ? distanciaBordaM / 2 : L / 4));
+  const larguraU = Math.max(passo, maxU - minU), larguraV = Math.max(passo, maxV - minV);
+  while ((larguraU / passo) * (larguraV / passo) > TETO) passo *= 1.4;
+  const probesPorCelula = Math.max(1, (L / passo) * (L / passo));
+
+  const frame: Frame = { minU, minV, L, passo, probesPorCelula, cos, sin };
+  const rng = mulberry32(seed);
+
+  // agrupa partes que se tocam em campos; cada campo é gerado isolado
+  const campos = agruparCampos(partes, 3); // partes a < 3 m = mesmo campo
+  const todos: { x: number; y: number }[] = [];
+  for (const campo of campos) {
+    const aneis = campo.flat();
+    const segs = bordasDoCampo(campo);
+    const area = campo.reduce((s, parte) => s + areaComponente(parte), 0);
+    const N = Math.max(1, Math.round(area / (densidadeHaPonto * 10000)));
+    for (const c of centrosDeComponente(aneis, segs, N, modo, distanciaBordaM, aleatoriedade, rng, frame)) todos.push(c);
+  }
+  if (todos.length === 0) return [];
+
+  // numeração serpentina global (linhas no espaço da grade alternam direção)
+  const arr = todos.map(p => { const [u, v] = toGrid(p.x, p.y); return { p, row: Math.round((v - minV) / L), u }; });
   arr.sort((a, b) => a.row - b.row || (a.row % 2 === 0 ? a.u - b.u : b.u - a.u));
 
-  return arr.map((c, i) => ({
-    lng: c.p.x / mLng + lng0,
-    lat: c.p.y / mLat + lat0,
-    ordem: i,
-  }));
+  return arr.map((c, i) => ({ lng: c.p.x / mLng + lng0, lat: c.p.y / mLat + lat0, ordem: i }));
 }

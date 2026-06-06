@@ -1,6 +1,11 @@
-export const APP_VERSION = '0.16.7';
+export const APP_VERSION = '0.16.8';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.16.8': [
+    'Grid: cada pedaço disjunto do limite recebe pontos (≥1, conforme a área) — antes pedaços separados ficavam sem ponto',
+    'Partes encostadas (talhão dividido em vários polígonos) viram um campo só: divisas internas não contam como borda (sem vãos internos)',
+    'Distância da borda medida só pelo contorno externo do campo',
+  ],
   '0.16.7': [
     'Fix: modo Grade agora é malha alinhada de verdade (ponto no centro da célula; encaixa para dentro só nas bordas)',
     'Fix: distância da borda respeitada nas zonas (amostragem fina o bastante; antes colapsava em zonas médias/pequenas)',
