@@ -7,7 +7,7 @@ import { parseGeoFile, normalizarZonas } from '@/lib/geo';
 import { classeZona } from '@/lib/zonas';
 import { AmostragemModulo } from '@/components/talhao/AmostragemModulo';
 import {
-  ChevronLeft, Grid3x3, TestTube, QrCode, Leaf,
+  ChevronLeft, Grid3x3, TestTube, Leaf,
   Satellite, Zap, BarChart3, Layers, FileSpreadsheet,
   FileText, ChevronDown, ChevronRight, Play, Upload, Download,
   CheckCircle2, AlertTriangle, MapPin, Plus, X, Save,
@@ -523,16 +523,6 @@ export function TalhaoDetailPanel() {
           </div>
         </AccordionSection>
 
-        {/* QR Code */}
-        <AccordionSection title="QR Code e Etiquetas" icon={QrCode} color="#34d399">
-          <div className="py-1">
-            <SelectField placeholder="Selecionar campanha de amostragem..." />
-            <InnerRow label="Etiquetas disponíveis" value="24" sub="Campanha Ago/2024" />
-            <InnerRow label="Profundidades" value="0–10 / 10–20 cm" />
-            <InnerBtn label="Gerar Etiquetas PDF" icon={<Download size={11} />} color="#065f46" />
-          </div>
-        </AccordionSection>
-
         {/* Fertilidade */}
         <AccordionSection title="Fertilidade" icon={Leaf} color="#4ade80">
           <div className="py-1">
@@ -604,28 +594,6 @@ export function TalhaoDetailPanel() {
             </div>
             <InnerBtn label="Importar e Limpar Outliers" icon={<Play size={11} />} color="#9d174d" />
             <InnerRow label="Soja 24/25" value="62,4 sc/ha" sub="Mapa limpo · Fev/2025" />
-          </div>
-        </AccordionSection>
-
-        {/* Zonas de Manejo */}
-        <AccordionSection title="Zonas de Manejo" icon={Layers} color="#c084fc">
-          <div className="py-1">
-            <p className="px-6 py-1 text-[10px] uppercase tracking-wider" style={{ color: '#475569' }}>Camadas</p>
-            {['CE', 'NDVI Histórico', 'Fertilidade', 'Produtividade'].map(c => (
-              <div key={c} className="flex items-center gap-2 px-6 py-1.5 text-xs"
-                style={{ color: '#94a3b8', borderBottom: '1px solid #0f2240' }}>
-                <input type="checkbox" className="accent-purple-500" defaultChecked={c === 'CE'} /> {c}
-              </div>
-            ))}
-            <p className="px-6 py-1 text-[10px] uppercase tracking-wider mt-1" style={{ color: '#475569' }}>Número de zonas</p>
-            <div className="flex gap-1.5 px-6 py-2">
-              {[2, 3, 4, 5].map(n => (
-                <button key={n} className="flex-1 py-1 rounded text-xs font-bold"
-                  style={{ background: n === 4 ? '#7c3aed' : '#1a3a6b', color: '#fff' }}>{n}</button>
-              ))}
-            </div>
-            <InnerBtn label="Gerar Zonas de Manejo" icon={<Play size={11} />} color="#6d28d9" />
-            <InnerRow label="Versão atual: v2" value="4 zonas" sub="CE + NDVI · Ago/2024" />
           </div>
         </AccordionSection>
 

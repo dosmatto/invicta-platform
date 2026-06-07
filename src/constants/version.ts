@@ -1,6 +1,9 @@
-export const APP_VERSION = '0.16.13';
+export const APP_VERSION = '0.16.14';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.16.14': [
+    'Limpeza: removidos do talhão os accordions duplicados "Zonas de Manejo" e "QR Code e Etiquetas" — as funções reais já estão em Amostragem (Grid/Zona, etiquetas Pimaco)',
+  ],
   '0.16.13': [
     'Z3 Zonas — salvar grades de zonas (várias por safra, uma para processar) e exportar KML/Shapefile',
     'Exportação inclui os pontos numerados + os polígonos das zonas (nomeados por id/classe)',
