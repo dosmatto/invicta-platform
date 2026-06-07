@@ -1,6 +1,9 @@
-export const APP_VERSION = '0.16.14';
+export const APP_VERSION = '0.16.15';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.16.15': [
+    'Limpeza: removidos 12 painéis órfãos (código morto, não importados em lugar nenhum) — Amostragem, Fazendas, Talhões, Fertilidade, NDVI, Condutividade, Produtividade, QR Code, Relatórios, Mapas de Aplicação, Laboratórios, Zonas',
+  ],
   '0.16.14': [
     'Limpeza: removidos do talhão os accordions duplicados "Zonas de Manejo" e "QR Code e Etiquetas" — as funções reais já estão em Amostragem (Grid/Zona, etiquetas Pimaco)',
   ],
