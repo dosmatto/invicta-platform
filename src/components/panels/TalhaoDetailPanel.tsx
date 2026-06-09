@@ -7,6 +7,8 @@ import { parseGeoFile, normalizarZonas } from '@/lib/geo';
 import { classeZona } from '@/lib/zonas';
 import { AmostragemModulo } from '@/components/talhao/AmostragemModulo';
 import { LabImportSection } from '@/components/talhao/LabImportSection';
+import { ImportarGradeSection } from '@/components/talhao/ImportarGradeSection';
+import { FertilidadeSection } from '@/components/talhao/FertilidadeSection';
 import {
   ChevronLeft, Grid3x3, TestTube, Leaf,
   Satellite, Zap, BarChart3, Layers, FileSpreadsheet,
@@ -507,6 +509,11 @@ export function TalhaoDetailPanel() {
           <AmostragemModulo />
         </AccordionSection>
 
+        {/* Importar Grade (arquivo externo) */}
+        <AccordionSection title="Importar Grade" icon={Upload} color="#22d3ee">
+          <ImportarGradeSection />
+        </AccordionSection>
+
         {/* Laboratório */}
         <AccordionSection title="Importação Laboratório" icon={TestTube} color="#a78bfa">
           <LabImportSection />
@@ -514,29 +521,7 @@ export function TalhaoDetailPanel() {
 
         {/* Fertilidade */}
         <AccordionSection title="Fertilidade" icon={Leaf} color="#4ade80">
-          <div className="py-1">
-            <p className="px-6 py-1 text-[10px] uppercase tracking-wider" style={{ color: '#475569' }}>Fluxo</p>
-            {['Grid (Interpolação espacial)', 'Zonas de Manejo (valor por zona)'].map(f => (
-              <div key={f} className="flex items-center gap-2 px-6 py-1.5 text-xs"
-                style={{ color: '#94a3b8', borderBottom: '1px solid #0f2240' }}>
-                <input type="radio" name="fluxo-fert" className="accent-green-500" defaultChecked={f.startsWith('Grid')} />
-                {f}
-              </div>
-            ))}
-            <SelectField placeholder="Metodologia / Legenda..." />
-            <SelectField placeholder="Profundidade..." />
-            <p className="px-6 py-1 text-[10px] uppercase tracking-wider mt-1" style={{ color: '#475569' }}>Nutriente</p>
-            <div className="flex flex-wrap gap-1 px-6 py-2">
-              {['pH', 'P', 'K', 'Ca', 'Mg', 'V%', 'MO', 'B', 'Zn'].map((n, i) => (
-                <button key={n} className="px-2 py-1 rounded text-[10px] font-bold"
-                  style={{ background: i === 1 ? 'var(--invicta-blue-mid)' : '#1a3a6b', color: i === 1 ? '#fff' : '#64748b' }}>
-                  {n}
-                </button>
-              ))}
-            </div>
-            <InnerBtn label="Processar Fertilidade" icon={<Play size={11} />} color="#166534" />
-            <InnerRow label="Último processamento" value="Set/2024" sub="P · Grid · Embrapa Cerrado" />
-          </div>
+          <FertilidadeSection />
         </AccordionSection>
 
         {/* NDVI / Satélite */}

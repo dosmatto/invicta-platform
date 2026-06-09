@@ -12,6 +12,12 @@ export type PontoEvent =
   | { tipo: 'remover'; ordem: number };
 // Clique numa zona de manejo no mapa (rótulo da zona)
 export type ZonaEvent = { rotulo: string };
+// Overlay raster do mapa de fertilidade (imagem interpolada recortada no talhão)
+export interface FertilidadeOverlay {
+  url: string; // data URL do PNG
+  coordinates: [[number, number], [number, number], [number, number], [number, number]];
+  opacity: number;
+}
 
 interface NavContext {
   produtorId: string | null;
@@ -55,6 +61,11 @@ interface AppContextType {
   // Clique numa zona de manejo (ajuste de densidade por zona)
   zonaEvent: ZonaEvent | null;
   setZonaEvent: (e: ZonaEvent | null) => void;
+  // Mapa de fertilidade — raster interpolado + rótulos de valor por ponto
+  fertilidadeOverlay: FertilidadeOverlay | null;
+  setFertilidadeOverlay: (o: FertilidadeOverlay | null) => void;
+  fertilidadeLabels: GeoJSON.FeatureCollection | null;
+  setFertilidadeLabels: (fc: GeoJSON.FeatureCollection | null) => void;
 }
 
 const AppContext = createContext<AppContextType>({
@@ -84,6 +95,10 @@ const AppContext = createContext<AppContextType>({
   setPontoEvent: () => {},
   zonaEvent: null,
   setZonaEvent: () => {},
+  fertilidadeOverlay: null,
+  setFertilidadeOverlay: () => {},
+  fertilidadeLabels: null,
+  setFertilidadeLabels: () => {},
 });
 
 export function AppProvider({ children }: { children: ReactNode }) {
@@ -102,6 +117,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [edicaoModo, setEdicaoModo] = useState<EdicaoModo>('mover');
   const [pontoEvent, setPontoEvent] = useState<PontoEvent | null>(null);
   const [zonaEvent, setZonaEvent] = useState<ZonaEvent | null>(null);
+  const [fertilidadeOverlay, setFertilidadeOverlay] = useState<FertilidadeOverlay | null>(null);
+  const [fertilidadeLabels, setFertilidadeLabels] = useState<GeoJSON.FeatureCollection | null>(null);
   const [nav, setNavState] = useState<NavContext>({
     produtorId: null, produtor: '',
     fazendaId: null, fazenda: '',
@@ -128,6 +145,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       edicaoModo, setEdicaoModo,
       pontoEvent, setPontoEvent,
       zonaEvent, setZonaEvent,
+      fertilidadeOverlay, setFertilidadeOverlay,
+      fertilidadeLabels, setFertilidadeLabels,
     }}>
       {children}
     </AppContext.Provider>

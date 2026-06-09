@@ -75,6 +75,7 @@ export interface PadraoAmostragem {
 
 export interface PontoAmostragem {
   ordem: number;          // índice serpentina (0-based)
+  numero?: number;        // nº da amostra (grade importada de fora); join com lab usa numero ?? ordem+1
   lng: number;
   lat: number;
   profs: number;          // nº de profundidades (define a cor)

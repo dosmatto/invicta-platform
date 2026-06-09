@@ -5,6 +5,8 @@ import { PanelSection, PanelRow } from './_shared';
 import { APP_VERSION, CHANGELOG } from '@/constants/version';
 import { EtiquetaLayoutPicker } from '../talhao/EtiquetaLayoutPicker';
 import { getConfigEtiqueta, saveConfigEtiqueta } from '@/lib/store';
+import { useApp } from '@/context/AppContext';
+import { carregarTalhaoTeste } from '@/lib/teste';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 
 export function ConfiguracoesPanel() {
@@ -13,6 +15,20 @@ export function ConfiguracoesPanel() {
   const [mostrarAnteriores, setMostrarAnteriores] = useState(false);
   const [abertos, setAbertos] = useState<Record<string, boolean>>({});
   const [etq, setEtq] = useState(() => getConfigEtiqueta());
+
+  const { setNav, setActivePanel, setUploadedGeo, setUploadedBbox, setMapMode } = useApp();
+  const [carregandoTeste, setCarregandoTeste] = useState(false);
+  const [erroTeste, setErroTeste] = useState('');
+  async function carregarTeste() {
+    setCarregandoTeste(true); setErroTeste('');
+    try {
+      const t = await carregarTalhaoTeste();
+      setNav({ produtorId: t.produtorId, produtor: t.produtor, fazendaId: t.fazendaId, fazenda: t.fazenda, talhaoId: t.talhaoId, talhao: t.talhao, safra: t.safra, area: t.area });
+      setUploadedGeo(t.geojson); setUploadedBbox(t.bbox); setMapMode('satellite');
+      setActivePanel(`talhao-${t.talhaoId}`);
+    } catch (e) { setErroTeste(e instanceof Error ? e.message : 'Erro ao carregar.'); }
+    finally { setCarregandoTeste(false); }
+  }
 
   function atualizarEtq(patch: Partial<typeof etq>) {
     const novo = { ...etq, ...patch };
@@ -41,6 +57,20 @@ export function ConfiguracoesPanel() {
             dx={etq.dx} dy={etq.dy}
             setDx={v => atualizarEtq({ dx: v })} setDy={v => atualizarEtq({ dy: v })}
           />
+        </div>
+      </PanelSection>
+
+      <PanelSection title="Dados de teste">
+        <div className="px-4 py-3 space-y-2">
+          <p className="text-[10px]" style={{ color: 'var(--sidebar-section)' }}>
+            Cria o talhão <strong style={{ color: '#e2e8f0' }}>IGEFI 07</strong> (polígono + 39 pontos + análise Fundação ABC) para testar a interpolação de fertilidade.
+          </p>
+          <button onClick={carregarTeste} disabled={carregandoTeste}
+            className="w-full py-1.5 rounded text-[11px] font-bold text-white"
+            style={{ background: carregandoTeste ? '#1a3a6b' : 'var(--invicta-green-dark)' }}>
+            {carregandoTeste ? 'Carregando…' : 'Carregar talhão-teste IGEFI 07'}
+          </button>
+          {erroTeste && <p className="text-[10px]" style={{ color: '#f87171' }}>{erroTeste}</p>}
         </div>
       </PanelSection>
 

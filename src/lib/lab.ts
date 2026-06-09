@@ -206,6 +206,14 @@ export const PERFIS_BUILTIN: PerfilLabBuiltin[] = [
     },
   },
   {
+    id: 'fundacao-abc-planilha',
+    nome: 'Fundação ABC (planilha)',
+    config: {
+      linhaCabecalho: 1, colId: 0, regexNumero: '(\\d+)', colProfundidade: 1,
+      elementos: { p: 2, mo: 3, ph: 4, al: 5, k: 6, ca: 7, mg: 8, ctc: 9, v: 10, m: 11, textura: 13, s: 14, b: 15, cu: 16, mn: 18, zn: 19 },
+    },
+  },
+  {
     id: 'interpartner-antigo',
     nome: 'Interpartner (antigo)',
     config: {
@@ -220,5 +228,5 @@ export const PERFIS_BUILTIN: PerfilLabBuiltin[] = [
 
 // nº de pontos da grade (para informar casamento na UI)
 export function numerosDaGrade(grade: GradeAmostragem | null): Set<number> {
-  return new Set((grade?.pontos ?? []).map(p => p.ordem + 1));
+  return new Set((grade?.pontos ?? []).map(p => p.numero ?? p.ordem + 1));
 }

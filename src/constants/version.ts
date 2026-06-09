@@ -1,6 +1,19 @@
-export const APP_VERSION = '0.16.17';
+export const APP_VERSION = '0.18.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.18.0': [
+    'Importar grade feita fora da plataforma (Shapefile .zip / KML / GeoJSON de pontos) — preserva o número de cada ponto para casar com o laboratório',
+    'Número da amostra desacoplado do índice serpentina (PontoAmostragem.numero); join da fertilidade usa numero ?? ordem+1',
+    'Perfil de laboratório "Fundação ABC (planilha)" para o XLSX limpo (1 coluna por elemento)',
+    'Botão "Carregar talhão-teste IGEFI 07" (Configurações) — polígono + 39 pontos + análise ABC, ponta a ponta na interpolação',
+    'Fertilidade: interpolador é escolha explícita (Krigagem | IDW) — sem troca automática para IDW',
+  ],
+  '0.17.0': [
+    'Mapa de Fertilidade por interpolação — krigagem ordinária (variograma auto-ajustado: esférico/exponencial/gaussiano) com fallback IDW',
+    'Recorte no polígono do talhão e raster colorido por gradiente contínuo ancorado nas classes da Base Agronômica; valor da amostra exibido em cada ponto',
+    'Uma interpolação por profundidade; liga resultados de laboratório aos pontos da grade (nº = ordem+1); opacidade ajustável',
+    'Backend Python local (FastAPI + PyKrige/Shapely/Pillow) em backend/ — rode backend\\start.bat',
+  ],
   '0.16.17': [
     'Importação de laboratório avançada — perfis Fundação ABC e Interpartner prontos (validados em arquivos reais)',
     'Lê nº do ponto/talhão/profundidade de dentro do texto, filtra por talhão (arquivo multi-talhão) e separa por campanha',

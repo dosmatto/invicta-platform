@@ -51,6 +51,7 @@ export function MapView() {
           uploadedGeo, setUploadedGeo,
           uploadedBbox, setUploadedBbox,
           pontosSimulados, talhoesFazenda, zonasManejo,
+          fertilidadeOverlay, fertilidadeLabels,
           edicaoAtiva, edicaoModo, setPontoEvent, setZonaEvent } = useApp();
 
   const [kmlLoading, setKmlLoading] = useState(false);
@@ -128,6 +129,12 @@ export function MapView() {
       map.addLayer({ id: 'pontos-label',  type: 'symbol', source: 'pontos-amos',
         layout: { 'text-field': ['get','label'], 'text-size': 9, 'text-offset': [0,1.3], 'text-font': ['Open Sans Bold'] },
         paint:  { 'text-color': '#fff', 'text-halo-color': '#000', 'text-halo-width': 1.2 } });
+
+      // Rótulos de valor da fertilidade (valor da variável em cada ponto de amostragem)
+      map.addSource('fert-labels', { type: 'geojson', data: EMPTY_FC });
+      map.addLayer({ id: 'fert-labels-text', type: 'symbol', source: 'fert-labels',
+        layout: { 'text-field': ['get','txt'], 'text-size': 11, 'text-font': ['Open Sans Bold'], 'text-allow-overlap': true },
+        paint:  { 'text-color': '#fff', 'text-halo-color': '#1e293b', 'text-halo-width': 2 } });
 
       map.resize(); // garante dimensões corretas após hidratação
       // Centro inicial = escritório (definido no construtor). Sem fitBounds aqui
@@ -299,6 +306,37 @@ export function MapView() {
       if (isFinite(minLng)) { map.resize(); map.fitBounds([[minLng, minLat], [maxLng, maxLat]], { padding: 50, duration: 0, maxZoom: 16 }); }
     }
   }, [zonasManejo, mapReady]);
+
+  // ── 6c. Overlay raster de fertilidade (image source dinâmico) ─────────────
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    const SRC = 'fert-raster', LYR = 'fert-raster-layer';
+    const existing = map.getSource(SRC) as maplibregl.ImageSource | undefined;
+    if (fertilidadeOverlay) {
+      const { url, coordinates, opacity } = fertilidadeOverlay;
+      if (!existing) {
+        map.addSource(SRC, { type: 'image', url, coordinates });
+        const beforeId = map.getLayer('pontos-circle') ? 'pontos-circle' : undefined;
+        map.addLayer({ id: LYR, type: 'raster', source: SRC,
+          paint: { 'raster-opacity': opacity, 'raster-fade-duration': 0 } }, beforeId);
+      } else {
+        existing.updateImage({ url, coordinates });
+        try { map.setPaintProperty(LYR, 'raster-opacity', opacity); } catch {}
+      }
+    } else if (existing) {
+      if (map.getLayer(LYR)) map.removeLayer(LYR);
+      map.removeSource(SRC);
+    }
+  }, [fertilidadeOverlay, mapReady]);
+
+  // ── 6d. Rótulos de valor da fertilidade (setData) ─────────────────────────
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    const src = map.getSource('fert-labels') as maplibregl.GeoJSONSource | undefined;
+    if (src) src.setData(fertilidadeLabels ?? EMPTY_FC);
+  }, [fertilidadeLabels, mapReady]);
 
   // ── 7. Edição manual de pontos (arrastar / adicionar / remover) ───────────
   useEffect(() => {
