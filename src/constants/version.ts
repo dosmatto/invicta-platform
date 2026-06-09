@@ -1,6 +1,11 @@
-export const APP_VERSION = '0.16.16';
+export const APP_VERSION = '0.16.17';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.16.17': [
+    'Importação de laboratório avançada — perfis Fundação ABC e Interpartner prontos (validados em arquivos reais)',
+    'Lê nº do ponto/talhão/profundidade de dentro do texto, filtra por talhão (arquivo multi-talhão) e separa por campanha',
+    'CSV lido nativamente (Latin-1 + ;, sem coerção de data), XLS/XLSX via SheetJS; auto-detecção para labs novos',
+  ],
   '0.16.16': [
     'Importação de resultados de laboratório (XLSX/CSV) ligados aos pontos da grade',
     'Auto-detecção das colunas + mapeamento manual por coluna; perfil salvo por laboratório (Fundação ABC, Interpartner, …) — adicionar lab = mapear uma vez',

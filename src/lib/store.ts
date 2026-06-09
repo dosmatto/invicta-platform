@@ -2,7 +2,7 @@
 
 // Store local com localStorage — temporário até integração com banco real
 
-import type { ResultadoAmostra } from './lab';
+import type { ResultadoAmostra, PerfilLabConfig } from './lab';
 
 export interface Cliente {
   id: string;
@@ -326,8 +326,8 @@ export function saveConfigEtiqueta(c: ConfigEtiqueta) {
 // ── Laboratório: perfis de mapeamento + importações de resultados ───────────
 export interface PerfilLab {
   id: string;
-  nome: string;                       // ex: "Fundação ABC"
-  atribuicao: Record<string, string>; // header -> 'numero'|'profundidade'|elementId|'ignorar'
+  nome: string;              // ex: "Fundação ABC"
+  config: PerfilLabConfig;   // de-para de colunas + extração (ver lib/lab.ts)
   criadoEm: string;
 }
 
@@ -337,6 +337,7 @@ export interface ImportacaoLab {
   safra: string;
   gradeId: string;
   laboratorio: string;
+  campanha?: string;
   resultados: ResultadoAmostra[];
   elementos: string[];
   criadoEm: string;
@@ -347,15 +348,15 @@ export function getPerfisLab(): PerfilLab[] {
 }
 
 // Cria ou atualiza o perfil pelo nome do laboratório (upsert).
-export function salvarPerfilLab(nome: string, atribuicao: Record<string, string>): PerfilLab {
+export function salvarPerfilLab(nome: string, config: PerfilLabConfig): PerfilLab {
   const lista = load<PerfilLab>('inv_lab_perfis');
   const idx = lista.findIndex(p => p.nome.toLowerCase() === nome.trim().toLowerCase());
   if (idx >= 0) {
-    lista[idx] = { ...lista[idx], atribuicao };
+    lista[idx] = { ...lista[idx], config };
     save('inv_lab_perfis', lista);
     return lista[idx];
   }
-  const novo: PerfilLab = { id: uid(), nome: nome.trim(), atribuicao, criadoEm: new Date().toISOString() };
+  const novo: PerfilLab = { id: uid(), nome: nome.trim(), config, criadoEm: new Date().toISOString() };
   lista.push(novo);
   save('inv_lab_perfis', lista);
   return novo;
