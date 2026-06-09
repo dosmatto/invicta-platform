@@ -6,6 +6,7 @@ import { getTalhoes, getSafras, saveSafra, updateTalhao, Talhao, Safra } from '@
 import { parseGeoFile, normalizarZonas } from '@/lib/geo';
 import { classeZona } from '@/lib/zonas';
 import { AmostragemModulo } from '@/components/talhao/AmostragemModulo';
+import { LabImportSection } from '@/components/talhao/LabImportSection';
 import {
   ChevronLeft, Grid3x3, TestTube, Leaf,
   Satellite, Zap, BarChart3, Layers, FileSpreadsheet,
@@ -508,19 +509,7 @@ export function TalhaoDetailPanel() {
 
         {/* Laboratório */}
         <AccordionSection title="Importação Laboratório" icon={TestTube} color="#a78bfa">
-          <div className="py-1">
-            <SelectField placeholder="Selecionar laboratório parceiro..." />
-            <SelectField placeholder="Selecionar campanha de amostragem..." />
-            <div className="mx-4 my-2 border-2 border-dashed rounded-lg py-4 text-center"
-              style={{ borderColor: '#1a3a6b' }}>
-              <Upload size={16} className="mx-auto mb-1" style={{ color: '#475569' }} />
-              <p className="text-[10px]" style={{ color: '#475569' }}>Arraste XLSX / CSV aqui</p>
-            </div>
-            <InnerBtn label="Importar Resultados" icon={<Upload size={11} />} color="#7c3aed" />
-            <p className="px-6 py-1 text-[10px] uppercase tracking-wider mt-1" style={{ color: '#475569' }}>Importações</p>
-            <InnerRow label="Laborsolo — Ago/2024" value="Importado" sub="24 amostras · 2 profundidades" />
-            <InnerRow label="Soloanalise — Out/2024" value="Aguardando" sub="30 amostras" />
-          </div>
+          <LabImportSection />
         </AccordionSection>
 
         {/* Fertilidade */}

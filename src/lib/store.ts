@@ -2,6 +2,8 @@
 
 // Store local com localStorage — temporário até integração com banco real
 
+import type { ResultadoAmostra } from './lab';
+
 export interface Cliente {
   id: string;
   nome: string;
@@ -319,6 +321,67 @@ export function getConfigEtiqueta(): ConfigEtiqueta {
 export function saveConfigEtiqueta(c: ConfigEtiqueta) {
   if (typeof window === 'undefined') return;
   localStorage.setItem(ETQ_KEY, JSON.stringify(c));
+}
+
+// ── Laboratório: perfis de mapeamento + importações de resultados ───────────
+export interface PerfilLab {
+  id: string;
+  nome: string;                       // ex: "Fundação ABC"
+  atribuicao: Record<string, string>; // header -> 'numero'|'profundidade'|elementId|'ignorar'
+  criadoEm: string;
+}
+
+export interface ImportacaoLab {
+  id: string;
+  talhaoId: string;
+  safra: string;
+  gradeId: string;
+  laboratorio: string;
+  resultados: ResultadoAmostra[];
+  elementos: string[];
+  criadoEm: string;
+}
+
+export function getPerfisLab(): PerfilLab[] {
+  return load<PerfilLab>('inv_lab_perfis').sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+}
+
+// Cria ou atualiza o perfil pelo nome do laboratório (upsert).
+export function salvarPerfilLab(nome: string, atribuicao: Record<string, string>): PerfilLab {
+  const lista = load<PerfilLab>('inv_lab_perfis');
+  const idx = lista.findIndex(p => p.nome.toLowerCase() === nome.trim().toLowerCase());
+  if (idx >= 0) {
+    lista[idx] = { ...lista[idx], atribuicao };
+    save('inv_lab_perfis', lista);
+    return lista[idx];
+  }
+  const novo: PerfilLab = { id: uid(), nome: nome.trim(), atribuicao, criadoEm: new Date().toISOString() };
+  lista.push(novo);
+  save('inv_lab_perfis', lista);
+  return novo;
+}
+
+export function deletePerfilLab(id: string) {
+  save('inv_lab_perfis', load<PerfilLab>('inv_lab_perfis').filter(p => p.id !== id));
+}
+
+export function getImportacoesLab(talhaoId?: string, safra?: string): ImportacaoLab[] {
+  let all = load<ImportacaoLab>('inv_lab');
+  if (talhaoId) all = all.filter(i => i.talhaoId === talhaoId);
+  if (safra) all = all.filter(i => i.safra === safra);
+  return all.sort((a, b) => b.criadoEm.localeCompare(a.criadoEm));
+}
+
+export function saveImportacaoLab(i: Omit<ImportacaoLab, 'id' | 'criadoEm'>): ImportacaoLab {
+  const lista = load<ImportacaoLab>('inv_lab');
+  const nova: ImportacaoLab = { ...i, id: uid(), criadoEm: new Date().toISOString() };
+  lista.push(nova);
+  save('inv_lab', lista);
+  return nova;
+}
+
+export function deleteImportacaoLab(id: string) {
+  save('inv_lab', load<ImportacaoLab>('inv_lab').filter(i => i.id !== id));
 }
 
 export function clearAll() {

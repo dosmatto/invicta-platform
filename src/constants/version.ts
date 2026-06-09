@@ -1,6 +1,11 @@
-export const APP_VERSION = '0.16.15';
+export const APP_VERSION = '0.16.16';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.16.16': [
+    'Importação de resultados de laboratório (XLSX/CSV) ligados aos pontos da grade',
+    'Auto-detecção das colunas + mapeamento manual por coluna; perfil salvo por laboratório (Fundação ABC, Interpartner, …) — adicionar lab = mapear uma vez',
+    'Elementos alinhados à Base Agronômica (pH, P, K, Ca, Mg, Al, CTC, V%, m%, MO, S, B, Zn, Cu, Mn, textura); números PT/US',
+  ],
   '0.16.15': [
     'Limpeza: removidos 12 painéis órfãos (código morto, não importados em lugar nenhum) — Amostragem, Fazendas, Talhões, Fertilidade, NDVI, Condutividade, Produtividade, QR Code, Relatórios, Mapas de Aplicação, Laboratórios, Zonas',
   ],
