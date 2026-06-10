@@ -1,6 +1,6 @@
 """API de interpolacao de fertilidade (FastAPI).
 
-Roda local: `python -m uvicorn app:app --host 127.0.0.1 --port 8000`
+Roda local: `python -m uvicorn app:app --host 127.0.0.1 --port 8800`
 ou use o start.ps1 / start.bat desta pasta.
 """
 from __future__ import annotations
@@ -15,7 +15,7 @@ import interp
 
 app = FastAPI(title="INVICTA - Interpolacao de Fertilidade", version="0.1.0")
 
-# Local: front em localhost:3000 chama este servico em 127.0.0.1:8000.
+# Local: front em localhost:3100 chama este servico em 127.0.0.1:8800.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],

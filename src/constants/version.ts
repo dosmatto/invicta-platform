@@ -1,6 +1,14 @@
-export const APP_VERSION = '0.18.0';
+export const APP_VERSION = '0.19.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.19.0': [
+    'Fertilidade: "Processar todos" os nutrientes de uma vez, com barra de progresso',
+    'Troca instantânea entre nutrientes no mapa (cache por nutriente; ✓ marca os já prontos) sem reprocessar',
+  ],
+  '0.18.1': [
+    'Backend de fertilidade movido para a porta 8800 (evita conflito com o Django em :8000)',
+    'Front (npm run dev) na porta 3100, para não colidir com outros projetos Next em :3000',
+  ],
   '0.18.0': [
     'Importar grade feita fora da plataforma (Shapefile .zip / KML / GeoJSON de pontos) — preserva o número de cada ponto para casar com o laboratório',
     'Número da amostra desacoplado do índice serpentina (PontoAmostragem.numero); join da fertilidade usa numero ?? ordem+1',

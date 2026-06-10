@@ -6,7 +6,7 @@
 
 import { LEGENDAS_PADRAO, CORES_CLASSES, type LegendaNutriente } from '@/constants/agronomica';
 
-const INTERP_URL = process.env.NEXT_PUBLIC_INTERP_URL ?? 'http://127.0.0.1:8000';
+const INTERP_URL = process.env.NEXT_PUBLIC_INTERP_URL ?? 'http://127.0.0.1:8800';
 
 export type Stop = [number, [number, number, number]];
 

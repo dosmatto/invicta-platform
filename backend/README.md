@@ -18,11 +18,11 @@ backend\start.bat
 (Na primeira vez ele cria o ambiente em `%LOCALAPPDATA%\invicta-fert-backend` e
 instala as dependencias. Depois e so subir.)
 
-Servico em `http://127.0.0.1:8000` — `GET /health`, `POST /interpolar`.
+Servico em `http://127.0.0.1:8800` — `GET /health`, `POST /interpolar`.
 
 ## Conexao com o front
 
-O front usa `NEXT_PUBLIC_INTERP_URL` (padrao `http://127.0.0.1:8000`).
+O front usa `NEXT_PUBLIC_INTERP_URL` (padrao `http://127.0.0.1:8800`).
 Para producao, suba o mesmo codigo em container e aponte essa variavel.
 
 ## Contrato `POST /interpolar`

@@ -11,6 +11,6 @@ if (-not (Test-Path $py)) {
   & $py -m pip install -r (Join-Path $here "requirements.txt")
 }
 
-Write-Host "Backend de fertilidade em http://127.0.0.1:8000  (Ctrl+C para parar)" -ForegroundColor Green
+Write-Host "Backend de fertilidade em http://127.0.0.1:8800  (Ctrl+C para parar)" -ForegroundColor Green
 Set-Location $here
-& $py -m uvicorn app:app --host 127.0.0.1 --port 8000
+& $py -m uvicorn app:app --host 127.0.0.1 --port 8800

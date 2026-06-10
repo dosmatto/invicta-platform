@@ -7,10 +7,15 @@ import {
   interpolar, rampaDaLegenda, gradienteCss, coordsFromBounds, extrairPoligono, legendaPorId,
   type RespInterp,
 } from '@/lib/fertilidade';
-import { Play, Loader2, Eraser, AlertTriangle, Activity } from 'lucide-react';
+import { Play, Layers, Loader2, Eraser, AlertTriangle, Activity } from 'lucide-react';
 
 const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
 const fmt = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits: 1 });
+
+type Ponto = { lng: number; lat: number; valor: number };
+type MapaPronto = { resp: RespInterp; labels: GeoJSON.FeatureCollection };
+// chave do cache = nutriente + profundidade (cada combinação é um mapa)
+const ck = (nut: string, prof: string) => `${nut}__${prof}`;
 
 export function FertilidadeSection() {
   const { nav, uploadedGeo, setFertilidadeOverlay, setFertilidadeLabels } = useApp();
@@ -20,13 +25,15 @@ export function FertilidadeSection() {
 
   const [importacoes, setImportacoes] = useState<ImportacaoLab[]>([]);
   const [importacaoId, setImportacaoId] = useState('');
-  const [nutriente, setNutriente] = useState('');
-  const [profundidade, setProfundidade] = useState('');
+  const [nutriente, setNutriente] = useState('');        // nutriente exibido
+  const [profundidade, setProfundidade] = useState('');  // profundidade exibida
   const [opacity, setOpacity] = useState(0.75);
   const [metodo, setMetodo] = useState<'krige' | 'idw'>('krige');
   const [estado, setEstado] = useState<'idle' | 'processando' | 'pronto' | 'erro'>('idle');
   const [erro, setErro] = useState('');
-  const [resultado, setResultado] = useState<{ resp: RespInterp; labels: GeoJSON.FeatureCollection } | null>(null);
+  const [progresso, setProgresso] = useState<{ atual: number; total: number; nome: string } | null>(null);
+  // cache dos mapas já interpolados (nutriente+profundidade) para a importação/método atual
+  const [cache, setCache] = useState<Record<string, MapaPronto>>({});
 
   useEffect(() => {
     if (nav.talhaoId && safraNome) setImportacoes(getImportacoesLab(nav.talhaoId, safraNome));
@@ -39,7 +46,6 @@ export function FertilidadeSection() {
     return getGrades(nav.talhaoId, safraNome).find(g => g.id === importacao.gradeId) ?? null;
   }, [importacao, nav.talhaoId, safraNome]);
 
-  // número da amostra (numero = ordem + 1) -> coordenada do ponto na grade
   const pontoPorNumero = useMemo(() => {
     const m = new Map<number, { lng: number; lat: number }>();
     (grade?.pontos ?? []).forEach(p => m.set(p.numero ?? p.ordem + 1, { lng: p.lng, lat: p.lat }));
@@ -49,7 +55,6 @@ export function FertilidadeSection() {
   const poligono = useMemo(() => {
     const p = extrairPoligono(uploadedGeo);
     if (p) return p;
-    // fallback: limite salvo no próprio talhão (ex.: talhão-teste / importado)
     if (!nav.talhaoId) return null;
     const t = getTalhoes().find(x => x.id === nav.talhaoId);
     if (t?.geojson) { try { return extrairPoligono(JSON.parse(t.geojson)); } catch {} }
@@ -61,6 +66,31 @@ export function FertilidadeSection() {
     () => (importacao ? [...new Set(importacao.resultados.map(r => r.profundidade).filter(Boolean))] : []),
     [importacao],
   );
+  const profsAll = profundidades.length ? profundidades : [profundidade];
+
+  // pontos (lng/lat/valor) de UM nutriente numa profundidade
+  function pontosDe(nut: string, prof: string): Ponto[] {
+    if (!importacao || !nut) return [];
+    const out: Ponto[] = [];
+    for (const r of importacao.resultados) {
+      if (r.profundidade !== prof) continue;
+      const v = r.valores[nut];
+      if (v == null || !isFinite(v)) continue;
+      const pt = pontoPorNumero.get(r.numero);
+      if (pt) out.push({ lng: pt.lng, lat: pt.lat, valor: v });
+    }
+    return out;
+  }
+  function fcLabels(pts: Ponto[]): GeoJSON.FeatureCollection {
+    return {
+      type: 'FeatureCollection',
+      features: pts.map(p => ({
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [p.lng, p.lat] },
+        properties: { txt: fmt(p.valor) },
+      })),
+    };
+  }
 
   // defaults ao trocar de importação
   useEffect(() => {
@@ -69,68 +99,74 @@ export function FertilidadeSection() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [importacaoId]);
 
-  // pontos efetivos (valor presente + número casado na grade + profundidade)
-  const pontosInterp = useMemo(() => {
-    if (!importacao || !nutriente) return [];
-    const out: { lng: number; lat: number; valor: number }[] = [];
-    for (const r of importacao.resultados) {
-      if (r.profundidade !== profundidade) continue;
-      const v = r.valores[nutriente];
-      if (v == null || !isFinite(v)) continue;
-      const pt = pontoPorNumero.get(r.numero);
-      if (!pt) continue;
-      out.push({ lng: pt.lng, lat: pt.lat, valor: v });
-    }
-    return out;
-  }, [importacao, nutriente, profundidade, pontoPorNumero]);
+  // trocar importação ou método invalida TODO o cache (profundidade NÃO — ficam todas em cache)
+  useEffect(() => { setCache({}); setEstado('idle'); setErro(''); }, [importacaoId, metodo]);
 
-  // limpa o mapa quando a seleção muda (evita raster desatualizado)
-  useEffect(() => { setResultado(null); setEstado('idle'); setErro(''); }, [importacaoId, nutriente, profundidade, metodo]);
-
-  // publica/atualiza overlay+rótulos no mapa conforme resultado/opacidade
+  // exibe no mapa o mapa do nutriente + profundidade selecionados (ou limpa)
   useEffect(() => {
-    if (resultado) {
-      setFertilidadeOverlay({ url: resultado.resp.png, coordinates: coordsFromBounds(resultado.resp.bounds), opacity });
-      setFertilidadeLabels(resultado.labels);
+    const r = cache[ck(nutriente, profundidade)];
+    if (r) {
+      setFertilidadeOverlay({ url: r.resp.png, coordinates: coordsFromBounds(r.resp.bounds), opacity });
+      setFertilidadeLabels(r.labels);
     } else {
       setFertilidadeOverlay(null);
       setFertilidadeLabels(null);
     }
-  }, [resultado, opacity, setFertilidadeOverlay, setFertilidadeLabels]);
+  }, [cache, nutriente, profundidade, opacity, setFertilidadeOverlay, setFertilidadeLabels]);
 
-  // limpa o mapa ao desmontar
   useEffect(() => () => { setFertilidadeOverlay(null); setFertilidadeLabels(null); }, [setFertilidadeOverlay, setFertilidadeLabels]);
 
+  const pontosInterp = useMemo(() => pontosDe(nutriente, profundidade), [nutriente, profundidade, importacao, pontoPorNumero]); // eslint-disable-line react-hooks/exhaustive-deps
   const leg = nutriente ? legendaPorId(nutriente) : undefined;
   const ramp = leg ? rampaDaLegenda(leg) : null;
 
+  async function processarUm(nut: string, prof: string) {
+    const l = legendaPorId(nut);
+    if (!l) throw new Error(`${nut}: sem legenda`);
+    const pts = pontosDe(nut, prof);
+    if (pts.length < 3) throw new Error(`${l.simbolo} ${prof}: menos de 3 pontos`);
+    const { dominio, stops } = rampaDaLegenda(l);
+    const resp = await interpolar({ pontos: pts, poligono: poligono!, dominio, stops, metodo });
+    setCache(c => ({ ...c, [ck(nut, prof)]: { resp, labels: fcLabels(pts) } }));
+  }
+
   async function processar() {
     if (!poligono) { setErro('Limite do talhão não encontrado — abra o talhão no mapa.'); setEstado('erro'); return; }
-    if (!leg || !ramp) { setErro('Selecione uma variável com legenda na Base Agronômica.'); setEstado('erro'); return; }
-    if (pontosInterp.length < 3) { setErro('Mínimo de 3 pontos com valor para interpolar.'); setEstado('erro'); return; }
+    if (!nutriente) { setErro('Selecione uma variável.'); setEstado('erro'); return; }
     setEstado('processando'); setErro('');
-    try {
-      const resp = await interpolar({ pontos: pontosInterp, poligono, dominio: ramp.dominio, stops: ramp.stops, metodo });
-      const labels: GeoJSON.FeatureCollection = {
-        type: 'FeatureCollection',
-        features: pontosInterp.map(p => ({
-          type: 'Feature',
-          geometry: { type: 'Point', coordinates: [p.lng, p.lat] },
-          properties: { txt: fmt(p.valor) },
-        })),
-      };
-      setResultado({ resp, labels });
-      setEstado('pronto');
-    } catch (e) {
-      setEstado('erro');
-      setErro(e instanceof Error ? e.message : 'Falha ao processar a interpolação.');
-    }
+    try { await processarUm(nutriente, profundidade); setEstado('pronto'); }
+    catch (e) { setEstado('erro'); setErro(e instanceof Error ? e.message : 'Falha ao processar.'); }
   }
+
+  // processa TODOS os nutrientes em TODAS as profundidades, de uma vez
+  async function processarTodos() {
+    if (!poligono) { setErro('Limite do talhão não encontrado — abra o talhão no mapa.'); setEstado('erro'); return; }
+    if (nutrientes.length === 0) return;
+    setEstado('processando'); setErro('');
+    const total = nutrientes.length * profsAll.length;
+    const falhas: string[] = [];
+    let i = 0;
+    for (const prof of profsAll) {
+      for (const nut of nutrientes) {
+        i++;
+        setProgresso({ atual: i, total, nome: `${legendaPorId(nut)?.simbolo ?? nut} ${prof}` });
+        try { await processarUm(nut, prof); } catch { falhas.push(`${legendaPorId(nut)?.simbolo ?? nut} ${prof}`); }
+      }
+    }
+    setProgresso(null);
+    setEstado(falhas.length === total ? 'erro' : 'pronto');
+    setErro(falhas.length ? `Não processou: ${falhas.join(', ')}.` : '');
+  }
+
+  function limpar() { setCache({}); setEstado('idle'); setErro(''); }
 
   if (!safraAtiva) return <div className="px-6 py-4"><Aviso texto="Defina uma safra ativa (no topo do talhão) para gerar o mapa de fertilidade." /></div>;
   if (importacoes.length === 0) return <div className="px-6 py-4"><Aviso texto="Importe resultados de laboratório (seção acima) — o mapa de fertilidade é gerado a partir deles." /></div>;
 
-  const stats = resultado?.resp.stats;
+  const processando = estado === 'processando';
+  const stats = cache[ck(nutriente, profundidade)]?.resp.stats;
+  const totalMapas = nutrientes.length * profsAll.length;
+  const feitosNaProf = nutrientes.filter(n => cache[ck(n, profundidade)]).length;
 
   return (
     <div className="px-4 py-3 space-y-3">
@@ -145,37 +181,7 @@ export function FertilidadeSection() {
 
       {importacao && (
         <>
-          {/* Variável */}
-          <div>
-            <label className="text-[10px] font-semibold block mb-1" style={{ color: '#64748b' }}>Variável</label>
-            {nutrientes.length === 0 ? (
-              <p className="text-[10px]" style={{ color: '#fbbf24' }}>Nenhuma variável desta importação tem legenda na Base Agronômica.</p>
-            ) : (
-              <div className="flex flex-wrap gap-1">
-                {nutrientes.map(id => {
-                  const sel = id === nutriente;
-                  return (
-                    <button key={id} onClick={() => setNutriente(id)} className="px-2 py-1 rounded text-[10px] font-bold"
-                      style={{ background: sel ? 'var(--invicta-blue-mid)' : '#1a3a6b', color: sel ? '#fff' : '#64748b' }}>
-                      {legendaPorId(id)?.simbolo ?? id}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* Profundidade */}
-          {profundidades.length > 0 && (
-            <div>
-              <label className="text-[10px] font-semibold block mb-0.5" style={{ color: '#64748b' }}>Profundidade (uma interpolação por profundidade)</label>
-              <select value={profundidade} onChange={e => setProfundidade(e.target.value)} className="w-full rounded px-2 py-1.5 text-xs outline-none" style={inputStyle}>
-                {profundidades.map(p => <option key={p} value={p}>{p}</option>)}
-              </select>
-            </div>
-          )}
-
-          {/* Interpolador (escolha explícita; sem troca automática) */}
+          {/* Interpolador */}
           <div>
             <label className="text-[10px] font-semibold block mb-1" style={{ color: '#64748b' }}>Interpolador</label>
             <div className="flex gap-1">
@@ -188,41 +194,79 @@ export function FertilidadeSection() {
             </div>
           </div>
 
-          {/* status de pontos / grade */}
+          {/* Processar */}
           {!poligono && <Aviso texto="Limite do talhão não carregado no mapa." />}
-          {!grade && importacao.gradeId && <Aviso texto="Grade vinculada a esta importação não foi encontrada." />}
-          <p className="text-[10px]" style={{ color: '#94a3b8' }}>
-            <strong style={{ color: pontosInterp.length >= 3 ? '#86efac' : '#fbbf24' }}>{pontosInterp.length}</strong> pontos com valor
-            {leg ? ` · ${leg.nome} (${leg.unidade})` : ''}
-          </p>
-
-          {/* Processar / Limpar */}
-          <div className="flex gap-2">
-            <button onClick={processar} disabled={estado === 'processando' || pontosInterp.length < 3 || !poligono}
-              className="flex-1 py-1.5 rounded text-[10px] font-bold text-white flex items-center justify-center gap-1"
-              style={{ background: (estado === 'processando' || pontosInterp.length < 3 || !poligono) ? '#1a3a6b' : 'var(--invicta-green-dark)', opacity: (pontosInterp.length < 3 || !poligono) ? 0.6 : 1 }}>
-              {estado === 'processando' ? <><Loader2 size={11} className="animate-spin" /> Interpolando…</> : <><Play size={11} /> Processar mapa</>}
-            </button>
-            {resultado && (
-              <button onClick={() => setResultado(null)} title="Limpar do mapa" className="px-2.5 py-1.5 rounded text-[10px] font-semibold flex items-center gap-1" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
-                <Eraser size={11} /> Limpar
-              </button>
-            )}
-          </div>
+          <button onClick={processarTodos} disabled={processando || !poligono || nutrientes.length === 0}
+            className="w-full py-2 rounded text-xs font-bold text-white flex items-center justify-center gap-1.5"
+            style={{ background: (processando || !poligono || nutrientes.length === 0) ? '#1a3a6b' : 'var(--invicta-green-dark)', opacity: (!poligono || nutrientes.length === 0) ? 0.6 : 1 }}>
+            {processando && progresso
+              ? <><Loader2 size={13} className="animate-spin" /> {progresso.nome} ({progresso.atual}/{progresso.total})</>
+              : <><Layers size={13} /> Processar tudo ({totalMapas} mapas)</>}
+          </button>
+          <button onClick={processar} disabled={processando || !poligono || !nutriente}
+            className="w-full py-1 rounded text-[10px] font-semibold flex items-center justify-center gap-1"
+            style={{ background: '#1a3a6b', color: '#93c5fd', opacity: (processando || !poligono || !nutriente) ? 0.6 : 1 }}>
+            <Play size={10} /> Processar só o selecionado
+          </button>
 
           {estado === 'erro' && <p className="text-[10px]" style={{ color: '#f87171' }}>{erro}</p>}
+          {erro && estado !== 'erro' && <p className="text-[10px]" style={{ color: '#fbbf24' }}>{erro}</p>}
 
-          {/* Resultado: legenda em gradiente + opacidade + variograma */}
+          {/* Profundidade — troca instantânea no mapa */}
+          {profundidades.length > 0 && (
+            <div>
+              <label className="text-[10px] font-semibold block mb-1" style={{ color: '#64748b' }}>Profundidade</label>
+              <div className="flex gap-1">
+                {profundidades.map(p => (
+                  <button key={p} onClick={() => setProfundidade(p)} className="flex-1 py-1 rounded text-[10px] font-bold"
+                    style={{ background: profundidade === p ? 'var(--invicta-blue-mid)' : '#1a3a6b', color: profundidade === p ? '#fff' : '#64748b' }}>
+                    {p}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Variáveis — clique para exibir (✓ = pronto nesta profundidade) */}
+          {nutrientes.length === 0 ? (
+            <p className="text-[10px]" style={{ color: '#fbbf24' }}>Nenhuma variável desta importação tem legenda na Base Agronômica.</p>
+          ) : (
+            <div>
+              <label className="text-[10px] font-semibold block mb-1" style={{ color: '#64748b' }}>
+                Variável no mapa {feitosNaProf > 0 && <span style={{ color: '#475569' }}>· {feitosNaProf}/{nutrientes.length} prontos</span>}
+              </label>
+              <div className="flex flex-wrap gap-1">
+                {nutrientes.map(id => {
+                  const sel = id === nutriente;
+                  const feito = !!cache[ck(id, profundidade)];
+                  return (
+                    <button key={id} onClick={() => setNutriente(id)} className="px-2 py-1 rounded text-[10px] font-bold"
+                      style={{ background: sel ? 'var(--invicta-blue-mid)' : '#1a3a6b', color: sel ? '#fff' : (feito ? '#86efac' : '#64748b') }}>
+                      {legendaPorId(id)?.simbolo ?? id}{feito ? ' ✓' : ''}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-[10px] mt-1" style={{ color: '#94a3b8' }}>
+                <strong style={{ color: pontosInterp.length >= 3 ? '#86efac' : '#fbbf24' }}>{pontosInterp.length}</strong> pontos
+                {leg ? ` · ${leg.nome} (${leg.unidade})` : ''}
+              </p>
+            </div>
+          )}
+
+          {/* Mapa exibido: variograma + legenda gradiente + opacidade */}
           {stats && ramp && leg && (
             <div className="space-y-2 p-2.5 rounded-lg" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
-              <div className="flex items-center gap-1.5 text-[10px]" style={{ color: stats.modelo === 'idw' ? '#93c5fd' : '#86efac' }}>
-                <Activity size={12} />
-                {stats.modelo === 'idw'
-                  ? `IDW · ${stats.n} pts`
-                  : `Krigagem · variograma ${stats.modelo} · ${stats.n} pts`}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-[10px]" style={{ color: stats.modelo === 'idw' ? '#93c5fd' : '#86efac' }}>
+                  <Activity size={12} />
+                  {stats.modelo === 'idw' ? `IDW · ${stats.n} pts` : `Krigagem · ${stats.modelo} · ${stats.n} pts`}
+                </div>
+                <button onClick={limpar} title="Limpar mapas" className="flex items-center gap-1 text-[10px]" style={{ color: '#93c5fd' }}>
+                  <Eraser size={11} /> Limpar
+                </button>
               </div>
 
-              {/* barra de gradiente com limites das classes */}
               <div>
                 <div className="relative h-3 rounded" style={{ background: gradienteCss(ramp.stops) }}>
                   {leg.classes.map(c => c.max).filter((m): m is number => m != null).slice(0, -1).map((b) => {
@@ -232,12 +276,11 @@ export function FertilidadeSection() {
                 </div>
                 <div className="flex justify-between text-[9px] mt-0.5" style={{ color: '#64748b' }}>
                   <span>{fmt(ramp.dominio[0])}</span>
-                  <span>{leg.unidade}</span>
+                  <span>{leg.simbolo} ({leg.unidade})</span>
                   <span>{fmt(ramp.dominio[1])}</span>
                 </div>
               </div>
 
-              {/* opacidade */}
               <div className="flex items-center gap-2">
                 <span className="text-[9px]" style={{ color: '#64748b' }}>Opacidade</span>
                 <input type="range" min={0.2} max={1} step={0.05} value={opacity} onChange={e => setOpacity(Number(e.target.value))} className="flex-1 accent-green-500" />
