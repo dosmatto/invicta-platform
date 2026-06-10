@@ -1,0 +1,11 @@
+# Render Blueprint — backend de interpolacao (fertilidade).
+# No Render: New > Blueprint > conecte este repositorio (ele le este arquivo).
+services:
+  - type: web
+    name: invicta-fertilidade-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    healthCheckPath: /health
+    autoDeploy: true

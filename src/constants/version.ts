@@ -1,6 +1,10 @@
-export const APP_VERSION = '0.19.1';
+export const APP_VERSION = '0.19.2';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.19.2': [
+    'Backend aceita Private Network Access — permite testar a interpolação pelo link publicado (HTTPS) usando o backend local (no Chrome)',
+    'Backend pronto pra nuvem: Dockerfile + render.yaml (deploy no Render) → link público funciona em qualquer máquina, sem backend local',
+  ],
   '0.19.1': [
     'Fertilidade mostra os detalhes da krigagem no mapa: modelo de variograma, alcance/patamar/pepita, RMSE da validação cruzada, pixel (m) e grade',
     'Configurações da interpolação (recolhível): pixel 5/10/20 m (padrão 20×20) e variograma (Auto ou fixo: esférico/exponencial/gaussiano)',

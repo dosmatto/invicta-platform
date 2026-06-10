@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+*.pyc
+start.bat
+start.ps1
+start.sh
+README.md

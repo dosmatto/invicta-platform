@@ -24,6 +24,16 @@ app.add_middleware(
 )
 
 
+# Permite que o app publicado (HTTPS) acesse este backend LOCAL em 127.0.0.1
+# (Private Network Access). Funciona no Chrome; em https->http localhost outros
+# navegadores podem bloquear (use o app local ou um backend na nuvem nesse caso).
+@app.middleware("http")
+async def _allow_private_network(request, call_next):
+    resp = await call_next(request)
+    resp.headers["Access-Control-Allow-Private-Network"] = "true"
+    return resp
+
+
 class Ponto(BaseModel):
     lng: float
     lat: float
