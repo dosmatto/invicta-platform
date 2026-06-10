@@ -9,23 +9,20 @@ talhao e devolve um raster (PNG) interpolado, recortado e colorido por gradiente
 - **Recorte** pelo poligono (Shapely) e **gradiente** continuo (cores enviadas
   pelo front, derivadas da Base Agronomica).
 
-## Rodar
+## Rodar (em cada maquina, uma vez)
 
-Windows:
+**Duplo-clique** (mais simples):
+- Windows: `backend\start.bat`
+- macOS: `backend/start.command`
 
-```
-backend\start.bat
-```
+Ou pelo terminal:
+- Windows: `backend\start.bat`
+- macOS / Linux: `bash backend/start.sh`
 
-macOS / Linux:
-
-```
-bash backend/start.sh
-```
-
-(Na primeira vez cria o ambiente Python e instala as dependencias, ~2-4 min.
-Windows: venv em `%LOCALAPPDATA%\invicta-fert-backend`; macOS/Linux: em
-`~/.invicta-fert-backend`. Depois e so subir.)
+Ele **acha o Python sozinho**, cria o ambiente e instala as dependencias na
+primeira vez (~2-4 min). Deixe a janela aberta enquanto usa o app — e so isso:
+o app passa a interpolar nessa maquina. (venv em `%LOCALAPPDATA%\invicta-fert-backend`
+no Windows; `~/.invicta-fert-backend` no macOS/Linux.)
 
 Servico em `http://127.0.0.1:8800` — `GET /health`, `POST /interpolar`.
 

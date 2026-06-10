@@ -1,6 +1,10 @@
-export const APP_VERSION = '0.19.2';
+export const APP_VERSION = '0.19.3';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.19.3': [
+    'Backend simples em cada máquina: duplo-clique em start.bat (Windows) ou start.command (Mac) — acha o Python sozinho e deixa pronto pra interpolar',
+    'Mensagem clara no app quando o interpolador não está ligado naquela máquina',
+  ],
   '0.19.2': [
     'Backend aceita Private Network Access — permite testar a interpolação pelo link publicado (HTTPS) usando o backend local (no Chrome)',
     'Backend pronto pra nuvem: Dockerfile + render.yaml (deploy no Render) → link público funciona em qualquer máquina, sem backend local',

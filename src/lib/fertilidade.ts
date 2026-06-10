@@ -81,7 +81,7 @@ export async function interpolar(params: {
       }),
     });
   } catch {
-    throw new Error('Backend de interpolação offline. Rode backend\\start.bat e tente de novo.');
+    throw new Error('Interpolador desligado nesta máquina. Dê dois cliques em backend\\start.bat (Windows) ou backend/start.command (Mac), espere a janela abrir, e tente de novo.');
   }
   if (!r.ok) {
     let msg = `Backend respondeu ${r.status}`;
