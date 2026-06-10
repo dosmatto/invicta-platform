@@ -7,7 +7,7 @@ import {
   interpolar, rampaDaLegenda, gradienteCss, coordsFromBounds, extrairPoligono, legendaPorId,
   type RespInterp,
 } from '@/lib/fertilidade';
-import { Play, Layers, Loader2, Eraser, AlertTriangle, Activity } from 'lucide-react';
+import { Play, Layers, Loader2, Eraser, AlertTriangle, Activity, Settings } from 'lucide-react';
 
 const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
 const fmt = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits: 1 });
@@ -29,6 +29,9 @@ export function FertilidadeSection() {
   const [profundidade, setProfundidade] = useState('');  // profundidade exibida
   const [opacity, setOpacity] = useState(0.75);
   const [metodo, setMetodo] = useState<'krige' | 'idw'>('krige');
+  const [pixelM, setPixelM] = useState(20);          // tamanho do pixel (m)
+  const [modeloFixo, setModeloFixo] = useState('');  // '' = variograma automático
+  const [cfgAberto, setCfgAberto] = useState(false); // painel "Configurações da interpolação"
   const [estado, setEstado] = useState<'idle' | 'processando' | 'pronto' | 'erro'>('idle');
   const [erro, setErro] = useState('');
   const [progresso, setProgresso] = useState<{ atual: number; total: number; nome: string } | null>(null);
@@ -100,7 +103,7 @@ export function FertilidadeSection() {
   }, [importacaoId]);
 
   // trocar importação ou método invalida TODO o cache (profundidade NÃO — ficam todas em cache)
-  useEffect(() => { setCache({}); setEstado('idle'); setErro(''); }, [importacaoId, metodo]);
+  useEffect(() => { setCache({}); setEstado('idle'); setErro(''); }, [importacaoId, metodo, pixelM, modeloFixo]);
 
   // exibe no mapa o mapa do nutriente + profundidade selecionados (ou limpa)
   useEffect(() => {
@@ -126,7 +129,7 @@ export function FertilidadeSection() {
     const pts = pontosDe(nut, prof);
     if (pts.length < 3) throw new Error(`${l.simbolo} ${prof}: menos de 3 pontos`);
     const { dominio, stops } = rampaDaLegenda(l);
-    const resp = await interpolar({ pontos: pts, poligono: poligono!, dominio, stops, metodo });
+    const resp = await interpolar({ pontos: pts, poligono: poligono!, dominio, stops, metodo, pixelM, modeloFixo: modeloFixo || null });
     setCache(c => ({ ...c, [ck(nut, prof)]: { resp, labels: fcLabels(pts) } }));
   }
 
@@ -181,17 +184,46 @@ export function FertilidadeSection() {
 
       {importacao && (
         <>
-          {/* Interpolador */}
-          <div>
-            <label className="text-[10px] font-semibold block mb-1" style={{ color: '#64748b' }}>Interpolador</label>
-            <div className="flex gap-1">
-              {(['krige', 'idw'] as const).map(mt => (
-                <button key={mt} onClick={() => setMetodo(mt)} className="flex-1 py-1 rounded text-[10px] font-bold"
-                  style={{ background: metodo === mt ? 'var(--invicta-blue-mid)' : '#1a3a6b', color: metodo === mt ? '#fff' : '#64748b' }}>
-                  {mt === 'krige' ? 'Krigagem' : 'IDW'}
-                </button>
-              ))}
-            </div>
+          {/* Configurações da interpolação (recolhível; pixel padrão 20×20 m) */}
+          <div className="rounded-lg overflow-hidden" style={{ border: '1px solid #1a3a6b' }}>
+            <button onClick={() => setCfgAberto(v => !v)} className="w-full flex items-center justify-between px-2.5 py-1.5 text-[10px] font-semibold" style={{ background: '#061525', color: '#93c5fd' }}>
+              <span className="flex items-center gap-1"><Settings size={12} /> Configurações da interpolação</span>
+              <span style={{ color: '#64748b' }}>{metodo === 'idw' ? 'IDW' : `Krigagem · ${modeloFixo || 'auto'}`} · {pixelM} m {cfgAberto ? '▴' : '▾'}</span>
+            </button>
+            {cfgAberto && (
+              <div className="px-2.5 py-2 space-y-2" style={{ background: '#061525' }}>
+                <div>
+                  <label className="text-[10px] font-semibold block mb-1" style={{ color: '#64748b' }}>Interpolador</label>
+                  <div className="flex gap-1">
+                    {(['krige', 'idw'] as const).map(mt => (
+                      <button key={mt} onClick={() => setMetodo(mt)} className="flex-1 py-1 rounded text-[10px] font-bold"
+                        style={{ background: metodo === mt ? 'var(--invicta-blue-mid)' : '#1a3a6b', color: metodo === mt ? '#fff' : '#64748b' }}>
+                        {mt === 'krige' ? 'Krigagem' : 'IDW'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <label className="text-[10px] font-semibold block mb-1" style={{ color: '#64748b' }}>Pixel</label>
+                    <select value={pixelM} onChange={e => setPixelM(Number(e.target.value))} className="w-full rounded px-2 py-1 text-[11px] outline-none" style={inputStyle}>
+                      {[5, 10, 20].map(p => <option key={p} value={p}>{p} × {p} m{p === 20 ? ' (padrão)' : ''}</option>)}
+                    </select>
+                  </div>
+                  {metodo === 'krige' && (
+                    <div className="flex-1">
+                      <label className="text-[10px] font-semibold block mb-1" style={{ color: '#64748b' }}>Variograma</label>
+                      <select value={modeloFixo} onChange={e => setModeloFixo(e.target.value)} className="w-full rounded px-2 py-1 text-[11px] outline-none" style={inputStyle}>
+                        <option value="">Auto (melhor)</option>
+                        <option value="spherical">Esférico</option>
+                        <option value="exponential">Exponencial</option>
+                        <option value="gaussian">Gaussiano</option>
+                      </select>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Processar */}
@@ -265,6 +297,13 @@ export function FertilidadeSection() {
                 <button onClick={limpar} title="Limpar mapas" className="flex items-center gap-1 text-[10px]" style={{ color: '#93c5fd' }}>
                   <Eraser size={11} /> Limpar
                 </button>
+              </div>
+
+              {/* detalhes do processo */}
+              <div className="text-[9px] leading-relaxed" style={{ color: '#64748b' }}>
+                pixel <strong style={{ color: '#94a3b8' }}>{stats.pixel_m} m</strong> · grade {stats.nx}×{stats.ny}
+                {stats.variograma && <> · alcance <strong style={{ color: '#94a3b8' }}>{stats.variograma.alcance_m} m</strong> · patamar {fmt(stats.variograma.patamar)} · pepita {fmt(stats.variograma.pepita)}</>}
+                {stats.rmse != null && <> · RMSE {stats.rmse}</>}
               </div>
 
               <div>

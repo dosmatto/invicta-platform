@@ -1,6 +1,11 @@
-export const APP_VERSION = '0.19.0';
+export const APP_VERSION = '0.19.1';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.19.1': [
+    'Fertilidade mostra os detalhes da krigagem no mapa: modelo de variograma, alcance/patamar/pepita, RMSE da validação cruzada, pixel (m) e grade',
+    'Configurações da interpolação (recolhível): pixel 5/10/20 m (padrão 20×20) e variograma (Auto ou fixo: esférico/exponencial/gaussiano)',
+    'Backend roda local em cada máquina (porta 8800): start.bat (Windows, detecta py/python) e start.sh (macOS/Linux)',
+  ],
   '0.19.0': [
     'Fertilidade: "Processar todos" os nutrientes de uma vez, com barra de progresso',
     'Troca instantânea entre nutrientes no mapa (cache por nutriente; ✓ marca os já prontos) sem reprocessar',

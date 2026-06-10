@@ -49,7 +49,11 @@ export interface PontoInterp { lng: number; lat: number; valor: number; }
 export interface RespInterp {
   bounds: [number, number, number, number];
   png: string;
-  stats: { n: number; modelo: string; min: number | null; max: number | null; nx: number; ny: number };
+  stats: {
+    n: number; modelo: string; min: number | null; max: number | null; nx: number; ny: number;
+    pixel_m: number; rmse: number | null;
+    variograma: { alcance_m: number; patamar: number; pepita: number } | null;
+  };
 }
 
 export async function interpolar(params: {
@@ -59,6 +63,7 @@ export async function interpolar(params: {
   stops: Stop[];
   pixelM?: number;
   metodo?: 'krige' | 'idw';
+  modeloFixo?: string | null;
 }): Promise<RespInterp> {
   let r: Response;
   try {
@@ -72,6 +77,7 @@ export async function interpolar(params: {
         stops: params.stops,
         pixel_m: params.pixelM ?? 20,
         metodo: params.metodo ?? 'krige',
+        modelo_fixo: params.modeloFixo ?? null,
       }),
     });
   } catch {

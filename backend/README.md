@@ -11,12 +11,21 @@ talhao e devolve um raster (PNG) interpolado, recortado e colorido por gradiente
 
 ## Rodar
 
+Windows:
+
 ```
 backend\start.bat
 ```
 
-(Na primeira vez ele cria o ambiente em `%LOCALAPPDATA%\invicta-fert-backend` e
-instala as dependencias. Depois e so subir.)
+macOS / Linux:
+
+```
+bash backend/start.sh
+```
+
+(Na primeira vez cria o ambiente Python e instala as dependencias, ~2-4 min.
+Windows: venv em `%LOCALAPPDATA%\invicta-fert-backend`; macOS/Linux: em
+`~/.invicta-fert-backend`. Depois e so subir.)
 
 Servico em `http://127.0.0.1:8800` — `GET /health`, `POST /interpolar`.
 

@@ -1,8 +1,9 @@
 """Interpolacao de fertilidade.
 
-Krigagem ordinaria (PyKrige) com selecao automatica de modelo de variograma e
-fallback para IDW quando ha poucos pontos. Recorte pelo poligono do talhao e
-geracao de um PNG RGBA com gradiente de cores continuo.
+Krigagem ordinaria (PyKrige) com selecao automatica de modelo de variograma
+(ou modelo fixo). Recorte pelo poligono do talhao e geracao de um PNG RGBA com
+gradiente de cores continuo. Retorna tambem os parametros do variograma
+(alcance/patamar/pepita), RMSE da validacao cruzada e o tamanho do pixel.
 
 Coordenadas de entrada sao geograficas (lng/lat). Para a krigagem os pontos sao
 projetados para um plano metrico local (equirretangular) para que o variograma
@@ -84,20 +85,26 @@ def _loo_rmse(xm, ym, z, model) -> float:
     return math.sqrt(float(np.mean(erros))) if erros else math.inf
 
 
-def _krige(xm, ym, z, gxm, gym):
-    melhor, melhor_rmse = None, math.inf
-    for modelo in KRIGE_MODELS:
-        r = _loo_rmse(xm, ym, z, modelo)
-        if r < melhor_rmse:
-            melhor_rmse, melhor = r, modelo
-    if melhor is None:
-        raise RuntimeError("nenhum modelo de variograma convergiu")
+def _krige(xm, ym, z, gxm, gym, modelo_fixo=None):
+    if modelo_fixo:
+        melhor, melhor_rmse = modelo_fixo, _loo_rmse(xm, ym, z, modelo_fixo)
+    else:
+        melhor, melhor_rmse = None, math.inf
+        for modelo in KRIGE_MODELS:
+            r = _loo_rmse(xm, ym, z, modelo)
+            if r < melhor_rmse:
+                melhor_rmse, melhor = r, modelo
+        if melhor is None:
+            raise RuntimeError("nenhum modelo de variograma convergiu")
     ok = OrdinaryKriging(
         xm, ym, z, variogram_model=melhor,
         enable_plotting=False, verbose=False,
     )
     zhat, _ = ok.execute("grid", gxm, gym)  # (ny, nx) masked array
-    return np.ma.filled(np.asarray(zhat, dtype=float), np.nan), melhor
+    # [psill, range, nugget] para spherical/exponential/gaussian
+    params = [float(p) for p in ok.variogram_model_parameters]
+    rmse = float(melhor_rmse) if math.isfinite(melhor_rmse) else None
+    return np.ma.filled(np.asarray(zhat, dtype=float), np.nan), melhor, params, rmse
 
 
 def _idw(xm, ym, z, gxm, gym, power=2.0, k=12):
@@ -156,7 +163,8 @@ def _png_data_url(rgba: np.ndarray) -> str:
 
 # ---------------------------------------------------------------- entrada
 def interpolar(points: list[dict], polygon_geojson: dict, dominio, stops,
-               pixel_m: float = 20.0, metodo: str = "krige") -> dict[str, Any]:
+               pixel_m: float = 20.0, metodo: str = "krige",
+               modelo_fixo: str | None = None) -> dict[str, Any]:
     poly = shape(polygon_geojson)
     x = np.array([p["lng"] for p in points], dtype=float)
     y = np.array([p["lat"] for p in points], dtype=float)
@@ -177,13 +185,20 @@ def interpolar(points: list[dict], polygon_geojson: dict, dominio, stops,
     _gx0, gym = _to_local(np.full_like(gy, lon0), gy, lon0, lat0)
 
     # Metodo escolhido pelo usuario (sem troca automatica). IDW so quando pedido.
+    variograma = None
+    rmse = None
     if metodo == "idw":
         grid, modelo = _idw(xm, ym, z, gxm, gym), "idw"
     else:
         if not _HAS_PYKRIGE:
             raise ValueError("Krigagem indisponivel no backend.")
         try:
-            grid, modelo = _krige(xm, ym, z, gxm, gym)
+            grid, modelo, params, rmse = _krige(xm, ym, z, gxm, gym, modelo_fixo)
+            variograma = {
+                "alcance_m": round(params[1], 1),            # range (metros)
+                "patamar": round(params[0] + params[2], 4),  # sill = psill + nugget
+                "pepita": round(params[2], 4),               # nugget
+            }
         except Exception as e:
             raise ValueError(
                 f"Krigagem nao convergiu com {len(z)} pontos (colineares/insuficientes?). [{e}]"
@@ -194,6 +209,8 @@ def interpolar(points: list[dict], polygon_geojson: dict, dominio, stops,
     rgba = rgba[::-1, :, :]  # norte no topo da imagem
 
     finitos = grid[np.isfinite(grid)]
+    pix_x = abs(float(gxm[1] - gxm[0])) if len(gxm) > 1 else float(pixel_m)
+    pix_y = abs(float(gym[1] - gym[0])) if len(gym) > 1 else float(pixel_m)
     stats = {
         "n": int(len(z)),
         "modelo": modelo,
@@ -201,5 +218,8 @@ def interpolar(points: list[dict], polygon_geojson: dict, dominio, stops,
         "max": float(np.max(finitos)) if finitos.size else None,
         "nx": int(len(gx)),
         "ny": int(len(gy)),
+        "pixel_m": round((pix_x + pix_y) / 2.0, 1),
+        "rmse": round(rmse, 3) if rmse is not None else None,
+        "variograma": variograma,
     }
     return {"bounds": [minx, miny, maxx, maxy], "png": _png_data_url(rgba), "stats": stats}
