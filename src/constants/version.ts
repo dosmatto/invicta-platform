@@ -1,6 +1,10 @@
-export const APP_VERSION = '0.22.0';
+export const APP_VERSION = '0.22.1';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.22.1': [
+    'Transição de cor dentro de cada classe (claro → escuro) com fronteira nítida entre classes — barra UI e raster',
+    'Mapas já processados antes desta versão usam o esquema antigo (cores sólidas); reprocesse no Fertilidade para ver o degradê novo',
+  ],
   '0.22.0': [
     'Editor visual de Legendas (novo item "Legendas" no menu lateral): listar por fonte, criar, editar, duplicar, excluir',
     'Editor de classes com cor (color picker), limites, largura visual, reordenação, validação de soma 100% e prévia ao vivo',

@@ -431,11 +431,9 @@ export function FertilidadeSection() {
 function BarraLegenda({ leg }: { leg: Legenda }) {
   return (
     <div>
-      <div className="relative h-4 rounded overflow-hidden flex" style={{ border: '1px solid rgba(255,255,255,0.1)' }}>
-        {leg.classes.map(c => (
-          <div key={c.ordem} style={{ width: `${c.larguraVisual}%`, background: c.corBase }} title={`${c.nome}${c.valorMin != null ? ` · >${c.valorMin}` : ''}${c.valorMax != null ? ` · ≤${c.valorMax}` : ''}`} />
-        ))}
-      </div>
+      <div className="relative h-4 rounded overflow-hidden"
+        style={{ border: '1px solid rgba(255,255,255,0.1)', background: gradienteCss(leg) }}
+        title={leg.classes.map(c => `${c.nome}${c.valorMin != null ? ` · >${c.valorMin}` : ''}${c.valorMax != null ? ` · ≤${c.valorMax}` : ''}`).join('  |  ')} />
       <div className="relative h-3 text-[8px]" style={{ color: '#cbd5e1' }}>
         {(() => {
           let acumulado = 0;

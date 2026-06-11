@@ -360,12 +360,10 @@ function LegendaEditor({ legenda, onClose }: { legenda: Legenda | null; onClose:
 
         {/* prévia */}
         <div>
-          <div className="text-[9px] mb-1" style={{ color: '#64748b' }}>Prévia</div>
-          <div className="h-4 rounded overflow-hidden flex" style={{ border: '1px solid rgba(255,255,255,0.1)' }}>
-            {form.classes.map((c, i) => (
-              <div key={i} style={{ width: `${c.larguraVisual}%`, background: c.corBase }} title={c.nome} />
-            ))}
-          </div>
+          <div className="text-[9px] mb-1" style={{ color: '#64748b' }}>Prévia (claro → escuro dentro de cada classe)</div>
+          <div className="h-4 rounded overflow-hidden"
+            style={{ border: '1px solid rgba(255,255,255,0.1)', background: gradienteCssDaLegenda({ ...form, id: 'preview', criadoEm: '', atualizadoEm: '' } as Legenda) }}
+            title={form.classes.map(c => c.nome).join(' | ')} />
         </div>
       </div>
 
