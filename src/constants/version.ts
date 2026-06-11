@@ -1,6 +1,11 @@
-export const APP_VERSION = '0.21.0';
+export const APP_VERSION = '0.22.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.22.0': [
+    'Editor visual de Legendas (novo item "Legendas" no menu lateral): listar por fonte, criar, editar, duplicar, excluir',
+    'Editor de classes com cor (color picker), limites, largura visual, reordenação, validação de soma 100% e prévia ao vivo',
+    'Import / Export JSON do repositório inteiro de legendas',
+  ],
   '0.21.0': [
     'Motor de Legendas Agronômicas — legendas são objetos editáveis e reutilizáveis (fonte, método, categoria, classes, cores, larguras visuais)',
     'Repositório inicial Fundação ABC com 11 legendas (pH CaCl₂, Al, Ca, Mg, CTC pH 7,0, CTC efetiva, V%, m%, M.O., P Resina, K) + exemplo Zn DTPA',
