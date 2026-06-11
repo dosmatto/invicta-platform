@@ -1,6 +1,11 @@
-export const APP_VERSION = '0.20.1';
+export const APP_VERSION = '0.20.2';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.20.2': [
+    'Mapas de fertilidade salvos no banco (Firestore): processou um vez, sobrevive ao F5 e aparece em qualquer máquina',
+    'Camada do raster fixa em 100% (slider de opacidade removido)',
+    'Botão Limpar agora apaga os mapas salvos também',
+  ],
   '0.20.1': [
     'Configurações → "Interpolação (motor local)": status ao vivo do interpolador, botão de download e instruções por sistema (macOS/Windows) — auto-detecta o seu',
     'Mensagem clara no Processar tudo quando o interpolador está desligado (em vez de listar todas as variáveis como falhas)',

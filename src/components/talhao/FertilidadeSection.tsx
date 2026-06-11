@@ -8,14 +8,22 @@ import {
   type RespInterp,
 } from '@/lib/fertilidade';
 import { Play, Layers, Loader2, Eraser, AlertTriangle, Activity, Settings } from 'lucide-react';
+import { cloudSalvarMapa, cloudCarregarMapasPorPrefixo, cloudExcluirMapasPorPrefixo } from '@/lib/cloud';
 
 const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
 const fmt = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits: 1 });
+const OPACIDADE = 1; // fixo 100% (sem slider)
 
 type Ponto = { lng: number; lat: number; valor: number };
 type MapaPronto = { resp: RespInterp; labels: GeoJSON.FeatureCollection };
-// chave do cache = nutriente + profundidade (cada combinação é um mapa)
+// chave do cache na sessão (nutriente + profundidade)
 const ck = (nut: string, prof: string) => `${nut}__${prof}`;
+// prefixo persistente: identifica o "conjunto" (talhão+importação+config) e
+// permite buscar/excluir todos os mapas daquele conjunto sem indices extras.
+const prefixoNuvem = (talhaoId: string, importacaoId: string, metodo: string, pixelM: number, modeloFixo: string) =>
+  `${talhaoId}__${importacaoId}__${metodo}__${pixelM}__${modeloFixo || 'auto'}__`;
+const idNuvem = (talhaoId: string, importacaoId: string, metodo: string, pixelM: number, modeloFixo: string, nut: string, prof: string) =>
+  `${prefixoNuvem(talhaoId, importacaoId, metodo, pixelM, modeloFixo)}${nut}__${prof}`;
 
 export function FertilidadeSection() {
   const { nav, uploadedGeo, setFertilidadeOverlay, setFertilidadeLabels } = useApp();
@@ -27,7 +35,6 @@ export function FertilidadeSection() {
   const [importacaoId, setImportacaoId] = useState('');
   const [nutriente, setNutriente] = useState('');        // nutriente exibido
   const [profundidade, setProfundidade] = useState('');  // profundidade exibida
-  const [opacity, setOpacity] = useState(0.75);
   const [metodo, setMetodo] = useState<'krige' | 'idw'>('krige');
   const [pixelM, setPixelM] = useState(20);          // tamanho do pixel (m)
   const [modeloFixo, setModeloFixo] = useState('');  // '' = variograma automático
@@ -102,20 +109,35 @@ export function FertilidadeSection() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [importacaoId]);
 
-  // trocar importação ou método invalida TODO o cache (profundidade NÃO — ficam todas em cache)
-  useEffect(() => { setCache({}); setEstado('idle'); setErro(''); }, [importacaoId, metodo, pixelM, modeloFixo]);
+  // trocar contexto: hidrata da nuvem o que estiver salvo (some no F5 só se a nuvem estiver vazia/desligada)
+  useEffect(() => {
+    setCache({}); setEstado('idle'); setErro('');
+    if (!nav.talhaoId || !importacaoId) return;
+    const prefixo = prefixoNuvem(nav.talhaoId, importacaoId, metodo, pixelM, modeloFixo);
+    (async () => {
+      const carregados = await cloudCarregarMapasPorPrefixo<MapaPronto>(prefixo);
+      if (carregados.length === 0) return;
+      const novo: Record<string, MapaPronto> = {};
+      for (const c of carregados) {
+        // último segmento do id = `${nut}__${prof}`
+        const chave = c.id.slice(prefixo.length);
+        novo[chave] = c.dados;
+      }
+      setCache(novo);
+    })();
+  }, [importacaoId, metodo, pixelM, modeloFixo, nav.talhaoId]);
 
   // exibe no mapa o mapa do nutriente + profundidade selecionados (ou limpa)
   useEffect(() => {
     const r = cache[ck(nutriente, profundidade)];
     if (r) {
-      setFertilidadeOverlay({ url: r.resp.png, coordinates: coordsFromBounds(r.resp.bounds), opacity });
+      setFertilidadeOverlay({ url: r.resp.png, coordinates: coordsFromBounds(r.resp.bounds), opacity: OPACIDADE });
       setFertilidadeLabels(r.labels);
     } else {
       setFertilidadeOverlay(null);
       setFertilidadeLabels(null);
     }
-  }, [cache, nutriente, profundidade, opacity, setFertilidadeOverlay, setFertilidadeLabels]);
+  }, [cache, nutriente, profundidade, setFertilidadeOverlay, setFertilidadeLabels]);
 
   useEffect(() => () => { setFertilidadeOverlay(null); setFertilidadeLabels(null); }, [setFertilidadeOverlay, setFertilidadeLabels]);
 
@@ -130,7 +152,11 @@ export function FertilidadeSection() {
     if (pts.length < 3) throw new Error(`${l.simbolo} ${prof}: menos de 3 pontos`);
     const { dominio, stops } = rampaDaLegenda(l);
     const resp = await interpolar({ pontos: pts, poligono: poligono!, dominio, stops, metodo, pixelM, modeloFixo: modeloFixo || null });
-    setCache(c => ({ ...c, [ck(nut, prof)]: { resp, labels: fcLabels(pts) } }));
+    const labels = fcLabels(pts);
+    setCache(c => ({ ...c, [ck(nut, prof)]: { resp, labels } }));
+    if (nav.talhaoId && importacaoId) {
+      cloudSalvarMapa(idNuvem(nav.talhaoId, importacaoId, metodo, pixelM, modeloFixo, nut, prof), { resp, labels });
+    }
   }
 
   async function processar() {
@@ -173,7 +199,12 @@ export function FertilidadeSection() {
     }
   }
 
-  function limpar() { setCache({}); setEstado('idle'); setErro(''); }
+  function limpar() {
+    setCache({}); setEstado('idle'); setErro('');
+    if (nav.talhaoId && importacaoId) {
+      cloudExcluirMapasPorPrefixo(prefixoNuvem(nav.talhaoId, importacaoId, metodo, pixelM, modeloFixo));
+    }
+  }
 
   if (!safraAtiva) return <div className="px-6 py-4"><Aviso texto="Defina uma safra ativa (no topo do talhão) para gerar o mapa de fertilidade." /></div>;
   if (importacoes.length === 0) return <div className="px-6 py-4"><Aviso texto="Importe resultados de laboratório (seção acima) — o mapa de fertilidade é gerado a partir deles." /></div>;
@@ -332,11 +363,6 @@ export function FertilidadeSection() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
-                <span className="text-[9px]" style={{ color: '#64748b' }}>Opacidade</span>
-                <input type="range" min={0.2} max={1} step={0.05} value={opacity} onChange={e => setOpacity(Number(e.target.value))} className="flex-1 accent-green-500" />
-                <span className="text-[9px] w-8 text-right" style={{ color: '#94a3b8' }}>{Math.round(opacity * 100)}%</span>
-              </div>
             </div>
           )}
         </>

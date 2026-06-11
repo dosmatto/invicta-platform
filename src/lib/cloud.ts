@@ -13,7 +13,7 @@
 // Sem variáveis NEXT_PUBLIC_FIREBASE_*, tudo aqui é no-op.
 
 import { getFb, entrarAnonimo, firebaseConfigurado } from './firebase';
-import { collection, deleteDoc, doc, getDoc, getDocs, setDoc } from 'firebase/firestore';
+import { collection, deleteDoc, doc, endAt, getDoc, getDocs, orderBy, query, setDoc, startAt } from 'firebase/firestore';
 
 // Coleções (arrays de registros com id) espelhadas 1:1 com as chaves locais
 const KEYS_LISTA = [
@@ -119,4 +119,48 @@ export function cloudPushObj(key: string, json: string) {
   espelho[key] = new Map([[key, json]]);
   setDoc(doc(fb.db, 'inv_config', key), { json })
     .catch(e => console.warn(`[nuvem] falha ao gravar ${key}:`, e));
+}
+
+// ── Mapas de fertilidade (carregados sob demanda, não no boot) ──────────────
+// Coleção 'inv_mapas_fert'. O id de cada doc carrega o contexto inteiro
+// (talhao/importacao/metodo/pixel/variograma/nutriente/profundidade) para
+// permitir busca por prefixo sem indices secundarios.
+const COL_MAPAS = 'inv_mapas_fert';
+
+export function cloudSalvarMapa(id: string, dados: object) {
+  if (!ativo) return;
+  const fb = getFb();
+  if (!fb) return;
+  setDoc(doc(fb.db, COL_MAPAS, id), { json: JSON.stringify(dados) })
+    .catch(e => console.warn(`[nuvem] falha ao salvar mapa ${id}:`, e));
+}
+
+export async function cloudCarregarMapasPorPrefixo<T>(prefixo: string): Promise<Array<{ id: string; dados: T }>> {
+  if (!ativo) return [];
+  const fb = getFb();
+  if (!fb) return [];
+  try {
+    const q = query(collection(fb.db, COL_MAPAS), orderBy('__name__'), startAt(prefixo), endAt(prefixo + ''));
+    const snap = await getDocs(q);
+    const out: Array<{ id: string; dados: T }> = [];
+    snap.forEach(d => {
+      const j = (d.data() as { json?: string }).json;
+      if (j) { try { out.push({ id: d.id, dados: JSON.parse(j) as T }); } catch {} }
+    });
+    return out;
+  } catch (e) {
+    console.warn('[nuvem] falha ao carregar mapas:', e);
+    return [];
+  }
+}
+
+export async function cloudExcluirMapasPorPrefixo(prefixo: string) {
+  if (!ativo) return;
+  const fb = getFb();
+  if (!fb) return;
+  try {
+    const q = query(collection(fb.db, COL_MAPAS), orderBy('__name__'), startAt(prefixo), endAt(prefixo + ''));
+    const snap = await getDocs(q);
+    await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
+  } catch (e) { console.warn('[nuvem] falha ao excluir mapas:', e); }
 }
