@@ -3,6 +3,7 @@
 // Store local com localStorage — temporário até integração com banco real
 
 import type { ResultadoAmostra, PerfilLabConfig } from './lab';
+import type { Legenda } from './legendas';
 import { cloudPushLista, cloudPushObj } from './cloud';
 
 export interface Cliente {
@@ -388,6 +389,56 @@ export function saveImportacaoLab(i: Omit<ImportacaoLab, 'id' | 'criadoEm'>): Im
 
 export function deleteImportacaoLab(id: string) {
   save('inv_lab', load<ImportacaoLab>('inv_lab').filter(i => i.id !== id));
+}
+
+// ── Legendas Agronômicas (motor de legendas) ──────────────────────────────
+// Repositório reutilizável de legendas para mapas de fertilidade, micros e
+// textura. Cada legenda é independente do mapa; o usuário escolhe qual aplicar.
+
+export function getLegendas(): Legenda[] {
+  return load<Legenda>('inv_legendas');
+}
+
+export function getLegendasPorAtributo(atributoId: string): Legenda[] {
+  return getLegendas().filter(l => l.atributoId === atributoId);
+}
+
+export function saveLegenda(l: Omit<Legenda, 'id' | 'criadoEm' | 'atualizadoEm'>): Legenda {
+  const lista = load<Legenda>('inv_legendas');
+  const agora = new Date().toISOString();
+  const nova: Legenda = { ...l, id: uid(), criadoEm: agora, atualizadoEm: agora };
+  lista.push(nova);
+  save('inv_legendas', lista);
+  return nova;
+}
+
+// Upsert por id (usado pelo seed ABC: idempotente)
+export function upsertLegenda(l: Legenda): Legenda {
+  const lista = load<Legenda>('inv_legendas');
+  const idx = lista.findIndex(x => x.id === l.id);
+  if (idx >= 0) lista[idx] = { ...l, atualizadoEm: new Date().toISOString() };
+  else lista.push(l);
+  save('inv_legendas', lista);
+  return l;
+}
+
+export function updateLegenda(id: string, patch: Partial<Omit<Legenda, 'id' | 'criadoEm'>>) {
+  const lista = load<Legenda>('inv_legendas');
+  const idx = lista.findIndex(l => l.id === id);
+  if (idx >= 0) {
+    lista[idx] = { ...lista[idx], ...patch, atualizadoEm: new Date().toISOString() };
+    save('inv_legendas', lista);
+  }
+}
+
+export function deleteLegenda(id: string) {
+  save('inv_legendas', load<Legenda>('inv_legendas').filter(l => l.id !== id));
+}
+
+// Garante o seed ABC ao abrir o app (idempotente; só insere os que faltam)
+export function seedLegendasABCIfEmpty(seed: Legenda[]) {
+  const atuais = new Set(getLegendas().map(l => l.id));
+  for (const l of seed) if (!atuais.has(l.id)) upsertLegenda(l);
 }
 
 export function clearAll() {

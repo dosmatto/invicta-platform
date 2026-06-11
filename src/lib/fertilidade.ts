@@ -4,44 +4,25 @@
 // derivados da legenda do nutriente. O backend devolve um PNG (raster
 // interpolado, recortado e colorido) + bounds para sobrepor no mapa.
 
-import { LEGENDAS_PADRAO, CORES_CLASSES, type LegendaNutriente } from '@/constants/agronomica';
+import { stopsParaBackend, gradienteCssDaLegenda, type Legenda } from './legendas';
+// (Mantemos LEGENDAS_PADRAO/CORES_CLASSES apenas como referência histórica;
+// o motor de cores agora é dirigido por `Legenda` editável.)
 
 const INTERP_URL = process.env.NEXT_PUBLIC_INTERP_URL ?? 'http://127.0.0.1:8800';
 
 export type Stop = [number, [number, number, number]];
 
-export function hexToRgb(hex: string): [number, number, number] {
-  const h = hex.replace('#', '');
-  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+// Domínio + paradas de cor para o backend (mapa raster).
+// A coloração é "discreta por classe" — cada pixel pega a cor da sua classe
+// (faixas sólidas, sem degradê dentro da classe).
+export function rampaDaLegenda(leg: Legenda): { dominio: [number, number]; stops: Stop[] } {
+  return stopsParaBackend(leg);
 }
 
-export function legendaPorId(id: string): LegendaNutriente | undefined {
-  return LEGENDAS_PADRAO.find(l => l.id === id);
-}
-
-// Domínio [min,max] + paradas de cor a partir das classes da legenda.
-// As cores das 5 classes (MB/B/M/A/MA) ficam ancoradas no centro de cada faixa
-// entre os limites finitos; gradiente contínuo entre elas (Al e m% invertidos).
-export function rampaDaLegenda(leg: LegendaNutriente): { dominio: [number, number]; stops: Stop[] } {
-  const cores = leg.invertido ? CORES_CLASSES.invertido : CORES_CLASSES.normal;
-  const lims = leg.classes.map(c => c.max).filter((m): m is number => m != null); // [b1,b2,b3,b4]
-  const vmin = lims[0];
-  const vmax = lims[lims.length - 1];
-  const span = (vmax - vmin) || 1;
-  const t = (v: number) => Math.min(1, Math.max(0, (v - vmin) / span));
-  const stops: Stop[] = [
-    [0, hexToRgb(cores['Muito Baixo'])],
-    [t((lims[0] + lims[1]) / 2), hexToRgb(cores['Baixo'])],
-    [t((lims[1] + lims[2]) / 2), hexToRgb(cores['Médio'])],
-    [t((lims[2] + lims[3]) / 2), hexToRgb(cores['Alto'])],
-    [1, hexToRgb(cores['Muito Alto'])],
-  ];
-  return { dominio: [vmin, vmax], stops };
-}
-
-export function gradienteCss(stops: Stop[]): string {
-  const partes = stops.map(([t, [r, g, b]]) => `rgb(${r},${g},${b}) ${Math.round(t * 100)}%`);
-  return `linear-gradient(to right, ${partes.join(', ')})`;
+// Barra visual da legenda (UI): respeita as larguras visuais por classe
+// (22,5 / 22,5 / 22,5 / 22,5 / 10 para 5 classes).
+export function gradienteCss(leg: Legenda): string {
+  return gradienteCssDaLegenda(leg);
 }
 
 export interface PontoInterp { lng: number; lat: number; valor: number; }

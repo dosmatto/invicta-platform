@@ -19,7 +19,7 @@ import { collection, deleteDoc, doc, endAt, getDoc, getDocs, orderBy, query, set
 const KEYS_LISTA = [
   'inv_clientes', 'inv_fazendas', 'inv_talhoes', 'inv_safras',
   'inv_padroes_elem', 'inv_padroes_amos', 'inv_grades',
-  'inv_lab_perfis', 'inv_lab',
+  'inv_lab_perfis', 'inv_lab', 'inv_legendas',
 ];
 // Configurações (objeto único por chave) — coleção 'inv_config', doc = chave
 const KEYS_OBJ = ['inv_etiqueta_cfg'];

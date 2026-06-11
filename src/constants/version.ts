@@ -1,6 +1,13 @@
-export const APP_VERSION = '0.20.3';
+export const APP_VERSION = '0.21.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.21.0': [
+    'Motor de Legendas Agronômicas — legendas são objetos editáveis e reutilizáveis (fonte, método, categoria, classes, cores, larguras visuais)',
+    'Repositório inicial Fundação ABC com 11 legendas (pH CaCl₂, Al, Ca, Mg, CTC pH 7,0, CTC efetiva, V%, m%, M.O., P Resina, K) + exemplo Zn DTPA',
+    'Cores oficiais: Vermelho → Amarelo → Verde → Azul → Roxo (#D7191C, #FFD92F, #1A9641, #2C7BB6, #7B3294); larguras visuais 22,5/22,5/22,5/22,5/10',
+    'Fertilidade: dropdown "Legenda" pra escolher qual aplicar (cache e mapas salvos por combinação legenda+nutriente+profundidade)',
+    'Barra da legenda no mapa usa as larguras visuais por classe + rótulos das bordas',
+  ],
   '0.20.3': [
     'Grid numérico bruto da interpolação salvo junto com o mapa (Float32 → base64) — base para mapa de aplicação e outras derivações sem reprocessar',
     'Diagnóstico do interpolador: mostra a URL alvo e a mensagem real do erro; aviso explícito quando o navegador bloqueia HTTPS→localhost (use Chrome no Mac)',
