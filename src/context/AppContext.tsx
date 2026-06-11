@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { seedIfEmpty } from '@/lib/seed';
+import { bootCloud } from '@/lib/cloud';
 
 export type MapMode = 'street' | 'satellite';
 
@@ -105,8 +106,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [activePanel, setActivePanel] = useState<string | null>('dashboard');
   const [mapMode, setMapMode] = useState<MapMode>('satellite');
 
-  // Pré-carrega dados de teste (uma vez) em qualquer navegador/plataforma
-  useEffect(() => { seedIfEmpty(); }, []);
+  // Boot: com nuvem configurada, baixa os dados antes de renderizar (a base é
+  // o Firestore); sem nuvem, mantém o seed local de demonstração.
+  const [dadosProntos, setDadosProntos] = useState(false);
+  useEffect(() => {
+    (async () => {
+      const nuvem = await bootCloud().catch(() => false);
+      if (!nuvem) seedIfEmpty();
+      setDadosProntos(true);
+    })();
+  }, []);
   const [activeModule, setActiveModule] = useState<string | null>(null);
   const [uploadedGeo, setUploadedGeo] = useState<GeoJSON.FeatureCollection | null>(null);
   const [uploadedBbox, setUploadedBbox] = useState<[number, number, number, number] | null>(null);
@@ -148,7 +157,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       fertilidadeOverlay, setFertilidadeOverlay,
       fertilidadeLabels, setFertilidadeLabels,
     }}>
-      {children}
+      {dadosProntos ? children : (
+        <div className="fixed inset-0 flex items-center justify-center" style={{ background: '#061525' }}>
+          <p className="text-xs font-semibold" style={{ color: '#64748b' }}>Carregando dados…</p>
+        </div>
+      )}
     </AppContext.Provider>
   );
 }

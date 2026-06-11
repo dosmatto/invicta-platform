@@ -1,0 +1,122 @@
+'use client';
+
+// Espelho do store local (localStorage) no Firestore — fase 1 da nuvem.
+//
+// O app continua lendo o localStorage de forma síncrona (nenhuma tela muda).
+// A nuvem entra em dois momentos:
+//   1. boot: baixa todas as coleções e substitui o cache local (se a nuvem
+//      estiver vazia e o local não, sobe o local — migração da 1ª máquina);
+//   2. gravação: cada save() espelha o diff (por id) no Firestore.
+//
+// Cada registro vira um doc {id, json} — JSON serializado para evitar
+// limitações de tipos do Firestore (ex.: arrays aninhados de GeoJSON).
+// Sem variáveis NEXT_PUBLIC_FIREBASE_*, tudo aqui é no-op.
+
+import { getFb, entrarAnonimo, firebaseConfigurado } from './firebase';
+import { collection, deleteDoc, doc, getDoc, getDocs, setDoc } from 'firebase/firestore';
+
+// Coleções (arrays de registros com id) espelhadas 1:1 com as chaves locais
+const KEYS_LISTA = [
+  'inv_clientes', 'inv_fazendas', 'inv_talhoes', 'inv_safras',
+  'inv_padroes_elem', 'inv_padroes_amos', 'inv_grades',
+  'inv_lab_perfis', 'inv_lab',
+];
+// Configurações (objeto único por chave) — coleção 'inv_config', doc = chave
+const KEYS_OBJ = ['inv_etiqueta_cfg'];
+
+const TIMEOUT_BOOT_MS = 10000;
+
+// Último estado conhecido da nuvem (key -> id -> json) para diff nas gravações
+const espelho: Record<string, Map<string, string>> = {};
+let ativo = false;
+
+export const cloudAtivo = () => ativo;
+
+function lerLocal(key: string): { id: string }[] {
+  try { return JSON.parse(localStorage.getItem(key) ?? '[]'); } catch { return []; }
+}
+
+async function hidratarLista(key: string) {
+  const fb = getFb()!;
+  const snap = await getDocs(collection(fb.db, key));
+  const nuvem = new Map<string, string>();
+  snap.forEach(d => { const j = (d.data() as { json?: string }).json; if (j) nuvem.set(d.id, j); });
+
+  if (nuvem.size > 0) {
+    const arr = [...nuvem.values()].map(j => JSON.parse(j));
+    localStorage.setItem(key, JSON.stringify(arr));
+  } else {
+    // nuvem vazia: sobe o que existir localmente (migração inicial)
+    for (const rec of lerLocal(key)) {
+      const json = JSON.stringify(rec);
+      await setDoc(doc(fb.db, key, String(rec.id)), { id: String(rec.id), json });
+      nuvem.set(String(rec.id), json);
+    }
+  }
+  espelho[key] = nuvem;
+}
+
+async function hidratarObj(key: string) {
+  const fb = getFb()!;
+  const ref = doc(fb.db, 'inv_config', key);
+  const snap = await getDoc(ref);
+  const m = new Map<string, string>();
+  if (snap.exists()) {
+    const j = (snap.data() as { json?: string }).json;
+    if (j) { localStorage.setItem(key, j); m.set(key, j); }
+  } else {
+    const local = localStorage.getItem(key);
+    if (local) { await setDoc(ref, { json: local }); m.set(key, local); }
+  }
+  espelho[key] = m;
+}
+
+// Baixa tudo antes do app renderizar. Retorna true se a nuvem está ativa.
+export async function bootCloud(): Promise<boolean> {
+  if (!firebaseConfigurado || typeof window === 'undefined') return false;
+  const trabalho = (async () => {
+    await entrarAnonimo();
+    for (const k of KEYS_LISTA) await hidratarLista(k);
+    for (const k of KEYS_OBJ) await hidratarObj(k);
+  })();
+  const timeout = new Promise<never>((_, rej) =>
+    setTimeout(() => rej(new Error('timeout ao conectar na nuvem')), TIMEOUT_BOOT_MS));
+  try {
+    await Promise.race([trabalho, timeout]);
+    ativo = true;
+  } catch (e) {
+    // segue 100% local nesta sessão (sem push, para não corromper o espelho)
+    console.warn('[nuvem] indisponível, usando dados locais:', e);
+    ativo = false;
+  }
+  return ativo;
+}
+
+// Espelha uma gravação de lista (diff por id contra o último estado conhecido)
+export function cloudPushLista(key: string, lista: unknown[]) {
+  if (!ativo || !KEYS_LISTA.includes(key)) return;
+  const fb = getFb();
+  if (!fb) return;
+  const prev = espelho[key] ?? new Map<string, string>();
+  const next = new Map<string, string>();
+  for (const rec of lista as { id: unknown }[]) next.set(String(rec.id), JSON.stringify(rec));
+  espelho[key] = next;
+  (async () => {
+    for (const [id, json] of next) {
+      if (prev.get(id) !== json) await setDoc(doc(fb.db, key, id), { id, json });
+    }
+    for (const id of prev.keys()) {
+      if (!next.has(id)) await deleteDoc(doc(fb.db, key, id));
+    }
+  })().catch(e => console.warn(`[nuvem] falha ao gravar ${key}:`, e));
+}
+
+// Espelha uma configuração (objeto único)
+export function cloudPushObj(key: string, json: string) {
+  if (!ativo || !KEYS_OBJ.includes(key)) return;
+  const fb = getFb();
+  if (!fb) return;
+  espelho[key] = new Map([[key, json]]);
+  setDoc(doc(fb.db, 'inv_config', key), { json })
+    .catch(e => console.warn(`[nuvem] falha ao gravar ${key}:`, e));
+}

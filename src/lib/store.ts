@@ -3,6 +3,7 @@
 // Store local com localStorage — temporário até integração com banco real
 
 import type { ResultadoAmostra, PerfilLabConfig } from './lab';
+import { cloudPushLista, cloudPushObj } from './cloud';
 
 export interface Cliente {
   id: string;
@@ -117,6 +118,7 @@ function load<T>(key: string): T[] {
 function save<T>(key: string, data: T[]) {
   if (typeof window === 'undefined') return;
   localStorage.setItem(key, JSON.stringify(data));
+  cloudPushLista(key, data); // espelha na nuvem quando configurada (no-op sem Firebase)
 }
 
 function uid() {
@@ -321,7 +323,9 @@ export function getConfigEtiqueta(): ConfigEtiqueta {
 
 export function saveConfigEtiqueta(c: ConfigEtiqueta) {
   if (typeof window === 'undefined') return;
-  localStorage.setItem(ETQ_KEY, JSON.stringify(c));
+  const json = JSON.stringify(c);
+  localStorage.setItem(ETQ_KEY, json);
+  cloudPushObj(ETQ_KEY, json);
 }
 
 // ── Laboratório: perfis de mapeamento + importações de resultados ───────────

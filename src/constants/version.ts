@@ -1,6 +1,11 @@
-export const APP_VERSION = '0.19.3';
+export const APP_VERSION = '0.20.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.20.0': [
+    'Dados na nuvem (Firebase/Firestore): clientes, fazendas, talhões, safras, padrões, grades e laboratório sincronizados entre todas as máquinas',
+    'Ao abrir o app ele baixa a base da nuvem; cada gravação espelha automaticamente (write-through); sem internet segue 100% local na sessão',
+    'Opcional por configuração (NEXT_PUBLIC_FIREBASE_*): sem as chaves o app funciona local como antes',
+  ],
   '0.19.3': [
     'Backend simples em cada máquina: duplo-clique em start.bat (Windows) ou start.command (Mac) — acha o Python sozinho e deixa pronto pra interpolar',
     'Mensagem clara no app quando o interpolador não está ligado naquela máquina',
