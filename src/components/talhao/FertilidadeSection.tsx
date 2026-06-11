@@ -148,17 +148,29 @@ export function FertilidadeSection() {
     setEstado('processando'); setErro('');
     const total = nutrientes.length * profsAll.length;
     const falhas: string[] = [];
+    let backendOff = false;
     let i = 0;
     for (const prof of profsAll) {
       for (const nut of nutrientes) {
         i++;
         setProgresso({ atual: i, total, nome: `${legendaPorId(nut)?.simbolo ?? nut} ${prof}` });
-        try { await processarUm(nut, prof); } catch { falhas.push(`${legendaPorId(nut)?.simbolo ?? nut} ${prof}`); }
+        try { await processarUm(nut, prof); }
+        catch (e) {
+          const msg = e instanceof Error ? e.message : '';
+          if (msg.includes('Interpolador desligado')) { backendOff = true; break; }
+          falhas.push(`${legendaPorId(nut)?.simbolo ?? nut} ${prof}`);
+        }
       }
+      if (backendOff) break;
     }
     setProgresso(null);
-    setEstado(falhas.length === total ? 'erro' : 'pronto');
-    setErro(falhas.length ? `Não processou: ${falhas.join(', ')}.` : '');
+    if (backendOff) {
+      setEstado('erro');
+      setErro('Interpolador desligado nesta máquina. Dê dois cliques em backend/start.command (Mac) ou backend\\start.bat (Windows), espere a janela abrir, e tente de novo.');
+    } else {
+      setEstado(falhas.length === total ? 'erro' : 'pronto');
+      setErro(falhas.length ? `Não processou: ${falhas.join(', ')}.` : '');
+    }
   }
 
   function limpar() { setCache({}); setEstado('idle'); setErro(''); }

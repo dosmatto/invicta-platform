@@ -7,6 +7,7 @@ import { EtiquetaLayoutPicker } from '../talhao/EtiquetaLayoutPicker';
 import { getConfigEtiqueta, saveConfigEtiqueta } from '@/lib/store';
 import { useApp } from '@/context/AppContext';
 import { carregarTalhaoTeste } from '@/lib/teste';
+import { InterpoladorSection } from '../config/InterpoladorSection';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 
 export function ConfiguracoesPanel() {
@@ -58,6 +59,10 @@ export function ConfiguracoesPanel() {
             setDx={v => atualizarEtq({ dx: v })} setDy={v => atualizarEtq({ dy: v })}
           />
         </div>
+      </PanelSection>
+
+      <PanelSection title="Interpolação (motor local)">
+        <InterpoladorSection />
       </PanelSection>
 
       <PanelSection title="Dados de teste">

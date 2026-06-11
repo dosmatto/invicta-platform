@@ -1,6 +1,10 @@
-export const APP_VERSION = '0.20.0';
+export const APP_VERSION = '0.20.1';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.20.1': [
+    'Configurações → "Interpolação (motor local)": status ao vivo do interpolador, botão de download e instruções por sistema (macOS/Windows) — auto-detecta o seu',
+    'Mensagem clara no Processar tudo quando o interpolador está desligado (em vez de listar todas as variáveis como falhas)',
+  ],
   '0.20.0': [
     'Dados na nuvem (Firebase/Firestore): clientes, fazendas, talhões, safras, padrões, grades e laboratório sincronizados entre todas as máquinas',
     'Ao abrir o app ele baixa a base da nuvem; cada gravação espelha automaticamente (write-through); sem internet segue 100% local na sessão',
