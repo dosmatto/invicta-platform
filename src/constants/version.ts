@@ -1,6 +1,11 @@
-export const APP_VERSION = '0.20.2';
+export const APP_VERSION = '0.20.3';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.20.3': [
+    'Grid numérico bruto da interpolação salvo junto com o mapa (Float32 → base64) — base para mapa de aplicação e outras derivações sem reprocessar',
+    'Diagnóstico do interpolador: mostra a URL alvo e a mensagem real do erro; aviso explícito quando o navegador bloqueia HTTPS→localhost (use Chrome no Mac)',
+    'Resolvido o caso do Safari no Mac: bloqueia mixed content (use Chrome)',
+  ],
   '0.20.2': [
     'Mapas de fertilidade salvos no banco (Firestore): processou um vez, sobrevive ao F5 e aparece em qualquer máquina',
     'Camada do raster fixa em 100% (slider de opacidade removido)',

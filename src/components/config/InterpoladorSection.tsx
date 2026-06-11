@@ -1,13 +1,19 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Download, RefreshCw, CheckCircle2, XCircle } from 'lucide-react';
+import { Download, RefreshCw, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react';
 
 const ZIP_URL = 'https://codeload.github.com/dosmatto/invicta-platform/zip/refs/heads/master';
 // Mesmo endpoint que o front usa em src/lib/fertilidade.ts
 const INTERP_URL = process.env.NEXT_PUBLIC_INTERP_URL ?? 'http://127.0.0.1:8800';
 
 type Status = 'verificando' | 'on' | 'off';
+
+// HTTPS chamando http://127.0.0.1 = "mixed content" — bloqueado pelo navegador.
+function temMixedContent() {
+  if (typeof window === 'undefined') return false;
+  return window.location.protocol === 'https:' && INTERP_URL.startsWith('http://');
+}
 
 function detectarSO(): 'mac' | 'win' | 'outro' {
   if (typeof navigator === 'undefined') return 'outro';
@@ -20,32 +26,56 @@ function detectarSO(): 'mac' | 'win' | 'outro' {
 export function InterpoladorSection() {
   const [status, setStatus] = useState<Status>('verificando');
   const [aba, setAba] = useState<'mac' | 'win'>(detectarSO() === 'win' ? 'win' : 'mac');
+  const [erroDetalhe, setErroDetalhe] = useState('');
+  const mixed = temMixedContent();
 
   async function checar() {
-    setStatus('verificando');
+    setStatus('verificando'); setErroDetalhe('');
     try {
       const ctrl = new AbortController();
-      const t = setTimeout(() => ctrl.abort(), 3000);
+      const t = setTimeout(() => ctrl.abort(), 4000);
       const r = await fetch(`${INTERP_URL}/health`, { signal: ctrl.signal });
       clearTimeout(t);
-      setStatus(r.ok ? 'on' : 'off');
-    } catch { setStatus('off'); }
+      if (r.ok) { setStatus('on'); return; }
+      setStatus('off'); setErroDetalhe(`HTTP ${r.status}`);
+    } catch (e) {
+      setStatus('off');
+      const msg = e instanceof Error ? e.message : String(e);
+      if (mixed) setErroDetalhe('Bloqueado pelo navegador (HTTPS chamando localhost HTTP). Veja a dica abaixo.');
+      else setErroDetalhe(msg);
+    }
   }
   useEffect(() => { checar(); /* eslint-disable-next-line */ }, []);
 
   return (
     <div className="px-4 py-3 space-y-3">
       {/* Status */}
-      <div className="flex items-center justify-between p-2.5 rounded-lg" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
-        <div className="flex items-center gap-2 text-[11px] font-semibold">
-          {status === 'on' && <><CheckCircle2 size={14} style={{ color: '#86efac' }} /><span style={{ color: '#86efac' }}>Interpolador ligado</span></>}
-          {status === 'off' && <><XCircle size={14} style={{ color: '#f87171' }} /><span style={{ color: '#f87171' }}>Interpolador desligado</span></>}
-          {status === 'verificando' && <><RefreshCw size={14} className="animate-spin" style={{ color: '#93c5fd' }} /><span style={{ color: '#93c5fd' }}>Verificando…</span></>}
+      <div className="p-2.5 rounded-lg space-y-1" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-[11px] font-semibold">
+            {status === 'on' && <><CheckCircle2 size={14} style={{ color: '#86efac' }} /><span style={{ color: '#86efac' }}>Interpolador ligado</span></>}
+            {status === 'off' && <><XCircle size={14} style={{ color: '#f87171' }} /><span style={{ color: '#f87171' }}>Interpolador desligado</span></>}
+            {status === 'verificando' && <><RefreshCw size={14} className="animate-spin" style={{ color: '#93c5fd' }} /><span style={{ color: '#93c5fd' }}>Verificando…</span></>}
+          </div>
+          <button onClick={checar} className="text-[10px] font-semibold flex items-center gap-1" style={{ color: '#93c5fd' }}>
+            <RefreshCw size={11} /> Verificar
+          </button>
         </div>
-        <button onClick={checar} className="text-[10px] font-semibold flex items-center gap-1" style={{ color: '#93c5fd' }}>
-          <RefreshCw size={11} /> Verificar
-        </button>
+        <p className="text-[9px] break-all" style={{ color: '#475569' }}>URL: {INTERP_URL}</p>
+        {erroDetalhe && <p className="text-[9px]" style={{ color: '#fbbf24' }}>↳ {erroDetalhe}</p>}
       </div>
+
+      {/* Aviso mixed content (HTTPS no app + HTTP local) */}
+      {mixed && (
+        <div className="p-2.5 rounded-lg text-[10px] space-y-1" style={{ background: '#2d1a00', border: '1px solid #92400e', color: '#fbbf24' }}>
+          <p className="font-semibold flex items-center gap-1"><AlertTriangle size={12} /> Você abriu o app pelo link público (HTTPS)</p>
+          <p style={{ color: '#fcd34d' }}>O navegador bloqueia o app HTTPS de conversar com o interpolador HTTP local. Dois caminhos:</p>
+          <ol className="pl-4 list-decimal space-y-0.5" style={{ color: '#fde68a' }}>
+            <li>Abrir o link público no <strong>Google Chrome</strong> — ele pergunta permissão de rede privada (clique <em>Permitir</em>).</li>
+            <li>Ou abrir o app pelo <strong>endereço HTTP local</strong> (sem nuvem): rode <code style={mono}>npm run dev</code> no Mac e use <code style={mono}>http://localhost:3100</code>.</li>
+          </ol>
+        </div>
+      )}
 
       {/* Download */}
       <a href={ZIP_URL} className="w-full py-2 rounded text-xs font-bold text-white flex items-center justify-center gap-1.5"

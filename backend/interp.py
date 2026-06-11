@@ -222,4 +222,9 @@ def interpolar(points: list[dict], polygon_geojson: dict, dominio, stops,
         "rmse": round(rmse, 3) if rmse is not None else None,
         "variograma": variograma,
     }
-    return {"bounds": [minx, miny, maxx, maxy], "png": _png_data_url(rgba), "stats": stats}
+    # Grid bruto (Float32, norte no topo p/ casar com a imagem) p/ futuras
+    # derivacoes (mapa de aplicacao, exportar GeoTIFF, etc.). NaN preservado.
+    grid_oriented = grid[::-1, :].astype("float32")
+    grid_b64 = base64.b64encode(grid_oriented.tobytes()).decode()
+    grid_meta = {"b64": grid_b64, "shape": [int(grid_oriented.shape[0]), int(grid_oriented.shape[1])]}
+    return {"bounds": [minx, miny, maxx, maxy], "png": _png_data_url(rgba), "stats": stats, "grid": grid_meta}

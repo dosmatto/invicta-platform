@@ -155,7 +155,17 @@ export function FertilidadeSection() {
     const labels = fcLabels(pts);
     setCache(c => ({ ...c, [ck(nut, prof)]: { resp, labels } }));
     if (nav.talhaoId && importacaoId) {
-      cloudSalvarMapa(idNuvem(nav.talhaoId, importacaoId, metodo, pixelM, modeloFixo, nut, prof), { resp, labels });
+      // Firestore tem limite de 1 MB/doc. Se o grid pesar demais (pixel pequeno
+      // em talhão grande), grava só visualização e larga o grid (reprocessa
+      // quando precisar dele).
+      let dadosPraSalvar: { resp: RespInterp; labels: GeoJSON.FeatureCollection } = { resp, labels };
+      const aprox = JSON.stringify(dadosPraSalvar).length;
+      if (aprox > 900_000 && resp.grid) {
+        const respSemGrid: RespInterp = { ...resp, grid: undefined };
+        dadosPraSalvar = { resp: respSemGrid, labels };
+        console.warn(`[fertilidade] grid muito grande p/ Firestore (${Math.round(aprox/1024)} KB); salvando só visualização de ${nut} ${prof}.`);
+      }
+      cloudSalvarMapa(idNuvem(nav.talhaoId, importacaoId, metodo, pixelM, modeloFixo, nut, prof), dadosPraSalvar);
     }
   }
 

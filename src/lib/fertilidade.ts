@@ -54,6 +54,18 @@ export interface RespInterp {
     pixel_m: number; rmse: number | null;
     variograma: { alcance_m: number; patamar: number; pepita: number } | null;
   };
+  // Grid bruto (Float32) — base64. Orientacao: norte no topo (linhas).
+  // Use `decodeGrid(grid)` p/ obter Float32Array de tamanho rows*cols (NaN fora do polígono).
+  grid?: { b64: string; shape: [number, number] };
+}
+
+// Decodifica o grid base64 -> Float32Array. Use grid_oriented[r*cols + c].
+export function decodeGrid(g: { b64: string; shape: [number, number] }): { valores: Float32Array; rows: number; cols: number } {
+  const bin = atob(g.b64);
+  const buf = new ArrayBuffer(bin.length);
+  const u8 = new Uint8Array(buf);
+  for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+  return { valores: new Float32Array(buf), rows: g.shape[0], cols: g.shape[1] };
 }
 
 export async function interpolar(params: {
