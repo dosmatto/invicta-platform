@@ -170,30 +170,30 @@ export function FertilidadeSection() {
     })();
   }, [importacaoId, metodo, pixelM, modeloFixo, nav.talhaoId]);
 
-  // exibe no mapa o mapa do nutriente+profundidade selecionados (recolore local
-  // a partir do grid quando legenda/estilo muda — sem reprocessar no backend).
+  // exibe no mapa o mapa do nutriente+profundidade selecionados.
+  // Estratégia: tenta colorir local (do grid); se falhar OU não houver grid, cai
+  // pro PNG do backend (presente na sessão atual; ausente nos docs antigos da nuvem).
   const legAtual = nutriente ? legendaDe(nutriente) : undefined;
+  const estiloAtual = legAtual?.estilo ?? 'segmentado';
+  const legHash = useMemo(() => legAtual ? JSON.stringify({ e: legAtual.estilo, i: legAtual.invertida, c: legAtual.classes }) : '', [legAtual]);
   useEffect(() => {
     if (!legAtual) { setFertilidadeOverlay(null); setFertilidadeLabels(null); return; }
     const r = cache[ck(nutriente, profundidade)];
     if (!r) { setFertilidadeOverlay(null); setFertilidadeLabels(null); return; }
-    try {
-      let url: string;
-      if (temGrid(r.resp)) {
-        url = colorirGridComLegenda(r.resp.grid, legAtual).dataUrl;
-      } else if (r.resp.png) {
-        // legacy: doc antigo sem grid — usa o PNG já colorido (não responde a troca de legenda)
-        url = r.resp.png;
-      } else {
-        setFertilidadeOverlay(null); setFertilidadeLabels(null); return;
-      }
-      setFertilidadeOverlay({ url, coordinates: coordsFromBounds(r.resp.bounds), opacity: OPACIDADE });
-      setFertilidadeLabels(r.labels);
-    } catch (e) {
-      console.warn('[fertilidade] falha ao colorir local:', e);
-      setFertilidadeOverlay(null); setFertilidadeLabels(null);
+    let url: string | undefined;
+    if (temGrid(r.resp)) {
+      try { url = colorirGridComLegenda(r.resp.grid, legAtual).dataUrl; }
+      catch (e) { console.warn('[fertilidade] colorir local falhou, usando PNG do backend:', e); }
     }
-  }, [cache, nutriente, profundidade, legAtual, legAtual?.estilo, legAtual?.classes, setFertilidadeOverlay, setFertilidadeLabels]);
+    if (!url && r.resp.png) url = r.resp.png; // fallback (legacy ou sessão atual)
+    if (!url) {
+      console.warn('[fertilidade] mapa sem grid e sem PNG — reprocesse este nutriente.');
+      setFertilidadeOverlay(null); setFertilidadeLabels(null); return;
+    }
+    setFertilidadeOverlay({ url, coordinates: coordsFromBounds(r.resp.bounds), opacity: OPACIDADE });
+    setFertilidadeLabels(r.labels);
+  // legHash garante re-render quando o usuário edita classes/cores da legenda atual
+  }, [cache, nutriente, profundidade, legAtual, legHash, estiloAtual, setFertilidadeOverlay, setFertilidadeLabels]);
 
   useEffect(() => () => { setFertilidadeOverlay(null); setFertilidadeLabels(null); }, [setFertilidadeOverlay, setFertilidadeLabels]);
 
@@ -209,14 +209,14 @@ export function FertilidadeSection() {
     const { dominio, stops } = rampaDaLegenda(leg);
     const resp = await interpolar({ pontos: pts, poligono: poligono!, dominio, stops, metodo, pixelM, modeloFixo: modeloFixo || null });
     const labels = fcLabels(pts);
-    // não guardamos o PNG colorido — a colorização vira local + reativa à legenda.
-    const respLeve: RespInterp = { ...resp, png: '' };
-    setCache(c => ({ ...c, [ck(nut, prof)]: { resp: respLeve, labels } }));
+    // Sessão guarda o PNG do backend como fallback (~10-30 KB). Quem economiza é o Firestore.
+    setCache(c => ({ ...c, [ck(nut, prof)]: { resp, labels } }));
     if (nav.talhaoId && importacaoId) {
-      let dados: { resp: RespInterp; labels: GeoJSON.FeatureCollection } = { resp: respLeve, labels };
+      // Joga fora o PNG pra economizar espaço na nuvem (colorimos local a partir do grid)
+      let dados: { resp: RespInterp; labels: GeoJSON.FeatureCollection } = { resp: { ...resp, png: '' }, labels };
       const aprox = JSON.stringify(dados).length;
-      if (aprox > 900_000 && respLeve.grid) {
-        dados = { resp: { ...respLeve, grid: undefined }, labels };
+      if (aprox > 900_000 && resp.grid) {
+        dados = { resp: { ...resp, png: '', grid: undefined }, labels };
         console.warn(`[fertilidade] grid muito grande p/ Firestore (${Math.round(aprox/1024)} KB); salvando só metadados de ${nut} ${prof}.`);
       }
       cloudSalvarMapa(idNuvem(nav.talhaoId, importacaoId, metodo, pixelM, modeloFixo, nut, prof), dados);

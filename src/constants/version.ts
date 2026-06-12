@@ -1,6 +1,11 @@
-export const APP_VERSION = '0.23.0';
+export const APP_VERSION = '0.23.1';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.23.1': [
+    'Fix: mapas voltam a aparecer após Processar (sessão mantém PNG do backend como fallback se a colorização local falhar)',
+    'Re-render reativo quando o usuário edita classes/cores da legenda atual (legHash)',
+    'Aviso no console em vez de mapa em branco quando não há grid nem PNG',
+  ],
   '0.23.0': [
     'Arquitetura nova: raster (grid + bounds + stats) é persistido; PNG é gerado localmente em canvas a partir do grid. Trocar legenda/estilo recolore sem reprocessar',
     'Chave de cache da fertilidade não inclui mais a legenda (mapas persistidos servem qualquer legenda futura); leitura tolera chave antiga (legacy)',
