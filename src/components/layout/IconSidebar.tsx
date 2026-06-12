@@ -1,7 +1,7 @@
 'use client';
 
 import {
-  LayoutDashboard, Users, CalendarDays, Database, Settings, Shield, BookOpen,
+  LayoutDashboard, Users, CalendarDays, Settings, Shield, BookOpen,
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { APP_VERSION } from '@/constants/version';
@@ -12,7 +12,6 @@ const MENU = [
   { id: 'produtores',      label: 'Clientes', icon: Users },
   { id: 'safras',          label: 'Safras',   icon: CalendarDays },
   null,
-  { id: 'cadastros',       label: 'Cadastros', icon: Database },
   { id: 'legendas',        label: 'Legendas',  icon: BookOpen },
   null,
   { id: 'usuarios',        label: 'Usuários', icon: Shield },

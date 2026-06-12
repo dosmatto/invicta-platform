@@ -5,8 +5,6 @@
 // interpolado, recortado e colorido) + bounds para sobrepor no mapa.
 
 import { stopsParaBackend, gradienteCssDaLegenda, type Legenda } from './legendas';
-// (Mantemos LEGENDAS_PADRAO/CORES_CLASSES apenas como referência histórica;
-// o motor de cores agora é dirigido por `Legenda` editável.)
 
 const INTERP_URL = process.env.NEXT_PUBLIC_INTERP_URL ?? 'http://127.0.0.1:8800';
 

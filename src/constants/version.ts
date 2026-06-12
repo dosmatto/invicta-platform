@@ -1,6 +1,12 @@
-export const APP_VERSION = '0.23.2';
+export const APP_VERSION = '0.24.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.24.0': [
+    'Reorganização Fase 0 (limpeza): Sidebar antiga, painel Base Agronômica + página completa, painel Cadastros e pasta agronomica/ (NutrienteCard, LegendaBar) removidos',
+    'Constante constants/agronomica.ts (LEGENDAS_PADRAO, CORES_CLASSES legacy) removida — motor de Legendas único em lib/legendas.ts',
+    '15 rotas vestigiais em src/app/painel/* removidas (mantidas só configuracoes, produtores, safras, legendas)',
+    'IconSidebar atualizado: Cadastros saiu (vai voltar dentro da Biblioteca de Padrões em fase futura)',
+  ],
   '0.23.2': [
     'Debug temporário na Fertilidade: mostra domínio, stops, estatística do grid e cor calculada por valor amostrado — facilita diagnosticar discrepâncias entre cor e valor',
   ],

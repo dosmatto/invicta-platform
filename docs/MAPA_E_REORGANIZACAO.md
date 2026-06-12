@@ -140,6 +140,14 @@ Vestigiais: `/painel/{amostragem, condutividade, custos, fazendas, fertilidade, 
 | Rotas vestigiais (~18) | Páginas vazias em `/painel/*` | Limpar — manter apenas as reais |
 | `SimuladorAmostragem` ↔ `AmostragemModulo` | Duas implementações no `talhao/` | Confirmar qual está ativa e remover a outra |
 
+### 1.8.1 Pedidos anotados (a implementar depois)
+
+- **Clonar legendas** — além de duplicar (já temos), oferecer fluxo de clone com opções:
+  - Clonar trocando escopo (`meu` → `empresa` / `empresa` → `meu`).
+  - Clonar várias legendas de uma vez (seleção múltipla).
+  - Clonar a partir de uma legenda do `sistema` (read-only) gerando uma editável em `meu`.
+  - Pensar em "clonar para outro atributo" (ex.: a curva de P resina vira base pra K, mantendo escala/cores).
+
 ### 1.8 Pendências (lista herdada da memória + descobertas)
 
 1. **BUG (Grid)** — salvar grade salva a versão original, não a editada (`SimuladorAmostragem.salvarGrade` / `pontosEfetivos`).
