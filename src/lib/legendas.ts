@@ -4,12 +4,17 @@
 
 export type CategoriaLegenda = 'fertilidade' | 'micronutriente' | 'textura' | 'outro';
 export type TipoEscala = 'gradiente' | 'discreta';
+// Estilo da apresentação visual da barra (não muda valores/limites/unidades).
+export type EstiloLegenda = 'segmentado' | 'continuo';
 
 export interface ClasseLegenda {
   nome: string;                  // "Muito Baixo" / "Baixo" / ...
   valorMin: number | null;       // null = sem limite inferior
   valorMax: number | null;       // null = sem limite superior
-  corBase: string;               // hex
+  corInicio?: string;            // cor no valor mínimo (esquerda) — preferido
+  corFim?: string;               // cor no valor máximo (direita) — preferido
+  /** @deprecated mantido para retrocompatibilidade; se ausente, derivar de corInicio/corFim */
+  corBase?: string;
   larguraVisual: number;         // 0..100; soma das classes = 100
   ordem: number;                 // 1..N
 }
@@ -26,6 +31,8 @@ export interface Legenda {
   categoria: CategoriaLegenda;
   invertida: boolean;            // true para Al, m%, etc.
   tipoEscala: TipoEscala;
+  /** Estilo da barra: segmentado (faixas separadas) | continuo (gradiente único). Default: segmentado. */
+  estilo?: EstiloLegenda;
   profundidade?: string;         // opcional: "0-20", "20-40"
   classes: ClasseLegenda[];      // 3, 5 ou 6 classes
   observacao?: string;
@@ -33,27 +40,34 @@ export interface Legenda {
   atualizadoEm: string;
 }
 
-// Paleta oficial recomendada (Vermelho → Amarelo → Verde → Azul → Roxo)
-export const CORES_OFICIAIS_FERTILIDADE = {
-  muitoBaixo: '#D7191C',
-  baixo:      '#FFD92F',
-  medio:      '#1A9641',
-  alto:       '#2C7BB6',
-  muitoAlto:  '#7B3294',
-} as const;
+// Paleta oficial (referência visual da especificação): cada classe tem PAR
+// de cores (início → fim). Direção interna é "esquerda → direita" na barra.
+export const PARES_OFICIAIS_5 = [
+  { inicio: '#B00000', fim: '#FF0000' }, // Muito Baixo
+  { inicio: '#D4A800', fim: '#FFD600' }, // Baixo
+  { inicio: '#7CFC00', fim: '#006400' }, // Médio
+  { inicio: '#66CCFF', fim: '#003D99' }, // Alto
+  { inicio: '#C77DFF', fim: '#5A189A' }, // Muito Alto
+] as const;
 
-// Para escalas invertidas (Al, m%): mesma paleta, ordem invertida
-const cores5normal   = [CORES_OFICIAIS_FERTILIDADE.muitoBaixo, CORES_OFICIAIS_FERTILIDADE.baixo, CORES_OFICIAIS_FERTILIDADE.medio, CORES_OFICIAIS_FERTILIDADE.alto, CORES_OFICIAIS_FERTILIDADE.muitoAlto];
-const cores5invertido = [...cores5normal].reverse();
+// Compatibilidade com código antigo (cor única por classe — usa o "fim").
+export const CORES_OFICIAIS_FERTILIDADE = {
+  muitoBaixo: PARES_OFICIAIS_5[0].fim,
+  baixo:      PARES_OFICIAIS_5[1].fim,
+  medio:      PARES_OFICIAIS_5[2].fim,
+  alto:       PARES_OFICIAIS_5[3].fim,
+  muitoAlto:  PARES_OFICIAIS_5[4].fim,
+} as const;
 
 // Distribuição visual padrão da barra (não-proporcional ao valor)
 export const LARGURAS_VISUAIS_5 = [22.5, 22.5, 22.5, 22.5, 10];
 const NOMES_CLASSES_5 = ['Muito Baixo', 'Baixo', 'Médio', 'Alto', 'Muito Alto'];
 
 // Helper para montar uma legenda padrão de fertilidade com 5 classes a partir
-// das BORDAS (limites entre classes). bordas.length === 4.
+// das BORDAS (limites entre classes). bordas.length === 4. Para escalas
+// invertidas, a ORDEM dos pares é invertida (Muito Baixo recebe o par roxo etc.).
 export function classesFertilidade5(bordas: [number, number, number, number], invertida = false): ClasseLegenda[] {
-  const cores = invertida ? cores5invertido : cores5normal;
+  const pares = invertida ? [...PARES_OFICIAIS_5].reverse() : PARES_OFICIAIS_5;
   const [b1, b2, b3, b4] = bordas;
   const minmax: Array<[number | null, number | null]> = [
     [null, b1],
@@ -66,10 +80,19 @@ export function classesFertilidade5(bordas: [number, number, number, number], in
     nome,
     valorMin: minmax[i][0],
     valorMax: minmax[i][1],
-    corBase: cores[i],
+    corInicio: pares[i].inicio,
+    corFim:    pares[i].fim,
     larguraVisual: LARGURAS_VISUAIS_5[i],
     ordem: i + 1,
   }));
+}
+
+// Resolve as cores início/fim de uma classe (com fallback derivando de corBase).
+export function paresDaClasse(c: ClasseLegenda): { inicio: string; fim: string } {
+  if (c.corInicio && c.corFim) return { inicio: c.corInicio, fim: c.corFim };
+  // fallback: deriva de corBase (claro → escuro)
+  const base = c.corBase ?? '#888888';
+  return { inicio: ajustarL(base, +0.18), fim: ajustarL(base, -0.16) };
 }
 
 // Encontra a classe à qual o valor pertence (com fronteiras semi-abertas).
@@ -92,48 +115,49 @@ export function dominioDaLegenda(leg: Legenda): [number, number] {
   return [Math.min(...bordas), Math.max(...bordas)];
 }
 
-// Quanto clareamos no valor mínimo e quanto escurecemos no máximo dentro da classe.
-// Ajuste no L do HSL — valores conservadores pra manter cor reconhecível.
-const CLAREIA_L = 0.18;
-const ESCURECE_L = 0.16;
-
-// Cores de borda da classe: começa CLARA no mínimo, vai pra ESCURA no máximo.
-export function coresDaClasse(corBase: string): { clara: string; escura: string } {
-  return { clara: ajustarL(corBase, +CLAREIA_L), escura: ajustarL(corBase, -ESCURECE_L) };
-}
-
-// Gradiente CSS pra UI da barra de legenda (usa larguras visuais).
-// Cada classe transita do tom mais claro (esquerda) ao mais escuro (direita);
-// fronteiras entre classes são nítidas (stops adjacentes na mesma posição).
+// Gradiente CSS pra UI da barra de legenda (respeita larguras visuais e estilo).
+// - SEGMENTADO: fronteira nítida entre classes (epsilon entre fim_k e inicio_{k+1}).
+// - CONTINUO:   sequência única de stops (transição suave nas fronteiras).
 export function gradienteCssDaLegenda(leg: Legenda): string {
+  const estilo: EstiloLegenda = leg.estilo ?? 'segmentado';
   const partes: string[] = [];
   let acumulado = 0;
-  for (const c of leg.classes) {
-    const { clara, escura } = coresDaClasse(c.corBase);
-    const fim = acumulado + c.larguraVisual;
-    partes.push(`${clara} ${acumulado}%`);
-    partes.push(`${escura} ${fim}%`);
-    acumulado = fim;
+  const epsCss = 0.001; // % — ínfimo
+  for (let i = 0; i < leg.classes.length; i++) {
+    const c = leg.classes[i];
+    const { inicio, fim } = paresDaClasse(c);
+    const fimPos = acumulado + c.larguraVisual;
+    if (estilo === 'segmentado' && i > 0) {
+      // força fronteira nítida com a classe anterior na mesma posição visual
+      partes.push(`${inicio} ${Math.max(0, acumulado - epsCss)}%`);
+      partes.push(`${inicio} ${acumulado}%`);
+    } else {
+      partes.push(`${inicio} ${acumulado}%`);
+    }
+    partes.push(`${fim} ${fimPos}%`);
+    acumulado = fimPos;
   }
   return `linear-gradient(to right, ${partes.join(', ')})`;
 }
 
-// Stops + domínio para o backend.
-// Cada classe gera dois stops: cor CLARA no mínimo e cor ESCURA no máximo
-// (degradê suave dentro da classe). Entre classes vizinhas usamos um epsilon
-// curtíssimo para criar fronteira nítida (sem mistura visual).
+// Stops + domínio para o backend (respeita estilo).
 export function stopsParaBackend(leg: Legenda): { dominio: [number, number]; stops: Array<[number, [number, number, number]]> } {
+  const estilo: EstiloLegenda = leg.estilo ?? 'segmentado';
   const [vmin, vmax] = dominioDaLegenda(leg);
   const span = (vmax - vmin) || 1;
   const stops: Array<[number, [number, number, number]]> = [];
   const eps = 1e-6;
   for (let i = 0; i < leg.classes.length; i++) {
     const c = leg.classes[i];
-    const { clara, escura } = coresDaClasse(c.corBase);
-    const inicio = c.valorMin == null ? 0 : Math.max(0, (c.valorMin - vmin) / span);
-    const fim    = c.valorMax == null ? 1 : Math.min(1, (c.valorMax - vmin) / span);
-    stops.push([Math.min(1, inicio + (i === 0 ? 0 : eps)), hexToRgb(clara)]);
-    stops.push([Math.max(0, fim - (i === leg.classes.length - 1 ? 0 : eps)), hexToRgb(escura)]);
+    const { inicio, fim } = paresDaClasse(c);
+    const ini = c.valorMin == null ? 0 : Math.max(0, (c.valorMin - vmin) / span);
+    const fimT = c.valorMax == null ? 1 : Math.min(1, (c.valorMax - vmin) / span);
+    if (estilo === 'segmentado' && i > 0) {
+      stops.push([Math.min(1, ini + eps), hexToRgb(inicio)]);
+    } else {
+      stops.push([ini, hexToRgb(inicio)]);
+    }
+    stops.push([fimT, hexToRgb(fim)]);
   }
   return { dominio: [vmin, vmax], stops };
 }

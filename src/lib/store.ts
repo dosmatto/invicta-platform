@@ -395,6 +395,12 @@ export function deleteImportacaoLab(id: string) {
 // Repositório reutilizável de legendas para mapas de fertilidade, micros e
 // textura. Cada legenda é independente do mapa; o usuário escolhe qual aplicar.
 
+function notificarLegendas() {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('inv:legendas'));
+  }
+}
+
 export function getLegendas(): Legenda[] {
   return load<Legenda>('inv_legendas');
 }
@@ -409,6 +415,7 @@ export function saveLegenda(l: Omit<Legenda, 'id' | 'criadoEm' | 'atualizadoEm'>
   const nova: Legenda = { ...l, id: uid(), criadoEm: agora, atualizadoEm: agora };
   lista.push(nova);
   save('inv_legendas', lista);
+  notificarLegendas();
   return nova;
 }
 
@@ -419,6 +426,7 @@ export function upsertLegenda(l: Legenda): Legenda {
   if (idx >= 0) lista[idx] = { ...l, atualizadoEm: new Date().toISOString() };
   else lista.push(l);
   save('inv_legendas', lista);
+  notificarLegendas();
   return l;
 }
 
@@ -428,17 +436,27 @@ export function updateLegenda(id: string, patch: Partial<Omit<Legenda, 'id' | 'c
   if (idx >= 0) {
     lista[idx] = { ...lista[idx], ...patch, atualizadoEm: new Date().toISOString() };
     save('inv_legendas', lista);
+    notificarLegendas();
   }
 }
 
 export function deleteLegenda(id: string) {
   save('inv_legendas', load<Legenda>('inv_legendas').filter(l => l.id !== id));
+  notificarLegendas();
 }
 
-// Garante o seed ABC ao abrir o app (idempotente; só insere os que faltam)
+// Garante o seed ABC ao abrir o app. Atualiza legendas ABC que ainda estão na
+// versão antiga (sem `corInicio`/`corFim`, antes do sistema de Estilos), sem
+// tocar em legendas criadas pelo usuário.
 export function seedLegendasABCIfEmpty(seed: Legenda[]) {
-  const atuais = new Set(getLegendas().map(l => l.id));
-  for (const l of seed) if (!atuais.has(l.id)) upsertLegenda(l);
+  const atuais = getLegendas();
+  const porId = new Map(atuais.map(l => [l.id, l] as const));
+  for (const l of seed) {
+    const existente = porId.get(l.id);
+    if (!existente) { upsertLegenda(l); continue; }
+    const semCoresNovas = existente.classes.some(c => !c.corInicio || !c.corFim);
+    if (semCoresNovas) upsertLegenda(l);
+  }
 }
 
 export function clearAll() {

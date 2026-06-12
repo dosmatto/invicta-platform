@@ -3,10 +3,10 @@
 // larguras visuais 22,5/22,5/22,5/22,5/10. Para escalas invertidas (Al, m%),
 // as cores são invertidas (Roxo no Muito Baixo, Vermelho no Muito Alto).
 
-import { classesFertilidade5, type Legenda, CORES_OFICIAIS_FERTILIDADE } from '@/lib/legendas';
+import { classesFertilidade5, type Legenda, PARES_OFICIAIS_5 } from '@/lib/legendas';
 
 const dtIso = '2026-06-11T00:00:00.000Z';
-const base = { fonte: 'Fundação ABC', categoria: 'fertilidade' as const, tipoEscala: 'gradiente' as const, criadoEm: dtIso, atualizadoEm: dtIso };
+const base = { fonte: 'Fundação ABC', categoria: 'fertilidade' as const, tipoEscala: 'gradiente' as const, estilo: 'segmentado' as const, criadoEm: dtIso, atualizadoEm: dtIso };
 
 export const LEGENDAS_SEED_ABC: Legenda[] = [
   {
@@ -96,9 +96,9 @@ export const LEGENDAS_SEED_ABC: Legenda[] = [
     unidade: 'mg/dm³', metodo: 'DTPA', categoria: 'micronutriente',
     invertida: false,
     classes: [
-      { nome: 'Baixo', valorMin: null, valorMax: 0.6, corBase: CORES_OFICIAIS_FERTILIDADE.muitoBaixo, larguraVisual: 30, ordem: 1 },
-      { nome: 'Médio', valorMin: 0.6,  valorMax: 1.2, corBase: CORES_OFICIAIS_FERTILIDADE.medio,      larguraVisual: 35, ordem: 2 },
-      { nome: 'Alto',  valorMin: 1.2,  valorMax: null, corBase: CORES_OFICIAIS_FERTILIDADE.alto,       larguraVisual: 35, ordem: 3 },
+      { nome: 'Baixo', valorMin: null, valorMax: 0.6, corInicio: PARES_OFICIAIS_5[0].inicio, corFim: PARES_OFICIAIS_5[0].fim, larguraVisual: 30, ordem: 1 },
+      { nome: 'Médio', valorMin: 0.6,  valorMax: 1.2, corInicio: PARES_OFICIAIS_5[2].inicio, corFim: PARES_OFICIAIS_5[2].fim, larguraVisual: 35, ordem: 2 },
+      { nome: 'Alto',  valorMin: 1.2,  valorMax: null, corInicio: PARES_OFICIAIS_5[3].inicio, corFim: PARES_OFICIAIS_5[3].fim, larguraVisual: 35, ordem: 3 },
     ],
   },
 ];

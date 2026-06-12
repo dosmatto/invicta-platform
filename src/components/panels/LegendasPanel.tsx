@@ -5,8 +5,8 @@ import {
   getLegendas, saveLegenda, upsertLegenda, updateLegenda, deleteLegenda,
 } from '@/lib/store';
 import {
-  type Legenda, type ClasseLegenda, type CategoriaLegenda,
-  gradienteCssDaLegenda, CORES_OFICIAIS_FERTILIDADE, LARGURAS_VISUAIS_5, classesFertilidade5,
+  type Legenda, type ClasseLegenda, type CategoriaLegenda, type EstiloLegenda,
+  gradienteCssDaLegenda, PARES_OFICIAIS_5, LARGURAS_VISUAIS_5, classesFertilidade5, paresDaClasse,
 } from '@/lib/legendas';
 import { ELEMENTOS_LAB } from '@/lib/lab';
 import {
@@ -204,6 +204,7 @@ function novaLegendaVazia(): Omit<Legenda, 'id' | 'criadoEm' | 'atualizadoEm'> {
     categoria: 'fertilidade',
     invertida: false,
     tipoEscala: 'gradiente',
+    estilo: 'segmentado',
     classes: classesFertilidade5([6, 15, 40, 80]),
   };
 }
@@ -231,7 +232,7 @@ function LegendaEditor({ legenda, onClose }: { legenda: Legenda | null; onClose:
   function addClasse() {
     setForm(f => ({
       ...f,
-      classes: [...f.classes, { nome: 'Nova', valorMin: null, valorMax: null, corBase: '#888888', larguraVisual: 0, ordem: f.classes.length + 1 }],
+      classes: [...f.classes, { nome: 'Nova', valorMin: null, valorMax: null, corInicio: '#888888', corFim: '#444444', larguraVisual: 0, ordem: f.classes.length + 1 }],
     }));
   }
   function removerClasse(i: number) {
@@ -319,6 +320,21 @@ function LegendaEditor({ legenda, onClose }: { legenda: Legenda | null; onClose:
             </button>
           </Field>
         </div>
+        {/* Estilo da barra */}
+        <Field label="Estilo da barra de cores">
+          <div className="flex gap-1">
+            {(['segmentado', 'continuo'] as EstiloLegenda[]).map(e => (
+              <button key={e} onClick={() => patch('estilo', e)}
+                className="flex-1 py-1 rounded text-[10px] font-bold"
+                style={{ background: (form.estilo ?? 'segmentado') === e ? 'var(--invicta-blue-mid)' : '#1a3a6b', color: (form.estilo ?? 'segmentado') === e ? '#fff' : '#64748b' }}>
+                {e === 'segmentado' ? 'Segmentado' : 'Contínuo'}
+              </button>
+            ))}
+          </div>
+          <p className="text-[9px] mt-1" style={{ color: '#475569' }}>
+            Só muda a aparência visual da barra. Não altera classes, limites, unidade, método, fonte ou escala invertida.
+          </p>
+        </Field>
       </div>
 
       {/* Classes */}
@@ -331,28 +347,38 @@ function LegendaEditor({ legenda, onClose }: { legenda: Legenda | null; onClose:
           </div>
         </div>
 
-        {form.classes.map((c, i) => (
-          <div key={i} className="p-2 rounded space-y-1.5" style={{ background: '#0b1d3a', border: '1px solid #1a3a6b' }}>
-            <div className="flex items-center gap-1.5">
-              <input type="color" value={c.corBase} onChange={e => patchClasse(i, { corBase: e.target.value })} className="w-7 h-7 rounded cursor-pointer" style={{ border: '1px solid #2e5fa3', background: 'transparent' }} />
-              <input value={c.nome} onChange={e => patchClasse(i, { nome: e.target.value })} className="flex-1 rounded px-2 py-1 text-[11px] outline-none" style={inputStyle} />
-              <button onClick={() => moverClasse(i, -1)} disabled={i === 0} title="Subir" className="p-1 rounded" style={{ color: '#93c5fd', background: '#1a3a6b', opacity: i === 0 ? 0.4 : 1 }}><ArrowUp size={10} /></button>
-              <button onClick={() => moverClasse(i, +1)} disabled={i === form.classes.length - 1} title="Descer" className="p-1 rounded" style={{ color: '#93c5fd', background: '#1a3a6b', opacity: i === form.classes.length - 1 ? 0.4 : 1 }}><ArrowDown size={10} /></button>
-              <button onClick={() => removerClasse(i)} title="Remover" className="p-1 rounded" style={{ color: '#f87171', background: '#1a3a6b' }}><X size={10} /></button>
-            </div>
-            <div className="grid grid-cols-3 gap-1.5">
-              <Field label="Min">
-                <input type="number" step="any" value={c.valorMin ?? ''} onChange={e => patchClasse(i, { valorMin: e.target.value === '' ? null : Number(e.target.value) })} placeholder="(∞)" className="w-full rounded px-1.5 py-1 text-[10px] outline-none" style={inputStyle} />
-              </Field>
-              <Field label="Max">
-                <input type="number" step="any" value={c.valorMax ?? ''} onChange={e => patchClasse(i, { valorMax: e.target.value === '' ? null : Number(e.target.value) })} placeholder="(∞)" className="w-full rounded px-1.5 py-1 text-[10px] outline-none" style={inputStyle} />
-              </Field>
-              <Field label="Larg. visual %">
+        {form.classes.map((c, i) => {
+          const { inicio, fim } = paresDaClasse(c);
+          return (
+            <div key={i} className="p-2 rounded space-y-1.5" style={{ background: '#0b1d3a', border: '1px solid #1a3a6b' }}>
+              <div className="flex items-center gap-1.5">
+                <input value={c.nome} onChange={e => patchClasse(i, { nome: e.target.value })} className="flex-1 rounded px-2 py-1 text-[11px] outline-none" style={inputStyle} />
+                <button onClick={() => moverClasse(i, -1)} disabled={i === 0} title="Subir" className="p-1 rounded" style={{ color: '#93c5fd', background: '#1a3a6b', opacity: i === 0 ? 0.4 : 1 }}><ArrowUp size={10} /></button>
+                <button onClick={() => moverClasse(i, +1)} disabled={i === form.classes.length - 1} title="Descer" className="p-1 rounded" style={{ color: '#93c5fd', background: '#1a3a6b', opacity: i === form.classes.length - 1 ? 0.4 : 1 }}><ArrowDown size={10} /></button>
+                <button onClick={() => removerClasse(i)} title="Remover" className="p-1 rounded" style={{ color: '#f87171', background: '#1a3a6b' }}><X size={10} /></button>
+              </div>
+              {/* mini barra da classe (claro → escuro) */}
+              <div className="h-3 rounded overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.1)', background: `linear-gradient(to right, ${inicio}, ${fim})` }} />
+              <div className="grid grid-cols-4 gap-1.5">
+                <Field label="Cor início">
+                  <input type="color" value={inicio} onChange={e => patchClasse(i, { corInicio: e.target.value, corBase: undefined })} className="w-full h-7 rounded cursor-pointer" style={{ border: '1px solid #2e5fa3', background: 'transparent' }} />
+                </Field>
+                <Field label="Cor fim">
+                  <input type="color" value={fim} onChange={e => patchClasse(i, { corFim: e.target.value, corBase: undefined })} className="w-full h-7 rounded cursor-pointer" style={{ border: '1px solid #2e5fa3', background: 'transparent' }} />
+                </Field>
+                <Field label="Min">
+                  <input type="number" step="any" value={c.valorMin ?? ''} onChange={e => patchClasse(i, { valorMin: e.target.value === '' ? null : Number(e.target.value) })} placeholder="(∞)" className="w-full rounded px-1.5 py-1 text-[10px] outline-none" style={inputStyle} />
+                </Field>
+                <Field label="Max">
+                  <input type="number" step="any" value={c.valorMax ?? ''} onChange={e => patchClasse(i, { valorMax: e.target.value === '' ? null : Number(e.target.value) })} placeholder="(∞)" className="w-full rounded px-1.5 py-1 text-[10px] outline-none" style={inputStyle} />
+                </Field>
+              </div>
+              <Field label="Largura visual %">
                 <input type="number" step="0.1" min={0} max={100} value={c.larguraVisual} onChange={e => patchClasse(i, { larguraVisual: Number(e.target.value) || 0 })} className="w-full rounded px-1.5 py-1 text-[10px] outline-none" style={inputStyle} />
               </Field>
             </div>
-          </div>
-        ))}
+          );
+        })}
 
         <div className="text-[9px]" style={{ color: somaOk ? '#86efac' : '#fbbf24' }}>
           {somaOk ? '✓' : '⚠'} Soma das larguras: {fmt(somaLarguras)}% (precisa ser 100)
@@ -368,7 +394,7 @@ function LegendaEditor({ legenda, onClose }: { legenda: Legenda | null; onClose:
       </div>
 
       <p className="text-[9px]" style={{ color: '#475569' }}>
-        Cores padrão fertilidade: Vermelho {CORES_OFICIAIS_FERTILIDADE.muitoBaixo} → Amarelo {CORES_OFICIAIS_FERTILIDADE.baixo} → Verde {CORES_OFICIAIS_FERTILIDADE.medio} → Azul {CORES_OFICIAIS_FERTILIDADE.alto} → Roxo {CORES_OFICIAIS_FERTILIDADE.muitoAlto}. Larguras 5 classes: {LARGURAS_VISUAIS_5.join(' / ')}.
+        Pares oficiais (5 classes): {PARES_OFICIAIS_5.map(p => `${p.inicio}→${p.fim}`).join(' · ')}. Larguras: {LARGURAS_VISUAIS_5.join(' / ')}.
       </p>
     </div>
   );

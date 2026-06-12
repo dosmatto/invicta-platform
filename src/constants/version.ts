@@ -1,6 +1,14 @@
-export const APP_VERSION = '0.22.1';
+export const APP_VERSION = '0.23.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.23.0': [
+    'Arquitetura nova: raster (grid + bounds + stats) é persistido; PNG é gerado localmente em canvas a partir do grid. Trocar legenda/estilo recolore sem reprocessar',
+    'Chave de cache da fertilidade não inclui mais a legenda (mapas persistidos servem qualquer legenda futura); leitura tolera chave antiga (legacy)',
+    'Sistema de Estilos de Legenda: Segmentado (faixas separadas, fronteira nítida) e Contínuo (gradiente único). Trocar estilo NÃO altera classes/limites/unidade/método/fonte/invertida',
+    'Pares de cores oficiais por classe (corInicio → corFim): Vermelho (#B00000→#FF0000), Amarelo (#D4A800→#FFD600), Verde (#7CFC00→#006400), Azul (#66CCFF→#003D99), Roxo (#C77DFF→#5A189A)',
+    'Editor de legendas com dois color pickers por classe + seletor de estilo + prévia em tempo real',
+    'Fertilidade reage ao editor: editar legenda atualiza o mapa instantaneamente (evento inv:legendas)',
+  ],
   '0.22.1': [
     'Transição de cor dentro de cada classe (claro → escuro) com fronteira nítida entre classes — barra UI e raster',
     'Mapas já processados antes desta versão usam o esquema antigo (cores sólidas); reprocesse no Fertilidade para ver o degradê novo',

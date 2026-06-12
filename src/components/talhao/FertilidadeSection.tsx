@@ -11,6 +11,7 @@ import {
   interpolar, rampaDaLegenda, gradienteCss, coordsFromBounds, extrairPoligono,
   type RespInterp,
 } from '@/lib/fertilidade';
+import { colorirGridComLegenda, temGrid } from '@/lib/raster';
 import type { Legenda } from '@/lib/legendas';
 import { LEGENDAS_SEED_ABC } from '@/constants/legendasSeedABC';
 import { Play, Layers, Loader2, Eraser, AlertTriangle, Activity, Settings, BookOpen } from 'lucide-react';
@@ -23,14 +24,16 @@ const OPACIDADE = 1; // fixo 100%
 type Ponto = { lng: number; lat: number; valor: number };
 type MapaPronto = { resp: RespInterp; labels: GeoJSON.FeatureCollection };
 
-// chave do cache na sessão (legenda + nutriente + profundidade)
-const ck = (legId: string, nut: string, prof: string) => `${legId}__${nut}__${prof}`;
-// prefixo persistente: contexto (talhão + importação + config) — a legenda
-// entra no sufixo, então mapas de diferentes legendas convivem no Firestore.
+// Arquitetura: separamos raster (interpolação cara) de renderização (cor barata).
+// A chave NÃO inclui a legenda — assim, trocar legenda/estilo apenas recolore o
+// grid persistido (sem ir ao backend).
+// Sufixo é `nut__prof`. Mapas anteriores (v0.21.0-0.22.x) usavam `legId__nut__prof`
+// no mesmo prefixo — leitura tolera ambos (legacy = qualquer legenda salva com grid).
+const ck = (nut: string, prof: string) => `${nut}__${prof}`;
 const prefixoNuvem = (talhaoId: string, importacaoId: string, metodo: string, pixelM: number, modeloFixo: string) =>
   `${talhaoId}__${importacaoId}__${metodo}__${pixelM}__${modeloFixo || 'auto'}__`;
-const idNuvem = (talhaoId: string, importacaoId: string, metodo: string, pixelM: number, modeloFixo: string, legId: string, nut: string, prof: string) =>
-  `${prefixoNuvem(talhaoId, importacaoId, metodo, pixelM, modeloFixo)}${legId}__${nut}__${prof}`;
+const idNuvem = (talhaoId: string, importacaoId: string, metodo: string, pixelM: number, modeloFixo: string, nut: string, prof: string) =>
+  `${prefixoNuvem(talhaoId, importacaoId, metodo, pixelM, modeloFixo)}${nut}__${prof}`;
 
 export function FertilidadeSection() {
   const { nav, uploadedGeo, setFertilidadeOverlay, setFertilidadeLabels } = useApp();
@@ -58,10 +61,14 @@ export function FertilidadeSection() {
   // cache de mapas: chave = legenda+nutriente+profundidade
   const [cache, setCache] = useState<Record<string, MapaPronto>>({});
 
-  // Seed automático do repositório Fundação ABC + carrega legendas do store
+  // Seed automático do repositório Fundação ABC + carrega legendas do store.
+  // Reage a mudanças no editor de Legendas via evento custom.
   useEffect(() => {
     seedLegendasABCIfEmpty(LEGENDAS_SEED_ABC);
     setLegendas(getLegendas());
+    const onLeg = () => setLegendas(getLegendas());
+    if (typeof window !== 'undefined') window.addEventListener('inv:legendas', onLeg);
+    return () => { if (typeof window !== 'undefined') window.removeEventListener('inv:legendas', onLeg); };
   }, []);
 
   useEffect(() => {
@@ -140,7 +147,8 @@ export function FertilidadeSection() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [importacaoId]);
 
-  // trocar contexto: hidrata da nuvem o que estiver salvo daquela combinação
+  // trocar contexto: hidrata da nuvem o que estiver salvo daquela combinação.
+  // Aceita tanto a chave nova (`nut__prof`) quanto a antiga (`legId__nut__prof`).
   useEffect(() => {
     setCache({}); setEstado('idle'); setErro('');
     if (!nav.talhaoId || !importacaoId) return;
@@ -150,27 +158,42 @@ export function FertilidadeSection() {
       if (carregados.length === 0) return;
       const novo: Record<string, MapaPronto> = {};
       for (const c of carregados) {
-        const chave = c.id.slice(prefixo.length); // `${legId}__${nut}__${prof}`
+        const sufixo = c.id.slice(prefixo.length);
+        const partes = sufixo.split('__');
+        // novo: `${nut}__${prof}` (2 partes) · legacy: `${legId}__${nut}__${prof}` (3+ partes)
+        const chave = partes.length >= 3 ? `${partes.slice(-2).join('__')}` : sufixo;
+        // prefere o mais "novo" (sufixo curto). Se já houver, ignora legacy.
+        if (novo[chave] && partes.length >= 3) continue;
         novo[chave] = c.dados;
       }
       setCache(novo);
     })();
   }, [importacaoId, metodo, pixelM, modeloFixo, nav.talhaoId]);
 
-  // exibe no mapa o mapa do nutriente+profundidade selecionados (com a legenda atual)
+  // exibe no mapa o mapa do nutriente+profundidade selecionados (recolore local
+  // a partir do grid quando legenda/estilo muda — sem reprocessar no backend).
   const legAtual = nutriente ? legendaDe(nutriente) : undefined;
   useEffect(() => {
-    if (!legAtual) {
-      setFertilidadeOverlay(null); setFertilidadeLabels(null); return;
-    }
-    const r = cache[ck(legAtual.id, nutriente, profundidade)];
-    if (r) {
-      setFertilidadeOverlay({ url: r.resp.png, coordinates: coordsFromBounds(r.resp.bounds), opacity: OPACIDADE });
+    if (!legAtual) { setFertilidadeOverlay(null); setFertilidadeLabels(null); return; }
+    const r = cache[ck(nutriente, profundidade)];
+    if (!r) { setFertilidadeOverlay(null); setFertilidadeLabels(null); return; }
+    try {
+      let url: string;
+      if (temGrid(r.resp)) {
+        url = colorirGridComLegenda(r.resp.grid, legAtual).dataUrl;
+      } else if (r.resp.png) {
+        // legacy: doc antigo sem grid — usa o PNG já colorido (não responde a troca de legenda)
+        url = r.resp.png;
+      } else {
+        setFertilidadeOverlay(null); setFertilidadeLabels(null); return;
+      }
+      setFertilidadeOverlay({ url, coordinates: coordsFromBounds(r.resp.bounds), opacity: OPACIDADE });
       setFertilidadeLabels(r.labels);
-    } else {
+    } catch (e) {
+      console.warn('[fertilidade] falha ao colorir local:', e);
       setFertilidadeOverlay(null); setFertilidadeLabels(null);
     }
-  }, [cache, nutriente, profundidade, legAtual, setFertilidadeOverlay, setFertilidadeLabels]);
+  }, [cache, nutriente, profundidade, legAtual, legAtual?.estilo, legAtual?.classes, setFertilidadeOverlay, setFertilidadeLabels]);
 
   useEffect(() => () => { setFertilidadeOverlay(null); setFertilidadeLabels(null); }, [setFertilidadeOverlay, setFertilidadeLabels]);
 
@@ -181,18 +204,22 @@ export function FertilidadeSection() {
     if (!leg) throw new Error(`${nut}: sem legenda`);
     const pts = pontosDe(nut, prof);
     if (pts.length < 3) throw new Error(`${leg.simbolo} ${prof}: menos de 3 pontos`);
+    // o backend devolve grid + bounds + stats + png; só usamos grid/bounds/stats.
+    // O domínio e os stops vão só pra colorir o PNG do backend (ignorado aqui).
     const { dominio, stops } = rampaDaLegenda(leg);
     const resp = await interpolar({ pontos: pts, poligono: poligono!, dominio, stops, metodo, pixelM, modeloFixo: modeloFixo || null });
     const labels = fcLabels(pts);
-    setCache(c => ({ ...c, [ck(leg.id, nut, prof)]: { resp, labels } }));
+    // não guardamos o PNG colorido — a colorização vira local + reativa à legenda.
+    const respLeve: RespInterp = { ...resp, png: '' };
+    setCache(c => ({ ...c, [ck(nut, prof)]: { resp: respLeve, labels } }));
     if (nav.talhaoId && importacaoId) {
-      let dadosPraSalvar: { resp: RespInterp; labels: GeoJSON.FeatureCollection } = { resp, labels };
-      const aprox = JSON.stringify(dadosPraSalvar).length;
-      if (aprox > 900_000 && resp.grid) {
-        dadosPraSalvar = { resp: { ...resp, grid: undefined }, labels };
-        console.warn(`[fertilidade] grid muito grande p/ Firestore (${Math.round(aprox/1024)} KB); salvando só visualização de ${nut} ${prof}.`);
+      let dados: { resp: RespInterp; labels: GeoJSON.FeatureCollection } = { resp: respLeve, labels };
+      const aprox = JSON.stringify(dados).length;
+      if (aprox > 900_000 && respLeve.grid) {
+        dados = { resp: { ...respLeve, grid: undefined }, labels };
+        console.warn(`[fertilidade] grid muito grande p/ Firestore (${Math.round(aprox/1024)} KB); salvando só metadados de ${nut} ${prof}.`);
       }
-      cloudSalvarMapa(idNuvem(nav.talhaoId, importacaoId, metodo, pixelM, modeloFixo, leg.id, nut, prof), dadosPraSalvar);
+      cloudSalvarMapa(idNuvem(nav.talhaoId, importacaoId, metodo, pixelM, modeloFixo, nut, prof), dados);
     }
   }
 
@@ -247,11 +274,11 @@ export function FertilidadeSection() {
   if (importacoes.length === 0) return <div className="px-6 py-4"><Aviso texto="Importe resultados de laboratório (seção acima) — o mapa de fertilidade é gerado a partir deles." /></div>;
 
   const processando = estado === 'processando';
-  const stats = (legAtual && nutriente && profundidade) ? cache[ck(legAtual.id, nutriente, profundidade)]?.resp.stats : undefined;
+  const stats = (nutriente && profundidade) ? cache[ck(nutriente, profundidade)]?.resp.stats : undefined;
   const totalMapas = nutrientes.length * profsAll.length;
   const feitosNaProf = nutrientes.filter(n => {
     const l = legendaDe(n);
-    return l && cache[ck(l.id, n, profundidade)];
+    return l && cache[ck(n, profundidade)];
   }).length;
 
   // legendas disponíveis pro atributo atual (pra o dropdown)
@@ -357,7 +384,7 @@ export function FertilidadeSection() {
                 {nutrientes.map(id => {
                   const sel = id === nutriente;
                   const l = legendaDe(id);
-                  const feito = l && !!cache[ck(l.id, id, profundidade)];
+                  const feito = l && !!cache[ck(id, profundidade)];
                   return (
                     <button key={id} onClick={() => setNutriente(id)} className="px-2 py-1 rounded text-[10px] font-bold"
                       style={{ background: sel ? 'var(--invicta-blue-mid)' : '#1a3a6b', color: sel ? '#fff' : (feito ? '#86efac' : '#64748b') }}>
