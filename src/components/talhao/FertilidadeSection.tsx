@@ -12,6 +12,8 @@ import {
   type RespInterp,
 } from '@/lib/fertilidade';
 import { colorirGridComLegenda, temGrid } from '@/lib/raster';
+import { decodeGrid } from '@/lib/fertilidade';
+import { stopsParaBackend, dominioDaLegenda, paresDaClasse } from '@/lib/legendas';
 import type { Legenda } from '@/lib/legendas';
 import { LEGENDAS_SEED_ABC } from '@/constants/legendasSeedABC';
 import { Play, Layers, Loader2, Eraser, AlertTriangle, Activity, Settings, BookOpen } from 'lucide-react';
@@ -52,6 +54,7 @@ export function FertilidadeSection() {
   const [estado, setEstado] = useState<'idle' | 'processando' | 'pronto' | 'erro'>('idle');
   const [erro, setErro] = useState('');
   const [progresso, setProgresso] = useState<{ atual: number; total: number; nome: string } | null>(null);
+  const [debugAberto, setDebugAberto] = useState(false);
 
   // legendas carregadas (seed garantido ao abrir)
   const [legendas, setLegendas] = useState<Legenda[]>([]);
@@ -447,6 +450,19 @@ export function FertilidadeSection() {
               <p className="text-[9px]" style={{ color: '#64748b' }}>{legAtual.fonte} · {legAtual.atributo}{legAtual.metodo ? ` (${legAtual.metodo})` : ''} · {legAtual.unidade}</p>
             </div>
           )}
+
+          {/* Debug temporário — ajuda a diagnosticar discrepâncias entre valor e cor */}
+          {legAtual && cache[ck(nutriente, profundidade)] && (
+            <div className="rounded-lg overflow-hidden" style={{ border: '1px solid #1a3a6b' }}>
+              <button onClick={() => setDebugAberto(v => !v)} className="w-full flex items-center justify-between px-2.5 py-1.5 text-[10px] font-semibold" style={{ background: '#061525', color: '#fbbf24' }}>
+                <span>🔬 Debug — valores vs cores</span>
+                <span>{debugAberto ? '▴' : '▾'}</span>
+              </button>
+              {debugAberto && (
+                <DebugBox leg={legAtual} resp={cache[ck(nutriente, profundidade)].resp} pontos={pontosInterp} />
+              )}
+            </div>
+          )}
         </>
       )}
     </div>
@@ -477,6 +493,106 @@ function BarraLegenda({ leg }: { leg: Legenda }) {
       </div>
     </div>
   );
+}
+
+// ============================================================
+// DEBUG — ajuda a diagnosticar discrepâncias entre valor e cor
+// ============================================================
+function DebugBox({ leg, resp, pontos }: { leg: Legenda; resp: RespInterp; pontos: Array<{ lng: number; lat: number; valor: number }> }) {
+  const { dominio, stops } = stopsParaBackend(leg);
+  const [vmin, vmax] = dominio;
+  let stats: { rows: number; cols: number; min: number; max: number; media: number; n: number } | null = null;
+  if (resp.grid) {
+    try {
+      const { valores, rows, cols } = decodeGrid(resp.grid);
+      let n = 0, soma = 0, vmin2 = Infinity, vmax2 = -Infinity;
+      for (let i = 0; i < valores.length; i++) {
+        const v = valores[i];
+        if (!isFinite(v)) continue;
+        n++; soma += v;
+        if (v < vmin2) vmin2 = v;
+        if (v > vmax2) vmax2 = v;
+      }
+      stats = { rows, cols, min: vmin2, max: vmax2, media: soma / Math.max(1, n), n };
+    } catch (e) { console.warn('debug decode falhou:', e); }
+  }
+
+  // Pra cada ponto: qual cor o pipeline mapearia
+  function corDoValor(v: number): string {
+    const span = (vmax - vmin) || 1;
+    const t = Math.max(0, Math.min(1, (v - vmin) / span));
+    // mesma lógica do interpolarCor mas em hex
+    if (t <= stops[0][0]) return rgbHex(stops[0][1]);
+    if (t >= stops[stops.length - 1][0]) return rgbHex(stops[stops.length - 1][1]);
+    let i = 0;
+    while (i < stops.length - 1 && stops[i + 1][0] < t) i++;
+    const [t0, c0] = stops[i];
+    const [t1, c1] = stops[i + 1];
+    const k = (t - t0) / (t1 - t0 || 1);
+    return rgbHex([
+      Math.round(c0[0] + (c1[0] - c0[0]) * k),
+      Math.round(c0[1] + (c1[1] - c0[1]) * k),
+      Math.round(c0[2] + (c1[2] - c0[2]) * k),
+    ]);
+  }
+
+  return (
+    <div className="px-2.5 py-2 space-y-2 text-[10px]" style={{ background: '#061525', color: '#cbd5e1' }}>
+      <div>
+        <strong style={{ color: '#fbbf24' }}>Legenda:</strong> {leg.nome} · invertida={String(leg.invertida)} · estilo={leg.estilo ?? 'segmentado'}
+      </div>
+      <div>
+        <strong style={{ color: '#fbbf24' }}>Domínio:</strong> [{fmt(vmin)} , {fmt(vmax)}] · span={fmt(vmax - vmin)}
+      </div>
+      <div>
+        <strong style={{ color: '#fbbf24' }}>Stops ({stops.length}):</strong>
+        <div className="space-y-0.5 mt-1">
+          {stops.map(([t, [r, g, b]], i) => (
+            <div key={i} className="flex items-center gap-1.5">
+              <span style={{ display: 'inline-block', width: 18, height: 10, background: `rgb(${r},${g},${b})`, border: '1px solid rgba(255,255,255,0.15)' }} />
+              <span style={{ color: '#94a3b8' }}>t={t.toFixed(4)}</span>
+              <span style={{ color: '#475569' }}>·</span>
+              <span style={{ color: '#cbd5e1' }}>{rgbHex([r, g, b])}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+      {stats && (
+        <div>
+          <strong style={{ color: '#fbbf24' }}>Grid bruto ({stats.rows}×{stats.cols}, {stats.n} pixels válidos):</strong>
+          <div>min={fmt(stats.min)} · max={fmt(stats.max)} · média={fmt(stats.media)}</div>
+        </div>
+      )}
+      {!resp.grid && <div style={{ color: '#f87171' }}>⚠ Sem grid (mapa legacy — reprocesse para diagnóstico completo).</div>}
+      <div>
+        <strong style={{ color: '#fbbf24' }}>Pontos amostrais ({pontos.length}):</strong>
+        <div className="space-y-0.5 mt-1 max-h-44 overflow-y-auto">
+          {pontos.slice().sort((a, b) => a.valor - b.valor).map((p, i) => {
+            const cor = corDoValor(p.valor);
+            return (
+              <div key={i} className="flex items-center gap-1.5">
+                <span style={{ display: 'inline-block', width: 18, height: 10, background: cor, border: '1px solid rgba(255,255,255,0.15)' }} />
+                <span style={{ color: '#94a3b8' }}>V={fmt(p.valor)}</span>
+                <span style={{ color: '#475569' }}>·</span>
+                <span style={{ color: '#cbd5e1' }}>{cor}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      <button onClick={() => {
+        // log tudo no console pra inspeção
+        // eslint-disable-next-line no-console
+        console.log('[fertilidade/debug]', { leg, dominio, stops, stats, primeirosValores: resp.grid ? Array.from(decodeGrid(resp.grid).valores.slice(0, 20)) : null });
+      }} className="w-full py-1 rounded text-[10px] font-semibold" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
+        Logar no console (F12)
+      </button>
+    </div>
+  );
+}
+
+function rgbHex([r, g, b]: [number, number, number]): string {
+  return '#' + [r, g, b].map(x => Math.max(0, Math.min(255, Math.round(x))).toString(16).padStart(2, '0')).join('');
 }
 
 function Aviso({ texto }: { texto: string }) {

@@ -1,6 +1,9 @@
-export const APP_VERSION = '0.23.1';
+export const APP_VERSION = '0.23.2';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.23.2': [
+    'Debug temporário na Fertilidade: mostra domínio, stops, estatística do grid e cor calculada por valor amostrado — facilita diagnosticar discrepâncias entre cor e valor',
+  ],
   '0.23.1': [
     'Fix: mapas voltam a aparecer após Processar (sessão mantém PNG do backend como fallback se a colorização local falhar)',
     'Re-render reativo quando o usuário edita classes/cores da legenda atual (legHash)',
