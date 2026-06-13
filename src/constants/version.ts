@@ -1,6 +1,12 @@
-export const APP_VERSION = '0.33.0';
+export const APP_VERSION = '0.34.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.34.0': [
+    'Página Individual do Talhão (rota /talhao/[id], tela cheia, deep-linkável): central de trabalho organizada por SAFRA, com barra de contexto fixa (Cliente · Fazenda · Talhão · Área · Safra · Cultura) e navegação por abas',
+    'Abas funcionais nesta etapa: Resumo, Fertilidade (reaproveita o módulo existente) e Amostragem; Produtividade, Recomendações, Compactação, NDVI, Arquivos e Relatórios entram como estrutura para preenchimento incremental',
+    'O seletor de safra da página filtra os trabalhos (Fertilidade passou a aceitar a safra escolhida em vez da ativa global)',
+    'Atalhos "Abrir página completa do talhão" na lista de talhões da fazenda e no painel lateral do talhão (o painel lateral atual segue funcionando em paralelo)',
+  ],
   '0.33.0': [
     'Mapas de Fertilidade persistentes: ao abrir o talhão a última importação é selecionada sozinha e os mapas já interpolados reaparecem automaticamente (sem reprocessar) — com selo mostrando quantos mapas estão salvos na nuvem',
     'Talhões grandes não perdem mais o mapa: o grid interpolado é comprimido (gzip) antes de ir para a nuvem, cabendo no limite do Firestore mesmo na malha máxima',

@@ -38,11 +38,12 @@ const prefixoNuvem = (talhaoId: string, importacaoId: string, metodo: string, pi
 const idNuvem = (talhaoId: string, importacaoId: string, metodo: string, pixelM: number, modeloFixo: string, nut: string, prof: string) =>
   `${prefixoNuvem(talhaoId, importacaoId, metodo, pixelM, modeloFixo)}${nut}__${prof}`;
 
-export function FertilidadeSection() {
+export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: string } = {}) {
   const { nav, uploadedGeo, setFertilidadeOverlay, setFertilidadeLabels } = useApp();
 
+  // safraProp (vinda da Página do Talhão) tem prioridade; sem ela, usa a ativa global.
   const safraAtiva = useMemo(() => getSafras().find(s => s.ativa) ?? null, []);
-  const safraNome = safraAtiva?.nome ?? '';
+  const safraNome = safraProp ?? safraAtiva?.nome ?? '';
 
   const [importacoes, setImportacoes] = useState<ImportacaoLab[]>([]);
   const [importacaoId, setImportacaoId] = useState('');
@@ -346,7 +347,7 @@ export function FertilidadeSection() {
     }
   }
 
-  if (!safraAtiva) return <div className="px-6 py-4"><Aviso texto="Defina uma safra ativa (no topo do talhão) para gerar o mapa de fertilidade." /></div>;
+  if (!safraNome) return <div className="px-6 py-4"><Aviso texto="Defina uma safra para gerar o mapa de fertilidade." /></div>;
   if (importacoes.length === 0) return <div className="px-6 py-4"><Aviso texto="Importe resultados de laboratório (seção acima) — o mapa de fertilidade é gerado a partir deles." /></div>;
 
   const processando = estado === 'processando';

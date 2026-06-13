@@ -1,12 +1,14 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useApp } from '@/context/AppContext';
 import { getFazendas, getTalhoes, saveTalhao, Fazenda, Talhao } from '@/lib/store';
-import { ChevronLeft, ChevronRight, Plus, Map, AlertTriangle, Save, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Map, AlertTriangle, Save, X, ExternalLink } from 'lucide-react';
 import { PanelSection, PanelButton, StatusBadge } from './_shared';
 
 export function FazendaDetailPanel() {
+  const router = useRouter();
   const { nav, setNav, setActivePanel, setMapMode, setUploadedGeo, setUploadedBbox, setTalhoesFazenda } = useApp();
   const [tab, setTab] = useState<'talhoes' | 'dados'>('talhoes');
   const [fazenda, setFazenda] = useState<Fazenda | null>(null);
@@ -197,8 +199,8 @@ export function FazendaDetailPanel() {
                   </div>
                 ) : (
                   talhoes.map(t => (
-                    <button key={t.id} onClick={() => abrirTalhao(t)}
-                      className="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors"
+                    <div key={t.id} role="button" tabIndex={0} onClick={() => abrirTalhao(t)}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors cursor-pointer"
                       style={{ borderBottom: '1px solid #0f2240' }}
                       onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'var(--sidebar-item-hover)'}
                       onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}>
@@ -214,9 +216,14 @@ export function FazendaDetailPanel() {
                       </div>
                       <div className="flex items-center gap-1.5">
                         <StatusBadge status={t.status} />
+                        <button onClick={e => { e.stopPropagation(); router.push(`/talhao/${t.id}`); }}
+                          title="Abrir página completa do talhão"
+                          className="p-1 rounded transition-colors hover:bg-white/10" style={{ color: '#93c5fd' }}>
+                          <ExternalLink size={14} />
+                        </button>
                         <ChevronRight size={14} style={{ color: '#64748b' }} />
                       </div>
-                    </button>
+                    </div>
                   ))
                 )}
               </>
