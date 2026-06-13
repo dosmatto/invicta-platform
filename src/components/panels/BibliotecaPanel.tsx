@@ -8,8 +8,15 @@ import {
 } from '@/lib/biblioteca';
 import { Search, Plus, Download, Upload, ChevronRight, Edit3, Trash2, Save, X, Power } from 'lucide-react';
 import { LegendasPanel } from './LegendasPanel';
+import { SafrasPanel } from './SafrasPanel';
+import { EtiquetaLayoutPicker } from '../talhao/EtiquetaLayoutPicker';
 import { PERFIS_BUILTIN, ELEMENTOS_LAB, simboloElemento } from '@/lib/lab';
-import { getPadroesAmostragem, getLegendasPorAtributo } from '@/lib/store';
+import {
+  getPadroesAmostragem, savePadraoAmostragem, updatePadraoAmostragem, deletePadraoAmostragem,
+  getPadroesElementos, savePadraoElementos, updatePadraoElementos, deletePadraoElementos,
+  getConfigEtiqueta, saveConfigEtiqueta, getLegendasPorAtributo,
+  type PadraoElementos, type PadraoAmostragem, type ProfundidadeConfig, type ConfigEtiqueta,
+} from '@/lib/store';
 
 const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
 
@@ -59,6 +66,9 @@ function CategoriaConteudo({ slug }: { slug: CategoriaBiblioteca }) {
   if (slug === 'legendas') return <ConteudoLegendas />;
   if (slug === 'laboratorios') return <ConteudoLaboratorios />;
   if (slug === 'perfis') return <ConteudoPerfis />;
+  if (slug === 'safras') return <ConteudoSafras />;
+  if (slug === 'grades') return <ConteudoGrades />;
+  if (slug === 'preferencias-analise') return <ConteudoPreferencias />;
   return <ConteudoGenerico slug={slug} />;
 }
 
@@ -743,6 +753,333 @@ function PerfilEditor({ state, onClose }: { state: PerfilEditState; onClose: () 
           style={{ background: 'var(--invicta-green-dark)' }}>
           <Save size={11} /> Salvar
         </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Safras ───────────────────────────────────────────────────────────────
+// Embute o SafrasPanel existente (que já opera via wrappers da Biblioteca).
+
+function ConteudoSafras() {
+  const def = CATEGORIAS.find(c => c.slug === 'safras')!;
+  const Icon = def.icone;
+  return (
+    <section className="flex-1 flex flex-col overflow-hidden">
+      <div className="px-4 py-3 flex-shrink-0" style={{ borderBottom: '1px solid #1a3a6b' }}>
+        <div className="flex items-center gap-2 mb-1">
+          <Icon size={14} style={{ color: '#93c5fd' }} />
+          <h3 className="text-sm font-bold uppercase tracking-wide" style={{ color: '#e2e8f0' }}>{def.nome}</h3>
+        </div>
+        <p className="text-[10px]" style={{ color: '#64748b' }}>{def.descricao}</p>
+      </div>
+      <div className="flex-1 overflow-y-auto"><SafrasPanel /></div>
+    </section>
+  );
+}
+
+// ─── Preferências de Análise (hoje: Etiqueta) ─────────────────────────────
+
+function ConteudoPreferencias() {
+  const def = CATEGORIAS.find(c => c.slug === 'preferencias-analise')!;
+  const Icon = def.icone;
+  const [etq, setEtq] = useState<ConfigEtiqueta>(() => getConfigEtiqueta());
+  function atualizar(patch: Partial<ConfigEtiqueta>) {
+    const novo = { ...etq, ...patch };
+    setEtq(novo);
+    saveConfigEtiqueta(novo);
+  }
+  return (
+    <section className="flex-1 flex flex-col overflow-hidden">
+      <div className="px-4 py-3 flex-shrink-0" style={{ borderBottom: '1px solid #1a3a6b' }}>
+        <div className="flex items-center gap-2 mb-1">
+          <Icon size={14} style={{ color: '#93c5fd' }} />
+          <h3 className="text-sm font-bold uppercase tracking-wide" style={{ color: '#e2e8f0' }}>{def.nome}</h3>
+        </div>
+        <p className="text-[10px]" style={{ color: '#64748b' }}>{def.descricao}</p>
+      </div>
+      <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2">
+        <div className="rounded-lg p-2" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
+          <div className="text-[11px] font-bold mb-2" style={{ color: '#e2e8f0' }}>Etiquetas (Pimaco)</div>
+          <EtiquetaLayoutPicker
+            layoutId={etq.layoutId} setLayoutId={id => atualizar({ layoutId: id })}
+            dx={etq.dx} dy={etq.dy}
+            setDx={v => atualizar({ dx: v })} setDy={v => atualizar({ dy: v })}
+          />
+        </div>
+        <p className="text-[9px]" style={{ color: '#475569' }}>
+          Também acessível em Configurações › Etiquetas — as duas telas editam o mesmo padrão.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+// ─── Grades (Padrões de Amostragem + Padrões de Elementos) ────────────────
+
+function ConteudoGrades() {
+  const def = CATEGORIAS.find(c => c.slug === 'grades')!;
+  const Icon = def.icone;
+  const [sub, setSub] = useState<'amostragem' | 'elementos'>('amostragem');
+  return (
+    <section className="flex-1 flex flex-col overflow-hidden relative">
+      <div className="px-4 py-3 flex-shrink-0" style={{ borderBottom: '1px solid #1a3a6b' }}>
+        <div className="flex items-center gap-2 mb-1">
+          <Icon size={14} style={{ color: '#93c5fd' }} />
+          <h3 className="text-sm font-bold uppercase tracking-wide" style={{ color: '#e2e8f0' }}>{def.nome}</h3>
+        </div>
+        <p className="text-[10px]" style={{ color: '#64748b' }}>{def.descricao}</p>
+      </div>
+      <div className="flex gap-1 px-3 pt-2 flex-shrink-0">
+        {([
+          { id: 'amostragem', label: 'Padrões de Amostragem' },
+          { id: 'elementos', label: 'Padrões de Elementos' },
+        ] as { id: 'amostragem' | 'elementos'; label: string }[]).map(t => (
+          <button key={t.id} onClick={() => setSub(t.id)}
+            className="flex-1 py-1 rounded text-[10px] font-bold"
+            style={{ background: sub === t.id ? 'var(--invicta-blue-mid)' : '#1a3a6b', color: sub === t.id ? '#fff' : '#64748b' }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+      {sub === 'amostragem' ? <GradesAmostragem /> : <GradesElementos />}
+    </section>
+  );
+}
+
+function GradesElementos() {
+  const [refresh, setRefresh] = useState(0);
+  const [edit, setEdit] = useState<{ id: string | null; nome: string; elementos: string[] } | null>(null);
+  const itens = useMemo(() => getPadroesElementos(), [refresh]);
+
+  function del(p: PadraoElementos) {
+    if (!confirm(`Excluir o padrão de elementos "${p.nome}"?`)) return;
+    deletePadraoElementos(p.id);
+    setRefresh(x => x + 1);
+  }
+
+  return (
+    <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="px-3 pt-2 flex-shrink-0">
+        <button onClick={() => setEdit({ id: null, nome: '', elementos: [] })}
+          className="w-full py-1.5 rounded text-[10px] font-bold text-white flex items-center justify-center gap-1"
+          style={{ background: 'var(--invicta-green-dark)' }}>
+          <Plus size={11} /> Novo padrão de elementos
+        </button>
+      </div>
+      <div className="flex-1 overflow-y-auto px-3 py-2">
+        {itens.length === 0 ? (
+          <p className="text-center text-[10px] py-8" style={{ color: '#64748b' }}>Nenhum padrão de elementos. Use <em>+ Novo</em>.</p>
+        ) : (
+          <div className="space-y-1.5">
+            {itens.map(p => (
+              <div key={p.id} className="p-2 rounded-lg flex items-center gap-2" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[11px] font-bold truncate" style={{ color: '#e2e8f0' }}>{p.nome}</div>
+                  <div className="text-[9px] truncate" style={{ color: '#64748b' }}>{p.elementos.map(simboloElemento).join(', ')}</div>
+                </div>
+                <button onClick={() => setEdit({ id: p.id, nome: p.nome, elementos: [...p.elementos] })} title="Editar" className="p-1 rounded hover:bg-white/10" style={{ color: '#93c5fd' }}><Edit3 size={11} /></button>
+                <button onClick={() => del(p)} title="Excluir" className="p-1 rounded hover:bg-white/10" style={{ color: '#f87171' }}><Trash2 size={11} /></button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      {edit && <ElementosEditor state={edit} onClose={() => { setEdit(null); setRefresh(x => x + 1); }} />}
+    </div>
+  );
+}
+
+function ElementosEditor({ state, onClose }: { state: { id: string | null; nome: string; elementos: string[] }; onClose: () => void }) {
+  const [nome, setNome] = useState(state.nome);
+  const [els, setEls] = useState<string[]>(state.elementos);
+  const [erro, setErro] = useState('');
+
+  function toggle(id: string) {
+    setEls(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
+  }
+  function salvar() {
+    setErro('');
+    const n = nome.trim();
+    if (!n) { setErro('Dê um nome.'); return; }
+    if (els.length === 0) { setErro('Selecione ao menos um elemento.'); return; }
+    if (state.id) updatePadraoElementos(state.id, { nome: n, elementos: els });
+    else savePadraoElementos({ nome: n, elementos: els });
+    onClose();
+  }
+
+  return (
+    <div className="absolute inset-0 z-10 flex flex-col" style={{ background: 'var(--invicta-blue-dark)' }}>
+      <div className="flex items-center justify-between px-4 py-2 flex-shrink-0" style={{ borderBottom: '1px solid #1a3a6b' }}>
+        <span className="text-[11px] font-bold uppercase" style={{ color: '#e2e8f0' }}>{state.id ? 'Editar padrão de elementos' : 'Novo padrão de elementos'}</span>
+        <button onClick={onClose} className="p-1 rounded hover:bg-white/10" style={{ color: '#cbd5e1' }}><X size={12} /></button>
+      </div>
+      <div className="flex-1 overflow-y-auto p-3 space-y-3">
+        <div>
+          <label className="text-[10px] font-semibold block mb-1" style={{ color: '#cbd5e1' }}>Nome</label>
+          <input value={nome} onChange={e => setNome(e.target.value)} placeholder="ex: Rotina + Micros"
+            className="w-full rounded px-2 py-1.5 text-[11px] outline-none" style={inputStyle} />
+        </div>
+        <div>
+          <label className="text-[10px] font-semibold block mb-1" style={{ color: '#cbd5e1' }}>Elementos ({els.length})</label>
+          <div className="grid grid-cols-3 gap-1">
+            {ELEMENTOS_LAB.map(el => {
+              const on = els.includes(el.id);
+              return (
+                <button key={el.id} onClick={() => toggle(el.id)}
+                  className="py-1 rounded text-[10px] font-bold"
+                  style={{ background: on ? 'var(--invicta-green-dark)' : '#1a3a6b', color: on ? '#fff' : '#94a3b8' }}>
+                  {el.simbolo}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        {erro && (
+          <div className="px-2 py-1.5 rounded text-[10px]" style={{ background: '#3a1a1a', color: '#fca5a5', border: '1px solid #7f1d1d' }}>{erro}</div>
+        )}
+      </div>
+      <div className="flex gap-2 px-3 py-2 flex-shrink-0" style={{ borderTop: '1px solid #1a3a6b' }}>
+        <button onClick={onClose} className="flex-1 py-1.5 rounded text-[10px] font-bold" style={{ background: '#1a3a6b', color: '#cbd5e1' }}>Cancelar</button>
+        <button onClick={salvar} className="flex-1 py-1.5 rounded text-[10px] font-bold text-white flex items-center justify-center gap-1" style={{ background: 'var(--invicta-green-dark)' }}><Save size={11} /> Salvar</button>
+      </div>
+    </div>
+  );
+}
+
+function GradesAmostragem() {
+  const [refresh, setRefresh] = useState(0);
+  const [edit, setEdit] = useState<{ id: string | null; nome: string; densidadeHaPonto: number; profundidades: ProfundidadeConfig[] } | null>(null);
+  const itens = useMemo(() => getPadroesAmostragem(), [refresh]);
+
+  function del(p: PadraoAmostragem) {
+    if (!confirm(`Excluir o padrão de amostragem "${p.nome}"?`)) return;
+    deletePadraoAmostragem(p.id);
+    setRefresh(x => x + 1);
+  }
+
+  return (
+    <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="px-3 pt-2 flex-shrink-0">
+        <button onClick={() => setEdit({ id: null, nome: '', densidadeHaPonto: 2, profundidades: [] })}
+          className="w-full py-1.5 rounded text-[10px] font-bold text-white flex items-center justify-center gap-1"
+          style={{ background: 'var(--invicta-green-dark)' }}>
+          <Plus size={11} /> Novo padrão de amostragem
+        </button>
+      </div>
+      <div className="flex-1 overflow-y-auto px-3 py-2">
+        {itens.length === 0 ? (
+          <p className="text-center text-[10px] py-8" style={{ color: '#64748b' }}>Nenhum padrão de amostragem. Use <em>+ Novo</em>.</p>
+        ) : (
+          <div className="space-y-1.5">
+            {itens.map(p => (
+              <div key={p.id} className="p-2 rounded-lg flex items-center gap-2" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[11px] font-bold truncate" style={{ color: '#e2e8f0' }}>{p.nome}</div>
+                  <div className="text-[9px] truncate" style={{ color: '#64748b' }}>
+                    1 ponto / {p.densidadeHaPonto} ha · {p.profundidades.length} profundidade(s)
+                  </div>
+                </div>
+                <button onClick={() => setEdit({ id: p.id, nome: p.nome, densidadeHaPonto: p.densidadeHaPonto, profundidades: p.profundidades.map(x => ({ ...x })) })} title="Editar" className="p-1 rounded hover:bg-white/10" style={{ color: '#93c5fd' }}><Edit3 size={11} /></button>
+                <button onClick={() => del(p)} title="Excluir" className="p-1 rounded hover:bg-white/10" style={{ color: '#f87171' }}><Trash2 size={11} /></button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      {edit && <AmostragemEditor state={edit} onClose={() => { setEdit(null); setRefresh(x => x + 1); }} />}
+    </div>
+  );
+}
+
+function AmostragemEditor({ state, onClose }: { state: { id: string | null; nome: string; densidadeHaPonto: number; profundidades: ProfundidadeConfig[] }; onClose: () => void }) {
+  const [nome, setNome] = useState(state.nome);
+  const [densidade, setDensidade] = useState(state.densidadeHaPonto);
+  const [profs, setProfs] = useState<ProfundidadeConfig[]>(state.profundidades);
+  const padrEl = useMemo(() => getPadroesElementos(), []);
+  const [erro, setErro] = useState('');
+
+  function addProf() {
+    setProfs(p => [...p, { rotulo: '', percentual: 100, padraoElementosId: padrEl[0]?.id ?? '' }]);
+  }
+  function setProf(i: number, patch: Partial<ProfundidadeConfig>) {
+    setProfs(p => p.map((x, idx) => idx === i ? { ...x, ...patch } : x));
+  }
+  function salvar() {
+    setErro('');
+    const n = nome.trim();
+    if (!n) { setErro('Dê um nome.'); return; }
+    if (!densidade || densidade <= 0) { setErro('Densidade deve ser maior que zero.'); return; }
+    if (profs.length === 0) { setErro('Adicione ao menos uma profundidade.'); return; }
+    for (const p of profs) {
+      if (!p.rotulo.trim()) { setErro('Cada profundidade precisa de um rótulo (ex: 00-20).'); return; }
+      if (!p.padraoElementosId) { setErro('Cada profundidade precisa de um padrão de elementos.'); return; }
+    }
+    const data = { nome: n, densidadeHaPonto: densidade, profundidades: profs };
+    if (state.id) updatePadraoAmostragem(state.id, data);
+    else savePadraoAmostragem(data);
+    onClose();
+  }
+
+  return (
+    <div className="absolute inset-0 z-10 flex flex-col" style={{ background: 'var(--invicta-blue-dark)' }}>
+      <div className="flex items-center justify-between px-4 py-2 flex-shrink-0" style={{ borderBottom: '1px solid #1a3a6b' }}>
+        <span className="text-[11px] font-bold uppercase" style={{ color: '#e2e8f0' }}>{state.id ? 'Editar padrão de amostragem' : 'Novo padrão de amostragem'}</span>
+        <button onClick={onClose} className="p-1 rounded hover:bg-white/10" style={{ color: '#cbd5e1' }}><X size={12} /></button>
+      </div>
+      <div className="flex-1 overflow-y-auto p-3 space-y-3">
+        {padrEl.length === 0 && (
+          <div className="px-2 py-1.5 rounded text-[10px]" style={{ background: '#3a2e1a', color: '#fbbf24', border: '1px solid #78510f' }}>
+            Crie ao menos um <strong>Padrão de Elementos</strong> primeiro (aba ao lado) — cada profundidade aponta para um.
+          </div>
+        )}
+        <div>
+          <label className="text-[10px] font-semibold block mb-1" style={{ color: '#cbd5e1' }}>Nome</label>
+          <input value={nome} onChange={e => setNome(e.target.value)} placeholder="ex: Padrão Invicta 2 ha"
+            className="w-full rounded px-2 py-1.5 text-[11px] outline-none" style={inputStyle} />
+        </div>
+        <div>
+          <label className="text-[10px] font-semibold block mb-1" style={{ color: '#cbd5e1' }}>Densidade (ha por ponto)</label>
+          <input type="number" step="0.5" min="0.5" value={densidade}
+            onChange={e => setDensidade(Number(e.target.value.replace(',', '.')) || 0)}
+            className="w-full rounded px-2 py-1.5 text-[11px] outline-none" style={inputStyle} />
+        </div>
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <label className="text-[10px] font-semibold" style={{ color: '#cbd5e1' }}>Profundidades</label>
+            <button onClick={addProf} className="text-[10px] font-bold flex items-center gap-1" style={{ color: '#4ade80' }}>
+              <Plus size={10} /> Adicionar
+            </button>
+          </div>
+          <div className="space-y-1.5">
+            {profs.map((p, i) => (
+              <div key={i} className="p-2 rounded space-y-1" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
+                <div className="flex items-center gap-1">
+                  <input value={p.rotulo} onChange={e => setProf(i, { rotulo: e.target.value })} placeholder="00-20"
+                    className="rounded px-1.5 py-1 text-[10px] outline-none" style={{ ...inputStyle, width: 64 }} />
+                  <input type="number" min="0" max="100" value={p.percentual}
+                    onChange={e => setProf(i, { percentual: Number(e.target.value) || 0 })}
+                    className="rounded px-1.5 py-1 text-[10px] outline-none" style={{ ...inputStyle, width: 52 }} />
+                  <span className="text-[10px]" style={{ color: '#64748b' }}>%</span>
+                  <button onClick={() => setProfs(prev => prev.filter((_, idx) => idx !== i))} title="Remover" className="ml-auto p-1 rounded hover:bg-white/10" style={{ color: '#f87171' }}><Trash2 size={10} /></button>
+                </div>
+                <select value={p.padraoElementosId} onChange={e => setProf(i, { padraoElementosId: e.target.value })}
+                  className="w-full rounded px-1.5 py-1 text-[10px] outline-none" style={inputStyle}>
+                  <option value="">— Padrão de elementos…</option>
+                  {padrEl.map(pe => <option key={pe.id} value={pe.id}>{pe.nome}</option>)}
+                </select>
+              </div>
+            ))}
+            {profs.length === 0 && <p className="text-[9px]" style={{ color: '#64748b' }}>Nenhuma profundidade. Clique em Adicionar.</p>}
+          </div>
+        </div>
+        {erro && (
+          <div className="px-2 py-1.5 rounded text-[10px]" style={{ background: '#3a1a1a', color: '#fca5a5', border: '1px solid #7f1d1d' }}>{erro}</div>
+        )}
+      </div>
+      <div className="flex gap-2 px-3 py-2 flex-shrink-0" style={{ borderTop: '1px solid #1a3a6b' }}>
+        <button onClick={onClose} className="flex-1 py-1.5 rounded text-[10px] font-bold" style={{ background: '#1a3a6b', color: '#cbd5e1' }}>Cancelar</button>
+        <button onClick={salvar} className="flex-1 py-1.5 rounded text-[10px] font-bold text-white flex items-center justify-center gap-1" style={{ background: 'var(--invicta-green-dark)' }}><Save size={11} /> Salvar</button>
       </div>
     </div>
   );

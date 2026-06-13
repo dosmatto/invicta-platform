@@ -20,6 +20,7 @@ import {
 import { empresaAtivaId, uidUsuario } from './empresa';
 import { cloudPushLista } from './cloud';
 import type { PerfilLabConfig } from './lab';
+import type { ProfundidadeConfig } from './store';
 
 // ─── Tipos ───────────────────────────────────────────────────────────────
 
@@ -60,12 +61,12 @@ export interface DefCategoria {
 }
 
 export const CATEGORIAS: DefCategoria[] = [
-  { slug: 'preferencias-analise', nome: 'Preferências de Análise', icone: SlidersHorizontal, status: 'em-breve',
-    descricao: 'Configurações cross-módulo (unidades, profundidades padrão, etc.).' },
-  { slug: 'safras', nome: 'Safras', icone: CalendarDays, status: 'em-breve',
-    descricao: 'Safras reutilizáveis. Hoje ainda acessível pelo menu lateral; migra para cá na Fase 4.' },
-  { slug: 'grades', nome: 'Grades', icone: Grid3x3, status: 'em-breve',
-    descricao: 'Modelos de grade, densidades, padrões de amostragem.' },
+  { slug: 'preferencias-analise', nome: 'Preferências de Análise', icone: SlidersHorizontal, status: 'disponivel',
+    descricao: 'Configurações cross-módulo. Hoje: modelo de etiqueta (folha Pimaco + ajuste fino).' },
+  { slug: 'safras', nome: 'Safras', icone: CalendarDays, status: 'disponivel',
+    descricao: 'Safras reutilizáveis. Criar, ativar e excluir (antes ficava no menu lateral).' },
+  { slug: 'grades', nome: 'Grades', icone: Grid3x3, status: 'disponivel',
+    descricao: 'Padrões de Amostragem (densidade + profundidades) e Padrões de Elementos (quais análises rodar).' },
   { slug: 'fertilidade', nome: 'Fertilidade', icone: Leaf, status: 'em-breve',
     descricao: 'Regras de interpretação e parâmetros padrão de krigagem/IDW.' },
   { slug: 'analises-foliares', nome: 'Análises Foliares', icone: Salad, status: 'em-breve',
@@ -254,8 +255,31 @@ export interface ConteudoLaboratorio {
 // as escolhas no Fertilidade. Não duplica os itens originais — só referencia.
 export interface ConteudoPerfil {
   laboratorioId?: string;                          // FK Lab: builtin id ou item da biblioteca
-  padraoAmostragemId?: string;                     // FK PadraoAmostragem (inv_padroes_amos)
+  padraoAmostragemId?: string;                     // FK PadraoAmostragem (categoria 'grades')
   legendasPorElemento?: Record<string, string>;    // elementoId -> legendaId (inv_legendas)
+}
+
+// Fase 5 — Safras (categoria 'safras'). nome/criadoEm vêm do envelope; a flag
+// `ativa` (safra ativa do contexto) é distinta de ItemBiblioteca.ativo.
+export interface ConteudoSafra {
+  anoInicio: number;
+  anoFim: number;
+  ativa: boolean;
+}
+
+// Fase 5 — Grades (categoria 'grades'). Dois tipos no mesmo storage,
+// discriminados por `kind`: Padrões de Amostragem e Padrões de Elementos.
+export type ConteudoGrade =
+  | { kind: 'amostragem'; densidadeHaPonto: number; profundidades: ProfundidadeConfig[] }
+  | { kind: 'elementos'; elementos: string[] };
+
+// Fase 5 — Preferências de Análise (categoria 'preferencias-analise').
+// Hoje só a config de etiqueta; `tipo` permite outros itens no futuro.
+export interface ConteudoEtiqueta {
+  tipo: 'etiqueta';
+  layoutId: string;
+  dx: number;
+  dy: number;
 }
 
 export function migrarLaboratoriosV1() {
@@ -297,5 +321,112 @@ export function migrarLaboratoriosV1() {
     adicionou = true;
   }
   if (adicionou) save('laboratorios', lista);
+  localStorage.setItem(FLAG, '1');
+}
+
+// ── Fase 5 — Safras / Grades / Preferências ──────────────────────────────
+// Migração ADITIVA: a chave antiga continua em KEYS_LISTA (cloud) para não
+// perder dados de quem usa Firestore; aqui só copiamos para inv_bib_*.
+// Itens sem empresaId herdam a empresa ativa (mesma semântica da Fase 1.A,
+// onde loadFiltrado auto-marcava os legados na empresa ativa).
+
+function escopoDe(empresaIdOld: string | undefined): { escopo: EscopoBiblioteca; empresaId?: string } {
+  const empresaId = empresaIdOld ?? empresaAtivaId() ?? undefined;
+  return empresaId ? { escopo: 'empresa', empresaId } : { escopo: 'meu' };
+}
+
+export function migrarSafrasV1() {
+  if (typeof window === 'undefined') return;
+  const FLAG = 'inv_migrado_safras_v1';
+  if (localStorage.getItem(FLAG) === '1') return;
+
+  type Antiga = { id: string; nome: string; anoInicio: number; anoFim: number; ativa: boolean; criadoEm: string; empresaId?: string };
+  let antigos: Antiga[] = [];
+  try { antigos = JSON.parse(localStorage.getItem('inv_safras') ?? '[]'); } catch {}
+
+  if (antigos.length) {
+    const lista = load<ConteudoSafra>('safras');
+    const ids = new Set(lista.map(i => i.id));
+    const u = uidUsuario();
+    let add = false;
+    for (const s of antigos) {
+      if (ids.has(s.id)) continue;
+      const { escopo, empresaId } = escopoDe(s.empresaId);
+      lista.push({
+        id: s.id, categoria: 'safras', nome: s.nome, escopo,
+        donoUsuarioId: escopo === 'meu' ? u : undefined,
+        empresaId: escopo === 'empresa' ? empresaId : undefined,
+        ativo: true, versao: 1, criadoEm: s.criadoEm, atualizadoEm: s.criadoEm, criadoPor: u,
+        conteudo: { anoInicio: s.anoInicio, anoFim: s.anoFim, ativa: s.ativa },
+      });
+      add = true;
+    }
+    if (add) save('safras', lista);
+  }
+  localStorage.setItem(FLAG, '1');
+}
+
+export function migrarGradesV1() {
+  if (typeof window === 'undefined') return;
+  const FLAG = 'inv_migrado_grades_v1';
+  if (localStorage.getItem(FLAG) === '1') return;
+
+  const lista = load<ConteudoGrade>('grades');
+  const ids = new Set(lista.map(i => i.id));
+  const u = uidUsuario();
+  let add = false;
+  const push = (id: string, nome: string, criadoEm: string, empresaIdOld: string | undefined, conteudo: ConteudoGrade) => {
+    if (ids.has(id)) return;
+    const { escopo, empresaId } = escopoDe(empresaIdOld);
+    lista.push({
+      id, categoria: 'grades', nome, escopo,
+      donoUsuarioId: escopo === 'meu' ? u : undefined,
+      empresaId: escopo === 'empresa' ? empresaId : undefined,
+      ativo: true, versao: 1, criadoEm, atualizadoEm: criadoEm, criadoPor: u, conteudo,
+    });
+    ids.add(id); add = true;
+  };
+
+  type Elem = { id: string; nome: string; elementos: string[]; criadoEm: string; empresaId?: string };
+  type Amos = { id: string; nome: string; densidadeHaPonto: number; profundidades: ProfundidadeConfig[]; criadoEm: string; empresaId?: string };
+  let elems: Elem[] = []; let amos: Amos[] = [];
+  try { elems = JSON.parse(localStorage.getItem('inv_padroes_elem') ?? '[]'); } catch {}
+  try { amos = JSON.parse(localStorage.getItem('inv_padroes_amos') ?? '[]'); } catch {}
+
+  for (const e of elems) push(e.id, e.nome, e.criadoEm, e.empresaId, { kind: 'elementos', elementos: e.elementos });
+  for (const a of amos) push(a.id, a.nome, a.criadoEm, a.empresaId, { kind: 'amostragem', densidadeHaPonto: a.densidadeHaPonto, profundidades: a.profundidades });
+
+  if (add) save('grades', lista);
+  localStorage.setItem(FLAG, '1');
+}
+
+export function migrarPreferenciasV1() {
+  if (typeof window === 'undefined') return;
+  const FLAG = 'inv_migrado_prefs_v1';
+  if (localStorage.getItem(FLAG) === '1') return;
+
+  let cfg: { layoutId?: string; dx?: number; dy?: number } | null = null;
+  try { const raw = localStorage.getItem('inv_etiqueta_cfg'); if (raw) cfg = JSON.parse(raw); } catch {}
+
+  if (cfg && cfg.layoutId) {
+    const lista = load<ConteudoEtiqueta>('preferencias-analise');
+    const u = uidUsuario();
+    const ativa = empresaAtivaId();
+    const jaTem = lista.some(i =>
+      i.conteudo?.tipo === 'etiqueta' && (ativa ? i.empresaId === ativa : i.donoUsuarioId === u),
+    );
+    if (!jaTem) {
+      const { escopo, empresaId } = escopoDe(undefined);
+      const agora = new Date().toISOString();
+      lista.push({
+        id: uid(), categoria: 'preferencias-analise', nome: 'Etiquetas (Pimaco)', escopo,
+        donoUsuarioId: escopo === 'meu' ? u : undefined,
+        empresaId: escopo === 'empresa' ? empresaId : undefined,
+        ativo: true, versao: 1, criadoEm: agora, atualizadoEm: agora, criadoPor: u,
+        conteudo: { tipo: 'etiqueta', layoutId: cfg.layoutId, dx: cfg.dx ?? 0, dy: cfg.dy ?? 0 },
+      });
+      save('preferencias-analise', lista);
+    }
+  }
   localStorage.setItem(FLAG, '1');
 }

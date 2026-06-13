@@ -17,10 +17,16 @@ import { collection, deleteDoc, doc, endAt, getDoc, getDocs, orderBy, query, set
 
 // Coleções (arrays de registros com id) espelhadas 1:1 com as chaves locais
 const KEYS_LISTA = [
-  'inv_clientes', 'inv_fazendas', 'inv_talhoes', 'inv_safras',
-  'inv_padroes_elem', 'inv_padroes_amos', 'inv_grades',
-  'inv_bib_laboratorios', // Fase 3: substitui inv_lab_perfis (que era espelhada antes)
-  'inv_bib_perfis',       // Fase 4: perfis agronômicos
+  'inv_clientes', 'inv_fazendas', 'inv_talhoes',
+  // Antigas (Fase 5 migra para inv_bib_*). Mantidas para HIDRATAR dados de
+  // quem já usa Firestore; após migração viram espelho inerte (nada grava nelas).
+  'inv_safras', 'inv_padroes_elem', 'inv_padroes_amos',
+  'inv_grades',                        // grades reais (GradeAmostragem) — não muda
+  'inv_bib_laboratorios',              // Fase 3
+  'inv_bib_perfis',                    // Fase 4
+  'inv_bib_safras',                    // Fase 5 — Safras
+  'inv_bib_grades',                    // Fase 5 — Padrões de Amostragem + Elementos
+  'inv_bib_preferencias-analise',      // Fase 5 — Etiqueta
   'inv_lab', 'inv_legendas',
 ];
 // Configurações (objeto único por chave) — coleção 'inv_config', doc = chave

@@ -4,15 +4,19 @@
 
 import type { ResultadoAmostra, PerfilLabConfig } from './lab';
 import type { Legenda } from './legendas';
-import { cloudPushLista, cloudPushObj } from './cloud';
+import { cloudPushLista } from './cloud';
 import { empresaAtivaId, uidUsuario } from './empresa';
 import {
   listar as bibListar,
+  obter as bibObter,
   criar as bibCriar,
   atualizar as bibAtualizar,
   excluir as bibExcluir,
   type ItemBiblioteca,
   type ConteudoLaboratorio,
+  type ConteudoSafra,
+  type ConteudoGrade,
+  type ConteudoEtiqueta,
 } from './biblioteca';
 
 export interface Cliente {
@@ -230,78 +234,125 @@ export function updateTalhao(id: string, data: Partial<Talhao>) {
 
 // ── Safras ────────────────────────────────────────────────────────────────
 
+// Wrappers de retrocompat (Fase 5): Safras vivem na Biblioteca > Safras.
+// Forma `Safra` e API públicas inalteradas — SafrasPanel não muda.
+
+function _itemParaSafra(it: ItemBiblioteca<ConteudoSafra>): Safra {
+  return { id: it.id, nome: it.nome, anoInicio: it.conteudo.anoInicio, anoFim: it.conteudo.anoFim, ativa: it.conteudo.ativa, criadoEm: it.criadoEm };
+}
+
 export function getSafras(): Safra[] {
-  return loadFiltrado<Safra>('inv_safras').sort((a, b) => b.anoInicio - a.anoInicio);
+  return bibListar<ConteudoSafra>('safras').map(_itemParaSafra).sort((a, b) => b.anoInicio - a.anoInicio);
 }
 
 export function saveSafra(s: Omit<Safra, 'id' | 'criadoEm'>): Safra {
-  const safras = load<Safra>('inv_safras');
-  const nova: Safra = comEmpresa({ ...s, id: uid(), criadoEm: new Date().toISOString() });
-  safras.push(nova);
-  save('inv_safras', safras);
-  return nova;
+  const it = bibCriar<ConteudoSafra>('safras', {
+    nome: s.nome,
+    conteudo: { anoInicio: s.anoInicio, anoFim: s.anoFim, ativa: s.ativa },
+    escopo: empresaAtivaId() ? 'empresa' : 'meu',
+  });
+  return _itemParaSafra(it);
 }
 
 export function updateSafra(id: string, data: Partial<Safra>) {
-  const safras = load<Safra>('inv_safras');
-  const idx = safras.findIndex(s => s.id === id);
-  if (idx >= 0) { safras[idx] = { ...safras[idx], ...data }; save('inv_safras', safras); }
+  const it = bibObter<ConteudoSafra>('safras', id);
+  if (!it) return;
+  const conteudo = { ...it.conteudo };
+  if (data.anoInicio !== undefined) conteudo.anoInicio = data.anoInicio;
+  if (data.anoFim !== undefined) conteudo.anoFim = data.anoFim;
+  if (data.ativa !== undefined) conteudo.ativa = data.ativa;
+  bibAtualizar<ConteudoSafra>('safras', id, { ...(data.nome !== undefined ? { nome: data.nome } : {}), conteudo });
 }
 
 export function deleteSafra(id: string) {
-  save('inv_safras', load<Safra>('inv_safras').filter(s => s.id !== id));
+  bibExcluir('safras', id);
 }
 
 // ── Padrões de Elementos ────────────────────────────────────────────────────
 // Conjunto nomeado de elementos a analisar (ex: "Rotina", "Rotina + Micros").
 // Os elementos referenciam os ids da Base Agronômica (ph, p, k, ca...).
 
+// Wrappers de retrocompat (Fase 5): Padrões de Elementos vivem na Biblioteca >
+// Grades (kind 'elementos'). API pública inalterada — SimuladorAmostragem não muda.
+
+function _itemParaPadrEl(it: ItemBiblioteca<ConteudoGrade>): PadraoElementos | null {
+  if (it.conteudo.kind !== 'elementos') return null;
+  return { id: it.id, nome: it.nome, elementos: it.conteudo.elementos, criadoEm: it.criadoEm };
+}
+
 export function getPadroesElementos(): PadraoElementos[] {
-  return loadFiltrado<PadraoElementos>('inv_padroes_elem').sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  return bibListar<ConteudoGrade>('grades')
+    .map(_itemParaPadrEl)
+    .filter((x): x is PadraoElementos => x !== null)
+    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
 }
 
 export function savePadraoElementos(p: Omit<PadraoElementos, 'id' | 'criadoEm'>): PadraoElementos {
-  const lista = load<PadraoElementos>('inv_padroes_elem');
-  const novo: PadraoElementos = comEmpresa({ ...p, id: uid(), criadoEm: new Date().toISOString() });
-  lista.push(novo);
-  save('inv_padroes_elem', lista);
-  return novo;
+  const it = bibCriar<ConteudoGrade>('grades', {
+    nome: p.nome,
+    conteudo: { kind: 'elementos', elementos: p.elementos },
+    escopo: empresaAtivaId() ? 'empresa' : 'meu',
+  });
+  return { id: it.id, nome: it.nome, elementos: p.elementos, criadoEm: it.criadoEm };
 }
 
 export function updatePadraoElementos(id: string, data: Partial<PadraoElementos>) {
-  const lista = load<PadraoElementos>('inv_padroes_elem');
-  const idx = lista.findIndex(p => p.id === id);
-  if (idx >= 0) { lista[idx] = { ...lista[idx], ...data }; save('inv_padroes_elem', lista); }
+  const it = bibObter<ConteudoGrade>('grades', id);
+  if (!it || it.conteudo.kind !== 'elementos') return;
+  const elementos = data.elementos ?? it.conteudo.elementos;
+  bibAtualizar<ConteudoGrade>('grades', id, {
+    ...(data.nome !== undefined ? { nome: data.nome } : {}),
+    conteudo: { kind: 'elementos', elementos },
+  });
 }
 
 export function deletePadraoElementos(id: string) {
-  save('inv_padroes_elem', load<PadraoElementos>('inv_padroes_elem').filter(p => p.id !== id));
+  bibExcluir('grades', id);
 }
 
 // ── Padrões de Amostragem ───────────────────────────────────────────────────
 // Template reutilizável: densidade + profundidades (cada uma com % de pontos
 // e qual padrão de elementos). Distância da borda/rotação ficam no simulador.
 
+// Wrappers de retrocompat (Fase 5): Padrões de Amostragem vivem na Biblioteca >
+// Grades (kind 'amostragem'). API pública inalterada.
+
+function _itemParaPadrAmos(it: ItemBiblioteca<ConteudoGrade>): PadraoAmostragem | null {
+  if (it.conteudo.kind !== 'amostragem') return null;
+  return { id: it.id, nome: it.nome, densidadeHaPonto: it.conteudo.densidadeHaPonto, profundidades: it.conteudo.profundidades, criadoEm: it.criadoEm };
+}
+
 export function getPadroesAmostragem(): PadraoAmostragem[] {
-  return loadFiltrado<PadraoAmostragem>('inv_padroes_amos').sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  return bibListar<ConteudoGrade>('grades')
+    .map(_itemParaPadrAmos)
+    .filter((x): x is PadraoAmostragem => x !== null)
+    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
 }
 
 export function savePadraoAmostragem(p: Omit<PadraoAmostragem, 'id' | 'criadoEm'>): PadraoAmostragem {
-  const lista = load<PadraoAmostragem>('inv_padroes_amos');
-  const novo: PadraoAmostragem = comEmpresa({ ...p, id: uid(), criadoEm: new Date().toISOString() });
-  lista.push(novo);
-  save('inv_padroes_amos', lista);
-  return novo;
+  const it = bibCriar<ConteudoGrade>('grades', {
+    nome: p.nome,
+    conteudo: { kind: 'amostragem', densidadeHaPonto: p.densidadeHaPonto, profundidades: p.profundidades },
+    escopo: empresaAtivaId() ? 'empresa' : 'meu',
+  });
+  return { id: it.id, nome: it.nome, densidadeHaPonto: p.densidadeHaPonto, profundidades: p.profundidades, criadoEm: it.criadoEm };
 }
 
 export function updatePadraoAmostragem(id: string, data: Partial<PadraoAmostragem>) {
-  const lista = load<PadraoAmostragem>('inv_padroes_amos');
-  const idx = lista.findIndex(p => p.id === id);
-  if (idx >= 0) { lista[idx] = { ...lista[idx], ...data }; save('inv_padroes_amos', lista); }
+  const it = bibObter<ConteudoGrade>('grades', id);
+  if (!it || it.conteudo.kind !== 'amostragem') return;
+  bibAtualizar<ConteudoGrade>('grades', id, {
+    ...(data.nome !== undefined ? { nome: data.nome } : {}),
+    conteudo: {
+      kind: 'amostragem',
+      densidadeHaPonto: data.densidadeHaPonto ?? it.conteudo.densidadeHaPonto,
+      profundidades: data.profundidades ?? it.conteudo.profundidades,
+    },
+  });
 }
 
 export function deletePadraoAmostragem(id: string) {
-  save('inv_padroes_amos', load<PadraoAmostragem>('inv_padroes_amos').filter(p => p.id !== id));
+  bibExcluir('grades', id);
 }
 
 // ── Grades de Amostragem ────────────────────────────────────────────────────
@@ -348,21 +399,33 @@ export function marcarParaProcessar(id: string) {
 }
 
 // ── Config de etiquetas (modelo de folha + ajuste fino) ─────────────────────
+// Fase 5: vive na Biblioteca > Preferências de Análise como item único
+// (conteudo.tipo === 'etiqueta'). API pública inalterada — Configurações e os
+// simuladores continuam usando get/saveConfigEtiqueta.
 export interface ConfigEtiqueta { layoutId: string; dx: number; dy: number; }
-const ETQ_KEY = 'inv_etiqueta_cfg';
+const ETQ_PADRAO: ConfigEtiqueta = { layoutId: 'A4361', dx: 0, dy: 0 };
+
+function _itemEtiqueta(): ItemBiblioteca<ConteudoEtiqueta> | undefined {
+  return bibListar<ConteudoEtiqueta>('preferencias-analise').find(i => i.conteudo?.tipo === 'etiqueta');
+}
 
 export function getConfigEtiqueta(): ConfigEtiqueta {
-  const padrao: ConfigEtiqueta = { layoutId: 'A4361', dx: 0, dy: 0 };
-  if (typeof window === 'undefined') return padrao;
-  try { const raw = localStorage.getItem(ETQ_KEY); if (raw) return { ...padrao, ...JSON.parse(raw) }; } catch {}
-  return padrao;
+  const it = _itemEtiqueta();
+  if (!it) return ETQ_PADRAO;
+  return { layoutId: it.conteudo.layoutId, dx: it.conteudo.dx, dy: it.conteudo.dy };
 }
 
 export function saveConfigEtiqueta(c: ConfigEtiqueta) {
   if (typeof window === 'undefined') return;
-  const json = JSON.stringify(c);
-  localStorage.setItem(ETQ_KEY, json);
-  cloudPushObj(ETQ_KEY, json);
+  const conteudo: ConteudoEtiqueta = { tipo: 'etiqueta', layoutId: c.layoutId, dx: c.dx, dy: c.dy };
+  const existente = _itemEtiqueta();
+  if (existente) {
+    bibAtualizar<ConteudoEtiqueta>('preferencias-analise', existente.id, { conteudo });
+  } else {
+    bibCriar<ConteudoEtiqueta>('preferencias-analise', {
+      nome: 'Etiquetas (Pimaco)', conteudo, escopo: empresaAtivaId() ? 'empresa' : 'meu',
+    });
+  }
 }
 
 // ── Laboratório: perfis de mapeamento + importações de resultados ───────────

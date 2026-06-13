@@ -1,6 +1,14 @@
-export const APP_VERSION = '0.29.0';
+export const APP_VERSION = '0.30.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.30.0': [
+    'Reorganização Fase 5 — Safras, Grades e Preferências migradas para a Biblioteca',
+    'Safras saíram do menu lateral (agora em Biblioteca › Safras); o editor é o mesmo de antes',
+    'Biblioteca › Grades: editores de Padrões de Amostragem (densidade + profundidades) e Padrões de Elementos (quais análises rodar) — antes não tinham UI desde a limpeza da Fase 0',
+    'Biblioteca › Preferências de Análise: modelo de etiqueta (Pimaco) — mesmo padrão editável também em Configurações',
+    'Migração idempotente e ADITIVA (inv_safras/inv_padroes_*/inv_etiqueta_cfg → inv_bib_*); chaves antigas preservadas para não perder dados de quem usa a nuvem',
+    'Padrões de Amostragem/Elementos, Safras e Etiqueta agora respeitam escopo por Empresa (multi-tenant) e sincronizam via Biblioteca',
+  ],
   '0.29.0': [
     'Reorganização Fase 4 — Perfis Agronômicos',
     'Biblioteca → Perfis: cria perfis que combinam Laboratório + Padrão de Amostragem + Legendas por elemento (Fundação ABC end-to-end com um clique)',
