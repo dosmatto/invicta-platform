@@ -585,6 +585,16 @@ export function deleteLegenda(id: string) {
 // Oficiais são read-only e visíveis a todas as empresas (sem empresaId);
 // sobrescreve a versão sistema desatualizada e converte ABC legadas (que
 // tinham empresaId) em sistema. Cópias do usuário (outros ids) não são tocadas.
+// Assinatura dos campos definidores — qualquer mudança no seed (limites,
+// cores, unidade, domínio…) propaga para a versão sistema no próximo boot.
+function _assinaturaLegenda(l: Legenda): string {
+  return JSON.stringify([
+    l.nome, l.atributoId, l.unidade, l.metodo, l.invertida, l.estilo,
+    l.dominioMin, l.dominioMax, l.categoria,
+    l.classes.map(c => [c.valorMin, c.valorMax, c.corInicio, c.corFim, c.larguraVisual, c.nome]),
+  ]);
+}
+
 export function seedLegendasSistema(seed: Legenda[]) {
   const lista = load<Legenda>('inv_legendas');
   const idxPorId = new Map(lista.map((l, i) => [l.id, i] as const));
@@ -595,12 +605,10 @@ export function seedLegendasSistema(seed: Legenda[]) {
     const i = idxPorId.get(oficial.id);
     if (i == null) { lista.push(item); mudou = true; continue; }
     const ex = lista[i];
-    const desatualizada =
-      ex.escopo !== 'sistema' ||
-      ex.classes.some(c => !c.corInicio || !c.corFim) ||
-      ex.dominioMin !== item.dominioMin ||
-      ex.dominioMax !== item.dominioMax;
-    if (desatualizada) { lista[i] = { ...item, criadoEm: ex.criadoEm }; mudou = true; }
+    if (ex.escopo !== 'sistema' || _assinaturaLegenda(ex) !== _assinaturaLegenda(item)) {
+      lista[i] = { ...item, criadoEm: ex.criadoEm };
+      mudou = true;
+    }
   }
   if (mudou) save('inv_legendas', lista);
 }

@@ -1,6 +1,11 @@
-export const APP_VERSION = '0.31.1';
+export const APP_VERSION = '0.32.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.32.0': [
+    'Mapa de Fertilidade: a linha de limite do talhão agora fica POR CIMA do raster, cobrindo o serrilhado do recorte nas bordas (o raster entra logo abaixo do contorno; pontos e rótulos seguem acima)',
+    'Legenda de Matéria Orgânica corrigida: limites ×10 (agora em g/dm³ — 14/24/34/45) para casar com os valores do laboratório',
+    'Legendas oficiais (Sistema) passam a propagar qualquer atualização do padrão no boot (limites, unidade, cores, domínio) — antes só cores/domínio',
+  ],
   '0.31.1': [
     'Fix: painéis Configurações, Usuários e Empresa agora rolam quando o conteúdo passa da altura da tela (faltava o scroll próprio que os outros painéis já tinham)',
   ],

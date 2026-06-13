@@ -317,7 +317,11 @@ export function MapView() {
       const { url, coordinates, opacity } = fertilidadeOverlay;
       if (!existing) {
         map.addSource(SRC, { type: 'image', url, coordinates });
-        const beforeId = map.getLayer('pontos-circle') ? 'pontos-circle' : undefined;
+        // Insere o raster logo ABAIXO da linha de borda do talhão (entre o
+        // preenchimento e o contorno), para que a borda fique por cima e
+        // cubra o serrilhado do recorte. Pontos/rótulos continuam acima.
+        const beforeId = map.getLayer('upload-line') ? 'upload-line'
+          : map.getLayer('pontos-circle') ? 'pontos-circle' : undefined;
         map.addLayer({ id: LYR, type: 'raster', source: SRC,
           paint: { 'raster-opacity': opacity, 'raster-fade-duration': 0 } }, beforeId);
       } else {

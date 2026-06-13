@@ -71,8 +71,8 @@ export const LEGENDAS_SEED_ABC: Legenda[] = [
     ...base, id: 'fabc_materia_organica',
     nome: 'Fundação ABC - Matéria Orgânica',
     atributoId: 'mo', atributo: 'Matéria Orgânica', simbolo: 'M.O.',
-    unidade: '%', metodo: null, invertida: false,
-    classes: classesFertilidade5([1.4, 2.4, 3.4, 4.5]),
+    unidade: 'g/dm³', metodo: null, invertida: false,
+    classes: classesFertilidade5([14, 24, 34, 45]),
   },
   {
     ...base, id: 'fabc_fosforo_resina',
