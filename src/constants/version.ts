@@ -1,6 +1,13 @@
-export const APP_VERSION = '0.24.0';
+export const APP_VERSION = '0.25.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.25.0': [
+    'Reorganização Fase 1.A — Conceito de Empresa (multi-tenant)',
+    'Auto-cria "Empresa Pessoal" no 1º boot (idempotente); todos os cadastros existentes recebem empresaId silenciosamente',
+    'Topbar ganha seletor de empresa (trocar / nova / gerenciar)',
+    'Novo painel "Empresa" (gerenciar membros por UID Firebase + papéis admin/editor/viewer)',
+    'Todos os getX/saveX do store agora respeitam a empresa ativa; cada empresa tem sua visão isolada de cadastros',
+  ],
   '0.24.0': [
     'Reorganização Fase 0 (limpeza): Sidebar antiga, painel Base Agronômica + página completa, painel Cadastros e pasta agronomica/ (NutrienteCard, LegendaBar) removidos',
     'Constante constants/agronomica.ts (LEGENDAS_PADRAO, CORES_CLASSES legacy) removida — motor de Legendas único em lib/legendas.ts',

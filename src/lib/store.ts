@@ -5,6 +5,7 @@
 import type { ResultadoAmostra, PerfilLabConfig } from './lab';
 import type { Legenda } from './legendas';
 import { cloudPushLista, cloudPushObj } from './cloud';
+import { empresaAtivaId } from './empresa';
 
 export interface Cliente {
   id: string;
@@ -126,15 +127,42 @@ function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2);
 }
 
+// ── Filtro por Empresa (Fase 1.A) ─────────────────────────────────────────
+// Cada item ganha `empresaId` opcional. `loadFiltrado` retorna só os da
+// empresa ativa; itens antigos sem `empresaId` são auto-marcados com a
+// empresa ativa na primeira leitura (migração silenciosa, idempotente).
+// `comEmpresa` injeta `empresaId` ao gravar.
+
+type ComEmpresa<T> = T & { empresaId?: string };
+
+function loadFiltrado<T>(key: string): T[] {
+  const todos = load<ComEmpresa<T>>(key);
+  const ativa = empresaAtivaId();
+  if (!ativa) return todos;
+  // auto-marca quem ainda não tem empresa
+  let mudou = false;
+  for (const x of todos) {
+    if (!x.empresaId) { x.empresaId = ativa; mudou = true; }
+  }
+  if (mudou) save(key, todos);
+  return todos.filter(x => x.empresaId === ativa);
+}
+
+function comEmpresa<T extends object>(item: T): T {
+  const ativa = empresaAtivaId();
+  if (!ativa) return item;
+  return { ...item, empresaId: ativa } as T;
+}
+
 // ── Clientes ──────────────────────────────────────────────────────────────
 
 export function getClientes(): Cliente[] {
-  return load<Cliente>('inv_clientes').sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  return loadFiltrado<Cliente>('inv_clientes').sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
 }
 
 export function saveCliente(c: Omit<Cliente, 'id' | 'criadoEm'>): Cliente {
   const clientes = load<Cliente>('inv_clientes');
-  const novo: Cliente = { ...c, id: uid(), criadoEm: new Date().toISOString() };
+  const novo: Cliente = comEmpresa({ ...c, id: uid(), criadoEm: new Date().toISOString() });
   clientes.push(novo);
   save('inv_clientes', clientes);
   return novo;
@@ -153,13 +181,13 @@ export function deleteCliente(id: string) {
 // ── Fazendas ──────────────────────────────────────────────────────────────
 
 export function getFazendas(clienteId?: string): Fazenda[] {
-  const all = load<Fazenda>('inv_fazendas');
+  const all = loadFiltrado<Fazenda>('inv_fazendas');
   return clienteId ? all.filter(f => f.clienteId === clienteId) : all;
 }
 
 export function saveFazenda(f: Omit<Fazenda, 'id' | 'criadoEm'>): Fazenda {
   const fazendas = load<Fazenda>('inv_fazendas');
-  const nova: Fazenda = { ...f, id: uid(), criadoEm: new Date().toISOString() };
+  const nova: Fazenda = comEmpresa({ ...f, id: uid(), criadoEm: new Date().toISOString() });
   fazendas.push(nova);
   save('inv_fazendas', fazendas);
   return nova;
@@ -174,13 +202,13 @@ export function updateFazenda(id: string, data: Partial<Fazenda>) {
 // ── Talhões ───────────────────────────────────────────────────────────────
 
 export function getTalhoes(fazendaId?: string): Talhao[] {
-  const all = load<Talhao>('inv_talhoes');
+  const all = loadFiltrado<Talhao>('inv_talhoes');
   return fazendaId ? all.filter(t => t.fazendaId === fazendaId) : all;
 }
 
 export function saveTalhao(t: Omit<Talhao, 'id' | 'criadoEm'>): Talhao {
   const talhoes = load<Talhao>('inv_talhoes');
-  const novo: Talhao = { ...t, id: uid(), criadoEm: new Date().toISOString() };
+  const novo: Talhao = comEmpresa({ ...t, id: uid(), criadoEm: new Date().toISOString() });
   talhoes.push(novo);
   save('inv_talhoes', talhoes);
   return novo;
@@ -195,12 +223,12 @@ export function updateTalhao(id: string, data: Partial<Talhao>) {
 // ── Safras ────────────────────────────────────────────────────────────────
 
 export function getSafras(): Safra[] {
-  return load<Safra>('inv_safras').sort((a, b) => b.anoInicio - a.anoInicio);
+  return loadFiltrado<Safra>('inv_safras').sort((a, b) => b.anoInicio - a.anoInicio);
 }
 
 export function saveSafra(s: Omit<Safra, 'id' | 'criadoEm'>): Safra {
   const safras = load<Safra>('inv_safras');
-  const nova: Safra = { ...s, id: uid(), criadoEm: new Date().toISOString() };
+  const nova: Safra = comEmpresa({ ...s, id: uid(), criadoEm: new Date().toISOString() });
   safras.push(nova);
   save('inv_safras', safras);
   return nova;
@@ -221,12 +249,12 @@ export function deleteSafra(id: string) {
 // Os elementos referenciam os ids da Base Agronômica (ph, p, k, ca...).
 
 export function getPadroesElementos(): PadraoElementos[] {
-  return load<PadraoElementos>('inv_padroes_elem').sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  return loadFiltrado<PadraoElementos>('inv_padroes_elem').sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
 }
 
 export function savePadraoElementos(p: Omit<PadraoElementos, 'id' | 'criadoEm'>): PadraoElementos {
   const lista = load<PadraoElementos>('inv_padroes_elem');
-  const novo: PadraoElementos = { ...p, id: uid(), criadoEm: new Date().toISOString() };
+  const novo: PadraoElementos = comEmpresa({ ...p, id: uid(), criadoEm: new Date().toISOString() });
   lista.push(novo);
   save('inv_padroes_elem', lista);
   return novo;
@@ -247,12 +275,12 @@ export function deletePadraoElementos(id: string) {
 // e qual padrão de elementos). Distância da borda/rotação ficam no simulador.
 
 export function getPadroesAmostragem(): PadraoAmostragem[] {
-  return load<PadraoAmostragem>('inv_padroes_amos').sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  return loadFiltrado<PadraoAmostragem>('inv_padroes_amos').sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
 }
 
 export function savePadraoAmostragem(p: Omit<PadraoAmostragem, 'id' | 'criadoEm'>): PadraoAmostragem {
   const lista = load<PadraoAmostragem>('inv_padroes_amos');
-  const novo: PadraoAmostragem = { ...p, id: uid(), criadoEm: new Date().toISOString() };
+  const novo: PadraoAmostragem = comEmpresa({ ...p, id: uid(), criadoEm: new Date().toISOString() });
   lista.push(novo);
   save('inv_padroes_amos', lista);
   return novo;
@@ -272,7 +300,7 @@ export function deletePadraoAmostragem(id: string) {
 // Várias grades por talhão+safra; uma marcada como "para processar".
 
 export function getGrades(talhaoId?: string, safra?: string, metodo?: 'grid' | 'zonas'): GradeAmostragem[] {
-  let all = load<GradeAmostragem>('inv_grades');
+  let all = loadFiltrado<GradeAmostragem>('inv_grades');
   if (talhaoId) all = all.filter(g => g.talhaoId === talhaoId);
   if (safra) all = all.filter(g => g.safra === safra);
   if (metodo) all = all.filter(g => (g.metodo ?? 'grid') === metodo);
@@ -281,7 +309,7 @@ export function getGrades(talhaoId?: string, safra?: string, metodo?: 'grid' | '
 
 export function saveGrade(g: Omit<GradeAmostragem, 'id' | 'criadoEm'>): GradeAmostragem {
   const lista = load<GradeAmostragem>('inv_grades');
-  const nova: GradeAmostragem = { ...g, id: uid(), criadoEm: new Date().toISOString() };
+  const nova: GradeAmostragem = comEmpresa({ ...g, id: uid(), criadoEm: new Date().toISOString() });
   lista.push(nova);
   save('inv_grades', lista);
   return nova;
@@ -350,19 +378,23 @@ export interface ImportacaoLab {
 }
 
 export function getPerfisLab(): PerfilLab[] {
-  return load<PerfilLab>('inv_lab_perfis').sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  return loadFiltrado<PerfilLab>('inv_lab_perfis').sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
 }
 
 // Cria ou atualiza o perfil pelo nome do laboratório (upsert).
 export function salvarPerfilLab(nome: string, config: PerfilLabConfig): PerfilLab {
   const lista = load<PerfilLab>('inv_lab_perfis');
-  const idx = lista.findIndex(p => p.nome.toLowerCase() === nome.trim().toLowerCase());
+  const ativa = empresaAtivaId();
+  const idx = lista.findIndex(p =>
+    p.nome.toLowerCase() === nome.trim().toLowerCase()
+    && (!ativa || (p as PerfilLab & { empresaId?: string }).empresaId === ativa)
+  );
   if (idx >= 0) {
-    lista[idx] = { ...lista[idx], config };
+    lista[idx] = comEmpresa({ ...lista[idx], config });
     save('inv_lab_perfis', lista);
     return lista[idx];
   }
-  const novo: PerfilLab = { id: uid(), nome: nome.trim(), config, criadoEm: new Date().toISOString() };
+  const novo: PerfilLab = comEmpresa({ id: uid(), nome: nome.trim(), config, criadoEm: new Date().toISOString() });
   lista.push(novo);
   save('inv_lab_perfis', lista);
   return novo;
@@ -373,7 +405,7 @@ export function deletePerfilLab(id: string) {
 }
 
 export function getImportacoesLab(talhaoId?: string, safra?: string): ImportacaoLab[] {
-  let all = load<ImportacaoLab>('inv_lab');
+  let all = loadFiltrado<ImportacaoLab>('inv_lab');
   if (talhaoId) all = all.filter(i => i.talhaoId === talhaoId);
   if (safra) all = all.filter(i => i.safra === safra);
   return all.sort((a, b) => b.criadoEm.localeCompare(a.criadoEm));
@@ -381,7 +413,7 @@ export function getImportacoesLab(talhaoId?: string, safra?: string): Importacao
 
 export function saveImportacaoLab(i: Omit<ImportacaoLab, 'id' | 'criadoEm'>): ImportacaoLab {
   const lista = load<ImportacaoLab>('inv_lab');
-  const nova: ImportacaoLab = { ...i, id: uid(), criadoEm: new Date().toISOString() };
+  const nova: ImportacaoLab = comEmpresa({ ...i, id: uid(), criadoEm: new Date().toISOString() });
   lista.push(nova);
   save('inv_lab', lista);
   return nova;
@@ -402,7 +434,7 @@ function notificarLegendas() {
 }
 
 export function getLegendas(): Legenda[] {
-  return load<Legenda>('inv_legendas');
+  return loadFiltrado<Legenda>('inv_legendas');
 }
 
 export function getLegendasPorAtributo(atributoId: string): Legenda[] {
@@ -412,7 +444,7 @@ export function getLegendasPorAtributo(atributoId: string): Legenda[] {
 export function saveLegenda(l: Omit<Legenda, 'id' | 'criadoEm' | 'atualizadoEm'>): Legenda {
   const lista = load<Legenda>('inv_legendas');
   const agora = new Date().toISOString();
-  const nova: Legenda = { ...l, id: uid(), criadoEm: agora, atualizadoEm: agora };
+  const nova: Legenda = comEmpresa({ ...l, id: uid(), criadoEm: agora, atualizadoEm: agora });
   lista.push(nova);
   save('inv_legendas', lista);
   notificarLegendas();
@@ -423,8 +455,8 @@ export function saveLegenda(l: Omit<Legenda, 'id' | 'criadoEm' | 'atualizadoEm'>
 export function upsertLegenda(l: Legenda): Legenda {
   const lista = load<Legenda>('inv_legendas');
   const idx = lista.findIndex(x => x.id === l.id);
-  if (idx >= 0) lista[idx] = { ...l, atualizadoEm: new Date().toISOString() };
-  else lista.push(l);
+  if (idx >= 0) lista[idx] = comEmpresa({ ...l, atualizadoEm: new Date().toISOString() });
+  else lista.push(comEmpresa(l));
   save('inv_legendas', lista);
   notificarLegendas();
   return l;

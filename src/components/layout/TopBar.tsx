@@ -3,6 +3,7 @@
 import Image from 'next/image';
 import { ChevronRight, Wifi, User } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
+import { EmpresaSwitcher } from './EmpresaSwitcher';
 
 export function TopBar() {
   const { nav: context } = useApp();
@@ -44,6 +45,7 @@ export function TopBar() {
 
       {/* Right actions */}
       <div className="flex items-center gap-3 flex-shrink-0">
+        <EmpresaSwitcher />
         <Wifi size={16} style={{ color: '#86efac' }} />
         <div className="flex items-center gap-2 pl-3 border-l border-white/20">
           <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold"

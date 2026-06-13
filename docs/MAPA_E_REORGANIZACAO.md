@@ -373,16 +373,13 @@ Visual referência: a imagem que você enviou (menu lateral fixo, navegação si
 3. **`BaseAgronomicaPanel` + `components/agronomica/`**: pode **aposentar** — conteúdo vira seed read-only do motor novo.
 4. **Rotas vestigiais** em `/painel/*`: pode **deletar tudo** que estiver vazio.
 
-### 2.7 Como Empresa funciona (revisão do escopo)
+### 2.7 Como Empresa funciona (decisões finais)
 
-Como Empresa entra de cara, completo a Parte 2 com o mecanismo:
-
-- **Auth**: continuamos com login anônimo do Firebase (já temos UID por usuário).
-- **Empresa**:
-  - Cada usuário tem **pelo menos uma empresa** — a "Empresa Pessoal" (auto-criada no 1º login com nome `<UID curto>`).
-  - O usuário pode **criar/renomear empresas** e ter mais de uma.
-  - Pode **adicionar outros usuários** (por UID/e-mail-anônimo) com papel `viewer | editor | admin`.
-  - O `empresaId` ativa é guardado no `localStorage` (`inv_empresa_ativa`) e no perfil em Firestore.
+- **Auth**: continuamos com login anônimo do Firebase (UID por usuário).
+- **1ª empresa**: **auto-criada** "Empresa Pessoal" no 1º boot pós-deploy. Renomeável depois.
+- **Convites**: admin **cola UID Firebase** do colega manualmente (sem e-mail/links). UI mostra o UID do usuário em "Perfil" pra ele copiar e mandar.
+- **Papéis**: `admin` (tudo + gerencia membros), `editor` (CRUD de dados/Biblioteca), `viewer` (somente leitura).
+- **Mapas de fertilidade**: sincronizam **dentro da empresa** (membros enxergam os mapas processados pelos colegas).
 - **Documento `Empresa`**:
   ```ts
   interface Empresa {
@@ -390,10 +387,11 @@ Como Empresa entra de cara, completo a Parte 2 com o mecanismo:
     nome: string;
     criadoPor: string;       // uid
     criadoEm: string;
-    membros: Record<string, 'viewer' | 'editor' | 'admin'>; // uid → papel
+    membros: Record<string, 'admin' | 'editor' | 'viewer'>;
   }
   ```
-- **Migração dos dados atuais**: ao 1º boot pós-deploy, cria a "Empresa Pessoal" do usuário e move TODOS os cadastros existentes (`inv_clientes`, `inv_fazendas`, ...) e os itens da Biblioteca para dentro dela. Idempotente (re-rodar não duplica).
+- **`empresaId` ativa** guardada em `localStorage` (`inv_empresa_ativa`) e refletida no perfil em Firestore.
+- **Migração dos dados atuais**: ao 1º boot pós-deploy, cria a "Empresa Pessoal" do usuário e move TODOS os cadastros existentes (`inv_clientes`, `inv_fazendas`, `inv_grades`, `inv_lab`, `inv_legendas`, `inv_mapas_fert`, etc.) para dentro dela. Idempotente.
 
 ### 3.5 Ajustes no plano por fases (com base nas decisões)
 

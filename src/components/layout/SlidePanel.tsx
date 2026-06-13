@@ -15,12 +15,14 @@ import { SafrasPanel } from '@/components/panels/SafrasPanel';
 import { LegendasPanel } from '@/components/panels/LegendasPanel';
 import { UsuariosPanel } from '@/components/panels/UsuariosPanel';
 import { ConfiguracoesPanel } from '@/components/panels/ConfiguracoesPanel';
+import { EmpresaConfig } from '@/components/panels/EmpresaConfig';
 
 const STATIC_PANELS: Record<string, { title: string; component: React.ComponentType }> = {
   dashboard:         { title: 'Início',          component: DashboardPanel },
   produtores:        { title: 'Clientes',        component: ProdutoresPanel },
   safras:            { title: 'Safras',          component: SafrasPanel },
   legendas:          { title: 'Legendas',        component: LegendasPanel },
+  empresa:           { title: 'Empresa',         component: EmpresaConfig },
   usuarios:          { title: 'Usuários',        component: UsuariosPanel },
   configuracoes:     { title: 'Configurações',   component: ConfiguracoesPanel },
 };

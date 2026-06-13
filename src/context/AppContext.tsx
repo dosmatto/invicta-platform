@@ -3,6 +3,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { seedIfEmpty } from '@/lib/seed';
 import { bootCloud } from '@/lib/cloud';
+import { empresaIfEmpty } from '@/lib/empresa';
 
 export type MapMode = 'street' | 'satellite';
 
@@ -113,6 +114,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     (async () => {
       const nuvem = await bootCloud().catch(() => false);
       if (!nuvem) seedIfEmpty();
+      // Garante Empresa Pessoal + ativa, idempotente.
+      empresaIfEmpty();
       setDadosProntos(true);
     })();
   }, []);
