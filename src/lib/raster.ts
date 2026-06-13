@@ -3,7 +3,7 @@
 // regenera o PNG instantaneamente no browser, sem ir ao backend.
 
 import { decodeGrid, type RespInterp } from './fertilidade';
-import { stopsParaBackend, type Legenda } from './legendas';
+import { rampaVisualStops, valorParaPosicaoVisual, type Legenda } from './legendas';
 
 export interface PngColorido {
   dataUrl: string;
@@ -11,14 +11,33 @@ export interface PngColorido {
   altura: number;
 }
 
-// Gera um PNG (dataURL) colorindo o grid com a rampa derivada da legenda.
-// Grid está orientado com norte no topo (linhas) — mesma orientação do bounds.
+// Gera um PNG (dataURL) colorindo o grid pela MESMA rampa visual da barra:
+// cada valor → posição visual da sua classe → cor. Resolve o colapso das
+// classes das pontas e garante que o mapa bata com a legenda exibida.
 export function colorirGridComLegenda(
   grid: { b64: string; shape: [number, number] },
   leg: Legenda,
 ): PngColorido {
-  const { dominio, stops } = stopsParaBackend(leg);
-  return colorirGrid(grid, dominio, stops);
+  const { valores, rows, cols } = decodeGrid(grid);
+  const stops = rampaVisualStops(leg);
+  const sp = stops.map(s => s[0]);
+  const sr = stops.map(s => s[1][0]);
+  const sg = stops.map(s => s[1][1]);
+  const sb = stops.map(s => s[1][2]);
+
+  const { canvas, ctx } = novoCanvas(cols, rows);
+  const img = ctx.createImageData(cols, rows);
+  const buf = img.data;
+  for (let i = 0; i < valores.length; i++) {
+    const v = valores[i];
+    const p4 = i * 4;
+    if (!isFinite(v)) { buf[p4 + 3] = 0; continue; }
+    const pVis = valorParaPosicaoVisual(v, leg);
+    const [r, g, b] = interpolarCor(pVis, sp, sr, sg, sb);
+    buf[p4] = r; buf[p4 + 1] = g; buf[p4 + 2] = b; buf[p4 + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  return finalizarCanvas(canvas, cols, rows);
 }
 
 export function colorirGrid(
@@ -36,13 +55,7 @@ export function colorirGrid(
   const sg = stops.map(s => s[1][1]);
   const sb = stops.map(s => s[1][2]);
 
-  const canvas = typeof OffscreenCanvas !== 'undefined'
-    ? new OffscreenCanvas(cols, rows)
-    : document.createElement('canvas');
-  if (!(canvas instanceof OffscreenCanvas)) { canvas.width = cols; canvas.height = rows; }
-  const ctx = canvas.getContext('2d') as OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D | null;
-  if (!ctx) throw new Error('Canvas 2D indisponível');
-
+  const { canvas, ctx } = novoCanvas(cols, rows);
   const img = ctx.createImageData(cols, rows);
   const buf = img.data;
 
@@ -58,7 +71,23 @@ export function colorirGrid(
     buf[p4 + 3] = 255;
   }
   ctx.putImageData(img, 0, 0);
+  return finalizarCanvas(canvas, cols, rows);
+}
 
+// ── Helpers de canvas (compartilhados pelas duas colorizações) ────────────
+type Canvas2D = OffscreenCanvas | HTMLCanvasElement;
+
+function novoCanvas(cols: number, rows: number): { canvas: Canvas2D; ctx: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D } {
+  const canvas: Canvas2D = typeof OffscreenCanvas !== 'undefined'
+    ? new OffscreenCanvas(cols, rows)
+    : document.createElement('canvas');
+  if (!(canvas instanceof OffscreenCanvas)) { canvas.width = cols; canvas.height = rows; }
+  const ctx = canvas.getContext('2d') as OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D | null;
+  if (!ctx) throw new Error('Canvas 2D indisponível');
+  return { canvas, ctx };
+}
+
+function finalizarCanvas(canvas: Canvas2D, cols: number, rows: number): PngColorido {
   if (canvas instanceof OffscreenCanvas) {
     // OffscreenCanvas → não dá toDataURL direto; volta para HTMLCanvas
     const tmp = document.createElement('canvas');

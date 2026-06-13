@@ -51,6 +51,12 @@ export interface Legenda {
   tipoEscala: TipoEscala;
   /** Estilo da barra: segmentado (faixas separadas) | continuo (gradiente único). Default: segmentado. */
   estilo?: EstiloLegenda;
+  /** Limites de VALOR das pontas (classes abertas). Ex: NDVI 0..1, Textura 0..100, V%/m% 0..100.
+   *  Se ausente, a ponta usa meia-classe interna (evita o colapso das extremas no mapa). */
+  dominioMin?: number;
+  dominioMax?: number;
+  /** Escopo de governança. 'sistema' = legenda oficial visível a todos (read-only). Ausente = legado/empresa. */
+  escopo?: 'meu' | 'empresa' | 'sistema';
   profundidade?: string;         // opcional: "0-20", "20-40"
   classes: ClasseLegenda[];      // 3, 5 ou 6 classes
   observacao?: string;
@@ -105,6 +111,29 @@ export function classesFertilidade5(bordas: [number, number, number, number], in
   }));
 }
 
+// Monta 5 classes com PARES de cor explícitos — para paletas não-oficiais
+// (Textura, Altimetria, NDVI). bordas.length === 4.
+export function classesComPares(
+  bordas: [number, number, number, number],
+  pares: Array<{ inicio: string; fim: string }>,
+  nomes: string[],
+  larguras: number[] = LARGURAS_VISUAIS_5,
+): ClasseLegenda[] {
+  const [b1, b2, b3, b4] = bordas;
+  const minmax: Array<[number | null, number | null]> = [
+    [null, b1], [b1, b2], [b2, b3], [b3, b4], [b4, null],
+  ];
+  return nomes.map((nome, i) => ({
+    nome,
+    valorMin: minmax[i][0],
+    valorMax: minmax[i][1],
+    corInicio: pares[i].inicio,
+    corFim: pares[i].fim,
+    larguraVisual: larguras[i],
+    ordem: i + 1,
+  }));
+}
+
 // Resolve as cores início/fim de uma classe (com fallback derivando de corBase).
 export function paresDaClasse(c: ClasseLegenda): { inicio: string; fim: string } {
   if (c.corInicio && c.corFim) return { inicio: c.corInicio, fim: c.corFim };
@@ -133,49 +162,146 @@ export function dominioDaLegenda(leg: Legenda): [number, number] {
   return [Math.min(...bordas), Math.max(...bordas)];
 }
 
-// Gradiente CSS pra UI da barra de legenda (respeita larguras visuais e estilo).
-// - SEGMENTADO: fronteira nítida entre classes (epsilon entre fim_k e inicio_{k+1}).
-// - CONTINUO:   sequência única de stops (transição suave nas fronteiras).
-export function gradienteCssDaLegenda(leg: Legenda): string {
-  const estilo: EstiloLegenda = leg.estilo ?? 'segmentado';
-  const partes: string[] = [];
-  let acumulado = 0;
-  const epsCss = 0.001; // % — ínfimo
-  for (let i = 0; i < leg.classes.length; i++) {
-    const c = leg.classes[i];
-    const { inicio, fim } = paresDaClasse(c);
-    const fimPos = acumulado + c.larguraVisual;
-    if (estilo === 'segmentado' && i > 0) {
-      // força fronteira nítida com a classe anterior na mesma posição visual
-      partes.push(`${inicio} ${Math.max(0, acumulado - epsCss)}%`);
-      partes.push(`${inicio} ${acumulado}%`);
-    } else {
-      partes.push(`${inicio} ${acumulado}%`);
-    }
-    partes.push(`${fim} ${fimPos}%`);
-    acumulado = fimPos;
+// ── Colorização por POSIÇÃO VISUAL (barra = mapa) ─────────────────────────
+// A barra usa larguras visuais fixas (22,5/22,5/22,5/22,5/10). O mapa passa a
+// usar a MESMA lógica: o valor define a classe + a fração dentro dela, e a cor
+// vem da posição visual acumulada. Assim as classes das pontas (abertas) não
+// colapsam e a barra bate com o mapa, nos dois estilos.
+
+// Largura de VALOR média das classes internas (fechadas) — dá largura às
+// pontas abertas quando não há dominioMin/Max explícito.
+function larguraValorMediaInterna(leg: Legenda): number {
+  const larguras = leg.classes
+    .filter(c => c.valorMin != null && c.valorMax != null)
+    .map(c => (c.valorMax as number) - (c.valorMin as number));
+  if (larguras.length === 0) return 1;
+  return larguras.reduce((a, b) => a + b, 0) / larguras.length;
+}
+
+// Faixa de VALOR efetiva de cada classe (pontas ancoradas em dominioMin/Max
+// ou em meia-classe interna).
+export function bordasEfetivas(leg: Legenda): Array<[number, number]> {
+  const meia = larguraValorMediaInterna(leg) / 2;
+  return leg.classes.map(c => {
+    let lo = c.valorMin;
+    let hi = c.valorMax;
+    if (lo == null) lo = leg.dominioMin ?? ((c.valorMax ?? 0) - meia);
+    if (hi == null) hi = leg.dominioMax ?? ((c.valorMin ?? 0) + meia);
+    if (hi <= lo) hi = lo + (meia || 1);
+    return [lo, hi] as [number, number];
+  });
+}
+
+// Posições visuais acumuladas [start,end] de cada classe, normalizadas 0..1.
+export function posicoesVisuais(leg: Legenda): Array<[number, number]> {
+  const total = leg.classes.reduce((s, c) => s + (c.larguraVisual || 0), 0) || 1;
+  const out: Array<[number, number]> = [];
+  let acc = 0;
+  for (const c of leg.classes) {
+    const start = acc / total;
+    acc += c.larguraVisual || 0;
+    out.push([start, acc / total]);
   }
+  return out;
+}
+
+// Valor → posição visual [0..1] (coordenada da rampa). Fora do domínio satura.
+export function valorParaPosicaoVisual(v: number, leg: Legenda): number {
+  const n = leg.classes.length;
+  if (n === 0) return 0;
+  const bordas = bordasEfetivas(leg);
+  const vis = posicoesVisuais(leg);
+  if (v <= bordas[0][0]) return vis[0][0];
+  if (v > bordas[n - 1][1]) return vis[n - 1][1];
+  for (let k = 0; k < n; k++) {
+    const [lo, hi] = bordas[k];
+    if (v > lo && v <= hi) {
+      const f = (v - lo) / ((hi - lo) || 1);
+      const [vs, ve] = vis[k];
+      return vs + f * (ve - vs);
+    }
+  }
+  return vis[n - 1][1];
+}
+
+const mediaRgb = (a: [number, number, number], b: [number, number, number]): [number, number, number] =>
+  [Math.round((a[0] + b[0]) / 2), Math.round((a[1] + b[1]) / 2), Math.round((a[2] + b[2]) / 2)];
+
+// Stops [posVisual, rgb] da rampa — FONTE ÚNICA para barra e mapa.
+// - SEGMENTADO: gradiente interno claro→escuro por classe + fronteira NÍTIDA.
+// - CONTINUO:   escala natural suave — uma cor representativa por classe (o tom
+//   "cheio" = média do par) no centro da sua faixa proporcional; o gradiente
+//   interpola suave entre elas. Sem "dentes": a sequência de cores das classes
+//   (ex.: vermelho→amarelo→verde→azul→roxo) flui naturalmente, e cada cor ocupa
+//   a proporção da sua classe (22,5/22,5/22,5/22,5/10).
+export function rampaVisualStops(leg: Legenda): Array<[number, [number, number, number]]> {
+  const estilo: EstiloLegenda = leg.estilo ?? 'segmentado';
+  const vis = posicoesVisuais(leg);
+  const stops: Array<[number, [number, number, number]]> = [];
+  const n = leg.classes.length;
+
+  if (estilo === 'continuo') {
+    for (let i = 0; i < n; i++) {
+      const { inicio, fim } = paresDaClasse(leg.classes[i]);
+      const cor = mediaRgb(hexToRgb(inicio), hexToRgb(fim));
+      const [vs, ve] = vis[i];
+      if (i === 0) stops.push([0, cor]);          // ancora a 1ª cor no começo
+      stops.push([(vs + ve) / 2, cor]);            // cor no centro da faixa proporcional
+      if (i === n - 1) stops.push([1, cor]);       // ancora a última cor no fim
+    }
+    return stops;
+  }
+
+  const eps = 1e-5;
+  for (let i = 0; i < n; i++) {
+    const { inicio, fim } = paresDaClasse(leg.classes[i]);
+    const [vs, ve] = vis[i];
+    if (i > 0) stops.push([Math.min(1, vs + eps), hexToRgb(inicio)]); // fronteira nítida
+    else stops.push([vs, hexToRgb(inicio)]);
+    stops.push([ve, hexToRgb(fim)]);
+  }
+  return stops;
+}
+
+// Interpolação linear de cor numa lista de stops [pos, rgb] ordenada por pos.
+export function interpRgb(stops: Array<[number, [number, number, number]]>, p: number): [number, number, number] {
+  const n = stops.length;
+  if (n === 0) return [0, 0, 0];
+  if (p <= stops[0][0]) return stops[0][1];
+  if (p >= stops[n - 1][0]) return stops[n - 1][1];
+  let i = 0;
+  while (i < n - 1 && stops[i + 1][0] < p) i++;
+  const [p0, c0] = stops[i];
+  const [p1, c1] = stops[i + 1];
+  const k = (p - p0) / ((p1 - p0) || 1);
+  return [
+    Math.round(c0[0] + (c1[0] - c0[0]) * k),
+    Math.round(c0[1] + (c1[1] - c0[1]) * k),
+    Math.round(c0[2] + (c1[2] - c0[2]) * k),
+  ];
+}
+
+// Gradiente CSS pra barra da UI — derivado da MESMA rampa visual do mapa.
+export function gradienteCssDaLegenda(leg: Legenda): string {
+  const stops = rampaVisualStops(leg);
+  const partes = stops.map(([p, [r, g, b]]) => `rgb(${r},${g},${b}) ${(p * 100).toFixed(3)}%`);
   return `linear-gradient(to right, ${partes.join(', ')})`;
 }
 
-// Stops + domínio para o backend (respeita estilo).
+// Stops + domínio para o backend (fallback PNG). Amostra a rampa visual em N
+// pontos ao longo do domínio de VALOR efetivo, reproduzindo a mesma curva.
 export function stopsParaBackend(leg: Legenda): { dominio: [number, number]; stops: Array<[number, [number, number, number]]> } {
-  const estilo: EstiloLegenda = leg.estilo ?? 'segmentado';
-  const [vmin, vmax] = dominioDaLegenda(leg);
+  const bordas = bordasEfetivas(leg);
+  const vmin = bordas[0][0];
+  const vmax = bordas[bordas.length - 1][1];
   const span = (vmax - vmin) || 1;
+  const visStops = rampaVisualStops(leg);
+  const M = 32;
   const stops: Array<[number, [number, number, number]]> = [];
-  const eps = 1e-6;
-  for (let i = 0; i < leg.classes.length; i++) {
-    const c = leg.classes[i];
-    const { inicio, fim } = paresDaClasse(c);
-    const ini = c.valorMin == null ? 0 : Math.max(0, (c.valorMin - vmin) / span);
-    const fimT = c.valorMax == null ? 1 : Math.min(1, (c.valorMax - vmin) / span);
-    if (estilo === 'segmentado' && i > 0) {
-      stops.push([Math.min(1, ini + eps), hexToRgb(inicio)]);
-    } else {
-      stops.push([ini, hexToRgb(inicio)]);
-    }
-    stops.push([fimT, hexToRgb(fim)]);
+  for (let j = 0; j < M; j++) {
+    const t = j / (M - 1);
+    const v = vmin + t * span;
+    stops.push([t, interpRgb(visStops, valorParaPosicaoVisual(v, leg))]);
   }
   return { dominio: [vmin, vmax], stops };
 }

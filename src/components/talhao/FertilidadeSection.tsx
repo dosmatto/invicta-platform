@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import {
   getSafras, getGrades, getImportacoesLab, getTalhoes,
-  getLegendas, getLegendasPorAtributo, seedLegendasABCIfEmpty,
+  getLegendas, getLegendasPorAtributo,
   type ImportacaoLab, type GradeAmostragem,
 } from '@/lib/store';
 import {
@@ -15,7 +15,6 @@ import { colorirGridComLegenda, temGrid } from '@/lib/raster';
 import { decodeGrid } from '@/lib/fertilidade';
 import { stopsParaBackend, dominioDaLegenda, paresDaClasse } from '@/lib/legendas';
 import type { Legenda } from '@/lib/legendas';
-import { LEGENDAS_SEED_ABC } from '@/constants/legendasSeedABC';
 import { Play, Layers, Loader2, Eraser, AlertTriangle, Activity, Settings, BookOpen, Save } from 'lucide-react';
 import { cloudSalvarMapa, cloudCarregarMapasPorPrefixo, cloudExcluirMapasPorPrefixo } from '@/lib/cloud';
 import { listar as bibListar, criar as bibCriar, type ConteudoPerfil, type ItemBiblioteca } from '@/lib/biblioteca';
@@ -84,7 +83,6 @@ export function FertilidadeSection() {
   // Seed automático do repositório Fundação ABC + carrega legendas do store.
   // Reage a mudanças no editor de Legendas via evento custom.
   useEffect(() => {
-    seedLegendasABCIfEmpty(LEGENDAS_SEED_ABC);
     setLegendas(getLegendas());
     const onLeg = () => setLegendas(getLegendas());
     if (typeof window !== 'undefined') window.addEventListener('inv:legendas', onLeg);

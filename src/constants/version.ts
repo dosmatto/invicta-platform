@@ -1,6 +1,14 @@
-export const APP_VERSION = '0.30.0';
+export const APP_VERSION = '0.31.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.31.0': [
+    'Legendas — conserto do motor: o mapa agora colore pela MESMA lógica da barra (posição visual da classe), então barra e mapa batem e as classes das pontas não saturam mais (fim do "roxo uniforme")',
+    'Estilo Contínuo agora é uma escala natural suave (uma cor por classe no centro da sua faixa proporcional, sem "dentes" nas fronteiras); Segmentado mantém faixas com gradiente interno e fronteira nítida — trocar estilo só muda a barra/raster, não os limites/rótulos',
+    'Cada legenda ganhou domínio mín/máx das pontas (NDVI 0–1, Textura/V%/m% 0–100; nutrientes sem teto usam meia-classe) — evita o colapso das classes abertas',
+    'Biblioteca OFICIAL de Legendas no banco (escopo Sistema, read-only, visível a todas as empresas): Fertilidade ABC + Textura do Solo + Altimetria + NDVI + Compactação',
+    'Produtividade com paleta própria (semáforo vermelho→verde) em 3 variantes: Absoluta (kg/ha por cultura — soja/milho/trigo/feijão), Percentil (% da área) e % da Média do talhão',
+    'Legendas do Sistema aparecem com selo e botão Duplicar (para editar, duplique — a cópia vira sua); editor ganhou campos de domínio das pontas',
+  ],
   '0.30.0': [
     'Reorganização Fase 5 — Safras, Grades e Preferências migradas para a Biblioteca',
     'Safras saíram do menu lateral (agora em Biblioteca › Safras); o editor é o mesmo de antes',

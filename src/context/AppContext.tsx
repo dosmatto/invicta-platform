@@ -5,6 +5,8 @@ import { seedIfEmpty } from '@/lib/seed';
 import { bootCloud } from '@/lib/cloud';
 import { empresaIfEmpty } from '@/lib/empresa';
 import { migrarLaboratoriosV1, migrarSafrasV1, migrarGradesV1, migrarPreferenciasV1 } from '@/lib/biblioteca';
+import { seedLegendasSistema } from '@/lib/store';
+import { LEGENDAS_OFICIAIS } from '@/constants/legendasSeedOficial';
 
 export type MapMode = 'street' | 'satellite';
 
@@ -122,6 +124,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       migrarSafrasV1();
       migrarGradesV1();
       migrarPreferenciasV1();
+      // Legendas oficiais (escopo sistema) no banco — idempotente.
+      seedLegendasSistema(LEGENDAS_OFICIAIS);
       setDadosProntos(true);
     })();
   }, []);

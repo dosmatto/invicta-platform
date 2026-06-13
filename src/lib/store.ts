@@ -521,7 +521,21 @@ function notificarLegendas() {
 }
 
 export function getLegendas(): Legenda[] {
-  return loadFiltrado<Legenda>('inv_legendas');
+  // Legendas 'sistema' (oficiais) são visíveis a todas as empresas e não
+  // recebem empresaId. As demais seguem o filtro por empresa (auto-marca legados).
+  const todas = load<Legenda>('inv_legendas');
+  const sistema = todas.filter(l => l.escopo === 'sistema');
+  const naoSistema = todas.filter(l => l.escopo !== 'sistema');
+  const ativa = empresaAtivaId();
+  if (!ativa) return [...sistema, ...naoSistema];
+  let mudou = false;
+  for (const l of naoSistema) {
+    const le = l as Legenda & { empresaId?: string };
+    if (!le.empresaId) { le.empresaId = ativa; mudou = true; }
+  }
+  if (mudou) save('inv_legendas', todas);
+  const daEmpresa = naoSistema.filter(l => (l as Legenda & { empresaId?: string }).empresaId === ativa);
+  return [...sistema, ...daEmpresa];
 }
 
 export function getLegendasPorAtributo(atributoId: string): Legenda[] {
@@ -567,15 +581,28 @@ export function deleteLegenda(id: string) {
 // Garante o seed ABC ao abrir o app. Atualiza legendas ABC que ainda estão na
 // versão antiga (sem `corInicio`/`corFim`, antes do sistema de Estilos), sem
 // tocar em legendas criadas pelo usuário.
-export function seedLegendasABCIfEmpty(seed: Legenda[]) {
-  const atuais = getLegendas();
-  const porId = new Map(atuais.map(l => [l.id, l] as const));
-  for (const l of seed) {
-    const existente = porId.get(l.id);
-    if (!existente) { upsertLegenda(l); continue; }
-    const semCoresNovas = existente.classes.some(c => !c.corInicio || !c.corFim);
-    if (semCoresNovas) upsertLegenda(l);
+// Semeia/atualiza as legendas OFICIAIS (escopo 'sistema'), idempotente.
+// Oficiais são read-only e visíveis a todas as empresas (sem empresaId);
+// sobrescreve a versão sistema desatualizada e converte ABC legadas (que
+// tinham empresaId) em sistema. Cópias do usuário (outros ids) não são tocadas.
+export function seedLegendasSistema(seed: Legenda[]) {
+  const lista = load<Legenda>('inv_legendas');
+  const idxPorId = new Map(lista.map((l, i) => [l.id, i] as const));
+  let mudou = false;
+  for (const oficial of seed) {
+    const item: Legenda = { ...oficial, escopo: 'sistema' };
+    delete (item as Legenda & { empresaId?: string }).empresaId;
+    const i = idxPorId.get(oficial.id);
+    if (i == null) { lista.push(item); mudou = true; continue; }
+    const ex = lista[i];
+    const desatualizada =
+      ex.escopo !== 'sistema' ||
+      ex.classes.some(c => !c.corInicio || !c.corFim) ||
+      ex.dominioMin !== item.dominioMin ||
+      ex.dominioMax !== item.dominioMax;
+    if (desatualizada) { lista[i] = { ...item, criadoEm: ex.criadoEm }; mudou = true; }
   }
+  if (mudou) save('inv_legendas', lista);
 }
 
 export function clearAll() {

@@ -159,6 +159,7 @@ function LegendasLista({
                       <span className="text-xs font-bold truncate" style={{ color: '#e2e8f0' }} title={l.nome}>{l.nome}</span>
                     </div>
                     <div className="flex flex-wrap gap-1 mt-1 text-[9px]">
+                      {l.escopo === 'sistema' && <Badge tone="sys">Sistema</Badge>}
                       <Badge>{l.atributo}{l.metodo ? ` · ${l.metodo}` : ''}</Badge>
                       <Badge>{l.unidade}</Badge>
                       <Badge tone="cat">{l.categoria}</Badge>
@@ -167,9 +168,15 @@ function LegendasLista({
                     </div>
                   </div>
                   <div className="flex flex-col gap-1">
-                    <button onClick={() => onEditar(l.id)} title="Editar" className="p-1 rounded" style={{ color: '#93c5fd', background: '#1a3a6b' }}><Edit3 size={10} /></button>
-                    <button onClick={() => duplicar(l)} title="Duplicar" className="p-1 rounded" style={{ color: '#93c5fd', background: '#1a3a6b' }}><Copy size={10} /></button>
-                    <button onClick={() => excluir(l)} title="Excluir" className="p-1 rounded" style={{ color: '#f87171', background: '#1a3a6b' }}><Trash2 size={10} /></button>
+                    {l.escopo === 'sistema' ? (
+                      <button onClick={() => duplicar(l)} title="Duplicar para editar (oficial é read-only)" className="p-1 rounded" style={{ color: '#93c5fd', background: '#1a3a6b' }}><Copy size={10} /></button>
+                    ) : (
+                      <>
+                        <button onClick={() => onEditar(l.id)} title="Editar" className="p-1 rounded" style={{ color: '#93c5fd', background: '#1a3a6b' }}><Edit3 size={10} /></button>
+                        <button onClick={() => duplicar(l)} title="Duplicar" className="p-1 rounded" style={{ color: '#93c5fd', background: '#1a3a6b' }}><Copy size={10} /></button>
+                        <button onClick={() => excluir(l)} title="Excluir" className="p-1 rounded" style={{ color: '#f87171', background: '#1a3a6b' }}><Trash2 size={10} /></button>
+                      </>
+                    )}
                   </div>
                 </div>
                 {/* mini barra */}
@@ -183,9 +190,9 @@ function LegendasLista({
   );
 }
 
-function Badge({ children, tone = 'default' }: { children: React.ReactNode; tone?: 'default' | 'cat' | 'warn' | 'muted' }) {
-  const bg = tone === 'warn' ? '#3a2300' : tone === 'cat' ? '#102a47' : tone === 'muted' ? '#0f1f3a' : '#1a3a6b';
-  const fg = tone === 'warn' ? '#fbbf24' : tone === 'cat' ? '#7dd3fc' : tone === 'muted' ? '#64748b' : '#cbd5e1';
+function Badge({ children, tone = 'default' }: { children: React.ReactNode; tone?: 'default' | 'cat' | 'warn' | 'muted' | 'sys' }) {
+  const bg = tone === 'warn' ? '#3a2300' : tone === 'cat' ? '#102a47' : tone === 'muted' ? '#0f1f3a' : tone === 'sys' ? '#064e3b' : '#1a3a6b';
+  const fg = tone === 'warn' ? '#fbbf24' : tone === 'cat' ? '#7dd3fc' : tone === 'muted' ? '#64748b' : tone === 'sys' ? '#6ee7b7' : '#cbd5e1';
   return <span className="px-1.5 py-0.5 rounded font-semibold" style={{ background: bg, color: fg }}>{children}</span>;
 }
 
@@ -320,6 +327,23 @@ function LegendaEditor({ legenda, onClose }: { legenda: Legenda | null; onClose:
             </button>
           </Field>
         </div>
+        {/* Domínio das pontas (evita o colapso das classes abertas no mapa) */}
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="Domínio mín (ponta inferior)">
+            <input type="number" value={form.dominioMin ?? ''}
+              onChange={e => patch('dominioMin', e.target.value === '' ? undefined : Number(e.target.value))}
+              placeholder="auto" className="w-full rounded px-2 py-1 text-[11px] outline-none" style={inputStyle} />
+          </Field>
+          <Field label="Domínio máx (ponta superior)">
+            <input type="number" value={form.dominioMax ?? ''}
+              onChange={e => patch('dominioMax', e.target.value === '' ? undefined : Number(e.target.value))}
+              placeholder="auto" className="w-full rounded px-2 py-1 text-[11px] outline-none" style={inputStyle} />
+          </Field>
+        </div>
+        <p className="text-[9px] -mt-1" style={{ color: '#475569' }}>
+          Limites de valor das classes abertas (ex.: NDVI 0–1, Textura/V%/m% 0–100). Em branco = meia-classe automática.
+        </p>
+
         {/* Estilo da barra */}
         <Field label="Estilo da barra de cores">
           <div className="flex gap-1">
