@@ -1,6 +1,12 @@
-export const APP_VERSION = '0.26.0';
+export const APP_VERSION = '0.27.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.27.0': [
+    'Reorganização Fase 2 — Legendas migradas para a Biblioteca',
+    'Categoria "Legendas" da Biblioteca agora abre o editor (substitui o item antigo do menu lateral)',
+    'Classificação interna da Legenda expandida: fertilidade, micronutriente, textura, produtividade-colheita, NDVI, condutividade, altimetria-elevação, compactação, pragas, outro',
+    'Editor mostra rótulos legíveis para a classificação interna',
+  ],
   '0.26.0': [
     'Reorganização Fase 1.B — Biblioteca de Padrões (esqueleto)',
     'Item "Biblioteca" no menu lateral + painel com sidebar interna de 16 categorias (Preferências, Safras, Grades, Fertilidade, Foliares, Altimetria, Satélite, Compactação, Álgebra de Mapas, Pragas, Equações, Recomendações, Produtividade, Perfis, Laboratórios, Legendas)',

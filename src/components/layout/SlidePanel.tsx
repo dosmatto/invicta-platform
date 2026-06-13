@@ -12,7 +12,6 @@ import { TalhaoDetailPanel } from '@/components/panels/TalhaoDetailPanel';
 
 // Painéis auxiliares
 import { SafrasPanel } from '@/components/panels/SafrasPanel';
-import { LegendasPanel } from '@/components/panels/LegendasPanel';
 import { BibliotecaPanel } from '@/components/panels/BibliotecaPanel';
 import { UsuariosPanel } from '@/components/panels/UsuariosPanel';
 import { ConfiguracoesPanel } from '@/components/panels/ConfiguracoesPanel';
@@ -22,7 +21,6 @@ const STATIC_PANELS: Record<string, { title: string; component: React.ComponentT
   dashboard:         { title: 'Início',          component: DashboardPanel },
   produtores:        { title: 'Clientes',        component: ProdutoresPanel },
   safras:            { title: 'Safras',          component: SafrasPanel },
-  legendas:          { title: 'Legendas',        component: LegendasPanel },
   biblioteca:        { title: 'Biblioteca',      component: BibliotecaPanel, largura: 480 },
   empresa:           { title: 'Empresa',         component: EmpresaConfig },
   usuarios:          { title: 'Usuários',        component: UsuariosPanel },

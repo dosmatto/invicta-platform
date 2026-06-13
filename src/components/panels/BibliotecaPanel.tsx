@@ -6,6 +6,7 @@ import {
   type CategoriaBiblioteca, type EscopoBiblioteca, type DefCategoria,
 } from '@/lib/biblioteca';
 import { Search, Plus, Download, Upload, ChevronRight } from 'lucide-react';
+import { LegendasPanel } from './LegendasPanel';
 
 const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
 
@@ -51,6 +52,31 @@ function CategoriasNav({ slug, setSlug }: { slug: CategoriaBiblioteca; setSlug: 
 // ─── Conteúdo da categoria selecionada ───────────────────────────────────
 
 function CategoriaConteudo({ slug }: { slug: CategoriaBiblioteca }) {
+  // Categorias com adaptador próprio têm UI customizada (já implementadas).
+  if (slug === 'legendas') return <ConteudoLegendas />;
+  return <ConteudoGenerico slug={slug} />;
+}
+
+function ConteudoLegendas() {
+  const def = CATEGORIAS.find(c => c.slug === 'legendas')!;
+  const Icon = def.icone;
+  return (
+    <section className="flex-1 flex flex-col overflow-hidden">
+      <div className="px-4 py-3 flex-shrink-0" style={{ borderBottom: '1px solid #1a3a6b' }}>
+        <div className="flex items-center gap-2 mb-1">
+          <Icon size={14} style={{ color: '#93c5fd' }} />
+          <h3 className="text-sm font-bold uppercase tracking-wide" style={{ color: '#e2e8f0' }}>{def.nome}</h3>
+        </div>
+        <p className="text-[10px]" style={{ color: '#64748b' }}>{def.descricao}</p>
+      </div>
+      <div className="flex-1 overflow-y-auto">
+        <LegendasPanel />
+      </div>
+    </section>
+  );
+}
+
+function ConteudoGenerico({ slug }: { slug: CategoriaBiblioteca }) {
   const def: DefCategoria = useMemo(() => CATEGORIAS.find(c => c.slug === slug)!, [slug]);
   const [aba, setAba] = useState<EscopoBiblioteca>('meu');
   const [filtro, setFiltro] = useState('');

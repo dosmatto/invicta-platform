@@ -88,7 +88,7 @@ export const CATEGORIAS: DefCategoria[] = [
     descricao: 'Perfis técnicos, de recomendação e operacionais.' },
   { slug: 'laboratorios', nome: 'Laboratórios', icone: FlaskConical, status: 'em-breve',
     descricao: 'Métodos, configurações de importação e perfis de laboratório.' },
-  { slug: 'legendas', nome: 'Legendas', icone: BookOpen, status: 'em-breve',
+  { slug: 'legendas', nome: 'Legendas', icone: BookOpen, status: 'disponivel',
     descricao: 'Repositório de legendas para mapas (fertilidade, NDVI, colheita, condutividade, etc.).' },
 ];
 

@@ -2,7 +2,25 @@
 // Uma legenda é um objeto independente do mapa: pode haver várias por atributo
 // (fontes/métodos diferentes) e o usuário escolhe qual aplicar.
 
-export type CategoriaLegenda = 'fertilidade' | 'micronutriente' | 'textura' | 'outro';
+// Classificação interna da Legenda (aplicação). Define onde a curva pode ser
+// usada e gera o agrupamento dentro da Biblioteca → Legendas.
+export type CategoriaLegenda =
+  | 'fertilidade' | 'micronutriente' | 'textura'
+  | 'produtividade-colheita' | 'ndvi' | 'condutividade'
+  | 'altimetria-elevacao' | 'compactacao' | 'pragas' | 'outro';
+
+export const CATEGORIAS_LEGENDA: Array<{ id: CategoriaLegenda; nome: string }> = [
+  { id: 'fertilidade',            nome: 'Fertilidade' },
+  { id: 'micronutriente',         nome: 'Micronutriente' },
+  { id: 'textura',                nome: 'Textura' },
+  { id: 'produtividade-colheita', nome: 'Produtividade / Colheita' },
+  { id: 'ndvi',                   nome: 'NDVI' },
+  { id: 'condutividade',          nome: 'Condutividade' },
+  { id: 'altimetria-elevacao',    nome: 'Altimetria / Elevação' },
+  { id: 'compactacao',            nome: 'Compactação' },
+  { id: 'pragas',                 nome: 'Pragas' },
+  { id: 'outro',                  nome: 'Outro' },
+];
 export type TipoEscala = 'gradiente' | 'discreta';
 // Estilo da apresentação visual da barra (não muda valores/limites/unidades).
 export type EstiloLegenda = 'segmentado' | 'continuo';

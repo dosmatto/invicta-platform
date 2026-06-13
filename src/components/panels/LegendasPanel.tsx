@@ -7,6 +7,7 @@ import {
 import {
   type Legenda, type ClasseLegenda, type CategoriaLegenda, type EstiloLegenda,
   gradienteCssDaLegenda, PARES_OFICIAIS_5, LARGURAS_VISUAIS_5, classesFertilidade5, paresDaClasse,
+  CATEGORIAS_LEGENDA,
 } from '@/lib/legendas';
 import { ELEMENTOS_LAB } from '@/lib/lab';
 import {
@@ -303,10 +304,9 @@ function LegendaEditor({ legenda, onClose }: { legenda: Legenda | null; onClose:
           </Field>
           <Field label="Categoria">
             <select value={form.categoria} onChange={e => patch('categoria', e.target.value as CategoriaLegenda)} className="w-full rounded px-2 py-1 text-[11px] outline-none" style={inputStyle}>
-              <option value="fertilidade">fertilidade</option>
-              <option value="micronutriente">micronutriente</option>
-              <option value="textura">textura</option>
-              <option value="outro">outro</option>
+              {CATEGORIAS_LEGENDA.map(c => (
+                <option key={c.id} value={c.id}>{c.nome}</option>
+              ))}
             </select>
           </Field>
         </div>
