@@ -1,6 +1,13 @@
-export const APP_VERSION = '0.27.0';
+export const APP_VERSION = '0.28.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.28.0': [
+    'Reorganização Fase 3 — Laboratórios migrados para a Biblioteca',
+    'Biblioteca → Laboratórios: lista os perfis salvos (criar/editar/excluir/ativar) e mostra os perfis embutidos (Fundação ABC, Interpartner) na aba "Sistema"',
+    'Migração idempotente de inv_lab_perfis → inv_bib_laboratorios (preserva ids; aba Empresa segue isolada por empresa ativa)',
+    'LabImportSection segue funcionando sem mudanças (wrappers compatíveis em store.ts)',
+    'Nuvem (Firestore) agora espelha inv_bib_laboratorios em vez de inv_lab_perfis; biblioteca.save() passa a chamar cloudPushLista para sincronização automática',
+  ],
   '0.27.0': [
     'Reorganização Fase 2 — Legendas migradas para a Biblioteca',
     'Categoria "Legendas" da Biblioteca agora abre o editor (substitui o item antigo do menu lateral)',

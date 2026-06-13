@@ -5,7 +5,15 @@
 import type { ResultadoAmostra, PerfilLabConfig } from './lab';
 import type { Legenda } from './legendas';
 import { cloudPushLista, cloudPushObj } from './cloud';
-import { empresaAtivaId } from './empresa';
+import { empresaAtivaId, uidUsuario } from './empresa';
+import {
+  listar as bibListar,
+  criar as bibCriar,
+  atualizar as bibAtualizar,
+  excluir as bibExcluir,
+  type ItemBiblioteca,
+  type ConteudoLaboratorio,
+} from './biblioteca';
 
 export interface Cliente {
   id: string;
@@ -377,31 +385,47 @@ export interface ImportacaoLab {
   criadoEm: string;
 }
 
+// Wrappers de retrocompat (Fase 3): perfis de laboratório agora vivem dentro
+// da Biblioteca de Padrões (categoria 'laboratorios'). A forma de PerfilLab e
+// a API pública continuam iguais — LabImportSection não precisa mudar.
+
+function _itemParaPerfilLab(it: ItemBiblioteca<ConteudoLaboratorio>): PerfilLab {
+  return { id: it.id, nome: it.nome, config: it.conteudo.config, criadoEm: it.criadoEm };
+}
+
 export function getPerfisLab(): PerfilLab[] {
-  return loadFiltrado<PerfilLab>('inv_lab_perfis').sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  const itens = bibListar<ConteudoLaboratorio>('laboratorios');
+  return itens
+    .filter(i => i.ativo)
+    .map(_itemParaPerfilLab)
+    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
 }
 
 // Cria ou atualiza o perfil pelo nome do laboratório (upsert).
 export function salvarPerfilLab(nome: string, config: PerfilLabConfig): PerfilLab {
-  const lista = load<PerfilLab>('inv_lab_perfis');
+  const nomeTrim = nome.trim();
   const ativa = empresaAtivaId();
-  const idx = lista.findIndex(p =>
-    p.nome.toLowerCase() === nome.trim().toLowerCase()
-    && (!ativa || (p as PerfilLab & { empresaId?: string }).empresaId === ativa)
-  );
-  if (idx >= 0) {
-    lista[idx] = comEmpresa({ ...lista[idx], config });
-    save('inv_lab_perfis', lista);
-    return lista[idx];
+  const u = uidUsuario();
+  const escopo: 'meu' | 'empresa' = ativa ? 'empresa' : 'meu';
+
+  const meus = bibListar<ConteudoLaboratorio>('laboratorios');
+  const existente = meus.find(i => i.nome.toLowerCase() === nomeTrim.toLowerCase()
+    && (escopo === 'empresa' ? i.escopo === 'empresa' && i.empresaId === ativa
+                              : i.escopo === 'meu' && i.donoUsuarioId === u));
+  if (existente) {
+    bibAtualizar<ConteudoLaboratorio>('laboratorios', existente.id, { conteudo: { config } });
+    return { id: existente.id, nome: existente.nome, config, criadoEm: existente.criadoEm };
   }
-  const novo: PerfilLab = comEmpresa({ id: uid(), nome: nome.trim(), config, criadoEm: new Date().toISOString() });
-  lista.push(novo);
-  save('inv_lab_perfis', lista);
-  return novo;
+  const novo = bibCriar<ConteudoLaboratorio>('laboratorios', {
+    nome: nomeTrim,
+    conteudo: { config },
+    escopo,
+  });
+  return _itemParaPerfilLab(novo);
 }
 
 export function deletePerfilLab(id: string) {
-  save('inv_lab_perfis', load<PerfilLab>('inv_lab_perfis').filter(p => p.id !== id));
+  bibExcluir('laboratorios', id);
 }
 
 export function getImportacoesLab(talhaoId?: string, safra?: string): ImportacaoLab[] {

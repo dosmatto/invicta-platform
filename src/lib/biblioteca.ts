@@ -18,6 +18,8 @@ import {
   UserCog, FlaskConical, BookOpen,
 } from 'lucide-react';
 import { empresaAtivaId, uidUsuario } from './empresa';
+import { cloudPushLista } from './cloud';
+import type { PerfilLabConfig } from './lab';
 
 // ─── Tipos ───────────────────────────────────────────────────────────────
 
@@ -86,8 +88,8 @@ export const CATEGORIAS: DefCategoria[] = [
     descricao: 'Padrões de mapas de colheita e classes de produtividade.' },
   { slug: 'perfis', nome: 'Perfis', icone: UserCog, status: 'em-breve',
     descricao: 'Perfis técnicos, de recomendação e operacionais.' },
-  { slug: 'laboratorios', nome: 'Laboratórios', icone: FlaskConical, status: 'em-breve',
-    descricao: 'Métodos, configurações de importação e perfis de laboratório.' },
+  { slug: 'laboratorios', nome: 'Laboratórios', icone: FlaskConical, status: 'disponivel',
+    descricao: 'Perfis de mapeamento de planilhas de laboratório (Fundação ABC, Interpartner, …).' },
   { slug: 'legendas', nome: 'Legendas', icone: BookOpen, status: 'disponivel',
     descricao: 'Repositório de legendas para mapas (fertilidade, NDVI, colheita, condutividade, etc.).' },
 ];
@@ -108,7 +110,8 @@ function load<T>(slug: CategoriaBiblioteca): ItemBiblioteca<T>[] {
 function save<T>(slug: CategoriaBiblioteca, data: ItemBiblioteca<T>[]) {
   if (typeof window === 'undefined') return;
   localStorage.setItem(chaveCat(slug), JSON.stringify(data));
-  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('inv:biblioteca', { detail: { slug } }));
+  cloudPushLista(chaveCat(slug), data); // espelha na nuvem se a chave estiver na lista (no-op caso contrário)
+  window.dispatchEvent(new CustomEvent('inv:biblioteca', { detail: { slug } }));
 }
 
 // ─── CRUD genérico ───────────────────────────────────────────────────────
@@ -226,4 +229,64 @@ export function importar<T = unknown>(slug: CategoriaBiblioteca, json: string): 
   }
   save(slug, lista);
   return payload.itens.length;
+}
+
+// ─── Helpers de baixo nível para os wrappers de retrocompat (store.ts) ────
+
+export function _bibLoadRaw<T = unknown>(slug: CategoriaBiblioteca): ItemBiblioteca<T>[] {
+  return load<T>(slug);
+}
+export function _bibSaveRaw<T = unknown>(slug: CategoriaBiblioteca, data: ItemBiblioteca<T>[]) {
+  save(slug, data);
+}
+
+// ─── Migrações idempotentes ──────────────────────────────────────────────
+
+// Fase 3 — perfis de laboratório: inv_lab_perfis → inv_bib_laboratorios.
+// Idempotente: marca uma flag local; preserva ids; não sobrescreve itens
+// já presentes na biblioteca; mantém a chave antiga intacta (rollback fácil).
+export interface ConteudoLaboratorio {
+  config: PerfilLabConfig;
+}
+
+export function migrarLaboratoriosV1() {
+  if (typeof window === 'undefined') return;
+  const FLAG = 'inv_migrado_lab_v1';
+  if (localStorage.getItem(FLAG) === '1') return;
+
+  type PerfilAntigo = { id: string; nome: string; config: PerfilLabConfig; criadoEm: string; empresaId?: string };
+  let antigos: PerfilAntigo[] = [];
+  try { antigos = JSON.parse(localStorage.getItem('inv_lab_perfis') ?? '[]'); } catch {}
+
+  if (antigos.length === 0) {
+    localStorage.setItem(FLAG, '1');
+    return;
+  }
+
+  const lista = load<ConteudoLaboratorio>('laboratorios');
+  const idsExistentes = new Set(lista.map(i => i.id));
+  const u = uidUsuario();
+  let adicionou = false;
+
+  for (const p of antigos) {
+    if (idsExistentes.has(p.id)) continue;
+    const escopo: EscopoBiblioteca = p.empresaId ? 'empresa' : 'meu';
+    lista.push({
+      id: p.id,
+      categoria: 'laboratorios',
+      nome: p.nome,
+      escopo,
+      donoUsuarioId: escopo === 'meu' ? u : undefined,
+      empresaId: escopo === 'empresa' ? p.empresaId : undefined,
+      ativo: true,
+      versao: 1,
+      criadoEm: p.criadoEm,
+      atualizadoEm: p.criadoEm,
+      criadoPor: u,
+      conteudo: { config: p.config },
+    });
+    adicionou = true;
+  }
+  if (adicionou) save('laboratorios', lista);
+  localStorage.setItem(FLAG, '1');
 }

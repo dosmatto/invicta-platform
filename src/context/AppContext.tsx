@@ -4,6 +4,7 @@ import { createContext, useContext, useState, useEffect, ReactNode } from 'react
 import { seedIfEmpty } from '@/lib/seed';
 import { bootCloud } from '@/lib/cloud';
 import { empresaIfEmpty } from '@/lib/empresa';
+import { migrarLaboratoriosV1 } from '@/lib/biblioteca';
 
 export type MapMode = 'street' | 'satellite';
 
@@ -116,6 +117,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (!nuvem) seedIfEmpty();
       // Garante Empresa Pessoal + ativa, idempotente.
       empresaIfEmpty();
+      // Migrações idempotentes da Biblioteca de Padrões (Fase 3+).
+      migrarLaboratoriosV1();
       setDadosProntos(true);
     })();
   }, []);
