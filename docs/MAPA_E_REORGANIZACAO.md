@@ -147,6 +147,10 @@ Vestigiais: `/painel/{amostragem, condutividade, custos, fazendas, fertilidade, 
   - Clonar várias legendas de uma vez (seleção múltipla).
   - Clonar a partir de uma legenda do `sistema` (read-only) gerando uma editável em `meu`.
   - Pensar em "clonar para outro atributo" (ex.: a curva de P resina vira base pra K, mantendo escala/cores).
+- **Legendas — classificação interna (campo `categoria` de `Legenda`)**: expandir as opções atuais (`fertilidade | micronutriente | textura | outro`) para cobrir os outros usos:
+  - `fertilidade`, `micronutriente`, `textura`, `produtividade-colheita`, `ndvi`, `condutividade`, `altimetria-elevacao`, `compactacao`, `pragas`, `outro`.
+  - Decidir junto com a Fase 2 (migração de Legendas para a Biblioteca) — vai virar filtro/agrupador dentro da categoria "Legendas" da Biblioteca.
+- **Outras alterações nas Legendas (a especificar)** — usuário sinalizou que ainda terão mudanças adicionais; manter ponto aberto.
 
 ### 1.8 Pendências (lista herdada da memória + descobertas)
 
@@ -173,11 +177,12 @@ Um módulo único **"Biblioteca"** se torna a **fonte única** de configuraçõe
 
 **Operações comuns** a toda categoria: criar, editar, duplicar, excluir, ativar/inativar, compartilhar (escalar escopo), exportar, importar, definir como padrão.
 
-### 2.2 As 15 categorias da Biblioteca
+### 2.2 As 16 categorias da Biblioteca
 
 | Slug | Nome | O que migra |
 |---|---|---|
 | `preferencias-analise` | Preferências de Análise | configurações cross-módulo (unidades, profundidades padrão…) |
+| `safras` | Safras | atual `inv_safras` (sai do menu lateral; uso real continua nos talhões) |
 | `grades` | Grades | padrões de amostragem, modelos de grade, densidades |
 | `fertilidade` | Fertilidade | regras de interpretação, parâmetros padrão de krigagem/IDW |
 | `analises-foliares` | Análises Foliares | (novo) |
@@ -191,9 +196,13 @@ Um módulo único **"Biblioteca"** se torna a **fonte única** de configuraçõe
 | `produtividade` | Produtividade | (novo) |
 | `perfis` | Perfis | perfis técnicos/recomendação/operacionais |
 | `laboratorios` | Laboratórios | métodos, configurações de importação, perfis (atual `inv_lab_perfis`) |
-| `legendas` | Legendas | atual `inv_legendas` (motor novo já está aderente) |
+| `legendas` | Legendas | atual `inv_legendas`; sai do menu lateral. Cada legenda tem **classificação interna** (fertilidade, NDVI, colheita, condutividade, etc.) usada como filtro/agrupador |
 
 A estrutura é **expansível** — adicionar categoria não muda o esqueleto.
+
+**Quando cada item sai do menu lateral:**
+- `Safras` sai do menu na Fase 4 (quando a categoria `safras` da Biblioteca estiver pronta com toda a funcionalidade atual + cadastro reutilizável).
+- `Legendas` sai do menu na Fase 2 (quando a categoria `legendas` da Biblioteca substituir o `LegendasPanel` atual).
 
 ### 2.3 Modelo de dados base
 

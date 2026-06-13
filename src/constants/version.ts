@@ -1,6 +1,12 @@
-export const APP_VERSION = '0.25.0';
+export const APP_VERSION = '0.26.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.26.0': [
+    'Reorganização Fase 1.B — Biblioteca de Padrões (esqueleto)',
+    'Item "Biblioteca" no menu lateral + painel com sidebar interna de 16 categorias (Preferências, Safras, Grades, Fertilidade, Foliares, Altimetria, Satélite, Compactação, Álgebra de Mapas, Pragas, Equações, Recomendações, Produtividade, Perfis, Laboratórios, Legendas)',
+    'Camada genérica em src/lib/biblioteca.ts: ItemBiblioteca, escopo Meu/Empresa/Sistema, CRUD + duplicar + ativar/inativar + compartilhar + import/export JSON',
+    'Categorias começam vazias ("em breve"); conteúdo migra nas próximas fases',
+  ],
   '0.25.0': [
     'Reorganização Fase 1.A — Conceito de Empresa (multi-tenant)',
     'Auto-cria "Empresa Pessoal" no 1º boot (idempotente); todos os cadastros existentes recebem empresaId silenciosamente',
