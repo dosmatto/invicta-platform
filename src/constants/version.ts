@@ -1,6 +1,10 @@
-export const APP_VERSION = '0.34.0';
+export const APP_VERSION = '0.35.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.35.0': [
+    'Página do Talhão — Cultura por safra: a barra de topo agora tem um seletor de cultura (soja, milho, trigo…) gravado por talhão+safra (talhões diferentes podem ter culturas diferentes na mesma safra); aparece também no Resumo',
+    'A safra escolhida na Página do Talhão passa a filtrar também a Amostragem (grade e zonas), não só a Fertilidade',
+  ],
   '0.34.0': [
     'Página Individual do Talhão (rota /talhao/[id], tela cheia, deep-linkável): central de trabalho organizada por SAFRA, com barra de contexto fixa (Cliente · Fazenda · Talhão · Área · Safra · Cultura) e navegação por abas',
     'Abas funcionais nesta etapa: Resumo, Fertilidade (reaproveita o módulo existente) e Amostragem; Produtividade, Recomendações, Compactação, NDVI, Arquivos e Relatórios entram como estrutura para preenchimento incremental',

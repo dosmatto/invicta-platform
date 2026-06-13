@@ -58,6 +58,39 @@ export interface Talhao {
   criadoEm: string;
 }
 
+// Plantio: cultura de um talhão numa safra (um por talhão+safra). Talhões
+// diferentes podem ter culturas diferentes na mesma safra, por isso é entidade
+// própria (não um campo da Safra global).
+export interface Plantio {
+  id: string;
+  talhaoId: string;
+  safra: string;
+  cultura: string;
+  criadoEm: string;
+}
+
+export const CULTURAS = ['Soja', 'Milho', 'Trigo', 'Feijão', 'Algodão', 'Aveia', 'Sorgo', 'Cevada', 'Pastagem', 'Outra'];
+
+export function getPlantio(talhaoId: string, safra: string): string {
+  if (!talhaoId || !safra) return '';
+  const p = loadFiltrado<Plantio>('inv_plantios').find(x => x.talhaoId === talhaoId && x.safra === safra);
+  return p?.cultura ?? '';
+}
+
+// Upsert da cultura por talhão+safra. Cultura vazia remove o registro.
+export function setPlantio(talhaoId: string, safra: string, cultura: string) {
+  if (!talhaoId || !safra) return;
+  const lista = load<Plantio>('inv_plantios');
+  const i = lista.findIndex(x => x.talhaoId === talhaoId && x.safra === safra);
+  if (i >= 0) {
+    if (cultura) lista[i] = { ...lista[i], cultura };
+    else lista.splice(i, 1);
+  } else if (cultura) {
+    lista.push(comEmpresa({ id: uid(), talhaoId, safra, cultura, criadoEm: new Date().toISOString() }));
+  }
+  save('inv_plantios', lista);
+}
+
 export interface Safra {
   id: string;
   nome: string;         // ex: "24/25"

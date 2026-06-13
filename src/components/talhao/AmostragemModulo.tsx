@@ -7,7 +7,7 @@ import { SimuladorZonas } from './SimuladorZonas';
 
 type Metodo = 'grid' | 'zona';
 
-export function AmostragemModulo() {
+export function AmostragemModulo({ safraNome }: { safraNome?: string } = {}) {
   const [metodo, setMetodo] = useState<Metodo>('grid');
 
   return (
@@ -26,7 +26,7 @@ export function AmostragemModulo() {
         ))}
       </div>
 
-      {metodo === 'grid' ? <SimuladorAmostragem /> : <SimuladorZonas />}
+      {metodo === 'grid' ? <SimuladorAmostragem safraNome={safraNome} /> : <SimuladorZonas safraNome={safraNome} />}
     </div>
   );
 }

@@ -20,7 +20,7 @@ interface ZonaFeat {
 const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
 const COR_PONTO = '#0f172a';
 
-export function SimuladorZonas() {
+export function SimuladorZonas({ safraNome: safraProp }: { safraNome?: string } = {}) {
   const { nav, setZonasManejo, setPontosSimulados, zonaEvent, setZonaEvent } = useApp();
 
   const [modelo, setModelo] = useState<'A' | 'B'>('A');
@@ -50,7 +50,8 @@ export function SimuladorZonas() {
   const talhao = useMemo(() => getTalhoes().find(t => t.id === nav.talhaoId) ?? null, [nav.talhaoId]);
 
   const safraAtiva = useMemo(() => getSafras().find(s => s.ativa) ?? null, []);
-  const safraNome = safraAtiva?.nome ?? '';
+  // safraProp (Página do Talhão) tem prioridade; sem ela, usa a ativa global.
+  const safraNome = safraProp ?? safraAtiva?.nome ?? '';
   const [grades, setGrades] = useState<GradeAmostragem[]>([]);
   const [renomeando, setRenomeando] = useState<string | null>(null);
   const [nomeTemp, setNomeTemp] = useState('');
@@ -176,7 +177,7 @@ export function SimuladorZonas() {
   }
 
   function salvarGradeZonas() {
-    if (!padrao || !safraAtiva || pontos.length === 0 || !nav.talhaoId) return;
+    if (!padrao || !safraNome || pontos.length === 0 || !nav.talhaoId) return;
     const lista = getGrades(nav.talhaoId, safraNome, 'zonas');
     saveGrade({
       talhaoId: nav.talhaoId, safra: safraNome, epoca: '1', nome: `Zonas ${lista.length + 1}`, metodo: 'zonas',
@@ -407,8 +408,8 @@ export function SimuladorZonas() {
       </div>
 
       {/* Salvar grade de zonas */}
-      {!safraAtiva ? (
-        <p className="text-[10px] text-center" style={{ color: '#fbbf24' }}>Defina uma safra ativa (no topo do talhão) para salvar a grade.</p>
+      {!safraNome ? (
+        <p className="text-[10px] text-center" style={{ color: '#fbbf24' }}>Defina uma safra (no topo do talhão) para salvar a grade.</p>
       ) : (
         <button onClick={salvarGradeZonas} disabled={!padrao || pontos.length === 0}
           className="w-full py-2.5 rounded text-sm font-bold text-white flex items-center justify-center gap-2"

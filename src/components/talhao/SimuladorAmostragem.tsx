@@ -48,7 +48,7 @@ function fcDePontos(pontos: PontoAmostragem[]): GeoJSON.FeatureCollection {
   };
 }
 
-export function SimuladorAmostragem() {
+export function SimuladorAmostragem({ safraNome: safraProp }: { safraNome?: string } = {}) {
   const { nav, uploadedGeo, setPontosSimulados,
           edicaoAtiva, setEdicaoAtiva, edicaoModo, setEdicaoModo, pontoEvent, setPontoEvent } = useApp();
 
@@ -171,14 +171,15 @@ export function SimuladorAmostragem() {
   useEffect(() => () => setEdicaoAtiva(false), [setEdicaoAtiva]);
 
   // ── Grades salvas ──
-  const safraNome = safraAtiva?.nome ?? '';
+  // safraProp (Página do Talhão) tem prioridade; sem ela, usa a ativa global.
+  const safraNome = safraProp ?? safraAtiva?.nome ?? '';
   function recarregarGrades() {
     if (nav.talhaoId && safraNome) setGrades(getGrades(nav.talhaoId, safraNome, 'grid'));
   }
   useEffect(() => { recarregarGrades(); /* eslint-disable-next-line */ }, [nav.talhaoId, safraNome]);
 
   function salvarGrade() {
-    if (!padrao || pontosEfetivos.length === 0 || !nav.talhaoId || !safraAtiva) return;
+    if (!padrao || pontosEfetivos.length === 0 || !nav.talhaoId || !safraNome) return;
     const n = getGrades(nav.talhaoId, safraNome, 'grid').length + 1;
     const primeira = getGrades(nav.talhaoId, safraNome, 'grid').length === 0;
     saveGrade({
@@ -220,10 +221,10 @@ export function SimuladorAmostragem() {
       </div>
     );
   }
-  if (!safraAtiva) {
+  if (!safraNome) {
     return (
       <div className="p-4">
-        <Aviso titulo="Nenhuma safra ativa" texto="Defina uma safra ativa no topo do talhão antes de simular a amostragem." />
+        <Aviso titulo="Nenhuma safra" texto="Defina uma safra (no topo do talhão) antes de simular a amostragem." />
       </div>
     );
   }
@@ -239,7 +240,7 @@ export function SimuladorAmostragem() {
     <div className="p-3 space-y-3">
       {/* Safra + Época */}
       <div className="flex items-center gap-2 text-[10px]" style={{ color: '#64748b' }}>
-        <span>Safra <strong style={{ color: '#86efac' }}>{safraAtiva.nome}</strong></span>
+        <span>Safra <strong style={{ color: '#86efac' }}>{safraNome}</strong></span>
         <span>·</span>
         <div className="flex gap-1">
           {(['1', '2'] as const).map(e => (

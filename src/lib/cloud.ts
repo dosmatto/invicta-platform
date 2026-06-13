@@ -28,6 +28,7 @@ const KEYS_LISTA = [
   'inv_bib_grades',                    // Fase 5 — Padrões de Amostragem + Elementos
   'inv_bib_preferencias-analise',      // Fase 5 — Etiqueta
   'inv_lab', 'inv_legendas',
+  'inv_plantios',                      // Fase 8.B — cultura por talhão+safra
 ];
 // Configurações (objeto único por chave) — coleção 'inv_config', doc = chave
 const KEYS_OBJ = ['inv_etiqueta_cfg'];

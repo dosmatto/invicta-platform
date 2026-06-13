@@ -12,7 +12,7 @@ import dynamic from 'next/dynamic';
 import { useApp } from '@/context/AppContext';
 import {
   getTalhoes, getFazendas, getClientes, getSafras,
-  getImportacoesLab, getGrades,
+  getImportacoesLab, getGrades, getPlantio, setPlantio, CULTURAS,
   type Talhao, type Fazenda, type Cliente, type Safra,
 } from '@/lib/store';
 import { FertilidadeSection } from '@/components/talhao/FertilidadeSection';
@@ -56,6 +56,7 @@ export function TalhaoPage({ id }: { id: string }) {
 
   const [safras, setSafras] = useState<Safra[]>([]);
   const [safraSel, setSafraSel] = useState('');
+  const [cultura, setCultura] = useState('');
   const [tab, setTab] = useState<TabId>('resumo');
 
   // Carrega o talhão e a cadeia cliente/fazenda; alimenta o nav + geometria para
@@ -92,6 +93,14 @@ export function TalhaoPage({ id }: { id: string }) {
     setSafraSel(prev => prev || sf.find(s => s.ativa)?.nome || sf[0]?.nome || '');
   }, []);
 
+  // Cultura por talhão+safra (carrega ao trocar de safra).
+  useEffect(() => { setCultura(safraSel ? getPlantio(id, safraSel) : ''); }, [id, safraSel]);
+
+  function mudarCultura(v: string) {
+    setCultura(v);
+    if (safraSel) setPlantio(id, safraSel, v);
+  }
+
   // Limpa os canais do mapa ao sair da página.
   useEffect(() => () => { setUploadedGeo(null); setUploadedBbox(null); setZonasManejo(null); }, [setUploadedGeo, setUploadedBbox, setZonasManejo]);
 
@@ -123,7 +132,16 @@ export function TalhaoPage({ id }: { id: string }) {
           <Sep /> <Ctx label="Fazenda" value={fazenda?.nome ?? '—'} />
           <Sep /> <Ctx label="Talhão" value={talhao?.nome ?? '—'} forte />
           <Sep /> <Ctx label="Área" value={talhao ? `${talhao.areaHa.toLocaleString('pt-BR')} ha` : '—'} />
-          <Sep /> <Ctx label="Cultura" value="—" />
+          <Sep />
+          <span className="flex items-center gap-1 flex-shrink-0">
+            <span style={{ color: '#64748b' }}>Cultura:</span>
+            <select value={cultura} onChange={e => mudarCultura(e.target.value)} disabled={!safraSel}
+              title="Cultura desta safra neste talhão"
+              className="rounded px-1.5 py-0.5 text-xs outline-none disabled:opacity-50" style={inputStyle}>
+              <option value="">—</option>
+              {CULTURAS.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </span>
         </div>
 
         {/* Seletor de safra (filtra os trabalhos da página) */}
@@ -156,9 +174,9 @@ export function TalhaoPage({ id }: { id: string }) {
           </nav>
 
           <div className="flex-1 overflow-y-auto">
-            {tab === 'resumo' && talhao && <ResumoTab talhao={talhao} fazenda={fazenda} safraNome={safraSel} />}
+            {tab === 'resumo' && talhao && <ResumoTab talhao={talhao} fazenda={fazenda} safraNome={safraSel} cultura={cultura} />}
             {tab === 'fertilidade' && <FertilidadeSection safraNome={safraSel} />}
-            {tab === 'amostragem' && <AmostragemModulo />}
+            {tab === 'amostragem' && <AmostragemModulo safraNome={safraSel} />}
             {!['resumo', 'fertilidade', 'amostragem'].includes(tab) && (
               <EmBreve label={TABS.find(t => t.id === tab)?.label ?? ''} />
             )}
@@ -185,13 +203,13 @@ function Ctx({ label, value, forte }: { label: string; value: string; forte?: bo
 function Sep() { return <span style={{ color: '#2e3f5c' }}>·</span>; }
 
 // ── Aba Resumo ───────────────────────────────────────────────────────────────
-function ResumoTab({ talhao, fazenda, safraNome }: { talhao: Talhao; fazenda: Fazenda | null; safraNome: string }) {
+function ResumoTab({ talhao, fazenda, safraNome, cultura }: { talhao: Talhao; fazenda: Fazenda | null; safraNome: string; cultura: string }) {
   const importacoes = useMemo(() => getImportacoesLab(talhao.id, safraNome), [talhao.id, safraNome]);
   const grades = useMemo(() => getGrades(talhao.id, safraNome), [talhao.id, safraNome]);
 
   const cards = [
     { label: 'Área', value: talhao.areaHa > 0 ? `${talhao.areaHa.toLocaleString('pt-BR')} ha` : '—' },
-    { label: 'Cultura', value: '—' },
+    { label: 'Cultura', value: cultura || '—' },
     { label: 'Safra', value: safraNome || '—' },
     { label: 'Importações de laboratório', value: String(importacoes.length) },
     { label: 'Grades de amostragem', value: String(grades.length) },
