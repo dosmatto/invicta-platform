@@ -42,7 +42,7 @@ export function ConfiguracoesPanel() {
   }
 
   return (
-    <div>
+    <div className="h-full overflow-y-auto">
       <PanelSection title="Plataforma">
         {['Dados da empresa', 'Backup de dados'].map(i => <PanelRow key={i} label={i} value="›" />)}
         <PanelRow label="Versão do sistema" value={`v${APP_VERSION}`} />

@@ -79,7 +79,7 @@ export function EmpresaConfig() {
   }
 
   return (
-    <div className="px-4 py-3 space-y-3">
+    <div className="h-full overflow-y-auto px-4 py-3 space-y-3">
       {/* Identidade da empresa */}
       <div className="p-3 rounded-lg" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
         <div className="flex items-center gap-1.5 mb-2 text-[10px] uppercase tracking-wider" style={{ color: '#475569' }}>

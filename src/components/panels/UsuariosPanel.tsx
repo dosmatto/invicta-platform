@@ -9,7 +9,7 @@ const USUARIOS = [
 ];
 export function UsuariosPanel() {
   return (
-    <div>
+    <div className="h-full overflow-y-auto">
       <PanelSection>
         <PanelButton label="Novo Usuário" icon={<Plus size={12} />} color="var(--invicta-blue-mid)" />
       </PanelSection>
