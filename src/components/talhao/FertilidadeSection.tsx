@@ -16,8 +16,9 @@ import { decodeGrid } from '@/lib/fertilidade';
 import { stopsParaBackend, dominioDaLegenda, paresDaClasse } from '@/lib/legendas';
 import type { Legenda } from '@/lib/legendas';
 import { LEGENDAS_SEED_ABC } from '@/constants/legendasSeedABC';
-import { Play, Layers, Loader2, Eraser, AlertTriangle, Activity, Settings, BookOpen } from 'lucide-react';
+import { Play, Layers, Loader2, Eraser, AlertTriangle, Activity, Settings, BookOpen, Save } from 'lucide-react';
 import { cloudSalvarMapa, cloudCarregarMapasPorPrefixo, cloudExcluirMapasPorPrefixo } from '@/lib/cloud';
+import { listar as bibListar, criar as bibCriar, type ConteudoPerfil, type ItemBiblioteca } from '@/lib/biblioteca';
 
 const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
 const fmt = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits: 1 });
@@ -60,6 +61,22 @@ export function FertilidadeSection() {
   const [legendas, setLegendas] = useState<Legenda[]>([]);
   // qual legenda aplicar por atributo (pH, P, K...) — o usuário escolhe
   const [legendaIdPorAtributo, setLegendaIdPorAtributo] = useState<Record<string, string>>({});
+
+  // Perfis agronômicos (Biblioteca > Perfis) — preset opcional que pré-preenche
+  // o legendaIdPorAtributo todo de uma vez.
+  const [perfis, setPerfis] = useState<ItemBiblioteca<ConteudoPerfil>[]>([]);
+  const [perfilId, setPerfilId] = useState('');
+  useEffect(() => {
+    setPerfis(bibListar<ConteudoPerfil>('perfis').filter(p => p.ativo));
+    const onBib = (e: Event) => {
+      const d = (e as CustomEvent).detail as { slug?: string } | undefined;
+      if (!d?.slug || d.slug === 'perfis') {
+        setPerfis(bibListar<ConteudoPerfil>('perfis').filter(p => p.ativo));
+      }
+    };
+    if (typeof window !== 'undefined') window.addEventListener('inv:biblioteca', onBib);
+    return () => { if (typeof window !== 'undefined') window.removeEventListener('inv:biblioteca', onBib); };
+  }, []);
 
   // cache de mapas: chave = legenda+nutriente+profundidade
   const [cache, setCache] = useState<Record<string, MapaPronto>>({});
@@ -118,6 +135,39 @@ export function FertilidadeSection() {
     if (lst.length === 0) return undefined;
     const escolhida = legendaIdPorAtributo[atributoId];
     return lst.find(l => l.id === escolhida) ?? lst[0];
+  }
+
+  // Aplica um perfil da Biblioteca: pré-preenche legendaIdPorAtributo com o
+  // mapa do perfil. Não trava — o usuário pode trocar individualmente depois.
+  function aplicarPerfil(id: string) {
+    setPerfilId(id);
+    if (!id) return;
+    const p = perfis.find(x => x.id === id);
+    if (!p) return;
+    setLegendaIdPorAtributo({ ...(p.conteudo.legendasPorElemento ?? {}) });
+  }
+
+  // Captura escolhas atuais (legendas por nutriente + grade.padraoAmostragemId)
+  // num novo Perfil da Biblioteca. Lab fica vazio (associação por nome livre
+  // não é confiável); usuário edita depois se quiser.
+  function salvarComoPerfil() {
+    if (!importacao) { alert('Selecione uma importação antes de salvar.'); return; }
+    const nome = window.prompt('Nome do perfil:', importacao.laboratorio ? `${importacao.laboratorio} — rotina` : '')?.trim();
+    if (!nome) return;
+    const legPorEl: Record<string, string> = {};
+    for (const n of nutrientes) {
+      const l = legendaDe(n);
+      if (l) legPorEl[n] = l.id;
+    }
+    const novo = bibCriar<ConteudoPerfil>('perfis', {
+      nome,
+      conteudo: {
+        padraoAmostragemId: grade?.padraoAmostragemId,
+        legendasPorElemento: Object.keys(legPorEl).length ? legPorEl : undefined,
+      },
+    });
+    setPerfilId(novo.id);
+    alert(`Perfil "${nome}" salvo na Biblioteca > Perfis.`);
   }
 
   function pontosDe(nut: string, prof: string): Ponto[] {
@@ -296,6 +346,24 @@ export function FertilidadeSection() {
           <option value="">Selecione a importação…</option>
           {importacoes.map(i => <option key={i.id} value={i.id}>{i.laboratorio}{i.campanha ? ` · ${i.campanha}` : ''} · {i.resultados.length} amostras</option>)}
         </select>
+      </div>
+
+      {/* Perfil agronômico — preset opcional (Biblioteca > Perfis). */}
+      <div>
+        <label className="text-[10px] font-semibold block mb-0.5" style={{ color: '#64748b' }}>Perfil (preenche legendas)</label>
+        <div className="flex gap-1">
+          <select value={perfilId} onChange={e => aplicarPerfil(e.target.value)}
+            className="flex-1 rounded px-2 py-1.5 text-xs outline-none" style={inputStyle}>
+            <option value="">— Manual (sem perfil)</option>
+            {perfis.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
+          </select>
+          <button onClick={salvarComoPerfil} disabled={!importacao}
+            title="Salvar escolhas atuais como Perfil"
+            className="px-2 py-1.5 rounded text-[10px] font-bold flex items-center gap-1 disabled:opacity-40"
+            style={{ background: 'var(--invicta-blue-mid)', color: '#fff' }}>
+            <Save size={11} /> Salvar
+          </button>
+        </div>
       </div>
 
       {importacao && (

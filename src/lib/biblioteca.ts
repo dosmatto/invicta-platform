@@ -86,8 +86,8 @@ export const CATEGORIAS: DefCategoria[] = [
     descricao: 'Regras de recomendação por cultura/objetivo.' },
   { slug: 'produtividade', nome: 'Produtividade', icone: BarChart3, status: 'em-breve',
     descricao: 'Padrões de mapas de colheita e classes de produtividade.' },
-  { slug: 'perfis', nome: 'Perfis', icone: UserCog, status: 'em-breve',
-    descricao: 'Perfis técnicos, de recomendação e operacionais.' },
+  { slug: 'perfis', nome: 'Perfis', icone: UserCog, status: 'disponivel',
+    descricao: 'Combina laboratório + padrão de amostragem + legendas por elemento. Selecione um perfil na Fertilidade pra preencher tudo de uma vez.' },
   { slug: 'laboratorios', nome: 'Laboratórios', icone: FlaskConical, status: 'disponivel',
     descricao: 'Perfis de mapeamento de planilhas de laboratório (Fundação ABC, Interpartner, …).' },
   { slug: 'legendas', nome: 'Legendas', icone: BookOpen, status: 'disponivel',
@@ -247,6 +247,15 @@ export function _bibSaveRaw<T = unknown>(slug: CategoriaBiblioteca, data: ItemBi
 // já presentes na biblioteca; mantém a chave antiga intacta (rollback fácil).
 export interface ConteudoLaboratorio {
   config: PerfilLabConfig;
+}
+
+// Fase 4 — perfil agronômico (categoria 'perfis'). Refers Lab + PadrAmos +
+// Legendas por elemento. Todos opcionais; é só um preset que pré-preenche
+// as escolhas no Fertilidade. Não duplica os itens originais — só referencia.
+export interface ConteudoPerfil {
+  laboratorioId?: string;                          // FK Lab: builtin id ou item da biblioteca
+  padraoAmostragemId?: string;                     // FK PadraoAmostragem (inv_padroes_amos)
+  legendasPorElemento?: Record<string, string>;    // elementoId -> legendaId (inv_legendas)
 }
 
 export function migrarLaboratoriosV1() {

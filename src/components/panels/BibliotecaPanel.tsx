@@ -4,11 +4,12 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   CATEGORIAS, listar, importar, exportar, criar, atualizar, excluir, ativar,
   type CategoriaBiblioteca, type EscopoBiblioteca, type DefCategoria,
-  type ItemBiblioteca, type ConteudoLaboratorio,
+  type ItemBiblioteca, type ConteudoLaboratorio, type ConteudoPerfil,
 } from '@/lib/biblioteca';
 import { Search, Plus, Download, Upload, ChevronRight, Edit3, Trash2, Save, X, Power } from 'lucide-react';
 import { LegendasPanel } from './LegendasPanel';
-import { PERFIS_BUILTIN } from '@/lib/lab';
+import { PERFIS_BUILTIN, ELEMENTOS_LAB, simboloElemento } from '@/lib/lab';
+import { getPadroesAmostragem, getLegendasPorAtributo } from '@/lib/store';
 
 const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
 
@@ -57,6 +58,7 @@ function CategoriaConteudo({ slug }: { slug: CategoriaBiblioteca }) {
   // Categorias com adaptador próprio têm UI customizada (já implementadas).
   if (slug === 'legendas') return <ConteudoLegendas />;
   if (slug === 'laboratorios') return <ConteudoLaboratorios />;
+  if (slug === 'perfis') return <ConteudoPerfis />;
   return <ConteudoGenerico slug={slug} />;
 }
 
@@ -446,6 +448,290 @@ function LabEditor({ state, onClose }: { state: LabEditState; onClose: () => voi
           </div>
         )}
       </div>
+      <div className="flex gap-2 px-3 py-2 flex-shrink-0" style={{ borderTop: '1px solid #1a3a6b' }}>
+        <button onClick={onClose}
+          className="flex-1 py-1.5 rounded text-[10px] font-bold"
+          style={{ background: '#1a3a6b', color: '#cbd5e1' }}>
+          Cancelar
+        </button>
+        <button onClick={salvar}
+          className="flex-1 py-1.5 rounded text-[10px] font-bold text-white flex items-center justify-center gap-1"
+          style={{ background: 'var(--invicta-green-dark)' }}>
+          <Save size={11} /> Salvar
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Perfis Agronômicos ───────────────────────────────────────────────────
+// Item da Biblioteca que referencia Lab + PadraoAmostragem + legendas por
+// elemento. É só um preset — aplicado no FertilidadeSection pré-preenche
+// `legendaIdPorAtributo` sem travar a escolha individual.
+
+interface PerfilEditState {
+  id: string | null;
+  nome: string;
+  laboratorioId: string;
+  padraoAmostragemId: string;
+  legendasPorElemento: Record<string, string>;
+}
+
+function ConteudoPerfis() {
+  const def = CATEGORIAS.find(c => c.slug === 'perfis')!;
+  const Icon = def.icone;
+  const [aba, setAba] = useState<EscopoBiblioteca>('meu');
+  const [refresh, setRefresh] = useState(0);
+  const [edit, setEdit] = useState<PerfilEditState | null>(null);
+
+  useEffect(() => {
+    const onCh = (e: Event) => {
+      const d = (e as CustomEvent).detail as { slug?: CategoriaBiblioteca } | undefined;
+      if (!d?.slug || d.slug === 'perfis') setRefresh(x => x + 1);
+    };
+    if (typeof window !== 'undefined') window.addEventListener('inv:biblioteca', onCh);
+    return () => { if (typeof window !== 'undefined') window.removeEventListener('inv:biblioteca', onCh); };
+  }, []);
+
+  const itens = useMemo(
+    () => aba === 'sistema' ? [] : listar<ConteudoPerfil>('perfis', aba),
+    [aba, refresh], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+
+  function novo() {
+    setEdit({ id: null, nome: '', laboratorioId: '', padraoAmostragemId: '', legendasPorElemento: {} });
+  }
+  function editar(it: ItemBiblioteca<ConteudoPerfil>) {
+    setEdit({
+      id: it.id, nome: it.nome,
+      laboratorioId: it.conteudo.laboratorioId ?? '',
+      padraoAmostragemId: it.conteudo.padraoAmostragemId ?? '',
+      legendasPorElemento: it.conteudo.legendasPorElemento ?? {},
+    });
+  }
+  function excluirItem(it: ItemBiblioteca<ConteudoPerfil>) {
+    if (!confirm(`Excluir o perfil "${it.nome}"?`)) return;
+    excluir('perfis', it.id);
+  }
+  function alternarAtivo(it: ItemBiblioteca<ConteudoPerfil>) {
+    ativar('perfis', it.id, !it.ativo);
+  }
+
+  return (
+    <section className="flex-1 flex flex-col overflow-hidden relative">
+      <div className="px-4 py-3 flex-shrink-0" style={{ borderBottom: '1px solid #1a3a6b' }}>
+        <div className="flex items-center gap-2 mb-1">
+          <Icon size={14} style={{ color: '#93c5fd' }} />
+          <h3 className="text-sm font-bold uppercase tracking-wide" style={{ color: '#e2e8f0' }}>{def.nome}</h3>
+        </div>
+        <p className="text-[10px]" style={{ color: '#64748b' }}>{def.descricao}</p>
+      </div>
+
+      <div className="flex gap-1 px-3 pt-2 flex-shrink-0">
+        {([
+          { id: 'meu', label: 'Meus padrões' },
+          { id: 'empresa', label: 'Empresa' },
+          { id: 'sistema', label: 'Sistema' },
+        ] as { id: EscopoBiblioteca; label: string }[]).map(t => (
+          <button key={t.id} onClick={() => setAba(t.id)}
+            className="flex-1 py-1 rounded text-[10px] font-bold"
+            style={{ background: aba === t.id ? 'var(--invicta-blue-mid)' : '#1a3a6b', color: aba === t.id ? '#fff' : '#64748b' }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {aba !== 'sistema' && (
+        <div className="px-3 pt-2 flex-shrink-0">
+          <button onClick={novo}
+            className="w-full py-1.5 rounded text-[10px] font-bold text-white flex items-center justify-center gap-1"
+            style={{ background: 'var(--invicta-green-dark)' }}>
+            <Plus size={11} /> Novo perfil
+          </button>
+        </div>
+      )}
+
+      <div className="flex-1 overflow-y-auto px-3 py-2">
+        {aba === 'sistema' ? (
+          <div className="text-center py-8 px-4">
+            <p className="text-[10px]" style={{ color: '#64748b' }}>
+              Ainda não há perfis embutidos pelo sistema. Crie um em <em>Meus padrões</em>
+              ou use o botão <em>Salvar como Perfil</em> dentro da Fertilidade.
+            </p>
+          </div>
+        ) : itens.length === 0 ? (
+          <div className="text-center py-8 px-4">
+            <p className="text-[10px]" style={{ color: '#64748b' }}>
+              Nenhum perfil em <strong>{abaLabel(aba)}</strong>.
+              Use <em>+ Novo perfil</em> ou salve um a partir da Fertilidade.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-1.5">
+            {itens.map(it => (
+              <ItemPerfil key={it.id} it={it}
+                onEdit={() => editar(it)} onDel={() => excluirItem(it)} onToggle={() => alternarAtivo(it)} />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {edit && <PerfilEditor state={edit} onClose={() => setEdit(null)} />}
+    </section>
+  );
+}
+
+function ItemPerfil({
+  it, onEdit, onDel, onToggle,
+}: {
+  it: ItemBiblioteca<ConteudoPerfil>;
+  onEdit: () => void; onDel: () => void; onToggle: () => void;
+}) {
+  const labNome = useMemo(() => {
+    if (!it.conteudo.laboratorioId) return null;
+    const builtin = PERFIS_BUILTIN.find(p => p.id === it.conteudo.laboratorioId);
+    if (builtin) return builtin.nome;
+    const item = listar<ConteudoLaboratorio>('laboratorios').find(i => i.id === it.conteudo.laboratorioId);
+    return item?.nome ?? '?';
+  }, [it.conteudo.laboratorioId]);
+
+  const nElementos = Object.keys(it.conteudo.legendasPorElemento ?? {}).length;
+  const padrAm = it.conteudo.padraoAmostragemId
+    ? getPadroesAmostragem().find(p => p.id === it.conteudo.padraoAmostragemId)?.nome ?? '?'
+    : null;
+
+  return (
+    <div className="p-2 rounded-lg" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
+      <div className="flex items-center gap-2">
+        <div className="flex-1 min-w-0">
+          <div className="text-[11px] font-bold truncate" style={{ color: '#e2e8f0' }}>{it.nome}</div>
+          <div className="text-[9px]" style={{ color: '#64748b' }}>
+            {[labNome && `Lab: ${labNome}`, padrAm && `Padrão: ${padrAm}`, `${nElementos} legenda(s)`]
+              .filter(Boolean).join(' · ')}
+          </div>
+        </div>
+        {!it.ativo && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ background: '#1a3a6b', color: '#94a3b8' }}>inativo</span>}
+        <button onClick={onEdit} title="Editar" className="p-1 rounded hover:bg-white/10" style={{ color: '#93c5fd' }}><Edit3 size={11} /></button>
+        <button onClick={onToggle} title={it.ativo ? 'Inativar' : 'Ativar'} className="p-1 rounded hover:bg-white/10" style={{ color: it.ativo ? '#fbbf24' : '#22c55e' }}><Power size={11} /></button>
+        <button onClick={onDel} title="Excluir" className="p-1 rounded hover:bg-white/10" style={{ color: '#f87171' }}><Trash2 size={11} /></button>
+      </div>
+    </div>
+  );
+}
+
+function PerfilEditor({ state, onClose }: { state: PerfilEditState; onClose: () => void }) {
+  const [nome, setNome] = useState(state.nome);
+  const [labId, setLabId] = useState(state.laboratorioId);
+  const [padrAmId, setPadrAmId] = useState(state.padraoAmostragemId);
+  const [legPorEl, setLegPorEl] = useState<Record<string, string>>(state.legendasPorElemento);
+  const [erro, setErro] = useState('');
+
+  // Lab options = builtins + biblioteca laboratorios (escopo filtrado)
+  const labOptions = useMemo(() => {
+    const builtins = PERFIS_BUILTIN.map(p => ({ id: p.id, nome: `${p.nome} (sistema)` }));
+    const salvos = listar<ConteudoLaboratorio>('laboratorios')
+      .filter(i => i.ativo)
+      .map(i => ({ id: i.id, nome: i.nome }));
+    return [...builtins, ...salvos];
+  }, []);
+
+  const padroes = useMemo(() => getPadroesAmostragem(), []);
+
+  function setLeg(el: string, legendaId: string) {
+    setLegPorEl(prev => {
+      const next = { ...prev };
+      if (legendaId) next[el] = legendaId;
+      else delete next[el];
+      return next;
+    });
+  }
+
+  function salvar() {
+    setErro('');
+    const n = nome.trim();
+    if (!n) { setErro('Dê um nome.'); return; }
+    if (!labId && !padrAmId && Object.keys(legPorEl).length === 0) {
+      setErro('Defina ao menos um campo (laboratório, padrão de amostragem ou ao menos uma legenda).');
+      return;
+    }
+    const conteudo: ConteudoPerfil = {
+      laboratorioId: labId || undefined,
+      padraoAmostragemId: padrAmId || undefined,
+      legendasPorElemento: Object.keys(legPorEl).length ? legPorEl : undefined,
+    };
+
+    if (state.id) {
+      atualizar<ConteudoPerfil>('perfis', state.id, { nome: n, conteudo });
+    } else {
+      criar<ConteudoPerfil>('perfis', { nome: n, conteudo });
+    }
+    onClose();
+  }
+
+  return (
+    <div className="absolute inset-0 z-10 flex flex-col" style={{ background: 'var(--invicta-blue-dark)' }}>
+      <div className="flex items-center justify-between px-4 py-2 flex-shrink-0" style={{ borderBottom: '1px solid #1a3a6b' }}>
+        <span className="text-[11px] font-bold uppercase" style={{ color: '#e2e8f0' }}>
+          {state.id ? 'Editar perfil' : 'Novo perfil'}
+        </span>
+        <button onClick={onClose} className="p-1 rounded hover:bg-white/10" style={{ color: '#cbd5e1' }}>
+          <X size={12} />
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-3 space-y-3">
+        <div>
+          <label className="text-[10px] font-semibold block mb-1" style={{ color: '#cbd5e1' }}>Nome</label>
+          <input value={nome} onChange={e => setNome(e.target.value)} placeholder="ex: Fundação ABC — rotina"
+            className="w-full rounded px-2 py-1.5 text-[11px] outline-none" style={inputStyle} />
+        </div>
+
+        <div>
+          <label className="text-[10px] font-semibold block mb-1" style={{ color: '#cbd5e1' }}>Laboratório (de-para de colunas)</label>
+          <select value={labId} onChange={e => setLabId(e.target.value)}
+            className="w-full rounded px-2 py-1.5 text-[11px] outline-none" style={inputStyle}>
+            <option value="">— Nenhum</option>
+            {labOptions.map(o => <option key={o.id} value={o.id}>{o.nome}</option>)}
+          </select>
+        </div>
+
+        <div>
+          <label className="text-[10px] font-semibold block mb-1" style={{ color: '#cbd5e1' }}>Padrão de Amostragem</label>
+          <select value={padrAmId} onChange={e => setPadrAmId(e.target.value)}
+            className="w-full rounded px-2 py-1.5 text-[11px] outline-none" style={inputStyle}>
+            <option value="">— Nenhum</option>
+            {padroes.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
+          </select>
+        </div>
+
+        <div>
+          <label className="text-[10px] font-semibold block mb-1" style={{ color: '#cbd5e1' }}>Legendas por elemento</label>
+          <div className="space-y-1">
+            {ELEMENTOS_LAB.map(el => {
+              const legs = getLegendasPorAtributo(el.id);
+              const valor = legPorEl[el.id] ?? '';
+              return (
+                <div key={el.id} className="flex items-center gap-2">
+                  <span className="text-[10px] font-mono flex-shrink-0" style={{ width: 60, color: '#93c5fd' }}>{simboloElemento(el.id)}</span>
+                  <select value={valor} onChange={e => setLeg(el.id, e.target.value)}
+                    disabled={legs.length === 0}
+                    className="flex-1 rounded px-2 py-1 text-[10px] outline-none" style={inputStyle}>
+                    <option value="">{legs.length === 0 ? '— sem legendas cadastradas' : '— Nenhuma'}</option>
+                    {legs.map(l => <option key={l.id} value={l.id}>{l.nome}</option>)}
+                  </select>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {erro && (
+          <div className="px-2 py-1.5 rounded text-[10px]" style={{ background: '#3a1a1a', color: '#fca5a5', border: '1px solid #7f1d1d' }}>
+            {erro}
+          </div>
+        )}
+      </div>
+
       <div className="flex gap-2 px-3 py-2 flex-shrink-0" style={{ borderTop: '1px solid #1a3a6b' }}>
         <button onClick={onClose}
           className="flex-1 py-1.5 rounded text-[10px] font-bold"

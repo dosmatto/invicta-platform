@@ -1,6 +1,13 @@
-export const APP_VERSION = '0.28.0';
+export const APP_VERSION = '0.29.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.29.0': [
+    'Reorganização Fase 4 — Perfis Agronômicos',
+    'Biblioteca → Perfis: cria perfis que combinam Laboratório + Padrão de Amostragem + Legendas por elemento (Fundação ABC end-to-end com um clique)',
+    'Fertilidade ganhou dropdown "Perfil" no topo: escolher um perfil pré-preenche todas as legendas por elemento (continua podendo trocar individualmente)',
+    'Botão "Salvar como Perfil" na Fertilidade — captura legendas atuais + padraoAmostragem da grade num novo item da Biblioteca',
+    'Perfis são por referência (não cópia): editar a legenda original atualiza todos os perfis que apontam pra ela',
+  ],
   '0.28.0': [
     'Reorganização Fase 3 — Laboratórios migrados para a Biblioteca',
     'Biblioteca → Laboratórios: lista os perfis salvos (criar/editar/excluir/ativar) e mostra os perfis embutidos (Fundação ABC, Interpartner) na aba "Sistema"',
