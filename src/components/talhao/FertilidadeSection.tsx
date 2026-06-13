@@ -9,6 +9,7 @@ import {
 } from '@/lib/store';
 import {
   interpolar, rampaDaLegenda, gradienteCss, coordsFromBounds, extrairPoligono,
+  comprimirGrid, descomprimirGrid,
   type RespInterp,
 } from '@/lib/fertilidade';
 import { colorirGridComLegenda, temGrid } from '@/lib/raster';
@@ -93,7 +94,21 @@ export function FertilidadeSection() {
     if (nav.talhaoId && safraNome) setImportacoes(getImportacoesLab(nav.talhaoId, safraNome));
   }, [nav.talhaoId, safraNome]);
 
+  // Carregamento inteligente (Etapa 2): ao abrir o talhão, auto-seleciona a
+  // importação mais recente. Isso dispara a hidratação da nuvem abaixo, então
+  // os mapas já interpolados reaparecem sozinhos (sem reprocessar). Antes o
+  // seletor abria vazio e o usuário precisava reescolher a importação.
+  useEffect(() => {
+    if (importacaoId || importacoes.length === 0) return;
+    const maisRecente = [...importacoes].sort((a, b) => (b.criadoEm ?? '').localeCompare(a.criadoEm ?? ''))[0];
+    if (maisRecente) setImportacaoId(maisRecente.id);
+  }, [importacoes, importacaoId]);
+
   const importacao = importacoes.find(i => i.id === importacaoId) ?? null;
+  const importacaoMaisRecente = useMemo(
+    () => [...importacoes].sort((a, b) => (b.criadoEm ?? '').localeCompare(a.criadoEm ?? ''))[0] ?? null,
+    [importacoes],
+  );
 
   const grade = useMemo<GradeAmostragem | null>(() => {
     if (!importacao || !nav.talhaoId) return null;
@@ -215,7 +230,13 @@ export function FertilidadeSection() {
         const chave = partes.length >= 3 ? `${partes.slice(-2).join('__')}` : sufixo;
         // prefere o mais "novo" (sufixo curto). Se já houver, ignora legacy.
         if (novo[chave] && partes.length >= 3) continue;
-        novo[chave] = c.dados;
+        const dados = c.dados;
+        // Grid pode vir comprimido (gzip) — descomprime p/ o render colorir local.
+        if (dados.resp?.grid?.comp === 'gz') {
+          try { dados.resp.grid = await descomprimirGrid(dados.resp.grid); }
+          catch (e) { console.warn('[fertilidade] falha ao descomprimir grid da nuvem:', e); }
+        }
+        novo[chave] = dados;
       }
       setCache(novo);
     })();
@@ -263,12 +284,16 @@ export function FertilidadeSection() {
     // Sessão guarda o PNG do backend como fallback (~10-30 KB). Quem economiza é o Firestore.
     setCache(c => ({ ...c, [ck(nut, prof)]: { resp, labels } }));
     if (nav.talhaoId && importacaoId) {
-      // Joga fora o PNG pra economizar espaço na nuvem (colorimos local a partir do grid)
-      let dados: { resp: RespInterp; labels: GeoJSON.FeatureCollection } = { resp: { ...resp, png: '' }, labels };
+      // Joga fora o PNG (colorimos local a partir do grid) e comprime o grid
+      // com gzip p/ caber no limite de 1 MB/doc do Firestore.
+      const gridGz = resp.grid ? await comprimirGrid(resp.grid) : undefined;
+      let dados: { resp: RespInterp; labels: GeoJSON.FeatureCollection } = { resp: { ...resp, png: '', grid: gridGz }, labels };
+      // Salvaguarda final (não deve disparar com o teto 500×500 + gzip): se ainda
+      // estourar, salva só metadados pra não falhar o write.
       const aprox = JSON.stringify(dados).length;
-      if (aprox > 900_000 && resp.grid) {
+      if (aprox > 950_000) {
         dados = { resp: { ...resp, png: '', grid: undefined }, labels };
-        console.warn(`[fertilidade] grid muito grande p/ Firestore (${Math.round(aprox/1024)} KB); salvando só metadados de ${nut} ${prof}.`);
+        console.warn(`[fertilidade] grid grande demais p/ Firestore mesmo comprimido (${Math.round(aprox/1024)} KB); salvando só metadados de ${nut} ${prof}.`);
       }
       cloudSalvarMapa(idNuvem(nav.talhaoId, importacaoId, metodo, pixelM, modeloFixo, nut, prof), dados);
     }
@@ -325,6 +350,14 @@ export function FertilidadeSection() {
   if (importacoes.length === 0) return <div className="px-6 py-4"><Aviso texto="Importe resultados de laboratório (seção acima) — o mapa de fertilidade é gerado a partir deles." /></div>;
 
   const processando = estado === 'processando';
+  const mapasSalvos = Object.keys(cache).length;
+  // Etapa 3: os mapas em tela são de uma importação mais antiga que a disponível
+  // → podem estar desatualizados (o usuário reimportou laudo depois).
+  const desatualizado = !!(
+    importacao && mapasSalvos > 0 && importacaoMaisRecente &&
+    importacaoMaisRecente.id !== importacao.id &&
+    (importacaoMaisRecente.criadoEm ?? '') > (importacao.criadoEm ?? '')
+  );
   const stats = (nutriente && profundidade) ? cache[ck(nutriente, profundidade)]?.resp.stats : undefined;
   const totalMapas = nutrientes.length * profsAll.length;
   const feitosNaProf = nutrientes.filter(n => {
@@ -344,7 +377,30 @@ export function FertilidadeSection() {
           <option value="">Selecione a importação…</option>
           {importacoes.map(i => <option key={i.id} value={i.id}>{i.laboratorio}{i.campanha ? ` · ${i.campanha}` : ''} · {i.resultados.length} amostras</option>)}
         </select>
+        {mapasSalvos > 0 && (
+          <p className="text-[10px] mt-1 flex items-center gap-1" style={{ color: '#86efac' }}>
+            <Layers size={10} /> {mapasSalvos} {mapasSalvos === 1 ? 'mapa salvo' : 'mapas salvos'} na nuvem — carregam sem reprocessar.
+          </p>
+        )}
       </div>
+
+      {/* Desatualizado (Etapa 3): existe importação mais recente que a destes mapas. */}
+      {desatualizado && importacaoMaisRecente && (
+        <div className="flex items-start gap-2 p-2.5 rounded-lg" style={{ background: '#2d1a00', border: '1px solid #92400e' }}>
+          <AlertTriangle size={13} style={{ color: '#fbbf24' }} className="flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="text-[10px]" style={{ color: '#fbbf24' }}>
+              Estes mapas são de uma importação anterior. Há uma mais recente
+              {importacaoMaisRecente.campanha ? ` (${importacaoMaisRecente.campanha})` : ''} — podem estar desatualizados.
+            </p>
+            <button onClick={() => setImportacaoId(importacaoMaisRecente.id)}
+              className="mt-1 px-2 py-1 rounded text-[10px] font-bold text-white"
+              style={{ background: 'var(--invicta-blue-mid)' }}>
+              Ir para a mais recente e regenerar
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Perfil agronômico — preset opcional (Biblioteca > Perfis). */}
       <div>

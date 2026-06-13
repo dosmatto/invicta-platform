@@ -1,6 +1,11 @@
-export const APP_VERSION = '0.32.0';
+export const APP_VERSION = '0.33.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.33.0': [
+    'Mapas de Fertilidade persistentes: ao abrir o talhão a última importação é selecionada sozinha e os mapas já interpolados reaparecem automaticamente (sem reprocessar) — com selo mostrando quantos mapas estão salvos na nuvem',
+    'Talhões grandes não perdem mais o mapa: o grid interpolado é comprimido (gzip) antes de ir para a nuvem, cabendo no limite do Firestore mesmo na malha máxima',
+    'Aviso de "desatualizado" quando existe uma importação de laboratório mais recente que a dos mapas em tela, com atalho para ir à mais recente e regenerar',
+  ],
   '0.32.0': [
     'Mapa de Fertilidade: a linha de limite do talhão agora fica POR CIMA do raster, cobrindo o serrilhado do recorte nas bordas (o raster entra logo abaixo do contorno; pontos e rótulos seguem acima)',
     'Legenda de Matéria Orgânica corrigida: limites ×10 (agora em g/dm³ — 14/24/34/45) para casar com os valores do laboratório',

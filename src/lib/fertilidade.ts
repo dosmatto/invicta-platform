@@ -35,16 +35,55 @@ export interface RespInterp {
   };
   // Grid bruto (Float32) — base64. Orientacao: norte no topo (linhas).
   // Use `decodeGrid(grid)` p/ obter Float32Array de tamanho rows*cols (NaN fora do polígono).
-  grid?: { b64: string; shape: [number, number] };
+  // `comp: 'gz'` indica que `b64` está comprimido (só na nuvem); em memória é sempre cru.
+  grid?: { b64: string; shape: [number, number]; comp?: 'gz' };
 }
 
-// Decodifica o grid base64 -> Float32Array. Use grid_oriented[r*cols + c].
-export function decodeGrid(g: { b64: string; shape: [number, number] }): { valores: Float32Array; rows: number; cols: number } {
+export type Grid = NonNullable<RespInterp['grid']>;
+
+// Decodifica o grid base64 (cru) -> Float32Array. Use grid_oriented[r*cols + c].
+export function decodeGrid(g: Grid): { valores: Float32Array; rows: number; cols: number } {
   const bin = atob(g.b64);
   const buf = new ArrayBuffer(bin.length);
   const u8 = new Uint8Array(buf);
   for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
   return { valores: new Float32Array(buf), rows: g.shape[0], cols: g.shape[1] };
+}
+
+// ── Compressão do grid para a nuvem (gzip, lossless) ────────────────────────
+// O grid Float32 é volumoso (até ~1,3 MB em base64 no teto de 500×500 do
+// backend) e estouraria o limite de 1 MB/doc do Firestore. Como é uma
+// superfície suave + muito NaN fora do polígono, comprime altíssimo (~5–20×),
+// cabendo folgado. Comprimimos só na fronteira da nuvem; o cache em memória
+// mantém o b64 cru para o render (decodeGrid) seguir síncrono.
+function b64ToBytes(b64: string): Uint8Array {
+  const bin = atob(b64);
+  const u8 = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+  return u8;
+}
+function bytesToB64(buf: ArrayBuffer): string {
+  const u8 = new Uint8Array(buf);
+  let s = '';
+  const CHUNK = 0x8000;
+  for (let i = 0; i < u8.length; i += CHUNK) s += String.fromCharCode(...u8.subarray(i, i + CHUNK));
+  return btoa(s);
+}
+async function porStream(u8: Uint8Array, ts: TransformStream): Promise<string> {
+  const stream = new Blob([u8 as BlobPart]).stream().pipeThrough(ts);
+  return bytesToB64(await new Response(stream).arrayBuffer());
+}
+
+export async function comprimirGrid(grid: Grid): Promise<Grid> {
+  if (grid.comp === 'gz' || typeof CompressionStream === 'undefined') return grid;
+  const gz = await porStream(b64ToBytes(grid.b64), new CompressionStream('gzip'));
+  return { shape: grid.shape, b64: gz, comp: 'gz' };
+}
+
+export async function descomprimirGrid(grid: Grid): Promise<Grid> {
+  if (grid.comp !== 'gz' || typeof DecompressionStream === 'undefined') return grid;
+  const cru = await porStream(b64ToBytes(grid.b64), new DecompressionStream('gzip'));
+  return { shape: grid.shape, b64: cru };
 }
 
 export async function interpolar(params: {
