@@ -17,6 +17,7 @@ import {
 } from '@/lib/store';
 import { FertilidadeSection } from '@/components/talhao/FertilidadeSection';
 import { AmostragemModulo } from '@/components/talhao/AmostragemModulo';
+import { CompactacaoSection } from '@/components/talhao/CompactacaoSection';
 import {
   ChevronLeft, Home, Leaf, Grid3x3, BarChart3, FileSpreadsheet,
   Activity, Satellite, FolderOpen, FileText, Clock,
@@ -37,7 +38,7 @@ const TABS: Array<{ id: TabId; label: string; icon: React.ElementType; pronto: b
   { id: 'amostragem',    label: 'Amostragem',    icon: Grid3x3,         pronto: true },
   { id: 'produtividade', label: 'Produtividade', icon: BarChart3,       pronto: false },
   { id: 'recomendacoes', label: 'Recomendações', icon: FileSpreadsheet, pronto: false },
-  { id: 'compactacao',   label: 'Compactação',   icon: Activity,        pronto: false },
+  { id: 'compactacao',   label: 'Compactação',   icon: Activity,        pronto: true },
   { id: 'ndvi',          label: 'NDVI / Satélite', icon: Satellite,     pronto: false },
   { id: 'arquivos',      label: 'Arquivos',      icon: FolderOpen,      pronto: false },
   { id: 'relatorios',    label: 'Relatórios',    icon: FileText,        pronto: false },
@@ -177,7 +178,8 @@ export function TalhaoPage({ id }: { id: string }) {
             {tab === 'resumo' && talhao && <ResumoTab talhao={talhao} fazenda={fazenda} safraNome={safraSel} cultura={cultura} />}
             {tab === 'fertilidade' && <FertilidadeSection safraNome={safraSel} />}
             {tab === 'amostragem' && <AmostragemModulo safraNome={safraSel} />}
-            {!['resumo', 'fertilidade', 'amostragem'].includes(tab) && (
+            {tab === 'compactacao' && <CompactacaoSection safraNome={safraSel} />}
+            {!['resumo', 'fertilidade', 'amostragem', 'compactacao'].includes(tab) && (
               <EmBreve label={TABS.find(t => t.id === tab)?.label ?? ''} />
             )}
           </div>

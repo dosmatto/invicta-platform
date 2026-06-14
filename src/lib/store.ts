@@ -91,6 +91,39 @@ export function setPlantio(talhaoId: string, safra: string, cultura: string) {
   save('inv_plantios', lista);
 }
 
+// ── Compactação (penetrometria) ───────────────────────────────────────────
+// Cada ponto do penetrômetro já vem georreferenciado com a resistência (MPa)
+// por profundidade — não precisa juntar com grade como na fertilidade.
+export interface PontoCompactacao { lng: number; lat: number; valores: Record<string, number>; }
+export interface ImportacaoCompactacao {
+  id: string;
+  talhaoId: string;
+  safra: string;
+  nome: string;
+  profundidades: string[];   // rótulos derivados das colunas escolhidas
+  pontos: PontoCompactacao[];
+  criadoEm: string;
+}
+
+export function getImportacoesCompactacao(talhaoId?: string, safra?: string): ImportacaoCompactacao[] {
+  let lista = loadFiltrado<ImportacaoCompactacao>('inv_compactacao');
+  if (talhaoId) lista = lista.filter(i => i.talhaoId === talhaoId);
+  if (safra) lista = lista.filter(i => i.safra === safra);
+  return lista.sort((a, b) => (b.criadoEm ?? '').localeCompare(a.criadoEm ?? ''));
+}
+
+export function saveImportacaoCompactacao(data: Omit<ImportacaoCompactacao, 'id' | 'criadoEm'>): ImportacaoCompactacao {
+  const lista = load<ImportacaoCompactacao>('inv_compactacao');
+  const nova: ImportacaoCompactacao = comEmpresa({ ...data, id: uid(), criadoEm: new Date().toISOString() });
+  lista.push(nova);
+  save('inv_compactacao', lista);
+  return nova;
+}
+
+export function deleteImportacaoCompactacao(id: string) {
+  save('inv_compactacao', load<ImportacaoCompactacao>('inv_compactacao').filter(i => i.id !== id));
+}
+
 export interface Safra {
   id: string;
   nome: string;         // ex: "24/25"
