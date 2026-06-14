@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useApp } from '@/context/AppContext';
-import { getTalhoes, getSafras, saveSafra, updateTalhao, Talhao, Safra } from '@/lib/store';
+import { getTalhoes, getSafras, saveSafra, updateTalhao, deleteTalhao, getGrades, getImportacoesLab, getImportacoesCompactacao, Talhao, Safra } from '@/lib/store';
 import { parseGeoFile, normalizarZonas } from '@/lib/geo';
 import { classeZona } from '@/lib/zonas';
 import { AmostragemModulo } from '@/components/talhao/AmostragemModulo';
@@ -14,7 +14,7 @@ import {
   ChevronLeft, Grid3x3, TestTube, Leaf,
   Satellite, Zap, BarChart3, Layers, FileSpreadsheet,
   FileText, ChevronDown, ChevronRight, Play, Upload, Download,
-  CheckCircle2, AlertTriangle, MapPin, Plus, X, Save, ExternalLink,
+  CheckCircle2, AlertTriangle, MapPin, Plus, X, Save, ExternalLink, Trash2, Pencil,
 } from 'lucide-react';
 
 // ── tipos ──────────────────────────────────────────────────────────────────
@@ -345,6 +345,25 @@ export function TalhaoDetailPanel() {
   const [safra, setSafra] = useState('');
   const [mostraFormSafra, setMostraFormSafra] = useState(false);
   const [novaSafra, setNovaSafra] = useState({ anoInicio: new Date().getFullYear(), anoFim: new Date().getFullYear() + 1 });
+  const [renomeando, setRenomeando] = useState(false);
+  const [nomeTemp, setNomeTemp] = useState('');
+  const [numDependencias, setNumDependencias] = useState(0);
+
+  function salvarRenome() {
+    const novo = nomeTemp.trim();
+    if (!nav.talhaoId || !novo) { setRenomeando(false); return; }
+    updateTalhao(nav.talhaoId, { nome: novo });
+    setNav({ talhao: novo });
+    setTalhao(t => (t ? { ...t, nome: novo } : t));
+    setRenomeando(false);
+  }
+  function apagarTalhao() {
+    if (!nav.talhaoId) return;
+    if (numDependencias > 0) { alert('Este talhão tem grades/importações/mapas. Apague esses dados primeiro para poder excluir o talhão.'); return; }
+    if (!confirm(`Excluir o talhão "${nav.talhao}"? Esta ação não pode ser desfeita.`)) return;
+    deleteTalhao(nav.talhaoId);
+    voltarFazenda();
+  }
 
   // Carrega talhão do store, safras e restaura geo no mapa
   useEffect(() => {
@@ -352,6 +371,11 @@ export function TalhaoDetailPanel() {
     const todos = getTalhoes();
     const t = todos.find(x => x.id === nav.talhaoId) ?? null;
     setTalhao(t);
+    setNumDependencias(
+      getGrades(nav.talhaoId).length +
+      getImportacoesLab(nav.talhaoId).length +
+      getImportacoesCompactacao(nav.talhaoId).length,
+    );
     const sf = getSafras();
     setSafras(sf);
     const ativa = sf.find(s => s.ativa);
@@ -425,7 +449,20 @@ export function TalhaoDetailPanel() {
         <div className="px-4 py-3">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-base font-bold" style={{ color: '#fff' }}>{nav.talhao}</p>
+              {renomeando ? (
+                <div className="flex items-center gap-1">
+                  <input autoFocus value={nomeTemp} onChange={e => setNomeTemp(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') salvarRenome(); if (e.key === 'Escape') setRenomeando(false); }}
+                    className="rounded px-1.5 py-0.5 text-sm font-bold outline-none" style={{ background: '#1a3a6b', color: '#fff', border: '1px solid #2e5fa3', width: 150 }} />
+                  <button onClick={salvarRenome} title="Salvar" className="p-1" style={{ color: '#4ade80' }}><Save size={13} /></button>
+                  <button onClick={() => setRenomeando(false)} title="Cancelar" className="p-1" style={{ color: '#94a3b8' }}><X size={13} /></button>
+                </div>
+              ) : (
+                <p className="text-base font-bold flex items-center gap-1.5" style={{ color: '#fff' }}>
+                  {nav.talhao}
+                  <button onClick={() => { setNomeTemp(nav.talhao); setRenomeando(true); }} title="Renomear talhão" className="p-0.5" style={{ color: '#64748b' }}><Pencil size={12} /></button>
+                </p>
+              )}
               <p className="text-xs mt-0.5" style={{ color: '#93c5fd' }}>{nav.fazenda}</p>
               <p className="text-xs" style={{ color: '#64748b' }}>
                 {nav.area > 0 ? `${nav.area.toLocaleString('pt-BR')} ha · ` : ''}{nav.produtor}
@@ -445,6 +482,13 @@ export function TalhaoDetailPanel() {
             className="mt-3 w-full flex items-center justify-center gap-1.5 py-2 rounded text-xs font-bold text-white transition-opacity hover:opacity-90"
             style={{ background: 'var(--invicta-blue-mid)' }}>
             <ExternalLink size={13} /> Abrir página completa do talhão
+          </button>
+
+          {/* Apagar talhão (bloqueado se tiver grades/importações/mapas) */}
+          <button onClick={apagarTalhao}
+            className="mt-2 w-full flex items-center justify-center gap-1.5 py-1.5 rounded text-[11px] font-semibold"
+            style={{ background: numDependencias > 0 ? '#1a3a6b' : '#7f1d1d', color: numDependencias > 0 ? '#475569' : '#fca5a5' }}>
+            <Trash2 size={12} /> {numDependencias > 0 ? `Exclusão bloqueada (${numDependencias} item${numDependencias > 1 ? 'ns' : ''})` : 'Apagar talhão'}
           </button>
         </div>
 

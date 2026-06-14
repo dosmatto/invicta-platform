@@ -2,11 +2,22 @@
 
 import { useState, useEffect } from 'react';
 import { useApp } from '@/context/AppContext';
-import { getClientes, getFazendas, saveFazenda, Cliente, Fazenda } from '@/lib/store';
-import { ChevronLeft, ChevronRight, Plus, Building2, Phone, Mail, Edit2, Save, X } from 'lucide-react';
+import { getClientes, getFazendas, saveFazenda, updateCliente, deleteCliente, Cliente, Fazenda } from '@/lib/store';
+import { ChevronLeft, ChevronRight, Plus, Building2, Phone, Mail, Edit2, Save, X, Trash2 } from 'lucide-react';
 import { PanelSection, PanelButton, MockIndicator } from './_shared';
 
 const ESTADOS_BR = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'];
+const editInput = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
+
+function FieldEdit({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <div>
+      <label className="text-[10px] font-semibold block mb-0.5" style={{ color: '#64748b' }}>{label}</label>
+      <input value={value} onChange={e => onChange(e.target.value)}
+        className="w-full rounded px-3 py-2 text-xs outline-none" style={editInput} />
+    </div>
+  );
+}
 
 export function ProdutorDetailPanel() {
   const { nav, setNav, setActivePanel } = useApp();
@@ -16,6 +27,23 @@ export function ProdutorDetailPanel() {
   const [mostraForm, setMostraForm] = useState(false);
   const [form, setForm] = useState({ nome: '', sigla: '', municipio: '', estado: 'PR', car: '', nirf: '' });
   const [salvando, setSalvando] = useState(false);
+  const [editando, setEditando] = useState(false);
+  const [editForm, setEditForm] = useState<Partial<Cliente>>({});
+
+  function iniciarEdicaoCliente() { if (cliente) { setEditForm({ ...cliente }); setEditando(true); } }
+  function salvarEdicaoCliente() {
+    if (!cliente) return;
+    updateCliente(cliente.id, editForm);
+    setCliente(getClientes().find(c => c.id === cliente.id) ?? null);
+    setEditando(false);
+  }
+  function apagarCliente() {
+    if (!cliente) return;
+    if (fazendas.length > 0) { alert('Este cliente tem fazendas cadastradas. Apague as fazendas primeiro para poder excluir o cliente.'); return; }
+    if (!confirm(`Excluir o cliente "${cliente.nome}"? Esta ação não pode ser desfeita.`)) return;
+    deleteCliente(cliente.id);
+    setActivePanel('produtores');
+  }
 
   useEffect(() => {
     if (!nav.produtorId) return;
@@ -189,32 +217,75 @@ export function ProdutorDetailPanel() {
           </>
         )}
 
-        {tab === 'dados' && (
-          <PanelSection>
-            {[
-              { label: 'Nome', value: cliente.nome },
-              { label: 'Tipo', value: cliente.tipoPessoa === 'PF' ? 'Pessoa Física' : 'Pessoa Jurídica' },
-              { label: 'CPF / CNPJ', value: cliente.documento || '—' },
-              { label: 'Município', value: cliente.cidade || '—' },
-              { label: 'Estado', value: cliente.estado },
-              { label: 'Telefone', value: cliente.telefone || '—' },
-              { label: 'E-mail', value: cliente.email || '—' },
-              { label: 'Cadastrado em', value: new Date(cliente.criadoEm).toLocaleDateString('pt-BR') },
-            ].map(d => (
-              <div key={d.label} className="flex items-center justify-between px-4 py-2.5"
-                style={{ borderBottom: '1px solid #0f2240' }}>
-                <p className="text-xs" style={{ color: '#64748b' }}>{d.label}</p>
-                <p className="text-xs font-semibold" style={{ color: '#e2e8f0' }}>{d.value}</p>
-              </div>
-            ))}
-            {cliente.observacoes && (
-              <div className="px-4 py-3">
-                <p className="text-[10px] font-semibold mb-1" style={{ color: '#64748b' }}>Observações</p>
-                <p className="text-xs" style={{ color: '#94a3b8' }}>{cliente.observacoes}</p>
-              </div>
-            )}
-          </PanelSection>
-        )}
+        {tab === 'dados' && (editando ? (
+          <div className="p-4 space-y-3">
+            <p className="text-xs font-bold uppercase tracking-wide" style={{ color: '#93c5fd' }}>Editar Cliente</p>
+            <FieldEdit label="Nome *" value={editForm.nome ?? ''} onChange={v => setEditForm(p => ({ ...p, nome: v }))} />
+            <FieldEdit label="Sigla" value={editForm.sigla ?? ''} onChange={v => setEditForm(p => ({ ...p, sigla: v }))} />
+            <div>
+              <label className="text-[10px] font-semibold block mb-0.5" style={{ color: '#64748b' }}>Tipo</label>
+              <select value={editForm.tipoPessoa ?? 'PF'} onChange={e => setEditForm(p => ({ ...p, tipoPessoa: e.target.value as 'PF' | 'PJ' }))}
+                className="w-full rounded px-3 py-2 text-xs outline-none" style={editInput}>
+                <option value="PF">Pessoa Física</option>
+                <option value="PJ">Pessoa Jurídica</option>
+              </select>
+            </div>
+            <FieldEdit label="CPF / CNPJ" value={editForm.documento ?? ''} onChange={v => setEditForm(p => ({ ...p, documento: v }))} />
+            <FieldEdit label="Município" value={editForm.cidade ?? ''} onChange={v => setEditForm(p => ({ ...p, cidade: v }))} />
+            <div>
+              <label className="text-[10px] font-semibold block mb-0.5" style={{ color: '#64748b' }}>Estado</label>
+              <select value={editForm.estado ?? 'PR'} onChange={e => setEditForm(p => ({ ...p, estado: e.target.value }))}
+                className="w-full rounded px-3 py-2 text-xs outline-none" style={editInput}>
+                {ESTADOS_BR.map(uf => <option key={uf} value={uf}>{uf}</option>)}
+              </select>
+            </div>
+            <FieldEdit label="Telefone" value={editForm.telefone ?? ''} onChange={v => setEditForm(p => ({ ...p, telefone: v }))} />
+            <FieldEdit label="E-mail" value={editForm.email ?? ''} onChange={v => setEditForm(p => ({ ...p, email: v }))} />
+            <FieldEdit label="Observações" value={editForm.observacoes ?? ''} onChange={v => setEditForm(p => ({ ...p, observacoes: v }))} />
+            <div className="flex gap-2">
+              <button onClick={() => setEditando(false)} className="flex-1 py-2 rounded text-xs font-semibold flex items-center justify-center gap-1" style={{ background: '#1a3a6b', color: '#94a3b8' }}><X size={12} /> Cancelar</button>
+              <button onClick={salvarEdicaoCliente} disabled={!editForm.nome?.trim()} className="flex-1 py-2 rounded text-xs font-bold text-white flex items-center justify-center gap-1 disabled:opacity-40" style={{ background: 'var(--invicta-green-dark)' }}><Save size={12} /> Salvar</button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="p-3 flex justify-end">
+              <button onClick={iniciarEdicaoCliente} className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold" style={{ background: '#1a3a6b', color: '#93c5fd' }}><Edit2 size={12} /> Editar</button>
+            </div>
+            <PanelSection>
+              {[
+                { label: 'Nome', value: cliente.nome },
+                { label: 'Tipo', value: cliente.tipoPessoa === 'PF' ? 'Pessoa Física' : 'Pessoa Jurídica' },
+                { label: 'CPF / CNPJ', value: cliente.documento || '—' },
+                { label: 'Município', value: cliente.cidade || '—' },
+                { label: 'Estado', value: cliente.estado },
+                { label: 'Telefone', value: cliente.telefone || '—' },
+                { label: 'E-mail', value: cliente.email || '—' },
+                { label: 'Cadastrado em', value: new Date(cliente.criadoEm).toLocaleDateString('pt-BR') },
+              ].map(d => (
+                <div key={d.label} className="flex items-center justify-between px-4 py-2.5"
+                  style={{ borderBottom: '1px solid #0f2240' }}>
+                  <p className="text-xs" style={{ color: '#64748b' }}>{d.label}</p>
+                  <p className="text-xs font-semibold" style={{ color: '#e2e8f0' }}>{d.value}</p>
+                </div>
+              ))}
+              {cliente.observacoes && (
+                <div className="px-4 py-3">
+                  <p className="text-[10px] font-semibold mb-1" style={{ color: '#64748b' }}>Observações</p>
+                  <p className="text-xs" style={{ color: '#94a3b8' }}>{cliente.observacoes}</p>
+                </div>
+              )}
+            </PanelSection>
+            <div className="p-4">
+              <button onClick={apagarCliente}
+                className="w-full flex items-center justify-center gap-1.5 py-2 rounded text-xs font-semibold"
+                style={{ background: fazendas.length > 0 ? '#1a3a6b' : '#7f1d1d', color: fazendas.length > 0 ? '#475569' : '#fca5a5' }}>
+                <Trash2 size={12} /> {fazendas.length > 0 ? `Exclusão bloqueada (${fazendas.length} fazenda${fazendas.length > 1 ? 's' : ''})` : 'Apagar cliente'}
+              </button>
+              {fazendas.length > 0 && <p className="text-[9px] text-center mt-1" style={{ color: '#475569' }}>Apague as fazendas primeiro para excluir o cliente.</p>}
+            </div>
+          </>
+        ))}
       </div>
     </div>
   );

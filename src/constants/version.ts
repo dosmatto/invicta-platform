@@ -1,6 +1,10 @@
-export const APP_VERSION = '0.38.0';
+export const APP_VERSION = '0.39.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.39.0': [
+    'Cadastros: agora dá para EDITAR o Cliente (aba Dados → Editar) e RENOMEAR o Talhão (lápis ao lado do nome no cabeçalho)',
+    'Exclusão segura: apagar Cliente fica bloqueado enquanto houver fazendas; apagar Talhão fica bloqueado enquanto houver grades/importações/mapas — evita perder dados em massa por engano. A exclusão só acontece (com confirmação) quando não há dependências',
+  ],
   '0.38.0': [
     'Amostragem: clicar no ícone 👁 de uma grade salva (Grid ou Zonas de Manejo) agora mostra os pontos dela no mapa, com a grade realçada; clicar de novo oculta. Editar ou mexer nos parâmetros volta para a simulação ao vivo',
   ],

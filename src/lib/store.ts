@@ -298,6 +298,10 @@ export function updateTalhao(id: string, data: Partial<Talhao>) {
   if (idx >= 0) { talhoes[idx] = { ...talhoes[idx], ...data }; save('inv_talhoes', talhoes); }
 }
 
+export function deleteTalhao(id: string) {
+  save('inv_talhoes', load<Talhao>('inv_talhoes').filter(t => t.id !== id));
+}
+
 // ── Safras ────────────────────────────────────────────────────────────────
 
 // Wrappers de retrocompat (Fase 5): Safras vivem na Biblioteca > Safras.
