@@ -3,7 +3,8 @@
 // Aba Compactação (penetrometria): importa pontos georreferenciados com a
 // resistência (MPa) por profundidade (mapeamento de colunas), e interpola um
 // raster por profundidade reaproveitando o motor da Fertilidade + a legenda
-// oficial de Compactação. O raster usa o mesmo canal do mapa (fertilidadeOverlay).
+// oficial de Compactação. O raster usa o mesmo canal do mapa (fertilidadeOverlay)
+// e é PERSISTIDO na nuvem (autoload + gzip), igual à Fertilidade.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useApp } from '@/context/AppContext';
@@ -11,22 +12,26 @@ import {
   getTalhoes, getLegendas, getImportacoesCompactacao, saveImportacaoCompactacao,
   deleteImportacaoCompactacao, type ImportacaoCompactacao,
 } from '@/lib/store';
-import { interpolar, rampaDaLegenda, gradienteCss, coordsFromBounds, extrairPoligono } from '@/lib/fertilidade';
+import {
+  interpolar, rampaDaLegenda, gradienteCss, coordsFromBounds, extrairPoligono,
+  comprimirGrid, descomprimirGrid, type RespInterp,
+} from '@/lib/fertilidade';
 import { colorirGridComLegenda, temGrid } from '@/lib/raster';
+import { cloudSalvarMapa, cloudCarregarMapasPorPrefixo, cloudExcluirMapasPorPrefixo } from '@/lib/cloud';
 import { parseArquivoPontos, pontosCompactacao, type ArquivoPontos } from '@/lib/compactacao';
 import type { Legenda } from '@/lib/legendas';
-import { Upload, Loader2, Activity, Eraser, AlertTriangle, Save, Trash2, Play, Plus } from 'lucide-react';
+import { Upload, Loader2, Activity, Eraser, AlertTriangle, Save, Trash2, Play, Plus, Layers } from 'lucide-react';
 
 const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
 const fmt = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
 
 type Ponto = { lng: number; lat: number; valor: number };
-type MapaPronto = {
-  url: string;
-  coords: [[number, number], [number, number], [number, number], [number, number]];
-  labels: GeoJSON.FeatureCollection;
-  stats: { n: number; modelo: string };
-};
+type MapaPronto = { resp: RespInterp; labels: GeoJSON.FeatureCollection };
+
+// Persistência na nuvem (coleção inv_mapas_fert, compartilhada): namespace
+// próprio para não colidir com os mapas de fertilidade.
+const prefixoNuvem = (talhaoId: string, importacaoId: string) => `compactacao__${talhaoId}__${importacaoId}__`;
+const idNuvem = (talhaoId: string, importacaoId: string, prof: string) => `${prefixoNuvem(talhaoId, importacaoId)}${prof}`;
 
 export function CompactacaoSection({ safraNome }: { safraNome?: string } = {}) {
   const { nav, uploadedGeo, setFertilidadeOverlay, setFertilidadeLabels } = useApp();
@@ -72,16 +77,43 @@ export function CompactacaoSection({ safraNome }: { safraNome?: string } = {}) {
 
   const importacao = importacoes.find(i => i.id === importacaoId) ?? null;
 
-  useEffect(() => { setProfundidade(importacao?.profundidades[0] ?? ''); setCache({}); }, [importacaoId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setProfundidade(importacao?.profundidades[0] ?? ''); }, [importacaoId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Autoload: hidrata da nuvem os rasters já interpolados desta importação.
+  useEffect(() => {
+    setCache({}); setEstado('idle'); setErro('');
+    if (!nav.talhaoId || !importacaoId) return;
+    const prefixo = prefixoNuvem(nav.talhaoId, importacaoId);
+    (async () => {
+      const carregados = await cloudCarregarMapasPorPrefixo<MapaPronto>(prefixo);
+      if (carregados.length === 0) return;
+      const novo: Record<string, MapaPronto> = {};
+      for (const c of carregados) {
+        const prof = c.id.slice(prefixo.length);
+        const dados = c.dados;
+        if (dados.resp?.grid?.comp === 'gz') {
+          try { dados.resp.grid = await descomprimirGrid(dados.resp.grid); }
+          catch (e) { console.warn('[compactacao] falha ao descomprimir grid:', e); }
+        }
+        novo[prof] = dados;
+      }
+      setCache(novo);
+    })();
+  }, [importacaoId, nav.talhaoId]);
 
   useEffect(() => () => { setFertilidadeOverlay(null); setFertilidadeLabels(null); }, [setFertilidadeOverlay, setFertilidadeLabels]);
 
-  // exibe o raster da profundidade selecionada (do cache da sessão)
+  // exibe o raster da profundidade selecionada (colore local a partir do grid)
   useEffect(() => {
     const c = cache[profundidade];
-    if (c) { setFertilidadeOverlay({ url: c.url, coordinates: c.coords, opacity: 1 }); setFertilidadeLabels(c.labels); }
-    else { setFertilidadeOverlay(null); setFertilidadeLabels(null); }
-  }, [profundidade, cache, setFertilidadeOverlay, setFertilidadeLabels]);
+    if (!c || !legenda) { setFertilidadeOverlay(null); setFertilidadeLabels(null); return; }
+    let url = '';
+    if (temGrid(c.resp)) { try { url = colorirGridComLegenda(c.resp.grid!, legenda).dataUrl; } catch { /* cai no png */ } }
+    if (!url && c.resp.png) url = c.resp.png;
+    if (!url) { setFertilidadeOverlay(null); setFertilidadeLabels(null); return; }
+    setFertilidadeOverlay({ url, coordinates: coordsFromBounds(c.resp.bounds), opacity: 1 });
+    setFertilidadeLabels(c.labels);
+  }, [profundidade, cache, legenda, setFertilidadeOverlay, setFertilidadeLabels]);
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -110,8 +142,7 @@ export function CompactacaoSection({ safraNome }: { safraNome?: string } = {}) {
       pontos: pontosCompactacao(arq.pontos, colsSel),
     });
     setArq(null); setColsSel([]); setNome(''); setModoUpload(false);
-    const lst = getImportacoesCompactacao(nav.talhaoId, safra);
-    setImportacoes(lst);
+    setImportacoes(getImportacoesCompactacao(nav.talhaoId, safra));
     setImportacaoId(nova.id);
   }
 
@@ -143,19 +174,29 @@ export function CompactacaoSection({ safraNome }: { safraNome?: string } = {}) {
     try {
       const { dominio, stops } = rampaDaLegenda(legenda);
       const resp = await interpolar({ pontos: pts, poligono, dominio, stops, metodo: 'krige', pixelM: 20, modeloFixo: null });
-      let url = '';
-      if (temGrid(resp)) { try { url = colorirGridComLegenda(resp.grid!, legenda).dataUrl; } catch { /* cai no png */ } }
-      if (!url) url = resp.png;
-      setCache(c => ({ ...c, [prof]: { url, coords: coordsFromBounds(resp.bounds), labels: fcLabels(pts), stats: { n: resp.stats.n, modelo: resp.stats.modelo } } }));
+      const labels = fcLabels(pts);
+      setCache(c => ({ ...c, [prof]: { resp, labels } }));
       setEstado('pronto');
+      // Persiste na nuvem (grid comprimido; sem PNG — colorimos local).
+      if (nav.talhaoId && importacaoId) {
+        const gridGz = resp.grid ? await comprimirGrid(resp.grid) : undefined;
+        const dados: MapaPronto = { resp: { ...resp, png: '', grid: gridGz }, labels };
+        cloudSalvarMapa(idNuvem(nav.talhaoId, importacaoId, prof), dados);
+      }
     } catch (e) {
       setEstado('erro'); setErro(e instanceof Error ? e.message : 'Falha ao interpolar.');
     }
   }
 
+  function limparProf(prof: string) {
+    setCache(c => { const n = { ...c }; delete n[prof]; return n; });
+    if (nav.talhaoId && importacaoId) cloudExcluirMapasPorPrefixo(idNuvem(nav.talhaoId, importacaoId, prof));
+  }
+
   function excluirImportacao() {
     if (!importacaoId) return;
-    if (!confirm('Excluir esta importação de compactação?')) return;
+    if (!confirm('Excluir esta importação de compactação (e seus mapas)?')) return;
+    if (nav.talhaoId) cloudExcluirMapasPorPrefixo(prefixoNuvem(nav.talhaoId, importacaoId));
     deleteImportacaoCompactacao(importacaoId);
     setImportacaoId('');
     recarregar();
@@ -166,6 +207,7 @@ export function CompactacaoSection({ safraNome }: { safraNome?: string } = {}) {
 
   const mostrarUpload = modoUpload || importacoes.length === 0;
   const processando = estado === 'processando';
+  const mapasSalvos = Object.keys(cache).length;
 
   return (
     <div className="px-4 py-3 space-y-3">
@@ -188,6 +230,11 @@ export function CompactacaoSection({ safraNome }: { safraNome?: string } = {}) {
               </button>
             )}
           </div>
+          {mapasSalvos > 0 && (
+            <p className="text-[10px] mt-1 flex items-center gap-1" style={{ color: '#86efac' }}>
+              <Layers size={10} /> {mapasSalvos} {mapasSalvos === 1 ? 'mapa salvo' : 'mapas salvos'} na nuvem — carregam sem reprocessar.
+            </p>
+          )}
         </div>
       )}
 
@@ -270,9 +317,9 @@ export function CompactacaoSection({ safraNome }: { safraNome?: string } = {}) {
             <div className="space-y-2 p-2.5 rounded-lg" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5 text-[10px]" style={{ color: '#86efac' }}>
-                  <Activity size={12} /> {cache[profundidade].stats.modelo} · {cache[profundidade].stats.n} pts
+                  <Activity size={12} /> {cache[profundidade].resp.stats.modelo} · {cache[profundidade].resp.stats.n} pts
                 </div>
-                <button onClick={() => setCache(c => { const n = { ...c }; delete n[profundidade]; return n; })}
+                <button onClick={() => limparProf(profundidade)}
                   className="flex items-center gap-1 text-[10px]" style={{ color: '#93c5fd' }}>
                   <Eraser size={11} /> Limpar
                 </button>

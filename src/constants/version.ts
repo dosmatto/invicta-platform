@@ -1,6 +1,9 @@
-export const APP_VERSION = '0.36.0';
+export const APP_VERSION = '0.37.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.37.0': [
+    'Compactação: os mapas interpolados agora são salvos na nuvem (mesmo esquema da Fertilidade — autoload ao reabrir + grid comprimido em gzip), com selo de quantos mapas estão salvos; não precisa reprocessar a cada visita',
+  ],
   '0.36.0': [
     'Página do Talhão — aba Compactação (penetrometria): importe pontos georreferenciados (SHP/KML/GeoJSON/CSV/XLSX), mapeie as colunas de resistência (cada uma vira uma profundidade) e gere o mapa interpolado por profundidade usando a legenda oficial de Compactação (MPa, invertida)',
     'Reaproveita o motor de interpolação (krigagem/IDW) e a coloração local; os pontos importados ficam salvos (sincronizados na nuvem)',
