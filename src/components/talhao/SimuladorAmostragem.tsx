@@ -6,7 +6,7 @@ import { getPadroesAmostragem, getPadroesElementos, getSafras, getGrades, saveGr
 import { gerarGrid, anguloMaiorDimensao, criarValidador, ModoDistribuicao } from '@/lib/grid';
 import { exportarKML, exportarSHP } from '@/lib/exportGrade';
 import { gerarEtiquetasPDF, itensDeGrade, LAYOUTS_ETIQUETA } from '@/lib/etiquetas';
-import { AlertTriangle, RotateCcw, Shuffle, Layers, MapPin, Save, Trash2, CheckCircle2, Circle, Pencil, Move, Plus, Eraser, X, Check, Download, Printer } from 'lucide-react';
+import { AlertTriangle, RotateCcw, Shuffle, Layers, MapPin, Save, Trash2, CheckCircle2, Circle, Pencil, Move, Plus, Eraser, X, Check, Download, Printer, Eye } from 'lucide-react';
 
 // PRNG simples para shuffle determinístico
 function shuffleSeed<T>(arr: T[], seed: number): T[] {
@@ -73,6 +73,7 @@ export function SimuladorAmostragem({ safraNome: safraProp }: { safraNome?: stri
   const [nomeTemp, setNomeTemp] = useState('');
   // Edição manual: pontos "congelados" + ponto extra pendente (aguardando escolha de profundidades)
   const [pontosManuais, setPontosManuais] = useState<PontoAmostragem[] | null>(null);
+  const [gradeViewId, setGradeViewId] = useState<string | null>(null); // grade salva exibida no mapa
   const [addPendente, setAddPendente] = useState<{ lng: number; lat: number } | null>(null);
   const [profsExtra, setProfsExtra] = useState<boolean[]>([]);
 
@@ -84,6 +85,7 @@ export function SimuladorAmostragem({ safraNome: safraProp }: { safraNome?: stri
     setDensidade(padrao.densidadeHaPonto);
     setProfs(padrao.profundidades.map(p => ({ ...p })));
     setPontosManuais(null);
+    setGradeViewId(null);
     setEdicaoAtiva(false);
   }, [padrao, setEdicaoAtiva]);
 
@@ -106,11 +108,14 @@ export function SimuladorAmostragem({ safraNome: safraProp }: { safraNome?: stri
   // Pontos efetivos: edição manual (se houver) tem prioridade sobre os gerados
   const pontosEfetivos = pontosManuais ?? gerados;
 
-  // Envia pontos ao mapa
+  // Envia pontos ao mapa. Se uma grade salva estiver em visualização, ela tem
+  // prioridade sobre a simulação ao vivo.
   useEffect(() => {
-    setPontosSimulados(pontosEfetivos.length ? fcDePontos(pontosEfetivos) : null);
+    const vista = gradeViewId ? grades.find(g => g.id === gradeViewId) : null;
+    const pts = vista ? vista.pontos : pontosEfetivos;
+    setPontosSimulados(pts.length ? fcDePontos(pts) : null);
     return () => setPontosSimulados(null);
-  }, [pontosEfetivos, setPontosSimulados]);
+  }, [gradeViewId, grades, pontosEfetivos, setPontosSimulados]);
 
   // Aplica eventos de edição vindos do mapa (arrastar / adicionar / remover)
   useEffect(() => {
@@ -143,16 +148,18 @@ export function SimuladorAmostragem({ safraNome: safraProp }: { safraNome?: stri
   // Ao mudar qualquer parâmetro, descarta a edição manual (a grade é regerada)
   function alterarParam<T>(setter: (v: T) => void, v: T) {
     if (pontosManuais) setPontosManuais(null);
+    setGradeViewId(null);
     setter(v);
   }
   function setProfPct(i: number, v: number) {
     if (pontosManuais) setPontosManuais(null);
+    setGradeViewId(null);
     setProfs(prev => prev.map((p, idx) => idx === i ? { ...p, percentual: v } : p));
   }
   const nomeElem = (id: string) => padroesElem.find(p => p.id === id)?.nome ?? '—';
 
   // ── Edição manual ──
-  function iniciarEdicao() { setPontosManuais(gerados.map(p => ({ ...p }))); setEdicaoModo('mover'); setEdicaoAtiva(true); }
+  function iniciarEdicao() { setGradeViewId(null); setPontosManuais(gerados.map(p => ({ ...p }))); setEdicaoModo('mover'); setEdicaoAtiva(true); }
   function concluirEdicao() { setEdicaoAtiva(false); }
   function descartarEdicao() { setPontosManuais(null); setEdicaoAtiva(false); }
   function confirmarAddPonto() {
@@ -474,7 +481,7 @@ export function SimuladorAmostragem({ safraNome: safraProp }: { safraNome?: stri
           </p>
           <div className="space-y-1.5">
             {grades.map(g => (
-              <div key={g.id} className="p-2 rounded-lg" style={{ background: '#061525', border: `1px solid ${g.paraProcessar ? '#166534' : '#1a3a6b'}` }}>
+              <div key={g.id} className="p-2 rounded-lg" style={{ background: '#061525', border: `1px solid ${gradeViewId === g.id ? '#22d3ee' : (g.paraProcessar ? '#166534' : '#1a3a6b')}` }}>
                 <div className="flex items-center gap-2">
                   {/* marcar para processar */}
                   <button onClick={() => { marcarParaProcessar(g.id); recarregarGrades(); }} title="Marcar para processar">
@@ -490,6 +497,8 @@ export function SimuladorAmostragem({ safraNome: safraProp }: { safraNome?: stri
                     <span className="text-xs font-bold flex-1" style={{ color: '#e2e8f0' }}>{g.nome}</span>
                   )}
                   {g.customizado && <span className="text-[8px] px-1 py-0.5 rounded" style={{ background: '#78350f', color: '#fde68a' }}>CUSTOM</span>}
+                  <button onClick={() => setGradeViewId(id => id === g.id ? null : g.id)} title={gradeViewId === g.id ? 'Ocultar do mapa' : 'Ver no mapa'}
+                    className="p-1 rounded" style={{ color: gradeViewId === g.id ? '#22d3ee' : '#93c5fd' }}><Eye size={11} /></button>
                   <button onClick={() => { setRenomeando(g.id); setNomeTemp(g.nome); }} title="Renomear"
                     className="p-1 rounded" style={{ color: '#93c5fd' }}><Pencil size={11} /></button>
                   <button onClick={() => { deleteGrade(g.id); recarregarGrades(); }} title="Excluir"

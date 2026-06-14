@@ -7,7 +7,7 @@ import { classeZona, ORDEM_CLASSES } from '@/lib/zonas';
 import { gerarGrid, pontoInterno, ModoDistribuicao } from '@/lib/grid';
 import { gerarEtiquetasPDF, EtiquetaItem, LAYOUTS_ETIQUETA } from '@/lib/etiquetas';
 import { exportarKML, exportarSHP } from '@/lib/exportGrade';
-import { AlertTriangle, Layers, MapPin, Printer, RotateCcw, Save, Trash2, CheckCircle2, Circle, Pencil, Download } from 'lucide-react';
+import { AlertTriangle, Layers, MapPin, Printer, RotateCcw, Save, Trash2, CheckCircle2, Circle, Pencil, Download, Eye } from 'lucide-react';
 
 interface ZonaFeat {
   id: string;
@@ -53,6 +53,7 @@ export function SimuladorZonas({ safraNome: safraProp }: { safraNome?: string } 
   // safraProp (Página do Talhão) tem prioridade; sem ela, usa a ativa global.
   const safraNome = safraProp ?? safraAtiva?.nome ?? '';
   const [grades, setGrades] = useState<GradeAmostragem[]>([]);
+  const [gradeViewId, setGradeViewId] = useState<string | null>(null); // grade salva exibida no mapa
   const [renomeando, setRenomeando] = useState<string | null>(null);
   const [nomeTemp, setNomeTemp] = useState('');
 
@@ -118,15 +119,28 @@ export function SimuladorZonas({ safraNome: safraProp }: { safraNome?: string } 
     return { pontos: out, totalPontos: out.length, porZona: cont };
   }, [zonas, modelo, densidade, densidadePorZona, aleatoriedade, distanciaBorda, seed, modoDist]);
 
-  // Publica os pontos no mapa
+  // Publica os pontos no mapa. Uma grade salva em visualização tem prioridade
+  // sobre a simulação ao vivo.
   useEffect(() => {
+    const vista = gradeViewId ? grades.find(g => g.id === gradeViewId) : null;
+    if (vista) {
+      const fcv: GeoJSON.FeatureCollection = {
+        type: 'FeatureCollection',
+        features: vista.pontos.map(p => ({ type: 'Feature', properties: { label: String(p.numero ?? p.ordem + 1), cor: COR_PONTO }, geometry: { type: 'Point', coordinates: [p.lng, p.lat] } })),
+      };
+      setPontosSimulados(vista.pontos.length ? fcv : null);
+      return () => setPontosSimulados(null);
+    }
     const fc: GeoJSON.FeatureCollection = {
       type: 'FeatureCollection',
       features: pontos.map(p => ({ type: 'Feature', properties: { label: p.label, cor: COR_PONTO }, geometry: { type: 'Point', coordinates: [p.lng, p.lat] } })),
     };
     setPontosSimulados(pontos.length ? fc : null);
     return () => setPontosSimulados(null);
-  }, [pontos, setPontosSimulados]);
+  }, [gradeViewId, grades, pontos, setPontosSimulados]);
+
+  // Ao mudar a simulação ao vivo (parâmetros/zonas), sai da visualização da grade salva.
+  useEffect(() => { setGradeViewId(null); }, [pontos]);
 
   if (!talhao?.zonasGeojson || zonas.length === 0) {
     return (
@@ -426,7 +440,7 @@ export function SimuladorZonas({ safraNome: safraProp }: { safraNome?: string } 
           </p>
           <div className="space-y-1.5">
             {grades.map(g => (
-              <div key={g.id} className="p-2 rounded-lg" style={{ background: '#061525', border: `1px solid ${g.paraProcessar ? '#166534' : '#1a3a6b'}` }}>
+              <div key={g.id} className="p-2 rounded-lg" style={{ background: '#061525', border: `1px solid ${gradeViewId === g.id ? '#22d3ee' : (g.paraProcessar ? '#166534' : '#1a3a6b')}` }}>
                 <div className="flex items-center gap-2">
                   <button onClick={() => { marcarParaProcessar(g.id); recarregarGrades(); }} title="Marcar para processar">
                     {g.paraProcessar ? <CheckCircle2 size={15} style={{ color: '#4ade80' }} /> : <Circle size={15} style={{ color: '#475569' }} />}
@@ -439,6 +453,8 @@ export function SimuladorZonas({ safraNome: safraProp }: { safraNome?: string } 
                     <span className="text-xs font-bold flex-1" style={{ color: '#e2e8f0' }}>{g.nome}</span>
                   )}
                   <span className="text-[8px] px-1 py-0.5 rounded" style={{ background: '#0f2a1a', color: '#86efac' }}>{g.modelo === 'A' ? 'Composta' : 'Individual'}</span>
+                  <button onClick={() => setGradeViewId(id => id === g.id ? null : g.id)} title={gradeViewId === g.id ? 'Ocultar do mapa' : 'Ver no mapa'}
+                    className="p-1 rounded" style={{ color: gradeViewId === g.id ? '#22d3ee' : '#93c5fd' }}><Eye size={11} /></button>
                   <button onClick={() => { setRenomeando(g.id); setNomeTemp(g.nome); }} title="Renomear" className="p-1 rounded" style={{ color: '#93c5fd' }}><Pencil size={11} /></button>
                   <button onClick={() => { deleteGrade(g.id); recarregarGrades(); }} title="Excluir" className="p-1 rounded" style={{ color: '#f87171' }}><Trash2 size={11} /></button>
                 </div>

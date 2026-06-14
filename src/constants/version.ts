@@ -1,6 +1,9 @@
-export const APP_VERSION = '0.37.0';
+export const APP_VERSION = '0.38.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.38.0': [
+    'Amostragem: clicar no ícone 👁 de uma grade salva (Grid ou Zonas de Manejo) agora mostra os pontos dela no mapa, com a grade realçada; clicar de novo oculta. Editar ou mexer nos parâmetros volta para a simulação ao vivo',
+  ],
   '0.37.0': [
     'Compactação: os mapas interpolados agora são salvos na nuvem (mesmo esquema da Fertilidade — autoload ao reabrir + grid comprimido em gzip), com selo de quantos mapas estão salvos; não precisa reprocessar a cada visita',
   ],
