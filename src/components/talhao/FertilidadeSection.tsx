@@ -3,10 +3,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import {
-  getSafras, getGrades, getImportacoesLab, getTalhoes,
+  getSafras, getGrades, getImportacoesLab, getTalhoes, getFazendas, getPlantio,
   getLegendas, getLegendasPorAtributo,
   type ImportacaoLab, type GradeAmostragem,
 } from '@/lib/store';
+import { gerarRelatorioFertilidade, type ProfundidadeRel } from '@/lib/relatorioFertilidade';
 import {
   interpolar, rampaDaLegenda, gradienteCss, coordsFromBounds, extrairPoligono,
   comprimirGrid, descomprimirGrid,
@@ -16,7 +17,7 @@ import { colorirGridComLegenda, temGrid } from '@/lib/raster';
 import { decodeGrid } from '@/lib/fertilidade';
 import { stopsParaBackend, dominioDaLegenda, paresDaClasse } from '@/lib/legendas';
 import type { Legenda } from '@/lib/legendas';
-import { Play, Layers, Loader2, Eraser, AlertTriangle, Activity, Settings, BookOpen, Save } from 'lucide-react';
+import { Play, Layers, Loader2, Eraser, AlertTriangle, Activity, Settings, BookOpen, Save, FileDown } from 'lucide-react';
 import { cloudSalvarMapa, cloudCarregarMapasPorPrefixo, cloudExcluirMapasPorPrefixo } from '@/lib/cloud';
 import { listar as bibListar, criar as bibCriar, type ConteudoPerfil, type ItemBiblioteca } from '@/lib/biblioteca';
 
@@ -25,7 +26,7 @@ const fmt = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits: 1 
 const OPACIDADE = 1; // fixo 100%
 
 type Ponto = { lng: number; lat: number; valor: number };
-type MapaPronto = { resp: RespInterp; labels: GeoJSON.FeatureCollection };
+type MapaPronto = { resp: RespInterp; labels: GeoJSON.FeatureCollection; interpoladoEm?: string };
 
 // Arquitetura: separamos raster (interpolação cara) de renderização (cor barata).
 // A chave NÃO inclui a legenda — assim, trocar legenda/estilo apenas recolore o
@@ -81,6 +82,7 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
 
   // cache de mapas: chave = legenda+nutriente+profundidade
   const [cache, setCache] = useState<Record<string, MapaPronto>>({});
+  const [gerandoPdf, setGerandoPdf] = useState(false);
 
   // Seed automático do repositório Fundação ABC + carrega legendas do store.
   // Reage a mudanças no editor de Legendas via evento custom.
@@ -282,18 +284,19 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
     const { dominio, stops } = rampaDaLegenda(leg);
     const resp = await interpolar({ pontos: pts, poligono: poligono!, dominio, stops, metodo, pixelM, modeloFixo: modeloFixo || null });
     const labels = fcLabels(pts);
+    const interpoladoEm = new Date().toISOString();
     // Sessão guarda o PNG do backend como fallback (~10-30 KB). Quem economiza é o Firestore.
-    setCache(c => ({ ...c, [ck(nut, prof)]: { resp, labels } }));
+    setCache(c => ({ ...c, [ck(nut, prof)]: { resp, labels, interpoladoEm } }));
     if (nav.talhaoId && importacaoId) {
       // Joga fora o PNG (colorimos local a partir do grid) e comprime o grid
       // com gzip p/ caber no limite de 1 MB/doc do Firestore.
       const gridGz = resp.grid ? await comprimirGrid(resp.grid) : undefined;
-      let dados: { resp: RespInterp; labels: GeoJSON.FeatureCollection } = { resp: { ...resp, png: '', grid: gridGz }, labels };
+      let dados: { resp: RespInterp; labels: GeoJSON.FeatureCollection; interpoladoEm: string } = { resp: { ...resp, png: '', grid: gridGz }, labels, interpoladoEm };
       // Salvaguarda final (não deve disparar com o teto 500×500 + gzip): se ainda
       // estourar, salva só metadados pra não falhar o write.
       const aprox = JSON.stringify(dados).length;
       if (aprox > 950_000) {
-        dados = { resp: { ...resp, png: '', grid: undefined }, labels };
+        dados = { resp: { ...resp, png: '', grid: undefined }, labels, interpoladoEm };
         console.warn(`[fertilidade] grid grande demais p/ Firestore mesmo comprimido (${Math.round(aprox/1024)} KB); salvando só metadados de ${nut} ${prof}.`);
       }
       cloudSalvarMapa(idNuvem(nav.talhaoId, importacaoId, metodo, pixelM, modeloFixo, nut, prof), dados);
@@ -344,6 +347,56 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
     setCache({}); setEstado('idle'); setErro('');
     if (nav.talhaoId && importacaoId) {
       cloudExcluirMapasPorPrefixo(prefixoNuvem(nav.talhaoId, importacaoId, metodo, pixelM, modeloFixo));
+    }
+  }
+
+  // Estatísticas a partir do RASTER interpolado (spec: nunca dos pontos).
+  function statsRaster(resp: RespInterp): { min: number; media: number; max: number } | null {
+    if (!resp.grid) return null;
+    try {
+      const { valores } = decodeGrid(resp.grid);
+      let n = 0, soma = 0, mn = Infinity, mx = -Infinity;
+      for (let i = 0; i < valores.length; i++) { const v = valores[i]; if (!isFinite(v)) continue; n++; soma += v; if (v < mn) mn = v; if (v > mx) mx = v; }
+      return n ? { min: mn, media: soma / n, max: mx } : null;
+    } catch { return null; }
+  }
+
+  // Gera o PDF "Layout Oficial Fertilidade V1" do atributo atual (todas as
+  // profundidades já processadas, lado a lado).
+  async function gerarPDF() {
+    if (!legAtual || !nutriente) return;
+    if (!poligono) { setErro('Limite do talhão não encontrado — abra o talhão no mapa.'); setEstado('erro'); return; }
+    const profs: ProfundidadeRel[] = [];
+    for (const prof of profsAll) {
+      const m = cache[ck(nutriente, prof)];
+      if (!m) continue;
+      const st = statsRaster(m.resp);
+      if (!st) continue;
+      const url = temGrid(m.resp) ? colorirGridComLegenda(m.resp.grid, legAtual).dataUrl : m.resp.png;
+      if (!url) continue;
+      profs.push({ profundidade: prof, rasterPng: url, bounds: m.resp.bounds, valores: m.labels, stats: st });
+    }
+    if (profs.length === 0) { setErro('Processe o(s) mapa(s) antes de gerar o PDF.'); setEstado('erro'); return; }
+
+    const fz = getFazendas().find(f => f.id === nav.fazendaId);
+    const cultura = nav.talhaoId ? getPlantio(nav.talhaoId, safraNome) : '';
+    const ts = profsAll.map(p => cache[ck(nutriente, p)]?.interpoladoEm).filter(Boolean).sort().pop()
+      ?? importacao?.criadoEm ?? new Date().toISOString();
+    const dataInterp = new Date(ts).toLocaleDateString('pt-BR', { month: '2-digit', year: 'numeric' });
+
+    setGerandoPdf(true); setErro('');
+    try {
+      await gerarRelatorioFertilidade({
+        fazenda: nav.fazenda, produtor: nav.produtor, talhao: nav.talhao, safra: safraNome,
+        cultura, areaHa: nav.area, municipio: fz?.municipio ?? '', estado: fz?.estado ?? '',
+        atributo: legAtual.atributo, simbolo: legAtual.simbolo, metodo: legAtual.metodo ?? null,
+        fonte: legAtual.fonte, unidade: legAtual.unidade, legenda: legAtual,
+        dataInterpolacao: dataInterp, poligono, profundidades: profs, satelite: true, corLimite: '#ffffff',
+      });
+    } catch (e) {
+      setEstado('erro'); setErro(e instanceof Error ? e.message : 'Falha ao gerar o PDF.');
+    } finally {
+      setGerandoPdf(false);
     }
   }
 
@@ -571,6 +624,13 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
               {/* Barra de legenda (largura visual por classe, conforme spec) */}
               <BarraLegenda leg={legAtual} />
               <p className="text-[9px]" style={{ color: '#64748b' }}>{legAtual.fonte} · {legAtual.atributo}{legAtual.metodo ? ` (${legAtual.metodo})` : ''} · {legAtual.unidade}</p>
+
+              {/* Gerar PDF (Layout Oficial Fertilidade V1 — todas as profundidades do atributo) */}
+              <button onClick={gerarPDF} disabled={gerandoPdf}
+                className="w-full mt-1 py-2 rounded text-xs font-bold text-white flex items-center justify-center gap-1.5 disabled:opacity-50"
+                style={{ background: 'var(--invicta-blue-mid)' }}>
+                {gerandoPdf ? <><Loader2 size={13} className="animate-spin" /> Gerando PDF…</> : <><FileDown size={13} /> Gerar PDF (Fertilidade)</>}
+              </button>
             </div>
           )}
 

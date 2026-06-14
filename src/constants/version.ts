@@ -1,6 +1,10 @@
-export const APP_VERSION = '0.39.0';
+export const APP_VERSION = '0.40.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.40.0': [
+    'Relatório PDF de Fertilidade — Layout Oficial V1 (A4 paisagem): botão "Gerar PDF" na Fertilidade gera o mapa final do elemento com as profundidades lado a lado sobre satélite, valores das amostras (só o número, halo branco), limite do talhão, legenda oficial abaixo, estatísticas do raster (Mín/Méd/Máx), escala gráfica e logos INVICTA + cliente (opcional)',
+    'Estatísticas vêm do raster interpolado e a data exibida é a da interpolação (não a da geração do PDF), conforme a especificação',
+  ],
   '0.39.0': [
     'Cadastros: agora dá para EDITAR o Cliente (aba Dados → Editar) e RENOMEAR o Talhão (lápis ao lado do nome no cabeçalho)',
     'Exclusão segura: apagar Cliente fica bloqueado enquanto houver fazendas; apagar Talhão fica bloqueado enquanto houver grades/importações/mapas — evita perder dados em massa por engano. A exclusão só acontece (com confirmação) quando não há dependências',
