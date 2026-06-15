@@ -94,6 +94,7 @@ export async function bootCloud(): Promise<boolean> {
   try {
     await Promise.race([trabalho, timeout]);
     ativo = true;
+    console.log('[nuvem] ATIVA — sincronizando com o Firestore.');
   } catch (e) {
     // segue 100% local nesta sessão (sem push, para não corromper o espelho)
     console.warn('[nuvem] indisponível, usando dados locais:', e);
@@ -138,10 +139,11 @@ export function cloudPushObj(key: string, json: string) {
 const COL_MAPAS = 'inv_mapas_fert';
 
 export function cloudSalvarMapa(id: string, dados: object) {
-  if (!ativo) return;
+  if (!ativo) { console.warn('[nuvem] INATIVA — mapa NÃO foi salvo (não persiste):', id); return; }
   const fb = getFb();
   if (!fb) return;
   setDoc(doc(fb.db, COL_MAPAS, id), { json: JSON.stringify(dados) })
+    .then(() => console.log('[nuvem] mapa salvo:', id))
     .catch(e => console.warn(`[nuvem] falha ao salvar mapa ${id}:`, e));
 }
 
@@ -157,6 +159,7 @@ export async function cloudCarregarMapasPorPrefixo<T>(prefixo: string): Promise<
       const j = (d.data() as { json?: string }).json;
       if (j) { try { out.push({ id: d.id, dados: JSON.parse(j) as T }); } catch {} }
     });
+    console.log(`[nuvem] mapas carregados p/ prefixo "${prefixo}":`, out.length, '(ativo=' + ativo + ')');
     return out;
   } catch (e) {
     console.warn('[nuvem] falha ao carregar mapas:', e);

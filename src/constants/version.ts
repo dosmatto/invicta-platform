@@ -1,6 +1,10 @@
-export const APP_VERSION = '0.40.1';
+export const APP_VERSION = '0.40.2';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.40.2': [
+    'Relatório de Fertilidade: ajuste de calibração do cabeçalho — o título do elemento agora fica na zona central com auto-redução de fonte, sem sobrepor o nome da fazenda',
+    'Diagnóstico de persistência: aviso visível na Fertilidade quando a nuvem está inativa (mapas não estão sendo salvos) + logs claros no console ([nuvem] ativa/inativa, mapa salvo, mapas carregados) para identificar por que as interpolações não persistem',
+  ],
   '0.40.1': [
     'Relatório de Fertilidade: captura de mapa com timeout (não trava mais) e, se algo falhar, a aba mostra a mensagem de erro em vez de ficar em branco (também loga no console)',
   ],

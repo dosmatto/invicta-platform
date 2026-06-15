@@ -115,11 +115,16 @@ export async function gerarRelatorioFertilidade(d: DadosRelatorioFert): Promise<
     doc.text(`Produtor: ${d.produtor || '—'}`, M + 56, 14);
     doc.text(`Safra: ${d.safra || '—'}   |   Data: ${d.dataInterpolacao}`, M + 56, 18.5);
 
-    // Título central (elemento)
-    doc.setTextColor(...NAVY); doc.setFont('helvetica', 'bold'); doc.setFontSize(22);
-    doc.text(`${d.atributo.toUpperCase()} (${d.simbolo})`, W / 2, 12, { align: 'center' });
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(...GRAY);
-    doc.text(`${d.metodo ? d.metodo + '  |  ' : ''}${d.fonte}`, W / 2, 18, { align: 'center' });
+    // Título central (elemento) — na zona central (entre o bloco da fazenda e as
+    // Informações da Área), com auto-redução de fonte p/ nunca sobrepor.
+    const tituloCx = 165, tituloMaxW = 88;
+    const titulo = `${d.atributo.toUpperCase()} (${d.simbolo})`;
+    doc.setTextColor(...NAVY); doc.setFont('helvetica', 'bold');
+    let tf = 20; doc.setFontSize(tf);
+    while (doc.getTextWidth(titulo) > tituloMaxW && tf > 10) { tf -= 1; doc.setFontSize(tf); }
+    doc.text(titulo, tituloCx, 12.5, { align: 'center' });
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(...GRAY);
+    doc.text(`${d.metodo ? d.metodo + '  |  ' : ''}${d.fonte}`, tituloCx, 18.5, { align: 'center', maxWidth: tituloMaxW });
 
     // Informações da área (direita)
     const [w0, s0, e0, n0] = d.profundidades[0].bounds;
