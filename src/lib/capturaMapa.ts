@@ -74,8 +74,9 @@ async function render(c: CapturaMapa): Promise<string> {
 
   try {
     await new Promise<void>((res, rej) => {
-      map.on('load', () => res());
-      map.on('error', e => rej((e as { error?: Error }).error ?? new Error('erro no mapa')));
+      const t = setTimeout(() => rej(new Error('mapa não carregou (timeout)')), 15000);
+      map.on('load', () => { clearTimeout(t); res(); });
+      map.on('error', e => { clearTimeout(t); rej((e as { error?: Error }).error ?? new Error('erro no mapa')); });
     });
 
     // Camada 2 — raster interpolado
@@ -95,8 +96,14 @@ async function render(c: CapturaMapa): Promise<string> {
 
     map.fitBounds(c.bounds, { padding: 22, animate: false });
 
-    // espera o mapa ficar ocioso (tiles + raster carregados) e captura
-    await new Promise<void>(res => { map.once('idle', () => res()); });
+    // espera o mapa ficar ocioso (tiles + raster carregados); captura mesmo se
+    // demorar (timeout) para nunca travar a geração do relatório.
+    await new Promise<void>(res => {
+      const t = setTimeout(() => res(), 9000);
+      map.once('idle', () => { clearTimeout(t); res(); });
+    });
+    map.triggerRepaint();
+    await new Promise<void>(res => requestAnimationFrame(() => res()));
     return map.getCanvas().toDataURL('image/png');
   } finally {
     map.remove();

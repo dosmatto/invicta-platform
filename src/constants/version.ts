@@ -1,6 +1,9 @@
-export const APP_VERSION = '0.40.0';
+export const APP_VERSION = '0.40.1';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.40.1': [
+    'Relatório de Fertilidade: captura de mapa com timeout (não trava mais) e, se algo falhar, a aba mostra a mensagem de erro em vez de ficar em branco (também loga no console)',
+  ],
   '0.40.0': [
     'Relatório PDF de Fertilidade — Layout Oficial V1 (A4 paisagem): botão "Gerar PDF" na Fertilidade gera o mapa final do elemento com as profundidades lado a lado sobre satélite, valores das amostras (só o número, halo branco), limite do talhão, legenda oficial abaixo, estatísticas do raster (Mín/Méd/Máx), escala gráfica e logos INVICTA + cliente (opcional)',
     'Estatísticas vêm do raster interpolado e a data exibida é a da interpolação (não a da geração do PDF), conforme a especificação',

@@ -77,6 +77,7 @@ export async function gerarRelatorioFertilidade(d: DadosRelatorioFert): Promise<
 
   // abre a aba no gesto do clique (antes dos awaits) p/ não cair no bloqueio de pop-up
   const aba = typeof window !== 'undefined' ? window.open('', '_blank') : null;
+  if (aba) try { aba.document.write('<!doctype html><meta charset="utf-8"><title>Relatório de Fertilidade</title><body style="font-family:system-ui,sans-serif;padding:28px;color:#334155"><p>⏳ Gerando o relatório PDF… isso leva alguns segundos (capturando os mapas).</p></body>'); } catch {}
 
   try {
     const W = 297, H = 210, M = 6;
@@ -232,7 +233,9 @@ export async function gerarRelatorioFertilidade(d: DadosRelatorioFert): Promise<
     if (aba) { const url = URL.createObjectURL(doc.output('blob')); aba.location.href = url; setTimeout(() => URL.revokeObjectURL(url), 60000); }
     else doc.save(nome);
   } catch (e) {
-    if (aba) aba.close();
+    const msg = e instanceof Error ? (e.stack ?? e.message) : String(e);
+    console.error('[relatorioFertilidade] falha:', e);
+    if (aba) { try { aba.document.body.innerHTML = `<h3 style="color:#b91c1c;font-family:system-ui">Falha ao gerar o relatório</h3><pre style="white-space:pre-wrap;font-size:12px;color:#334155">${msg.replace(/[<>&]/g, s => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[s]!))}</pre>`; } catch {} }
     throw e;
   }
 }
