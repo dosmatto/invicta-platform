@@ -451,9 +451,15 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
           {importacoes.map(i => <option key={i.id} value={i.id}>{i.laboratorio}{i.campanha ? ` · ${i.campanha}` : ''} · {i.resultados.length} amostras</option>)}
         </select>
         {mapasSalvos > 0 && (
-          <p className="text-[10px] mt-1 flex items-center gap-1" style={{ color: '#86efac' }}>
-            <Layers size={10} /> {mapasSalvos} {mapasSalvos === 1 ? 'mapa salvo' : 'mapas salvos'} na nuvem — carregam sem reprocessar.
-          </p>
+          cloudAtivo() ? (
+            <p className="text-[10px] mt-1 flex items-center gap-1" style={{ color: '#86efac' }}>
+              <Layers size={10} /> {mapasSalvos} {mapasSalvos === 1 ? 'mapa salvo' : 'mapas salvos'} na nuvem — carregam sem reprocessar.
+            </p>
+          ) : (
+            <p className="text-[10px] mt-1 flex items-center gap-1" style={{ color: '#fbbf24' }}>
+              <Layers size={10} /> {mapasSalvos} {mapasSalvos === 1 ? 'mapa' : 'mapas'} nesta sessão — <strong>não salvos</strong> (nuvem inativa).
+            </p>
+          )
         )}
       </div>
 

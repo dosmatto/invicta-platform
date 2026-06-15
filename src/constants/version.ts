@@ -1,6 +1,10 @@
-export const APP_VERSION = '0.40.3';
+export const APP_VERSION = '0.40.4';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.40.4': [
+    'Página completa do Talhão agora abre em NOVA ABA (carrega direto a página do talhão), em vez de navegar na mesma aba',
+    'Selo de mapas na Fertilidade corrigido: com a nuvem inativa, mostra "N mapas nesta sessão — não salvos" (antes dizia "salvos na nuvem" indevidamente)',
+  ],
   '0.40.3': [
     'Relatório de Fertilidade mais robusto: se a captura do mapa com satélite falhar (timeout/CORS/WebGL), o relatório agora compõe o mapa sem satélite (raster + limite + valores em fundo branco) em vez de dar erro — não trava mais',
     'Estatísticas do relatório com fallback para os números do backend (também do raster) quando o grid não decodifica — corrige o falso "Processe o(s) mapa(s)" mesmo com mapas prontos',

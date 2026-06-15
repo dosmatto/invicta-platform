@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
 import { useApp } from '@/context/AppContext';
 import { getTalhoes, getSafras, saveSafra, updateTalhao, deleteTalhao, getGrades, getImportacoesLab, getImportacoesCompactacao, Talhao, Safra } from '@/lib/store';
 import { parseGeoFile, normalizarZonas } from '@/lib/geo';
@@ -337,7 +336,6 @@ function ZonasSection({ talhao, onZonas }: { talhao: Talhao | null; onZonas: () 
 
 // ── painel principal ────────────────────────────────────────────────────────
 export function TalhaoDetailPanel() {
-  const router = useRouter();
   const { activePanel, setActivePanel, nav, setNav, setMapMode, setUploadedGeo, setUploadedBbox, setZonasManejo } = useApp();
 
   const [talhao, setTalhao] = useState<Talhao | null>(null);
@@ -477,8 +475,8 @@ export function TalhaoDetailPanel() {
             </span>
           </div>
 
-          {/* Abrir página completa (tela cheia, organizada por safra) */}
-          <button onClick={() => nav.talhaoId && router.push(`/talhao/${nav.talhaoId}`)}
+          {/* Abrir página completa (tela cheia, organizada por safra) — em nova aba */}
+          <button onClick={() => nav.talhaoId && window.open(`/talhao/${nav.talhaoId}`, '_blank')}
             className="mt-3 w-full flex items-center justify-center gap-1.5 py-2 rounded text-xs font-bold text-white transition-opacity hover:opacity-90"
             style={{ background: 'var(--invicta-blue-mid)' }}>
             <ExternalLink size={13} /> Abrir página completa do talhão

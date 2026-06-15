@@ -1,14 +1,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import { useApp } from '@/context/AppContext';
 import { getFazendas, getTalhoes, saveTalhao, Fazenda, Talhao } from '@/lib/store';
 import { ChevronLeft, ChevronRight, Plus, Map, AlertTriangle, Save, X, ExternalLink } from 'lucide-react';
 import { PanelSection, PanelButton, StatusBadge } from './_shared';
 
 export function FazendaDetailPanel() {
-  const router = useRouter();
   const { nav, setNav, setActivePanel, setMapMode, setUploadedGeo, setUploadedBbox, setTalhoesFazenda } = useApp();
   const [tab, setTab] = useState<'talhoes' | 'dados'>('talhoes');
   const [fazenda, setFazenda] = useState<Fazenda | null>(null);
@@ -216,8 +214,8 @@ export function FazendaDetailPanel() {
                       </div>
                       <div className="flex items-center gap-1.5">
                         <StatusBadge status={t.status} />
-                        <button onClick={e => { e.stopPropagation(); router.push(`/talhao/${t.id}`); }}
-                          title="Abrir página completa do talhão"
+                        <button onClick={e => { e.stopPropagation(); window.open(`/talhao/${t.id}`, '_blank'); }}
+                          title="Abrir página completa do talhão (nova aba)"
                           className="p-1 rounded transition-colors hover:bg-white/10" style={{ color: '#93c5fd' }}>
                           <ExternalLink size={14} />
                         </button>
