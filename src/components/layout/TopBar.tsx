@@ -1,9 +1,10 @@
 'use client';
 
 import Image from 'next/image';
-import { ChevronRight, Wifi, User } from 'lucide-react';
+import { ChevronRight, Wifi, User, LogOut } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { EmpresaSwitcher } from './EmpresaSwitcher';
+import { logout, emailUsuario, firebaseConfigurado } from '@/lib/auth';
 
 export function TopBar() {
   const { nav: context } = useApp();
@@ -48,10 +49,18 @@ export function TopBar() {
         <EmpresaSwitcher />
         <Wifi size={16} style={{ color: '#86efac' }} />
         <div className="flex items-center gap-2 pl-3 border-l border-white/20">
+          {firebaseConfigurado && emailUsuario() && (
+            <span className="text-[11px] truncate max-w-[150px] hidden sm:inline" style={{ color: '#cbd5e1' }}>{emailUsuario()}</span>
+          )}
           <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold"
             style={{ background: 'var(--invicta-blue-mid)' }}>
             <User size={14} />
           </div>
+          {firebaseConfigurado && (
+            <button onClick={() => logout()} title="Sair" className="p-1 rounded transition-colors hover:bg-white/10" style={{ color: '#93c5fd' }}>
+              <LogOut size={16} />
+            </button>
+          )}
         </div>
       </div>
     </header>

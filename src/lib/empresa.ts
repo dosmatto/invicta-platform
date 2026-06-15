@@ -8,6 +8,7 @@
 // a hierarquia `/empresas/{eid}/...` entra na Fase 1.5.
 
 import { getFb } from './firebase';
+import { cloudPushLista } from './cloud';
 
 export type PapelMembro = 'admin' | 'editor' | 'viewer';
 
@@ -30,6 +31,7 @@ function load<T>(key: string): T[] {
 function save<T>(key: string, data: T[]) {
   if (typeof window === 'undefined') return;
   localStorage.setItem(key, JSON.stringify(data));
+  cloudPushLista(key, data as { id: unknown }[]); // espelha empresas na nuvem (no-op sem Firebase/login)
 }
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
 
@@ -132,6 +134,24 @@ export function empresaIfEmpty() {
   }
   // Se há empresas mas nenhuma ativa, ativa a primeira
   if (!empresaAtivaId()) setEmpresaAtivaId(minhas[0].id);
+}
+
+// Ao logar pela 1ª vez, "adota" as empresas criadas no modo local/anônimo
+// (criadoPor 'local-…' ou sem membros) para o usuário logado — preserva os
+// dados que já existiam antes do login (eles ficam visíveis e sobem p/ a nuvem).
+export function adotarEmpresasLocais(uid: string) {
+  if (typeof window === 'undefined' || !uid) return;
+  const lista = load<Empresa>(K_EMPRESAS);
+  let mudou = false;
+  for (const e of lista) {
+    const semDono = !e.membros || Object.keys(e.membros).length === 0;
+    const localCriada = (e.criadoPor ?? '').startsWith('local-');
+    if (!e.membros?.[uid] && (localCriada || semDono)) {
+      e.membros = { ...(e.membros ?? {}), [uid]: 'admin' };
+      mudou = true;
+    }
+  }
+  if (mudou) save(K_EMPRESAS, lista);
 }
 
 // Membros (CRUD)

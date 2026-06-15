@@ -3,10 +3,13 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { seedIfEmpty } from '@/lib/seed';
 import { bootCloud } from '@/lib/cloud';
-import { empresaIfEmpty } from '@/lib/empresa';
+import { empresaIfEmpty, adotarEmpresasLocais, uidUsuario } from '@/lib/empresa';
 import { migrarLaboratoriosV1, migrarSafrasV1, migrarGradesV1, migrarPreferenciasV1 } from '@/lib/biblioteca';
 import { seedLegendasSistema } from '@/lib/store';
 import { LEGENDAS_OFICIAIS } from '@/constants/legendasSeedOficial';
+import { firebaseConfigurado } from '@/lib/firebase';
+import { observarAuth, type User } from '@/lib/auth';
+import { LoginScreen } from '@/components/auth/LoginScreen';
 
 export type MapMode = 'street' | 'satellite';
 
@@ -110,24 +113,34 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [activePanel, setActivePanel] = useState<string | null>('dashboard');
   const [mapMode, setMapMode] = useState<MapMode>('satellite');
 
-  // Boot: com nuvem configurada, baixa os dados antes de renderizar (a base é
-  // o Firestore); sem nuvem, mantém o seed local de demonstração.
+  // Login obrigatório quando o Firebase está configurado: o boot da nuvem só
+  // roda depois de autenticar. Sem Firebase, modo local com seed de demo.
+  const [usuario, setUsuario] = useState<User | null | undefined>(firebaseConfigurado ? undefined : null);
   const [dadosProntos, setDadosProntos] = useState(false);
   useEffect(() => {
-    (async () => {
-      const nuvem = await bootCloud().catch(() => false);
-      if (!nuvem) seedIfEmpty();
-      // Garante Empresa Pessoal + ativa, idempotente.
-      empresaIfEmpty();
-      // Migrações idempotentes da Biblioteca de Padrões (Fase 3+).
-      migrarLaboratoriosV1();
-      migrarSafrasV1();
-      migrarGradesV1();
-      migrarPreferenciasV1();
-      // Legendas oficiais (escopo sistema) no banco — idempotente.
-      seedLegendasSistema(LEGENDAS_OFICIAIS);
+    function migracoesLocais() {
+      empresaIfEmpty();                 // Empresa Pessoal + ativa, idempotente
+      migrarLaboratoriosV1(); migrarSafrasV1(); migrarGradesV1(); migrarPreferenciasV1();
+      seedLegendasSistema(LEGENDAS_OFICIAIS); // legendas oficiais (sistema)
+    }
+
+    if (!firebaseConfigurado) {
+      seedIfEmpty();
+      migracoesLocais();
       setDadosProntos(true);
-    })();
+      return;
+    }
+
+    const unsub = observarAuth(async (user) => {
+      setUsuario(user);
+      if (!user) { setDadosProntos(false); return; }
+      setDadosProntos(false);
+      adotarEmpresasLocais(uidUsuario());  // preserva os dados locais pré-login
+      await bootCloud().catch(() => {});
+      migracoesLocais();
+      setDadosProntos(true);
+    });
+    return () => unsub();
   }, []);
   const [activeModule, setActiveModule] = useState<string | null>(null);
   const [uploadedGeo, setUploadedGeo] = useState<GeoJSON.FeatureCollection | null>(null);
@@ -170,7 +183,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       fertilidadeOverlay, setFertilidadeOverlay,
       fertilidadeLabels, setFertilidadeLabels,
     }}>
-      {dadosProntos ? children : (
+      {firebaseConfigurado && usuario === undefined ? (
+        <div className="fixed inset-0 flex items-center justify-center" style={{ background: '#061525' }}>
+          <p className="text-xs font-semibold" style={{ color: '#64748b' }}>Verificando acesso…</p>
+        </div>
+      ) : firebaseConfigurado && usuario === null ? (
+        <LoginScreen />
+      ) : dadosProntos ? children : (
         <div className="fixed inset-0 flex items-center justify-center" style={{ background: '#061525' }}>
           <p className="text-xs font-semibold" style={{ color: '#64748b' }}>Carregando dados…</p>
         </div>

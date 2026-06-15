@@ -151,7 +151,7 @@ async function render(c: CapturaMapa): Promise<string> {
     // Camada 3 — valores (só texto, halo branco, sem marcador)
     map.addSource('valores', { type: 'geojson', data: c.valores });
     map.addLayer({ id: 'valores', type: 'symbol', source: 'valores',
-      layout: { 'text-field': ['get', 'txt'], 'text-size': 12, 'text-font': ['Open Sans Bold'], 'text-allow-overlap': true },
+      layout: { 'text-field': ['get', 'txt'], 'text-size': 12, 'text-font': ['Open Sans Regular'], 'text-allow-overlap': true },
       paint: { 'text-color': '#ffffff', 'text-halo-color': '#1f2937', 'text-halo-width': 1.6 } });
 
     map.fitBounds(c.bounds, { padding: 22, animate: false });

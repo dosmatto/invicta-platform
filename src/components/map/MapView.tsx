@@ -84,7 +84,7 @@ export function MapView() {
       map.addLayer({ id: 'talhao-fill',            type: 'fill',   source: 'talhoes', paint: { 'fill-color': '#f59e0b', 'fill-opacity': 0.35 } });
       map.addLayer({ id: 'talhao-outline',         type: 'line',   source: 'talhoes', paint: { 'line-color': '#d97706', 'line-width': 2 } });
       map.addLayer({ id: 'talhao-label',           type: 'symbol', source: 'talhoes',
-        layout: { 'text-field': ['get','nome'], 'text-size': 12, 'text-font': ['Open Sans Bold'] },
+        layout: { 'text-field': ['get','nome'], 'text-size': 12, 'text-font': ['Open Sans Regular'] },
         paint:  { 'text-color': '#fff', 'text-halo-color': '#000', 'text-halo-width': 1.5 } });
 
       // Zonas de manejo — fonte persistente, cor por classe (property 'cor')
@@ -97,7 +97,7 @@ export function MapView() {
           'line-width': ['case', ['==', ['get', 'selecionada'], true], 4, 1.5],
         } });
       map.addLayer({ id: 'zona-label', type: 'symbol', source: 'zonas',
-        layout: { 'text-field': ['get', 'rotulo'], 'text-size': 11, 'text-font': ['Open Sans Bold'] },
+        layout: { 'text-field': ['get', 'rotulo'], 'text-size': 11, 'text-font': ['Open Sans Regular'] },
         paint: { 'text-color': '#fff', 'text-halo-color': '#000', 'text-halo-width': 1.4 } });
 
       // Geometria carregada (KML/upload) — fonte persistente, dados atualizados via setData
@@ -127,13 +127,13 @@ export function MapView() {
           'circle-stroke-color': '#fff', 'circle-stroke-width': 1.5,
         } });
       map.addLayer({ id: 'pontos-label',  type: 'symbol', source: 'pontos-amos',
-        layout: { 'text-field': ['get','label'], 'text-size': 9, 'text-offset': [0,1.3], 'text-font': ['Open Sans Bold'] },
+        layout: { 'text-field': ['get','label'], 'text-size': 9, 'text-offset': [0,1.3], 'text-font': ['Open Sans Regular'] },
         paint:  { 'text-color': '#fff', 'text-halo-color': '#000', 'text-halo-width': 1.2 } });
 
       // Rótulos de valor da fertilidade (valor da variável em cada ponto de amostragem)
       map.addSource('fert-labels', { type: 'geojson', data: EMPTY_FC });
       map.addLayer({ id: 'fert-labels-text', type: 'symbol', source: 'fert-labels',
-        layout: { 'text-field': ['get','txt'], 'text-size': 11, 'text-font': ['Open Sans Bold'], 'text-allow-overlap': true },
+        layout: { 'text-field': ['get','txt'], 'text-size': 11, 'text-font': ['Open Sans Regular'], 'text-allow-overlap': true },
         paint:  { 'text-color': '#fff', 'text-halo-color': '#1e293b', 'text-halo-width': 2 } });
 
       map.resize(); // garante dimensões corretas após hidratação

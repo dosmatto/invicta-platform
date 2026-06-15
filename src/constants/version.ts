@@ -1,6 +1,12 @@
-export const APP_VERSION = '0.40.4';
+export const APP_VERSION = '0.41.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.41.0': [
+    'Login obrigatório por e-mail/senha (Firebase Auth): tela de login na entrada; o app inteiro fica atrás do login, substituindo o acesso anônimo. Ao logar, a NUVEM ATIVA — os mapas (e tudo) passam a salvar de verdade (conserta a persistência)',
+    'Empresas/usuários agora sincronizam na nuvem (entre máquinas); ao logar pela 1ª vez, as empresas/dados criados antes (modo local) são adotados para o usuário logado — nada se perde',
+    'Topo com e-mail do usuário + botão Sair',
+    'Rótulos do mapa passam a usar Open Sans Regular (corrige os erros 404 de glyphs "Open Sans Bold" no console e ajuda a captura do relatório)',
+  ],
   '0.40.4': [
     'Página completa do Talhão agora abre em NOVA ABA (carrega direto a página do talhão), em vez de navegar na mesma aba',
     'Selo de mapas na Fertilidade corrigido: com a nuvem inativa, mostra "N mapas nesta sessão — não salvos" (antes dizia "salvos na nuvem" indevidamente)',

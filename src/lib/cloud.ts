@@ -12,7 +12,7 @@
 // limitações de tipos do Firestore (ex.: arrays aninhados de GeoJSON).
 // Sem variáveis NEXT_PUBLIC_FIREBASE_*, tudo aqui é no-op.
 
-import { getFb, entrarAnonimo, firebaseConfigurado } from './firebase';
+import { getFb, firebaseConfigurado } from './firebase';
 import { collection, deleteDoc, doc, endAt, getDoc, getDocs, orderBy, query, setDoc, startAt } from 'firebase/firestore';
 
 // Coleções (arrays de registros com id) espelhadas 1:1 com as chaves locais
@@ -30,6 +30,7 @@ const KEYS_LISTA = [
   'inv_lab', 'inv_legendas',
   'inv_plantios',                      // Fase 8.B — cultura por talhão+safra
   'inv_compactacao',                   // Fase 8.C — penetrometria por profundidade
+  'inv_empresas',                      // multi-tenant — empresas/membros (sync entre máquinas)
 ];
 // Configurações (objeto único por chave) — coleção 'inv_config', doc = chave
 const KEYS_OBJ = ['inv_etiqueta_cfg'];
@@ -84,8 +85,9 @@ async function hidratarObj(key: string) {
 // Baixa tudo antes do app renderizar. Retorna true se a nuvem está ativa.
 export async function bootCloud(): Promise<boolean> {
   if (!firebaseConfigurado || typeof window === 'undefined') return false;
+  const fb = getFb();
+  if (!fb?.auth.currentUser) { console.warn('[nuvem] sem usuário logado — nuvem inativa.'); ativo = false; return false; }
   const trabalho = (async () => {
-    await entrarAnonimo();
     for (const k of KEYS_LISTA) await hidratarLista(k);
     for (const k of KEYS_OBJ) await hidratarObj(k);
   })();
