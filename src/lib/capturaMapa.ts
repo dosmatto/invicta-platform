@@ -41,18 +41,75 @@ function estilo(satelite: boolean) {
   };
 }
 
-// Captura o mapa. Se o satélite tornar o canvas "tainted" (CORS), tenta de novo
-// sem satélite (fundo branco) — o relatório nunca falha por causa do basemap.
+// Captura o mapa. Com satélite usa um MapLibre oculto; se isso falhar (timeout,
+// CORS, WebGL), cai para uma composição determinística em canvas (raster +
+// limite + valores em fundo branco) — assim o relatório NUNCA falha pelo mapa.
 export async function capturarMapaFertilidade(c: CapturaMapa): Promise<string> {
+  if (!c.satelite) return comporDeterministico(c);
   try {
     return await render(c);
   } catch (e) {
-    if (c.satelite) {
-      console.warn('[captura] satélite indisponível para exportar; usando fundo branco:', e);
-      return render({ ...c, satelite: false });
-    }
-    throw e;
+    console.warn('[captura] satélite indisponível; compondo sem satélite (fundo branco):', e);
+    return comporDeterministico(c);
   }
+}
+
+function carregarImg(src: string): Promise<HTMLImageElement> {
+  return new Promise((res, rej) => {
+    const img = new Image();
+    img.onload = () => res(img);
+    img.onerror = () => rej(new Error('falha ao carregar raster'));
+    img.src = src;
+  });
+}
+
+// Composição sem MapLibre: projeta o bbox no canvas (preservando proporção),
+// desenha o raster, o limite do talhão e os valores. Determinística e à prova
+// de timeout/CORS.
+async function comporDeterministico(c: CapturaMapa): Promise<string> {
+  const W = c.larguraPx, H = c.alturaPx;
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const ctx = cv.getContext('2d')!;
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, H);
+
+  const [w, s, e, n] = c.bounds;
+  const latC = (s + n) / 2;
+  const aspect = ((e - w) * Math.cos(latC * Math.PI / 180)) / (n - s || 1);
+  const pad = 0.06;
+  const availW = W * (1 - 2 * pad), availH = H * (1 - 2 * pad);
+  let drawW: number, drawH: number;
+  if (availW / availH > aspect) { drawH = availH; drawW = availH * aspect; }
+  else { drawW = availW; drawH = availW / aspect; }
+  const ox = (W - drawW) / 2, oy = (H - drawH) / 2;
+  const px = (lng: number) => ox + ((lng - w) / (e - w || 1)) * drawW;
+  const py = (lat: number) => oy + ((n - lat) / (n - s || 1)) * drawH;
+
+  // raster (cobre exatamente o bbox)
+  try { const img = await carregarImg(c.rasterPng); ctx.drawImage(img, ox, oy, drawW, drawH); } catch { /* segue sem raster */ }
+
+  // limite do talhão (contorno)
+  const aneis: GeoJSON.Position[][] = c.poligono.type === 'Polygon'
+    ? c.poligono.coordinates
+    : c.poligono.coordinates.flat();
+  ctx.lineWidth = Math.max(1.5, W / 500); ctx.strokeStyle = c.corLimite; ctx.lineJoin = 'round';
+  for (const anel of aneis) {
+    ctx.beginPath();
+    anel.forEach((pt, i) => { const x = px(pt[0]), y = py(pt[1]); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+    ctx.closePath(); ctx.stroke();
+  }
+
+  // valores (só o número, halo branco)
+  ctx.font = `bold ${Math.round(W / 90)}px sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.lineWidth = Math.max(2, W / 350); ctx.strokeStyle = '#1f2937'; ctx.fillStyle = '#ffffff';
+  for (const f of c.valores.features) {
+    if (f.geometry?.type !== 'Point') continue;
+    const [lng, lat] = (f.geometry as GeoJSON.Point).coordinates;
+    const txt = String((f.properties as { txt?: string } | null)?.txt ?? '');
+    if (!txt) continue;
+    const x = px(lng), y = py(lat);
+    ctx.strokeText(txt, x, y); ctx.fillText(txt, x, y);
+  }
+  return cv.toDataURL('image/png');
 }
 
 async function render(c: CapturaMapa): Promise<string> {
@@ -73,11 +130,14 @@ async function render(c: CapturaMapa): Promise<string> {
   });
 
   try {
-    await new Promise<void>((res, rej) => {
-      const t = setTimeout(() => rej(new Error('mapa não carregou (timeout)')), 15000);
-      map.on('load', () => { clearTimeout(t); res(); });
-      map.on('error', e => { clearTimeout(t); rej((e as { error?: Error }).error ?? new Error('erro no mapa')); });
+    // espera o estilo carregar (erros de tile NÃO abortam); se não carregar a
+    // tempo, lança e o chamador cai para a composição determinística.
+    await new Promise<void>(res => {
+      if (map.isStyleLoaded()) return res();
+      const t = setTimeout(res, 18000);
+      map.once('load', () => { clearTimeout(t); res(); });
     });
+    if (!map.isStyleLoaded()) throw new Error('estilo do mapa não carregou (timeout)');
 
     // Camada 2 — raster interpolado
     map.addSource('raster', { type: 'image', url: c.rasterPng, coordinates: coordsFromBounds(c.bounds) });

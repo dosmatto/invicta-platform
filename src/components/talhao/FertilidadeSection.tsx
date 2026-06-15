@@ -351,14 +351,19 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
   }
 
   // Estatísticas a partir do RASTER interpolado (spec: nunca dos pontos).
+  // Fallback p/ min/max do backend (também do raster) se o grid não decodificar.
   function statsRaster(resp: RespInterp): { min: number; media: number; max: number } | null {
-    if (!resp.grid) return null;
-    try {
-      const { valores } = decodeGrid(resp.grid);
-      let n = 0, soma = 0, mn = Infinity, mx = -Infinity;
-      for (let i = 0; i < valores.length; i++) { const v = valores[i]; if (!isFinite(v)) continue; n++; soma += v; if (v < mn) mn = v; if (v > mx) mx = v; }
-      return n ? { min: mn, media: soma / n, max: mx } : null;
-    } catch { return null; }
+    if (resp.grid) {
+      try {
+        const { valores } = decodeGrid(resp.grid);
+        let n = 0, soma = 0, mn = Infinity, mx = -Infinity;
+        for (let i = 0; i < valores.length; i++) { const v = valores[i]; if (!isFinite(v)) continue; n++; soma += v; if (v < mn) mn = v; if (v > mx) mx = v; }
+        if (n) return { min: mn, media: soma / n, max: mx };
+      } catch { /* cai no fallback */ }
+    }
+    const st = resp.stats;
+    if (st && st.min != null && st.max != null) return { min: st.min, media: (st.min + st.max) / 2, max: st.max };
+    return null;
   }
 
   // Gera o PDF "Layout Oficial Fertilidade V1" do atributo atual (todas as
@@ -376,7 +381,12 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
       if (!url) continue;
       profs.push({ profundidade: prof, rasterPng: url, bounds: m.resp.bounds, valores: m.labels, stats: st });
     }
-    if (profs.length === 0) { setErro('Processe o(s) mapa(s) antes de gerar o PDF.'); setEstado('erro'); return; }
+    if (profs.length === 0) {
+      console.warn('[relatorio] sem mapas elegíveis. nutriente=', nutriente, 'profsAll=', profsAll,
+        'chaves no cache=', Object.keys(cache), 'temGrid/stats por prof=',
+        profsAll.map(p => { const m = cache[ck(nutriente, p)]; return { p, existe: !!m, temGrid: m ? temGrid(m.resp) : false, stats: m ? !!statsRaster(m.resp) : false }; }));
+      setErro('Processe o(s) mapa(s) antes de gerar o PDF.'); setEstado('erro'); return;
+    }
 
     const fz = getFazendas().find(f => f.id === nav.fazendaId);
     const cultura = nav.talhaoId ? getPlantio(nav.talhaoId, safraNome) : '';
