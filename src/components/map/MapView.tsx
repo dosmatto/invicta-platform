@@ -10,7 +10,7 @@ import { ESCRITORIO_INVICTA } from '@/lib/seed';
 // ── Estilo único com OSM + Satélite — toggle de visibilidade, sem setStyle() ──
 const COMBINED_STYLE: maplibregl.StyleSpecification = {
   version: 8,
-  glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
+  glyphs: 'https://fonts.openmaptiles.org/{fontstack}/{range}.pbf',
   sources: {
     osm: {
       type: 'raster',

@@ -10,7 +10,7 @@
 import type { StyleSpecification } from 'maplibre-gl';
 import { coordsFromBounds } from './fertilidade';
 
-const GLYPHS = 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf';
+const GLYPHS = 'https://fonts.openmaptiles.org/{fontstack}/{range}.pbf';
 const SAT_TILES = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
 
 export interface CapturaMapa {

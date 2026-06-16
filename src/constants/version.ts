@@ -1,6 +1,9 @@
-export const APP_VERSION = '0.41.0';
+export const APP_VERSION = '0.41.1';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.41.1': [
+    'Glyphs do mapa: servidor de fontes trocado para o openmaptiles (o demotiles não servia "Open Sans") — elimina de vez os erros 404 de glyphs no console e melhora a nitidez dos rótulos',
+  ],
   '0.41.0': [
     'Login obrigatório por e-mail/senha (Firebase Auth): tela de login na entrada; o app inteiro fica atrás do login, substituindo o acesso anônimo. Ao logar, a NUVEM ATIVA — os mapas (e tudo) passam a salvar de verdade (conserta a persistência)',
     'Empresas/usuários agora sincronizam na nuvem (entre máquinas); ao logar pela 1ª vez, as empresas/dados criados antes (modo local) são adotados para o usuário logado — nada se perde',
