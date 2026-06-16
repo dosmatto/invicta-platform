@@ -1,6 +1,9 @@
-export const APP_VERSION = '0.41.1';
+export const APP_VERSION = '0.41.2';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.41.2': [
+    'Correção da herança de empresa no login: o usuário logado vira membro das empresas existentes (depois do boot da nuvem). Resolve o caso em que os dados criados sob o usuário anônimo não apareciam para os usuários de e-mail — agora william/jhon acessam os dados da empresa existente',
+  ],
   '0.41.1': [
     'Glyphs do mapa: servidor de fontes trocado para o openmaptiles (o demotiles não servia "Open Sans") — elimina de vez os erros 404 de glyphs no console e melhora a nitidez dos rótulos',
   ],

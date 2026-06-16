@@ -136,17 +136,17 @@ export function empresaIfEmpty() {
   if (!empresaAtivaId()) setEmpresaAtivaId(minhas[0].id);
 }
 
-// Ao logar pela 1ª vez, "adota" as empresas criadas no modo local/anônimo
-// (criadoPor 'local-…' ou sem membros) para o usuário logado — preserva os
-// dados que já existiam antes do login (eles ficam visíveis e sobem p/ a nuvem).
+// Herança de empresa: o usuário logado vira admin de TODAS as empresas
+// existentes (chamado depois do boot da nuvem, com as empresas já hidratadas).
+// Resolve a transição anônimo→e-mail: os dados ficavam "presos" à empresa do
+// usuário anônimo e os usuários reais não a viam. Simplificação single-tenant
+// (uma empresa/companhia); a segregação por empresa real fica para a Fase 1.5.
 export function adotarEmpresasLocais(uid: string) {
   if (typeof window === 'undefined' || !uid) return;
   const lista = load<Empresa>(K_EMPRESAS);
   let mudou = false;
   for (const e of lista) {
-    const semDono = !e.membros || Object.keys(e.membros).length === 0;
-    const localCriada = (e.criadoPor ?? '').startsWith('local-');
-    if (!e.membros?.[uid] && (localCriada || semDono)) {
+    if (!e.membros?.[uid]) {
       e.membros = { ...(e.membros ?? {}), [uid]: 'admin' };
       mudou = true;
     }

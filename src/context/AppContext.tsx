@@ -135,8 +135,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setUsuario(user);
       if (!user) { setDadosProntos(false); return; }
       setDadosProntos(false);
-      adotarEmpresasLocais(uidUsuario());  // preserva os dados locais pré-login
-      await bootCloud().catch(() => {});
+      await bootCloud().catch(() => {});       // hidrata empresas/dados da nuvem
+      adotarEmpresasLocais(uidUsuario());      // herda as empresas existentes (depois do boot)
       migracoesLocais();
       setDadosProntos(true);
     });
