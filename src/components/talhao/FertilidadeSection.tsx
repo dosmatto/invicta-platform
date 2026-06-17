@@ -246,6 +246,8 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
         novo[chave] = dados;
       }
       setCache(novo);
+      console.log('[fertilidade] autoload da nuvem:', Object.keys(novo).length, 'mapas —',
+        Object.fromEntries(Object.entries(novo).map(([k, v]) => [k, { grid: !!v.resp?.grid, comp: v.resp?.grid?.comp ?? null, pngLen: v.resp?.png?.length ?? 0, bounds: !!v.resp?.bounds }])));
     })();
   }, [importacaoId, nav.talhaoId]);
 
@@ -256,19 +258,22 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
   const estiloAtual = legAtual?.estilo ?? 'segmentado';
   const legHash = useMemo(() => legAtual ? JSON.stringify({ e: legAtual.estilo, i: legAtual.invertida, c: legAtual.classes }) : '', [legAtual]);
   useEffect(() => {
-    if (!legAtual) { setFertilidadeOverlay(null); setFertilidadeLabels(null); return; }
+    if (!legAtual) { console.log('[fert-overlay] sem legenda para', nutriente); setFertilidadeOverlay(null); setFertilidadeLabels(null); return; }
     const r = cache[ck(nutriente, profundidade)];
-    if (!r) { setFertilidadeOverlay(null); setFertilidadeLabels(null); return; }
+    if (!r) { console.log('[fert-overlay] cache MISS', ck(nutriente, profundidade), '— chaves:', Object.keys(cache)); setFertilidadeOverlay(null); setFertilidadeLabels(null); return; }
     let url: string | undefined;
     if (temGrid(r.resp)) {
       try { url = colorirGridComLegenda(r.resp.grid, legAtual).dataUrl; }
-      catch (e) { console.warn('[fertilidade] colorir local falhou, usando PNG do backend:', e); }
+      catch (e) { console.warn('[fert-overlay] colorir FALHOU (grid comp=', r.resp.grid?.comp, '):', e); }
+    } else {
+      console.warn('[fert-overlay] sem grid utilizável — grid=', r.resp.grid, 'pngLen=', r.resp.png?.length ?? 0);
     }
     if (!url && r.resp.png) url = r.resp.png; // fallback (legacy ou sessão atual)
     if (!url) {
-      console.warn('[fertilidade] mapa sem grid e sem PNG — reprocesse este nutriente.');
+      console.warn('[fert-overlay] SEM URL final para', ck(nutriente, profundidade), '— overlay não exibido.');
       setFertilidadeOverlay(null); setFertilidadeLabels(null); return;
     }
+    console.log('[fert-overlay] overlay DEFINIDO', ck(nutriente, profundidade), 'urlLen=', url.length, 'bounds=', r.resp.bounds);
     setFertilidadeOverlay({ url, coordinates: coordsFromBounds(r.resp.bounds), opacity: OPACIDADE });
     setFertilidadeLabels(r.labels);
   // legHash garante re-render quando o usuário edita classes/cores da legenda atual

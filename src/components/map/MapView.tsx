@@ -317,22 +317,25 @@ export function MapView() {
     const existing = map.getSource(SRC) as maplibregl.ImageSource | undefined;
     if (fertilidadeOverlay) {
       const { url, coordinates, opacity } = fertilidadeOverlay;
-      if (!existing) {
-        map.addSource(SRC, { type: 'image', url, coordinates });
-        // Insere o raster logo ABAIXO da linha de borda do talhão (entre o
-        // preenchimento e o contorno), para que a borda fique por cima e
-        // cubra o serrilhado do recorte. Pontos/rótulos continuam acima.
+      if (existing) { try { existing.updateImage({ url, coordinates }); } catch (e) { console.warn('[mapa-fert] updateImage falhou:', e); } }
+      else { map.addSource(SRC, { type: 'image', url, coordinates }); }
+      // Garante a CAMADA do raster sempre que houver overlay. Antes, se a fonte
+      // existisse mas a camada tivesse ficado órfã (um removeSource anterior que
+      // falhou, sem remover/recriar a camada), o raster não aparecia. Inserida
+      // logo ABAIXO da linha de borda do talhão (a borda fica por cima e cobre o
+      // serrilhado do recorte); pontos/rótulos continuam acima.
+      if (!map.getLayer(LYR)) {
         const beforeId = map.getLayer('upload-line') ? 'upload-line'
           : map.getLayer('pontos-circle') ? 'pontos-circle' : undefined;
         map.addLayer({ id: LYR, type: 'raster', source: SRC,
           paint: { 'raster-opacity': opacity, 'raster-fade-duration': 0 } }, beforeId);
+        console.log('[mapa-fert] camada raster adicionada (beforeId=', beforeId, ', urlLen=', url.length, ')');
       } else {
-        existing.updateImage({ url, coordinates });
         try { map.setPaintProperty(LYR, 'raster-opacity', opacity); } catch {}
       }
     } else if (existing) {
-      if (map.getLayer(LYR)) map.removeLayer(LYR);
-      map.removeSource(SRC);
+      try { if (map.getLayer(LYR)) map.removeLayer(LYR); map.removeSource(SRC); }
+      catch (e) { console.warn('[mapa-fert] remover raster falhou:', e); }
     }
   }, [fertilidadeOverlay, mapReady]);
 

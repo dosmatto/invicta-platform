@@ -1,6 +1,10 @@
-export const APP_VERSION = '0.43.3';
+export const APP_VERSION = '0.43.4';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.43.4': [
+    'Correção do raster de fertilidade que não aparecia mesmo com o mapa processado: a camada do raster agora é sempre (re)criada quando há overlay (resolve o caso da fonte ficar órfã sem camada após uma remoção que falhou)',
+    'Diagnóstico: logs detalhados no console ([fertilidade]/[fert-overlay]/[mapa-fert]) para rastrear o carregamento e a exibição dos mapas salvos',
+  ],
   '0.43.3': [
     'Correção (interpolação sumindo): a aba Fertilidade agora carrega os mapas salvos pelo prefixo largo (talhão+importação), independente de método/pixel/modelo — uma interpolação feita por outro usuário (ou com outra configuração) reaparece em vez de sumir. "Limpar" também passou a apagar todos os mapas daquele talhão/importação',
     'Relatório PDF: estatísticas agora ficam centralizadas logo abaixo de cada mapa (0-20 e 20-40), escala centralizada e renomeada para "Escala", títulos do cabeçalho mais proporcionais e mais espaço acima do rodapé',
