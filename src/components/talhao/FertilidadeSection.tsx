@@ -18,7 +18,7 @@ import { decodeGrid } from '@/lib/fertilidade';
 import { stopsParaBackend, dominioDaLegenda, paresDaClasse } from '@/lib/legendas';
 import type { Legenda } from '@/lib/legendas';
 import { Play, Layers, Loader2, Eraser, AlertTriangle, Activity, Settings, BookOpen, Save, FileDown } from 'lucide-react';
-import { cloudSalvarMapa, cloudCarregarMapasPorPrefixo, cloudExcluirMapasPorPrefixo, cloudAtivo } from '@/lib/cloud';
+import { cloudSalvarMapa, cloudCarregarMapasPorPrefixo, cloudExcluirMapasPorPrefixo, cloudPodeGravar } from '@/lib/cloud';
 import { listar as bibListar, criar as bibCriar, type ConteudoPerfil, type ItemBiblioteca } from '@/lib/biblioteca';
 
 const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
@@ -434,11 +434,11 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
 
   return (
     <div className="px-4 py-3 space-y-3">
-      {!cloudAtivo() && (
+      {!cloudPodeGravar() && (
         <div className="flex items-start gap-2 p-2.5 rounded-lg" style={{ background: '#2d1a00', border: '1px solid #92400e' }}>
           <AlertTriangle size={13} style={{ color: '#fbbf24' }} className="flex-shrink-0 mt-0.5" />
           <p className="text-[10px]" style={{ color: '#fbbf24' }}>
-            <strong>Nuvem inativa nesta sessão</strong> — os mapas interpolados <strong>não estão sendo salvos</strong> e precisam ser reprocessados ao reabrir. Verifique o Firebase (login anônimo habilitado + regras do Firestore). Veja o console (F12) por mensagens "[nuvem]".
+            <strong>Você não está logado</strong> — os mapas interpolados <strong>não estão sendo salvos</strong> e precisam ser reprocessados ao reabrir. Faça login para que as interpolações fiquem salvas na nuvem.
           </p>
         </div>
       )}
@@ -451,13 +451,13 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
           {importacoes.map(i => <option key={i.id} value={i.id}>{i.laboratorio}{i.campanha ? ` · ${i.campanha}` : ''} · {i.resultados.length} amostras</option>)}
         </select>
         {mapasSalvos > 0 && (
-          cloudAtivo() ? (
+          cloudPodeGravar() ? (
             <p className="text-[10px] mt-1 flex items-center gap-1" style={{ color: '#86efac' }}>
               <Layers size={10} /> {mapasSalvos} {mapasSalvos === 1 ? 'mapa salvo' : 'mapas salvos'} na nuvem — carregam sem reprocessar.
             </p>
           ) : (
             <p className="text-[10px] mt-1 flex items-center gap-1" style={{ color: '#fbbf24' }}>
-              <Layers size={10} /> {mapasSalvos} {mapasSalvos === 1 ? 'mapa' : 'mapas'} nesta sessão — <strong>não salvos</strong> (nuvem inativa).
+              <Layers size={10} /> {mapasSalvos} {mapasSalvos === 1 ? 'mapa' : 'mapas'} nesta sessão — <strong>não salvos</strong> (faça login).
             </p>
           )
         )}

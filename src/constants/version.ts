@@ -1,6 +1,10 @@
-export const APP_VERSION = '0.43.1';
+export const APP_VERSION = '0.43.2';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.43.2': [
+    'Correção: interpolações não estavam sendo salvas em conexões mais lentas — o salvamento dependia do boot da nuvem terminar (timeout de 10s). Agora os mapas (fertilidade/compactação) salvam e recarregam sempre que houver usuário logado, independente do boot',
+    'Boot da nuvem ficou mais rápido (coleções carregadas em paralelo) e o timeout subiu para 20s — corrige também o sync de cadastros/grades em conexões lentas',
+  ],
   '0.43.1': [
     'Empresa: a empresa de testes (a que concentra os cadastros) foi renomeada para "Invicta" e definida como padrão no login',
     'No login, a Invicta vira a empresa ativa quando não há uma escolha válida (ou a ativa está vazia) — uma troca deliberada para outra empresa com dados é preservada',

@@ -35,13 +35,20 @@ const KEYS_LISTA = [
 // Configurações (objeto único por chave) — coleção 'inv_config', doc = chave
 const KEYS_OBJ = ['inv_etiqueta_cfg'];
 
-const TIMEOUT_BOOT_MS = 10000;
+const TIMEOUT_BOOT_MS = 20000;
 
 // Último estado conhecido da nuvem (key -> id -> json) para diff nas gravações
 const espelho: Record<string, Map<string, string>> = {};
 let ativo = false;
 
 export const cloudAtivo = () => ativo;
+
+// Pode gravar/ler docs independentes (mapas) basta estar logado — NÃO depende do
+// boot ter terminado de hidratar todas as listas (que é o que `ativo` indica).
+// Mapas são docs autônomos (setDoc por id), então não precisam do espelho/diff.
+export function cloudPodeGravar(): boolean {
+  return firebaseConfigurado && !!getFb()?.auth.currentUser;
+}
 
 function lerLocal(key: string): { id: string }[] {
   try { return JSON.parse(localStorage.getItem(key) ?? '[]'); } catch { return []; }
@@ -88,8 +95,10 @@ export async function bootCloud(): Promise<boolean> {
   const fb = getFb();
   if (!fb?.auth.currentUser) { console.warn('[nuvem] sem usuário logado — nuvem inativa.'); ativo = false; return false; }
   const trabalho = (async () => {
-    for (const k of KEYS_LISTA) await hidratarLista(k);
-    for (const k of KEYS_OBJ) await hidratarObj(k);
+    // Em paralelo — antes era sequencial (16 coleções uma a uma), o que
+    // estourava o timeout em conexões lentas e deixava a nuvem inativa.
+    await Promise.all(KEYS_LISTA.map(k => hidratarLista(k)));
+    await Promise.all(KEYS_OBJ.map(k => hidratarObj(k)));
   })();
   const timeout = new Promise<never>((_, rej) =>
     setTimeout(() => rej(new Error('timeout ao conectar na nuvem')), TIMEOUT_BOOT_MS));
@@ -141,7 +150,7 @@ export function cloudPushObj(key: string, json: string) {
 const COL_MAPAS = 'inv_mapas_fert';
 
 export function cloudSalvarMapa(id: string, dados: object) {
-  if (!ativo) { console.warn('[nuvem] INATIVA — mapa NÃO foi salvo (não persiste):', id); return; }
+  if (!cloudPodeGravar()) { console.warn('[nuvem] sem login — mapa NÃO foi salvo (não persiste):', id); return; }
   const fb = getFb();
   if (!fb) return;
   setDoc(doc(fb.db, COL_MAPAS, id), { json: JSON.stringify(dados) })
@@ -150,7 +159,7 @@ export function cloudSalvarMapa(id: string, dados: object) {
 }
 
 export async function cloudCarregarMapasPorPrefixo<T>(prefixo: string): Promise<Array<{ id: string; dados: T }>> {
-  if (!ativo) return [];
+  if (!cloudPodeGravar()) return [];
   const fb = getFb();
   if (!fb) return [];
   try {
@@ -170,7 +179,7 @@ export async function cloudCarregarMapasPorPrefixo<T>(prefixo: string): Promise<
 }
 
 export async function cloudExcluirMapasPorPrefixo(prefixo: string) {
-  if (!ativo) return;
+  if (!cloudPodeGravar()) return;
   const fb = getFb();
   if (!fb) return;
   try {
