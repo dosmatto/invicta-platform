@@ -260,9 +260,11 @@ export function MapView() {
     src.setData(uploadedGeo ?? EMPTY_FC);
 
     if (uploadedGeo && uploadedBbox) {
+      // duration 0 = vai direto pro talhão (sem animar saindo do escritório),
+      // mais rápido ao abrir a página completa do talhão.
       map.fitBounds(
         [[uploadedBbox[0], uploadedBbox[1]], [uploadedBbox[2], uploadedBbox[3]]],
-        { padding: 60, duration: 900 }
+        { padding: 60, duration: 0, maxZoom: 16 }
       );
     }
   }, [uploadedGeo, uploadedBbox, mapReady]);

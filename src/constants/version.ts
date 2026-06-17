@@ -1,6 +1,9 @@
-export const APP_VERSION = '0.42.0';
+export const APP_VERSION = '0.42.1';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.42.1': [
+    'Página completa do talhão abre direto no mapa do talhão (o enquadramento agora é instantâneo, sem a animação que "navegava" desde o escritório) — bem mais rápido',
+  ],
   '0.42.0': [
     'Gerador de Relatórios (aba Relatórios da Página do Talhão): monta um PDF ÚNICO de Fertilidade com vários elementos — selecione e reordene os mapas (↑/↓), ligue/desligue satélite e valores, e gere o documento. Cada elemento vira uma página no layout oficial V1',
     'Usa os mapas já salvos na nuvem do talhão+safra (processados na aba Fertilidade); o relatorioFertilidade foi refatorado para compor várias páginas num só PDF',
