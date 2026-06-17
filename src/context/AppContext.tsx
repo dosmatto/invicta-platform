@@ -3,7 +3,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { seedIfEmpty } from '@/lib/seed';
 import { bootCloud } from '@/lib/cloud';
-import { empresaIfEmpty, adotarEmpresasLocais, uidUsuario } from '@/lib/empresa';
+import { empresaIfEmpty, adotarEmpresasLocais, garantirEmpresaInvicta, uidUsuario } from '@/lib/empresa';
 import { migrarLaboratoriosV1, migrarSafrasV1, migrarGradesV1, migrarPreferenciasV1 } from '@/lib/biblioteca';
 import { seedLegendasSistema } from '@/lib/store';
 import { LEGENDAS_OFICIAIS } from '@/constants/legendasSeedOficial';
@@ -137,6 +137,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setDadosProntos(false);
       await bootCloud().catch(() => {});       // hidrata empresas/dados da nuvem
       adotarEmpresasLocais(uidUsuario());      // herda as empresas existentes (depois do boot)
+      garantirEmpresaInvicta(uidUsuario());    // empresa padrão "Invicta" (default inteligente)
       migracoesLocais();
       setDadosProntos(true);
     });

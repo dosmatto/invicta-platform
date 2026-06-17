@@ -154,6 +154,51 @@ export function adotarEmpresasLocais(uid: string) {
   if (mudou) save(K_EMPRESAS, lista);
 }
 
+// ── Empresa padrão "Invicta" (single-tenant) ───────────────────────────────
+// Renomeia a empresa que concentra os cadastros para "Invicta" e a define como
+// ativa quando não há uma escolha válida (default inteligente). Idempotente;
+// roda no login depois do boot da nuvem (a renomeação persiste pelo sync).
+const NOME_PADRAO_EMPRESA = 'Invicta';
+
+function contarCadastrosPorEmpresa(): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const key of ['inv_clientes', 'inv_fazendas', 'inv_talhoes']) {
+    for (const r of load<{ empresaId?: string }>(key)) {
+      if (r.empresaId) out[r.empresaId] = (out[r.empresaId] ?? 0) + 1;
+    }
+  }
+  return out;
+}
+
+export function garantirEmpresaInvicta(uidLogado = uidUsuario()) {
+  if (typeof window === 'undefined' || !uidLogado) return;
+  const lista = load<Empresa>(K_EMPRESAS);
+  if (lista.length === 0) return; // sem empresas: empresaIfEmpty cuida
+
+  const contagem = contarCadastrosPorEmpresa();
+  // Canônica: já chamada "Invicta" > a com mais cadastros > a mais antiga.
+  let canonica = lista.find(e => e.nome.trim().toLowerCase() === NOME_PADRAO_EMPRESA.toLowerCase());
+  if (!canonica) {
+    canonica = [...lista].sort((a, b) =>
+      (contagem[b.id] ?? 0) - (contagem[a.id] ?? 0) ||
+      new Date(a.criadoEm).getTime() - new Date(b.criadoEm).getTime()
+    )[0];
+  }
+  if (!canonica) return;
+
+  // Renomeia para "Invicta" + garante o usuário como admin (persiste na nuvem).
+  let mudou = false;
+  if (canonica.nome !== NOME_PADRAO_EMPRESA) { canonica.nome = NOME_PADRAO_EMPRESA; mudou = true; }
+  if (!canonica.membros?.[uidLogado]) { canonica.membros = { ...(canonica.membros ?? {}), [uidLogado]: 'admin' }; mudou = true; }
+  if (mudou) save(K_EMPRESAS, lista);
+
+  // Default inteligente: só ativa a Invicta se a ativa atual for inválida/vazia.
+  const ativaId = empresaAtivaId();
+  const ativa = ativaId ? lista.find(e => e.id === ativaId) : undefined;
+  const ativaValida = !!ativa && !!ativa.membros?.[uidLogado] && (contagem[ativa.id] ?? 0) > 0;
+  if (!ativaValida) setEmpresaAtivaId(canonica.id);
+}
+
 // Membros (CRUD)
 export function adicionarMembro(empresaId: string, uidNovo: string, papel: PapelMembro = 'editor') {
   const e = getEmpresa(empresaId);

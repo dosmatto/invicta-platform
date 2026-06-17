@@ -1,6 +1,10 @@
-export const APP_VERSION = '0.43.0';
+export const APP_VERSION = '0.43.1';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.43.1': [
+    'Empresa: a empresa de testes (a que concentra os cadastros) foi renomeada para "Invicta" e definida como padrão no login',
+    'No login, a Invicta vira a empresa ativa quando não há uma escolha válida (ou a ativa está vazia) — uma troca deliberada para outra empresa com dados é preservada',
+  ],
   '0.43.0': [
     'Relatórios: novo botão "Gerar relatório completo" — junta todos os mapas do talhão/safra num PDF único',
     'Relatórios: cada PDF gerado agora é ARQUIVADO (Firebase Storage) — o menu mostra o histórico de tudo que foi gerado, com data, tipo, mapas e safra',
