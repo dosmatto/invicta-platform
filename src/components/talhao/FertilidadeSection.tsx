@@ -216,24 +216,28 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [importacaoId]);
 
-  // trocar contexto: hidrata da nuvem o que estiver salvo daquela combinação.
-  // Aceita tanto a chave nova (`nut__prof`) quanto a antiga (`legId__nut__prof`).
+  // trocar contexto: hidrata da nuvem o que estiver salvo para este talhão+importação.
+  // Usa o prefixo LARGO (igual ao gerador de relatórios) — INDEPENDENTE de
+  // método/pixel/modelo. Antes o prefixo incluía essas configs e, se a
+  // interpolação tivesse sido feita com outras (ex.: por outro usuário), ela
+  // "sumia" da aba enquanto o relatório a encontrava. A chave do cache é
+  // sempre `nut__prof` (os 2 últimos campos do id, p/ ids novos e legados).
   useEffect(() => {
     setCache({}); setEstado('idle'); setErro('');
     if (!nav.talhaoId || !importacaoId) return;
-    const prefixo = prefixoNuvem(nav.talhaoId, importacaoId, metodo, pixelM, modeloFixo);
+    const prefixo = `${nav.talhaoId}__${importacaoId}__`;
     (async () => {
       const carregados = await cloudCarregarMapasPorPrefixo<MapaPronto>(prefixo);
       if (carregados.length === 0) return;
       const novo: Record<string, MapaPronto> = {};
       for (const c of carregados) {
-        const sufixo = c.id.slice(prefixo.length);
-        const partes = sufixo.split('__');
-        // novo: `${nut}__${prof}` (2 partes) · legacy: `${legId}__${nut}__${prof}` (3+ partes)
-        const chave = partes.length >= 3 ? `${partes.slice(-2).join('__')}` : sufixo;
-        // prefere o mais "novo" (sufixo curto). Se já houver, ignora legacy.
-        if (novo[chave] && partes.length >= 3) continue;
+        const partes = c.id.slice(prefixo.length).split('__');
+        if (partes.length < 2) continue;
+        const chave = `${partes[partes.length - 2]}__${partes[partes.length - 1]}`; // nut__prof
         const dados = c.dados;
+        // Se houver duplicado (mesmo nut/prof salvo com configs diferentes), mantém o mais recente.
+        const atual = novo[chave];
+        if (atual && (atual.interpoladoEm ?? '') >= (dados.interpoladoEm ?? '')) continue;
         // Grid pode vir comprimido (gzip) — descomprime p/ o render colorir local.
         if (dados.resp?.grid?.comp === 'gz') {
           try { dados.resp.grid = await descomprimirGrid(dados.resp.grid); }
@@ -243,7 +247,7 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
       }
       setCache(novo);
     })();
-  }, [importacaoId, metodo, pixelM, modeloFixo, nav.talhaoId]);
+  }, [importacaoId, nav.talhaoId]);
 
   // exibe no mapa o mapa do nutriente+profundidade selecionados.
   // Estratégia: tenta colorir local (do grid); se falhar OU não houver grid, cai
@@ -346,7 +350,8 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
   function limpar() {
     setCache({}); setEstado('idle'); setErro('');
     if (nav.talhaoId && importacaoId) {
-      cloudExcluirMapasPorPrefixo(prefixoNuvem(nav.talhaoId, importacaoId, metodo, pixelM, modeloFixo));
+      // Prefixo largo — apaga TODOS os mapas deste talhão+importação (qualquer config).
+      cloudExcluirMapasPorPrefixo(`${nav.talhaoId}__${importacaoId}__`);
     }
   }
 

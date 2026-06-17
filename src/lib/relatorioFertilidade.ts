@@ -91,7 +91,7 @@ async function desenharPaginaMapa(doc: JsPDF, d: DadosRelatorioFert, logos: Logo
   const W = 297, H = 210, M = 6;
   const nProf = d.profundidades.length;
   const gap = 5;
-  const mapsY = 31, mapsH = 116;
+  const mapsY = 31, mapsH = 104;
   const frameW = nProf === 2 ? (W - 2 * M - gap) / 2 : Math.min(200, W - 2 * M);
   const startX = nProf === 2 ? M : (W - frameW) / 2;
   const PXMM = 8;
@@ -117,14 +117,14 @@ async function desenharPaginaMapa(doc: JsPDF, d: DadosRelatorioFert, logos: Logo
   doc.text(`Safra: ${d.safra || '—'}   |   Data: ${d.dataInterpolacao}`, M + 56, 18.5);
 
   // Título central (elemento) — auto-redução p/ não sobrepor.
-  const tituloCx = 165, tituloMaxW = 88;
+  const tituloCx = 158, tituloMaxW = 94;
   const titulo = `${d.atributo.toUpperCase()} (${d.simbolo})`;
   doc.setTextColor(...NAVY); doc.setFont('helvetica', 'bold');
-  let tf = 20; doc.setFontSize(tf);
+  let tf = 22; doc.setFontSize(tf);
   while (doc.getTextWidth(titulo) > tituloMaxW && tf > 10) { tf -= 1; doc.setFontSize(tf); }
-  doc.text(titulo, tituloCx, 12.5, { align: 'center' });
+  doc.text(titulo, tituloCx, 13.5, { align: 'center' });
   doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(...GRAY);
-  doc.text(`${d.metodo ? d.metodo + '  |  ' : ''}${d.fonte}`, tituloCx, 18.5, { align: 'center', maxWidth: tituloMaxW });
+  doc.text(`${d.metodo ? d.metodo + '  |  ' : ''}${d.fonte}`, tituloCx, 20, { align: 'center', maxWidth: tituloMaxW });
 
   // Informações da área (direita)
   const [w0, s0, e0, n0] = d.profundidades[0].bounds;
@@ -161,15 +161,33 @@ async function desenharPaginaMapa(doc: JsPDF, d: DadosRelatorioFert, logos: Logo
     doc.setTextColor(255, 255, 255); doc.setFontSize(6); doc.text('N', nx, ny + 4, { align: 'center' });
   });
 
-  // ── LEGENDA ──
-  const lgY = mapsY + mapsH + 3;
-  doc.setDrawColor(...LINE); doc.setLineWidth(0.4); doc.roundedRect(M, lgY, W - 2 * M, 25, 2, 2, 'S');
-  doc.setTextColor(...NAVY); doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5);
-  doc.text('INTERPRETAÇÃO', M + 4, lgY + 8); doc.text('FERTILIDADE', M + 4, lgY + 12.5);
-  doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(...GRAY);
-  doc.text(`(${d.unidade})`, M + 4, lgY + 17);
+  // ── ESTATÍSTICAS (centralizadas abaixo de cada mapa) ──
+  const stBandY = mapsY + mapsH + 4;
+  const stBandH = 14;
+  d.profundidades.forEach((p, i) => {
+    const x = startX + i * (frameW + gap);
+    const cx = x + frameW / 2;
+    doc.setDrawColor(...LINE); doc.setLineWidth(0.4); doc.roundedRect(x, stBandY, frameW, stBandH, 2, 2, 'S');
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(...NAVY);
+    doc.text(`ESTATÍSTICAS  ${p.profundidade} cm`, cx, stBandY + 4.5, { align: 'center' });
+    const tri: [string, number][] = [['MÍNIMO', p.stats.min], ['MÉDIO', p.stats.media], ['MÁXIMO', p.stats.max]];
+    tri.forEach(([lab, val], j) => {
+      const tx = x + frameW * (j + 0.5) / 3;
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(6); doc.setTextColor(...GRAY); doc.text(lab, tx, stBandY + 8.5, { align: 'center' });
+      doc.setFontSize(11); doc.setTextColor(...NAVY); doc.text(`${fmt(val)} ${d.unidade}`, tx, stBandY + 12.6, { align: 'center' });
+    });
+  });
 
-  const barX = M + 40, barW = 150, barY = lgY + 9, barH = 6;
+  // ── LEGENDA (barra contínua, largura total) ──
+  const lgY = stBandY + stBandH + 4;
+  const lgH = 20;
+  doc.setDrawColor(...LINE); doc.setLineWidth(0.4); doc.roundedRect(M, lgY, W - 2 * M, lgH, 2, 2, 'S');
+  doc.setTextColor(...NAVY); doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5);
+  doc.text('INTERPRETAÇÃO', M + 4, lgY + 7.5); doc.text('FERTILIDADE', M + 4, lgY + 12);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(...GRAY);
+  doc.text(`(${d.unidade})`, M + 4, lgY + 16.5);
+
+  const barX = M + 40, barW = 150, barY = lgY + 8, barH = 6;
   doc.addImage(barraLegenda(d.legenda, 600, 24), 'PNG', barX, barY, barW, barH);
   doc.setDrawColor(...LINE); doc.setLineWidth(0.2); doc.rect(barX, barY, barW, barH, 'S');
   doc.setFont('helvetica', 'bold'); doc.setFontSize(6.5); doc.setTextColor(...NAVY);
@@ -180,38 +198,23 @@ async function desenharPaginaMapa(doc: JsPDF, d: DadosRelatorioFert, logos: Logo
   doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5); doc.setTextColor(...GRAY);
   for (const t of ticks) { const tx = barX + valorParaPosicaoVisual(t, d.legenda) * barW; doc.text(fmt(t, t % 1 === 0 ? 0 : 1), tx, barY + barH + 4, { align: 'center' }); }
 
-  const cols = [['UNIDADE', d.unidade], ['MÉTODO', d.metodo || '—'], ['FONTE', d.fonte]];
+  const cols: [string, string][] = [['UNIDADE', d.unidade], ['MÉTODO', d.metodo || '—'], ['FONTE', d.fonte]];
   const cx0 = barX + barW + 8, cw = (W - M - cx0) / 3;
   cols.forEach(([lab, val], i) => {
     const cx = cx0 + cw * i + cw / 2;
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor(...NAVY); doc.text(lab, cx, lgY + 9, { align: 'center' });
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(...GRAY); doc.text(String(val), cx, lgY + 15, { align: 'center', maxWidth: cw - 2 });
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor(...NAVY); doc.text(lab, cx, lgY + 8, { align: 'center' });
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(...GRAY); doc.text(String(val), cx, lgY + 14, { align: 'center', maxWidth: cw - 2 });
   });
 
-  // ── ESTATÍSTICAS + ESCALA ──
-  const stY = lgY + 28;
-  doc.setDrawColor(...LINE); doc.setLineWidth(0.4); doc.roundedRect(M, stY, W - 2 * M, 22, 2, 2, 'S');
-  const statBlocoW = (W - 2 * M) * (nProf === 2 ? 0.66 : 0.5) / nProf;
-  d.profundidades.forEach((p, i) => {
-    const bx = M + 4 + i * statBlocoW;
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor(...NAVY);
-    doc.text(`ESTATÍSTICAS  ${p.profundidade} cm`, bx + statBlocoW / 2 - 4, stY + 6, { align: 'center' });
-    const tri = [['MÍNIMO', p.stats.min], ['MÉDIO', p.stats.media], ['MÁXIMO', p.stats.max]];
-    tri.forEach(([lab, val], j) => {
-      const tx = bx + (statBlocoW / 3) * j + statBlocoW / 6 - 4;
-      doc.setFont('helvetica', 'bold'); doc.setFontSize(6.5); doc.setTextColor(...GRAY); doc.text(String(lab), tx, stY + 11, { align: 'center' });
-      doc.setFontSize(12); doc.setTextColor(...NAVY); doc.text(fmt(Number(val)), tx, stY + 17, { align: 'center' });
-      doc.setFont('helvetica', 'normal'); doc.setFontSize(6); doc.setTextColor(...GRAY); doc.text(d.unidade, tx, stY + 20.5, { align: 'center' });
-    });
-  });
-
-  const escX = M + (W - 2 * M) * (nProf === 2 ? 0.7 : 0.55), escW = W - M - escX - 4;
+  // ── ESCALA (centralizada) ──
+  const escY = lgY + lgH + 7;
+  const escAvail = 60;
   const groundW = Math.max(1, (e0 - w0) * 111320 * Math.cos(latC * Math.PI / 180));
-  const niceMax = nice(groundW * (Math.min(50, escW) / frameW));
-  const barLen = Math.min(escW, (niceMax / groundW) * frameW);
-  const ey = stY + 14, ex = escX + (escW - barLen) / 2;
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor(...NAVY);
-  doc.text('ESCALA GRÁFICA', escX + escW / 2, stY + 6, { align: 'center' });
+  const niceMax = nice(groundW * (Math.min(50, escAvail) / frameW));
+  const barLen = Math.min(escAvail, (niceMax / groundW) * frameW);
+  const ex = W / 2 - barLen / 2, ey = escY + 2.5;
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(...NAVY);
+  doc.text('Escala', W / 2, escY, { align: 'center' });
   for (let k = 0; k < 4; k++) {
     const sx = ex + (barLen / 4) * k;
     doc.setFillColor(...(k % 2 === 0 ? NAVY : [255, 255, 255] as [number, number, number]));
@@ -219,7 +222,7 @@ async function desenharPaginaMapa(doc: JsPDF, d: DadosRelatorioFert, logos: Logo
     doc.rect(sx, ey, barLen / 4, 2, k % 2 === 0 ? 'FD' : 'D');
   }
   doc.setFont('helvetica', 'normal'); doc.setFontSize(6); doc.setTextColor(...GRAY);
-  for (let k = 0; k <= 4; k++) { const sx = ex + (barLen / 4) * k; doc.text(k === 4 ? `${Math.round(niceMax)} m` : String(Math.round(niceMax / 4 * k)), sx, ey - 1.5, { align: 'center' }); }
+  for (let k = 0; k <= 4; k++) { const sx = ex + (barLen / 4) * k; doc.text(k === 4 ? `${Math.round(niceMax)} m` : String(Math.round(niceMax / 4 * k)), sx, ey + 5, { align: 'center' }); }
 
   // ── RODAPÉ ──
   doc.setFillColor(...NAVY); doc.rect(0, H - 10, W, 10, 'F');

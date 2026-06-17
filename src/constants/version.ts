@@ -1,6 +1,10 @@
-export const APP_VERSION = '0.43.2';
+export const APP_VERSION = '0.43.3';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.43.3': [
+    'Correção (interpolação sumindo): a aba Fertilidade agora carrega os mapas salvos pelo prefixo largo (talhão+importação), independente de método/pixel/modelo — uma interpolação feita por outro usuário (ou com outra configuração) reaparece em vez de sumir. "Limpar" também passou a apagar todos os mapas daquele talhão/importação',
+    'Relatório PDF: estatísticas agora ficam centralizadas logo abaixo de cada mapa (0-20 e 20-40), escala centralizada e renomeada para "Escala", títulos do cabeçalho mais proporcionais e mais espaço acima do rodapé',
+  ],
   '0.43.2': [
     'Correção: interpolações não estavam sendo salvas em conexões mais lentas — o salvamento dependia do boot da nuvem terminar (timeout de 10s). Agora os mapas (fertilidade/compactação) salvam e recarregam sempre que houver usuário logado, independente do boot',
     'Boot da nuvem ficou mais rápido (coleções carregadas em paralelo) e o timeout subiu para 20s — corrige também o sync de cadastros/grades em conexões lentas',
