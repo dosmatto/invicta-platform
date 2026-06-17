@@ -35,6 +35,13 @@ MAX_CELLS = 500
 # COM estrutura. Abaixo disso = pepita ~= patamar (ruido puro) -> krigagem prediz
 # a media em todo lugar -> mapa uniforme. Nesse caso caimos para IDW.
 ESTRUTURA_MIN = 0.10
+# Se o raster krigado variar menos que esta fracao da amplitude dos dados, ele
+# esta "plano demais" (nao honra os pontos) -> cai para IDW. Detecta o mapa
+# uniforme DIRETO pela saida, independente dos parametros do variograma.
+AMPLITUDE_MIN = 0.30
+# Versao do motor de interpolacao (conferir em GET /health para saber se o
+# backend foi reiniciado com o codigo novo).
+VERSION = "interp-3-amplitude-guard"
 
 
 def _nlags(n: int) -> int:
@@ -229,7 +236,13 @@ def interpolar(points: list[dict], polygon_geojson: dict, dominio, stops,
             # via modelo="idw". So no modo automatico (respeita modelo forcado).
             espacamento = _espacamento_mediano(xm, ym)
             estrutura = (psill / patamar) if patamar > 0 else 0.0
-            if (not modelo_fixo) and (estrutura < ESTRUTURA_MIN or alcance < espacamento):
+            # Amplitude do raster krigado DENTRO do talhao vs amplitude dos dados.
+            _gc = _clip(grid, gx, gy, poly)
+            _fin = _gc[np.isfinite(_gc)]
+            amp_krige = float(_fin.max() - _fin.min()) if _fin.size else 0.0
+            amp_dados = float(np.max(z) - np.min(z)) or 1.0
+            plano = amp_krige < AMPLITUDE_MIN * amp_dados
+            if (not modelo_fixo) and (estrutura < ESTRUTURA_MIN or alcance < espacamento or plano):
                 grid = _idw(xm, ym, z, gxm, gym)
                 modelo = "idw"
                 rmse = None

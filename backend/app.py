@@ -52,7 +52,7 @@ class ReqInterp(BaseModel):
 
 @app.get("/health")
 def health():
-    return {"ok": True, "pykrige": interp._HAS_PYKRIGE}
+    return {"ok": True, "pykrige": interp._HAS_PYKRIGE, "v": getattr(interp, "VERSION", "?")}
 
 
 @app.post("/interpolar")
