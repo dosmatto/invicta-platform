@@ -1,6 +1,10 @@
-export const APP_VERSION = '0.41.2';
+export const APP_VERSION = '0.42.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.42.0': [
+    'Gerador de Relatórios (aba Relatórios da Página do Talhão): monta um PDF ÚNICO de Fertilidade com vários elementos — selecione e reordene os mapas (↑/↓), ligue/desligue satélite e valores, e gere o documento. Cada elemento vira uma página no layout oficial V1',
+    'Usa os mapas já salvos na nuvem do talhão+safra (processados na aba Fertilidade); o relatorioFertilidade foi refatorado para compor várias páginas num só PDF',
+  ],
   '0.41.2': [
     'Correção da herança de empresa no login: o usuário logado vira membro das empresas existentes (depois do boot da nuvem). Resolve o caso em que os dados criados sob o usuário anônimo não apareciam para os usuários de e-mail — agora william/jhon acessam os dados da empresa existente',
   ],
