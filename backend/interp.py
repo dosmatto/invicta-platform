@@ -31,6 +31,25 @@ except Exception:  # pragma: no cover
 KRIGE_MODELS = ["spherical", "exponential", "gaussian"]
 # Teto de resolucao da malha (por lado) para proteger memoria/CPU
 MAX_CELLS = 500
+# Fracao minima de patamar parcial (psill/sill) para o variograma ser considerado
+# COM estrutura. Abaixo disso = pepita ~= patamar (ruido puro) -> krigagem prediz
+# a media em todo lugar -> mapa uniforme. Nesse caso caimos para IDW.
+ESTRUTURA_MIN = 0.10
+
+
+def _nlags(n: int) -> int:
+    """Numero de lags do variograma proporcional aos pontos (entre 6 e 12)."""
+    return max(6, min(12, n // 8))
+
+
+def _espacamento_mediano(xm: np.ndarray, ym: np.ndarray) -> float:
+    """Distancia mediana ao vizinho mais proximo (m). Serve de piso p/ o alcance:
+    alcance menor que isso = sem correlacao na escala amostrada."""
+    if len(xm) < 2:
+        return 0.0
+    tree = cKDTree(np.column_stack([xm, ym]))
+    d, _ = tree.query(np.column_stack([xm, ym]), k=2)
+    return float(np.median(d[:, 1]))
 
 
 # ---------------------------------------------------------------- projecao
@@ -76,6 +95,7 @@ def _loo_rmse(xm, ym, z, model) -> float:
         try:
             ok = OrdinaryKriging(
                 xm[m], ym[m], z[m], variogram_model=model,
+                nlags=_nlags(int(m.sum())), weight=True,
                 enable_plotting=False, verbose=False,
             )
             zp, _ = ok.execute("points", np.array([xm[i]]), np.array([ym[i]]))
@@ -98,6 +118,7 @@ def _krige(xm, ym, z, gxm, gym, modelo_fixo=None):
             raise RuntimeError("nenhum modelo de variograma convergiu")
     ok = OrdinaryKriging(
         xm, ym, z, variogram_model=melhor,
+        nlags=_nlags(len(z)), weight=True,
         enable_plotting=False, verbose=False,
     )
     zhat, _ = ok.execute("grid", gxm, gym)  # (ny, nx) masked array
@@ -194,11 +215,25 @@ def interpolar(points: list[dict], polygon_geojson: dict, dominio, stops,
             raise ValueError("Krigagem indisponivel no backend.")
         try:
             grid, modelo, params, rmse = _krige(xm, ym, z, gxm, gym, modelo_fixo)
+            psill, alcance, pepita = params[0], params[1], params[2]
+            patamar = psill + pepita
             variograma = {
-                "alcance_m": round(params[1], 1),            # range (metros)
-                "patamar": round(params[0] + params[2], 4),  # sill = psill + nugget
-                "pepita": round(params[2], 4),               # nugget
+                "alcance_m": round(alcance, 1),  # range (metros)
+                "patamar": round(patamar, 4),    # sill = psill + nugget
+                "pepita": round(pepita, 4),      # nugget
             }
+            # Guarda anti-degeneracao: variograma com pepita ~= patamar (sem
+            # estrutura) ou alcance < espacamento das amostras => krigagem prediz
+            # a MEDIA em todo lugar (mapa uniforme que ignora os pontos). Nesse
+            # caso cai para IDW (interpolador exato, honra os pontos) e SINALIZA
+            # via modelo="idw". So no modo automatico (respeita modelo forcado).
+            espacamento = _espacamento_mediano(xm, ym)
+            estrutura = (psill / patamar) if patamar > 0 else 0.0
+            if (not modelo_fixo) and (estrutura < ESTRUTURA_MIN or alcance < espacamento):
+                grid = _idw(xm, ym, z, gxm, gym)
+                modelo = "idw"
+                rmse = None
+                variograma = None
         except Exception as e:
             raise ValueError(
                 f"Krigagem nao convergiu com {len(z)} pontos (colineares/insuficientes?). [{e}]"
