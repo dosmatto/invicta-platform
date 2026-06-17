@@ -45,11 +45,17 @@ function statsRaster(resp: RespInterp): { min: number; media: number; max: numbe
   return null;
 }
 
-export async function carregarContextoRelatorio(talhaoId: string, safra: string): Promise<ContextoRelatorio> {
+export async function carregarContextoRelatorio(
+  talhaoId: string, safra: string,
+  poligonoFallback?: GeoJSON.Polygon | GeoJSON.MultiPolygon | null,
+): Promise<ContextoRelatorio> {
   const talhao = getTalhoes().find(t => t.id === talhaoId) ?? null;
   const fazenda = talhao ? getFazendas().find(f => f.id === talhao.fazendaId) ?? null : null;
   const cliente = fazenda ? getClientes().find(c => c.id === fazenda.clienteId) ?? null : null;
-  const poligono = talhao?.geojson ? (() => { try { return extrairPoligono(JSON.parse(talhao.geojson!)); } catch { return null; } })() : null;
+  // Polígono: tenta o salvo no talhão; se falhar, usa o fallback (geometria que o
+  // mapa já está usando — uploadedGeo). Sem polígono, montarPaginas pula tudo.
+  let poligono = talhao?.geojson ? (() => { try { return extrairPoligono(JSON.parse(talhao.geojson!)); } catch { return null; } })() : null;
+  if (!poligono) poligono = poligonoFallback ?? null;
 
   const importacoes = getImportacoesLab(talhaoId, safra).sort((a, b) => (b.criadoEm ?? '').localeCompare(a.criadoEm ?? ''));
   const importacao = importacoes[0] ?? null;
@@ -87,7 +93,8 @@ export async function carregarContextoRelatorio(talhaoId: string, safra: string)
       const v = r.valores[nut];
       if (v == null || !isFinite(v)) continue;
       const pt = pontoPorNumero.get(r.numero);
-      if (pt) feats.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [pt.lng, pt.lat] }, properties: { txt: v.toLocaleString('pt-BR', { maximumFractionDigits: 1 }) } });
+      const casas = (nut === 'ph' || nut === 'k') ? 1 : 0; // pH e K com 1 casa; demais inteiros
+      if (pt) feats.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [pt.lng, pt.lat] }, properties: { txt: v.toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: casas }) } });
     }
     return { type: 'FeatureCollection', features: feats };
   }
@@ -151,6 +158,14 @@ export function montarPaginas(ctx: ContextoRelatorio, nutsSelecionados: string[]
       legenda: leg, dataInterpolacao: ctx.dataInterpolacao, poligono: ctx.poligono,
       profundidades, satelite: config.satelite, corLimite: '#ffffff', logoClienteUrl: config.logoClienteUrl ?? null,
     });
+  }
+  if (paginas.length === 0) {
+    console.warn('[relatorio] montarPaginas vazio — poligono?', !!ctx.poligono, '| nuts=', nutsSelecionados,
+      '| detalhe=', nutsSelecionados.map(nut => {
+        const el = ctx.elementos.find(e => e.nut === nut);
+        return { nut, temLeg: !!ctx.legendaPorNut[nut], temEl: !!el,
+          profs: (el?.profundidades ?? []).map(p => { const m = ctx.mapas[`${nut}__${p}`]; return { p, mapa: !!m, grid: !!m?.resp?.grid, png: !!m?.resp?.png, stats: !!m?.resp?.stats }; }) };
+      }));
   }
   return paginas;
 }

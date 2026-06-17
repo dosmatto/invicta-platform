@@ -12,13 +12,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import { carregarContextoRelatorio, montarPaginas, type ContextoRelatorio } from '@/lib/relatorioDados';
+import { extrairPoligono } from '@/lib/fertilidade';
 import { gerarRelatorioMultiplo } from '@/lib/relatorioFertilidade';
 import { salvarRelatorio, listarRelatorios, excluirRelatorio, type RegistroRelatorio } from '@/lib/relatoriosArquivo';
 import { emailUsuario } from '@/lib/auth';
 import { FileDown, Loader2, ChevronUp, ChevronDown, AlertTriangle, CheckSquare, Square, Satellite, Hash, FileStack, History, Trash2, ExternalLink } from 'lucide-react';
 
 export function GeradorRelatorios({ safraNome }: { safraNome?: string } = {}) {
-  const { nav } = useApp();
+  const { nav, uploadedGeo } = useApp();
   const safra = safraNome ?? '';
 
   const [ctx, setCtx] = useState<ContextoRelatorio | null>(null);
@@ -42,7 +43,7 @@ export function GeradorRelatorios({ safraNome }: { safraNome?: string } = {}) {
     let cancel = false;
     if (!nav.talhaoId || !safra) { setCtx(null); setCarregando(false); return; }
     setCarregando(true); setErro('');
-    carregarContextoRelatorio(nav.talhaoId, safra)
+    carregarContextoRelatorio(nav.talhaoId, safra, extrairPoligono(uploadedGeo))
       .then(c => {
         if (cancel) return;
         setCtx(c);
@@ -52,7 +53,7 @@ export function GeradorRelatorios({ safraNome }: { safraNome?: string } = {}) {
       })
       .catch(() => { if (!cancel) { setErro('Falha ao carregar os mapas salvos.'); setCarregando(false); } });
     return () => { cancel = true; };
-  }, [nav.talhaoId, safra]);
+  }, [nav.talhaoId, safra, uploadedGeo]);
 
   useEffect(() => { recarregarHistorico(); }, [recarregarHistorico]);
 

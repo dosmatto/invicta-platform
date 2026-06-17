@@ -23,6 +23,9 @@ import { listar as bibListar, criar as bibCriar, type ConteudoPerfil, type ItemB
 
 const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
 const fmt = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits: 1 });
+// Rótulo do valor no ponto do mapa: pH e K com 1 casa decimal; os demais inteiros.
+const casasPonto = (nut: string) => (nut === 'ph' || nut === 'k') ? 1 : 0;
+const fmtPonto = (v: number, nut: string) => v.toLocaleString('pt-BR', { minimumFractionDigits: casasPonto(nut), maximumFractionDigits: casasPonto(nut) });
 const OPACIDADE = 1; // fixo 100%
 
 type Ponto = { lng: number; lat: number; valor: number };
@@ -198,13 +201,13 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
     }
     return out;
   }
-  function fcLabels(pts: Ponto[]): GeoJSON.FeatureCollection {
+  function fcLabels(pts: Ponto[], nut: string): GeoJSON.FeatureCollection {
     return {
       type: 'FeatureCollection',
       features: pts.map(p => ({
         type: 'Feature',
         geometry: { type: 'Point', coordinates: [p.lng, p.lat] },
-        properties: { txt: fmt(p.valor) },
+        properties: { txt: fmtPonto(p.valor, nut) },
       })),
     };
   }
@@ -275,7 +278,10 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
     }
     console.log('[fert-overlay] overlay DEFINIDO', ck(nutriente, profundidade), 'urlLen=', url.length, 'bounds=', r.resp.bounds);
     setFertilidadeOverlay({ url, coordinates: coordsFromBounds(r.resp.bounds), opacity: OPACIDADE });
-    setFertilidadeLabels(r.labels);
+    // Reformata os rótulos com as casas decimais por nutriente (pH/K=1, resto=0),
+    // valendo também p/ mapas já salvos. Cai p/ os rótulos salvos se não houver pontos.
+    const pts = pontosDe(nutriente, profundidade);
+    setFertilidadeLabels(pts.length ? fcLabels(pts, nutriente) : r.labels);
   // legHash garante re-render quando o usuário edita classes/cores da legenda atual
   }, [cache, nutriente, profundidade, legAtual, legHash, estiloAtual, setFertilidadeOverlay, setFertilidadeLabels]);
 
@@ -292,7 +298,7 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
     // O domínio e os stops vão só pra colorir o PNG do backend (ignorado aqui).
     const { dominio, stops } = rampaDaLegenda(leg);
     const resp = await interpolar({ pontos: pts, poligono: poligono!, dominio, stops, metodo, pixelM, modeloFixo: modeloFixo || null });
-    const labels = fcLabels(pts);
+    const labels = fcLabels(pts, nut);
     const interpoladoEm = new Date().toISOString();
     // Sessão guarda o PNG do backend como fallback (~10-30 KB). Quem economiza é o Firestore.
     setCache(c => ({ ...c, [ck(nut, prof)]: { resp, labels, interpoladoEm } }));

@@ -1,6 +1,12 @@
-export const APP_VERSION = '0.43.4';
+export const APP_VERSION = '0.43.5';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.43.5': [
+    'Correção (Relatórios "Nenhuma página gerável"): o gerador agora usa como polígono a mesma geometria que o mapa está exibindo (fallback do uploadedGeo) quando não consegue extrair do talhão salvo — destrava a geração do relatório completo',
+    'Números nos pontos do mapa (e do PDF): pH e K com 1 casa decimal; os demais sem casas decimais',
+    'PDF: corrigido o espaçamento estranho em unidades com subscrito (ex.: "CaCl₂" agora sai como "CaCl2" em vez de letras espaçadas)',
+    'Diagnóstico: quando o relatório não gera nenhuma página, o console mostra o motivo exato por elemento/profundidade',
+  ],
   '0.43.4': [
     'Correção do raster de fertilidade que não aparecia mesmo com o mapa processado: a camada do raster agora é sempre (re)criada quando há overlay (resolve o caso da fonte ficar órfã sem camada após uma remoção que falhou)',
     'Diagnóstico: logs detalhados no console ([fertilidade]/[fert-overlay]/[mapa-fert]) para rastrear o carregamento e a exibição dos mapas salvos',

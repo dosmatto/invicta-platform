@@ -35,6 +35,13 @@ const NAVY: [number, number, number] = [13, 33, 64];
 const GRAY: [number, number, number] = [100, 116, 139];
 const LINE: [number, number, number] = [210, 219, 232];
 const fmt = (v: number, d = 1) => v.toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d });
+// jsPDF (fontes padrão WinAnsi) não tem subscrito (₂) — vira lixo e bagunça o
+// espaçamento das letras. Converte subscrito → dígito normal e remove o que
+// estiver fora do Latin-1 (ex.: "CaCl₂" → "CaCl2").
+const SUB = '₀₁₂₃₄₅₆₇₈₉';
+const san = (s: string | null | undefined): string => (s ?? '')
+  .replace(/[₀₁₂₃₄₅₆₇₈₉]/g, c => '0123456789'[SUB.indexOf(c)])
+  .replace(/[^\x00-\xFF]/g, '');
 
 function carregarImg(src: string): Promise<HTMLImageElement> {
   return new Promise((res, rej) => {
@@ -118,13 +125,13 @@ async function desenharPaginaMapa(doc: JsPDF, d: DadosRelatorioFert, logos: Logo
 
   // Título central (elemento) — auto-redução p/ não sobrepor.
   const tituloCx = 158, tituloMaxW = 94;
-  const titulo = `${d.atributo.toUpperCase()} (${d.simbolo})`;
+  const titulo = `${san(d.atributo).toUpperCase()} (${san(d.simbolo)})`;
   doc.setTextColor(...NAVY); doc.setFont('helvetica', 'bold');
   let tf = 22; doc.setFontSize(tf);
   while (doc.getTextWidth(titulo) > tituloMaxW && tf > 10) { tf -= 1; doc.setFontSize(tf); }
   doc.text(titulo, tituloCx, 13.5, { align: 'center' });
   doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(...GRAY);
-  doc.text(`${d.metodo ? d.metodo + '  |  ' : ''}${d.fonte}`, tituloCx, 20, { align: 'center', maxWidth: tituloMaxW });
+  doc.text(`${d.metodo ? san(d.metodo) + '  |  ' : ''}${san(d.fonte)}`, tituloCx, 20, { align: 'center', maxWidth: tituloMaxW });
 
   // Informações da área (direita)
   const [w0, s0, e0, n0] = d.profundidades[0].bounds;
@@ -174,7 +181,7 @@ async function desenharPaginaMapa(doc: JsPDF, d: DadosRelatorioFert, logos: Logo
     tri.forEach(([lab, val], j) => {
       const tx = x + frameW * (j + 0.5) / 3;
       doc.setFont('helvetica', 'bold'); doc.setFontSize(6); doc.setTextColor(...GRAY); doc.text(lab, tx, stBandY + 8.5, { align: 'center' });
-      doc.setFontSize(11); doc.setTextColor(...NAVY); doc.text(`${fmt(val)} ${d.unidade}`, tx, stBandY + 12.6, { align: 'center' });
+      doc.setFontSize(11); doc.setTextColor(...NAVY); doc.text(`${fmt(val)} ${san(d.unidade)}`, tx, stBandY + 12.6, { align: 'center' });
     });
   });
 
@@ -185,7 +192,7 @@ async function desenharPaginaMapa(doc: JsPDF, d: DadosRelatorioFert, logos: Logo
   doc.setTextColor(...NAVY); doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5);
   doc.text('INTERPRETAÇÃO', M + 4, lgY + 7.5); doc.text('FERTILIDADE', M + 4, lgY + 12);
   doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(...GRAY);
-  doc.text(`(${d.unidade})`, M + 4, lgY + 16.5);
+  doc.text(`(${san(d.unidade)})`, M + 4, lgY + 16.5);
 
   const barX = M + 40, barW = 150, barY = lgY + 8, barH = 6;
   doc.addImage(barraLegenda(d.legenda, 600, 24), 'PNG', barX, barY, barW, barH);
@@ -198,7 +205,7 @@ async function desenharPaginaMapa(doc: JsPDF, d: DadosRelatorioFert, logos: Logo
   doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5); doc.setTextColor(...GRAY);
   for (const t of ticks) { const tx = barX + valorParaPosicaoVisual(t, d.legenda) * barW; doc.text(fmt(t, t % 1 === 0 ? 0 : 1), tx, barY + barH + 4, { align: 'center' }); }
 
-  const cols: [string, string][] = [['UNIDADE', d.unidade], ['MÉTODO', d.metodo || '—'], ['FONTE', d.fonte]];
+  const cols: [string, string][] = [['UNIDADE', san(d.unidade)], ['MÉTODO', san(d.metodo) || '—'], ['FONTE', san(d.fonte)]];
   const cx0 = barX + barW + 8, cw = (W - M - cx0) / 3;
   cols.forEach(([lab, val], i) => {
     const cx = cx0 + cw * i + cw / 2;
