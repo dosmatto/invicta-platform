@@ -229,8 +229,9 @@ async function desenharPaginaMapa(doc: JsPDF, d: DadosRelatorioFert, logos: Logo
   doc.setFont('helvetica', 'bold'); doc.text('www.invictaap.com.br', W - M, H - 3.8, { align: 'right' });
 }
 
-// Núcleo: monta o PDF (1+ páginas) e abre em nova aba (com mensagem de erro na aba se falhar).
-async function gerarDoc(paginas: DadosRelatorioFert[], nomeArquivo: string): Promise<void> {
+// Núcleo: monta o PDF (1+ páginas), abre em nova aba (com mensagem de erro na
+// aba se falhar) e RETORNA o Blob (para o caller arquivar no Storage).
+async function gerarDoc(paginas: DadosRelatorioFert[], nomeArquivo: string): Promise<Blob> {
   const aba = typeof window !== 'undefined' ? window.open('', '_blank') : null;
   if (aba) try { aba.document.write('<!doctype html><meta charset="utf-8"><title>Relatório</title><body style="font-family:system-ui,sans-serif;padding:28px;color:#334155"><p>⏳ Gerando o relatório PDF… aguarde alguns segundos (capturando os mapas).</p></body>'); } catch {}
   try {
@@ -242,8 +243,10 @@ async function gerarDoc(paginas: DadosRelatorioFert[], nomeArquivo: string): Pro
       await desenharPaginaMapa(doc, paginas[i], logos);
     }
     const nome = nomeArquivo.replace(/[^\w.\-]+/g, '_') + '.pdf';
-    if (aba) { const url = URL.createObjectURL(doc.output('blob')); aba.location.href = url; setTimeout(() => URL.revokeObjectURL(url), 60000); }
+    const blob = doc.output('blob');
+    if (aba) { const url = URL.createObjectURL(blob); aba.location.href = url; setTimeout(() => URL.revokeObjectURL(url), 60000); }
     else doc.save(nome);
+    return blob;
   } catch (e) {
     const msg = e instanceof Error ? (e.stack ?? e.message) : String(e);
     console.error('[relatorio] falha:', e);
@@ -259,9 +262,9 @@ export async function gerarRelatorioFertilidade(d: DadosRelatorioFert): Promise<
   await gerarDoc([d], `Fertilidade_${d.talhao}_${d.atributo}`);
 }
 
-// Vários elementos num PDF único (usado pelo Gerador de Relatórios).
-export async function gerarRelatorioMultiplo(paginas: DadosRelatorioFert[], nomeArquivo: string): Promise<void> {
+// Vários elementos num PDF único (usado pelo Gerador de Relatórios). Retorna o Blob.
+export async function gerarRelatorioMultiplo(paginas: DadosRelatorioFert[], nomeArquivo: string): Promise<Blob> {
   if (paginas.length === 0) throw new Error('Selecione ao menos um mapa para o relatório.');
   for (const p of paginas) { const erro = validarPagina(p); if (erro) throw new Error(erro); }
-  await gerarDoc(paginas, nomeArquivo);
+  return await gerarDoc(paginas, nomeArquivo);
 }

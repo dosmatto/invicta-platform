@@ -6,6 +6,7 @@
 import { initializeApp, getApps, type FirebaseApp } from 'firebase/app';
 import { getFirestore, type Firestore } from 'firebase/firestore';
 import { getAuth, signInAnonymously, type Auth } from 'firebase/auth';
+import { getStorage, type FirebaseStorage } from 'firebase/storage';
 
 const cfg = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -24,6 +25,14 @@ export function getFb(): { db: Firestore; auth: Auth } | null {
   if (!firebaseConfigurado || typeof window === 'undefined') return null;
   if (!app) app = getApps()[0] ?? initializeApp(cfg);
   return { db: getFirestore(app), auth: getAuth(app) };
+}
+
+// Firebase Storage (usado p/ arquivar os PDFs dos relatórios). Sem Storage
+// habilitado no console, o upload simplesmente falha e é tratado pelo caller.
+export function getStorageFb(): FirebaseStorage | null {
+  if (!firebaseConfigurado || typeof window === 'undefined') return null;
+  if (!app) app = getApps()[0] ?? initializeApp(cfg);
+  return getStorage(app);
 }
 
 // Login anônimo (regras do Firestore exigem usuário autenticado)

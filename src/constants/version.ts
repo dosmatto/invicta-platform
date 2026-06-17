@@ -1,6 +1,11 @@
-export const APP_VERSION = '0.42.2';
+export const APP_VERSION = '0.43.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.43.0': [
+    'Relatórios: novo botão "Gerar relatório completo" — junta todos os mapas do talhão/safra num PDF único',
+    'Relatórios: cada PDF gerado agora é ARQUIVADO (Firebase Storage) — o menu mostra o histórico de tudo que foi gerado, com data, tipo, mapas e safra',
+    'Relatórios: cada geração cria um registro novo (não sobrescreve); botões Abrir (PDF original) e Excluir em cada item do histórico',
+  ],
   '0.42.2': [
     'Relatório PDF: o SATÉLITE de fundo agora aparece de verdade — a composição do mapa busca os tiles de satélite diretamente (não dependia mais da captura via WebGL, que caía em fundo branco). Ordem das camadas: satélite → raster → números das amostras → limite do talhão',
     'Logo do cliente: quando não há logo, nada é desenhado no cabeçalho (removido o placeholder "LOGO DO CLIENTE (opcional)")',
