@@ -310,33 +310,26 @@ export function MapView() {
   }, [zonasManejo, mapReady]);
 
   // ── 6c. Overlay raster de fertilidade (image source dinâmico) ─────────────
+  // Recria a fonte+camada do zero a cada mudança do overlay. O `updateImage` do
+  // MapLibre às vezes MANTÉM a imagem anterior ao trocar só o url (mesmos
+  // coordinates), o que fazia o raster ficar "preso" no nutriente anterior
+  // enquanto os números (rótulos) trocavam — daí "os números não batem com o raster".
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
     const SRC = 'fert-raster', LYR = 'fert-raster-layer';
-    const existing = map.getSource(SRC) as maplibregl.ImageSource | undefined;
-    if (fertilidadeOverlay) {
-      const { url, coordinates, opacity } = fertilidadeOverlay;
-      if (existing) { try { existing.updateImage({ url, coordinates }); } catch (e) { console.warn('[mapa-fert] updateImage falhou:', e); } }
-      else { map.addSource(SRC, { type: 'image', url, coordinates }); }
-      // Garante a CAMADA do raster sempre que houver overlay. Antes, se a fonte
-      // existisse mas a camada tivesse ficado órfã (um removeSource anterior que
-      // falhou, sem remover/recriar a camada), o raster não aparecia. Inserida
-      // logo ABAIXO da linha de borda do talhão (a borda fica por cima e cobre o
-      // serrilhado do recorte); pontos/rótulos continuam acima.
-      if (!map.getLayer(LYR)) {
-        const beforeId = map.getLayer('upload-line') ? 'upload-line'
-          : map.getLayer('pontos-circle') ? 'pontos-circle' : undefined;
-        map.addLayer({ id: LYR, type: 'raster', source: SRC,
-          paint: { 'raster-opacity': opacity, 'raster-fade-duration': 0 } }, beforeId);
-        console.log('[mapa-fert] camada raster adicionada (beforeId=', beforeId, ', urlLen=', url.length, ')');
-      } else {
-        try { map.setPaintProperty(LYR, 'raster-opacity', opacity); } catch {}
-      }
-    } else if (existing) {
-      try { if (map.getLayer(LYR)) map.removeLayer(LYR); map.removeSource(SRC); }
-      catch (e) { console.warn('[mapa-fert] remover raster falhou:', e); }
-    }
+    if (map.getLayer(LYR)) { try { map.removeLayer(LYR); } catch {} }
+    if (map.getSource(SRC)) { try { map.removeSource(SRC); } catch {} }
+    if (!fertilidadeOverlay) return;
+    const { url, coordinates, opacity } = fertilidadeOverlay;
+    // Borda do talhão fica por cima (cobre o serrilhado do recorte); pontos/rótulos acima.
+    const beforeId = map.getLayer('upload-line') ? 'upload-line'
+      : map.getLayer('pontos-circle') ? 'pontos-circle' : undefined;
+    try {
+      map.addSource(SRC, { type: 'image', url, coordinates });
+      map.addLayer({ id: LYR, type: 'raster', source: SRC,
+        paint: { 'raster-opacity': opacity, 'raster-fade-duration': 0 } }, beforeId);
+    } catch (e) { console.warn('[mapa-fert] falha ao desenhar raster:', e); }
   }, [fertilidadeOverlay, mapReady]);
 
   // ── 6d. Rótulos de valor da fertilidade (setData) ─────────────────────────

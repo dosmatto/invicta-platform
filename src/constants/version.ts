@@ -1,6 +1,14 @@
-export const APP_VERSION = '0.43.5';
+export const APP_VERSION = '0.44.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.44.0': [
+    'Painel lateral do talhão virou "Ficha do Talhão" (informação, não central de trabalho): atualizar o limite do talhão, ver o que existe na safra (amostragem, laboratório, fertilidade, compactação) e os mapas definitivos',
+    'Mapas definitivos: Zonas de manejo e Textura (Argila) visualizáveis no mapa; Altimetria e Produtividade marcados como "em breve"',
+    'Todo o trabalho/edição (amostragem, importar grade, laboratório, fertilidade, compactação, relatórios) fica na página completa do talhão',
+    'Página completa: Importação de Laboratório foi para a aba Fertilidade e Importar Grade para a aba Amostragem (antes só existiam no painel lateral)',
+    'Correção: ao trocar de nutriente, o raster do mapa agora atualiza junto com os números (antes o raster podia ficar preso no nutriente anterior — "números não batem com o raster")',
+    'Correção: a aba Relatórios não fica mais presa em "Carregando mapas salvos na nuvem…" (era um loop de recarga disparado pela geometria do mapa)',
+  ],
   '0.43.5': [
     'Correção (Relatórios "Nenhuma página gerável"): o gerador agora usa como polígono a mesma geometria que o mapa está exibindo (fallback do uploadedGeo) quando não consegue extrair do talhão salvo — destrava a geração do relatório completo',
     'Números nos pontos do mapa (e do PDF): pH e K com 1 casa decimal; os demais sem casas decimais',

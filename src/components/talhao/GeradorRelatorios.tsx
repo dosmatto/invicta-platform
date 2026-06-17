@@ -9,7 +9,7 @@
 // menu mostra o histórico de tudo que foi gerado (data · tipo · mapas · safra),
 // com Abrir e Excluir. Cada geração cria um registro novo (não sobrescreve).
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import { carregarContextoRelatorio, montarPaginas, type ContextoRelatorio } from '@/lib/relatorioDados';
 import { extrairPoligono } from '@/lib/fertilidade';
@@ -21,6 +21,11 @@ import { FileDown, Loader2, ChevronUp, ChevronDown, AlertTriangle, CheckSquare, 
 export function GeradorRelatorios({ safraNome }: { safraNome?: string } = {}) {
   const { nav, uploadedGeo } = useApp();
   const safra = safraNome ?? '';
+  // uploadedGeo num ref (fallback do polígono) — NÃO pode ser dependência do
+  // efeito de carga: como o objeto muda de identidade, virava loop de recarga
+  // e o "Carregando…" nunca terminava.
+  const uploadedGeoRef = useRef(uploadedGeo);
+  uploadedGeoRef.current = uploadedGeo;
 
   const [ctx, setCtx] = useState<ContextoRelatorio | null>(null);
   const [carregando, setCarregando] = useState(true);
@@ -43,7 +48,7 @@ export function GeradorRelatorios({ safraNome }: { safraNome?: string } = {}) {
     let cancel = false;
     if (!nav.talhaoId || !safra) { setCtx(null); setCarregando(false); return; }
     setCarregando(true); setErro('');
-    carregarContextoRelatorio(nav.talhaoId, safra, extrairPoligono(uploadedGeo))
+    carregarContextoRelatorio(nav.talhaoId, safra, extrairPoligono(uploadedGeoRef.current))
       .then(c => {
         if (cancel) return;
         setCtx(c);
@@ -53,7 +58,7 @@ export function GeradorRelatorios({ safraNome }: { safraNome?: string } = {}) {
       })
       .catch(() => { if (!cancel) { setErro('Falha ao carregar os mapas salvos.'); setCarregando(false); } });
     return () => { cancel = true; };
-  }, [nav.talhaoId, safra, uploadedGeo]);
+  }, [nav.talhaoId, safra]);
 
   useEffect(() => { recarregarHistorico(); }, [recarregarHistorico]);
 

@@ -18,6 +18,8 @@ import {
 import { FertilidadeSection } from '@/components/talhao/FertilidadeSection';
 import { AmostragemModulo } from '@/components/talhao/AmostragemModulo';
 import { CompactacaoSection } from '@/components/talhao/CompactacaoSection';
+import { LabImportSection } from '@/components/talhao/LabImportSection';
+import { ImportarGradeSection } from '@/components/talhao/ImportarGradeSection';
 import { GeradorRelatorios } from '@/components/talhao/GeradorRelatorios';
 import {
   ChevronLeft, Home, Leaf, Grid3x3, BarChart3, FileSpreadsheet,
@@ -177,8 +179,22 @@ export function TalhaoPage({ id }: { id: string }) {
 
           <div className="flex-1 overflow-y-auto">
             {tab === 'resumo' && talhao && <ResumoTab talhao={talhao} fazenda={fazenda} safraNome={safraSel} cultura={cultura} />}
-            {tab === 'fertilidade' && <FertilidadeSection safraNome={safraSel} />}
-            {tab === 'amostragem' && <AmostragemModulo safraNome={safraSel} />}
+            {tab === 'fertilidade' && (
+              <>
+                <div className="px-4 pt-3 pb-1 text-[10px] font-bold uppercase tracking-wider" style={{ color: '#a78bfa' }}>Importação de Laboratório</div>
+                <LabImportSection />
+                <div className="px-4 pt-3 pb-1 text-[10px] font-bold uppercase tracking-wider" style={{ color: '#4ade80', borderTop: '1px solid #1a3a6b' }}>Mapa de Fertilidade</div>
+                <FertilidadeSection safraNome={safraSel} />
+              </>
+            )}
+            {tab === 'amostragem' && (
+              <>
+                <div className="px-4 pt-3 pb-1 text-[10px] font-bold uppercase tracking-wider" style={{ color: '#22d3ee' }}>Importar Grade externa</div>
+                <ImportarGradeSection />
+                <div className="px-4 pt-3 pb-1 text-[10px] font-bold uppercase tracking-wider" style={{ color: '#60a5fa', borderTop: '1px solid #1a3a6b' }}>Amostragem</div>
+                <AmostragemModulo safraNome={safraSel} />
+              </>
+            )}
             {tab === 'compactacao' && <CompactacaoSection safraNome={safraSel} />}
             {tab === 'relatorios' && <GeradorRelatorios safraNome={safraSel} />}
             {!['resumo', 'fertilidade', 'amostragem', 'compactacao', 'relatorios'].includes(tab) && (
