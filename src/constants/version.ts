@@ -1,6 +1,10 @@
-export const APP_VERSION = '0.42.1';
+export const APP_VERSION = '0.42.2';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.42.2': [
+    'Relatório PDF: o SATÉLITE de fundo agora aparece de verdade — a composição do mapa busca os tiles de satélite diretamente (não dependia mais da captura via WebGL, que caía em fundo branco). Ordem das camadas: satélite → raster → números das amostras → limite do talhão',
+    'Logo do cliente: quando não há logo, nada é desenhado no cabeçalho (removido o placeholder "LOGO DO CLIENTE (opcional)")',
+  ],
   '0.42.1': [
     'Página completa do talhão abre direto no mapa do talhão (o enquadramento agora é instantâneo, sem a animação que "navegava" desde o escritório) — bem mais rápido',
   ],

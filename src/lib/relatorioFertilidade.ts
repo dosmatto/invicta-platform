@@ -139,10 +139,11 @@ async function desenharPaginaMapa(doc: JsPDF, d: DadosRelatorioFert, logos: Logo
   doc.text(`Datum: SIRGAS 2000`, ix, 21);
   doc.text(`Fuso: ${fuso}S`, ix, 24.5);
 
-  // Caixa logo do cliente
-  doc.setDrawColor(...LINE); doc.setLineWidth(0.3); doc.roundedRect(W - M - 34, 5, 34, 20, 1.5, 1.5, 'S');
-  if (logos.cli) { const h = 14, w = Math.min(30, h * (logos.cli.naturalWidth / logos.cli.naturalHeight)); doc.addImage(logos.cli, 'PNG', W - M - 34 + (34 - w) / 2, 8, w, h); }
-  else { doc.setFontSize(6.5); doc.setTextColor(...GRAY); doc.text('LOGO DO CLIENTE', W - M - 17, 13, { align: 'center' }); doc.text('(opcional)', W - M - 17, 17, { align: 'center' }); }
+  // Logo do cliente — só desenha se existir (sem placeholder quando não há).
+  if (logos.cli) {
+    const h = 16, w = Math.min(34, h * (logos.cli.naturalWidth / logos.cli.naturalHeight));
+    doc.addImage(logos.cli, 'PNG', W - M - w, 5, w, h);
+  }
 
   doc.setDrawColor(...NAVY); doc.setLineWidth(0.8); doc.line(0, 26.5, W, 26.5);
 
