@@ -239,17 +239,85 @@ async function desenharPaginaMapa(doc: JsPDF, d: DadosRelatorioFert, logos: Logo
   doc.setFont('helvetica', 'bold'); doc.text('www.invictaap.com.br', W - M, H - 3.8, { align: 'right' });
 }
 
+const EMPTY_FC: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
+
+// Página de CAPA do book: logo + título + satélite do talhão em destaque +
+// painel com produtor/fazenda/talhão/safra/cultura/área/município + sumário dos mapas.
+async function desenharCapa(doc: JsPDF, paginas: DadosRelatorioFert[], logos: Logos): Promise<void> {
+  const W = 297, H = 210, M = 6;
+  const d = paginas[0];
+  const heroW = 168, heroH = 116, heroX = M, heroY = 56;
+  // Satélite do talhão (sem raster/valores) — reusa o capturador, com raster vazio.
+  const hero = await capturarMapaFertilidade({
+    rasterPng: '', bounds: d.profundidades[0].bounds, poligono: d.poligono,
+    valores: EMPTY_FC, satelite: d.satelite, corLimite: d.corLimite,
+    larguraPx: Math.round(heroW * 8), alturaPx: Math.round(heroH * 8),
+  });
+
+  // ── Topo: logos + título ──
+  if (logos.inv) { const h = 16, w = h * (logos.inv.naturalWidth / logos.inv.naturalHeight); doc.addImage(logos.inv, 'PNG', M, 8, w, h); }
+  if (logos.cli) { const h = 16, w = Math.min(34, h * (logos.cli.naturalWidth / logos.cli.naturalHeight)); doc.addImage(logos.cli, 'PNG', W - M - w, 8, w, h); }
+  doc.setDrawColor(...NAVY); doc.setLineWidth(0.8); doc.line(M, 28, W - M, 28);
+  doc.setTextColor(...NAVY); doc.setFont('helvetica', 'bold'); doc.setFontSize(19);
+  doc.text('RELATÓRIO DE FERTILIDADE DO SOLO', W / 2, 41, { align: 'center' });
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(11); doc.setTextColor(...GRAY);
+  doc.text(`Produtor: ${san(d.produtor) || '—'}`, W / 2, 49, { align: 'center' });
+
+  // ── Satélite do talhão (destaque) ──
+  doc.addImage(hero, 'PNG', heroX, heroY, heroW, heroH);
+  doc.setDrawColor(...LINE); doc.setLineWidth(0.4); doc.rect(heroX, heroY, heroW, heroH, 'S');
+  doc.setFillColor(...NAVY); doc.roundedRect(heroX + 3, heroY + 3, Math.min(70, 8 + san(d.talhao).length * 2.4), 8, 1.5, 1.5, 'F');
+  doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
+  doc.text(san(d.talhao), heroX + 6, heroY + 8.6);
+
+  // ── Painel de informações (direita) ──
+  const ix = heroX + heroW + 8, iw = W - M - ix;
+  doc.setFillColor(247, 249, 252); doc.setDrawColor(...LINE); doc.setLineWidth(0.4);
+  doc.roundedRect(ix, heroY, iw, heroH, 2, 2, 'FD');
+  let yy = heroY + 11;
+  const linha = (lab: string, val: string) => {
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor(...GRAY);
+    doc.text(lab.toUpperCase(), ix + 5, yy);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(...NAVY);
+    doc.text(val || '—', ix + 5, yy + 5, { maxWidth: iw - 10 });
+    yy += 13;
+  };
+  linha('Fazenda', san(d.fazenda));
+  linha('Talhão', san(d.talhao));
+  linha('Safra', d.safra);
+  linha('Cultura', san(d.cultura));
+  linha('Área total', `${fmt(d.areaHa, 2)} ha`);
+  linha('Município', `${san(d.municipio)}${d.estado ? ' - ' + d.estado : ''}`);
+  linha('Datum', 'SIRGAS 2000');
+  linha('Data', d.dataInterpolacao);
+
+  // ── Sumário dos mapas ──
+  const sy = heroY + heroH + 9;
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(...NAVY);
+  doc.text(`MAPAS NESTE RELATÓRIO (${paginas.length}):`, M, sy);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(...GRAY);
+  doc.text(paginas.map(p => `${san(p.atributo)} (${san(p.simbolo)})`).join('   ·   '), M, sy + 6, { maxWidth: W - 2 * M });
+
+  // ── Rodapé ──
+  doc.setFillColor(...NAVY); doc.rect(0, H - 10, W, 10, 'F');
+  if (logos.branca) { const h = 5, w = h * (logos.branca.naturalWidth / logos.branca.naturalHeight); doc.addImage(logos.branca, 'PNG', M, H - 7.5, w, h); }
+  doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5);
+  doc.text('INVICTA AP   |   Tecnologia que transforma dados em produtividade.', M + 26, H - 3.8);
+  doc.setFont('helvetica', 'bold'); doc.text('www.invictaap.com.br', W - M, H - 3.8, { align: 'right' });
+}
+
 // Núcleo: monta o PDF (1+ páginas), abre em nova aba (com mensagem de erro na
 // aba se falhar) e RETORNA o Blob (para o caller arquivar no Storage).
-async function gerarDoc(paginas: DadosRelatorioFert[], nomeArquivo: string): Promise<Blob> {
+async function gerarDoc(paginas: DadosRelatorioFert[], nomeArquivo: string, comCapa = false): Promise<Blob> {
   const aba = typeof window !== 'undefined' ? window.open('', '_blank') : null;
   if (aba) try { aba.document.write('<!doctype html><meta charset="utf-8"><title>Relatório</title><body style="font-family:system-ui,sans-serif;padding:28px;color:#334155"><p>⏳ Gerando o relatório PDF… aguarde alguns segundos (capturando os mapas).</p></body>'); } catch {}
   try {
     const logos = await carregarLogos(paginas[0]?.logoClienteUrl);
     const { jsPDF } = await import('jspdf');
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    if (comCapa) await desenharCapa(doc, paginas, logos); // página 1 = capa
     for (let i = 0; i < paginas.length; i++) {
-      if (i > 0) doc.addPage('a4', 'landscape');
+      if (comCapa || i > 0) doc.addPage('a4', 'landscape');
       await desenharPaginaMapa(doc, paginas[i], logos);
     }
     const nome = nomeArquivo.replace(/[^\w.\-]+/g, '_') + '.pdf';
@@ -272,9 +340,9 @@ export async function gerarRelatorioFertilidade(d: DadosRelatorioFert): Promise<
   await gerarDoc([d], `Fertilidade_${d.talhao}_${d.atributo}`);
 }
 
-// Vários elementos num PDF único (usado pelo Gerador de Relatórios). Retorna o Blob.
+// Vários elementos num PDF único (book) com CAPA (usado pelo Gerador de Relatórios). Retorna o Blob.
 export async function gerarRelatorioMultiplo(paginas: DadosRelatorioFert[], nomeArquivo: string): Promise<Blob> {
   if (paginas.length === 0) throw new Error('Selecione ao menos um mapa para o relatório.');
   for (const p of paginas) { const erro = validarPagina(p); if (erro) throw new Error(erro); }
-  return await gerarDoc(paginas, nomeArquivo);
+  return await gerarDoc(paginas, nomeArquivo, true);
 }

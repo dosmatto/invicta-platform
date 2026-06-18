@@ -1,6 +1,9 @@
-export const APP_VERSION = '0.44.2';
+export const APP_VERSION = '0.45.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.45.0': [
+    'Relatório completo (book) agora abre com uma CAPA: logo, título, satélite do talhão em destaque, produtor/fazenda/talhão/safra/cultura/área/município e o sumário dos mapas inclusos',
+  ],
   '0.44.2': [
     'Correção (mapa interpolado não renderizava): mapas salvos sem grid (backend que não devolve grid) agora guardam o PNG do backend como fallback e renderizam, em vez de virar só metadados invisíveis. Mapas antigos sem grid/PNG precisam ser reprocessados',
   ],
