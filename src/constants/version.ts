@@ -1,6 +1,9 @@
-export const APP_VERSION = '0.44.1';
+export const APP_VERSION = '0.44.2';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.44.2': [
+    'Correção (mapa interpolado não renderizava): mapas salvos sem grid (backend que não devolve grid) agora guardam o PNG do backend como fallback e renderizam, em vez de virar só metadados invisíveis. Mapas antigos sem grid/PNG precisam ser reprocessados',
+  ],
   '0.44.1': [
     'Empresa única "Invicta" para todos: o filtro por empresa foi desligado (era o que fazia importações/mapas "sumirem" para quem caísse em outra empresa ativa). Todos passam a ver os mesmos dados',
   ],

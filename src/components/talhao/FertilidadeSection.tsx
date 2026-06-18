@@ -303,16 +303,21 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
     // Sessão guarda o PNG do backend como fallback (~10-30 KB). Quem economiza é o Firestore.
     setCache(c => ({ ...c, [ck(nut, prof)]: { resp, labels, interpoladoEm } }));
     if (nav.talhaoId && importacaoId) {
-      // Joga fora o PNG (colorimos local a partir do grid) e comprime o grid
-      // com gzip p/ caber no limite de 1 MB/doc do Firestore.
+      // Com grid: descarta o PNG (colorimos local a partir do grid, gzipado p/
+      // caber no limite de 1 MB/doc do Firestore). SEM grid (backend antigo que
+      // não devolve grid): MANTÉM o PNG do backend como fallback — senão o mapa
+      // não renderiza (era a causa de "interpolado mas não aparece").
       const gridGz = resp.grid ? await comprimirGrid(resp.grid) : undefined;
-      let dados: { resp: RespInterp; labels: GeoJSON.FeatureCollection; interpoladoEm: string } = { resp: { ...resp, png: '', grid: gridGz }, labels, interpoladoEm };
-      // Salvaguarda final (não deve disparar com o teto 500×500 + gzip): se ainda
-      // estourar, salva só metadados pra não falhar o write.
-      const aprox = JSON.stringify(dados).length;
-      if (aprox > 950_000) {
-        dados = { resp: { ...resp, png: '', grid: undefined }, labels, interpoladoEm };
-        console.warn(`[fertilidade] grid grande demais p/ Firestore mesmo comprimido (${Math.round(aprox/1024)} KB); salvando só metadados de ${nut} ${prof}.`);
+      let dados: { resp: RespInterp; labels: GeoJSON.FeatureCollection; interpoladoEm: string } =
+        { resp: { ...resp, png: gridGz ? '' : (resp.png ?? ''), grid: gridGz }, labels, interpoladoEm };
+      // Salvaguarda de tamanho: se estourar mesmo com gzip, tenta manter só o PNG
+      // (ainda renderiza); se nem assim couber, salva só metadados.
+      if (JSON.stringify(dados).length > 950_000) {
+        const soPng = { resp: { ...resp, grid: undefined }, labels, interpoladoEm }; // mantém resp.png
+        dados = JSON.stringify(soPng).length <= 950_000
+          ? soPng
+          : { resp: { ...resp, png: '', grid: undefined }, labels, interpoladoEm };
+        console.warn(`[fertilidade] mapa grande p/ Firestore — salvando ${dados.resp.png ? 'só PNG' : 'só metadados'} de ${nut} ${prof}.`);
       }
       cloudSalvarMapa(idNuvem(nav.talhaoId, importacaoId, metodo, pixelM, modeloFixo, nut, prof), dados);
     }
