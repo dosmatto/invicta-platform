@@ -39,9 +39,15 @@ ESTRUTURA_MIN = 0.10
 # esta "plano demais" (nao honra os pontos) -> cai para IDW. Detecta o mapa
 # uniforme DIRETO pela saida, independente dos parametros do variograma.
 AMPLITUDE_MIN = 0.30
+# Teto do efeito pepita na krigagem (fracao do patamar). Pepita alta = krigagem
+# alisa demais e ignora os extremos (pontos baixos viram a media da vizinhanca).
+# Capando a pepita, a krigagem passa mais perto dos pontos (honra as amostras) —
+# mantendo o alcance/modelo que o auto-ajuste encontrou. Decisao do usuario:
+# mapa de fertilidade deve bater com os pontos.
+NUGGET_MAX = 0.20
 # Versao do motor de interpolacao (conferir em GET /health para saber se o
 # backend foi reiniciado com o codigo novo).
-VERSION = "interp-5-krige-pinv"
+VERSION = "interp-6-nugget-cap"
 
 
 def _nlags(n: int) -> int:
@@ -135,26 +141,25 @@ def _krige(xm, ym, z, gxm, gym, modelo_fixo=None):
     return np.ma.filled(np.asarray(zhat, dtype=float), np.nan), melhor, params, rmse
 
 
+def _krige_fixo(xm, ym, z, gxm, gym, modelo, psill, rng, nugget):
+    """Krigagem ordinaria com variograma FIXO (psill, alcance, pepita)."""
+    ok = OrdinaryKriging(
+        xm, ym, z, variogram_model=modelo,
+        variogram_parameters=[float(psill), float(rng), float(nugget)], pseudo_inv=True,
+        enable_plotting=False, verbose=False,
+    )
+    zhat, _ = ok.execute("grid", gxm, gym)
+    return np.ma.filled(np.asarray(zhat, dtype=float), np.nan), [float(psill), float(rng), float(nugget)]
+
+
 def _krige_constrangido(xm, ym, z, gxm, gym, modelo, spacing):
     """Krigagem com variograma SENSATO fixo, para quando o auto-ajuste degenera
     (pepita ~= patamar / alcance < espacamento -> krige preve a media -> mapa
     uniforme). Em vez de cair para IDW (que o usuario nao quer em fertilidade),
     forca um variograma que honra os pontos e varia: patamar = variancia dos
-    dados, alcance = ~3x o espacamento das amostras (continuidade espacial
-    plausivel do solo), pepita pequena (10% -> krige quase exato nos pontos).
-    Continua sendo krigagem ordinaria, so com variograma plausivel em vez do
-    degenerado."""
+    dados, alcance = ~3x o espacamento das amostras, pepita pequena (10%)."""
     var = float(np.var(z)) or 1.0
-    psill = var
-    rng = max(3.0 * spacing, 1.0)
-    nugget = 0.10 * var
-    ok = OrdinaryKriging(
-        xm, ym, z, variogram_model=modelo,
-        variogram_parameters=[psill, rng, nugget], pseudo_inv=True,
-        enable_plotting=False, verbose=False,
-    )
-    zhat, _ = ok.execute("grid", gxm, gym)
-    return np.ma.filled(np.asarray(zhat, dtype=float), np.nan), [psill, rng, nugget]
+    return _krige_fixo(xm, ym, z, gxm, gym, modelo, var, max(3.0 * spacing, 1.0), 0.10 * var)
 
 
 def _amplitude_no_poligono(grid: np.ndarray, gx, gy, poly) -> float:
@@ -288,6 +293,20 @@ def interpolar(points: list[dict], polygon_geojson: dict, dominio, stops,
                     modelo = "idw"
                     rmse = None
                     variograma = None
+            elif (not modelo_fixo) and (pepita > NUGGET_MAX * patamar):
+                # Tem estrutura, mas a pepita alta faz a krigagem ALISAR demais
+                # (os extremos viram a media da vizinhanca -> o mapa nao bate com
+                # os pontos). Capa a pepita mantendo alcance/modelo -> a krigagem
+                # passa mais perto dos pontos (honra as amostras). Continua krigagem.
+                nugget_cap = NUGGET_MAX * patamar
+                grid, params2 = _krige_fixo(xm, ym, z, gxm, gym, modelo, patamar - nugget_cap, alcance, nugget_cap)
+                params, rmse = params2, None
+                variograma = {
+                    "alcance_m": round(params2[1], 1),
+                    "patamar": round(params2[0] + params2[2], 4),
+                    "pepita": round(params2[2], 4),
+                    "ajustado": True,
+                }
         except Exception as e:
             raise ValueError(
                 f"Krigagem nao convergiu com {len(z)} pontos (colineares/insuficientes?). [{e}]"
