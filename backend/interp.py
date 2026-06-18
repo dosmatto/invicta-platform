@@ -44,10 +44,10 @@ AMPLITUDE_MIN = 0.30
 # Capando a pepita, a krigagem passa mais perto dos pontos (honra as amostras) —
 # mantendo o alcance/modelo que o auto-ajuste encontrou. Decisao do usuario:
 # mapa de fertilidade deve bater com os pontos.
-NUGGET_MAX = 0.20
+NUGGET_MAX = 0.10
 # Versao do motor de interpolacao (conferir em GET /health para saber se o
 # backend foi reiniciado com o codigo novo).
-VERSION = "interp-6-nugget-cap"
+VERSION = "interp-7-nugget-10"
 
 
 def _nlags(n: int) -> int:
