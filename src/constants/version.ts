@@ -1,6 +1,9 @@
-export const APP_VERSION = '0.44.0';
+export const APP_VERSION = '0.44.1';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.44.1': [
+    'Empresa única "Invicta" para todos: o filtro por empresa foi desligado (era o que fazia importações/mapas "sumirem" para quem caísse em outra empresa ativa). Todos passam a ver os mesmos dados',
+  ],
   '0.44.0': [
     'Painel lateral do talhão virou "Ficha do Talhão" (informação, não central de trabalho): atualizar o limite do talhão, ver o que existe na safra (amostragem, laboratório, fertilidade, compactação) e os mapas definitivos',
     'Mapas definitivos: Zonas de manejo e Textura (Argila) visualizáveis no mapa; Altimetria e Produtividade marcados como "em breve"',

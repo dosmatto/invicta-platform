@@ -214,16 +214,12 @@ function uid() {
 type ComEmpresa<T> = T & { empresaId?: string };
 
 function loadFiltrado<T>(key: string): T[] {
-  const todos = load<ComEmpresa<T>>(key);
-  const ativa = empresaAtivaId();
-  if (!ativa) return todos;
-  // auto-marca quem ainda não tem empresa
-  let mudou = false;
-  for (const x of todos) {
-    if (!x.empresaId) { x.empresaId = ativa; mudou = true; }
-  }
-  if (mudou) save(key, todos);
-  return todos.filter(x => x.empresaId === ativa);
+  // SINGLE-TENANT (decisão do usuário): uma única empresa "Invicta" para todos.
+  // O filtro por empresa foi DESLIGADO — ele escondia dados/importações de quem
+  // caísse numa empresa ativa diferente (causava "mapas/importações somem ao
+  // atualizar"). Todos veem os mesmos dados. `comEmpresa` ainda carimba o
+  // empresaId ao gravar (inócuo), caso se reative a segregação no futuro.
+  return load<ComEmpresa<T>>(key);
 }
 
 function comEmpresa<T extends object>(item: T): T {
