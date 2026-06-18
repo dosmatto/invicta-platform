@@ -1,6 +1,9 @@
-export const APP_VERSION = '0.45.0';
+export const APP_VERSION = '0.45.1';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.45.1': [
+    'Histórico de relatórios sem custo (sem precisar do plano pago do Firebase Storage): cada relatório gerado fica registrado, e o "Abrir" regenera o PDF na hora a partir dos mapas salvos. Mostra data, tipo, mapas e safra; cada geração cria um registro novo',
+  ],
   '0.45.0': [
     'Relatório completo (book) agora abre com uma CAPA: logo, título, satélite do talhão em destaque, produtor/fazenda/talhão/safra/cultura/área/município e o sumário dos mapas inclusos',
   ],

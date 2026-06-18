@@ -5,9 +5,9 @@
 // reordenar os elementos + ligar/desligar satélite e valores, e gera um PDF
 // ÚNICO (uma página por elemento) reaproveitando o layout oficial V1.
 //
-// Cada PDF gerado é ARQUIVADO (Firebase Storage + metadados no Firestore): o
-// menu mostra o histórico de tudo que foi gerado (data · tipo · mapas · safra),
-// com Abrir e Excluir. Cada geração cria um registro novo (não sobrescreve).
+// Cada geração registra a CONFIGURAÇÃO no Firestore (sem Storage/custo): o menu
+// mostra o histórico (data · tipo · mapas · safra), com Abrir (REGENERA o PDF a
+// partir dos mapas salvos) e Excluir. Cada geração cria um registro novo.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useApp } from '@/context/AppContext';
@@ -77,20 +77,36 @@ export function GeradorRelatorios({ safraNome }: { safraNome?: string } = {}) {
       if (paginas.length === 0) { setErro('Nenhuma página gerável (mapas sem dados completos).'); return; }
       const elPorNut = Object.fromEntries(ctx.elementos.map(e => [e.nut, e]));
       const simbolos = nuts.map(n => elPorNut[n]?.simbolo ?? n);
-      const blob = await gerarRelatorioMultiplo(paginas, `Relatorio_Fertilidade_${ctx.talhao}_${safra}`);
+      await gerarRelatorioMultiplo(paginas, `Relatorio_Fertilidade_${ctx.talhao}_${safra}`);
       try {
-        await salvarRelatorio(blob, {
+        await salvarRelatorio({
           talhaoId: nav.talhaoId!, safra, tipo: 'Fertilidade',
           titulo: completo ? 'Relatório completo' : `Relatório (${paginas.length} ${paginas.length === 1 ? 'mapa' : 'mapas'})`,
-          elementos: simbolos, paginas: paginas.length, geradoPor: emailUsuario() ?? '—',
+          nuts, elementos: simbolos, satelite, valores, paginas: paginas.length, geradoPor: emailUsuario() ?? '—',
         });
         await recarregarHistorico();
       } catch (e) {
-        setAviso('PDF gerado e aberto, mas NÃO foi arquivado no histórico — verifique se o Firebase Storage está habilitado. ' + (e instanceof Error ? e.message : ''));
+        setAviso('PDF gerado e aberto, mas não foi registrado no histórico. ' + (e instanceof Error ? e.message : ''));
       }
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Falha ao gerar o relatório.');
     } finally { setGerando(false); }
+  }
+
+  // Reabre um relatório do histórico REGENERANDO o PDF a partir da configuração
+  // salva (sem Storage). Usa o contexto atual se for o mesmo talhão/safra; senão recarrega.
+  async function abrirRelatorio(reg: RegistroRelatorio) {
+    setErro('');
+    try {
+      const c = (reg.talhaoId === nav.talhaoId && reg.safra === safra && ctx)
+        ? ctx
+        : await carregarContextoRelatorio(reg.talhaoId, reg.safra, extrairPoligono(uploadedGeoRef.current));
+      const paginas = montarPaginas(c, reg.nuts, { satelite: reg.satelite, valores: reg.valores });
+      if (paginas.length === 0) { setErro('Não há mais mapas salvos para regenerar este relatório.'); return; }
+      await gerarRelatorioMultiplo(paginas, `Relatorio_Fertilidade_${c.talhao}_${reg.safra}`);
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Falha ao reabrir o relatório.');
+    }
   }
 
   if (!safra) return <div className="px-4 py-4"><Aviso texto="Defina uma safra (no topo) para montar o relatório." /></div>;
@@ -167,7 +183,7 @@ export function GeradorRelatorios({ safraNome }: { safraNome?: string } = {}) {
           <p className="text-[10px]" style={{ color: '#475569' }}>Nenhum relatório arquivado ainda para este talhão.</p>
         ) : (
           <div className="space-y-1">
-            {historico.map(r => <LinhaHistorico key={r.id} reg={r} onExcluir={async () => { await excluirRelatorio(r); await recarregarHistorico(); }} />)}
+            {historico.map(r => <LinhaHistorico key={r.id} reg={r} onAbrir={() => abrirRelatorio(r)} onExcluir={async () => { await excluirRelatorio(r); await recarregarHistorico(); }} />)}
           </div>
         )}
       </div>
@@ -175,10 +191,10 @@ export function GeradorRelatorios({ safraNome }: { safraNome?: string } = {}) {
   );
 }
 
-function LinhaHistorico({ reg, onExcluir }: { reg: RegistroRelatorio; onExcluir: () => void }) {
+function LinhaHistorico({ reg, onAbrir, onExcluir }: { reg: RegistroRelatorio; onAbrir: () => Promise<void>; onExcluir: () => void }) {
   const [apagando, setApagando] = useState(false);
+  const [abrindo, setAbrindo] = useState(false);
   const data = new Date(reg.geradoEm).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-  const mb = reg.tamanhoBytes ? (reg.tamanhoBytes / 1048576).toFixed(1) + ' MB' : '';
   return (
     <div className="flex items-center gap-2 p-2 rounded-lg" style={{ background: '#061525', border: '1px solid #0f2240' }}>
       <div className="flex-1 min-w-0">
@@ -187,15 +203,16 @@ function LinhaHistorico({ reg, onExcluir }: { reg: RegistroRelatorio; onExcluir:
           <span className="text-xs font-semibold truncate" style={{ color: '#e2e8f0' }}>{reg.titulo}</span>
         </div>
         <div className="text-[10px] mt-0.5 truncate" style={{ color: '#64748b' }}>
-          {data} · Safra {reg.safra} · {reg.paginas} {reg.paginas === 1 ? 'pág' : 'págs'}{mb ? ' · ' + mb : ''}
+          {data} · Safra {reg.safra} · {reg.paginas} {reg.paginas === 1 ? 'pág' : 'págs'}
         </div>
         {reg.elementos?.length > 0 && (
           <div className="text-[9px] mt-0.5 truncate" style={{ color: '#475569' }}>{reg.elementos.join(' · ')}</div>
         )}
       </div>
-      <a href={reg.downloadURL} target="_blank" rel="noopener noreferrer" title="Abrir PDF" className="p-1 rounded" style={{ color: '#93c5fd' }}>
-        <ExternalLink size={15} />
-      </a>
+      <button onClick={async () => { setAbrindo(true); try { await onAbrir(); } finally { setAbrindo(false); } }} disabled={abrindo}
+        title="Abrir (regenera o PDF)" className="p-1 rounded disabled:opacity-50" style={{ color: '#93c5fd' }}>
+        {abrindo ? <Loader2 size={15} className="animate-spin" /> : <ExternalLink size={15} />}
+      </button>
       <button onClick={async () => { if (apagando) { await onExcluir(); } else { setApagando(true); setTimeout(() => setApagando(false), 2500); } }}
         title={apagando ? 'Clique de novo para confirmar' : 'Excluir'} className="p-1 rounded" style={{ color: apagando ? '#f87171' : '#64748b' }}>
         <Trash2 size={15} />

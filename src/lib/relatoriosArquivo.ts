@@ -1,12 +1,11 @@
 'use client';
 
-// Arquivo de relatórios gerados. O PDF (arquivo fiel) vai para o Firebase
-// Storage; os metadados (data, tipo, elementos, safra…) ficam numa coleção
-// Firestore própria (inv_relatorios) para listar/excluir por talhão. Cada
-// geração cria um registro NOVO (não sobrescreve).
+// Histórico de relatórios gerados. Versão SEM custo (sem Firebase Storage/Blaze):
+// guarda apenas a CONFIGURAÇÃO do relatório no Firestore (coleção inv_relatorios);
+// o PDF é REGENERADO sob demanda ao "Abrir" (a partir dos mapas salvos na nuvem).
+// Cada geração cria um registro novo (não sobrescreve).
 
-import { getFb, getStorageFb } from './firebase';
-import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import { getFb } from './firebase';
 import { collection, deleteDoc, doc, getDocs, query, setDoc, where } from 'firebase/firestore';
 
 export interface RegistroRelatorio {
@@ -15,31 +14,24 @@ export interface RegistroRelatorio {
   safra: string;
   tipo: string;          // 'Fertilidade'
   titulo: string;        // ex.: "Relatório completo" / "Relatório (3 mapas)"
-  elementos: string[];   // símbolos incluídos, na ordem
+  nuts: string[];        // elementos (ids) p/ regenerar o PDF, na ordem
+  elementos: string[];   // símbolos (exibição)
+  satelite: boolean;
+  valores: boolean;
   paginas: number;
   geradoEm: number;      // Date.now()
   geradoPor: string;     // e-mail do usuário
-  tamanhoBytes: number;
-  storagePath: string;   // relatorios/{talhaoId}/{id}.pdf
-  downloadURL: string;
 }
 
 const COL = 'inv_relatorios';
+type MetaEntrada = Omit<RegistroRelatorio, 'id' | 'geradoEm'>;
 
-type MetaEntrada = Omit<RegistroRelatorio, 'id' | 'storagePath' | 'downloadURL' | 'tamanhoBytes' | 'geradoEm'>;
-
-// Sobe o PDF p/ o Storage e grava os metadados. Lança erro se a nuvem/Storage
-// estiver indisponível (o caller mostra a mensagem; o PDF já abriu na aba).
-export async function salvarRelatorio(blob: Blob, meta: MetaEntrada): Promise<RegistroRelatorio> {
+// Grava o registro (configuração) do relatório no Firestore.
+export async function salvarRelatorio(meta: MetaEntrada): Promise<RegistroRelatorio> {
   const fb = getFb();
-  const st = getStorageFb();
-  if (!fb || !st) throw new Error('Nuvem indisponível para arquivar o relatório.');
+  if (!fb) throw new Error('Nuvem indisponível para registrar o relatório.');
   const id = `rel_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-  const storagePath = `relatorios/${meta.talhaoId}/${id}.pdf`;
-  const r = ref(st, storagePath);
-  await uploadBytes(r, blob, { contentType: 'application/pdf' });
-  const downloadURL = await getDownloadURL(r);
-  const reg: RegistroRelatorio = { ...meta, id, storagePath, downloadURL, tamanhoBytes: blob.size, geradoEm: Date.now() };
+  const reg: RegistroRelatorio = { ...meta, id, geradoEm: Date.now() };
   await setDoc(doc(fb.db, COL, id), reg);
   return reg;
 }
@@ -61,8 +53,6 @@ export async function listarRelatorios(talhaoId: string): Promise<RegistroRelato
 
 export async function excluirRelatorio(reg: RegistroRelatorio): Promise<void> {
   const fb = getFb();
-  const st = getStorageFb();
   if (!fb) return;
-  try { if (st && reg.storagePath) await deleteObject(ref(st, reg.storagePath)); } catch (e) { console.warn('[relatorios] falha ao apagar arquivo:', e); }
   await deleteDoc(doc(fb.db, COL, reg.id));
 }
