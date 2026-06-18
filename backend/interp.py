@@ -41,7 +41,7 @@ ESTRUTURA_MIN = 0.10
 AMPLITUDE_MIN = 0.30
 # Versao do motor de interpolacao (conferir em GET /health para saber se o
 # backend foi reiniciado com o codigo novo).
-VERSION = "interp-3-amplitude-guard"
+VERSION = "interp-5-krige-pinv"
 
 
 def _nlags(n: int) -> int:
@@ -102,7 +102,7 @@ def _loo_rmse(xm, ym, z, model) -> float:
         try:
             ok = OrdinaryKriging(
                 xm[m], ym[m], z[m], variogram_model=model,
-                nlags=_nlags(int(m.sum())), weight=True,
+                nlags=_nlags(int(m.sum())), weight=True, pseudo_inv=True,
                 enable_plotting=False, verbose=False,
             )
             zp, _ = ok.execute("points", np.array([xm[i]]), np.array([ym[i]]))
@@ -125,7 +125,7 @@ def _krige(xm, ym, z, gxm, gym, modelo_fixo=None):
             raise RuntimeError("nenhum modelo de variograma convergiu")
     ok = OrdinaryKriging(
         xm, ym, z, variogram_model=melhor,
-        nlags=_nlags(len(z)), weight=True,
+        nlags=_nlags(len(z)), weight=True, pseudo_inv=True,
         enable_plotting=False, verbose=False,
     )
     zhat, _ = ok.execute("grid", gxm, gym)  # (ny, nx) masked array
@@ -133,6 +133,35 @@ def _krige(xm, ym, z, gxm, gym, modelo_fixo=None):
     params = [float(p) for p in ok.variogram_model_parameters]
     rmse = float(melhor_rmse) if math.isfinite(melhor_rmse) else None
     return np.ma.filled(np.asarray(zhat, dtype=float), np.nan), melhor, params, rmse
+
+
+def _krige_constrangido(xm, ym, z, gxm, gym, modelo, spacing):
+    """Krigagem com variograma SENSATO fixo, para quando o auto-ajuste degenera
+    (pepita ~= patamar / alcance < espacamento -> krige preve a media -> mapa
+    uniforme). Em vez de cair para IDW (que o usuario nao quer em fertilidade),
+    forca um variograma que honra os pontos e varia: patamar = variancia dos
+    dados, alcance = ~3x o espacamento das amostras (continuidade espacial
+    plausivel do solo), pepita pequena (10% -> krige quase exato nos pontos).
+    Continua sendo krigagem ordinaria, so com variograma plausivel em vez do
+    degenerado."""
+    var = float(np.var(z)) or 1.0
+    psill = var
+    rng = max(3.0 * spacing, 1.0)
+    nugget = 0.10 * var
+    ok = OrdinaryKriging(
+        xm, ym, z, variogram_model=modelo,
+        variogram_parameters=[psill, rng, nugget], pseudo_inv=True,
+        enable_plotting=False, verbose=False,
+    )
+    zhat, _ = ok.execute("grid", gxm, gym)
+    return np.ma.filled(np.asarray(zhat, dtype=float), np.nan), [psill, rng, nugget]
+
+
+def _amplitude_no_poligono(grid: np.ndarray, gx, gy, poly) -> float:
+    """Amplitude (max-min) do raster considerando apenas o interior do talhao."""
+    gc = _clip(grid, gx, gy, poly)
+    fin = gc[np.isfinite(gc)]
+    return float(fin.max() - fin.min()) if fin.size else 0.0
 
 
 def _idw(xm, ym, z, gxm, gym, power=2.0, k=12):
@@ -236,17 +265,29 @@ def interpolar(points: list[dict], polygon_geojson: dict, dominio, stops,
             # via modelo="idw". So no modo automatico (respeita modelo forcado).
             espacamento = _espacamento_mediano(xm, ym)
             estrutura = (psill / patamar) if patamar > 0 else 0.0
-            # Amplitude do raster krigado DENTRO do talhao vs amplitude dos dados.
-            _gc = _clip(grid, gx, gy, poly)
-            _fin = _gc[np.isfinite(_gc)]
-            amp_krige = float(_fin.max() - _fin.min()) if _fin.size else 0.0
             amp_dados = float(np.max(z) - np.min(z)) or 1.0
-            plano = amp_krige < AMPLITUDE_MIN * amp_dados
-            if (not modelo_fixo) and (estrutura < ESTRUTURA_MIN or alcance < espacamento or plano):
-                grid = _idw(xm, ym, z, gxm, gym)
-                modelo = "idw"
-                rmse = None
-                variograma = None
+            amp_krige = _amplitude_no_poligono(grid, gx, gy, poly)
+            degenerada = (estrutura < ESTRUTURA_MIN) or (alcance < espacamento) or (amp_krige < AMPLITUDE_MIN * amp_dados)
+            if degenerada and not modelo_fixo:
+                # Auto-ajuste degenerou (krige -> media -> mapa uniforme). Refaz a
+                # KRIGAGEM com um variograma plausivel (honra os pontos e varia),
+                # em vez de cair para IDW (que o usuario nao quer em fertilidade).
+                grid2, params2 = _krige_constrangido(xm, ym, z, gxm, gym, modelo, espacamento)
+                amp2 = _amplitude_no_poligono(grid2, gx, gy, poly)
+                if amp2 >= AMPLITUDE_MIN * amp_dados:
+                    grid, params, rmse = grid2, params2, None
+                    variograma = {
+                        "alcance_m": round(params2[1], 1),
+                        "patamar": round(params2[0] + params2[2], 4),
+                        "pepita": round(params2[2], 4),
+                        "ajustado": True,  # variograma plausivel (auto-ajuste tinha degenerado)
+                    }
+                else:
+                    # Nem o variograma plausivel variou (dados praticamente constantes) -> IDW.
+                    grid = _idw(xm, ym, z, gxm, gym)
+                    modelo = "idw"
+                    rmse = None
+                    variograma = None
         except Exception as e:
             raise ValueError(
                 f"Krigagem nao convergiu com {len(z)} pontos (colineares/insuficientes?). [{e}]"
