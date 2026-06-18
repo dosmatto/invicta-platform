@@ -1,5 +1,20 @@
 $ErrorActionPreference = "Stop"
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
+
+# Mata qualquer backend ANTIGO preso na porta 8800. No Windows, fechar a janela
+# nem sempre encerra o uvicorn -> ele continua segurando a 8800 com o codigo
+# antigo, e o novo start nao assume (parecia que "nada mudava"). Aqui garantimos
+# que a porta esta livre antes de subir o codigo atual.
+try {
+  Get-NetTCPConnection -LocalPort 8800 -State Listen -ErrorAction SilentlyContinue |
+    Select-Object -ExpandProperty OwningProcess -Unique |
+    ForEach-Object {
+      Write-Host "Encerrando backend antigo (PID $_) na porta 8800..." -ForegroundColor DarkYellow
+      Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue
+    }
+  Start-Sleep -Milliseconds 500
+} catch {}
+
 # venv fora do OneDrive para nao sincronizar milhares de arquivos
 $venv = Join-Path $env:LOCALAPPDATA "invicta-fert-backend\venv"
 $py = Join-Path $venv "Scripts\python.exe"
