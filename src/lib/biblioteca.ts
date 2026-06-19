@@ -81,8 +81,8 @@ export const CATEGORIAS: DefCategoria[] = [
     descricao: 'Expressões e operadores para combinar camadas.' },
   { slug: 'pragas', nome: 'Pragas', icone: Bug, status: 'em-breve',
     descricao: 'Catálogos de pragas, níveis de dano, recomendações.' },
-  { slug: 'equacoes', nome: 'Equações', icone: Hash, status: 'em-breve',
-    descricao: 'Fórmulas, cálculos e conversões reutilizáveis.' },
+  { slug: 'equacoes', nome: 'Equações', icone: Hash, status: 'disponivel',
+    descricao: 'Fórmulas de recomendação (álgebra de mapas): a dose é calculada a partir dos atributos de fertilidade. Linguagem simples, estilo Excel pt-BR.' },
   { slug: 'recomendacoes', nome: 'Recomendações', icone: Wand2, status: 'em-breve',
     descricao: 'Regras de recomendação por cultura/objetivo.' },
   { slug: 'produtividade', nome: 'Produtividade', icone: BarChart3, status: 'em-breve',
@@ -280,6 +280,31 @@ export interface ConteudoEtiqueta {
   layoutId: string;
   dx: number;
   dy: number;
+}
+
+// Fase R1 — Equações de Recomendação (categoria 'equacoes'). Uma equação calcula
+// uma DOSE a partir dos atributos de fertilidade (álgebra de mapas). O script é
+// avaliado pelo motor (lib/recomendacao/motor.ts) — pixel a pixel na Fase R3.
+export interface ConstanteEquacao { nome: string; valor: number; }
+export interface ClasseEstiloRec { cor: string; limiteSuperior: number; }
+export interface EstiloRecomendacao {
+  valorMinimo: number;
+  classes: ClasseEstiloRec[];   // ordenadas por limiteSuperior crescente
+  dividirAuto: boolean;
+  zeroTransparente: boolean;
+}
+export interface ConteudoEquacao {
+  produto: string;
+  custoTonelada: number | null;
+  unidadeEquacao: string;            // unidade dos atributos de entrada (ex.: mmolc/dm3)
+  unidadeTratamento: string;         // unidade da dose de saída (ex.: kg/ha, t/ha)
+  tratamento: 'taxa-variada' | 'taxa-fixa';
+  culturas: string[];
+  fases: string[];
+  naoNegativo: boolean;              // dose < 0 vira 0
+  constantes: ConstanteEquacao[];
+  script: string;                    // o código da equação
+  estilo: EstiloRecomendacao;        // escala fixa de cores por classe de dose
 }
 
 export function migrarLaboratoriosV1() {

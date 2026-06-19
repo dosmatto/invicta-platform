@@ -1,6 +1,12 @@
-export const APP_VERSION = '0.45.3';
+export const APP_VERSION = '0.46.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.46.0': [
+    'Biblioteca → Equações (Recomendações, Fase R1): cadastro de equações de recomendação com 3 abas — Detalhes (produto, custo/tonelada, unidades, tratamento, culturas, fases), Equação (constantes + fórmula) e Estilo (escala fixa de cores por classe de dose)',
+    'Linguagem de equação nova, simples e funcional (estilo Excel pt-BR): atributos pelo nome (V, CTC, Ca, K…), decimal com vírgula, argumentos com ponto-e-vírgula, funções se/max/min/arredonda/raiz/abs e "não permitir dose negativa" por opção (sem código de clamp)',
+    'Validação e teste ao vivo: a fórmula é conferida enquanto se digita e dá para testar o resultado com valores de amostra; equações sincronizam na nuvem e respeitam os escopos Meus/Empresa/Sistema',
+    'Aplicar a equação a um talhão e gerar o mapa de dose vem na próxima fase (R3 — Cenários)',
+  ],
   '0.45.3': [
     'Correção (Relatórios "mapas sem dados"): quando havia mais de uma versão do mesmo mapa salva (uma antiga vazia + uma nova com dados), o gerador podia pegar a vazia. Agora ele prefere a versão COM dados e a mais recente — igual à aba Fertilidade. Destrava a geração do relatório',
   ],
