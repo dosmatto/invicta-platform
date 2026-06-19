@@ -1,24 +1,25 @@
 'use client';
 
-// Biblioteca → Equações (Fase R1). Lista de equações de recomendação com CRUD
-// e um editor de 3 abas (Detalhes / Equação / Estilo), espelhando o modelo de
-// referência. A equação é escrita na linguagem simples da plataforma e validada/
-// testada ao vivo pelo motor (lib/recomendacao/motor.ts). Aplicar a um talhão e
-// gerar o mapa de dose é a Fase R3.
+// Biblioteca → Equações (Fase R1). Lista ÚNICA e prática (sem abas de escopo) +
+// busca; equações novas/clonadas nascem COMPARTILHADAS (escopo 'empresa') para
+// que todos os usuários enxerguem. Editor numa página só (Detalhes → Equação →
+// Estilo, sem trocar de aba) com "Salvar" e "Salvar como" (clona p/ pequenas
+// alterações sem mexer na original). A equação é validada/testada ao vivo pelo
+// motor (lib/recomendacao/motor.ts). Aplicar a um talhão e gerar o mapa de dose
+// é a Fase R3.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  CATEGORIAS, listar, criar, atualizar, excluir, ativar, duplicar,
-  type EscopoBiblioteca, type CategoriaBiblioteca, type ItemBiblioteca,
-  type ConteudoEquacao, type ConstanteEquacao, type EstiloRecomendacao,
+  CATEGORIAS, listar, criar, atualizar, excluir, ativar,
+  type ItemBiblioteca, type ConteudoEquacao, type ConstanteEquacao, type EstiloRecomendacao,
 } from '@/lib/biblioteca';
+import type { CategoriaBiblioteca } from '@/lib/biblioteca';
 import { ATRIBUTOS_EQUACAO, validar, testarEscalar, atributoPorToken } from '@/lib/recomendacao/motor';
-import { Plus, Edit3, Trash2, Power, Copy, X, Save, Play, ChevronRight } from 'lucide-react';
+import { Plus, Edit3, Trash2, Power, Copy, X, Save, Play, ChevronRight, Search, SaveAll } from 'lucide-react';
 
 const SLUG: CategoriaBiblioteca = 'equacoes';
 const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
 
-const abaLabel = (e: EscopoBiblioteca) => (e === 'meu' ? 'Meus padrões' : e === 'empresa' ? 'Empresa' : 'Sistema');
 const listaDe = (s: string) => s.split(',').map(x => x.trim()).filter(Boolean);
 const parseNum = (s: string) => parseFloat(s.replace(',', '.'));
 
@@ -40,8 +41,8 @@ function estiloPadrao(): EstiloRecomendacao {
 export function EquacoesPanel() {
   const def = CATEGORIAS.find(c => c.slug === SLUG)!;
   const Icon = def.icone;
-  const [aba, setAba] = useState<EscopoBiblioteca>('meu');
   const [refresh, setRefresh] = useState(0);
+  const [filtro, setFiltro] = useState('');
   const [edit, setEdit] = useState<ItemBiblioteca<ConteudoEquacao> | 'novo' | null>(null);
 
   useEffect(() => {
@@ -53,14 +54,24 @@ export function EquacoesPanel() {
     return () => { if (typeof window !== 'undefined') window.removeEventListener('inv:biblioteca', onCh); };
   }, []);
 
+  // Lista ÚNICA: tudo que o usuário enxerga (suas + da empresa + do sistema).
   const itens = useMemo(
-    () => listar<ConteudoEquacao>(SLUG, aba),
-    [aba, refresh], // eslint-disable-line react-hooks/exhaustive-deps
+    () => listar<ConteudoEquacao>(SLUG),
+    [refresh], // eslint-disable-line react-hooks/exhaustive-deps
   );
+  const filtrados = useMemo(() => {
+    const f = filtro.trim().toLowerCase();
+    if (!f) return itens;
+    return itens.filter(i => `${i.nome} ${i.conteudo.produto ?? ''} ${(i.conteudo.culturas ?? []).join(' ')}`.toLowerCase().includes(f));
+  }, [itens, filtro]);
 
   function excluirItem(it: ItemBiblioteca<ConteudoEquacao>) {
     if (!confirm(`Excluir a equação "${it.nome}"?`)) return;
     excluir(SLUG, it.id);
+  }
+  // Clona como COMPARTILHADA (não como 'meu') para o outro usuário também ver.
+  function clonar(it: ItemBiblioteca<ConteudoEquacao>) {
+    criar<ConteudoEquacao>(SLUG, { nome: `${it.nome} (cópia)`, descricao: it.descricao, conteudo: it.conteudo, escopo: 'empresa' });
   }
 
   return (
@@ -73,37 +84,30 @@ export function EquacoesPanel() {
         <p className="text-[10px]" style={{ color: '#64748b' }}>{def.descricao}</p>
       </div>
 
-      <div className="flex gap-1 px-3 pt-2 flex-shrink-0">
-        {(['meu', 'empresa', 'sistema'] as EscopoBiblioteca[]).map(t => (
-          <button key={t} onClick={() => setAba(t)}
-            className="flex-1 py-1 rounded text-[10px] font-bold"
-            style={{ background: aba === t ? 'var(--invicta-blue-mid)' : '#1a3a6b', color: aba === t ? '#fff' : '#64748b' }}>
-            {abaLabel(t)}
-          </button>
-        ))}
+      <div className="px-3 pt-2 flex-shrink-0 flex gap-1.5">
+        <div className="relative flex-1">
+          <Search size={11} className="absolute left-2 top-1/2 -translate-y-1/2" style={{ color: '#64748b' }} />
+          <input value={filtro} onChange={e => setFiltro(e.target.value)} placeholder="Buscar equação..."
+            className="w-full rounded pl-7 pr-2 py-1.5 text-[11px] outline-none" style={inputStyle} />
+        </div>
+        <button onClick={() => setEdit('novo')}
+          className="px-2.5 py-1.5 rounded text-[10px] font-bold text-white flex items-center gap-1 flex-shrink-0"
+          style={{ background: 'var(--invicta-green-dark)' }}>
+          <Plus size={11} /> Nova
+        </button>
       </div>
 
-      {aba !== 'sistema' && (
-        <div className="px-3 pt-2 flex-shrink-0">
-          <button onClick={() => setEdit('novo')}
-            className="w-full py-1.5 rounded text-[10px] font-bold text-white flex items-center justify-center gap-1"
-            style={{ background: 'var(--invicta-green-dark)' }}>
-            <Plus size={11} /> Nova equação
-          </button>
-        </div>
-      )}
-
       <div className="flex-1 overflow-y-auto px-3 py-2">
-        {itens.length === 0 ? (
+        {filtrados.length === 0 ? (
           <div className="text-center py-8 px-4">
             <p className="text-[10px]" style={{ color: '#64748b' }}>
-              Nenhuma equação em <strong>{abaLabel(aba)}</strong>.
-              {aba !== 'sistema' && <> Use <em>+ Nova equação</em>.</>}
+              {itens.length === 0 ? 'Nenhuma equação ainda. Use ' : 'Nada encontrado. '}
+              {itens.length === 0 && <em>+ Nova</em>}{itens.length === 0 ? '.' : ''}
             </p>
           </div>
         ) : (
           <div className="space-y-1.5">
-            {itens.map(it => (
+            {filtrados.map(it => (
               <div key={it.id} className="p-2 rounded-lg" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
                 <div className="flex items-center gap-2">
                   <div className="flex-1 min-w-0">
@@ -114,9 +118,10 @@ export function EquacoesPanel() {
                       {it.conteudo.custoTonelada != null ? ` · R$ ${it.conteudo.custoTonelada}/t` : ''}
                     </div>
                   </div>
+                  {it.escopo === 'sistema' && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ background: '#1a3a6b', color: '#93c5fd' }}>sistema</span>}
                   {!it.ativo && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ background: '#1a3a6b', color: '#94a3b8' }}>inativo</span>}
                   <button onClick={() => setEdit(it)} title="Editar" className="p-1 rounded hover:bg-white/10" style={{ color: '#93c5fd' }}><Edit3 size={11} /></button>
-                  <button onClick={() => duplicar(SLUG, it.id)} title="Duplicar" className="p-1 rounded hover:bg-white/10" style={{ color: '#93c5fd' }}><Copy size={11} /></button>
+                  <button onClick={() => clonar(it)} title="Clonar" className="p-1 rounded hover:bg-white/10" style={{ color: '#93c5fd' }}><Copy size={11} /></button>
                   <button onClick={() => ativar(SLUG, it.id, !it.ativo)} title={it.ativo ? 'Inativar' : 'Ativar'} className="p-1 rounded hover:bg-white/10" style={{ color: it.ativo ? '#fbbf24' : '#22c55e' }}><Power size={11} /></button>
                   <button onClick={() => excluirItem(it)} title="Excluir" className="p-1 rounded hover:bg-white/10" style={{ color: '#f87171' }}><Trash2 size={11} /></button>
                 </div>
@@ -126,32 +131,24 @@ export function EquacoesPanel() {
         )}
       </div>
 
-      {edit && (
-        <EquacaoEditor
-          item={edit === 'novo' ? null : edit}
-          escopoNovo={aba === 'sistema' ? 'meu' : aba}
-          onClose={() => setEdit(null)}
-        />
-      )}
+      {edit && <EquacaoEditor item={edit === 'novo' ? null : edit} onClose={() => setEdit(null)} />}
     </section>
   );
 }
 
-// ─── Editor (3 abas) ──────────────────────────────────────────────────────
+// ─── Editor (página única) ────────────────────────────────────────────────
 
-const TABS: { id: 'detalhes' | 'equacao' | 'estilo'; label: string }[] = [
-  { id: 'detalhes', label: 'Detalhes' },
-  { id: 'equacao', label: 'Equação' },
-  { id: 'estilo', label: 'Estilo' },
-];
+function Secao({ titulo, children }: { titulo: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div className="text-[10px] font-bold uppercase tracking-wide mb-1.5 pb-1" style={{ color: '#93c5fd', borderBottom: '1px solid #1a3a6b' }}>{titulo}</div>
+      {children}
+    </div>
+  );
+}
 
-function EquacaoEditor({ item, escopoNovo, onClose }: {
-  item: ItemBiblioteca<ConteudoEquacao> | null;
-  escopoNovo: EscopoBiblioteca;
-  onClose: () => void;
-}) {
+function EquacaoEditor({ item, onClose }: { item: ItemBiblioteca<ConteudoEquacao> | null; onClose: () => void }) {
   const c = item?.conteudo;
-  const [tab, setTab] = useState<'detalhes' | 'equacao' | 'estilo'>('detalhes');
   const [nome, setNome] = useState(item?.nome ?? '');
   const [descricao, setDescricao] = useState(item?.descricao ?? '');
   const [produto, setProduto] = useState(c?.produto ?? '');
@@ -170,12 +167,8 @@ function EquacaoEditor({ item, escopoNovo, onClose }: {
 
   const val = useMemo(() => validar(script, constantes), [script, constantes]);
 
-  function salvar() {
-    setErro('');
-    if (!nome.trim()) { setErro('Dê um nome à equação.'); setTab('detalhes'); return; }
-    const v = validar(script, constantes);
-    if (!v.ok) { setErro(v.erro ?? 'Equação inválida.'); setTab('equacao'); return; }
-    const conteudo: ConteudoEquacao = {
+  function montarConteudo(): ConteudoEquacao {
+    return {
       produto: produto.trim(),
       custoTonelada: custo.trim() ? parseNum(custo) : null,
       unidadeEquacao: unEq.trim(),
@@ -188,8 +181,27 @@ function EquacaoEditor({ item, escopoNovo, onClose }: {
       script,
       estilo,
     };
+  }
+  function validarTudo(): boolean {
+    setErro('');
+    if (!nome.trim()) { setErro('Dê um nome à equação.'); return false; }
+    const v = validar(script, constantes);
+    if (!v.ok) { setErro(v.erro ?? 'Equação inválida.'); return false; }
+    return true;
+  }
+  function salvar() {
+    if (!validarTudo()) return;
+    const conteudo = montarConteudo();
     if (item) atualizar<ConteudoEquacao>(SLUG, item.id, { nome: nome.trim(), descricao: descricao.trim() || undefined, conteudo });
-    else criar<ConteudoEquacao>(SLUG, { nome: nome.trim(), descricao: descricao.trim() || undefined, conteudo, escopo: escopoNovo });
+    else criar<ConteudoEquacao>(SLUG, { nome: nome.trim(), descricao: descricao.trim() || undefined, conteudo, escopo: 'empresa' });
+    onClose();
+  }
+  // Salvar como = clona (cria NOVA) a partir das edições atuais, sem mexer na original.
+  function salvarComo() {
+    if (!validarTudo()) return;
+    const base = nome.trim();
+    const nomeNovo = item && base === item.nome ? `${base} (cópia)` : base;
+    criar<ConteudoEquacao>(SLUG, { nome: nomeNovo, descricao: descricao.trim() || undefined, conteudo: montarConteudo(), escopo: 'empresa' });
     onClose();
   }
 
@@ -198,54 +210,45 @@ function EquacaoEditor({ item, escopoNovo, onClose }: {
     if (!ta) { setScript(s => s + tk); return; }
     const start = ta.selectionStart ?? script.length;
     const end = ta.selectionEnd ?? script.length;
-    const novo = script.slice(0, start) + tk + script.slice(end);
-    setScript(novo);
+    setScript(script.slice(0, start) + tk + script.slice(end));
     requestAnimationFrame(() => { ta.focus(); const p = start + tk.length; ta.setSelectionRange(p, p); });
   }
 
   return (
     <div className="absolute inset-0 z-10 flex flex-col" style={{ background: 'var(--invicta-blue-dark)' }}>
       <div className="flex items-center justify-between px-4 py-2 flex-shrink-0" style={{ borderBottom: '1px solid #1a3a6b' }}>
-        <span className="text-[11px] font-bold uppercase truncate" style={{ color: '#e2e8f0' }}>
-          {item ? 'Editar equação' : 'Nova equação'}
-        </span>
+        <span className="text-[11px] font-bold uppercase truncate" style={{ color: '#e2e8f0' }}>{item ? 'Editar equação' : 'Nova equação'}</span>
         <button onClick={onClose} className="p-1 rounded hover:bg-white/10" style={{ color: '#cbd5e1' }}><X size={12} /></button>
       </div>
 
-      <div className="flex gap-1 px-3 pt-2 flex-shrink-0">
-        {TABS.map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)}
-            className="flex-1 py-1 rounded text-[10px] font-bold"
-            style={{ background: tab === t.id ? 'var(--invicta-blue-mid)' : '#1a3a6b', color: tab === t.id ? '#fff' : '#64748b' }}>
-            {t.label}
-          </button>
-        ))}
-      </div>
-
-      <div className="flex-1 overflow-y-auto p-3 space-y-2">
-        {tab === 'detalhes' && (
+      <div className="flex-1 overflow-y-auto p-3 space-y-4">
+        <Secao titulo="Detalhes">
           <Detalhes {...{ nome, setNome, produto, setProduto, custo, setCusto, unEq, setUnEq, unTrat, setUnTrat, tratamento, setTratamento, culturas, setCulturas, fases, setFases, descricao, setDescricao }} />
-        )}
-        {tab === 'equacao' && (
+        </Secao>
+        <Secao titulo="Equação">
           <Equacao {...{ constantes, setConstantes, script, setScript, scriptRef, naoNeg, setNaoNeg, val, inserirToken }} />
-        )}
-        {tab === 'estilo' && (
+        </Secao>
+        <Secao titulo="Estilo do mapa">
           <Estilo estilo={estilo} setEstilo={setEstilo} unidade={unTrat} />
-        )}
+        </Secao>
       </div>
 
-      {erro && (
-        <div className="mx-3 mb-2 px-2 py-1.5 rounded text-[10px] flex-shrink-0" style={{ background: '#3a1a1a', color: '#fca5a5', border: '1px solid #7f1d1d' }}>{erro}</div>
-      )}
+      {erro && <div className="mx-3 mb-2 px-2 py-1.5 rounded text-[10px] flex-shrink-0" style={{ background: '#3a1a1a', color: '#fca5a5', border: '1px solid #7f1d1d' }}>{erro}</div>}
       <div className="flex gap-2 px-3 py-2 flex-shrink-0" style={{ borderTop: '1px solid #1a3a6b' }}>
-        <button onClick={onClose} className="flex-1 py-1.5 rounded text-[10px] font-bold" style={{ background: '#1a3a6b', color: '#cbd5e1' }}>Cancelar</button>
-        <button onClick={salvar} className="flex-1 py-1.5 rounded text-[10px] font-bold text-white flex items-center justify-center gap-1" style={{ background: 'var(--invicta-green-dark)' }}><Save size={11} /> Salvar</button>
+        <button onClick={onClose} className="py-1.5 px-3 rounded text-[10px] font-bold" style={{ background: '#1a3a6b', color: '#cbd5e1' }}>Cancelar</button>
+        <button onClick={salvarComo} title="Cria uma nova equação a partir destas edições (não altera a original)"
+          className="flex-1 py-1.5 rounded text-[10px] font-bold flex items-center justify-center gap-1" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
+          <SaveAll size={11} /> Salvar como
+        </button>
+        <button onClick={salvar} className="flex-1 py-1.5 rounded text-[10px] font-bold text-white flex items-center justify-center gap-1" style={{ background: 'var(--invicta-green-dark)' }}>
+          <Save size={11} /> Salvar
+        </button>
       </div>
     </div>
   );
 }
 
-// ── Aba Detalhes ──────────────────────────────────────────────────────────
+// ── Componentes de campo ────────────────────────────────────────────────────
 function Campo({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
@@ -288,12 +291,11 @@ function Detalhes(p: {
         <Campo label="Culturas (vírgula)"><input value={p.culturas} onChange={e => p.setCulturas(e.target.value)} placeholder="Soja, Milho" className={txt} style={inputStyle} /></Campo>
         <Campo label="Fases (vírgula)"><input value={p.fases} onChange={e => p.setFases(e.target.value)} placeholder="Pré-plantio" className={txt} style={inputStyle} /></Campo>
       </div>
-      <Campo label="Descrição"><textarea value={p.descricao} onChange={e => p.setDescricao(e.target.value)} rows={3} className={txt + " resize-none"} style={inputStyle} /></Campo>
+      <Campo label="Descrição"><textarea value={p.descricao} onChange={e => p.setDescricao(e.target.value)} rows={2} className={txt + " resize-none"} style={inputStyle} /></Campo>
     </div>
   );
 }
 
-// ── Aba Equação ───────────────────────────────────────────────────────────
 function Equacao(p: {
   constantes: ConstanteEquacao[]; setConstantes: (c: ConstanteEquacao[]) => void;
   script: string; setScript: (s: string) => void; scriptRef: React.RefObject<HTMLTextAreaElement | null>;
@@ -302,7 +304,7 @@ function Equacao(p: {
 }) {
   const [testVals, setTestVals] = useState<Record<string, string>>({});
   const teste = useMemo(() => {
-    if (!p.val.ok || p.val.vars.length === 0 && !p.script.trim()) return null;
+    if (!p.val.ok) return null;
     const valores: Record<string, number> = {};
     for (const v of p.val.vars) {
       const raw = testVals[v];
@@ -313,20 +315,16 @@ function Equacao(p: {
   }, [p.script, p.constantes, p.val, p.naoNeg, testVals]);
 
   function setConst(i: number, patch: Partial<ConstanteEquacao>) {
-    const next = p.constantes.map((c, idx) => idx === i ? { ...c, ...patch } : c);
-    p.setConstantes(next);
+    p.setConstantes(p.constantes.map((c, idx) => idx === i ? { ...c, ...patch } : c));
   }
 
   return (
     <div className="space-y-3">
-      {/* Constantes */}
       <div>
         <div className="flex items-center justify-between mb-1">
           <label className="text-[10px] font-semibold" style={{ color: '#cbd5e1' }}>Constantes</label>
           <button onClick={() => p.setConstantes([...p.constantes, { nome: '', valor: 0 }])}
-            className="text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
-            <Plus size={10} /> Constante
-          </button>
+            className="text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1" style={{ background: '#1a3a6b', color: '#93c5fd' }}><Plus size={10} /> Constante</button>
         </div>
         {p.constantes.length === 0 && <p className="text-[9px]" style={{ color: '#64748b' }}>Opcional. Ex.: CaO = 28, PRNT = 95.</p>}
         <div className="space-y-1">
@@ -340,9 +338,8 @@ function Equacao(p: {
         </div>
       </div>
 
-      {/* Script */}
       <div>
-        <label className="text-[10px] font-semibold block mb-1" style={{ color: '#cbd5e1' }}>Equação</label>
+        <label className="text-[10px] font-semibold block mb-1" style={{ color: '#cbd5e1' }}>Fórmula</label>
         <textarea ref={p.scriptRef} value={p.script} onChange={e => p.setScript(e.target.value)} rows={6} spellCheck={false}
           placeholder={'dose = (70 - V) / 100 * CTC * 10'}
           className="w-full rounded px-2 py-1.5 text-[11px] font-mono outline-none resize-none" style={inputStyle} />
@@ -354,20 +351,16 @@ function Equacao(p: {
         </label>
       </div>
 
-      {/* Variáveis disponíveis */}
       <div>
         <label className="text-[10px] font-semibold block mb-1" style={{ color: '#cbd5e1' }}>Atributos (clique para inserir)</label>
         <div className="flex flex-wrap gap-1">
           {ATRIBUTOS_EQUACAO.map(a => (
             <button key={a.token} onClick={() => p.inserirToken(a.token)} title={`${a.rotulo}${a.unidade ? ` (${a.unidade})` : ''}`}
-              className="text-[10px] font-mono px-1.5 py-0.5 rounded" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
-              {a.token}
-            </button>
+              className="text-[10px] font-mono px-1.5 py-0.5 rounded" style={{ background: '#1a3a6b', color: '#93c5fd' }}>{a.token}</button>
           ))}
         </div>
       </div>
 
-      {/* Validação + teste */}
       <div className="rounded p-2" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
         <div className="flex items-center gap-1 mb-1">
           <Play size={11} style={{ color: '#22c55e' }} />
@@ -408,7 +401,6 @@ function Equacao(p: {
   );
 }
 
-// ── Aba Estilo ────────────────────────────────────────────────────────────
 function Estilo({ estilo, setEstilo, unidade }: { estilo: EstiloRecomendacao; setEstilo: (e: EstiloRecomendacao) => void; unidade: string }) {
   function setClasse(i: number, patch: Partial<{ cor: string; limiteSuperior: number }>) {
     setEstilo({ ...estilo, classes: estilo.classes.map((c, idx) => idx === i ? { ...c, ...patch } : c) });
@@ -427,7 +419,6 @@ function Estilo({ estilo, setEstilo, unidade }: { estilo: EstiloRecomendacao; se
         Escala fixa de cores por classe de dose{unidade ? ` (${unidade})` : ''}. Menor dose = verde, maior = vermelho. Cada classe vai do limite anterior até o seu <strong>limite superior</strong>.
       </p>
 
-      {/* Prévia da rampa */}
       <div className="h-3 rounded overflow-hidden flex" style={{ border: '1px solid #2e5fa3' }}>
         {estilo.classes.map((c, i) => <div key={i} className="flex-1" style={{ background: c.cor }} />)}
       </div>

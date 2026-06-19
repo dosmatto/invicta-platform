@@ -1,6 +1,11 @@
-export const APP_VERSION = '0.46.0';
+export const APP_VERSION = '0.46.1';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.46.1': [
+    'Equações mais prática: lista única (sem as abas Meus/Empresa/Sistema) com busca, e o editor virou uma página só (Detalhes → Equação → Estilo num rolar só, sem trocar de aba)',
+    'Clonar equações: botão de clonar na lista + "Salvar como" no editor — abra uma equação, faça pequenas alterações e salve como nova sem mexer na original',
+    'Equações novas e clonadas nascem compartilhadas: todos os usuários da empresa enxergam (antes uma equação "minha" ficava invisível para o outro)',
+  ],
   '0.46.0': [
     'Biblioteca → Equações (Recomendações, Fase R1): cadastro de equações de recomendação com 3 abas — Detalhes (produto, custo/tonelada, unidades, tratamento, culturas, fases), Equação (constantes + fórmula) e Estilo (escala fixa de cores por classe de dose)',
     'Linguagem de equação nova, simples e funcional (estilo Excel pt-BR): atributos pelo nome (V, CTC, Ca, K…), decimal com vírgula, argumentos com ponto-e-vírgula, funções se/max/min/arredonda/raiz/abs e "não permitir dose negativa" por opção (sem código de clamp)',
