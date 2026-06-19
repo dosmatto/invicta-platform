@@ -77,10 +77,22 @@ export async function carregarContextoRelatorio(
       const nut = partes[partes.length - 2];
       const prof = partes[partes.length - 1];
       const dados = c.dados;
+      const chave = `${nut}__${prof}`;
+      // Pode haver MAIS DE UM doc para o mesmo nut/prof (configs/método diferentes,
+      // ex.: um antigo VAZIO + um novo com grid). Desempata: mapa COM dados ganha
+      // de VAZIO; entre iguais, o mais recente (interpoladoEm). Sem isso, o gerador
+      // pegava o último por ordem de id — às vezes o VAZIO ("mapas sem dados").
+      const temDados = (m?: MapaCarregado) => !!(m?.resp?.grid?.b64 || m?.resp?.png);
+      const atual = mapas[chave];
+      if (atual) {
+        const trocar = (temDados(dados) && !temDados(atual)) ||
+          (temDados(dados) === temDados(atual) && (dados.interpoladoEm ?? '') > (atual.interpoladoEm ?? ''));
+        if (!trocar) continue;
+      }
       if (dados.resp?.grid?.comp === 'gz') {
         try { dados.resp.grid = await descomprimirGrid(dados.resp.grid); } catch { /* segue */ }
       }
-      mapas[`${nut}__${prof}`] = dados;
+      mapas[chave] = dados;
       if ((dados.interpoladoEm ?? '') > dataMaisRecente) dataMaisRecente = dados.interpoladoEm ?? '';
     }
   }

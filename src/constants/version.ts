@@ -1,6 +1,9 @@
-export const APP_VERSION = '0.45.2';
+export const APP_VERSION = '0.45.3';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.45.3': [
+    'Correção (Relatórios "mapas sem dados"): quando havia mais de uma versão do mesmo mapa salva (uma antiga vazia + uma nova com dados), o gerador podia pegar a vazia. Agora ele prefere a versão COM dados e a mais recente — igual à aba Fertilidade. Destrava a geração do relatório',
+  ],
   '0.45.2': [
     'Diagnóstico na tela quando o relatório não gera páginas: mostra se o polígono veio e, por elemento, se o mapa tem grid/png — para identificar a causa sem abrir o console',
   ],
