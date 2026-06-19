@@ -1,6 +1,9 @@
-export const APP_VERSION = '0.45.1';
+export const APP_VERSION = '0.45.2';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.45.2': [
+    'Diagnóstico na tela quando o relatório não gera páginas: mostra se o polígono veio e, por elemento, se o mapa tem grid/png — para identificar a causa sem abrir o console',
+  ],
   '0.45.1': [
     'Histórico de relatórios sem custo (sem precisar do plano pago do Firebase Storage): cada relatório gerado fica registrado, e o "Abrir" regenera o PDF na hora a partir dos mapas salvos. Mostra data, tipo, mapas e safra; cada geração cria um registro novo',
   ],

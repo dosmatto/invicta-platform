@@ -74,7 +74,21 @@ export function GeradorRelatorios({ safraNome }: { safraNome?: string } = {}) {
     setGerando(true); setErro(''); setAviso('');
     try {
       const paginas = montarPaginas(ctx, nuts, { satelite, valores });
-      if (paginas.length === 0) { setErro('Nenhuma página gerável (mapas sem dados completos).'); return; }
+      if (paginas.length === 0) {
+        // Diagnóstico na tela (sem precisar de F12): por que zerou.
+        const resumo = nuts.slice(0, 4).map(n => {
+          const el = ctx.elementos.find(e => e.nut === n);
+          if (!el) return `${n}:sem-elemento`;
+          const ps = el.profundidades.map(p => {
+            const m = ctx.mapas[`${n}__${p}`];
+            if (!m) return `${p}=sem-mapa`;
+            return `${p}=${m.resp?.grid ? 'grid' : (m.resp?.png ? 'png' : 'VAZIO')}`;
+          }).join(',');
+          return `${n}(${ps})`;
+        }).join('  ');
+        setErro(`Sem páginas. Polígono: ${ctx.poligono ? 'OK' : 'FALTANDO'}. Mapas: ${resumo}`);
+        return;
+      }
       const elPorNut = Object.fromEntries(ctx.elementos.map(e => [e.nut, e]));
       const simbolos = nuts.map(n => elPorNut[n]?.simbolo ?? n);
       await gerarRelatorioMultiplo(paginas, `Relatorio_Fertilidade_${ctx.talhao}_${safra}`);
