@@ -1,6 +1,11 @@
-export const APP_VERSION = '0.46.1';
+export const APP_VERSION = '0.47.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.47.0': [
+    'Biblioteca → Recomendações (Fase R2): uma recomendação é um conjunto de equações (ex.: Corretivos, Fosfatagem, KCl). Editor numa página só com seletor de equações em chips (buscar, adicionar, remover), além de nome, culturas e descrição',
+    'Mesma praticidade das Equações: lista única + busca, clonar e "Salvar como", e a recomendação nasce compartilhada (todos da empresa veem)',
+    'Aplicar a recomendação a um talhão e gerar os mapas de dose + comparação financeira vem na próxima fase (R3 — Cenários)',
+  ],
   '0.46.1': [
     'Equações mais prática: lista única (sem as abas Meus/Empresa/Sistema) com busca, e o editor virou uma página só (Detalhes → Equação → Estilo num rolar só, sem trocar de aba)',
     'Clonar equações: botão de clonar na lista + "Salvar como" no editor — abra uma equação, faça pequenas alterações e salve como nova sem mexer na original',

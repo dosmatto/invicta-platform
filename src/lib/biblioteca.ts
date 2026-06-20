@@ -83,8 +83,8 @@ export const CATEGORIAS: DefCategoria[] = [
     descricao: 'Catálogos de pragas, níveis de dano, recomendações.' },
   { slug: 'equacoes', nome: 'Equações', icone: Hash, status: 'disponivel',
     descricao: 'Fórmulas de recomendação (álgebra de mapas): a dose é calculada a partir dos atributos de fertilidade. Linguagem simples, estilo Excel pt-BR.' },
-  { slug: 'recomendacoes', nome: 'Recomendações', icone: Wand2, status: 'em-breve',
-    descricao: 'Regras de recomendação por cultura/objetivo.' },
+  { slug: 'recomendacoes', nome: 'Recomendações', icone: Wand2, status: 'disponivel',
+    descricao: 'Conjuntos de equações de recomendação (ex.: Corretivos, Fosfatagem, KCl). Aplicar a um talhão e gerar cenários vem na Fase R3.' },
   { slug: 'produtividade', nome: 'Produtividade', icone: BarChart3, status: 'em-breve',
     descricao: 'Padrões de mapas de colheita e classes de produtividade.' },
   { slug: 'perfis', nome: 'Perfis', icone: UserCog, status: 'disponivel',
@@ -305,6 +305,13 @@ export interface ConteudoEquacao {
   constantes: ConstanteEquacao[];
   script: string;                    // o código da equação
   estilo: EstiloRecomendacao;        // escala fixa de cores por classe de dose
+}
+
+// Fase R2 — Recomendação (categoria 'recomendacoes') = conjunto de equações.
+// Só agrupa equações da biblioteca; o cálculo vive em cada ConteudoEquacao.
+export interface ConteudoRecomendacao {
+  equacaoIds: string[];
+  culturas: string[];
 }
 
 export function migrarLaboratoriosV1() {

@@ -9,6 +9,7 @@ import {
 import { Search, Plus, Download, Upload, ChevronRight, Edit3, Trash2, Save, X, Power } from 'lucide-react';
 import { LegendasPanel } from './LegendasPanel';
 import { EquacoesPanel } from './EquacoesPanel';
+import { RecomendacoesPanel } from './RecomendacoesPanel';
 import { SafrasPanel } from './SafrasPanel';
 import { EtiquetaLayoutPicker } from '../talhao/EtiquetaLayoutPicker';
 import { PERFIS_BUILTIN, ELEMENTOS_LAB, simboloElemento } from '@/lib/lab';
@@ -66,6 +67,7 @@ function CategoriaConteudo({ slug }: { slug: CategoriaBiblioteca }) {
   // Categorias com adaptador próprio têm UI customizada (já implementadas).
   if (slug === 'legendas') return <ConteudoLegendas />;
   if (slug === 'equacoes') return <EquacoesPanel />;
+  if (slug === 'recomendacoes') return <RecomendacoesPanel />;
   if (slug === 'laboratorios') return <ConteudoLaboratorios />;
   if (slug === 'perfis') return <ConteudoPerfis />;
   if (slug === 'safras') return <ConteudoSafras />;
