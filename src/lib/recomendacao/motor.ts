@@ -322,11 +322,23 @@ export function validar(script: string, constantes: ConstanteEquacao[] = []): Va
   };
 }
 
+// ─── Pós-processamento da dose (mínimo operacional) ───────────────────────
+// Ordem: clamp negativo → mínimo viável. Só doses POSITIVAS menores que o mínimo
+// são ajustadas (0 = "não precisa" continua 0). abaixoMinimo: 'zero' = não aplica;
+// 'minimo' = aplica a própria dose mínima.
+export interface OpcoesDose { naoNegativo: boolean; doseMinima: number; abaixoMinimo: 'zero' | 'minimo'; }
+export function ajustarDose(d: number, opts: OpcoesDose): number {
+  if (!Number.isFinite(d)) return d;
+  if (opts.naoNegativo && d < 0) d = 0;
+  if (opts.doseMinima > 0 && d > 0 && d < opts.doseMinima) d = opts.abaixoMinimo === 'minimo' ? opts.doseMinima : 0;
+  return d;
+}
+
 // ─── Teste escalar (preview com valores de amostra) ───────────────────────
 export interface ResultadoTeste { ok: boolean; valor?: number; erro?: string; faltando: string[]; }
 export function testarEscalar(
   script: string, constantes: ConstanteEquacao[],
-  valores: Record<string, number>, naoNegativo: boolean,
+  valores: Record<string, number>, opts: OpcoesDose,
 ): ResultadoTeste {
   const c = compilar(script, constantes);
   if (!c.ok) return { ok: false, erro: c.erro, faltando: [] };
@@ -338,8 +350,7 @@ export function testarEscalar(
     return v;
   };
   try {
-    let v = executar(c.prog, constantes, ext);
-    if (naoNegativo && v < 0) v = 0;
+    const v = ajustarDose(executar(c.prog, constantes, ext), opts);
     return { ok: faltando.length === 0, valor: v, faltando };
   } catch (e) {
     return { ok: false, erro: e instanceof Error ? e.message : String(e), faltando };

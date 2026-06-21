@@ -160,6 +160,8 @@ function EquacaoEditor({ item, onClose }: { item: ItemBiblioteca<ConteudoEquacao
   const [culturas, setCulturas] = useState((c?.culturas ?? []).join(', '));
   const [fases, setFases] = useState((c?.fases ?? []).join(', '));
   const [naoNeg, setNaoNeg] = useState(c?.naoNegativo ?? true);
+  const [doseMinima, setDoseMinima] = useState(c?.doseMinimaViavel ? String(c.doseMinimaViavel) : '');
+  const [abaixoMinimo, setAbaixoMinimo] = useState<'zero' | 'minimo'>(c?.abaixoMinimo ?? 'zero');
   const [constantes, setConstantes] = useState<ConstanteEquacao[]>(c?.constantes ?? []);
   const [script, setScript] = useState(c?.script ?? 'dose = ');
   const [estilo, setEstilo] = useState<EstiloRecomendacao>(c?.estilo ?? estiloPadrao());
@@ -179,6 +181,8 @@ function EquacaoEditor({ item, onClose }: { item: ItemBiblioteca<ConteudoEquacao
       culturas: listaDe(culturas),
       fases: listaDe(fases),
       naoNegativo: naoNeg,
+      doseMinimaViavel: doseMinima.trim() ? (parseNum(doseMinima) || 0) : 0,
+      abaixoMinimo,
       constantes: constantes.filter(k => k.nome.trim()),
       script,
       estilo,
@@ -228,7 +232,7 @@ function EquacaoEditor({ item, onClose }: { item: ItemBiblioteca<ConteudoEquacao
           <Detalhes {...{ nome, setNome, produto, setProduto, custo, setCusto, profundidade, setProfundidade, unEq, setUnEq, unTrat, setUnTrat, tratamento, setTratamento, culturas, setCulturas, fases, setFases, descricao, setDescricao }} />
         </Secao>
         <Secao titulo="Equação">
-          <Equacao {...{ constantes, setConstantes, script, setScript, scriptRef, naoNeg, setNaoNeg, val, inserirToken }} />
+          <Equacao {...{ constantes, setConstantes, script, setScript, scriptRef, naoNeg, setNaoNeg, doseMinima, setDoseMinima, abaixoMinimo, setAbaixoMinimo, unTrat, val, inserirToken }} />
         </Secao>
         <Secao titulo="Estilo do mapa">
           <Estilo estilo={estilo} setEstilo={setEstilo} unidade={unTrat} />
@@ -310,6 +314,9 @@ function Equacao(p: {
   constantes: ConstanteEquacao[]; setConstantes: (c: ConstanteEquacao[]) => void;
   script: string; setScript: (s: string) => void; scriptRef: React.RefObject<HTMLTextAreaElement | null>;
   naoNeg: boolean; setNaoNeg: (b: boolean) => void;
+  doseMinima: string; setDoseMinima: (s: string) => void;
+  abaixoMinimo: 'zero' | 'minimo'; setAbaixoMinimo: (s: 'zero' | 'minimo') => void;
+  unTrat: string;
   val: ReturnType<typeof validar>; inserirToken: (t: string) => void;
 }) {
   const [testVals, setTestVals] = useState<Record<string, string>>({});
@@ -321,8 +328,10 @@ function Equacao(p: {
       const at = atributoPorToken(v);
       valores[v] = raw != null && raw.trim() ? parseNum(raw) : (at?.exemplo ?? NaN);
     }
-    return testarEscalar(p.script, p.constantes, valores, p.naoNeg);
-  }, [p.script, p.constantes, p.val, p.naoNeg, testVals]);
+    return testarEscalar(p.script, p.constantes, valores, {
+      naoNegativo: p.naoNeg, doseMinima: parseNum(p.doseMinima) || 0, abaixoMinimo: p.abaixoMinimo,
+    });
+  }, [p.script, p.constantes, p.val, p.naoNeg, p.doseMinima, p.abaixoMinimo, testVals]);
 
   function setConst(i: number, patch: Partial<ConstanteEquacao>) {
     p.setConstantes(p.constantes.map((c, idx) => idx === i ? { ...c, ...patch } : c));
@@ -359,6 +368,26 @@ function Equacao(p: {
         <label className="flex items-center gap-1.5 mt-1.5 text-[10px]" style={{ color: '#cbd5e1' }}>
           <input type="checkbox" checked={p.naoNeg} onChange={e => p.setNaoNeg(e.target.checked)} /> Não permitir dose negativa (vira 0)
         </label>
+      </div>
+
+      {/* Dose mínima viável (operacional) */}
+      <div>
+        <label className="text-[10px] font-semibold block mb-1" style={{ color: '#cbd5e1' }}>
+          Dose mínima viável{p.unTrat ? ` (${p.unTrat})` : ''}
+        </label>
+        <input value={p.doseMinima} onChange={e => p.setDoseMinima(e.target.value)} placeholder="0 = sem mínimo" inputMode="decimal"
+          className="w-full rounded px-2 py-1.5 text-[11px] outline-none" style={inputStyle} />
+        {(parseNum(p.doseMinima) || 0) > 0 && (
+          <div className="flex gap-1 mt-1">
+            {([['zero', 'Abaixo disso: zera'], ['minimo', 'Abaixo disso: aplica a mínima']] as const).map(([v, label]) => (
+              <button key={v} onClick={() => p.setAbaixoMinimo(v)} className="flex-1 py-1 rounded text-[9px] font-bold"
+                style={{ background: p.abaixoMinimo === v ? 'var(--invicta-blue-mid)' : '#1a3a6b', color: p.abaixoMinimo === v ? '#fff' : '#94a3b8' }}>
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+        <p className="text-[9px] mt-1" style={{ color: '#64748b' }}>Ex.: calcário só compensa a partir de uma dose; abaixo dela, zera ou sobe para a mínima.</p>
       </div>
 
       <div>

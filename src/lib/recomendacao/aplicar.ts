@@ -7,7 +7,7 @@
 
 import { cloudCarregarMapasPorPrefixo } from '../cloud';
 import { descomprimirGrid, decodeGrid, type RespInterp } from '../fertilidade';
-import { compilar, executarGrid, atributoPorToken } from './motor';
+import { compilar, executarGrid, atributoPorToken, ajustarDose } from './motor';
 import type { ConteudoEquacao } from '../biblioteca';
 
 type MapaPronto = { resp: RespInterp; labels?: GeoJSON.FeatureCollection; interpoladoEm?: string };
@@ -87,7 +87,8 @@ export function aplicarEquacao(eq: ConteudoEquacao, grids: Record<string, RespIn
   }
 
   const dose = executarGrid(prog, eq.constantes, gridPorVar, n);
-  if (eq.naoNegativo) for (let i = 0; i < n; i++) { const d = dose[i]; if (isFinite(d) && d < 0) dose[i] = 0; }
+  const opts = { naoNegativo: eq.naoNegativo, doseMinima: eq.doseMinimaViavel ?? 0, abaixoMinimo: eq.abaixoMinimo ?? 'zero' as const };
+  for (let i = 0; i < n; i++) dose[i] = ajustarDose(dose[i], opts);
 
   let mn = Infinity, mx = -Infinity, soma = 0, cnt = 0;
   for (let i = 0; i < n; i++) { const d = dose[i]; if (!isFinite(d)) continue; cnt++; soma += d; if (d < mn) mn = d; if (d > mx) mx = d; }

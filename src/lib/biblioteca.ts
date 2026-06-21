@@ -303,6 +303,8 @@ export interface ConteudoEquacao {
   culturas: string[];
   fases: string[];
   naoNegativo: boolean;              // dose < 0 vira 0
+  doseMinimaViavel: number;          // 0 = sem mínimo; doses entre 0 e X são ajustadas
+  abaixoMinimo: 'zero' | 'minimo';   // abaixo do mínimo: zera (não aplica) | aplica a própria mínima
   constantes: ConstanteEquacao[];
   script: string;                    // o código da equação
   estilo: EstiloRecomendacao;        // escala fixa de cores por classe de dose

@@ -1,6 +1,10 @@
-export const APP_VERSION = '0.48.0';
+export const APP_VERSION = '0.48.1';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.48.1': [
+    'Dose mínima viável por equação: você define um valor X (na unidade de tratamento) e escolhe o que fazer abaixo dele — zerar (não aplicar) ou aplicar a própria dose mínima. Ex.: calcário só compensa a partir de uma dose',
+    'O ajuste vale no teste ao vivo da equação e na aplicação ao mapa (Recomendações)',
+  ],
   '0.48.0': [
     'Recomendações (Fase R3.A): a aba Recomendações da página do talhão agora APLICA uma equação aos mapas de fertilidade da safra e gera o MAPA DE DOSE direto no mapa (álgebra pixel a pixel, no navegador), com estatísticas (mín/média/máx), total estimado e custo',
     'A equação agora guarda a PROFUNDIDADE que ela lê (campo em Detalhes) — ao aplicar é automático, sem perguntar profundidade',
