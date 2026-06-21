@@ -32,6 +32,19 @@ const chaveProduto = (d: DoseCalculada) => d.produto || d.nomeEquacao;
 
 export async function gerarPdfComparador(cenarios: Cenario[]): Promise<void> {
   if (cenarios.length < 2) throw new Error('Selecione ao menos 2 cenários.');
+  // Abre a aba ANTES de qualquer await (senão o navegador bloqueia o popup).
+  const aba = typeof window !== 'undefined' ? window.open('', '_blank') : null;
+  try {
+    const blob = await montarPdfComparador(cenarios);
+    abrirOuBaixar(blob, aba, `comparador-${cenarios[0]?.safra || 'cenarios'}.pdf`);
+  } catch (e) {
+    if (aba) aba.close();
+    throw e;
+  }
+}
+
+// Monta o doc do comparador e devolve o Blob (sem abrir aba) — reutilizável no lote.
+export async function montarPdfComparador(cenarios: Cenario[]): Promise<Blob> {
   const tId = cenarios[0].talhaoId, safra = cenarios[0].safra;
   const tal = getTalhoes().find(t => t.id === tId) ?? null;
   const faz = tal ? getFazendas().find(f => f.id === tal.fazendaId) ?? null : null;
@@ -43,33 +56,30 @@ export async function gerarPdfComparador(cenarios: Cenario[]): Promise<void> {
     produtor: cli?.nome ?? '', areaHa: tal?.areaHa ?? 0, poligono,
   };
 
-  // cenário recomendado = menor investimento total
   let recIdx = 0; let min = Infinity;
   cenarios.forEach((c, i) => { if (c.financeiro.custoTotal < min) { min = c.financeiro.custoTotal; recIdx = i; } });
 
-  // produtos (união, preservando ordem)
   const produtos: string[] = [];
   for (const c of cenarios) for (const d of c.doses) { const k = chaveProduto(d); if (!produtos.includes(k)) produtos.push(k); }
   if (produtos.length === 0) throw new Error('Os cenários não têm doses para comparar.');
 
   const logoBranca = await carregarImg('/images/logo-branca.png').catch(() => null);
-
-  const aba = typeof window !== 'undefined' ? window.open('', '_blank') : null;
-  try {
-    const { jsPDF } = await import('jspdf');
-    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-    let primeira = true;
-    for (const prod of produtos) {
-      if (!primeira) doc.addPage();
-      primeira = false;
-      await desenharPagina(doc, prod, cenarios, recIdx, ctx, logoBranca);
-    }
-    const blob = doc.output('blob');
-    if (aba) { const url = URL.createObjectURL(blob); aba.location.href = url; setTimeout(() => URL.revokeObjectURL(url), 60000); }
-  } catch (e) {
-    if (aba) aba.close();
-    throw e;
+  const { jsPDF } = await import('jspdf');
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  let primeira = true;
+  for (const prod of produtos) {
+    if (!primeira) doc.addPage();
+    primeira = false;
+    await desenharPagina(doc, prod, cenarios, recIdx, ctx, logoBranca);
   }
+  return doc.output('blob');
+}
+
+function abrirOuBaixar(blob: Blob, aba: Window | null, nome: string) {
+  const url = URL.createObjectURL(blob);
+  if (aba) { aba.location.href = url; }
+  else { const a = document.createElement('a'); a.href = url; a.download = nome; document.body.appendChild(a); a.click(); a.remove(); }
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 
 interface Ctx { fazenda: string; talhao: string; safra: string; cultura: string; produtor: string; areaHa: number; poligono: GeoJSON.Polygon | GeoJSON.MultiPolygon; }
