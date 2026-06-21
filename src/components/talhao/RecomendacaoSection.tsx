@@ -241,9 +241,9 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
                 style={{ background: i === visivel ? '#11305a' : '#0b1f38', border: i === visivel ? '1px solid var(--invicta-green)' : '1px solid transparent' }}>
                 <Eye size={11} style={{ color: i === visivel ? '#4ade80' : '#475569', flexShrink: 0 }} />
                 <div className="flex-1 min-w-0">
-                  <div className="text-[10px] font-bold truncate" style={{ color: '#e2e8f0' }}>{d.produto || d.nomeEquacao}</div>
-                  <div className="text-[9px]" style={{ color: '#64748b' }}>
-                    méd {fmt(d.stats.media)} {d.unidade} · {fmt(d.toneladas, 1)} t{d.custo != null ? ` · R$ ${fmt(d.custo, 2)}` : ''}
+                  <div className="text-[10px] font-bold truncate" style={{ color: '#e2e8f0' }}>{d.nomeEquacao}</div>
+                  <div className="text-[9px] truncate" style={{ color: '#64748b' }}>
+                    {d.produto ? `${d.produto} · ` : ''}méd {fmt(d.stats.media)} {d.unidade} · {fmt(d.toneladas, 1)} t{d.custo != null ? ` · R$ ${fmt(d.custo, 2)}` : ''}
                   </div>
                 </div>
               </button>
@@ -253,7 +253,7 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
           {/* legenda da dose visível */}
           {classesVis.length > 0 && doseAtiva && (
             <div className="pt-1" style={{ borderTop: '1px solid #1a3a6b' }}>
-              <div className="text-[9px] font-semibold mb-1" style={{ color: '#94a3b8' }}>Legenda · {doseAtiva.produto || doseAtiva.nomeEquacao} ({doseAtiva.unidade})</div>
+              <div className="text-[9px] font-semibold mb-1" style={{ color: '#94a3b8' }}>Legenda · {doseAtiva.nomeEquacao} ({doseAtiva.unidade})</div>
               <div className="space-y-0.5">
                 {classesVis.map((c, i) => {
                   const inf = i === 0 ? doseAtiva.estilo.valorMinimo : classesVis[i - 1].limiteSuperior;

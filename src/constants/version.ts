@@ -1,6 +1,9 @@
-export const APP_VERSION = '0.49.0';
+export const APP_VERSION = '0.49.1';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.49.1': [
+    'Cenário: cada dose agora mostra o NOME DA EQUAÇÃO em destaque (antes aparecia só o produto — "Calcário"/"Calcário" ficava idêntico). O produto vai na linha de baixo, e a legenda também usa o nome da equação',
+  ],
   '0.49.0': [
     'Recomendações (Fase R3.B): além de aplicar 1 equação, dá para aplicar uma RECOMENDAÇÃO inteira (todas as equações dela de uma vez) → vários mapas de dose, um por produto; clique em cada produto para ver seu mapa',
     'Resumo financeiro consolidado do cenário: custo total (soma dos produtos) e custo por hectare',
