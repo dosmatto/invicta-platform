@@ -99,3 +99,30 @@ export function aplicarEquacao(eq: ConteudoEquacao, grids: Record<string, RespIn
     stats: { min: cnt ? mn : 0, media: cnt ? soma / cnt : 0, max: cnt ? mx : 0, n: cnt },
   };
 }
+
+// Dose de UMA equação já com financeiro (toneladas + custo). Total por hectare:
+// se a unidade de tratamento for t/ha → média×área; se kg/ha → média×área÷1000.
+export interface DoseCalculada {
+  equacaoId: string; nomeEquacao: string; produto: string; unidade: string;
+  estilo: ConteudoEquacao['estilo'];
+  grid: { b64: string; shape: [number, number]; comp?: 'gz' };
+  bounds: [number, number, number, number];
+  stats: { min: number; media: number; max: number; n: number };
+  toneladas: number; custo: number | null;
+}
+
+export function calcularDose(
+  eq: { id: string; nome: string; conteudo: ConteudoEquacao },
+  grids: Record<string, RespInterp>, areaHa: number,
+): DoseCalculada {
+  const res = aplicarEquacao(eq.conteudo, grids);
+  const c = eq.conteudo;
+  const u = (c.unidadeTratamento || '').toLowerCase();
+  const ehT = u.includes('t/ha') || u.includes('ton');
+  const toneladas = ehT ? res.stats.media * areaHa : res.stats.media * areaHa / 1000;
+  const custo = c.custoTonelada != null ? toneladas * c.custoTonelada : null;
+  return {
+    equacaoId: eq.id, nomeEquacao: eq.nome, produto: c.produto, unidade: c.unidadeTratamento,
+    estilo: c.estilo, grid: res.grid, bounds: res.bounds, stats: res.stats, toneladas, custo,
+  };
+}

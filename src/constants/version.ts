@@ -1,6 +1,12 @@
-export const APP_VERSION = '0.48.1';
+export const APP_VERSION = '0.49.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.49.0': [
+    'Recomendações (Fase R3.B): além de aplicar 1 equação, dá para aplicar uma RECOMENDAÇÃO inteira (todas as equações dela de uma vez) → vários mapas de dose, um por produto; clique em cada produto para ver seu mapa',
+    'Resumo financeiro consolidado do cenário: custo total (soma dos produtos) e custo por hectare',
+    'Salvar cenário na nuvem: o cenário (mapas de dose + financeiro) fica guardado e pode ser reaberto depois na lista "Cenários salvos" (base para o comparador de cenários da próxima fase)',
+    'Quando alguma equação não pode ser aplicada (falta interpolar um atributo), as demais ainda funcionam e o motivo aparece na tela',
+  ],
   '0.48.1': [
     'Dose mínima viável por equação: você define um valor X (na unidade de tratamento) e escolhe o que fazer abaixo dele — zerar (não aplicar) ou aplicar a própria dose mínima. Ex.: calcário só compensa a partir de uma dose',
     'O ajuste vale no teste ao vivo da equação e na aplicação ao mapa (Recomendações)',
