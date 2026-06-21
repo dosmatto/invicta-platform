@@ -3,7 +3,8 @@
 // regenera o PNG instantaneamente no browser, sem ir ao backend.
 
 import { decodeGrid, type RespInterp } from './fertilidade';
-import { rampaVisualStops, valorParaPosicaoVisual, type Legenda } from './legendas';
+import { rampaVisualStops, valorParaPosicaoVisual, hexToRgb, type Legenda } from './legendas';
+import type { EstiloRecomendacao } from './biblioteca';
 
 export interface PngColorido {
   dataUrl: string;
@@ -69,6 +70,37 @@ export function colorirGrid(
     buf[p4 + 1] = g;
     buf[p4 + 2] = b;
     buf[p4 + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  return finalizarCanvas(canvas, cols, rows);
+}
+
+// Colorização de DOSE (Fase R3) por classes DISCRETAS do estilo da equação:
+// cada pixel recebe a cor da 1ª classe cujo limite superior ≥ valor (a última
+// classe pega o que passar do maior limite). Fora do polígono (NaN) e, se
+// `zeroTransparente`, dose ≤ valorMínimo ficam transparentes.
+export function colorirDose(
+  grid: { b64: string; shape: [number, number] },
+  estilo: EstiloRecomendacao,
+): PngColorido {
+  const { valores, rows, cols } = decodeGrid(grid);
+  const classes = [...estilo.classes].filter(c => Number.isFinite(c.limiteSuperior)).sort((a, b) => a.limiteSuperior - b.limiteSuperior);
+  const cores = classes.map(c => hexToRgb(c.cor));
+  const lims = classes.map(c => c.limiteSuperior);
+  const ult = cores.length - 1;
+
+  const { canvas, ctx } = novoCanvas(cols, rows);
+  const img = ctx.createImageData(cols, rows);
+  const buf = img.data;
+  for (let i = 0; i < valores.length; i++) {
+    const v = valores[i];
+    const p4 = i * 4;
+    if (!isFinite(v) || cores.length === 0) { buf[p4 + 3] = 0; continue; }
+    if (estilo.zeroTransparente && v <= estilo.valorMinimo) { buf[p4 + 3] = 0; continue; }
+    let k = lims.findIndex(L => v <= L);
+    if (k < 0) k = ult;
+    const [r, g, b] = cores[k];
+    buf[p4] = r; buf[p4 + 1] = g; buf[p4 + 2] = b; buf[p4 + 3] = 255;
   }
   ctx.putImageData(img, 0, 0);
   return finalizarCanvas(canvas, cols, rows);

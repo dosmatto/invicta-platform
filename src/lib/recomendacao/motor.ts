@@ -292,6 +292,21 @@ export function executar(prog: Programa, constantes: ConstanteEquacao[], ext: Re
   return scope.has(prog.resultadoVar) ? scope.get(prog.resultadoVar)! : NaN;
 }
 
+// ─── Álgebra de mapas: avalia o programa PIXEL A PIXEL (Fase R3) ──────────
+// gridPorVar mapeia o nome (token lowercased) da variável → Float32Array do
+// atributo, todos do MESMO tamanho n. Fora do polígono o grid traz NaN, que
+// propaga (resultado NaN = transparente). Reaproveita o mesmo AST do teste.
+export function executarGrid(
+  prog: Programa, constantes: ConstanteEquacao[],
+  gridPorVar: Map<string, Float32Array>, n: number,
+): Float32Array {
+  const out = new Float32Array(n);
+  let i = 0;
+  const ext: Resolver = (nome) => { const a = gridPorVar.get(nome.toLowerCase()); return a ? a[i] : NaN; };
+  for (i = 0; i < n; i++) out[i] = executar(prog, constantes, ext);
+  return out;
+}
+
 // ─── Validação (sintaxe + variáveis reconhecidas) ─────────────────────────
 export interface Validacao { ok: boolean; erro?: string; vars: string[]; desconhecidas: string[]; }
 export function validar(script: string, constantes: ConstanteEquacao[] = []): Validacao {

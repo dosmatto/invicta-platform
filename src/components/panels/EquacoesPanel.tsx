@@ -153,6 +153,7 @@ function EquacaoEditor({ item, onClose }: { item: ItemBiblioteca<ConteudoEquacao
   const [descricao, setDescricao] = useState(item?.descricao ?? '');
   const [produto, setProduto] = useState(c?.produto ?? '');
   const [custo, setCusto] = useState(c?.custoTonelada != null ? String(c.custoTonelada) : '');
+  const [profundidade, setProfundidade] = useState(c?.profundidade ?? '0-20');
   const [unEq, setUnEq] = useState(c?.unidadeEquacao ?? '');
   const [unTrat, setUnTrat] = useState(c?.unidadeTratamento ?? 'kg/ha');
   const [tratamento, setTratamento] = useState<'taxa-variada' | 'taxa-fixa'>(c?.tratamento ?? 'taxa-variada');
@@ -171,6 +172,7 @@ function EquacaoEditor({ item, onClose }: { item: ItemBiblioteca<ConteudoEquacao
     return {
       produto: produto.trim(),
       custoTonelada: custo.trim() ? parseNum(custo) : null,
+      profundidade: profundidade || '0-20',
       unidadeEquacao: unEq.trim(),
       unidadeTratamento: unTrat.trim(),
       tratamento,
@@ -223,7 +225,7 @@ function EquacaoEditor({ item, onClose }: { item: ItemBiblioteca<ConteudoEquacao
 
       <div className="flex-1 overflow-y-auto p-3 space-y-4">
         <Secao titulo="Detalhes">
-          <Detalhes {...{ nome, setNome, produto, setProduto, custo, setCusto, unEq, setUnEq, unTrat, setUnTrat, tratamento, setTratamento, culturas, setCulturas, fases, setFases, descricao, setDescricao }} />
+          <Detalhes {...{ nome, setNome, produto, setProduto, custo, setCusto, profundidade, setProfundidade, unEq, setUnEq, unTrat, setUnTrat, tratamento, setTratamento, culturas, setCulturas, fases, setFases, descricao, setDescricao }} />
         </Secao>
         <Secao titulo="Equação">
           <Equacao {...{ constantes, setConstantes, script, setScript, scriptRef, naoNeg, setNaoNeg, val, inserirToken }} />
@@ -259,9 +261,12 @@ function Campo({ label, children }: { label: string; children: React.ReactNode }
 }
 const txt = "w-full rounded px-2 py-1.5 text-[11px] outline-none";
 
+const PROFUNDIDADES = ['0-20', '20-40', '0-40', '0-10', '10-20', '40-60'];
+
 function Detalhes(p: {
   nome: string; setNome: (s: string) => void; produto: string; setProduto: (s: string) => void;
-  custo: string; setCusto: (s: string) => void; unEq: string; setUnEq: (s: string) => void;
+  custo: string; setCusto: (s: string) => void; profundidade: string; setProfundidade: (s: string) => void;
+  unEq: string; setUnEq: (s: string) => void;
   unTrat: string; setUnTrat: (s: string) => void; tratamento: 'taxa-variada' | 'taxa-fixa'; setTratamento: (s: 'taxa-variada' | 'taxa-fixa') => void;
   culturas: string; setCulturas: (s: string) => void; fases: string; setFases: (s: string) => void;
   descricao: string; setDescricao: (s: string) => void;
@@ -274,9 +279,14 @@ function Detalhes(p: {
         <Campo label="Custo / tonelada (R$)"><input value={p.custo} onChange={e => p.setCusto(e.target.value)} placeholder="ex: 180" inputMode="decimal" className={txt} style={inputStyle} /></Campo>
       </div>
       <div className="grid grid-cols-2 gap-2">
-        <Campo label="Unidade da equação"><input value={p.unEq} onChange={e => p.setUnEq(e.target.value)} placeholder="ex: mmolc/dm³" className={txt} style={inputStyle} /></Campo>
+        <Campo label="Profundidade (a equação lê)">
+          <select value={p.profundidade} onChange={e => p.setProfundidade(e.target.value)} className={txt} style={inputStyle}>
+            {(PROFUNDIDADES.includes(p.profundidade) ? PROFUNDIDADES : [p.profundidade, ...PROFUNDIDADES]).map(d => <option key={d} value={d}>{d} cm</option>)}
+          </select>
+        </Campo>
         <Campo label="Unidade de tratamento"><input value={p.unTrat} onChange={e => p.setUnTrat(e.target.value)} placeholder="ex: kg/ha" className={txt} style={inputStyle} /></Campo>
       </div>
+      <Campo label="Unidade da equação"><input value={p.unEq} onChange={e => p.setUnEq(e.target.value)} placeholder="ex: mmolc/dm³" className={txt} style={inputStyle} /></Campo>
       <Campo label="Tratamento">
         <div className="flex gap-1">
           {(['taxa-variada', 'taxa-fixa'] as const).map(t => (

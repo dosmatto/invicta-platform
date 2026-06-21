@@ -18,6 +18,7 @@ import {
 import { FertilidadeSection } from '@/components/talhao/FertilidadeSection';
 import { AmostragemModulo } from '@/components/talhao/AmostragemModulo';
 import { CompactacaoSection } from '@/components/talhao/CompactacaoSection';
+import { RecomendacaoSection } from '@/components/talhao/RecomendacaoSection';
 import { LabImportSection } from '@/components/talhao/LabImportSection';
 import { ImportarGradeSection } from '@/components/talhao/ImportarGradeSection';
 import { GeradorRelatorios } from '@/components/talhao/GeradorRelatorios';
@@ -40,7 +41,7 @@ const TABS: Array<{ id: TabId; label: string; icon: React.ElementType; pronto: b
   { id: 'fertilidade',   label: 'Fertilidade',   icon: Leaf,            pronto: true },
   { id: 'amostragem',    label: 'Amostragem',    icon: Grid3x3,         pronto: true },
   { id: 'produtividade', label: 'Produtividade', icon: BarChart3,       pronto: false },
-  { id: 'recomendacoes', label: 'Recomendações', icon: FileSpreadsheet, pronto: false },
+  { id: 'recomendacoes', label: 'Recomendações', icon: FileSpreadsheet, pronto: true },
   { id: 'compactacao',   label: 'Compactação',   icon: Activity,        pronto: true },
   { id: 'ndvi',          label: 'NDVI / Satélite', icon: Satellite,     pronto: false },
   { id: 'arquivos',      label: 'Arquivos',      icon: FolderOpen,      pronto: false },
@@ -196,8 +197,9 @@ export function TalhaoPage({ id }: { id: string }) {
               </>
             )}
             {tab === 'compactacao' && <CompactacaoSection safraNome={safraSel} />}
+            {tab === 'recomendacoes' && <RecomendacaoSection safraNome={safraSel} />}
             {tab === 'relatorios' && <GeradorRelatorios safraNome={safraSel} />}
-            {!['resumo', 'fertilidade', 'amostragem', 'compactacao', 'relatorios'].includes(tab) && (
+            {!['resumo', 'fertilidade', 'amostragem', 'compactacao', 'recomendacoes', 'relatorios'].includes(tab) && (
               <EmBreve label={TABS.find(t => t.id === tab)?.label ?? ''} />
             )}
           </div>

@@ -1,6 +1,12 @@
-export const APP_VERSION = '0.47.0';
+export const APP_VERSION = '0.48.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.48.0': [
+    'Recomendações (Fase R3.A): a aba Recomendações da página do talhão agora APLICA uma equação aos mapas de fertilidade da safra e gera o MAPA DE DOSE direto no mapa (álgebra pixel a pixel, no navegador), com estatísticas (mín/média/máx), total estimado e custo',
+    'A equação agora guarda a PROFUNDIDADE que ela lê (campo em Detalhes) — ao aplicar é automático, sem perguntar profundidade',
+    'Mensagens claras quando falta interpolar algum atributo que a equação usa, ou quando os mapas têm pixels diferentes',
+    'Salvar o cenário, aplicar a recomendação inteira (várias equações) e a comparação financeira entre cenários vêm na próxima etapa (R3.B / R4)',
+  ],
   '0.47.0': [
     'Biblioteca → Recomendações (Fase R2): uma recomendação é um conjunto de equações (ex.: Corretivos, Fosfatagem, KCl). Editor numa página só com seletor de equações em chips (buscar, adicionar, remover), além de nome, culturas e descrição',
     'Mesma praticidade das Equações: lista única + busca, clonar e "Salvar como", e a recomendação nasce compartilhada (todos da empresa veem)',
