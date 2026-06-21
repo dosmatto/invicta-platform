@@ -1,6 +1,10 @@
-export const APP_VERSION = '0.50.0';
+export const APP_VERSION = '0.51.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.51.0': [
+    'PDF do Comparador de Cenários (layout oficial, A4 paisagem): no comparador, botão "Gerar PDF" cria o relatório com cabeçalho INVICTA, os mapas (satélite + dose) lado a lado — recomendado com ★ + moldura verde —, legenda única e os resumos Técnico e Financeiro; uma página por produto',
+    'Equação agora tem Frete (R$/ha) e Aplicação (R$/ha): o custo por hectare passa a ser produto + frete + aplicação (financeiro completo no comparador e no PDF). Cenários gerados antes disso precisam ser regerados para o financeiro detalhado',
+  ],
   '0.50.0': [
     'Comparador de Cenários (Fase R4 / C1): marque 2 ou 3 cenários salvos e clique "Comparar" → abre uma tela com eles lado a lado',
     'Escolha um produto no topo e os mapas dos cenários aparecem com a MESMA legenda/escala/classes; comparação financeira por cenário (custo total e por ha) com destaque do mais barato',

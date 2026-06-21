@@ -153,6 +153,8 @@ function EquacaoEditor({ item, onClose }: { item: ItemBiblioteca<ConteudoEquacao
   const [descricao, setDescricao] = useState(item?.descricao ?? '');
   const [produto, setProduto] = useState(c?.produto ?? '');
   const [custo, setCusto] = useState(c?.custoTonelada != null ? String(c.custoTonelada) : '');
+  const [frete, setFrete] = useState(c?.freteHa ? String(c.freteHa) : '');
+  const [aplicacao, setAplicacao] = useState(c?.aplicacaoHa ? String(c.aplicacaoHa) : '');
   const [profundidade, setProfundidade] = useState(c?.profundidade ?? '0-20');
   const [unEq, setUnEq] = useState(c?.unidadeEquacao ?? '');
   const [unTrat, setUnTrat] = useState(c?.unidadeTratamento ?? 'kg/ha');
@@ -174,6 +176,8 @@ function EquacaoEditor({ item, onClose }: { item: ItemBiblioteca<ConteudoEquacao
     return {
       produto: produto.trim(),
       custoTonelada: custo.trim() ? parseNum(custo) : null,
+      freteHa: frete.trim() ? (parseNum(frete) || 0) : 0,
+      aplicacaoHa: aplicacao.trim() ? (parseNum(aplicacao) || 0) : 0,
       profundidade: profundidade || '0-20',
       unidadeEquacao: unEq.trim(),
       unidadeTratamento: unTrat.trim(),
@@ -229,7 +233,7 @@ function EquacaoEditor({ item, onClose }: { item: ItemBiblioteca<ConteudoEquacao
 
       <div className="flex-1 overflow-y-auto p-3 space-y-4">
         <Secao titulo="Detalhes">
-          <Detalhes {...{ nome, setNome, produto, setProduto, custo, setCusto, profundidade, setProfundidade, unEq, setUnEq, unTrat, setUnTrat, tratamento, setTratamento, culturas, setCulturas, fases, setFases, descricao, setDescricao }} />
+          <Detalhes {...{ nome, setNome, produto, setProduto, custo, setCusto, frete, setFrete, aplicacao, setAplicacao, profundidade, setProfundidade, unEq, setUnEq, unTrat, setUnTrat, tratamento, setTratamento, culturas, setCulturas, fases, setFases, descricao, setDescricao }} />
         </Secao>
         <Secao titulo="Equação">
           <Equacao {...{ constantes, setConstantes, script, setScript, scriptRef, naoNeg, setNaoNeg, doseMinima, setDoseMinima, abaixoMinimo, setAbaixoMinimo, unTrat, val, inserirToken }} />
@@ -269,7 +273,8 @@ const PROFUNDIDADES = ['0-20', '20-40', '0-40', '0-10', '10-20', '40-60'];
 
 function Detalhes(p: {
   nome: string; setNome: (s: string) => void; produto: string; setProduto: (s: string) => void;
-  custo: string; setCusto: (s: string) => void; profundidade: string; setProfundidade: (s: string) => void;
+  custo: string; setCusto: (s: string) => void; frete: string; setFrete: (s: string) => void;
+  aplicacao: string; setAplicacao: (s: string) => void; profundidade: string; setProfundidade: (s: string) => void;
   unEq: string; setUnEq: (s: string) => void;
   unTrat: string; setUnTrat: (s: string) => void; tratamento: 'taxa-variada' | 'taxa-fixa'; setTratamento: (s: 'taxa-variada' | 'taxa-fixa') => void;
   culturas: string; setCulturas: (s: string) => void; fases: string; setFases: (s: string) => void;
@@ -281,6 +286,10 @@ function Detalhes(p: {
       <div className="grid grid-cols-2 gap-2">
         <Campo label="Produto"><input value={p.produto} onChange={e => p.setProduto(e.target.value)} placeholder="ex: Calcário" className={txt} style={inputStyle} /></Campo>
         <Campo label="Custo / tonelada (R$)"><input value={p.custo} onChange={e => p.setCusto(e.target.value)} placeholder="ex: 180" inputMode="decimal" className={txt} style={inputStyle} /></Campo>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <Campo label="Frete (R$/ha)"><input value={p.frete} onChange={e => p.setFrete(e.target.value)} placeholder="ex: 18" inputMode="decimal" className={txt} style={inputStyle} /></Campo>
+        <Campo label="Aplicação (R$/ha)"><input value={p.aplicacao} onChange={e => p.setAplicacao(e.target.value)} placeholder="ex: 22" inputMode="decimal" className={txt} style={inputStyle} /></Campo>
       </div>
       <div className="grid grid-cols-2 gap-2">
         <Campo label="Profundidade (a equação lê)">

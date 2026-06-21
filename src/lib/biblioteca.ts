@@ -296,6 +296,8 @@ export interface EstiloRecomendacao {
 export interface ConteudoEquacao {
   produto: string;
   custoTonelada: number | null;
+  freteHa: number;                   // R$/ha — custo de frete por hectare
+  aplicacaoHa: number;               // R$/ha — custo de aplicação por hectare
   profundidade: string;              // profundidade que a equação lê (ex.: '0-20'); aplicação é automática
   unidadeEquacao: string;            // unidade dos atributos de entrada (ex.: mmolc/dm3)
   unidadeTratamento: string;         // unidade da dose de saída (ex.: kg/ha, t/ha)

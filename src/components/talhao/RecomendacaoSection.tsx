@@ -131,7 +131,7 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
     if (!doses.length) return null;
     const area = talhao?.areaHa ?? 0;
     let custoTotal = 0; let temSemCusto = false;
-    for (const d of doses) { if (d.custo != null) custoTotal += d.custo; else temSemCusto = true; }
+    for (const d of doses) { custoTotal += d.custo; if (d.custoTonelada == null) temSemCusto = true; }
     return { area, custoTotal, custoHa: area ? custoTotal / area : 0, temSemCusto };
   }, [doses, talhao]);
 

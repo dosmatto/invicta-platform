@@ -108,7 +108,13 @@ export interface DoseCalculada {
   grid: { b64: string; shape: [number, number]; comp?: 'gz' };
   bounds: [number, number, number, number];
   stats: { min: number; media: number; max: number; n: number };
-  toneladas: number; custo: number | null;
+  toneladas: number;
+  custoTonelada: number | null;   // R$/t do produto
+  freteHa: number;                // R$/ha
+  aplicacaoHa: number;            // R$/ha
+  custoProdutoHa: number;         // R$/ha só do produto
+  custoHa: number;                // R$/ha total (produto + frete + aplicação)
+  custo: number;                  // investimento total = custoHa × área
 }
 
 export function calcularDose(
@@ -120,9 +126,14 @@ export function calcularDose(
   const u = (c.unidadeTratamento || '').toLowerCase();
   const ehT = u.includes('t/ha') || u.includes('ton');
   const toneladas = ehT ? res.stats.media * areaHa : res.stats.media * areaHa / 1000;
-  const custo = c.custoTonelada != null ? toneladas * c.custoTonelada : null;
+  const tonHa = areaHa > 0 ? toneladas / areaHa : 0;
+  const custoProdutoHa = tonHa * (c.custoTonelada ?? 0);
+  const freteHa = c.freteHa ?? 0;
+  const aplicacaoHa = c.aplicacaoHa ?? 0;
+  const custoHa = custoProdutoHa + freteHa + aplicacaoHa;
   return {
     equacaoId: eq.id, nomeEquacao: eq.nome, produto: c.produto, unidade: c.unidadeTratamento,
-    estilo: c.estilo, grid: res.grid, bounds: res.bounds, stats: res.stats, toneladas, custo,
+    estilo: c.estilo, grid: res.grid, bounds: res.bounds, stats: res.stats, toneladas,
+    custoTonelada: c.custoTonelada, freteHa, aplicacaoHa, custoProdutoHa, custoHa, custo: custoHa * areaHa,
   };
 }

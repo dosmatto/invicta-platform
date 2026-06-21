@@ -9,7 +9,8 @@
 import { useMemo, useState } from 'react';
 import { colorirDose } from '@/lib/raster';
 import type { Cenario } from '@/lib/recomendacao/cenarios';
-import { X, Star } from 'lucide-react';
+import { gerarPdfComparador } from '@/lib/recomendacao/relatorioCenarios';
+import { X, Star, FileDown, Loader2 } from 'lucide-react';
 
 const fmt = (v: number, dec = 0) => v.toLocaleString('pt-BR', { maximumFractionDigits: dec, minimumFractionDigits: dec });
 
@@ -41,6 +42,13 @@ export function ComparadorCenarios({ cenarios, onClose }: { cenarios: Cenario[];
   }, [cenarios]);
 
   const classes = ref ? [...ref.estilo.classes].sort((a, b) => a.limiteSuperior - b.limiteSuperior) : [];
+  const [gerando, setGerando] = useState(false);
+  async function pdf() {
+    setGerando(true);
+    try { await gerarPdfComparador(cenarios); }
+    catch (e) { alert('Falha ao gerar o PDF: ' + (e instanceof Error ? e.message : String(e))); }
+    finally { setGerando(false); }
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col" style={{ background: 'rgba(3,12,24,0.97)' }}>
@@ -53,7 +61,10 @@ export function ComparadorCenarios({ cenarios, onClose }: { cenarios: Cenario[];
             {produtos.map(p => <option key={p} value={p}>{p}</option>)}
           </select>
         </div>
-        <button onClick={onClose} className="ml-auto p-1.5 rounded hover:bg-white/10" style={{ color: '#cbd5e1' }}><X size={16} /></button>
+        <button onClick={pdf} disabled={gerando} className="ml-auto px-3 py-1.5 rounded text-[11px] font-bold text-white flex items-center gap-1.5" style={{ background: 'var(--invicta-green-dark)', opacity: gerando ? 0.6 : 1 }}>
+          {gerando ? <Loader2 size={13} className="animate-spin" /> : <FileDown size={13} />} Gerar PDF
+        </button>
+        <button onClick={onClose} className="p-1.5 rounded hover:bg-white/10" style={{ color: '#cbd5e1' }}><X size={16} /></button>
       </div>
 
       <div className="flex-1 overflow-auto p-4">
