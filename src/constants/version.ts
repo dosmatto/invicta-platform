@@ -1,6 +1,10 @@
-export const APP_VERSION = '0.49.2';
+export const APP_VERSION = '0.50.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.50.0': [
+    'Comparador de Cenários (Fase R4 / C1): marque 2 ou 3 cenários salvos e clique "Comparar" → abre uma tela com eles lado a lado',
+    'Escolha um produto no topo e os mapas dos cenários aparecem com a MESMA legenda/escala/classes; comparação financeira por cenário (custo total e por ha) com destaque do mais barato',
+  ],
   '0.49.2': [
     'Cenário salvo automaticamente ao aplicar (nada se perde): o botão virou "Aplicar e salvar" e o cenário já fica gravado na nuvem; reprocessar a mesma recomendação+importação sobrescreve (não duplica)',
     'Nome do cenário pode ser definido antes de aplicar; em "Cenários salvos" dá para apagar manualmente o que não for usar',

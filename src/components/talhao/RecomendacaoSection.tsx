@@ -13,7 +13,8 @@ import { carregarGridsTalhao, calcularDose, type DoseCalculada } from '@/lib/rec
 import { salvarCenario, listarCenarios, descomprimirCenario, excluirCenario, type Cenario } from '@/lib/recomendacao/cenarios';
 import { colorirDose } from '@/lib/raster';
 import { coordsFromBounds } from '@/lib/fertilidade';
-import { Play, Loader2, AlertTriangle, Wand2, Save, FolderOpen, Trash2, Eye } from 'lucide-react';
+import { ComparadorCenarios } from '@/components/talhao/ComparadorCenarios';
+import { Play, Loader2, AlertTriangle, Wand2, Save, FolderOpen, Trash2, Eye, GitCompare } from 'lucide-react';
 
 const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
 const fmt = (v: number, dec = 0) => v.toLocaleString('pt-BR', { maximumFractionDigits: dec, minimumFractionDigits: dec });
@@ -38,6 +39,8 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
   const [nomeCenario, setNomeCenario] = useState('');
   const [salvoMsg, setSalvoMsg] = useState('');
   const [salvos, setSalvos] = useState<Cenario[]>([]);
+  const [selCompara, setSelCompara] = useState<Set<string>>(new Set());
+  const [comparar, setComparar] = useState<Cenario[] | null>(null);
 
   // Biblioteca (equações + recomendações) — reage a edições
   useEffect(() => {
@@ -143,6 +146,21 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
   async function excluirSalvo(c: Cenario) {
     if (!confirm(`Excluir o cenário "${c.nome}"?`)) return;
     await excluirCenario(c.id); await recarregarSalvos();
+    setSelCompara(prev => { const n = new Set(prev); n.delete(c.id); return n; });
+  }
+  function toggleCompara(id: string) {
+    setSelCompara(prev => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id);
+      else if (n.size < 3) n.add(id);   // compara até 3
+      return n;
+    });
+  }
+  async function abrirComparador() {
+    const sel = salvos.filter(c => selCompara.has(c.id));
+    if (sel.length < 2) return;
+    const full = await Promise.all(sel.map(descomprimirCenario));
+    setComparar(full);
   }
 
   const classesVis = useMemo(() => doseAtiva ? [...doseAtiva.estilo.classes].sort((a, b) => a.limiteSuperior - b.limiteSuperior) : [], [doseAtiva]);
@@ -281,23 +299,37 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
       {/* Cenários salvos */}
       {salvos.length > 0 && (
         <div>
-          <div className="text-[10px] font-bold uppercase tracking-wide mb-1.5" style={{ color: '#93c5fd' }}>Cenários salvos</div>
+          <div className="flex items-center justify-between mb-1.5">
+            <div className="text-[10px] font-bold uppercase tracking-wide" style={{ color: '#93c5fd' }}>Cenários salvos</div>
+            <button onClick={abrirComparador} disabled={selCompara.size < 2}
+              className="text-[10px] font-bold px-2 py-1 rounded flex items-center gap-1"
+              style={{ background: selCompara.size >= 2 ? 'var(--invicta-blue-mid)' : '#1a3a6b', color: selCompara.size >= 2 ? '#fff' : '#64748b' }}>
+              <GitCompare size={11} /> Comparar{selCompara.size ? ` (${selCompara.size})` : ''}
+            </button>
+          </div>
+          <div className="text-[9px] mb-1" style={{ color: '#64748b' }}>Marque 2 ou 3 cenários para comparar lado a lado.</div>
           <div className="space-y-1">
-            {salvos.map(c => (
-              <div key={c.id} className="p-2 rounded-lg flex items-center gap-2" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
-                <div className="flex-1 min-w-0">
-                  <div className="text-[10px] font-bold truncate" style={{ color: '#e2e8f0' }}>{c.nome}</div>
-                  <div className="text-[9px]" style={{ color: '#64748b' }}>
-                    {new Date(c.geradoEm).toLocaleDateString('pt-BR')} · {c.doses.length} produto(s) · R$ {fmt(c.financeiro.custoTotal, 2)}
+            {salvos.map(c => {
+              const marcado = selCompara.has(c.id);
+              return (
+                <div key={c.id} className="p-2 rounded-lg flex items-center gap-2" style={{ background: '#061525', border: marcado ? '1px solid var(--invicta-green)' : '1px solid #1a3a6b' }}>
+                  <input type="checkbox" checked={marcado} onChange={() => toggleCompara(c.id)} disabled={!marcado && selCompara.size >= 3} title="Comparar" />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[10px] font-bold truncate" style={{ color: '#e2e8f0' }}>{c.nome}</div>
+                    <div className="text-[9px]" style={{ color: '#64748b' }}>
+                      {new Date(c.geradoEm).toLocaleDateString('pt-BR')} · {c.doses.length} produto(s) · R$ {fmt(c.financeiro.custoTotal, 2)}
+                    </div>
                   </div>
+                  <button onClick={() => reabrir(c)} title="Reabrir" className="p-1 rounded hover:bg-white/10" style={{ color: '#93c5fd' }}><FolderOpen size={12} /></button>
+                  <button onClick={() => excluirSalvo(c)} title="Excluir" className="p-1 rounded hover:bg-white/10" style={{ color: '#f87171' }}><Trash2 size={12} /></button>
                 </div>
-                <button onClick={() => reabrir(c)} title="Reabrir" className="p-1 rounded hover:bg-white/10" style={{ color: '#93c5fd' }}><FolderOpen size={12} /></button>
-                <button onClick={() => excluirSalvo(c)} title="Excluir" className="p-1 rounded hover:bg-white/10" style={{ color: '#f87171' }}><Trash2 size={12} /></button>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
+
+      {comparar && <ComparadorCenarios cenarios={comparar} onClose={() => setComparar(null)} />}
     </div>
   );
 }
