@@ -36,7 +36,7 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
   const [falhas, setFalhas] = useState<{ nome: string; erro: string }[]>([]);
   const [visivel, setVisivel] = useState(0);
   const [nomeCenario, setNomeCenario] = useState('');
-  const [salvando, setSalvando] = useState(false);
+  const [salvoMsg, setSalvoMsg] = useState('');
   const [salvos, setSalvos] = useState<Cenario[]>([]);
 
   // Biblioteca (equações + recomendações) — reage a edições
@@ -68,7 +68,7 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
   useEffect(() => { recarregarSalvos(); }, [recarregarSalvos]);
 
   // limpa resultado ao trocar contexto
-  useEffect(() => { setDoses([]); setFalhas([]); setEstado('idle'); setErro(''); setVisivel(0); }, [modo, equacaoId, recomendacaoId, importacaoId]);
+  useEffect(() => { setDoses([]); setFalhas([]); setEstado('idle'); setErro(''); setVisivel(0); setSalvoMsg(''); }, [modo, equacaoId, recomendacaoId, importacaoId]);
 
   // dose visível no mapa
   const doseAtiva = doses[visivel] ?? null;
@@ -83,7 +83,7 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
   useEffect(() => () => { setFertilidadeOverlay(null); setFertilidadeLabels(null); }, [setFertilidadeOverlay, setFertilidadeLabels]);
 
   async function aplicar() {
-    setErro(''); setDoses([]); setFalhas([]); setVisivel(0);
+    setErro(''); setDoses([]); setFalhas([]); setVisivel(0); setSalvoMsg('');
     if (!nav.talhaoId || !importacaoId) { setErro('Selecione uma importação de laboratório.'); setEstado('erro'); return; }
     let itens: ItemBiblioteca<ConteudoEquacao>[] = [];
     if (modo === 'equacao') {
@@ -106,7 +106,21 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
       }
       setDoses(ok); setFalhas(erros);
       setEstado(ok.length ? 'pronto' : 'erro');
-      if (!ok.length) setErro('Nenhuma equação pôde ser aplicada — veja os detalhes abaixo.');
+      if (!ok.length) { setErro('Nenhuma equação pôde ser aplicada — veja os detalhes abaixo.'); return; }
+      // Auto-salva o cenário na nuvem (id determinístico = não duplica ao reprocessar).
+      const ref = modo === 'recomendacao' ? recomendacaoId : equacaoId;
+      const autoId = `cen_${nav.talhaoId}_${importacaoId}_${modo}_${ref}`;
+      const custoTotal = ok.reduce((s, d) => s + (d.custo ?? 0), 0);
+      const nome = nomeCenario.trim() || `${recSel?.nome ?? eqSel?.nome ?? 'Cenário'}`;
+      try {
+        await salvarCenario({
+          talhaoId: nav.talhaoId, safra, importacaoId,
+          origem: modo, recomendacaoId: modo === 'recomendacao' ? recomendacaoId : undefined,
+          nome, doses: ok, financeiro: { custoTotal, custoHa: area ? custoTotal / area : 0, areaHa: area },
+        }, autoId);
+        await recarregarSalvos();
+        setSalvoMsg(`Salvo como "${nome}".`);
+      } catch (e) { setSalvoMsg('Calculado, mas NÃO salvou na nuvem: ' + (e instanceof Error ? e.message : String(e))); }
     } catch (e) { setErro(e instanceof Error ? e.message : String(e)); setEstado('erro'); }
   }
 
@@ -117,25 +131,6 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
     for (const d of doses) { if (d.custo != null) custoTotal += d.custo; else temSemCusto = true; }
     return { area, custoTotal, custoHa: area ? custoTotal / area : 0, temSemCusto };
   }, [doses, talhao]);
-
-  async function salvar() {
-    if (!doses.length || !nav.talhaoId) return;
-    setSalvando(true);
-    try {
-      const area = talhao?.areaHa ?? 0;
-      const custoTotal = doses.reduce((s, d) => s + (d.custo ?? 0), 0);
-      const nome = nomeCenario.trim() || `${recSel?.nome ?? eqSel?.nome ?? 'Cenário'} — ${new Date().toLocaleDateString('pt-BR')}`;
-      const cen = await salvarCenario({
-        talhaoId: nav.talhaoId, safra, importacaoId,
-        origem: modo, recomendacaoId: modo === 'recomendacao' ? recomendacaoId : undefined,
-        nome, doses, financeiro: { custoTotal, custoHa: area ? custoTotal / area : 0, areaHa: area },
-      });
-      setNomeCenario('');
-      await recarregarSalvos();
-      alert(`Cenário "${cen.nome}" salvo na nuvem.`);
-    } catch (e) { alert('Falha ao salvar: ' + (e instanceof Error ? e.message : String(e))); }
-    finally { setSalvando(false); }
-  }
 
   async function reabrir(cen: Cenario) {
     setEstado('carregando'); setErro('');
@@ -202,10 +197,16 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
         </div>
       )}
 
+      <div>
+        <label className="text-[10px] font-semibold block mb-1" style={{ color: '#cbd5e1' }}>Nome do cenário (opcional)</label>
+        <input value={nomeCenario} onChange={e => setNomeCenario(e.target.value)} placeholder="ex: Cenário A — V70"
+          className="w-full rounded px-2 py-1.5 text-[11px] outline-none" style={inputStyle} />
+      </div>
+
       <button onClick={aplicar} disabled={!podeAplicar}
         className="w-full py-2 rounded text-[11px] font-bold text-white flex items-center justify-center gap-1.5"
         style={{ background: !podeAplicar ? '#1a3a6b' : 'var(--invicta-green-dark)', opacity: podeAplicar ? 1 : 0.5 }}>
-        {estado === 'carregando' ? <><Loader2 size={13} className="animate-spin" /> Aplicando…</> : <><Play size={13} /> Aplicar no mapa</>}
+        {estado === 'carregando' ? <><Loader2 size={13} className="animate-spin" /> Aplicando e salvando…</> : <><Play size={13} /> Aplicar e salvar</>}
       </button>
 
       {erro && (
@@ -268,15 +269,12 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
             </div>
           )}
 
-          {/* salvar cenário */}
-          <div className="pt-1 flex gap-1.5" style={{ borderTop: '1px solid #1a3a6b' }}>
-            <input value={nomeCenario} onChange={e => setNomeCenario(e.target.value)} placeholder="Nome do cenário (opcional)"
-              className="flex-1 rounded px-2 py-1.5 text-[10px] outline-none" style={inputStyle} />
-            <button onClick={salvar} disabled={salvando}
-              className="px-2.5 py-1.5 rounded text-[10px] font-bold text-white flex items-center gap-1" style={{ background: 'var(--invicta-green-dark)', opacity: salvando ? 0.6 : 1 }}>
-              {salvando ? <Loader2 size={11} className="animate-spin" /> : <Save size={11} />} Salvar cenário
-            </button>
-          </div>
+          {/* status do auto-save */}
+          {salvoMsg && (
+            <div className="pt-1 flex items-center gap-1.5 text-[9px]" style={{ color: salvoMsg.startsWith('Salvo') ? '#4ade80' : '#fbbf24', borderTop: '1px solid #1a3a6b' }}>
+              <Save size={10} /> <span>{salvoMsg} Apague em “Cenários salvos” o que não for usar.</span>
+            </div>
+          )}
         </div>
       )}
 

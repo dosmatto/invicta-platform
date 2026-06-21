@@ -27,10 +27,12 @@ export interface Cenario {
 
 const COL = 'inv_cenarios';
 
-export async function salvarCenario(meta: Omit<Cenario, 'id' | 'geradoEm' | 'geradoPor'>): Promise<Cenario> {
+// `idFixo` faz upsert (reprocessar a mesma recomendação+importação sobrescreve,
+// em vez de criar duplicado). Sem ele, gera um id novo a cada chamada.
+export async function salvarCenario(meta: Omit<Cenario, 'id' | 'geradoEm' | 'geradoPor'>, idFixo?: string): Promise<Cenario> {
   const fb = getFb();
   if (!fb) throw new Error('Nuvem indisponível para salvar o cenário.');
-  const id = `cen_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+  const id = idFixo ?? `cen_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
   // comprime os grids (gzip) p/ caber no doc do Firestore.
   const doses = await Promise.all(meta.doses.map(async d => ({ ...d, grid: await comprimirGrid(d.grid as Grid) })));
   const cen: Cenario = { ...meta, doses, id, geradoEm: Date.now(), geradoPor: fb.auth.currentUser?.email ?? '' };

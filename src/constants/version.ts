@@ -1,6 +1,10 @@
-export const APP_VERSION = '0.49.1';
+export const APP_VERSION = '0.49.2';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.49.2': [
+    'Cenário salvo automaticamente ao aplicar (nada se perde): o botão virou "Aplicar e salvar" e o cenário já fica gravado na nuvem; reprocessar a mesma recomendação+importação sobrescreve (não duplica)',
+    'Nome do cenário pode ser definido antes de aplicar; em "Cenários salvos" dá para apagar manualmente o que não for usar',
+  ],
   '0.49.1': [
     'Cenário: cada dose agora mostra o NOME DA EQUAÇÃO em destaque (antes aparecia só o produto — "Calcário"/"Calcário" ficava idêntico). O produto vai na linha de baixo, e a legenda também usa o nome da equação',
   ],
