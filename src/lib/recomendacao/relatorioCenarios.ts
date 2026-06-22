@@ -10,7 +10,7 @@ import type { jsPDF as JsPDF } from 'jspdf';
 import { capturarMapaFertilidade } from '../capturaMapa';
 import { colorirDose } from '../raster';
 import { hexToRgb } from '../legendas';
-import { extrairPoligono } from '../fertilidade';
+import { extrairPoligono, decodeGrid } from '../fertilidade';
 import { getTalhoes, getFazendas, getClientes, getPlantio } from '../store';
 import type { Cenario } from './cenarios';
 import type { DoseCalculada } from './aplicar';
@@ -75,7 +75,7 @@ export async function montarPdfComparador(cenarios: Cenario[]): Promise<Blob> {
   return doc.output('blob');
 }
 
-function abrirOuBaixar(blob: Blob, aba: Window | null, nome: string) {
+export function abrirOuBaixar(blob: Blob, aba: Window | null, nome: string) {
   const url = URL.createObjectURL(blob);
   if (aba) { aba.location.href = url; }
   else { const a = document.createElement('a'); a.href = url; a.download = nome; document.body.appendChild(a); a.click(); a.remove(); }
@@ -203,4 +203,120 @@ function desenharTabela(doc: JsPDF, x: number, y: number, w: number, titulo: str
     }
     yy += 4.6; doc.setDrawColor(...LINE); doc.line(x, yy - 3.1, x + w, yy - 3.1);
   });
+}
+
+// ─── C2 — Recomendação Oficial (book em lote) ─────────────────────────────
+interface FaixaPlano { inf: number; sup: number; cor: string; area: number; pct: number; }
+function planoDeAplicacao(dose: DoseCalculada, areaHa: number): FaixaPlano[] {
+  const classes = [...dose.estilo.classes].filter(c => Number.isFinite(c.limiteSuperior)).sort((a, b) => a.limiteSuperior - b.limiteSuperior);
+  if (!classes.length) return [];
+  const lims = classes.map(c => c.limiteSuperior);
+  const cont = new Array(classes.length).fill(0);
+  let n = 0;
+  try {
+    const { valores } = decodeGrid(dose.grid);
+    for (let i = 0; i < valores.length; i++) { const v = valores[i]; if (!isFinite(v)) continue; n++; let k = lims.findIndex(L => v <= L); if (k < 0) k = classes.length - 1; cont[k]++; }
+  } catch { /* sem grid */ }
+  const areaPx = n > 0 ? areaHa / n : 0;
+  return classes.map((c, i) => ({ inf: i === 0 ? dose.estilo.valorMinimo : classes[i - 1].limiteSuperior, sup: c.limiteSuperior, cor: c.cor, area: cont[i] * areaPx, pct: n > 0 ? cont[i] / n * 100 : 0 }));
+}
+
+function secaoH(doc: JsPDF, x: number, y: number, t: string): number {
+  doc.setFontSize(8); doc.setTextColor(...GREEN); doc.setFont('helvetica', 'bold'); doc.text(t.toUpperCase(), x, y); return y + 4.6;
+}
+function kv(doc: JsPDF, x: number, w: number, y: number, k: string, v: string, cor?: RGB, fill?: boolean): number {
+  if (fill) { doc.setFillColor(238, 246, 233); doc.rect(x, y - 2.9, w, 4.5, 'F'); }
+  doc.setFontSize(8); doc.setFont('helvetica', fill ? 'bold' : 'normal'); doc.setTextColor(...(fill ? GREEN : [90, 101, 115] as RGB)); doc.text(k, x, y);
+  doc.setTextColor(...(cor ?? (fill ? GREEN : [40, 48, 58] as RGB))); doc.setFont('helvetica', cor || fill ? 'bold' : 'normal'); doc.text(v, x + w, y, { align: 'right' });
+  doc.setDrawColor(...LINE); doc.line(x, y + 1.7, x + w, y + 1.7);
+  return y + 5;
+}
+
+async function desenharPaginaOficial(doc: JsPDF, dose: DoseCalculada, cenNome: string, ctx: Ctx, logo: HTMLImageElement | null) {
+  const W = 297, H = 210, M = 6;
+  let mapImg: string | null = null;
+  try { mapImg = await capturarMapaFertilidade({ rasterPng: colorirDose(dose.grid, dose.estilo).dataUrl, bounds: dose.bounds, poligono: ctx.poligono, valores: VAZIO, satelite: true, corLimite: '#ffffff', larguraPx: 900, alturaPx: 805 }); } catch { /* segue */ }
+
+  doc.setFillColor(...NAVY); doc.rect(0, 0, W, 16, 'F');
+  if (logo) { const h = 9.5, w = h * (logo.naturalWidth / logo.naturalHeight); doc.addImage(logo, 'PNG', M, 3.2, w, h); }
+  const campos: [string, string][] = [
+    ['FAZENDA', ctx.fazenda], ['TALHÃO', ctx.talhao], ['SAFRA', ctx.safra], ['PRODUTO', dose.produto || dose.nomeEquacao],
+    ['CENÁRIO', cenNome], ['ÁREA', `${fmt(ctx.areaHa, 1)} ha`], ['DATA', new Date().toLocaleDateString('pt-BR')],
+  ];
+  let cx = 44;
+  for (const [lb, val] of campos) {
+    doc.setFontSize(6); doc.setTextColor(127, 163, 207); doc.setFont('helvetica', 'normal'); doc.text(san(lb), cx, 6.5);
+    doc.setFontSize(8); doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.text(san(val) || '—', cx, 11.5, { maxWidth: 42 });
+    cx += Math.max(26, Math.min(50, san(val).length * 1.7 + 14));
+  }
+
+  const SX = M, SW = 82; let y = 22;
+  doc.setFontSize(11); doc.setTextColor(...GREEN); doc.setFont('helvetica', 'bold'); doc.text('Recomendação oficial', SX, y); y += 6;
+  y = secaoH(doc, SX, y, 'Produtor / fazenda / cultura');
+  doc.setFontSize(9); doc.setTextColor(40, 48, 58); doc.setFont('helvetica', 'bold'); doc.text(san(ctx.produtor) || '—', SX, y); y += 4;
+  doc.setFontSize(8); doc.setTextColor(...GRAY); doc.setFont('helvetica', 'normal'); doc.text(`${san(ctx.fazenda)} · ${san(ctx.cultura) || '—'}`, SX, y); y += 6;
+
+  y = secaoH(doc, SX, y, 'Resumo técnico');
+  y = kv(doc, SX, SW, y, 'Dose mínima', `${fmt(dose.stats.min)} kg/ha`);
+  y = kv(doc, SX, SW, y, 'Dose média', `${fmt(dose.stats.media)} kg/ha`, GREEN);
+  y = kv(doc, SX, SW, y, 'Dose máxima', `${fmt(dose.stats.max)} kg/ha`, [192, 57, 43]);
+  y = kv(doc, SX, SW, y, 'Quantidade total', `${fmt(dose.toneladas, 1)} t`);
+  y = kv(doc, SX, SW, y, 'Área total', `${fmt(ctx.areaHa, 1)} ha`);
+  y += 2;
+
+  y = secaoH(doc, SX, y, 'Plano de aplicação');
+  doc.setFontSize(6.5); doc.setTextColor(...GRAY); doc.setFont('helvetica', 'normal');
+  doc.text('Faixa (kg/ha)', SX, y); doc.text('ha', SX + SW - 16, y, { align: 'right' }); doc.text('%', SX + SW, y, { align: 'right' });
+  y += 1; doc.setDrawColor(...LINE); doc.line(SX, y, SX + SW, y); y += 3.4;
+  doc.setFontSize(7.5); doc.setTextColor(40, 48, 58); doc.setFont('helvetica', 'normal');
+  for (const f of planoDeAplicacao(dose, ctx.areaHa)) {
+    const [r, g, b] = hexToRgb(f.cor); doc.setFillColor(r, g, b); doc.rect(SX, y - 2.6, 4, 3, 'F');
+    doc.text(`${fmt(f.inf)} – ${fmt(f.sup)}`, SX + 6, y);
+    doc.text(fmt(f.area, 1), SX + SW - 16, y, { align: 'right' });
+    doc.text(fmt(f.pct, 1) + '%', SX + SW, y, { align: 'right' });
+    y += 4; doc.setDrawColor(...LINE); doc.line(SX, y - 2.8, SX + SW, y - 2.8);
+  }
+  y += 2;
+
+  y = secaoH(doc, SX, y, 'Resumo financeiro');
+  y = kv(doc, SX, SW, y, 'Produto', `R$ ${fmt(dose.custoProdutoHa ?? 0, 2)}/ha`);
+  y = kv(doc, SX, SW, y, 'Frete', `R$ ${fmt(dose.freteHa ?? 0, 2)}/ha`);
+  y = kv(doc, SX, SW, y, 'Aplicação', `R$ ${fmt(dose.aplicacaoHa ?? 0, 2)}/ha`);
+  y = kv(doc, SX, SW, y, 'Investimento por ha', `R$ ${fmt(dose.custoHa ?? 0, 2)}/ha`, GREEN, true);
+  y = kv(doc, SX, SW, y, 'Investimento total', `R$ ${fmt(dose.custo ?? 0, 2)}`);
+  y = kv(doc, SX, SW, y, 'Preço do produto', dose.custoTonelada != null ? `R$ ${fmt(dose.custoTonelada, 2)}/t` : '—');
+  y = kv(doc, SX, SW, y, 'Total de produto', `${fmt(dose.toneladas, 1)} t`);
+
+  const mx = M + 86, my = 20, mw = W - mx - M, mh = H - my - 11;
+  doc.setFillColor(36, 48, 24); doc.rect(mx, my, mw, mh, 'F');
+  if (mapImg) doc.addImage(mapImg, 'PNG', mx, my, mw, mh);
+
+  doc.setFillColor(...NAVY); doc.rect(0, H - 9, W, 9, 'F');
+  if (logo) { const h = 4.5, w = h * (logo.naturalWidth / logo.naturalHeight); doc.addImage(logo, 'PNG', M, H - 7, w, h); }
+  doc.setFontSize(7); doc.setTextColor(127, 163, 207); doc.setFont('helvetica', 'normal'); doc.text('Recomendação oficial — taxa variável', W - M, H - 3.5, { align: 'right' });
+}
+
+// Book: 1 página oficial por dose (produto) de cada cenário/recomendação. 1 PDF.
+export async function montarBookOficial(cenarios: Cenario[]): Promise<Blob> {
+  if (cenarios.length === 0) throw new Error('Nenhuma recomendação selecionada.');
+  const tId = cenarios[0].talhaoId, safra = cenarios[0].safra;
+  const tal = getTalhoes().find(t => t.id === tId) ?? null;
+  const faz = tal ? getFazendas().find(f => f.id === tal.fazendaId) ?? null : null;
+  const cli = faz ? getClientes().find(c => c.id === faz.clienteId) ?? null : null;
+  const poligono = tal?.geojson ? (() => { try { return extrairPoligono(JSON.parse(tal.geojson!)); } catch { return null; } })() : null;
+  if (!poligono) throw new Error('Talhão sem polígono salvo — não dá para desenhar os mapas.');
+  const ctx: Ctx = { fazenda: faz?.nome ?? '', talhao: tal?.nome ?? '', safra, cultura: getPlantio(tId, safra), produtor: cli?.nome ?? '', areaHa: tal?.areaHa ?? 0, poligono };
+  const logo = await carregarImg('/images/logo-branca.png').catch(() => null);
+  const { jsPDF } = await import('jspdf');
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  let primeira = true;
+  for (const cen of cenarios) {
+    for (const dose of cen.doses) {
+      if (!primeira) doc.addPage();
+      primeira = false;
+      await desenharPaginaOficial(doc, dose, cen.nome, ctx, logo);
+    }
+  }
+  if (primeira) throw new Error('As recomendações não geraram nenhuma dose.');
+  return doc.output('blob');
 }

@@ -14,7 +14,8 @@ import { salvarCenario, listarCenarios, descomprimirCenario, excluirCenario, typ
 import { colorirDose } from '@/lib/raster';
 import { coordsFromBounds } from '@/lib/fertilidade';
 import { ComparadorCenarios } from '@/components/talhao/ComparadorCenarios';
-import { Play, Loader2, AlertTriangle, Wand2, Save, FolderOpen, Trash2, Eye, GitCompare } from 'lucide-react';
+import { montarBookOficial, abrirOuBaixar } from '@/lib/recomendacao/relatorioCenarios';
+import { Play, Loader2, AlertTriangle, Wand2, Save, FolderOpen, Trash2, Eye, GitCompare, FileText } from 'lucide-react';
 
 const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
 const fmt = (v: number, dec = 0) => v.toLocaleString('pt-BR', { maximumFractionDigits: dec, minimumFractionDigits: dec });
@@ -41,6 +42,9 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
   const [salvos, setSalvos] = useState<Cenario[]>([]);
   const [selCompara, setSelCompara] = useState<Set<string>>(new Set());
   const [comparar, setComparar] = useState<Cenario[] | null>(null);
+  const [bookSel, setBookSel] = useState<Set<string>>(new Set());
+  const [bookEstado, setBookEstado] = useState<'idle' | 'carregando' | 'pronto' | 'erro'>('idle');
+  const [erroBook, setErroBook] = useState('');
 
   // Biblioteca (equações + recomendações) — reage a edições
   useEffect(() => {
@@ -161,6 +165,40 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
     if (sel.length < 2) return;
     const full = await Promise.all(sel.map(descomprimirCenario));
     setComparar(full);
+  }
+
+  // Book: todas as recomendações marcadas por padrão (o usuário desmarca o que não quer).
+  useEffect(() => { setBookSel(new Set(recomendacoes.map(r => r.id))); }, [recomendacoes]);
+  function toggleBook(id: string) {
+    setBookSel(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  }
+  async function gerarBook() {
+    setErroBook('');
+    if (!nav.talhaoId || !importacaoId) { setErroBook('Selecione uma importação de laboratório.'); setBookEstado('erro'); return; }
+    const recs = recomendacoes.filter(r => bookSel.has(r.id));
+    if (recs.length === 0) { setErroBook('Marque ao menos uma recomendação.'); setBookEstado('erro'); return; }
+    const aba = typeof window !== 'undefined' ? window.open('', '_blank') : null;  // antes de qualquer await
+    setBookEstado('carregando');
+    try {
+      const grids = await carregarGridsTalhao(nav.talhaoId, importacaoId);
+      const area = talhao?.areaHa ?? 0;
+      const cens: Cenario[] = [];
+      for (const r of recs) {
+        const itens = r.conteudo.equacaoIds.map(id => equacoes.find(e => e.id === id)).filter(Boolean) as ItemBiblioteca<ConteudoEquacao>[];
+        const ok: DoseCalculada[] = [];
+        for (const it of itens) { try { ok.push(calcularDose(it, grids, area)); } catch { /* sem mapa p/ essa equação */ } }
+        if (ok.length === 0) continue;
+        const custoTotal = ok.reduce((s, d) => s + d.custo, 0);
+        const financeiro = { custoTotal, custoHa: area ? custoTotal / area : 0, areaHa: area };
+        cens.push({ id: '', talhaoId: nav.talhaoId, safra, importacaoId, origem: 'recomendacao', recomendacaoId: r.id, nome: r.nome, doses: ok, financeiro, geradoEm: Date.now(), geradoPor: '' });
+        salvarCenario({ talhaoId: nav.talhaoId, safra, importacaoId, origem: 'recomendacao', recomendacaoId: r.id, nome: r.nome, doses: ok, financeiro }, `cen_${nav.talhaoId}_${importacaoId}_recomendacao_${r.id}`).catch(() => {});
+      }
+      if (cens.length === 0) { if (aba) aba.close(); setErroBook('Nenhuma recomendação pôde ser aplicada — faltam mapas interpolados dos atributos usados.'); setBookEstado('erro'); return; }
+      const blob = await montarBookOficial(cens);
+      abrirOuBaixar(blob, aba, `book-recomendacoes-${safra}.pdf`);
+      await recarregarSalvos();
+      setBookEstado('pronto');
+    } catch (e) { if (aba) aba.close(); setErroBook(e instanceof Error ? e.message : String(e)); setBookEstado('erro'); }
   }
 
   const classesVis = useMemo(() => doseAtiva ? [...doseAtiva.estilo.classes].sort((a, b) => a.limiteSuperior - b.limiteSuperior) : [], [doseAtiva]);
@@ -326,6 +364,38 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
               );
             })}
           </div>
+        </div>
+      )}
+
+      {/* Book de recomendações (PDF oficial em lote) */}
+      {recomendacoes.length > 0 && (
+        <div style={{ borderTop: '1px solid #1a3a6b', paddingTop: 10 }}>
+          <div className="flex items-center gap-1.5 mb-1">
+            <FileText size={13} style={{ color: '#a78bfa' }} />
+            <span className="text-[11px] font-bold uppercase tracking-wide" style={{ color: '#93c5fd' }}>Book de recomendações (PDF)</span>
+          </div>
+          <p className="text-[9px] mb-1.5" style={{ color: '#64748b' }}>
+            Gera 1 PDF oficial por recomendação marcada (uma página por produto) para apresentar ao produtor. Todas vêm marcadas; desmarque as que não quiser.
+          </p>
+          <div className="space-y-0.5 mb-2">
+            {recomendacoes.map(r => (
+              <label key={r.id} className="flex items-center gap-2 text-[10px] p-1 rounded cursor-pointer" style={{ color: '#cbd5e1' }}>
+                <input type="checkbox" checked={bookSel.has(r.id)} onChange={() => toggleBook(r.id)} />
+                <span className="flex-1 truncate">{r.nome}</span>
+                <span style={{ color: '#64748b' }}>{r.conteudo.equacaoIds.length} eq.</span>
+              </label>
+            ))}
+          </div>
+          <button onClick={gerarBook} disabled={bookSel.size === 0 || !importacaoId || bookEstado === 'carregando'}
+            className="w-full py-2 rounded text-[11px] font-bold text-white flex items-center justify-center gap-1.5"
+            style={{ background: (bookSel.size === 0 || !importacaoId || bookEstado === 'carregando') ? '#1a3a6b' : 'var(--invicta-green-dark)', opacity: (bookSel.size === 0 || !importacaoId) ? 0.5 : 1 }}>
+            {bookEstado === 'carregando' ? <><Loader2 size={13} className="animate-spin" /> Gerando book…</> : <><FileText size={13} /> Gerar book PDF ({bookSel.size})</>}
+          </button>
+          {erroBook && (
+            <div className="mt-2 px-2 py-1.5 rounded text-[10px] flex items-start gap-1.5" style={{ background: '#3a1a1a', color: '#fca5a5', border: '1px solid #7f1d1d' }}>
+              <AlertTriangle size={12} className="flex-shrink-0 mt-0.5" /> <span>{erroBook}</span>
+            </div>
+          )}
         </div>
       )}
 

@@ -1,6 +1,11 @@
-export const APP_VERSION = '0.51.1';
+export const APP_VERSION = '0.52.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.52.0': [
+    'Recomendação Oficial (PDF C2) + Book em lote: na aba Recomendações, seção "Book de recomendações" lista todas as recomendações (todas marcadas por padrão) — clique em "Gerar book PDF" e sai um único PDF com a página oficial de cada recomendação marcada (uma página por produto), pronto para apresentar ao produtor',
+    'Página oficial (layout aprovado): cabeçalho + barra lateral (produtor/fazenda/cultura, resumo técnico, plano de aplicação com faixa·cor·área·%, resumo financeiro) e o mapa grande (satélite + dose) à direita',
+    'Ao gerar o book, cada cenário é aplicado e salvo automaticamente (aparece em "Cenários salvos"); depois é só apagar os que não for usar',
+  ],
   '0.51.1': [
     'Correção: o "Gerar PDF" do comparador não abria nada — a aba era aberta depois de carregar a logo (após um await), então o navegador bloqueava o popup. Agora a aba abre antes e, se mesmo assim for bloqueada, o PDF é baixado automaticamente',
   ],
