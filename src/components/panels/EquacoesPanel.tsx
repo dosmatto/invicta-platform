@@ -24,15 +24,11 @@ const listaDe = (s: string) => s.split(',').map(x => x.trim()).filter(Boolean);
 const parseNum = (s: string) => parseFloat(s.replace(',', '.'));
 
 function estiloPadrao(): EstiloRecomendacao {
+  // 10 faixas padrão (verde → vermelho), limites de 1.000 em 1.000 kg/ha.
+  const cores = ['#1b7a1f', '#3fa336', '#6fbf3f', '#9ccc4e', '#cddb39', '#ffe93b', '#ffc107', '#ff9800', '#fb5a23', '#e23b2e'];
   return {
     valorMinimo: 0,
-    classes: [
-      { cor: '#1a7a1a', limiteSuperior: 250 },
-      { cor: '#7cba2c', limiteSuperior: 500 },
-      { cor: '#f2d600', limiteSuperior: 1000 },
-      { cor: '#f59e0b', limiteSuperior: 2000 },
-      { cor: '#e23b2e', limiteSuperior: 4000 },
-    ],
+    classes: cores.map((cor, i) => ({ cor, limiteSuperior: (i + 1) * 1000 })),
     dividirAuto: false,
     zeroTransparente: true,
   };

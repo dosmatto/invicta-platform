@@ -1,6 +1,10 @@
-export const APP_VERSION = '0.52.0';
+export const APP_VERSION = '0.52.1';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.52.1': [
+    'Recomendação Oficial (C2): Resumo Técnico reordenado (Área total → Dose média → mínima → máxima → Quantidade total) e Resumo Financeiro simplificado para só o Custo estimado do produto (por ha e total) — sem as linhas que confundiam',
+    'Legenda de dose passa a vir com 10 faixas por padrão (verde → vermelho, de 1.000 em 1.000 kg/ha) nas equações novas',
+  ],
   '0.52.0': [
     'Recomendação Oficial (PDF C2) + Book em lote: na aba Recomendações, seção "Book de recomendações" lista todas as recomendações (todas marcadas por padrão) — clique em "Gerar book PDF" e sai um único PDF com a página oficial de cada recomendação marcada (uma página por produto), pronto para apresentar ao produtor',
     'Página oficial (layout aprovado): cabeçalho + barra lateral (produtor/fazenda/cultura, resumo técnico, plano de aplicação com faixa·cor·área·%, resumo financeiro) e o mapa grande (satélite + dose) à direita',

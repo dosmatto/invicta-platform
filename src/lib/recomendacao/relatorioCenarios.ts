@@ -257,11 +257,11 @@ async function desenharPaginaOficial(doc: JsPDF, dose: DoseCalculada, cenNome: s
   doc.setFontSize(8); doc.setTextColor(...GRAY); doc.setFont('helvetica', 'normal'); doc.text(`${san(ctx.fazenda)} · ${san(ctx.cultura) || '—'}`, SX, y); y += 6;
 
   y = secaoH(doc, SX, y, 'Resumo técnico');
-  y = kv(doc, SX, SW, y, 'Dose mínima', `${fmt(dose.stats.min)} kg/ha`);
+  y = kv(doc, SX, SW, y, 'Área total', `${fmt(ctx.areaHa, 1)} ha`);
   y = kv(doc, SX, SW, y, 'Dose média', `${fmt(dose.stats.media)} kg/ha`, GREEN);
+  y = kv(doc, SX, SW, y, 'Dose mínima', `${fmt(dose.stats.min)} kg/ha`);
   y = kv(doc, SX, SW, y, 'Dose máxima', `${fmt(dose.stats.max)} kg/ha`, [192, 57, 43]);
   y = kv(doc, SX, SW, y, 'Quantidade total', `${fmt(dose.toneladas, 1)} t`);
-  y = kv(doc, SX, SW, y, 'Área total', `${fmt(ctx.areaHa, 1)} ha`);
   y += 2;
 
   y = secaoH(doc, SX, y, 'Plano de aplicação');
@@ -279,13 +279,8 @@ async function desenharPaginaOficial(doc: JsPDF, dose: DoseCalculada, cenNome: s
   y += 2;
 
   y = secaoH(doc, SX, y, 'Resumo financeiro');
-  y = kv(doc, SX, SW, y, 'Produto', `R$ ${fmt(dose.custoProdutoHa ?? 0, 2)}/ha`);
-  y = kv(doc, SX, SW, y, 'Frete', `R$ ${fmt(dose.freteHa ?? 0, 2)}/ha`);
-  y = kv(doc, SX, SW, y, 'Aplicação', `R$ ${fmt(dose.aplicacaoHa ?? 0, 2)}/ha`);
-  y = kv(doc, SX, SW, y, 'Investimento por ha', `R$ ${fmt(dose.custoHa ?? 0, 2)}/ha`, GREEN, true);
-  y = kv(doc, SX, SW, y, 'Investimento total', `R$ ${fmt(dose.custo ?? 0, 2)}`);
-  y = kv(doc, SX, SW, y, 'Preço do produto', dose.custoTonelada != null ? `R$ ${fmt(dose.custoTonelada, 2)}/t` : '—');
-  y = kv(doc, SX, SW, y, 'Total de produto', `${fmt(dose.toneladas, 1)} t`);
+  y = kv(doc, SX, SW, y, 'Custo estimado por ha', `R$ ${fmt(dose.custoProdutoHa ?? 0, 2)}/ha`, GREEN, true);
+  y = kv(doc, SX, SW, y, 'Custo estimado total', `R$ ${fmt((dose.custoProdutoHa ?? 0) * ctx.areaHa, 2)}`);
 
   const mx = M + 86, my = 20, mw = W - mx - M, mh = H - my - 11;
   doc.setFillColor(36, 48, 24); doc.rect(mx, my, mw, mh, 'F');
