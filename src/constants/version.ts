@@ -1,6 +1,10 @@
-export const APP_VERSION = '0.53.0';
+export const APP_VERSION = '0.53.1';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.53.1': [
+    'Marcar "Para uso" agora é por MAPA (dose), não pelo cenário inteiro: no resultado da recomendação, clique na ★ de cada mapa que será utilizado (ex.: usar V80 e não V70). A marcação é salva',
+    'A aba Arquivos passa a listar os MAPAS marcados e gera o PDF/JPG só deles',
+  ],
   '0.53.0': [
     'Marcar cenário "Para uso" (estrela) em Recomendações → Cenários salvos: marque um ou mais cenários que serão realmente utilizados',
     'Aba Arquivos (nova): lista os cenários marcados e gera o mapa final de recomendação — PDF oficial e imagem JPG (satélite + dose) por produto',

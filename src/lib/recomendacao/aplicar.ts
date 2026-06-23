@@ -109,6 +109,7 @@ export interface DoseCalculada {
   bounds: [number, number, number, number];
   stats: { min: number; media: number; max: number; n: number };
   toneladas: number;
+  usar?: boolean;                 // marcado "será utilizado" → entra na geração de arquivos
   custoTonelada: number | null;   // R$/t do produto
   freteHa: number;                // R$/ha
   aplicacaoHa: number;            // R$/ha

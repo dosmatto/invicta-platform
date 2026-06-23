@@ -41,7 +41,7 @@ export function ArquivosSection({ safraNome }: { safraNome?: string }) {
   useEffect(() => {
     if (!nav.talhaoId || !safra) return;
     setCarregando(true);
-    listarCenarios(nav.talhaoId, safra).then(cs => setCens(cs.filter(c => c.oficial))).finally(() => setCarregando(false));
+    listarCenarios(nav.talhaoId, safra).then(cs => setCens(cs.filter(c => c.doses.some(d => d.usar)))).finally(() => setCarregando(false));
   }, [nav.talhaoId, safra]);
 
   const poligono = useMemo(() => {
@@ -53,16 +53,16 @@ export function ArquivosSection({ safraNome }: { safraNome?: string }) {
   async function pdfOficial(c: Cenario) {
     const aba = typeof window !== 'undefined' ? window.open('', '_blank') : null;
     setBusy('pdf-' + c.id);
-    try { const full = await descomprimirCenario(c); const blob = await montarBookOficial([full]); abrirOuBaixar(blob, aba, `recomendacao-${c.nome}.pdf`); }
+    try { const full = await descomprimirCenario(c); const marc = { ...full, doses: full.doses.filter(d => d.usar) }; const blob = await montarBookOficial([marc]); abrirOuBaixar(blob, aba, `recomendacao-${c.nome}.pdf`); }
     catch (e) { if (aba) aba.close(); alert('Falha ao gerar o PDF: ' + (e instanceof Error ? e.message : String(e))); }
     finally { setBusy(''); }
   }
-  async function jpgDose(c: Cenario, idx: number) {
+  async function jpgDose(c: Cenario, eqId: string) {
     if (!poligono) { alert('Talhão sem polígono salvo.'); return; }
-    setBusy(`jpg-${c.id}-${idx}`);
+    setBusy(`jpg-${c.id}-${eqId}`);
     try {
       const full = await descomprimirCenario(c);
-      const d = full.doses[idx]; if (!d) return;
+      const d = full.doses.find(x => x.equacaoId === eqId); if (!d) return;
       const png = colorirDose(d.grid, d.estilo).dataUrl;
       const comp = await capturarMapaFertilidade({ rasterPng: png, bounds: d.bounds, poligono, valores: VAZIO, satelite: true, corLimite: '#ffffff', larguraPx: 1600, alturaPx: 1120 });
       baixar(await pngParaJpeg(comp), `mapa-${c.nome}-${(d.produto || d.nomeEquacao)}.jpg`);
@@ -85,7 +85,7 @@ export function ArquivosSection({ safraNome }: { safraNome?: string }) {
       ) : cens.length === 0 ? (
         <div className="text-center py-8 px-4">
           <p className="text-[10px]" style={{ color: '#64748b' }}>
-            Nenhum cenário marcado para uso. Vá em <strong>Recomendações → Cenários salvos</strong> e clique na <Star size={10} style={{ display: 'inline', verticalAlign: 'middle', color: '#fbbf24' }} /> dos que serão utilizados.
+            Nenhum mapa marcado para uso. Vá em <strong>Recomendações</strong>, aplique/reabra um cenário e clique na <Star size={10} style={{ display: 'inline', verticalAlign: 'middle', color: '#fbbf24' }} /> dos mapas que serão utilizados.
           </p>
         </div>
       ) : (
@@ -96,7 +96,7 @@ export function ArquivosSection({ safraNome }: { safraNome?: string }) {
                 <Star size={11} fill="#fbbf24" style={{ color: '#fbbf24' }} />
                 <div className="flex-1 min-w-0">
                   <div className="text-[11px] font-bold truncate" style={{ color: '#e2e8f0' }}>{c.nome}</div>
-                  <div className="text-[9px]" style={{ color: '#64748b' }}>{c.doses.length} produto(s) · R$ {fmt(c.financeiro.custoTotal, 2)} · {fmt(c.financeiro.areaHa, 1)} ha</div>
+                  <div className="text-[9px]" style={{ color: '#64748b' }}>{c.doses.filter(d => d.usar).length} mapa(s) p/ uso · {fmt(c.financeiro.areaHa, 1)} ha</div>
                 </div>
                 <button onClick={() => pdfOficial(c)} disabled={!!busy}
                   className="px-2 py-1 rounded text-[10px] font-bold text-white flex items-center gap-1" style={{ background: 'var(--invicta-green-dark)', opacity: busy ? 0.6 : 1 }}>
@@ -104,10 +104,10 @@ export function ArquivosSection({ safraNome }: { safraNome?: string }) {
                 </button>
               </div>
               <div className="flex flex-wrap gap-1">
-                {c.doses.map((d, i) => (
-                  <button key={i} onClick={() => jpgDose(c, i)} disabled={!!busy}
+                {c.doses.filter(d => d.usar).map(d => (
+                  <button key={d.equacaoId} onClick={() => jpgDose(c, d.equacaoId)} disabled={!!busy}
                     className="px-1.5 py-1 rounded text-[9px] font-semibold flex items-center gap-1" style={{ background: '#1a3a6b', color: '#93c5fd', opacity: busy ? 0.6 : 1 }}>
-                    {busy === `jpg-${c.id}-${i}` ? <Loader2 size={10} className="animate-spin" /> : <FileImage size={10} />} JPG · {d.produto || d.nomeEquacao}
+                    {busy === `jpg-${c.id}-${d.equacaoId}` ? <Loader2 size={10} className="animate-spin" /> : <FileImage size={10} />} JPG · {d.produto || d.nomeEquacao}
                   </button>
                 ))}
               </div>

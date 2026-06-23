@@ -10,7 +10,7 @@ import { useApp } from '@/context/AppContext';
 import { getImportacoesLab, getTalhoes, type ImportacaoLab } from '@/lib/store';
 import { listar as bibListar, type ItemBiblioteca, type ConteudoEquacao, type ConteudoRecomendacao } from '@/lib/biblioteca';
 import { carregarGridsTalhao, calcularDose, type DoseCalculada } from '@/lib/recomendacao/aplicar';
-import { salvarCenario, listarCenarios, descomprimirCenario, excluirCenario, marcarCenarioOficial, type Cenario } from '@/lib/recomendacao/cenarios';
+import { salvarCenario, listarCenarios, descomprimirCenario, excluirCenario, type Cenario } from '@/lib/recomendacao/cenarios';
 import { colorirDose } from '@/lib/raster';
 import { coordsFromBounds } from '@/lib/fertilidade';
 import { ComparadorCenarios } from '@/components/talhao/ComparadorCenarios';
@@ -37,6 +37,8 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
   const [doses, setDoses] = useState<DoseCalculada[]>([]);
   const [falhas, setFalhas] = useState<{ nome: string; erro: string }[]>([]);
   const [visivel, setVisivel] = useState(0);
+  // cenário atualmente exibido (p/ persistir a marcação "usar" por dose)
+  const [cenMeta, setCenMeta] = useState<{ id: string; origem: 'equacao' | 'recomendacao'; recomendacaoId?: string; nome: string } | null>(null);
   const [nomeCenario, setNomeCenario] = useState('');
   const [salvoMsg, setSalvoMsg] = useState('');
   const [salvos, setSalvos] = useState<Cenario[]>([]);
@@ -75,7 +77,7 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
   useEffect(() => { recarregarSalvos(); }, [recarregarSalvos]);
 
   // limpa resultado ao trocar contexto
-  useEffect(() => { setDoses([]); setFalhas([]); setEstado('idle'); setErro(''); setVisivel(0); setSalvoMsg(''); }, [modo, equacaoId, recomendacaoId, importacaoId]);
+  useEffect(() => { setDoses([]); setFalhas([]); setEstado('idle'); setErro(''); setVisivel(0); setSalvoMsg(''); setCenMeta(null); }, [modo, equacaoId, recomendacaoId, importacaoId]);
 
   // dose visível no mapa
   const doseAtiva = doses[visivel] ?? null;
@@ -119,6 +121,7 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
       const autoId = `cen_${nav.talhaoId}_${importacaoId}_${modo}_${ref}`;
       const custoTotal = ok.reduce((s, d) => s + (d.custo ?? 0), 0);
       const nome = nomeCenario.trim() || `${recSel?.nome ?? eqSel?.nome ?? 'Cenário'}`;
+      setCenMeta({ id: autoId, origem: modo, recomendacaoId: modo === 'recomendacao' ? recomendacaoId : undefined, nome });
       try {
         await salvarCenario({
           talhaoId: nav.talhaoId, safra, importacaoId,
@@ -143,8 +146,8 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
     setEstado('carregando'); setErro('');
     try {
       const full = await descomprimirCenario(cen);
-      setModo(full.origem);
       setDoses(full.doses); setFalhas([]); setVisivel(0); setEstado('pronto');
+      setCenMeta({ id: cen.id, origem: full.origem, recomendacaoId: full.recomendacaoId, nome: full.nome });
     } catch (e) { setErro('Falha ao reabrir: ' + (e instanceof Error ? e.message : String(e))); setEstado('erro'); }
   }
   async function excluirSalvo(c: Cenario) {
@@ -152,9 +155,17 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
     await excluirCenario(c.id); await recarregarSalvos();
     setSelCompara(prev => { const n = new Set(prev); n.delete(c.id); return n; });
   }
-  async function toggleOficial(c: Cenario) {
-    try { await marcarCenarioOficial(c, !c.oficial); await recarregarSalvos(); }
-    catch (e) { alert('Falha ao marcar: ' + (e instanceof Error ? e.message : String(e))); }
+  // Marca/desmarca um MAPA (dose) como "será utilizado" e persiste o cenário atual.
+  async function toggleUsar(i: number) {
+    const novas = doses.map((d, k) => k === i ? { ...d, usar: !d.usar } : d);
+    setDoses(novas);
+    if (!cenMeta || !nav.talhaoId) return;
+    const area = talhao?.areaHa ?? 0;
+    const custoTotal = novas.reduce((s, d) => s + (d.custo ?? 0), 0);
+    try {
+      await salvarCenario({ talhaoId: nav.talhaoId, safra, importacaoId, origem: cenMeta.origem, recomendacaoId: cenMeta.recomendacaoId, nome: cenMeta.nome, doses: novas, financeiro: { custoTotal, custoHa: area ? custoTotal / area : 0, areaHa: area } }, cenMeta.id);
+      await recarregarSalvos();
+    } catch { /* mantém em memória mesmo se a nuvem falhar */ }
   }
   function toggleCompara(id: string) {
     setSelCompara(prev => {
@@ -296,18 +307,24 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
           )}
 
           {/* lista de doses (clique p/ ver no mapa) */}
+          <div className="text-[9px] mb-1" style={{ color: '#64748b' }}>Clique no mapa para ver; clique na ★ para marcar os que serão utilizados (gera arquivo).</div>
           <div className="space-y-1">
             {doses.map((d, i) => (
-              <button key={i} onClick={() => setVisivel(i)} className="w-full p-1.5 rounded text-left flex items-center gap-2"
-                style={{ background: i === visivel ? '#11305a' : '#0b1f38', border: i === visivel ? '1px solid var(--invicta-green)' : '1px solid transparent' }}>
-                <Eye size={11} style={{ color: i === visivel ? '#4ade80' : '#475569', flexShrink: 0 }} />
-                <div className="flex-1 min-w-0">
-                  <div className="text-[10px] font-bold truncate" style={{ color: '#e2e8f0' }}>{d.nomeEquacao}</div>
-                  <div className="text-[9px] truncate" style={{ color: '#64748b' }}>
-                    {d.produto ? `${d.produto} · ` : ''}méd {fmt(d.stats.media)} {d.unidade} · {fmt(d.toneladas, 1)} t{d.custo != null ? ` · R$ ${fmt(d.custo, 2)}` : ''}
+              <div key={i} className="w-full p-1.5 rounded flex items-center gap-2"
+                style={{ background: i === visivel ? '#11305a' : '#0b1f38', border: d.usar ? '1px solid var(--invicta-green)' : i === visivel ? '1px solid #2e5fa3' : '1px solid transparent' }}>
+                <button onClick={() => setVisivel(i)} className="flex items-center gap-2 flex-1 min-w-0 text-left">
+                  <Eye size={11} style={{ color: i === visivel ? '#4ade80' : '#475569', flexShrink: 0 }} />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[10px] font-bold truncate" style={{ color: '#e2e8f0' }}>{d.nomeEquacao}</div>
+                    <div className="text-[9px] truncate" style={{ color: '#64748b' }}>
+                      {d.produto ? `${d.produto} · ` : ''}méd {fmt(d.stats.media)} {d.unidade} · {fmt(d.toneladas, 1)} t{d.custo != null ? ` · R$ ${fmt(d.custo, 2)}` : ''}
+                    </div>
                   </div>
-                </div>
-              </button>
+                </button>
+                <button onClick={() => toggleUsar(i)} title={d.usar ? 'Marcado para usar — clique para desmarcar' : 'Usar este mapa (entra na geração de arquivos)'} className="p-1 rounded hover:bg-white/10 flex-shrink-0" style={{ color: d.usar ? '#fbbf24' : '#475569' }}>
+                  <Star size={13} fill={d.usar ? '#fbbf24' : 'none'} />
+                </button>
+              </div>
             ))}
           </div>
 
@@ -360,14 +377,13 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
                   <div className="flex-1 min-w-0">
                     <div className="text-[10px] font-bold truncate flex items-center gap-1" style={{ color: '#e2e8f0' }}>
                       {c.nome}
-                      {c.oficial && <span className="text-[8px] font-bold px-1 py-0.5 rounded" style={{ background: 'var(--invicta-green-dark)', color: '#fff' }}>uso</span>}
+                      {c.doses.some(d => d.usar) && <span className="text-[8px] font-bold px-1 py-0.5 rounded" style={{ background: 'var(--invicta-green-dark)', color: '#fff' }}>{c.doses.filter(d => d.usar).length} p/ uso</span>}
                     </div>
                     <div className="text-[9px]" style={{ color: '#64748b' }}>
                       {new Date(c.geradoEm).toLocaleDateString('pt-BR')} · {c.doses.length} produto(s) · R$ {fmt(c.financeiro.custoTotal, 2)}
                     </div>
                   </div>
-                  <button onClick={() => toggleOficial(c)} title={c.oficial ? 'Marcado para uso (clique p/ desmarcar)' : 'Marcar para uso (entra na geração de arquivos)'} className="p-1 rounded hover:bg-white/10" style={{ color: c.oficial ? '#fbbf24' : '#475569' }}><Star size={12} fill={c.oficial ? '#fbbf24' : 'none'} /></button>
-                  <button onClick={() => reabrir(c)} title="Reabrir" className="p-1 rounded hover:bg-white/10" style={{ color: '#93c5fd' }}><FolderOpen size={12} /></button>
+                  <button onClick={() => reabrir(c)} title="Reabrir (marcar mapas p/ uso)" className="p-1 rounded hover:bg-white/10" style={{ color: '#93c5fd' }}><FolderOpen size={12} /></button>
                   <button onClick={() => excluirSalvo(c)} title="Excluir" className="p-1 rounded hover:bg-white/10" style={{ color: '#f87171' }}><Trash2 size={12} /></button>
                 </div>
               );
