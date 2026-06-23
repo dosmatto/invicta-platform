@@ -1,6 +1,10 @@
-export const APP_VERSION = '0.53.1';
+export const APP_VERSION = '0.54.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.54.0': [
+    'Arquivos: gera o Shapefile de taxa variável (.shp/.shx/.dbf/.prj em .zip) de cada mapa marcado — zonas por classe de dose com a TAXA (média da classe). Botão SHP por mapa na aba Arquivos',
+    'Seletor de monitor/máquina (Stara, Trimble, John Deere, Raven, Muller, AgLeader e demais) que mostra em qual pasta do pen drive copiar os arquivos',
+  ],
   '0.53.1': [
     'Marcar "Para uso" agora é por MAPA (dose), não pelo cenário inteiro: no resultado da recomendação, clique na ★ de cada mapa que será utilizado (ex.: usar V80 e não V70). A marcação é salva',
     'A aba Arquivos passa a listar os MAPAS marcados e gera o PDF/JPG só deles',

@@ -13,7 +13,8 @@ import { colorirDose } from '@/lib/raster';
 import { capturarMapaFertilidade } from '@/lib/capturaMapa';
 import { listarCenarios, descomprimirCenario, type Cenario } from '@/lib/recomendacao/cenarios';
 import { montarBookOficial, abrirOuBaixar } from '@/lib/recomendacao/relatorioCenarios';
-import { FileText, FileImage, Loader2, FolderArchive, Star } from 'lucide-react';
+import { MONITORES, monitorPorId, gerarShapefileZip } from '@/lib/recomendacao/shapefile';
+import { FileText, FileImage, Loader2, FolderArchive, Star, FileCode } from 'lucide-react';
 
 const VAZIO: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
 const fmt = (v: number, d = 0) => v.toLocaleString('pt-BR', { maximumFractionDigits: d, minimumFractionDigits: d });
@@ -30,6 +31,11 @@ async function pngParaJpeg(dataUrl: string): Promise<string> {
 function baixar(dataUrl: string, nome: string) {
   const a = document.createElement('a'); a.href = dataUrl; a.download = nome; document.body.appendChild(a); a.click(); a.remove();
 }
+function baixarBlob(blob: Blob, nome: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = nome; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
 
 export function ArquivosSection({ safraNome }: { safraNome?: string }) {
   const { nav } = useApp();
@@ -37,6 +43,7 @@ export function ArquivosSection({ safraNome }: { safraNome?: string }) {
   const [cens, setCens] = useState<Cenario[]>([]);
   const [carregando, setCarregando] = useState(false);
   const [busy, setBusy] = useState('');
+  const [monitorId, setMonitorId] = useState('raiz');
 
   useEffect(() => {
     if (!nav.talhaoId || !safra) return;
@@ -67,6 +74,17 @@ export function ArquivosSection({ safraNome }: { safraNome?: string }) {
       const comp = await capturarMapaFertilidade({ rasterPng: png, bounds: d.bounds, poligono, valores: VAZIO, satelite: true, corLimite: '#ffffff', larguraPx: 1600, alturaPx: 1120 });
       baixar(await pngParaJpeg(comp), `mapa-${c.nome}-${(d.produto || d.nomeEquacao)}.jpg`);
     } catch (e) { alert('Falha ao gerar a imagem: ' + (e instanceof Error ? e.message : String(e))); }
+    finally { setBusy(''); }
+  }
+  async function shpDose(c: Cenario, eqId: string) {
+    setBusy(`shp-${c.id}-${eqId}`);
+    try {
+      const full = await descomprimirCenario(c);
+      const d = full.doses.find(x => x.equacaoId === eqId); if (!d) return;
+      const t = getTalhoes().find(x => x.id === nav.talhaoId);
+      const blob = await gerarShapefileZip(d, t?.nome ?? 'talhao');
+      baixarBlob(blob, `RX_${t?.nome ?? 'talhao'}_${d.produto || d.nomeEquacao}_shp.zip`.replace(/[^\w.\-]+/g, '_'));
+    } catch (e) { alert('Falha ao gerar o Shapefile: ' + (e instanceof Error ? e.message : String(e))); }
     finally { setBusy(''); }
   }
 
@@ -103,20 +121,33 @@ export function ArquivosSection({ safraNome }: { safraNome?: string }) {
                   {busy === 'pdf-' + c.id ? <Loader2 size={11} className="animate-spin" /> : <FileText size={11} />} PDF oficial
                 </button>
               </div>
-              <div className="flex flex-wrap gap-1">
+              <div className="space-y-1">
                 {c.doses.filter(d => d.usar).map(d => (
-                  <button key={d.equacaoId} onClick={() => jpgDose(c, d.equacaoId)} disabled={!!busy}
-                    className="px-1.5 py-1 rounded text-[9px] font-semibold flex items-center gap-1" style={{ background: '#1a3a6b', color: '#93c5fd', opacity: busy ? 0.6 : 1 }}>
-                    {busy === `jpg-${c.id}-${d.equacaoId}` ? <Loader2 size={10} className="animate-spin" /> : <FileImage size={10} />} JPG · {d.produto || d.nomeEquacao}
-                  </button>
+                  <div key={d.equacaoId} className="flex items-center gap-1.5">
+                    <span className="flex-1 truncate text-[9px]" style={{ color: '#cbd5e1' }}>{d.produto || d.nomeEquacao}</span>
+                    <button onClick={() => jpgDose(c, d.equacaoId)} disabled={!!busy} title="Imagem JPG (satélite + dose)"
+                      className="px-1.5 py-1 rounded text-[9px] font-semibold flex items-center gap-1" style={{ background: '#1a3a6b', color: '#93c5fd', opacity: busy ? 0.6 : 1 }}>
+                      {busy === `jpg-${c.id}-${d.equacaoId}` ? <Loader2 size={10} className="animate-spin" /> : <FileImage size={10} />} JPG
+                    </button>
+                    <button onClick={() => shpDose(c, d.equacaoId)} disabled={!!busy} title="Shapefile de taxa variável (.shp/.shx/.dbf)"
+                      className="px-1.5 py-1 rounded text-[9px] font-semibold flex items-center gap-1" style={{ background: '#1a3a6b', color: '#93c5fd', opacity: busy ? 0.6 : 1 }}>
+                      {busy === `shp-${c.id}-${d.equacaoId}` ? <Loader2 size={10} className="animate-spin" /> : <FileCode size={10} />} SHP
+                    </button>
+                  </div>
                 ))}
               </div>
             </div>
           ))}
 
-          <div className="rounded-lg p-2.5 mt-1" style={{ background: '#0b1f38', border: '1px dashed #2e5fa3' }}>
-            <div className="text-[10px] font-bold mb-0.5" style={{ color: '#93c5fd' }}>Arquivos de taxa variável (Shapefile)</div>
-            <p className="text-[9px]" style={{ color: '#64748b' }}>Em breve: gera .shp/.shx/.dbf das zonas de recomendação, já na pasta certa por marca de monitor (Stara, Trimble, John Deere, Raven, AgLeader…).</p>
+          <div className="rounded-lg p-2.5 mt-1" style={{ background: '#0b1f38', border: '1px solid #2e5fa3' }}>
+            <div className="text-[10px] font-bold mb-1" style={{ color: '#93c5fd' }}>Shapefile (taxa variável)</div>
+            <label className="text-[9px] block mb-1" style={{ color: '#94a3b8' }}>Monitor / máquina:</label>
+            <select value={monitorId} onChange={e => setMonitorId(e.target.value)} className="w-full rounded px-2 py-1.5 text-[10px] outline-none" style={{ background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' }}>
+              {MONITORES.map(m => <option key={m.id} value={m.id}>{m.nome}</option>)}
+            </select>
+            <p className="text-[9px] mt-1.5" style={{ color: '#64748b' }}>
+              Baixe o <strong>SHP</strong> de cada mapa (botões acima) e copie os arquivos <code>.shp/.shx/.dbf/.prj</code> para: <strong style={{ color: '#cbd5e1' }}>{monitorPorId(monitorId).pasta}</strong>.
+            </p>
           </div>
         </div>
       )}
