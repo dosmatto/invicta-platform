@@ -64,33 +64,68 @@ function clipPorCelula(subject: Pt[], celulaCCW: Pt[]): Pt[] {
 }
 const fechar = (r: Pt[]): Pt[] => (r.length && (r[0][0] !== r[r.length - 1][0] || r[0][1] !== r[r.length - 1][1]) ? [...r, r[0]] : r);
 
-// Uma célula (pixel ~20×20 m) por polígono — SEM mesclar. clip=true recorta as
-// células de borda pelo polígono do talhão; clip=false mantém a célula inteira.
+// Ponto dentro do polígono (ray casting; even-odd entre anéis externos).
+function pip(x: number, y: number, ring: Pt[]): boolean {
+  let dentro = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const xi = ring[i][0], yi = ring[i][1], xj = ring[j][0], yj = ring[j][1];
+    if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / ((yj - yi) || 1e-12) + xi)) dentro = !dentro;
+  }
+  return dentro;
+}
+
+// GRADE FIXA de 20×20 m (independe da resolução do grid da interpolação).
+// Inclui toda célula que TOCA o polígono (transborda um pouco) e amostra a dose
+// pelo vizinho mais próximo — assim, ao clipar pela borda, o polígono fica 100%
+// preenchido (sem a faixa vazia que a interpolação deixava). clip=true recorta as
+// células de borda pelo polígono; clip=false mantém a célula 20×20 inteira.
+const METRO_GRAU = 111320;
 function dosePolygons(dose: DoseCalculada, poligono: GeoJSON.Polygon | GeoJSON.MultiPolygon | null, clip: boolean): GeoJSON.FeatureCollection {
   const { valores, rows, cols } = decodeGrid(dose.grid);
   const [w, s, e, n] = dose.bounds;
   const classes = [...dose.estilo.classes].filter(c => Number.isFinite(c.limiteSuperior)).sort((a, b) => a.limiteSuperior - b.limiteSuperior);
-  if (!classes.length) return { type: 'FeatureCollection', features: [] };
+  if (!classes.length || !poligono) return { type: 'FeatureCollection', features: [] };
   const lims = classes.map(c => c.limiteSuperior);
   const classeDe = (v: number) => { const k = lims.findIndex(L => v <= L); return k < 0 ? classes.length - 1 : k; };
-  const lonAt = (c: number) => w + (c / cols) * (e - w);
-  const latAt = (r: number) => n - (r / rows) * (n - s);   // grid: norte no topo
-  const aneis = clip && poligono ? outerRings(poligono) : [];
+  const ehTransp = (k: number) => dose.estilo.zeroTransparente && classes[k].limiteSuperior <= dose.estilo.valorMinimo;
+
+  // amostra a dose no grid (vizinho mais próximo com valor — cobre a borda)
+  const colAt = (lon: number) => Math.floor((lon - w) / ((e - w) || 1) * cols);
+  const rowAt = (lat: number) => Math.floor((n - lat) / ((n - s) || 1) * rows);
+  function doseAt(lon: number, lat: number): number {
+    const c0 = Math.max(0, Math.min(cols - 1, colAt(lon))), r0 = Math.max(0, Math.min(rows - 1, rowAt(lat)));
+    const v0 = valores[r0 * cols + c0]; if (isFinite(v0)) return v0;
+    for (let rad = 1; rad <= 8; rad++) {
+      for (let dr = -rad; dr <= rad; dr++) for (let dc = -rad; dc <= rad; dc++) {
+        if (Math.max(Math.abs(dr), Math.abs(dc)) !== rad) continue;
+        const rr = r0 + dr, cc = c0 + dc;
+        if (rr < 0 || rr >= rows || cc < 0 || cc >= cols) continue;
+        const vv = valores[rr * cols + cc]; if (isFinite(vv)) return vv;
+      }
+    }
+    return NaN;
+  }
+
+  const aneis = outerRings(poligono);
+  const dentro = (x: number, y: number) => { let inside = false; for (const ring of aneis) if (pip(x, y, ring)) inside = !inside; return inside; };
+
+  const latC = (s + n) / 2;
+  const dLat = 20 / METRO_GRAU;
+  const dLon = 20 / (METRO_GRAU * Math.cos(latC * Math.PI / 180) || 1);
+  const nCols = Math.ceil((e - w) / dLon), nRows = Math.ceil((n - s) / dLat);
   const feats: GeoJSON.Feature[] = [];
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const v = valores[r * cols + c];
-      if (!isFinite(v)) continue;
-      const k = classeDe(v);
-      if (dose.estilo.zeroTransparente && classes[k].limiteSuperior <= dose.estilo.valorMinimo) continue;
-      const lonL = lonAt(c), lonR = lonAt(c + 1), latT = latAt(r), latB = latAt(r + 1);
+  for (let j = 0; j < nRows; j++) {
+    const latT = n - j * dLat, latB = latT - dLat;
+    for (let i = 0; i < nCols; i++) {
+      const lonL = w + i * dLon, lonR = lonL + dLon, cx = (lonL + lonR) / 2, cy = (latT + latB) / 2;
+      // inclui se o centro OU qualquer canto cai dentro (transborda na borda)
+      if (!(dentro(cx, cy) || dentro(lonL, latT) || dentro(lonR, latT) || dentro(lonR, latB) || dentro(lonL, latB))) continue;
+      const v = doseAt(cx, cy); if (!isFinite(v)) continue;
+      const k = classeDe(v); if (ehTransp(k)) continue;
       const props = { TAXA: Math.round(v), CLASSE: `${k === 0 ? 0 : lims[k - 1]}-${lims[k]}`, PRODUTO: dose.produto || dose.nomeEquacao, UNID: dose.unidade || 'kg/ha' };
-      if (aneis.length) {
-        const celula: Pt[] = [[lonL, latB], [lonR, latB], [lonR, latT], [lonL, latT]]; // CCW (clip)
-        for (const anel of aneis) {
-          const cl = clipPorCelula(anel, celula);
-          if (cl.length >= 3) feats.push({ type: 'Feature', properties: props, geometry: { type: 'Polygon', coordinates: [fechar(cl)] } });
-        }
+      if (clip) {
+        const celula: Pt[] = [[lonL, latB], [lonR, latB], [lonR, latT], [lonL, latT]]; // CCW
+        for (const anel of aneis) { const cl = clipPorCelula(anel, celula); if (cl.length >= 3) feats.push({ type: 'Feature', properties: props, geometry: { type: 'Polygon', coordinates: [fechar(cl)] } }); }
       } else {
         feats.push({ type: 'Feature', properties: props, geometry: { type: 'Polygon', coordinates: [[[lonL, latT], [lonR, latT], [lonR, latB], [lonL, latB], [lonL, latT]]] } });
       }
