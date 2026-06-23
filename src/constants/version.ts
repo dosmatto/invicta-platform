@@ -1,6 +1,9 @@
-export const APP_VERSION = '0.55.0';
+export const APP_VERSION = '0.55.1';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.55.1': [
+    'Dividir aplicação agora é escolhido na HORA de aplicar (aba Recomendações, ao selecionar a recomendação), não fixo na Biblioteca: marque "Dividir aplicação por limite máximo" + o limite e aplique',
+  ],
   '0.55.0': [
     'Dividir aplicação (Recomendações): na recomendação dá para ativar "Dividir aplicação por limite máximo" (ex.: 4 t/ha por passada). Ao aplicar, a dose total é dividida em um GRUPO de mapas — aplicação 1, 2, 3… — cada um limitado ao máximo por passada',
     'Cada passada vira um mapa próprio (já marcado para uso), com seu PDF oficial e seu Shapefile na aba Arquivos. Ex.: necessidade de 9 t/ha com limite 4 → 3 mapas (4 + 4 + 1)',

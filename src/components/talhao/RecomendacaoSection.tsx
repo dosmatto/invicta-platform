@@ -27,9 +27,9 @@ function limiteNaUnidadeDaDose(limite: number, unidLimite: 't/ha' | 'kg/ha', uni
   if (unidLimite === 'kg/ha' && doseT) return limite / 1000;
   return limite;
 }
-function expandirDoses(doses: DoseCalculada[], rec: ConteudoRecomendacao, areaHa: number): DoseCalculada[] {
-  const div = rec.dividirAplicacao;
-  if (!div?.ativo || !(div.limiteMax > 0)) return doses;
+interface DivCfg { ativo: boolean; limiteMax: number; unidade: 't/ha' | 'kg/ha'; }
+function expandirDoses(doses: DoseCalculada[], div: DivCfg, areaHa: number): DoseCalculada[] {
+  if (!div.ativo || !(div.limiteMax > 0)) return doses;
   const out: DoseCalculada[] = [];
   for (const d of doses) out.push(...dividirDoseEmPassadas(d, limiteNaUnidadeDaDose(div.limiteMax, div.unidade, d.unidade), areaHa));
   return out;
@@ -46,6 +46,10 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
   const [recomendacoes, setRecomendacoes] = useState<ItemBiblioteca<ConteudoRecomendacao>[]>([]);
   const [equacaoId, setEquacaoId] = useState('');
   const [recomendacaoId, setRecomendacaoId] = useState('');
+  // Dividir aplicação (escolhido na hora de aplicar a recomendação)
+  const [divAtivo, setDivAtivo] = useState(false);
+  const [divLimite, setDivLimite] = useState('4');
+  const [divUnid, setDivUnid] = useState<'t/ha' | 'kg/ha'>('t/ha');
 
   const [estado, setEstado] = useState<'idle' | 'carregando' | 'pronto' | 'erro'>('idle');
   const [erro, setErro] = useState('');
@@ -128,8 +132,9 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
         try { ok.push(calcularDose(it, grids, area)); }
         catch (e) { erros.push({ nome: it.nome, erro: e instanceof Error ? e.message : String(e) }); }
       }
-      // Divisão de aplicação (se a recomendação pedir) → grupo de mapas (passadas).
-      const finais = (modo === 'recomendacao' && recSel) ? expandirDoses(ok, recSel.conteudo, area) : ok;
+      // Divisão de aplicação (escolhida na hora) → grupo de mapas (passadas).
+      const div: DivCfg = { ativo: divAtivo, limiteMax: parseFloat(divLimite.replace(',', '.')) || 0, unidade: divUnid };
+      const finais = (modo === 'recomendacao') ? expandirDoses(ok, div, area) : ok;
       setDoses(finais); setFalhas(erros);
       setEstado(finais.length ? 'pronto' : 'erro');
       if (!finais.length) { setErro('Nenhuma equação pôde ser aplicada — veja os detalhes abaixo.'); return; }
@@ -220,7 +225,8 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
         const ok: DoseCalculada[] = [];
         for (const it of itens) { try { ok.push(calcularDose(it, grids, area)); } catch { /* sem mapa p/ essa equação */ } }
         if (ok.length === 0) continue;
-        const finais = expandirDoses(ok, r.conteudo, area);   // divide em passadas se a recomendação pedir
+        const divBook: DivCfg = { ativo: divAtivo, limiteMax: parseFloat(divLimite.replace(',', '.')) || 0, unidade: divUnid };
+        const finais = expandirDoses(ok, divBook, area);   // divide em passadas se marcado
         const custoTotal = finais.reduce((s, d) => s + d.custo, 0);
         const financeiro = { custoTotal, custoHa: area ? custoTotal / area : 0, areaHa: area };
         cens.push({ id: '', talhaoId: nav.talhaoId, safra, importacaoId, origem: 'recomendacao', recomendacaoId: r.id, nome: r.nome, doses: finais, financeiro, geradoEm: Date.now(), geradoPor: '' });
@@ -283,6 +289,27 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
               {recomendacoes.map(r => <option key={r.id} value={r.id}>{r.nome} ({r.conteudo.equacaoIds.length})</option>)}
             </select>
           )}
+        </div>
+      )}
+
+      {modo === 'recomendacao' && (
+        <div style={{ borderTop: '1px solid #1a3a6b', paddingTop: 8 }}>
+          <label className="flex items-center gap-1.5 text-[10px] font-semibold" style={{ color: '#cbd5e1' }}>
+            <input type="checkbox" checked={divAtivo} onChange={e => setDivAtivo(e.target.checked)} /> Dividir aplicação por limite máximo
+          </label>
+          {divAtivo && (
+            <div className="mt-1.5 flex items-end gap-2">
+              <div className="flex-1">
+                <label className="text-[9px] block mb-0.5" style={{ color: '#94a3b8' }}>Limite por aplicação</label>
+                <input value={divLimite} onChange={e => setDivLimite(e.target.value)} inputMode="decimal" className="w-full rounded px-2 py-1.5 text-[11px] outline-none" style={inputStyle} />
+              </div>
+              <select value={divUnid} onChange={e => setDivUnid(e.target.value as 't/ha' | 'kg/ha')} className="rounded px-2 py-1.5 text-[11px] outline-none" style={inputStyle}>
+                <option value="t/ha">t/ha</option>
+                <option value="kg/ha">kg/ha</option>
+              </select>
+            </div>
+          )}
+          {divAtivo && <p className="text-[9px] mt-1" style={{ color: '#64748b' }}>Divide a dose em passadas de no máx. esse valor → grupo de mapas (aplicação 1, 2, 3…), cada um com PDF e SHP.</p>}
         </div>
       )}
 
