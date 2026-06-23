@@ -141,10 +141,13 @@ async function desenharPagina(doc: JsPDF, produto: string, cenarios: Cenario[], 
     y += 2.5;
     const classes = [...estilo.classes].sort((a, b) => a.limiteSuperior - b.limiteSuperior);
     const lw = 150, lx = (W - lw) / 2, segW = lw / classes.length;
-    classes.forEach((c, i) => { const [r, g, b] = hexToRgb(c.cor); doc.setFillColor(r, g, b); doc.rect(lx + i * segW, y, segW, 4, 'F'); });
+    classes.forEach((c, i) => {
+      if (estilo.zeroTransparente && c.limiteSuperior <= estilo.valorMinimo) { doc.setDrawColor(...GRAY); doc.rect(lx + i * segW, y, segW, 4); }
+      else { const [r, g, b] = hexToRgb(c.cor); doc.setFillColor(r, g, b); doc.rect(lx + i * segW, y, segW, 4, 'F'); }
+    });
     doc.setDrawColor(...LINE); doc.rect(lx, y, lw, 4);
     doc.setFontSize(7); doc.setTextColor(...GRAY); doc.setFont('helvetica', 'normal');
-    doc.text(fmt(estilo.valorMinimo), lx, y + 8);
+    doc.text(fmt(0), lx, y + 8);
     classes.forEach((c, i) => doc.text(fmt(c.limiteSuperior), lx + (i + 1) * segW, y + 8, { align: 'center' }));
     y += 12;
   }
@@ -206,7 +209,7 @@ function desenharTabela(doc: JsPDF, x: number, y: number, w: number, titulo: str
 }
 
 // ─── C2 — Recomendação Oficial (book em lote) ─────────────────────────────
-interface FaixaPlano { inf: number; sup: number; cor: string; area: number; pct: number; }
+interface FaixaPlano { inf: number; sup: number; cor: string; area: number; pct: number; transparente: boolean; }
 function planoDeAplicacao(dose: DoseCalculada, areaHa: number): FaixaPlano[] {
   const classes = [...dose.estilo.classes].filter(c => Number.isFinite(c.limiteSuperior)).sort((a, b) => a.limiteSuperior - b.limiteSuperior);
   if (!classes.length) return [];
@@ -218,7 +221,13 @@ function planoDeAplicacao(dose: DoseCalculada, areaHa: number): FaixaPlano[] {
     for (let i = 0; i < valores.length; i++) { const v = valores[i]; if (!isFinite(v)) continue; n++; let k = lims.findIndex(L => v <= L); if (k < 0) k = classes.length - 1; cont[k]++; }
   } catch { /* sem grid */ }
   const areaPx = n > 0 ? areaHa / n : 0;
-  return classes.map((c, i) => ({ inf: i === 0 ? dose.estilo.valorMinimo : classes[i - 1].limiteSuperior, sup: c.limiteSuperior, cor: c.cor, area: cont[i] * areaPx, pct: n > 0 ? cont[i] / n * 100 : 0 }));
+  // 1ª faixa sempre começa em 0 (ex.: "0 – 500"); faixa ≤ valor mínimo (com zero
+  // transparente) é a banda transparente (não aplica) — evita "500 – 500".
+  return classes.map((c, i) => ({
+    inf: i === 0 ? 0 : classes[i - 1].limiteSuperior, sup: c.limiteSuperior, cor: c.cor,
+    area: cont[i] * areaPx, pct: n > 0 ? cont[i] / n * 100 : 0,
+    transparente: dose.estilo.zeroTransparente && c.limiteSuperior <= dose.estilo.valorMinimo,
+  }));
 }
 
 function secaoH(doc: JsPDF, x: number, y: number, t: string): number {
@@ -270,7 +279,8 @@ async function desenharPaginaOficial(doc: JsPDF, dose: DoseCalculada, cenNome: s
   y += 1; doc.setDrawColor(...LINE); doc.line(SX, y, SX + SW, y); y += 3.4;
   doc.setFontSize(7.5); doc.setTextColor(40, 48, 58); doc.setFont('helvetica', 'normal');
   for (const f of planoDeAplicacao(dose, ctx.areaHa)) {
-    const [r, g, b] = hexToRgb(f.cor); doc.setFillColor(r, g, b); doc.rect(SX, y - 2.6, 4, 3, 'F');
+    if (f.transparente) { doc.setDrawColor(...GRAY); doc.setLineWidth(0.3); doc.rect(SX, y - 2.6, 4, 3); doc.setLineWidth(0.2); }
+    else { const [r, g, b] = hexToRgb(f.cor); doc.setFillColor(r, g, b); doc.rect(SX, y - 2.6, 4, 3, 'F'); }
     doc.text(`${fmt(f.inf)} – ${fmt(f.sup)}`, SX + 6, y);
     doc.text(fmt(f.area, 1), SX + SW - 16, y, { align: 'right' });
     doc.text(fmt(f.pct, 1) + '%', SX + SW, y, { align: 'right' });

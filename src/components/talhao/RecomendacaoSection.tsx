@@ -313,11 +313,12 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
               <div className="text-[9px] font-semibold mb-1" style={{ color: '#94a3b8' }}>Legenda · {doseAtiva.nomeEquacao} ({doseAtiva.unidade})</div>
               <div className="space-y-0.5">
                 {classesVis.map((c, i) => {
-                  const inf = i === 0 ? doseAtiva.estilo.valorMinimo : classesVis[i - 1].limiteSuperior;
+                  const inf = i === 0 ? 0 : classesVis[i - 1].limiteSuperior;
+                  const transp = doseAtiva.estilo.zeroTransparente && c.limiteSuperior <= doseAtiva.estilo.valorMinimo;
                   return (
                     <div key={i} className="flex items-center gap-1.5 text-[9px]" style={{ color: '#cbd5e1' }}>
-                      <span className="w-4 h-3 rounded" style={{ background: c.cor, border: '1px solid #2e5fa3' }} />
-                      <span>{fmt(inf)} – {fmt(c.limiteSuperior)}</span>
+                      <span className="w-4 h-3 rounded" style={{ background: transp ? 'transparent' : c.cor, border: transp ? '1px dashed #64748b' : '1px solid #2e5fa3' }} />
+                      <span>{fmt(inf)} – {fmt(c.limiteSuperior)}{transp ? ' (transparente)' : ''}</span>
                     </div>
                   );
                 })}

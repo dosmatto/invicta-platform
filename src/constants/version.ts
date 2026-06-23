@@ -1,6 +1,9 @@
-export const APP_VERSION = '0.52.2';
+export const APP_VERSION = '0.52.3';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.52.3': [
+    'Legenda da dose: a primeira faixa agora começa sempre em 0 (ex.: "0 – 500" em vez de "500 – 500"). Quando há valor mínimo com zero transparente, essa faixa aparece como transparente (não recebe) — vale no plano de aplicação, no comparador e nas legendas em tela',
+  ],
   '0.52.2': [
     'Estilo da equação: ao adicionar/remover classes, as cores são redistribuídas na rampa verde→vermelho (com tons intermediários) em vez de repetir o vermelho. Novo botão "Distribuir cores" reaplica a rampa quando quiser',
   ],

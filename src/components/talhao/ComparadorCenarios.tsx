@@ -111,10 +111,11 @@ export function ComparadorCenarios({ cenarios, onClose }: { cenarios: Cenario[];
         <div className="px-4 py-2 flex items-center gap-3 flex-wrap flex-shrink-0" style={{ borderTop: '1px solid #1a3a6b' }}>
           <span className="text-[10px] font-semibold" style={{ color: '#94a3b8' }}>Legenda · {produto} {ref?.unidade ? `(${ref.unidade})` : ''}</span>
           {classes.map((c, i) => {
-            const inf = i === 0 ? (ref?.estilo.valorMinimo ?? 0) : classes[i - 1].limiteSuperior;
+            const inf = i === 0 ? 0 : classes[i - 1].limiteSuperior;
+            const transp = !!ref?.estilo.zeroTransparente && c.limiteSuperior <= (ref?.estilo.valorMinimo ?? 0);
             return (
               <span key={i} className="flex items-center gap-1 text-[9px]" style={{ color: '#cbd5e1' }}>
-                <span className="w-4 h-3 rounded" style={{ background: c.cor, border: '1px solid #2e5fa3' }} />
+                <span className="w-4 h-3 rounded" style={{ background: transp ? 'transparent' : c.cor, border: transp ? '1px dashed #64748b' : '1px solid #2e5fa3' }} />
                 {fmt(inf)}–{fmt(c.limiteSuperior)}
               </span>
             );
