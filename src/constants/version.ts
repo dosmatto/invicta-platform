@@ -1,6 +1,10 @@
-export const APP_VERSION = '0.54.1';
+export const APP_VERSION = '0.54.2';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.54.2': [
+    'Shapefile: o ZIP já vem com a PASTA do monitor (ex.: Dados/Mapas, AgData/Prescriptions, Rx…) — é só descompactar na raiz do pen drive e colar. Opção alternativa "só os arquivos" sem pasta',
+    'Nome curto do arquivo: talhão + produto (ex.: AFSSA_09_calc). Trimble separado em GFX750 (AgData) e CFX750 (AgGPS)',
+  ],
   '0.54.1': [
     'Shapefile: agora é uma célula por pixel (20×20 m), sem mesclar, com a TAXA de cada célula. Duas opções: "sem clipar" (células inteiras, borda em escada) ou "clipar pela borda do talhão" (células da beira recortadas no polígono)',
   ],

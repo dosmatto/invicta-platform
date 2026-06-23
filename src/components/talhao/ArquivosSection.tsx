@@ -45,6 +45,7 @@ export function ArquivosSection({ safraNome }: { safraNome?: string }) {
   const [busy, setBusy] = useState('');
   const [monitorId, setMonitorId] = useState('raiz');
   const [clipBorda, setClipBorda] = useState(false);
+  const [comPasta, setComPasta] = useState(true);
 
   useEffect(() => {
     if (!nav.talhaoId || !safra) return;
@@ -83,8 +84,9 @@ export function ArquivosSection({ safraNome }: { safraNome?: string }) {
       const full = await descomprimirCenario(c);
       const d = full.doses.find(x => x.equacaoId === eqId); if (!d) return;
       const t = getTalhoes().find(x => x.id === nav.talhaoId);
-      const blob = await gerarShapefileZip(d, t?.nome ?? 'talhao', poligono, clipBorda);
-      baixarBlob(blob, `RX_${t?.nome ?? 'talhao'}_${d.produto || d.nomeEquacao}_shp.zip`.replace(/[^\w.\-]+/g, '_'));
+      const caminho = comPasta ? monitorPorId(monitorId).caminho : '';
+      const { blob, nome } = await gerarShapefileZip(d, t?.nome ?? 'talhao', poligono, clipBorda, caminho);
+      baixarBlob(blob, nome);
     } catch (e) { alert('Falha ao gerar o Shapefile: ' + (e instanceof Error ? e.message : String(e))); }
     finally { setBusy(''); }
   }
@@ -149,12 +151,21 @@ export function ArquivosSection({ safraNome }: { safraNome?: string }) {
                   style={{ background: clipBorda === v ? 'var(--invicta-blue-mid)' : '#1a3a6b', color: clipBorda === v ? '#fff' : '#94a3b8' }}>{label}</button>
               ))}
             </div>
+            <label className="text-[9px] block mb-1" style={{ color: '#94a3b8' }}>Empacotamento:</label>
+            <div className="flex gap-1 mb-2">
+              {([[true, 'Com a pasta do monitor'], [false, 'Só os arquivos (nome curto)']] as const).map(([v, label]) => (
+                <button key={String(v)} onClick={() => setComPasta(v)} className="flex-1 py-1.5 rounded text-[9px] font-bold"
+                  style={{ background: comPasta === v ? 'var(--invicta-blue-mid)' : '#1a3a6b', color: comPasta === v ? '#fff' : '#94a3b8' }}>{label}</button>
+              ))}
+            </div>
             <label className="text-[9px] block mb-1" style={{ color: '#94a3b8' }}>Monitor / máquina:</label>
             <select value={monitorId} onChange={e => setMonitorId(e.target.value)} className="w-full rounded px-2 py-1.5 text-[10px] outline-none" style={{ background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' }}>
               {MONITORES.map(m => <option key={m.id} value={m.id}>{m.nome}</option>)}
             </select>
             <p className="text-[9px] mt-1.5" style={{ color: '#64748b' }}>
-              Baixe o <strong>SHP</strong> de cada mapa (botões acima) e copie os arquivos <code>.shp/.shx/.dbf/.prj</code> para: <strong style={{ color: '#cbd5e1' }}>{monitorPorId(monitorId).pasta}</strong>.
+              {comPasta
+                ? <>O ZIP já vem com a pasta <strong style={{ color: '#cbd5e1' }}>{monitorPorId(monitorId).pasta}</strong> — descompacte na raiz do pen drive e está pronto.</>
+                : <>O ZIP traz só os arquivos <code>.shp/.shx/.dbf/.prj</code> (nome curto, ex.: <code>AFSSA_09_calc</code>). Copie para: <strong style={{ color: '#cbd5e1' }}>{monitorPorId(monitorId).pasta}</strong>.</>}
             </p>
           </div>
         </div>

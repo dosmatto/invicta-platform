@@ -12,17 +12,27 @@ import type { DoseCalculada } from './aplicar';
 const PRJ_WGS84 =
   'GEOGCS["GCS_WGS_1984",DATUM["D_WGS_1984",SPHEROID["WGS_1984",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["Degree",0.017453292519943295]]';
 
-// Pasta no pendrive por marca de monitor (tabela do usuário).
-export interface Monitor { id: string; nome: string; pasta: string; }
+// Marca de monitor → pasta no pen drive. `caminho` = pasta literal usada no ZIP
+// (vazio = raiz). `pasta` = texto amigável mostrado na tela.
+export interface Monitor { id: string; nome: string; pasta: string; caminho: string; }
 export const MONITORES: Monitor[] = [
-  { id: 'raiz', nome: 'AgLeader / Raven CR7 / Arvos / Hexagon / Jacto / Agres', pasta: 'Raiz do pen drive (sem pasta)' },
-  { id: 'stara', nome: 'Stara / Topper', pasta: 'Dados / Mapas' },
-  { id: 'trimble', nome: 'Trimble (GFX750 = AgData · CFX750 = AgGPS)', pasta: 'AgData ou AgGPS → Prescriptions' },
-  { id: 'jd', nome: 'John Deere (GS3 / GS4)', pasta: 'Rx' },
-  { id: 'raven-epro', nome: 'Raven Envizio Pro', pasta: 'ePro… → rxMaps' },
-  { id: 'muller', nome: 'Muller (novo)', pasta: 'SHP (ou mesmo caminho do Trimble)' },
+  { id: 'raiz', nome: 'AgLeader / Raven CR7 / Arvos / Hexagon / Jacto / Agres', pasta: 'Raiz do pen drive (sem pasta)', caminho: '' },
+  { id: 'stara', nome: 'Stara / Topper', pasta: 'Dados / Mapas', caminho: 'Dados/Mapas' },
+  { id: 'trimble-gfx', nome: 'Trimble GFX750 (AgData)', pasta: 'AgData / Prescriptions', caminho: 'AgData/Prescriptions' },
+  { id: 'trimble-cfx', nome: 'Trimble CFX750 (AgGPS)', pasta: 'AgGPS / Prescriptions', caminho: 'AgGPS/Prescriptions' },
+  { id: 'jd', nome: 'John Deere (GS3 / GS4)', pasta: 'Rx', caminho: 'Rx' },
+  { id: 'raven-epro', nome: 'Raven Envizio Pro', pasta: 'rxMaps', caminho: 'rxMaps' },
+  { id: 'muller', nome: 'Muller (novo)', pasta: 'SHP', caminho: 'SHP' },
 ];
 export const monitorPorId = (id: string) => MONITORES.find(m => m.id === id) ?? MONITORES[0];
+
+const semAcento = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '');
+const slug = (s: string) => semAcento(s || '').replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+// Nome curto do arquivo: talhão + 4 letras do produto. Ex.: "AFSSA 09" + "Calcário" → AFSSA_09_calc
+function nomeCurto(talhaoNome: string, dose: DoseCalculada): string {
+  const prod = semAcento(dose.produto || dose.nomeEquacao).toLowerCase().replace(/[^a-z0-9]+/g, '').slice(0, 4) || 'rx';
+  return `${slug(talhaoNome)}_${prod}`;
+}
 
 type Pt = [number, number];
 const outerRings = (p: GeoJSON.Polygon | GeoJSON.MultiPolygon): Pt[][] =>
@@ -91,11 +101,24 @@ function dosePolygons(dose: DoseCalculada, poligono: GeoJSON.Polygon | GeoJSON.M
 
 export async function gerarShapefileZip(
   dose: DoseCalculada, talhaoNome: string,
-  poligono: GeoJSON.Polygon | GeoJSON.MultiPolygon | null, clip: boolean,
-): Promise<Blob> {
+  poligono: GeoJSON.Polygon | GeoJSON.MultiPolygon | null, clip: boolean, caminho = '',
+): Promise<{ blob: Blob; nome: string }> {
   const fc = dosePolygons(dose, poligono, clip);
   if (fc.features.length === 0) throw new Error('Sem células de dose para exportar (tudo abaixo do mínimo / fora do talhão).');
   const shpwrite = await import('@mapbox/shp-write');
-  const nome = `RX_${talhaoNome}_${dose.produto || dose.nomeEquacao}`.replace(/[^\w\-]+/g, '_').slice(0, 40);
-  return await shpwrite.zip<'blob'>(fc, { outputType: 'blob', compression: 'DEFLATE', prj: PRJ_WGS84, types: { polygon: nome } });
+  const interno = await shpwrite.zip<'blob'>(fc, { outputType: 'blob', compression: 'DEFLATE', prj: PRJ_WGS84, types: { polygon: 'rx' } });
+  // Re-empacota: renomeia para nome curto (ex.: AFSSA_09_calc) e coloca na pasta do monitor (se houver).
+  const { default: JSZip } = await import('jszip');
+  const zin = await JSZip.loadAsync(interno);
+  const zout = new JSZip();
+  const base = nomeCurto(talhaoNome, dose);
+  const pasta = caminho ? caminho.replace(/^\/+|\/+$/g, '') + '/' : '';
+  for (const path of Object.keys(zin.files)) {
+    const f = zin.files[path];
+    if (f.dir) continue;
+    const ext = path.slice(path.lastIndexOf('.'));
+    zout.file(`${pasta}${base}${ext}`, await f.async('uint8array'));
+  }
+  const blob = await zout.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+  return { blob, nome: `${base}.zip` };
 }
