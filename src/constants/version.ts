@@ -1,6 +1,9 @@
-export const APP_VERSION = '0.54.0';
+export const APP_VERSION = '0.54.1';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.54.1': [
+    'Shapefile: agora é uma célula por pixel (20×20 m), sem mesclar, com a TAXA de cada célula. Duas opções: "sem clipar" (células inteiras, borda em escada) ou "clipar pela borda do talhão" (células da beira recortadas no polígono)',
+  ],
   '0.54.0': [
     'Arquivos: gera o Shapefile de taxa variável (.shp/.shx/.dbf/.prj em .zip) de cada mapa marcado — zonas por classe de dose com a TAXA (média da classe). Botão SHP por mapa na aba Arquivos',
     'Seletor de monitor/máquina (Stara, Trimble, John Deere, Raven, Muller, AgLeader e demais) que mostra em qual pasta do pen drive copiar os arquivos',

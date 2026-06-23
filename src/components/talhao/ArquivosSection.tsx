@@ -44,6 +44,7 @@ export function ArquivosSection({ safraNome }: { safraNome?: string }) {
   const [carregando, setCarregando] = useState(false);
   const [busy, setBusy] = useState('');
   const [monitorId, setMonitorId] = useState('raiz');
+  const [clipBorda, setClipBorda] = useState(false);
 
   useEffect(() => {
     if (!nav.talhaoId || !safra) return;
@@ -82,7 +83,7 @@ export function ArquivosSection({ safraNome }: { safraNome?: string }) {
       const full = await descomprimirCenario(c);
       const d = full.doses.find(x => x.equacaoId === eqId); if (!d) return;
       const t = getTalhoes().find(x => x.id === nav.talhaoId);
-      const blob = await gerarShapefileZip(d, t?.nome ?? 'talhao');
+      const blob = await gerarShapefileZip(d, t?.nome ?? 'talhao', poligono, clipBorda);
       baixarBlob(blob, `RX_${t?.nome ?? 'talhao'}_${d.produto || d.nomeEquacao}_shp.zip`.replace(/[^\w.\-]+/g, '_'));
     } catch (e) { alert('Falha ao gerar o Shapefile: ' + (e instanceof Error ? e.message : String(e))); }
     finally { setBusy(''); }
@@ -141,6 +142,13 @@ export function ArquivosSection({ safraNome }: { safraNome?: string }) {
 
           <div className="rounded-lg p-2.5 mt-1" style={{ background: '#0b1f38', border: '1px solid #2e5fa3' }}>
             <div className="text-[10px] font-bold mb-1" style={{ color: '#93c5fd' }}>Shapefile (taxa variável)</div>
+            <label className="text-[9px] block mb-1" style={{ color: '#94a3b8' }}>Borda (células 20×20 m):</label>
+            <div className="flex gap-1 mb-2">
+              {([[false, 'Sem clipar (células inteiras)'], [true, 'Clipar pela borda do talhão']] as const).map(([v, label]) => (
+                <button key={String(v)} onClick={() => setClipBorda(v)} className="flex-1 py-1.5 rounded text-[9px] font-bold"
+                  style={{ background: clipBorda === v ? 'var(--invicta-blue-mid)' : '#1a3a6b', color: clipBorda === v ? '#fff' : '#94a3b8' }}>{label}</button>
+              ))}
+            </div>
             <label className="text-[9px] block mb-1" style={{ color: '#94a3b8' }}>Monitor / máquina:</label>
             <select value={monitorId} onChange={e => setMonitorId(e.target.value)} className="w-full rounded px-2 py-1.5 text-[10px] outline-none" style={{ background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' }}>
               {MONITORES.map(m => <option key={m.id} value={m.id}>{m.nome}</option>)}
