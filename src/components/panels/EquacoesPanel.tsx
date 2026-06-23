@@ -23,12 +23,26 @@ const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid
 const listaDe = (s: string) => s.split(',').map(x => x.trim()).filter(Boolean);
 const parseNum = (s: string) => parseFloat(s.replace(',', '.'));
 
+// Rampa de cores da dose (verde → vermelho) — âncoras interpoladas para QUALQUER nº de classes.
+const RAMPA_DOSE = ['#1b7a1f', '#3fa336', '#6fbf3f', '#9ccc4e', '#cddb39', '#ffe93b', '#ffc107', '#ff9800', '#fb5a23', '#e23b2e'];
+const hexRgb = (h: string): [number, number, number] => { const n = h.replace('#', ''); return [parseInt(n.slice(0, 2), 16), parseInt(n.slice(2, 4), 16), parseInt(n.slice(4, 6), 16)]; };
+function corNaRampa(t: number): string {
+  const n = RAMPA_DOSE.length;
+  const x = Math.max(0, Math.min(1, t)) * (n - 1);
+  const i = Math.floor(x), f = x - i;
+  if (i >= n - 1) return RAMPA_DOSE[n - 1];
+  const a = hexRgb(RAMPA_DOSE[i]), b = hexRgb(RAMPA_DOSE[i + 1]);
+  return '#' + [0, 1, 2].map(k => Math.round(a[k] + (b[k] - a[k]) * f).toString(16).padStart(2, '0')).join('');
+}
+// Reaplica a rampa nas classes pelo índice (1ª = verde escuro, última = vermelho, intermediárias interpoladas).
+const distribuirCores = <T extends { cor: string }>(classes: T[]): T[] =>
+  classes.map((c, i) => ({ ...c, cor: corNaRampa(classes.length <= 1 ? 1 : i / (classes.length - 1)) }));
+
 function estiloPadrao(): EstiloRecomendacao {
   // 10 faixas padrão (verde → vermelho), limites de 1.000 em 1.000 kg/ha.
-  const cores = ['#1b7a1f', '#3fa336', '#6fbf3f', '#9ccc4e', '#cddb39', '#ffe93b', '#ffc107', '#ff9800', '#fb5a23', '#e23b2e'];
   return {
     valorMinimo: 0,
-    classes: cores.map((cor, i) => ({ cor, limiteSuperior: (i + 1) * 1000 })),
+    classes: distribuirCores(Array.from({ length: 10 }, (_, i) => ({ cor: '', limiteSuperior: (i + 1) * 1000 }))),
     dividirAuto: false,
     zeroTransparente: true,
   };
@@ -451,10 +465,11 @@ function Estilo({ estilo, setEstilo, unidade }: { estilo: EstiloRecomendacao; se
   }
   function addClasse() {
     const ult = estilo.classes[estilo.classes.length - 1];
-    setEstilo({ ...estilo, classes: [...estilo.classes, { cor: '#e23b2e', limiteSuperior: (ult?.limiteSuperior ?? 0) + 1000 }] });
+    const novas = [...estilo.classes, { cor: '#e23b2e', limiteSuperior: (ult?.limiteSuperior ?? 0) + 1000 }];
+    setEstilo({ ...estilo, classes: distribuirCores(novas) });   // re-espalha verde→vermelho
   }
   function rmClasse(i: number) {
-    setEstilo({ ...estilo, classes: estilo.classes.filter((_, idx) => idx !== i) });
+    setEstilo({ ...estilo, classes: distribuirCores(estilo.classes.filter((_, idx) => idx !== i)) });
   }
 
   return (
@@ -484,7 +499,10 @@ function Estilo({ estilo, setEstilo, unidade }: { estilo: EstiloRecomendacao; se
       <div>
         <div className="flex items-center justify-between mb-1">
           <label className="text-[10px] font-semibold" style={{ color: '#cbd5e1' }}>Classes</label>
-          <button onClick={addClasse} className="text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1" style={{ background: '#1a3a6b', color: '#93c5fd' }}><Plus size={10} /> Classe</button>
+          <div className="flex items-center gap-1">
+            <button onClick={() => setEstilo({ ...estilo, classes: distribuirCores(estilo.classes) })} title="Reaplica a rampa verde→vermelho em todas as classes" className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: '#1a3a6b', color: '#93c5fd' }}>Distribuir cores</button>
+            <button onClick={addClasse} className="text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1" style={{ background: '#1a3a6b', color: '#93c5fd' }}><Plus size={10} /> Classe</button>
+          </div>
         </div>
         <div className="space-y-1">
           {estilo.classes.map((c, i) => (

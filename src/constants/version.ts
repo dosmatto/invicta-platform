@@ -1,6 +1,9 @@
-export const APP_VERSION = '0.52.1';
+export const APP_VERSION = '0.52.2';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.52.2': [
+    'Estilo da equação: ao adicionar/remover classes, as cores são redistribuídas na rampa verde→vermelho (com tons intermediários) em vez de repetir o vermelho. Novo botão "Distribuir cores" reaplica a rampa quando quiser',
+  ],
   '0.52.1': [
     'Recomendação Oficial (C2): Resumo Técnico reordenado (Área total → Dose média → mínima → máxima → Quantidade total) e Resumo Financeiro simplificado para só o Custo estimado do produto (por ha e total) — sem as linhas que confundiam',
     'Legenda de dose passa a vir com 10 faixas por padrão (verde → vermelho, de 1.000 em 1.000 kg/ha) nas equações novas',
