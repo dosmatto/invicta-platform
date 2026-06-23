@@ -23,6 +23,7 @@ export interface Cenario {
   financeiro: { custoTotal: number; custoHa: number; areaHa: number };
   geradoEm: number;
   geradoPor: string;
+  oficial?: boolean;   // marcado "Para uso" → entra na geração de arquivos (aba Arquivos)
 }
 
 const COL = 'inv_cenarios';
@@ -62,6 +63,17 @@ export async function descomprimirCenario(cen: Cenario): Promise<Cenario> {
     ...d, grid: d.grid?.comp === 'gz' ? await descomprimirGrid(d.grid as Grid) : d.grid,
   })));
   return { ...cen, doses };
+}
+
+// Marca/desmarca o cenário como "Para uso" (oficial). Regrava o doc preservando
+// os grids como estão (gz) — sem recomprimir.
+export async function marcarCenarioOficial(cen: Cenario, oficial: boolean): Promise<void> {
+  const fb = getFb();
+  if (!fb) throw new Error('Nuvem indisponível.');
+  const atualizado: Cenario = { ...cen, oficial };
+  await setDoc(doc(fb.db, COL, cen.id), {
+    id: cen.id, talhaoId: cen.talhaoId, safra: cen.safra, geradoEm: cen.geradoEm, json: JSON.stringify(atualizado),
+  });
 }
 
 export async function excluirCenario(id: string): Promise<void> {

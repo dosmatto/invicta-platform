@@ -19,6 +19,7 @@ import { FertilidadeSection } from '@/components/talhao/FertilidadeSection';
 import { AmostragemModulo } from '@/components/talhao/AmostragemModulo';
 import { CompactacaoSection } from '@/components/talhao/CompactacaoSection';
 import { RecomendacaoSection } from '@/components/talhao/RecomendacaoSection';
+import { ArquivosSection } from '@/components/talhao/ArquivosSection';
 import { LabImportSection } from '@/components/talhao/LabImportSection';
 import { ImportarGradeSection } from '@/components/talhao/ImportarGradeSection';
 import { GeradorRelatorios } from '@/components/talhao/GeradorRelatorios';
@@ -44,7 +45,7 @@ const TABS: Array<{ id: TabId; label: string; icon: React.ElementType; pronto: b
   { id: 'recomendacoes', label: 'Recomendações', icon: FileSpreadsheet, pronto: true },
   { id: 'compactacao',   label: 'Compactação',   icon: Activity,        pronto: true },
   { id: 'ndvi',          label: 'NDVI / Satélite', icon: Satellite,     pronto: false },
-  { id: 'arquivos',      label: 'Arquivos',      icon: FolderOpen,      pronto: false },
+  { id: 'arquivos',      label: 'Arquivos',      icon: FolderOpen,      pronto: true },
   { id: 'relatorios',    label: 'Relatórios',    icon: FileText,        pronto: true },
 ];
 
@@ -198,8 +199,9 @@ export function TalhaoPage({ id }: { id: string }) {
             )}
             {tab === 'compactacao' && <CompactacaoSection safraNome={safraSel} />}
             {tab === 'recomendacoes' && <RecomendacaoSection safraNome={safraSel} />}
+            {tab === 'arquivos' && <ArquivosSection safraNome={safraSel} />}
             {tab === 'relatorios' && <GeradorRelatorios safraNome={safraSel} />}
-            {!['resumo', 'fertilidade', 'amostragem', 'compactacao', 'recomendacoes', 'relatorios'].includes(tab) && (
+            {!['resumo', 'fertilidade', 'amostragem', 'compactacao', 'recomendacoes', 'arquivos', 'relatorios'].includes(tab) && (
               <EmBreve label={TABS.find(t => t.id === tab)?.label ?? ''} />
             )}
           </div>

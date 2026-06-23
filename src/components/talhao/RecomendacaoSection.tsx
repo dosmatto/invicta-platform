@@ -10,12 +10,12 @@ import { useApp } from '@/context/AppContext';
 import { getImportacoesLab, getTalhoes, type ImportacaoLab } from '@/lib/store';
 import { listar as bibListar, type ItemBiblioteca, type ConteudoEquacao, type ConteudoRecomendacao } from '@/lib/biblioteca';
 import { carregarGridsTalhao, calcularDose, type DoseCalculada } from '@/lib/recomendacao/aplicar';
-import { salvarCenario, listarCenarios, descomprimirCenario, excluirCenario, type Cenario } from '@/lib/recomendacao/cenarios';
+import { salvarCenario, listarCenarios, descomprimirCenario, excluirCenario, marcarCenarioOficial, type Cenario } from '@/lib/recomendacao/cenarios';
 import { colorirDose } from '@/lib/raster';
 import { coordsFromBounds } from '@/lib/fertilidade';
 import { ComparadorCenarios } from '@/components/talhao/ComparadorCenarios';
 import { montarBookOficial, abrirOuBaixar } from '@/lib/recomendacao/relatorioCenarios';
-import { Play, Loader2, AlertTriangle, Wand2, Save, FolderOpen, Trash2, Eye, GitCompare, FileText } from 'lucide-react';
+import { Play, Loader2, AlertTriangle, Wand2, Save, FolderOpen, Trash2, Eye, GitCompare, FileText, Star } from 'lucide-react';
 
 const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
 const fmt = (v: number, dec = 0) => v.toLocaleString('pt-BR', { maximumFractionDigits: dec, minimumFractionDigits: dec });
@@ -151,6 +151,10 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
     if (!confirm(`Excluir o cenário "${c.nome}"?`)) return;
     await excluirCenario(c.id); await recarregarSalvos();
     setSelCompara(prev => { const n = new Set(prev); n.delete(c.id); return n; });
+  }
+  async function toggleOficial(c: Cenario) {
+    try { await marcarCenarioOficial(c, !c.oficial); await recarregarSalvos(); }
+    catch (e) { alert('Falha ao marcar: ' + (e instanceof Error ? e.message : String(e))); }
   }
   function toggleCompara(id: string) {
     setSelCompara(prev => {
@@ -354,11 +358,15 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
                 <div key={c.id} className="p-2 rounded-lg flex items-center gap-2" style={{ background: '#061525', border: marcado ? '1px solid var(--invicta-green)' : '1px solid #1a3a6b' }}>
                   <input type="checkbox" checked={marcado} onChange={() => toggleCompara(c.id)} disabled={!marcado && selCompara.size >= 3} title="Comparar" />
                   <div className="flex-1 min-w-0">
-                    <div className="text-[10px] font-bold truncate" style={{ color: '#e2e8f0' }}>{c.nome}</div>
+                    <div className="text-[10px] font-bold truncate flex items-center gap-1" style={{ color: '#e2e8f0' }}>
+                      {c.nome}
+                      {c.oficial && <span className="text-[8px] font-bold px-1 py-0.5 rounded" style={{ background: 'var(--invicta-green-dark)', color: '#fff' }}>uso</span>}
+                    </div>
                     <div className="text-[9px]" style={{ color: '#64748b' }}>
                       {new Date(c.geradoEm).toLocaleDateString('pt-BR')} · {c.doses.length} produto(s) · R$ {fmt(c.financeiro.custoTotal, 2)}
                     </div>
                   </div>
+                  <button onClick={() => toggleOficial(c)} title={c.oficial ? 'Marcado para uso (clique p/ desmarcar)' : 'Marcar para uso (entra na geração de arquivos)'} className="p-1 rounded hover:bg-white/10" style={{ color: c.oficial ? '#fbbf24' : '#475569' }}><Star size={12} fill={c.oficial ? '#fbbf24' : 'none'} /></button>
                   <button onClick={() => reabrir(c)} title="Reabrir" className="p-1 rounded hover:bg-white/10" style={{ color: '#93c5fd' }}><FolderOpen size={12} /></button>
                   <button onClick={() => excluirSalvo(c)} title="Excluir" className="p-1 rounded hover:bg-white/10" style={{ color: '#f87171' }}><Trash2 size={12} /></button>
                 </div>

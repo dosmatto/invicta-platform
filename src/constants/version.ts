@@ -1,6 +1,11 @@
-export const APP_VERSION = '0.52.3';
+export const APP_VERSION = '0.53.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.53.0': [
+    'Marcar cenário "Para uso" (estrela) em Recomendações → Cenários salvos: marque um ou mais cenários que serão realmente utilizados',
+    'Aba Arquivos (nova): lista os cenários marcados e gera o mapa final de recomendação — PDF oficial e imagem JPG (satélite + dose) por produto',
+    'Arquivos de taxa variável (Shapefile por marca de monitor) vêm na próxima etapa',
+  ],
   '0.52.3': [
     'Legenda da dose: a primeira faixa agora começa sempre em 0 (ex.: "0 – 500" em vez de "500 – 500"). Quando há valor mínimo com zero transparente, essa faixa aparece como transparente (não recebe) — vale no plano de aplicação, no comparador e nas legendas em tela',
   ],
