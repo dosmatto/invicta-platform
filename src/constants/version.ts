@@ -1,6 +1,9 @@
-export const APP_VERSION = '0.54.3';
+export const APP_VERSION = '0.54.4';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.54.4': [
+    'Correção: pH não tem unidade de medida — "CaCl₂" é o método de extração, não a unidade. A legenda de pH passou a ter unidade vazia e CaCl₂ só como método (corrige o cabeçalho dos layouts/relatórios)',
+  ],
   '0.54.3': [
     'Shapefile: corrigido o tamanho das células — agora reamostra numa grade FIXA de 20×20 m (antes saía com a resolução fina do grid, tipo 5×5)',
     'Shapefile: as células da borda transbordam um pouco o talhão (dose do vizinho mais próximo), então ao "clipar pela borda" o polígono fica 100% preenchido — acabou a faixa vazia na beira',

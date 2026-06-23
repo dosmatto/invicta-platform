@@ -13,7 +13,7 @@ export const LEGENDAS_SEED_ABC: Legenda[] = [
     ...base, id: 'fabc_ph_cacl2',
     nome: 'Fundação ABC - pH CaCl₂',
     atributoId: 'ph', atributo: 'pH', simbolo: 'pH',
-    unidade: 'CaCl₂', metodo: 'CaCl₂', invertida: false,
+    unidade: '', metodo: 'CaCl₂', invertida: false,   // pH é adimensional; CaCl₂ é o método de extração
     classes: classesFertilidade5([4.3, 5.0, 5.5, 6.0]),
   },
   {
