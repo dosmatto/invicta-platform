@@ -317,6 +317,9 @@ export interface ConteudoEquacao {
 export interface ConteudoRecomendacao {
   equacaoIds: string[];
   culturas: string[];
+  // Divisão de aplicação: parte a dose total em passadas de no máximo `limiteMax`
+  // (na unidade escolhida) → gera um grupo de mapas (aplicação 1, 2, 3…).
+  dividirAplicacao?: { ativo: boolean; limiteMax: number; unidade: 't/ha' | 'kg/ha' };
 }
 
 export function migrarLaboratoriosV1() {

@@ -16,6 +16,7 @@ import { Plus, Edit3, Trash2, Power, Copy, X, Save, SaveAll, Search, Check } fro
 const SLUG: CategoriaBiblioteca = 'recomendacoes';
 const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
 const listaDe = (s: string) => s.split(',').map(x => x.trim()).filter(Boolean);
+const parseNum = (s: string) => parseFloat(s.replace(',', '.'));
 
 export function RecomendacoesPanel() {
   const def = CATEGORIAS.find(c => c.slug === SLUG)!;
@@ -116,6 +117,9 @@ function RecomendacaoEditor({ item, onClose }: { item: ItemBiblioteca<ConteudoRe
   const [culturas, setCulturas] = useState((c?.culturas ?? []).join(', '));
   const [equacaoIds, setEquacaoIds] = useState<string[]>(c?.equacaoIds ?? []);
   const [buscaEq, setBuscaEq] = useState('');
+  const [divAtivo, setDivAtivo] = useState(c?.dividirAplicacao?.ativo ?? false);
+  const [divLimite, setDivLimite] = useState(c?.dividirAplicacao?.limiteMax ? String(c.dividirAplicacao.limiteMax) : '4');
+  const [divUnid, setDivUnid] = useState<'t/ha' | 'kg/ha'>(c?.dividirAplicacao?.unidade ?? 't/ha');
   const [erro, setErro] = useState('');
 
   const equacoes = useMemo(() => listar<ConteudoEquacao>('equacoes'), []);
@@ -128,7 +132,10 @@ function RecomendacaoEditor({ item, onClose }: { item: ItemBiblioteca<ConteudoRe
   }, [equacoes, equacaoIds, buscaEq]);
 
   function montarConteudo(): ConteudoRecomendacao {
-    return { equacaoIds, culturas: listaDe(culturas) };
+    return {
+      equacaoIds, culturas: listaDe(culturas),
+      dividirAplicacao: divAtivo ? { ativo: true, limiteMax: parseNum(divLimite) || 0, unidade: divUnid } : undefined,
+    };
   }
   function validarTudo(): boolean {
     setErro('');
@@ -172,6 +179,26 @@ function RecomendacaoEditor({ item, onClose }: { item: ItemBiblioteca<ConteudoRe
         <div>
           <label className="text-[10px] font-semibold block mb-1" style={{ color: '#cbd5e1' }}>Descrição</label>
           <textarea value={descricao} onChange={e => setDescricao(e.target.value)} rows={2} className={txt + " resize-none"} style={inputStyle} />
+        </div>
+
+        {/* Dividir aplicação */}
+        <div style={{ borderTop: '1px solid #1a3a6b', paddingTop: 8 }}>
+          <label className="flex items-center gap-1.5 text-[10px] font-semibold" style={{ color: '#cbd5e1' }}>
+            <input type="checkbox" checked={divAtivo} onChange={e => setDivAtivo(e.target.checked)} /> Dividir aplicação por limite máximo
+          </label>
+          {divAtivo && (
+            <div className="mt-1.5 flex items-end gap-2">
+              <div className="flex-1">
+                <label className="text-[9px] block mb-0.5" style={{ color: '#94a3b8' }}>Limite máximo por aplicação</label>
+                <input value={divLimite} onChange={e => setDivLimite(e.target.value)} inputMode="decimal" className={txt} style={inputStyle} />
+              </div>
+              <select value={divUnid} onChange={e => setDivUnid(e.target.value as 't/ha' | 'kg/ha')} className="rounded px-2 py-1.5 text-[11px] outline-none" style={inputStyle}>
+                <option value="t/ha">t/ha</option>
+                <option value="kg/ha">kg/ha</option>
+              </select>
+            </div>
+          )}
+          {divAtivo && <p className="text-[9px] mt-1" style={{ color: '#64748b' }}>A dose total é dividida em passadas de no máximo esse valor — gera um grupo de mapas (aplicação 1, 2, 3…), cada um com PDF e Shapefile.</p>}
         </div>
 
         {/* Equações selecionadas */}

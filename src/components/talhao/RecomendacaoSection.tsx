@@ -9,7 +9,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import { getImportacoesLab, getTalhoes, type ImportacaoLab } from '@/lib/store';
 import { listar as bibListar, type ItemBiblioteca, type ConteudoEquacao, type ConteudoRecomendacao } from '@/lib/biblioteca';
-import { carregarGridsTalhao, calcularDose, type DoseCalculada } from '@/lib/recomendacao/aplicar';
+import { carregarGridsTalhao, calcularDose, dividirDoseEmPassadas, type DoseCalculada } from '@/lib/recomendacao/aplicar';
 import { salvarCenario, listarCenarios, descomprimirCenario, excluirCenario, type Cenario } from '@/lib/recomendacao/cenarios';
 import { colorirDose } from '@/lib/raster';
 import { coordsFromBounds } from '@/lib/fertilidade';
@@ -19,6 +19,21 @@ import { Play, Loader2, AlertTriangle, Wand2, Save, FolderOpen, Trash2, Eye, Git
 
 const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
 const fmt = (v: number, dec = 0) => v.toLocaleString('pt-BR', { maximumFractionDigits: dec, minimumFractionDigits: dec });
+
+// Converte o limite (t/ha ou kg/ha) p/ a unidade da dose e divide em passadas.
+function limiteNaUnidadeDaDose(limite: number, unidLimite: 't/ha' | 'kg/ha', unidDose: string): number {
+  const doseT = /t\/ha|ton/i.test(unidDose || '');
+  if (unidLimite === 't/ha' && !doseT) return limite * 1000;
+  if (unidLimite === 'kg/ha' && doseT) return limite / 1000;
+  return limite;
+}
+function expandirDoses(doses: DoseCalculada[], rec: ConteudoRecomendacao, areaHa: number): DoseCalculada[] {
+  const div = rec.dividirAplicacao;
+  if (!div?.ativo || !(div.limiteMax > 0)) return doses;
+  const out: DoseCalculada[] = [];
+  for (const d of doses) out.push(...dividirDoseEmPassadas(d, limiteNaUnidadeDaDose(div.limiteMax, div.unidade, d.unidade), areaHa));
+  return out;
+}
 
 export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
   const { nav, setFertilidadeOverlay, setFertilidadeLabels } = useApp();
@@ -113,20 +128,22 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
         try { ok.push(calcularDose(it, grids, area)); }
         catch (e) { erros.push({ nome: it.nome, erro: e instanceof Error ? e.message : String(e) }); }
       }
-      setDoses(ok); setFalhas(erros);
-      setEstado(ok.length ? 'pronto' : 'erro');
-      if (!ok.length) { setErro('Nenhuma equação pôde ser aplicada — veja os detalhes abaixo.'); return; }
+      // Divisão de aplicação (se a recomendação pedir) → grupo de mapas (passadas).
+      const finais = (modo === 'recomendacao' && recSel) ? expandirDoses(ok, recSel.conteudo, area) : ok;
+      setDoses(finais); setFalhas(erros);
+      setEstado(finais.length ? 'pronto' : 'erro');
+      if (!finais.length) { setErro('Nenhuma equação pôde ser aplicada — veja os detalhes abaixo.'); return; }
       // Auto-salva o cenário na nuvem (id determinístico = não duplica ao reprocessar).
       const ref = modo === 'recomendacao' ? recomendacaoId : equacaoId;
       const autoId = `cen_${nav.talhaoId}_${importacaoId}_${modo}_${ref}`;
-      const custoTotal = ok.reduce((s, d) => s + (d.custo ?? 0), 0);
+      const custoTotal = finais.reduce((s, d) => s + (d.custo ?? 0), 0);
       const nome = nomeCenario.trim() || `${recSel?.nome ?? eqSel?.nome ?? 'Cenário'}`;
       setCenMeta({ id: autoId, origem: modo, recomendacaoId: modo === 'recomendacao' ? recomendacaoId : undefined, nome });
       try {
         await salvarCenario({
           talhaoId: nav.talhaoId, safra, importacaoId,
           origem: modo, recomendacaoId: modo === 'recomendacao' ? recomendacaoId : undefined,
-          nome, doses: ok, financeiro: { custoTotal, custoHa: area ? custoTotal / area : 0, areaHa: area },
+          nome, doses: finais, financeiro: { custoTotal, custoHa: area ? custoTotal / area : 0, areaHa: area },
         }, autoId);
         await recarregarSalvos();
         setSalvoMsg(`Salvo como "${nome}".`);
@@ -203,10 +220,11 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
         const ok: DoseCalculada[] = [];
         for (const it of itens) { try { ok.push(calcularDose(it, grids, area)); } catch { /* sem mapa p/ essa equação */ } }
         if (ok.length === 0) continue;
-        const custoTotal = ok.reduce((s, d) => s + d.custo, 0);
+        const finais = expandirDoses(ok, r.conteudo, area);   // divide em passadas se a recomendação pedir
+        const custoTotal = finais.reduce((s, d) => s + d.custo, 0);
         const financeiro = { custoTotal, custoHa: area ? custoTotal / area : 0, areaHa: area };
-        cens.push({ id: '', talhaoId: nav.talhaoId, safra, importacaoId, origem: 'recomendacao', recomendacaoId: r.id, nome: r.nome, doses: ok, financeiro, geradoEm: Date.now(), geradoPor: '' });
-        salvarCenario({ talhaoId: nav.talhaoId, safra, importacaoId, origem: 'recomendacao', recomendacaoId: r.id, nome: r.nome, doses: ok, financeiro }, `cen_${nav.talhaoId}_${importacaoId}_recomendacao_${r.id}`).catch(() => {});
+        cens.push({ id: '', talhaoId: nav.talhaoId, safra, importacaoId, origem: 'recomendacao', recomendacaoId: r.id, nome: r.nome, doses: finais, financeiro, geradoEm: Date.now(), geradoPor: '' });
+        salvarCenario({ talhaoId: nav.talhaoId, safra, importacaoId, origem: 'recomendacao', recomendacaoId: r.id, nome: r.nome, doses: finais, financeiro }, `cen_${nav.talhaoId}_${importacaoId}_recomendacao_${r.id}`).catch(() => {});
       }
       if (cens.length === 0) { if (aba) aba.close(); setErroBook('Nenhuma recomendação pôde ser aplicada — faltam mapas interpolados dos atributos usados.'); setBookEstado('erro'); return; }
       const blob = await montarBookOficial(cens);

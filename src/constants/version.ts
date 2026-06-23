@@ -1,6 +1,11 @@
-export const APP_VERSION = '0.54.4';
+export const APP_VERSION = '0.55.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.55.0': [
+    'Dividir aplicação (Recomendações): na recomendação dá para ativar "Dividir aplicação por limite máximo" (ex.: 4 t/ha por passada). Ao aplicar, a dose total é dividida em um GRUPO de mapas — aplicação 1, 2, 3… — cada um limitado ao máximo por passada',
+    'Cada passada vira um mapa próprio (já marcado para uso), com seu PDF oficial e seu Shapefile na aba Arquivos. Ex.: necessidade de 9 t/ha com limite 4 → 3 mapas (4 + 4 + 1)',
+    'O limite pode ser informado em t/ha ou kg/ha (convertido para a unidade da dose)',
+  ],
   '0.54.4': [
     'Correção: pH não tem unidade de medida — "CaCl₂" é o método de extração, não a unidade. A legenda de pH passou a ter unidade vazia e CaCl₂ só como método (corrige o cabeçalho dos layouts/relatórios)',
   ],

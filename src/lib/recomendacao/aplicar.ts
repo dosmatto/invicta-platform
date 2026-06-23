@@ -138,3 +138,42 @@ export function calcularDose(
     custoTonelada: c.custoTonelada, freteHa, aplicacaoHa, custoProdutoHa, custoHa, custo: custoHa * areaHa,
   };
 }
+
+// Divide a dose total em passadas de no máximo `limiteMax` (na unidade da dose):
+// aplicação i = min(max(dose − (i−1)·limiteMax, 0), limiteMax). Nº de passadas =
+// teto(maxDose / limiteMax). Cada passada vira uma DoseCalculada própria (mapa +
+// financeiro recalculado; frete/aplicação contam por passada).
+export function dividirDoseEmPassadas(dose: DoseCalculada, limiteMax: number, areaHa: number): DoseCalculada[] {
+  if (!(limiteMax > 0)) return [dose];
+  const { valores } = decodeGrid(dose.grid);
+  let maxV = 0;
+  for (let i = 0; i < valores.length; i++) { const v = valores[i]; if (isFinite(v) && v > maxV) maxV = v; }
+  const n = Math.max(1, Math.ceil(maxV / limiteMax - 1e-9));
+  if (n <= 1) return [dose];
+  const u = (dose.unidade || '').toLowerCase();
+  const ehT = u.includes('t/ha') || u.includes('ton');
+  const passes: DoseCalculada[] = [];
+  for (let i = 0; i < n; i++) {
+    const arr = new Float32Array(valores.length);
+    let mn = Infinity, mx = -Infinity, soma = 0, cnt = 0;
+    for (let j = 0; j < valores.length; j++) {
+      const v = valores[j];
+      if (!isFinite(v)) { arr[j] = NaN; continue; }
+      const p = Math.min(Math.max(v - i * limiteMax, 0), limiteMax);
+      arr[j] = p; cnt++; soma += p; if (p < mn) mn = p; if (p > mx) mx = p;
+    }
+    const media = cnt ? soma / cnt : 0;
+    const tonHa = ehT ? media : media / 1000;
+    const custoProdutoHa = tonHa * (dose.custoTonelada ?? 0);
+    const custoHa = custoProdutoHa + (dose.freteHa ?? 0) + (dose.aplicacaoHa ?? 0);
+    passes.push({
+      ...dose,
+      equacaoId: `${dose.equacaoId}__ap${i + 1}`,
+      nomeEquacao: `${dose.nomeEquacao} — aplicação ${i + 1}/${n}`,
+      grid: { b64: float32ParaB64(arr), shape: dose.grid.shape },
+      stats: { min: cnt ? mn : 0, media, max: cnt ? mx : 0, n: cnt },
+      toneladas: tonHa * areaHa, custoProdutoHa, custoHa, custo: custoHa * areaHa, usar: true,
+    });
+  }
+  return passes;
+}
