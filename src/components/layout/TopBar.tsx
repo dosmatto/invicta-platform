@@ -1,13 +1,26 @@
 'use client';
 
 import Image from 'next/image';
+import { useEffect, useState } from 'react';
 import { ChevronRight, Wifi, User, LogOut } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
+import { getSafras } from '@/lib/store';
 import { EmpresaSwitcher } from './EmpresaSwitcher';
 import { logout, emailUsuario, firebaseConfigurado } from '@/lib/auth';
 
 export function TopBar() {
   const { nav: context } = useApp();
+
+  // Safra exibida = a ATIVA de verdade (getSafras), não o default de nav.safra.
+  // Reage à troca de safra (dispara inv:biblioteca) e à troca de empresa.
+  const [safraAtiva, setSafraAtiva] = useState('');
+  useEffect(() => {
+    const ler = () => setSafraAtiva(getSafras().find(s => s.ativa)?.nome ?? '');
+    ler();
+    window.addEventListener('inv:biblioteca', ler);
+    window.addEventListener('inv:empresa', ler);
+    return () => { window.removeEventListener('inv:biblioteca', ler); window.removeEventListener('inv:empresa', ler); };
+  }, []);
 
   return (
     <header
@@ -25,7 +38,7 @@ export function TopBar() {
           { label: 'Cliente', value: context.produtor },
           { label: 'Fazenda', value: context.fazenda },
           { label: 'Talhão', value: context.talhao },
-          { label: 'Safra', value: context.safra || '—' },
+          { label: 'Safra', value: safraAtiva || context.safra || '—' },
         ].map((item, i) => (
           <span key={item.label} className="flex items-center gap-1.5">
             {i > 0 && <ChevronRight size={12} className="opacity-40 flex-shrink-0" style={{ color: '#fff' }} />}

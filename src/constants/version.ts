@@ -1,6 +1,9 @@
-export const APP_VERSION = '0.61.0';
+export const APP_VERSION = '0.61.1';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.61.1': [
+    'Correção: a Safra no topo ficava travada (24/25) mesmo trocando a safra ativa. Agora o topo mostra a safra ativa de verdade e atualiza ao trocá-la',
+  ],
   '0.61.0': [
     'Biblioteca agora abre em TELA CHEIA (sem o mapa do lado) — mais espaço para trabalhar nas equações, recomendações, legendas, padrões etc. Fechar volta para o mapa',
     'Usuários saiu do menu lateral e virou uma aba DENTRO da Biblioteca (só Owner/Admin veem) — centraliza a configuração num lugar só',
