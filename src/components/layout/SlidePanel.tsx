@@ -12,16 +12,13 @@ import { TalhaoDetailPanel } from '@/components/panels/TalhaoDetailPanel';
 
 // Painéis auxiliares
 import { BibliotecaPanel } from '@/components/panels/BibliotecaPanel';
-import { UsuariosPanel } from '@/components/panels/UsuariosPanel';
 import { ConfiguracoesPanel } from '@/components/panels/ConfiguracoesPanel';
 import { EmpresaConfig } from '@/components/panels/EmpresaConfig';
 
 const STATIC_PANELS: Record<string, { title: string; component: React.ComponentType; largura?: number }> = {
   dashboard:         { title: 'Início',          component: DashboardPanel },
   produtores:        { title: 'Clientes',        component: ProdutoresPanel },
-  biblioteca:        { title: 'Biblioteca',      component: BibliotecaPanel, largura: 480 },
   empresa:           { title: 'Empresa',         component: EmpresaConfig },
-  usuarios:          { title: 'Usuários',        component: UsuariosPanel },
   configuracoes:     { title: 'Configurações',   component: ConfiguracoesPanel },
 };
 
@@ -29,6 +26,21 @@ export function SlidePanel() {
   const { activePanel, setActivePanel } = useApp();
 
   if (!activePanel) return null;
+
+  // Biblioteca em TELA CHEIA (overlay) — sem o mapa, mais espaço para trabalhar.
+  if (activePanel === 'biblioteca') {
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col" style={{ background: 'var(--invicta-blue-dark)' }}>
+        <div className="flex items-center justify-between px-4 py-3 flex-shrink-0" style={{ borderBottom: '1px solid #1a3a6b' }}>
+          <h2 className="text-sm font-semibold uppercase tracking-wide" style={{ color: '#fff' }}>Biblioteca</h2>
+          <button onClick={() => setActivePanel(null)} className="p-1 rounded hover:bg-white/10 transition-colors">
+            <X size={16} style={{ color: 'var(--sidebar-text)' }} />
+          </button>
+        </div>
+        <div className="flex-1 overflow-hidden"><BibliotecaPanel /></div>
+      </div>
+    );
+  }
 
   // Roteamento hierárquico — sem header próprio (painel gerencia internamente)
   if (activePanel.startsWith('produtor-')) {

@@ -1,6 +1,10 @@
-export const APP_VERSION = '0.60.1';
+export const APP_VERSION = '0.61.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.61.0': [
+    'Biblioteca agora abre em TELA CHEIA (sem o mapa do lado) — mais espaço para trabalhar nas equações, recomendações, legendas, padrões etc. Fechar volta para o mapa',
+    'Usuários saiu do menu lateral e virou uma aba DENTRO da Biblioteca (só Owner/Admin veem) — centraliza a configuração num lugar só',
+  ],
   '0.60.1': [
     'Permissões por papel: matriz reorganizada para caber no painel (rótulos curtos nas colunas Admin/Agrôn./Oper. e nas capacidades; passe o mouse para ver o nome completo) — antes a coluna do Operador estourava a largura',
   ],

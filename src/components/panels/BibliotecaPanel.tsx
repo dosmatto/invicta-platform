@@ -6,11 +6,16 @@ import {
   type CategoriaBiblioteca, type EscopoBiblioteca, type DefCategoria,
   type ItemBiblioteca, type ConteudoLaboratorio, type ConteudoPerfil,
 } from '@/lib/biblioteca';
-import { Search, Plus, Download, Upload, ChevronRight, Edit3, Trash2, Save, X, Power } from 'lucide-react';
+import { Search, Plus, Download, Upload, ChevronRight, Edit3, Trash2, Save, X, Power, Shield } from 'lucide-react';
 import { LegendasPanel } from './LegendasPanel';
 import { EquacoesPanel } from './EquacoesPanel';
 import { RecomendacoesPanel } from './RecomendacoesPanel';
 import { SafrasPanel } from './SafrasPanel';
+import { UsuariosPanel } from './UsuariosPanel';
+import { ehAdmin } from '@/lib/empresa';
+
+// Slug interno: as categorias da Biblioteca + a aba especial "Usuários".
+type SlugBiblioteca = CategoriaBiblioteca | 'usuarios';
 import { EtiquetaLayoutPicker } from '../talhao/EtiquetaLayoutPicker';
 import { PERFIS_BUILTIN, ELEMENTOS_LAB, simboloElemento } from '@/lib/lab';
 import {
@@ -23,7 +28,7 @@ import {
 const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
 
 export function BibliotecaPanel() {
-  const [slug, setSlug] = useState<CategoriaBiblioteca>('legendas');
+  const [slug, setSlug] = useState<SlugBiblioteca>('legendas');
   return (
     <div className="flex h-full">
       <CategoriasNav slug={slug} setSlug={setSlug} />
@@ -32,38 +37,43 @@ export function BibliotecaPanel() {
   );
 }
 
-// ─── Sidebar interna com as 16 categorias ────────────────────────────────
+// ─── Sidebar interna com as categorias (+ Usuários para admin) ───────────
 
-function CategoriasNav({ slug, setSlug }: { slug: CategoriaBiblioteca; setSlug: (s: CategoriaBiblioteca) => void }) {
+function CategoriasNav({ slug, setSlug }: { slug: SlugBiblioteca; setSlug: (s: SlugBiblioteca) => void }) {
+  const item = (chave: SlugBiblioteca, nome: string, Icon: React.ComponentType<{ size?: number; style?: React.CSSProperties }>, emBreve = false) => {
+    const ativo = chave === slug;
+    return (
+      <button key={chave} onClick={() => setSlug(chave)}
+        className="w-full flex items-center gap-1.5 px-2 py-1.5 text-[10px] font-semibold text-left transition-colors"
+        style={{
+          background: ativo ? 'var(--invicta-blue)' : 'transparent',
+          color: ativo ? '#fff' : '#cbd5e1',
+          borderLeft: ativo ? '2px solid var(--invicta-green)' : '2px solid transparent',
+        }}>
+        <Icon size={11} style={{ flexShrink: 0 }} />
+        <span className="truncate flex-1">{nome}</span>
+        {emBreve && <span className="text-[8px] font-bold px-1 rounded" style={{ background: '#1a3a6b', color: '#64748b' }}>em breve</span>}
+      </button>
+    );
+  };
   return (
     <nav className="flex-shrink-0 overflow-y-auto py-2"
       style={{ width: 140, background: '#061525', borderRight: '1px solid #1a3a6b' }}>
-      {CATEGORIAS.map(c => {
-        const Icon = c.icone;
-        const ativo = c.slug === slug;
-        return (
-          <button key={c.slug} onClick={() => setSlug(c.slug)}
-            className="w-full flex items-center gap-1.5 px-2 py-1.5 text-[10px] font-semibold text-left transition-colors"
-            style={{
-              background: ativo ? 'var(--invicta-blue)' : 'transparent',
-              color: ativo ? '#fff' : '#cbd5e1',
-              borderLeft: ativo ? '2px solid var(--invicta-green)' : '2px solid transparent',
-            }}>
-            <Icon size={11} style={{ flexShrink: 0 }} />
-            <span className="truncate flex-1">{c.nome}</span>
-            {c.status === 'em-breve' && (
-              <span className="text-[8px] font-bold px-1 rounded" style={{ background: '#1a3a6b', color: '#64748b' }}>em breve</span>
-            )}
-          </button>
-        );
-      })}
+      {CATEGORIAS.map(c => item(c.slug, c.nome, c.icone, c.status === 'em-breve'))}
+      {ehAdmin() && (
+        <>
+          <div className="my-1 mx-2" style={{ height: 1, background: '#1a3a6b' }} />
+          {item('usuarios', 'Usuários', Shield)}
+        </>
+      )}
     </nav>
   );
 }
 
 // ─── Conteúdo da categoria selecionada ───────────────────────────────────
 
-function CategoriaConteudo({ slug }: { slug: CategoriaBiblioteca }) {
+function CategoriaConteudo({ slug }: { slug: SlugBiblioteca }) {
+  if (slug === 'usuarios') return <section className="flex-1 overflow-y-auto"><UsuariosPanel /></section>;
   // Categorias com adaptador próprio têm UI customizada (já implementadas).
   if (slug === 'legendas') return <ConteudoLegendas />;
   if (slug === 'equacoes') return <EquacoesPanel />;
