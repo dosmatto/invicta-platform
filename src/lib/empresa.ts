@@ -28,7 +28,7 @@ const K_PAPEIS = 'inv_papeis';
 // Papéis por E-MAIL (fonte da verdade, sincronizada). Substitui a antiga
 // "auto-promoção a admin" (todo login virava admin). Quem não está na lista =
 // sem papel = acesso bloqueado. Owner é o nível máximo.
-export interface RegistroPapel { id: string; email: string; papel: PapelMembro; }
+export interface RegistroPapel { id: string; email: string; papel: PapelMembro; senhaProvisoria?: boolean; }
 const PAPEIS_SEED: Array<{ email: string; papel: PapelMembro }> = [
   { email: 'william@invicta.agr.br', papel: 'owner' },
   { email: 'jhon@invicta.agr.br', papel: 'admin' },
@@ -83,14 +83,29 @@ export function papelDoEmail(email: string | null): PapelMembro | null {
   const e = normEmail(email);
   return getPapeis().find(p => p.email === e)?.papel ?? null;
 }
-export function definirPapelEmail(email: string, papel: PapelMembro) {
+export function definirPapelEmail(email: string, papel: PapelMembro, senhaProvisoria?: boolean) {
   const e = normEmail(email);
   if (!e) return;
   const lista = load<RegistroPapel>(K_PAPEIS);
   const idx = lista.findIndex(p => p.email === e);
-  if (idx >= 0) lista[idx] = { ...lista[idx], papel };
-  else lista.push({ id: e, email: e, papel });
+  const extra = senhaProvisoria !== undefined ? { senhaProvisoria } : {};
+  if (idx >= 0) lista[idx] = { ...lista[idx], papel, ...extra };
+  else lista.push({ id: e, email: e, papel, ...extra });
   save(K_PAPEIS, lista);
+}
+
+// 1º acesso: o usuário convidado precisa trocar a senha provisória.
+export function precisaTrocarSenha(): boolean {
+  const email = emailUsuario();
+  if (!email) return false;
+  return getPapeis().find(p => p.email === email)?.senhaProvisoria === true;
+}
+export function limparSenhaProvisoria() {
+  const email = emailUsuario();
+  if (!email) return;
+  const lista = load<RegistroPapel>(K_PAPEIS);
+  const idx = lista.findIndex(p => p.email === email);
+  if (idx >= 0 && lista[idx].senhaProvisoria) { lista[idx] = { ...lista[idx], senhaProvisoria: false }; save(K_PAPEIS, lista); }
 }
 export function removerPapelEmail(email: string) {
   const e = normEmail(email);

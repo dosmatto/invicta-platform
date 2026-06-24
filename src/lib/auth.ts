@@ -5,7 +5,7 @@
 // pelo admin no Console do Firebase (Authentication → Users); o app só faz login.
 
 import { getFb, firebaseConfigurado } from './firebase';
-import { onAuthStateChanged, signInWithEmailAndPassword, signOut, type User } from 'firebase/auth';
+import { onAuthStateChanged, signInWithEmailAndPassword, signOut, updatePassword, type User } from 'firebase/auth';
 
 export { firebaseConfigurado };
 export type { User };
@@ -26,6 +26,13 @@ export async function loginEmailSenha(email: string, senha: string): Promise<voi
 export async function logout(): Promise<void> {
   const fb = getFb();
   if (fb) await signOut(fb.auth);
+}
+
+// Troca a senha do usuário logado (usado na troca obrigatória do 1º acesso).
+export async function trocarSenha(novaSenha: string): Promise<void> {
+  const fb = getFb();
+  if (!fb?.auth.currentUser) throw new Error('Não autenticado.');
+  await updatePassword(fb.auth.currentUser, novaSenha);
 }
 
 export function emailUsuario(): string | null {

@@ -1,6 +1,11 @@
-export const APP_VERSION = '0.61.1';
+export const APP_VERSION = '0.62.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.62.0': [
+    'Convite de usuário (Fase U3): na aba Usuários (Biblioteca), o Owner digita o e-mail + papel e clica "Convidar" — o app CRIA a conta de login e gera uma senha provisória para você repassar (sem precisar do Console do Firebase)',
+    'No 1º acesso, o usuário convidado é OBRIGADO a definir uma nova senha antes de usar o app',
+    'Se a conta já existir, o papel é atribuído mesmo assim (sem nova senha)',
+  ],
   '0.61.1': [
     'Correção: a Safra no topo ficava travada (24/25) mesmo trocando a safra ativa. Agora o topo mostra a safra ativa de verdade e atualiza ao trocá-la',
   ],

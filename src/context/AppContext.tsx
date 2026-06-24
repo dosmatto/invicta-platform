@@ -3,8 +3,9 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { seedIfEmpty } from '@/lib/seed';
 import { bootCloud } from '@/lib/cloud';
-import { empresaIfEmpty, adotarEmpresasLocais, garantirEmpresaInvicta, uidUsuario, ehOwner, seedPapeis, seedPermissoes, papelDoEmail, emailUsuario } from '@/lib/empresa';
+import { empresaIfEmpty, adotarEmpresasLocais, garantirEmpresaInvicta, uidUsuario, ehOwner, seedPapeis, seedPermissoes, papelDoEmail, emailUsuario, precisaTrocarSenha } from '@/lib/empresa';
 import { limparBaseOperacional } from '@/lib/admin/manutencao';
+import { TrocaSenhaObrigatoria } from '@/components/auth/TrocaSenhaObrigatoria';
 import { migrarLaboratoriosV1, migrarSafrasV1, migrarGradesV1, migrarPreferenciasV1 } from '@/lib/biblioteca';
 import { seedLegendasSistema } from '@/lib/store';
 import { LEGENDAS_OFICIAIS } from '@/constants/legendasSeedOficial';
@@ -120,6 +121,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [dadosProntos, setDadosProntos] = useState(false);
   // Fase U1: e-mail sem papel atribuído (inv_papeis) = acesso bloqueado.
   const [acessoBloqueado, setAcessoBloqueado] = useState(false);
+  // Fase U3: 1º acesso com senha provisória → troca obrigatória.
+  const [trocaSenha, setTrocaSenha] = useState(false);
   useEffect(() => {
     function migracoesLocais() {
       empresaIfEmpty();                 // Empresa Pessoal + ativa, idempotente
@@ -136,7 +139,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     const unsub = observarAuth(async (user) => {
       setUsuario(user);
-      if (!user) { setDadosProntos(false); setAcessoBloqueado(false); return; }
+      if (!user) { setDadosProntos(false); setAcessoBloqueado(false); setTrocaSenha(false); return; }
       setDadosProntos(false);
       await bootCloud().catch(() => {});       // hidrata empresas/dados/papéis da nuvem
       seedPapeis();                            // garante owner/admin oficiais (idempotente)
@@ -144,7 +147,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       adotarEmpresasLocais(uidUsuario());      // empresa (cosmética, single-tenant)
       garantirEmpresaInvicta(uidUsuario());    // empresa padrão "Invicta"
       migracoesLocais();
-      setAcessoBloqueado(!papelDoEmail(emailUsuario())); // e-mail sem papel = bloqueado
+      const autorizado = !!papelDoEmail(emailUsuario());
+      setAcessoBloqueado(!autorizado);                 // e-mail sem papel = bloqueado
+      setTrocaSenha(autorizado && precisaTrocarSenha()); // convidado no 1º acesso
       setDadosProntos(true);
     });
     return () => unsub();
@@ -209,6 +214,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         <div className="fixed inset-0 flex items-center justify-center" style={{ background: '#061525' }}>
           <p className="text-xs font-semibold" style={{ color: '#64748b' }}>Carregando dados…</p>
         </div>
+      ) : trocaSenha ? (
+        <TrocaSenhaObrigatoria email={usuario?.email ?? ''} onDone={() => setTrocaSenha(false)} />
       ) : acessoBloqueado ? (
         <div className="fixed inset-0 flex flex-col items-center justify-center gap-4 px-6 text-center" style={{ background: '#061525' }}>
           <div className="max-w-sm space-y-2">

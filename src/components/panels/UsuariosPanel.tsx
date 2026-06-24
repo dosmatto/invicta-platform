@@ -14,11 +14,14 @@ import {
   CAPACIDADES, PAPEIS_ATRIBUIVEIS, ROTULO_PAPEL, ROTULO_CURTO,
   type PapelMembro, type RegistroPapel, type Capacidade,
 } from '@/lib/empresa';
-import { UserPlus, Trash2, AlertTriangle, ShieldCheck, SlidersHorizontal } from 'lucide-react';
+import { criarUsuarioConvite } from '@/lib/firebase';
+import { UserPlus, Trash2, AlertTriangle, ShieldCheck, SlidersHorizontal, Copy, Loader2, KeyRound } from 'lucide-react';
 
 const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
 // Papéis cujas permissões o Owner edita (Owner é sempre tudo, não aparece aqui).
 const PAPEIS_CONFIG: PapelMembro[] = ['admin', 'agronomo', 'operador'];
+// Senha provisória simples (≥6 chars; letras+dígitos). Ex.: Inv54321
+const gerarSenhaProvisoria = () => 'Inv' + Math.floor(10000 + Math.random() * 90000);
 
 export function UsuariosPanel() {
   const [papeis, setPapeis] = useState<RegistroPapel[]>([]);
@@ -26,6 +29,8 @@ export function UsuariosPanel() {
   const [emailNovo, setEmailNovo] = useState('');
   const [papelNovo, setPapelNovo] = useState<PapelMembro>('admin');
   const [aviso, setAviso] = useState('');
+  const [convidando, setConvidando] = useState(false);
+  const [convite, setConvite] = useState<{ email: string; senha?: string; msg: string } | null>(null);
 
   function recarregar() { setPapeis(getPapeis()); setPerms(getPermissoes()); }
   useEffect(() => {
@@ -38,15 +43,33 @@ export function UsuariosPanel() {
   const meuEmail = emailUsuario();
   const souOwner = ehOwner();
 
-  function add() {
-    setAviso('');
+  async function add() {
+    setAviso(''); setConvite(null);
     if (!souOwner) { setAviso('Só o Owner pode atribuir papéis.'); return; }
     const e = emailNovo.trim().toLowerCase();
     if (!e || !e.includes('@')) { setAviso('Informe um e-mail válido.'); return; }
     if (papeis.some(p => p.email === e)) { setAviso('Esse e-mail já tem papel — edite na lista abaixo.'); return; }
-    definirPapelEmail(e, papelNovo);
+    setConvidando(true);
+    const senha = gerarSenhaProvisoria();
+    const r = await criarUsuarioConvite(e, senha);
+    if (r.ok) {
+      definirPapelEmail(e, papelNovo, true); // papel + obriga troca no 1º acesso
+      setConvite({ email: e, senha, msg: 'Conta criada. Passe a senha provisória ao usuário — ele troca no 1º acesso.' });
+    } else if (r.jaExiste) {
+      definirPapelEmail(e, papelNovo); // conta já existe: só atribui o papel
+      setConvite({ email: e, msg: 'A conta de login já existia — papel atribuído. (Sem senha provisória; redefina no Console do Firebase se precisar.)' });
+    } else {
+      setAviso('Falha ao convidar: ' + (r.erro ?? '') + '. O papel NÃO foi atribuído.');
+      setConvidando(false);
+      return;
+    }
     setEmailNovo('');
+    setConvidando(false);
     recarregar();
+  }
+
+  function copiar(txt: string) {
+    if (typeof navigator !== 'undefined') navigator.clipboard?.writeText(txt).catch(() => {});
   }
 
   function trocar(email: string, p: PapelMembro) {
@@ -89,20 +112,38 @@ export function UsuariosPanel() {
       {/* Novo usuário (e-mail + papel) — só Owner */}
       {souOwner ? (
         <div className="p-3 rounded-lg" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
-          <p className="text-[10px] uppercase tracking-wider mb-1.5" style={{ color: '#475569' }}>Novo usuário</p>
+          <p className="text-[10px] uppercase tracking-wider mb-1.5" style={{ color: '#475569' }}>Convidar usuário</p>
           <div className="flex gap-2">
-            <input value={emailNovo} onChange={e => setEmailNovo(e.target.value)} placeholder="email@dominio.com"
+            <input value={emailNovo} onChange={e => setEmailNovo(e.target.value)} placeholder="email@dominio.com" disabled={convidando}
               onKeyDown={e => { if (e.key === 'Enter') add(); }}
               className="flex-1 rounded px-2 py-1.5 text-[11px] outline-none" style={inputStyle} />
-            <select value={papelNovo} onChange={e => setPapelNovo(e.target.value as PapelMembro)}
+            <select value={papelNovo} onChange={e => setPapelNovo(e.target.value as PapelMembro)} disabled={convidando}
               className="rounded px-2 py-1 text-[11px] outline-none" style={inputStyle}>
               {PAPEIS_ATRIBUIVEIS.map(p => <option key={p} value={p}>{ROTULO_PAPEL[p]}</option>)}
             </select>
-            <button onClick={add} className="px-3 py-1 rounded text-[10px] font-bold text-white flex items-center gap-1"
+            <button onClick={add} disabled={convidando} className="px-3 py-1 rounded text-[10px] font-bold text-white flex items-center gap-1 disabled:opacity-50"
               style={{ background: 'var(--invicta-green-dark)' }}>
-              <UserPlus size={11} /> Add
+              {convidando ? <Loader2 size={11} className="animate-spin" /> : <UserPlus size={11} />} Convidar
             </button>
           </div>
+          <p className="text-[9px] mt-1" style={{ color: '#64748b' }}>Cria a conta de login e gera uma senha provisória pra você passar. Ele troca no 1º acesso.</p>
+
+          {convite && (
+            <div className="mt-2 p-2 rounded" style={{ background: '#0f2a1a', border: '1px solid #166534' }}>
+              <p className="text-[10px] mb-1" style={{ color: '#86efac' }}>{convite.msg}</p>
+              <p className="text-[10px]" style={{ color: '#cbd5e1' }}><strong>{convite.email}</strong></p>
+              {convite.senha && (
+                <div className="flex items-center gap-2 mt-1">
+                  <KeyRound size={12} style={{ color: '#fbbf24' }} />
+                  <code className="flex-1 text-[12px] font-bold" style={{ color: '#fde68a' }}>{convite.senha}</code>
+                  <button onClick={() => copiar(`${convite.email} / ${convite.senha}`)} title="Copiar e-mail + senha"
+                    className="p-1 rounded text-[10px] flex items-center gap-1" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
+                    <Copy size={11} /> Copiar
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       ) : (
         <p className="text-[10px]" style={{ color: '#64748b' }}>Só o Owner pode adicionar ou alterar papéis.</p>
