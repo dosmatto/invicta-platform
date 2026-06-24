@@ -18,6 +18,7 @@ import { ATRIBUTOS_EQUACAO, validar, testarEscalar, atributoPorToken } from '@/l
 import { Plus, Edit3, Trash2, Power, Copy, X, Save, Play, ChevronRight, Search, SaveAll } from 'lucide-react';
 
 const SLUG: CategoriaBiblioteca = 'equacoes';
+const SEM_GRUPO = 'Sem grupo';
 const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
 
 const listaDe = (s: string) => s.split(',').map(x => x.trim()).filter(Boolean);
@@ -72,8 +73,23 @@ export function EquacoesPanel() {
   const filtrados = useMemo(() => {
     const f = filtro.trim().toLowerCase();
     if (!f) return itens;
-    return itens.filter(i => `${i.nome} ${i.conteudo.produto ?? ''} ${(i.conteudo.culturas ?? []).join(' ')}`.toLowerCase().includes(f));
+    return itens.filter(i => `${i.nome} ${i.conteudo.produto ?? ''} ${i.conteudo.grupo ?? ''} ${(i.conteudo.culturas ?? []).join(' ')}`.toLowerCase().includes(f));
   }, [itens, filtro]);
+
+  // Agrupa por Grupo (rótulo livre); "Sem grupo" por último. Cabeçalhos recolhem.
+  const grupos = useMemo(() => {
+    const m = new Map<string, ItemBiblioteca<ConteudoEquacao>[]>();
+    for (const it of filtrados) {
+      const g = it.conteudo.grupo?.trim() || SEM_GRUPO;
+      (m.get(g) ?? m.set(g, []).get(g)!).push(it);
+    }
+    return [...m.entries()].sort(([a], [b]) =>
+      a === SEM_GRUPO ? 1 : b === SEM_GRUPO ? -1 : a.localeCompare(b, 'pt-BR'));
+  }, [filtrados]);
+  const [colapsados, setColapsados] = useState<Set<string>>(new Set());
+  const toggleGrupo = (g: string) => setColapsados(prev => {
+    const n = new Set(prev); if (n.has(g)) n.delete(g); else n.add(g); return n;
+  });
 
   function excluirItem(it: ItemBiblioteca<ConteudoEquacao>) {
     if (!confirm(`Excluir a equação "${it.nome}"?`)) return;
@@ -116,27 +132,43 @@ export function EquacoesPanel() {
             </p>
           </div>
         ) : (
-          <div className="space-y-1.5">
-            {filtrados.map(it => (
-              <div key={it.id} className="p-2 rounded-lg" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[11px] font-bold truncate" style={{ color: '#e2e8f0' }}>{it.nome}</div>
-                    <div className="text-[9px] truncate" style={{ color: '#64748b' }}>
-                      {it.conteudo.produto || 'sem produto'}
-                      {it.conteudo.unidadeTratamento ? ` · ${it.conteudo.unidadeTratamento}` : ''}
-                      {it.conteudo.custoTonelada != null ? ` · R$ ${it.conteudo.custoTonelada}/t` : ''}
+          <div className="space-y-2">
+            {grupos.map(([g, lista]) => {
+              const aberto = filtro.trim() ? true : !colapsados.has(g);
+              return (
+                <div key={g}>
+                  <button onClick={() => toggleGrupo(g)} className="w-full flex items-center gap-1.5 px-1 py-1 text-left rounded hover:bg-white/5">
+                    <ChevronRight size={12} style={{ color: '#93c5fd', transform: aberto ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }} />
+                    <span className="text-[10px] font-bold uppercase tracking-wide" style={{ color: g === SEM_GRUPO ? '#64748b' : '#93c5fd' }}>{g}</span>
+                    <span className="text-[9px]" style={{ color: '#475569' }}>· {lista.length}</span>
+                  </button>
+                  {aberto && (
+                    <div className="space-y-1.5 mt-1 pl-1">
+                      {lista.map(it => (
+                        <div key={it.id} className="p-2 rounded-lg" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 min-w-0">
+                              <div className="text-[11px] font-bold truncate" style={{ color: '#e2e8f0' }}>{it.nome}</div>
+                              <div className="text-[9px] truncate" style={{ color: '#64748b' }}>
+                                {it.conteudo.produto || 'sem produto'}
+                                {it.conteudo.unidadeTratamento ? ` · ${it.conteudo.unidadeTratamento}` : ''}
+                                {it.conteudo.custoTonelada != null ? ` · R$ ${it.conteudo.custoTonelada}/t` : ''}
+                              </div>
+                            </div>
+                            {it.escopo === 'sistema' && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ background: '#1a3a6b', color: '#93c5fd' }}>sistema</span>}
+                            {!it.ativo && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ background: '#1a3a6b', color: '#94a3b8' }}>inativo</span>}
+                            <button onClick={() => setEdit(it)} title="Editar" className="p-1 rounded hover:bg-white/10" style={{ color: '#93c5fd' }}><Edit3 size={11} /></button>
+                            <button onClick={() => clonar(it)} title="Clonar" className="p-1 rounded hover:bg-white/10" style={{ color: '#93c5fd' }}><Copy size={11} /></button>
+                            <button onClick={() => ativar(SLUG, it.id, !it.ativo)} title={it.ativo ? 'Inativar' : 'Ativar'} className="p-1 rounded hover:bg-white/10" style={{ color: it.ativo ? '#fbbf24' : '#22c55e' }}><Power size={11} /></button>
+                            <button onClick={() => excluirItem(it)} title="Excluir" className="p-1 rounded hover:bg-white/10" style={{ color: '#f87171' }}><Trash2 size={11} /></button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  </div>
-                  {it.escopo === 'sistema' && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ background: '#1a3a6b', color: '#93c5fd' }}>sistema</span>}
-                  {!it.ativo && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ background: '#1a3a6b', color: '#94a3b8' }}>inativo</span>}
-                  <button onClick={() => setEdit(it)} title="Editar" className="p-1 rounded hover:bg-white/10" style={{ color: '#93c5fd' }}><Edit3 size={11} /></button>
-                  <button onClick={() => clonar(it)} title="Clonar" className="p-1 rounded hover:bg-white/10" style={{ color: '#93c5fd' }}><Copy size={11} /></button>
-                  <button onClick={() => ativar(SLUG, it.id, !it.ativo)} title={it.ativo ? 'Inativar' : 'Ativar'} className="p-1 rounded hover:bg-white/10" style={{ color: it.ativo ? '#fbbf24' : '#22c55e' }}><Power size={11} /></button>
-                  <button onClick={() => excluirItem(it)} title="Excluir" className="p-1 rounded hover:bg-white/10" style={{ color: '#f87171' }}><Trash2 size={11} /></button>
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -169,6 +201,13 @@ function EquacaoEditor({ item, onClose }: { item: ItemBiblioteca<ConteudoEquacao
   const [unEq, setUnEq] = useState(c?.unidadeEquacao ?? '');
   const [unTrat, setUnTrat] = useState(c?.unidadeTratamento ?? 'kg/ha');
   const [tratamento, setTratamento] = useState<'taxa-variada' | 'taxa-fixa'>(c?.tratamento ?? 'taxa-variada');
+  const [grupo, setGrupo] = useState(c?.grupo ?? '');
+  // grupos já existentes (autocomplete do campo Grupo)
+  const gruposExistentes = useMemo(() => {
+    const set = new Set<string>();
+    for (const it of listar<ConteudoEquacao>(SLUG)) { const g = it.conteudo.grupo?.trim(); if (g) set.add(g); }
+    return [...set].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  }, []);
   const [culturas, setCulturas] = useState((c?.culturas ?? []).join(', '));
   const [fases, setFases] = useState((c?.fases ?? []).join(', '));
   const [naoNeg, setNaoNeg] = useState(c?.naoNegativo ?? true);
@@ -193,6 +232,7 @@ function EquacaoEditor({ item, onClose }: { item: ItemBiblioteca<ConteudoEquacao
       unidadeEquacao: unEq.trim(),
       unidadeTratamento: unTrat.trim(),
       tratamento,
+      grupo: grupo.trim() || undefined,
       culturas: listaDe(culturas),
       fases: listaDe(fases),
       naoNegativo: naoNeg,
@@ -245,7 +285,7 @@ function EquacaoEditor({ item, onClose }: { item: ItemBiblioteca<ConteudoEquacao
 
       <div className="flex-1 overflow-y-auto p-3 space-y-4">
         <Secao titulo="Detalhes">
-          <Detalhes {...{ nome, setNome, produto, setProduto, custo, setCusto, frete, setFrete, aplicacao, setAplicacao, profundidade, setProfundidade, unEq, setUnEq, unTrat, setUnTrat, tratamento, setTratamento, culturas, setCulturas, fases, setFases, descricao, setDescricao }} />
+          <Detalhes {...{ nome, setNome, produto, setProduto, custo, setCusto, frete, setFrete, aplicacao, setAplicacao, profundidade, setProfundidade, unEq, setUnEq, unTrat, setUnTrat, tratamento, setTratamento, grupo, setGrupo, gruposExistentes, culturas, setCulturas, fases, setFases, descricao, setDescricao }} />
         </Secao>
         <Secao titulo="Equação">
           <Equacao {...{ constantes, setConstantes, script, setScript, scriptRef, naoNeg, setNaoNeg, doseMinima, setDoseMinima, abaixoMinimo, setAbaixoMinimo, doseMaxima, setDoseMaxima, unTrat, val, inserirToken }} />
@@ -289,6 +329,7 @@ function Detalhes(p: {
   aplicacao: string; setAplicacao: (s: string) => void; profundidade: string; setProfundidade: (s: string) => void;
   unEq: string; setUnEq: (s: string) => void;
   unTrat: string; setUnTrat: (s: string) => void; tratamento: 'taxa-variada' | 'taxa-fixa'; setTratamento: (s: 'taxa-variada' | 'taxa-fixa') => void;
+  grupo: string; setGrupo: (s: string) => void; gruposExistentes: string[];
   culturas: string; setCulturas: (s: string) => void; fases: string; setFases: (s: string) => void;
   descricao: string; setDescricao: (s: string) => void;
 }) {
@@ -321,6 +362,10 @@ function Detalhes(p: {
             </button>
           ))}
         </div>
+      </Campo>
+      <Campo label="Grupo (organiza a lista)">
+        <input value={p.grupo} onChange={e => p.setGrupo(e.target.value)} placeholder="ex: Calcário, Gesso, KCl" list="grupos-equacoes" className={txt} style={inputStyle} />
+        <datalist id="grupos-equacoes">{p.gruposExistentes.map(g => <option key={g} value={g} />)}</datalist>
       </Campo>
       <div className="grid grid-cols-2 gap-2">
         <Campo label="Culturas (vírgula)"><input value={p.culturas} onChange={e => p.setCulturas(e.target.value)} placeholder="Soja, Milho" className={txt} style={inputStyle} /></Campo>

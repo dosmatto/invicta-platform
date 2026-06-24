@@ -1,6 +1,9 @@
-export const APP_VERSION = '0.57.0';
+export const APP_VERSION = '0.58.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.58.0': [
+    'Equações: novo campo "Grupo" (rótulo livre, ex.: Calcário, Gesso, KCl) com autocomplete dos grupos já criados. A lista de equações passa a ser AGRUPADA por esse rótulo, com cabeçalhos que recolhem (e contador). "Sem grupo" fica por último; a busca continua funcionando',
+  ],
   '0.57.0': [
     'Equações: novo campo "Dose máxima" (teto). Quando a equação ultrapassa esse valor, a dose é limitada ao teto no mapa (a mínima já existia). 0 = sem máximo',
     'Produtores: admin pode EXCLUIR um produtor — apaga em cascata tudo dele (fazendas, talhões, análises, grades, mapas e cenários), exigindo digitar "APAGAR" antes',

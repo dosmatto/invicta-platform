@@ -302,6 +302,7 @@ export interface ConteudoEquacao {
   unidadeEquacao: string;            // unidade dos atributos de entrada (ex.: mmolc/dm3)
   unidadeTratamento: string;         // unidade da dose de saída (ex.: kg/ha, t/ha)
   tratamento: 'taxa-variada' | 'taxa-fixa';
+  grupo?: string;                    // rótulo livre p/ organizar a lista (ex.: Calcário, Gesso, KCl)
   culturas: string[];
   fases: string[];
   naoNegativo: boolean;              // dose < 0 vira 0
