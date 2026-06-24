@@ -1,6 +1,10 @@
-export const APP_VERSION = '0.59.0';
+export const APP_VERSION = '0.59.1';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.59.1': [
+    'Aba Usuários agora é REAL: removidos os usuários de exemplo chumbados no código (Admin Invicta, Carlos Técnico, etc.); mostra os papéis de acesso reais por e-mail (william=Owner, jhon=Admin) e o Owner adiciona/edita/remove ali mesmo',
+    'A gestão de papéis saiu de Config → Empresa (que ficou só com nome da empresa) e foi para a aba Usuários',
+  ],
   '0.59.0': [
     'Usuários/Papéis (Fase U1 — fundação): o acesso agora é por E-MAIL, não mais "todo login vira admin". william@invicta.agr.br = Owner, jhon@invicta.agr.br = Admin',
     'Novo papel Owner (acima de Admin). E-mail sem papel atribuído fica BLOQUEADO (tela "acesso não liberado") até um Owner liberar',
