@@ -51,6 +51,9 @@ export async function limparBaseOperacional(confirmacao: string): Promise<void> 
     localStorage.removeItem(key);
     await cloudExcluirColecao(key);
   }
+  // As coleções de docs (mapas/cenários/relatórios) já foram aguardadas acima.
+  // Os deletes das listas vão por cloudPushLista (fire-and-forget) — dá folga
+  // antes do reload p/ não cancelar requisições em andamento na nuvem.
   console.log('%c[invicta] Base operacional apagada. Biblioteca preservada. Recarregando…', 'color:#4ade80;font-weight:bold');
-  setTimeout(() => location.reload(), 1000);
+  setTimeout(() => location.reload(), 3000);
 }
