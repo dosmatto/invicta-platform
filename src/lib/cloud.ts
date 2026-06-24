@@ -33,6 +33,7 @@ const KEYS_LISTA = [
   'inv_plantios',                      // Fase 8.B — cultura por talhão+safra
   'inv_compactacao',                   // Fase 8.C — penetrometria por profundidade
   'inv_empresas',                      // multi-tenant — empresas/membros (sync entre máquinas)
+  'inv_papeis',                        // papéis por e-mail (owner/admin/…) — fonte da verdade de acesso
 ];
 // Configurações (objeto único por chave) — coleção 'inv_config', doc = chave
 const KEYS_OBJ = ['inv_etiqueta_cfg'];

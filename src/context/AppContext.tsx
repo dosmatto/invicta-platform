@@ -3,13 +3,13 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { seedIfEmpty } from '@/lib/seed';
 import { bootCloud } from '@/lib/cloud';
-import { empresaIfEmpty, adotarEmpresasLocais, garantirEmpresaInvicta, uidUsuario, ehAdmin, empresaAtiva } from '@/lib/empresa';
+import { empresaIfEmpty, adotarEmpresasLocais, garantirEmpresaInvicta, uidUsuario, ehOwner, seedPapeis, papelDoEmail, emailUsuario } from '@/lib/empresa';
 import { limparBaseOperacional } from '@/lib/admin/manutencao';
 import { migrarLaboratoriosV1, migrarSafrasV1, migrarGradesV1, migrarPreferenciasV1 } from '@/lib/biblioteca';
 import { seedLegendasSistema } from '@/lib/store';
 import { LEGENDAS_OFICIAIS } from '@/constants/legendasSeedOficial';
 import { firebaseConfigurado } from '@/lib/firebase';
-import { observarAuth, type User } from '@/lib/auth';
+import { observarAuth, logout, type User } from '@/lib/auth';
 import { LoginScreen } from '@/components/auth/LoginScreen';
 
 export type MapMode = 'street' | 'satellite';
@@ -118,6 +118,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // roda depois de autenticar. Sem Firebase, modo local com seed de demo.
   const [usuario, setUsuario] = useState<User | null | undefined>(firebaseConfigurado ? undefined : null);
   const [dadosProntos, setDadosProntos] = useState(false);
+  // Fase U1: e-mail sem papel atribuído (inv_papeis) = acesso bloqueado.
+  const [acessoBloqueado, setAcessoBloqueado] = useState(false);
   useEffect(() => {
     function migracoesLocais() {
       empresaIfEmpty();                 // Empresa Pessoal + ativa, idempotente
@@ -134,12 +136,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     const unsub = observarAuth(async (user) => {
       setUsuario(user);
-      if (!user) { setDadosProntos(false); return; }
+      if (!user) { setDadosProntos(false); setAcessoBloqueado(false); return; }
       setDadosProntos(false);
-      await bootCloud().catch(() => {});       // hidrata empresas/dados da nuvem
-      adotarEmpresasLocais(uidUsuario());      // herda as empresas existentes (depois do boot)
-      garantirEmpresaInvicta(uidUsuario());    // empresa padrão "Invicta" (default inteligente)
+      await bootCloud().catch(() => {});       // hidrata empresas/dados/papéis da nuvem
+      seedPapeis();                            // garante owner/admin oficiais (idempotente)
+      adotarEmpresasLocais(uidUsuario());      // empresa (cosmética, single-tenant)
+      garantirEmpresaInvicta(uidUsuario());    // empresa padrão "Invicta"
       migracoesLocais();
+      setAcessoBloqueado(!papelDoEmail(emailUsuario())); // e-mail sem papel = bloqueado
       setDadosProntos(true);
     });
     return () => unsub();
@@ -148,9 +152,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Console-only (sem botão, decisão do usuário): admin pode zerar a base
   // operacional com  await invLimparBase('APAGAR TUDO')  — preserva a Biblioteca.
   useEffect(() => {
-    if (typeof window === 'undefined' || !dadosProntos || !ehAdmin(empresaAtiva())) return;
+    if (typeof window === 'undefined' || !dadosProntos || !ehOwner()) return;
     (window as unknown as { invLimparBase?: typeof limparBaseOperacional }).invLimparBase = limparBaseOperacional;
-    console.info('[invicta] Admin: para zerar a base (mantendo a Biblioteca), rode no Console:  await invLimparBase("APAGAR TUDO")');
+    console.info('[invicta] Owner: para zerar a base (mantendo a Biblioteca), rode no Console:  await invLimparBase("APAGAR TUDO")');
   }, [dadosProntos]);
 
   const [activeModule, setActiveModule] = useState<string | null>(null);
@@ -200,11 +204,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
         </div>
       ) : firebaseConfigurado && usuario === null ? (
         <LoginScreen />
-      ) : dadosProntos ? children : (
+      ) : !dadosProntos ? (
         <div className="fixed inset-0 flex items-center justify-center" style={{ background: '#061525' }}>
           <p className="text-xs font-semibold" style={{ color: '#64748b' }}>Carregando dados…</p>
         </div>
-      )}
+      ) : acessoBloqueado ? (
+        <div className="fixed inset-0 flex flex-col items-center justify-center gap-4 px-6 text-center" style={{ background: '#061525' }}>
+          <div className="max-w-sm space-y-2">
+            <p className="text-base font-bold" style={{ color: '#e2e8f0' }}>Acesso ainda não liberado</p>
+            <p className="text-xs" style={{ color: '#94a3b8' }}>
+              O e-mail <strong style={{ color: '#cbd5e1' }}>{usuario?.email}</strong> não tem papel atribuído.
+              Peça a um administrador para liberar seu acesso.
+            </p>
+          </div>
+          <button onClick={() => logout()} className="px-4 py-2 rounded text-xs font-bold text-white" style={{ background: 'var(--invicta-blue-mid)' }}>
+            Sair
+          </button>
+        </div>
+      ) : children}
     </AppContext.Provider>
   );
 }

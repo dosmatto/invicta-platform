@@ -10,7 +10,7 @@
 import { getFb } from './firebase';
 import { cloudPushLista } from './cloud';
 
-export type PapelMembro = 'admin' | 'editor' | 'viewer';
+export type PapelMembro = 'owner' | 'admin' | 'editor' | 'viewer';
 
 export interface Empresa {
   id: string;
@@ -23,6 +23,17 @@ export interface Empresa {
 const K_EMPRESAS = 'inv_empresas';
 const K_ATIVA = 'inv_empresa_ativa';
 const K_UID_LOCAL = 'inv_uid_local';
+const K_PAPEIS = 'inv_papeis';
+
+// Papéis por E-MAIL (fonte da verdade, sincronizada). Substitui a antiga
+// "auto-promoção a admin" (todo login virava admin). Quem não está na lista =
+// sem papel = acesso bloqueado. Owner é o nível máximo.
+export interface RegistroPapel { id: string; email: string; papel: PapelMembro; }
+const PAPEIS_SEED: Array<{ email: string; papel: PapelMembro }> = [
+  { email: 'william@invicta.agr.br', papel: 'owner' },
+  { email: 'jhon@invicta.agr.br', papel: 'admin' },
+];
+const normEmail = (e: string) => e.trim().toLowerCase();
 
 function load<T>(key: string): T[] {
   if (typeof window === 'undefined') return [];
@@ -50,6 +61,50 @@ export function uidUsuario(): string {
     localStorage.setItem(K_UID_LOCAL, local);
   }
   return local;
+}
+
+// E-mail do usuário autenticado (minúsculo). null se não logado (modo local).
+export function emailUsuario(): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const fb = getFb();
+    const auth = (fb as { auth?: { currentUser?: { email?: string | null } } } | null)?.auth;
+    const email = auth?.currentUser?.email;
+    return email ? normEmail(email) : null;
+  } catch { return null; }
+}
+
+// ── Papéis por e-mail (inv_papeis) ──────────────────────────────────────────
+export function getPapeis(): RegistroPapel[] {
+  return load<RegistroPapel>(K_PAPEIS).sort((a, b) => a.email.localeCompare(b.email));
+}
+export function papelDoEmail(email: string | null): PapelMembro | null {
+  if (!email) return null;
+  const e = normEmail(email);
+  return getPapeis().find(p => p.email === e)?.papel ?? null;
+}
+export function definirPapelEmail(email: string, papel: PapelMembro) {
+  const e = normEmail(email);
+  if (!e) return;
+  const lista = load<RegistroPapel>(K_PAPEIS);
+  const idx = lista.findIndex(p => p.email === e);
+  if (idx >= 0) lista[idx] = { ...lista[idx], papel };
+  else lista.push({ id: e, email: e, papel });
+  save(K_PAPEIS, lista);
+}
+export function removerPapelEmail(email: string) {
+  const e = normEmail(email);
+  save(K_PAPEIS, load<RegistroPapel>(K_PAPEIS).filter(p => p.email !== e));
+}
+// Garante owner/admin oficiais (idempotente; rede de segurança contra lockout do
+// owner). Roda no boot DEPOIS de hidratar a nuvem.
+export function seedPapeis() {
+  const lista = load<RegistroPapel>(K_PAPEIS);
+  let mudou = false;
+  for (const s of PAPEIS_SEED) {
+    if (!lista.some(p => p.email === s.email)) { lista.push({ id: s.email, email: s.email, papel: s.papel }); mudou = true; }
+  }
+  if (mudou) save(K_PAPEIS, lista);
 }
 
 // CRUD básico
@@ -104,16 +159,23 @@ export function setEmpresaAtivaId(id: string | null) {
   if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('inv:empresa'));
 }
 
-// Papéis
-export function papelDoUsuario(e: Empresa | null, uidLocal = uidUsuario()): PapelMembro | null {
-  return e?.membros?.[uidLocal] ?? null;
+// Papéis — agora resolvidos pelo E-MAIL do usuário logado (inv_papeis), não mais
+// pela membros[uid] da empresa. O parâmetro Empresa é ignorado (mantido só p/
+// compatibilidade com os call sites existentes). Dados são single-tenant
+// (loadFiltrado desligado), então papel e visibilidade são independentes.
+export function papelDoUsuario(_e?: Empresa | null): PapelMembro | null {
+  return papelDoEmail(emailUsuario());
 }
-export function ehAdmin(e: Empresa | null, uidLocal = uidUsuario()): boolean {
-  return papelDoUsuario(e, uidLocal) === 'admin';
+export function ehOwner(_e?: Empresa | null): boolean {
+  return papelDoUsuario() === 'owner';
 }
-export function podeEditar(e: Empresa | null, uidLocal = uidUsuario()): boolean {
-  const p = papelDoUsuario(e, uidLocal);
-  return p === 'admin' || p === 'editor';
+export function ehAdmin(_e?: Empresa | null): boolean {
+  const p = papelDoUsuario();
+  return p === 'owner' || p === 'admin';
+}
+export function podeEditar(_e?: Empresa | null): boolean {
+  const p = papelDoUsuario();
+  return p === 'owner' || p === 'admin' || p === 'editor';
 }
 
 // Boot — chamada uma vez por sessão (idempotente).

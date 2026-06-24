@@ -1,6 +1,12 @@
-export const APP_VERSION = '0.58.0';
+export const APP_VERSION = '0.59.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.59.0': [
+    'Usuários/Papéis (Fase U1 — fundação): o acesso agora é por E-MAIL, não mais "todo login vira admin". william@invicta.agr.br = Owner, jhon@invicta.agr.br = Admin',
+    'Novo papel Owner (acima de Admin). E-mail sem papel atribuído fica BLOQUEADO (tela "acesso não liberado") até um Owner liberar',
+    'Configurações → Empresa: gestão de papéis por e-mail (o Owner adiciona/edita/remove e-mails e papéis). A limpeza de base (invLimparBase) passou a ser Owner-only',
+    'Agrônomo / Operador de campo / Produtor / Amostrador ficam para as próximas fases (U2/U3)',
+  ],
   '0.58.0': [
     'Equações: novo campo "Grupo" (rótulo livre, ex.: Calcário, Gesso, KCl) com autocomplete dos grupos já criados. A lista de equações passa a ser AGRUPADA por esse rótulo, com cabeçalhos que recolhem (e contador). "Sem grupo" fica por último; a busca continua funcionando',
   ],
