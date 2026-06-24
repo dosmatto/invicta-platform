@@ -1,6 +1,12 @@
-export const APP_VERSION = '0.56.0';
+export const APP_VERSION = '0.57.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.57.0': [
+    'Equações: novo campo "Dose máxima" (teto). Quando a equação ultrapassa esse valor, a dose é limitada ao teto no mapa (a mínima já existia). 0 = sem máximo',
+    'Produtores: admin pode EXCLUIR um produtor — apaga em cascata tudo dele (fazendas, talhões, análises, grades, mapas e cenários), exigindo digitar "APAGAR" antes',
+    'Produtores: opção de EDITAR um cliente (corrigir nome/sigla/documento/contato/município) — ícone de lápis na lista',
+    'Manutenção (admin, sem botão — via Console F12): para começar do zero mantendo a Biblioteca, rode  await invLimparBase("APAGAR TUDO")  — faz backup JSON automático e apaga só os dados operacionais (local + nuvem)',
+  ],
   '0.56.0': [
     'Fertilidade por Zona (Z1): quando a importação de laboratório está ligada a uma grade de Zonas de Manejo, o mapa do nutriente fica CONSTANTE por zona (sem interpolação) — cada zona recebe o valor da sua amostra composta',
     'Na aba Fertilidade aparece a tabela de vínculo "zona ↔ nº da amostra" (sugerido pela ordem, editável); ao processar, o mapa de cada zona é gerado no front-end e salvo na nuvem igual aos mapas interpolados',

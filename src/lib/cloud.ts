@@ -190,3 +190,27 @@ export async function cloudExcluirMapasPorPrefixo(prefixo: string) {
     await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
   } catch (e) { console.warn('[nuvem] falha ao excluir mapas:', e); }
 }
+
+// Apaga por prefixo de id em QUALQUER coleção (ex.: inv_cenarios id `cen_<talhao>_…`).
+// U+F8FF é o sentinela alto do Firestore para o fim do intervalo de prefixo.
+export async function cloudExcluirPorPrefixo(key: string, prefixo: string) {
+  if (!cloudPodeGravar()) return;
+  const fb = getFb();
+  if (!fb) return;
+  try {
+    const q = query(collection(fb.db, key), orderBy('__name__'), startAt(prefixo), endAt(prefixo + ''));
+    const snap = await getDocs(q);
+    await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
+  } catch (e) { console.warn('[nuvem] falha ao excluir por prefixo', key, prefixo, e); }
+}
+
+// Apaga TODOS os docs de uma coleção (usado na limpeza total da base).
+export async function cloudExcluirColecao(key: string) {
+  if (!cloudPodeGravar()) return;
+  const fb = getFb();
+  if (!fb) return;
+  try {
+    const snap = await getDocs(collection(fb.db, key));
+    await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
+  } catch (e) { console.warn('[nuvem] falha ao excluir coleção', key, e); }
+}

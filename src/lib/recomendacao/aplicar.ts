@@ -87,7 +87,7 @@ export function aplicarEquacao(eq: ConteudoEquacao, grids: Record<string, RespIn
   }
 
   const dose = executarGrid(prog, eq.constantes, gridPorVar, n);
-  const opts = { naoNegativo: eq.naoNegativo, doseMinima: eq.doseMinimaViavel ?? 0, abaixoMinimo: eq.abaixoMinimo ?? 'zero' as const };
+  const opts = { naoNegativo: eq.naoNegativo, doseMinima: eq.doseMinimaViavel ?? 0, abaixoMinimo: eq.abaixoMinimo ?? 'zero' as const, doseMaxima: eq.doseMaxima ?? 0 };
   for (let i = 0; i < n; i++) dose[i] = ajustarDose(dose[i], opts);
 
   let mn = Infinity, mx = -Infinity, soma = 0, cnt = 0;

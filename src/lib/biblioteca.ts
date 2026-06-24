@@ -307,6 +307,7 @@ export interface ConteudoEquacao {
   naoNegativo: boolean;              // dose < 0 vira 0
   doseMinimaViavel: number;          // 0 = sem mínimo; doses entre 0 e X são ajustadas
   abaixoMinimo: 'zero' | 'minimo';   // abaixo do mínimo: zera (não aplica) | aplica a própria mínima
+  doseMaxima?: number;               // 0/ausente = sem teto; acima de X a dose é limitada a X no mapa
   constantes: ConstanteEquacao[];
   script: string;                    // o código da equação
   estilo: EstiloRecomendacao;        // escala fixa de cores por classe de dose

@@ -326,11 +326,12 @@ export function validar(script: string, constantes: ConstanteEquacao[] = []): Va
 // Ordem: clamp negativo → mínimo viável. Só doses POSITIVAS menores que o mínimo
 // são ajustadas (0 = "não precisa" continua 0). abaixoMinimo: 'zero' = não aplica;
 // 'minimo' = aplica a própria dose mínima.
-export interface OpcoesDose { naoNegativo: boolean; doseMinima: number; abaixoMinimo: 'zero' | 'minimo'; }
+export interface OpcoesDose { naoNegativo: boolean; doseMinima: number; abaixoMinimo: 'zero' | 'minimo'; doseMaxima: number; }
 export function ajustarDose(d: number, opts: OpcoesDose): number {
   if (!Number.isFinite(d)) return d;
   if (opts.naoNegativo && d < 0) d = 0;
   if (opts.doseMinima > 0 && d > 0 && d < opts.doseMinima) d = opts.abaixoMinimo === 'minimo' ? opts.doseMinima : 0;
+  if (opts.doseMaxima > 0 && d > opts.doseMaxima) d = opts.doseMaxima; // teto: limita a dose no mapa
   return d;
 }
 

@@ -3,7 +3,8 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { seedIfEmpty } from '@/lib/seed';
 import { bootCloud } from '@/lib/cloud';
-import { empresaIfEmpty, adotarEmpresasLocais, garantirEmpresaInvicta, uidUsuario } from '@/lib/empresa';
+import { empresaIfEmpty, adotarEmpresasLocais, garantirEmpresaInvicta, uidUsuario, ehAdmin, empresaAtiva } from '@/lib/empresa';
+import { limparBaseOperacional } from '@/lib/admin/manutencao';
 import { migrarLaboratoriosV1, migrarSafrasV1, migrarGradesV1, migrarPreferenciasV1 } from '@/lib/biblioteca';
 import { seedLegendasSistema } from '@/lib/store';
 import { LEGENDAS_OFICIAIS } from '@/constants/legendasSeedOficial';
@@ -143,6 +144,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
     return () => unsub();
   }, []);
+
+  // Console-only (sem botão, decisão do usuário): admin pode zerar a base
+  // operacional com  await invLimparBase('APAGAR TUDO')  — preserva a Biblioteca.
+  useEffect(() => {
+    if (typeof window === 'undefined' || !dadosProntos || !ehAdmin(empresaAtiva())) return;
+    (window as unknown as { invLimparBase?: typeof limparBaseOperacional }).invLimparBase = limparBaseOperacional;
+    console.info('[invicta] Admin: para zerar a base (mantendo a Biblioteca), rode no Console:  await invLimparBase("APAGAR TUDO")');
+  }, [dadosProntos]);
+
   const [activeModule, setActiveModule] = useState<string | null>(null);
   const [uploadedGeo, setUploadedGeo] = useState<GeoJSON.FeatureCollection | null>(null);
   const [uploadedBbox, setUploadedBbox] = useState<[number, number, number, number] | null>(null);

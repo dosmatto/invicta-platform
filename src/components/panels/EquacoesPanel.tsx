@@ -174,6 +174,7 @@ function EquacaoEditor({ item, onClose }: { item: ItemBiblioteca<ConteudoEquacao
   const [naoNeg, setNaoNeg] = useState(c?.naoNegativo ?? true);
   const [doseMinima, setDoseMinima] = useState(c?.doseMinimaViavel ? String(c.doseMinimaViavel) : '');
   const [abaixoMinimo, setAbaixoMinimo] = useState<'zero' | 'minimo'>(c?.abaixoMinimo ?? 'zero');
+  const [doseMaxima, setDoseMaxima] = useState(c?.doseMaxima ? String(c.doseMaxima) : '');
   const [constantes, setConstantes] = useState<ConstanteEquacao[]>(c?.constantes ?? []);
   const [script, setScript] = useState(c?.script ?? 'dose = ');
   const [estilo, setEstilo] = useState<EstiloRecomendacao>(c?.estilo ?? estiloPadrao());
@@ -197,6 +198,7 @@ function EquacaoEditor({ item, onClose }: { item: ItemBiblioteca<ConteudoEquacao
       naoNegativo: naoNeg,
       doseMinimaViavel: doseMinima.trim() ? (parseNum(doseMinima) || 0) : 0,
       abaixoMinimo,
+      doseMaxima: doseMaxima.trim() ? (parseNum(doseMaxima) || 0) : 0,
       constantes: constantes.filter(k => k.nome.trim()),
       script,
       estilo,
@@ -246,7 +248,7 @@ function EquacaoEditor({ item, onClose }: { item: ItemBiblioteca<ConteudoEquacao
           <Detalhes {...{ nome, setNome, produto, setProduto, custo, setCusto, frete, setFrete, aplicacao, setAplicacao, profundidade, setProfundidade, unEq, setUnEq, unTrat, setUnTrat, tratamento, setTratamento, culturas, setCulturas, fases, setFases, descricao, setDescricao }} />
         </Secao>
         <Secao titulo="Equação">
-          <Equacao {...{ constantes, setConstantes, script, setScript, scriptRef, naoNeg, setNaoNeg, doseMinima, setDoseMinima, abaixoMinimo, setAbaixoMinimo, unTrat, val, inserirToken }} />
+          <Equacao {...{ constantes, setConstantes, script, setScript, scriptRef, naoNeg, setNaoNeg, doseMinima, setDoseMinima, abaixoMinimo, setAbaixoMinimo, doseMaxima, setDoseMaxima, unTrat, val, inserirToken }} />
         </Secao>
         <Secao titulo="Estilo do mapa">
           <Estilo estilo={estilo} setEstilo={setEstilo} unidade={unTrat} />
@@ -335,6 +337,7 @@ function Equacao(p: {
   naoNeg: boolean; setNaoNeg: (b: boolean) => void;
   doseMinima: string; setDoseMinima: (s: string) => void;
   abaixoMinimo: 'zero' | 'minimo'; setAbaixoMinimo: (s: 'zero' | 'minimo') => void;
+  doseMaxima: string; setDoseMaxima: (s: string) => void;
   unTrat: string;
   val: ReturnType<typeof validar>; inserirToken: (t: string) => void;
 }) {
@@ -349,8 +352,9 @@ function Equacao(p: {
     }
     return testarEscalar(p.script, p.constantes, valores, {
       naoNegativo: p.naoNeg, doseMinima: parseNum(p.doseMinima) || 0, abaixoMinimo: p.abaixoMinimo,
+      doseMaxima: parseNum(p.doseMaxima) || 0,
     });
-  }, [p.script, p.constantes, p.val, p.naoNeg, p.doseMinima, p.abaixoMinimo, testVals]);
+  }, [p.script, p.constantes, p.val, p.naoNeg, p.doseMinima, p.abaixoMinimo, p.doseMaxima, testVals]);
 
   function setConst(i: number, patch: Partial<ConstanteEquacao>) {
     p.setConstantes(p.constantes.map((c, idx) => idx === i ? { ...c, ...patch } : c));
@@ -407,6 +411,16 @@ function Equacao(p: {
           </div>
         )}
         <p className="text-[9px] mt-1" style={{ color: '#64748b' }}>Ex.: calcário só compensa a partir de uma dose; abaixo dela, zera ou sobe para a mínima.</p>
+      </div>
+
+      {/* Dose máxima (teto operacional) */}
+      <div>
+        <label className="text-[10px] font-semibold block mb-1" style={{ color: '#cbd5e1' }}>
+          Dose máxima{p.unTrat ? ` (${p.unTrat})` : ''}
+        </label>
+        <input value={p.doseMaxima} onChange={e => p.setDoseMaxima(e.target.value)} placeholder="0 = sem máximo" inputMode="decimal"
+          className="w-full rounded px-2 py-1.5 text-[11px] outline-none" style={inputStyle} />
+        <p className="text-[9px] mt-1" style={{ color: '#64748b' }}>Acima desse valor a dose é limitada ao teto no mapa (ex.: nunca aplicar mais que X t/ha numa passada).</p>
       </div>
 
       <div>

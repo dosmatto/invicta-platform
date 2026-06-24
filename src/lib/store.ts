@@ -252,6 +252,25 @@ export function deleteCliente(id: string) {
   save('inv_clientes', load<Cliente>('inv_clientes').filter(c => c.id !== id));
 }
 
+// Exclui um produtor e TUDO ligado a ele (fazendas, talhões, importações de
+// lab, grades, plantios, compactação) — local + nuvem (save propaga a remoção
+// via cloudPushLista). Devolve os ids de talhão para o chamador limpar também
+// os mapas/cenários na nuvem (coleções de docs, fora das listas). NÃO toca na
+// Biblioteca nem em legendas/safras/padrões.
+export function excluirProdutorCascata(clienteId: string): { talhaoIds: string[] } {
+  const fazIds = new Set(load<Fazenda>('inv_fazendas').filter(f => f.clienteId === clienteId).map(f => f.id));
+  const talhaoIds = load<Talhao>('inv_talhoes').filter(t => fazIds.has(t.fazendaId)).map(t => t.id);
+  const tal = new Set(talhaoIds);
+  save('inv_lab', load<ImportacaoLab>('inv_lab').filter(i => !tal.has(i.talhaoId)));
+  save('inv_grades', load<GradeAmostragem>('inv_grades').filter(g => !tal.has(g.talhaoId)));
+  save('inv_plantios', load<Plantio>('inv_plantios').filter(p => !tal.has(p.talhaoId)));
+  save('inv_compactacao', load<ImportacaoCompactacao>('inv_compactacao').filter(c => !tal.has(c.talhaoId)));
+  save('inv_talhoes', load<Talhao>('inv_talhoes').filter(t => !tal.has(t.id)));
+  save('inv_fazendas', load<Fazenda>('inv_fazendas').filter(f => !fazIds.has(f.id)));
+  save('inv_clientes', load<Cliente>('inv_clientes').filter(c => c.id !== clienteId));
+  return { talhaoIds };
+}
+
 // ── Fazendas ──────────────────────────────────────────────────────────────
 
 export function getFazendas(clienteId?: string): Fazenda[] {

@@ -2,8 +2,16 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useApp } from '@/context/AppContext';
-import { getClientes, saveCliente, Cliente } from '@/lib/store';
-import { Plus, Search, ChevronRight, X, Save, Users } from 'lucide-react';
+import { getClientes, saveCliente, updateCliente, excluirProdutorCascata, Cliente } from '@/lib/store';
+import { ehAdmin, podeEditar, empresaAtiva } from '@/lib/empresa';
+import { cloudExcluirMapasPorPrefixo, cloudExcluirPorPrefixo } from '@/lib/cloud';
+import { Plus, Search, ChevronRight, X, Save, Users, Pencil, Trash2, AlertTriangle } from 'lucide-react';
+
+const FORM_VAZIO = {
+  nome: '', sigla: '', tipoPessoa: 'PF' as 'PF' | 'PJ',
+  documento: '', telefone: '', email: '',
+  cidade: '', estado: 'PR', observacoes: '',
+};
 
 const LETRAS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 
@@ -21,13 +29,17 @@ export function ProdutoresPanel() {
   const [letraAtiva, setLetraAtiva] = useState<string | null>(null);
   const [mostraForm, setMostraForm] = useState(false);
   const [salvando, setSalvando] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [alvoExcluir, setAlvoExcluir] = useState<Cliente | null>(null);
+  const [txtConfirma, setTxtConfirma] = useState('');
+  const [excluindo, setExcluindo] = useState(false);
   const letraRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
-  const [form, setForm] = useState({
-    nome: '', sigla: '', tipoPessoa: 'PF' as 'PF' | 'PJ',
-    documento: '', telefone: '', email: '',
-    cidade: '', estado: 'PR', observacoes: '',
-  });
+  const emp = empresaAtiva();
+  const souAdmin = ehAdmin(emp);
+  const podeEdit = podeEditar(emp);
+
+  const [form, setForm] = useState({ ...FORM_VAZIO });
 
   useEffect(() => { setClientes(getClientes()); }, []);
 
@@ -38,16 +50,42 @@ export function ProdutoresPanel() {
     setActivePanel(`produtor-${c.id}`);
   }
 
+  function abrirNovo() { setEditId(null); setForm({ ...FORM_VAZIO }); setMostraForm(true); }
+  function cancelarForm() { setMostraForm(false); setEditId(null); setForm({ ...FORM_VAZIO }); }
+
+  function abrirEdicao(c: Cliente) {
+    setForm({
+      nome: c.nome, sigla: c.sigla ?? '', tipoPessoa: c.tipoPessoa,
+      documento: c.documento, telefone: c.telefone, email: c.email,
+      cidade: c.cidade, estado: c.estado, observacoes: c.observacoes ?? '',
+    });
+    setEditId(c.id);
+    setMostraForm(true);
+  }
+
   function handleSave() {
     if (!form.nome.trim()) return;
     setSalvando(true);
     setTimeout(() => {
-      saveCliente(form);
+      if (editId) updateCliente(editId, form); else saveCliente(form);
       reload();
-      setForm({ nome: '', sigla: '', tipoPessoa: 'PF', documento: '', telefone: '', email: '', cidade: '', estado: 'PR', observacoes: '' });
-      setMostraForm(false);
+      cancelarForm();
       setSalvando(false);
     }, 300);
+  }
+
+  // Exclusão (admin): apaga o produtor e tudo dele (cascata local + nuvem).
+  async function confirmarExclusao() {
+    if (!alvoExcluir || txtConfirma.trim().toUpperCase() !== 'APAGAR') return;
+    setExcluindo(true);
+    const { talhaoIds } = excluirProdutorCascata(alvoExcluir.id);
+    for (const tid of talhaoIds) {
+      await cloudExcluirMapasPorPrefixo(`${tid}__`);
+      await cloudExcluirPorPrefixo('inv_cenarios', `cen_${tid}_`);
+    }
+    setExcluindo(false);
+    setAlvoExcluir(null); setTxtConfirma('');
+    reload();
   }
 
   function scrollToLetra(letra: string) {
@@ -96,7 +134,7 @@ export function ProdutoresPanel() {
               style={{ color: '#e2e8f0' }} />
             {busca && <button onClick={() => setBusca('')}><X size={11} /></button>}
           </div>
-          <button onClick={() => setMostraForm(f => !f)}
+          <button onClick={() => mostraForm ? cancelarForm() : abrirNovo()}
             className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-white flex-shrink-0"
             style={{ background: mostraForm ? '#374151' : 'var(--invicta-green-dark)' }}>
             {mostraForm ? <X size={12} /> : <Plus size={12} />}
@@ -131,7 +169,7 @@ export function ProdutoresPanel() {
       {mostraForm && (
         <div className="flex-1 overflow-y-auto p-4 space-y-3">
           <p className="text-xs font-bold uppercase tracking-wide" style={{ color: '#93c5fd' }}>
-            Novo Cliente
+            {editId ? 'Editar Cliente' : 'Novo Cliente'}
           </p>
 
           {/* Tipo de pessoa */}
@@ -184,7 +222,7 @@ export function ProdutoresPanel() {
             className="w-full py-2.5 rounded text-sm font-bold text-white flex items-center justify-center gap-2 transition-opacity disabled:opacity-40"
             style={{ background: 'var(--invicta-green-dark)' }}>
             <Save size={14} />
-            {salvando ? 'Salvando...' : 'Salvar Cliente'}
+            {salvando ? 'Salvando...' : editId ? 'Salvar alterações' : 'Salvar Cliente'}
           </button>
         </div>
       )}
@@ -216,23 +254,37 @@ export function ProdutoresPanel() {
                   <span className="text-xs font-black" style={{ color: 'var(--invicta-blue-mid)' }}>{letra}</span>
                 </div>
                 {porLetra[letra].map(c => (
-                  <button key={c.id} onClick={() => abrirCliente(c)}
-                    className="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors"
+                  <div key={c.id}
+                    className="w-full flex items-center gap-1 pr-2 transition-colors"
                     style={{ borderBottom: '1px solid #0f2240' }}
                     onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'var(--sidebar-item-hover)'}
                     onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}>
-                    <div className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0"
-                      style={{ background: 'var(--invicta-blue-mid)', color: '#fff' }}>
-                      {c.nome.charAt(0).toUpperCase()}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold truncate" style={{ color: '#e2e8f0' }}>{c.nome}</p>
-                      <p className="text-[10px] truncate" style={{ color: '#64748b' }}>
-                        {c.sigla ? `${c.sigla} · ` : ''}{c.tipoPessoa} · {c.cidade} · {c.estado}
-                      </p>
-                    </div>
-                    <ChevronRight size={14} style={{ color: '#64748b' }} />
-                  </button>
+                    <button onClick={() => abrirCliente(c)} className="flex-1 min-w-0 flex items-center gap-3 px-4 py-3 text-left">
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0"
+                        style={{ background: 'var(--invicta-blue-mid)', color: '#fff' }}>
+                        {c.nome.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold truncate" style={{ color: '#e2e8f0' }}>{c.nome}</p>
+                        <p className="text-[10px] truncate" style={{ color: '#64748b' }}>
+                          {c.sigla ? `${c.sigla} · ` : ''}{c.tipoPessoa} · {c.cidade} · {c.estado}
+                        </p>
+                      </div>
+                    </button>
+                    {podeEdit && (
+                      <button onClick={() => abrirEdicao(c)} title="Editar cliente"
+                        className="p-1.5 rounded flex-shrink-0" style={{ color: '#93c5fd' }}>
+                        <Pencil size={13} />
+                      </button>
+                    )}
+                    {souAdmin && (
+                      <button onClick={() => { setAlvoExcluir(c); setTxtConfirma(''); }} title="Excluir cliente"
+                        className="p-1.5 rounded flex-shrink-0" style={{ color: '#f87171' }}>
+                        <Trash2 size={13} />
+                      </button>
+                    )}
+                    <ChevronRight size={14} style={{ color: '#64748b' }} className="flex-shrink-0" />
+                  </div>
                 ))}
               </div>
             ))
@@ -245,6 +297,47 @@ export function ProdutoresPanel() {
         <div className="flex-shrink-0 px-4 py-2 text-center text-[10px]"
           style={{ color: '#475569', borderTop: '1px solid #1a3a6b' }}>
           {clientes.length} cliente{clientes.length !== 1 ? 's' : ''} cadastrado{clientes.length !== 1 ? 's' : ''}
+        </div>
+      )}
+
+      {/* Modal de exclusão (admin): exige digitar APAGAR */}
+      {alvoExcluir && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.6)' }}
+          onClick={() => { if (!excluindo) { setAlvoExcluir(null); setTxtConfirma(''); } }}>
+          <div className="w-full max-w-sm rounded-xl p-4 space-y-3" style={{ background: '#0a1929', border: '1px solid #7f1d1d' }}
+            onClick={e => e.stopPropagation()}>
+            <div className="flex items-start gap-2">
+              <AlertTriangle size={18} style={{ color: '#f87171' }} className="flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-bold" style={{ color: '#fecaca' }}>Excluir produtor</p>
+                <p className="text-[11px] mt-1" style={{ color: '#94a3b8' }}>
+                  Isto apaga <strong style={{ color: '#e2e8f0' }}>{alvoExcluir.nome}</strong> e <strong>tudo</strong> ligado a ele
+                  (fazendas, talhões, análises, grades, mapas e cenários). <strong style={{ color: '#fca5a5' }}>Não dá para desfazer.</strong>
+                </p>
+              </div>
+            </div>
+            <div>
+              <label className="text-[10px] font-semibold block mb-1" style={{ color: '#64748b' }}>
+                Para confirmar, digite <span style={{ color: '#fca5a5', fontWeight: 700 }}>APAGAR</span>
+              </label>
+              <input autoFocus value={txtConfirma} onChange={e => setTxtConfirma(e.target.value)}
+                placeholder="APAGAR" disabled={excluindo}
+                onKeyDown={e => { if (e.key === 'Enter') confirmarExclusao(); }}
+                className="w-full rounded px-3 py-2 text-xs outline-none"
+                style={{ background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' }} />
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => { setAlvoExcluir(null); setTxtConfirma(''); }} disabled={excluindo}
+                className="flex-1 py-2 rounded text-xs font-semibold" style={{ background: '#1a3a6b', color: '#cbd5e1' }}>
+                Cancelar
+              </button>
+              <button onClick={confirmarExclusao} disabled={excluindo || txtConfirma.trim().toUpperCase() !== 'APAGAR'}
+                className="flex-1 py-2 rounded text-xs font-bold text-white flex items-center justify-center gap-1.5 disabled:opacity-40"
+                style={{ background: '#b91c1c' }}>
+                <Trash2 size={13} /> {excluindo ? 'Apagando…' : 'Excluir'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
