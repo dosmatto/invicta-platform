@@ -1,6 +1,11 @@
-export const APP_VERSION = '0.55.1';
+export const APP_VERSION = '0.56.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.56.0': [
+    'Fertilidade por Zona (Z1): quando a importação de laboratório está ligada a uma grade de Zonas de Manejo, o mapa do nutriente fica CONSTANTE por zona (sem interpolação) — cada zona recebe o valor da sua amostra composta',
+    'Na aba Fertilidade aparece a tabela de vínculo "zona ↔ nº da amostra" (sugerido pela ordem, editável); ao processar, o mapa de cada zona é gerado no front-end e salvo na nuvem igual aos mapas interpolados',
+    'Como o mapa por zona usa o mesmo formato dos interpolados, TODO o módulo de Recomendações reusa sem mudança: aplicar recomendação/equação, cenários, comparador, PDFs e Shapefile de taxa variável funcionam por zona',
+  ],
   '0.55.1': [
     'Dividir aplicação agora é escolhido na HORA de aplicar (aba Recomendações, ao selecionar a recomendação), não fixo na Biblioteca: marque "Dividir aplicação por limite máximo" + o limite e aplique',
   ],

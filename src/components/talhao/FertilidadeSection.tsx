@@ -15,6 +15,7 @@ import {
 } from '@/lib/fertilidade';
 import { colorirGridComLegenda, temGrid } from '@/lib/raster';
 import { decodeGrid } from '@/lib/fertilidade';
+import { rasterizarZonas, centroideGeom, type ZonaValor } from '@/lib/recomendacao/zonasGrid';
 import { stopsParaBackend, dominioDaLegenda, paresDaClasse } from '@/lib/legendas';
 import type { Legenda } from '@/lib/legendas';
 import { Play, Layers, Loader2, Eraser, AlertTriangle, Activity, Settings, BookOpen, Save, FileDown } from 'lucide-react';
@@ -127,6 +128,39 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
     return m;
   }, [grade]);
 
+  // Zonas de manejo do talhão (Fase Z1). Quando a importação está ligada a uma
+  // grade de zonas, o mapa é CONSTANTE por zona (sem interpolação): cada zona
+  // recebe o valor da sua amostra composta.
+  const zonas = useMemo<{ id: string; classe: string; geometry: GeoJSON.Geometry }[]>(() => {
+    if (!nav.talhaoId) return [];
+    const t = getTalhoes().find(x => x.id === nav.talhaoId);
+    if (!t?.zonasGeojson) return [];
+    try {
+      const fc = JSON.parse(t.zonasGeojson) as GeoJSON.FeatureCollection;
+      return fc.features
+        .filter(f => f.geometry && (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon'))
+        .map(f => {
+          const p = (f.properties ?? {}) as { id?: string; classe?: string };
+          return { id: String(p.id ?? '?'), classe: String(p.classe ?? ''), geometry: f.geometry! };
+        })
+        .sort((a, b) => a.id.localeCompare(b.id));
+    } catch { return []; }
+  }, [nav.talhaoId]);
+
+  const ehZona = grade?.metodo === 'zonas' && zonas.length > 0;
+
+  // Vínculo zona ↔ nº da amostra (auto pela ordem; editável na tabela). Refaz ao
+  // trocar de importação/talhão; estável dentro do mesmo par (preserva edições).
+  const [mapaZonaNumero, setMapaZonaNumero] = useState<Record<string, number>>({});
+  useEffect(() => {
+    if (!ehZona || !importacao) { setMapaZonaNumero({}); return; }
+    const nums = [...new Set(importacao.resultados.map(r => r.numero))].sort((a, b) => a - b);
+    const init: Record<string, number> = {};
+    zonas.forEach((z, i) => { init[z.id] = nums[i] ?? nums[nums.length - 1] ?? 0; });
+    setMapaZonaNumero(init);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ehZona, importacaoId, zonas]);
+
   const poligono = useMemo(() => {
     const p = extrairPoligono(uploadedGeo);
     if (p) return p;
@@ -212,6 +246,29 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
     };
   }
 
+  // Modo zona: valor da zona p/ um nutriente+profundidade, via o vínculo
+  // zona↔amostra; zonas com valor; e rótulos no centroide de cada zona.
+  function valorZona(zonaId: string, nut: string, prof: string): number {
+    if (!importacao) return NaN;
+    const num = mapaZonaNumero[zonaId];
+    const r = importacao.resultados.find(x => x.numero === num && x.profundidade === prof);
+    const v = r?.valores[nut];
+    return v != null && isFinite(v) ? v : NaN;
+  }
+  function zonasComValor(nut: string, prof: string): ZonaValor[] {
+    return zonas
+      .map(z => ({ id: z.id, geometry: z.geometry, valor: valorZona(z.id, nut, prof) }))
+      .filter(z => isFinite(z.valor));
+  }
+  function fcLabelsZona(nut: string, prof: string): GeoJSON.FeatureCollection {
+    const feats: GeoJSON.Feature[] = [];
+    for (const z of zonasComValor(nut, prof)) {
+      const c = centroideGeom(z.geometry);
+      if (c) feats.push({ type: 'Feature', geometry: { type: 'Point', coordinates: c }, properties: { txt: fmtPonto(z.valor, nut) } });
+    }
+    return { type: 'FeatureCollection', features: feats };
+  }
+
   // defaults ao trocar de importação
   useEffect(() => {
     setNutriente(nutrientes[0] ?? '');
@@ -289,7 +346,26 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
 
   const pontosInterp = useMemo(() => pontosDe(nutriente, profundidade), [nutriente, profundidade, importacao, pontoPorNumero]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Modo zona (Z1): pinta cada zona com o valor da sua amostra e salva no MESMO
+  // formato/chave da interpolação (metodo='zona') → a Recomendação lê transparente.
+  async function processarUmZona(nut: string, prof: string) {
+    const leg = legendaDe(nut);
+    if (!leg) throw new Error(`${nut}: sem legenda`);
+    const zv = zonasComValor(nut, prof);
+    if (zv.length === 0) throw new Error(`${leg.simbolo} ${prof}: nenhuma zona com valor`);
+    const resp = rasterizarZonas(zv, pixelM);
+    const labels = fcLabelsZona(nut, prof);
+    const interpoladoEm = new Date().toISOString();
+    setCache(c => ({ ...c, [ck(nut, prof)]: { resp, labels, interpoladoEm } }));
+    if (nav.talhaoId && importacaoId) {
+      const gridGz = resp.grid ? await comprimirGrid(resp.grid) : undefined;
+      const dados = { resp: { ...resp, png: '', grid: gridGz }, labels, interpoladoEm };
+      cloudSalvarMapa(idNuvem(nav.talhaoId, importacaoId, 'zona', pixelM, '', nut, prof), dados);
+    }
+  }
+
   async function processarUm(nut: string, prof: string) {
+    if (ehZona) return processarUmZona(nut, prof);
     const leg = legendaDe(nut);
     if (!leg) throw new Error(`${nut}: sem legenda`);
     const pts = pontosDe(nut, prof);
@@ -484,6 +560,32 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
         )}
       </div>
 
+      {/* Modo zona (Z1): mapa constante por zona — vínculo zona ↔ nº da amostra. */}
+      {ehZona && (
+        <div className="rounded-lg p-2.5" style={{ background: '#0b1f3a', border: '1px solid #2e5fa3' }}>
+          <p className="text-[11px] font-semibold mb-1 flex items-center gap-1" style={{ color: '#93c5fd' }}>
+            <Layers size={12} /> Mapa por zona (sem interpolação)
+          </p>
+          <p className="text-[10px] mb-2" style={{ color: '#64748b' }}>
+            Cada zona recebe o valor da sua amostra composta. Confira o vínculo zona ↔ nº da amostra (sugerido pela ordem).
+          </p>
+          <div className="space-y-1">
+            {zonas.map(z => (
+              <div key={z.id} className="flex items-center gap-2">
+                <span className="text-xs font-bold" style={{ color: '#e2e8f0', minWidth: 30 }}>Z{z.id}</span>
+                <span className="text-[10px] flex-1 truncate" style={{ color: '#93c5fd' }}>{z.classe || '—'}</span>
+                <span className="text-[10px]" style={{ color: '#64748b' }}>amostra</span>
+                <select value={mapaZonaNumero[z.id] ?? ''} onChange={e => setMapaZonaNumero(prev => ({ ...prev, [z.id]: Number(e.target.value) }))}
+                  className="rounded px-2 py-1 text-[11px] outline-none" style={inputStyle}>
+                  {[...new Set((importacao?.resultados ?? []).map(r => r.numero))].sort((a, b) => a - b)
+                    .map(nu => <option key={nu} value={nu}>{nu}</option>)}
+                </select>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Desatualizado (Etapa 3): existe importação mais recente que a destes mapas. */}
       {desatualizado && importacaoMaisRecente && (
         <div className="flex items-start gap-2 p-2.5 rounded-lg" style={{ background: '#2d1a00', border: '1px solid #92400e' }}>
@@ -619,7 +721,9 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
                 })}
               </div>
               <p className="text-[10px] mt-1" style={{ color: '#94a3b8' }}>
-                <strong style={{ color: pontosInterp.length >= 3 ? '#86efac' : '#fbbf24' }}>{pontosInterp.length}</strong> pontos
+                {ehZona
+                  ? <><strong style={{ color: '#86efac' }}>{zonas.length}</strong> zonas</>
+                  : <><strong style={{ color: pontosInterp.length >= 3 ? '#86efac' : '#fbbf24' }}>{pontosInterp.length}</strong> pontos</>}
                 {legAtual ? ` · ${legAtual.atributo} (${legAtual.unidade})` : ''}
               </p>
             </div>
@@ -654,7 +758,9 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5 text-[10px]" style={{ color: stats.modelo === 'idw' ? '#93c5fd' : '#86efac' }}>
                   <Activity size={12} />
-                  {stats.modelo === 'idw' ? `IDW · ${stats.n} pts` : `Krigagem · ${stats.modelo} · ${stats.n} pts`}
+                  {stats.modelo === 'zona' ? `Por zona · ${stats.n} px`
+                    : stats.modelo === 'idw' ? `IDW · ${stats.n} pts`
+                      : `Krigagem · ${stats.modelo} · ${stats.n} pts`}
                 </div>
                 <button onClick={limpar} title="Limpar mapas" className="flex items-center gap-1 text-[10px]" style={{ color: '#93c5fd' }}>
                   <Eraser size={11} /> Limpar
