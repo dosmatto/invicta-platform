@@ -8,6 +8,7 @@ import {
   GradeAmostragem, ImportacaoLab,
 } from '@/lib/store';
 import { lerArquivo, aplicarPerfil, autoConfig, PERFIS_BUILTIN, simboloElemento, norm, numerosDaGrade, PerfilLabConfig } from '@/lib/lab';
+import { pode } from '@/lib/empresa';
 import { Upload, Save, Trash2, CheckCircle2, AlertTriangle, FlaskConical } from 'lucide-react';
 
 const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
@@ -99,6 +100,7 @@ export function LabImportSection() {
     if (achado) setPerfilId(achado.id);
   }
 
+  if (!pode('importarLaudo')) return <div className="px-6 py-4"><Aviso texto="Seu papel não importa laudos de laboratório (somente visualização)." /></div>;
   if (!safraAtiva) return <div className="px-6 py-4"><Aviso texto="Defina uma safra ativa (no topo do talhão) para importar resultados." /></div>;
   if (grades.length === 0) return <div className="px-6 py-4"><Aviso texto="Salve uma grade de amostragem (Amostragem) antes de importar — os resultados são ligados aos pontos." /></div>;
 

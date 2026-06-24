@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import { getTalhoes, getPadroesAmostragem, getPadroesElementos, getConfigEtiqueta, getSafras, getGrades, saveGrade, updateGrade, deleteGrade, marcarParaProcessar, ProfundidadeConfig, GradeAmostragem, PontoAmostragem } from '@/lib/store';
 import { classeZona, ORDEM_CLASSES } from '@/lib/zonas';
+import { pode } from '@/lib/empresa';
 import { gerarGrid, pontoInterno, ModoDistribuicao } from '@/lib/grid';
 import { gerarEtiquetasPDF, EtiquetaItem, LAYOUTS_ETIQUETA } from '@/lib/etiquetas';
 import { exportarKML, exportarSHP } from '@/lib/exportGrade';
@@ -422,7 +423,7 @@ export function SimuladorZonas({ safraNome: safraProp }: { safraNome?: string } 
       </div>
 
       {/* Salvar grade de zonas */}
-      {!safraNome ? (
+      {!pode('amostragem') ? null : !safraNome ? (
         <p className="text-[10px] text-center" style={{ color: '#fbbf24' }}>Defina uma safra (no topo do talhão) para salvar a grade.</p>
       ) : (
         <button onClick={salvarGradeZonas} disabled={!padrao || pontos.length === 0}

@@ -12,6 +12,7 @@ import {
   type CategoriaBiblioteca,
 } from '@/lib/biblioteca';
 import { Plus, Edit3, Trash2, Power, Copy, X, Save, SaveAll, Search, Check } from 'lucide-react';
+import { pode } from '@/lib/empresa';
 
 const SLUG: CategoriaBiblioteca = 'recomendacoes';
 const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
@@ -23,6 +24,7 @@ export function RecomendacoesPanel() {
   const [refresh, setRefresh] = useState(0);
   const [filtro, setFiltro] = useState('');
   const [edit, setEdit] = useState<ItemBiblioteca<ConteudoRecomendacao> | 'novo' | null>(null);
+  const podeBib = pode('biblioteca');
 
   useEffect(() => {
     const onCh = (e: Event) => {
@@ -64,11 +66,13 @@ export function RecomendacoesPanel() {
           <input value={filtro} onChange={e => setFiltro(e.target.value)} placeholder="Buscar recomendação..."
             className="w-full rounded pl-7 pr-2 py-1.5 text-[11px] outline-none" style={inputStyle} />
         </div>
-        <button onClick={() => setEdit('novo')}
-          className="px-2.5 py-1.5 rounded text-[10px] font-bold text-white flex items-center gap-1 flex-shrink-0"
-          style={{ background: 'var(--invicta-green-dark)' }}>
-          <Plus size={11} /> Nova
-        </button>
+        {podeBib && (
+          <button onClick={() => setEdit('novo')}
+            className="px-2.5 py-1.5 rounded text-[10px] font-bold text-white flex items-center gap-1 flex-shrink-0"
+            style={{ background: 'var(--invicta-green-dark)' }}>
+            <Plus size={11} /> Nova
+          </button>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto px-3 py-2">
@@ -93,10 +97,12 @@ export function RecomendacoesPanel() {
                   </div>
                   {it.escopo === 'sistema' && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ background: '#1a3a6b', color: '#93c5fd' }}>sistema</span>}
                   {!it.ativo && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ background: '#1a3a6b', color: '#94a3b8' }}>inativo</span>}
-                  <button onClick={() => setEdit(it)} title="Editar" className="p-1 rounded hover:bg-white/10" style={{ color: '#93c5fd' }}><Edit3 size={11} /></button>
-                  <button onClick={() => clonar(it)} title="Clonar" className="p-1 rounded hover:bg-white/10" style={{ color: '#93c5fd' }}><Copy size={11} /></button>
-                  <button onClick={() => ativar(SLUG, it.id, !it.ativo)} title={it.ativo ? 'Inativar' : 'Ativar'} className="p-1 rounded hover:bg-white/10" style={{ color: it.ativo ? '#fbbf24' : '#22c55e' }}><Power size={11} /></button>
-                  <button onClick={() => excluirItem(it)} title="Excluir" className="p-1 rounded hover:bg-white/10" style={{ color: '#f87171' }}><Trash2 size={11} /></button>
+                  {podeBib && (<>
+                    <button onClick={() => setEdit(it)} title="Editar" className="p-1 rounded hover:bg-white/10" style={{ color: '#93c5fd' }}><Edit3 size={11} /></button>
+                    <button onClick={() => clonar(it)} title="Clonar" className="p-1 rounded hover:bg-white/10" style={{ color: '#93c5fd' }}><Copy size={11} /></button>
+                    <button onClick={() => ativar(SLUG, it.id, !it.ativo)} title={it.ativo ? 'Inativar' : 'Ativar'} className="p-1 rounded hover:bg-white/10" style={{ color: it.ativo ? '#fbbf24' : '#22c55e' }}><Power size={11} /></button>
+                    <button onClick={() => excluirItem(it)} title="Excluir" className="p-1 rounded hover:bg-white/10" style={{ color: '#f87171' }}><Trash2 size={11} /></button>
+                  </>)}
                 </div>
               </div>
             ))}

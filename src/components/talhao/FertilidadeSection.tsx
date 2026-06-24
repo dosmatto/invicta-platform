@@ -20,6 +20,7 @@ import { stopsParaBackend, dominioDaLegenda, paresDaClasse } from '@/lib/legenda
 import type { Legenda } from '@/lib/legendas';
 import { Play, Layers, Loader2, Eraser, AlertTriangle, Activity, Settings, BookOpen, Save, FileDown } from 'lucide-react';
 import { cloudSalvarMapa, cloudCarregarMapasPorPrefixo, cloudExcluirMapasPorPrefixo, cloudPodeGravar } from '@/lib/cloud';
+import { pode } from '@/lib/empresa';
 import { listar as bibListar, criar as bibCriar, type ConteudoPerfil, type ItemBiblioteca } from '@/lib/biblioteca';
 
 const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
@@ -511,6 +512,8 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
   if (importacoes.length === 0) return <div className="px-6 py-4"><Aviso texto="Importe resultados de laboratório (seção acima) — o mapa de fertilidade é gerado a partir deles." /></div>;
 
   const processando = estado === 'processando';
+  const podeProcessar = pode('fertilidade');
+  const podeRel = pode('relatorios');
   const mapasSalvos = Object.keys(cache).length;
   // Etapa 3: os mapas em tela são de uma importação mais antiga que a disponível
   // → podem estar desatualizados (o usuário reimportou laudo depois).
@@ -668,18 +671,22 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
 
           {/* Processar */}
           {!poligono && <Aviso texto="Limite do talhão não carregado no mapa." />}
-          <button onClick={processarTodos} disabled={processando || !poligono || nutrientes.length === 0}
-            className="w-full py-2 rounded text-xs font-bold text-white flex items-center justify-center gap-1.5"
-            style={{ background: (processando || !poligono || nutrientes.length === 0) ? '#1a3a6b' : 'var(--invicta-green-dark)', opacity: (!poligono || nutrientes.length === 0) ? 0.6 : 1 }}>
-            {processando && progresso
-              ? <><Loader2 size={13} className="animate-spin" /> {progresso.nome} ({progresso.atual}/{progresso.total})</>
-              : <><Layers size={13} /> Processar tudo ({totalMapas} mapas)</>}
-          </button>
-          <button onClick={processar} disabled={processando || !poligono || !nutriente}
-            className="w-full py-1 rounded text-[10px] font-semibold flex items-center justify-center gap-1"
-            style={{ background: '#1a3a6b', color: '#93c5fd', opacity: (processando || !poligono || !nutriente) ? 0.6 : 1 }}>
-            <Play size={10} /> Processar só o selecionado
-          </button>
+          {!podeProcessar ? (
+            <Aviso texto="Seu papel não processa mapas de fertilidade (somente visualização)." />
+          ) : (<>
+            <button onClick={processarTodos} disabled={processando || !poligono || nutrientes.length === 0}
+              className="w-full py-2 rounded text-xs font-bold text-white flex items-center justify-center gap-1.5"
+              style={{ background: (processando || !poligono || nutrientes.length === 0) ? '#1a3a6b' : 'var(--invicta-green-dark)', opacity: (!poligono || nutrientes.length === 0) ? 0.6 : 1 }}>
+              {processando && progresso
+                ? <><Loader2 size={13} className="animate-spin" /> {progresso.nome} ({progresso.atual}/{progresso.total})</>
+                : <><Layers size={13} /> Processar tudo ({totalMapas} mapas)</>}
+            </button>
+            <button onClick={processar} disabled={processando || !poligono || !nutriente}
+              className="w-full py-1 rounded text-[10px] font-semibold flex items-center justify-center gap-1"
+              style={{ background: '#1a3a6b', color: '#93c5fd', opacity: (processando || !poligono || !nutriente) ? 0.6 : 1 }}>
+              <Play size={10} /> Processar só o selecionado
+            </button>
+          </>)}
 
           {estado === 'erro' && <p className="text-[10px]" style={{ color: '#f87171' }}>{erro}</p>}
           {erro && estado !== 'erro' && <p className="text-[10px]" style={{ color: '#fbbf24' }}>{erro}</p>}
@@ -778,11 +785,11 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
               <p className="text-[9px]" style={{ color: '#64748b' }}>{legAtual.fonte} · {legAtual.atributo}{legAtual.metodo ? ` (${legAtual.metodo})` : ''} · {legAtual.unidade}</p>
 
               {/* Gerar PDF (Layout Oficial Fertilidade V1 — todas as profundidades do atributo) */}
-              <button onClick={gerarPDF} disabled={gerandoPdf}
+              {podeRel && <button onClick={gerarPDF} disabled={gerandoPdf}
                 className="w-full mt-1 py-2 rounded text-xs font-bold text-white flex items-center justify-center gap-1.5 disabled:opacity-50"
                 style={{ background: 'var(--invicta-blue-mid)' }}>
                 {gerandoPdf ? <><Loader2 size={13} className="animate-spin" /> Gerando PDF…</> : <><FileDown size={13} /> Gerar PDF (Fertilidade)</>}
-              </button>
+              </button>}
             </div>
           )}
 

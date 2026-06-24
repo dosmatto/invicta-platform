@@ -6,6 +6,7 @@ import { getPadroesAmostragem, getPadroesElementos, getSafras, getGrades, saveGr
 import { gerarGrid, anguloMaiorDimensao, criarValidador, ModoDistribuicao } from '@/lib/grid';
 import { exportarKML, exportarSHP } from '@/lib/exportGrade';
 import { gerarEtiquetasPDF, itensDeGrade, LAYOUTS_ETIQUETA } from '@/lib/etiquetas';
+import { pode } from '@/lib/empresa';
 import { AlertTriangle, RotateCcw, Shuffle, Layers, MapPin, Save, Trash2, CheckCircle2, Circle, Pencil, Move, Plus, Eraser, X, Check, Download, Printer, Eye } from 'lucide-react';
 
 // PRNG simples para shuffle determinístico
@@ -465,11 +466,13 @@ export function SimuladorAmostragem({ safraNome: safraProp }: { safraNome?: stri
           )}
 
           {/* Salvar grade */}
-          <button onClick={salvarGrade}
-            className="w-full py-2.5 rounded text-sm font-bold text-white flex items-center justify-center gap-2"
-            style={{ background: 'var(--invicta-green-dark)' }}>
-            <Save size={14} /> Salvar grade
-          </button>
+          {pode('amostragem') && (
+            <button onClick={salvarGrade}
+              className="w-full py-2.5 rounded text-sm font-bold text-white flex items-center justify-center gap-2"
+              style={{ background: 'var(--invicta-green-dark)' }}>
+              <Save size={14} /> Salvar grade
+            </button>
+          )}
         </>
       )}
 

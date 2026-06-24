@@ -3,7 +3,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { seedIfEmpty } from '@/lib/seed';
 import { bootCloud } from '@/lib/cloud';
-import { empresaIfEmpty, adotarEmpresasLocais, garantirEmpresaInvicta, uidUsuario, ehOwner, seedPapeis, papelDoEmail, emailUsuario } from '@/lib/empresa';
+import { empresaIfEmpty, adotarEmpresasLocais, garantirEmpresaInvicta, uidUsuario, ehOwner, seedPapeis, seedPermissoes, papelDoEmail, emailUsuario } from '@/lib/empresa';
 import { limparBaseOperacional } from '@/lib/admin/manutencao';
 import { migrarLaboratoriosV1, migrarSafrasV1, migrarGradesV1, migrarPreferenciasV1 } from '@/lib/biblioteca';
 import { seedLegendasSistema } from '@/lib/store';
@@ -140,6 +140,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setDadosProntos(false);
       await bootCloud().catch(() => {});       // hidrata empresas/dados/papéis da nuvem
       seedPapeis();                            // garante owner/admin oficiais (idempotente)
+      seedPermissoes();                        // semeia as permissões padrão por papel
       adotarEmpresasLocais(uidUsuario());      // empresa (cosmética, single-tenant)
       garantirEmpresaInvicta(uidUsuario());    // empresa padrão "Invicta"
       migracoesLocais();

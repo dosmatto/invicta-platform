@@ -10,7 +10,7 @@
 import { getFb } from './firebase';
 import { cloudPushLista } from './cloud';
 
-export type PapelMembro = 'owner' | 'admin' | 'editor' | 'viewer';
+export type PapelMembro = 'owner' | 'admin' | 'agronomo' | 'operador' | 'editor' | 'viewer';
 
 export interface Empresa {
   id: string;
@@ -105,6 +105,75 @@ export function seedPapeis() {
     if (!lista.some(p => p.email === s.email)) { lista.push({ id: s.email, email: s.email, papel: s.papel }); mudou = true; }
   }
   if (mudou) save(K_PAPEIS, lista);
+}
+
+// ── Capacidades / Permissões por papel (U2 — configurável pelo Owner) ────────
+const K_PERMISSOES = 'inv_permissoes';
+
+export type Capacidade =
+  | 'cadastro' | 'excluirProdutor' | 'amostragem' | 'importarLaudo'
+  | 'fertilidade' | 'recomendacoes' | 'biblioteca' | 'relatorios';
+
+export const CAPACIDADES: Array<{ id: Capacidade; label: string }> = [
+  { id: 'cadastro', label: 'Cadastrar/editar Cliente·Fazenda·Talhão' },
+  { id: 'excluirProdutor', label: 'Excluir produtor' },
+  { id: 'amostragem', label: 'Amostragem (grades, etiquetas, SHP/KML)' },
+  { id: 'importarLaudo', label: 'Importar laudo de laboratório' },
+  { id: 'fertilidade', label: 'Processar fertilidade (interpolar/zona)' },
+  { id: 'recomendacoes', label: 'Recomendações (simular/cenários/arquivos)' },
+  { id: 'biblioteca', label: 'Biblioteca (criar/editar)' },
+  { id: 'relatorios', label: 'Gerar relatórios (PDF)' },
+];
+
+// Papéis atribuíveis na UI (Owner sempre tudo; Produtor/Amostrador = fases U3).
+export const PAPEIS_ATRIBUIVEIS: PapelMembro[] = ['owner', 'admin', 'agronomo', 'operador'];
+export const ROTULO_PAPEL: Record<string, string> = {
+  owner: 'Owner', admin: 'Admin', agronomo: 'Agrônomo', operador: 'Operador de campo', editor: 'Editor', viewer: 'Viewer',
+};
+
+type Caps = Record<Capacidade, boolean>;
+const TODAS = (v: boolean): Caps => ({ cadastro: v, excluirProdutor: v, amostragem: v, importarLaudo: v, fertilidade: v, recomendacoes: v, biblioteca: v, relatorios: v });
+const DEFAULTS_PERMISSOES: Record<string, Caps> = {
+  owner: TODAS(true),
+  admin: TODAS(true),
+  agronomo: { ...TODAS(false), recomendacoes: true, relatorios: true },
+  operador: { ...TODAS(false), amostragem: true },
+  editor: TODAS(true),    // legado
+  viewer: TODAS(false),   // legado
+};
+
+export interface RegistroPermissao { id: string; caps: Caps; } // id = papel
+
+// Config efetiva (defaults sobrescritos pelo que o Owner salvou).
+export function getPermissoes(): Record<string, Caps> {
+  const out: Record<string, Caps> = {};
+  for (const p of Object.keys(DEFAULTS_PERMISSOES)) out[p] = { ...DEFAULTS_PERMISSOES[p] };
+  for (const r of load<RegistroPermissao>(K_PERMISSOES)) out[r.id] = { ...(out[r.id] ?? TODAS(false)), ...r.caps };
+  return out;
+}
+export function seedPermissoes() {
+  const lista = load<RegistroPermissao>(K_PERMISSOES);
+  let mudou = false;
+  for (const papel of PAPEIS_ATRIBUIVEIS) {
+    if (!lista.some(r => r.id === papel)) { lista.push({ id: papel, caps: { ...DEFAULTS_PERMISSOES[papel] } }); mudou = true; }
+  }
+  if (mudou) save(K_PERMISSOES, lista);
+}
+export function definirPermissao(papel: PapelMembro, cap: Capacidade, valor: boolean) {
+  const lista = load<RegistroPermissao>(K_PERMISSOES);
+  const idx = lista.findIndex(r => r.id === papel);
+  const base = idx >= 0 ? lista[idx].caps : { ...(DEFAULTS_PERMISSOES[papel] ?? TODAS(false)) };
+  const caps = { ...base, [cap]: valor };
+  if (idx >= 0) lista[idx] = { ...lista[idx], caps };
+  else lista.push({ id: papel, caps });
+  save(K_PERMISSOES, lista);
+}
+
+// O usuário logado tem a capacidade? Owner sempre sim; sem papel (bloqueado) = não.
+export function pode(cap: Capacidade, papel: PapelMembro | null = papelDoUsuario()): boolean {
+  if (!papel) return false;
+  if (papel === 'owner') return true;
+  return getPermissoes()[papel]?.[cap] ?? DEFAULTS_PERMISSOES[papel]?.[cap] ?? false;
 }
 
 // CRUD básico

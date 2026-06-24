@@ -1,6 +1,11 @@
-export const APP_VERSION = '0.59.1';
+export const APP_VERSION = '0.60.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.60.0': [
+    'Permissões por papel (Fase U2): novos papéis Agrônomo e Operador de campo + matriz CONFIGURÁVEL pelo Owner (aba Usuários) — liga/desliga, por papel, o que cada um pode fazer (cadastro, excluir produtor, amostragem, importar laudo, fertilidade, recomendações, biblioteca, relatórios)',
+    'Defaults: Agrônomo só Recomendações + relatórios; Operador só Amostragem. Owner/Admin têm tudo (não mudou nada para vocês)',
+    'As travas foram aplicadas nas telas: Produtores (cadastro/excluir), Amostragem (salvar grade), Importar laudo, Fertilidade (processar), Recomendações, Biblioteca (Equações/Recomendações — ver, não editar) e Relatórios',
+  ],
   '0.59.1': [
     'Aba Usuários agora é REAL: removidos os usuários de exemplo chumbados no código (Admin Invicta, Carlos Técnico, etc.); mostra os papéis de acesso reais por e-mail (william=Owner, jhon=Admin) e o Owner adiciona/edita/remove ali mesmo',
     'A gestão de papéis saiu de Config → Empresa (que ficou só com nome da empresa) e foi para a aba Usuários',

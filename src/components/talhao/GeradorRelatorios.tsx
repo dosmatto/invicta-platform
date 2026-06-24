@@ -16,6 +16,7 @@ import { extrairPoligono } from '@/lib/fertilidade';
 import { gerarRelatorioMultiplo } from '@/lib/relatorioFertilidade';
 import { salvarRelatorio, listarRelatorios, excluirRelatorio, type RegistroRelatorio } from '@/lib/relatoriosArquivo';
 import { emailUsuario } from '@/lib/auth';
+import { pode } from '@/lib/empresa';
 import { FileDown, Loader2, ChevronUp, ChevronDown, AlertTriangle, CheckSquare, Square, Satellite, Hash, FileStack, History, Trash2, ExternalLink } from 'lucide-react';
 
 export function GeradorRelatorios({ safraNome }: { safraNome?: string } = {}) {
@@ -123,6 +124,7 @@ export function GeradorRelatorios({ safraNome }: { safraNome?: string } = {}) {
     }
   }
 
+  if (!pode('relatorios')) return <div className="px-4 py-4"><Aviso texto="Seu papel não gera relatórios (somente visualização)." /></div>;
   if (!safra) return <div className="px-4 py-4"><Aviso texto="Defina uma safra (no topo) para montar o relatório." /></div>;
   if (carregando) return <div className="px-4 py-4 flex items-center gap-2 text-xs" style={{ color: '#64748b' }}><Loader2 size={13} className="animate-spin" /> Carregando mapas salvos na nuvem…</div>;
 

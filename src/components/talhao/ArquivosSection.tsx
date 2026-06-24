@@ -14,6 +14,7 @@ import { capturarMapaFertilidade } from '@/lib/capturaMapa';
 import { listarCenarios, descomprimirCenario, type Cenario } from '@/lib/recomendacao/cenarios';
 import { montarBookOficial, abrirOuBaixar } from '@/lib/recomendacao/relatorioCenarios';
 import { MONITORES, monitorPorId, gerarShapefileZip } from '@/lib/recomendacao/shapefile';
+import { pode } from '@/lib/empresa';
 import { FileText, FileImage, Loader2, FolderArchive, Star, FileCode } from 'lucide-react';
 
 const VAZIO: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
@@ -90,6 +91,10 @@ export function ArquivosSection({ safraNome }: { safraNome?: string }) {
     } catch (e) { alert('Falha ao gerar o Shapefile: ' + (e instanceof Error ? e.message : String(e))); }
     finally { setBusy(''); }
   }
+
+  if (!pode('relatorios')) return (
+    <div className="p-4"><p className="text-[11px]" style={{ color: '#fbbf24' }}>Seu papel não acessa os arquivos/relatórios (somente visualização).</p></div>
+  );
 
   return (
     <div className="p-4 space-y-3">

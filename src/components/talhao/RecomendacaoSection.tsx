@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import { getImportacoesLab, getTalhoes, type ImportacaoLab } from '@/lib/store';
+import { pode } from '@/lib/empresa';
 import { listar as bibListar, type ItemBiblioteca, type ConteudoEquacao, type ConteudoRecomendacao } from '@/lib/biblioteca';
 import { carregarGridsTalhao, calcularDose, dividirDoseEmPassadas, type DoseCalculada } from '@/lib/recomendacao/aplicar';
 import { salvarCenario, listarCenarios, descomprimirCenario, excluirCenario, type Cenario } from '@/lib/recomendacao/cenarios';
@@ -242,6 +243,10 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
 
   const classesVis = useMemo(() => doseAtiva ? [...doseAtiva.estilo.classes].sort((a, b) => a.limiteSuperior - b.limiteSuperior) : [], [doseAtiva]);
   const podeAplicar = !!importacaoId && (modo === 'equacao' ? !!eqSel : !!recSel) && estado !== 'carregando';
+
+  if (!pode('recomendacoes')) return (
+    <div className="px-6 py-4"><p className="text-[11px]" style={{ color: '#fbbf24' }}>Seu papel não trabalha com recomendações (somente visualização).</p></div>
+  );
 
   return (
     <div className="p-4 space-y-3">

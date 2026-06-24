@@ -1,29 +1,33 @@
 'use client';
 
-// Gestão de usuários/papéis (Fase U1). O acesso é por E-MAIL (inv_papeis):
-// quem está na lista entra com o papel dado; quem não está fica bloqueado.
-// Só o Owner adiciona/edita/remove. As CONTAS de login são criadas no Console
-// do Firebase (o convite automático com senha provisória é a Fase U3).
+// Gestão de usuários/papéis + permissões (Fases U1/U2). Acesso por E-MAIL
+// (inv_papeis): quem está na lista entra com o papel dado; quem não está fica
+// bloqueado. O Owner também configura, por papel, o que cada um pode fazer
+// (inv_permissoes). As CONTAS de login são criadas no Console do Firebase
+// (convite automático com senha provisória = Fase U3).
 
 import { useEffect, useState } from 'react';
 import {
   getPapeis, definirPapelEmail, removerPapelEmail,
-  ehOwner, emailUsuario, type PapelMembro, type RegistroPapel,
+  getPermissoes, definirPermissao,
+  ehOwner, emailUsuario,
+  CAPACIDADES, PAPEIS_ATRIBUIVEIS, ROTULO_PAPEL,
+  type PapelMembro, type RegistroPapel, type Capacidade,
 } from '@/lib/empresa';
-import { UserPlus, Trash2, AlertTriangle, ShieldCheck } from 'lucide-react';
+import { UserPlus, Trash2, AlertTriangle, ShieldCheck, SlidersHorizontal } from 'lucide-react';
 
 const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
-// Fase U1: só Owner/Admin são atribuíveis; Agrônomo/Operador/Produtor/Amostrador entram na U2/U3.
-const PAPEIS_DISPONIVEIS: PapelMembro[] = ['owner', 'admin'];
-const rotuloPapel: Record<string, string> = { owner: 'Owner', admin: 'Admin', editor: 'Editor', viewer: 'Viewer' };
+// Papéis cujas permissões o Owner edita (Owner é sempre tudo, não aparece aqui).
+const PAPEIS_CONFIG: PapelMembro[] = ['admin', 'agronomo', 'operador'];
 
 export function UsuariosPanel() {
   const [papeis, setPapeis] = useState<RegistroPapel[]>([]);
+  const [perms, setPerms] = useState<Record<string, Record<string, boolean>>>({});
   const [emailNovo, setEmailNovo] = useState('');
   const [papelNovo, setPapelNovo] = useState<PapelMembro>('admin');
   const [aviso, setAviso] = useState('');
 
-  function recarregar() { setPapeis(getPapeis()); }
+  function recarregar() { setPapeis(getPapeis()); setPerms(getPermissoes()); }
   useEffect(() => {
     recarregar();
     const onCh = () => recarregar();
@@ -60,6 +64,12 @@ export function UsuariosPanel() {
     recarregar();
   }
 
+  function togglePerm(papel: PapelMembro, cap: Capacidade) {
+    if (!souOwner) return;
+    definirPermissao(papel, cap, !perms[papel]?.[cap]);
+    recarregar();
+  }
+
   return (
     <div className="h-full overflow-y-auto px-4 py-3 space-y-3">
       <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider" style={{ color: '#475569' }}>
@@ -86,7 +96,7 @@ export function UsuariosPanel() {
               className="flex-1 rounded px-2 py-1.5 text-[11px] outline-none" style={inputStyle} />
             <select value={papelNovo} onChange={e => setPapelNovo(e.target.value as PapelMembro)}
               className="rounded px-2 py-1 text-[11px] outline-none" style={inputStyle}>
-              {PAPEIS_DISPONIVEIS.map(p => <option key={p} value={p}>{rotuloPapel[p]}</option>)}
+              {PAPEIS_ATRIBUIVEIS.map(p => <option key={p} value={p}>{ROTULO_PAPEL[p]}</option>)}
             </select>
             <button onClick={add} className="px-3 py-1 rounded text-[10px] font-bold text-white flex items-center gap-1"
               style={{ background: 'var(--invicta-green-dark)' }}>
@@ -98,7 +108,7 @@ export function UsuariosPanel() {
         <p className="text-[10px]" style={{ color: '#64748b' }}>Só o Owner pode adicionar ou alterar papéis.</p>
       )}
 
-      {/* Lista */}
+      {/* Lista de usuários */}
       <div className="p-3 rounded-lg" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
         <p className="text-[10px] uppercase tracking-wider mb-2" style={{ color: '#475569' }}>Usuários do sistema ({papeis.length})</p>
         <div className="space-y-1.5">
@@ -109,8 +119,8 @@ export function UsuariosPanel() {
               </code>
               <select value={r.papel} onChange={e => trocar(r.email, e.target.value as PapelMembro)} disabled={!souOwner}
                 className="rounded px-1 py-0.5 text-[10px] outline-none" style={inputStyle}>
-                {PAPEIS_DISPONIVEIS.map(p => <option key={p} value={p}>{rotuloPapel[p]}</option>)}
-                {!PAPEIS_DISPONIVEIS.includes(r.papel) && <option value={r.papel}>{rotuloPapel[r.papel] ?? r.papel}</option>}
+                {PAPEIS_ATRIBUIVEIS.map(p => <option key={p} value={p}>{ROTULO_PAPEL[p]}</option>)}
+                {!PAPEIS_ATRIBUIVEIS.includes(r.papel) && <option value={r.papel}>{ROTULO_PAPEL[r.papel] ?? r.papel}</option>}
               </select>
               <button onClick={() => remover(r.email)} disabled={!souOwner}
                 className="p-1 rounded" style={{ color: '#f87171', background: '#1a3a6b', opacity: souOwner ? 1 : 0.5 }}>
@@ -121,6 +131,41 @@ export function UsuariosPanel() {
           {papeis.length === 0 && <p className="text-[10px]" style={{ color: '#64748b' }}>Nenhum usuário com papel ainda.</p>}
         </div>
       </div>
+
+      {/* Permissões por papel (matriz) — só Owner edita */}
+      {souOwner && (
+        <div className="p-3 rounded-lg" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
+          <div className="flex items-center gap-1.5 mb-1 text-[10px] uppercase tracking-wider" style={{ color: '#475569' }}>
+            <SlidersHorizontal size={12} /> Permissões por papel
+          </div>
+          <p className="text-[9px] mb-2" style={{ color: '#64748b' }}>Owner tem tudo. Marque o que cada papel pode fazer.</p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-[10px]" style={{ color: '#cbd5e1' }}>
+              <thead>
+                <tr>
+                  <th className="text-left font-semibold pb-1" style={{ color: '#64748b' }}>Capacidade</th>
+                  {PAPEIS_CONFIG.map(p => (
+                    <th key={p} className="px-1 pb-1 font-semibold text-center" style={{ color: '#93c5fd' }}>{ROTULO_PAPEL[p]}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {CAPACIDADES.map(c => (
+                  <tr key={c.id} style={{ borderTop: '1px solid #0f2240' }}>
+                    <td className="py-1 pr-2">{c.label}</td>
+                    {PAPEIS_CONFIG.map(p => (
+                      <td key={p} className="text-center">
+                        <input type="checkbox" checked={!!perms[p]?.[c.id]} onChange={() => togglePerm(p, c.id)}
+                          className="accent-green-600 cursor-pointer" style={{ width: 14, height: 14 }} />
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

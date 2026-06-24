@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useApp } from '@/context/AppContext';
 import { getClientes, saveCliente, updateCliente, excluirProdutorCascata, Cliente } from '@/lib/store';
-import { ehAdmin, podeEditar, empresaAtiva } from '@/lib/empresa';
+import { pode } from '@/lib/empresa';
 import { cloudExcluirMapasPorPrefixo, cloudExcluirPorPrefixo } from '@/lib/cloud';
 import { Plus, Search, ChevronRight, X, Save, Users, Pencil, Trash2, AlertTriangle } from 'lucide-react';
 
@@ -35,9 +35,8 @@ export function ProdutoresPanel() {
   const [excluindo, setExcluindo] = useState(false);
   const letraRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
-  const emp = empresaAtiva();
-  const souAdmin = ehAdmin(emp);
-  const podeEdit = podeEditar(emp);
+  const podeCadastro = pode('cadastro');
+  const podeExcluir = pode('excluirProdutor');
 
   const [form, setForm] = useState({ ...FORM_VAZIO });
 
@@ -134,12 +133,14 @@ export function ProdutoresPanel() {
               style={{ color: '#e2e8f0' }} />
             {busca && <button onClick={() => setBusca('')}><X size={11} /></button>}
           </div>
-          <button onClick={() => mostraForm ? cancelarForm() : abrirNovo()}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-white flex-shrink-0"
-            style={{ background: mostraForm ? '#374151' : 'var(--invicta-green-dark)' }}>
-            {mostraForm ? <X size={12} /> : <Plus size={12} />}
-            {mostraForm ? 'Cancelar' : 'Novo'}
-          </button>
+          {podeCadastro && (
+            <button onClick={() => mostraForm ? cancelarForm() : abrirNovo()}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-white flex-shrink-0"
+              style={{ background: mostraForm ? '#374151' : 'var(--invicta-green-dark)' }}>
+              {mostraForm ? <X size={12} /> : <Plus size={12} />}
+              {mostraForm ? 'Cancelar' : 'Novo'}
+            </button>
+          )}
         </div>
 
         {/* Índice A-Z */}
@@ -271,13 +272,13 @@ export function ProdutoresPanel() {
                         </p>
                       </div>
                     </button>
-                    {podeEdit && (
+                    {podeCadastro && (
                       <button onClick={() => abrirEdicao(c)} title="Editar cliente"
                         className="p-1.5 rounded flex-shrink-0" style={{ color: '#93c5fd' }}>
                         <Pencil size={13} />
                       </button>
                     )}
-                    {souAdmin && (
+                    {podeExcluir && (
                       <button onClick={() => { setAlvoExcluir(c); setTxtConfirma(''); }} title="Excluir cliente"
                         className="p-1.5 rounded flex-shrink-0" style={{ color: '#f87171' }}>
                         <Trash2 size={13} />
