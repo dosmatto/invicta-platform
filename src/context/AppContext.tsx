@@ -1,9 +1,10 @@
 'use client';
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { useRouter } from 'next/navigation';
 import { seedIfEmpty } from '@/lib/seed';
 import { bootCloud } from '@/lib/cloud';
-import { empresaIfEmpty, adotarEmpresasLocais, garantirEmpresaInvicta, uidUsuario, ehOwner, seedPapeis, seedPermissoes, papelDoEmail, emailUsuario, precisaTrocarSenha } from '@/lib/empresa';
+import { empresaIfEmpty, adotarEmpresasLocais, garantirEmpresaInvicta, uidUsuario, ehOwner, seedPapeis, seedPermissoes, seedPlanos, papelDoEmail, papelDoUsuario, emailUsuario, precisaTrocarSenha } from '@/lib/empresa';
 import { limparBaseOperacional } from '@/lib/admin/manutencao';
 import { TrocaSenhaObrigatoria } from '@/components/auth/TrocaSenhaObrigatoria';
 import { migrarLaboratoriosV1, migrarSafrasV1, migrarGradesV1, migrarPreferenciasV1 } from '@/lib/biblioteca';
@@ -111,7 +112,8 @@ const AppContext = createContext<AppContextType>({
   setFertilidadeLabels: () => {},
 });
 
-export function AppProvider({ children }: { children: ReactNode }) {
+export function AppProvider({ children, redirectProdutorParaPortal }: { children: ReactNode; redirectProdutorParaPortal?: boolean }) {
+  const router = useRouter();
   const [activePanel, setActivePanel] = useState<string | null>('dashboard');
   const [mapMode, setMapMode] = useState<MapMode>('satellite');
 
@@ -144,6 +146,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       await bootCloud().catch(() => {});       // hidrata empresas/dados/papéis da nuvem
       seedPapeis();                            // garante owner/admin oficiais (idempotente)
       seedPermissoes();                        // semeia as permissões padrão por papel
+      seedPlanos();                            // semeia os planos de assinatura (Básico/Interm./Completo)
       adotarEmpresasLocais(uidUsuario());      // empresa (cosmética, single-tenant)
       garantirEmpresaInvicta(uidUsuario());    // empresa padrão "Invicta"
       migracoesLocais();
@@ -162,6 +165,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     (window as unknown as { invLimparBase?: typeof limparBaseOperacional }).invLimparBase = limparBaseOperacional;
     console.info('[invicta] Owner: para zerar a base (mantendo a Biblioteca), rode no Console:  await invLimparBase("APAGAR TUDO")');
   }, [dadosProntos]);
+
+  // Produtor não usa o app do mapa — vai direto pro portal (read-only).
+  useEffect(() => {
+    if (!dadosProntos || !redirectProdutorParaPortal) return;
+    if (papelDoUsuario() === 'produtor') router.replace('/portal');
+  }, [dadosProntos]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [activeModule, setActiveModule] = useState<string | null>(null);
   const [uploadedGeo, setUploadedGeo] = useState<GeoJSON.FeatureCollection | null>(null);

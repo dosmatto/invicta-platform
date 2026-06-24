@@ -1,6 +1,11 @@
-export const APP_VERSION = '0.62.0';
+export const APP_VERSION = '0.63.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.63.0': [
+    'Produtor + Assinatura (Fase U3.B): novo papel Produtor. Ao convidar um Produtor, você escolhe o Cliente dele + o Plano de assinatura',
+    'Planos de assinatura editáveis (aba Usuários, só Owner): renomeie e marque quais seções do portal cada plano libera (Resumo, Fertilidade, Amostragem, Recomendações, Compactação, Relatórios, Arquivos). Sementes: Básico/Intermediário/Completo',
+    'Portal do Produtor (/portal): o produtor logado cai no portal, vê só o cliente dele (fazendas → talhões), abre a página do talhão somente-leitura com as abas que o plano libera',
+  ],
   '0.62.0': [
     'Convite de usuário (Fase U3): na aba Usuários (Biblioteca), o Owner digita o e-mail + papel e clica "Convidar" — o app CRIA a conta de login e gera uma senha provisória para você repassar (sem precisar do Console do Firebase)',
     'No 1º acesso, o usuário convidado é OBRIGADO a definir uma nova senha antes de usar o app',

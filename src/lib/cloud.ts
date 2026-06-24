@@ -35,6 +35,7 @@ const KEYS_LISTA = [
   'inv_empresas',                      // multi-tenant — empresas/membros (sync entre máquinas)
   'inv_papeis',                        // papéis por e-mail (owner/admin/…) — fonte da verdade de acesso
   'inv_permissoes',                    // capacidades por papel (U2, editável pelo Owner)
+  'inv_planos',                        // planos de assinatura do produtor (U3.B)
 ];
 // Configurações (objeto único por chave) — coleção 'inv_config', doc = chave
 const KEYS_OBJ = ['inv_etiqueta_cfg'];

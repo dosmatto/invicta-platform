@@ -10,7 +10,7 @@
 import { getFb } from './firebase';
 import { cloudPushLista } from './cloud';
 
-export type PapelMembro = 'owner' | 'admin' | 'agronomo' | 'operador' | 'editor' | 'viewer';
+export type PapelMembro = 'owner' | 'admin' | 'agronomo' | 'operador' | 'produtor' | 'editor' | 'viewer';
 
 export interface Empresa {
   id: string;
@@ -28,7 +28,11 @@ const K_PAPEIS = 'inv_papeis';
 // Papéis por E-MAIL (fonte da verdade, sincronizada). Substitui a antiga
 // "auto-promoção a admin" (todo login virava admin). Quem não está na lista =
 // sem papel = acesso bloqueado. Owner é o nível máximo.
-export interface RegistroPapel { id: string; email: string; papel: PapelMembro; senhaProvisoria?: boolean; }
+export interface RegistroPapel {
+  id: string; email: string; papel: PapelMembro; senhaProvisoria?: boolean;
+  clienteId?: string;  // produtor: qual Cliente ele é (escopo do portal)
+  planoId?: string;    // produtor: qual plano de assinatura (seções liberadas)
+}
 const PAPEIS_SEED: Array<{ email: string; papel: PapelMembro }> = [
   { email: 'william@invicta.agr.br', papel: 'owner' },
   { email: 'jhon@invicta.agr.br', papel: 'admin' },
@@ -83,15 +87,25 @@ export function papelDoEmail(email: string | null): PapelMembro | null {
   const e = normEmail(email);
   return getPapeis().find(p => p.email === e)?.papel ?? null;
 }
-export function definirPapelEmail(email: string, papel: PapelMembro, senhaProvisoria?: boolean) {
+export function definirPapelEmail(
+  email: string, papel: PapelMembro,
+  extra?: { senhaProvisoria?: boolean; clienteId?: string; planoId?: string },
+) {
   const e = normEmail(email);
   if (!e) return;
   const lista = load<RegistroPapel>(K_PAPEIS);
   const idx = lista.findIndex(p => p.email === e);
-  const extra = senhaProvisoria !== undefined ? { senhaProvisoria } : {};
-  if (idx >= 0) lista[idx] = { ...lista[idx], papel, ...extra };
-  else lista.push({ id: e, email: e, papel, ...extra });
+  const patch = { papel, ...(extra ?? {}) };
+  if (idx >= 0) lista[idx] = { ...lista[idx], ...patch };
+  else lista.push({ id: e, email: e, ...patch });
   save(K_PAPEIS, lista);
+}
+
+// Registro de papel do usuário logado (produtor: traz clienteId/planoId).
+export function meuRegistro(): RegistroPapel | null {
+  const email = emailUsuario();
+  if (!email) return null;
+  return getPapeis().find(p => p.email === email) ?? null;
 }
 
 // 1º acesso: o usuário convidado precisa trocar a senha provisória.
@@ -140,14 +154,14 @@ export const CAPACIDADES: Array<{ id: Capacidade; label: string; curto: string }
   { id: 'relatorios', label: 'Gerar relatórios (PDF)', curto: 'Relatórios' },
 ];
 
-// Papéis atribuíveis na UI (Owner sempre tudo; Produtor/Amostrador = fases U3).
-export const PAPEIS_ATRIBUIVEIS: PapelMembro[] = ['owner', 'admin', 'agronomo', 'operador'];
+// Papéis atribuíveis na UI (Owner sempre tudo; Amostrador = fase futura).
+export const PAPEIS_ATRIBUIVEIS: PapelMembro[] = ['owner', 'admin', 'agronomo', 'operador', 'produtor'];
 export const ROTULO_PAPEL: Record<string, string> = {
-  owner: 'Owner', admin: 'Admin', agronomo: 'Agrônomo', operador: 'Operador de campo', editor: 'Editor', viewer: 'Viewer',
+  owner: 'Owner', admin: 'Admin', agronomo: 'Agrônomo', operador: 'Operador de campo', produtor: 'Produtor', editor: 'Editor', viewer: 'Viewer',
 };
 // Rótulo curto p/ cabeçalhos estreitos (matriz de permissões).
 export const ROTULO_CURTO: Record<string, string> = {
-  owner: 'Owner', admin: 'Admin', agronomo: 'Agrôn.', operador: 'Oper.', editor: 'Editor', viewer: 'Viewer',
+  owner: 'Owner', admin: 'Admin', agronomo: 'Agrôn.', operador: 'Oper.', produtor: 'Produtor', editor: 'Editor', viewer: 'Viewer',
 };
 
 type Caps = Record<Capacidade, boolean>;
@@ -193,6 +207,65 @@ export function pode(cap: Capacidade, papel: PapelMembro | null = papelDoUsuario
   if (!papel) return false;
   if (papel === 'owner') return true;
   return getPermissoes()[papel]?.[cap] ?? DEFAULTS_PERMISSOES[papel]?.[cap] ?? false;
+}
+
+// ── Planos de assinatura do Produtor (U3.B — editáveis pelo Owner) ───────────
+// Cada plano (nome editável) libera um conjunto de SEÇÕES do portal (= abas da
+// página do talhão que têm dado pronto). O produtor é read-only.
+const K_PLANOS = 'inv_planos';
+
+export type SecaoPortal = 'resumo' | 'fertilidade' | 'amostragem' | 'recomendacoes' | 'compactacao' | 'relatorios' | 'arquivos';
+export const SECOES_PORTAL: Array<{ id: SecaoPortal; label: string }> = [
+  { id: 'resumo', label: 'Resumo' },
+  { id: 'fertilidade', label: 'Fertilidade (mapas)' },
+  { id: 'amostragem', label: 'Amostragem' },
+  { id: 'recomendacoes', label: 'Recomendações' },
+  { id: 'compactacao', label: 'Compactação' },
+  { id: 'relatorios', label: 'Relatórios' },
+  { id: 'arquivos', label: 'Arquivos' },
+];
+export interface PlanoAssinatura { id: string; nome: string; secoes: Record<string, boolean>; }
+
+const secoesDe = (ids: SecaoPortal[]): Record<string, boolean> =>
+  Object.fromEntries(SECOES_PORTAL.map(s => [s.id, ids.includes(s.id)]));
+const PLANOS_SEED: PlanoAssinatura[] = [
+  { id: 'basico', nome: 'Básico', secoes: secoesDe(['resumo', 'fertilidade']) },
+  { id: 'intermediario', nome: 'Intermediário', secoes: secoesDe(['resumo', 'fertilidade', 'recomendacoes', 'compactacao']) },
+  { id: 'completo', nome: 'Completo', secoes: secoesDe(['resumo', 'fertilidade', 'amostragem', 'recomendacoes', 'compactacao', 'relatorios', 'arquivos']) },
+];
+
+export function getPlanos(): PlanoAssinatura[] { return load<PlanoAssinatura>(K_PLANOS); }
+export function planoPorId(id: string | undefined): PlanoAssinatura | null {
+  if (!id) return null;
+  return getPlanos().find(p => p.id === id) ?? null;
+}
+export function seedPlanos() {
+  const lista = load<PlanoAssinatura>(K_PLANOS);
+  let mudou = false;
+  for (const s of PLANOS_SEED) {
+    if (!lista.some(p => p.id === s.id)) { lista.push({ ...s, secoes: { ...s.secoes } }); mudou = true; }
+  }
+  if (mudou) save(K_PLANOS, lista);
+}
+export function salvarPlano(p: { nome: string; secoes?: Record<string, boolean> }): PlanoAssinatura {
+  const lista = load<PlanoAssinatura>(K_PLANOS);
+  const novo: PlanoAssinatura = { id: 'plano-' + uid(), nome: p.nome.trim() || 'Plano', secoes: p.secoes ?? secoesDe(['resumo']) };
+  lista.push(novo);
+  save(K_PLANOS, lista);
+  return novo;
+}
+export function atualizarPlano(id: string, patch: Partial<Omit<PlanoAssinatura, 'id'>>) {
+  const lista = load<PlanoAssinatura>(K_PLANOS);
+  const idx = lista.findIndex(p => p.id === id);
+  if (idx >= 0) { lista[idx] = { ...lista[idx], ...patch }; save(K_PLANOS, lista); }
+}
+export function excluirPlano(id: string) {
+  save(K_PLANOS, load<PlanoAssinatura>(K_PLANOS).filter(p => p.id !== id));
+}
+export function toggleSecaoPlano(id: string, secao: SecaoPortal, valor: boolean) {
+  const lista = load<PlanoAssinatura>(K_PLANOS);
+  const idx = lista.findIndex(p => p.id === id);
+  if (idx >= 0) { lista[idx] = { ...lista[idx], secoes: { ...lista[idx].secoes, [secao]: valor } }; save(K_PLANOS, lista); }
 }
 
 // CRUD básico

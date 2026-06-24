@@ -13,7 +13,7 @@ const MapView = dynamic(
 
 export default function PainelLayout({ children }: { children: React.ReactNode }) {
   return (
-    <AppProvider>
+    <AppProvider redirectProdutorParaPortal>
       <div className="flex flex-col h-screen overflow-hidden">
         <TopBar />
         <div className="flex flex-1 overflow-hidden relative">

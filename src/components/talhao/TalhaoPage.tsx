@@ -23,6 +23,7 @@ import { ArquivosSection } from '@/components/talhao/ArquivosSection';
 import { LabImportSection } from '@/components/talhao/LabImportSection';
 import { ImportarGradeSection } from '@/components/talhao/ImportarGradeSection';
 import { GeradorRelatorios } from '@/components/talhao/GeradorRelatorios';
+import { papelDoUsuario, meuRegistro, planoPorId } from '@/lib/empresa';
 import {
   ChevronLeft, Home, Leaf, Grid3x3, BarChart3, FileSpreadsheet,
   Activity, Satellite, FolderOpen, FileText, Clock,
@@ -123,14 +124,20 @@ export function TalhaoPage({ id }: { id: string }) {
     );
   }
 
+  // Produtor: read-only e só vê as abas que o plano de assinatura libera.
+  const ehProdutor = papelDoUsuario() === 'produtor';
+  const plano = ehProdutor ? planoPorId(meuRegistro()?.planoId) : null;
+  const tabsVisiveis = ehProdutor ? TABS.filter(t => !!plano?.secoes?.[t.id]) : TABS;
+  const tabAtivo: TabId = tabsVisiveis.some(t => t.id === tab) ? tab : (tabsVisiveis[0]?.id ?? 'resumo');
+
   return (
     <div className="flex flex-col h-screen overflow-hidden" style={{ background: '#061525' }}>
       {/* Barra de contexto fixa */}
       <header className="flex-shrink-0 flex items-center gap-3 px-4 py-2.5" style={{ background: 'var(--invicta-blue-dark)', borderBottom: '1px solid #1a3a6b' }}>
-        <button onClick={voltar} title="Voltar ao mapa da fazenda"
+        <button onClick={ehProdutor ? () => router.push('/portal') : voltar} title={ehProdutor ? 'Voltar ao portal' : 'Voltar ao mapa da fazenda'}
           className="flex items-center gap-1 px-2 py-1.5 rounded text-xs font-semibold flex-shrink-0"
           style={{ background: '#1a3a6b', color: '#93c5fd' }}>
-          <ChevronLeft size={14} /> Mapa
+          <ChevronLeft size={14} /> {ehProdutor ? 'Portal' : 'Mapa'}
         </button>
 
         <div className="flex items-center gap-2 text-xs min-w-0" style={{ color: '#cbd5e1' }}>
@@ -166,8 +173,8 @@ export function TalhaoPage({ id }: { id: string }) {
         <aside className="flex flex-col flex-shrink-0" style={{ width: 440, background: 'var(--invicta-blue-dark)', borderRight: '1px solid #1a3a6b' }}>
           {/* Navegação por abas */}
           <nav className="flex flex-wrap gap-1 px-2 py-2 flex-shrink-0" style={{ borderBottom: '1px solid #1a3a6b' }}>
-            {TABS.map(t => {
-              const sel = t.id === tab;
+            {tabsVisiveis.map(t => {
+              const sel = t.id === tabAtivo;
               const Icon = t.icon;
               return (
                 <button key={t.id} onClick={() => setTab(t.id)}
@@ -180,16 +187,20 @@ export function TalhaoPage({ id }: { id: string }) {
           </nav>
 
           <div className="flex-1 overflow-y-auto">
-            {tab === 'resumo' && talhao && <ResumoTab talhao={talhao} fazenda={fazenda} safraNome={safraSel} cultura={cultura} />}
-            {tab === 'fertilidade' && (
+            {tabAtivo === 'resumo' && talhao && <ResumoTab talhao={talhao} fazenda={fazenda} safraNome={safraSel} cultura={cultura} />}
+            {tabAtivo === 'fertilidade' && (
               <>
-                <div className="px-4 pt-3 pb-1 text-[10px] font-bold uppercase tracking-wider" style={{ color: '#a78bfa' }}>Importação de Laboratório</div>
-                <LabImportSection />
-                <div className="px-4 pt-3 pb-1 text-[10px] font-bold uppercase tracking-wider" style={{ color: '#4ade80', borderTop: '1px solid #1a3a6b' }}>Mapa de Fertilidade</div>
+                {!ehProdutor && (
+                  <>
+                    <div className="px-4 pt-3 pb-1 text-[10px] font-bold uppercase tracking-wider" style={{ color: '#a78bfa' }}>Importação de Laboratório</div>
+                    <LabImportSection />
+                    <div className="px-4 pt-3 pb-1 text-[10px] font-bold uppercase tracking-wider" style={{ color: '#4ade80', borderTop: '1px solid #1a3a6b' }}>Mapa de Fertilidade</div>
+                  </>
+                )}
                 <FertilidadeSection safraNome={safraSel} />
               </>
             )}
-            {tab === 'amostragem' && (
+            {tabAtivo === 'amostragem' && (
               <>
                 <div className="px-4 pt-3 pb-1 text-[10px] font-bold uppercase tracking-wider" style={{ color: '#22d3ee' }}>Importar Grade externa</div>
                 <ImportarGradeSection />
@@ -197,12 +208,12 @@ export function TalhaoPage({ id }: { id: string }) {
                 <AmostragemModulo safraNome={safraSel} />
               </>
             )}
-            {tab === 'compactacao' && <CompactacaoSection safraNome={safraSel} />}
-            {tab === 'recomendacoes' && <RecomendacaoSection safraNome={safraSel} />}
-            {tab === 'arquivos' && <ArquivosSection safraNome={safraSel} />}
-            {tab === 'relatorios' && <GeradorRelatorios safraNome={safraSel} />}
-            {!['resumo', 'fertilidade', 'amostragem', 'compactacao', 'recomendacoes', 'arquivos', 'relatorios'].includes(tab) && (
-              <EmBreve label={TABS.find(t => t.id === tab)?.label ?? ''} />
+            {tabAtivo === 'compactacao' && <CompactacaoSection safraNome={safraSel} />}
+            {tabAtivo === 'recomendacoes' && <RecomendacaoSection safraNome={safraSel} />}
+            {tabAtivo === 'arquivos' && <ArquivosSection safraNome={safraSel} />}
+            {tabAtivo === 'relatorios' && <GeradorRelatorios safraNome={safraSel} />}
+            {!['resumo', 'fertilidade', 'amostragem', 'compactacao', 'recomendacoes', 'arquivos', 'relatorios'].includes(tabAtivo) && (
+              <EmBreve label={TABS.find(t => t.id === tabAtivo)?.label ?? ''} />
             )}
           </div>
         </aside>
