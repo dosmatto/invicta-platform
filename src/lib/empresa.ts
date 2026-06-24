@@ -114,21 +114,25 @@ export type Capacidade =
   | 'cadastro' | 'excluirProdutor' | 'amostragem' | 'importarLaudo'
   | 'fertilidade' | 'recomendacoes' | 'biblioteca' | 'relatorios';
 
-export const CAPACIDADES: Array<{ id: Capacidade; label: string }> = [
-  { id: 'cadastro', label: 'Cadastrar/editar Cliente·Fazenda·Talhão' },
-  { id: 'excluirProdutor', label: 'Excluir produtor' },
-  { id: 'amostragem', label: 'Amostragem (grades, etiquetas, SHP/KML)' },
-  { id: 'importarLaudo', label: 'Importar laudo de laboratório' },
-  { id: 'fertilidade', label: 'Processar fertilidade (interpolar/zona)' },
-  { id: 'recomendacoes', label: 'Recomendações (simular/cenários/arquivos)' },
-  { id: 'biblioteca', label: 'Biblioteca (criar/editar)' },
-  { id: 'relatorios', label: 'Gerar relatórios (PDF)' },
+export const CAPACIDADES: Array<{ id: Capacidade; label: string; curto: string }> = [
+  { id: 'cadastro', label: 'Cadastrar/editar Cliente·Fazenda·Talhão', curto: 'Cadastro' },
+  { id: 'excluirProdutor', label: 'Excluir produtor', curto: 'Excluir produtor' },
+  { id: 'amostragem', label: 'Amostragem (grades, etiquetas, SHP/KML)', curto: 'Amostragem' },
+  { id: 'importarLaudo', label: 'Importar laudo de laboratório', curto: 'Importar laudo' },
+  { id: 'fertilidade', label: 'Processar fertilidade (interpolar/zona)', curto: 'Fertilidade' },
+  { id: 'recomendacoes', label: 'Recomendações (simular/cenários/arquivos)', curto: 'Recomendações' },
+  { id: 'biblioteca', label: 'Biblioteca (criar/editar)', curto: 'Biblioteca' },
+  { id: 'relatorios', label: 'Gerar relatórios (PDF)', curto: 'Relatórios' },
 ];
 
 // Papéis atribuíveis na UI (Owner sempre tudo; Produtor/Amostrador = fases U3).
 export const PAPEIS_ATRIBUIVEIS: PapelMembro[] = ['owner', 'admin', 'agronomo', 'operador'];
 export const ROTULO_PAPEL: Record<string, string> = {
   owner: 'Owner', admin: 'Admin', agronomo: 'Agrônomo', operador: 'Operador de campo', editor: 'Editor', viewer: 'Viewer',
+};
+// Rótulo curto p/ cabeçalhos estreitos (matriz de permissões).
+export const ROTULO_CURTO: Record<string, string> = {
+  owner: 'Owner', admin: 'Admin', agronomo: 'Agrôn.', operador: 'Oper.', editor: 'Editor', viewer: 'Viewer',
 };
 
 type Caps = Record<Capacidade, boolean>;

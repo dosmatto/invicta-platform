@@ -1,6 +1,9 @@
-export const APP_VERSION = '0.60.0';
+export const APP_VERSION = '0.60.1';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.60.1': [
+    'Permissões por papel: matriz reorganizada para caber no painel (rótulos curtos nas colunas Admin/Agrôn./Oper. e nas capacidades; passe o mouse para ver o nome completo) — antes a coluna do Operador estourava a largura',
+  ],
   '0.60.0': [
     'Permissões por papel (Fase U2): novos papéis Agrônomo e Operador de campo + matriz CONFIGURÁVEL pelo Owner (aba Usuários) — liga/desliga, por papel, o que cada um pode fazer (cadastro, excluir produtor, amostragem, importar laudo, fertilidade, recomendações, biblioteca, relatórios)',
     'Defaults: Agrônomo só Recomendações + relatórios; Operador só Amostragem. Owner/Admin têm tudo (não mudou nada para vocês)',

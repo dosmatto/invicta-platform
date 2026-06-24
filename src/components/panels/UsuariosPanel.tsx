@@ -11,7 +11,7 @@ import {
   getPapeis, definirPapelEmail, removerPapelEmail,
   getPermissoes, definirPermissao,
   ehOwner, emailUsuario,
-  CAPACIDADES, PAPEIS_ATRIBUIVEIS, ROTULO_PAPEL,
+  CAPACIDADES, PAPEIS_ATRIBUIVEIS, ROTULO_PAPEL, ROTULO_CURTO,
   type PapelMembro, type RegistroPapel, type Capacidade,
 } from '@/lib/empresa';
 import { UserPlus, Trash2, AlertTriangle, ShieldCheck, SlidersHorizontal } from 'lucide-react';
@@ -139,31 +139,29 @@ export function UsuariosPanel() {
             <SlidersHorizontal size={12} /> Permissões por papel
           </div>
           <p className="text-[9px] mb-2" style={{ color: '#64748b' }}>Owner tem tudo. Marque o que cada papel pode fazer.</p>
-          <div className="overflow-x-auto">
-            <table className="w-full text-[10px]" style={{ color: '#cbd5e1' }}>
-              <thead>
-                <tr>
-                  <th className="text-left font-semibold pb-1" style={{ color: '#64748b' }}>Capacidade</th>
+          <table className="w-full text-[10px]" style={{ color: '#cbd5e1', tableLayout: 'fixed' }}>
+            <thead>
+              <tr>
+                <th className="text-left font-semibold pb-1" style={{ color: '#64748b' }}>Capacidade</th>
+                {PAPEIS_CONFIG.map(p => (
+                  <th key={p} className="pb-1 font-semibold text-center" style={{ color: '#93c5fd', width: 44 }} title={ROTULO_PAPEL[p]}>{ROTULO_CURTO[p]}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {CAPACIDADES.map(c => (
+                <tr key={c.id} style={{ borderTop: '1px solid #0f2240' }}>
+                  <td className="py-1.5 pr-1 leading-tight" title={c.label}>{c.curto}</td>
                   {PAPEIS_CONFIG.map(p => (
-                    <th key={p} className="px-1 pb-1 font-semibold text-center" style={{ color: '#93c5fd' }}>{ROTULO_PAPEL[p]}</th>
+                    <td key={p} className="text-center">
+                      <input type="checkbox" checked={!!perms[p]?.[c.id]} onChange={() => togglePerm(p, c.id)}
+                        className="accent-green-600 cursor-pointer" style={{ width: 15, height: 15 }} />
+                    </td>
                   ))}
                 </tr>
-              </thead>
-              <tbody>
-                {CAPACIDADES.map(c => (
-                  <tr key={c.id} style={{ borderTop: '1px solid #0f2240' }}>
-                    <td className="py-1 pr-2">{c.label}</td>
-                    {PAPEIS_CONFIG.map(p => (
-                      <td key={p} className="text-center">
-                        <input type="checkbox" checked={!!perms[p]?.[c.id]} onChange={() => togglePerm(p, c.id)}
-                          className="accent-green-600 cursor-pointer" style={{ width: 14, height: 14 }} />
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>
