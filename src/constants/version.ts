@@ -1,6 +1,9 @@
-export const APP_VERSION = '0.64.0';
+export const APP_VERSION = '0.64.1';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.64.1': [
+    'Correção (Amostragem · Grid): o simulador não desenha mais pontos no mapa sozinho. Antes, ao abrir a aba, ele gerava uma grade com a densidade padrão (ex.: 26 pontos) mesmo sem você escolher um Padrão de Amostragem. Agora o grid só aparece depois que você seleciona um Padrão (o "comando de grid")',
+  ],
   '0.64.0': [
     'Município automático na Fazenda: na aba Dados da fazenda, botão "Detectar município (pelos talhões)" preenche município/UF a partir do polígono dos talhões (via OpenStreetMap). Se os talhões pegarem mais de um município, lista todos',
   ],

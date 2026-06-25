@@ -94,9 +94,11 @@ export function SimuladorAmostragem({ safraNome: safraProp }: { safraNome?: stri
   const anguloAuto = useMemo(() => uploadedGeo ? Math.round(anguloMaiorDimensao(uploadedGeo)) : 0, [uploadedGeo]);
   const rotacaoEfetiva = rotacaoAuto ? anguloAuto : rotacaoGraus;
 
-  // Geração da grade + atribuição de profundidades (ao vivo, a partir dos parâmetros)
+  // Geração da grade + atribuição de profundidades (ao vivo, a partir dos parâmetros).
+  // Só gera quando há um padrão selecionado: sem padrão, nada vai ao mapa (evita
+  // pontos "automáticos" antes de o usuário acionar o grid).
   const gerados = useMemo<PontoAmostragem[]>(() => {
-    if (!uploadedGeo) return [];
+    if (!uploadedGeo || !padrao) return [];
     const pts = gerarGrid({ geojson: uploadedGeo, densidadeHaPonto: densidade, distanciaBordaM: distanciaBorda, rotacaoGraus: rotacaoEfetiva, aleatoriedade, seed: seedPos, modo: modoDist });
     const n = pts.length;
     const selecoes = profs.map(p => selecionar(n, p.percentual, modoSel, seedSel + p.rotulo.length));
@@ -104,7 +106,7 @@ export function SimuladorAmostragem({ safraNome: safraProp }: { safraNome?: stri
       const rotulos = profs.filter((_, pi) => selecoes[pi].has(i)).map(p => p.rotulo);
       return { ordem: i, lng: pt.lng, lat: pt.lat, profs: rotulos.length, profundidades: rotulos };
     });
-  }, [uploadedGeo, densidade, distanciaBorda, rotacaoEfetiva, aleatoriedade, seedPos, profs, modoSel, seedSel, modoDist]);
+  }, [uploadedGeo, padrao, densidade, distanciaBorda, rotacaoEfetiva, aleatoriedade, seedPos, profs, modoSel, seedSel, modoDist]);
 
   // Pontos efetivos: edição manual (se houver) tem prioridade sobre os gerados
   const pontosEfetivos = pontosManuais ?? gerados;
