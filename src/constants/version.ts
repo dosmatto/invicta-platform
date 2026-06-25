@@ -1,6 +1,9 @@
-export const APP_VERSION = '0.63.0';
+export const APP_VERSION = '0.64.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.64.0': [
+    'Município automático na Fazenda: na aba Dados da fazenda, botão "Detectar município (pelos talhões)" preenche município/UF a partir do polígono dos talhões (via OpenStreetMap). Se os talhões pegarem mais de um município, lista todos',
+  ],
   '0.63.0': [
     'Produtor + Assinatura (Fase U3.B): novo papel Produtor. Ao convidar um Produtor, você escolhe o Cliente dele + o Plano de assinatura',
     'Planos de assinatura editáveis (aba Usuários, só Owner): renomeie e marque quais seções do portal cada plano libera (Resumo, Fertilidade, Amostragem, Recomendações, Compactação, Relatórios, Arquivos). Sementes: Básico/Intermediário/Completo',

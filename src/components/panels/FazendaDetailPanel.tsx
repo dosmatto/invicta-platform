@@ -2,8 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { useApp } from '@/context/AppContext';
-import { getFazendas, getTalhoes, saveTalhao, Fazenda, Talhao } from '@/lib/store';
-import { ChevronLeft, ChevronRight, Plus, Map, AlertTriangle, Save, X, ExternalLink } from 'lucide-react';
+import { getFazendas, getTalhoes, saveTalhao, updateFazenda, Fazenda, Talhao } from '@/lib/store';
+import { pode } from '@/lib/empresa';
+import { detectarMunicipiosFazenda } from '@/lib/geocode';
+import { ChevronLeft, ChevronRight, Plus, Map, AlertTriangle, Save, X, ExternalLink, MapPin, Loader2 } from 'lucide-react';
 import { PanelSection, PanelButton, StatusBadge } from './_shared';
 
 export function FazendaDetailPanel() {
@@ -14,6 +16,20 @@ export function FazendaDetailPanel() {
   const [mostraForm, setMostraForm] = useState(false);
   const [form, setForm] = useState({ nome: '' });
   const [salvando, setSalvando] = useState(false);
+  const [detectando, setDetectando] = useState(false);
+  const [msgMunicipio, setMsgMunicipio] = useState('');
+
+  async function detectarMunicipio() {
+    if (!nav.fazendaId || detectando) return;
+    setMsgMunicipio(''); setDetectando(true);
+    try {
+      const r = await detectarMunicipiosFazenda(nav.fazendaId);
+      if (!r) { setMsgMunicipio('Não consegui detectar — talhões sem geometria ou serviço indisponível.'); return; }
+      updateFazenda(nav.fazendaId, { municipio: r.municipios.join(' / '), ...(r.uf ? { estado: r.uf } : {}) });
+      setFazenda(getFazendas().find(f => f.id === nav.fazendaId) ?? null);
+      setMsgMunicipio(`Detectado: ${r.municipios.join(' / ')}${r.uf ? ` (${r.uf})` : ''}.`);
+    } finally { setDetectando(false); }
+  }
 
   // Monta a camada de polígonos dos talhões da fazenda para o mapa.
   // Robusto: aceita o geojson salvo como FeatureCollection, Feature, Geometry
@@ -249,6 +265,17 @@ export function FazendaDetailPanel() {
                 <p className="text-xs font-semibold" style={{ color: '#e2e8f0' }}>{d.value}</p>
               </div>
             ))}
+            {pode('cadastro') && (
+              <div className="px-4 py-3">
+                <button onClick={detectarMunicipio} disabled={detectando}
+                  className="w-full py-2 rounded text-xs font-bold text-white flex items-center justify-center gap-2 disabled:opacity-50"
+                  style={{ background: 'var(--invicta-blue-mid)' }}>
+                  {detectando ? <><Loader2 size={13} className="animate-spin" /> Detectando…</> : <><MapPin size={13} /> Detectar município (pelos talhões)</>}
+                </button>
+                {msgMunicipio && <p className="text-[10px] mt-1.5" style={{ color: '#94a3b8' }}>{msgMunicipio}</p>}
+                <p className="text-[9px] mt-1" style={{ color: '#475569' }}>Usa o OpenStreetMap a partir do polígono dos talhões.</p>
+              </div>
+            )}
           </PanelSection>
         )}
       </div>
