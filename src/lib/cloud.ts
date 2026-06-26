@@ -32,6 +32,7 @@ const KEYS_LISTA = [
   'inv_lab', 'inv_legendas',
   'inv_plantios',                      // Fase 8.B — cultura por talhão+safra
   'inv_compactacao',                   // Fase 8.C — penetrometria por profundidade
+  'inv_meap_ambientes',                // MEAP — Ambientes Produtivos / Zonas de Manejo (M1)
   'inv_empresas',                      // multi-tenant — empresas/membros (sync entre máquinas)
   'inv_papeis',                        // papéis por e-mail (owner/admin/…) — fonte da verdade de acesso
   'inv_permissoes',                    // capacidades por papel (U2, editável pelo Owner)

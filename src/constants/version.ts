@@ -1,6 +1,11 @@
-export const APP_VERSION = '0.64.1';
+export const APP_VERSION = '0.65.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.65.0': [
+    'Zonas de Manejo (MEAP) — Fase M1: a aba Resumo do talhão agora mostra um card real "Zonas de Manejo (MEAP)" com as suas zonas importadas, a área e o % de cada uma, e a HOMOGENEIDADE INTERNA (CV) de cada zona calculada dos resultados de laboratório (uma zona boa é homogênea = CV baixo)',
+    'O CV é calculado na escala original dos atributos (argila, P, K…), por zona, usando os pontos de lab que caem dentro de cada zona. A "variável de validação" (headline) prioriza argila/textura, depois CTC/saturações, depois macronutrientes',
+    'Sem resultados de laboratório casados à grade, o card aparece com as zonas e CV "—" (honesto). Convergência fica "—" até existir uma 2ª versão (versionamento real vem nas próximas fases). Documentação técnica completa em docs/13.00–13.99 (MEAP)',
+  ],
   '0.64.1': [
     'Correção (Amostragem · Grid): o simulador não desenha mais pontos no mapa sozinho. Antes, ao abrir a aba, ele gerava uma grade com a densidade padrão (ex.: 26 pontos) mesmo sem você escolher um Padrão de Amostragem. Agora o grid só aparece depois que você seleciona um Padrão (o "comando de grid")',
   ],

@@ -23,6 +23,7 @@ import { ArquivosSection } from '@/components/talhao/ArquivosSection';
 import { LabImportSection } from '@/components/talhao/LabImportSection';
 import { ImportarGradeSection } from '@/components/talhao/ImportarGradeSection';
 import { GeradorRelatorios } from '@/components/talhao/GeradorRelatorios';
+import { MeapResumoCard } from '@/components/talhao/MeapResumoCard';
 import { papelDoUsuario, meuRegistro, planoPorId } from '@/lib/empresa';
 import {
   ChevronLeft, Home, Leaf, Grid3x3, BarChart3, FileSpreadsheet,
@@ -261,6 +262,8 @@ function ResumoTab({ talhao, fazenda, safraNome, cultura }: { talhao: Talhao; fa
           </div>
         ))}
       </div>
+
+      <MeapResumoCard talhao={talhao} safraNome={safraNome} />
 
       <div className="p-3 rounded-lg flex items-start gap-2" style={{ background: '#0a1929', border: '1px solid #1a3a6b' }}>
         <Clock size={13} style={{ color: '#93c5fd' }} className="mt-0.5 flex-shrink-0" />

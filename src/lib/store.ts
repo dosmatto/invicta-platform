@@ -4,6 +4,7 @@
 
 import type { ResultadoAmostra, PerfilLabConfig } from './lab';
 import type { Legenda } from './legendas';
+import type { AmbienteProdutivo } from './meap/tipos';
 import { cloudPushLista } from './cloud';
 import { empresaAtivaId, uidUsuario } from './empresa';
 import {
@@ -593,6 +594,22 @@ export function saveImportacaoLab(i: Omit<ImportacaoLab, 'id' | 'criadoEm'>): Im
 
 export function deleteImportacaoLab(id: string) {
   save('inv_lab', load<ImportacaoLab>('inv_lab').filter(i => i.id !== id));
+}
+
+// ── MEAP: Ambientes Produtivos / Zonas de Manejo ────────────────────────────
+// 1 AmbienteProdutivo por talhão (id = talhaoId). Fase M1: adoção das zonas já
+// importadas + CV por zona (ver lib/meap/). Persistência no padrão da casa.
+
+export function getAmbienteMeap(talhaoId: string): AmbienteProdutivo | null {
+  return loadFiltrado<AmbienteProdutivo>('inv_meap_ambientes').find(a => a.talhaoId === talhaoId) ?? null;
+}
+
+export function saveAmbienteMeap(amb: AmbienteProdutivo): void {
+  const lista = load<AmbienteProdutivo>('inv_meap_ambientes');
+  const rec = comEmpresa({ ...amb });
+  const idx = lista.findIndex(a => a.id === amb.id);
+  if (idx >= 0) lista[idx] = rec; else lista.push(rec);
+  save('inv_meap_ambientes', lista);
 }
 
 // ── Legendas Agronômicas (motor de legendas) ──────────────────────────────
