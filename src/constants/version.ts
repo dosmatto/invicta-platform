@@ -1,6 +1,9 @@
-export const APP_VERSION = '0.65.0';
+export const APP_VERSION = '0.65.1';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.65.1': [
+    'Zonas de Manejo (MEAP) virou um MÓDULO PRÓPRIO: nova aba "Zonas de Manejo" na página do talhão (entre Amostragem e Produtividade), com as zonas coloridas no mapa + a homogeneidade (CV) por zona. Saiu do Resumo (não é mais um card lá)',
+  ],
   '0.65.0': [
     'Zonas de Manejo (MEAP) — Fase M1: a aba Resumo do talhão agora mostra um card real "Zonas de Manejo (MEAP)" com as suas zonas importadas, a área e o % de cada uma, e a HOMOGENEIDADE INTERNA (CV) de cada zona calculada dos resultados de laboratório (uma zona boa é homogênea = CV baixo)',
     'O CV é calculado na escala original dos atributos (argila, P, K…), por zona, usando os pontos de lab que caem dentro de cada zona. A "variável de validação" (headline) prioriza argila/textura, depois CTC/saturações, depois macronutrientes',

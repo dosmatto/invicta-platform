@@ -23,10 +23,10 @@ import { ArquivosSection } from '@/components/talhao/ArquivosSection';
 import { LabImportSection } from '@/components/talhao/LabImportSection';
 import { ImportarGradeSection } from '@/components/talhao/ImportarGradeSection';
 import { GeradorRelatorios } from '@/components/talhao/GeradorRelatorios';
-import { MeapResumoCard } from '@/components/talhao/MeapResumoCard';
+import { MeapSection } from '@/components/talhao/MeapSection';
 import { papelDoUsuario, meuRegistro, planoPorId } from '@/lib/empresa';
 import {
-  ChevronLeft, Home, Leaf, Grid3x3, BarChart3, FileSpreadsheet,
+  ChevronLeft, Home, Leaf, Grid3x3, Layers, BarChart3, FileSpreadsheet,
   Activity, Satellite, FolderOpen, FileText, Clock,
 } from 'lucide-react';
 
@@ -36,13 +36,14 @@ const MapView = dynamic(
 );
 
 type TabId =
-  | 'resumo' | 'fertilidade' | 'amostragem' | 'produtividade'
+  | 'resumo' | 'fertilidade' | 'amostragem' | 'zonas' | 'produtividade'
   | 'recomendacoes' | 'compactacao' | 'ndvi' | 'arquivos' | 'relatorios';
 
 const TABS: Array<{ id: TabId; label: string; icon: React.ElementType; pronto: boolean }> = [
   { id: 'resumo',        label: 'Resumo',        icon: Home,            pronto: true },
   { id: 'fertilidade',   label: 'Fertilidade',   icon: Leaf,            pronto: true },
   { id: 'amostragem',    label: 'Amostragem',    icon: Grid3x3,         pronto: true },
+  { id: 'zonas',         label: 'Zonas de Manejo', icon: Layers,        pronto: true },
   { id: 'produtividade', label: 'Produtividade', icon: BarChart3,       pronto: false },
   { id: 'recomendacoes', label: 'Recomendações', icon: FileSpreadsheet, pronto: true },
   { id: 'compactacao',   label: 'Compactação',   icon: Activity,        pronto: true },
@@ -209,11 +210,12 @@ export function TalhaoPage({ id }: { id: string }) {
                 <AmostragemModulo safraNome={safraSel} />
               </>
             )}
+            {tabAtivo === 'zonas' && talhao && <MeapSection talhao={talhao} safraNome={safraSel} />}
             {tabAtivo === 'compactacao' && <CompactacaoSection safraNome={safraSel} />}
             {tabAtivo === 'recomendacoes' && <RecomendacaoSection safraNome={safraSel} />}
             {tabAtivo === 'arquivos' && <ArquivosSection safraNome={safraSel} />}
             {tabAtivo === 'relatorios' && <GeradorRelatorios safraNome={safraSel} />}
-            {!['resumo', 'fertilidade', 'amostragem', 'compactacao', 'recomendacoes', 'arquivos', 'relatorios'].includes(tabAtivo) && (
+            {!['resumo', 'fertilidade', 'amostragem', 'zonas', 'compactacao', 'recomendacoes', 'arquivos', 'relatorios'].includes(tabAtivo) && (
               <EmBreve label={TABS.find(t => t.id === tabAtivo)?.label ?? ''} />
             )}
           </div>
@@ -262,8 +264,6 @@ function ResumoTab({ talhao, fazenda, safraNome, cultura }: { talhao: Talhao; fa
           </div>
         ))}
       </div>
-
-      <MeapResumoCard talhao={talhao} safraNome={safraNome} />
 
       <div className="p-3 rounded-lg flex items-start gap-2" style={{ background: '#0a1929', border: '1px solid #1a3a6b' }}>
         <Clock size={13} style={{ color: '#93c5fd' }} className="mt-0.5 flex-shrink-0" />
