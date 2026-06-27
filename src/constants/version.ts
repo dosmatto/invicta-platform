@@ -1,6 +1,10 @@
-export const APP_VERSION = '0.75.1';
+export const APP_VERSION = '0.76.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.76.0': [
+    'Zona de Manejo: ao CLICAR numa camada (NDVI, fertilidade, textura…), aparece uma PRÉVIA do mapa daquela camada sobre o talhão — assim você vê o que está escolhendo antes de gerar as zonas. A camada em prévia fica destacada (borda amarela); "ocultar prévia" remove',
+    'A prévia usa a legenda do atributo (NDVI pela legenda de NDVI; fertilidade pela do nutriente; demais por uma escala min–máx)',
+  ],
   '0.75.1': [
     'Zona de Manejo: as camadas de NDVI agora mostram a ORIGEM da imagem — "NDVI S2 ‹data›" (Sentinel-2) ou "NDVI CBERS ‹data›" (CBERS-4A 2 m) — para não confundir as fontes',
   ],

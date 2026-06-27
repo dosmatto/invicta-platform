@@ -9,11 +9,13 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useApp } from '@/context/AppContext';
-import { getZoneamentosMeap, saveZoneamentoMeap, deleteZoneamentoMeap, setZoneamentoPadraoMeap, type Talhao, type ZoneamentoMeap } from '@/lib/store';
+import { getZoneamentosMeap, saveZoneamentoMeap, deleteZoneamentoMeap, setZoneamentoPadraoMeap, getLegendasPorAtributo, type Talhao, type ZoneamentoMeap } from '@/lib/store';
 import { obterOuAdotarAmbiente } from '@/lib/meap/adocao';
 import { carregarCamadas, gerarMulti, dadosLabCV, type CamadasCarregadas } from '@/lib/meap/gerar';
 import { calcularCVZonas } from '@/lib/meap/cv';
-import { extrairPoligono, type RespZonarMulti } from '@/lib/fertilidade';
+import { extrairPoligono, coordsFromBounds, decodeGrid, type RespZonarMulti } from '@/lib/fertilidade';
+import { colorirGrid, colorirGridComLegenda } from '@/lib/raster';
+import { rampaVisualStops } from '@/lib/legendas';
 import { classeZona } from '@/lib/zonas';
 import { simboloElemento } from '@/lib/lab';
 import type { AmbienteProdutivo, Homogeneidade, MetricasZonaMeap } from '@/lib/meap/tipos';
@@ -92,8 +94,33 @@ function IndicesChart({ indices, sugestao }: { indices: { c: number; fpi: number
   );
 }
 
+// Rampa genérica (viridis-like) p/ a prévia de uma camada sem legenda própria.
+const RAMPA_PREVIEW: Array<[number, [number, number, number]]> = [
+  [0, [68, 1, 84]], [0.25, [59, 82, 139]], [0.5, [33, 145, 140]], [0.75, [94, 201, 98]], [1, [253, 231, 37]],
+];
+
+// Coloriza o grid de uma camada para a prévia no mapa: NDVI -> legenda NDVI
+// (contínua); fertilidade -> legenda do atributo; senão rampa genérica (min–máx).
+function corDaCamadaPreview(c: { nut: string; b64: string; shape: [number, number] }): string | null {
+  const grid = { b64: c.b64, shape: c.shape };
+  try {
+    if (c.nut.startsWith('ndvi')) {
+      const leg = getLegendasPorAtributo('ndvi')[0];
+      if (leg) return colorirGrid(grid, [0, 1], rampaVisualStops({ ...leg, estilo: 'continuo' })).dataUrl;
+    } else {
+      const leg = getLegendasPorAtributo(c.nut)[0];
+      if (leg) return colorirGridComLegenda(grid, leg).dataUrl;
+    }
+    const { valores } = decodeGrid(grid);
+    let mn = Infinity, mx = -Infinity;
+    for (let i = 0; i < valores.length; i++) { const v = valores[i]; if (isFinite(v)) { if (v < mn) mn = v; if (v > mx) mx = v; } }
+    if (mn < mx) return colorirGrid(grid, [mn, mx], RAMPA_PREVIEW).dataUrl;
+  } catch (e) { console.warn('[meap] prévia da camada falhou:', e); }
+  return null;
+}
+
 export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) {
-  const { setZonasManejo } = useApp();
+  const { setZonasManejo, setFertilidadeOverlay, setFertilidadeLabels } = useApp();
   const [amb, setAmb] = useState<AmbienteProdutivo | null>(null);
 
   // Camadas (mapas já interpolados)
@@ -113,6 +140,7 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
   // Zoneamentos salvos (vários por talhão; um é o "padrão" usado pela Amostragem)
   const [zoneamentos, setZoneamentos] = useState<ZoneamentoMeap[]>([]);
   const [vendoId, setVendoId] = useState<string | null>(null);  // zoneamento salvo em visualização no mapa
+  const [previewCh, setPreviewCh] = useState<string | null>(null);  // camada em pré-visualização no mapa
 
   const poligono = useMemo(() => {
     if (!talhao.geojson) return null;
@@ -196,6 +224,18 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
     return () => setZonasManejo(null);
   }, [vendoFc, res, zonas, talhao.zonasGeojson, setZonasManejo]);
 
+  // Prévia: clicar numa camada mostra o raster dela sobre o talhão (fase de
+  // seleção). Some quando há zonas geradas/visualizadas (aí o mapa mostra as zonas).
+  useEffect(() => {
+    if (!previewCh || !carregadas || res || vendoFc) { setFertilidadeOverlay(null); setFertilidadeLabels(null); return; }
+    const c = carregadas.camadas.find(x => x.chave === previewCh);
+    const url = c ? corDaCamadaPreview(c) : null;
+    if (!url) { setFertilidadeOverlay(null); return; }
+    setFertilidadeOverlay({ url, coordinates: coordsFromBounds(carregadas.bounds), opacity: 0.82 });
+    setFertilidadeLabels(null);
+  }, [previewCh, carregadas, res, vendoFc, setFertilidadeOverlay, setFertilidadeLabels]);
+  useEffect(() => () => { setFertilidadeOverlay(null); setFertilidadeLabels(null); }, [setFertilidadeOverlay, setFertilidadeLabels]);
+
   function toggle(ch: string) { setChaves(prev => prev.includes(ch) ? prev.filter(c => c !== ch) : [...prev, ch]); }
 
   function moverRank(pos: number, dir: -1 | 1) {
@@ -209,7 +249,7 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
 
   async function gerar() {
     if (!carregadas || chaves.length === 0) return;
-    setErro(null); setGerando(true);
+    setErro(null); setGerando(true); setPreviewCh(null);
     try {
       const r = await gerarMulti({ carregadas, chaves, poligono, algoritmo, nClasses, areaMinHa: areaMin });
       if (!r.features.length) throw new Error('Nenhuma zona gerada (sobreposição de dados insuficiente).');
@@ -309,14 +349,19 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
         ) : (
           <>
             <div>
-              <span className="text-[9px] font-semibold block mb-1" style={{ color: '#64748b' }}>Camadas a usar ({chaves.length}/{carregadas.camadas.length})</span>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[9px] font-semibold" style={{ color: '#64748b' }}>Camadas a usar ({chaves.length}/{carregadas.camadas.length}) — clique p/ pré-visualizar</span>
+                {previewCh && <button onClick={() => setPreviewCh(null)} className="text-[9px] font-semibold flex items-center gap-0.5" style={{ color: '#fbbf24' }}>ocultar prévia <X size={9} /></button>}
+              </div>
               <div className="flex flex-wrap gap-1">
                 {carregadas.camadas.map(c => {
                   const on = chaves.includes(c.chave);
+                  const prev = previewCh === c.chave;
                   return (
-                    <button key={c.chave} onClick={() => toggle(c.chave)}
+                    <button key={c.chave} onClick={() => { toggle(c.chave); setPreviewCh(c.chave); }}
                       className="flex items-center gap-1 px-1.5 py-1 rounded text-[10px] font-semibold"
-                      style={{ background: on ? 'var(--invicta-blue-mid)' : '#1a3a6b', color: on ? '#fff' : '#93c5fd', border: `1px solid ${on ? '#60a5fa' : '#1a3a6b'}` }}>
+                      title="Clique: seleciona e mostra a prévia no mapa"
+                      style={{ background: on ? 'var(--invicta-blue-mid)' : '#1a3a6b', color: on ? '#fff' : '#93c5fd', border: `1px solid ${prev ? '#fbbf24' : on ? '#60a5fa' : '#1a3a6b'}` }}>
                       {on && <Check size={9} />} {c.simbolo} <span style={{ opacity: 0.7 }}>{c.prof}</span>
                     </button>
                   );
