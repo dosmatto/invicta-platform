@@ -18,9 +18,9 @@ import {
   buscarNdviSentinel, listarCenasNdvi, buscarImagemSatelite,
   type RespNdvi, type CenaDisponivel, type FonteNdvi,
 } from '@/lib/msr';
-import { cloudSalvarMapa, cloudCarregarMapasPorPrefixo, cloudPodeGravar } from '@/lib/cloud';
+import { cloudSalvarMapa, cloudCarregarMapasPorPrefixo, cloudExcluirMapasPorPrefixo, cloudPodeGravar } from '@/lib/cloud';
 import type { Legenda } from '@/lib/legendas';
-import { Satellite, Loader2, AlertTriangle, Save, Calendar, Image as ImageIcon, Contrast, Check } from 'lucide-react';
+import { Satellite, Loader2, AlertTriangle, Calendar, Image as ImageIcon, Contrast, Check, Star } from 'lucide-react';
 
 const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
 const fmt2 = (v: number | null | undefined) => (v == null ? '—' : v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
@@ -67,6 +67,7 @@ export function NdviSection() {
   const [contraste, setContraste] = useState(false);
   const [imagens, setImagens] = useState<Record<string, Imagem>>({}); // cor verdadeira por data
   const [carregandoImg, setCarregandoImg] = useState(false);
+  const [salvos, setSalvos] = useState<Record<string, boolean>>({}); // cenas MANTIDAS (persistidas) por data
 
   // Legenda NDVI oficial -> versão CONTÍNUA (sem mexer no seed do sistema).
   const legNdvi: Legenda | undefined = useMemo(() => getLegendasPorAtributo('ndvi')[0], []);
@@ -103,7 +104,7 @@ export function NdviSection() {
 
   // Autoload das cenas salvas ao abrir o talhão / trocar de fonte.
   useEffect(() => {
-    setCenas({}); setImagens({}); setCandidatos([]); setDataSel(''); setEstado('idle'); setErro('');
+    setCenas({}); setImagens({}); setCandidatos([]); setDataSel(''); setEstado('idle'); setErro(''); setSalvos({});
     if (!nav.talhaoId) return;
     (async () => {
       const carregados = await cloudCarregarMapasPorPrefixo<MapaNdvi>(prefixoNuvem(nav.talhaoId!, fonte));
@@ -120,6 +121,7 @@ export function NdviSection() {
         novo[data] = m;
       }
       setCenas(novo);
+      setSalvos(Object.fromEntries(Object.keys(novo).map(k => [k, true]))); // o que veio da nuvem já está mantido
       const maisRecente = Object.keys(novo).sort().pop();
       if (maisRecente) setDataSel(maisRecente);
     })();
@@ -179,20 +181,32 @@ export function NdviSection() {
     if (!poligono) return;
     setCarregandoId(c.id); setErro('');
     try {
+      // Buscar NÃO salva: a cena fica só na sessão até o usuário clicar "Manter".
       const resp = await buscarNdviSentinel({ poligono, dataIni, dataFim, cenaId: c.id, fonte, pixelM: pixelDe(fonte) });
       const d = resp.cena.data ?? data;
       const criadoEm = new Date().toISOString();
       setCenas(prev => ({ ...prev, [d]: { resp, criadoEm } }));
       setDataSel(d);
-      if (nav.talhaoId && cloudPodeGravar()) {
-        const gz = await comprimirGrid(resp.grid);
-        cloudSalvarMapa(idNuvem(nav.talhaoId, fonte, d), { resp: { ...resp, grid: gz }, criadoEm });
-      }
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Falha ao calcular NDVI da cena.');
     } finally {
       setCarregandoId('');
     }
+  }
+
+  // Manter a cena selecionada: persiste na nuvem (vira disponível p/ Zona de Manejo).
+  async function manterCena() {
+    if (!sel || !dataSel || !nav.talhaoId) return;
+    if (!cloudPodeGravar()) { setErro('Faça login para manter a cena salva.'); return; }
+    const gz = await comprimirGrid(sel.resp.grid);
+    cloudSalvarMapa(idNuvem(nav.talhaoId, fonte, dataSel), { resp: { ...sel.resp, grid: gz }, criadoEm: sel.criadoEm });
+    setSalvos(s => ({ ...s, [dataSel]: true }));
+  }
+
+  function removerCena() {
+    if (!dataSel || !nav.talhaoId) return;
+    cloudExcluirMapasPorPrefixo(idNuvem(nav.talhaoId, fonte, dataSel)); // id exato = prefixo só desta cena
+    setSalvos(s => ({ ...s, [dataSel]: false }));
   }
 
   if (!legNdvi) return <div className="px-4 py-3"><Aviso texto="Legenda oficial de NDVI não encontrada (seed do sistema)." /></div>;
@@ -289,7 +303,9 @@ export function NdviSection() {
                   className="px-2 py-1 rounded text-[10px] font-bold flex items-center gap-1"
                   title={`${ddmmyy(c.data)}${c.nuvem != null ? ` · nuvem ${fmt2(c.nuvem)}%` : ''} · ${c.plataforma ?? ''}`}
                   style={{ background: ativa ? 'var(--invicta-blue-mid)' : '#1a3a6b', color: ativa ? '#fff' : (c.carregada ? '#86efac' : '#93c5fd') }}>
-                  {carregando ? <Loader2 size={10} className="animate-spin" /> : c.carregada ? <Check size={10} /> : null}
+                  {carregando ? <Loader2 size={10} className="animate-spin" />
+                    : (c.data && salvos[c.data]) ? <Star size={10} fill="currentColor" />
+                    : c.carregada ? <Check size={10} /> : null}
                   {ddmmyy(c.data)}
                   {c.nuvem != null && <span style={{ color: ativa ? '#cbd5e1' : '#64748b', fontWeight: 400 }}>· {Math.round(c.nuvem)}%</span>}
                 </button>
@@ -362,10 +378,21 @@ export function NdviSection() {
             </div>
           )}
 
-          {nav.talhaoId && cloudPodeGravar() && (
-            <p className="text-[9px] flex items-center gap-1" style={{ color: '#86efac' }}>
-              <Save size={10} /> Cena salva na nuvem — recarrega sem rebuscar.
-            </p>
+          {nav.talhaoId && (
+            salvos[dataSel] ? (
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[9px] flex items-center gap-1" style={{ color: '#86efac' }}>
+                  <Star size={11} fill="#86efac" /> Mantida — disponível como fonte na Zona de Manejo
+                </span>
+                <button onClick={removerCena} className="text-[10px] font-semibold" style={{ color: '#93c5fd' }}>Remover</button>
+              </div>
+            ) : (
+              <button onClick={manterCena} disabled={!cloudPodeGravar()}
+                className="w-full py-1.5 rounded text-[10px] font-bold flex items-center justify-center gap-1 disabled:opacity-50"
+                style={{ background: 'var(--invicta-blue-mid)', color: '#fff' }}>
+                <Star size={12} /> Manter esta cena{!cloudPodeGravar() ? ' (faça login)' : ''}
+              </button>
+            )
           )}
         </div>
       )}

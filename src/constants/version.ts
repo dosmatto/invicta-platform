@@ -1,6 +1,11 @@
-export const APP_VERSION = '0.74.0';
+export const APP_VERSION = '0.75.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.75.0': [
+    'NDVI / Satélite: as cenas buscadas agora ficam só na sessão — você escolhe quais MANTER (botão "Manter esta cena"). Só as mantidas são salvas na nuvem e recarregam ao reabrir; as demais sao descartadas. Dá pra Remover uma cena mantida',
+    'As cenas de NDVI MANTIDAS viram FONTE na Zona de Manejo (MEAP): na aba Zonas, elas aparecem como camadas selecionáveis ("NDVI <data>") junto da fertilidade, e entram na clusterização (reamostradas para a malha de referência)',
+    'Com isso dá pra gerar zonas a partir do NDVI (sozinho ou combinado com fertilidade) — inclusive em talhões sem laboratório, usando só NDVI',
+  ],
   '0.74.0': [
     'NDVI / Satélite: nova FONTE CBERS-4A (satélite brasileiro do INPE) com resolução de 2 m — 5× mais nítida que o Sentinel-2 (10 m). Um seletor no topo troca entre Sentinel-2 (10 m, global) e CBERS-4A (2 m, Brasil)',
     'O NDVI do CBERS sai a 2 m: calculado das bandas (8 m) e realçado com a banda pancromática de 2 m (a base do infravermelho é 8 m; o detalhe espacial vem da PAN)',
