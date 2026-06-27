@@ -1,6 +1,11 @@
-export const APP_VERSION = '0.79.0';
+export const APP_VERSION = '0.80.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.80.0': [
+    'Produtividade: a limpeza agora é a OFICIAL da Invicta (porte do script QGIS para o backend) — filtro bruto, correção por colhedora (unificação) e MapFilter global + local anisotrópico (remove ruído/sobreposição ao longo da passada). A etapa "Processar mapa" roda tudo no backend e mostra um relatório por etapa (quantos pontos saíram em cada filtro)',
+    'Filtro bruto é sugerido automaticamente pelos percentis dos dados; parâmetros avançados do MapFilter e da correção por colhedora ficam num painel recolhível',
+    'A média real (calibração) agora é aplicada nos pontos, igual ao script oficial. Processar arquivos grandes pode levar ~30–60 s (limpeza espacial pesada)',
+  ],
   '0.79.0': [
     'Produtividade: novo COMPARADOR Produtividade × NDVI — com o Mapa de Produtividade salvo e um NDVI mantido, a aba mostra os dois lado a lado, com a CORRELAÇÃO espacial (Pearson) entre eles',
     'Botão "Relatório lado a lado (PDF)": gera um PDF A4 paisagem com o mapa de produtividade e o de NDVI lado a lado (sobre o satélite), legendas, dados e a correlação',

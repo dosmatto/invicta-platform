@@ -1,8 +1,10 @@
 'use client';
 
-// Aba Produtividade — Módulo 12 (Mapas de Colheita), P1 + P2.1. Processo em
-// etapas: 1) Importar máquinas → 2) Unificação (normaliza) → 3) Limpeza →
-// 4) Interpolação IDW (com ajuste pela MÉDIA REAL). Salva como versão; 1 = oficial.
+// Aba Produtividade — Módulo 12 (Mapas de Colheita), P1 + P2 (porte oficial).
+// Etapas: 1) Importar máquinas → 2) Unificação (correção por colhedora) →
+// 3) Limpeza (filtro bruto + MapFilter global/local) → 4) Interpolação IDW +
+// MÉDIA REAL. A limpeza+unificação+IDW rodam no backend (pipeline oficial QGIS
+// portado). Salva como versão; 1 = oficial. + Comparador Produtividade × NDVI.
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useApp } from '@/context/AppContext';
@@ -17,14 +19,14 @@ import {
 import { colorirGridComLegenda } from '@/lib/raster';
 import {
   parseCsvTexto, autoColunas, pontosDeCsv, lerShapefilePontos, pontosDeGeojson,
-  unificar, limpar, interpolarColheita, calibrarGrid, statsDoGrid, legendaDaCultura,
-  emUnidade, rotuloUnidade, SACA_KG, PARAMS_PADRAO,
-  type PontoColheita, type ParamsLimpeza, type Unidade, type StatsProd, type CsvParsed,
+  processarColheita, statsDoGrid, legendaDaCultura, emUnidade, rotuloUnidade, sugerirFiltroBruto,
+  SACA_KG, PARAMS_COLHEITA_PADRAO,
+  type PontoColheita, type Unidade, type StatsProd, type CsvParsed, type ParamsColheita, type RelatorioColheita,
 } from '@/lib/produtividade';
 import { cloudSalvarMapa, cloudCarregarMapasPorPrefixo, cloudPodeGravar } from '@/lib/cloud';
 import { ComparadorProdNdvi } from '@/components/talhao/ComparadorProdNdvi';
 import type { Legenda } from '@/lib/legendas';
-import { Upload, Loader2, AlertTriangle, Save, Star, Trash2, Eye, Wand2, FileSpreadsheet, Plus, Layers } from 'lucide-react';
+import { Upload, Loader2, AlertTriangle, Save, Star, Trash2, Eye, Wand2, FileSpreadsheet, Plus, Layers, ChevronDown, ChevronUp } from 'lucide-react';
 
 const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
 const fmt = (v: number, d = 0) => v.toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d });
@@ -61,11 +63,12 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
   const [colunas, setColunas] = useState<string[]>([]);
   const [colLat, setColLat] = useState(''); const [colLng, setColLng] = useState(''); const [colVal, setColVal] = useState('');
   const [temCsv, setTemCsv] = useState(false);
-  // 2) Unificação
-  const [normalizar, setNormalizar] = useState(true);
-  // 3) Limpeza
-  const [params, setParams] = useState<ParamsLimpeza>(PARAMS_PADRAO);
-  // 4) Interpolação
+  // 3) Limpeza (params do pipeline oficial)
+  const [pixelM, setPixelM] = useState(10);
+  const [clean, setClean] = useState<ParamsColheita>(PARAMS_COLHEITA_PADRAO);
+  const [brutoTocado, setBrutoTocado] = useState(false);
+  const [avancado, setAvancado] = useState(false);
+  // 4) Média real
   const [mediaReal, setMediaReal] = useState('');
 
   const [estado, setEstado] = useState<'idle' | 'processando' | 'pronto' | 'erro'>('idle');
@@ -73,6 +76,7 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
   const [res, setRes] = useState<RespInterp | null>(null);
   const [stats, setStats] = useState<StatsProd | null>(null);
   const [legenda, setLegenda] = useState<Legenda | null>(null);
+  const [relatorio, setRelatorio] = useState<RelatorioColheita | null>(null);
   const [fresco, setFresco] = useState(false);
 
   const [versoes, setVersoes] = useState<MapaProdutividade[]>([]);
@@ -81,7 +85,7 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
 
   useEffect(() => {
     recarregar();
-    setRes(null); setStats(null); setFresco(false); setMaqs([]); setColunas([]);
+    setRes(null); setStats(null); setFresco(false); setMaqs([]); setColunas([]); setRelatorio(null); setBrutoTocado(false);
     if (!nav.talhaoId) return;
     (async () => {
       const docs = await cloudCarregarMapasPorPrefixo<{ resp: { bounds: [number, number, number, number]; grid?: Grid } }>(prefixoProd(nav.talhaoId!));
@@ -138,24 +142,32 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
     id: m.id, nome: m.nome, arquivo: m.arquivo,
     pontos: m.csv ? pontosDeCsv(m.csv, { lat: colLat, lng: colLng, valor: colVal }) : m.fc ? pontosDeGeojson(m.fc, colVal) : [] as PontoColheita[],
   })), [maqs, colLat, colLng, colVal]);
+  const nPontosTotal = useMemo(() => pontosPorMaq.reduce((s, m) => s + m.pontos.length, 0), [pontosPorMaq]);
 
-  const unif = useMemo(() => unificar(pontosPorMaq, normalizar), [pontosPorMaq, normalizar]);
-  const limpeza = useMemo(() => limpar(unif.pontos, params), [unif, params]);
-  const nPontosTotal = unif.pontos.length;
+  // Auto-sugere o filtro bruto pelos dados (até o usuário editar manualmente).
+  useEffect(() => {
+    if (brutoTocado || nPontosTotal === 0) return;
+    const todos: number[] = [];
+    for (const m of pontosPorMaq) for (const p of m.pontos) todos.push(p.valor);
+    const s = sugerirFiltroBruto(todos);
+    setClean(c => ({ ...c, hard_min: s.min, hard_max: s.max }));
+  }, [pontosPorMaq, nPontosTotal, brutoTocado]);
+
+  const setCampoBruto = (patch: Partial<ParamsColheita>) => { setBrutoTocado(true); setClean(c => ({ ...c, ...patch })); };
 
   async function processar() {
     if (!poligono) { setErro('Limite do talhão não encontrado — abra o talhão no mapa.'); setEstado('erro'); return; }
-    if (limpeza.usados.length < 3) { setErro('Poucos pontos após a limpeza (mínimo 3).'); setEstado('erro'); return; }
+    const machines = pontosPorMaq.filter(m => m.pontos.length).map(m => ({ nome: m.nome, pontos: m.pontos }));
+    if (machines.reduce((s, m) => s + m.pontos.length, 0) < 10) { setErro('Poucos pontos importados.'); setEstado('erro'); return; }
     const leg = legendaDaCultura(cultura);
     if (!leg) { setErro('Legenda de produtividade não encontrada.'); setEstado('erro'); return; }
     setEstado('processando'); setErro('');
     try {
-      let r = await interpolarColheita(limpeza.usados, poligono, leg, params.pixelM);
       const mr = parseFloat(mediaReal);
-      if (isFinite(mr) && mr > 0) r = calibrarGrid(r, paraKgha(mr, unidade));
-      const st = statsDoGrid(r, limpeza.usados.length);
+      const r = await processarColheita({ machines, cleaning: clean, poligono, pixelM, mediaRealKgha: isFinite(mr) && mr > 0 ? paraKgha(mr, unidade) : 0, legenda: leg });
+      const st = statsDoGrid(r, r.relatorio.n_usados);
       if (!st) throw new Error('Não foi possível calcular o raster.');
-      setRes(r); setStats(st); setLegenda(leg); setFresco(true); setEstado('pronto');
+      setRes(r); setStats(st); setLegenda(leg); setRelatorio(r.relatorio); setFresco(true); setEstado('pronto');
     } catch (e) { setEstado('erro'); setErro(e instanceof Error ? e.message : 'Falha ao processar.'); }
   }
 
@@ -166,9 +178,11 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
     const mr = parseFloat(mediaReal);
     const rec = saveMapaProdutividade({
       talhaoId: nav.talhaoId, safra, epoca, cultura, oficial: primeiro, unidade,
-      nMaquinas: maqs.length, normalizado: normalizar,
+      nMaquinas: maqs.length, normalizado: clean.corrigir_colhedora,
       mediaRealKgha: isFinite(mr) && mr > 0 ? paraKgha(mr, unidade) : null,
-      params, bounds: res.bounds,
+      cleaning: clean as unknown as Record<string, number | boolean>,
+      params: { removerZeros: true, pLo: 0, pHi: 100, min: clean.hard_min, max: clean.hard_max, pixelM },
+      bounds: res.bounds,
       stats: { nPontos: nPontosTotal, nUsados: stats.nUsados, areaHa: stats.areaHa, producaoTotalKg: stats.producaoTotalKg, mediaKgha: stats.mediaKgha, minKgha: stats.minKgha, maxKgha: stats.maxKgha, cv: stats.cv },
       arquivo: maqs.map(m => m.arquivo).join(', '),
     });
@@ -183,7 +197,7 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
     const r = rasters[v.id];
     if (!r) { setErro('Raster desta versão não está na nuvem (reprocesse).'); return; }
     const leg = legendaDaCultura(v.cultura);
-    setLegenda(leg ?? null);
+    setLegenda(leg ?? null); setRelatorio(null);
     setRes({ bounds: r.bounds, grid: r.grid, png: '', stats: { n: 0, modelo: 'idw', min: v.stats.minKgha, max: v.stats.maxKgha, nx: 0, ny: 0, pixel_m: v.params.pixelM, rmse: null, variograma: null } });
     setStats({ nUsados: v.stats.nUsados, areaHa: v.stats.areaHa, producaoTotalKg: v.stats.producaoTotalKg, mediaKgha: v.stats.mediaKgha, minKgha: v.stats.minKgha, maxKgha: v.stats.maxKgha, cv: v.stats.cv, histograma: [] });
     setUnidade(v.unidade); setFresco(false);
@@ -199,6 +213,7 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
   if (!safra) return <div className="px-4 py-3"><Aviso texto="Defina uma safra para o mapa de produtividade." /></div>;
   const proc = estado === 'processando';
   const u = (kgha: number) => fmt(emUnidade(kgha, unidade), unidade === 't/ha' ? 2 : unidade === 'sc/ha' ? 1 : 0);
+  const varias = maqs.length > 1;
 
   return (
     <div className="px-4 py-3 space-y-3">
@@ -244,31 +259,53 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
 
       {/* 2) Unificação */}
       {maqs.length > 0 && (
-        <Etapa n={2} titulo="Unificação">
-          <label className="flex items-center gap-1.5 text-[10px]" style={{ color: '#cbd5e1' }}>
-            <input type="checkbox" checked={normalizar} onChange={e => setNormalizar(e.target.checked)} /> Normalizar máquinas (média comum — corrige calibração entre monitores)
+        <Etapa n={2} titulo="Unificação (correção por colhedora)">
+          <label className="flex items-center gap-1.5 text-[10px]" style={{ color: varias ? '#cbd5e1' : '#64748b' }}>
+            <input type="checkbox" checked={clean.corrigir_colhedora} disabled={!varias} onChange={e => setClean(c => ({ ...c, corrigir_colhedora: e.target.checked }))} />
+            Corrigir diferença entre colhedoras (escala cada máquina p/ a mediana geral)
           </label>
-          {maqs.length > 1 && unif.medias.map((m, i) => (
-            <p key={i} className="text-[9px]" style={{ color: '#64748b' }}>{m.nome}: média {fmt(m.media)} kg/ha · fator ×{m.fator}</p>
-          ))}
-          <p className="text-[10px] flex items-center gap-1" style={{ color: '#93c5fd' }}><Layers size={11} /> Unificado: <strong>{fmt(nPontosTotal)}</strong> pontos de {maqs.length} {maqs.length === 1 ? 'máquina' : 'máquinas'}</p>
+          {varias
+            ? <label className="flex items-center gap-1.5 text-[10px]" style={{ color: '#cbd5e1' }}>
+                <input type="checkbox" checked={clean.corrigir_colhedora_local} onChange={e => setClean(c => ({ ...c, corrigir_colhedora_local: e.target.checked }))} />
+                + correção local entre colhedoras (por raio)
+              </label>
+            : <p className="text-[9px]" style={{ color: '#475569' }}>Só 1 máquina — sem o que unificar (adicione outra para ativar).</p>}
         </Etapa>
       )}
 
       {/* 3) Limpeza */}
       {nPontosTotal > 0 && (
-        <Etapa n={3} titulo="Limpeza dos dados">
-          <label className="flex items-center gap-1.5 text-[10px]" style={{ color: '#cbd5e1' }}>
-            <input type="checkbox" checked={params.removerZeros} onChange={e => setParams(p => ({ ...p, removerZeros: e.target.checked }))} /> Remover zeros (cabeceira/manobra)
-          </label>
+        <Etapa n={3} titulo="Limpeza dos dados (oficial)">
           <div className="flex gap-2 items-end">
-            <Num label="Outlier baixo (p%)" v={params.pLo} set={n => setParams(p => ({ ...p, pLo: n }))} />
-            <Num label="Outlier alto (p%)" v={params.pHi} set={n => setParams(p => ({ ...p, pHi: n }))} />
-            <Num label="Pixel (m)" v={params.pixelM} set={n => setParams(p => ({ ...p, pixelM: n }))} />
+            <Num label="Excluir ≤ (kg/ha)" v={clean.hard_min} set={n => setCampoBruto({ hard_min: n })} />
+            <Num label="Excluir > (kg/ha)" v={clean.hard_max} set={n => setCampoBruto({ hard_max: n })} />
+            <Num label="Pixel (m)" v={pixelM} set={setPixelM} />
           </div>
-          <p className="text-[10px]" style={{ color: '#94a3b8' }}>
-            Usados: <strong style={{ color: limpeza.usados.length >= 3 ? '#86efac' : '#fbbf24' }}>{fmt(limpeza.usados.length)}</strong> de {fmt(nPontosTotal)} · faixa {fmt(limpeza.limites[0])}–{fmt(limpeza.limites[1])} kg/ha · removidos {fmt(limpeza.removidos)}
-          </p>
+          <button onClick={() => setAvancado(v => !v)} className="text-[10px] font-semibold flex items-center gap-1" style={{ color: '#93c5fd' }}>
+            {avancado ? <ChevronUp size={11} /> : <ChevronDown size={11} />} MapFilter / parâmetros avançados
+          </button>
+          {avancado && (
+            <div className="space-y-2 p-2 rounded" style={{ background: '#0b1f3a', border: '1px solid #1a3a6b' }}>
+              <p className="text-[9px] font-semibold" style={{ color: '#93c5fd' }}>MapFilter (remoção de ruído/sobreposição)</p>
+              <div className="flex gap-2">
+                <Num label="Global ± %" v={Math.round(clean.mf_global_v * 100)} set={n => setClean(c => ({ ...c, mf_global_v: n / 100 }))} />
+                <Num label="Raio local (m)" v={clean.mf_local_r} set={n => setClean(c => ({ ...c, mf_local_r: n }))} />
+                <Num label="Local ± %" v={Math.round(clean.mf_local_v * 100)} set={n => setClean(c => ({ ...c, mf_local_v: n / 100 }))} />
+              </div>
+              <div className="flex gap-2">
+                <Num label="Tol. ângulo (°)" v={clean.mf_aniso_tol} set={n => setClean(c => ({ ...c, mf_aniso_tol: n }))} />
+                <Num label="Mín. vizinhos" v={clean.mf_min_neighbors} set={n => setClean(c => ({ ...c, mf_min_neighbors: n }))} />
+                <Num label="Multiplicador" v={clean.multiplicador} set={n => setClean(c => ({ ...c, multiplicador: n }))} />
+              </div>
+              {varias && (
+                <div className="flex gap-2">
+                  <Num label="Colhedora ± %" v={Math.round(clean.limite_colhedora * 100)} set={n => setClean(c => ({ ...c, limite_colhedora: n / 100 }))} />
+                  <Num label="Intensidade %" v={Math.round(clean.peso_colhedora * 100)} set={n => setClean(c => ({ ...c, peso_colhedora: n / 100 }))} />
+                </div>
+              )}
+            </div>
+          )}
+          <p className="text-[10px]" style={{ color: '#94a3b8' }}>{fmt(nPontosTotal)} pontos importados de {maqs.length} {maqs.length === 1 ? 'máquina' : 'máquinas'}.</p>
         </Etapa>
       )}
 
@@ -278,11 +315,12 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
           <Campo label={`Média real (${rotuloUnidade(unidade)}) — opcional, calibra o mapa`}>
             <input type="number" value={mediaReal} onChange={e => setMediaReal(e.target.value)} placeholder="ex.: da balança/notas" className="w-full rounded px-2 py-1 text-[11px] outline-none" style={inputStyle} />
           </Campo>
-          <button onClick={processar} disabled={proc || !poligono || limpeza.usados.length < 3}
+          <button onClick={processar} disabled={proc || !poligono}
             className="w-full py-2 rounded text-xs font-bold text-white flex items-center justify-center gap-1.5"
-            style={{ background: proc ? '#1a3a6b' : 'var(--invicta-green-dark)', opacity: (!poligono || limpeza.usados.length < 3) ? 0.6 : 1 }}>
-            {proc ? <><Loader2 size={13} className="animate-spin" /> Interpolando (IDW)…</> : <><Wand2 size={13} /> Processar mapa</>}
+            style={{ background: proc ? '#1a3a6b' : 'var(--invicta-green-dark)', opacity: !poligono ? 0.6 : 1 }}>
+            {proc ? <><Loader2 size={13} className="animate-spin" /> Limpando + interpolando…</> : <><Wand2 size={13} /> Processar mapa</>}
           </button>
+          <p className="text-[9px]" style={{ color: '#475569' }}>Limpeza oficial (MapFilter + correção por colhedora) roda no backend — pode levar ~30–60 s em arquivos grandes.</p>
         </Etapa>
       )}
 
@@ -301,9 +339,16 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
             <Metrica rotulo={`máx (${rotuloUnidade(unidade)})`} valor={u(stats.maxKgha)} />
             <Metrica rotulo="CV" valor={`${fmt(stats.cv, 1)}%`} />
           </div>
+          {relatorio && (
+            <div className="text-[9px] leading-relaxed p-2 rounded" style={{ background: '#0b1f3a', color: '#94a3b8' }}>
+              <strong style={{ color: '#86efac' }}>Limpeza:</strong> {fmt(relatorio.n_bruto)} brutos → filtro {fmt(relatorio.n_apos_filtro_bruto)} → MapFilter global −{fmt(relatorio.mapfilter_global_removidos)} → local −{fmt(relatorio.mapfilter_local_removidos)} → <strong style={{ color: '#86efac' }}>{fmt(relatorio.n_usados)} usados</strong>
+              {relatorio.correcao_colhedora_global && <> · colhedoras corrigidas: {relatorio.correcao_colhedora_global.maquinas_corrigidas}</>}
+              {relatorio.fator_media_real != null && <> · calibrado ×{fmt(relatorio.fator_media_real, 3)}</>}
+            </div>
+          )}
           {stats.histograma.length > 0 && <Histograma h={stats.histograma} unidade={unidade} />}
           <div className="h-3.5 rounded" style={{ border: '1px solid rgba(255,255,255,0.1)', background: gradienteCss(legenda) }} />
-          <p className="text-[9px]" style={{ color: '#64748b' }}>{legenda.nome} · {stats.nUsados} pontos · pixel {res.stats?.pixel_m ?? params.pixelM} m{parseFloat(mediaReal) > 0 ? ' · calibrado pela média real' : ''}</p>
+          <p className="text-[9px]" style={{ color: '#64748b' }}>{legenda.nome} · pixel {res.stats?.pixel_m ?? pixelM} m</p>
           {fresco && (
             cloudPodeGravar()
               ? <button onClick={salvar} className="w-full py-2 rounded text-xs font-bold text-white flex items-center justify-center gap-1.5" style={{ background: 'var(--invicta-blue-mid)' }}><Save size={13} /> Salvar como Mapa Oficial</button>

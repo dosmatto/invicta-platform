@@ -14,6 +14,7 @@ from pydantic import BaseModel
 import interp
 import msr
 import cbers
+import colheita
 
 app = FastAPI(title="INVICTA - Interpolacao de Fertilidade", version="0.1.0")
 
@@ -62,6 +63,7 @@ def health():
         "msr_v": getattr(msr, "VERSION", "?"),
         "cbers": cbers._HAS,
         "cbers_v": getattr(cbers, "VERSION", "?"),
+        "colheita_v": getattr(colheita, "VERSION", "?"),
     }
 
 
@@ -158,6 +160,28 @@ def ndvi_imagem(req: ReqImagem):
         raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:  # pragma: no cover
         raise HTTPException(status_code=500, detail=f"falha ao gerar imagem: {e}")
+
+
+class ReqColheita(BaseModel):
+    machines: list[dict[str, Any]]    # [{nome, pontos:[{lng,lat,valor,vel?,larg?}]}]
+    params: dict[str, Any]
+    poligono: dict[str, Any]
+    pixel_m: float = 10.0
+    media_real: float = 0.0
+    dominio: list[float]
+    stops: list[Any]
+
+
+@app.post("/colheita-processar")
+def colheita_processar(req: ReqColheita):
+    """Limpeza oficial de colheita (filtro bruto + operacional + correção por
+    colhedora + MapFilter global/local) + IDW + média real. Devolve grid + relatório."""
+    try:
+        return colheita.processar(req.machines, req.params, req.poligono, req.pixel_m, req.media_real, req.dominio, req.stops)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:  # pragma: no cover
+        raise HTTPException(status_code=500, detail=f"falha na limpeza de colheita: {e}")
 
 
 @app.post("/zonear-multi")

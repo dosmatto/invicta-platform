@@ -143,6 +143,7 @@ export interface MapaProdutividade {
   nMaquinas?: number;                    // nº de máquinas unificadas
   normalizado?: boolean;                 // máquinas normalizadas na unificação
   mediaRealKgha?: number | null;         // média real (balança) usada p/ calibrar o mapa
+  cleaning?: Record<string, number | boolean>;  // params do pipeline oficial (filtro bruto + colhedora + MapFilter)
   params: { removerZeros: boolean; pLo: number; pHi: number; min: number | null; max: number | null; pixelM: number };
   stats: { nPontos: number; nUsados: number; areaHa: number; producaoTotalKg: number; mediaKgha: number; minKgha: number; maxKgha: number; cv: number };
   bounds: [number, number, number, number];

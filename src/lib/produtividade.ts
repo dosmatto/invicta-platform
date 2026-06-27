@@ -10,6 +10,8 @@ import { getLegendasPorAtributo } from '@/lib/store';
 import { parseShapefile } from '@/lib/geo';
 import type { Legenda } from '@/lib/legendas';
 
+const INTERP_URL = process.env.NEXT_PUBLIC_INTERP_URL ?? 'http://127.0.0.1:8800';
+
 export interface PontoColheita { lng: number; lat: number; valor: number; }
 export type Unidade = 'kg/ha' | 'sc/ha' | 't/ha';
 export interface ParamsLimpeza {
@@ -164,6 +166,70 @@ export function emUnidade(kgha: number, u: Unidade): number {
 
 export function rotuloUnidade(u: Unidade): string {
   return u === 'sc/ha' ? 'sc/ha' : u === 't/ha' ? 't/ha' : 'kg/ha';
+}
+
+// ── Pipeline de limpeza OFICIAL (porte do script QGIS → backend) ──────────────
+export interface ParamsColheita {
+  multiplicador: number;
+  hard_min: number; hard_max: number;
+  corrigir_colhedora: boolean; limite_colhedora: number; peso_colhedora: number; min_points_colhedora: number;
+  corrigir_colhedora_local: boolean;
+  mf_global_v: number; mf_local_r: number; mf_local_v: number; mf_aniso_tol: number; mf_min_neighbors: number;
+}
+export const PARAMS_COLHEITA_PADRAO: ParamsColheita = {
+  multiplicador: 1, hard_min: 0, hard_max: 15000,
+  corrigir_colhedora: true, limite_colhedora: 0.08, peso_colhedora: 0.8, min_points_colhedora: 100,
+  corrigir_colhedora_local: false,
+  mf_global_v: 0.35, mf_local_r: 30, mf_local_v: 0.10, mf_aniso_tol: 20, mf_min_neighbors: 4,
+};
+
+export interface RelatorioColheita {
+  n_bruto: number; n_apos_filtro_bruto: number;
+  mapfilter_global_removidos: number; mapfilter_local_removidos: number;
+  n_usados: number; media_calculada: number; fator_media_real?: number;
+  correcao_colhedora_global?: { med_geral: number; maquinas_corrigidas: number };
+  correcao_colhedora_local_corrigidos?: number;
+}
+
+// Sugere limites do filtro bruto pelos percentis (porte de suggest_raw_filter_limits).
+export function sugerirFiltroBruto(valores: number[]): { min: number; max: number } {
+  const v = valores.filter(x => x > 0).sort((a, b) => a - b);
+  if (v.length < 20) return { min: 0, max: 15000 };
+  const pct = (q: number) => v[Math.min(v.length - 1, Math.max(0, Math.round(q * (v.length - 1))))];
+  const med = pct(0.5), p005 = pct(0.005), p995 = pct(0.995), p999 = pct(0.999);
+  const min = med <= 0 ? 0 : Math.max(0, Math.min(Math.max(p005 * 0.8, med * 0.1), med * 0.6));
+  let max = med <= 0 ? (p999 || v[v.length - 1]) : Math.min(Math.max(p995 * 1.25, med * 3), Math.max(p999 * 1.1, med * 4));
+  max = Math.min(Math.max(max, med * 1.5), 25000);
+  return { min: Math.round(min), max: Math.round(max) };
+}
+
+export async function processarColheita(params: {
+  machines: { nome: string; pontos: PontoColheita[] }[];
+  cleaning: ParamsColheita;
+  poligono: GeoJSON.Polygon | GeoJSON.MultiPolygon;
+  pixelM: number;
+  mediaRealKgha: number;
+  legenda: Legenda;
+}): Promise<RespInterp & { relatorio: RelatorioColheita }> {
+  const { dominio, stops } = rampaDaLegenda(params.legenda);
+  let r: Response;
+  try {
+    r = await fetch(`${INTERP_URL}/colheita-processar`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        machines: params.machines, params: params.cleaning, poligono: params.poligono,
+        pixel_m: params.pixelM, media_real: params.mediaRealKgha, dominio, stops,
+      }),
+    });
+  } catch {
+    throw new Error('Backend desligado nesta máquina. Dê dois cliques em backend\\start.bat e tente de novo.');
+  }
+  if (!r.ok) {
+    let msg = `Backend respondeu ${r.status}`;
+    try { const j = await r.json(); if (j?.detail) msg = String(j.detail); } catch {}
+    throw new Error(msg);
+  }
+  return r.json();
 }
 
 // ── Unificação de máquinas ────────────────────────────────────────────────────
