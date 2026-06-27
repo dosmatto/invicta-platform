@@ -1,6 +1,12 @@
-export const APP_VERSION = '0.76.0';
+export const APP_VERSION = '0.77.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.77.0': [
+    'NOVO módulo Produtividade / Mapas de Colheita (Módulo 12, P1): a aba Produtividade do talhão agora IMPORTA dados de colheita (CSV ou Shapefile .zip), faz a limpeza (remove zeros de cabeceira + corta outliers por percentil) e gera o mapa de produtividade por interpolação IDW, com a legenda oficial da cultura',
+    'Mostra estatísticas (produtividade média/mín/máx, área, produção total em t, CV, histograma) e converte a exibição entre kg/ha, sc/ha e t/ha (interno sempre kg/ha)',
+    'Você salva o mapa como VERSÃO; uma é marcada como OFICIAL (Camada Oficial de Produtividade) por contexto (talhão+safra+época+cultura). Dá pra ver no mapa, tornar oficial e excluir cada versão',
+    'P2 (próximo): unificação de máquinas, limpeza avançada (velocidade/cabeceiras via SHP), biblioteca de parâmetros, comparador (Produtividade × NDVI/Fertilidade) e a Camada alimentando MEAP/Rentabilidade',
+  ],
   '0.76.0': [
     'Zona de Manejo: ao CLICAR numa camada (NDVI, fertilidade, textura…), aparece uma PRÉVIA do mapa daquela camada sobre o talhão — assim você vê o que está escolhendo antes de gerar as zonas. A camada em prévia fica destacada (borda amarela); "ocultar prévia" remove',
     'A prévia usa a legenda do atributo (NDVI pela legenda de NDVI; fertilidade pela do nutriente; demais por uma escala min–máx)',

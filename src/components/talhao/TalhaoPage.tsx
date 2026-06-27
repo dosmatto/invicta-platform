@@ -25,6 +25,7 @@ import { ImportarGradeSection } from '@/components/talhao/ImportarGradeSection';
 import { GeradorRelatorios } from '@/components/talhao/GeradorRelatorios';
 import { MeapSection } from '@/components/talhao/MeapSection';
 import { NdviSection } from '@/components/talhao/NdviSection';
+import { ProdutividadeSection } from '@/components/talhao/ProdutividadeSection';
 import { papelDoUsuario, meuRegistro, planoPorId } from '@/lib/empresa';
 import {
   ChevronLeft, Home, Leaf, Grid3x3, Layers, BarChart3, FileSpreadsheet,
@@ -45,7 +46,7 @@ const TABS: Array<{ id: TabId; label: string; icon: React.ElementType; pronto: b
   { id: 'fertilidade',   label: 'Fertilidade',   icon: Leaf,            pronto: true },
   { id: 'amostragem',    label: 'Amostragem',    icon: Grid3x3,         pronto: true },
   { id: 'zonas',         label: 'Zonas de Manejo', icon: Layers,        pronto: true },
-  { id: 'produtividade', label: 'Produtividade', icon: BarChart3,       pronto: false },
+  { id: 'produtividade', label: 'Produtividade', icon: BarChart3,       pronto: true },
   { id: 'recomendacoes', label: 'Recomendações', icon: FileSpreadsheet, pronto: true },
   { id: 'compactacao',   label: 'Compactação',   icon: Activity,        pronto: true },
   { id: 'ndvi',          label: 'NDVI / Satélite', icon: Satellite,     pronto: true },
@@ -213,11 +214,12 @@ export function TalhaoPage({ id }: { id: string }) {
             )}
             {tabAtivo === 'zonas' && talhao && <MeapSection talhao={talhao} safraNome={safraSel} />}
             {tabAtivo === 'compactacao' && <CompactacaoSection safraNome={safraSel} />}
+            {tabAtivo === 'produtividade' && <ProdutividadeSection safraNome={safraSel} />}
             {tabAtivo === 'ndvi' && <NdviSection />}
             {tabAtivo === 'recomendacoes' && <RecomendacaoSection safraNome={safraSel} />}
             {tabAtivo === 'arquivos' && <ArquivosSection safraNome={safraSel} />}
             {tabAtivo === 'relatorios' && <GeradorRelatorios safraNome={safraSel} />}
-            {!['resumo', 'fertilidade', 'amostragem', 'zonas', 'compactacao', 'ndvi', 'recomendacoes', 'arquivos', 'relatorios'].includes(tabAtivo) && (
+            {!['resumo', 'fertilidade', 'amostragem', 'zonas', 'compactacao', 'produtividade', 'ndvi', 'recomendacoes', 'arquivos', 'relatorios'].includes(tabAtivo) && (
               <EmBreve label={TABS.find(t => t.id === tabAtivo)?.label ?? ''} />
             )}
           </div>

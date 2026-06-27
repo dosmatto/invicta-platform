@@ -125,6 +125,60 @@ export function deleteImportacaoCompactacao(id: string) {
   save('inv_compactacao', load<ImportacaoCompactacao>('inv_compactacao').filter(i => i.id !== id));
 }
 
+// ── Mapas de Colheita / Produtividade (Módulo 12, P1) ───────────────────────
+// Metadados/versões de cada processamento. O raster fica na nuvem sob demanda
+// (cloudSalvarMapa, prefixo `${talhaoId}__prod__`), como fertilidade/NDVI.
+// Unidade interna sempre kg/ha. Um mapa por contexto (talhão+safra+época+cultura)
+// pode ser marcado OFICIAL (= Camada Oficial de Produtividade).
+export interface MapaProdutividade {
+  id: string;
+  empresaId?: string;
+  talhaoId: string;
+  safra: string;
+  epoca: string;          // 'verao' | 'safrinha' | 'inverno' | ''
+  cultura: string;
+  versao: number;
+  oficial: boolean;
+  unidade: 'kg/ha' | 'sc/ha' | 't/ha';   // unidade de EXIBIÇÃO escolhida (interno = kg/ha)
+  params: { removerZeros: boolean; pLo: number; pHi: number; min: number | null; max: number | null; pixelM: number };
+  stats: { nPontos: number; nUsados: number; areaHa: number; producaoTotalKg: number; mediaKgha: number; minKgha: number; maxKgha: number; cv: number };
+  bounds: [number, number, number, number];
+  arquivo: string;
+  criadoEm: string;
+}
+
+export function getMapasProdutividade(talhaoId?: string, safra?: string): MapaProdutividade[] {
+  let lista = loadFiltrado<MapaProdutividade>('inv_produtividade');
+  if (talhaoId) lista = lista.filter(m => m.talhaoId === talhaoId);
+  if (safra) lista = lista.filter(m => m.safra === safra);
+  return lista.sort((a, b) => (b.criadoEm ?? '').localeCompare(a.criadoEm ?? ''));
+}
+
+export function saveMapaProdutividade(data: Omit<MapaProdutividade, 'id' | 'versao' | 'criadoEm'>): MapaProdutividade {
+  const lista = load<MapaProdutividade>('inv_produtividade');
+  const irmaos = lista.filter(m => m.talhaoId === data.talhaoId && m.safra === data.safra && m.epoca === data.epoca && m.cultura === data.cultura);
+  const versao = irmaos.reduce((mx, m) => Math.max(mx, m.versao), 0) + 1;
+  if (data.oficial) irmaos.forEach(m => { m.oficial = false; });
+  const nova: MapaProdutividade = comEmpresa({ ...data, id: uid(), versao, criadoEm: new Date().toISOString() });
+  lista.push(nova);
+  save('inv_produtividade', lista);
+  return nova;
+}
+
+export function setMapaProdutividadeOficial(id: string) {
+  const lista = load<MapaProdutividade>('inv_produtividade');
+  const alvo = lista.find(m => m.id === id);
+  if (!alvo) return;
+  lista.forEach(m => {
+    if (m.talhaoId === alvo.talhaoId && m.safra === alvo.safra && m.epoca === alvo.epoca && m.cultura === alvo.cultura) m.oficial = m.id === id;
+  });
+  save('inv_produtividade', lista);
+}
+
+export function deleteMapaProdutividade(id: string) {
+  save('inv_produtividade', load<MapaProdutividade>('inv_produtividade').filter(m => m.id !== id));
+}
+
 export interface Safra {
   id: string;
   nome: string;         // ex: "24/25"
