@@ -49,7 +49,7 @@ AMPLITUDE_MIN = 0.30
 NUGGET_MAX = 0.10
 # Versao do motor de interpolacao (conferir em GET /health para saber se o
 # backend foi reiniciado com o codigo novo).
-VERSION = "interp-11-area-ordem"
+VERSION = "interp-12-identidade"
 
 
 def _nlags(n: int) -> int:
@@ -565,7 +565,7 @@ def zonar_multi(camadas: list[dict], bounds, dims, n_classes: int = 0,
     ey = np.linspace(s - dy / 2.0, n + dy / 2.0, rows + 1)
     grid_snap = min(dx, dy) / 100.0
 
-    features = []
+    zonas = []  # (rank_do_potencial, areaHa, geometria contígua)
     for r, k in enumerate(presentes):
         jj, ii = np.where(cls == k)
         if jj.size == 0:
@@ -579,11 +579,23 @@ def zonar_multi(camadas: list[dict], bounds, dims, n_classes: int = 0,
         geom = geom.simplify(dx * 0.5, preserve_topology=True)
         if geom.is_empty:
             continue
-        rotulo = rotulos[r] if r < len(rotulos) else f"Classe {r + 1}"
+        # IDENTIDADE ÚNICA: cada parte CONTÍGUA da classe vira uma zona própria
+        # (o potencial Alta/Médio/Baixo fica como atributo, não como identidade).
+        partes = list(geom.geoms) if geom.geom_type == "MultiPolygon" else [geom]
+        for p in partes:
+            if p.is_empty or p.geom_type not in ("Polygon", "MultiPolygon"):
+                continue
+            zonas.append((r, _area_ha(p, lon0, lat0), p))
+
+    # Numeração única: por potencial (Alta primeiro) e, dentro, maior área primeiro.
+    zonas.sort(key=lambda z: (z[0], -z[1]))
+    features = []
+    for num, (rank, area, p) in enumerate(zonas, start=1):
+        rotulo = rotulos[rank] if rank < len(rotulos) else f"Classe {rank + 1}"
         features.append({
             "type": "Feature",
-            "properties": {"id": f"{r + 1:02d}", "classe": rotulo, "areaHa": round(_area_ha(geom, lon0, lat0), 2)},
-            "geometry": mapping(geom),
+            "properties": {"id": f"{num:02d}", "potencialRank": int(rank), "classe": rotulo, "areaHa": round(area, 2)},
+            "geometry": mapping(p),
         })
 
     return {
@@ -593,7 +605,8 @@ def zonar_multi(camadas: list[dict], bounds, dims, n_classes: int = 0,
         "sugestao_c": sugestao,    # nº de zonas sugerido (mínimo de FPI+NCE)
         "stats": {
             "algoritmo": algoritmo,
-            "n_classes": len(presentes),
+            "n_classes": len(presentes),   # nº de POTENCIAIS (classes de similaridade)
+            "n_zonas": len(features),       # nº de zonas únicas (manchas contíguas)
             "n_pixels": int(idx.shape[0]),
             "n_camadas": len(camadas),
             "area_min_ha": area_min_ha,

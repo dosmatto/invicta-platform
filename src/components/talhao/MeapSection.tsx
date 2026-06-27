@@ -3,9 +3,9 @@
 // Módulo "Zonas de Manejo" (MEAP) — aba dedicada da página do talhão.
 // M1: zonas adotadas (importadas) + homogeneidade interna (CV) por zona.
 // M2: gerar zonas por SIMILARIDADE — clusteriza (k-means/FCM) os mapas JÁ
-// interpolados das camadas escolhidas; FPI/NCE sugerem o nº de zonas; área
-// mínima funde manchas pequenas; ordenação Alta→Baixa manual + sugerida.
-// Preview no mapa (não persiste). Convergência "—" até a 2ª versão (M3).
+// interpolados; FPI/NCE sugerem o nº de potenciais; área mínima funde manchas;
+// cada mancha CONTÍGUA é uma zona de IDENTIDADE ÚNICA (potencial = atributo);
+// ordenação Alta→Baixa manual + sugerida. Preview no mapa (não persiste).
 
 import { useEffect, useMemo, useState } from 'react';
 import { useApp } from '@/context/AppContext';
@@ -30,15 +30,15 @@ const ESTADO: Record<AmbienteProdutivo['estado'], string> = {
 
 const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
 
-// Rótulos ordinais por nº de zonas (espelha o backend; usado ao reordenar).
+// Rótulos ordinais de POTENCIAL por nº de classes (espelha o backend).
 const ZLAB: Record<number, string[]> = {
   2: ['Alta', 'Baixa'],
   3: ['Alta', 'Média', 'Baixa'],
   4: ['Alta', 'Média-alta', 'Média-baixa', 'Baixa'],
   5: ['Alta', 'Média-alta', 'Média', 'Média-baixa', 'Baixa'],
 };
-function rotulosZona(nn: number): string[] {
-  return ZLAB[nn] ?? Array.from({ length: nn }, (_, i) => `Classe ${i + 1}`);
+function rotulosPotencial(nn: number): string[] {
+  return ZLAB[nn] ?? Array.from({ length: nn }, (_, i) => `Nível ${i + 1}`);
 }
 
 function parseImportadas(zonasGeojson?: string): GeoJSON.FeatureCollection | null {
@@ -59,7 +59,7 @@ function featuresParaMapa(fc: GeoJSON.FeatureCollection): GeoJSON.FeatureCollect
   };
 }
 
-// Gráfico FPI/NCE: dois índices por nº de zonas (mínimo = nº ótimo).
+// Gráfico FPI/NCE: dois índices por nº de potenciais (mínimo = nº ótimo).
 function IndicesChart({ indices, sugestao }: { indices: { c: number; fpi: number; nce: number }[]; sugestao: number | null }) {
   if (indices.length < 2) return null;
   const W = 240, H = 120, x0 = 28, x1 = 232, y0 = 12, y1 = 92;
@@ -86,7 +86,7 @@ function IndicesChart({ indices, sugestao }: { indices: { c: number; fpi: number
       ))}
       <text x={x0} y={H - 1} fontSize="8" fill="#22d3ee">FPI</text>
       <text x={x0 + 26} y={H - 1} fontSize="8" fill="#fbbf24">NCE</text>
-      <text x={x1} y={H - 1} fontSize="8" fill="#64748b" textAnchor="end">nº de zonas →</text>
+      <text x={x1} y={H - 1} fontSize="8" fill="#64748b" textAnchor="end">nº de potenciais →</text>
     </svg>
   );
 }
@@ -107,7 +107,7 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
   const [gerando, setGerando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [res, setRes] = useState<RespZonarMulti | null>(null);
-  const [ordem, setOrdem] = useState<string[]>([]);  // ids das zonas na ordem Alta→Baixa
+  const [ordemRanks, setOrdemRanks] = useState<number[]>([]);  // potenciais (ranks) na ordem Alta→Baixa
 
   const poligono = useMemo(() => {
     if (!talhao.geojson) return null;
@@ -126,28 +126,46 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
     return () => { vivo = false; };
   }, [talhao.id]);
 
-  // Ao gerar, inicializa a ordem com a sugestão do backend (Alta→Baixa).
-  useEffect(() => { setOrdem(res ? res.features.map(f => String((f.properties as { id?: string })?.id)) : []); }, [res]);
+  // Ao gerar, inicializa a ordem dos potenciais com a sugestão do backend.
+  useEffect(() => { setOrdemRanks(res ? Array.from({ length: res.stats.n_classes }, (_, i) => i) : []); }, [res]);
 
-  // Zonas na ordem atual, relabeladas por POSIÇÃO (topo = Alta) e recoloridas.
-  const zonasOrdenadas = useMemo(() => {
-    if (!res) return [];
-    const byId = new Map(res.features.map(f => [String((f.properties as { id?: string })?.id), f]));
-    const ids = (ordem.length ? ordem : [...byId.keys()]).filter(id => byId.has(id));
-    const labels = rotulosZona(ids.length);
-    return ids.map((id, i) => {
-      const f = byId.get(id)!;
-      const classe = labels[i] ?? `Classe ${i + 1}`;
-      const cz = classeZona(classe);
-      return { id, rotulo: String(i + 1).padStart(2, '0'), classe, cor: cz.cor, areaHa: Number((f.properties as { areaHa?: number })?.areaHa ?? 0), geometry: f.geometry };
+  // Potencial (rótulo + cor) por rank, conforme a ordem atual (posição = potencial).
+  const potDeRank = useMemo(() => {
+    const labels = rotulosPotencial(ordemRanks.length);
+    const m = new Map<number, { label: string; cor: string }>();
+    ordemRanks.forEach((rank, pos) => {
+      const label = labels[pos] ?? `Nível ${pos + 1}`;
+      m.set(rank, { label, cor: classeZona(label).cor });
     });
-  }, [res, ordem]);
+    return m;
+  }, [ordemRanks]);
 
-  // Mapa: preview gerado (na ordem atual) tem prioridade sobre as importadas.
+  // Zonas (identidade única) com potencial/cor aplicados.
+  const zonas = useMemo(() => {
+    if (!res) return [];
+    return res.features.map(f => {
+      const p = (f.properties ?? {}) as { id?: string; potencialRank?: number; areaHa?: number };
+      const rank = Number(p.potencialRank ?? 0);
+      const pot = potDeRank.get(rank);
+      return { id: String(p.id ?? '?'), rank, potencial: pot?.label ?? '—', cor: pot?.cor ?? '#94a3b8', areaHa: Number(p.areaHa ?? 0), geometry: f.geometry };
+    });
+  }, [res, potDeRank]);
+
+  // Resumo por potencial (na ordem) para a lista reordenável.
+  const potenciais = useMemo(() => {
+    const labels = rotulosPotencial(ordemRanks.length);
+    return ordemRanks.map((rank, pos) => {
+      const zs = zonas.filter(z => z.rank === rank);
+      const label = labels[pos] ?? `Nível ${pos + 1}`;
+      return { rank, pos, label, cor: classeZona(label).cor, nZonas: zs.length, areaHa: zs.reduce((s, z) => s + z.areaHa, 0) };
+    });
+  }, [ordemRanks, zonas]);
+
+  // Mapa: preview gerado (cor por potencial, nº = identidade) tem prioridade.
   useEffect(() => {
     let fc: GeoJSON.FeatureCollection | null = null;
-    if (res && zonasOrdenadas.length) {
-      fc = { type: 'FeatureCollection', features: zonasOrdenadas.map(z => ({ type: 'Feature' as const, properties: { cor: z.cor, rotulo: z.rotulo, classeLabel: z.classe, selecionada: false }, geometry: z.geometry! })) };
+    if (res && zonas.length) {
+      fc = { type: 'FeatureCollection', features: zonas.map(z => ({ type: 'Feature' as const, properties: { cor: z.cor, rotulo: z.id, classeLabel: z.potencial, selecionada: false }, geometry: z.geometry! })) };
     } else {
       const imp = parseImportadas(talhao.zonasGeojson);
       fc = imp ? featuresParaMapa(imp) : null;
@@ -155,15 +173,15 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
     if (!fc) { setZonasManejo(null); return; }
     setZonasManejo(fc);
     return () => setZonasManejo(null);
-  }, [res, zonasOrdenadas, talhao.zonasGeojson, setZonasManejo]);
+  }, [res, zonas, talhao.zonasGeojson, setZonasManejo]);
 
   function toggle(ch: string) { setChaves(prev => prev.includes(ch) ? prev.filter(c => c !== ch) : [...prev, ch]); }
 
-  function mover(i: number, dir: -1 | 1) {
-    setOrdem(prev => {
-      const a = [...prev]; const j = i + dir;
+  function moverRank(pos: number, dir: -1 | 1) {
+    setOrdemRanks(prev => {
+      const a = [...prev]; const j = pos + dir;
       if (j < 0 || j >= a.length) return prev;
-      [a[i], a[j]] = [a[j], a[i]];
+      [a[pos], a[j]] = [a[j], a[pos]];
       return a;
     });
   }
@@ -261,10 +279,10 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
                 </div>
               </div>
               <label className="block">
-                <span className="text-[9px] font-semibold block mb-1" style={{ color: '#64748b' }}>Nº de zonas</span>
+                <span className="text-[9px] font-semibold block mb-1" style={{ color: '#64748b' }}>Nº de potenciais</span>
                 <select value={nClasses} onChange={e => setNClasses(Number(e.target.value))} className="w-full rounded px-2 py-1.5 text-xs outline-none" style={inputStyle}>
                   <option value={0}>Auto (sugestão)</option>
-                  {[2, 3, 4, 5, 6].map(n => <option key={n} value={n}>{n} zonas</option>)}
+                  {[2, 3, 4, 5, 6].map(n => <option key={n} value={n}>{n} potenciais</option>)}
                 </select>
               </label>
             </div>
@@ -291,7 +309,7 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
             )}
 
             {res && (
-              <div className="p-2 rounded space-y-1.5" style={{ background: '#1a1033', border: '1px solid #5b21b6' }}>
+              <div className="p-2 rounded space-y-2" style={{ background: '#1a1033', border: '1px solid #5b21b6' }}>
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] font-bold" style={{ color: '#c4b5fd' }}>Preview no mapa</span>
                   <button onClick={() => setRes(null)} title="Limpar preview" className="ml-auto flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded font-semibold" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
@@ -299,39 +317,55 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
                   </button>
                 </div>
                 <p className="text-[10px]" style={{ color: '#94a3b8' }}>
-                  <strong style={{ color: '#e2e8f0' }}>{zonasOrdenadas.length}</strong> zonas · {res.stats.algoritmo === 'fcm' ? 'fuzzy c-means' : 'k-means'} · {res.stats.n_camadas} camadas · {res.stats.n_pixels.toLocaleString('pt-BR')} px
+                  <strong style={{ color: '#e2e8f0' }}>{zonas.length}</strong> zonas únicas · <strong style={{ color: '#e2e8f0' }}>{potenciais.length}</strong> potenciais · {res.stats.algoritmo === 'fcm' ? 'fuzzy c-means' : 'k-means'} · {res.stats.n_camadas} camadas
                   {res.stats.area_min_ha > 0 && <> · área mín. {res.stats.area_min_ha} ha</>}
                 </p>
 
-                {/* Ordenação manual (↑/↓) — relabela Alta→Baixa por posição */}
-                <p className="text-[9px]" style={{ color: '#a78bfa' }}>
-                  Ordem Alta→Baixa — sugerida por <strong style={{ color: '#e9d5ff' }}>{res.stats.ordem_por}</strong> · use ↑/↓ p/ ajustar
-                </p>
-                <div className="space-y-1">
-                  {zonasOrdenadas.map((z, i) => (
-                    <div key={z.id} className="flex items-center gap-2 px-2 py-1 rounded" style={{ background: '#0b1f3a', border: '1px solid #2e2050' }}>
-                      <span className="inline-block w-3 h-3 rounded-sm flex-shrink-0" style={{ background: z.cor, border: '1px solid #fff' }} />
-                      <span className="text-[11px] font-bold" style={{ color: '#e2e8f0', minWidth: '60px' }}>Zona {z.rotulo}</span>
-                      <span className="text-[10px]" style={{ color: '#c4b5fd' }}>{z.classe}</span>
-                      <span className="text-[10px] ml-auto" style={{ color: '#64748b' }}>{z.areaHa.toLocaleString('pt-BR')} ha</span>
-                      <div className="flex flex-col">
-                        <button onClick={() => mover(i, -1)} disabled={i === 0} title="Subir" className="leading-none disabled:opacity-30" style={{ color: '#93c5fd' }}><ChevronUp size={12} /></button>
-                        <button onClick={() => mover(i, 1)} disabled={i === zonasOrdenadas.length - 1} title="Descer" className="leading-none disabled:opacity-30" style={{ color: '#93c5fd' }}><ChevronDown size={12} /></button>
+                {/* Potenciais reordenáveis (Alta→Baixa) — recolore/renomeia as zonas */}
+                <div>
+                  <p className="text-[9px] mb-1" style={{ color: '#a78bfa' }}>
+                    Potenciais (Alta→Baixa) — sugeridos por <strong style={{ color: '#e9d5ff' }}>{res.stats.ordem_por}</strong> · ↑/↓ p/ ajustar
+                  </p>
+                  <div className="space-y-1">
+                    {potenciais.map((pt, i) => (
+                      <div key={pt.rank} className="flex items-center gap-2 px-2 py-1 rounded" style={{ background: '#0b1f3a', border: '1px solid #2e2050' }}>
+                        <span className="inline-block w-3 h-3 rounded-sm flex-shrink-0" style={{ background: pt.cor, border: '1px solid #fff' }} />
+                        <span className="text-[11px] font-bold" style={{ color: '#e2e8f0', minWidth: '78px' }}>{pt.label}</span>
+                        <span className="text-[10px] ml-auto" style={{ color: '#64748b' }}>{pt.nZonas} zona{pt.nZonas !== 1 ? 's' : ''} · {pt.areaHa.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} ha</span>
+                        <div className="flex flex-col">
+                          <button onClick={() => moverRank(i, -1)} disabled={i === 0} title="Subir" className="leading-none disabled:opacity-30" style={{ color: '#93c5fd' }}><ChevronUp size={12} /></button>
+                          <button onClick={() => moverRank(i, 1)} disabled={i === potenciais.length - 1} title="Descer" className="leading-none disabled:opacity-30" style={{ color: '#93c5fd' }}><ChevronDown size={12} /></button>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
+                </div>
+
+                {/* Zonas (identidade única) */}
+                <div>
+                  <p className="text-[9px] mb-1" style={{ color: '#a78bfa' }}>Zonas ({zonas.length}) — cada mancha contígua é uma zona própria</p>
+                  <div className="space-y-1">
+                    {zonas.map(z => (
+                      <div key={z.id} className="flex items-center gap-2 px-2 py-1 rounded" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
+                        <span className="inline-block w-3 h-3 rounded-sm flex-shrink-0" style={{ background: z.cor, border: '1px solid #fff' }} />
+                        <span className="text-[11px] font-bold" style={{ color: '#e2e8f0', minWidth: '60px' }}>Zona {z.id}</span>
+                        <span className="text-[10px]" style={{ color: '#93c5fd' }}>{z.potencial}</span>
+                        <span className="text-[10px] ml-auto" style={{ color: '#64748b' }}>{z.areaHa.toLocaleString('pt-BR')} ha</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
 
                 {res.indices.length >= 2 && (
                   <>
                     <p className="text-[9px]" style={{ color: '#a78bfa' }}>
-                      FPI/NCE — nº ótimo (mínimo) sugerido: <strong style={{ color: '#e9d5ff' }}>{res.sugestao_c ?? '—'}</strong> zonas
+                      FPI/NCE — nº ótimo (mínimo) sugerido: <strong style={{ color: '#e9d5ff' }}>{res.sugestao_c ?? '—'}</strong> potenciais
                     </p>
                     <IndicesChart indices={res.indices} sugestao={res.sugestao_c} />
                   </>
                 )}
                 <p className="text-[9px] leading-relaxed" style={{ color: '#6d5b9e' }}>
-                  Preview — não salvo. A seguir (M3): salvar como versão do MEAP + CV das zonas geradas → convergência.
+                  Preview — não salvo. A seguir (M3): salvar a zona → vai para a <strong style={{ color: '#93c5fd' }}>Amostragem</strong> gerar o grid + CV das zonas → convergência.
                 </p>
               </div>
             )}

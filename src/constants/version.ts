@@ -1,6 +1,10 @@
-export const APP_VERSION = '0.68.0';
+export const APP_VERSION = '0.69.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.69.0': [
+    'Zonas de Manejo (MEAP): cada zona agora tem IDENTIDADE ÚNICA. Antes, a clusterização dava "classes" de similaridade que se repetiam pelo talhão (a mesma classe em manchas separadas). Agora cada mancha contígua é uma ZONA própria, numerada (Zona 01, 02, 03…), e o potencial (Alta/Médio/Baixo) é um atributo dela',
+    'No preview, agora há duas listas: os POTENCIAIS (reordenáveis Alta→Baixa, recolorem as zonas) e as ZONAS únicas. Zonas de mesmo potencial têm a mesma cor (semáforo), distinguidas pelo número',
+  ],
   '0.68.0': [
     'Zonas de Manejo (MEAP) — Fase M2 (Fatia 2): ÁREA MÍNIMA de zona — defina em ha e o sistema funde as manchas pequenas na zona vizinha (mapa operável). 0 = sem fusão',
     'Ordenação das zonas Alta→Baixa: a plataforma SUGERE pela ordem de potencial (produtividade/NDVI/MO/CTC quando presentes; senão pelo conjunto das camadas) e você pode REORDENAR manualmente com as setas ↑/↓ — a zona recolore e renomeia (Alta no topo) na hora',
