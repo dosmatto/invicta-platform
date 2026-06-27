@@ -13,6 +13,7 @@ from pydantic import BaseModel
 
 import interp
 import msr
+import cbers
 
 app = FastAPI(title="INVICTA - Interpolacao de Fertilidade", version="0.1.0")
 
@@ -59,6 +60,8 @@ def health():
         "v": getattr(interp, "VERSION", "?"),
         "msr": msr._HAS_MSR,
         "msr_v": getattr(msr, "VERSION", "?"),
+        "cbers": cbers._HAS,
+        "cbers_v": getattr(cbers, "VERSION", "?"),
     }
 
 
@@ -90,24 +93,71 @@ class ReqZonarMulti(BaseModel):
     area_min_ha: float = 0.0          # 0 = sem fusão de manchas pequenas
 
 
+class ReqCenas(BaseModel):
+    poligono: dict[str, Any]          # GeoJSON Polygon/MultiPolygon do talhão
+    data_ini: str                     # 'YYYY-MM-DD'
+    data_fim: str                     # 'YYYY-MM-DD'
+    nuvem_max: float = 60.0           # % máx de nuvem p/ entrar na lista (só Sentinel)
+    fonte: str = "sentinel"           # 'sentinel' | 'cbers'
+
+
+@app.post("/ndvi-cenas")
+def ndvi_cenas(req: ReqCenas):
+    """Lista as cenas disponíveis no período (sem ler COG) para o usuário
+    escolher quais quer ver. Fonte Sentinel-2 (global) ou CBERS-4A (Brasil, 2 m)."""
+    try:
+        if req.fonte == "cbers":
+            return cbers.listar_cenas(req.poligono, req.data_ini, req.data_fim, req.nuvem_max)
+        return msr.listar_cenas(req.poligono, req.data_ini, req.data_fim, req.nuvem_max)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:  # pragma: no cover
+        raise HTTPException(status_code=500, detail=f"falha ao listar cenas: {e}")
+
+
 class ReqNdvi(BaseModel):
     poligono: dict[str, Any]          # GeoJSON Polygon/MultiPolygon do talhão
     data_ini: str                     # 'YYYY-MM-DD'
     data_fim: str                     # 'YYYY-MM-DD'
-    nuvem_max: float = 40.0           # % máx de cobertura de nuvem da cena
-    pixel_m: float = 10.0             # resolução alvo (Sentinel-2 nativo = 10 m)
+    nuvem_max: float = 40.0           # % máx de cobertura de nuvem da cena (só Sentinel)
+    pixel_m: float = 10.0             # resolução alvo (Sentinel 10 m / CBERS 2 m)
+    cena_id: str | None = None        # cena específica (da lista); None = mais recente
+    fonte: str = "sentinel"           # 'sentinel' | 'cbers'
 
 
 @app.post("/ndvi-sentinel")
 def ndvi_sentinel(req: ReqNdvi):
-    """NDVI da cena Sentinel-2 mais recente com pouca nuvem sobre o talhão
-    (STAC público + COG). Devolve grid no mesmo formato da interpolação."""
+    """NDVI de uma cena (Sentinel-2 ou CBERS-4A 2 m pan-sharpened), escolhida por
+    cena_id ou a mais recente. Devolve grid no mesmo formato da interpolação."""
     try:
-        return msr.gerar_ndvi(req.poligono, req.data_ini, req.data_fim, req.nuvem_max, req.pixel_m)
+        if req.fonte == "cbers":
+            return cbers.gerar_ndvi(req.poligono, req.data_ini, req.data_fim, req.nuvem_max, req.pixel_m, req.cena_id)
+        return msr.gerar_ndvi(req.poligono, req.data_ini, req.data_fim, req.nuvem_max, req.pixel_m, req.cena_id)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:  # pragma: no cover
         raise HTTPException(status_code=500, detail=f"falha ao gerar NDVI: {e}")
+
+
+class ReqImagem(BaseModel):
+    poligono: dict[str, Any]
+    cena_id: str
+    pixel_m: float = 10.0
+    fonte: str = "sentinel"           # 'sentinel' | 'cbers'
+
+
+@app.post("/ndvi-imagem")
+def ndvi_imagem(req: ReqImagem):
+    """Imagem de satélite em cor verdadeira da cena escolhida, recortada no
+    talhão e alinhada ao NDVI. Sentinel-2 (TCI) ou CBERS-4A (Brovey 2 m). PNG."""
+    try:
+        if req.fonte == "cbers":
+            return cbers.gerar_imagem(req.poligono, req.cena_id, req.pixel_m)
+        return msr.gerar_imagem(req.poligono, req.cena_id, req.pixel_m)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:  # pragma: no cover
+        raise HTTPException(status_code=500, detail=f"falha ao gerar imagem: {e}")
 
 
 @app.post("/zonear-multi")

@@ -11,12 +11,14 @@ de render/legenda do front. NÃO interpola nada — é leitura + álgebra de ban
 from __future__ import annotations
 
 import base64
+import io
 import math
 from typing import Any
 
 import numpy as np
 from shapely.geometry import shape
 import shapely
+from PIL import Image
 
 # Dependências do MSR carregadas com guarda: se faltarem, o backend de
 # fertilidade continua de pé e o endpoint responde um erro claro.
@@ -29,13 +31,15 @@ try:
 except Exception:  # pragma: no cover
     _HAS_MSR = False
 
-VERSION = "msr-1-ndvi-s1"
+VERSION = "msr-2-cenas-imagem"
 
 STAC_URL = "https://earth-search.aws.element84.com/v1"
 COLECAO = "sentinel-2-l2a"
 # Nomes comuns do earth-search v1; fallback p/ os ids de banda do Sentinel-2.
 ASSET_RED = ["red", "B04"]
 ASSET_NIR = ["nir", "B08"]
+# Imagem em cor verdadeira (True Color Image): 3 bandas RGB uint8 prontas.
+ASSET_VISUAL = ["visual", "TCI"]
 # Teto de células por lado (protege memória; NDVI nativo é 10 m).
 MAX_CELLS = 800
 # Config GDAL p/ ler COG remoto por range-request com eficiência.
@@ -48,21 +52,47 @@ _GDAL_ENV = dict(
 )
 
 
-def _buscar_cena(bbox, data_ini: str, data_fim: str, nuvem_max: float):
-    """Cena Sentinel-2 L2A mais RECENTE com nuvem < limite no período."""
+def _buscar_itens(bbox, data_ini: str, data_fim: str, nuvem_max: float, limite: int = 30):
+    """Cenas Sentinel-2 L2A com nuvem < limite no período (mais recentes 1º)."""
     cat = Client.open(STAC_URL)
     search = cat.search(
         collections=[COLECAO],
         bbox=list(bbox),
         datetime=f"{data_ini}/{data_fim}",
         query={"eo:cloud_cover": {"lt": float(nuvem_max)}},
-        max_items=30,
+        max_items=limite,
     )
     itens = list(search.items())
-    if not itens:
-        return None
     itens.sort(key=lambda it: it.datetime, reverse=True)
-    return itens[0]
+    return itens
+
+
+def _item_por_id(item_id: str):
+    """Recupera UMA cena pelo id (para recalcular NDVI/imagem da cena escolhida)."""
+    cat = Client.open(STAC_URL)
+    search = cat.search(collections=[COLECAO], ids=[item_id], max_items=1)
+    itens = list(search.items())
+    return itens[0] if itens else None
+
+
+def _cena_meta(item) -> dict[str, Any]:
+    cloud = item.properties.get("eo:cloud_cover")
+    return {
+        "id": item.id,
+        "data": item.datetime.date().isoformat() if item.datetime else None,
+        "nuvem": round(float(cloud), 1) if cloud is not None else None,
+        "plataforma": item.properties.get("platform"),
+    }
+
+
+def listar_cenas(polygon_geojson: dict, data_ini: str, data_fim: str,
+                 nuvem_max: float = 60.0) -> dict[str, Any]:
+    """Lista as cenas disponíveis (sem ler COG) p/ o usuário escolher quais ver."""
+    if not _HAS_MSR:
+        raise ValueError("Dependências do MSR ausentes no backend (rasterio / pystac-client).")
+    poly = shape(polygon_geojson)
+    itens = _buscar_itens(poly.bounds, data_ini, data_fim, nuvem_max)
+    return {"cenas": [_cena_meta(it) for it in itens]}
 
 
 def _asset(item, nomes) -> tuple[str, float, float, Any]:
@@ -93,7 +123,13 @@ def _grid_dims(minx, miny, maxx, maxy, pixel_m):
 
 def _ler_reproj(href: str, scale: float, offset: float, nodata, dst_transform, nx: int, ny: int) -> np.ndarray:
     """Lê a banda (COG remoto) e reprojeta p/ a grade 4326 (linha 0 = norte).
-    Devolve refletância (Float32, NaN onde nodata)."""
+    Devolve refletância (Float32, NaN onde nodata).
+
+    NOTA: aplicamos só a escala, NÃO o offset BOA (baseline 04.00). Como o NDVI
+    é uma razão, a escala se cancela e o offset apenas introduz refletância
+    NEGATIVA em pixels escuros (sombra/nuvem) -> NDVI estoura acima de 1. Sem o
+    offset, o NDVI fica sempre em [-1, 1] e robusto cena a cena. (Refinar com
+    máscara de nuvem SCL numa fase futura.)"""
     dst = np.full((ny, nx), np.nan, dtype="float32")
     with rasterio.Env(**_GDAL_ENV):
         with rasterio.open(href) as src:
@@ -110,7 +146,7 @@ def _ler_reproj(href: str, scale: float, offset: float, nodata, dst_transform, n
                 resampling=Resampling.bilinear,
             )
     fin = np.isfinite(dst)
-    dst[fin] = dst[fin] * scale + offset
+    dst[fin] = dst[fin] * scale
     return dst
 
 
@@ -123,7 +159,8 @@ def _clip(grid: np.ndarray, gx: np.ndarray, gy: np.ndarray, poly) -> np.ndarray:
 
 
 def gerar_ndvi(polygon_geojson: dict, data_ini: str, data_fim: str,
-               nuvem_max: float = 40.0, pixel_m: float = 10.0) -> dict[str, Any]:
+               nuvem_max: float = 40.0, pixel_m: float = 10.0,
+               cena_id: str | None = None) -> dict[str, Any]:
     if not _HAS_MSR:
         raise ValueError(
             "Dependências do MSR ausentes no backend (rasterio / pystac-client). "
@@ -132,12 +169,18 @@ def gerar_ndvi(polygon_geojson: dict, data_ini: str, data_fim: str,
     poly = shape(polygon_geojson)
     minx, miny, maxx, maxy = poly.bounds
 
-    item = _buscar_cena((minx, miny, maxx, maxy), data_ini, data_fim, nuvem_max)
-    if item is None:
-        raise ValueError(
-            f"Nenhuma cena Sentinel-2 com nuvem < {nuvem_max:.0f}% entre {data_ini} e {data_fim}. "
-            "Amplie o período ou o limite de nuvem."
-        )
+    if cena_id:
+        item = _item_por_id(cena_id)
+        if item is None:
+            raise ValueError(f"Cena {cena_id} não encontrada.")
+    else:
+        itens = _buscar_itens((minx, miny, maxx, maxy), data_ini, data_fim, nuvem_max)
+        item = itens[0] if itens else None
+        if item is None:
+            raise ValueError(
+                f"Nenhuma cena Sentinel-2 com nuvem < {nuvem_max:.0f}% entre {data_ini} e {data_fim}. "
+                "Amplie o período ou o limite de nuvem."
+            )
 
     red_href, red_sc, red_of, red_nd = _asset(item, ASSET_RED)
     nir_href, nir_sc, nir_of, nir_nd = _asset(item, ASSET_NIR)
@@ -164,7 +207,6 @@ def gerar_ndvi(polygon_geojson: dict, data_ini: str, data_fim: str,
 
     pix_y = (maxy - miny) / ny * 111320.0
     pix_x = (maxx - minx) / nx * 111320.0 * math.cos(math.radians((miny + maxy) / 2.0))
-    cloud = item.properties.get("eo:cloud_cover")
     return {
         "bounds": [minx, miny, maxx, maxy],
         "grid": {"b64": grid_b64, "shape": [int(ny), int(nx)]},
@@ -177,10 +219,63 @@ def gerar_ndvi(polygon_geojson: dict, data_ini: str, data_fim: str,
             "pixel_m": round((pix_x + pix_y) / 2.0, 1),
             "indice": "NDVI",
         },
-        "cena": {
-            "id": item.id,
-            "data": item.datetime.date().isoformat() if item.datetime else None,
-            "nuvem": round(float(cloud), 1) if cloud is not None else None,
-            "plataforma": item.properties.get("platform"),
-        },
+        "cena": _cena_meta(item),
     }
+
+
+# ---------------------------------------------------------------- imagem (cor verdadeira)
+def _png_data_url(rgba: np.ndarray) -> str:
+    img = Image.fromarray(rgba, mode="RGBA")
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
+
+
+def _ler_reproj_rgb(href: str, dst_transform, nx: int, ny: int) -> np.ndarray:
+    """Reprojeta as 3 bandas da imagem TCI (uint8) p/ a grade 4326. (3, ny, nx)."""
+    out = np.full((3, ny, nx), np.nan, dtype="float32")
+    with rasterio.Env(**_GDAL_ENV):
+        with rasterio.open(href) as src:
+            for b in range(3):
+                reproject(
+                    source=rasterio.band(src, b + 1),
+                    destination=out[b],
+                    src_transform=src.transform,
+                    src_crs=src.crs,
+                    src_nodata=0,
+                    dst_transform=dst_transform,
+                    dst_crs="EPSG:4326",
+                    dst_nodata=np.nan,
+                    resampling=Resampling.bilinear,
+                )
+    return out
+
+
+def gerar_imagem(polygon_geojson: dict, cena_id: str, pixel_m: float = 10.0) -> dict[str, Any]:
+    """Imagem de satélite em COR VERDADEIRA (TCI) da cena escolhida, recortada
+    no talhão, no MESMO bounds/grade do NDVI (overlay alinhado). PNG RGBA."""
+    if not _HAS_MSR:
+        raise ValueError("Dependências do MSR ausentes no backend (rasterio / pystac-client).")
+    poly = shape(polygon_geojson)
+    minx, miny, maxx, maxy = poly.bounds
+    item = _item_por_id(cena_id)
+    if item is None:
+        raise ValueError(f"Cena {cena_id} não encontrada.")
+
+    href, _sc, _of, _nd = _asset(item, ASSET_VISUAL)
+    nx, ny = _grid_dims(minx, miny, maxx, maxy, pixel_m)
+    dst_transform = from_bounds(minx, miny, maxx, maxy, nx, ny)
+    rgb = _ler_reproj_rgb(href, dst_transform, nx, ny)
+
+    gx = minx + (np.arange(nx) + 0.5) * (maxx - minx) / nx
+    gy = maxy - (np.arange(ny) + 0.5) * (maxy - miny) / ny
+    XX, YY = np.meshgrid(gx, gy)
+    dentro = shapely.contains(poly, shapely.points(XX.ravel(), YY.ravel())).reshape(XX.shape)
+    valido = np.all(np.isfinite(rgb), axis=0) & dentro
+
+    rgba = np.zeros((ny, nx, 4), dtype=np.uint8)
+    for b in range(3):
+        rgba[..., b] = np.clip(np.nan_to_num(rgb[b]), 0, 255).astype(np.uint8)
+    rgba[..., 3] = np.where(valido, 255, 0).astype(np.uint8)
+
+    return {"bounds": [minx, miny, maxx, maxy], "png": _png_data_url(rgba), "cena": _cena_meta(item)}

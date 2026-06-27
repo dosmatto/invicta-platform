@@ -1,6 +1,20 @@
-export const APP_VERSION = '0.72.0';
+export const APP_VERSION = '0.74.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.74.0': [
+    'NDVI / Satélite: nova FONTE CBERS-4A (satélite brasileiro do INPE) com resolução de 2 m — 5× mais nítida que o Sentinel-2 (10 m). Um seletor no topo troca entre Sentinel-2 (10 m, global) e CBERS-4A (2 m, Brasil)',
+    'O NDVI do CBERS sai a 2 m: calculado das bandas (8 m) e realçado com a banda pancromática de 2 m (a base do infravermelho é 8 m; o detalhe espacial vem da PAN)',
+    'A imagem em cor verdadeira do CBERS também sai a 2 m (pan-sharpening), ótima para enxergar o detalhe fino do talhão',
+    'Obs.: o CBERS não informa % de nuvem (escolha a cena pela data/imagem) e cada cena leva ~20–30 s para processar (lê direto do INPE)',
+  ],
+  '0.73.0': [
+    'NDVI / Satélite: agora a busca LISTA todas as cenas do Sentinel-2 no período (antes pegava só a mais recente). Você vê todas as datas com a % de nuvem e CLICA nas que quiser para calcular o NDVI de cada uma',
+    'Legenda do NDVI virou CONTÍNUA (escala suave), em vez de faixas segmentadas',
+    'Botão "Contraste realçado": estica as cores para o intervalo real da cena (p2–p98) — faz a variação dentro do talhão saltar aos olhos quando o NDVI está concentrado numa faixa estreita',
+    'Botão "Imagem": mostra a imagem de satélite em cor verdadeira (Sentinel-2) recortada no talhão, para comparar com o NDVI',
+    'Correção: o offset BOA do Sentinel-2 (baseline 04.00) podia estourar o NDVI acima de 1 em pixels escuros/nuvem — removido (NDVI agora fica sempre em -1..1)',
+    'Atalho do backend criado na Área de Trabalho (INVICTA Backend)',
+  ],
   '0.72.0': [
     'NOVO módulo NDVI / Satélite (motor MSR — Sensoriamento Remoto), Fase S1: na página do talhão, a aba "NDVI / Satélite" agora BUSCA a imagem de satélite mais recente (Sentinel-2) com pouca nuvem e calcula o NDVI (vigor da lavoura) recortado no talhão',
     'Você escolhe o período e o limite de nuvem; a plataforma pega a melhor cena, mostra o mapa de NDVI com a legenda oficial (0–1) e as estatísticas (NDVI médio/mín/máx, data da imagem, satélite, % de nuvem)',
