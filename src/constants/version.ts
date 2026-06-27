@@ -1,6 +1,11 @@
-export const APP_VERSION = '0.80.0';
+export const APP_VERSION = '0.81.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.81.0': [
+    'NOVO Comparador universal de camadas (tela cheia): escolha Camada A × Camada B entre Produtividade, NDVI e Fertilidade do talhão e veja os dois mapas sobre o satélite, lado a lado, com legendas, estatísticas (média/mín/máx/CV/área), correlação espacial (scatter + coeficiente r) e distribuição de área por classe',
+    'Abre pelo botão "Comparação completa" no comparador da aba Produtividade; exporta o PDF lado a lado',
+    'Próximo (fatia 2): sobreposição com cortina (swipe), gráfico de rosca e compartilhar',
+  ],
   '0.80.0': [
     'Produtividade: a limpeza agora é a OFICIAL da Invicta (porte do script QGIS para o backend) — filtro bruto, correção por colhedora (unificação) e MapFilter global + local anisotrópico (remove ruído/sobreposição ao longo da passada). A etapa "Processar mapa" roda tudo no backend e mostra um relatório por etapa (quantos pontos saíram em cada filtro)',
     'Filtro bruto é sugerido automaticamente pelos percentis dos dados; parâmetros avançados do MapFilter e da correção por colhedora ficam num painel recolhível',

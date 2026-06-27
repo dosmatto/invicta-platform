@@ -14,7 +14,8 @@ import { colorirGrid, colorirGridComLegenda } from '@/lib/raster';
 import { rampaVisualStops, type Legenda } from '@/lib/legendas';
 import { legendaDaCultura, emUnidade, type Unidade } from '@/lib/produtividade';
 import { gerarRelatorioComparacao, type LadoComparacao } from '@/lib/relatorioComparacao';
-import { Loader2, FileDown, GitCompare } from 'lucide-react';
+import { ComparacaoCompleta } from '@/components/talhao/ComparacaoCompleta';
+import { Loader2, FileDown, GitCompare, Maximize2 } from 'lucide-react';
 
 const fmt = (v: number, d = 0) => v.toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d });
 const prefixoProd = (talhaoId: string) => `${talhaoId}__prod__`;
@@ -74,6 +75,7 @@ export function ComparadorProdNdvi({ safraNome }: { safraNome: string }) {
   const [carregando, setCarregando] = useState(true);
   const [gerando, setGerando] = useState(false);
   const [erro, setErro] = useState('');
+  const [completo, setCompleto] = useState(false);
 
   const ndviLeg = useMemo(() => getLegendasPorAtributo('ndvi')[0], []);
 
@@ -127,6 +129,10 @@ export function ComparadorProdNdvi({ safraNome }: { safraNome: string }) {
       <div className="rounded-lg p-2.5 text-[10px]" style={{ background: '#061525', border: '1px solid #1a3a6b', color: '#64748b' }}>
         <p className="font-semibold flex items-center gap-1 mb-1" style={{ color: '#93c5fd' }}><GitCompare size={12} /> Comparar com NDVI</p>
         Para comparar, é preciso ter um <strong style={{ color: prod ? '#86efac' : '#fbbf24' }}>Mapa de Produtividade salvo</strong> e ao menos um <strong style={{ color: ndvis.length ? '#86efac' : '#fbbf24' }}>NDVI mantido</strong> (aba NDVI → "Manter esta cena").
+        <button onClick={() => setCompleto(true)} className="mt-2 w-full py-1.5 rounded text-[10px] font-bold flex items-center justify-center gap-1" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
+          <Maximize2 size={11} /> Comparação completa (qualquer camada)
+        </button>
+        {completo && <ComparacaoCompleta safraNome={safraNome} onClose={() => setCompleto(false)} />}
       </div>
     );
   }
@@ -193,6 +199,10 @@ export function ComparadorProdNdvi({ safraNome }: { safraNome: string }) {
         style={{ background: 'var(--invicta-blue-mid)' }}>
         {gerando ? <><Loader2 size={13} className="animate-spin" /> Gerando PDF…</> : <><FileDown size={13} /> Relatório lado a lado (PDF)</>}
       </button>
+      <button onClick={() => setCompleto(true)} className="w-full py-1.5 rounded text-[10px] font-bold flex items-center justify-center gap-1" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
+        <Maximize2 size={11} /> Comparação completa (tela cheia · qualquer camada)
+      </button>
+      {completo && <ComparacaoCompleta safraNome={safraNome} onClose={() => setCompleto(false)} />}
     </div>
   );
 }
