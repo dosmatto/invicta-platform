@@ -64,3 +64,32 @@ def interpolar(req: ReqInterp):
         raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:  # pragma: no cover
         raise HTTPException(status_code=500, detail=f"falha na interpolacao: {e}")
+
+
+class Camada(BaseModel):
+    nome: str
+    b64: str                          # Float32 (norte no topo), rows*cols
+
+
+class ReqZonarMulti(BaseModel):
+    camadas: list[Camada]             # MAPAS JÁ INTERPOLADOS (co-registrados)
+    bounds: list[float]               # [w, s, e, n] comum às camadas
+    shape: list[int]                  # [rows, cols] comum às camadas
+    poligono: dict[str, Any] | None = None
+    n_classes: int = 0                # 0 = usar a sugestão (mín. de FPI/NCE)
+    algoritmo: str = "fcm"            # 'fcm' (fuzzy c-means) | 'kmeans'
+    c_min: int = 2                    # faixa p/ a curva FPI/NCE
+    c_max: int = 6
+
+
+@app.post("/zonear-multi")
+def zonear_multi(req: ReqZonarMulti):
+    """Zona de manejo por SIMILARIDADE: clusteriza (k-means/FCM) os mapas já
+    interpolados das camadas escolhidas + índices FPI/NCE p/ o nº de zonas."""
+    cams = [{"nome": c.nome, "b64": c.b64} for c in req.camadas]
+    try:
+        return interp.zonar_multi(cams, req.bounds, req.shape, req.n_classes, req.algoritmo, req.c_min, req.c_max, req.poligono)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:  # pragma: no cover
+        raise HTTPException(status_code=500, detail=f"falha ao zonear-multi: {e}")

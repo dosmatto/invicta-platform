@@ -18,8 +18,9 @@ from typing import Any
 
 import numpy as np
 import shapely
-from shapely.geometry import shape
+from shapely.geometry import shape, mapping
 from scipy.spatial import cKDTree
+from scipy.cluster.vq import kmeans2
 from PIL import Image
 
 try:
@@ -47,7 +48,7 @@ AMPLITUDE_MIN = 0.30
 NUGGET_MAX = 0.10
 # Versao do motor de interpolacao (conferir em GET /health para saber se o
 # backend foi reiniciado com o codigo novo).
-VERSION = "interp-7-nugget-10"
+VERSION = "interp-9-cluster"
 
 
 def _nlags(n: int) -> int:
@@ -223,10 +224,13 @@ def _png_data_url(rgba: np.ndarray) -> str:
     return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
 
 
-# ---------------------------------------------------------------- entrada
-def interpolar(points: list[dict], polygon_geojson: dict, dominio, stops,
-               pixel_m: float = 20.0, metodo: str = "krige",
-               modelo_fixo: str | None = None) -> dict[str, Any]:
+# ---------------------------------------------------------------- grid bruto
+def gerar_grid(points: list[dict], polygon_geojson: dict, pixel_m: float = 20.0,
+               metodo: str = "krige", modelo_fixo: str | None = None) -> dict[str, Any]:
+    """Interpola UM atributo e devolve o grid bruto recortado + eixos geograficos.
+    Reusado por interpolar() (que colore) e por zonar() (que classifica e vetoriza).
+    O grid devolvido NAO esta invertido (grid[j, i] <-> gx[i], gy[j], gy ascendente).
+    """
     poly = shape(polygon_geojson)
     x = np.array([p["lng"] for p in points], dtype=float)
     y = np.array([p["lat"] for p in points], dtype=float)
@@ -313,26 +317,231 @@ def interpolar(points: list[dict], polygon_geojson: dict, dominio, stops,
             )
 
     grid = _clip(grid, gx, gy, poly)
+    return {
+        "grid": grid, "gx": gx, "gy": gy, "bounds": [minx, miny, maxx, maxy],
+        "modelo": modelo, "rmse": rmse, "variograma": variograma,
+        "lon0": lon0, "lat0": lat0, "n": int(len(z)),
+    }
+
+
+# ---------------------------------------------------------------- entrada
+def interpolar(points: list[dict], polygon_geojson: dict, dominio, stops,
+               pixel_m: float = 20.0, metodo: str = "krige",
+               modelo_fixo: str | None = None) -> dict[str, Any]:
+    g = gerar_grid(points, polygon_geojson, pixel_m, metodo, modelo_fixo)
+    grid, gx, gy = g["grid"], g["gx"], g["gy"]
+
     rgba = _colorize(grid, dominio, stops)
     rgba = rgba[::-1, :, :]  # norte no topo da imagem
 
     finitos = grid[np.isfinite(grid)]
+    gxm, _ = _to_local(gx, np.full_like(gx, g["lat0"]), g["lon0"], g["lat0"])
+    _, gym = _to_local(np.full_like(gy, g["lon0"]), gy, g["lon0"], g["lat0"])
     pix_x = abs(float(gxm[1] - gxm[0])) if len(gxm) > 1 else float(pixel_m)
     pix_y = abs(float(gym[1] - gym[0])) if len(gym) > 1 else float(pixel_m)
     stats = {
-        "n": int(len(z)),
-        "modelo": modelo,
+        "n": g["n"],
+        "modelo": g["modelo"],
         "min": float(np.min(finitos)) if finitos.size else None,
         "max": float(np.max(finitos)) if finitos.size else None,
         "nx": int(len(gx)),
         "ny": int(len(gy)),
         "pixel_m": round((pix_x + pix_y) / 2.0, 1),
-        "rmse": round(rmse, 3) if rmse is not None else None,
-        "variograma": variograma,
+        "rmse": round(g["rmse"], 3) if g["rmse"] is not None else None,
+        "variograma": g["variograma"],
     }
     # Grid bruto (Float32, norte no topo p/ casar com a imagem) p/ futuras
     # derivacoes (mapa de aplicacao, exportar GeoTIFF, etc.). NaN preservado.
     grid_oriented = grid[::-1, :].astype("float32")
     grid_b64 = base64.b64encode(grid_oriented.tobytes()).decode()
     grid_meta = {"b64": grid_b64, "shape": [int(grid_oriented.shape[0]), int(grid_oriented.shape[1])]}
-    return {"bounds": [minx, miny, maxx, maxy], "png": _png_data_url(rgba), "stats": stats, "grid": grid_meta}
+    return {"bounds": g["bounds"], "png": _png_data_url(rgba), "stats": stats, "grid": grid_meta}
+
+
+# ---------------------------------------------------------------- zoneamento
+# Rotulos no vocabulario do semaforo (lib/zonas.ts do front colore por eles).
+# Classe "01" = maiores valores do atributo = "Alta".
+ZONE_LABELS = {
+    2: ["Alta", "Baixa"],
+    3: ["Alta", "Média", "Baixa"],
+    4: ["Alta", "Média-alta", "Média-baixa", "Baixa"],
+    5: ["Alta", "Média-alta", "Média", "Média-baixa", "Baixa"],
+}
+
+
+def _rotulos(n: int) -> list[str]:
+    return ZONE_LABELS.get(n, [f"Classe {i + 1}" for i in range(n)])
+
+
+def _area_ha(geom, lon0: float, lat0: float) -> float:
+    """Area em hectares: projeta a geometria (lng/lat) p/ metros locais e mede."""
+    def _proj(coords):
+        mx, my = _to_local(coords[:, 0], coords[:, 1], lon0, lat0)
+        return np.column_stack([mx, my])
+    return float(shapely.transform(geom, _proj).area) / 10000.0
+
+
+# ---------------------------------------------------------------- zoneamento multi-camada
+# Zona de manejo por SIMILARIDADE (clusterização) sobre MAPAS JÁ INTERPOLADOS
+# (não interpola). Empilha as camadas escolhidas -> cada pixel é um vetor ->
+# agrupa pixels parecidos (k-means OU fuzzy c-means). O nº ótimo de zonas é
+# escolhido pelos índices FPI/NCE (Fridgen/MZA), calculados via FCM por nº de
+# classes. FCM/FPI/NCE reimplementados em numpy (referência: SmartMapPlugin).
+
+def _decode_grid_b64(b64: str, rows: int, cols: int) -> np.ndarray:
+    """base64 Float32 (norte no topo) -> grid 2D canônico (gy ascendente)."""
+    a = np.frombuffer(base64.b64decode(b64), dtype="<f4").astype(float)
+    if a.size != rows * cols:
+        raise ValueError(f"camada com {a.size} células != {rows}x{cols}")
+    return a.reshape(rows, cols)[::-1]  # desfaz o flip de orientação do interpolador
+
+
+def _normalizar_colunas(X: np.ndarray) -> np.ndarray:
+    """z-score por coluna (camada) p/ as camadas entrarem com peso comparável."""
+    mu = X.mean(axis=0)
+    sd = X.std(axis=0)
+    sd[sd == 0] = 1.0
+    return (X - mu) / sd
+
+
+def _fcm(X: np.ndarray, c: int, m: float = 2.0, max_iter: int = 150, tol: float = 1e-5, seed: int = 0):
+    """Fuzzy c-means (numpy). Devolve a matriz de pertinência U (n, c)."""
+    rng = np.random.default_rng(seed)
+    n = X.shape[0]
+    U = rng.random((n, c))
+    U /= U.sum(axis=1, keepdims=True)
+    p = 2.0 / (m - 1.0)
+    centers = np.zeros((c, X.shape[1]))
+    for _ in range(max_iter):
+        Um = U ** m
+        centers = (Um.T @ X) / Um.sum(axis=0)[:, None]
+        d = np.linalg.norm(X[:, None, :] - centers[None, :, :], axis=2)
+        d = np.fmax(d, 1e-10)
+        inv = d ** (-p)
+        Unew = inv / inv.sum(axis=1, keepdims=True)
+        if np.linalg.norm(Unew - U) < tol:
+            U = Unew
+            break
+        U = Unew
+    return U, centers
+
+
+def _fpi_nce(U: np.ndarray):
+    """Índices do MZA (Fridgen et al. 2004). Mínimos = nº ótimo de zonas.
+    FPI = 1 - (c*F - 1)/(c - 1), F = coef. de partição = (1/n) ΣΣ u².
+    NCE = H / ln(c), H = entropia de partição = -(1/n) ΣΣ u·ln(u)."""
+    n, c = U.shape
+    if c < 2:
+        return 1.0, 1.0
+    F = float(np.sum(U ** 2) / n)
+    H = float(-np.sum(U * np.log(np.clip(U, 1e-12, 1.0))) / n)
+    fpi = 1.0 - (c * F - 1.0) / (c - 1.0)
+    nce = H / math.log(c)
+    return fpi, nce
+
+
+def _kmeans_labels(X: np.ndarray, c: int, seed: int = 0) -> np.ndarray:
+    try:
+        _, labels = kmeans2(X, c, minit="++", seed=seed, missing="warn")
+    except Exception:
+        _, labels = kmeans2(X, c, minit="points", seed=seed, missing="warn")
+    return np.asarray(labels, dtype=int)
+
+
+def zonar_multi(camadas: list[dict], bounds, dims, n_classes: int = 0,
+                algoritmo: str = "fcm", c_min: int = 2, c_max: int = 6,
+                polygon_geojson: dict | None = None, seed: int = 0) -> dict[str, Any]:
+    rows, cols = int(dims[0]), int(dims[1])
+    w, s, e, n = [float(v) for v in bounds]
+    gx = np.linspace(w, e, cols)
+    gy = np.linspace(s, n, rows)
+    lon0, lat0 = (w + e) / 2.0, (s + n) / 2.0
+
+    if not camadas:
+        raise ValueError("nenhuma camada selecionada")
+    stack = np.stack([_decode_grid_b64(cam["b64"], rows, cols) for cam in camadas], axis=0)  # (L, rows, cols)
+
+    finite = np.all(np.isfinite(stack), axis=0)  # pixels válidos em TODAS as camadas
+    idx = np.argwhere(finite)  # (n_pix, 2) -> [j, i]
+    if idx.shape[0] < max(int(c_max), 3):
+        raise ValueError("pixels insuficientes (camadas com pouca sobreposição válida)")
+    X = stack[:, finite].T  # (n_pix, L)
+    Xn = _normalizar_colunas(X)
+
+    # Índices FPI/NCE por nº de classes (via FCM) -> curva p/ escolher o nº de zonas.
+    indices = []
+    ca = max(2, int(c_min))
+    cb = max(ca, int(c_max))
+    for c in range(ca, cb + 1):
+        if idx.shape[0] <= c:
+            break
+        U, _ = _fcm(Xn, c, seed=seed)
+        fpi, nce = _fpi_nce(U)
+        indices.append({"c": c, "fpi": round(fpi, 4), "nce": round(nce, 4)})
+
+    sugestao = None
+    if indices:
+        fs = np.array([d["fpi"] for d in indices])
+        ns = np.array([d["nce"] for d in indices])
+        def _norm(a):
+            r = a.max() - a.min()
+            return (a - a.min()) / r if r > 0 else a * 0.0
+        score = _norm(fs) + _norm(ns)
+        sugestao = int(indices[int(np.argmin(score))]["c"])
+
+    c_sel = int(n_classes) if int(n_classes) >= 2 else (sugestao or 3)
+    c_sel = min(c_sel, idx.shape[0])
+
+    if algoritmo == "kmeans":
+        labels = _kmeans_labels(Xn, c_sel, seed=seed)
+    else:
+        U, _ = _fcm(Xn, c_sel, seed=seed)
+        labels = np.argmax(U, axis=1)
+
+    # Ordena clusters por "índice de potencial" = média das camadas normalizadas
+    # (maior = "Alta"). A ordenação manual/sugerida fina é da próxima fatia.
+    comp = Xn.mean(axis=1)
+    presentes = [k for k in range(c_sel) if np.any(labels == k)]
+    presentes.sort(key=lambda k: float(comp[labels == k].mean()), reverse=True)
+    rotulos = _rotulos(len(presentes))
+
+    cls = np.full((rows, cols), -1, dtype=int)
+    cls[idx[:, 0], idx[:, 1]] = labels
+
+    poly = shape(polygon_geojson) if polygon_geojson else None
+    dx = float(np.median(np.diff(gx))) if cols > 1 else (e - w)
+    dy = float(np.median(np.diff(gy))) if rows > 1 else (n - s)
+
+    features = []
+    for r, k in enumerate(presentes):
+        jj, ii = np.where(cls == k)
+        if jj.size == 0:
+            continue
+        boxes = shapely.box(gx[ii] - dx / 2.0, gy[jj] - dy / 2.0, gx[ii] + dx / 2.0, gy[jj] + dy / 2.0)
+        geom = shapely.union_all(boxes)
+        if poly is not None:
+            geom = geom.intersection(poly)
+        if geom.is_empty:
+            continue
+        geom = geom.simplify(dx * 0.5, preserve_topology=True)
+        if geom.is_empty:
+            continue
+        rotulo = rotulos[r] if r < len(rotulos) else f"Classe {r + 1}"
+        features.append({
+            "type": "Feature",
+            "properties": {"id": f"{r + 1:02d}", "classe": rotulo, "areaHa": round(_area_ha(geom, lon0, lat0), 2)},
+            "geometry": mapping(geom),
+        })
+
+    return {
+        "type": "FeatureCollection",
+        "features": features,
+        "indices": indices,        # [{c, fpi, nce}] p/ o gráfico
+        "sugestao_c": sugestao,    # nº de zonas sugerido (mínimo de FPI+NCE)
+        "stats": {
+            "algoritmo": algoritmo,
+            "n_classes": len(presentes),
+            "n_pixels": int(idx.shape[0]),
+            "n_camadas": len(camadas),
+        },
+    }

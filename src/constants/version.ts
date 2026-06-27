@@ -1,6 +1,11 @@
-export const APP_VERSION = '0.65.1';
+export const APP_VERSION = '0.67.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.67.0': [
+    'Zonas de Manejo (MEAP) — Fase M2 (similaridade): a geração de zonas agora é por CLUSTERIZAÇÃO dos mapas JÁ interpolados (não reinterpola). Na aba Zonas de Manejo você escolhe quais CAMADAS usar (argila, CTC, MO, P…), o algoritmo (Fuzzy c-means ou K-means) e o nº de zonas',
+    'O nº ótimo de zonas é sugerido pelos índices FPI e NCE (método MZA/Fridgen): a plataforma roda o fuzzy c-means para 2 a 6 zonas e mostra um gráfico — o mínimo das curvas é o número recomendado',
+    'As zonas saem coloridas no mapa (preview, não salva ainda). Próximo: área mínima de zona, ordenação manual/sugerida (produtividade, NDVI, MO, CTC) e salvar como versão do MEAP',
+  ],
   '0.65.1': [
     'Zonas de Manejo (MEAP) virou um MÓDULO PRÓPRIO: nova aba "Zonas de Manejo" na página do talhão (entre Amostragem e Produtividade), com as zonas coloridas no mapa + a homogeneidade (CV) por zona. Saiu do Resumo (não é mais um card lá)',
   ],

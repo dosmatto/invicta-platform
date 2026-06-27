@@ -121,6 +121,52 @@ export async function interpolar(params: {
   return r.json();
 }
 
+// Zona por SIMILARIDADE: clusteriza mapas JÁ interpolados (não interpola).
+export interface RespZonarMulti {
+  type: 'FeatureCollection';
+  features: GeoJSON.Feature[];
+  indices: { c: number; fpi: number; nce: number }[];
+  sugestao_c: number | null;
+  stats: { algoritmo: string; n_classes: number; n_pixels: number; n_camadas: number };
+}
+
+export async function zonearMulti(params: {
+  camadas: { nome: string; b64: string }[];
+  bounds: [number, number, number, number];
+  shape: [number, number];
+  poligono?: GeoJSON.Polygon | GeoJSON.MultiPolygon | null;
+  nClasses?: number;
+  algoritmo?: 'fcm' | 'kmeans';
+  cMin?: number;
+  cMax?: number;
+}): Promise<RespZonarMulti> {
+  let r: Response;
+  try {
+    r = await fetch(`${INTERP_URL}/zonear-multi`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        camadas: params.camadas,
+        bounds: params.bounds,
+        shape: params.shape,
+        poligono: params.poligono ?? null,
+        n_classes: params.nClasses ?? 0,
+        algoritmo: params.algoritmo ?? 'fcm',
+        c_min: params.cMin ?? 2,
+        c_max: params.cMax ?? 6,
+      }),
+    });
+  } catch {
+    throw new Error('Interpolador desligado nesta máquina. Dê dois cliques em backend\\start.bat (Windows) ou backend/start.command (Mac), espere a janela abrir, e tente de novo.');
+  }
+  if (!r.ok) {
+    let msg = `Backend respondeu ${r.status}`;
+    try { const j = await r.json(); if (j?.detail) msg = String(j.detail); } catch {}
+    throw new Error(msg);
+  }
+  return r.json();
+}
+
 // bounds [w,s,e,n] -> coordinates do image source (TL, TR, BR, BL)
 export function coordsFromBounds(
   b: [number, number, number, number],
