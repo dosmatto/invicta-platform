@@ -106,7 +106,7 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
     let vivo = true;
     setCarregando(true);
     carregarCamadas(talhao.id)
-      .then(c => { if (!vivo) return; setCarregadas(c); setChaves(c ? c.camadas.map(x => x.chave) : []); })
+      .then(c => { if (!vivo) return; setCarregadas(c); setChaves([]); }) // começa desmarcado: o usuário escolhe as camadas
       .catch(() => { if (vivo) setCarregadas(null); })
       .finally(() => { if (vivo) setCarregando(false); });
     return () => { vivo = false; };

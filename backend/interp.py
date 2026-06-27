@@ -48,7 +48,7 @@ AMPLITUDE_MIN = 0.30
 NUGGET_MAX = 0.10
 # Versao do motor de interpolacao (conferir em GET /health para saber se o
 # backend foi reiniciado com o codigo novo).
-VERSION = "interp-9-cluster"
+VERSION = "interp-10-cluster-fix"
 
 
 def _nlags(n: int) -> int:
@@ -509,16 +509,22 @@ def zonar_multi(camadas: list[dict], bounds, dims, n_classes: int = 0,
     cls[idx[:, 0], idx[:, 1]] = labels
 
     poly = shape(polygon_geojson) if polygon_geojson else None
-    dx = float(np.median(np.diff(gx))) if cols > 1 else (e - w)
-    dy = float(np.median(np.diff(gy))) if rows > 1 else (n - s)
+    dx = float((e - w) / (cols - 1)) if cols > 1 else (e - w)
+    dy = float((n - s) / (rows - 1)) if rows > 1 else (n - s)
+    # Arestas EXATAS das células (linspace) -> quadrados vizinhos compartilham a
+    # mesma coordenada de aresta. Sem isso (centros ± mediana/2) a união do GEOS
+    # deixava costuras/noding (linhas internas espúrias) que fragmentavam a zona.
+    ex = np.linspace(w - dx / 2.0, e + dx / 2.0, cols + 1)
+    ey = np.linspace(s - dy / 2.0, n + dy / 2.0, rows + 1)
+    grid_snap = min(dx, dy) / 100.0
 
     features = []
     for r, k in enumerate(presentes):
         jj, ii = np.where(cls == k)
         if jj.size == 0:
             continue
-        boxes = shapely.box(gx[ii] - dx / 2.0, gy[jj] - dy / 2.0, gx[ii] + dx / 2.0, gy[jj] + dy / 2.0)
-        geom = shapely.union_all(boxes)
+        boxes = shapely.box(ex[ii], ey[jj], ex[ii + 1], ey[jj + 1])
+        geom = shapely.union_all(boxes, grid_size=grid_snap)
         if poly is not None:
             geom = geom.intersection(poly)
         if geom.is_empty:
