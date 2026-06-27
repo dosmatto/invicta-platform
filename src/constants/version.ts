@@ -1,6 +1,11 @@
-export const APP_VERSION = '0.70.0';
+export const APP_VERSION = '0.71.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.71.0': [
+    'Zonas de Manejo (MEAP): a geração agora mostra a HOMOGENEIDADE (CV) de cada zona já no preview — calculada do laboratório que cai dentro de cada zona. Assim dá pra comparar zoneamentos pela qualidade (zona boa = CV baixo) antes de escolher o padrão',
+    'O CV vai salvo junto do zoneamento (CV médio aparece na lista "Zoneamentos salvos")',
+    'Em "Zoneamentos salvos", basta CLICAR na linha do zoneamento para vê-lo no mapa (a última clicada fica na tela) — não precisa mais do botão do olho',
+  ],
   '0.70.0': [
     'Zonas de Manejo (MEAP): agora dá pra SALVAR o zoneamento gerado. Você pode salvar VÁRIOS por talhão e marcar UM como "Padrão" — o padrão é o oficial e vai automaticamente para a aba Amostragem gerar o grid por zona',
     'Lista "Zoneamentos salvos": tornar padrão, ver no mapa ou excluir cada um. O padrão também é adotado pelo card do MEAP (calcula o CV das zonas)',

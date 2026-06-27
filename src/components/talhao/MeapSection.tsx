@@ -11,11 +11,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import { getZoneamentosMeap, saveZoneamentoMeap, deleteZoneamentoMeap, setZoneamentoPadraoMeap, type Talhao, type ZoneamentoMeap } from '@/lib/store';
 import { obterOuAdotarAmbiente } from '@/lib/meap/adocao';
-import { carregarCamadas, gerarMulti, type CamadasCarregadas } from '@/lib/meap/gerar';
+import { carregarCamadas, gerarMulti, dadosLabCV, type CamadasCarregadas } from '@/lib/meap/gerar';
+import { calcularCVZonas } from '@/lib/meap/cv';
 import { extrairPoligono, type RespZonarMulti } from '@/lib/fertilidade';
 import { classeZona } from '@/lib/zonas';
 import { simboloElemento } from '@/lib/lab';
-import type { AmbienteProdutivo, Homogeneidade } from '@/lib/meap/tipos';
+import type { AmbienteProdutivo, Homogeneidade, MetricasZonaMeap } from '@/lib/meap/tipos';
 import { Layers, AlertTriangle, Wand2, Loader2, X, Check, ChevronUp, ChevronDown, Save, Star, Trash2, Eye } from 'lucide-react';
 
 const HOMOG: Record<Homogeneidade, { label: string; cor: string; bg: string }> = {
@@ -159,6 +160,16 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
     });
   }, [res, potDeRank]);
 
+  // CV (homogeneidade) por zona gerada, calculado dos dados de laboratório.
+  const cv = useMemo(() => {
+    if (!res) return null;
+    const { pontos, resultados } = dadosLabCV(talhao.id);
+    if (!resultados.length) return null;
+    return calcularCVZonas({ zonas: res.features.map(f => ({ id: String((f.properties as { id?: string })?.id ?? ''), geometry: f.geometry })), pontos, resultados });
+  }, [res, talhao.id]);
+  const cvPorZona: Record<string, MetricasZonaMeap> = cv?.porZona ?? {};
+  const varCVsimbolo = cv?.variavelValidacao ? simboloElemento(cv.variavelValidacao) : null;
+
   // Resumo por potencial (na ordem) para a lista reordenável.
   const potenciais = useMemo(() => {
     const labels = rotulosPotencial(ordemRanks.length);
@@ -213,13 +224,19 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
     if (!res || !zonas.length) return;
     const fc: GeoJSON.FeatureCollection = {
       type: 'FeatureCollection',
-      features: zonas.map(z => ({ type: 'Feature', properties: { id: z.id, classe: z.potencial, potencialRank: z.rank, areaHa: z.areaHa }, geometry: z.geometry! })),
+      features: zonas.map(z => {
+        const m = cvPorZona[z.id];
+        return { type: 'Feature', properties: { id: z.id, classe: z.potencial, potencialRank: z.rank, areaHa: z.areaHa, cvValidacao: m?.cvValidacao ?? null, homogeneidade: m?.homogeneidade ?? null }, geometry: z.geometry! };
+      }),
     };
     const cams = carregadas ? carregadas.camadas.filter(c => chaves.includes(c.chave)).map(c => `${c.simbolo} ${c.prof}`) : [];
+    const comCv = zonas.filter(z => cvPorZona[z.id]?.cvValidacao != null);
+    const areaCv = comCv.reduce((s, z) => s + z.areaHa, 0);
+    const cvMedio = areaCv > 0 ? Math.round((comCv.reduce((s, z) => s + (cvPorZona[z.id]!.cvValidacao as number) * z.areaHa, 0) / areaCv) * 10) / 10 : null;
     const primeiro = zoneamentos.length === 0;
     const novo = saveZoneamentoMeap({
       talhaoId: talhao.id, nome: `Zoneamento ${zoneamentos.length + 1}`, padrao: primeiro, fc,
-      meta: { camadas: cams, algoritmo: res.stats.algoritmo, nPotenciais: potenciais.length, areaMinHa: res.stats.area_min_ha, nZonas: zonas.length },
+      meta: { camadas: cams, algoritmo: res.stats.algoritmo, nPotenciais: potenciais.length, areaMinHa: res.stats.area_min_ha, nZonas: zonas.length, cvMedio },
     });
     if (primeiro) setZoneamentoPadraoMeap(talhao.id, novo.id);  // grava em talhao.zonasGeojson → Amostragem
     recarregarZon();
@@ -385,7 +402,9 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
 
                 {/* Zonas (identidade única) */}
                 <div>
-                  <p className="text-[9px] mb-1" style={{ color: '#a78bfa' }}>Zonas ({zonas.length}) — cada mancha contígua é uma zona própria</p>
+                  <p className="text-[9px] mb-1" style={{ color: '#a78bfa' }}>
+                    Zonas ({zonas.length}) — cada mancha é uma zona própria{varCVsimbolo && <> · homogeneidade (CV) por <strong style={{ color: '#e9d5ff' }}>{varCVsimbolo}</strong></>}
+                  </p>
                   <div className="space-y-1">
                     {zonas.map(z => (
                       <div key={z.id} className="flex items-center gap-2 px-2 py-1 rounded" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
@@ -393,6 +412,13 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
                         <span className="text-[11px] font-bold" style={{ color: '#e2e8f0', minWidth: '60px' }}>Zona {z.id}</span>
                         <span className="text-[10px]" style={{ color: '#93c5fd' }}>{z.potencial}</span>
                         <span className="text-[10px] ml-auto" style={{ color: '#64748b' }}>{z.areaHa.toLocaleString('pt-BR')} ha</span>
+                        {(() => {
+                          const m = cvPorZona[z.id];
+                          const h = m?.homogeneidade ? HOMOG[m.homogeneidade] : null;
+                          return h && m?.cvValidacao != null
+                            ? <span className="text-[9px] px-1.5 py-0.5 rounded font-semibold flex-shrink-0" style={{ background: h.bg, color: h.cor }}>CV {m.cvValidacao.toLocaleString('pt-BR')}%</span>
+                            : null;
+                        })()}
                       </div>
                     ))}
                   </div>
@@ -423,17 +449,20 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
             <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color: '#cbd5e1' }}>Zoneamentos salvos ({zoneamentos.length})</span>
           </div>
           {zoneamentos.map(z => (
-            <div key={z.id} className="px-2 py-1.5 rounded" style={{ background: '#061525', border: `1px solid ${z.padrao ? '#a16207' : '#1a3a6b'}` }}>
+            <div key={z.id} onClick={() => setVendoId(vendoId === z.id ? null : z.id)} title="Clique para ver no mapa"
+              className="px-2 py-1.5 rounded cursor-pointer transition-colors"
+              style={{ background: vendoId === z.id ? '#0f2240' : '#061525', border: `1px solid ${vendoId === z.id ? '#22d3ee' : (z.padrao ? '#a16207' : '#1a3a6b')}` }}>
               <div className="flex items-center gap-2">
+                {vendoId === z.id && <Eye size={11} className="flex-shrink-0" style={{ color: '#22d3ee' }} />}
                 <span className="text-xs font-bold flex-1 truncate" style={{ color: '#e2e8f0' }}>{z.nome}</span>
                 {z.padrao
                   ? <span className="text-[9px] px-1.5 py-0.5 rounded font-bold flex items-center gap-1 flex-shrink-0" style={{ background: '#3a2e0a', color: '#fbbf24' }}><Star size={8} /> Padrão</span>
-                  : <button onClick={() => tornarPadrao(z.id)} className="text-[9px] px-1.5 py-0.5 rounded font-semibold flex-shrink-0" style={{ background: '#1a3a6b', color: '#93c5fd' }}>Tornar padrão</button>}
-                <button onClick={() => setVendoId(vendoId === z.id ? null : z.id)} title={vendoId === z.id ? 'Parar de ver' : 'Ver no mapa'} className="p-1 rounded flex-shrink-0" style={{ color: vendoId === z.id ? '#22d3ee' : '#93c5fd' }}><Eye size={12} /></button>
-                <button onClick={() => excluir(z.id)} title="Excluir" className="p-1 rounded flex-shrink-0" style={{ color: '#f87171' }}><Trash2 size={12} /></button>
+                  : <button onClick={e => { e.stopPropagation(); tornarPadrao(z.id); }} className="text-[9px] px-1.5 py-0.5 rounded font-semibold flex-shrink-0" style={{ background: '#1a3a6b', color: '#93c5fd' }}>Tornar padrão</button>}
+                <button onClick={e => { e.stopPropagation(); excluir(z.id); }} title="Excluir" className="p-1 rounded flex-shrink-0" style={{ color: '#f87171' }}><Trash2 size={12} /></button>
               </div>
               <p className="text-[9px] mt-0.5" style={{ color: '#64748b' }}>
                 {z.meta.nZonas} zonas · {z.meta.nPotenciais} potenciais · {z.meta.algoritmo === 'fcm' ? 'fuzzy' : 'k-means'}
+                {z.meta.cvMedio != null && <> · CV médio {z.meta.cvMedio.toLocaleString('pt-BR')}%</>}
                 {z.meta.camadas.length > 0 && <> · {z.meta.camadas.join(', ')}</>}
                 {z.padrao && <span style={{ color: '#fbbf24' }}> · usado na Amostragem</span>}
               </p>
