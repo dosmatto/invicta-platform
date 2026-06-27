@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { seedIfEmpty } from '@/lib/seed';
 import { bootCloud } from '@/lib/cloud';
@@ -191,9 +191,12 @@ export function AppProvider({ children, redirectProdutorParaPortal }: { children
     safra: '24/25', area: 0,
   });
 
-  function setNav(partial: Partial<NavContext>) {
+  // useCallback: setNav PRECISA ser estável. Sem isso, recriava-se a cada render
+  // e qualquer useEffect que o tem como dependência (ex.: TalhaoPage) re-rodava
+  // sem parar → "Maximum update depth exceeded" → a página/mapa travava.
+  const setNav = useCallback((partial: Partial<NavContext>) => {
     setNavState(prev => ({ ...prev, ...partial }));
-  }
+  }, []);
 
   return (
     <AppContext.Provider value={{

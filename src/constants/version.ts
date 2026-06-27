@@ -1,6 +1,9 @@
-export const APP_VERSION = '0.69.0';
+export const APP_VERSION = '0.69.1';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.69.1': [
+    'Correção (mapa do talhão): o mapa travava na página completa do talhão — não dava zoom nem arrastava. Era um loop infinito de renderização (o setNav do contexto se recriava a cada render e disparava o efeito da página sem parar). Estabilizado; o mapa volta a responder normalmente',
+  ],
   '0.69.0': [
     'Zonas de Manejo (MEAP): cada zona agora tem IDENTIDADE ÚNICA. Antes, a clusterização dava "classes" de similaridade que se repetiam pelo talhão (a mesma classe em manchas separadas). Agora cada mancha contígua é uma ZONA própria, numerada (Zona 01, 02, 03…), e o potencial (Alta/Médio/Baixo) é um atributo dela',
     'No preview, agora há duas listas: os POTENCIAIS (reordenáveis Alta→Baixa, recolorem as zonas) e as ZONAS únicas. Zonas de mesmo potencial têm a mesma cor (semáforo), distinguidas pelo número',
