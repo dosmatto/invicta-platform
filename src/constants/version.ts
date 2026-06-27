@@ -1,6 +1,10 @@
-export const APP_VERSION = '0.78.0';
+export const APP_VERSION = '0.79.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.79.0': [
+    'Produtividade: novo COMPARADOR Produtividade × NDVI — com o Mapa de Produtividade salvo e um NDVI mantido, a aba mostra os dois lado a lado, com a CORRELAÇÃO espacial (Pearson) entre eles',
+    'Botão "Relatório lado a lado (PDF)": gera um PDF A4 paisagem com o mapa de produtividade e o de NDVI lado a lado (sobre o satélite), legendas, dados e a correlação',
+  ],
   '0.78.0': [
     'Produtividade: o processamento agora é em ETAPAS claras — 1) Importar máquinas (Máquina 1, 2, …), 2) Unificação (normaliza as máquinas para uma média comum, corrigindo diferença de calibração entre monitores), 3) Limpeza, 4) Interpolação',
     'Na interpolação dá para informar a MÉDIA REAL (da balança/notas) e o mapa é CALIBRADO para a média bater com ela, mantendo o padrão espacial',

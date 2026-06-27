@@ -64,10 +64,10 @@ function capShape(s: [number, number], maxSide: number): [number, number] {
   return [Math.max(2, Math.round(s[0] * k)), Math.max(2, Math.round(s[1] * k))];
 }
 
-interface NdviCamada { chave: string; nut: string; prof: string; data: string; bounds: [number, number, number, number]; b64: string; shape: [number, number]; }
+export interface NdviCamada { chave: string; nut: string; prof: string; data: string; bounds: [number, number, number, number]; b64: string; shape: [number, number]; }
 
 // Carrega os NDVI MANTIDOS (Sentinel + CBERS) do talhão a partir da nuvem.
-async function carregarNdviSalvos(talhaoId: string): Promise<NdviCamada[]> {
+export async function carregarNdviSalvos(talhaoId: string): Promise<NdviCamada[]> {
   const fontes: Array<['s2' | 'cbers', string]> = [['s2', `${talhaoId}__ndvi__`], ['cbers', `${talhaoId}__ndvicbers__`]];
   const out: NdviCamada[] = [];
   for (const [fonte, pref] of fontes) {

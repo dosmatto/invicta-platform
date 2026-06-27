@@ -22,6 +22,7 @@ import {
   type PontoColheita, type ParamsLimpeza, type Unidade, type StatsProd, type CsvParsed,
 } from '@/lib/produtividade';
 import { cloudSalvarMapa, cloudCarregarMapasPorPrefixo, cloudPodeGravar } from '@/lib/cloud';
+import { ComparadorProdNdvi } from '@/components/talhao/ComparadorProdNdvi';
 import type { Legenda } from '@/lib/legendas';
 import { Upload, Loader2, AlertTriangle, Save, Star, Trash2, Eye, Wand2, FileSpreadsheet, Plus, Layers } from 'lucide-react';
 
@@ -335,6 +336,9 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
           </div>
         </div>
       )}
+
+      {/* 5) Comparar Produtividade × NDVI (+ relatório lado a lado) */}
+      <ComparadorProdNdvi safraNome={safra} />
     </div>
   );
 }
