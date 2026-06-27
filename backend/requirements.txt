@@ -5,3 +5,5 @@ scipy
 pykrige
 shapely>=2.0
 pillow
+rasterio
+pystac-client

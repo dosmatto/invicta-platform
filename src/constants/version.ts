@@ -1,6 +1,12 @@
-export const APP_VERSION = '0.71.0';
+export const APP_VERSION = '0.72.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.72.0': [
+    'NOVO módulo NDVI / Satélite (motor MSR — Sensoriamento Remoto), Fase S1: na página do talhão, a aba "NDVI / Satélite" agora BUSCA a imagem de satélite mais recente (Sentinel-2) com pouca nuvem e calcula o NDVI (vigor da lavoura) recortado no talhão',
+    'Você escolhe o período e o limite de nuvem; a plataforma pega a melhor cena, mostra o mapa de NDVI com a legenda oficial (0–1) e as estatísticas (NDVI médio/mín/máx, data da imagem, satélite, % de nuvem)',
+    'As cenas ficam SALVAS por data (série inicial) — recarregam sem rebuscar; clique numa data para trocar o mapa',
+    'Requer o backend local atualizado (novas dependências rasterio + pystac-client); imagem vem do catálogo público Sentinel-2, sem credenciais',
+  ],
   '0.71.0': [
     'Zonas de Manejo (MEAP): a geração agora mostra a HOMOGENEIDADE (CV) de cada zona já no preview — calculada do laboratório que cai dentro de cada zona. Assim dá pra comparar zoneamentos pela qualidade (zona boa = CV baixo) antes de escolher o padrão',
     'O CV vai salvo junto do zoneamento (CV médio aparece na lista "Zoneamentos salvos")',

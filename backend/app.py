@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 import interp
+import msr
 
 app = FastAPI(title="INVICTA - Interpolacao de Fertilidade", version="0.1.0")
 
@@ -52,7 +53,13 @@ class ReqInterp(BaseModel):
 
 @app.get("/health")
 def health():
-    return {"ok": True, "pykrige": interp._HAS_PYKRIGE, "v": getattr(interp, "VERSION", "?")}
+    return {
+        "ok": True,
+        "pykrige": interp._HAS_PYKRIGE,
+        "v": getattr(interp, "VERSION", "?"),
+        "msr": msr._HAS_MSR,
+        "msr_v": getattr(msr, "VERSION", "?"),
+    }
 
 
 @app.post("/interpolar")
@@ -81,6 +88,26 @@ class ReqZonarMulti(BaseModel):
     c_min: int = 2                    # faixa p/ a curva FPI/NCE
     c_max: int = 6
     area_min_ha: float = 0.0          # 0 = sem fusão de manchas pequenas
+
+
+class ReqNdvi(BaseModel):
+    poligono: dict[str, Any]          # GeoJSON Polygon/MultiPolygon do talhão
+    data_ini: str                     # 'YYYY-MM-DD'
+    data_fim: str                     # 'YYYY-MM-DD'
+    nuvem_max: float = 40.0           # % máx de cobertura de nuvem da cena
+    pixel_m: float = 10.0             # resolução alvo (Sentinel-2 nativo = 10 m)
+
+
+@app.post("/ndvi-sentinel")
+def ndvi_sentinel(req: ReqNdvi):
+    """NDVI da cena Sentinel-2 mais recente com pouca nuvem sobre o talhão
+    (STAC público + COG). Devolve grid no mesmo formato da interpolação."""
+    try:
+        return msr.gerar_ndvi(req.poligono, req.data_ini, req.data_fim, req.nuvem_max, req.pixel_m)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:  # pragma: no cover
+        raise HTTPException(status_code=500, detail=f"falha ao gerar NDVI: {e}")
 
 
 @app.post("/zonear-multi")
