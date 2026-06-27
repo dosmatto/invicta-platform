@@ -127,7 +127,7 @@ export interface RespZonarMulti {
   features: GeoJSON.Feature[];
   indices: { c: number; fpi: number; nce: number }[];
   sugestao_c: number | null;
-  stats: { algoritmo: string; n_classes: number; n_pixels: number; n_camadas: number };
+  stats: { algoritmo: string; n_classes: number; n_pixels: number; n_camadas: number; area_min_ha: number; ordem_por: string };
 }
 
 export async function zonearMulti(params: {
@@ -139,6 +139,7 @@ export async function zonearMulti(params: {
   algoritmo?: 'fcm' | 'kmeans';
   cMin?: number;
   cMax?: number;
+  areaMinHa?: number;
 }): Promise<RespZonarMulti> {
   let r: Response;
   try {
@@ -154,6 +155,7 @@ export async function zonearMulti(params: {
         algoritmo: params.algoritmo ?? 'fcm',
         c_min: params.cMin ?? 2,
         c_max: params.cMax ?? 6,
+        area_min_ha: params.areaMinHa ?? 0,
       }),
     });
   } catch {

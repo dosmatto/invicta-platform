@@ -1,6 +1,10 @@
-export const APP_VERSION = '0.67.1';
+export const APP_VERSION = '0.68.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.68.0': [
+    'Zonas de Manejo (MEAP) — Fase M2 (Fatia 2): ÁREA MÍNIMA de zona — defina em ha e o sistema funde as manchas pequenas na zona vizinha (mapa operável). 0 = sem fusão',
+    'Ordenação das zonas Alta→Baixa: a plataforma SUGERE pela ordem de potencial (produtividade/NDVI/MO/CTC quando presentes; senão pelo conjunto das camadas) e você pode REORDENAR manualmente com as setas ↑/↓ — a zona recolore e renomeia (Alta no topo) na hora',
+  ],
   '0.67.1': [
     'Correção (Zonas de Manejo): linhas verticais brancas que apareciam cortando as zonas. Eram costuras da vetorização (os "quadradinhos" de célula não fechavam na mesma borda e a zona se fragmentava). Agora cada zona sai como um polígono contínuo',
     'Na geração de zonas, as camadas começam DESMARCADAS — você escolhe quais entram (antes vinham todas marcadas)',

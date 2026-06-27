@@ -2,8 +2,9 @@
 
 // Módulo "Zonas de Manejo" (MEAP) — aba dedicada da página do talhão.
 // M1: zonas adotadas (importadas) + homogeneidade interna (CV) por zona.
-// M2 Fatia 1: gerar zonas por SIMILARIDADE — clusteriza (k-means/FCM) os mapas
-// JÁ interpolados das camadas escolhidas; índices FPI/NCE sugerem o nº de zonas.
+// M2: gerar zonas por SIMILARIDADE — clusteriza (k-means/FCM) os mapas JÁ
+// interpolados das camadas escolhidas; FPI/NCE sugerem o nº de zonas; área
+// mínima funde manchas pequenas; ordenação Alta→Baixa manual + sugerida.
 // Preview no mapa (não persiste). Convergência "—" até a 2ª versão (M3).
 
 import { useEffect, useMemo, useState } from 'react';
@@ -15,7 +16,7 @@ import { extrairPoligono, type RespZonarMulti } from '@/lib/fertilidade';
 import { classeZona } from '@/lib/zonas';
 import { simboloElemento } from '@/lib/lab';
 import type { AmbienteProdutivo, Homogeneidade } from '@/lib/meap/tipos';
-import { Layers, AlertTriangle, Wand2, Loader2, X, Check } from 'lucide-react';
+import { Layers, AlertTriangle, Wand2, Loader2, X, Check, ChevronUp, ChevronDown } from 'lucide-react';
 
 const HOMOG: Record<Homogeneidade, { label: string; cor: string; bg: string }> = {
   alta: { label: 'Homogênea', cor: '#86efac', bg: '#0f2a1a' },
@@ -28,6 +29,17 @@ const ESTADO: Record<AmbienteProdutivo['estado'], string> = {
 };
 
 const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
+
+// Rótulos ordinais por nº de zonas (espelha o backend; usado ao reordenar).
+const ZLAB: Record<number, string[]> = {
+  2: ['Alta', 'Baixa'],
+  3: ['Alta', 'Média', 'Baixa'],
+  4: ['Alta', 'Média-alta', 'Média-baixa', 'Baixa'],
+  5: ['Alta', 'Média-alta', 'Média', 'Média-baixa', 'Baixa'],
+};
+function rotulosZona(nn: number): string[] {
+  return ZLAB[nn] ?? Array.from({ length: nn }, (_, i) => `Classe ${i + 1}`);
+}
 
 function parseImportadas(zonasGeojson?: string): GeoJSON.FeatureCollection | null {
   if (!zonasGeojson) return null;
@@ -90,10 +102,12 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
 
   // Geração
   const [algoritmo, setAlgoritmo] = useState<'fcm' | 'kmeans'>('fcm');
-  const [nClasses, setNClasses] = useState(0); // 0 = auto (sugestão)
+  const [nClasses, setNClasses] = useState(0);   // 0 = auto (sugestão)
+  const [areaMin, setAreaMin] = useState(0);     // ha; 0 = sem fusão
   const [gerando, setGerando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [res, setRes] = useState<RespZonarMulti | null>(null);
+  const [ordem, setOrdem] = useState<string[]>([]);  // ids das zonas na ordem Alta→Baixa
 
   const poligono = useMemo(() => {
     if (!talhao.geojson) return null;
@@ -106,30 +120,59 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
     let vivo = true;
     setCarregando(true);
     carregarCamadas(talhao.id)
-      .then(c => { if (!vivo) return; setCarregadas(c); setChaves([]); }) // começa desmarcado: o usuário escolhe as camadas
+      .then(c => { if (!vivo) return; setCarregadas(c); setChaves([]); })
       .catch(() => { if (vivo) setCarregadas(null); })
       .finally(() => { if (vivo) setCarregando(false); });
     return () => { vivo = false; };
   }, [talhao.id]);
 
-  // Mapa: preview gerado tem prioridade sobre as zonas importadas.
-  const geradasFC = res ? { type: 'FeatureCollection' as const, features: res.features } : null;
-  useEffect(() => {
-    const fc = geradasFC ?? parseImportadas(talhao.zonasGeojson);
-    if (!fc) { setZonasManejo(null); return; }
-    setZonasManejo(featuresParaMapa(fc));
-    return () => setZonasManejo(null);
-  }, [res, talhao.zonasGeojson, setZonasManejo]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Ao gerar, inicializa a ordem com a sugestão do backend (Alta→Baixa).
+  useEffect(() => { setOrdem(res ? res.features.map(f => String((f.properties as { id?: string })?.id)) : []); }, [res]);
 
-  function toggle(ch: string) {
-    setChaves(prev => prev.includes(ch) ? prev.filter(c => c !== ch) : [...prev, ch]);
+  // Zonas na ordem atual, relabeladas por POSIÇÃO (topo = Alta) e recoloridas.
+  const zonasOrdenadas = useMemo(() => {
+    if (!res) return [];
+    const byId = new Map(res.features.map(f => [String((f.properties as { id?: string })?.id), f]));
+    const ids = (ordem.length ? ordem : [...byId.keys()]).filter(id => byId.has(id));
+    const labels = rotulosZona(ids.length);
+    return ids.map((id, i) => {
+      const f = byId.get(id)!;
+      const classe = labels[i] ?? `Classe ${i + 1}`;
+      const cz = classeZona(classe);
+      return { id, rotulo: String(i + 1).padStart(2, '0'), classe, cor: cz.cor, areaHa: Number((f.properties as { areaHa?: number })?.areaHa ?? 0), geometry: f.geometry };
+    });
+  }, [res, ordem]);
+
+  // Mapa: preview gerado (na ordem atual) tem prioridade sobre as importadas.
+  useEffect(() => {
+    let fc: GeoJSON.FeatureCollection | null = null;
+    if (res && zonasOrdenadas.length) {
+      fc = { type: 'FeatureCollection', features: zonasOrdenadas.map(z => ({ type: 'Feature' as const, properties: { cor: z.cor, rotulo: z.rotulo, classeLabel: z.classe, selecionada: false }, geometry: z.geometry! })) };
+    } else {
+      const imp = parseImportadas(talhao.zonasGeojson);
+      fc = imp ? featuresParaMapa(imp) : null;
+    }
+    if (!fc) { setZonasManejo(null); return; }
+    setZonasManejo(fc);
+    return () => setZonasManejo(null);
+  }, [res, zonasOrdenadas, talhao.zonasGeojson, setZonasManejo]);
+
+  function toggle(ch: string) { setChaves(prev => prev.includes(ch) ? prev.filter(c => c !== ch) : [...prev, ch]); }
+
+  function mover(i: number, dir: -1 | 1) {
+    setOrdem(prev => {
+      const a = [...prev]; const j = i + dir;
+      if (j < 0 || j >= a.length) return prev;
+      [a[i], a[j]] = [a[j], a[i]];
+      return a;
+    });
   }
 
   async function gerar() {
     if (!carregadas || chaves.length === 0) return;
     setErro(null); setGerando(true);
     try {
-      const r = await gerarMulti({ carregadas, chaves, poligono, algoritmo, nClasses });
+      const r = await gerarMulti({ carregadas, chaves, poligono, algoritmo, nClasses, areaMinHa: areaMin });
       if (!r.features.length) throw new Error('Nenhuma zona gerada (sobreposição de dados insuficiente).');
       setRes(r);
       if (nClasses === 0 && r.sugestao_c) setNClasses(r.sugestao_c);
@@ -226,6 +269,14 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
               </label>
             </div>
 
+            <label className="block">
+              <span className="text-[9px] font-semibold block mb-0.5" style={{ color: '#64748b' }}>Área mínima de zona (ha) — funde manchas pequenas</span>
+              <input type="number" step="0.5" min="0" value={areaMin}
+                onChange={e => setAreaMin(Math.max(0, Number(e.target.value.replace(',', '.')) || 0))}
+                className="w-full rounded px-2 py-1.5 text-xs outline-none" style={inputStyle} />
+              <span className="text-[9px]" style={{ color: '#475569' }}>0 = sem fusão (mapa fiel aos dados).</span>
+            </label>
+
             <button onClick={gerar} disabled={gerando || chaves.length === 0}
               className="w-full py-2 rounded text-xs font-bold text-white flex items-center justify-center gap-2"
               style={{ background: gerando ? '#1a3a6b' : '#5b21b6', opacity: gerando || chaves.length === 0 ? 0.7 : 1 }}>
@@ -248,18 +299,39 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
                   </button>
                 </div>
                 <p className="text-[10px]" style={{ color: '#94a3b8' }}>
-                  <strong style={{ color: '#e2e8f0' }}>{res.features.length}</strong> zonas · {res.stats.algoritmo === 'fcm' ? 'fuzzy c-means' : 'k-means'} · {res.stats.n_camadas} camadas · {res.stats.n_pixels.toLocaleString('pt-BR')} px
+                  <strong style={{ color: '#e2e8f0' }}>{zonasOrdenadas.length}</strong> zonas · {res.stats.algoritmo === 'fcm' ? 'fuzzy c-means' : 'k-means'} · {res.stats.n_camadas} camadas · {res.stats.n_pixels.toLocaleString('pt-BR')} px
+                  {res.stats.area_min_ha > 0 && <> · área mín. {res.stats.area_min_ha} ha</>}
                 </p>
+
+                {/* Ordenação manual (↑/↓) — relabela Alta→Baixa por posição */}
+                <p className="text-[9px]" style={{ color: '#a78bfa' }}>
+                  Ordem Alta→Baixa — sugerida por <strong style={{ color: '#e9d5ff' }}>{res.stats.ordem_por}</strong> · use ↑/↓ p/ ajustar
+                </p>
+                <div className="space-y-1">
+                  {zonasOrdenadas.map((z, i) => (
+                    <div key={z.id} className="flex items-center gap-2 px-2 py-1 rounded" style={{ background: '#0b1f3a', border: '1px solid #2e2050' }}>
+                      <span className="inline-block w-3 h-3 rounded-sm flex-shrink-0" style={{ background: z.cor, border: '1px solid #fff' }} />
+                      <span className="text-[11px] font-bold" style={{ color: '#e2e8f0', minWidth: '60px' }}>Zona {z.rotulo}</span>
+                      <span className="text-[10px]" style={{ color: '#c4b5fd' }}>{z.classe}</span>
+                      <span className="text-[10px] ml-auto" style={{ color: '#64748b' }}>{z.areaHa.toLocaleString('pt-BR')} ha</span>
+                      <div className="flex flex-col">
+                        <button onClick={() => mover(i, -1)} disabled={i === 0} title="Subir" className="leading-none disabled:opacity-30" style={{ color: '#93c5fd' }}><ChevronUp size={12} /></button>
+                        <button onClick={() => mover(i, 1)} disabled={i === zonasOrdenadas.length - 1} title="Descer" className="leading-none disabled:opacity-30" style={{ color: '#93c5fd' }}><ChevronDown size={12} /></button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
                 {res.indices.length >= 2 && (
                   <>
                     <p className="text-[9px]" style={{ color: '#a78bfa' }}>
-                      Índices FPI/NCE — nº ótimo (mínimo) sugerido: <strong style={{ color: '#e9d5ff' }}>{res.sugestao_c ?? '—'}</strong> zonas
+                      FPI/NCE — nº ótimo (mínimo) sugerido: <strong style={{ color: '#e9d5ff' }}>{res.sugestao_c ?? '—'}</strong> zonas
                     </p>
                     <IndicesChart indices={res.indices} sugestao={res.sugestao_c} />
                   </>
                 )}
                 <p className="text-[9px] leading-relaxed" style={{ color: '#6d5b9e' }}>
-                  Preview — não salvo. A seguir: área mínima de zona, ordenação manual/sugerida (produtividade, NDVI, MO, CTC) e persistir como versão do MEAP.
+                  Preview — não salvo. A seguir (M3): salvar como versão do MEAP + CV das zonas geradas → convergência.
                 </p>
               </div>
             )}

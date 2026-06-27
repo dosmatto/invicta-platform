@@ -55,6 +55,7 @@ export async function gerarMulti(opts: {
   poligono?: GeoJSON.Polygon | GeoJSON.MultiPolygon | null;
   algoritmo?: 'fcm' | 'kmeans';
   nClasses?: number;
+  areaMinHa?: number;
 }): Promise<RespZonarMulti> {
   const sel = opts.carregadas.camadas.filter(c => opts.chaves.includes(c.chave));
   if (sel.length === 0) throw new Error('Selecione ao menos uma camada.');
@@ -65,5 +66,6 @@ export async function gerarMulti(opts: {
     poligono: opts.poligono ?? null,
     algoritmo: opts.algoritmo ?? 'fcm',
     nClasses: opts.nClasses ?? 0,
+    areaMinHa: opts.areaMinHa ?? 0,
   });
 }

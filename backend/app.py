@@ -80,6 +80,7 @@ class ReqZonarMulti(BaseModel):
     algoritmo: str = "fcm"            # 'fcm' (fuzzy c-means) | 'kmeans'
     c_min: int = 2                    # faixa p/ a curva FPI/NCE
     c_max: int = 6
+    area_min_ha: float = 0.0          # 0 = sem fusão de manchas pequenas
 
 
 @app.post("/zonear-multi")
@@ -88,7 +89,7 @@ def zonear_multi(req: ReqZonarMulti):
     interpolados das camadas escolhidas + índices FPI/NCE p/ o nº de zonas."""
     cams = [{"nome": c.nome, "b64": c.b64} for c in req.camadas]
     try:
-        return interp.zonar_multi(cams, req.bounds, req.shape, req.n_classes, req.algoritmo, req.c_min, req.c_max, req.poligono)
+        return interp.zonar_multi(cams, req.bounds, req.shape, req.n_classes, req.algoritmo, req.c_min, req.c_max, req.poligono, req.area_min_ha)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:  # pragma: no cover

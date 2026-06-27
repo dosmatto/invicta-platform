@@ -21,6 +21,7 @@ import shapely
 from shapely.geometry import shape, mapping
 from scipy.spatial import cKDTree
 from scipy.cluster.vq import kmeans2
+from scipy import ndimage
 from PIL import Image
 
 try:
@@ -48,7 +49,7 @@ AMPLITUDE_MIN = 0.30
 NUGGET_MAX = 0.10
 # Versao do motor de interpolacao (conferir em GET /health para saber se o
 # backend foi reiniciado com o codigo novo).
-VERSION = "interp-10-cluster-fix"
+VERSION = "interp-11-area-ordem"
 
 
 def _nlags(n: int) -> int:
@@ -448,9 +449,42 @@ def _kmeans_labels(X: np.ndarray, c: int, seed: int = 0) -> np.ndarray:
     return np.asarray(labels, dtype=int)
 
 
+# Símbolos que servem de "potencial" para a SUGESTÃO de ordenação Alta->Baixa
+# (produtividade/NDVI/MO/CTC). Os nomes das camadas chegam como "MO 0-20" etc.
+RANK_SIMBOLOS = {"PRODUTIVIDADE", "PROD", "COLHEITA", "NDVI", "MO", "CTC"}
+
+
+def _sieve_labels(cls: np.ndarray, finite: np.ndarray, min_cells: int) -> np.ndarray:
+    """Area minima: funde as componentes conexas menores que `min_cells` a zona
+    vizinha majoritaria (filtro 'sieve', estilo gdal_sieve). Itera ate estabilizar."""
+    cls = cls.copy()
+    st = ndimage.generate_binary_structure(2, 1)  # 4-conectividade
+    for _ in range(60):
+        mudou = False
+        for k in [int(v) for v in np.unique(cls[finite]) if v >= 0]:
+            comp, ncomp = ndimage.label(cls == k, structure=st)
+            if ncomp == 0:
+                continue
+            tam = np.bincount(comp.ravel())
+            for ci in range(1, ncomp + 1):
+                if tam[ci] >= min_cells:
+                    continue
+                cells = comp == ci
+                borda = ndimage.binary_dilation(cells, structure=st) & ~cells & finite
+                viz = cls[borda]
+                viz = viz[(viz >= 0) & (viz != k)]
+                if viz.size:
+                    cls[cells] = int(np.bincount(viz).argmax())
+                    mudou = True
+        if not mudou:
+            break
+    return cls
+
+
 def zonar_multi(camadas: list[dict], bounds, dims, n_classes: int = 0,
                 algoritmo: str = "fcm", c_min: int = 2, c_max: int = 6,
-                polygon_geojson: dict | None = None, seed: int = 0) -> dict[str, Any]:
+                polygon_geojson: dict | None = None, area_min_ha: float = 0.0,
+                seed: int = 0) -> dict[str, Any]:
     rows, cols = int(dims[0]), int(dims[1])
     w, s, e, n = [float(v) for v in bounds]
     gx = np.linspace(w, e, cols)
@@ -498,15 +532,28 @@ def zonar_multi(camadas: list[dict], bounds, dims, n_classes: int = 0,
         U, _ = _fcm(Xn, c_sel, seed=seed)
         labels = np.argmax(U, axis=1)
 
-    # Ordena clusters por "índice de potencial" = média das camadas normalizadas
-    # (maior = "Alta"). A ordenação manual/sugerida fina é da próxima fatia.
-    comp = Xn.mean(axis=1)
-    presentes = [k for k in range(c_sel) if np.any(labels == k)]
-    presentes.sort(key=lambda k: float(comp[labels == k].mean()), reverse=True)
-    rotulos = _rotulos(len(presentes))
-
     cls = np.full((rows, cols), -1, dtype=int)
     cls[idx[:, 0], idx[:, 1]] = labels
+
+    # Área mínima de zona: funde manchas menores que o limiar à zona vizinha.
+    if area_min_ha and area_min_ha > 0:
+        dx_m = abs((e - w) / max(cols - 1, 1)) * 111320.0 * math.cos(math.radians(lat0))
+        dy_m = abs((n - s) / max(rows - 1, 1)) * 111320.0
+        cell_ha = (dx_m * dy_m) / 10000.0
+        min_cells = int(math.ceil(area_min_ha / cell_ha)) if cell_ha > 0 else 0
+        if min_cells > 1:
+            cls = _sieve_labels(cls, finite, min_cells)
+
+    # Ordenação Alta->Baixa (SUGESTÃO): por variáveis de potencial
+    # (produtividade/NDVI/MO/CTC) entre as camadas escolhidas; senão, pelo
+    # composto (média das camadas). O usuário pode reordenar manualmente no front.
+    labels_final = cls[idx[:, 0], idx[:, 1]]
+    rank_cols = [i for i, cam in enumerate(camadas) if str(cam.get("nome", "")).split(" ")[0].upper() in RANK_SIMBOLOS]
+    pot = Xn[:, rank_cols].mean(axis=1) if rank_cols else Xn.mean(axis=1)
+    presentes = [int(k) for k in np.unique(labels_final) if k >= 0]
+    presentes.sort(key=lambda k: float(pot[labels_final == k].mean()) if np.any(labels_final == k) else -1e18, reverse=True)
+    rotulos = _rotulos(len(presentes))
+    ordem_por = ", ".join(str(camadas[i].get("nome", "")).split(" ")[0] for i in rank_cols) if rank_cols else "composto"
 
     poly = shape(polygon_geojson) if polygon_geojson else None
     dx = float((e - w) / (cols - 1)) if cols > 1 else (e - w)
@@ -549,5 +596,7 @@ def zonar_multi(camadas: list[dict], bounds, dims, n_classes: int = 0,
             "n_classes": len(presentes),
             "n_pixels": int(idx.shape[0]),
             "n_camadas": len(camadas),
+            "area_min_ha": area_min_ha,
+            "ordem_por": ordem_por,
         },
     }
