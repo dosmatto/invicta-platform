@@ -1,10 +1,10 @@
 'use client';
 
-// Aba Produtividade — Módulo 12 (Mapas de Colheita), P1. Importa colheita
-// (CSV/SHP), limpa (zeros+outliers), interpola por IDW (reusa backend) e mostra
-// o mapa com a legenda oficial + estatísticas. Salva como versão; 1 = oficial.
+// Aba Produtividade — Módulo 12 (Mapas de Colheita), P1 + P2.1. Processo em
+// etapas: 1) Importar máquinas → 2) Unificação (normaliza) → 3) Limpeza →
+// 4) Interpolação IDW (com ajuste pela MÉDIA REAL). Salva como versão; 1 = oficial.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useApp } from '@/context/AppContext';
 import {
   getSafras, getPlantio, getTalhoes, getMapasProdutividade, saveMapaProdutividade,
@@ -17,12 +17,13 @@ import {
 import { colorirGridComLegenda } from '@/lib/raster';
 import {
   parseCsvTexto, autoColunas, pontosDeCsv, lerShapefilePontos, pontosDeGeojson,
-  limpar, interpolarColheita, statsDoGrid, legendaDaCultura, emUnidade, rotuloUnidade,
-  PARAMS_PADRAO, type PontoColheita, type ParamsLimpeza, type Unidade, type StatsProd, type CsvParsed,
+  unificar, limpar, interpolarColheita, calibrarGrid, statsDoGrid, legendaDaCultura,
+  emUnidade, rotuloUnidade, SACA_KG, PARAMS_PADRAO,
+  type PontoColheita, type ParamsLimpeza, type Unidade, type StatsProd, type CsvParsed,
 } from '@/lib/produtividade';
 import { cloudSalvarMapa, cloudCarregarMapasPorPrefixo, cloudPodeGravar } from '@/lib/cloud';
 import type { Legenda } from '@/lib/legendas';
-import { Upload, Loader2, AlertTriangle, Save, Star, Trash2, Eye, Wand2, FileSpreadsheet } from 'lucide-react';
+import { Upload, Loader2, AlertTriangle, Save, Star, Trash2, Eye, Wand2, FileSpreadsheet, Plus, Layers } from 'lucide-react';
 
 const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
 const fmt = (v: number, d = 0) => v.toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d });
@@ -30,6 +31,9 @@ const CULTURAS = ['soja', 'milho', 'trigo', 'feijao', 'outro'];
 const EPOCAS: Array<{ v: string; l: string }> = [{ v: '', l: '—' }, { v: 'verao', l: 'Verão' }, { v: 'safrinha', l: 'Safrinha' }, { v: 'inverno', l: 'Inverno' }];
 const prefixoProd = (talhaoId: string) => `${talhaoId}__prod__`;
 const idProd = (talhaoId: string, recId: string) => `${prefixoProd(talhaoId)}${recId}`;
+const paraKgha = (v: number, u: Unidade) => (u === 'sc/ha' ? v * SACA_KG : u === 't/ha' ? v * 1000 : v);
+
+type MaqRaw = { id: string; nome: string; arquivo: string; csv?: CsvParsed; fc?: GeoJSON.FeatureCollection };
 
 export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: string } = {}) {
   const { nav, uploadedGeo, setFertilidadeOverlay, setFertilidadeLabels } = useApp();
@@ -45,39 +49,38 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
     return null;
   }, [uploadedGeo, nav.talhaoId]);
 
-  // Contexto
   const culturaPlantio = useMemo(() => (nav.talhaoId ? getPlantio(nav.talhaoId, safra) : ''), [nav.talhaoId, safra]);
   const [cultura, setCultura] = useState('soja');
   const [epoca, setEpoca] = useState('');
   const [unidade, setUnidade] = useState<Unidade>('kg/ha');
   useEffect(() => { if (culturaPlantio && CULTURAS.includes(culturaPlantio.toLowerCase())) setCultura(culturaPlantio.toLowerCase()); }, [culturaPlantio]);
 
-  // Importação
-  const [arquivo, setArquivo] = useState('');
-  const [csv, setCsv] = useState<CsvParsed | null>(null);
-  const [fcShp, setFcShp] = useState<GeoJSON.FeatureCollection | null>(null);
+  // 1) Máquinas + mapeamento de colunas (do 1º arquivo)
+  const [maqs, setMaqs] = useState<MaqRaw[]>([]);
   const [colunas, setColunas] = useState<string[]>([]);
   const [colLat, setColLat] = useState(''); const [colLng, setColLng] = useState(''); const [colVal, setColVal] = useState('');
-  const [pontos, setPontos] = useState<PontoColheita[]>([]);
-
+  const [temCsv, setTemCsv] = useState(false);
+  // 2) Unificação
+  const [normalizar, setNormalizar] = useState(true);
+  // 3) Limpeza
   const [params, setParams] = useState<ParamsLimpeza>(PARAMS_PADRAO);
+  // 4) Interpolação
+  const [mediaReal, setMediaReal] = useState('');
+
   const [estado, setEstado] = useState<'idle' | 'processando' | 'pronto' | 'erro'>('idle');
   const [erro, setErro] = useState('');
-
-  // Resultado em tela (fresco = ainda não salvo)
   const [res, setRes] = useState<RespInterp | null>(null);
   const [stats, setStats] = useState<StatsProd | null>(null);
   const [legenda, setLegenda] = useState<Legenda | null>(null);
   const [fresco, setFresco] = useState(false);
 
-  // Versões salvas + cache de rasters
   const [versoes, setVersoes] = useState<MapaProdutividade[]>([]);
   const [rasters, setRasters] = useState<Record<string, { bounds: [number, number, number, number]; grid: Grid }>>({});
   const recarregar = () => setVersoes(nav.talhaoId ? getMapasProdutividade(nav.talhaoId, safra) : []);
 
   useEffect(() => {
     recarregar();
-    setRes(null); setStats(null); setFresco(false);
+    setRes(null); setStats(null); setFresco(false); setMaqs([]); setColunas([]);
     if (!nav.talhaoId) return;
     (async () => {
       const docs = await cloudCarregarMapasPorPrefixo<{ resp: { bounds: [number, number, number, number]; grid?: Grid } }>(prefixoProd(nav.talhaoId!));
@@ -93,7 +96,7 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
     })();
   }, [nav.talhaoId, safra]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Render no mapa do resultado/visualização atual.
+  // Render no mapa
   useEffect(() => {
     if (!res?.grid?.b64 || !legenda) { setFertilidadeOverlay(null); setFertilidadeLabels(null); return; }
     let url: string | undefined;
@@ -105,36 +108,39 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
   }, [res, legenda, setFertilidadeOverlay, setFertilidadeLabels]);
   useEffect(() => () => { setFertilidadeOverlay(null); setFertilidadeLabels(null); }, [setFertilidadeOverlay, setFertilidadeLabels]);
 
-  async function aoEscolherArquivo(file: File) {
-    setErro(''); setEstado('idle'); setRes(null); setStats(null); setFresco(false);
-    setCsv(null); setFcShp(null); setPontos([]); setColunas([]);
-    setArquivo(file.name);
+  async function adicionarMaquina(file: File) {
+    setErro(''); setRes(null); setFresco(false);
     try {
       const ext = file.name.split('.').pop()?.toLowerCase();
+      const id = Math.random().toString(36).slice(2);
+      const nome = `Máquina ${maqs.length + 1}`;
       if (ext === 'zip') {
         const { colunas: cols, fc } = await lerShapefilePontos(file);
-        setFcShp(fc); setColunas(cols);
-        const valor = cols.find(c => /prod|rend|yield|colh|massa|kg/i.test(c)) ?? cols[0] ?? '';
-        setColVal(valor);
-        setPontos(valor ? pontosDeGeojson(fc, valor) : []);
+        setMaqs(m => [...m, { id, nome, arquivo: file.name, fc }]);
+        if (colunas.length === 0) { setColunas(cols); setTemCsv(false); setColVal(cols.find(c => /prod|rend|yield|colh|massa|kg/i.test(c)) ?? cols[0] ?? ''); }
       } else {
         const texto = await file.text();
         const p = parseCsvTexto(texto);
-        setCsv(p); setColunas(p.colunas);
-        const auto = autoColunas(p.colunas);
-        setColLat(auto.lat); setColLng(auto.lng); setColVal(auto.valor);
-        setPontos(pontosDeCsv(p, auto));
+        setMaqs(m => [...m, { id, nome, arquivo: file.name, csv: p }]);
+        if (colunas.length === 0) {
+          setColunas(p.colunas); setTemCsv(true);
+          const a = autoColunas(p.colunas); setColLat(a.lat); setColLng(a.lng); setColVal(a.valor);
+        }
       }
-    } catch (e) { setErro(e instanceof Error ? e.message : 'Falha ao ler o arquivo.'); setEstado('erro'); }
+    } catch (e) { setErro(e instanceof Error ? e.message : 'Falha ao ler o arquivo.'); }
+  }
+  function removerMaquina(id: string) {
+    setMaqs(m => { const r = m.filter(x => x.id !== id); if (r.length === 0) { setColunas([]); } return r; });
   }
 
-  // Reextrai pontos quando o usuário troca o mapeamento de colunas.
-  useEffect(() => {
-    if (csv && colLat && colLng && colVal) setPontos(pontosDeCsv(csv, { lat: colLat, lng: colLng, valor: colVal }));
-    else if (fcShp && colVal) setPontos(pontosDeGeojson(fcShp, colVal));
-  }, [csv, fcShp, colLat, colLng, colVal]);
+  const pontosPorMaq = useMemo(() => maqs.map(m => ({
+    id: m.id, nome: m.nome, arquivo: m.arquivo,
+    pontos: m.csv ? pontosDeCsv(m.csv, { lat: colLat, lng: colLng, valor: colVal }) : m.fc ? pontosDeGeojson(m.fc, colVal) : [] as PontoColheita[],
+  })), [maqs, colLat, colLng, colVal]);
 
-  const limpeza = useMemo(() => limpar(pontos, params), [pontos, params]);
+  const unif = useMemo(() => unificar(pontosPorMaq, normalizar), [pontosPorMaq, normalizar]);
+  const limpeza = useMemo(() => limpar(unif.pontos, params), [unif, params]);
+  const nPontosTotal = unif.pontos.length;
 
   async function processar() {
     if (!poligono) { setErro('Limite do talhão não encontrado — abra o talhão no mapa.'); setEstado('erro'); return; }
@@ -143,7 +149,9 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
     if (!leg) { setErro('Legenda de produtividade não encontrada.'); setEstado('erro'); return; }
     setEstado('processando'); setErro('');
     try {
-      const r = await interpolarColheita(limpeza.usados, poligono, leg, params.pixelM);
+      let r = await interpolarColheita(limpeza.usados, poligono, leg, params.pixelM);
+      const mr = parseFloat(mediaReal);
+      if (isFinite(mr) && mr > 0) r = calibrarGrid(r, paraKgha(mr, unidade));
       const st = statsDoGrid(r, limpeza.usados.length);
       if (!st) throw new Error('Não foi possível calcular o raster.');
       setRes(r); setStats(st); setLegenda(leg); setFresco(true); setEstado('pronto');
@@ -154,11 +162,14 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
     if (!res || !stats || !nav.talhaoId) return;
     if (!cloudPodeGravar()) { setErro('Faça login para salvar o mapa.'); return; }
     const primeiro = versoes.filter(v => v.cultura === cultura && v.epoca === epoca).length === 0;
+    const mr = parseFloat(mediaReal);
     const rec = saveMapaProdutividade({
       talhaoId: nav.talhaoId, safra, epoca, cultura, oficial: primeiro, unidade,
+      nMaquinas: maqs.length, normalizado: normalizar,
+      mediaRealKgha: isFinite(mr) && mr > 0 ? paraKgha(mr, unidade) : null,
       params, bounds: res.bounds,
-      stats: { nPontos: pontos.length, nUsados: stats.nUsados, areaHa: stats.areaHa, producaoTotalKg: stats.producaoTotalKg, mediaKgha: stats.mediaKgha, minKgha: stats.minKgha, maxKgha: stats.maxKgha, cv: stats.cv },
-      arquivo,
+      stats: { nPontos: nPontosTotal, nUsados: stats.nUsados, areaHa: stats.areaHa, producaoTotalKg: stats.producaoTotalKg, mediaKgha: stats.mediaKgha, minKgha: stats.minKgha, maxKgha: stats.maxKgha, cv: stats.cv },
+      arquivo: maqs.map(m => m.arquivo).join(', '),
     });
     const gz = res.grid ? await comprimirGrid(res.grid) : undefined;
     cloudSalvarMapa(idProd(nav.talhaoId, rec.id), { resp: { bounds: res.bounds, grid: gz, stats: res.stats }, criadoEm: rec.criadoEm });
@@ -176,17 +187,15 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
     setStats({ nUsados: v.stats.nUsados, areaHa: v.stats.areaHa, producaoTotalKg: v.stats.producaoTotalKg, mediaKgha: v.stats.mediaKgha, minKgha: v.stats.minKgha, maxKgha: v.stats.maxKgha, cv: v.stats.cv, histograma: [] });
     setUnidade(v.unidade); setFresco(false);
   }
-
   function tornarOficial(id: string) { setMapaProdutividadeOficial(id); recarregar(); }
   function excluir(v: MapaProdutividade) {
     if (!confirm(`Excluir o ${v.cultura} v${v.versao}?`)) return;
     deleteMapaProdutividade(v.id);
-    if (nav.talhaoId) cloudSalvarMapa(idProd(nav.talhaoId, v.id), {}); // limpa o doc do raster
+    if (nav.talhaoId) cloudSalvarMapa(idProd(nav.talhaoId, v.id), {});
     recarregar();
   }
 
   if (!safra) return <div className="px-4 py-3"><Aviso texto="Defina uma safra para o mapa de produtividade." /></div>;
-
   const proc = estado === 'processando';
   const u = (kgha: number) => fmt(emUnidade(kgha, unidade), unidade === 't/ha' ? 2 : unidade === 'sc/ha' ? 1 : 0);
 
@@ -202,50 +211,52 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
 
       {/* Contexto */}
       <div className="grid grid-cols-3 gap-2">
-        <div>
-          <label className="text-[10px] font-semibold block mb-0.5" style={{ color: '#64748b' }}>Cultura</label>
-          <select value={cultura} onChange={e => setCultura(e.target.value)} className="w-full rounded px-2 py-1 text-[11px] outline-none" style={inputStyle}>
-            {CULTURAS.map(c => <option key={c} value={c}>{c[0].toUpperCase() + c.slice(1)}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="text-[10px] font-semibold block mb-0.5" style={{ color: '#64748b' }}>Época</label>
-          <select value={epoca} onChange={e => setEpoca(e.target.value)} className="w-full rounded px-2 py-1 text-[11px] outline-none" style={inputStyle}>
-            {EPOCAS.map(e2 => <option key={e2.v} value={e2.v}>{e2.l}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="text-[10px] font-semibold block mb-0.5" style={{ color: '#64748b' }}>Unidade</label>
-          <select value={unidade} onChange={e => setUnidade(e.target.value as Unidade)} className="w-full rounded px-2 py-1 text-[11px] outline-none" style={inputStyle}>
-            {(['kg/ha', 'sc/ha', 't/ha'] as Unidade[]).map(uu => <option key={uu} value={uu}>{uu}</option>)}
-          </select>
-        </div>
+        <Campo label="Cultura"><select value={cultura} onChange={e => setCultura(e.target.value)} className="w-full rounded px-2 py-1 text-[11px] outline-none" style={inputStyle}>{CULTURAS.map(c => <option key={c} value={c}>{c[0].toUpperCase() + c.slice(1)}</option>)}</select></Campo>
+        <Campo label="Época"><select value={epoca} onChange={e => setEpoca(e.target.value)} className="w-full rounded px-2 py-1 text-[11px] outline-none" style={inputStyle}>{EPOCAS.map(e2 => <option key={e2.v} value={e2.v}>{e2.l}</option>)}</select></Campo>
+        <Campo label="Unidade"><select value={unidade} onChange={e => setUnidade(e.target.value as Unidade)} className="w-full rounded px-2 py-1 text-[11px] outline-none" style={inputStyle}>{(['kg/ha', 'sc/ha', 't/ha'] as Unidade[]).map(uu => <option key={uu} value={uu}>{uu}</option>)}</select></Campo>
       </div>
 
-      {/* Importar */}
-      <div className="rounded-lg p-2.5 space-y-2" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
-        <label className="text-[11px] font-semibold flex items-center gap-1 cursor-pointer" style={{ color: '#93c5fd' }}>
-          <Upload size={12} /> Importar colheita (CSV ou Shapefile .zip)
-          <input type="file" accept=".csv,.zip" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) aoEscolherArquivo(f); }} />
+      {/* 1) Máquinas */}
+      <Etapa n={1} titulo="Importar máquinas">
+        <label className="flex items-center justify-center gap-1 py-1.5 rounded text-[10px] font-bold cursor-pointer" style={{ background: 'var(--invicta-blue-mid)', color: '#fff' }}>
+          <Plus size={12} /> Adicionar máquina (CSV ou Shapefile .zip)
+          <input type="file" accept=".csv,.zip" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) adicionarMaquina(f); e.currentTarget.value = ''; }} />
         </label>
-        {arquivo && <p className="text-[10px] flex items-center gap-1" style={{ color: '#86efac' }}><FileSpreadsheet size={11} /> {arquivo} · {fmt(pontos.length)} pontos</p>}
-
-        {/* Mapeamento de colunas */}
+        {pontosPorMaq.map(m => (
+          <div key={m.id} className="flex items-center gap-2 text-[10px]" style={{ color: '#cbd5e1' }}>
+            <FileSpreadsheet size={11} style={{ color: '#86efac' }} />
+            <span className="font-semibold">{m.nome}</span>
+            <span className="flex-1 truncate" style={{ color: '#64748b' }}>{m.arquivo} · {fmt(m.pontos.length)} pts</span>
+            <button onClick={() => removerMaquina(m.id)} style={{ color: '#f87171' }}><Trash2 size={12} /></button>
+          </div>
+        ))}
         {colunas.length > 0 && (
-          <div className="grid grid-cols-3 gap-1">
-            {csv && (<>
+          <div className="grid grid-cols-3 gap-1 pt-1">
+            {temCsv && (<>
               <ColSel label="Latitude" v={colLat} set={setColLat} cols={colunas} />
               <ColSel label="Longitude" v={colLng} set={setColLng} cols={colunas} />
             </>)}
             <ColSel label="Produtividade" v={colVal} set={setColVal} cols={colunas} />
           </div>
         )}
-      </div>
+      </Etapa>
 
-      {/* Limpeza */}
-      {pontos.length > 0 && (
-        <div className="rounded-lg p-2.5 space-y-2" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
-          <p className="text-[11px] font-semibold" style={{ color: '#93c5fd' }}>Limpeza</p>
+      {/* 2) Unificação */}
+      {maqs.length > 0 && (
+        <Etapa n={2} titulo="Unificação">
+          <label className="flex items-center gap-1.5 text-[10px]" style={{ color: '#cbd5e1' }}>
+            <input type="checkbox" checked={normalizar} onChange={e => setNormalizar(e.target.checked)} /> Normalizar máquinas (média comum — corrige calibração entre monitores)
+          </label>
+          {maqs.length > 1 && unif.medias.map((m, i) => (
+            <p key={i} className="text-[9px]" style={{ color: '#64748b' }}>{m.nome}: média {fmt(m.media)} kg/ha · fator ×{m.fator}</p>
+          ))}
+          <p className="text-[10px] flex items-center gap-1" style={{ color: '#93c5fd' }}><Layers size={11} /> Unificado: <strong>{fmt(nPontosTotal)}</strong> pontos de {maqs.length} {maqs.length === 1 ? 'máquina' : 'máquinas'}</p>
+        </Etapa>
+      )}
+
+      {/* 3) Limpeza */}
+      {nPontosTotal > 0 && (
+        <Etapa n={3} titulo="Limpeza dos dados">
           <label className="flex items-center gap-1.5 text-[10px]" style={{ color: '#cbd5e1' }}>
             <input type="checkbox" checked={params.removerZeros} onChange={e => setParams(p => ({ ...p, removerZeros: e.target.checked }))} /> Remover zeros (cabeceira/manobra)
           </label>
@@ -255,20 +266,28 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
             <Num label="Pixel (m)" v={params.pixelM} set={n => setParams(p => ({ ...p, pixelM: n }))} />
           </div>
           <p className="text-[10px]" style={{ color: '#94a3b8' }}>
-            Usados: <strong style={{ color: limpeza.usados.length >= 3 ? '#86efac' : '#fbbf24' }}>{fmt(limpeza.usados.length)}</strong> de {fmt(pontos.length)}
-            {' '}· faixa {fmt(limpeza.limites[0])}–{fmt(limpeza.limites[1])} kg/ha · removidos {fmt(limpeza.removidos)}
+            Usados: <strong style={{ color: limpeza.usados.length >= 3 ? '#86efac' : '#fbbf24' }}>{fmt(limpeza.usados.length)}</strong> de {fmt(nPontosTotal)} · faixa {fmt(limpeza.limites[0])}–{fmt(limpeza.limites[1])} kg/ha · removidos {fmt(limpeza.removidos)}
           </p>
+        </Etapa>
+      )}
+
+      {/* 4) Interpolação */}
+      {nPontosTotal > 0 && (
+        <Etapa n={4} titulo="Interpolação (IDW)">
+          <Campo label={`Média real (${rotuloUnidade(unidade)}) — opcional, calibra o mapa`}>
+            <input type="number" value={mediaReal} onChange={e => setMediaReal(e.target.value)} placeholder="ex.: da balança/notas" className="w-full rounded px-2 py-1 text-[11px] outline-none" style={inputStyle} />
+          </Campo>
           <button onClick={processar} disabled={proc || !poligono || limpeza.usados.length < 3}
             className="w-full py-2 rounded text-xs font-bold text-white flex items-center justify-center gap-1.5"
             style={{ background: proc ? '#1a3a6b' : 'var(--invicta-green-dark)', opacity: (!poligono || limpeza.usados.length < 3) ? 0.6 : 1 }}>
             {proc ? <><Loader2 size={13} className="animate-spin" /> Interpolando (IDW)…</> : <><Wand2 size={13} /> Processar mapa</>}
           </button>
-        </div>
+        </Etapa>
       )}
 
       {estado === 'erro' && <p className="text-[10px]" style={{ color: '#f87171' }}>{erro}</p>}
 
-      {/* Resultado / visualização */}
+      {/* Resultado */}
       {res && stats && legenda && (
         <div className="space-y-2 p-2.5 rounded-lg" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
           <div className="grid grid-cols-3 gap-2 text-center">
@@ -283,8 +302,7 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
           </div>
           {stats.histograma.length > 0 && <Histograma h={stats.histograma} unidade={unidade} />}
           <div className="h-3.5 rounded" style={{ border: '1px solid rgba(255,255,255,0.1)', background: gradienteCss(legenda) }} />
-          <p className="text-[9px]" style={{ color: '#64748b' }}>{legenda.nome} · {stats.nUsados} pontos · pixel {res.stats?.pixel_m ?? params.pixelM} m</p>
-
+          <p className="text-[9px]" style={{ color: '#64748b' }}>{legenda.nome} · {stats.nUsados} pontos · pixel {res.stats?.pixel_m ?? params.pixelM} m{parseFloat(mediaReal) > 0 ? ' · calibrado pela média real' : ''}</p>
           {fresco && (
             cloudPodeGravar()
               ? <button onClick={salvar} className="w-full py-2 rounded text-xs font-bold text-white flex items-center justify-center gap-1.5" style={{ background: 'var(--invicta-blue-mid)' }}><Save size={13} /> Salvar como Mapa Oficial</button>
@@ -321,6 +339,20 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
   );
 }
 
+function Etapa({ n, titulo, children }: { n: number; titulo: string; children: ReactNode }) {
+  return (
+    <div className="rounded-lg p-2.5 space-y-2" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
+      <p className="text-[11px] font-semibold flex items-center gap-1.5" style={{ color: '#93c5fd' }}>
+        <span className="flex items-center justify-center rounded-full text-[9px] font-bold" style={{ width: 16, height: 16, background: 'var(--invicta-blue-mid)', color: '#fff' }}>{n}</span>
+        {titulo}
+      </p>
+      {children}
+    </div>
+  );
+}
+function Campo({ label, children }: { label: string; children: ReactNode }) {
+  return <div><label className="text-[10px] font-semibold block mb-0.5" style={{ color: '#64748b' }}>{label}</label>{children}</div>;
+}
 function ColSel({ label, v, set, cols }: { label: string; v: string; set: (s: string) => void; cols: string[] }) {
   return (
     <div>
@@ -332,7 +364,6 @@ function ColSel({ label, v, set, cols }: { label: string; v: string; set: (s: st
     </div>
   );
 }
-
 function Num({ label, v, set }: { label: string; v: number; set: (n: number) => void }) {
   return (
     <div className="flex-1">
@@ -341,7 +372,6 @@ function Num({ label, v, set }: { label: string; v: number; set: (n: number) => 
     </div>
   );
 }
-
 function Metrica({ rotulo, valor, destaque }: { rotulo: string; valor: string; destaque?: boolean }) {
   return (
     <div className="rounded-lg py-1.5" style={{ background: '#0b1f3a', border: '1px solid #1a3a6b' }}>
@@ -350,25 +380,24 @@ function Metrica({ rotulo, valor, destaque }: { rotulo: string; valor: string; d
     </div>
   );
 }
-
 function Histograma({ h, unidade }: { h: { x0: number; x1: number; n: number }[]; unidade: Unidade }) {
   const max = Math.max(...h.map(b => b.n), 1);
+  const d = unidade === 'kg/ha' ? 0 : 1;
   return (
     <div>
       <div className="flex items-end gap-0.5 h-12">
         {h.map((b, i) => (
-          <div key={i} className="flex-1 rounded-t" title={`${fmt(emUnidade(b.x0, unidade), unidade === 'kg/ha' ? 0 : 1)}–${fmt(emUnidade(b.x1, unidade), unidade === 'kg/ha' ? 0 : 1)} ${unidade}: ${b.n}`}
+          <div key={i} className="flex-1 rounded-t" title={`${fmt(emUnidade(b.x0, unidade), d)}–${fmt(emUnidade(b.x1, unidade), d)} ${unidade}: ${b.n}`}
             style={{ height: `${(b.n / max) * 100}%`, background: 'var(--invicta-blue-mid)', minHeight: 1 }} />
         ))}
       </div>
       <div className="flex justify-between text-[8px] mt-0.5" style={{ color: '#64748b' }}>
-        <span>{fmt(emUnidade(h[0].x0, unidade), unidade === 'kg/ha' ? 0 : 1)}</span>
-        <span>{fmt(emUnidade(h[h.length - 1].x1, unidade), unidade === 'kg/ha' ? 0 : 1)} {unidade}</span>
+        <span>{fmt(emUnidade(h[0].x0, unidade), d)}</span>
+        <span>{fmt(emUnidade(h[h.length - 1].x1, unidade), d)} {unidade}</span>
       </div>
     </div>
   );
 }
-
 function Aviso({ texto }: { texto: string }) {
   return (
     <div className="flex items-start gap-2 p-3 rounded-lg" style={{ background: '#2d1a00', border: '1px solid #92400e' }}>

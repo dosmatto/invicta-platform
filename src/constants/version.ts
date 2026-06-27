@@ -1,6 +1,11 @@
-export const APP_VERSION = '0.77.0';
+export const APP_VERSION = '0.78.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.78.0': [
+    'Produtividade: o processamento agora é em ETAPAS claras — 1) Importar máquinas (Máquina 1, 2, …), 2) Unificação (normaliza as máquinas para uma média comum, corrigindo diferença de calibração entre monitores), 3) Limpeza, 4) Interpolação',
+    'Na interpolação dá para informar a MÉDIA REAL (da balança/notas) e o mapa é CALIBRADO para a média bater com ela, mantendo o padrão espacial',
+    'A unificação atual é uma normalização básica (substituível pelo script oficial da Invicta quando disponível)',
+  ],
   '0.77.0': [
     'NOVO módulo Produtividade / Mapas de Colheita (Módulo 12, P1): a aba Produtividade do talhão agora IMPORTA dados de colheita (CSV ou Shapefile .zip), faz a limpeza (remove zeros de cabeceira + corta outliers por percentil) e gera o mapa de produtividade por interpolação IDW, com a legenda oficial da cultura',
     'Mostra estatísticas (produtividade média/mín/máx, área, produção total em t, CV, histograma) e converte a exibição entre kg/ha, sc/ha e t/ha (interno sempre kg/ha)',

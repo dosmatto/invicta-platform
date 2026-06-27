@@ -165,3 +165,50 @@ export function emUnidade(kgha: number, u: Unidade): number {
 export function rotuloUnidade(u: Unidade): string {
   return u === 'sc/ha' ? 'sc/ha' : u === 't/ha' ? 't/ha' : 'kg/ha';
 }
+
+// ── Unificação de máquinas ────────────────────────────────────────────────────
+// Junta os pontos de todas as máquinas. Se `normalizar`, escala cada máquina
+// para uma MÉDIA COMUM (média das médias por máquina) — corrige diferenças de
+// calibração entre monitores. (Substituível pelo script oficial da Invicta.)
+export interface Maquina { id: string; nome: string; arquivo: string; pontos: PontoColheita[]; }
+
+export function unificar(maquinas: Maquina[], normalizar: boolean): { pontos: PontoColheita[]; medias: { nome: string; media: number; fator: number; n: number }[] } {
+  const infos = maquinas.map(m => {
+    const nz = m.pontos.filter(p => p.valor > 0);
+    const media = nz.length ? nz.reduce((s, p) => s + p.valor, 0) / nz.length : 0;
+    return { m, media };
+  });
+  const validas = infos.filter(i => i.media > 0);
+  const alvo = validas.length ? validas.reduce((s, i) => s + i.media, 0) / validas.length : 0;
+  const pontos: PontoColheita[] = [];
+  const medias = infos.map(i => {
+    const fator = normalizar && i.media > 0 && alvo > 0 ? alvo / i.media : 1;
+    for (const p of i.m.pontos) pontos.push({ lng: p.lng, lat: p.lat, valor: p.valor * fator });
+    return { nome: i.m.nome, media: Math.round(i.media), fator: Math.round(fator * 1000) / 1000, n: i.m.pontos.length };
+  });
+  return { pontos, medias };
+}
+
+// ── Calibração pela média real (ajuste do mapa) ───────────────────────────────
+function f32ParaB64(a: Float32Array): string {
+  const u8 = new Uint8Array(a.buffer, a.byteOffset, a.byteLength);
+  let s = ''; const CH = 0x8000;
+  for (let i = 0; i < u8.length; i += CH) s += String.fromCharCode(...u8.subarray(i, i + CH));
+  return btoa(s);
+}
+
+// Escala o raster para que a MÉDIA dele bata com a média real informada
+// (mantém o padrão espacial). mediaRealKgha em kg/ha.
+export function calibrarGrid(resp: RespInterp, mediaRealKgha: number): RespInterp {
+  if (!resp.grid || !(mediaRealKgha > 0)) return resp;
+  const { valores } = decodeGrid(resp.grid);
+  let n = 0, soma = 0;
+  for (let i = 0; i < valores.length; i++) { const v = valores[i]; if (isFinite(v)) { n++; soma += v; } }
+  if (!n) return resp;
+  const media = soma / n;
+  if (media <= 0) return resp;
+  const k = mediaRealKgha / media;
+  const out = new Float32Array(valores.length);
+  for (let i = 0; i < valores.length; i++) { const v = valores[i]; out[i] = isFinite(v) ? v * k : NaN; }
+  return { ...resp, grid: { b64: f32ParaB64(out), shape: resp.grid.shape } };
+}
