@@ -9,14 +9,14 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useApp } from '@/context/AppContext';
-import type { Talhao } from '@/lib/store';
+import { getZoneamentosMeap, saveZoneamentoMeap, deleteZoneamentoMeap, setZoneamentoPadraoMeap, type Talhao, type ZoneamentoMeap } from '@/lib/store';
 import { obterOuAdotarAmbiente } from '@/lib/meap/adocao';
 import { carregarCamadas, gerarMulti, type CamadasCarregadas } from '@/lib/meap/gerar';
 import { extrairPoligono, type RespZonarMulti } from '@/lib/fertilidade';
 import { classeZona } from '@/lib/zonas';
 import { simboloElemento } from '@/lib/lab';
 import type { AmbienteProdutivo, Homogeneidade } from '@/lib/meap/tipos';
-import { Layers, AlertTriangle, Wand2, Loader2, X, Check, ChevronUp, ChevronDown } from 'lucide-react';
+import { Layers, AlertTriangle, Wand2, Loader2, X, Check, ChevronUp, ChevronDown, Save, Star, Trash2, Eye } from 'lucide-react';
 
 const HOMOG: Record<Homogeneidade, { label: string; cor: string; bg: string }> = {
   alta: { label: 'Homogênea', cor: '#86efac', bg: '#0f2a1a' },
@@ -109,6 +109,10 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
   const [res, setRes] = useState<RespZonarMulti | null>(null);
   const [ordemRanks, setOrdemRanks] = useState<number[]>([]);  // potenciais (ranks) na ordem Alta→Baixa
 
+  // Zoneamentos salvos (vários por talhão; um é o "padrão" usado pela Amostragem)
+  const [zoneamentos, setZoneamentos] = useState<ZoneamentoMeap[]>([]);
+  const [vendoId, setVendoId] = useState<string | null>(null);  // zoneamento salvo em visualização no mapa
+
   const poligono = useMemo(() => {
     if (!talhao.geojson) return null;
     try { return extrairPoligono(JSON.parse(talhao.geojson) as GeoJSON.FeatureCollection); } catch { return null; }
@@ -125,6 +129,10 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
       .finally(() => { if (vivo) setCarregando(false); });
     return () => { vivo = false; };
   }, [talhao.id]);
+
+  useEffect(() => { setZoneamentos(getZoneamentosMeap(talhao.id)); }, [talhao.id]);
+  const recarregarZon = () => setZoneamentos(getZoneamentosMeap(talhao.id));
+  const vendoFc = useMemo(() => (vendoId ? (zoneamentos.find(z => z.id === vendoId)?.fc ?? null) : null), [vendoId, zoneamentos]);
 
   // Ao gerar, inicializa a ordem dos potenciais com a sugestão do backend.
   useEffect(() => { setOrdemRanks(res ? Array.from({ length: res.stats.n_classes }, (_, i) => i) : []); }, [res]);
@@ -161,10 +169,12 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
     });
   }, [ordemRanks, zonas]);
 
-  // Mapa: preview gerado (cor por potencial, nº = identidade) tem prioridade.
+  // Mapa: prioridade = zoneamento salvo em visualização > preview gerado > importadas.
   useEffect(() => {
     let fc: GeoJSON.FeatureCollection | null = null;
-    if (res && zonas.length) {
+    if (vendoFc) {
+      fc = featuresParaMapa(vendoFc);
+    } else if (res && zonas.length) {
       fc = { type: 'FeatureCollection', features: zonas.map(z => ({ type: 'Feature' as const, properties: { cor: z.cor, rotulo: z.id, classeLabel: z.potencial, selecionada: false }, geometry: z.geometry! })) };
     } else {
       const imp = parseImportadas(talhao.zonasGeojson);
@@ -173,7 +183,7 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
     if (!fc) { setZonasManejo(null); return; }
     setZonasManejo(fc);
     return () => setZonasManejo(null);
-  }, [res, zonas, talhao.zonasGeojson, setZonasManejo]);
+  }, [vendoFc, res, zonas, talhao.zonasGeojson, setZonasManejo]);
 
   function toggle(ch: string) { setChaves(prev => prev.includes(ch) ? prev.filter(c => c !== ch) : [...prev, ch]); }
 
@@ -197,6 +207,35 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Falha ao gerar zonas.');
     } finally { setGerando(false); }
+  }
+
+  function salvar() {
+    if (!res || !zonas.length) return;
+    const fc: GeoJSON.FeatureCollection = {
+      type: 'FeatureCollection',
+      features: zonas.map(z => ({ type: 'Feature', properties: { id: z.id, classe: z.potencial, potencialRank: z.rank, areaHa: z.areaHa }, geometry: z.geometry! })),
+    };
+    const cams = carregadas ? carregadas.camadas.filter(c => chaves.includes(c.chave)).map(c => `${c.simbolo} ${c.prof}`) : [];
+    const primeiro = zoneamentos.length === 0;
+    const novo = saveZoneamentoMeap({
+      talhaoId: talhao.id, nome: `Zoneamento ${zoneamentos.length + 1}`, padrao: primeiro, fc,
+      meta: { camadas: cams, algoritmo: res.stats.algoritmo, nPotenciais: potenciais.length, areaMinHa: res.stats.area_min_ha, nZonas: zonas.length },
+    });
+    if (primeiro) setZoneamentoPadraoMeap(talhao.id, novo.id);  // grava em talhao.zonasGeojson → Amostragem
+    recarregarZon();
+    setAmb(obterOuAdotarAmbiente(talhao.id));
+  }
+
+  function tornarPadrao(id: string) {
+    setZoneamentoPadraoMeap(talhao.id, id);
+    recarregarZon();
+    setAmb(obterOuAdotarAmbiente(talhao.id));
+  }
+
+  function excluir(id: string) {
+    deleteZoneamentoMeap(id);
+    if (vendoId === id) setVendoId(null);
+    recarregarZon();
   }
 
   const versao = useMemo(() => amb?.versoes.find(v => v.numero === amb.versaoVigente) ?? amb?.versoes[0] ?? null, [amb]);
@@ -312,7 +351,10 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
               <div className="p-2 rounded space-y-2" style={{ background: '#1a1033', border: '1px solid #5b21b6' }}>
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] font-bold" style={{ color: '#c4b5fd' }}>Preview no mapa</span>
-                  <button onClick={() => setRes(null)} title="Limpar preview" className="ml-auto flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded font-semibold" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
+                  <button onClick={salvar} className="ml-auto flex items-center gap-1 text-[9px] px-2 py-0.5 rounded font-bold text-white" style={{ background: '#065f46' }}>
+                    <Save size={9} /> Salvar zoneamento
+                  </button>
+                  <button onClick={() => setRes(null)} title="Limpar preview" className="flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded font-semibold" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
                     <X size={9} /> Limpar
                   </button>
                 </div>
@@ -365,13 +407,40 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
                   </>
                 )}
                 <p className="text-[9px] leading-relaxed" style={{ color: '#6d5b9e' }}>
-                  Preview — não salvo. A seguir (M3): salvar a zona → vai para a <strong style={{ color: '#93c5fd' }}>Amostragem</strong> gerar o grid + CV das zonas → convergência.
+                  Clique em <strong style={{ color: '#86efac' }}>Salvar zoneamento</strong> para guardá-lo. Você pode salvar vários e marcar um como <strong style={{ color: '#fbbf24' }}>Padrão</strong> — esse vai para a <strong style={{ color: '#93c5fd' }}>Amostragem</strong> gerar o grid.
                 </p>
               </div>
             )}
           </>
         )}
       </div>
+
+      {/* ── Zoneamentos salvos (1 padrão → Amostragem) ── */}
+      {zoneamentos.length > 0 && (
+        <div className="rounded-lg p-2.5 space-y-1.5" style={{ background: '#0a1929', border: '1px solid #1a3a6b' }}>
+          <div className="flex items-center gap-2">
+            <Star size={12} style={{ color: '#fbbf24' }} />
+            <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color: '#cbd5e1' }}>Zoneamentos salvos ({zoneamentos.length})</span>
+          </div>
+          {zoneamentos.map(z => (
+            <div key={z.id} className="px-2 py-1.5 rounded" style={{ background: '#061525', border: `1px solid ${z.padrao ? '#a16207' : '#1a3a6b'}` }}>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold flex-1 truncate" style={{ color: '#e2e8f0' }}>{z.nome}</span>
+                {z.padrao
+                  ? <span className="text-[9px] px-1.5 py-0.5 rounded font-bold flex items-center gap-1 flex-shrink-0" style={{ background: '#3a2e0a', color: '#fbbf24' }}><Star size={8} /> Padrão</span>
+                  : <button onClick={() => tornarPadrao(z.id)} className="text-[9px] px-1.5 py-0.5 rounded font-semibold flex-shrink-0" style={{ background: '#1a3a6b', color: '#93c5fd' }}>Tornar padrão</button>}
+                <button onClick={() => setVendoId(vendoId === z.id ? null : z.id)} title={vendoId === z.id ? 'Parar de ver' : 'Ver no mapa'} className="p-1 rounded flex-shrink-0" style={{ color: vendoId === z.id ? '#22d3ee' : '#93c5fd' }}><Eye size={12} /></button>
+                <button onClick={() => excluir(z.id)} title="Excluir" className="p-1 rounded flex-shrink-0" style={{ color: '#f87171' }}><Trash2 size={12} /></button>
+              </div>
+              <p className="text-[9px] mt-0.5" style={{ color: '#64748b' }}>
+                {z.meta.nZonas} zonas · {z.meta.nPotenciais} potenciais · {z.meta.algoritmo === 'fcm' ? 'fuzzy' : 'k-means'}
+                {z.meta.camadas.length > 0 && <> · {z.meta.camadas.join(', ')}</>}
+                {z.padrao && <span style={{ color: '#fbbf24' }}> · usado na Amostragem</span>}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

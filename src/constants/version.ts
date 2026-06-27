@@ -1,6 +1,10 @@
-export const APP_VERSION = '0.69.1';
+export const APP_VERSION = '0.70.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.70.0': [
+    'Zonas de Manejo (MEAP): agora dá pra SALVAR o zoneamento gerado. Você pode salvar VÁRIOS por talhão e marcar UM como "Padrão" — o padrão é o oficial e vai automaticamente para a aba Amostragem gerar o grid por zona',
+    'Lista "Zoneamentos salvos": tornar padrão, ver no mapa ou excluir cada um. O padrão também é adotado pelo card do MEAP (calcula o CV das zonas)',
+  ],
   '0.69.1': [
     'Correção (mapa do talhão): o mapa travava na página completa do talhão — não dava zoom nem arrastava. Era um loop infinito de renderização (o setNav do contexto se recriava a cada render e disparava o efeito da página sem parar). Estabilizado; o mapa volta a responder normalmente',
   ],

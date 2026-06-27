@@ -612,6 +612,46 @@ export function saveAmbienteMeap(amb: AmbienteProdutivo): void {
   save('inv_meap_ambientes', lista);
 }
 
+// Zoneamentos gerados (vários por talhão; um marcado como "padrão" = oficial).
+// O padrão é gravado em talhao.zonasGeojson → a Amostragem gera o grid por zona.
+export interface ZoneamentoMeap {
+  id: string;
+  talhaoId: string;
+  nome: string;
+  padrao: boolean;
+  fc: GeoJSON.FeatureCollection;   // zonas {id, classe, areaHa, potencialRank}
+  meta: { camadas: string[]; algoritmo: string; nPotenciais: number; areaMinHa: number; nZonas: number };
+  criadoEm: string;
+}
+
+export function getZoneamentosMeap(talhaoId: string): ZoneamentoMeap[] {
+  return loadFiltrado<ZoneamentoMeap>('inv_meap_zoneamentos')
+    .filter(z => z.talhaoId === talhaoId)
+    .sort((a, b) => a.criadoEm.localeCompare(b.criadoEm));
+}
+
+export function saveZoneamentoMeap(z: Omit<ZoneamentoMeap, 'id' | 'criadoEm'>): ZoneamentoMeap {
+  const lista = load<ZoneamentoMeap>('inv_meap_zoneamentos');
+  const novo: ZoneamentoMeap = comEmpresa({ ...z, id: uid(), criadoEm: new Date().toISOString() });
+  lista.push(novo);
+  save('inv_meap_zoneamentos', lista);
+  return novo;
+}
+
+export function deleteZoneamentoMeap(id: string): void {
+  save('inv_meap_zoneamentos', load<ZoneamentoMeap>('inv_meap_zoneamentos').filter(z => z.id !== id));
+}
+
+// Marca um zoneamento como padrão (desmarca os outros do talhão) e grava as
+// zonas dele em talhao.zonasGeojson — é o que a Amostragem (modo Zonas) usa.
+export function setZoneamentoPadraoMeap(talhaoId: string, id: string): void {
+  const lista = load<ZoneamentoMeap>('inv_meap_zoneamentos');
+  lista.forEach(z => { if (z.talhaoId === talhaoId) z.padrao = z.id === id; });
+  save('inv_meap_zoneamentos', lista);
+  const padrao = lista.find(z => z.id === id && z.talhaoId === talhaoId);
+  if (padrao) updateTalhao(talhaoId, { zonasGeojson: JSON.stringify(padrao.fc) });
+}
+
 // ── Legendas Agronômicas (motor de legendas) ──────────────────────────────
 // Repositório reutilizável de legendas para mapas de fertilidade, micros e
 // textura. Cada legenda é independente do mapa; o usuário escolhe qual aplicar.
