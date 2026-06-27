@@ -118,7 +118,10 @@ export async function carregarCamadas(talhaoId: string): Promise<CamadasCarregad
   if (bounds && shape) {
     for (const n of ndvi) {
       const b64 = (n.shape[0] === shape[0] && n.shape[1] === shape[1]) ? n.b64 : reamostrarB64(n.b64, n.shape, shape);
-      camadas.push({ chave: n.chave, nut: n.nut, prof: n.prof, simbolo: 'NDVI', b64, shape });
+      // Diferencia a origem no rótulo (Sentinel vs CBERS); o 1º token segue "NDVI"
+      // para o backend reconhecer o potencial (RANK_SIMBOLOS).
+      const fonteLabel = n.nut === 'ndvi_cbers' ? 'CBERS' : 'S2';
+      camadas.push({ chave: n.chave, nut: n.nut, prof: n.prof, simbolo: `NDVI ${fonteLabel}`, b64, shape });
     }
   }
 

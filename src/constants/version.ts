@@ -1,6 +1,9 @@
-export const APP_VERSION = '0.75.0';
+export const APP_VERSION = '0.75.1';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.75.1': [
+    'Zona de Manejo: as camadas de NDVI agora mostram a ORIGEM da imagem — "NDVI S2 ‹data›" (Sentinel-2) ou "NDVI CBERS ‹data›" (CBERS-4A 2 m) — para não confundir as fontes',
+  ],
   '0.75.0': [
     'NDVI / Satélite: as cenas buscadas agora ficam só na sessão — você escolhe quais MANTER (botão "Manter esta cena"). Só as mantidas são salvas na nuvem e recarregam ao reabrir; as demais sao descartadas. Dá pra Remover uma cena mantida',
     'As cenas de NDVI MANTIDAS viram FONTE na Zona de Manejo (MEAP): na aba Zonas, elas aparecem como camadas selecionáveis ("NDVI <data>") junto da fertilidade, e entram na clusterização (reamostradas para a malha de referência)',
