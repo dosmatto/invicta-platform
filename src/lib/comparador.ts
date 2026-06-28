@@ -126,6 +126,34 @@ function classeDe(v: number, leg: Legenda): number {
   return cls.length - 1;
 }
 
+// ── Matriz de fatores: o que explica a camada-alvo (ex.: Produtividade) ───────
+export interface Fator { id: string; grupo: string; nome: string; r: number; }
+
+// Correlaciona o ALVO com todas as outras camadas e ranqueia por |r|.
+export function matrizFatores(alvo: CamadaComparavel, camadas: CamadaComparavel[]): Fator[] {
+  const out: Fator[] = [];
+  for (const c of camadas) {
+    if (c.id === alvo.id) continue;
+    const { r } = correlacao(alvo.grid, c.grid);
+    if (r == null || !isFinite(r)) continue;
+    out.push({ id: c.id, grupo: c.grupo, nome: c.nome, r });
+  }
+  out.sort((a, b) => Math.abs(b.r) - Math.abs(a.r));
+  return out;
+}
+
+// Texto de insight a partir dos fatores ranqueados.
+export function insightFatores(alvoNome: string, fatores: Fator[]): string {
+  const f = (x: number) => x.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const pos = fatores.filter(x => x.r >= 0.3).slice(0, 2);
+  const neg = fatores.filter(x => x.r <= -0.3).slice(0, 2);
+  if (!pos.length && !neg.length) return `Nenhum fator se correlaciona fortemente com ${alvoNome.toLowerCase()} neste talhão (todas as relações fracas).`;
+  const partes: string[] = [];
+  if (pos.length) partes.push(`acompanha ${pos.map(p => `${p.nome} (r=${f(p.r)})`).join(' e ')}`);
+  if (neg.length) partes.push(`cai onde sobe ${neg.map(p => `${p.nome} (r=${f(p.r)})`).join(' e ')}`);
+  return `Neste talhão, ${alvoNome.toLowerCase()} ${partes.join('; e ')}.`;
+}
+
 // % de área por classe da legenda (rótulo + cor de cada classe).
 export function areaPorClasse(grid: Grid, leg: Legenda): ClasseArea[] {
   const { valores } = decodeGrid(grid);

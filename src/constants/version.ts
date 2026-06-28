@@ -1,6 +1,10 @@
-export const APP_VERSION = '0.81.0';
+export const APP_VERSION = '0.82.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.82.0': [
+    'NOVA análise "O que explica a produtividade?" (tela cheia): correlaciona o mapa de produtividade com TODAS as outras camadas do talhão (NDVI, argila, CTC, MO, V%, fertilidade…) e RANQUEIA os fatores pela força da correlação (r), com barras +/−, um insight automático em texto e o gráfico de dispersão do fator escolhido',
+    'Responde direto "por que essa área produziu o que produziu" — é a base das análises cruzadas que diferenciam a plataforma. Abre pelos botões do comparador na aba Produtividade',
+  ],
   '0.81.0': [
     'NOVO Comparador universal de camadas (tela cheia): escolha Camada A × Camada B entre Produtividade, NDVI e Fertilidade do talhão e veja os dois mapas sobre o satélite, lado a lado, com legendas, estatísticas (média/mín/máx/CV/área), correlação espacial (scatter + coeficiente r) e distribuição de área por classe',
     'Abre pelo botão "Comparação completa" no comparador da aba Produtividade; exporta o PDF lado a lado',
