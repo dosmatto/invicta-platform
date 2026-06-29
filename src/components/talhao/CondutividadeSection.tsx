@@ -472,10 +472,50 @@ export function CondutividadeSection() {
             </div>
             {limpos[profundidade] && (() => {
               const r = limpos[profundidade].rel;
+              const filtroRem = r.n_bruto - r.n_apos_filtro_bruto;
+              const aposGlobal = r.n_apos_filtro_bruto - r.mapfilter_global_removidos;
+              const removido = r.n_bruto - r.n_limpo;
+              const pKept = r.n_bruto > 0 ? (r.n_limpo / r.n_bruto) * 100 : 0;
+              const nf = (n: number) => n.toLocaleString('pt-BR');
+              const Etapa = ({ rotulo, det, rem, resta, cor }: { rotulo: string; det: string; rem: number; resta: number; cor: string }) => (
+                <div className="flex items-center gap-2 text-[10px]">
+                  <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: cor }} />
+                  <span style={{ color: '#cbd5e1' }}>{rotulo}</span>
+                  <span className="text-[9px]" style={{ color: '#475569' }}>{det}</span>
+                  <span className="ml-auto font-semibold" style={{ color: '#f87171' }}>−{nf(rem)}</span>
+                  <span className="tabular-nums" style={{ color: '#64748b', minWidth: 46, textAlign: 'right' }}>{nf(resta)}</span>
+                </div>
+              );
               return (
-                <p className="text-[9px] leading-relaxed p-1.5 rounded" style={{ background: '#0b1f3a', color: '#8aa6cf', border: '1px solid #1a3a6b' }}>
-                  Limpeza: bruto <strong>{r.n_bruto}</strong> → filtro {r.n_apos_filtro_bruto} → global −{r.mapfilter_global_removidos} → local −{r.mapfilter_local_removidos} = <strong style={{ color: '#86efac' }}>{r.n_limpo}</strong> pts ({r.perc_removido}% removido)
-                </p>
+                <div className="p-2.5 rounded-lg space-y-1.5" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
+                  <div className="flex items-center gap-1.5">
+                    <Eraser size={12} style={{ color: '#93c5fd' }} />
+                    <span className="text-[11px] font-bold" style={{ color: '#cbd5e1' }}>Resumo da limpeza</span>
+                    <span className="text-[9px] ml-auto" style={{ color: '#64748b' }}>MapFilter</span>
+                  </div>
+                  <div className="flex items-center justify-between text-[10px]">
+                    <span style={{ color: '#94a3b8' }}>Pontos brutos</span>
+                    <span className="font-bold tabular-nums" style={{ color: '#e2e8f0' }}>{nf(r.n_bruto)}</span>
+                  </div>
+                  <div className="space-y-1 pl-0.5">
+                    <Etapa rotulo="Filtro bruto" det="zeros / absurdos" rem={filtroRem} resta={r.n_apos_filtro_bruto} cor="#f59e0b" />
+                    <Etapa rotulo="MapFilter global" det="mediana ± faixa" rem={r.mapfilter_global_removidos} resta={aposGlobal} cor="#3b82f6" />
+                    <Etapa rotulo="MapFilter local" det="vizinhança da passada" rem={r.mapfilter_local_removidos} resta={r.n_limpo} cor="#a855f7" />
+                  </div>
+                  <div className="flex items-center justify-between pt-1 text-[11px]" style={{ borderTop: '1px solid #1a3a6b' }}>
+                    <span className="font-bold" style={{ color: '#86efac' }}>Pontos limpos</span>
+                    <span className="font-bold tabular-nums" style={{ color: '#86efac' }}>{nf(r.n_limpo)}</span>
+                  </div>
+                  {/* barra mantido (verde) × removido (vermelho) */}
+                  <div className="h-2.5 rounded overflow-hidden flex" style={{ border: '1px solid #1a3a6b' }}>
+                    <div style={{ width: `${pKept}%`, background: '#16a34a' }} />
+                    <div style={{ width: `${100 - pKept}%`, background: '#dc2626' }} />
+                  </div>
+                  <div className="flex justify-between text-[9px]">
+                    <span style={{ color: '#86efac' }}>mantido {Math.round(pKept)}%</span>
+                    <span style={{ color: '#f87171' }}>removido {nf(removido)} ({r.perc_removido}%)</span>
+                  </div>
+                </div>
               );
             })()}
             <p className="text-[9px]" style={{ color: '#475569' }}>Veja os pontos brutos, rode a limpeza (filtra outliers/ruído pelo MapFilter) e interpole sobre os pontos limpos.</p>

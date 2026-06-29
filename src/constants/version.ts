@@ -1,6 +1,9 @@
-export const APP_VERSION = '0.94.2';
+export const APP_VERSION = '0.95.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.95.0': [
+    'Condutividade: painel "Resumo da limpeza" — depois de rodar o MapFilter, mostra a quebra por etapa (pontos brutos → filtro bruto → MapFilter global → MapFilter local → pontos limpos), quantos pontos saíram em cada uma, o total removido e uma barra de mantido × removido (verde/vermelho)',
+  ],
   '0.94.2': [
     'Condutividade: os pontos brutos/limpos agora aparecem de verdade no mapa — antes ficavam pequenos demais (2,5 px) e sumiam no zoom do talhão. Agora o tamanho cresce com o zoom e ganham um contorno escuro fino, ficando visíveis sobre o satélite. Vale também para futuras nuvens densas (mapas de colheita)',
   ],
