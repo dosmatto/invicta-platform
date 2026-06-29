@@ -1,6 +1,11 @@
-export const APP_VERSION = '0.89.0';
+export const APP_VERSION = '0.90.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.90.0': [
+    'Correção (Zonas de Manejo): zonas com mais de 5 classes saíam todas CINZA (o semáforo só tinha nome/cor p/ Alta…Baixa). Agora as cores seguem uma rampa contínua verde→amarelo→vermelho por posição, então mesmo 6 a 12 zonas ficam coloridas (e no mapa cada polígono usa a cor da sua zona)',
+    'Correção (prévia de camada): ao clicar numa camada para pré-visualizar (NDVI, fertilidade…), as zonas adotadas ficavam por cima e escondiam o raster. Agora a prévia oculta temporariamente as zonas para você enxergar a camada; ao ocultar a prévia, as zonas voltam',
+    'No mapa, o rótulo de cada polígono passou a ser o número da ZONA oficial (polígonos da mesma zona mostram o mesmo número)',
+  ],
   '0.89.0': [
     'Zonas de Manejo: conceito corrigido — ZONA OFICIAL = a classe agronômica. O número escolhido (ex.: 7) é o nº de zonas oficiais; uma mesma zona pode ter VÁRIOS polígonos (manchas separadas no talhão) sem virar "novas zonas". A avaliação agora mostra "7 zonas oficiais · 13 polígonos"',
     'Cada zona oficial mostra: nº de polígonos, área total e (quando tem mais de um) o menor e o maior polígono. A lista de baixo passou a se chamar "Polígonos", cada um com um selo "Zona 0X" indicando a que zona pertence',

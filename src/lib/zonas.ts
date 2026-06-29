@@ -32,5 +32,19 @@ export function classeReconhecida(raw: string): boolean {
   return /MEDI|ALT|BAIX/.test(normaliza(raw));
 }
 
+// Cor por POSIÇÃO no ranking (0 = maior potencial = verde … último = vermelho).
+// Usada quando há mais classes (6–12) do que os 5 nomes do semáforo — aí
+// classeZona não tem nome/cor e cairia em cinza.
+export function corZonaPorPosicao(pos: number, total: number): string {
+  const t = total <= 1 ? 0 : Math.min(1, Math.max(0, pos / (total - 1)));
+  const stops: Array<[number, number, number]> = [[22, 163, 74], [234, 179, 8], [220, 38, 38]]; // verde, amarelo, vermelho
+  const seg = t <= 0.5 ? 0 : 1;
+  const lt = t <= 0.5 ? t / 0.5 : (t - 0.5) / 0.5;
+  const [r1, g1, b1] = stops[seg], [r2, g2, b2] = stops[seg + 1];
+  const mix = (a: number, b: number) => Math.round(a + (b - a) * lt);
+  const hex = (v: number) => v.toString(16).padStart(2, '0');
+  return `#${hex(mix(r1, r2))}${hex(mix(g1, g2))}${hex(mix(b1, b2))}`;
+}
+
 // Ordem da legenda (alta → baixa)
 export const ORDEM_CLASSES = ['Alta', 'Média-alta', 'Média', 'Média-baixa', 'Baixa'];

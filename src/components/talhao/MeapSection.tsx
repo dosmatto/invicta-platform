@@ -17,7 +17,7 @@ import { unirFeatures, limparZona } from '@/lib/meap/fundir';
 import { extrairPoligono, coordsFromBounds, decodeGrid, type RespGerarZonas, type RespAnalisarZonas } from '@/lib/fertilidade';
 import { colorirGrid, colorirGridComLegenda } from '@/lib/raster';
 import { rampaVisualStops } from '@/lib/legendas';
-import { classeZona } from '@/lib/zonas';
+import { classeZona, classeReconhecida, corZonaPorPosicao } from '@/lib/zonas';
 import { simboloElemento } from '@/lib/lab';
 import type { AmbienteProdutivo, Homogeneidade, MetricasZonaMeap } from '@/lib/meap/tipos';
 import { Layers, AlertTriangle, Wand2, Loader2, X, Check, ChevronUp, ChevronDown, Save, Star, Trash2, Eye, BarChart3, Sparkles, Combine, CheckSquare, Square } from 'lucide-react';
@@ -51,15 +51,22 @@ function parseImportadas(zonasGeojson?: string): GeoJSON.FeatureCollection | nul
 }
 
 function featuresParaMapa(fc: GeoJSON.FeatureCollection): GeoJSON.FeatureCollection {
+  const feats = fc.features.filter(f => f.geometry && (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon'));
+  // nº de zonas oficiais distintas (p/ a rampa de cor por posição quando há >5 classes)
+  const total = new Set(feats.map(f => String((f.properties as { zona?: string | number; classe?: string })?.zona ?? (f.properties as { classe?: string })?.classe ?? ''))).size;
   return {
     type: 'FeatureCollection',
-    features: fc.features
-      .filter(f => f.geometry && (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon'))
-      .map(f => {
-        const p = (f.properties ?? {}) as { id?: string; classe?: string };
-        const cz = classeZona(p.classe ?? '');
-        return { type: 'Feature' as const, properties: { cor: cz.cor, rotulo: String(p.id ?? '?'), classeLabel: cz.label, selecionada: false }, geometry: f.geometry! };
-      }),
+    features: feats.map(f => {
+      const p = (f.properties ?? {}) as { id?: string; zona?: string | number; classe?: string; cor?: string };
+      const cz = classeZona(p.classe ?? '');
+      // 1) cor salva na feature; 2) rampa por nº da zona quando a classe não é
+      // reconhecida (Nível N); 3) cor do semáforo pela classe.
+      let cor = p.cor;
+      if (!cor) cor = (p.zona != null && !classeReconhecida(p.classe ?? '')) ? corZonaPorPosicao(Number(p.zona) - 1, total) : cz.cor;
+      // rótulo = nº da ZONA oficial (polígonos da mesma zona mostram o mesmo nº)
+      const rotulo = String(p.zona ?? p.id ?? '?');
+      return { type: 'Feature' as const, properties: { cor, rotulo, classeLabel: cz.label, selecionada: false }, geometry: f.geometry! };
+    }),
   };
 }
 
@@ -206,10 +213,13 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
   // Potencial (rótulo + cor) por rank, conforme a ordem atual (posição = potencial).
   const potDeRank = useMemo(() => {
     const labels = rotulosPotencial(ordemRanks.length);
+    const total = ordemRanks.length;
     const m = new Map<number, { label: string; cor: string }>();
     ordemRanks.forEach((rank, pos) => {
-      const label = labels[pos] ?? `Nível ${pos + 1}`;
-      m.set(rank, { label, cor: classeZona(label).cor });
+      const label = labels[pos] ?? `Classe ${pos + 1}`;
+      // ≤5 classes com nome de semáforo → cor oficial; 6–12 → rampa por posição.
+      const cor = (total <= 5 && classeReconhecida(label)) ? classeZona(label).cor : corZonaPorPosicao(pos, total);
+      m.set(rank, { label, cor });
     });
     return m;
   }, [ordemRanks]);
@@ -246,14 +256,14 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
       const label = labels[pos] ?? `Classe ${pos + 1}`;
       return {
         rank, pos, num: String(pos + 1).padStart(2, '0'),
-        label, cor: classeZona(label).cor,
+        label, cor: potDeRank.get(rank)?.cor ?? classeZona(label).cor,
         nPolig: polis.length,
         areaHa: areas.reduce((s, a) => s + a, 0),
         menor: areas.length ? Math.min(...areas) : 0,
         maior: areas.length ? Math.max(...areas) : 0,
       };
     });
-  }, [ordemRanks, zonas]);
+  }, [ordemRanks, zonas, potDeRank]);
   // rank → número da zona oficial (p/ rotular cada polígono).
   const numDeRank = useMemo(() => {
     const m = new Map<number, string>();
@@ -261,13 +271,16 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
     return m;
   }, [potenciais]);
 
-  // Mapa: prioridade = zoneamento salvo em visualização > preview gerado > importadas.
+  // Mapa: prioridade = zoneamento salvo em visualização > preview gerado >
+  // (prévia de camada: oculta as zonas p/ enxergar o raster) > zonas adotadas.
   useEffect(() => {
     let fc: GeoJSON.FeatureCollection | null = null;
     if (vendoFc) {
       fc = featuresParaMapa(vendoFc);
     } else if (res && zonas.length) {
-      fc = { type: 'FeatureCollection', features: zonas.map(z => ({ type: 'Feature' as const, properties: { cor: z.cor, rotulo: z.id, classeLabel: z.potencial, selecionada: false }, geometry: z.geometry! })) };
+      fc = { type: 'FeatureCollection', features: zonas.map(z => ({ type: 'Feature' as const, properties: { cor: z.cor, rotulo: numDeRank.get(z.rank) ?? z.id, classeLabel: z.potencial, selecionada: false }, geometry: z.geometry! })) };
+    } else if (previewCh) {
+      fc = null;  // previewando uma camada → não cobrir com as zonas adotadas
     } else {
       const imp = parseImportadas(talhao.zonasGeojson);
       fc = imp ? featuresParaMapa(imp) : null;
@@ -275,7 +288,7 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
     if (!fc) { setZonasManejo(null); return; }
     setZonasManejo(fc);
     return () => setZonasManejo(null);
-  }, [vendoFc, res, zonas, talhao.zonasGeojson, setZonasManejo]);
+  }, [vendoFc, res, zonas, previewCh, numDeRank, talhao.zonasGeojson, setZonasManejo]);
 
   // Prévia: clicar numa camada mostra o raster dela sobre o talhão (fase de
   // seleção). Some quando há zonas geradas/visualizadas (aí o mapa mostra as zonas).
@@ -370,7 +383,7 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
       features: zonas.map(z => {
         const m = cvPorZona[z.id];
         // Cada feature é um POLÍGONO; a zona oficial é a classe (zona/classe/rank).
-        return { type: 'Feature', properties: { id: z.id, zona: numDeRank.get(z.rank) ?? z.id, classe: z.potencial, potencialRank: z.rank, areaHa: z.areaHa, cvValidacao: m?.cvValidacao ?? null, homogeneidade: m?.homogeneidade ?? null }, geometry: z.geometry! };
+        return { type: 'Feature', properties: { id: z.id, zona: numDeRank.get(z.rank) ?? z.id, classe: z.potencial, cor: z.cor, potencialRank: z.rank, areaHa: z.areaHa, cvValidacao: m?.cvValidacao ?? null, homogeneidade: m?.homogeneidade ?? null }, geometry: z.geometry! };
       }),
     };
     const cams = carregadas ? carregadas.camadas.filter(c => chaves.includes(c.chave)).map(c => `${c.simbolo} ${c.prof}`) : [];
