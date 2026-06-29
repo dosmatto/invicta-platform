@@ -9,7 +9,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useApp } from '@/context/AppContext';
-import { getZoneamentosMeap, saveZoneamentoMeap, deleteZoneamentoMeap, setZoneamentoPadraoMeap, getLegendasPorAtributo, type Talhao, type ZoneamentoMeap } from '@/lib/store';
+import { getZoneamentosMeap, saveZoneamentoMeap, deleteZoneamentoMeap, setZoneamentoPadraoMeap, removerAdocaoMeap, getTalhoes, getLegendasPorAtributo, type Talhao, type ZoneamentoMeap } from '@/lib/store';
 import { obterOuAdotarAmbiente } from '@/lib/meap/adocao';
 import { carregarCamadas, analisarMulti, gerarMulti, dadosLabCV, type CamadasCarregadas } from '@/lib/meap/gerar';
 import { calcularCVZonas } from '@/lib/meap/cv';
@@ -172,13 +172,23 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
   const [zoneamentos, setZoneamentos] = useState<ZoneamentoMeap[]>([]);
   const [vendoId, setVendoId] = useState<string | null>(null);  // zoneamento salvo em visualização no mapa
   const [previewCh, setPreviewCh] = useState<string | null>(null);  // camada em pré-visualização no mapa
+  const [refreshAmb, setRefreshAmb] = useState(0);  // força re-derivar o ambiente adotado (após remover)
 
   const poligono = useMemo(() => {
     if (!talhao.geojson) return null;
     try { return extrairPoligono(JSON.parse(talhao.geojson) as GeoJSON.FeatureCollection); } catch { return null; }
   }, [talhao.geojson]);
 
-  useEffect(() => { setAmb(obterOuAdotarAmbiente(talhao.id)); }, [talhao.id, talhao.zonasGeojson]);
+  useEffect(() => { setAmb(obterOuAdotarAmbiente(talhao.id)); }, [talhao.id, talhao.zonasGeojson, refreshAmb]);
+
+  // Remove a adoção (apaga o bloco "Zonas adotadas"): desadota e re-deriva do store.
+  function removerAdocao() {
+    if (!confirm('Remover as zonas adotadas deste talhão? Os zoneamentos salvos continuam; só deixa de haver um oficial (a Amostragem por zona fica sem grade até você adotar outro).')) return;
+    removerAdocaoMeap(talhao.id);
+    setVendoId(null);
+    setRefreshAmb(n => n + 1);   // re-deriva amb (agora null) e o mapa
+    recarregarZon();
+  }
 
   useEffect(() => {
     let vivo = true;
@@ -286,13 +296,15 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
     } else if (previewCh) {
       fc = null;  // previewando uma camada → não cobrir com as zonas adotadas
     } else {
-      const imp = parseImportadas(talhao.zonasGeojson);
+      // lê do store (reflete a remoção da adoção, que o prop `talhao` não atualiza)
+      const zg = getTalhoes().find(x => x.id === talhao.id)?.zonasGeojson;
+      const imp = parseImportadas(zg);
       fc = imp ? featuresParaMapa(imp) : null;
     }
     if (!fc) { setZonasManejo(null); return; }
     setZonasManejo(fc);
     return () => setZonasManejo(null);
-  }, [vendoFc, res, zonas, previewCh, numDeRank, talhao.zonasGeojson, setZonasManejo]);
+  }, [vendoFc, res, zonas, previewCh, numDeRank, talhao.id, talhao.zonasGeojson, refreshAmb, setZonasManejo]);
 
   // Prévia: clicar numa camada mostra o raster dela sobre o talhão (fase de
   // seleção). Some quando há zonas geradas/visualizadas (aí o mapa mostra as zonas).
@@ -430,7 +442,13 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
               <Layers size={15} style={{ color: '#86efac' }} />
               <span className="text-xs font-bold uppercase tracking-wider" style={{ color: '#cbd5e1' }}>Zonas de Manejo (MEAP)</span>
             </div>
-            <span className="text-[9px] px-1.5 py-0.5 rounded font-semibold" style={{ background: '#0b1f3a', color: '#93c5fd', border: '1px solid #1e3a8a' }}>{ESTADO[amb!.estado]}</span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[9px] px-1.5 py-0.5 rounded font-semibold" style={{ background: '#0b1f3a', color: '#93c5fd', border: '1px solid #1e3a8a' }}>{ESTADO[amb!.estado]}</span>
+              <button onClick={removerAdocao} title="Remover as zonas adotadas (desadotar)"
+                className="flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded font-semibold" style={{ background: '#2a0f12', color: '#f87171', border: '1px solid #7f1d1d' }}>
+                <Trash2 size={10} /> Remover
+              </button>
+            </div>
           </div>
           <p className="text-[10px] leading-relaxed" style={{ color: '#64748b' }}>
             <strong style={{ color: '#cbd5e1' }}>{versao.zonas.length}</strong> zonas adotadas · CV {temCV ? <>por <strong style={{ color: '#93c5fd' }}>{varSimbolo}</strong></> : 'indisponível'}.

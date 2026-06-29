@@ -1,6 +1,9 @@
-export const APP_VERSION = '0.90.1';
+export const APP_VERSION = '0.91.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.91.0': [
+    'Zonas de Manejo: o bloco "Zonas adotadas" (no topo) agora tem botão "Remover" — antes ele ficava fixo, sem como apagar. Remover desadota o talhão: tira o oficial, apaga o ambiente e limpa as zonas (a Amostragem por zona fica sem grade até você adotar outro). Os zoneamentos salvos NÃO são apagados',
+  ],
   '0.90.1': [
     'Zonas de Manejo: rótulos das zonas mais claros — em vez de "Nível 1..N" (que só repetia o número da zona), agora cada zona mostra o potencial de forma legível (Muito alto → Alto → Médio → Baixo → Muito baixo) quando há mais de 5 classes',
     'A avaliação ganhou uma frase explicando a lógica: cada Zona é uma classe de potencial (do maior ao menor) e pode aparecer em vários polígonos; por isso "7 zonas · 12 polígonos"',

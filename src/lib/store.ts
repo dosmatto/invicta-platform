@@ -772,6 +772,19 @@ export function setZoneamentoPadraoMeap(talhaoId: string, id: string): void {
   if (padrao) updateTalhao(talhaoId, { zonasGeojson: JSON.stringify(padrao.fc) });
 }
 
+// Remove a ADOÇÃO de zonas do talhão (o bloco "Zonas adotadas"): tira o padrão de
+// qualquer zoneamento, apaga o Ambiente Produtivo e limpa talhao.zonasGeojson.
+// NÃO apaga os zoneamentos salvos nem mapas — só "desadota" (a Amostragem por
+// zona fica sem grade até adotar outro).
+export function removerAdocaoMeap(talhaoId: string): void {
+  const lista = load<ZoneamentoMeap>('inv_meap_zoneamentos');
+  let mudou = false;
+  lista.forEach(z => { if (z.talhaoId === talhaoId && z.padrao) { z.padrao = false; mudou = true; } });
+  if (mudou) save('inv_meap_zoneamentos', lista);
+  save('inv_meap_ambientes', load<AmbienteProdutivo>('inv_meap_ambientes').filter(a => a.talhaoId !== talhaoId));
+  updateTalhao(talhaoId, { zonasGeojson: '' });
+}
+
 // ── Legendas Agronômicas (motor de legendas) ──────────────────────────────
 // Repositório reutilizável de legendas para mapas de fertilidade, micros e
 // textura. Cada legenda é independente do mapa; o usuário escolhe qual aplicar.
