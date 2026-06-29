@@ -17,7 +17,7 @@ import { unirFeatures, limparZona } from '@/lib/meap/fundir';
 import { extrairPoligono, coordsFromBounds, decodeGrid, type RespGerarZonas, type RespAnalisarZonas } from '@/lib/fertilidade';
 import { colorirGrid, colorirGridComLegenda } from '@/lib/raster';
 import { rampaVisualStops } from '@/lib/legendas';
-import { classeZona, classeReconhecida, corZonaPorPosicao } from '@/lib/zonas';
+import { classeZona, classeReconhecida, corZonaPorPosicao, ORDEM_CLASSES } from '@/lib/zonas';
 import { simboloElemento } from '@/lib/lab';
 import type { AmbienteProdutivo, Homogeneidade, MetricasZonaMeap } from '@/lib/meap/tipos';
 import { Layers, AlertTriangle, Wand2, Loader2, X, Check, ChevronUp, ChevronDown, Save, Star, Trash2, Eye, BarChart3, Sparkles, Combine, CheckSquare, Square } from 'lucide-react';
@@ -432,6 +432,33 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
   const varSimbolo = versao?.variavelValidacao ? simboloElemento(versao.variavelValidacao) : null;
   const temCV = !!versao?.zonas.some(z => z.metricas.cvValidacao != null);
 
+  // Zonas adotadas são POLÍGONOS; agrupa por classe em ZONAS OFICIAIS (igual à
+  // avaliação): ordena por potencial, recolore em gradiente e relabela legível.
+  const zonasAdotOficiais = useMemo(() => {
+    if (!versao) return [];
+    const grupos = new Map<string, typeof versao.zonas>();
+    for (const z of versao.zonas) {
+      const k = z.classeLabel || z.rotulo;
+      const arr = grupos.get(k); if (arr) arr.push(z); else grupos.set(k, [z]);
+    }
+    const ordem = (classe: string): number => {
+      const idx = ORDEM_CLASSES.indexOf(classe);
+      if (idx >= 0) return idx;                       // Alta=0 … Baixa=4
+      const m = classe.match(/(\d+)/);
+      return m ? 100 + parseInt(m[1], 10) : 999;      // Nível N
+    };
+    const arr = [...grupos.entries()].map(([classe, polis]) => {
+      const areas = polis.map(p => p.areaHa);
+      const comCv = polis.filter(p => p.metricas.cvValidacao != null);
+      const areaCv = comCv.reduce((s, p) => s + p.areaHa, 0);
+      const cv = areaCv > 0 ? Math.round((comCv.reduce((s, p) => s + p.metricas.cvValidacao! * p.areaHa, 0) / areaCv) * 10) / 10 : null;
+      return { classe, nPolig: polis.length, areaTotal: areas.reduce((s, a) => s + a, 0), perc: polis.reduce((s, p) => s + p.percTalhao, 0), menor: Math.min(...areas), maior: Math.max(...areas), cv };
+    }).sort((a, b) => ordem(a.classe) - ordem(b.classe));
+    const total = arr.length;
+    const labels = rotulosPotencial(total);
+    return arr.map((g, i) => ({ ...g, num: String(i + 1).padStart(2, '0'), label: labels[i] ?? g.classe, cor: corZonaPorPosicao(i, total) }));
+  }, [versao]);
+
   return (
     <div className="p-3 space-y-3">
       {/* ── Zonas adotadas (M1) ── */}
@@ -451,19 +478,24 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
             </div>
           </div>
           <p className="text-[10px] leading-relaxed" style={{ color: '#64748b' }}>
-            <strong style={{ color: '#cbd5e1' }}>{versao.zonas.length}</strong> zonas adotadas · CV {temCV ? <>por <strong style={{ color: '#93c5fd' }}>{varSimbolo}</strong></> : 'indisponível'}.
+            <strong style={{ color: '#cbd5e1' }}>{zonasAdotOficiais.length}</strong> zonas oficiais · <strong style={{ color: '#cbd5e1' }}>{versao.zonas.length}</strong> polígonos · CV {temCV ? <>por <strong style={{ color: '#93c5fd' }}>{varSimbolo}</strong></> : 'indisponível'}.
           </p>
           <div className="space-y-1">
-            {versao.zonas.map(z => {
-              const h = z.metricas.homogeneidade ? HOMOG[z.metricas.homogeneidade] : null;
+            {zonasAdotOficiais.map(z => {
+              const banda = z.cv == null ? null : z.cv <= 10 ? HOMOG.alta : z.cv <= 20 ? HOMOG.media : HOMOG.baixa;
               return (
-                <div key={z.id} className="flex items-center gap-2 px-2 py-1.5 rounded" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
+                <div key={z.classe} className="flex items-center gap-2 px-2 py-1.5 rounded" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
                   <span className="inline-block w-3 h-3 rounded-sm flex-shrink-0" style={{ background: z.cor, border: '1px solid #fff' }} />
-                  <span className="text-xs font-bold" style={{ color: '#e2e8f0', minWidth: '54px' }}>{z.rotulo}</span>
-                  <span className="text-[11px]" style={{ color: '#93c5fd' }}>{z.classeLabel}</span>
-                  <span className="text-[10px] ml-auto" style={{ color: '#64748b' }}>{z.areaHa.toLocaleString('pt-BR')} ha · {Math.round(z.percTalhao * 100)}%</span>
-                  {h && z.metricas.cvValidacao != null
-                    ? <span className="text-[9px] px-1.5 py-0.5 rounded font-semibold flex-shrink-0" style={{ background: h.bg, color: h.cor }}>CV {z.metricas.cvValidacao.toLocaleString('pt-BR')}%</span>
+                  <div className="min-w-0 flex-1">
+                    <span className="text-xs font-bold" style={{ color: '#e2e8f0' }}>Zona {z.num}</span>
+                    <span className="text-[11px] ml-1.5" style={{ color: '#93c5fd' }}>{z.label}</span>
+                    <div className="text-[9px]" style={{ color: '#64748b' }}>
+                      {z.nPolig} polígono{z.nPolig !== 1 ? 's' : ''} · {z.areaTotal.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} ha · {Math.round(z.perc * 100)}%
+                      {z.nPolig > 1 && <> · menor {z.menor.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} / maior {z.maior.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} ha</>}
+                    </div>
+                  </div>
+                  {banda && z.cv != null
+                    ? <span className="text-[9px] px-1.5 py-0.5 rounded font-semibold flex-shrink-0" style={{ background: banda.bg, color: banda.cor }}>CV {z.cv.toLocaleString('pt-BR')}%</span>
                     : <span className="text-[9px] px-1.5 py-0.5 rounded flex-shrink-0" style={{ background: '#0b1f3a', color: '#475569' }}>CV —</span>}
                 </div>
               );

@@ -1,6 +1,10 @@
-export const APP_VERSION = '0.91.0';
+export const APP_VERSION = '0.91.1';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.91.1': [
+    'Zonas de Manejo: o bloco "Zonas adotadas" (topo) agora segue o mesmo conceito da avaliação — agrupa por classe e mostra "N zonas oficiais · M polígonos" (antes contava cada mancha como uma zona, ex.: "9 zonas" que na verdade eram 6 zonas em 9 polígonos)',
+    'As zonas adotadas ganharam as cores em gradiente (verde→vermelho por potencial), os rótulos legíveis (Muito alto…Muito baixo) e, por zona, o nº de polígonos + área + % + menor/maior + CV',
+  ],
   '0.91.0': [
     'Zonas de Manejo: o bloco "Zonas adotadas" (no topo) agora tem botão "Remover" — antes ele ficava fixo, sem como apagar. Remover desadota o talhão: tira o oficial, apaga o ambiente e limpa as zonas (a Amostragem por zona fica sem grade até você adotar outro). Os zoneamentos salvos NÃO são apagados',
   ],
