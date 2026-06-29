@@ -115,8 +115,10 @@ export function MapView() {
       map.addSource('pontos-amos', { type: 'geojson', data: EMPTY_FC });
       map.addLayer({ id: 'pontos-circle', type: 'circle', source: 'pontos-amos',
         paint: {
-          // raio por feature ('r') quando presente — p/ nuvens densas (EC) com pontos pequenos
-          'circle-radius': ['case', ['has', 'r'], ['get', 'r'], 6],
+          // raio por feature ('r') quando presente — p/ nuvens densas (EC) com pontos pequenos.
+          // 'to-number' é OBRIGATÓRIO: num 'case', os ramos precisam do MESMO tipo
+          // (['get','r'] é 'value', 6 é 'number') — sem isso a camada nem é criada.
+          'circle-radius': ['case', ['has', 'r'], ['to-number', ['get', 'r']], 6],
           'circle-color': ['case',
             ['has', 'cor'], ['get', 'cor'],   // cor explícita (ex: pontos de zona)
             ['match', ['get', 'profs'],

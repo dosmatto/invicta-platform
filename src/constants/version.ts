@@ -1,6 +1,9 @@
-export const APP_VERSION = '0.94.0';
+export const APP_VERSION = '0.94.1';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.94.1': [
+    'Correção: os pontos (Condutividade brutos/limpos), além dos rótulos de valor e dos pontos de amostragem, pararam de aparecer na 0.94.0 — uma expressão de raio inválida no mapa fazia a camada de pontos nem ser criada. Corrigido; os pontos voltam a ser plotados',
+  ],
   '0.94.0': [
     'Condutividade: novo fluxo com LIMPEZA dos dados antes de interpolar — Pontos brutos → Limpar (MapFilter) → Interpolar. Agora dá para VER os pontos brutos no mapa (coloridos pela legenda, como um mapa), rodar a limpeza e ver os pontos LIMPOS, e só então krigar sobre os pontos filtrados',
     'A limpeza usa a mesma metodologia do MapFilter da colheita: filtro bruto (remove zeros/absurdos por percentil) + MapFilter global (mediana ± faixa) + MapFilter local anisotrópico (remove o ponto que destoa dos vizinhos ao longo da passada). Mostra quantos pontos saíram em cada etapa e o % removido',
