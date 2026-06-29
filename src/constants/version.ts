@@ -1,6 +1,12 @@
-export const APP_VERSION = '0.82.0';
+export const APP_VERSION = '0.83.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.83.0': [
+    'Zonas de Manejo (MEAP) — fluxo reorganizado (rev. 13.00A) em 5 etapas claras: 1) Configurar (camadas + PESO de cada camada + método), 2) Analisar, 3) Decidir e gerar, 4/5) Avaliar. Agora a pergunta "quantas zonas?" vem ANTES de gerar, e os indicadores de qualidade (CV/homogeneidade) só aparecem DEPOIS, avaliando as zonas prontas',
+    'NOVO botão "Analisar (FPI × NCE)": calcula a curva de organização das zonas para 2 a 12 zonas (antes só ia até 6) e mostra um gráfico estilo "cotovelo" + uma SUGESTÃO automática (nº de zonas + justificativa + nível de confiança). A sugestão não é obrigatória — você escolhe o número num seletor de 2 a 12 (a sugestão fica marcada com ★)',
+    'NOVO peso por camada (0 = ignora · 1 = padrão · ↑ = manda mais na separação das zonas) — dá para fazer, por ex., o NDVI pesar o dobro da CTC',
+    'Antes de gerar, um RESUMO do processamento (camadas + pesos, método, nº de zonas, área mínima) para você confirmar',
+  ],
   '0.82.0': [
     'NOVA análise "O que explica a produtividade?" (tela cheia): correlaciona o mapa de produtividade com TODAS as outras camadas do talhão (NDVI, argila, CTC, MO, V%, fertilidade…) e RANQUEIA os fatores pela força da correlação (r), com barras +/−, um insight automático em texto e o gráfico de dispersão do fator escolhido',
     'Responde direto "por que essa área produziu o que produziu" — é a base das análises cruzadas que diferenciam a plataforma. Abre pelos botões do comparador na aba Produtividade',

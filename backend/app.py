@@ -83,16 +83,27 @@ class Camada(BaseModel):
     b64: str                          # Float32 (norte no topo), rows*cols
 
 
-class ReqZonarMulti(BaseModel):
+# Revisão 13.00A: Configurar → ANALISAR → Decidir → GERAR → Avaliar.
+class ReqAnalisarZonas(BaseModel):
     camadas: list[Camada]             # MAPAS JÁ INTERPOLADOS (co-registrados)
     bounds: list[float]               # [w, s, e, n] comum às camadas
     shape: list[int]                  # [rows, cols] comum às camadas
     poligono: dict[str, Any] | None = None
-    n_classes: int = 0                # 0 = usar a sugestão (mín. de FPI/NCE)
     algoritmo: str = "fcm"            # 'fcm' (fuzzy c-means) | 'kmeans'
     c_min: int = 2                    # faixa p/ a curva FPI/NCE
-    c_max: int = 6
+    c_max: int = 12                   # mínimo 12 (rev. 13.00A)
+    pesos: list[float] | None = None  # peso por camada (None = todos 1)
+
+
+class ReqGerarZonas(BaseModel):
+    camadas: list[Camada]
+    bounds: list[float]
+    shape: list[int]
+    n_classes: int                    # nº de zonas ESCOLHIDO pelo usuário
+    poligono: dict[str, Any] | None = None
+    algoritmo: str = "fcm"
     area_min_ha: float = 0.0          # 0 = sem fusão de manchas pequenas
+    pesos: list[float] | None = None
 
 
 class ReqCenas(BaseModel):
@@ -184,14 +195,27 @@ def colheita_processar(req: ReqColheita):
         raise HTTPException(status_code=500, detail=f"falha na limpeza de colheita: {e}")
 
 
-@app.post("/zonear-multi")
-def zonear_multi(req: ReqZonarMulti):
-    """Zona de manejo por SIMILARIDADE: clusteriza (k-means/FCM) os mapas já
-    interpolados das camadas escolhidas + índices FPI/NCE p/ o nº de zonas."""
+@app.post("/zonear-analisar")
+def zonear_analisar(req: ReqAnalisarZonas):
+    """ETAPA 1 (Analisar): só FPI/NCE p/ 2..c_max + sugestão do nº de zonas
+    (não gera/vetoriza). O gráfico FPI×NCE é mostrado ANTES da geração."""
     cams = [{"nome": c.nome, "b64": c.b64} for c in req.camadas]
     try:
-        return interp.zonar_multi(cams, req.bounds, req.shape, req.n_classes, req.algoritmo, req.c_min, req.c_max, req.poligono, req.area_min_ha)
+        return interp.analisar_multi(cams, req.bounds, req.shape, req.algoritmo, req.c_min, req.c_max, req.poligono, req.pesos)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:  # pragma: no cover
-        raise HTTPException(status_code=500, detail=f"falha ao zonear-multi: {e}")
+        raise HTTPException(status_code=500, detail=f"falha ao analisar zonas: {e}")
+
+
+@app.post("/zonear-gerar")
+def zonear_gerar(req: ReqGerarZonas):
+    """ETAPA 2 (Gerar): clusteriza com o nº ESCOLHIDO + área mínima + vetoriza
+    (identidade única). Avaliação de qualidade (CV etc.) é feita DEPOIS, no front."""
+    cams = [{"nome": c.nome, "b64": c.b64} for c in req.camadas]
+    try:
+        return interp.gerar_multi(cams, req.bounds, req.shape, req.n_classes, req.algoritmo, req.poligono, req.area_min_ha, req.pesos)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:  # pragma: no cover
+        raise HTTPException(status_code=500, detail=f"falha ao gerar zonas: {e}")

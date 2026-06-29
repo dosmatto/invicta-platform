@@ -49,7 +49,7 @@ AMPLITUDE_MIN = 0.30
 NUGGET_MAX = 0.10
 # Versao do motor de interpolacao (conferir em GET /health para saber se o
 # backend foi reiniciado com o codigo novo).
-VERSION = "interp-12-identidade"
+VERSION = "interp-13-analisar-gerar"
 
 
 def _nlags(n: int) -> int:
@@ -481,49 +481,81 @@ def _sieve_labels(cls: np.ndarray, finite: np.ndarray, min_cells: int) -> np.nda
     return cls
 
 
-def zonar_multi(camadas: list[dict], bounds, dims, n_classes: int = 0,
-                algoritmo: str = "fcm", c_min: int = 2, c_max: int = 6,
-                polygon_geojson: dict | None = None, area_min_ha: float = 0.0,
-                seed: int = 0) -> dict[str, Any]:
-    rows, cols = int(dims[0]), int(dims[1])
-    w, s, e, n = [float(v) for v in bounds]
-    gx = np.linspace(w, e, cols)
-    gy = np.linspace(s, n, rows)
-    lon0, lat0 = (w + e) / 2.0, (s + n) / 2.0
+# Revisão 13.00A: o fluxo é Configurar → ANALISAR → Decidir → GERAR → Avaliar.
+# analisar_multi() = ETAPA 1 (só FPI/NCE 2..12 + sugestão; não vetoriza).
+# gerar_multi()    = ETAPA 2 (clusteriza o nº ESCOLHIDO + área mínima + vetoriza).
+# Pesos por camada entram em _stack_xn (escala as colunas z-score).
 
+def _stack_xn(camadas, rows, cols, pesos):
     if not camadas:
         raise ValueError("nenhuma camada selecionada")
     stack = np.stack([_decode_grid_b64(cam["b64"], rows, cols) for cam in camadas], axis=0)  # (L, rows, cols)
-
     finite = np.all(np.isfinite(stack), axis=0)  # pixels válidos em TODAS as camadas
     idx = np.argwhere(finite)  # (n_pix, 2) -> [j, i]
-    if idx.shape[0] < max(int(c_max), 3):
-        raise ValueError("pixels insuficientes (camadas com pouca sobreposição válida)")
     X = stack[:, finite].T  # (n_pix, L)
     Xn = _normalizar_colunas(X)
+    if pesos:  # peso 2 = a camada conta o dobro na distância
+        wgt = np.array([float(p) for p in pesos], dtype=float)
+        if wgt.size == Xn.shape[1] and np.all(np.isfinite(wgt)):
+            Xn = Xn * np.clip(wgt, 0.0, None)
+    return stack, finite, idx, Xn
 
-    # Índices FPI/NCE por nº de classes (via FCM) -> curva p/ escolher o nº de zonas.
+
+def _sugestao_zonas(indices):
+    """nº sugerido (mínimo de FPI+NCE normalizados) + confiança (gap p/ o 2º) + justificativa."""
+    if not indices:
+        return None, 0, ""
+    fs = np.array([d["fpi"] for d in indices]); ns = np.array([d["nce"] for d in indices])
+    def _norm(a):
+        r = a.max() - a.min()
+        return (a - a.min()) / r if r > 0 else a * 0.0
+    score = _norm(fs) + _norm(ns)
+    best = int(indices[int(np.argmin(score))]["c"])
+    conf = 60
+    if len(score) > 1:
+        ss = np.sort(score)
+        rng = (float(score.max()) - float(score.min())) or 1.0
+        conf = max(5, min(99, int(round(100.0 * (ss[1] - ss[0]) / rng))))
+    return best, conf, "menor desorganização (NCE) e maior organização estatística (FPI) das classes"
+
+
+def analisar_multi(camadas: list[dict], bounds, dims, algoritmo: str = "fcm",
+                   c_min: int = 2, c_max: int = 12, polygon_geojson: dict | None = None,
+                   pesos: list | None = None, seed: int = 0) -> dict[str, Any]:
+    """ETAPA 1 — Analisar: FPI/NCE para 2..c_max + sugestão. Não gera nem vetoriza zonas."""
+    rows, cols = int(dims[0]), int(dims[1])
+    _stack, _finite, idx, Xn = _stack_xn(camadas, rows, cols, pesos)
+    if idx.shape[0] < max(int(c_max), 3):
+        raise ValueError("pixels insuficientes (camadas com pouca sobreposição válida)")
     indices = []
-    ca = max(2, int(c_min))
-    cb = max(ca, int(c_max))
+    ca = max(2, int(c_min)); cb = max(ca, int(c_max))
     for c in range(ca, cb + 1):
         if idx.shape[0] <= c:
             break
         U, _ = _fcm(Xn, c, seed=seed)
         fpi, nce = _fpi_nce(U)
         indices.append({"c": c, "fpi": round(fpi, 4), "nce": round(nce, 4)})
+    sug, conf, just = _sugestao_zonas(indices)
+    return {
+        "indices": indices, "sugestao_c": sug, "confianca": conf, "justificativa": just,
+        "stats": {"algoritmo": algoritmo, "n_pixels": int(idx.shape[0]), "n_camadas": len(camadas)},
+    }
 
-    sugestao = None
-    if indices:
-        fs = np.array([d["fpi"] for d in indices])
-        ns = np.array([d["nce"] for d in indices])
-        def _norm(a):
-            r = a.max() - a.min()
-            return (a - a.min()) / r if r > 0 else a * 0.0
-        score = _norm(fs) + _norm(ns)
-        sugestao = int(indices[int(np.argmin(score))]["c"])
 
-    c_sel = int(n_classes) if int(n_classes) >= 2 else (sugestao or 3)
+def gerar_multi(camadas: list[dict], bounds, dims, n_classes: int,
+                algoritmo: str = "fcm", polygon_geojson: dict | None = None,
+                area_min_ha: float = 0.0, pesos: list | None = None,
+                seed: int = 0) -> dict[str, Any]:
+    """ETAPA 2 — Gerar: clusteriza com o nº ESCOLHIDO + área mínima + vetoriza (identidade única)."""
+    rows, cols = int(dims[0]), int(dims[1])
+    w, s, e, n = [float(v) for v in bounds]
+    lon0, lat0 = (w + e) / 2.0, (s + n) / 2.0
+
+    _stack, finite, idx, Xn = _stack_xn(camadas, rows, cols, pesos)
+    if idx.shape[0] < 3:
+        raise ValueError("pixels insuficientes (camadas com pouca sobreposição válida)")
+
+    c_sel = int(n_classes) if int(n_classes) >= 2 else 3
     c_sel = min(c_sel, idx.shape[0])
 
     if algoritmo == "kmeans":
@@ -601,8 +633,6 @@ def zonar_multi(camadas: list[dict], bounds, dims, n_classes: int = 0,
     return {
         "type": "FeatureCollection",
         "features": features,
-        "indices": indices,        # [{c, fpi, nce}] p/ o gráfico
-        "sugestao_c": sugestao,    # nº de zonas sugerido (mínimo de FPI+NCE)
         "stats": {
             "algoritmo": algoritmo,
             "n_classes": len(presentes),   # nº de POTENCIAIS (classes de similaridade)

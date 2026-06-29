@@ -122,50 +122,90 @@ export async function interpolar(params: {
 }
 
 // Zona por SIMILARIDADE: clusteriza mapas JÁ interpolados (não interpola).
-export interface RespZonarMulti {
-  type: 'FeatureCollection';
-  features: GeoJSON.Feature[];
-  indices: { c: number; fpi: number; nce: number }[];
-  sugestao_c: number | null;
-  stats: { algoritmo: string; n_classes: number; n_pixels: number; n_camadas: number; area_min_ha: number; ordem_por: string };
-}
+// Revisão 13.00A — duas etapas que não se misturam:
+//   ANALISAR (FPI/NCE 2..12 + sugestão) → o usuário decide o nº de zonas →
+//   GERAR (clusteriza o nº escolhido + área mínima + vetoriza). Qualidade (CV…) é avaliada DEPOIS.
 
-export async function zonearMulti(params: {
-  camadas: { nome: string; b64: string }[];
-  bounds: [number, number, number, number];
-  shape: [number, number];
-  poligono?: GeoJSON.Polygon | GeoJSON.MultiPolygon | null;
-  nClasses?: number;
-  algoritmo?: 'fcm' | 'kmeans';
-  cMin?: number;
-  cMax?: number;
-  areaMinHa?: number;
-}): Promise<RespZonarMulti> {
+const ZON_OFF = 'Interpolador desligado nesta máquina. Dê dois cliques em backend\\start.bat (Windows) ou backend/start.command (Mac), espere a janela abrir, e tente de novo.';
+
+async function postZonear(rota: string, body: unknown): Promise<Response> {
   let r: Response;
   try {
-    r = await fetch(`${INTERP_URL}/zonear-multi`, {
+    r = await fetch(`${INTERP_URL}${rota}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        camadas: params.camadas,
-        bounds: params.bounds,
-        shape: params.shape,
-        poligono: params.poligono ?? null,
-        n_classes: params.nClasses ?? 0,
-        algoritmo: params.algoritmo ?? 'fcm',
-        c_min: params.cMin ?? 2,
-        c_max: params.cMax ?? 6,
-        area_min_ha: params.areaMinHa ?? 0,
-      }),
+      body: JSON.stringify(body),
     });
   } catch {
-    throw new Error('Interpolador desligado nesta máquina. Dê dois cliques em backend\\start.bat (Windows) ou backend/start.command (Mac), espere a janela abrir, e tente de novo.');
+    throw new Error(ZON_OFF);
   }
   if (!r.ok) {
     let msg = `Backend respondeu ${r.status}`;
     try { const j = await r.json(); if (j?.detail) msg = String(j.detail); } catch {}
     throw new Error(msg);
   }
+  return r;
+}
+
+// ── ETAPA 1: Analisar (não gera) ──
+export interface RespAnalisarZonas {
+  indices: { c: number; fpi: number; nce: number }[];   // 2..c_max
+  sugestao_c: number | null;
+  confianca: number;                                     // 0..100 (%)
+  justificativa: string;
+  stats: { algoritmo: string; n_pixels: number; n_camadas: number; c_min: number; c_max: number };
+}
+
+export async function analisarZonas(params: {
+  camadas: { nome: string; b64: string }[];
+  bounds: [number, number, number, number];
+  shape: [number, number];
+  poligono?: GeoJSON.Polygon | GeoJSON.MultiPolygon | null;
+  algoritmo?: 'fcm' | 'kmeans';
+  cMin?: number;
+  cMax?: number;
+  pesos?: number[] | null;
+}): Promise<RespAnalisarZonas> {
+  const r = await postZonear('/zonear-analisar', {
+    camadas: params.camadas,
+    bounds: params.bounds,
+    shape: params.shape,
+    poligono: params.poligono ?? null,
+    algoritmo: params.algoritmo ?? 'fcm',
+    c_min: params.cMin ?? 2,
+    c_max: params.cMax ?? 12,
+    pesos: params.pesos ?? null,
+  });
+  return r.json();
+}
+
+// ── ETAPA 2: Gerar (nº já escolhido) ──
+export interface RespGerarZonas {
+  type: 'FeatureCollection';
+  features: GeoJSON.Feature[];
+  stats: { algoritmo: string; n_classes: number; n_zonas: number; n_pixels: number; n_camadas: number; area_min_ha: number; ordem_por: string };
+}
+
+export async function gerarZonas(params: {
+  camadas: { nome: string; b64: string }[];
+  bounds: [number, number, number, number];
+  shape: [number, number];
+  nClasses: number;
+  poligono?: GeoJSON.Polygon | GeoJSON.MultiPolygon | null;
+  algoritmo?: 'fcm' | 'kmeans';
+  areaMinHa?: number;
+  pesos?: number[] | null;
+}): Promise<RespGerarZonas> {
+  const r = await postZonear('/zonear-gerar', {
+    camadas: params.camadas,
+    bounds: params.bounds,
+    shape: params.shape,
+    n_classes: params.nClasses,
+    poligono: params.poligono ?? null,
+    algoritmo: params.algoritmo ?? 'fcm',
+    area_min_ha: params.areaMinHa ?? 0,
+    pesos: params.pesos ?? null,
+  });
   return r.json();
 }
 

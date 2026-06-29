@@ -7,7 +7,7 @@
 
 import { getImportacoesLab, getGrades } from '@/lib/store';
 import { carregarGridsTalhao } from '@/lib/recomendacao/aplicar';
-import { zonearMulti, decodeGrid, descomprimirGrid, type RespZonarMulti, type Grid } from '@/lib/fertilidade';
+import { analisarZonas, gerarZonas, decodeGrid, descomprimirGrid, type RespAnalisarZonas, type RespGerarZonas, type Grid } from '@/lib/fertilidade';
 import { cloudCarregarMapasPorPrefixo } from '@/lib/cloud';
 import { simboloElemento, type ResultadoAmostra } from '@/lib/lab';
 
@@ -139,23 +139,59 @@ export function dadosLabCV(talhaoId: string): { pontos: { numero: number; lng: n
   return { pontos, resultados: imp?.resultados ?? [] };
 }
 
-export async function gerarMulti(opts: {
+// Monta o payload (camadas selecionadas na ordem fixa + pesos correspondentes).
+function montar(carregadas: CamadasCarregadas, chaves: string[], pesos?: Record<string, number>) {
+  const sel = carregadas.camadas.filter(c => chaves.includes(c.chave));
+  if (sel.length === 0) throw new Error('Selecione ao menos uma camada.');
+  return {
+    camadas: sel.map(c => ({ nome: `${c.simbolo} ${c.prof}`, b64: c.b64 })),
+    pesos: pesos ? sel.map(c => (pesos[c.chave] ?? 1)) : null,
+    bounds: carregadas.bounds,
+    shape: carregadas.shape,
+  };
+}
+
+// ETAPA 1 — Analisar (FPI/NCE 2..12 + sugestão). Não gera.
+export async function analisarMulti(opts: {
   carregadas: CamadasCarregadas;
   chaves: string[];
   poligono?: GeoJSON.Polygon | GeoJSON.MultiPolygon | null;
   algoritmo?: 'fcm' | 'kmeans';
-  nClasses?: number;
-  areaMinHa?: number;
-}): Promise<RespZonarMulti> {
-  const sel = opts.carregadas.camadas.filter(c => opts.chaves.includes(c.chave));
-  if (sel.length === 0) throw new Error('Selecione ao menos uma camada.');
-  return zonearMulti({
-    camadas: sel.map(c => ({ nome: `${c.simbolo} ${c.prof}`, b64: c.b64 })),
-    bounds: opts.carregadas.bounds,
-    shape: opts.carregadas.shape,
+  pesos?: Record<string, number>;
+  cMax?: number;
+}): Promise<RespAnalisarZonas> {
+  const m = montar(opts.carregadas, opts.chaves, opts.pesos);
+  return analisarZonas({
+    camadas: m.camadas,
+    bounds: m.bounds,
+    shape: m.shape,
     poligono: opts.poligono ?? null,
     algoritmo: opts.algoritmo ?? 'fcm',
-    nClasses: opts.nClasses ?? 0,
+    cMin: 2,
+    cMax: opts.cMax ?? 12,
+    pesos: m.pesos,
+  });
+}
+
+// ETAPA 2 — Gerar (nº de zonas já escolhido + área mínima).
+export async function gerarMulti(opts: {
+  carregadas: CamadasCarregadas;
+  chaves: string[];
+  nClasses: number;
+  poligono?: GeoJSON.Polygon | GeoJSON.MultiPolygon | null;
+  algoritmo?: 'fcm' | 'kmeans';
+  areaMinHa?: number;
+  pesos?: Record<string, number>;
+}): Promise<RespGerarZonas> {
+  const m = montar(opts.carregadas, opts.chaves, opts.pesos);
+  return gerarZonas({
+    camadas: m.camadas,
+    bounds: m.bounds,
+    shape: m.shape,
+    nClasses: opts.nClasses,
+    poligono: opts.poligono ?? null,
+    algoritmo: opts.algoritmo ?? 'fcm',
     areaMinHa: opts.areaMinHa ?? 0,
+    pesos: m.pesos,
   });
 }

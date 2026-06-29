@@ -11,15 +11,15 @@ import { useEffect, useMemo, useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import { getZoneamentosMeap, saveZoneamentoMeap, deleteZoneamentoMeap, setZoneamentoPadraoMeap, getLegendasPorAtributo, type Talhao, type ZoneamentoMeap } from '@/lib/store';
 import { obterOuAdotarAmbiente } from '@/lib/meap/adocao';
-import { carregarCamadas, gerarMulti, dadosLabCV, type CamadasCarregadas } from '@/lib/meap/gerar';
+import { carregarCamadas, analisarMulti, gerarMulti, dadosLabCV, type CamadasCarregadas } from '@/lib/meap/gerar';
 import { calcularCVZonas } from '@/lib/meap/cv';
-import { extrairPoligono, coordsFromBounds, decodeGrid, type RespZonarMulti } from '@/lib/fertilidade';
+import { extrairPoligono, coordsFromBounds, decodeGrid, type RespGerarZonas, type RespAnalisarZonas } from '@/lib/fertilidade';
 import { colorirGrid, colorirGridComLegenda } from '@/lib/raster';
 import { rampaVisualStops } from '@/lib/legendas';
 import { classeZona } from '@/lib/zonas';
 import { simboloElemento } from '@/lib/lab';
 import type { AmbienteProdutivo, Homogeneidade, MetricasZonaMeap } from '@/lib/meap/tipos';
-import { Layers, AlertTriangle, Wand2, Loader2, X, Check, ChevronUp, ChevronDown, Save, Star, Trash2, Eye } from 'lucide-react';
+import { Layers, AlertTriangle, Wand2, Loader2, X, Check, ChevronUp, ChevronDown, Save, Star, Trash2, Eye, BarChart3, Sparkles } from 'lucide-react';
 
 const HOMOG: Record<Homogeneidade, { label: string; cor: string; bg: string }> = {
   alta: { label: 'Homogênea', cor: '#86efac', bg: '#0f2a1a' },
@@ -94,6 +94,16 @@ function IndicesChart({ indices, sugestao }: { indices: { c: number; fpi: number
   );
 }
 
+// Cabeçalho numerado de etapa (rev. 13.00A: Configurar → Analisar → Decidir → Gerar → Avaliar).
+function EtapaHdr({ n, t }: { n: number; t: string }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="flex items-center justify-center text-[10px] font-bold rounded-full flex-shrink-0" style={{ width: 18, height: 18, background: '#5b21b6', color: '#fff' }}>{n}</span>
+      <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: '#c4b5fd' }}>{t}</span>
+    </div>
+  );
+}
+
 // Rampa genérica (viridis-like) p/ a prévia de uma camada sem legenda própria.
 const RAMPA_PREVIEW: Array<[number, [number, number, number]]> = [
   [0, [68, 1, 84]], [0.25, [59, 82, 139]], [0.5, [33, 145, 140]], [0.75, [94, 201, 98]], [1, [253, 231, 37]],
@@ -128,13 +138,20 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
   const [carregando, setCarregando] = useState(true);
   const [chaves, setChaves] = useState<string[]>([]);
 
-  // Geração
+  // Configuração (rev. 13.00A: Configurar → Analisar → Decidir → Gerar → Avaliar)
   const [algoritmo, setAlgoritmo] = useState<'fcm' | 'kmeans'>('fcm');
-  const [nClasses, setNClasses] = useState(0);   // 0 = auto (sugestão)
+  const [pesos, setPesos] = useState<Record<string, number>>({});  // peso por camada (chave→peso)
   const [areaMin, setAreaMin] = useState(0);     // ha; 0 = sem fusão
+
+  // Etapa 2 — Analisar (FPI/NCE 2..12 + sugestão, ANTES de gerar)
+  const [analise, setAnalise] = useState<RespAnalisarZonas | null>(null);
+  const [analisando, setAnalisando] = useState(false);
+  const [nClasses, setNClasses] = useState(0);   // nº de zonas escolhido (0 = ainda não)
+
+  // Etapa 4/5 — Gerar / Avaliar
   const [gerando, setGerando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
-  const [res, setRes] = useState<RespZonarMulti | null>(null);
+  const [res, setRes] = useState<RespGerarZonas | null>(null);
   const [ordemRanks, setOrdemRanks] = useState<number[]>([]);  // potenciais (ranks) na ordem Alta→Baixa
 
   // Zoneamentos salvos (vários por talhão; um é o "padrão" usado pela Amostragem)
@@ -153,7 +170,7 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
     let vivo = true;
     setCarregando(true);
     carregarCamadas(talhao.id)
-      .then(c => { if (!vivo) return; setCarregadas(c); setChaves([]); })
+      .then(c => { if (!vivo) return; setCarregadas(c); setChaves([]); setPesos({}); setAnalise(null); setRes(null); setNClasses(0); })
       .catch(() => { if (vivo) setCarregadas(null); })
       .finally(() => { if (vivo) setCarregando(false); });
     return () => { vivo = false; };
@@ -236,7 +253,30 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
   }, [previewCh, carregadas, res, vendoFc, setFertilidadeOverlay, setFertilidadeLabels]);
   useEffect(() => () => { setFertilidadeOverlay(null); setFertilidadeLabels(null); }, [setFertilidadeOverlay, setFertilidadeLabels]);
 
-  function toggle(ch: string) { setChaves(prev => prev.includes(ch) ? prev.filter(c => c !== ch) : [...prev, ch]); }
+  // Mudar camadas/pesos/método invalida a análise (a curva FPI/NCE muda) e o preview.
+  function invalidarAnalise() { setAnalise(null); setRes(null); setNClasses(0); }
+  function toggle(ch: string) {
+    setChaves(prev => prev.includes(ch) ? prev.filter(c => c !== ch) : [...prev, ch]);
+    invalidarAnalise();
+  }
+  function setPeso(ch: string, v: number) {
+    setPesos(prev => ({ ...prev, [ch]: Math.max(0, v) }));
+    invalidarAnalise();
+  }
+  function mudarAlgoritmo(m: 'fcm' | 'kmeans') { setAlgoritmo(m); invalidarAnalise(); }
+
+  // Etapa 2 — Analisar: FPI/NCE 2..12 + sugestão (não gera).
+  async function analisar() {
+    if (!carregadas || chaves.length === 0) return;
+    setErro(null); setAnalisando(true); setRes(null); setPreviewCh(null);
+    try {
+      const a = await analisarMulti({ carregadas, chaves, poligono, algoritmo, pesos, cMax: 12 });
+      setAnalise(a);
+      setNClasses(a.sugestao_c ?? 0);   // pré-seleciona a sugestão (o usuário pode trocar)
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Falha ao analisar.');
+    } finally { setAnalisando(false); }
+  }
 
   function moverRank(pos: number, dir: -1 | 1) {
     setOrdemRanks(prev => {
@@ -247,14 +287,14 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
     });
   }
 
+  // Etapa 4 — Gerar: clusteriza o nº ESCOLHIDO + área mínima (avaliação vem depois).
   async function gerar() {
-    if (!carregadas || chaves.length === 0) return;
+    if (!carregadas || chaves.length === 0 || nClasses < 2) return;
     setErro(null); setGerando(true); setPreviewCh(null);
     try {
-      const r = await gerarMulti({ carregadas, chaves, poligono, algoritmo, nClasses, areaMinHa: areaMin });
+      const r = await gerarMulti({ carregadas, chaves, poligono, algoritmo, nClasses, areaMinHa: areaMin, pesos });
       if (!r.features.length) throw new Error('Nenhuma zona gerada (sobreposição de dados insuficiente).');
       setRes(r);
-      if (nClasses === 0 && r.sugestao_c) setNClasses(r.sugestao_c);
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Falha ao gerar zonas.');
     } finally { setGerando(false); }
@@ -348,6 +388,8 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
           </p>
         ) : (
           <>
+            {/* ───── ETAPA 1 — Configurar (camadas + pesos + método) ───── */}
+            <EtapaHdr n={1} t="Configurar" />
             <div>
               <div className="flex items-center justify-between mb-1">
                 <span className="text-[9px] font-semibold" style={{ color: '#64748b' }}>Camadas a usar ({chaves.length}/{carregadas.camadas.length}) — clique p/ pré-visualizar</span>
@@ -369,38 +411,113 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
+            {/* Pesos por camada (quanto cada uma pesa na separação das zonas) */}
+            {chaves.length > 0 && (
               <div>
-                <span className="text-[9px] font-semibold block mb-1" style={{ color: '#64748b' }}>Algoritmo</span>
-                <div className="grid grid-cols-2 gap-1">
-                  {([['fcm', 'Fuzzy'], ['kmeans', 'K-means']] as const).map(([m, t]) => (
-                    <button key={m} onClick={() => setAlgoritmo(m)} className="py-1.5 rounded text-[10px] font-semibold"
-                      style={{ background: algoritmo === m ? 'var(--invicta-blue-mid)' : '#1a3a6b', color: algoritmo === m ? '#fff' : '#93c5fd', border: `1px solid ${algoritmo === m ? '#60a5fa' : '#1a3a6b'}` }}>{t}</button>
-                  ))}
+                <span className="text-[9px] font-semibold block mb-1" style={{ color: '#64748b' }}>Peso de cada camada (0 = ignora · 1 = padrão · ↑ = manda mais)</span>
+                <div className="space-y-1">
+                  {carregadas.camadas.filter(c => chaves.includes(c.chave)).map(c => {
+                    const p = pesos[c.chave] ?? 1;
+                    return (
+                      <div key={c.chave} className="flex items-center gap-2">
+                        <span className="text-[10px] font-semibold flex-shrink-0" style={{ color: '#93c5fd', minWidth: '92px' }}>{c.simbolo} <span style={{ opacity: 0.65 }}>{c.prof}</span></span>
+                        <input type="range" min={0} max={3} step={0.5} value={p} onChange={e => setPeso(c.chave, Number(e.target.value))} className="flex-1 accent-violet-500" />
+                        <span className="text-[10px] font-bold tabular-nums flex-shrink-0" style={{ color: p === 1 ? '#64748b' : '#c4b5fd', minWidth: '26px', textAlign: 'right' }}>{p}×</span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
-              <label className="block">
-                <span className="text-[9px] font-semibold block mb-1" style={{ color: '#64748b' }}>Nº de potenciais</span>
-                <select value={nClasses} onChange={e => setNClasses(Number(e.target.value))} className="w-full rounded px-2 py-1.5 text-xs outline-none" style={inputStyle}>
-                  <option value={0}>Auto (sugestão)</option>
-                  {[2, 3, 4, 5, 6].map(n => <option key={n} value={n}>{n} potenciais</option>)}
-                </select>
-              </label>
+            )}
+
+            <div>
+              <span className="text-[9px] font-semibold block mb-1" style={{ color: '#64748b' }}>Algoritmo</span>
+              <div className="grid grid-cols-2 gap-1">
+                {([['fcm', 'Fuzzy'], ['kmeans', 'K-means']] as const).map(([m, t]) => (
+                  <button key={m} onClick={() => mudarAlgoritmo(m)} className="py-1.5 rounded text-[10px] font-semibold"
+                    style={{ background: algoritmo === m ? 'var(--invicta-blue-mid)' : '#1a3a6b', color: algoritmo === m ? '#fff' : '#93c5fd', border: `1px solid ${algoritmo === m ? '#60a5fa' : '#1a3a6b'}` }}>{t}</button>
+                ))}
+              </div>
             </div>
 
-            <label className="block">
-              <span className="text-[9px] font-semibold block mb-0.5" style={{ color: '#64748b' }}>Área mínima de zona (ha) — funde manchas pequenas</span>
-              <input type="number" step="0.5" min="0" value={areaMin}
-                onChange={e => setAreaMin(Math.max(0, Number(e.target.value.replace(',', '.')) || 0))}
-                className="w-full rounded px-2 py-1.5 text-xs outline-none" style={inputStyle} />
-              <span className="text-[9px]" style={{ color: '#475569' }}>0 = sem fusão (mapa fiel aos dados).</span>
-            </label>
-
-            <button onClick={gerar} disabled={gerando || chaves.length === 0}
+            <button onClick={analisar} disabled={analisando || chaves.length === 0}
               className="w-full py-2 rounded text-xs font-bold text-white flex items-center justify-center gap-2"
-              style={{ background: gerando ? '#1a3a6b' : '#5b21b6', opacity: gerando || chaves.length === 0 ? 0.7 : 1 }}>
-              {gerando ? <><Loader2 size={13} className="animate-spin" /> Clusterizando…</> : <><Wand2 size={13} /> Gerar zonas</>}
+              style={{ background: analisando ? '#1a3a6b' : '#1d4ed8', opacity: analisando || chaves.length === 0 ? 0.7 : 1 }}>
+              {analisando ? <><Loader2 size={13} className="animate-spin" /> Analisando…</> : <><BarChart3 size={13} /> Analisar (FPI × NCE)</>}
             </button>
+
+            {/* ───── ETAPA 2 — Analisar (quantas zonas?) ───── */}
+            {analise && (
+              <div className="p-2 rounded space-y-2" style={{ background: '#0a1f33', border: '1px solid #1d4ed8' }}>
+                <EtapaHdr n={2} t="Analisar — quantas zonas?" />
+                {analise.sugestao_c != null && (() => {
+                  const conf = analise.confianca;
+                  const cc = conf >= 66 ? { bg: '#0f2a1a', cor: '#86efac' } : conf >= 33 ? { bg: '#2d1a00', cor: '#fbbf24' } : { bg: '#2a0f12', cor: '#f87171' };
+                  return (
+                    <div className="flex items-start gap-2 p-2 rounded" style={{ background: '#0b1f3a', border: '1px solid #1e3a8a' }}>
+                      <Sparkles size={13} className="flex-shrink-0 mt-0.5" style={{ color: '#93c5fd' }} />
+                      <div className="min-w-0">
+                        <p className="text-[11px]" style={{ color: '#e2e8f0' }}>
+                          Sugestão: <strong style={{ color: '#93c5fd' }}>{analise.sugestao_c} zonas</strong>
+                          <span className="text-[9px] px-1.5 py-0.5 rounded font-bold ml-1.5" style={{ background: cc.bg, color: cc.cor }}>confiança {conf}%</span>
+                        </p>
+                        <p className="text-[9px] leading-relaxed mt-0.5" style={{ color: '#94a3b8' }}>{analise.justificativa}</p>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                <IndicesChart indices={analise.indices} sugestao={analise.sugestao_c} />
+                <p className="text-[9px] leading-relaxed" style={{ color: '#6d8bbe' }}>
+                  <strong style={{ color: '#22d3ee' }}>FPI</strong> e <strong style={{ color: '#fbbf24' }}>NCE</strong> menores = zonas mais organizadas. O ponto onde a curva «empena» (estilo cotovelo) costuma ser o melhor nº.
+                </p>
+
+                <div>
+                  <span className="text-[9px] font-semibold block mb-1" style={{ color: '#64748b' }}>Número de zonas (a sugestão não é obrigatória)</span>
+                  <div className="flex flex-wrap gap-1">
+                    {Array.from({ length: 11 }, (_, i) => i + 2).map(n => {
+                      const sel = nClasses === n;
+                      const sug = analise.sugestao_c === n;
+                      return (
+                        <button key={n} onClick={() => { setNClasses(n); setRes(null); }}
+                          className="relative px-2.5 py-1 rounded text-[11px] font-bold"
+                          style={{ background: sel ? '#5b21b6' : '#1a3a6b', color: sel ? '#fff' : '#93c5fd', border: `1px solid ${sel ? '#a78bfa' : sug ? '#fbbf24' : '#1a3a6b'}` }}>
+                          {n}{sug && <Star size={7} className="absolute -top-1 -right-1" fill="#fbbf24" style={{ color: '#fbbf24' }} />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {analise.sugestao_c != null && <span className="text-[9px] mt-0.5 inline-flex items-center gap-1" style={{ color: '#475569' }}><Star size={7} fill="#fbbf24" style={{ color: '#fbbf24' }} /> = sugerido</span>}
+                </div>
+              </div>
+            )}
+
+            {/* ───── ETAPA 3 — Decidir e gerar (regras + resumo + confirmar) ───── */}
+            {analise && nClasses >= 2 && (
+              <div className="p-2 rounded space-y-2" style={{ background: '#0b1f3a', border: '1px solid #2e5fa3' }}>
+                <EtapaHdr n={3} t="Decidir e gerar" />
+                <label className="block">
+                  <span className="text-[9px] font-semibold block mb-0.5" style={{ color: '#64748b' }}>Área mínima de zona (ha) — funde manchas pequenas na vizinha mais parecida</span>
+                  <input type="number" step="0.5" min="0" value={areaMin}
+                    onChange={e => { setAreaMin(Math.max(0, Number(e.target.value.replace(',', '.')) || 0)); setRes(null); }}
+                    className="w-full rounded px-2 py-1.5 text-xs outline-none" style={inputStyle} />
+                  <span className="text-[9px]" style={{ color: '#475569' }}>0 = sem fusão (mapa fiel aos dados).</span>
+                </label>
+
+                {/* Resumo do processamento (confirmação antes de gerar) */}
+                <div className="p-2 rounded text-[10px] leading-relaxed" style={{ background: '#061525', border: '1px solid #1a3a6b', color: '#94a3b8' }}>
+                  <p style={{ color: '#cbd5e1' }} className="font-semibold mb-0.5">Resumo</p>
+                  <p>Camadas: {carregadas.camadas.filter(c => chaves.includes(c.chave)).map(c => `${c.simbolo}${(pesos[c.chave] ?? 1) !== 1 ? ` (${pesos[c.chave] ?? 1}×)` : ''}`).join(', ')}</p>
+                  <p>Método: {algoritmo === 'fcm' ? 'fuzzy c-means' : 'k-means'} · Zonas: <strong style={{ color: '#e2e8f0' }}>{nClasses}</strong> · Área mín.: {areaMin > 0 ? `${areaMin} ha` : '—'}</p>
+                </div>
+
+                <button onClick={gerar} disabled={gerando}
+                  className="w-full py-2 rounded text-xs font-bold text-white flex items-center justify-center gap-2"
+                  style={{ background: gerando ? '#1a3a6b' : '#5b21b6', opacity: gerando ? 0.7 : 1 }}>
+                  {gerando ? <><Loader2 size={13} className="animate-spin" /> Gerando…</> : <><Wand2 size={13} /> Confirmar e gerar zonas</>}
+                </button>
+              </div>
+            )}
 
             {erro && (
               <div className="flex items-start gap-1.5 p-2 rounded" style={{ background: '#2a0f12', border: '1px solid #7f1d1d' }}>
@@ -412,7 +529,7 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
             {res && (
               <div className="p-2 rounded space-y-2" style={{ background: '#1a1033', border: '1px solid #5b21b6' }}>
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-bold" style={{ color: '#c4b5fd' }}>Preview no mapa</span>
+                  <EtapaHdr n={4} t="Avaliar" />
                   <button onClick={salvar} className="ml-auto flex items-center gap-1 text-[9px] px-2 py-0.5 rounded font-bold text-white" style={{ background: '#065f46' }}>
                     <Save size={9} /> Salvar zoneamento
                   </button>
@@ -469,14 +586,6 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
                   </div>
                 </div>
 
-                {res.indices.length >= 2 && (
-                  <>
-                    <p className="text-[9px]" style={{ color: '#a78bfa' }}>
-                      FPI/NCE — nº ótimo (mínimo) sugerido: <strong style={{ color: '#e9d5ff' }}>{res.sugestao_c ?? '—'}</strong> potenciais
-                    </p>
-                    <IndicesChart indices={res.indices} sugestao={res.sugestao_c} />
-                  </>
-                )}
                 <p className="text-[9px] leading-relaxed" style={{ color: '#6d5b9e' }}>
                   Clique em <strong style={{ color: '#86efac' }}>Salvar zoneamento</strong> para guardá-lo. Você pode salvar vários e marcar um como <strong style={{ color: '#fbbf24' }}>Padrão</strong> — esse vai para a <strong style={{ color: '#93c5fd' }}>Amostragem</strong> gerar o grid.
                 </p>
