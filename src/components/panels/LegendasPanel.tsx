@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   getLegendas, saveLegenda, upsertLegenda, updateLegenda, deleteLegenda,
-  getPaletas, savePaleta, deletePaleta, type Paleta,
+  getPaletas, savePaleta, deletePaleta, destravarLegendasSistema, type Paleta,
 } from '@/lib/store';
 import { listar as listarBib, type ConteudoPerfil } from '@/lib/biblioteca';
 import {
@@ -14,7 +14,7 @@ import {
 import { ELEMENTOS_LAB } from '@/lib/lab';
 import {
   Plus, Edit3, Copy, Trash2, Download, Upload, ChevronLeft, BookOpen,
-  Save, X, ArrowUp, ArrowDown, AlertTriangle, Check,
+  Save, X, ArrowUp, ArrowDown, AlertTriangle, Check, Unlock,
 } from 'lucide-react';
 
 const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
@@ -106,6 +106,14 @@ function LegendasLista({
   // Para legendas do Sistema (read-only): duplica e já abre o editor na cópia.
   function editarComoCopia(l: Legenda) { onEditar(duplicar(l).id); }
 
+  const temSistema = legendas.some(l => l.escopo === 'sistema');
+  function destravar() {
+    if (!confirm('Destravar as legendas oficiais? Elas viram SUAS — passam a ser editáveis e excluíveis, e deixam de ser repostas pelo sistema.')) return;
+    const n = destravarLegendasSistema();
+    onMudou();
+    alert(`${n} legenda(s) destravada(s). Agora você pode editar e excluir todas.`);
+  }
+
   function excluir(l: Legenda) {
     const usos = legendaEmUso(l.id);
     if (usos.length) {
@@ -169,6 +177,14 @@ function LegendasLista({
         placeholder="Filtrar por nome, atributo, fonte…"
         className="w-full rounded px-2 py-1 text-[11px] outline-none" style={inputStyle}
       />
+
+      {temSistema && (
+        <button onClick={destravar} title="As oficiais viram suas (editáveis/excluíveis) e param de ser repostas pelo sistema"
+          className="w-full py-1.5 rounded text-[10px] font-bold flex items-center justify-center gap-1.5"
+          style={{ background: '#3a2300', color: '#fde68a', border: '1px solid #92400e' }}>
+          <Unlock size={11} /> Destravar legendas oficiais (tornar editáveis)
+        </button>
+      )}
 
       {legendas.length === 0 && (
         <p className="text-[10px] py-4 text-center" style={{ color: '#64748b' }}>

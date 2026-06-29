@@ -1,6 +1,10 @@
-export const APP_VERSION = '0.97.0';
+export const APP_VERSION = '0.98.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.98.0': [
+    'Legendas: as oficiais não são mais "presas no código". Antes, um seed rodava a cada boot, deixava elas como "Sistema" (read-only) e desfazia qualquer alteração sua. Agora o seed só roda uma vez (banco vazio); depois disso as legendas vivem no banco e são suas',
+    'Legendas: novo botão "Destravar legendas oficiais" — converte as legendas Sistema em SUAS (editáveis e excluíveis), e elas não voltam mais ao padrão. Depois de destravar, dá para editar cores/limites e excluir (respeitando a trava de "em uso por perfil")',
+  ],
   '0.97.0': [
     'Legendas: agora dá para criar legenda para QUALQUER atributo (não só os de laboratório) — o campo "ID do atributo" virou texto livre com sugestões (p, ctc, condutividade, altimetria, NDVI, produtividade…). Ex.: criar a legenda de Condutividade',
     'Condutividade: os pontos brutos/limpos ganharam halo branco e tamanho maior por zoom (mais visíveis sobre o satélite), e a tela agora mostra "N pontos plotados no mapa" para confirmar o que está sendo desenhado',

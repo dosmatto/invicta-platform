@@ -879,39 +879,38 @@ export function deletePaleta(id: string) {
   save('inv_paletas', load<Paleta>('inv_paletas').filter(p => p.id !== id));
 }
 
-// Garante o seed ABC ao abrir o app. Atualiza legendas ABC que ainda estão na
-// versão antiga (sem `corInicio`/`corFim`, antes do sistema de Estilos), sem
-// tocar em legendas criadas pelo usuário.
-// Semeia/atualiza as legendas OFICIAIS (escopo 'sistema'), idempotente.
-// Oficiais são read-only e visíveis a todas as empresas (sem empresaId);
-// sobrescreve a versão sistema desatualizada e converte ABC legadas (que
-// tinham empresaId) em sistema. Cópias do usuário (outros ids) não são tocadas.
-// Assinatura dos campos definidores — qualquer mudança no seed (limites,
-// cores, unidade, domínio…) propaga para a versão sistema no próximo boot.
-function _assinaturaLegenda(l: Legenda): string {
-  return JSON.stringify([
-    l.nome, l.atributoId, l.unidade, l.metodo, l.invertida, l.estilo,
-    l.dominioMin, l.dominioMax, l.categoria,
-    l.classes.map(c => [c.valorMin, c.valorMax, c.corInicio, c.corFim, c.larguraVisual, c.nome]),
-  ]);
-}
-
+// Seed das legendas oficiais APENAS num banco vazio (1º boot). Depois disso as
+// legendas vivem no BANCO e são gerenciadas pelo usuário — o código não sobrescreve
+// nem readiciona, para que editar/excluir uma legenda passe a valer (antes o seed
+// rodava todo boot e revertia as alterações).
 export function seedLegendasSistema(seed: Legenda[]) {
   const lista = load<Legenda>('inv_legendas');
-  const idxPorId = new Map(lista.map((l, i) => [l.id, i] as const));
-  let mudou = false;
-  for (const oficial of seed) {
+  if (lista.length > 0) return;   // já existem legendas no banco → não mexe
+  const novas = seed.map(oficial => {
     const item: Legenda = { ...oficial, escopo: 'sistema' };
     delete (item as Legenda & { empresaId?: string }).empresaId;
-    const i = idxPorId.get(oficial.id);
-    if (i == null) { lista.push(item); mudou = true; continue; }
-    const ex = lista[i];
-    if (ex.escopo !== 'sistema' || _assinaturaLegenda(ex) !== _assinaturaLegenda(item)) {
-      lista[i] = { ...item, criadoEm: ex.criadoEm };
-      mudou = true;
+    return item;
+  });
+  save('inv_legendas', novas);
+  notificarLegendas();
+}
+
+// "Destrava" as legendas oficiais (escopo 'sistema', read-only) tornando-as do
+// usuário (escopo 'empresa') — passam a ser editáveis/excluíveis. Como o seed só
+// roda em banco vazio, a conversão é permanente.
+export function destravarLegendasSistema(): number {
+  const lista = load<Legenda>('inv_legendas');
+  const ativa = empresaAtivaId();
+  let n = 0;
+  for (const l of lista) {
+    if (l.escopo === 'sistema') {
+      l.escopo = 'empresa';
+      (l as Legenda & { empresaId?: string }).empresaId = ativa ?? undefined;
+      n++;
     }
   }
-  if (mudou) save('inv_legendas', lista);
+  if (n) { save('inv_legendas', lista); notificarLegendas(); }
+  return n;
 }
 
 export function clearAll() {
