@@ -1,6 +1,10 @@
-export const APP_VERSION = '0.87.0';
+export const APP_VERSION = '0.88.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.88.0': [
+    'Zonas de Manejo: limpeza automática de "resquícios" — buracos e fragmentos de polígono menores que a área mínima são removidos das zonas (preenche buracos pequenos e descarta ilhas/slivers). Vale ao gerar as zonas e também ao fundir manualmente, então a fusão não deixa mais sobras dentro do talhão',
+    'Buracos e partes GRANDES (≥ área mínima) são preservados — uma zona realmente encravada em outra continua existindo',
+  ],
   '0.87.0': [
     'Correção (Condutividade): o botão "Interpolar" não fazia nada com levantamentos grandes (milhares de pontos). A condutividade é dado denso (coletado em movimento), então passou a usar IDW — krigagem montava uma matriz enorme e travava. Agora interpola em poucos segundos mesmo com milhares de pontos',
     'Zonas de Manejo: quando o backend LOCAL está desatualizado (faltam as rotas novas de zonas), o erro agora é claro — "Backend local desatualizado: feche e reabra pelo atalho INVICTA Backend" — em vez do críptico "Not Found"',

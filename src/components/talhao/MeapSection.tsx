@@ -13,7 +13,7 @@ import { getZoneamentosMeap, saveZoneamentoMeap, deleteZoneamentoMeap, setZoneam
 import { obterOuAdotarAmbiente } from '@/lib/meap/adocao';
 import { carregarCamadas, analisarMulti, gerarMulti, dadosLabCV, type CamadasCarregadas } from '@/lib/meap/gerar';
 import { calcularCVZonas } from '@/lib/meap/cv';
-import { unirFeatures } from '@/lib/meap/fundir';
+import { unirFeatures, limparZona } from '@/lib/meap/fundir';
 import { extrairPoligono, coordsFromBounds, decodeGrid, type RespGerarZonas, type RespAnalisarZonas } from '@/lib/fertilidade';
 import { colorirGrid, colorirGridComLegenda } from '@/lib/raster';
 import { rampaVisualStops } from '@/lib/legendas';
@@ -187,9 +187,19 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
   useEffect(() => { setOrdemRanks(res ? Array.from({ length: res.stats.n_classes }, (_, i) => i) : []); }, [res]);
 
   // Espelha as features geradas numa cópia EDITÁVEL (a fusão manual mexe nela,
-  // não no res original) e limpa a seleção a cada nova geração.
+  // não no res original), LIMPA resquícios (buracos/slivers < área mínima) e zera
+  // a seleção a cada nova geração.
   useEffect(() => {
-    setFeatsEdit(res ? res.features.map(f => ({ ...f, properties: { ...(f.properties ?? {}) } })) : []);
+    if (!res) { setFeatsEdit([]); setSelZonas(new Set()); return; }
+    const minM2 = Math.max((res.stats.area_min_ha || 0) * 10000, 1000);  // piso ~0,1 ha p/ ruído de vetorização
+    const limpas: GeoJSON.Feature[] = [];
+    for (const f of res.features) {
+      if (!f.geometry) continue;
+      const { geometry, areaHa } = limparZona(f.geometry as GeoJSON.Geometry, minM2);
+      if (areaHa * 10000 < minM2) continue;  // zona inteira virou sliver → descarta
+      limpas.push({ ...f, geometry, properties: { ...(f.properties ?? {}), areaHa } });
+    }
+    setFeatsEdit(limpas);
     setSelZonas(new Set());
   }, [res]);
 
@@ -313,7 +323,8 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
     const areaDe = (f: GeoJSON.Feature) => Number((f.properties as { areaHa?: number })?.areaHa ?? 0);
     const maior = sel.reduce((a, b) => (areaDe(b) > areaDe(a) ? b : a));
     const mp = (maior.properties ?? {}) as { id?: string; potencialRank?: number; classe?: string };
-    const { geometry, areaHa } = unirFeatures(sel);
+    const minM2 = Math.max((res?.stats.area_min_ha || 0) * 10000, 1000);
+    const { geometry, areaHa } = unirFeatures(sel, minM2);
     const novo: GeoJSON.Feature = {
       type: 'Feature', geometry,
       properties: { id: String(mp.id ?? '?'), potencialRank: Number(mp.potencialRank ?? 0), classe: mp.classe, areaHa },
