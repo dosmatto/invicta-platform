@@ -380,7 +380,7 @@ function LegendaEditor({ legenda, onClose }: { legenda: Legenda | null; onClose:
           <Field label="Fonte">
             <input value={form.fonte} onChange={e => patch('fonte', e.target.value)} placeholder="Ex.: Fundação ABC" className="w-full rounded px-2 py-1 text-[11px] outline-none" style={inputStyle} />
           </Field>
-          <Field label="Categoria">
+          <Field label="Categoria (onde a legenda aparece)">
             <select value={form.categoria} onChange={e => patch('categoria', e.target.value as CategoriaLegenda)} className="w-full rounded px-2 py-1 text-[11px] outline-none" style={inputStyle}>
               {CATEGORIAS_LEGENDA.map(c => (
                 <option key={c.id} value={c.id}>{c.nome}</option>

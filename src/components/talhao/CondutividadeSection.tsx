@@ -36,7 +36,12 @@ const idNuvem = (talhaoId: string, levId: string, prof: string) => `${prefixoNuv
 export function CondutividadeSection() {
   const { nav, uploadedGeo, setFertilidadeOverlay, setFertilidadeLabels, setPontosSimulados } = useApp();
 
-  const legenda = useMemo<Legenda | null>(() => getLegendas().find(l => l.atributoId === 'condutividade') ?? null, []);
+  // Legendas disponíveis p/ condutividade (por atributoId OU categoria) — o usuário
+  // escolhe qual aplicar (ex.: a fixa ou a de quartil). A escolha fica lembrada.
+  const legendasDisp = useMemo<Legenda[]>(() => getLegendas().filter(l => l.atributoId === 'condutividade' || l.categoria === 'condutividade'), []);
+  const [legId, setLegId] = useState<string>(() => (typeof window !== 'undefined' ? localStorage.getItem('inv_leg_pref_condutividade') : null) ?? '');
+  const legenda = useMemo<Legenda | null>(() => legendasDisp.find(l => l.id === legId) ?? legendasDisp[0] ?? null, [legendasDisp, legId]);
+  function escolherLegenda(id: string) { setLegId(id); try { localStorage.setItem('inv_leg_pref_condutividade', id); } catch {} }
 
   const poligono = useMemo(() => {
     const p = extrairPoligono(uploadedGeo);
@@ -555,11 +560,23 @@ export function CondutividadeSection() {
                 </p>
               </div>
 
+              {/* Seletor de legenda (trocar fixa ↔ quartil ↔ outras de condutividade) */}
+              {legendasDisp.length > 1 && (
+                <div>
+                  <label className="text-[9px] font-semibold block mb-0.5" style={{ color: '#64748b' }}>Legenda do mapa</label>
+                  <select value={legenda?.id ?? ''} onChange={e => escolherLegenda(e.target.value)} className="w-full rounded px-2 py-1 text-[11px] outline-none" style={inputStyle}>
+                    {legendasDisp.map(l => <option key={l.id} value={l.id}>{l.nome}{l.escalaRelativa ? ` · ${l.escalaRelativa === 'quantil' ? 'quartil' : 'mín–máx'}` : ' · fixa'}</option>)}
+                  </select>
+                </div>
+              )}
+
               {/* Legenda */}
               <div>
                 <div className="relative h-4 rounded overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.1)', background: gradienteCss(legenda) }} />
                 <div className="flex justify-between text-[8px] mt-0.5" style={{ color: '#94a3b8' }}>
-                  {legenda.classes.map((c, i) => c.valorMax != null && i < legenda.classes.length - 1 ? <span key={i}>{fmt(c.valorMax)}</span> : null)}
+                  {legenda.escalaRelativa
+                    ? <><span>menor</span><span style={{ color: '#64748b' }}>{legenda.escalaRelativa === 'quantil' ? 'por quartil (área igual)' : 'mín–máx'}</span><span>maior</span></>
+                    : legenda.classes.map((c, i) => c.valorMax != null && i < legenda.classes.length - 1 ? <span key={i}>{fmt(c.valorMax)}</span> : null)}
                 </div>
               </div>
               <p className="text-[9px]" style={{ color: '#64748b' }}>{legenda.atributo} · {legenda.unidade} ({legenda.metodo})</p>
