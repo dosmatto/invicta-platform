@@ -3,7 +3,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   getLegendas, saveLegenda, upsertLegenda, updateLegenda, deleteLegenda,
+  getPaletas, savePaleta, deletePaleta, type Paleta,
 } from '@/lib/store';
+import { listar as listarBib, type ConteudoPerfil } from '@/lib/biblioteca';
 import {
   type Legenda, type ClasseLegenda, type CategoriaLegenda, type EstiloLegenda,
   gradienteCssDaLegenda, PARES_OFICIAIS_5, LARGURAS_VISUAIS_5, classesFertilidade5, paresDaClasse,
@@ -17,6 +19,16 @@ import {
 
 const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
 const fmt = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits: 3 });
+
+// Perfis (Biblioteca) que REFERENCIAM esta legenda (legendasPorElemento) — uma
+// legenda "em uso" não pode ser excluída.
+function legendaEmUso(id: string): string[] {
+  try {
+    return listarBib<ConteudoPerfil>('perfis')
+      .filter(p => Object.values(p.conteudo?.legendasPorElemento ?? {}).includes(id))
+      .map(p => p.nome);
+  } catch { return []; }
+}
 
 export function LegendasPanel() {
   const [modo, setModo] = useState<'lista' | 'editor'>('lista');
@@ -72,16 +84,24 @@ function LegendasLista({
     return [...mapa.entries()].sort((a, b) => a[0].localeCompare(b[0], 'pt-BR'));
   }, [legendas, filtro]);
 
-  function duplicar(l: Legenda) {
+  function duplicar(l: Legenda): Legenda {
     const copia: Omit<Legenda, 'id' | 'criadoEm' | 'atualizadoEm'> = {
-      ...l, nome: `${l.nome} (cópia)`,
+      ...l, nome: `${l.nome} (cópia)`, escopo: 'empresa',   // cópia vira SUA (editável), nunca Sistema
       classes: l.classes.map(c => ({ ...c })),
     };
-    saveLegenda(copia);
+    const nova = saveLegenda(copia);
     onMudou();
+    return nova;
   }
+  // Para legendas do Sistema (read-only): duplica e já abre o editor na cópia.
+  function editarComoCopia(l: Legenda) { onEditar(duplicar(l).id); }
 
   function excluir(l: Legenda) {
+    const usos = legendaEmUso(l.id);
+    if (usos.length) {
+      alert(`Não dá para excluir "${l.nome}": está em uso no(s) perfil(is): ${usos.join(', ')}.\nRemova a referência nesses perfis primeiro.`);
+      return;
+    }
     if (!confirm(`Excluir a legenda "${l.nome}"?`)) return;
     deleteLegenda(l.id);
     onMudou();
@@ -169,7 +189,10 @@ function LegendasLista({
                   </div>
                   <div className="flex flex-col gap-1">
                     {l.escopo === 'sistema' ? (
-                      <button onClick={() => duplicar(l)} title="Duplicar para editar (oficial é read-only)" className="p-1 rounded" style={{ color: '#93c5fd', background: '#1a3a6b' }}><Copy size={10} /></button>
+                      <>
+                        <button onClick={() => editarComoCopia(l)} title="Editar: cria uma cópia sua e abre o editor (a oficial é read-only)" className="p-1 rounded" style={{ color: '#93c5fd', background: '#1a3a6b' }}><Edit3 size={10} /></button>
+                        <button onClick={() => duplicar(l)} title="Duplicar" className="p-1 rounded" style={{ color: '#93c5fd', background: '#1a3a6b' }}><Copy size={10} /></button>
+                      </>
                     ) : (
                       <>
                         <button onClick={() => onEditar(l.id)} title="Editar" className="p-1 rounded" style={{ color: '#93c5fd', background: '#1a3a6b' }}><Edit3 size={10} /></button>
@@ -221,6 +244,24 @@ function LegendaEditor({ legenda, onClose }: { legenda: Legenda | null; onClose:
   // edição ou criação
   const [form, setForm] = useState(() => legenda ? { ...legenda, classes: legenda.classes.map(c => ({ ...c })) } : novaLegendaVazia());
   const [aviso, setAviso] = useState('');
+  const [paletas, setPaletas] = useState<Paleta[]>([]);
+  useEffect(() => { setPaletas(getPaletas()); }, []);
+
+  // Aplica as cores de uma paleta salva às classes (por posição).
+  function aplicarPaleta(p: Paleta) {
+    setForm(f => ({ ...f, classes: f.classes.map((c, i) => {
+      const par = p.cores[i];
+      return par ? { ...c, corInicio: par[0], corFim: par[1], corBase: undefined } : c;
+    }) }));
+  }
+  function salvarPaletaAtual() {
+    const nome = prompt('Nome da paleta (barra de cores) para reusar depois:');
+    if (!nome) return;
+    const cores = form.classes.map(c => { const { inicio, fim } = paresDaClasse(c); return [inicio, fim] as [string, string]; });
+    savePaleta(nome, cores);
+    setPaletas(getPaletas());
+  }
+  function excluirPaleta(id: string) { deletePaleta(id); setPaletas(getPaletas()); }
 
   function patch<K extends keyof typeof form>(k: K, v: typeof form[K]) {
     setForm(f => ({ ...f, [k]: v }));
@@ -369,6 +410,31 @@ function LegendaEditor({ legenda, onClose }: { legenda: Legenda | null; onClose:
             <button onClick={resetClasses5} title="Padrão 5 classes" className="px-2 py-1 rounded text-[9px] font-semibold" style={{ background: '#1a3a6b', color: '#93c5fd' }}>5 padrão</button>
             <button onClick={addClasse} className="px-2 py-1 rounded text-[9px] font-bold text-white" style={{ background: 'var(--invicta-blue)' }}>+ classe</button>
           </div>
+        </div>
+
+        {/* Paletas de cor salvas (barras reutilizáveis) */}
+        <div className="space-y-1">
+          <div className="flex items-center gap-1.5">
+            <span className="text-[9px] font-semibold" style={{ color: '#64748b' }}>Paletas de cor</span>
+            <button onClick={salvarPaletaAtual} title="Salvar as cores atuais como uma paleta nomeada" className="ml-auto px-2 py-0.5 rounded text-[9px] font-semibold flex items-center gap-1" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
+              <Save size={9} /> Salvar paleta atual
+            </button>
+          </div>
+          {paletas.length === 0 ? (
+            <p className="text-[9px]" style={{ color: '#475569' }}>Nenhuma paleta salva. Monte as cores e clique em &quot;Salvar paleta atual&quot; para reusar rápido em outras legendas.</p>
+          ) : (
+            <div className="flex flex-wrap gap-1">
+              {paletas.map(p => (
+                <span key={p.id} className="flex items-center gap-1 pl-1.5 pr-1 py-0.5 rounded" style={{ background: '#0b1d3a', border: '1px solid #1a3a6b' }}>
+                  <button onClick={() => aplicarPaleta(p)} title="Aplicar esta paleta às classes" className="text-[9px] font-semibold" style={{ color: '#93c5fd' }}>{p.nome}</button>
+                  <span className="flex gap-px">
+                    {p.cores.slice(0, 8).map((c, i) => <span key={i} className="w-2 h-2.5 rounded-sm" style={{ background: c[0], border: '1px solid rgba(255,255,255,0.15)' }} />)}
+                  </span>
+                  <button onClick={() => excluirPaleta(p.id)} title="Excluir paleta" className="p-0.5" style={{ color: '#f87171' }}><X size={9} /></button>
+                </span>
+              ))}
+            </div>
+          )}
         </div>
 
         {form.classes.map((c, i) => {

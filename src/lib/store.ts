@@ -853,6 +853,32 @@ export function deleteLegenda(id: string) {
   notificarLegendas();
 }
 
+// ── Paletas de cor salvas (barras de cor reutilizáveis) ──────────────────────
+// Guarda a sequência de pares (corInicio→corFim) das classes de uma legenda sob
+// um NOME, para reaplicar rápido em outra legenda (importação de cores).
+export interface Paleta {
+  id: string;
+  nome: string;
+  cores: Array<[string, string]>;   // [corInicio, corFim] por classe
+  criadoEm: string;
+}
+
+export function getPaletas(): Paleta[] {
+  return loadFiltrado<Paleta>('inv_paletas').sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+}
+
+export function savePaleta(nome: string, cores: Array<[string, string]>): Paleta {
+  const lista = load<Paleta>('inv_paletas');
+  const nova: Paleta = comEmpresa({ id: uid(), nome: nome.trim() || 'Paleta', cores, criadoEm: new Date().toISOString() });
+  lista.push(nova);
+  save('inv_paletas', lista);
+  return nova;
+}
+
+export function deletePaleta(id: string) {
+  save('inv_paletas', load<Paleta>('inv_paletas').filter(p => p.id !== id));
+}
+
 // Garante o seed ABC ao abrir o app. Atualiza legendas ABC que ainda estão na
 // versão antiga (sem `corInicio`/`corFim`, antes do sistema de Estilos), sem
 // tocar em legendas criadas pelo usuário.

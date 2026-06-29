@@ -33,6 +33,7 @@ const KEYS_LISTA = [
   'inv_plantios',                      // Fase 8.B — cultura por talhão+safra
   'inv_compactacao',                   // Fase 8.C — penetrometria por profundidade
   'inv_condutividade',                 // Condutividade Elétrica — Variável Fixa do Talhão (versões/oficial)
+  'inv_paletas',                       // paletas de cor salvas (barras reutilizáveis nas legendas)
   'inv_meap_ambientes',                // MEAP — Ambientes Produtivos / Zonas de Manejo (M1)
   'inv_meap_zoneamentos',              // MEAP — zoneamentos salvos (1 padrão → Amostragem)
   'inv_produtividade',                 // Módulo 12 — Mapas de Colheita (metadados/versões; raster sob demanda)

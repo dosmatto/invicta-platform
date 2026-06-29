@@ -1,6 +1,11 @@
-export const APP_VERSION = '0.95.0';
+export const APP_VERSION = '0.96.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.96.0': [
+    'Legendas: as legendas do Sistema (oficiais) agora têm um botão "Editar" que cria uma cópia SUA e já abre o editor — antes só dava para duplicar e procurar a cópia. (As oficiais seguem read-only; você edita a cópia)',
+    'Legendas: NOVAS Paletas de cor salvas — no editor, "Salvar paleta atual" guarda a barra de cores com um nome; depois é só clicar na paleta para reaplicar as cores em outra legenda (importação rápida). Paletas têm prévia das cores e podem ser excluídas',
+    'Legendas: excluir uma legenda agora é bloqueado se ela estiver EM USO por algum Perfil — avisa em qual perfil está sendo usada (evita quebrar referências). Correção: a cópia de uma legenda agora nasce como "sua" (editável), não mais como Sistema',
+  ],
   '0.95.0': [
     'Condutividade: painel "Resumo da limpeza" — depois de rodar o MapFilter, mostra a quebra por etapa (pontos brutos → filtro bruto → MapFilter global → MapFilter local → pontos limpos), quantos pontos saíram em cada uma, o total removido e uma barra de mantido × removido (verde/vermelho)',
   ],
