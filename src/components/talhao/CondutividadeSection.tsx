@@ -19,7 +19,7 @@ import {
 } from '@/lib/fertilidade';
 import { colorirGridComLegenda, temGrid } from '@/lib/raster';
 import { cloudSalvarMapa, cloudCarregarMapasPorPrefixo, cloudExcluirMapasPorPrefixo } from '@/lib/cloud';
-import { parseArquivoPontos, pontosCondutividade, avaliarQualidade, CORES_QUALIDADE, sugerirProfundidadesCEa, ehColunaAltitude, prepararPontosKrigagem, limparPontosEC, corDoValor, type ArquivoPontos, type RelatorioLimpeza } from '@/lib/condutividade';
+import { parseArquivoPontos, pontosCondutividade, avaliarQualidade, CORES_QUALIDADE, sugerirProfundidadesCEa, ehColunaAltitude, prepararPontosKrigagem, limparPontosEC, rasterizarPontos, type ArquivoPontos, type RelatorioLimpeza } from '@/lib/condutividade';
 import type { Legenda } from '@/lib/legendas';
 import { Upload, Loader2, Zap, Eraser, AlertTriangle, Save, Trash2, Play, Plus, Layers, Star, Gauge, Mountain } from 'lucide-react';
 
@@ -74,6 +74,7 @@ export function CondutividadeSection() {
   const [vista, setVista] = useState<'bruto' | 'limpo' | 'mapa'>('mapa');  // o que o mapa mostra
   const [limpos, setLimpos] = useState<Record<string, { pontos: Ponto[]; rel: RelatorioLimpeza }>>({});
   const [limpando, setLimpando] = useState(false);
+  const [vistaInfo, setVistaInfo] = useState<{ n: number; min: number; max: number } | null>(null);  // pontos plotados
   const [cache, setCache] = useState<Record<string, MapaPronto>>({});
 
   function recarregar() {
@@ -117,20 +118,20 @@ export function CondutividadeSection() {
   // Renderiza no mapa conforme a VISTA: pontos brutos / pontos limpos / mapa krigado.
   useEffect(() => {
     setFertilidadeLabels(null);
-    // Pontos (brutos ou limpos) coloridos pela legenda — desenhados como mapa (pontos pequenos).
+    setPontosSimulados(null);
+    // Pontos (brutos ou limpos) RASTERIZADOS numa imagem colorida pela legenda
+    // (mesmo canal do raster de fertilidade — renderiza de forma confiável).
     if ((vista === 'bruto' || vista === 'limpo') && legenda) {
       const pts = vista === 'bruto' ? pontosDe(profundidade) : (limpos[profundidade]?.pontos ?? []);
-      setFertilidadeOverlay(null);
-      if (pts.length === 0) { setPontosSimulados(null); return; }
       const { dominio, stops } = rampaDaLegenda(legenda);
-      setPontosSimulados({
-        type: 'FeatureCollection',
-        features: pts.map(p => ({ type: 'Feature' as const, geometry: { type: 'Point' as const, coordinates: [p.lng, p.lat] }, properties: { cor: corDoValor(p.valor, dominio, stops), r: 2.5 } })),
-      });
+      const img = rasterizarPontos(pts, dominio, stops);
+      if (!img) { setFertilidadeOverlay(null); setVistaInfo(null); return; }
+      setFertilidadeOverlay({ url: img.dataUrl, coordinates: coordsFromBounds(img.bounds), opacity: 1 });
+      setVistaInfo({ n: pts.length, min: img.min, max: img.max });
       return;
     }
     // Mapa krigado (raster)
-    setPontosSimulados(null);
+    setVistaInfo(null);
     const c = cache[profundidade];
     if (!c || !legenda) { setFertilidadeOverlay(null); return; }
     let url = '';
@@ -463,10 +464,10 @@ export function CondutividadeSection() {
                 );
               })}
             </div>
-            {(vista === 'bruto' || vista === 'limpo') && (
-              <p className="text-[9px] flex items-center gap-1" style={{ color: '#86efac' }}>
-                <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ background: '#86efac' }} />
-                {(vista === 'bruto' ? (lev?.pontos.length ?? 0) : (limpos[profundidade]?.pontos.length ?? 0)).toLocaleString('pt-BR')} pontos plotados no mapa ({vista === 'bruto' ? 'brutos' : 'limpos'})
+            {(vista === 'bruto' || vista === 'limpo') && vistaInfo && (
+              <p className="text-[9px] flex items-center gap-1.5" style={{ color: '#86efac' }}>
+                <span className="inline-block w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: '#86efac' }} />
+                {vistaInfo.n.toLocaleString('pt-BR')} pontos ({vista === 'bruto' ? 'brutos' : 'limpos'}) · {legenda?.simbolo ?? 'CEa'} {fmt(vistaInfo.min)}–{fmt(vistaInfo.max)} {legenda?.unidade ?? ''}
               </p>
             )}
             <div className="grid grid-cols-2 gap-1.5">

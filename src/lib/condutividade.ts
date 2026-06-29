@@ -133,6 +133,34 @@ export async function limparPontosEC(pontos: PontoXYV[], params: Record<string, 
   return r.json();
 }
 
+// Rasteriza os pontos (lng/lat/valor) numa IMAGEM colorida pela legenda, para
+// mostrá-los no mapa como overlay (mesmo canal do raster de fertilidade, que
+// renderiza de forma confiável). Devolve dataURL + bounds [w,s,e,n] p/ posicionar.
+export function rasterizarPontos(
+  pts: PontoXYV[], dominio: [number, number], stops: Array<[number, [number, number, number]]>,
+): { dataUrl: string; bounds: [number, number, number, number]; min: number; max: number } | null {
+  if (typeof document === 'undefined' || pts.length === 0) return null;
+  let w = Infinity, s = Infinity, e = -Infinity, n = -Infinity, mn = Infinity, mx = -Infinity;
+  for (const p of pts) {
+    if (p.lng < w) w = p.lng; if (p.lng > e) e = p.lng;
+    if (p.lat < s) s = p.lat; if (p.lat > n) n = p.lat;
+    if (p.valor < mn) mn = p.valor; if (p.valor > mx) mx = p.valor;
+  }
+  const spanX = (e - w) || 1e-4, spanY = (n - s) || 1e-4;
+  w -= spanX * 0.02; e += spanX * 0.02; s -= spanY * 0.02; n += spanY * 0.02;
+  const sx = e - w, sy = n - s;
+  const W = 900, H = Math.max(2, Math.min(1400, Math.round(W * sy / sx)));
+  const canvas = document.createElement('canvas'); canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d'); if (!ctx) return null;
+  for (const p of pts) {
+    const x = ((p.lng - w) / sx) * W;
+    const y = (1 - (p.lat - s) / sy) * H;   // norte no topo
+    ctx.fillStyle = corDoValor(p.valor, dominio, stops);
+    ctx.beginPath(); ctx.arc(x, y, 2.6, 0, 6.2832); ctx.fill();
+  }
+  return { dataUrl: canvas.toDataURL('image/png'), bounds: [w, s, e, n], min: mn, max: mx };
+}
+
 // Cor (rgb) de um valor segundo a rampa da legenda — p/ desenhar os pontos como mapa.
 export function corDoValor(v: number, dominio: [number, number], stops: Array<[number, [number, number, number]]>): string {
   const [dmin, dmax] = dominio;

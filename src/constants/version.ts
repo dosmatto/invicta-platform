@@ -1,6 +1,10 @@
-export const APP_VERSION = '0.99.1';
+export const APP_VERSION = '0.99.2';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.99.2': [
+    'Condutividade: os pontos brutos/limpos agora aparecem de vez no mapa — passaram a ser desenhados como uma IMAGEM (mesmo mecanismo do mapa de fertilidade, que sempre renderiza), em vez da camada de círculos que não estava aparecendo. Dá para ver os pontos do CSV e comparar bruto × limpo',
+    'Condutividade: o contador agora mostra também o intervalo de valores dos pontos (ex.: "7.525 pontos · CEa 3–48 mS/m") — para confirmar que está usando a coluna de condutividade certa',
+  ],
   '0.99.1': [
     'Condutividade: novo seletor "Legenda do mapa" — quando há mais de uma legenda de condutividade, você escolhe qual aplicar (ex.: a fixa ou a de quartil) e o mapa recolore na hora. A escolha fica lembrada',
     'Legendas: a "Categoria" (no editor) agora deixa claro que define ONDE a legenda aparece — a de Fertilidade aparece na Fertilidade, a de Condutividade na Condutividade, etc. O seletor de cada módulo lista as legendas da categoria/atributo correspondente',
