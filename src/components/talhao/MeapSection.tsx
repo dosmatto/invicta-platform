@@ -235,15 +235,31 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
   const cvPorZona: Record<string, MetricasZonaMeap> = cv?.porZona ?? {};
   const varCVsimbolo = cv?.variavelValidacao ? simboloElemento(cv.variavelValidacao) : null;
 
-  // Resumo por potencial (na ordem) para a lista reordenável.
+  // ZONAS OFICIAIS = as classes (na ordem Alta→Baixa). O nº escolhido pelo usuário
+  // = nº de zonas oficiais. Cada zona pode ter VÁRIOS polígonos (manchas separadas);
+  // isso NÃO aumenta o nº de zonas. Numeradas Zona 01..0N pela ordem do potencial.
   const potenciais = useMemo(() => {
     const labels = rotulosPotencial(ordemRanks.length);
     return ordemRanks.map((rank, pos) => {
-      const zs = zonas.filter(z => z.rank === rank);
-      const label = labels[pos] ?? `Nível ${pos + 1}`;
-      return { rank, pos, label, cor: classeZona(label).cor, nZonas: zs.length, areaHa: zs.reduce((s, z) => s + z.areaHa, 0) };
+      const polis = zonas.filter(z => z.rank === rank);
+      const areas = polis.map(p => p.areaHa);
+      const label = labels[pos] ?? `Classe ${pos + 1}`;
+      return {
+        rank, pos, num: String(pos + 1).padStart(2, '0'),
+        label, cor: classeZona(label).cor,
+        nPolig: polis.length,
+        areaHa: areas.reduce((s, a) => s + a, 0),
+        menor: areas.length ? Math.min(...areas) : 0,
+        maior: areas.length ? Math.max(...areas) : 0,
+      };
     });
   }, [ordemRanks, zonas]);
+  // rank → número da zona oficial (p/ rotular cada polígono).
+  const numDeRank = useMemo(() => {
+    const m = new Map<number, string>();
+    potenciais.forEach(p => m.set(p.rank, p.num));
+    return m;
+  }, [potenciais]);
 
   // Mapa: prioridade = zoneamento salvo em visualização > preview gerado > importadas.
   useEffect(() => {
@@ -353,7 +369,8 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
       type: 'FeatureCollection',
       features: zonas.map(z => {
         const m = cvPorZona[z.id];
-        return { type: 'Feature', properties: { id: z.id, classe: z.potencial, potencialRank: z.rank, areaHa: z.areaHa, cvValidacao: m?.cvValidacao ?? null, homogeneidade: m?.homogeneidade ?? null }, geometry: z.geometry! };
+        // Cada feature é um POLÍGONO; a zona oficial é a classe (zona/classe/rank).
+        return { type: 'Feature', properties: { id: z.id, zona: numDeRank.get(z.rank) ?? z.id, classe: z.potencial, potencialRank: z.rank, areaHa: z.areaHa, cvValidacao: m?.cvValidacao ?? null, homogeneidade: m?.homogeneidade ?? null }, geometry: z.geometry! };
       }),
     };
     const cams = carregadas ? carregadas.camadas.filter(c => chaves.includes(c.chave)).map(c => `${c.simbolo} ${c.prof}`) : [];
@@ -363,7 +380,7 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
     const primeiro = zoneamentos.length === 0;
     const novo = saveZoneamentoMeap({
       talhaoId: talhao.id, nome: `Zoneamento ${zoneamentos.length + 1}`, padrao: primeiro, fc,
-      meta: { camadas: cams, algoritmo: res.stats.algoritmo, nPotenciais: potenciais.length, areaMinHa: res.stats.area_min_ha, nZonas: zonas.length, cvMedio },
+      meta: { camadas: cams, algoritmo: res.stats.algoritmo, nPotenciais: potenciais.length, areaMinHa: res.stats.area_min_ha, nZonas: potenciais.length, nPoligonos: zonas.length, cvMedio },
     });
     if (primeiro) setZoneamentoPadraoMeap(talhao.id, novo.id);  // grava em talhao.zonasGeojson → Amostragem
     recarregarZon();
@@ -585,22 +602,28 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
                   </button>
                 </div>
                 <p className="text-[10px]" style={{ color: '#94a3b8' }}>
-                  <strong style={{ color: '#e2e8f0' }}>{zonas.length}</strong> zonas únicas · <strong style={{ color: '#e2e8f0' }}>{potenciais.length}</strong> potenciais · {res.stats.algoritmo === 'fcm' ? 'fuzzy c-means' : 'k-means'} · {res.stats.n_camadas} camadas
+                  <strong style={{ color: '#e2e8f0' }}>{potenciais.length}</strong> zonas oficiais · <strong style={{ color: '#e2e8f0' }}>{zonas.length}</strong> polígonos · {res.stats.algoritmo === 'fcm' ? 'fuzzy c-means' : 'k-means'} · {res.stats.n_camadas} camadas
                   {res.stats.area_min_ha > 0 && <> · área mín. {res.stats.area_min_ha} ha</>}
                 </p>
 
-                {/* Potenciais reordenáveis (Alta→Baixa) — recolore/renomeia as zonas */}
+                {/* ZONAS OFICIAIS (= classes) — reordenáveis Alta→Baixa */}
                 <div>
                   <p className="text-[9px] mb-1" style={{ color: '#a78bfa' }}>
-                    Potenciais (Alta→Baixa) — sugeridos por <strong style={{ color: '#e9d5ff' }}>{res.stats.ordem_por}</strong> · ↑/↓ p/ ajustar
+                    Zonas oficiais ({potenciais.length}) — ordem do potencial por <strong style={{ color: '#e9d5ff' }}>{res.stats.ordem_por}</strong> · ↑/↓ p/ ajustar
                   </p>
                   <div className="space-y-1">
                     {potenciais.map((pt, i) => (
                       <div key={pt.rank} className="flex items-center gap-2 px-2 py-1 rounded" style={{ background: '#0b1f3a', border: '1px solid #2e2050' }}>
                         <span className="inline-block w-3 h-3 rounded-sm flex-shrink-0" style={{ background: pt.cor, border: '1px solid #fff' }} />
-                        <span className="text-[11px] font-bold" style={{ color: '#e2e8f0', minWidth: '78px' }}>{pt.label}</span>
-                        <span className="text-[10px] ml-auto" style={{ color: '#64748b' }}>{pt.nZonas} zona{pt.nZonas !== 1 ? 's' : ''} · {pt.areaHa.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} ha</span>
-                        <div className="flex flex-col">
+                        <div className="min-w-0 flex-1">
+                          <span className="text-[11px] font-bold" style={{ color: '#e2e8f0' }}>Zona {pt.num}</span>
+                          <span className="text-[10px] ml-1.5" style={{ color: '#93c5fd' }}>{pt.label}</span>
+                          <div className="text-[9px]" style={{ color: '#64748b' }}>
+                            {pt.nPolig} polígono{pt.nPolig !== 1 ? 's' : ''} · {pt.areaHa.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} ha
+                            {pt.nPolig > 1 && <> · menor {pt.menor.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} / maior {pt.maior.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} ha</>}
+                          </div>
+                        </div>
+                        <div className="flex flex-col flex-shrink-0">
                           <button onClick={() => moverRank(i, -1)} disabled={i === 0} title="Subir" className="leading-none disabled:opacity-30" style={{ color: '#93c5fd' }}><ChevronUp size={12} /></button>
                           <button onClick={() => moverRank(i, 1)} disabled={i === potenciais.length - 1} title="Descer" className="leading-none disabled:opacity-30" style={{ color: '#93c5fd' }}><ChevronDown size={12} /></button>
                         </div>
@@ -609,11 +632,11 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
                   </div>
                 </div>
 
-                {/* Zonas (identidade única) — marque 2+ para fundir manualmente */}
+                {/* POLÍGONOS (manchas) — partes das zonas; marque 2+ p/ fundir */}
                 <div>
                   <div className="flex items-center justify-between mb-1 gap-2">
                     <p className="text-[9px]" style={{ color: '#a78bfa' }}>
-                      Zonas ({zonas.length}) — marque 2+ p/ fundir{varCVsimbolo && <> · CV por <strong style={{ color: '#e9d5ff' }}>{varCVsimbolo}</strong></>}
+                      Polígonos ({zonas.length}) — partes das zonas · marque 2+ p/ fundir{varCVsimbolo && <> · CV por <strong style={{ color: '#e9d5ff' }}>{varCVsimbolo}</strong></>}
                     </p>
                     {selZonas.size >= 2 && (
                       <button onClick={fundirSelecionadas} className="flex items-center gap-1 text-[9px] px-2 py-0.5 rounded font-bold text-white flex-shrink-0" style={{ background: '#5b21b6' }}>
@@ -630,8 +653,8 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
                           style={{ background: on ? '#1a1033' : '#061525', border: `1px solid ${on ? '#a78bfa' : '#1a3a6b'}` }}>
                           {on ? <CheckSquare size={12} className="flex-shrink-0" style={{ color: '#a78bfa' }} /> : <Square size={12} className="flex-shrink-0" style={{ color: '#475569' }} />}
                           <span className="inline-block w-3 h-3 rounded-sm flex-shrink-0" style={{ background: z.cor, border: '1px solid #fff' }} />
-                          <span className="text-[11px] font-bold" style={{ color: '#e2e8f0', minWidth: '54px' }}>Zona {z.id}</span>
-                          <span className="text-[10px]" style={{ color: '#93c5fd' }}>{z.potencial}</span>
+                          <span className="text-[10px] font-bold px-1 rounded flex-shrink-0" style={{ background: '#0b1f3a', color: '#93c5fd' }}>Zona {numDeRank.get(z.rank) ?? '—'}</span>
+                          <span className="text-[10px]" style={{ color: '#cbd5e1' }}>{z.potencial}</span>
                           <span className="text-[10px] ml-auto" style={{ color: '#64748b' }}>{z.areaHa.toLocaleString('pt-BR')} ha</span>
                           {(() => {
                             const m = cvPorZona[z.id];
@@ -646,7 +669,7 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
                   </div>
                   {selZonas.size >= 2 && (
                     <p className="text-[9px] mt-1 leading-relaxed" style={{ color: '#6d5b9e' }}>
-                      A fusão dissolve as divisas num polígono só; a zona resultante herda o potencial da MAIOR. Ajuste os potenciais acima se precisar.
+                      A fusão dissolve as divisas num polígono só; ele herda a zona da MAIOR parte. Não muda o nº de zonas oficiais (só junta polígonos).
                     </p>
                   )}
                 </div>
@@ -680,7 +703,7 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
                 <button onClick={e => { e.stopPropagation(); excluir(z.id); }} title="Excluir" className="p-1 rounded flex-shrink-0" style={{ color: '#f87171' }}><Trash2 size={12} /></button>
               </div>
               <p className="text-[9px] mt-0.5" style={{ color: '#64748b' }}>
-                {z.meta.nZonas} zonas · {z.meta.nPotenciais} potenciais · {z.meta.algoritmo === 'fcm' ? 'fuzzy' : 'k-means'}
+                {z.meta.nZonas} zonas oficiais{z.meta.nPoligonos ? ` · ${z.meta.nPoligonos} polígonos` : ''} · {z.meta.algoritmo === 'fcm' ? 'fuzzy' : 'k-means'}
                 {z.meta.cvMedio != null && <> · CV médio {z.meta.cvMedio.toLocaleString('pt-BR')}%</>}
                 {z.meta.camadas.length > 0 && <> · {z.meta.camadas.join(', ')}</>}
                 {z.padrao && <span style={{ color: '#fbbf24' }}> · usado na Amostragem</span>}

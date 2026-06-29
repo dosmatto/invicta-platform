@@ -1,6 +1,11 @@
-export const APP_VERSION = '0.88.0';
+export const APP_VERSION = '0.89.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.89.0': [
+    'Zonas de Manejo: conceito corrigido — ZONA OFICIAL = a classe agronômica. O número escolhido (ex.: 7) é o nº de zonas oficiais; uma mesma zona pode ter VÁRIOS polígonos (manchas separadas no talhão) sem virar "novas zonas". A avaliação agora mostra "7 zonas oficiais · 13 polígonos"',
+    'Cada zona oficial mostra: nº de polígonos, área total e (quando tem mais de um) o menor e o maior polígono. A lista de baixo passou a se chamar "Polígonos", cada um com um selo "Zona 0X" indicando a que zona pertence',
+    'A fusão manual junta polígonos sem alterar o número de zonas oficiais. Removido o termo confuso "níveis/potenciais" da tela (agora: Zona = classe, Polígono = parte espacial)',
+  ],
   '0.88.0': [
     'Zonas de Manejo: limpeza automática de "resquícios" — buracos e fragmentos de polígono menores que a área mínima são removidos das zonas (preenche buracos pequenos e descarta ilhas/slivers). Vale ao gerar as zonas e também ao fundir manualmente, então a fusão não deixa mais sobras dentro do talhão',
     'Buracos e partes GRANDES (≥ área mínima) são preservados — uma zona realmente encravada em outra continua existindo',

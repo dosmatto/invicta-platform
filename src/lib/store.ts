@@ -739,8 +739,8 @@ export interface ZoneamentoMeap {
   talhaoId: string;
   nome: string;
   padrao: boolean;
-  fc: GeoJSON.FeatureCollection;   // zonas {id, classe, areaHa, potencialRank}
-  meta: { camadas: string[]; algoritmo: string; nPotenciais: number; areaMinHa: number; nZonas: number; cvMedio?: number | null };
+  fc: GeoJSON.FeatureCollection;   // polígonos {id, zona, classe, areaHa, potencialRank}
+  meta: { camadas: string[]; algoritmo: string; nPotenciais: number; areaMinHa: number; nZonas: number; nPoligonos?: number; cvMedio?: number | null };
   criadoEm: string;
 }
 
