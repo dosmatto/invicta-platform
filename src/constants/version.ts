@@ -1,6 +1,9 @@
-export const APP_VERSION = '0.93.0';
+export const APP_VERSION = '0.93.1';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.93.1': [
+    'Correção (Condutividade): o mapa aparecia como uma mancha BRANCA cobrindo tudo — eram os milhares de rótulos de valor (um por ponto do levantamento, 7.000+) desenhados em cima do raster. Em dado denso como o EC, esses rótulos não são mais desenhados; agora aparece o mapa krigado colorido',
+  ],
   '0.93.0': [
     'Condutividade: a interpolação voltou a ser por KRIGAGEM (era IDW). Como o EC vem muito denso (milhares de pontos), o sistema agrega os pontos numa grade fina (média por célula, ~600 células) e kriga as médias com variograma automático (esférico/exponencial/gaussiano) + validação cruzada — então o índice de qualidade passa a ter o RMSE de verdade',
     'A linha de status mostra o modelo de variograma e quantas células de quantos pontos foram usadas (ex.: "krigagem · 527 células de 7500 pts, grade 34 m")',

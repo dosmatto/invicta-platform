@@ -115,7 +115,7 @@ export function CondutividadeSection() {
     if (!url && c.resp.png) url = c.resp.png;
     if (!url) { setFertilidadeOverlay(null); setFertilidadeLabels(null); return; }
     setFertilidadeOverlay({ url, coordinates: coordsFromBounds(c.resp.bounds), opacity: 1 });
-    setFertilidadeLabels(c.labels);
+    setFertilidadeLabels(null);  // EC tem milhares de pontos → não desenha rótulo por ponto (viraria mancha branca)
   }, [profundidade, cache, legenda, setFertilidadeOverlay, setFertilidadeLabels]);
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -178,15 +178,6 @@ export function CondutividadeSection() {
     }
     return out;
   }
-  function fcLabels(pts: Ponto[]): GeoJSON.FeatureCollection {
-    return {
-      type: 'FeatureCollection',
-      features: pts.map(p => ({
-        type: 'Feature', geometry: { type: 'Point', coordinates: [p.lng, p.lat] }, properties: { txt: fmt(p.valor) },
-      })),
-    };
-  }
-
   async function processar(prof: string) {
     if (!legenda) { setErro('Legenda de condutividade não encontrada.'); setEstado('erro'); return; }
     if (!poligono) { setErro('Limite do talhão não encontrado — abra o talhão no mapa.'); setEstado('erro'); return; }
@@ -201,7 +192,7 @@ export function CondutividadeSection() {
       const { pontos: ptsK, binM, original } = prepararPontosKrigagem(pts);
       setBinMsg(b => ({ ...b, [prof]: binM > 0 ? `krigagem · ${ptsK.length} células de ${original} pts (grade ${binM.toFixed(0)} m)` : `krigagem · ${ptsK.length} pts` }));
       const resp = await interpolar({ pontos: ptsK, poligono, dominio, stops, metodo: 'krige', pixelM: 20, modeloFixo: null });
-      const labels = fcLabels(pts);
+      const labels: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };  // EC denso → sem rótulo por ponto
       setCache(c => ({ ...c, [prof]: { resp, labels } }));
       setEstado('pronto');
       if (nav.talhaoId && levId) {
