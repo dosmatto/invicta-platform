@@ -24,6 +24,40 @@ export function ehColunaAltitude(coluna: string): boolean {
   return /(altitude|altimetr|eleva|elevation|\bcota\b|\baltura\b)/.test(semAcento(coluna));
 }
 
+// ── Preparo p/ KRIGAGEM (dado denso) ────────────────────────────────────────
+// EC vem com milhares de pontos (coletado em movimento). Krigagem ordinária
+// "pura" montaria uma matriz N×N inviável. Agregamos os pontos numa grade fina
+// (média por célula) até caber num teto — reduz N e já limpa ruído de aquisição.
+// Depois krigamos as médias (variograma automático + validação cruzada → RMSE).
+type PontoXYV = { lng: number; lat: number; valor: number };
+
+function binar(pts: PontoXYV[], binM: number, mLat: number, mLng: number): PontoXYV[] {
+  const dLat = binM / mLat, dLng = binM / mLng;
+  const cel = new Map<string, { sx: number; sy: number; sv: number; n: number }>();
+  for (const p of pts) {
+    const k = `${Math.floor(p.lng / dLng)}_${Math.floor(p.lat / dLat)}`;
+    const c = cel.get(k);
+    if (c) { c.sx += p.lng; c.sy += p.lat; c.sv += p.valor; c.n++; }
+    else cel.set(k, { sx: p.lng, sy: p.lat, sv: p.valor, n: 1 });
+  }
+  return [...cel.values()].map(c => ({ lng: c.sx / c.n, lat: c.sy / c.n, valor: c.sv / c.n }));
+}
+
+// Devolve os pontos prontos p/ krigar (binados se necessário) + a grade usada.
+export function prepararPontosKrigagem(pts: PontoXYV[], alvoMax = 600, binInicial = 10): { pontos: PontoXYV[]; binM: number; original: number } {
+  const original = pts.length;
+  if (original <= alvoMax) return { pontos: pts, binM: 0, original };
+  const latMed = pts.reduce((s, p) => s + p.lat, 0) / original;
+  const mLat = 111320, mLng = 111320 * Math.cos((latMed * Math.PI) / 180);
+  let binM = binInicial, out = pts;
+  for (let i = 0; i < 8; i++) {
+    out = binar(pts, binM, mLat, mLng);
+    if (out.length <= alvoMax) break;
+    binM *= 1.5;
+  }
+  return { pontos: out, binM, original };
+}
+
 export type ClasseQualidade = 'Excelente' | 'Boa' | 'Regular' | 'Baixa';
 
 export interface QualidadeEC {

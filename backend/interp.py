@@ -49,7 +49,7 @@ AMPLITUDE_MIN = 0.30
 NUGGET_MAX = 0.10
 # Versao do motor de interpolacao (conferir em GET /health para saber se o
 # backend foi reiniciado com o codigo novo).
-VERSION = "interp-13-analisar-gerar"
+VERSION = "interp-14-loo-amostra"
 
 
 def _nlags(n: int) -> int:
@@ -100,9 +100,16 @@ def _grid_axes(minx, miny, maxx, maxy, pixel_m, lat0):
 
 
 # ---------------------------------------------------------------- krigagem
-def _loo_rmse(xm, ym, z, model) -> float:
-    """RMSE por leave-one-out para escolher o melhor modelo de variograma."""
+def _loo_rmse(xm, ym, z, model, cv_max: int = 120, seed: int = 0) -> float:
+    """RMSE por leave-one-out para escolher o melhor modelo de variograma.
+    Custo O(N^4) (N krigagens de N pontos) -> inviavel com muitos pontos (EC binado).
+    Acima de cv_max, avalia numa AMOSTRA aleatoria (escolher o modelo nao precisa de
+    todos os pontos); o mapa final usa todos. Mantem fertilidade (N pequeno) igual."""
     n = len(z)
+    if n > cv_max:
+        idx = np.random.default_rng(seed).choice(n, cv_max, replace=False)
+        xm, ym, z = xm[idx], ym[idx], z[idx]
+        n = cv_max
     erros = []
     for i in range(n):
         m = np.ones(n, dtype=bool)

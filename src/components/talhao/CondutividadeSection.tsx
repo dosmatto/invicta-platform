@@ -19,7 +19,7 @@ import {
 } from '@/lib/fertilidade';
 import { colorirGridComLegenda, temGrid } from '@/lib/raster';
 import { cloudSalvarMapa, cloudCarregarMapasPorPrefixo, cloudExcluirMapasPorPrefixo } from '@/lib/cloud';
-import { parseArquivoPontos, pontosCondutividade, avaliarQualidade, CORES_QUALIDADE, sugerirProfundidadesCEa, ehColunaAltitude, type ArquivoPontos } from '@/lib/condutividade';
+import { parseArquivoPontos, pontosCondutividade, avaliarQualidade, CORES_QUALIDADE, sugerirProfundidadesCEa, ehColunaAltitude, prepararPontosKrigagem, type ArquivoPontos } from '@/lib/condutividade';
 import type { Legenda } from '@/lib/legendas';
 import { Upload, Loader2, Zap, Eraser, AlertTriangle, Save, Trash2, Play, Plus, Layers, Star, Gauge, Mountain } from 'lucide-react';
 
@@ -65,6 +65,7 @@ export function CondutividadeSection() {
   // interpolação
   const [estado, setEstado] = useState<'idle' | 'processando' | 'pronto' | 'erro'>('idle');
   const [erro, setErro] = useState('');
+  const [binMsg, setBinMsg] = useState<Record<string, string>>({});  // resumo do binning por profundidade
   const [cache, setCache] = useState<Record<string, MapaPronto>>({});
 
   function recarregar() {
@@ -194,9 +195,12 @@ export function CondutividadeSection() {
     setEstado('processando'); setErro('');
     try {
       const { dominio, stops } = rampaDaLegenda(legenda);
-      // EC é dado DENSO (coletado em movimento, milhares de pontos) → IDW.
-      // Krigagem aqui montaria uma matriz N×N inviável (travaria/estouraria).
-      const resp = await interpolar({ pontos: pts, poligono, dominio, stops, metodo: 'idw', pixelM: 20, modeloFixo: null });
+      // EC é dado DENSO → krigagem pura travaria (matriz N×N). Agregamos os pontos
+      // numa grade fina (média por célula) p/ reduzir N e limpar ruído, e krigamos
+      // as médias (variograma automático + validação cruzada → RMSE p/ a qualidade).
+      const { pontos: ptsK, binM, original } = prepararPontosKrigagem(pts);
+      setBinMsg(b => ({ ...b, [prof]: binM > 0 ? `krigagem · ${ptsK.length} células de ${original} pts (grade ${binM.toFixed(0)} m)` : `krigagem · ${ptsK.length} pts` }));
+      const resp = await interpolar({ pontos: ptsK, poligono, dominio, stops, metodo: 'krige', pixelM: 20, modeloFixo: null });
       const labels = fcLabels(pts);
       setCache(c => ({ ...c, [prof]: { resp, labels } }));
       setEstado('pronto');
@@ -430,7 +434,7 @@ export function CondutividadeSection() {
             <div className="space-y-2 p-2.5 rounded-lg" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5 text-[10px]" style={{ color: '#86efac' }}>
-                  <Zap size={12} /> {cache[profundidade].resp.stats.modelo} · {cache[profundidade].resp.stats.n} pts
+                  <Zap size={12} /> {cache[profundidade].resp.stats.modelo}{binMsg[profundidade] ? ` · ${binMsg[profundidade]}` : ` · ${cache[profundidade].resp.stats.n} pts`}
                 </div>
                 <button onClick={() => limparProf(profundidade)} className="flex items-center gap-1 text-[10px]" style={{ color: '#93c5fd' }}>
                   <Eraser size={11} /> Limpar

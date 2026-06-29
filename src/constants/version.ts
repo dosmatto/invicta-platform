@@ -1,6 +1,11 @@
-export const APP_VERSION = '0.92.0';
+export const APP_VERSION = '0.93.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.93.0': [
+    'Condutividade: a interpolação voltou a ser por KRIGAGEM (era IDW). Como o EC vem muito denso (milhares de pontos), o sistema agrega os pontos numa grade fina (média por célula, ~600 células) e kriga as médias com variograma automático (esférico/exponencial/gaussiano) + validação cruzada — então o índice de qualidade passa a ter o RMSE de verdade',
+    'A linha de status mostra o modelo de variograma e quantas células de quantos pontos foram usadas (ex.: "krigagem · 527 células de 7500 pts, grade 34 m")',
+    'Próximo (anotado): avaliar a Krigagem Bayesiana Empírica (EBK) como evolução',
+  ],
   '0.92.0': [
     'Zonas de Manejo: NOVO "Camada de fundo" na etapa Avaliar — depois de gerar as zonas, escolha uma camada (NDVI, fertilidade, condutividade…) para aparecer POR BAIXO das zonas e comparar visualmente. Antes, ao gerar, as camadas de fundo sumiam',
     'NOVO controle de "Opacidade das zonas": um slider deixa as zonas mais transparentes para enxergar a camada de fundo (e o satélite) por baixo',
