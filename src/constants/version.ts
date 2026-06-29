@@ -1,6 +1,10 @@
-export const APP_VERSION = '0.99.2';
+export const APP_VERSION = '0.99.3';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.99.3': [
+    'Condutividade: novo painel "Parâmetros da limpeza" (recolhível) — os valores do MapFilter vêm preenchidos com o padrão, mas dá para ajustar: corte do filtro bruto (% por cauda), faixa do MapFilter global (± % da mediana), raio e faixa do MapFilter local (m e ± % dos vizinhos), tolerância do eixo da passada e mínimo de vizinhos. Botão "Restaurar padrões"',
+    'Mude um parâmetro → clique em Limpar de novo → compare em "Pontos limpos" quantos/quais pontos saíram',
+  ],
   '0.99.2': [
     'Condutividade: os pontos brutos/limpos agora aparecem de vez no mapa — passaram a ser desenhados como uma IMAGEM (mesmo mecanismo do mapa de fertilidade, que sempre renderiza), em vez da camada de círculos que não estava aparecendo. Dá para ver os pontos do CSV e comparar bruto × limpo',
     'Condutividade: o contador agora mostra também o intervalo de valores dos pontos (ex.: "7.525 pontos · CEa 3–48 mS/m") — para confirmar que está usando a coluna de condutividade certa',

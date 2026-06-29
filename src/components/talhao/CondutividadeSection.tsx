@@ -21,10 +21,14 @@ import { colorirGridComLegenda, temGrid } from '@/lib/raster';
 import { cloudSalvarMapa, cloudCarregarMapasPorPrefixo, cloudExcluirMapasPorPrefixo } from '@/lib/cloud';
 import { parseArquivoPontos, pontosCondutividade, avaliarQualidade, CORES_QUALIDADE, sugerirProfundidadesCEa, ehColunaAltitude, prepararPontosKrigagem, limparPontosEC, rasterizarPontos, type ArquivoPontos, type RelatorioLimpeza } from '@/lib/condutividade';
 import type { Legenda } from '@/lib/legendas';
-import { Upload, Loader2, Zap, Eraser, AlertTriangle, Save, Trash2, Play, Plus, Layers, Star, Gauge, Mountain } from 'lucide-react';
+import { Upload, Loader2, Zap, Eraser, AlertTriangle, Save, Trash2, Play, Plus, Layers, Star, Gauge, Mountain, SlidersHorizontal, ChevronDown, ChevronUp, RotateCcw } from 'lucide-react';
 
 const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
 const fmt = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
+
+// Parâmetros padrão da limpeza (MapFilter). Vêm preenchidos e são editáveis.
+const PARAMS_LIMPEZA_PADRAO = { p_clip: 1, mf_global_v: 0.5, mf_local_r: 25, mf_local_v: 0.15, mf_aniso_tol: 25, mf_min_neighbors: 4 } as const;
+type ParamsLimpeza = { [K in keyof typeof PARAMS_LIMPEZA_PADRAO]: number };
 
 type Ponto = { lng: number; lat: number; valor: number };
 type MapaPronto = { resp: RespInterp; labels: GeoJSON.FeatureCollection };
@@ -75,6 +79,9 @@ export function CondutividadeSection() {
   const [limpos, setLimpos] = useState<Record<string, { pontos: Ponto[]; rel: RelatorioLimpeza }>>({});
   const [limpando, setLimpando] = useState(false);
   const [vistaInfo, setVistaInfo] = useState<{ n: number; min: number; max: number } | null>(null);  // pontos plotados
+  const [params, setParams] = useState<ParamsLimpeza>({ ...PARAMS_LIMPEZA_PADRAO });
+  const [paramsAberto, setParamsAberto] = useState(false);
+  const setParam = (k: keyof ParamsLimpeza, v: number) => setParams(p => ({ ...p, [k]: v }));
   const [cache, setCache] = useState<Record<string, MapaPronto>>({});
 
   function recarregar() {
@@ -207,7 +214,7 @@ export function CondutividadeSection() {
     if (pts.length < 3) { setErro(`${prof}: poucos pontos.`); setEstado('erro'); return; }
     setLimpando(true); setErro('');
     try {
-      const r = await limparPontosEC(pts);
+      const r = await limparPontosEC(pts, params);
       setLimpos(l => ({ ...l, [prof]: { pontos: r.pontos as Ponto[], rel: r.relatorio } }));
       setVista('limpo');
     } catch (e) {
@@ -470,6 +477,27 @@ export function CondutividadeSection() {
                 {vistaInfo.n.toLocaleString('pt-BR')} pontos ({vista === 'bruto' ? 'brutos' : 'limpos'}) · {legenda?.simbolo ?? 'CEa'} {fmt(vistaInfo.min)}–{fmt(vistaInfo.max)} {legenda?.unidade ?? ''}
               </p>
             )}
+            {/* Parâmetros da limpeza (recolhível; vêm com padrão, editáveis) */}
+            <div>
+              <button onClick={() => setParamsAberto(v => !v)} className="flex items-center gap-1 text-[9px] font-semibold" style={{ color: '#93c5fd' }}>
+                <SlidersHorizontal size={10} /> Parâmetros da limpeza {paramsAberto ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
+              </button>
+              {paramsAberto && (
+                <div className="mt-1 p-2 rounded space-y-1.5" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
+                  <ParamRow label="Filtro bruto — corte por cauda (%)" hint="remove zeros e valores absurdos" value={params.p_clip} step={0.5} min={0} onChange={v => setParam('p_clip', v)} />
+                  <ParamRow label="Global — faixa ± da mediana (%)" hint="mantém perto da mediana geral" value={Math.round(params.mf_global_v * 100)} step={5} min={0} onChange={v => setParam('mf_global_v', v / 100)} />
+                  <ParamRow label="Local — raio de busca (m)" hint="vizinhança considerada na passada" value={params.mf_local_r} step={5} min={1} onChange={v => setParam('mf_local_r', v)} />
+                  <ParamRow label="Local — faixa ± dos vizinhos (%)" hint="remove quem destoa dos vizinhos" value={Math.round(params.mf_local_v * 100)} step={5} min={0} onChange={v => setParam('mf_local_v', v / 100)} />
+                  <ParamRow label="Local — tolerância do eixo (°)" hint="ângulo ao longo da passada" value={params.mf_aniso_tol} step={5} min={0} onChange={v => setParam('mf_aniso_tol', v)} />
+                  <ParamRow label="Local — mínimo de vizinhos" value={params.mf_min_neighbors} step={1} min={1} onChange={v => setParam('mf_min_neighbors', Math.round(v))} />
+                  <button onClick={() => setParams({ ...PARAMS_LIMPEZA_PADRAO })} className="flex items-center gap-1 text-[9px] font-semibold" style={{ color: '#fbbf24' }}>
+                    <RotateCcw size={10} /> Restaurar padrões
+                  </button>
+                  <p className="text-[8px] leading-relaxed" style={{ color: '#475569' }}>Mude um parâmetro e clique em <strong>Limpar</strong> de novo para ver quantos/quais pontos saem (compare em &quot;Pontos limpos&quot;).</p>
+                </div>
+              )}
+            </div>
+
             <div className="grid grid-cols-2 gap-1.5">
               <button onClick={() => limpar(profundidade)} disabled={limpando || !profundidade}
                 className="py-2 rounded text-xs font-bold text-white flex items-center justify-center gap-1.5"
@@ -585,6 +613,20 @@ export function CondutividadeSection() {
           )}
         </>
       )}
+    </div>
+  );
+}
+
+function ParamRow({ label, hint, value, step, min, onChange }: { label: string; hint?: string; value: number; step: number; min: number; onChange: (v: number) => void }) {
+  return (
+    <div className="flex items-center gap-2">
+      <div className="min-w-0 flex-1">
+        <div className="text-[9px]" style={{ color: '#cbd5e1' }}>{label}</div>
+        {hint && <div className="text-[8px]" style={{ color: '#475569' }}>{hint}</div>}
+      </div>
+      <input type="number" value={value} step={step} min={min}
+        onChange={e => onChange(Math.max(min, Number(e.target.value.replace(',', '.')) || 0))}
+        className="w-16 rounded px-1.5 py-1 text-[10px] outline-none flex-shrink-0" style={inputStyle} />
     </div>
   );
 }
