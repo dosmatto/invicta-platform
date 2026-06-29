@@ -1,6 +1,11 @@
-export const APP_VERSION = '0.91.1';
+export const APP_VERSION = '0.92.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.92.0': [
+    'Zonas de Manejo: NOVO "Camada de fundo" na etapa Avaliar — depois de gerar as zonas, escolha uma camada (NDVI, fertilidade, condutividade…) para aparecer POR BAIXO das zonas e comparar visualmente. Antes, ao gerar, as camadas de fundo sumiam',
+    'NOVO controle de "Opacidade das zonas": um slider deixa as zonas mais transparentes para enxergar a camada de fundo (e o satélite) por baixo',
+    'A camada de fundo entra abaixo das zonas (satélite → camada → zonas semitransparentes)',
+  ],
   '0.91.1': [
     'Zonas de Manejo: o bloco "Zonas adotadas" (topo) agora segue o mesmo conceito da avaliação — agrupa por classe e mostra "N zonas oficiais · M polígonos" (antes contava cada mancha como uma zona, ex.: "9 zonas" que na verdade eram 6 zonas em 9 polígonos)',
     'As zonas adotadas ganharam as cores em gradiente (verde→vermelho por potencial), os rótulos legíveis (Muito alto…Muito baixo) e, por zona, o nº de polígonos + área + % + menor/maior + CV',

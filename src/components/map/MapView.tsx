@@ -50,7 +50,7 @@ export function MapView() {
   const { mapMode, setMapMode, nav, setNav, setActivePanel,
           uploadedGeo, setUploadedGeo,
           uploadedBbox, setUploadedBbox,
-          pontosSimulados, talhoesFazenda, zonasManejo,
+          pontosSimulados, talhoesFazenda, zonasManejo, zonasFundo, zonasOpacidade,
           fertilidadeOverlay, fertilidadeLabels,
           edicaoAtiva, edicaoModo, setPontoEvent, setZonaEvent } = useApp();
 
@@ -331,6 +331,31 @@ export function MapView() {
         paint: { 'raster-opacity': opacity, 'raster-fade-duration': 0 } }, beforeId);
     } catch (e) { console.warn('[mapa-fert] falha ao desenhar raster:', e); }
   }, [fertilidadeOverlay, mapReady]);
+
+  // ── 6c.2. MEAP: camada de FUNDO (raster) SOB as zonas + opacidade das zonas ──
+  // Permite comparar a zona com uma camada (NDVI, fertilidade, EC…) por baixo,
+  // com as zonas semitransparentes por cima.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    const SRC = 'meap-fundo', LYR = 'meap-fundo-layer';
+    if (map.getLayer(LYR)) { try { map.removeLayer(LYR); } catch {} }
+    if (map.getSource(SRC)) { try { map.removeSource(SRC); } catch {} }
+    if (!zonasFundo) return;
+    const { url, coordinates, opacity } = zonasFundo;
+    const beforeId = map.getLayer('zona-fill') ? 'zona-fill' : undefined; // SOB as zonas
+    try {
+      map.addSource(SRC, { type: 'image', url, coordinates });
+      map.addLayer({ id: LYR, type: 'raster', source: SRC, paint: { 'raster-opacity': opacity, 'raster-fade-duration': 0 } }, beforeId);
+    } catch (e) { console.warn('[meap-fundo] falha ao desenhar raster:', e); }
+  }, [zonasFundo, mapReady]);
+
+  // Opacidade do preenchimento das zonas (slider de transparência do MEAP).
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    try { if (map.getLayer('zona-fill')) map.setPaintProperty('zona-fill', 'fill-opacity', zonasOpacidade); } catch {}
+  }, [zonasOpacidade, zonasManejo, mapReady]);
 
   // ── 6d. Rótulos de valor da fertilidade (setData) ─────────────────────────
   useEffect(() => {

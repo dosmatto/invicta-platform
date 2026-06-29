@@ -62,6 +62,11 @@ interface AppContextType {
   // Zonas de manejo do talhão (coloridas por classe) exibidas no mapa
   zonasManejo: GeoJSON.FeatureCollection | null;
   setZonasManejo: (fc: GeoJSON.FeatureCollection | null) => void;
+  // MEAP — camada de FUNDO (raster) sob as zonas + opacidade das zonas (comparação)
+  zonasFundo: FertilidadeOverlay | null;
+  setZonasFundo: (o: FertilidadeOverlay | null) => void;
+  zonasOpacidade: number;
+  setZonasOpacidade: (v: number) => void;
   // Edição manual de pontos de amostragem
   edicaoAtiva: boolean;
   setEdicaoAtiva: (v: boolean) => void;
@@ -98,6 +103,10 @@ const AppContext = createContext<AppContextType>({
   setTalhoesFazenda: () => {},
   zonasManejo: null,
   setZonasManejo: () => {},
+  zonasFundo: null,
+  setZonasFundo: () => {},
+  zonasOpacidade: 0.5,
+  setZonasOpacidade: () => {},
   edicaoAtiva: false,
   setEdicaoAtiva: () => {},
   edicaoModo: 'mover',
@@ -178,6 +187,8 @@ export function AppProvider({ children, redirectProdutorParaPortal }: { children
   const [pontosSimulados, setPontosSimulados] = useState<GeoJSON.FeatureCollection | null>(null);
   const [talhoesFazenda, setTalhoesFazenda] = useState<GeoJSON.FeatureCollection | null>(null);
   const [zonasManejo, setZonasManejo] = useState<GeoJSON.FeatureCollection | null>(null);
+  const [zonasFundo, setZonasFundo] = useState<FertilidadeOverlay | null>(null);
+  const [zonasOpacidade, setZonasOpacidade] = useState(0.5);
   const [edicaoAtiva, setEdicaoAtiva] = useState(false);
   const [edicaoModo, setEdicaoModo] = useState<EdicaoModo>('mover');
   const [pontoEvent, setPontoEvent] = useState<PontoEvent | null>(null);
@@ -209,6 +220,8 @@ export function AppProvider({ children, redirectProdutorParaPortal }: { children
       pontosSimulados, setPontosSimulados,
       talhoesFazenda, setTalhoesFazenda,
       zonasManejo, setZonasManejo,
+      zonasFundo, setZonasFundo,
+      zonasOpacidade, setZonasOpacidade,
       edicaoAtiva, setEdicaoAtiva,
       edicaoModo, setEdicaoModo,
       pontoEvent, setPontoEvent,

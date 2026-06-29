@@ -142,7 +142,7 @@ function corDaCamadaPreview(c: { nut: string; b64: string; shape: [number, numbe
 }
 
 export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) {
-  const { setZonasManejo, setFertilidadeOverlay, setFertilidadeLabels } = useApp();
+  const { setZonasManejo, setFertilidadeOverlay, setFertilidadeLabels, setZonasFundo, zonasOpacidade, setZonasOpacidade } = useApp();
   const [amb, setAmb] = useState<AmbienteProdutivo | null>(null);
 
   // Camadas (mapas já interpolados)
@@ -173,6 +173,7 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
   const [vendoId, setVendoId] = useState<string | null>(null);  // zoneamento salvo em visualização no mapa
   const [previewCh, setPreviewCh] = useState<string | null>(null);  // camada em pré-visualização no mapa
   const [refreshAmb, setRefreshAmb] = useState(0);  // força re-derivar o ambiente adotado (após remover)
+  const [fundoCh, setFundoCh] = useState<string | null>(null);  // camada de FUNDO sob as zonas (Avaliar)
 
   const poligono = useMemo(() => {
     if (!talhao.geojson) return null;
@@ -317,6 +318,17 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
     setFertilidadeLabels(null);
   }, [previewCh, carregadas, res, vendoFc, setFertilidadeOverlay, setFertilidadeLabels]);
   useEffect(() => () => { setFertilidadeOverlay(null); setFertilidadeLabels(null); }, [setFertilidadeOverlay, setFertilidadeLabels]);
+
+  // MEAP — camada de FUNDO sob as zonas (etapa Avaliar / vendo um zoneamento):
+  // mostra o raster de uma camada por BAIXO das zonas semitransparentes.
+  useEffect(() => {
+    if (!fundoCh || !carregadas || !(res || vendoFc)) { setZonasFundo(null); return; }
+    const c = carregadas.camadas.find(x => x.chave === fundoCh);
+    const url = c ? corDaCamadaPreview(c) : null;
+    if (!url) { setZonasFundo(null); return; }
+    setZonasFundo({ url, coordinates: coordsFromBounds(carregadas.bounds), opacity: 1 });
+  }, [fundoCh, carregadas, res, vendoFc, setZonasFundo]);
+  useEffect(() => () => { setZonasFundo(null); setZonasOpacidade(0.5); }, [setZonasFundo, setZonasOpacidade]);
 
   // Mudar camadas/pesos/método invalida a análise (a curva FPI/NCE muda) e o preview.
   function invalidarAnalise() { setAnalise(null); setRes(null); setNClasses(0); }
@@ -675,6 +687,37 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
                 <p className="text-[9px] leading-relaxed p-1.5 rounded" style={{ background: '#0b1f3a', color: '#8aa6cf', border: '1px solid #1a3a6b' }}>
                   Cada <strong style={{ color: '#cbd5e1' }}>Zona</strong> é uma classe de potencial, do <strong style={{ color: '#86efac' }}>maior</strong> (Zona 01) ao <strong style={{ color: '#f87171' }}>menor</strong> (Zona {potenciais.length ? potenciais[potenciais.length - 1].num : '—'}). A mesma zona pode estar em vários <strong style={{ color: '#cbd5e1' }}>polígonos</strong> (manchas separadas) — por isso {potenciais.length} zonas e {zonas.length} polígonos. Áreas não seguem a ordem (uma zona alta pode ser pequena).
                 </p>
+
+                {/* Camadas de fundo + opacidade das zonas (comparação visual) */}
+                {carregadas && carregadas.camadas.length > 0 && (
+                  <div className="p-2 rounded space-y-1.5" style={{ background: '#0b1f3a', border: '1px solid #1e3a8a' }}>
+                    <div className="flex items-center gap-1.5">
+                      <Layers size={11} style={{ color: '#93c5fd' }} />
+                      <span className="text-[10px] font-bold" style={{ color: '#93c5fd' }}>Camada de fundo</span>
+                      <span className="text-[9px]" style={{ color: '#64748b' }}>— compare a zona com uma camada por baixo</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      <button onClick={() => setFundoCh(null)} className="px-2 py-1 rounded text-[10px] font-semibold"
+                        style={{ background: fundoCh === null ? 'var(--invicta-blue-mid)' : '#1a3a6b', color: fundoCh === null ? '#fff' : '#93c5fd', border: `1px solid ${fundoCh === null ? '#60a5fa' : '#1a3a6b'}` }}>Nenhuma</button>
+                      {carregadas.camadas.map(c => {
+                        const on = fundoCh === c.chave;
+                        return (
+                          <button key={c.chave} onClick={() => setFundoCh(c.chave)} className="px-2 py-1 rounded text-[10px] font-semibold"
+                            style={{ background: on ? 'var(--invicta-blue-mid)' : '#1a3a6b', color: on ? '#fff' : '#93c5fd', border: `1px solid ${on ? '#60a5fa' : '#1a3a6b'}` }}>
+                            {c.simbolo} <span style={{ opacity: 0.7 }}>{c.prof}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div>
+                      <div className="flex justify-between mb-0.5">
+                        <span className="text-[9px]" style={{ color: '#64748b' }}>Opacidade das zonas <span style={{ color: '#475569' }}>(↓ mostra mais a camada de fundo)</span></span>
+                        <span className="text-[9px] font-bold tabular-nums" style={{ color: '#c4b5fd' }}>{Math.round(zonasOpacidade * 100)}%</span>
+                      </div>
+                      <input type="range" min={0} max={1} step={0.05} value={zonasOpacidade} onChange={e => setZonasOpacidade(Number(e.target.value))} className="w-full accent-violet-500" />
+                    </div>
+                  </div>
+                )}
 
                 {/* ZONAS OFICIAIS (= classes) — reordenáveis Alta→Baixa */}
                 <div>
