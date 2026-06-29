@@ -13,13 +13,14 @@ import { getZoneamentosMeap, saveZoneamentoMeap, deleteZoneamentoMeap, setZoneam
 import { obterOuAdotarAmbiente } from '@/lib/meap/adocao';
 import { carregarCamadas, analisarMulti, gerarMulti, dadosLabCV, type CamadasCarregadas } from '@/lib/meap/gerar';
 import { calcularCVZonas } from '@/lib/meap/cv';
+import { unirFeatures } from '@/lib/meap/fundir';
 import { extrairPoligono, coordsFromBounds, decodeGrid, type RespGerarZonas, type RespAnalisarZonas } from '@/lib/fertilidade';
 import { colorirGrid, colorirGridComLegenda } from '@/lib/raster';
 import { rampaVisualStops } from '@/lib/legendas';
 import { classeZona } from '@/lib/zonas';
 import { simboloElemento } from '@/lib/lab';
 import type { AmbienteProdutivo, Homogeneidade, MetricasZonaMeap } from '@/lib/meap/tipos';
-import { Layers, AlertTriangle, Wand2, Loader2, X, Check, ChevronUp, ChevronDown, Save, Star, Trash2, Eye, BarChart3, Sparkles } from 'lucide-react';
+import { Layers, AlertTriangle, Wand2, Loader2, X, Check, ChevronUp, ChevronDown, Save, Star, Trash2, Eye, BarChart3, Sparkles, Combine, CheckSquare, Square } from 'lucide-react';
 
 const HOMOG: Record<Homogeneidade, { label: string; cor: string; bg: string }> = {
   alta: { label: 'Homogênea', cor: '#86efac', bg: '#0f2a1a' },
@@ -153,6 +154,8 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
   const [erro, setErro] = useState<string | null>(null);
   const [res, setRes] = useState<RespGerarZonas | null>(null);
   const [ordemRanks, setOrdemRanks] = useState<number[]>([]);  // potenciais (ranks) na ordem Alta→Baixa
+  const [featsEdit, setFeatsEdit] = useState<GeoJSON.Feature[]>([]);  // zonas EDITÁVEIS (fusão manual) — espelham res.features
+  const [selZonas, setSelZonas] = useState<Set<string>>(new Set());  // zonas marcadas p/ fundir
 
   // Zoneamentos salvos (vários por talhão; um é o "padrão" usado pela Amostragem)
   const [zoneamentos, setZoneamentos] = useState<ZoneamentoMeap[]>([]);
@@ -183,6 +186,13 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
   // Ao gerar, inicializa a ordem dos potenciais com a sugestão do backend.
   useEffect(() => { setOrdemRanks(res ? Array.from({ length: res.stats.n_classes }, (_, i) => i) : []); }, [res]);
 
+  // Espelha as features geradas numa cópia EDITÁVEL (a fusão manual mexe nela,
+  // não no res original) e limpa a seleção a cada nova geração.
+  useEffect(() => {
+    setFeatsEdit(res ? res.features.map(f => ({ ...f, properties: { ...(f.properties ?? {}) } })) : []);
+    setSelZonas(new Set());
+  }, [res]);
+
   // Potencial (rótulo + cor) por rank, conforme a ordem atual (posição = potencial).
   const potDeRank = useMemo(() => {
     const labels = rotulosPotencial(ordemRanks.length);
@@ -194,24 +204,24 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
     return m;
   }, [ordemRanks]);
 
-  // Zonas (identidade única) com potencial/cor aplicados.
+  // Zonas (identidade única) com potencial/cor aplicados — derivadas das features
+  // EDITÁVEIS (refletem fusões manuais).
   const zonas = useMemo(() => {
-    if (!res) return [];
-    return res.features.map(f => {
+    return featsEdit.map(f => {
       const p = (f.properties ?? {}) as { id?: string; potencialRank?: number; areaHa?: number };
       const rank = Number(p.potencialRank ?? 0);
       const pot = potDeRank.get(rank);
       return { id: String(p.id ?? '?'), rank, potencial: pot?.label ?? '—', cor: pot?.cor ?? '#94a3b8', areaHa: Number(p.areaHa ?? 0), geometry: f.geometry };
     });
-  }, [res, potDeRank]);
+  }, [featsEdit, potDeRank]);
 
   // CV (homogeneidade) por zona gerada, calculado dos dados de laboratório.
   const cv = useMemo(() => {
-    if (!res) return null;
+    if (!featsEdit.length) return null;
     const { pontos, resultados } = dadosLabCV(talhao.id);
     if (!resultados.length) return null;
-    return calcularCVZonas({ zonas: res.features.map(f => ({ id: String((f.properties as { id?: string })?.id ?? ''), geometry: f.geometry })), pontos, resultados });
-  }, [res, talhao.id]);
+    return calcularCVZonas({ zonas: featsEdit.map(f => ({ id: String((f.properties as { id?: string })?.id ?? ''), geometry: f.geometry })), pontos, resultados });
+  }, [featsEdit, talhao.id]);
   const cvPorZona: Record<string, MetricasZonaMeap> = cv?.porZona ?? {};
   const varCVsimbolo = cv?.variavelValidacao ? simboloElemento(cv.variavelValidacao) : null;
 
@@ -285,6 +295,32 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
       [a[pos], a[j]] = [a[j], a[pos]];
       return a;
     });
+  }
+
+  const idDaFeat = (f: GeoJSON.Feature) => String((f.properties as { id?: string })?.id ?? '');
+  function toggleSelZona(id: string) {
+    setSelZonas(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  }
+
+  // Fusão MANUAL: une as zonas marcadas num único polígono (dissolve as divisas).
+  // A zona resultante herda o potencial do MAIOR constituinte e o id da maior;
+  // as demais são removidas.
+  function fundirSelecionadas() {
+    if (selZonas.size < 2) return;
+    const sel = featsEdit.filter(f => selZonas.has(idDaFeat(f)));
+    const resto = featsEdit.filter(f => !selZonas.has(idDaFeat(f)));
+    if (sel.length < 2) return;
+    const areaDe = (f: GeoJSON.Feature) => Number((f.properties as { areaHa?: number })?.areaHa ?? 0);
+    const maior = sel.reduce((a, b) => (areaDe(b) > areaDe(a) ? b : a));
+    const mp = (maior.properties ?? {}) as { id?: string; potencialRank?: number; classe?: string };
+    const { geometry, areaHa } = unirFeatures(sel);
+    const novo: GeoJSON.Feature = {
+      type: 'Feature', geometry,
+      properties: { id: String(mp.id ?? '?'), potencialRank: Number(mp.potencialRank ?? 0), classe: mp.classe, areaHa },
+    };
+    const todas = [...resto, novo].sort((a, b) => idDaFeat(a).localeCompare(idDaFeat(b)));
+    setFeatsEdit(todas);
+    setSelZonas(new Set());
   }
 
   // Etapa 4 — Gerar: clusteriza o nº ESCOLHIDO + área mínima (avaliação vem depois).
@@ -562,28 +598,46 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
                   </div>
                 </div>
 
-                {/* Zonas (identidade única) */}
+                {/* Zonas (identidade única) — marque 2+ para fundir manualmente */}
                 <div>
-                  <p className="text-[9px] mb-1" style={{ color: '#a78bfa' }}>
-                    Zonas ({zonas.length}) — cada mancha é uma zona própria{varCVsimbolo && <> · homogeneidade (CV) por <strong style={{ color: '#e9d5ff' }}>{varCVsimbolo}</strong></>}
-                  </p>
-                  <div className="space-y-1">
-                    {zonas.map(z => (
-                      <div key={z.id} className="flex items-center gap-2 px-2 py-1 rounded" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
-                        <span className="inline-block w-3 h-3 rounded-sm flex-shrink-0" style={{ background: z.cor, border: '1px solid #fff' }} />
-                        <span className="text-[11px] font-bold" style={{ color: '#e2e8f0', minWidth: '60px' }}>Zona {z.id}</span>
-                        <span className="text-[10px]" style={{ color: '#93c5fd' }}>{z.potencial}</span>
-                        <span className="text-[10px] ml-auto" style={{ color: '#64748b' }}>{z.areaHa.toLocaleString('pt-BR')} ha</span>
-                        {(() => {
-                          const m = cvPorZona[z.id];
-                          const h = m?.homogeneidade ? HOMOG[m.homogeneidade] : null;
-                          return h && m?.cvValidacao != null
-                            ? <span className="text-[9px] px-1.5 py-0.5 rounded font-semibold flex-shrink-0" style={{ background: h.bg, color: h.cor }}>CV {m.cvValidacao.toLocaleString('pt-BR')}%</span>
-                            : null;
-                        })()}
-                      </div>
-                    ))}
+                  <div className="flex items-center justify-between mb-1 gap-2">
+                    <p className="text-[9px]" style={{ color: '#a78bfa' }}>
+                      Zonas ({zonas.length}) — marque 2+ p/ fundir{varCVsimbolo && <> · CV por <strong style={{ color: '#e9d5ff' }}>{varCVsimbolo}</strong></>}
+                    </p>
+                    {selZonas.size >= 2 && (
+                      <button onClick={fundirSelecionadas} className="flex items-center gap-1 text-[9px] px-2 py-0.5 rounded font-bold text-white flex-shrink-0" style={{ background: '#5b21b6' }}>
+                        <Combine size={10} /> Fundir {selZonas.size}
+                      </button>
+                    )}
                   </div>
+                  <div className="space-y-1">
+                    {zonas.map(z => {
+                      const on = selZonas.has(z.id);
+                      return (
+                        <button key={z.id} onClick={() => toggleSelZona(z.id)} title="Marcar para fundir"
+                          className="w-full flex items-center gap-2 px-2 py-1 rounded text-left"
+                          style={{ background: on ? '#1a1033' : '#061525', border: `1px solid ${on ? '#a78bfa' : '#1a3a6b'}` }}>
+                          {on ? <CheckSquare size={12} className="flex-shrink-0" style={{ color: '#a78bfa' }} /> : <Square size={12} className="flex-shrink-0" style={{ color: '#475569' }} />}
+                          <span className="inline-block w-3 h-3 rounded-sm flex-shrink-0" style={{ background: z.cor, border: '1px solid #fff' }} />
+                          <span className="text-[11px] font-bold" style={{ color: '#e2e8f0', minWidth: '54px' }}>Zona {z.id}</span>
+                          <span className="text-[10px]" style={{ color: '#93c5fd' }}>{z.potencial}</span>
+                          <span className="text-[10px] ml-auto" style={{ color: '#64748b' }}>{z.areaHa.toLocaleString('pt-BR')} ha</span>
+                          {(() => {
+                            const m = cvPorZona[z.id];
+                            const h = m?.homogeneidade ? HOMOG[m.homogeneidade] : null;
+                            return h && m?.cvValidacao != null
+                              ? <span className="text-[9px] px-1.5 py-0.5 rounded font-semibold flex-shrink-0" style={{ background: h.bg, color: h.cor }}>CV {m.cvValidacao.toLocaleString('pt-BR')}%</span>
+                              : null;
+                          })()}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {selZonas.size >= 2 && (
+                    <p className="text-[9px] mt-1 leading-relaxed" style={{ color: '#6d5b9e' }}>
+                      A fusão dissolve as divisas num polígono só; a zona resultante herda o potencial da MAIOR. Ajuste os potenciais acima se precisar.
+                    </p>
+                  )}
                 </div>
 
                 <p className="text-[9px] leading-relaxed" style={{ color: '#6d5b9e' }}>

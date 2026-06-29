@@ -1,6 +1,10 @@
-export const APP_VERSION = '0.84.0';
+export const APP_VERSION = '0.85.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.85.0': [
+    'Zonas de Manejo (MEAP): FUSÃO MANUAL de zonas — na etapa Avaliar, marque 2 ou mais zonas na lista e clique em "Fundir" para juntá-las numa só. As divisas entre zonas vizinhas são dissolvidas (vira um polígono contínuo); a zona resultante herda o potencial da MAIOR e a área é recalculada',
+    'Diferente da "área mínima" (fusão automática por tamanho): aqui é você quem escolhe quais zonas unir, na hora, antes de salvar o zoneamento',
+  ],
   '0.84.0': [
     'NOVO módulo Condutividade Elétrica (CEa) — Fase C1: nova aba "Condutividade" na página do talhão. Importe os pontos do levantamento (SHP .zip · KML · GeoJSON · CSV · XLSX), escolha as colunas das duas profundidades (rasa/profunda) e gere o mapa interpolado por profundidade (krigagem automática)',
     'A condutividade é uma VARIÁVEL FIXA do talhão (estrutural, não por safra): fica salva com VERSÕES ao longo do tempo — uma é a oficial (★) — e dentro dela você marca qual PROFUNDIDADE é a camada oficial (base para as Zonas de Manejo)',
