@@ -125,6 +125,63 @@ export function deleteImportacaoCompactacao(id: string) {
   save('inv_compactacao', load<ImportacaoCompactacao>('inv_compactacao').filter(i => i.id !== id));
 }
 
+// ── Condutividade Elétrica (Variável Fixa do Talhão) ─────────────────────────
+// Diferente da compactação (por safra), a EC é uma característica ESTRUTURAL do
+// talhão: fica vinculada permanentemente ao talhão e pode ter várias VERSÕES ao
+// longo do tempo; uma é a OFICIAL. Cada levantamento traz ~2 profundidades
+// (rasa/profunda) e o usuário define qual é a profundidade oficial.
+export interface PontoCondutividade { lng: number; lat: number; valores: Record<string, number>; }
+export interface LevantamentoCondutividade {
+  id: string;
+  talhaoId: string;
+  nome: string;
+  data?: string;                  // data do levantamento (opcional)
+  profundidades: string[];        // rótulos derivados das colunas (geralmente 2)
+  profundidadeOficial?: string;   // qual profundidade é a camada oficial
+  oficial: boolean;               // versão oficial (1 por talhão)
+  pontos: PontoCondutividade[];
+  criadoEm: string;
+}
+
+export function getCondutividade(talhaoId?: string): LevantamentoCondutividade[] {
+  let lista = loadFiltrado<LevantamentoCondutividade>('inv_condutividade');
+  if (talhaoId) lista = lista.filter(l => l.talhaoId === talhaoId);
+  return lista.sort((a, b) => (b.criadoEm ?? '').localeCompare(a.criadoEm ?? ''));
+}
+
+export function saveCondutividade(data: Omit<LevantamentoCondutividade, 'id' | 'criadoEm'>): LevantamentoCondutividade {
+  const lista = load<LevantamentoCondutividade>('inv_condutividade');
+  const nova: LevantamentoCondutividade = comEmpresa({ ...data, id: uid(), criadoEm: new Date().toISOString() });
+  // A 1ª versão do talhão (ou uma marcada explicitamente) vira a oficial.
+  if (nova.oficial || !lista.some(l => l.talhaoId === nova.talhaoId && l.oficial)) {
+    nova.oficial = true;
+    lista.forEach(l => { if (l.talhaoId === nova.talhaoId) l.oficial = false; });
+  }
+  lista.push(nova);
+  save('inv_condutividade', lista);
+  return nova;
+}
+
+export function deleteCondutividade(id: string) {
+  save('inv_condutividade', load<LevantamentoCondutividade>('inv_condutividade').filter(l => l.id !== id));
+}
+
+export function setCondutividadeOficial(id: string) {
+  const lista = load<LevantamentoCondutividade>('inv_condutividade');
+  const alvo = lista.find(l => l.id === id);
+  if (!alvo) return;
+  lista.forEach(l => { if (l.talhaoId === alvo.talhaoId) l.oficial = l.id === id; });
+  save('inv_condutividade', lista);
+}
+
+export function setProfundidadeOficialCondutividade(id: string, prof: string) {
+  const lista = load<LevantamentoCondutividade>('inv_condutividade');
+  const alvo = lista.find(l => l.id === id);
+  if (!alvo) return;
+  alvo.profundidadeOficial = prof;
+  save('inv_condutividade', lista);
+}
+
 // ── Mapas de Colheita / Produtividade (Módulo 12, P1) ───────────────────────
 // Metadados/versões de cada processamento. O raster fica na nuvem sob demanda
 // (cloudSalvarMapa, prefixo `${talhaoId}__prod__`), como fertilidade/NDVI.
@@ -324,6 +381,7 @@ export function excluirProdutorCascata(clienteId: string): { talhaoIds: string[]
   save('inv_grades', load<GradeAmostragem>('inv_grades').filter(g => !tal.has(g.talhaoId)));
   save('inv_plantios', load<Plantio>('inv_plantios').filter(p => !tal.has(p.talhaoId)));
   save('inv_compactacao', load<ImportacaoCompactacao>('inv_compactacao').filter(c => !tal.has(c.talhaoId)));
+  save('inv_condutividade', load<LevantamentoCondutividade>('inv_condutividade').filter(c => !tal.has(c.talhaoId)));
   save('inv_talhoes', load<Talhao>('inv_talhoes').filter(t => !tal.has(t.id)));
   save('inv_fazendas', load<Fazenda>('inv_fazendas').filter(f => !fazIds.has(f.id)));
   save('inv_clientes', load<Cliente>('inv_clientes').filter(c => c.id !== clienteId));

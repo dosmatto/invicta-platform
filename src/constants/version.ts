@@ -1,6 +1,13 @@
-export const APP_VERSION = '0.83.0';
+export const APP_VERSION = '0.84.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.84.0': [
+    'NOVO módulo Condutividade Elétrica (CEa) — Fase C1: nova aba "Condutividade" na página do talhão. Importe os pontos do levantamento (SHP .zip · KML · GeoJSON · CSV · XLSX), escolha as colunas das duas profundidades (rasa/profunda) e gere o mapa interpolado por profundidade (krigagem automática)',
+    'A condutividade é uma VARIÁVEL FIXA do talhão (estrutural, não por safra): fica salva com VERSÕES ao longo do tempo — uma é a oficial (★) — e dentro dela você marca qual PROFUNDIDADE é a camada oficial (base para as Zonas de Manejo)',
+    'ÍNDICE DE QUALIDADE após interpolar: classifica o levantamento em Excelente/Boa/Regular/Baixa (pelo erro da validação cruzada) e informa se está apto para gerar Zonas de Manejo',
+    'Legenda oficial de Condutividade (mS/m) adicionada à Biblioteca (Sistema, editável). Mapas salvos na nuvem (carregam sem reprocessar)',
+    'Próximas fases (anotadas): C2 limpeza inteligente dos dados + assistente + krigagem manual + GeoTIFF; C3 vetorização no MEAP (zona só EC × multivariável) + comparação de zonas; C4 histórico avançado + Laboratório de Zonas',
+  ],
   '0.83.0': [
     'Zonas de Manejo (MEAP) — fluxo reorganizado (rev. 13.00A) em 5 etapas claras: 1) Configurar (camadas + PESO de cada camada + método), 2) Analisar, 3) Decidir e gerar, 4/5) Avaliar. Agora a pergunta "quantas zonas?" vem ANTES de gerar, e os indicadores de qualidade (CV/homogeneidade) só aparecem DEPOIS, avaliando as zonas prontas',
     'NOVO botão "Analisar (FPI × NCE)": calcula a curva de organização das zonas para 2 a 12 zonas (antes só ia até 6) e mostra um gráfico estilo "cotovelo" + uma SUGESTÃO automática (nº de zonas + justificativa + nível de confiança). A sugestão não é obrigatória — você escolhe o número num seletor de 2 a 12 (a sugestão fica marcada com ★)',

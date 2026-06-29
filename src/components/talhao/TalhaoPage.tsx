@@ -18,6 +18,7 @@ import {
 import { FertilidadeSection } from '@/components/talhao/FertilidadeSection';
 import { AmostragemModulo } from '@/components/talhao/AmostragemModulo';
 import { CompactacaoSection } from '@/components/talhao/CompactacaoSection';
+import { CondutividadeSection } from '@/components/talhao/CondutividadeSection';
 import { RecomendacaoSection } from '@/components/talhao/RecomendacaoSection';
 import { ArquivosSection } from '@/components/talhao/ArquivosSection';
 import { LabImportSection } from '@/components/talhao/LabImportSection';
@@ -29,7 +30,7 @@ import { ProdutividadeSection } from '@/components/talhao/ProdutividadeSection';
 import { papelDoUsuario, meuRegistro, planoPorId } from '@/lib/empresa';
 import {
   ChevronLeft, Home, Leaf, Grid3x3, Layers, BarChart3, FileSpreadsheet,
-  Activity, Satellite, FolderOpen, FileText, Clock,
+  Activity, Satellite, FolderOpen, FileText, Clock, Zap,
 } from 'lucide-react';
 
 const MapView = dynamic(
@@ -39,7 +40,7 @@ const MapView = dynamic(
 
 type TabId =
   | 'resumo' | 'fertilidade' | 'amostragem' | 'zonas' | 'produtividade'
-  | 'recomendacoes' | 'compactacao' | 'ndvi' | 'arquivos' | 'relatorios';
+  | 'recomendacoes' | 'compactacao' | 'condutividade' | 'ndvi' | 'arquivos' | 'relatorios';
 
 const TABS: Array<{ id: TabId; label: string; icon: React.ElementType; pronto: boolean }> = [
   { id: 'resumo',        label: 'Resumo',        icon: Home,            pronto: true },
@@ -49,6 +50,7 @@ const TABS: Array<{ id: TabId; label: string; icon: React.ElementType; pronto: b
   { id: 'produtividade', label: 'Produtividade', icon: BarChart3,       pronto: true },
   { id: 'recomendacoes', label: 'Recomendações', icon: FileSpreadsheet, pronto: true },
   { id: 'compactacao',   label: 'Compactação',   icon: Activity,        pronto: true },
+  { id: 'condutividade', label: 'Condutividade', icon: Zap,             pronto: true },
   { id: 'ndvi',          label: 'NDVI / Satélite', icon: Satellite,     pronto: true },
   { id: 'arquivos',      label: 'Arquivos',      icon: FolderOpen,      pronto: true },
   { id: 'relatorios',    label: 'Relatórios',    icon: FileText,        pronto: true },
@@ -214,12 +216,13 @@ export function TalhaoPage({ id }: { id: string }) {
             )}
             {tabAtivo === 'zonas' && talhao && <MeapSection talhao={talhao} safraNome={safraSel} />}
             {tabAtivo === 'compactacao' && <CompactacaoSection safraNome={safraSel} />}
+            {tabAtivo === 'condutividade' && <CondutividadeSection />}
             {tabAtivo === 'produtividade' && <ProdutividadeSection safraNome={safraSel} />}
             {tabAtivo === 'ndvi' && <NdviSection />}
             {tabAtivo === 'recomendacoes' && <RecomendacaoSection safraNome={safraSel} />}
             {tabAtivo === 'arquivos' && <ArquivosSection safraNome={safraSel} />}
             {tabAtivo === 'relatorios' && <GeradorRelatorios safraNome={safraSel} />}
-            {!['resumo', 'fertilidade', 'amostragem', 'zonas', 'compactacao', 'produtividade', 'ndvi', 'recomendacoes', 'arquivos', 'relatorios'].includes(tabAtivo) && (
+            {!['resumo', 'fertilidade', 'amostragem', 'zonas', 'compactacao', 'condutividade', 'produtividade', 'ndvi', 'recomendacoes', 'arquivos', 'relatorios'].includes(tabAtivo) && (
               <EmBreve label={TABS.find(t => t.id === tabAtivo)?.label ?? ''} />
             )}
           </div>

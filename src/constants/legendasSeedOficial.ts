@@ -164,6 +164,19 @@ const compactacao: Legenda = {
   classes: classesFertilidade5([1.0, 1.5, 2.0, 3.0], true),
 };
 
+// ── Condutividade Elétrica (mS/m; não invertida: alta EC ~ mais argila/CTC) ──
+const condutividade: Legenda = {
+  ...baseFix,
+  id: 'sys_condutividade',
+  nome: 'Condutividade Elétrica do Solo',
+  atributoId: 'condutividade', atributo: 'Condutividade Elétrica', simbolo: 'CEa',
+  unidade: 'mS/m', metodo: 'Indução eletromagnética',
+  categoria: 'condutividade', invertida: false,
+  dominioMin: 0, dominioMax: 60,
+  observacao: 'Condutividade elétrica aparente do solo; valores altos ~ mais argila/umidade/CTC.',
+  classes: classesFertilidade5([10, 20, 30, 40], false),
+};
+
 export const LEGENDAS_OFICIAIS: Legenda[] = [
   ...ABC_SISTEMA,
   textura,
@@ -172,4 +185,5 @@ export const LEGENDAS_OFICIAIS: Legenda[] = [
   prodSoja, prodMilho, prodTrigo, prodFeijao,
   prodPercentil, prodMedia,
   compactacao,
+  condutividade,
 ];
