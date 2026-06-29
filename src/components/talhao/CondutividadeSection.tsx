@@ -30,6 +30,15 @@ const fmt = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits: 2 
 const PARAMS_LIMPEZA_PADRAO = { p_clip: 1, mf_global_v: 0.5, mf_local_r: 25, mf_local_v: 0.15, mf_aniso_tol: 25, mf_min_neighbors: 4 } as const;
 type ParamsLimpeza = { [K in keyof typeof PARAMS_LIMPEZA_PADRAO]: number };
 
+// Legenda para uma variável EXTRA (ex.: Altitude → Altimetria). Resolve pela
+// natureza da coluna; null se não houver legenda compatível.
+function legendaParaExtra(coluna: string): Legenda | null {
+  const todas = getLegendas();
+  if (ehColunaAltitude(coluna)) return todas.find(l => l.atributoId === 'altimetria' || l.categoria === 'altimetria-elevacao') ?? null;
+  const norm = coluna.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  return todas.find(l => l.atributoId === norm) ?? null;
+}
+
 type Ponto = { lng: number; lat: number; valor: number };
 type MapaPronto = { resp: RespInterp; labels: GeoJSON.FeatureCollection };
 
@@ -44,7 +53,7 @@ export function CondutividadeSection() {
   // escolhe qual aplicar (ex.: a fixa ou a de quartil). A escolha fica lembrada.
   const legendasDisp = useMemo<Legenda[]>(() => getLegendas().filter(l => l.atributoId === 'condutividade' || l.categoria === 'condutividade'), []);
   const [legId, setLegId] = useState<string>(() => (typeof window !== 'undefined' ? localStorage.getItem('inv_leg_pref_condutividade') : null) ?? '');
-  const legenda = useMemo<Legenda | null>(() => legendasDisp.find(l => l.id === legId) ?? legendasDisp[0] ?? null, [legendasDisp, legId]);
+  const legendaCea = useMemo<Legenda | null>(() => legendasDisp.find(l => l.id === legId) ?? legendasDisp[0] ?? null, [legendasDisp, legId]);
   function escolherLegenda(id: string) { setLegId(id); try { localStorage.setItem('inv_leg_pref_condutividade', id); } catch {} }
 
   const poligono = useMemo(() => {
@@ -95,6 +104,21 @@ export function CondutividadeSection() {
   useEffect(recarregar, [nav.talhaoId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const lev = levs.find(l => l.id === levId) ?? null;
+
+  // Camadas da aba: profundidade(s) de CEa + variáveis fixas EXTRAS que têm legenda
+  // (ex.: Altitude → Altimetria). Cada camada usa a SUA legenda.
+  const camadas = useMemo(() => {
+    const out: Array<{ nome: string; legenda: Legenda; tipo: 'cea' | 'extra' }> = [];
+    if (legendaCea) for (const p of (lev?.profundidades ?? [])) out.push({ nome: p, legenda: legendaCea, tipo: 'cea' });
+    for (const ex of (lev?.extras ?? [])) {
+      if (!ex.fixa) continue;
+      const lg = legendaParaExtra(ex.coluna);
+      if (lg) out.push({ nome: ex.coluna, legenda: lg, tipo: 'extra' });
+    }
+    return out;
+  }, [lev, legendaCea]);
+  const camadaSel = camadas.find(c => c.nome === profundidade) ?? camadas[0] ?? null;
+  const legenda = camadaSel?.legenda ?? legendaCea;   // legenda da camada selecionada
 
   useEffect(() => { setProfundidade(lev?.profundidades[0] ?? ''); }, [levId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -277,7 +301,7 @@ export function CondutividadeSection() {
   }
 
   if (!nav.talhaoId) return <div className="px-6 py-4"><Aviso texto="Abra um talhão para registrar a condutividade elétrica." /></div>;
-  if (!legenda) return <div className="px-6 py-4"><Aviso texto="Legenda de Condutividade não encontrada na Biblioteca (Sistema)." /></div>;
+  if (!legendaCea) return <div className="px-6 py-4"><Aviso texto="Legenda de Condutividade não encontrada na Biblioteca (Sistema)." /></div>;
 
   const mostrarUpload = modoUpload || levs.length === 0;
   const processando = estado === 'processando';
@@ -431,26 +455,28 @@ export function CondutividadeSection() {
         </div>
       )}
 
-      {/* Profundidades + processar */}
-      {lev && lev.profundidades.length > 0 && (
+      {/* Camadas (CEa + variáveis fixas extras) + processar */}
+      {lev && camadas.length > 0 && (
         <>
           <div>
-            <label className="text-[10px] font-semibold block mb-1" style={{ color: '#64748b' }}>Profundidade (★ = camada oficial · clique no ★ para definir)</label>
+            <label className="text-[10px] font-semibold block mb-1" style={{ color: '#64748b' }}>Camada (★ = profundidade oficial de CEa · extras viram camada fixa própria)</label>
             <div className="flex flex-wrap gap-1">
-              {lev.profundidades.map(p => {
-                const sel = p === profundidade;
-                const feito = !!cache[p];
-                const oficial = lev.profundidadeOficial === p;
+              {camadas.map(c => {
+                const sel = c.nome === profundidade;
+                const feito = !!cache[c.nome];
+                const oficial = c.tipo === 'cea' && lev.profundidadeOficial === c.nome;
                 return (
-                  <div key={p} className="flex items-center rounded overflow-hidden" style={{ border: `1px solid ${sel ? '#60a5fa' : '#1a3a6b'}` }}>
-                    <button onClick={() => setProfundidade(p)} className="px-2 py-1 text-[10px] font-bold"
+                  <div key={c.nome} className="flex items-center rounded overflow-hidden" style={{ border: `1px solid ${sel ? '#60a5fa' : '#1a3a6b'}` }}>
+                    <button onClick={() => setProfundidade(c.nome)} className="px-2 py-1 text-[10px] font-bold flex items-center gap-1"
                       style={{ background: sel ? 'var(--invicta-blue-mid)' : '#1a3a6b', color: sel ? '#fff' : (feito ? '#86efac' : '#93c5fd') }}>
-                      {p}{feito ? ' ✓' : ''}
+                      {c.tipo === 'extra' && <Mountain size={9} />}{c.nome}{c.tipo === 'extra' ? ` · ${c.legenda.atributo}` : ''}{feito ? ' ✓' : ''}
                     </button>
-                    <button onClick={() => definirProfOficial(p)} title={oficial ? 'camada oficial' : 'definir como oficial'}
-                      className="px-1.5 py-1" style={{ background: '#0b1f3a' }}>
-                      <Star size={11} fill={oficial ? '#fbbf24' : 'none'} style={{ color: oficial ? '#fbbf24' : '#475569' }} />
-                    </button>
+                    {c.tipo === 'cea' && (
+                      <button onClick={() => definirProfOficial(c.nome)} title={oficial ? 'camada oficial' : 'definir como oficial'}
+                        className="px-1.5 py-1" style={{ background: '#0b1f3a' }}>
+                        <Star size={11} fill={oficial ? '#fbbf24' : 'none'} style={{ color: oficial ? '#fbbf24' : '#475569' }} />
+                      </button>
+                    )}
                   </div>
                 );
               })}
@@ -564,7 +590,7 @@ export function CondutividadeSection() {
           {estado === 'erro' && <p className="text-[10px]" style={{ color: '#f87171' }}>{erro}</p>}
 
           {/* Índice de qualidade + legenda + stats */}
-          {cache[profundidade] && qual && (
+          {cache[profundidade] && qual && legenda && (
             <div className="space-y-2 p-2.5 rounded-lg" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5 text-[10px]" style={{ color: '#86efac' }}>
@@ -589,8 +615,8 @@ export function CondutividadeSection() {
                 </p>
               </div>
 
-              {/* Seletor de legenda (trocar fixa ↔ quartil ↔ outras de condutividade) */}
-              {legendasDisp.length > 1 && (
+              {/* Seletor de legenda (trocar fixa ↔ quartil ↔ outras de condutividade) — só p/ camada de CEa; extras usam a legenda do seu atributo */}
+              {camadaSel?.tipo === 'cea' && legendasDisp.length > 1 && (
                 <div>
                   <label className="text-[9px] font-semibold block mb-0.5" style={{ color: '#64748b' }}>Legenda do mapa</label>
                   <select value={legenda?.id ?? ''} onChange={e => escolherLegenda(e.target.value)} className="w-full rounded px-2 py-1 text-[11px] outline-none" style={inputStyle}>
