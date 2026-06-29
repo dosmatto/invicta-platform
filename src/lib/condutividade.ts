@@ -9,6 +9,21 @@ export {
   type PontoBruto,
 } from './compactacao';
 
+const semAcento = (s: string) => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
+// Sugere quais colunas numéricas são profundidades de CEa (rasa/profunda) — para
+// NÃO marcar tudo (velocidade, altitude, corrente… não são CEa). Se nada casar,
+// devolve [] e o usuário escolhe manualmente (≥1 obrigatório).
+export function sugerirProfundidadesCEa(colsNumericas: string[]): string[] {
+  const re = /(condut|cea|\bec\b|shallow|deep|rasa|profund|0\s*-?\s*\d)/;
+  return colsNumericas.filter(c => re.test(semAcento(c)));
+}
+
+// Reconhece a coluna de altitude/elevação (candidata a Variável Fixa = Altimetria).
+export function ehColunaAltitude(coluna: string): boolean {
+  return /(altitude|altimetr|eleva|elevation|\bcota\b|\baltura\b)/.test(semAcento(coluna));
+}
+
 export type ClasseQualidade = 'Excelente' | 'Boa' | 'Regular' | 'Baixa';
 
 export interface QualidadeEC {

@@ -19,9 +19,9 @@ import {
 } from '@/lib/fertilidade';
 import { colorirGridComLegenda, temGrid } from '@/lib/raster';
 import { cloudSalvarMapa, cloudCarregarMapasPorPrefixo, cloudExcluirMapasPorPrefixo } from '@/lib/cloud';
-import { parseArquivoPontos, pontosCondutividade, avaliarQualidade, CORES_QUALIDADE, type ArquivoPontos } from '@/lib/condutividade';
+import { parseArquivoPontos, pontosCondutividade, avaliarQualidade, CORES_QUALIDADE, sugerirProfundidadesCEa, ehColunaAltitude, type ArquivoPontos } from '@/lib/condutividade';
 import type { Legenda } from '@/lib/legendas';
-import { Upload, Loader2, Zap, Eraser, AlertTriangle, Save, Trash2, Play, Plus, Layers, Star, Gauge } from 'lucide-react';
+import { Upload, Loader2, Zap, Eraser, AlertTriangle, Save, Trash2, Play, Plus, Layers, Star, Gauge, Mountain } from 'lucide-react';
 
 const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
 const fmt = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
@@ -55,7 +55,9 @@ export function CondutividadeSection() {
   // upload + mapeamento
   const inputRef = useRef<HTMLInputElement>(null);
   const [arq, setArq] = useState<ArquivoPontos | null>(null);
-  const [colsSel, setColsSel] = useState<string[]>([]);
+  const [depthsSel, setDepthsSel] = useState<string[]>([]);   // colunas de CEa (≥1)
+  const [extrasSel, setExtrasSel] = useState<string[]>([]);   // outras variáveis (altitude…)
+  const [fixaSet, setFixaSet] = useState<Set<string>>(new Set());  // extras marcadas como Variável Fixa
   const [nome, setNome] = useState('');
   const [data, setData] = useState('');
   const [parseErro, setParseErro] = useState('');
@@ -123,28 +125,44 @@ export function CondutividadeSection() {
     try {
       const r = await parseArquivoPontos(file);
       setArq(r);
-      setColsSel(r.colunasNumericas);
+      setDepthsSel(sugerirProfundidadesCEa(r.colunasNumericas));  // só as colunas de CEa
+      setExtrasSel([]);
+      setFixaSet(new Set());
       setNome(file.name.replace(/\.[^.]+$/, ''));
     } catch (err) {
       setParseErro(err instanceof Error ? err.message : 'Falha ao ler o arquivo.');
     }
   }
 
-  function toggleCol(c: string) {
-    setColsSel(prev => prev.includes(c) ? prev.filter(x => x !== c) : [...prev, c]);
+  // Profundidade e Extra são papéis EXCLUSIVOS de cada coluna.
+  function toggleDepth(c: string) {
+    setDepthsSel(prev => prev.includes(c) ? prev.filter(x => x !== c) : [...prev, c]);
+    setExtrasSel(prev => prev.filter(x => x !== c));
+  }
+  function toggleExtra(c: string) {
+    setExtrasSel(prev => {
+      const on = prev.includes(c);
+      if (on) setFixaSet(s => { const n = new Set(s); n.delete(c); return n; });
+      return on ? prev.filter(x => x !== c) : [...prev, c];
+    });
+    setDepthsSel(prev => prev.filter(x => x !== c));
+  }
+  function toggleFixa(c: string) {
+    setFixaSet(prev => { const n = new Set(prev); if (n.has(c)) n.delete(c); else n.add(c); return n; });
   }
 
   function salvarLevantamento() {
-    if (!arq || !nav.talhaoId || colsSel.length === 0) return;
+    if (!arq || !nav.talhaoId || depthsSel.length === 0) return;
     const nova = saveCondutividade({
       talhaoId: nav.talhaoId, nome: nome.trim() || 'Levantamento de CEa',
       data: data || undefined,
-      profundidades: colsSel,
-      profundidadeOficial: colsSel[0],
+      profundidades: depthsSel,
+      profundidadeOficial: depthsSel[0],
+      extras: extrasSel.map(c => ({ coluna: c, fixa: fixaSet.has(c) })),
       oficial: false,  // saveCondutividade marca a 1ª do talhão como oficial sozinho
-      pontos: pontosCondutividade(arq.pontos, colsSel),
+      pontos: pontosCondutividade(arq.pontos, [...depthsSel, ...extrasSel]),
     });
-    setArq(null); setColsSel([]); setNome(''); setData(''); setModoUpload(false);
+    setArq(null); setDepthsSel([]); setExtrasSel([]); setFixaSet(new Set()); setNome(''); setData(''); setModoUpload(false);
     setLevs(getCondutividade(nav.talhaoId));
     setLevId(nova.id);
   }
@@ -267,6 +285,18 @@ export function CondutividadeSection() {
               )}
             </div>
           )}
+          {lev?.extras && lev.extras.length > 0 && (
+            <div className="mt-1 flex flex-wrap items-center gap-1">
+              <span className="text-[9px]" style={{ color: '#64748b' }}>Outras variáveis:</span>
+              {lev.extras.map(ex => (
+                <span key={ex.coluna} className="text-[9px] px-1.5 py-0.5 rounded flex items-center gap-1"
+                  style={{ background: '#0b1f3a', color: ex.fixa ? '#fbbf24' : '#93c5fd', border: '1px solid #1a3a6b' }}>
+                  {ex.fixa && <Star size={8} fill="#fbbf24" style={{ color: '#fbbf24' }} />}{ex.coluna}
+                </span>
+              ))}
+              <span className="text-[9px]" style={{ color: '#475569' }}>· armazenadas (uso como camada fixa em breve)</span>
+            </div>
+          )}
         </div>
       )}
 
@@ -285,24 +315,59 @@ export function CondutividadeSection() {
           {arq && (
             <>
               <p className="text-[10px]" style={{ color: '#86efac' }}>{arq.pontos.length} pontos lidos.</p>
+
+              {/* Grupo 1 — Profundidade(s) de CEa (≥1 obrigatório) */}
               <div>
                 <label className="text-[10px] font-semibold block mb-1" style={{ color: '#64748b' }}>
-                  Colunas de condutividade (cada uma vira uma profundidade — normalmente rasa e profunda)
+                  Profundidade(s) de Condutividade — escolha <strong style={{ color: '#93c5fd' }}>1 ou mais</strong> (obrigatório)
                 </label>
                 <div className="flex flex-wrap gap-1">
-                  {arq.colunas.map(c => {
-                    const sel = colsSel.includes(c);
-                    const num = arq.colunasNumericas.includes(c);
+                  {arq.colunasNumericas.map(c => {
+                    const sel = depthsSel.includes(c);
                     return (
-                      <button key={c} onClick={() => toggleCol(c)} title={num ? 'coluna numérica' : 'coluna de texto (provavelmente não é CEa)'}
+                      <button key={c} onClick={() => toggleDepth(c)}
                         className="px-2 py-1 rounded text-[10px] font-bold"
-                        style={{ background: sel ? 'var(--invicta-blue-mid)' : '#1a3a6b', color: sel ? '#fff' : (num ? '#93c5fd' : '#475569') }}>
+                        style={{ background: sel ? 'var(--invicta-blue-mid)' : '#1a3a6b', color: sel ? '#fff' : '#93c5fd' }}>
                         {c}
                       </button>
                     );
                   })}
                 </div>
               </div>
+
+              {/* Grupo 2 — Outras variáveis (opcional) + marcar como Variável Fixa */}
+              <div>
+                <label className="text-[10px] font-semibold block mb-1" style={{ color: '#64748b' }}>
+                  Outras variáveis a importar (opcional) — ex.: altitude · ★ = guardar como Variável Fixa
+                </label>
+                {arq.colunasNumericas.filter(c => !depthsSel.includes(c)).length === 0 ? (
+                  <p className="text-[9px]" style={{ color: '#475569' }}>Nenhuma coluna numérica sobrando.</p>
+                ) : (
+                  <div className="flex flex-wrap gap-1">
+                    {arq.colunasNumericas.filter(c => !depthsSel.includes(c)).map(c => {
+                      const sel = extrasSel.includes(c);
+                      const fixa = fixaSet.has(c);
+                      const alt = ehColunaAltitude(c);
+                      return (
+                        <div key={c} className="flex items-center rounded overflow-hidden" style={{ border: `1px solid ${sel ? '#60a5fa' : '#1a3a6b'}` }}>
+                          <button onClick={() => toggleExtra(c)} title={alt ? 'altitude (candidata a Altimetria)' : 'importar esta variável junto'}
+                            className="px-2 py-1 text-[10px] font-bold flex items-center gap-1"
+                            style={{ background: sel ? 'var(--invicta-blue-mid)' : '#1a3a6b', color: sel ? '#fff' : '#93c5fd' }}>
+                            {alt && <Mountain size={9} />} {c}
+                          </button>
+                          {sel && (
+                            <button onClick={() => toggleFixa(c)} title={fixa ? 'marcada como Variável Fixa' : 'marcar como Variável Fixa do talhão'}
+                              className="px-1.5 py-1" style={{ background: '#0b1f3a' }}>
+                              <Star size={11} fill={fixa ? '#fbbf24' : 'none'} style={{ color: fixa ? '#fbbf24' : '#475569' }} />
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="text-[10px] font-semibold block mb-0.5" style={{ color: '#64748b' }}>Nome da versão</label>
@@ -313,11 +378,12 @@ export function CondutividadeSection() {
                   <input type="date" value={data} onChange={e => setData(e.target.value)} className="w-full rounded px-2 py-1.5 text-xs outline-none" style={inputStyle} />
                 </div>
               </div>
-              <button onClick={salvarLevantamento} disabled={colsSel.length === 0}
+              <button onClick={salvarLevantamento} disabled={depthsSel.length === 0}
                 className="w-full py-2 rounded text-xs font-bold text-white flex items-center justify-center gap-1.5 disabled:opacity-40"
                 style={{ background: 'var(--invicta-green-dark)' }}>
-                <Save size={12} /> Salvar versão ({colsSel.length} profundidade{colsSel.length !== 1 ? 's' : ''})
+                <Save size={12} /> Salvar versão ({depthsSel.length} prof.{extrasSel.length > 0 ? ` + ${extrasSel.length} variáve${extrasSel.length !== 1 ? 'is' : 'l'}` : ''})
               </button>
+              {depthsSel.length === 0 && <p className="text-[9px]" style={{ color: '#fbbf24' }}>Escolha ao menos uma profundidade de condutividade.</p>}
             </>
           )}
         </div>

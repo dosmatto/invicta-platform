@@ -1,6 +1,11 @@
-export const APP_VERSION = '0.85.0';
+export const APP_VERSION = '0.86.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.86.0': [
+    'Condutividade (import): a tela de colunas agora separa "Profundidade(s) de Condutividade" (escolha 1 ou mais — obrigatório) das "Outras variáveis a importar" (opcional). Antes o sistema marcava TODAS as colunas numéricas como profundidade (ex.: 7 profundidades sem querer)',
+    'O sistema sugere sozinho quais colunas são CEa (pelo nome) — você ajusta à mão. Dá para importar JUNTO outras variáveis do mesmo arquivo, como a altitude',
+    'Cada variável extra pode ser marcada com ★ "Variável Fixa" (ex.: altitude para virar Altimetria depois). Por ora elas ficam armazenadas no levantamento; usar a altitude como camada fixa/interpolada vem na sequência',
+  ],
   '0.85.0': [
     'Zonas de Manejo (MEAP): FUSÃO MANUAL de zonas — na etapa Avaliar, marque 2 ou mais zonas na lista e clique em "Fundir" para juntá-las numa só. As divisas entre zonas vizinhas são dissolvidas (vira um polígono contínuo); a zona resultante herda o potencial da MAIOR e a área é recalculada',
     'Diferente da "área mínima" (fusão automática por tamanho): aqui é você quem escolhe quais zonas unir, na hora, antes de salvar o zoneamento',

@@ -131,15 +131,19 @@ export function deleteImportacaoCompactacao(id: string) {
 // longo do tempo; uma é a OFICIAL. Cada levantamento traz ~2 profundidades
 // (rasa/profunda) e o usuário define qual é a profundidade oficial.
 export interface PontoCondutividade { lng: number; lat: number; valores: Record<string, number>; }
+// Variável extra do MESMO arquivo (ex.: Altitude, Velocidade) importada junto da
+// CEa. `fixa` = marcada para virar uma Variável Fixa do Talhão (uso futuro).
+export interface ExtraCondutividade { coluna: string; fixa: boolean; }
 export interface LevantamentoCondutividade {
   id: string;
   talhaoId: string;
   nome: string;
   data?: string;                  // data do levantamento (opcional)
-  profundidades: string[];        // rótulos derivados das colunas (geralmente 2)
+  profundidades: string[];        // colunas de CEa (≥1)
   profundidadeOficial?: string;   // qual profundidade é a camada oficial
+  extras?: ExtraCondutividade[];  // outras variáveis importadas junto (altitude…)
   oficial: boolean;               // versão oficial (1 por talhão)
-  pontos: PontoCondutividade[];
+  pontos: PontoCondutividade[];   // valores incluem profundidades + extras
   criadoEm: string;
 }
 
