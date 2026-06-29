@@ -41,8 +41,12 @@ const ZLAB: Record<number, string[]> = {
   4: ['Alta', 'Média-alta', 'Média-baixa', 'Baixa'],
   5: ['Alta', 'Média-alta', 'Média', 'Média-baixa', 'Baixa'],
 };
+// Escala qualitativa p/ 6–12 classes (em vez de "Nível N", que não diz nada).
+const ESCALA_POT = ['Muito alto', 'Alto', 'Médio-alto', 'Médio', 'Médio-baixo', 'Baixo', 'Muito baixo'];
 function rotulosPotencial(nn: number): string[] {
-  return ZLAB[nn] ?? Array.from({ length: nn }, (_, i) => `Nível ${i + 1}`);
+  if (ZLAB[nn]) return ZLAB[nn];
+  if (nn <= 1) return ['Único'];
+  return Array.from({ length: nn }, (_, i) => ESCALA_POT[Math.round((i / (nn - 1)) * (ESCALA_POT.length - 1))]);
 }
 
 function parseImportadas(zonasGeojson?: string): GeoJSON.FeatureCollection | null {
@@ -617,6 +621,9 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
                 <p className="text-[10px]" style={{ color: '#94a3b8' }}>
                   <strong style={{ color: '#e2e8f0' }}>{potenciais.length}</strong> zonas oficiais · <strong style={{ color: '#e2e8f0' }}>{zonas.length}</strong> polígonos · {res.stats.algoritmo === 'fcm' ? 'fuzzy c-means' : 'k-means'} · {res.stats.n_camadas} camadas
                   {res.stats.area_min_ha > 0 && <> · área mín. {res.stats.area_min_ha} ha</>}
+                </p>
+                <p className="text-[9px] leading-relaxed p-1.5 rounded" style={{ background: '#0b1f3a', color: '#8aa6cf', border: '1px solid #1a3a6b' }}>
+                  Cada <strong style={{ color: '#cbd5e1' }}>Zona</strong> é uma classe de potencial, do <strong style={{ color: '#86efac' }}>maior</strong> (Zona 01) ao <strong style={{ color: '#f87171' }}>menor</strong> (Zona {potenciais.length ? potenciais[potenciais.length - 1].num : '—'}). A mesma zona pode estar em vários <strong style={{ color: '#cbd5e1' }}>polígonos</strong> (manchas separadas) — por isso {potenciais.length} zonas e {zonas.length} polígonos. Áreas não seguem a ordem (uma zona alta pode ser pequena).
                 </p>
 
                 {/* ZONAS OFICIAIS (= classes) — reordenáveis Alta→Baixa */}

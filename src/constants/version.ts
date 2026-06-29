@@ -1,6 +1,10 @@
-export const APP_VERSION = '0.90.0';
+export const APP_VERSION = '0.90.1';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.90.1': [
+    'Zonas de Manejo: rótulos das zonas mais claros — em vez de "Nível 1..N" (que só repetia o número da zona), agora cada zona mostra o potencial de forma legível (Muito alto → Alto → Médio → Baixo → Muito baixo) quando há mais de 5 classes',
+    'A avaliação ganhou uma frase explicando a lógica: cada Zona é uma classe de potencial (do maior ao menor) e pode aparecer em vários polígonos; por isso "7 zonas · 12 polígonos"',
+  ],
   '0.90.0': [
     'Correção (Zonas de Manejo): zonas com mais de 5 classes saíam todas CINZA (o semáforo só tinha nome/cor p/ Alta…Baixa). Agora as cores seguem uma rampa contínua verde→amarelo→vermelho por posição, então mesmo 6 a 12 zonas ficam coloridas (e no mapa cada polígono usa a cor da sua zona)',
     'Correção (prévia de camada): ao clicar numa camada para pré-visualizar (NDVI, fertilidade…), as zonas adotadas ficavam por cima e escondiam o raster. Agora a prévia oculta temporariamente as zonas para você enxergar a camada; ao ocultar a prévia, as zonas voltam',
