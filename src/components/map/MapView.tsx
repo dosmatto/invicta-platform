@@ -115,7 +115,8 @@ export function MapView() {
       map.addSource('pontos-amos', { type: 'geojson', data: EMPTY_FC });
       map.addLayer({ id: 'pontos-circle', type: 'circle', source: 'pontos-amos',
         paint: {
-          'circle-radius': 6,
+          // raio por feature ('r') quando presente — p/ nuvens densas (EC) com pontos pequenos
+          'circle-radius': ['case', ['has', 'r'], ['get', 'r'], 6],
           'circle-color': ['case',
             ['has', 'cor'], ['get', 'cor'],   // cor explícita (ex: pontos de zona)
             ['match', ['get', 'profs'],
@@ -124,7 +125,8 @@ export function MapView() {
               '#a855f7',      // 3+ profundidades — roxo
             ],
           ],
-          'circle-stroke-color': '#fff', 'circle-stroke-width': 1.5,
+          'circle-stroke-color': '#fff',
+          'circle-stroke-width': ['case', ['has', 'r'], 0, 1.5],  // sem contorno nos pontos pequenos
         } });
       map.addLayer({ id: 'pontos-label',  type: 'symbol', source: 'pontos-amos',
         layout: { 'text-field': ['get','label'], 'text-size': 9, 'text-offset': [0,1.3], 'text-font': ['Open Sans Regular'] },

@@ -195,6 +195,24 @@ def colheita_processar(req: ReqColheita):
         raise HTTPException(status_code=500, detail=f"falha na limpeza de colheita: {e}")
 
 
+class ReqLimpar(BaseModel):
+    pontos: list[dict[str, Any]]      # [{lng, lat, valor}]
+    params: dict[str, Any] = {}
+
+
+@app.post("/limpar-pontos")
+def limpar_pontos(req: ReqLimpar):
+    """Limpeza dos pontos brutos (MapFilter global+local), SEM interpolar. Devolve
+    os pontos limpos + relatório por etapa. Usado pela Condutividade (ver bruto →
+    limpar → interpolar)."""
+    try:
+        return colheita.limpar_pontos(req.pontos, req.params)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:  # pragma: no cover
+        raise HTTPException(status_code=500, detail=f"falha na limpeza: {e}")
+
+
 @app.post("/zonear-analisar")
 def zonear_analisar(req: ReqAnalisarZonas):
     """ETAPA 1 (Analisar): só FPI/NCE p/ 2..c_max + sugestão do nº de zonas

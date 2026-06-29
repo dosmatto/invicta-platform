@@ -100,3 +100,47 @@ export const CORES_QUALIDADE: Record<ClasseQualidade, { cor: string; bg: string 
   Regular: { cor: '#fbbf24', bg: '#2d1a00' },
   Baixa: { cor: '#f87171', bg: '#2a0f12' },
 };
+
+// ── Limpeza dos pontos brutos (MapFilter) ────────────────────────────────────
+const INTERP_URL = process.env.NEXT_PUBLIC_INTERP_URL ?? 'http://127.0.0.1:8800';
+
+export interface RelatorioLimpeza {
+  n_bruto: number;
+  n_apos_filtro_bruto: number;
+  mapfilter_global_removidos: number;
+  mapfilter_local_removidos: number;
+  n_limpo: number;
+  perc_removido: number;
+}
+
+// Filtra os pontos ANTES de interpolar (mesma metodologia do MapFilter da colheita):
+// filtro bruto (percentil) + MapFilter global + local anisotrópico. Não interpola.
+export async function limparPontosEC(pontos: PontoXYV[], params: Record<string, number> = {}): Promise<{ pontos: PontoXYV[]; relatorio: RelatorioLimpeza }> {
+  let r: Response;
+  try {
+    r = await fetch(`${INTERP_URL}/limpar-pontos`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pontos, params }),
+    });
+  } catch {
+    throw new Error('Interpolador desligado nesta máquina. Abra o backend (atalho INVICTA Backend) e tente de novo.');
+  }
+  if (!r.ok) {
+    let msg = `Backend respondeu ${r.status}`;
+    try { const j = await r.json(); if (j?.detail) msg = String(j.detail); } catch {}
+    throw new Error(msg);
+  }
+  return r.json();
+}
+
+// Cor (rgb) de um valor segundo a rampa da legenda — p/ desenhar os pontos como mapa.
+export function corDoValor(v: number, dominio: [number, number], stops: Array<[number, [number, number, number]]>): string {
+  const [dmin, dmax] = dominio;
+  const t = dmax > dmin ? Math.min(1, Math.max(0, (v - dmin) / (dmax - dmin))) : 0;
+  let a = stops[0], b = stops[stops.length - 1];
+  for (let i = 0; i < stops.length - 1; i++) { if (t >= stops[i][0] && t <= stops[i + 1][0]) { a = stops[i]; b = stops[i + 1]; break; } }
+  const span = (b[0] - a[0]) || 1;
+  const f = (t - a[0]) / span;
+  const ch = (j: number) => Math.round(a[1][j] + (b[1][j] - a[1][j]) * f);
+  return `rgb(${ch(0)},${ch(1)},${ch(2)})`;
+}

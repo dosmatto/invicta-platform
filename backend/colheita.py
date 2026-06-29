@@ -26,7 +26,7 @@ from scipy.spatial import cKDTree
 
 import interp
 
-VERSION = "colheita-1"
+VERSION = "colheita-2-limpar"
 
 
 def _mediana(vals: list[float] | np.ndarray) -> float:
@@ -122,6 +122,57 @@ def _mapfilter_local(mx, my, val, tree, raio, v, aniso_tol_deg, min_neighbors, a
         if not (med - med * v <= val[i] <= med + med * v):
             keep[i] = False
     return keep
+
+
+def limpar_pontos(pontos: list[dict], params: dict) -> dict[str, Any]:
+    """Limpeza dos pontos BRUTOS (sem interpolar) com a metodologia do MapFilter:
+    filtro bruto (finito/>0 + clip por percentil) + MapFilter global (mediana ± v%)
+    + MapFilter local anisotrópico (ao longo do eixo das passadas). Devolve os
+    pontos LIMPOS + um relatório por etapa. Usado pela Condutividade antes de krigar.
+    """
+    lng = np.array([p.get("lng") for p in pontos], dtype=float)
+    lat = np.array([p.get("lat") for p in pontos], dtype=float)
+    val = np.array([p.get("valor") for p in pontos], dtype=float)
+    n_bruto = int(len(val))
+
+    # filtro bruto: finito + > 0 + clip por percentil (mata absurdos)
+    ok = np.isfinite(lng) & np.isfinite(lat) & np.isfinite(val) & (val > 0)
+    lng, lat, val = lng[ok], lat[ok], val[ok]
+    pclip = float(params.get("p_clip", 1.0))  # percentil de corte por cauda
+    if pclip > 0 and len(val) > 20:
+        lo, hi = np.percentile(val, [pclip, 100.0 - pclip])
+        m = (val >= lo) & (val <= hi)
+        lng, lat, val = lng[m], lat[m], val[m]
+    n_apos_bruto = int(len(val))
+    if n_apos_bruto < 3:
+        raise ValueError("Poucos pontos válidos após o filtro bruto (mínimo 3).")
+
+    lon0, lat0 = float(lng.mean()), float(lat.mean())
+    mx, my = interp._to_local(lng, lat, lon0, lat0)
+    rel: dict[str, Any] = {"n_bruto": n_bruto, "n_apos_filtro_bruto": n_apos_bruto}
+
+    # MapFilter global (mediana ± v%)
+    mfg = _mapfilter_global(val, float(params.get("mf_global_v", 0.5)))
+    rel["mapfilter_global_removidos"] = int((~mfg).sum())
+    lng, lat, val, mx, my = lng[mfg], lat[mfg], val[mfg], mx[mfg], my[mfg]
+    if len(val) < 3:
+        raise ValueError("Poucos pontos após o MapFilter global.")
+
+    # MapFilter local anisotrópico (ao longo do eixo das passadas)
+    tree = cKDTree(np.column_stack([mx, my]))
+    angle = _angulo_principal(mx, my)
+    mfl = _mapfilter_local(mx, my, val, tree, float(params.get("mf_local_r", 25.0)),
+                           float(params.get("mf_local_v", 0.15)), float(params.get("mf_aniso_tol", 25.0)),
+                           int(params.get("mf_min_neighbors", 4)), angle)
+    rel["mapfilter_local_removidos"] = int((~mfl).sum())
+    lng, lat, val = lng[mfl], lat[mfl], val[mfl]
+    if len(val) < 3:
+        raise ValueError("Poucos pontos após o MapFilter local.")
+    rel["n_limpo"] = int(len(val))
+    rel["perc_removido"] = round(100.0 * (n_bruto - len(val)) / n_bruto, 1) if n_bruto else 0.0
+
+    pts = [{"lng": float(a), "lat": float(b), "valor": float(c)} for a, b, c in zip(lng, lat, val)]
+    return {"pontos": pts, "relatorio": rel}
 
 
 def processar(machines: list[dict], params: dict, poligono: dict, pixel_m: float,

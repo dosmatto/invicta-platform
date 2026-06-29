@@ -1,6 +1,12 @@
-export const APP_VERSION = '0.93.1';
+export const APP_VERSION = '0.94.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.94.0': [
+    'Condutividade: novo fluxo com LIMPEZA dos dados antes de interpolar — Pontos brutos → Limpar (MapFilter) → Interpolar. Agora dá para VER os pontos brutos no mapa (coloridos pela legenda, como um mapa), rodar a limpeza e ver os pontos LIMPOS, e só então krigar sobre os pontos filtrados',
+    'A limpeza usa a mesma metodologia do MapFilter da colheita: filtro bruto (remove zeros/absurdos por percentil) + MapFilter global (mediana ± faixa) + MapFilter local anisotrópico (remove o ponto que destoa dos vizinhos ao longo da passada). Mostra quantos pontos saíram em cada etapa e o % removido',
+    'O seletor "Ver no mapa" alterna entre Pontos brutos · Pontos limpos · Mapa krigado',
+    'Próximo (anotado em C2): assistente que sugere os parâmetros pelo tamanho do talhão + usar as colunas de qualidade do levantamento (Qualidade Contato) + krigagem manual',
+  ],
   '0.93.1': [
     'Correção (Condutividade): o mapa aparecia como uma mancha BRANCA cobrindo tudo — eram os milhares de rótulos de valor (um por ponto do levantamento, 7.000+) desenhados em cima do raster. Em dado denso como o EC, esses rótulos não são mais desenhados; agora aparece o mapa krigado colorido',
   ],

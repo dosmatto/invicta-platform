@@ -19,7 +19,7 @@ import {
 } from '@/lib/fertilidade';
 import { colorirGridComLegenda, temGrid } from '@/lib/raster';
 import { cloudSalvarMapa, cloudCarregarMapasPorPrefixo, cloudExcluirMapasPorPrefixo } from '@/lib/cloud';
-import { parseArquivoPontos, pontosCondutividade, avaliarQualidade, CORES_QUALIDADE, sugerirProfundidadesCEa, ehColunaAltitude, prepararPontosKrigagem, type ArquivoPontos } from '@/lib/condutividade';
+import { parseArquivoPontos, pontosCondutividade, avaliarQualidade, CORES_QUALIDADE, sugerirProfundidadesCEa, ehColunaAltitude, prepararPontosKrigagem, limparPontosEC, corDoValor, type ArquivoPontos, type RelatorioLimpeza } from '@/lib/condutividade';
 import type { Legenda } from '@/lib/legendas';
 import { Upload, Loader2, Zap, Eraser, AlertTriangle, Save, Trash2, Play, Plus, Layers, Star, Gauge, Mountain } from 'lucide-react';
 
@@ -34,7 +34,7 @@ const prefixoNuvem = (talhaoId: string, levId: string) => `condutividade__${talh
 const idNuvem = (talhaoId: string, levId: string, prof: string) => `${prefixoNuvem(talhaoId, levId)}${prof}`;
 
 export function CondutividadeSection() {
-  const { nav, uploadedGeo, setFertilidadeOverlay, setFertilidadeLabels } = useApp();
+  const { nav, uploadedGeo, setFertilidadeOverlay, setFertilidadeLabels, setPontosSimulados } = useApp();
 
   const legenda = useMemo<Legenda | null>(() => getLegendas().find(l => l.atributoId === 'condutividade') ?? null, []);
 
@@ -62,10 +62,13 @@ export function CondutividadeSection() {
   const [data, setData] = useState('');
   const [parseErro, setParseErro] = useState('');
 
-  // interpolação
+  // limpeza (MapFilter) + interpolação
   const [estado, setEstado] = useState<'idle' | 'processando' | 'pronto' | 'erro'>('idle');
   const [erro, setErro] = useState('');
   const [binMsg, setBinMsg] = useState<Record<string, string>>({});  // resumo do binning por profundidade
+  const [vista, setVista] = useState<'bruto' | 'limpo' | 'mapa'>('mapa');  // o que o mapa mostra
+  const [limpos, setLimpos] = useState<Record<string, { pontos: Ponto[]; rel: RelatorioLimpeza }>>({});
+  const [limpando, setLimpando] = useState(false);
   const [cache, setCache] = useState<Record<string, MapaPronto>>({});
 
   function recarregar() {
@@ -84,7 +87,7 @@ export function CondutividadeSection() {
 
   // Autoload: hidrata da nuvem os rasters já interpolados deste levantamento.
   useEffect(() => {
-    setCache({}); setEstado('idle'); setErro('');
+    setCache({}); setEstado('idle'); setErro(''); setLimpos({}); setBinMsg({}); setVista('mapa');
     if (!nav.talhaoId || !levId) return;
     const prefixo = prefixoNuvem(nav.talhaoId, levId);
     (async () => {
@@ -104,19 +107,33 @@ export function CondutividadeSection() {
     })();
   }, [levId, nav.talhaoId]);
 
-  useEffect(() => () => { setFertilidadeOverlay(null); setFertilidadeLabels(null); }, [setFertilidadeOverlay, setFertilidadeLabels]);
+  useEffect(() => () => { setFertilidadeOverlay(null); setFertilidadeLabels(null); setPontosSimulados(null); }, [setFertilidadeOverlay, setFertilidadeLabels, setPontosSimulados]);
 
-  // exibe o raster da profundidade selecionada (colore local a partir do grid)
+  // Renderiza no mapa conforme a VISTA: pontos brutos / pontos limpos / mapa krigado.
   useEffect(() => {
+    setFertilidadeLabels(null);
+    // Pontos (brutos ou limpos) coloridos pela legenda — desenhados como mapa (pontos pequenos).
+    if ((vista === 'bruto' || vista === 'limpo') && legenda) {
+      const pts = vista === 'bruto' ? pontosDe(profundidade) : (limpos[profundidade]?.pontos ?? []);
+      setFertilidadeOverlay(null);
+      if (pts.length === 0) { setPontosSimulados(null); return; }
+      const { dominio, stops } = rampaDaLegenda(legenda);
+      setPontosSimulados({
+        type: 'FeatureCollection',
+        features: pts.map(p => ({ type: 'Feature' as const, geometry: { type: 'Point' as const, coordinates: [p.lng, p.lat] }, properties: { cor: corDoValor(p.valor, dominio, stops), r: 2.5 } })),
+      });
+      return;
+    }
+    // Mapa krigado (raster)
+    setPontosSimulados(null);
     const c = cache[profundidade];
-    if (!c || !legenda) { setFertilidadeOverlay(null); setFertilidadeLabels(null); return; }
+    if (!c || !legenda) { setFertilidadeOverlay(null); return; }
     let url = '';
     if (temGrid(c.resp)) { try { url = colorirGridComLegenda(c.resp.grid!, legenda).dataUrl; } catch { /* cai no png */ } }
     if (!url && c.resp.png) url = c.resp.png;
-    if (!url) { setFertilidadeOverlay(null); setFertilidadeLabels(null); return; }
+    if (!url) { setFertilidadeOverlay(null); return; }
     setFertilidadeOverlay({ url, coordinates: coordsFromBounds(c.resp.bounds), opacity: 1 });
-    setFertilidadeLabels(null);  // EC tem milhares de pontos → não desenha rótulo por ponto (viraria mancha branca)
-  }, [profundidade, cache, legenda, setFertilidadeOverlay, setFertilidadeLabels]);
+  }, [vista, profundidade, cache, limpos, legenda, setFertilidadeOverlay, setFertilidadeLabels, setPontosSimulados]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -178,10 +195,25 @@ export function CondutividadeSection() {
     }
     return out;
   }
+  // Etapa de LIMPEZA (MapFilter) — antes de interpolar. Mostra os pontos limpos.
+  async function limpar(prof: string) {
+    const pts = pontosDe(prof);
+    if (pts.length < 3) { setErro(`${prof}: poucos pontos.`); setEstado('erro'); return; }
+    setLimpando(true); setErro('');
+    try {
+      const r = await limparPontosEC(pts);
+      setLimpos(l => ({ ...l, [prof]: { pontos: r.pontos as Ponto[], rel: r.relatorio } }));
+      setVista('limpo');
+    } catch (e) {
+      setEstado('erro'); setErro(e instanceof Error ? e.message : 'Falha na limpeza.');
+    } finally { setLimpando(false); }
+  }
+
   async function processar(prof: string) {
     if (!legenda) { setErro('Legenda de condutividade não encontrada.'); setEstado('erro'); return; }
     if (!poligono) { setErro('Limite do talhão não encontrado — abra o talhão no mapa.'); setEstado('erro'); return; }
-    const pts = pontosDe(prof);
+    // Usa os pontos LIMPOS se a limpeza já rodou; senão os brutos.
+    const pts = limpos[prof]?.pontos ?? pontosDe(prof);
     if (pts.length < 3) { setErro(`${prof}: menos de 3 pontos válidos.`); setEstado('erro'); return; }
     setEstado('processando'); setErro('');
     try {
@@ -194,7 +226,7 @@ export function CondutividadeSection() {
       const resp = await interpolar({ pontos: ptsK, poligono, dominio, stops, metodo: 'krige', pixelM: 20, modeloFixo: null });
       const labels: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };  // EC denso → sem rótulo por ponto
       setCache(c => ({ ...c, [prof]: { resp, labels } }));
-      setEstado('pronto');
+      setEstado('pronto'); setVista('mapa');
       if (nav.talhaoId && levId) {
         const gridGz = resp.grid ? await comprimirGrid(resp.grid) : undefined;
         const dados: MapaPronto = { resp: { ...resp, png: '', grid: gridGz }, labels };
@@ -412,11 +444,42 @@ export function CondutividadeSection() {
             </div>
           </div>
 
-          <button onClick={() => processar(profundidade)} disabled={processando || !poligono || !profundidade}
-            className="w-full py-2 rounded text-xs font-bold text-white flex items-center justify-center gap-1.5"
-            style={{ background: (processando || !poligono) ? '#1a3a6b' : 'var(--invicta-green-dark)' }}>
-            {processando ? <><Loader2 size={13} className="animate-spin" /> Interpolando…</> : <><Play size={13} /> Interpolar {profundidade}</>}
-          </button>
+          {/* Fluxo: Pontos brutos → Limpar (MapFilter) → Interpolar */}
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-1">
+              <span className="text-[9px]" style={{ color: '#64748b' }}>Ver no mapa:</span>
+              {([['bruto', 'Pontos brutos'], ['limpo', 'Pontos limpos'], ['mapa', 'Mapa krigado']] as const).map(([v, t]) => {
+                const dis = v === 'limpo' ? !limpos[profundidade] : v === 'mapa' ? !cache[profundidade] : false;
+                const sel = vista === v;
+                return (
+                  <button key={v} disabled={dis} onClick={() => setVista(v)}
+                    className="px-2 py-0.5 rounded text-[10px] font-semibold disabled:opacity-30"
+                    style={{ background: sel ? 'var(--invicta-blue-mid)' : '#1a3a6b', color: sel ? '#fff' : '#93c5fd' }}>{t}</button>
+                );
+              })}
+            </div>
+            <div className="grid grid-cols-2 gap-1.5">
+              <button onClick={() => limpar(profundidade)} disabled={limpando || !profundidade}
+                className="py-2 rounded text-xs font-bold text-white flex items-center justify-center gap-1.5"
+                style={{ background: limpando ? '#1a3a6b' : 'var(--invicta-blue-mid)' }}>
+                {limpando ? <><Loader2 size={13} className="animate-spin" /> Limpando…</> : <><Eraser size={13} /> Limpar (MapFilter)</>}
+              </button>
+              <button onClick={() => processar(profundidade)} disabled={processando || !poligono || !profundidade}
+                className="py-2 rounded text-xs font-bold text-white flex items-center justify-center gap-1.5"
+                style={{ background: (processando || !poligono) ? '#1a3a6b' : 'var(--invicta-green-dark)' }}>
+                {processando ? <><Loader2 size={13} className="animate-spin" /> Interpolando…</> : <><Play size={13} /> Interpolar{limpos[profundidade] ? ' (limpos)' : ''}</>}
+              </button>
+            </div>
+            {limpos[profundidade] && (() => {
+              const r = limpos[profundidade].rel;
+              return (
+                <p className="text-[9px] leading-relaxed p-1.5 rounded" style={{ background: '#0b1f3a', color: '#8aa6cf', border: '1px solid #1a3a6b' }}>
+                  Limpeza: bruto <strong>{r.n_bruto}</strong> → filtro {r.n_apos_filtro_bruto} → global −{r.mapfilter_global_removidos} → local −{r.mapfilter_local_removidos} = <strong style={{ color: '#86efac' }}>{r.n_limpo}</strong> pts ({r.perc_removido}% removido)
+                </p>
+              );
+            })()}
+            <p className="text-[9px]" style={{ color: '#475569' }}>Veja os pontos brutos, rode a limpeza (filtra outliers/ruído pelo MapFilter) e interpole sobre os pontos limpos.</p>
+          </div>
 
           {estado === 'erro' && <p className="text-[10px]" style={{ color: '#f87171' }}>{erro}</p>}
 
@@ -427,8 +490,8 @@ export function CondutividadeSection() {
                 <div className="flex items-center gap-1.5 text-[10px]" style={{ color: '#86efac' }}>
                   <Zap size={12} /> {cache[profundidade].resp.stats.modelo}{binMsg[profundidade] ? ` · ${binMsg[profundidade]}` : ` · ${cache[profundidade].resp.stats.n} pts`}
                 </div>
-                <button onClick={() => limparProf(profundidade)} className="flex items-center gap-1 text-[10px]" style={{ color: '#93c5fd' }}>
-                  <Eraser size={11} /> Limpar
+                <button onClick={() => limparProf(profundidade)} title="Apagar o mapa interpolado" className="flex items-center gap-1 text-[10px]" style={{ color: '#93c5fd' }}>
+                  <Trash2 size={11} /> Apagar
                 </button>
               </div>
 
