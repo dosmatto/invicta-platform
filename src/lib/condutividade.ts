@@ -141,6 +141,6 @@ export function corDoValor(v: number, dominio: [number, number], stops: Array<[n
   for (let i = 0; i < stops.length - 1; i++) { if (t >= stops[i][0] && t <= stops[i + 1][0]) { a = stops[i]; b = stops[i + 1]; break; } }
   const span = (b[0] - a[0]) || 1;
   const f = (t - a[0]) / span;
-  const ch = (j: number) => Math.round(a[1][j] + (b[1][j] - a[1][j]) * f);
-  return `rgb(${ch(0)},${ch(1)},${ch(2)})`;
+  const ch = (j: number) => Math.max(0, Math.min(255, Math.round(a[1][j] + (b[1][j] - a[1][j]) * f))).toString(16).padStart(2, '0');
+  return `#${ch(0)}${ch(1)}${ch(2)}`;
 }

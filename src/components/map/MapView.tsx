@@ -118,7 +118,7 @@ export function MapView() {
           // Nuvens densas (EC/colheita) marcam a feature com 'r' → raio que cresce
           // com o zoom (visível em qualquer escala); senão o raio fixo da amostragem.
           'circle-radius': ['case', ['has', 'r'],
-            ['interpolate', ['linear'], ['zoom'], 11, 2.5, 14, 4.5, 17, 8],
+            ['interpolate', ['linear'], ['zoom'], 10, 3, 13, 5, 17, 9],
             6],
           'circle-color': ['case',
             ['has', 'cor'], ['get', 'cor'],   // cor explícita (ex: pontos de zona / EC)
@@ -128,9 +128,10 @@ export function MapView() {
               '#a855f7',      // 3+ profundidades — roxo
             ],
           ],
-          // contorno escuro fino nos pontos densos (contraste sobre satélite); branco nos demais
-          'circle-stroke-color': ['case', ['has', 'r'], '#0f172a', '#fff'],
-          'circle-stroke-width': ['case', ['has', 'r'], 0.6, 1.5],
+          // halo BRANCO nos pontos densos (EC/colheita) p/ destacar sobre o satélite
+          'circle-stroke-color': '#ffffff',
+          'circle-stroke-width': ['case', ['has', 'r'], 1, 1.5],
+          'circle-stroke-opacity': 0.9,
         } });
       map.addLayer({ id: 'pontos-label',  type: 'symbol', source: 'pontos-amos',
         layout: { 'text-field': ['get','label'], 'text-size': 9, 'text-offset': [0,1.3], 'text-font': ['Open Sans Regular'] },

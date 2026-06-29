@@ -458,6 +458,12 @@ export function CondutividadeSection() {
                 );
               })}
             </div>
+            {(vista === 'bruto' || vista === 'limpo') && (
+              <p className="text-[9px] flex items-center gap-1" style={{ color: '#86efac' }}>
+                <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ background: '#86efac' }} />
+                {(vista === 'bruto' ? (lev?.pontos.length ?? 0) : (limpos[profundidade]?.pontos.length ?? 0)).toLocaleString('pt-BR')} pontos plotados no mapa ({vista === 'bruto' ? 'brutos' : 'limpos'})
+              </p>
+            )}
             <div className="grid grid-cols-2 gap-1.5">
               <button onClick={() => limpar(profundidade)} disabled={limpando || !profundidade}
                 className="py-2 rounded text-xs font-bold text-white flex items-center justify-center gap-1.5"

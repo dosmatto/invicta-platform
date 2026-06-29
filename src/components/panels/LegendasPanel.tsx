@@ -20,6 +20,16 @@ import {
 const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
 const fmt = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits: 3 });
 
+// Atributos NÃO-laboratório que também usam legenda (a chave atributoId liga a
+// legenda ao módulo). Sugestões além dos elementos de lab.
+const ATRIBUTOS_EXTRA = [
+  { id: 'condutividade', nome: 'Condutividade Elétrica' },
+  { id: 'altimetria', nome: 'Altimetria' },
+  { id: 'compactacao', nome: 'Compactação' },
+  { id: 'ndvi', nome: 'NDVI' },
+  { id: 'produtividade', nome: 'Produtividade' },
+];
+
 // Perfis (Biblioteca) que REFERENCIAM esta legenda (legendasPorElemento) — uma
 // legenda "em uso" não pode ser excluída.
 function legendaEmUso(id: string): string[] {
@@ -333,10 +343,14 @@ function LegendaEditor({ legenda, onClose }: { legenda: Legenda | null; onClose:
             <input value={form.simbolo} onChange={e => patch('simbolo', e.target.value)} className="w-full rounded px-2 py-1 text-[11px] outline-none" style={inputStyle} />
           </Field>
         </div>
-        <Field label="ID do atributo (casa com laboratório)">
-          <select value={form.atributoId} onChange={e => patch('atributoId', e.target.value)} className="w-full rounded px-2 py-1 text-[11px] outline-none" style={inputStyle}>
-            {ELEMENTOS_LAB.map(el => <option key={el.id} value={el.id}>{el.id} · {el.simbolo}</option>)}
-          </select>
+        <Field label="ID do atributo (ex.: p, ctc, condutividade, altimetria…)">
+          <input list="atributos-legenda" value={form.atributoId} onChange={e => patch('atributoId', e.target.value.trim())}
+            placeholder="digite ou escolha" className="w-full rounded px-2 py-1 text-[11px] outline-none" style={inputStyle} />
+          <datalist id="atributos-legenda">
+            {ELEMENTOS_LAB.map(el => <option key={el.id} value={el.id}>{el.simbolo}</option>)}
+            {ATRIBUTOS_EXTRA.map(a => <option key={a.id} value={a.id}>{a.nome}</option>)}
+          </datalist>
+          <p className="text-[9px] mt-0.5" style={{ color: '#475569' }}>É a CHAVE que liga a legenda ao módulo (Fertilidade usa os de laboratório; Condutividade usa &quot;condutividade&quot; etc.). Pode criar um novo.</p>
         </Field>
         <div className="grid grid-cols-2 gap-2">
           <Field label="Unidade">

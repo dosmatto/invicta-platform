@@ -1,6 +1,10 @@
-export const APP_VERSION = '0.96.0';
+export const APP_VERSION = '0.97.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.97.0': [
+    'Legendas: agora dá para criar legenda para QUALQUER atributo (não só os de laboratório) — o campo "ID do atributo" virou texto livre com sugestões (p, ctc, condutividade, altimetria, NDVI, produtividade…). Ex.: criar a legenda de Condutividade',
+    'Condutividade: os pontos brutos/limpos ganharam halo branco e tamanho maior por zoom (mais visíveis sobre o satélite), e a tela agora mostra "N pontos plotados no mapa" para confirmar o que está sendo desenhado',
+  ],
   '0.96.0': [
     'Legendas: as legendas do Sistema (oficiais) agora têm um botão "Editar" que cria uma cópia SUA e já abre o editor — antes só dava para duplicar e procurar a cópia. (As oficiais seguem read-only; você edita a cópia)',
     'Legendas: NOVAS Paletas de cor salvas — no editor, "Salvar paleta atual" guarda a barra de cores com um nome; depois é só clicar na paleta para reaplicar as cores em outra legenda (importação rápida). Paletas têm prévia das cores e podem ser excluídas',
