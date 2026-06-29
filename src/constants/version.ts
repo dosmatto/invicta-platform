@@ -1,6 +1,9 @@
-export const APP_VERSION = '0.94.1';
+export const APP_VERSION = '0.94.2';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.94.2': [
+    'Condutividade: os pontos brutos/limpos agora aparecem de verdade no mapa — antes ficavam pequenos demais (2,5 px) e sumiam no zoom do talhão. Agora o tamanho cresce com o zoom e ganham um contorno escuro fino, ficando visíveis sobre o satélite. Vale também para futuras nuvens densas (mapas de colheita)',
+  ],
   '0.94.1': [
     'Correção: os pontos (Condutividade brutos/limpos), além dos rótulos de valor e dos pontos de amostragem, pararam de aparecer na 0.94.0 — uma expressão de raio inválida no mapa fazia a camada de pontos nem ser criada. Corrigido; os pontos voltam a ser plotados',
   ],

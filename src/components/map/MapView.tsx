@@ -115,20 +115,22 @@ export function MapView() {
       map.addSource('pontos-amos', { type: 'geojson', data: EMPTY_FC });
       map.addLayer({ id: 'pontos-circle', type: 'circle', source: 'pontos-amos',
         paint: {
-          // raio por feature ('r') quando presente — p/ nuvens densas (EC) com pontos pequenos.
-          // 'to-number' é OBRIGATÓRIO: num 'case', os ramos precisam do MESMO tipo
-          // (['get','r'] é 'value', 6 é 'number') — sem isso a camada nem é criada.
-          'circle-radius': ['case', ['has', 'r'], ['to-number', ['get', 'r']], 6],
+          // Nuvens densas (EC/colheita) marcam a feature com 'r' → raio que cresce
+          // com o zoom (visível em qualquer escala); senão o raio fixo da amostragem.
+          'circle-radius': ['case', ['has', 'r'],
+            ['interpolate', ['linear'], ['zoom'], 11, 2.5, 14, 4.5, 17, 8],
+            6],
           'circle-color': ['case',
-            ['has', 'cor'], ['get', 'cor'],   // cor explícita (ex: pontos de zona)
+            ['has', 'cor'], ['get', 'cor'],   // cor explícita (ex: pontos de zona / EC)
             ['match', ['get', 'profs'],
               1, '#f59e0b',   // 1 profundidade — laranja
               2, '#3b82f6',   // 2 profundidades — azul
               '#a855f7',      // 3+ profundidades — roxo
             ],
           ],
-          'circle-stroke-color': '#fff',
-          'circle-stroke-width': ['case', ['has', 'r'], 0, 1.5],  // sem contorno nos pontos pequenos
+          // contorno escuro fino nos pontos densos (contraste sobre satélite); branco nos demais
+          'circle-stroke-color': ['case', ['has', 'r'], '#0f172a', '#fff'],
+          'circle-stroke-width': ['case', ['has', 'r'], 0.6, 1.5],
         } });
       map.addLayer({ id: 'pontos-label',  type: 'symbol', source: 'pontos-amos',
         layout: { 'text-field': ['get','label'], 'text-size': 9, 'text-offset': [0,1.3], 'text-font': ['Open Sans Regular'] },
