@@ -1,6 +1,10 @@
-export const APP_VERSION = '0.98.0';
+export const APP_VERSION = '0.99.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.99.0': [
+    'Legendas: nova "Escala de cor" — além da escala fixa por valor, agora dá para usar escala RELATIVA aos dados do mapa: "Mín–máx" estica as cores entre o menor e o maior valor; "Quartil" distribui as cores por percentil (cada cor cobre uma fração igual da área). Ótimo para condutividade/produtividade, onde os valores variam de talhão para talhão',
+    'No modo relativo a legenda ignora os limites das classes e usa só as CORES, adaptando automaticamente a cada mapa',
+  ],
   '0.98.0': [
     'Legendas: as oficiais não são mais "presas no código". Antes, um seed rodava a cada boot, deixava elas como "Sistema" (read-only) e desfazia qualquer alteração sua. Agora o seed só roda uma vez (banco vazio); depois disso as legendas vivem no banco e são suas',
     'Legendas: novo botão "Destravar legendas oficiais" — converte as legendas Sistema em SUAS (editáveis e excluíveis), e elas não voltam mais ao padrão. Depois de destravar, dá para editar cores/limites e excluir (respeitando a trava de "em uso por perfil")',

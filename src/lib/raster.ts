@@ -26,6 +26,10 @@ export function colorirGridComLegenda(
   const sg = stops.map(s => s[1][1]);
   const sb = stops.map(s => s[1][2]);
 
+  // Posição (0..1) de cada valor na rampa. Fixa = pelos limites das classes;
+  // RELATIVA = pela distribuição do próprio mapa (mín–máx ou quantil/quartil).
+  const posDe = posicionadorRelativo(valores, leg);
+
   const { canvas, ctx } = novoCanvas(cols, rows);
   const img = ctx.createImageData(cols, rows);
   const buf = img.data;
@@ -33,12 +37,42 @@ export function colorirGridComLegenda(
     const v = valores[i];
     const p4 = i * 4;
     if (!isFinite(v)) { buf[p4 + 3] = 0; continue; }
-    const pVis = valorParaPosicaoVisual(v, leg);
+    const pVis = posDe(v);
     const [r, g, b] = interpolarCor(pVis, sp, sr, sg, sb);
     buf[p4] = r; buf[p4 + 1] = g; buf[p4 + 2] = b; buf[p4 + 3] = 255;
   }
   ctx.putImageData(img, 0, 0);
   return finalizarCanvas(canvas, cols, rows);
+}
+
+// Devolve a função valor→posição (0..1) conforme a escala da legenda.
+// 'minmax'  → estica linearmente entre o mín e o máx dos dados;
+// 'quantil' → posição = percentil do valor (cada cor cobre fração igual da área);
+// (default) → posição fixa pelos limites das classes (valorParaPosicaoVisual).
+function posicionadorRelativo(valores: Float32Array | number[], leg: Legenda): (v: number) => number {
+  const modo = leg.escalaRelativa;
+  if (!modo) return (v: number) => valorParaPosicaoVisual(v, leg);
+
+  // A inversão (invertida) já está embutida nas CORES das classes (a rampa reflete),
+  // então a posição não é invertida de novo aqui.
+  if (modo === 'minmax') {
+    let mn = Infinity, mx = -Infinity;
+    for (let i = 0; i < valores.length; i++) { const v = valores[i]; if (isFinite(v)) { if (v < mn) mn = v; if (v > mx) mx = v; } }
+    const span = (mx - mn) || 1;
+    return (v: number) => Math.max(0, Math.min(1, (v - mn) / span));
+  }
+
+  // quantil: ordena os finitos e usa o rank (busca binária) como percentil.
+  const ord: number[] = [];
+  for (let i = 0; i < valores.length; i++) { const v = valores[i]; if (isFinite(v)) ord.push(v); }
+  ord.sort((a, b) => a - b);
+  const n = ord.length;
+  return (v: number) => {
+    if (n <= 1) return 0;
+    let lo = 0, hi = n;
+    while (lo < hi) { const m = (lo + hi) >> 1; if (ord[m] < v) lo = m + 1; else hi = m; }
+    return lo / (n - 1);
+  };
 }
 
 export function colorirGrid(

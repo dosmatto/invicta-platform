@@ -415,6 +415,22 @@ function LegendaEditor({ legenda, onClose }: { legenda: Legenda | null; onClose:
           Limites de valor das classes abertas (ex.: NDVI 0–1, Textura/V%/m% 0–100). Em branco = meia-classe automática.
         </p>
 
+        {/* Escala de cor: fixa por valor × relativa (mín–máx / quartil) */}
+        <Field label="Escala de cor">
+          <div className="flex gap-1">
+            {([[undefined, 'Por valor'], ['minmax', 'Mín–máx'], ['quantil', 'Quartil']] as const).map(([v, t]) => (
+              <button key={t} onClick={() => patch('escalaRelativa', v)}
+                className="flex-1 py-1 rounded text-[10px] font-bold"
+                style={{ background: form.escalaRelativa === v ? 'var(--invicta-blue-mid)' : '#1a3a6b', color: form.escalaRelativa === v ? '#fff' : '#64748b' }}>
+                {t}
+              </button>
+            ))}
+          </div>
+          <p className="text-[9px] mt-1" style={{ color: '#475569' }}>
+            <strong>Por valor</strong> = pelos limites das classes (fixo). <strong>Relativa</strong> ignora os limites e usa só as CORES, adaptando ao mapa: <strong>Mín–máx</strong> estica entre o menor e o maior valor; <strong>Quartil</strong> dá fração igual de área a cada cor (por percentil).
+          </p>
+        </Field>
+
         {/* Estilo da barra */}
         <Field label="Estilo da barra de cores">
           <div className="flex gap-1">

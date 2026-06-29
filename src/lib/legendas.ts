@@ -51,6 +51,10 @@ export interface Legenda {
   tipoEscala: TipoEscala;
   /** Estilo da barra: segmentado (faixas separadas) | continuo (gradiente único). Default: segmentado. */
   estilo?: EstiloLegenda;
+  /** Escala RELATIVA aos dados (ignora os limites fixos das classes; usa só as cores):
+   *  'minmax' = estica a rampa entre o mín e o máx do mapa; 'quantil' = por quartil/
+   *  percentil (cada cor = fração igual da área). Ausente = escala fixa por valor. */
+  escalaRelativa?: 'minmax' | 'quantil';
   /** Limites de VALOR das pontas (classes abertas). Ex: NDVI 0..1, Textura 0..100, V%/m% 0..100.
    *  Se ausente, a ponta usa meia-classe interna (evita o colapso das extremas no mapa). */
   dominioMin?: number;
