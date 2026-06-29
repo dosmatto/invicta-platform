@@ -1,6 +1,10 @@
-export const APP_VERSION = '0.86.0';
+export const APP_VERSION = '0.87.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.87.0': [
+    'Correção (Condutividade): o botão "Interpolar" não fazia nada com levantamentos grandes (milhares de pontos). A condutividade é dado denso (coletado em movimento), então passou a usar IDW — krigagem montava uma matriz enorme e travava. Agora interpola em poucos segundos mesmo com milhares de pontos',
+    'Zonas de Manejo: quando o backend LOCAL está desatualizado (faltam as rotas novas de zonas), o erro agora é claro — "Backend local desatualizado: feche e reabra pelo atalho INVICTA Backend" — em vez do críptico "Not Found"',
+  ],
   '0.86.0': [
     'Condutividade (import): a tela de colunas agora separa "Profundidade(s) de Condutividade" (escolha 1 ou mais — obrigatório) das "Outras variáveis a importar" (opcional). Antes o sistema marcava TODAS as colunas numéricas como profundidade (ex.: 7 profundidades sem querer)',
     'O sistema sugere sozinho quais colunas são CEa (pelo nome) — você ajusta à mão. Dá para importar JUNTO outras variáveis do mesmo arquivo, como a altitude',

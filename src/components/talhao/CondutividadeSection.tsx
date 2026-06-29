@@ -194,7 +194,9 @@ export function CondutividadeSection() {
     setEstado('processando'); setErro('');
     try {
       const { dominio, stops } = rampaDaLegenda(legenda);
-      const resp = await interpolar({ pontos: pts, poligono, dominio, stops, metodo: 'krige', pixelM: 20, modeloFixo: null });
+      // EC é dado DENSO (coletado em movimento, milhares de pontos) → IDW.
+      // Krigagem aqui montaria uma matriz N×N inviável (travaria/estouraria).
+      const resp = await interpolar({ pontos: pts, poligono, dominio, stops, metodo: 'idw', pixelM: 20, modeloFixo: null });
       const labels = fcLabels(pts);
       setCache(c => ({ ...c, [prof]: { resp, labels } }));
       setEstado('pronto');

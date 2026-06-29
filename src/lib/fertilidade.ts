@@ -139,6 +139,11 @@ async function postZonear(rota: string, body: unknown): Promise<Response> {
   } catch {
     throw new Error(ZON_OFF);
   }
+  if (r.status === 404) {
+    // A rota não existe → o backend local está DESATUALIZADO (versão anterior ao
+    // split de zonas). Precisa atualizar o código e reiniciar o backend.
+    throw new Error('Backend local DESATUALIZADO: feche a janela do backend e reabra pelo atalho "INVICTA Backend" (ele atualiza as rotas de zonas). Se persistir, atualize o código do backend nesta máquina.');
+  }
   if (!r.ok) {
     let msg = `Backend respondeu ${r.status}`;
     try { const j = await r.json(); if (j?.detail) msg = String(j.detail); } catch {}
