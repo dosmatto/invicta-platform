@@ -1,6 +1,9 @@
-export const APP_VERSION = '0.99.5';
+export const APP_VERSION = '0.99.6';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.99.6': [
+    'Infra (migração Supabase — Fase 3, etapa A3.1): adicionado o cliente Supabase (lib/supabase.ts) + SDK @supabase/supabase-js, sem efeito nenhum ainda — fica inerte enquanto não houver as chaves NEXT_PUBLIC_SUPABASE_*, igual ao Firebase. Prepara a troca do provedor de login (Firebase Auth → Supabase Auth) nas próximas etapas',
+  ],
   '0.99.5': [
     'Talhão: as abas foram reordenadas na ORDEM DE TRABALHO — Resumo · Altimetria (MDE) · Condutividade · Zonas de Manejo · Amostragem · Fertilidade · Recomendações · Arquivos · NDVI/Satélite · Produtividade · Compactação · Relatórios',
     'Nova aba "Altimetria (MDE)" (em breve) — reservada para o relevo por Modelo Digital de Elevação. A Compactação foi mantida, agora no fim da barra (antes de Relatórios)',
