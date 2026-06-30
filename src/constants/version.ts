@@ -1,6 +1,10 @@
-export const APP_VERSION = '0.99.4';
+export const APP_VERSION = '0.99.5';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.99.5': [
+    'Talhão: as abas foram reordenadas na ORDEM DE TRABALHO — Resumo · Altimetria (MDE) · Condutividade · Zonas de Manejo · Amostragem · Fertilidade · Recomendações · Arquivos · NDVI/Satélite · Produtividade · Compactação · Relatórios',
+    'Nova aba "Altimetria (MDE)" (em breve) — reservada para o relevo por Modelo Digital de Elevação. A Compactação foi mantida, agora no fim da barra (antes de Relatórios)',
+  ],
   '0.99.4': [
     'Condutividade: as variáveis extras marcadas com ★ (ex.: Altitude) agora viram uma CAMADA própria na aba — aparecem ao lado das profundidades de CEa com o ícone de relevo e o nome do atributo (ex.: "Altitude · Altimetria"). Selecione e use o mesmo fluxo (Pontos brutos → Limpar → Interpolar), só que com a legenda do próprio atributo (Altimetria) em vez da de condutividade',
     'O seletor "Legenda do mapa" só aparece nas camadas de CEa; as extras usam automaticamente a legenda do seu atributo (a de Altimetria já é oficial)',

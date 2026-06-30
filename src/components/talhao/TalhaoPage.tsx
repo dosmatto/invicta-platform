@@ -30,7 +30,7 @@ import { ProdutividadeSection } from '@/components/talhao/ProdutividadeSection';
 import { papelDoUsuario, meuRegistro, planoPorId } from '@/lib/empresa';
 import {
   ChevronLeft, Home, Leaf, Grid3x3, Layers, BarChart3, FileSpreadsheet,
-  Activity, Satellite, FolderOpen, FileText, Clock, Zap,
+  Activity, Satellite, FolderOpen, FileText, Clock, Zap, Mountain,
 } from 'lucide-react';
 
 const MapView = dynamic(
@@ -39,21 +39,23 @@ const MapView = dynamic(
 );
 
 type TabId =
-  | 'resumo' | 'fertilidade' | 'amostragem' | 'zonas' | 'produtividade'
+  | 'resumo' | 'altimetria' | 'fertilidade' | 'amostragem' | 'zonas' | 'produtividade'
   | 'recomendacoes' | 'compactacao' | 'condutividade' | 'ndvi' | 'arquivos' | 'relatorios';
 
+// Ordem de TRABALHO do talhão (não-`pronto` = "em breve", cai no placeholder EmBreve).
 const TABS: Array<{ id: TabId; label: string; icon: React.ElementType; pronto: boolean }> = [
-  { id: 'resumo',        label: 'Resumo',        icon: Home,            pronto: true },
-  { id: 'fertilidade',   label: 'Fertilidade',   icon: Leaf,            pronto: true },
-  { id: 'amostragem',    label: 'Amostragem',    icon: Grid3x3,         pronto: true },
-  { id: 'zonas',         label: 'Zonas de Manejo', icon: Layers,        pronto: true },
-  { id: 'produtividade', label: 'Produtividade', icon: BarChart3,       pronto: true },
-  { id: 'recomendacoes', label: 'Recomendações', icon: FileSpreadsheet, pronto: true },
-  { id: 'compactacao',   label: 'Compactação',   icon: Activity,        pronto: true },
-  { id: 'condutividade', label: 'Condutividade', icon: Zap,             pronto: true },
-  { id: 'ndvi',          label: 'NDVI / Satélite', icon: Satellite,     pronto: true },
-  { id: 'arquivos',      label: 'Arquivos',      icon: FolderOpen,      pronto: true },
-  { id: 'relatorios',    label: 'Relatórios',    icon: FileText,        pronto: true },
+  { id: 'resumo',        label: 'Resumo',          icon: Home,            pronto: true },
+  { id: 'altimetria',    label: 'Altimetria (MDE)', icon: Mountain,       pronto: false },
+  { id: 'condutividade', label: 'Condutividade',   icon: Zap,             pronto: true },
+  { id: 'zonas',         label: 'Zonas de Manejo', icon: Layers,          pronto: true },
+  { id: 'amostragem',    label: 'Amostragem',      icon: Grid3x3,         pronto: true },
+  { id: 'fertilidade',   label: 'Fertilidade',     icon: Leaf,            pronto: true },
+  { id: 'recomendacoes', label: 'Recomendações',   icon: FileSpreadsheet, pronto: true },
+  { id: 'arquivos',      label: 'Arquivos',        icon: FolderOpen,      pronto: true },
+  { id: 'ndvi',          label: 'NDVI / Satélite', icon: Satellite,       pronto: true },
+  { id: 'produtividade', label: 'Produtividade',   icon: BarChart3,       pronto: true },
+  { id: 'compactacao',   label: 'Compactação',     icon: Activity,        pronto: true },
+  { id: 'relatorios',    label: 'Relatórios',      icon: FileText,        pronto: true },
 ];
 
 const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
