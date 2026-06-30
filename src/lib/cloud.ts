@@ -14,6 +14,7 @@
 
 import { getFb, firebaseConfigurado } from './firebase';
 import { collection, deleteDoc, doc, endAt, getDoc, getDocs, orderBy, query, setDoc, startAt } from 'firebase/firestore';
+import { usarDadosSupabase, bootSupabaseData, pushListaSupabase, pushObjSupabase } from './supabaseData';
 
 // Coleções (arrays de registros com id) espelhadas 1:1 com as chaves locais
 const KEYS_LISTA = [
@@ -101,7 +102,15 @@ async function hidratarObj(key: string) {
 
 // Baixa tudo antes do app renderizar. Retorna true se a nuvem está ativa.
 export async function bootCloud(): Promise<boolean> {
-  if (!firebaseConfigurado || typeof window === 'undefined') return false;
+  if (typeof window === 'undefined') return false;
+  // Dados no Supabase/Postgres (D1.2) — substitui o Firestore quando o interruptor
+  // está ligado. Hidrata o cache local a partir das tabelas e segue o fluxo normal.
+  if (usarDadosSupabase()) {
+    try { await bootSupabaseData(KEYS_LISTA, KEYS_OBJ); ativo = true; console.log('[nuvem] ATIVA — dados no Supabase (Postgres).'); }
+    catch (e) { console.warn('[nuvem] Supabase indisponível, usando dados locais:', e); ativo = false; }
+    return ativo;
+  }
+  if (!firebaseConfigurado) return false;
   const fb = getFb();
   if (!fb?.auth.currentUser) { console.warn('[nuvem] sem usuário logado — nuvem inativa.'); ativo = false; return false; }
   const trabalho = (async () => {
@@ -126,7 +135,9 @@ export async function bootCloud(): Promise<boolean> {
 
 // Espelha uma gravação de lista (diff por id contra o último estado conhecido)
 export function cloudPushLista(key: string, lista: unknown[]) {
-  if (!ativo || !KEYS_LISTA.includes(key)) return;
+  if (!KEYS_LISTA.includes(key)) return;
+  if (usarDadosSupabase()) { void pushListaSupabase(key, lista); return; }
+  if (!ativo) return;
   const fb = getFb();
   if (!fb) return;
   const prev = espelho[key] ?? new Map<string, string>();
@@ -145,7 +156,9 @@ export function cloudPushLista(key: string, lista: unknown[]) {
 
 // Espelha uma configuração (objeto único)
 export function cloudPushObj(key: string, json: string) {
-  if (!ativo || !KEYS_OBJ.includes(key)) return;
+  if (!KEYS_OBJ.includes(key)) return;
+  if (usarDadosSupabase()) { void pushObjSupabase(key, json); return; }
+  if (!ativo) return;
   const fb = getFb();
   if (!fb) return;
   espelho[key] = new Map([[key, json]]);

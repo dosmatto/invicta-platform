@@ -1,6 +1,9 @@
-export const APP_VERSION = '0.99.10';
+export const APP_VERSION = '0.99.11';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.99.11': [
+    'Migração de DADOS — Fase 3/D1.2: nova camada de persistência no Supabase/Postgres (lib/supabaseData.ts) — o cloud.ts virou um roteador que grava/lê no Postgres (tabelas app_kv + talhoes) em vez do Firestore quando o interruptor NEXT_PUBLIC_USE_SUPABASE_DATA=true está ligado. Mantém o modelo de cache local (front continua síncrono). Inerte sem o interruptor (produção segue no Firestore). Mapas (rasters) continuam no Firestore por ora (entram no Storage no D1.3)',
+  ],
   '0.99.10': [
     'Migração Supabase — Fase 3 (A3.4, re-chave): o "dono" da Biblioteca pessoal passou a ser identificado pelo E-MAIL (estável), em vez do uid do provedor de login (que muda Firebase→Supabase). Uma migração automática e idempotente re-chaveia seus itens pessoais no 1º boot, para nada ficar órfão quando o login virar Supabase. Transparente: você não perde nada da sua Biblioteca',
   ],
