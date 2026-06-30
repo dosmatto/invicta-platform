@@ -28,8 +28,10 @@ try:
     from pystac_client import Client
     from scipy.ndimage import gaussian_filter
     _HAS = True
-except Exception:  # pragma: no cover
+    _ERR = ""
+except Exception as _e:  # pragma: no cover
     _HAS = False
+    _ERR = repr(_e)  # mostrado em /health p/ diagnosticar dep faltando no container
 
 import msr  # reusa _clip, _png_data_url, _GDAL_ENV
 

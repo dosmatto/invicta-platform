@@ -5,8 +5,7 @@
 // interpolado, recortado e colorido) + bounds para sobrepor no mapa.
 
 import { stopsParaBackend, gradienteCssDaLegenda, type Legenda } from './legendas';
-
-const INTERP_URL = process.env.NEXT_PUBLIC_INTERP_URL ?? 'http://127.0.0.1:8800';
+import { INTERP_URL } from './interpUrl';
 
 export type Stop = [number, [number, number, number]];
 

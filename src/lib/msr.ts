@@ -6,8 +6,7 @@
 // reusar `decodeGrid`/`colorirGridComLegenda`/overlay do mapa.
 
 import type { Grid } from './fertilidade';
-
-const INTERP_URL = process.env.NEXT_PUBLIC_INTERP_URL ?? 'http://127.0.0.1:8800';
+import { INTERP_URL } from './interpUrl';
 
 export interface CenaNdvi {
   id: string;

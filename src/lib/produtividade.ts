@@ -9,8 +9,7 @@ import { interpolar, rampaDaLegenda, decodeGrid, type RespInterp } from '@/lib/f
 import { getLegendasPorAtributo } from '@/lib/store';
 import { parseShapefile } from '@/lib/geo';
 import type { Legenda } from '@/lib/legendas';
-
-const INTERP_URL = process.env.NEXT_PUBLIC_INTERP_URL ?? 'http://127.0.0.1:8800';
+import { INTERP_URL } from '@/lib/interpUrl';
 
 export interface PontoColheita { lng: number; lat: number; valor: number; }
 export type Unidade = 'kg/ha' | 'sc/ha' | 't/ha';

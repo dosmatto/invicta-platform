@@ -1,6 +1,8 @@
-# Backend de interpolacao (fertilidade) para a nuvem.
+# Backend de interpolacao (fertilidade/satelite) para a nuvem.
 # Build context = ./backend (ver render.yaml).
-FROM python:3.12-slim
+# Imagem COMPLETA (nao -slim): traz as libs de sistema que o rasterio/GDAL
+# precisam em runtime (no slim, import rasterio falha -> msr/cbers ausentes).
+FROM python:3.12
 
 WORKDIR /app
 

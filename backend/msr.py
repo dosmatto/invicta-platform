@@ -28,8 +28,10 @@ try:
     from rasterio.transform import from_bounds
     from pystac_client import Client
     _HAS_MSR = True
-except Exception:  # pragma: no cover
+    _ERR_MSR = ""
+except Exception as _e:  # pragma: no cover
     _HAS_MSR = False
+    _ERR_MSR = repr(_e)  # mostrado em /health p/ diagnosticar dep faltando no container
 
 VERSION = "msr-2-cenas-imagem"
 

@@ -8,6 +8,7 @@ export {
   type ArquivoPontos,
   type PontoBruto,
 } from './compactacao';
+import { INTERP_URL } from './interpUrl';
 
 const semAcento = (s: string) => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
@@ -102,7 +103,6 @@ export const CORES_QUALIDADE: Record<ClasseQualidade, { cor: string; bg: string 
 };
 
 // ── Limpeza dos pontos brutos (MapFilter) ────────────────────────────────────
-const INTERP_URL = process.env.NEXT_PUBLIC_INTERP_URL ?? 'http://127.0.0.1:8800';
 
 export interface RelatorioLimpeza {
   n_bruto: number;

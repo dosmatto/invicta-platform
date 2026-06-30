@@ -2,10 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { Download, RefreshCw, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react';
+import { INTERP_URL } from '@/lib/interpUrl';
 
 const ZIP_URL = 'https://codeload.github.com/dosmatto/invicta-platform/zip/refs/heads/master';
-// Mesmo endpoint que o front usa em src/lib/fertilidade.ts
-const INTERP_URL = process.env.NEXT_PUBLIC_INTERP_URL ?? 'http://127.0.0.1:8800';
 
 type Status = 'verificando' | 'on' | 'off';
 

@@ -61,8 +61,10 @@ def health():
         "v": getattr(interp, "VERSION", "?"),
         "msr": msr._HAS_MSR,
         "msr_v": getattr(msr, "VERSION", "?"),
+        "msr_err": getattr(msr, "_ERR_MSR", ""),
         "cbers": cbers._HAS,
         "cbers_v": getattr(cbers, "VERSION", "?"),
+        "cbers_err": getattr(cbers, "_ERR", ""),
         "colheita_v": getattr(colheita, "VERSION", "?"),
     }
 
