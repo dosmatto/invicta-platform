@@ -1,52 +1,123 @@
 'use client';
 
-// Autenticação por e-mail/senha (Firebase Auth). Login obrigatório quando o
-// Firebase está configurado — substitui o acesso anônimo. As CONTAS são criadas
-// pelo admin no Console do Firebase (Authentication → Users); o app só faz login.
+// Autenticação por e-mail/senha — DUAL-PROVIDER (Fase 3, etapa A3.2).
+//
+// Seleção por ambiente (mesma filosofia "no-op sem chave" do resto):
+//   • Se NEXT_PUBLIC_SUPABASE_* presentes  -> Supabase Auth (novo provedor).
+//   • Senão                                 -> Firebase Auth (comportamento atual).
+//
+// Na transição, a IDENTIDADE (login/e-mail/uid p/ autorização) vem do Supabase,
+// mas os DADOS continuam no Firestore — que exige sessão Firebase. Por isso, com
+// o Supabase ativo, abrimos TAMBÉM um login ANÔNIMO no Firebase (ponte) só para o
+// espelho (`cloud.ts`) seguir gravando. O `cloud.ts` não muda: ele só checa
+// "existe currentUser do Firebase?", e o anônimo satisfaz isso.
+//
+// As assinaturas exportadas são as mesmas de antes — os consumidores não mudam.
 
-import { getFb, firebaseConfigurado } from './firebase';
-import { onAuthStateChanged, signInWithEmailAndPassword, signOut, updatePassword, type User } from 'firebase/auth';
+import { getFb, firebaseConfigurado, entrarAnonimo } from './firebase';
+import { getSupabase, supabaseConfigurado } from './supabase';
+import { onAuthStateChanged, signInWithEmailAndPassword, signOut as fbSignOut, updatePassword } from 'firebase/auth';
 
 export { firebaseConfigurado };
-export type { User };
+
+// Usuário normalizado, independente de provedor.
+export type User = { uid: string; email: string | null };
+
+// Há algum provedor de auth configurado (Supabase OU Firebase).
+export const authConfigurado = supabaseConfigurado || firebaseConfigurado;
+// Provedor ativo nesta build. Supabase tem precedência quando configurado.
+const usarSupabase = supabaseConfigurado;
+
+const normEmail = (e: string) => e.trim().toLowerCase();
+
+// Cache SÍNCRONO do usuário Supabase (o SDK só expõe a sessão de forma async;
+// os getters do app — emailUsuario/uidUsuario — são síncronos). Atualizado pelo
+// observador de auth, que roda no boot.
+let supaUser: User | null = null;
+
+// Usuário atual (provedor-ciente), p/ os getters síncronos de identidade.
+export function usuarioAtual(): User | null {
+  if (usarSupabase) return supaUser;
+  const u = getFb()?.auth.currentUser;
+  return u ? { uid: u.uid, email: u.email } : null;
+}
 
 // Observa o estado de login. Retorna função para cancelar a inscrição.
 export function observarAuth(cb: (u: User | null) => void): () => void {
+  if (usarSupabase) {
+    const sb = getSupabase();
+    if (!sb) { cb(null); return () => {}; }
+    // onAuthStateChange dispara INITIAL_SESSION na inscrição (sessão restaurada
+    // do storage), então cobre o boot e os logins/logouts seguintes.
+    const { data } = sb.auth.onAuthStateChange(async (_evt, session) => {
+      const su = session?.user;
+      supaUser = su ? { uid: su.id, email: su.email ?? null } : null;
+      // Ponte: garante a sessão anônima do Firebase ANTES de avisar o app
+      // (o boot da nuvem grava no Firestore logo em seguida).
+      if (supaUser) await entrarAnonimo().catch(() => {});
+      cb(supaUser);
+    });
+    return () => data.subscription.unsubscribe();
+  }
   const fb = getFb();
   if (!fb) { cb(null); return () => {}; }
-  return onAuthStateChanged(fb.auth, cb);
+  return onAuthStateChanged(fb.auth, u => cb(u ? { uid: u.uid, email: u.email } : null));
 }
 
 export async function loginEmailSenha(email: string, senha: string): Promise<void> {
+  const e = normEmail(email);
+  if (usarSupabase) {
+    const sb = getSupabase();
+    if (!sb) throw new Error('Supabase não configurado.');
+    const { error } = await sb.auth.signInWithPassword({ email: e, password: senha });
+    if (error) throw error;
+    return; // a ponte anônima é estabelecida pelo observador (onAuthStateChange)
+  }
   const fb = getFb();
   if (!fb) throw new Error('Firebase não configurado.');
-  await signInWithEmailAndPassword(fb.auth, email.trim().toLowerCase(), senha);
+  await signInWithEmailAndPassword(fb.auth, e, senha);
 }
 
 export async function logout(): Promise<void> {
+  if (usarSupabase) {
+    await getSupabase()?.auth.signOut().catch(() => {});
+  }
+  // sempre encerra a sessão Firebase (real ou anônima da ponte)
   const fb = getFb();
-  if (fb) await signOut(fb.auth);
+  if (fb?.auth.currentUser) await fbSignOut(fb.auth).catch(() => {});
 }
 
 // Troca a senha do usuário logado (usado na troca obrigatória do 1º acesso).
 export async function trocarSenha(novaSenha: string): Promise<void> {
+  if (usarSupabase) {
+    const sb = getSupabase();
+    if (!sb) throw new Error('Supabase não configurado.');
+    const { error } = await sb.auth.updateUser({ password: novaSenha });
+    if (error) throw error;
+    return;
+  }
   const fb = getFb();
   if (!fb?.auth.currentUser) throw new Error('Não autenticado.');
   await updatePassword(fb.auth.currentUser, novaSenha);
 }
 
 export function emailUsuario(): string | null {
-  return getFb()?.auth.currentUser?.email ?? null;
+  const em = usuarioAtual()?.email;
+  return em ? normEmail(em) : null;
 }
 
-// Mensagem amigável a partir do código de erro do Firebase Auth.
+// Mensagem amigável a partir do erro do provedor (Firebase ou Supabase).
 export function mensagemErroLogin(err: unknown): string {
   const code = (err as { code?: string })?.code ?? '';
-  if (code.includes('invalid-credential') || code.includes('wrong-password') || code.includes('user-not-found') || code.includes('invalid-email'))
+  const msg = ((err as { message?: string })?.message ?? '').toLowerCase();
+  if (code.includes('invalid-credential') || code.includes('wrong-password') || code.includes('user-not-found') || code.includes('invalid-email')
+    || msg.includes('invalid login credentials') || msg.includes('invalid email or password'))
     return 'E-mail ou senha incorretos.';
+  if (msg.includes('email not confirmed'))
+    return 'E-mail ainda não confirmado no Supabase (Authentication → Users).';
   if (code.includes('operation-not-allowed'))
     return 'Login por e-mail/senha não está habilitado no Firebase (Authentication → Sign-in method → E-mail/senha).';
-  if (code.includes('too-many-requests')) return 'Muitas tentativas. Aguarde alguns instantes e tente de novo.';
-  if (code.includes('network')) return 'Sem conexão com o Firebase. Verifique a internet.';
+  if (code.includes('too-many-requests') || msg.includes('rate limit')) return 'Muitas tentativas. Aguarde alguns instantes e tente de novo.';
+  if (code.includes('network') || msg.includes('network') || msg.includes('fetch')) return 'Sem conexão com o servidor de login. Verifique a internet.';
   return 'Falha ao entrar' + (code ? ` (${code})` : '') + '.';
 }

@@ -7,7 +7,7 @@
 // Por enquanto o Firestore continua usando os paths antigos (`inv_*` raiz);
 // a hierarquia `/empresas/{eid}/...` entra na Fase 1.5.
 
-import { getFb } from './firebase';
+import { usuarioAtual } from './auth';
 import { cloudPushLista } from './cloud';
 
 export type PapelMembro = 'owner' | 'admin' | 'agronomo' | 'operador' | 'produtor' | 'editor' | 'viewer';
@@ -50,14 +50,13 @@ function save<T>(key: string, data: T[]) {
 }
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
 
-// UID do usuário atual. Se Firebase ativo, usa o uid de auth; senão, um uid
-// local persistido (anônimo, só pra fins de "dono" antes de auth).
+// UID do usuário atual (provedor-ciente: Supabase ou Firebase, via auth.ts).
+// Sem login, um uid local persistido (anônimo, só pra fins de "dono" antes de auth).
 export function uidUsuario(): string {
   if (typeof window === 'undefined') return 'srv';
   try {
-    const fb = getFb();
-    const auth = (fb as { auth?: { currentUser?: { uid?: string } } } | null)?.auth;
-    if (auth?.currentUser?.uid) return auth.currentUser.uid;
+    const u = usuarioAtual();
+    if (u?.uid) return u.uid;
   } catch {}
   let local = localStorage.getItem(K_UID_LOCAL);
   if (!local) {
@@ -71,9 +70,7 @@ export function uidUsuario(): string {
 export function emailUsuario(): string | null {
   if (typeof window === 'undefined') return null;
   try {
-    const fb = getFb();
-    const auth = (fb as { auth?: { currentUser?: { email?: string | null } } } | null)?.auth;
-    const email = auth?.currentUser?.email;
+    const email = usuarioAtual()?.email;
     return email ? normEmail(email) : null;
   } catch { return null; }
 }

@@ -1,6 +1,9 @@
-export const APP_VERSION = '0.99.6';
+export const APP_VERSION = '0.99.7';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.99.7': [
+    'Infra (migração Supabase — Fase 3, etapa A3.2): o login agora é DUAL-PROVIDER e escolhido por ambiente — com as chaves NEXT_PUBLIC_SUPABASE_* presentes usa Supabase Auth; sem elas, segue no Firebase Auth (produção/Vercel inalterada). A identidade (e-mail/uid p/ papéis) passa a vir do Supabase quando ativo; os dados continuam no Firestore via uma sessão anônima-ponte (cloud.ts não muda). Nada visível ainda — só ativa quando as chaves forem configuradas no .env.local',
+  ],
   '0.99.6': [
     'Infra (migração Supabase — Fase 3, etapa A3.1): adicionado o cliente Supabase (lib/supabase.ts) + SDK @supabase/supabase-js, sem efeito nenhum ainda — fica inerte enquanto não houver as chaves NEXT_PUBLIC_SUPABASE_*, igual ao Firebase. Prepara a troca do provedor de login (Firebase Auth → Supabase Auth) nas próximas etapas',
   ],

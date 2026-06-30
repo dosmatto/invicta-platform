@@ -7,6 +7,7 @@
 // json } — os grids vão GZIP dentro do json (cabe no limite de 1 MB/doc).
 
 import { getFb } from '../firebase';
+import { emailUsuario } from '../auth';
 import { collection, deleteDoc, doc, getDocs, query, setDoc, where } from 'firebase/firestore';
 import { comprimirGrid, descomprimirGrid, type Grid } from '../fertilidade';
 import type { DoseCalculada } from './aplicar';
@@ -36,7 +37,7 @@ export async function salvarCenario(meta: Omit<Cenario, 'id' | 'geradoEm' | 'ger
   const id = idFixo ?? `cen_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
   // comprime os grids (gzip) p/ caber no doc do Firestore.
   const doses = await Promise.all(meta.doses.map(async d => ({ ...d, grid: await comprimirGrid(d.grid as Grid) })));
-  const cen: Cenario = { ...meta, doses, id, geradoEm: Date.now(), geradoPor: fb.auth.currentUser?.email ?? '' };
+  const cen: Cenario = { ...meta, doses, id, geradoEm: Date.now(), geradoPor: emailUsuario() ?? '' };
   await setDoc(doc(fb.db, COL, id), {
     id, talhaoId: cen.talhaoId, safra: cen.safra, geradoEm: cen.geradoEm, json: JSON.stringify(cen),
   });
