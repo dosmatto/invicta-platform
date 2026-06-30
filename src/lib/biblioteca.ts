@@ -17,7 +17,7 @@ import {
   Satellite, Layers, Calculator, Bug, Hash, Wand2, BarChart3,
   UserCog, FlaskConical, BookOpen,
 } from 'lucide-react';
-import { empresaAtivaId, uidUsuario } from './empresa';
+import { empresaAtivaId, uidUsuario, idsReKeyDono } from './empresa';
 import { cloudPushLista } from './cloud';
 import type { PerfilLabConfig } from './lab';
 import type { ProfundidadeConfig } from './store';
@@ -113,6 +113,29 @@ function save<T>(slug: CategoriaBiblioteca, data: ItemBiblioteca<T>[]) {
   localStorage.setItem(chaveCat(slug), JSON.stringify(data));
   cloudPushLista(chaveCat(slug), data); // espelha na nuvem se a chave estiver na lista (no-op caso contrário)
   window.dispatchEvent(new CustomEvent('inv:biblioteca', { detail: { slug } }));
+}
+
+// Migração ÚNICA e idempotente (A3.4): re-chaveia o "dono" dos itens de escopo
+// 'meu' do uid antigo (do provedor de auth, que muda Firebase→Supabase) para o
+// id ESTÁVEL por e-mail, para a Biblioteca pessoal não ficar órfã. Conservadora:
+// só toca itens cujo donoUsuarioId é exatamente um dos ids antigos. Roda no boot;
+// depois do 1º re-chaveio, não há mais itens com id antigo → no-op.
+export function reKeyDonoBiblioteca(): number {
+  const r = idsReKeyDono();
+  if (!r || r.oldIds.length === 0) return 0;
+  const antigos = new Set(r.oldIds);
+  let total = 0;
+  for (const slug of slugsCategorias()) {
+    const itens = load(slug);
+    let mudou = false;
+    for (const it of itens) {
+      if (it.escopo === 'meu' && it.donoUsuarioId && antigos.has(it.donoUsuarioId)) {
+        it.donoUsuarioId = r.newId; mudou = true; total++;
+      }
+    }
+    if (mudou) save(slug, itens);
+  }
+  return total;
 }
 
 // ─── CRUD genérico ───────────────────────────────────────────────────────

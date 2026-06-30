@@ -50,13 +50,19 @@ function save<T>(key: string, data: T[]) {
 }
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
 
-// UID do usuário atual (provedor-ciente: Supabase ou Firebase, via auth.ts).
-// Sem login, um uid local persistido (anônimo, só pra fins de "dono" antes de auth).
+// Id de "dono" ESTÁVEL derivado do e-mail — independe do provedor de auth, então
+// sobrevive à troca Firebase→Supabase (o uid do provedor MUDA; o e-mail não).
+export function idDonoEmail(email: string): string {
+  return 'email:' + normEmail(email);
+}
+
+// UID/"dono" do usuário atual. Logado → id por E-MAIL (estável entre provedores).
+// Sem login → uid local persistido (anônimo, só pra fins de "dono" antes de auth).
 export function uidUsuario(): string {
   if (typeof window === 'undefined') return 'srv';
   try {
-    const u = usuarioAtual();
-    if (u?.uid) return u.uid;
+    const email = usuarioAtual()?.email;
+    if (email) return idDonoEmail(email);
   } catch {}
   let local = localStorage.getItem(K_UID_LOCAL);
   if (!local) {
@@ -64,6 +70,20 @@ export function uidUsuario(): string {
     localStorage.setItem(K_UID_LOCAL, local);
   }
   return local;
+}
+
+// Ids ANTIGOS do dono (uid do provedor + uid local persistido) e o id NOVO por
+// e-mail. Usado pela migração que re-chaveia a Biblioteca pessoal (donoUsuarioId)
+// quando o uid muda. Roda no boot: no Firebase temos uid+e-mail juntos.
+export function idsReKeyDono(): { oldIds: string[]; newId: string } | null {
+  if (typeof window === 'undefined') return null;
+  const email = emailUsuario();
+  if (!email) return null;
+  const newId = idDonoEmail(email);
+  const provUid = usuarioAtual()?.uid ?? '';
+  const localUid = localStorage.getItem(K_UID_LOCAL) ?? '';
+  const oldIds = [provUid, localUid].filter(x => x && x !== newId);
+  return { oldIds, newId };
 }
 
 // E-mail do usuário autenticado (minúsculo). null se não logado (modo local).

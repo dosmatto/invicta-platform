@@ -7,7 +7,7 @@ import { bootCloud } from '@/lib/cloud';
 import { empresaIfEmpty, adotarEmpresasLocais, garantirEmpresaInvicta, uidUsuario, ehOwner, seedPapeis, seedPermissoes, seedPlanos, papelDoEmail, papelDoUsuario, emailUsuario, precisaTrocarSenha } from '@/lib/empresa';
 import { limparBaseOperacional } from '@/lib/admin/manutencao';
 import { TrocaSenhaObrigatoria } from '@/components/auth/TrocaSenhaObrigatoria';
-import { migrarLaboratoriosV1, migrarSafrasV1, migrarGradesV1, migrarPreferenciasV1 } from '@/lib/biblioteca';
+import { migrarLaboratoriosV1, migrarSafrasV1, migrarGradesV1, migrarPreferenciasV1, reKeyDonoBiblioteca } from '@/lib/biblioteca';
 import { seedLegendasSistema } from '@/lib/store';
 import { LEGENDAS_OFICIAIS } from '@/constants/legendasSeedOficial';
 import { firebaseConfigurado } from '@/lib/firebase';
@@ -158,6 +158,7 @@ export function AppProvider({ children, redirectProdutorParaPortal }: { children
       seedPlanos();                            // semeia os planos de assinatura (Básico/Interm./Completo)
       adotarEmpresasLocais(uidUsuario());      // empresa (cosmética, single-tenant)
       garantirEmpresaInvicta(uidUsuario());    // empresa padrão "Invicta"
+      reKeyDonoBiblioteca();                   // A3.4: dono da Biblioteca pessoal uid→e-mail (idempotente)
       migracoesLocais();
       const autorizado = !!papelDoEmail(emailUsuario());
       setAcessoBloqueado(!autorizado);                 // e-mail sem papel = bloqueado

@@ -1,6 +1,9 @@
-export const APP_VERSION = '0.99.9';
+export const APP_VERSION = '0.99.10';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.99.10': [
+    'Migração Supabase — Fase 3 (A3.4, re-chave): o "dono" da Biblioteca pessoal passou a ser identificado pelo E-MAIL (estável), em vez do uid do provedor de login (que muda Firebase→Supabase). Uma migração automática e idempotente re-chaveia seus itens pessoais no 1º boot, para nada ficar órfão quando o login virar Supabase. Transparente: você não perde nada da sua Biblioteca',
+  ],
   '0.99.9': [
     'Migração Supabase — Fase 3 (A3.3): o convite de novos usuários (painel Usuários) agora cria a conta no provedor ativo — Supabase (quando configurado) ou Firebase. No Supabase usa um cliente efêmero (signUp) que não desloga o admin. Requer no projeto Supabase "Confirm email" DESLIGADO para a senha provisória já valer. Sem chaves Supabase, segue idêntico ao Firebase',
   ],
