@@ -1,6 +1,9 @@
-export const APP_VERSION = '0.99.8';
+export const APP_VERSION = '0.99.9';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.99.9': [
+    'Migração Supabase — Fase 3 (A3.3): o convite de novos usuários (painel Usuários) agora cria a conta no provedor ativo — Supabase (quando configurado) ou Firebase. No Supabase usa um cliente efêmero (signUp) que não desloga o admin. Requer no projeto Supabase "Confirm email" DESLIGADO para a senha provisória já valer. Sem chaves Supabase, segue idêntico ao Firebase',
+  ],
   '0.99.8': [
     'Backend NA NUVEM: o interpolador (krigagem/IDW/satélite) agora roda online por padrão (Render), não mais na sua máquina. O app passa a processar mapas sem ninguém abrir backend local — some a fonte dos erros de "backend desatualizado/404". A URL ficou centralizada (lib/interpUrl.ts); para desenvolver o backend local ainda dá, definindo NEXT_PUBLIC_INTERP_URL=http://127.0.0.1:8800',
   ],

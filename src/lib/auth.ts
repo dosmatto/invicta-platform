@@ -14,8 +14,8 @@
 //
 // As assinaturas exportadas são as mesmas de antes — os consumidores não mudam.
 
-import { getFb, firebaseConfigurado, entrarAnonimo } from './firebase';
-import { getSupabase, supabaseConfigurado } from './supabase';
+import { getFb, firebaseConfigurado, entrarAnonimo, criarUsuarioConvite as criarUsuarioConviteFb } from './firebase';
+import { getSupabase, getSupabaseEfemero, supabaseConfigurado } from './supabase';
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut as fbSignOut, updatePassword } from 'firebase/auth';
 
 export { firebaseConfigurado };
@@ -99,6 +99,31 @@ export async function trocarSenha(novaSenha: string): Promise<void> {
   const fb = getFb();
   if (!fb?.auth.currentUser) throw new Error('Não autenticado.');
   await updatePassword(fb.auth.currentUser, novaSenha);
+}
+
+// Cria a conta de login de um NOVO usuário (convite do admin) SEM deslogar quem
+// está logado. Firebase: app secundário in-memory. Supabase: cliente EFÊMERO +
+// signUp — exige no projeto Supabase "Confirm email" DESLIGADO (Authentication →
+// Providers → Email) p/ a senha provisória já servir de imediato. O 1º acesso
+// força a troca de senha (via `senhaProvisoria`/`precisaTrocarSenha`).
+export async function criarUsuarioConvite(email: string, senha: string): Promise<{ ok: boolean; jaExiste?: boolean; erro?: string }> {
+  const e = normEmail(email);
+  if (usarSupabase) {
+    const sb = getSupabaseEfemero();
+    if (!sb) return { ok: false, erro: 'Supabase não configurado.' };
+    const { data, error } = await sb.auth.signUp({ email: e, password: senha });
+    if (error) {
+      const m = (error.message || '').toLowerCase();
+      if (m.includes('already registered') || m.includes('already exists') || m.includes('already been registered'))
+        return { ok: false, jaExiste: true };
+      return { ok: false, erro: error.message };
+    }
+    // Supabase "obfusca" usuário existente devolvendo user sem identities.
+    if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0)
+      return { ok: false, jaExiste: true };
+    return { ok: true };
+  }
+  return criarUsuarioConviteFb(e, senha);
 }
 
 export function emailUsuario(): string | null {

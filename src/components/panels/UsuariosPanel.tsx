@@ -16,7 +16,7 @@ import {
   type PapelMembro, type RegistroPapel, type Capacidade, type PlanoAssinatura, type SecaoPortal,
 } from '@/lib/empresa';
 import { getClientes, type Cliente } from '@/lib/store';
-import { criarUsuarioConvite } from '@/lib/firebase';
+import { criarUsuarioConvite } from '@/lib/auth';
 import { UserPlus, Trash2, AlertTriangle, ShieldCheck, SlidersHorizontal, Copy, Loader2, KeyRound, CreditCard, Plus } from 'lucide-react';
 
 const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
@@ -65,7 +65,7 @@ export function UsuariosPanel() {
       setConvite({ email: e, senha, msg: 'Conta criada. Passe a senha provisória ao usuário — ele troca no 1º acesso.' });
     } else if (r.jaExiste) {
       definirPapelEmail(e, papelNovo, extraProd); // conta já existe: só atribui o papel
-      setConvite({ email: e, msg: 'A conta de login já existia — papel atribuído. (Sem senha provisória; redefina no Console do Firebase se precisar.)' });
+      setConvite({ email: e, msg: 'A conta de login já existia — papel atribuído. (Sem senha provisória nova; gere outra se precisar.)' });
     } else {
       setAviso('Falha ao convidar: ' + (r.erro ?? '') + '. O papel NÃO foi atribuído.');
       setConvidando(false);
@@ -108,7 +108,7 @@ export function UsuariosPanel() {
       </div>
       <p className="text-[10px]" style={{ color: '#64748b' }}>
         O acesso é por e-mail. Quem não estiver na lista fica bloqueado até um Owner liberar.
-        A conta de login é criada no Console do Firebase (convite automático = em breve).
+        A conta de login é criada automaticamente ao adicionar o usuário, com senha provisória.
       </p>
 
       {aviso && (

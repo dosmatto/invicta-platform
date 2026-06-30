@@ -27,3 +27,14 @@ export function getSupabase(): SupabaseClient | null {
   }
   return client;
 }
+
+// Cliente EFÊMERO (sem persistência) — para ações que NÃO devem mexer na sessão
+// do admin, como criar usuário (signUp). Cada chamada devolve um cliente novo,
+// descartável; a sessão que o signUp gerar fica só na memória dele. Mesma ideia
+// do "app secundário in-memory" do Firebase.
+export function getSupabaseEfemero(): SupabaseClient | null {
+  if (!supabaseConfigurado || typeof window === 'undefined') return null;
+  return createClient(url!, anonKey!, {
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+  });
+}
