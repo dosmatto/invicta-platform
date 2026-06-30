@@ -1,6 +1,9 @@
-export const APP_VERSION = '0.99.11';
+export const APP_VERSION = '0.99.12';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.99.12': [
+    'Migração de DADOS — D3 (auto-carga): ao ligar NEXT_PUBLIC_USE_SUPABASE_DATA pela 1ª vez, se o Postgres estiver vazio, o app semeia automaticamente as tabelas a partir dos dados locais (vindos do Firestore) ANTES de passar a ler do Postgres — a virada preserva tudo (clientes/fazendas/talhões/biblioteca) sem script nem chave de servidor. Idempotente: não re-semeia depois',
+  ],
   '0.99.11': [
     'Migração de DADOS — Fase 3/D1.2: nova camada de persistência no Supabase/Postgres (lib/supabaseData.ts) — o cloud.ts virou um roteador que grava/lê no Postgres (tabelas app_kv + talhoes) em vez do Firestore quando o interruptor NEXT_PUBLIC_USE_SUPABASE_DATA=true está ligado. Mantém o modelo de cache local (front continua síncrono). Inerte sem o interruptor (produção segue no Firestore). Mapas (rasters) continuam no Firestore por ora (entram no Storage no D1.3)',
   ],

@@ -25,10 +25,46 @@ export function usarDadosSupabase(): boolean {
 
 type Rec = { id?: unknown; empresaId?: string; fazendaId?: string; nome?: string; areaHa?: number };
 
+function lerLocalLista(key: string): unknown[] {
+  try { return JSON.parse(localStorage.getItem(key) ?? '[]'); } catch { return []; }
+}
+
+// ── D3 — AUTO-CARGA: na 1ª vez (Postgres vazio), semeia a partir dos dados ────
+// locais (que vieram do Firestore). Roda ANTES de hidratar, então a virada do
+// interruptor preserva tudo sem script nem service_role. Idempotente: depois que
+// o Postgres tem dados, não semeia de novo.
+async function seedSeVazio(keysLista: string[], keysObj: string[]): Promise<void> {
+  const sb = getSupabase();
+  if (!sb) return;
+  const [kv, tal] = await Promise.all([
+    sb.from('app_kv').select('item_id', { count: 'exact', head: true }),
+    sb.from('talhoes').select('id', { count: 'exact', head: true }),
+  ]);
+  if (kv.error || tal.error) throw (kv.error ?? tal.error);
+  const vazio = (kv.count ?? 0) === 0 && (tal.count ?? 0) === 0;
+  if (!vazio) return;
+
+  const temLocal = keysLista.some(k => lerLocalLista(k).length > 0);
+  if (!temLocal) return;  // nada local pra semear (ex.: navegador novo)
+
+  console.log('[supabase] Postgres vazio — semeando a partir dos dados locais (1ª vez)…');
+  for (const key of keysLista) {
+    const arr = lerLocalLista(key);
+    if (arr.length) await pushListaSupabase(key, arr);
+  }
+  for (const key of keysObj) {
+    const v = localStorage.getItem(key);
+    if (v != null) await pushObjSupabase(key, v);
+  }
+  console.log('[supabase] seed concluído.');
+}
+
 // ── BOOT: hidrata o localStorage a partir do Postgres ────────────────────────
 export async function bootSupabaseData(keysLista: string[], keysObj: string[]): Promise<void> {
   const sb = getSupabase();
   if (!sb) throw new Error('Supabase não configurado.');
+
+  await seedSeVazio(keysLista, keysObj);   // D3: 1ª vez carrega o Postgres do local
 
   // Talhões (tabela dedicada) → inv_talhoes
   const talhoes = await sb.from('talhoes').select('dados');
