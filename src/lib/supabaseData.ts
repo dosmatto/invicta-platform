@@ -17,6 +17,8 @@ import { getSupabase, supabaseConfigurado } from './supabase';
 
 const TABELA_TALHOES_KEY = 'inv_talhoes';
 const ITEM_OBJ = '__obj__';  // item_id usado p/ guardar uma config (objeto único) no app_kv
+const COL_MAPAS = 'inv_mapas_fert';  // coleção dos rasters no app_kv (carregada SOB DEMANDA, fora do boot)
+const escLike = (s: string) => s.replace(/[\\%_]/g, c => '\\' + c);  // escapa curingas do LIKE (ids usam '__')
 
 // Os dados vêm do Supabase? (login Supabase + interruptor de dados ligado)
 export function usarDadosSupabase(): boolean {
@@ -71,8 +73,8 @@ export async function bootSupabaseData(keysLista: string[], keysObj: string[]): 
   if (talhoes.error) throw talhoes.error;
   localStorage.setItem(TABELA_TALHOES_KEY, JSON.stringify((talhoes.data ?? []).map(r => r.dados)));
 
-  // app_kv → todas as outras coleções de uma vez
-  const kv = await sb.from('app_kv').select('colecao, item_id, dados');
+  // app_kv → só as coleções de listas/config (os MAPAS ficam fora do boot)
+  const kv = await sb.from('app_kv').select('colecao, item_id, dados').in('colecao', [...keysLista, ...keysObj]);
   if (kv.error) throw kv.error;
   const porColecao: Record<string, unknown[]> = {};
   const objs: Record<string, unknown> = {};
@@ -136,4 +138,43 @@ export async function pushObjSupabase(key: string, json: string): Promise<void> 
     { onConflict: 'colecao,item_id' },
   );
   if (up.error) console.warn(`[supabase] upsert obj ${key}:`, up.error.message);
+}
+
+// ── Mapas (rasters) — D1.3 ────────────────────────────────────────────────────
+// Ficam no app_kv na coleção COL_MAPAS, com o id encodando o contexto inteiro
+// (talhao__importacao__metodo__…). Carregados SOB DEMANDA por prefixo (LIKE),
+// fora do boot. Mesma API do cloud.ts (Firestore).
+export async function salvarMapaSupabase(id: string, dados: object): Promise<void> {
+  const sb = getSupabase();
+  if (!sb) return;
+  const up = await sb.from('app_kv').upsert(
+    { colecao: COL_MAPAS, item_id: id, dados, atualizado_em: new Date().toISOString() },
+    { onConflict: 'colecao,item_id' },
+  );
+  if (up.error) console.warn('[supabase] salvar mapa:', up.error.message);
+}
+
+export async function carregarMapasPorPrefixoSupabase<T>(prefixo: string): Promise<Array<{ id: string; dados: T }>> {
+  const sb = getSupabase();
+  if (!sb) return [];
+  const r = await sb.from('app_kv').select('item_id, dados')
+    .eq('colecao', COL_MAPAS).like('item_id', escLike(prefixo) + '%');
+  if (r.error) { console.warn('[supabase] carregar mapas:', r.error.message); return []; }
+  return (r.data ?? []).map(row => ({ id: row.item_id as string, dados: row.dados as T }));
+}
+
+export async function excluirMapasPorPrefixoSupabase(prefixo: string): Promise<void> {
+  const sb = getSupabase();
+  if (!sb) return;
+  const r = await sb.from('app_kv').delete().eq('colecao', COL_MAPAS).like('item_id', escLike(prefixo) + '%');
+  if (r.error) console.warn('[supabase] excluir mapas:', r.error.message);
+}
+
+// Quantos mapas já existem no Supabase (p/ a migração única dos mapas do Firestore).
+export async function contarMapasSupabase(): Promise<number> {
+  const sb = getSupabase();
+  if (!sb) return -1;
+  const r = await sb.from('app_kv').select('item_id', { count: 'exact', head: true }).eq('colecao', COL_MAPAS);
+  if (r.error) return -1;
+  return r.count ?? 0;
 }

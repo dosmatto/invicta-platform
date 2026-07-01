@@ -1,6 +1,9 @@
-export const APP_VERSION = '0.99.12';
+export const APP_VERSION = '0.99.13';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.99.13': [
+    'Migração de DADOS — D1.3: os mapas/rasters (fertilidade, EC, NDVI, zonas) passam a ficar no Supabase/Postgres (na tabela app_kv, coleção à parte, carregados sob demanda por prefixo — fora do boot). Ao ligar os dados no Supabase, os mapas que já estão no Firestore migram sozinhos na 1ª carga. Só ativo com NEXT_PUBLIC_USE_SUPABASE_DATA=true; sem o interruptor, seguem no Firestore',
+  ],
   '0.99.12': [
     'Migração de DADOS — D3 (auto-carga): ao ligar NEXT_PUBLIC_USE_SUPABASE_DATA pela 1ª vez, se o Postgres estiver vazio, o app semeia automaticamente as tabelas a partir dos dados locais (vindos do Firestore) ANTES de passar a ler do Postgres — a virada preserva tudo (clientes/fazendas/talhões/biblioteca) sem script nem chave de servidor. Idempotente: não re-semeia depois',
   ],
