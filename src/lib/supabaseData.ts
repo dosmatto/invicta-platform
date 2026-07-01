@@ -170,11 +170,24 @@ export async function excluirMapasPorPrefixoSupabase(prefixo: string): Promise<v
   if (r.error) console.warn('[supabase] excluir mapas:', r.error.message);
 }
 
-// Quantos mapas já existem no Supabase (p/ a migração única dos mapas do Firestore).
-export async function contarMapasSupabase(): Promise<number> {
+// Marca de conclusão da migração ÚNICA dos mapas (evita reler o Firestore sempre
+// E garante que uma migração interrompida seja retomada até terminar por completo).
+const MIG_MAPAS = { colecao: '__meta__', item_id: 'mapas_migrados' };
+
+export async function mapasJaMigrados(): Promise<boolean> {
   const sb = getSupabase();
-  if (!sb) return -1;
-  const r = await sb.from('app_kv').select('item_id', { count: 'exact', head: true }).eq('colecao', COL_MAPAS);
-  if (r.error) return -1;
-  return r.count ?? 0;
+  if (!sb) return true;  // sem Supabase, nada a migrar
+  const r = await sb.from('app_kv').select('item_id', { count: 'exact', head: true })
+    .eq('colecao', MIG_MAPAS.colecao).eq('item_id', MIG_MAPAS.item_id);
+  if (r.error) return false;  // na dúvida, tenta migrar
+  return (r.count ?? 0) > 0;
+}
+
+export async function marcarMapasMigrados(): Promise<void> {
+  const sb = getSupabase();
+  if (!sb) return;
+  await sb.from('app_kv').upsert(
+    { ...MIG_MAPAS, dados: { em: new Date().toISOString() }, atualizado_em: new Date().toISOString() },
+    { onConflict: 'colecao,item_id' },
+  );
 }

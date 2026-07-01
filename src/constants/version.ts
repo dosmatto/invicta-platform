@@ -1,6 +1,9 @@
-export const APP_VERSION = '0.99.13';
+export const APP_VERSION = '0.99.14';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.99.14': [
+    'D1.3 (ajuste): a migração dos mapas Firestore→Supabase agora usa uma MARCA de conclusão em vez de "está vazio?" — assim, se uma migração for interrompida no meio, a próxima carga retoma e completa (o upsert não duplica). Depois de concluída, não relê mais o Firestore',
+  ],
   '0.99.13': [
     'Migração de DADOS — D1.3: os mapas/rasters (fertilidade, EC, NDVI, zonas) passam a ficar no Supabase/Postgres (na tabela app_kv, coleção à parte, carregados sob demanda por prefixo — fora do boot). Ao ligar os dados no Supabase, os mapas que já estão no Firestore migram sozinhos na 1ª carga. Só ativo com NEXT_PUBLIC_USE_SUPABASE_DATA=true; sem o interruptor, seguem no Firestore',
   ],

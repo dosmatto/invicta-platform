@@ -15,7 +15,8 @@
 import { getFb, firebaseConfigurado } from './firebase';
 import { collection, deleteDoc, doc, endAt, getDoc, getDocs, orderBy, query, setDoc, startAt } from 'firebase/firestore';
 import { usarDadosSupabase, bootSupabaseData, pushListaSupabase, pushObjSupabase,
-  salvarMapaSupabase, carregarMapasPorPrefixoSupabase, excluirMapasPorPrefixoSupabase, contarMapasSupabase } from './supabaseData';
+  salvarMapaSupabase, carregarMapasPorPrefixoSupabase, excluirMapasPorPrefixoSupabase,
+  mapasJaMigrados, marcarMapasMigrados } from './supabaseData';
 
 // Coleções (arrays de registros com id) espelhadas 1:1 com as chaves locais
 const KEYS_LISTA = [
@@ -226,18 +227,19 @@ export async function cloudExcluirMapasPorPrefixo(prefixo: string) {
 // Idempotente: só roda quando o Supabase ainda não tem nenhum mapa.
 async function migrarMapasParaSupabaseSeVazio() {
   try {
-    if ((await contarMapasSupabase()) !== 0) return;  // já tem mapas (ou erro) — não mexe
+    if (await mapasJaMigrados()) return;                // já concluiu (flag) — não relê o Firestore
     const fb = getFb();
-    if (!fb?.auth.currentUser) return;                 // sem sessão Firebase, nada a ler
+    console.log('[nuvem][mig-mapas] Firebase logado (ponte)?', !!fb?.auth.currentUser);
+    if (!fb?.auth.currentUser) return;                  // sem ponte Firebase agora — tenta na próxima carga
     const snap = await getDocs(collection(fb.db, COL_MAPAS));
-    if (snap.empty) return;
-    console.log(`[nuvem] migrando ${snap.size} mapas Firestore → Supabase…`);
+    console.log('[nuvem][mig-mapas] copiando', snap.size, 'mapas do Firestore → Supabase…');
     for (const d of snap.docs) {
       const j = (d.data() as { json?: string }).json;
       if (!j) continue;
       try { await salvarMapaSupabase(d.id, JSON.parse(j)); } catch {}
     }
-    console.log('[nuvem] mapas migrados p/ o Supabase.');
+    await marcarMapasMigrados();                        // marca como concluído (idempotente)
+    console.log('[nuvem][mig-mapas] concluído.');
   } catch (e) { console.warn('[nuvem] falha ao migrar mapas:', e); }
 }
 
