@@ -47,13 +47,19 @@ export function observarAuth(cb: (u: User | null) => void): () => void {
   if (usarSupabase) {
     const sb = getSupabase();
     if (!sb) { cb(null); return () => {}; }
-    // onAuthStateChange dispara INITIAL_SESSION na inscrição (sessão restaurada
-    // do storage), então cobre o boot e os logins/logouts seguintes.
+    // onAuthStateChange dispara INITIAL_SESSION na inscrição + eventos seguintes.
+    // Só avisamos o app quando a IDENTIDADE muda (login/logout). O Supabase reemite
+    // TOKEN_REFRESHED / SIGNED_IN a cada refresh de token e foco de aba; sem o
+    // guard, o AppContext re-rodaria o boot inteiro toda vez ("reabre tudo" +
+    // interrompe interpolação/uploads no meio).
+    let ultimoUid: string | null | undefined = undefined;  // undefined = ainda não avisou
     const { data } = sb.auth.onAuthStateChange(async (_evt, session) => {
       const su = session?.user;
+      const uid = su?.id ?? null;
+      if (uid === ultimoUid) return;   // mesma pessoa (refresh/foco) → ignora
+      ultimoUid = uid;
       supaUser = su ? { uid: su.id, email: su.email ?? null } : null;
-      // Ponte: garante a sessão anônima do Firebase ANTES de avisar o app
-      // (o boot da nuvem grava no Firestore logo em seguida).
+      // Ponte: garante a sessão anônima do Firebase ANTES de avisar o app.
       if (supaUser) await entrarAnonimo().catch(() => {});
       cb(supaUser);
     });

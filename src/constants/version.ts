@@ -1,6 +1,9 @@
-export const APP_VERSION = '0.99.15';
+export const APP_VERSION = '0.99.16';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.99.16': [
+    'Correção importante (produção Supabase): o app "reabria tudo" ao clicar nas abas e a interpolação/NDVI não completava/salvava. Causa: o Supabase reemite eventos de login (refresh de token, foco na aba) e o app re-rodava o boot inteiro a cada um — desmontando a tela no meio das operações. Agora o boot só re-roda quando a identidade muda de verdade (login/logout)',
+  ],
   '0.99.15': [
     'Migração de DADOS — fim: os dois últimos que ainda usavam o Firestore direto — Cenários de recomendação e o Arquivo de Relatórios — passam a ficar no Supabase/Postgres (com migração automática dos existentes na 1ª carga). Com isso, com o interruptor ligado, NENHUM dado do app grava mais no Firebase (só resta a ponte anônima temporária p/ as migrações únicas)',
   ],
