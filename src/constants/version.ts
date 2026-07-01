@@ -1,6 +1,10 @@
-export const APP_VERSION = '0.99.16';
+export const APP_VERSION = '1.0.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.0.0': [
+    '🎉 Versão 1.0 — a plataforma entrou em PRODUÇÃO com o banco definitivo. Dados, login, mapas e geometria (PostGIS) no Supabase/Postgres (São Paulo); processamento (krigagem/IDW/satélite) no Render; app na Vercel. A migração do Firebase para o Supabase está concluída — nada mais depende de rodar backend/banco na sua máquina.',
+    'Marco de tudo que veio até aqui: Fertilidade, Amostragem, Zonas de Manejo (MEAP), Condutividade, NDVI/Satélite (Sentinel-2 + CBERS-4A), Produtividade, Recomendações/Cenários, Relatórios e a Biblioteca de Padrões — agora sobre uma base geoespacial de verdade.',
+  ],
   '0.99.16': [
     'Correção importante (produção Supabase): o app "reabria tudo" ao clicar nas abas e a interpolação/NDVI não completava/salvava. Causa: o Supabase reemite eventos de login (refresh de token, foco na aba) e o app re-rodava o boot inteiro a cada um — desmontando a tela no meio das operações. Agora o boot só re-roda quando a identidade muda de verdade (login/logout)',
   ],
