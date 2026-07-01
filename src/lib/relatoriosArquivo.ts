@@ -7,6 +7,7 @@
 
 import { getFb } from './firebase';
 import { collection, deleteDoc, doc, getDocs, query, setDoc, where } from 'firebase/firestore';
+import { usarDadosSupabase, salvarDocSupabase, carregarDocsPorCampoSupabase, excluirDocSupabase } from './supabaseData';
 
 export interface RegistroRelatorio {
   id: string;
@@ -28,16 +29,21 @@ type MetaEntrada = Omit<RegistroRelatorio, 'id' | 'geradoEm'>;
 
 // Grava o registro (configuração) do relatório no Firestore.
 export async function salvarRelatorio(meta: MetaEntrada): Promise<RegistroRelatorio> {
-  const fb = getFb();
-  if (!fb) throw new Error('Nuvem indisponível para registrar o relatório.');
   const id = `rel_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
   const reg: RegistroRelatorio = { ...meta, id, geradoEm: Date.now() };
+  if (usarDadosSupabase()) { await salvarDocSupabase(COL, id, reg); return reg; }
+  const fb = getFb();
+  if (!fb) throw new Error('Nuvem indisponível para registrar o relatório.');
   await setDoc(doc(fb.db, COL, id), reg);
   return reg;
 }
 
 // Lista os relatórios de um talhão (todas as safras), mais recente primeiro.
 export async function listarRelatorios(talhaoId: string): Promise<RegistroRelatorio[]> {
+  if (usarDadosSupabase()) {
+    const out = await carregarDocsPorCampoSupabase<RegistroRelatorio>(COL, 'talhaoId', talhaoId);
+    return out.sort((a, b) => b.geradoEm - a.geradoEm);
+  }
   const fb = getFb();
   if (!fb) return [];
   try {
@@ -52,6 +58,7 @@ export async function listarRelatorios(talhaoId: string): Promise<RegistroRelato
 }
 
 export async function excluirRelatorio(reg: RegistroRelatorio): Promise<void> {
+  if (usarDadosSupabase()) { await excluirDocSupabase(COL, reg.id); return; }
   const fb = getFb();
   if (!fb) return;
   await deleteDoc(doc(fb.db, COL, reg.id));

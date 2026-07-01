@@ -191,3 +191,49 @@ export async function marcarMapasMigrados(): Promise<void> {
     { onConflict: 'colecao,item_id' },
   );
 }
+
+// ── Coleções consultadas por CAMPO (ex.: talhaoId), fora do boot ──────────────
+// Usadas por cenários (inv_cenarios) e relatórios (inv_relatorios). Guardadas no
+// app_kv (colecao+item_id+dados), consultadas por um campo do jsonb.
+export async function salvarDocSupabase(colecao: string, id: string, dados: object): Promise<void> {
+  const sb = getSupabase();
+  if (!sb) return;
+  const up = await sb.from('app_kv').upsert(
+    { colecao, item_id: id, dados, atualizado_em: new Date().toISOString() },
+    { onConflict: 'colecao,item_id' },
+  );
+  if (up.error) console.warn(`[supabase] salvar ${colecao}:`, up.error.message);
+}
+
+export async function carregarDocsPorCampoSupabase<T>(colecao: string, campo: string, valor: string): Promise<T[]> {
+  const sb = getSupabase();
+  if (!sb) return [];
+  const r = await sb.from('app_kv').select('dados').eq('colecao', colecao).eq(`dados->>${campo}`, valor);
+  if (r.error) { console.warn(`[supabase] carregar ${colecao}:`, r.error.message); return []; }
+  return (r.data ?? []).map(row => row.dados as T);
+}
+
+export async function excluirDocSupabase(colecao: string, id: string): Promise<void> {
+  const sb = getSupabase();
+  if (!sb) return;
+  const r = await sb.from('app_kv').delete().eq('colecao', colecao).eq('item_id', id);
+  if (r.error) console.warn(`[supabase] excluir ${colecao}:`, r.error.message);
+}
+
+// Flag genérica de "coleção já migrada do Firestore" (evita reler).
+export async function colecaoJaMigrada(nome: string): Promise<boolean> {
+  const sb = getSupabase();
+  if (!sb) return true;
+  const r = await sb.from('app_kv').select('item_id', { count: 'exact', head: true })
+    .eq('colecao', '__meta__').eq('item_id', `mig_${nome}`);
+  if (r.error) return false;
+  return (r.count ?? 0) > 0;
+}
+export async function marcarColecaoMigrada(nome: string): Promise<void> {
+  const sb = getSupabase();
+  if (!sb) return;
+  await sb.from('app_kv').upsert(
+    { colecao: '__meta__', item_id: `mig_${nome}`, dados: { em: new Date().toISOString() }, atualizado_em: new Date().toISOString() },
+    { onConflict: 'colecao,item_id' },
+  );
+}

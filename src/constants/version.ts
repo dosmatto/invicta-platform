@@ -1,6 +1,9 @@
-export const APP_VERSION = '0.99.14';
+export const APP_VERSION = '0.99.15';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '0.99.15': [
+    'Migração de DADOS — fim: os dois últimos que ainda usavam o Firestore direto — Cenários de recomendação e o Arquivo de Relatórios — passam a ficar no Supabase/Postgres (com migração automática dos existentes na 1ª carga). Com isso, com o interruptor ligado, NENHUM dado do app grava mais no Firebase (só resta a ponte anônima temporária p/ as migrações únicas)',
+  ],
   '0.99.14': [
     'D1.3 (ajuste): a migração dos mapas Firestore→Supabase agora usa uma MARCA de conclusão em vez de "está vazio?" — assim, se uma migração for interrompida no meio, a próxima carga retoma e completa (o upsert não duplica). Depois de concluída, não relê mais o Firestore',
   ],

@@ -8,6 +8,7 @@
 
 import { getFb } from '../firebase';
 import { emailUsuario } from '../auth';
+import { usarDadosSupabase, salvarDocSupabase, carregarDocsPorCampoSupabase, excluirDocSupabase } from '../supabaseData';
 import { collection, deleteDoc, doc, getDocs, query, setDoc, where } from 'firebase/firestore';
 import { comprimirGrid, descomprimirGrid, type Grid } from '../fertilidade';
 import type { DoseCalculada } from './aplicar';
@@ -32,12 +33,13 @@ const COL = 'inv_cenarios';
 // `idFixo` faz upsert (reprocessar a mesma recomendação+importação sobrescreve,
 // em vez de criar duplicado). Sem ele, gera um id novo a cada chamada.
 export async function salvarCenario(meta: Omit<Cenario, 'id' | 'geradoEm' | 'geradoPor'>, idFixo?: string): Promise<Cenario> {
-  const fb = getFb();
-  if (!fb) throw new Error('Nuvem indisponível para salvar o cenário.');
   const id = idFixo ?? `cen_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-  // comprime os grids (gzip) p/ caber no doc do Firestore.
+  // comprime os grids (gzip) p/ caber no doc.
   const doses = await Promise.all(meta.doses.map(async d => ({ ...d, grid: await comprimirGrid(d.grid as Grid) })));
   const cen: Cenario = { ...meta, doses, id, geradoEm: Date.now(), geradoPor: emailUsuario() ?? '' };
+  if (usarDadosSupabase()) { await salvarDocSupabase(COL, id, cen); return cen; }
+  const fb = getFb();
+  if (!fb) throw new Error('Nuvem indisponível para salvar o cenário.');
   await setDoc(doc(fb.db, COL, id), {
     id, talhaoId: cen.talhaoId, safra: cen.safra, geradoEm: cen.geradoEm, json: JSON.stringify(cen),
   });
@@ -45,6 +47,10 @@ export async function salvarCenario(meta: Omit<Cenario, 'id' | 'geradoEm' | 'ger
 }
 
 export async function listarCenarios(talhaoId: string, safra?: string): Promise<Cenario[]> {
+  if (usarDadosSupabase()) {
+    const out = await carregarDocsPorCampoSupabase<Cenario>(COL, 'talhaoId', talhaoId);
+    return out.filter(c => !safra || c.safra === safra).sort((a, b) => b.geradoEm - a.geradoEm);
+  }
   const fb = getFb();
   if (!fb) return [];
   try {
@@ -69,15 +75,17 @@ export async function descomprimirCenario(cen: Cenario): Promise<Cenario> {
 // Marca/desmarca o cenário como "Para uso" (oficial). Regrava o doc preservando
 // os grids como estão (gz) — sem recomprimir.
 export async function marcarCenarioOficial(cen: Cenario, oficial: boolean): Promise<void> {
+  const atualizado: Cenario = { ...cen, oficial };
+  if (usarDadosSupabase()) { await salvarDocSupabase(COL, cen.id, atualizado); return; }
   const fb = getFb();
   if (!fb) throw new Error('Nuvem indisponível.');
-  const atualizado: Cenario = { ...cen, oficial };
   await setDoc(doc(fb.db, COL, cen.id), {
     id: cen.id, talhaoId: cen.talhaoId, safra: cen.safra, geradoEm: cen.geradoEm, json: JSON.stringify(atualizado),
   });
 }
 
 export async function excluirCenario(id: string): Promise<void> {
+  if (usarDadosSupabase()) { await excluirDocSupabase(COL, id); return; }
   const fb = getFb();
   if (!fb) return;
   await deleteDoc(doc(fb.db, COL, id));

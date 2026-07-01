@@ -16,7 +16,8 @@ import { getFb, firebaseConfigurado } from './firebase';
 import { collection, deleteDoc, doc, endAt, getDoc, getDocs, orderBy, query, setDoc, startAt } from 'firebase/firestore';
 import { usarDadosSupabase, bootSupabaseData, pushListaSupabase, pushObjSupabase,
   salvarMapaSupabase, carregarMapasPorPrefixoSupabase, excluirMapasPorPrefixoSupabase,
-  mapasJaMigrados, marcarMapasMigrados } from './supabaseData';
+  mapasJaMigrados, marcarMapasMigrados,
+  salvarDocSupabase, colecaoJaMigrada, marcarColecaoMigrada } from './supabaseData';
 
 // Coleções (arrays de registros com id) espelhadas 1:1 com as chaves locais
 const KEYS_LISTA = [
@@ -113,6 +114,11 @@ export async function bootCloud(): Promise<boolean> {
       ativo = true;
       console.log('[nuvem] ATIVA — dados no Supabase (Postgres).');
       await migrarMapasParaSupabaseSeVazio();   // 1ª vez: leva os mapas do Firestore p/ o Supabase
+      // cenários (doc traz o objeto no campo `json`) e relatórios (objeto direto)
+      await migrarColecaoParaSupabaseSeVazio('inv_cenarios', (d) => {
+        try { return JSON.parse((d as { json?: string }).json ?? 'null'); } catch { return null; }
+      });
+      await migrarColecaoParaSupabaseSeVazio('inv_relatorios', (d) => (d ?? null) as object | null);
     }
     catch (e) { console.warn('[nuvem] Supabase indisponível, usando dados locais:', e); ativo = false; }
     return ativo;
@@ -241,6 +247,23 @@ async function migrarMapasParaSupabaseSeVazio() {
     await marcarMapasMigrados();                        // marca como concluído (idempotente)
     console.log('[nuvem][mig-mapas] concluído.');
   } catch (e) { console.warn('[nuvem] falha ao migrar mapas:', e); }
+}
+
+// Migração única genérica de uma coleção Firestore → Supabase (cenários, relatórios).
+// `transform` converte o doc do Firestore no objeto a guardar (ou null p/ pular).
+async function migrarColecaoParaSupabaseSeVazio(colecao: string, transform: (d: unknown) => object | null) {
+  try {
+    if (await colecaoJaMigrada(colecao)) return;
+    const fb = getFb();
+    if (!fb?.auth.currentUser) return;
+    const snap = await getDocs(collection(fb.db, colecao));
+    for (const d of snap.docs) {
+      const obj = transform(d.data());
+      if (obj) { try { await salvarDocSupabase(colecao, d.id, obj); } catch {} }
+    }
+    await marcarColecaoMigrada(colecao);
+    console.log(`[nuvem][mig] ${colecao}: ${snap.size} migrados p/ o Supabase`);
+  } catch (e) { console.warn(`[nuvem][mig] falha em ${colecao}:`, e); }
 }
 
 // Apaga por prefixo de id em QUALQUER coleção (ex.: inv_cenarios id `cen_<talhao>_…`).
