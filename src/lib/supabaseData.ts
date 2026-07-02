@@ -216,6 +216,15 @@ export async function carregarDocsPorCampoSupabase<T>(colecao: string, campo: st
   return (r.data ?? []).map(row => row.dados as T);
 }
 
+// Toda a coleção (ex.: repositório de medições no painel web).
+export async function carregarColecaoSupabase<T>(colecao: string): Promise<T[]> {
+  const sb = getSupabase();
+  if (!sb) return [];
+  const r = await sb.from('app_kv').select('dados').eq('colecao', colecao);
+  if (r.error) { console.warn(`[supabase] carregar coleção ${colecao}:`, r.error.message); return []; }
+  return (r.data ?? []).map(row => row.dados as T);
+}
+
 export async function excluirDocSupabase(colecao: string, id: string): Promise<void> {
   const sb = getSupabase();
   if (!sb) return;

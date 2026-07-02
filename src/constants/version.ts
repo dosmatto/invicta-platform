@@ -1,6 +1,10 @@
-export const APP_VERSION = '1.8.1';
+export const APP_VERSION = '1.9.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.9.0': [
+    'NOVO no painel web — REPOSITÓRIO DE MEDIÇÕES (ícone "Medições" na barra lateral): lista tudo que o app de campo enviou pra nuvem (áreas e linhas), com categoria, área/distância, talhão vinculado, operador e data. Fecha o ciclo campo → escritório',
+    'Por medição: ver no mapa, BAIXAR em SHP (.zip)/KML/GeoJSON, e — para polígonos — CRIAR um talhão novo (escolhendo cliente/fazenda) ou SUBSTITUIR o limite de um talhão existente, além de excluir',
+  ],
   '1.8.1': [
     'Medição: a FREQUÊNCIA de gravação virou opção (1 / 2 / 3 / 4 / 5 segundos por ponto) no botão de ajustes — intervalos maiores geram menos pontos em áreas grandes e economizam bateria; dá pra mudar até no meio da caminhada. O cronômetro continua em segundos reais e o offset lateral ficou no mesmo painel de ajustes',
   ],

@@ -12,7 +12,7 @@
 //  • Tiles offline: Cache Storage 'coleta-tiles' (o mesmo que o service worker usa).
 
 import { getSupabase } from './supabase';
-import { usarDadosSupabase, salvarDocSupabase, carregarDocsPorCampoSupabase, excluirDocSupabase } from './supabaseData';
+import { usarDadosSupabase, salvarDocSupabase, carregarDocsPorCampoSupabase, carregarColecaoSupabase, excluirDocSupabase } from './supabaseData';
 
 // ── Registros de coleta ───────────────────────────────────────────────────────
 
@@ -311,6 +311,21 @@ export function salvarMedicao(m: Omit<MedicaoCampo, 'syncPendente'>): MedicaoCam
 export function excluirMedicao(id: string) {
   saveMedicoesLocal(getMedicoes().filter(m => m.id !== id));
   if (usarDadosSupabase() && navigator.onLine) void excluirDocSupabase(COLECAO_MED, id).catch(() => {});
+}
+
+// Repositório (painel web): TODAS as medições — nuvem + locais, unidas por id
+// (a versão da nuvem prevalece por já estar sincronizada entre aparelhos).
+export async function carregarMedicoes(): Promise<MedicaoCampo[]> {
+  const locais = getMedicoes();
+  const porId = new Map<string, MedicaoCampo>();
+  for (const m of locais) porId.set(m.id, m);
+  if (usarDadosSupabase() && typeof navigator !== 'undefined' && navigator.onLine) {
+    try {
+      const nuvem = await carregarColecaoSupabase<MedicaoCampo>(COLECAO_MED);
+      for (const m of nuvem) porId.set(m.id, { ...m, syncPendente: false });
+    } catch { /* offline/erro: fica só com as locais */ }
+  }
+  return [...porId.values()].sort((a, b) => (b.criadoEm ?? '').localeCompare(a.criadoEm ?? ''));
 }
 
 export async function pushMedicoesPendentes(): Promise<number> {

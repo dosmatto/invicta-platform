@@ -1,7 +1,7 @@
 'use client';
 
 import {
-  LayoutDashboard, Users, Settings, Library,
+  LayoutDashboard, Users, Settings, Library, Ruler,
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { APP_VERSION } from '@/constants/version';
@@ -10,6 +10,8 @@ const MENU = [
   { id: 'dashboard',       label: 'Início',   icon: LayoutDashboard },
   null,
   { id: 'produtores',      label: 'Clientes', icon: Users },
+  null,
+  { id: 'medicoes',        label: 'Medições', icon: Ruler },
   null,
   { id: 'biblioteca',      label: 'Biblioteca', icon: Library },
   null,

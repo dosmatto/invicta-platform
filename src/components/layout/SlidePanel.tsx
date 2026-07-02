@@ -14,10 +14,12 @@ import { TalhaoDetailPanel } from '@/components/panels/TalhaoDetailPanel';
 import { BibliotecaPanel } from '@/components/panels/BibliotecaPanel';
 import { ConfiguracoesPanel } from '@/components/panels/ConfiguracoesPanel';
 import { EmpresaConfig } from '@/components/panels/EmpresaConfig';
+import { MedicoesPanel } from '@/components/panels/MedicoesPanel';
 
 const STATIC_PANELS: Record<string, { title: string; component: React.ComponentType; largura?: number }> = {
   dashboard:         { title: 'Início',          component: DashboardPanel },
   produtores:        { title: 'Clientes',        component: ProdutoresPanel },
+  medicoes:          { title: 'Medições de campo', component: MedicoesPanel, largura: 340 },
   empresa:           { title: 'Empresa',         component: EmpresaConfig },
   configuracoes:     { title: 'Configurações',   component: ConfiguracoesPanel },
 };
