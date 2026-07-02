@@ -1,6 +1,11 @@
-export const APP_VERSION = '1.1.0';
+export const APP_VERSION = '1.1.1';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.1.1': [
+    'Zerada de erros: o Início agora mostra a VISÃO GERAL REAL (produtores, fazendas, talhões, área total, incompletos e a safra ativa) — antes eram números fixos em 0 (mock antigo). O bloco "Processamentos Recentes / SIMULADO" (fake) foi removido',
+    'Corrigido o erro vermelho do mapa no Console (circle-radius com "zoom" dentro de "case" — inválido no MapLibre); os pontos de amostragem/EC seguem com o mesmo comportamento visual',
+    'Logo: eliminados os avisos do next/image (proporção width/height) e o aviso de LCP — logo com prioridade de carregamento no topo e no login',
+  ],
   '1.1.0': [
     'Biblioteca › Preferências de Análise ganhou a aba VARIÁVEIS DE ANÁLISE — o cadastro das variáveis dos laudos (Sigla · Nome · Unidade · Usar), no estilo do InCeres. As 16 variáveis atuais viram cadastro editável (semeadas na 1ª abertura) e dá para CRIAR novas (ex.: pH SMP), com sinônimos para o auto-mapeamento das planilhas. As do sistema podem ser desativadas (não excluídas, pois são chave de dados)',
     'Laboratórios: cada perfil agora registra a UNIDADE e o EXTRATOR/MÉTODO de cada variável DAQUELE laboratório (ex.: K em mmolc/dm³ · Mehlich num lab; cmolc/dm³ · Resina em outro) — editável no perfil (Biblioteca › Laboratórios) e exibido na importação do laudo',

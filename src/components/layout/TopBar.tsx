@@ -29,7 +29,8 @@ export function TopBar() {
     >
       {/* Logo */}
       <div className="flex-shrink-0 pr-4 border-r border-white/20">
-        <Image src="/images/logo-branca.png" alt="Invicta" width={90} height={28} style={{ objectFit: 'contain' }} />
+        {/* height fixa + width auto (mantém proporção) — sem warning do next/image; priority = LCP do painel */}
+        <Image src="/images/logo-branca.png" alt="Invicta" width={90} height={28} priority style={{ objectFit: 'contain', height: 28, width: 'auto' }} />
       </div>
 
       {/* Breadcrumb contextual */}

@@ -43,7 +43,7 @@ export default function PortalPage() {
   return (
     <div className="min-h-screen" style={{ background: '#0a1929' }}>
       <header className="flex items-center justify-between px-5 py-3" style={{ background: 'var(--invicta-blue)', borderBottom: '1px solid #1a3a6b' }}>
-        <Image src="/images/logo-branca.png" alt="Invicta" width={96} height={28} style={{ objectFit: 'contain' }} />
+        <Image src="/images/logo-branca.png" alt="Invicta" width={96} height={28} priority style={{ objectFit: 'contain', height: 28, width: 'auto' }} />
         <div className="flex items-center gap-3">
           <div className="text-right hidden sm:block">
             <p className="text-xs font-semibold" style={{ color: '#fff' }}>{cliente.nome}</p>

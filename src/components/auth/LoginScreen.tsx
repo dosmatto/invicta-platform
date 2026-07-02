@@ -29,7 +29,7 @@ export function LoginScreen() {
       <form onSubmit={entrar} className="w-full max-w-sm rounded-2xl p-8 space-y-5"
         style={{ background: 'var(--invicta-blue)', border: '1px solid #1a3a6b', boxShadow: '0 20px 60px rgba(0,0,0,0.4)' }}>
         <div className="flex justify-center">
-          <Image src="/images/logo-branca.png" alt="Invicta" width={150} height={46} style={{ objectFit: 'contain' }} priority />
+          <Image src="/images/logo-branca.png" alt="Invicta" width={150} height={46} style={{ objectFit: 'contain', width: 150, height: 'auto' }} priority />
         </div>
         <p className="text-center text-xs" style={{ color: '#93c5fd' }}>Plataforma Agronômica — acesso restrito</p>
 

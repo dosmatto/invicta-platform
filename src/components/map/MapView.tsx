@@ -117,9 +117,12 @@ export function MapView() {
         paint: {
           // Nuvens densas (EC/colheita) marcam a feature com 'r' → raio que cresce
           // com o zoom (visível em qualquer escala); senão o raio fixo da amostragem.
-          'circle-radius': ['case', ['has', 'r'],
-            ['interpolate', ['linear'], ['zoom'], 10, 3, 13, 5, 17, 9],
-            6],
+          // NOTA MapLibre: `zoom` só vale no TOPO da expressão — por isso o
+          // interpolate fica fora e o `case` dentro de cada parada (invertido).
+          'circle-radius': ['interpolate', ['linear'], ['zoom'],
+            10, ['case', ['has', 'r'], 3, 6],
+            13, ['case', ['has', 'r'], 5, 6],
+            17, ['case', ['has', 'r'], 9, 6]],
           'circle-color': ['case',
             ['has', 'cor'], ['get', 'cor'],   // cor explícita (ex: pontos de zona / EC)
             ['match', ['get', 'profs'],
