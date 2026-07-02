@@ -5,7 +5,7 @@
 // enquanto caminha. Medições podem ser salvas com nome (localStorage) e
 // reabertas depois — tudo funciona offline.
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import turfArea from '@turf/area';
 import { MapaColeta } from './MapaColeta';
 import { useGps } from './useGps';
@@ -16,10 +16,30 @@ import {
 import { emailUsuario } from '@/lib/auth';
 import {
   ChevronLeft, Crosshair, Layers, Maximize2, Plus, Undo2, Trash2, List, X, AlertTriangle, Save,
+  Play, Pause, Flag, MoveHorizontal,
 } from 'lucide-react';
 
 const AZUL_ESC = '#061525', AZUL = '#0a1929', BORDA = '#1a3a6b', TXT = '#e2e8f0', SUB = '#64748b';
 const EMPTY_FC: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
+
+const PASSO_GRAVACAO_M = 3; // distância mínima entre vértices ao gravar caminhando
+
+// Aplica um OFFSET lateral (m) perpendicular à direção de caminhada. Útil quando
+// o GPS/veículo anda paralelo à divisa (ex.: 2,5 m à direita da cerca).
+function aplicarOffset(
+  lng: number, lat: number, prevLng: number, prevLat: number,
+  offM: number, lado: 'esq' | 'dir',
+): [number, number] {
+  if (!offM) return [lng, lat];
+  const mLat = 1 / 110540;
+  const mLng = 1 / (111320 * Math.cos((lat * Math.PI) / 180));
+  let dx = (lng - prevLng) / mLng, dy = (lat - prevLat) / mLat; // direção (m)
+  const len = Math.hypot(dx, dy);
+  if (len < 0.5) return [lng, lat]; // parado → sem direção confiável
+  dx /= len; dy /= len;
+  const [px, py] = lado === 'esq' ? [-dy, dx] : [dy, -dx]; // perpendicular
+  return [lng + px * offM * mLng, lat + py * offM * mLat];
+}
 
 // medidas de uma sequência de vértices
 function medir(tipo: TipoMedicao, coords: [number, number][]) {
@@ -49,6 +69,41 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
   const [salvas, setSalvas] = useState<MedicaoCampo[]>(() => getMedicoes());
   const [msg, setMsg] = useState('');
 
+  // ── gravação de caminhada (estilo FieldRover) ──
+  const [gravando, setGravando] = useState(false); // sessão de caminhada ativa
+  const [pausado, setPausado] = useState(false);    // pausado no meio (retoma emendando)
+  const [offsetM, setOffsetM] = useState(0);        // offset lateral em metros (1 casa)
+  const [offsetLado, setOffsetLado] = useState<'esq' | 'dir'>('dir');
+  const [mostraOffset, setMostraOffset] = useState(false);
+  const ultimaPosRef = useRef<[number, number] | null>(null);   // última leitura crua do GPS
+  const ultimoGravadoRef = useRef<[number, number] | null>(null); // último vértice gravado (cru)
+
+  // Grava vértices automaticamente enquanto o operador caminha (com offset).
+  useEffect(() => {
+    if (!userPos) return;
+    const cur: [number, number] = [userPos.lng, userPos.lat];
+    const prev = ultimaPosRef.current;
+    ultimaPosRef.current = cur;
+    if (!gravando || pausado) return;
+    const ultimo = ultimoGravadoRef.current;
+    if (ultimo && distanciaM(ultimo[0], ultimo[1], cur[0], cur[1]) < PASSO_GRAVACAO_M) return;
+    const ponto = prev ? aplicarOffset(cur[0], cur[1], prev[0], prev[1], offsetM, offsetLado) : cur;
+    ultimoGravadoRef.current = cur;
+    setCoords(c => [...c, ponto]);
+  }, [userPos, gravando, pausado, offsetM, offsetLado]);
+
+  function iniciarGravacao() {
+    setGravando(true); setPausado(false); setMsg('');
+    setSeguir(true); setPedidoGps(x => x + 1);
+    ultimoGravadoRef.current = null; // 1º ponto é gravado já na próxima leitura
+  }
+  function finalizarGravacao() {
+    setGravando(false); setPausado(false);
+    if (tipo === 'poligono' && coords.length >= 3) setMsg('Caminhada finalizada — pontos ligados automaticamente.');
+    else if (coords.length >= 2) setMsg('Caminhada finalizada.');
+    setSeguir(false); setPedidoEnquadrar(x => x + 1);
+  }
+
   const medidas = useMemo(() => medir(tipo, coords), [tipo, coords]);
 
   const desenho: GeoJSON.FeatureCollection = useMemo(() => {
@@ -77,7 +132,12 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
   function addVerticeGps() {
     if (!userPos) { setMsg('Aguardando o GPS…'); return; }
     setMsg('');
-    setCoords(c => [...c, [userPos.lng, userPos.lat]]);
+    const prev = ultimaPosRef.current;
+    const ponto: [number, number] = prev
+      ? aplicarOffset(userPos.lng, userPos.lat, prev[0], prev[1], offsetM, offsetLado)
+      : [userPos.lng, userPos.lat];
+    ultimoGravadoRef.current = [userPos.lng, userPos.lat];
+    setCoords(c => [...c, ponto]);
   }
 
   function salvar() {
@@ -123,7 +183,9 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
         </button>
         <div className="flex-1 min-w-0">
           <p className="text-xs font-bold" style={{ color: TXT }}>Medição</p>
-          <p className="text-[10px]" style={{ color: SUB }}>Toque no mapa ou marque vértices no seu GPS</p>
+          <p className="text-[10px]" style={{ color: gravando && !pausado ? '#f87171' : SUB }}>
+            {gravando ? (pausado ? '⏸ Pausado — retoma emendando' : '● Gravando caminhada…') : 'Toque no mapa, marque no GPS ou grave a caminhada'}
+          </p>
         </div>
         <button onClick={() => setMostraSalvas(true)} className="p-1.5 rounded-lg flex-shrink-0" style={{ background: BORDA, color: '#93c5fd' }} title="Medições salvas">
           <List size={16} />
@@ -152,8 +214,9 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
         <BotaoMapa onClick={() => { setSeguir(false); setPedidoEnquadrar(x => x + 1); }} titulo="Enquadrar o desenho"><Maximize2 size={18} /></BotaoMapa>
         <BotaoMapa onClick={() => setModo(m => (m === 'sat' ? 'ruas' : 'sat'))} titulo="Satélite / Ruas"><Layers size={18} /></BotaoMapa>
         <BotaoMapa onClick={addVerticeGps} titulo="Marcar vértice no meu GPS"><Plus size={18} /></BotaoMapa>
+        <BotaoMapa ativo={offsetM > 0} onClick={() => setMostraOffset(true)} titulo="Offset lateral (m)"><MoveHorizontal size={18} /></BotaoMapa>
         <BotaoMapa onClick={() => setCoords(c => c.slice(0, -1))} titulo="Desfazer último vértice"><Undo2 size={18} /></BotaoMapa>
-        <BotaoMapa onClick={() => { setCoords([]); setMsg(''); }} titulo="Limpar desenho"><Trash2 size={18} /></BotaoMapa>
+        <BotaoMapa onClick={() => { setCoords([]); setMsg(''); setGravando(false); setPausado(false); ultimoGravadoRef.current = null; }} titulo="Limpar desenho"><Trash2 size={18} /></BotaoMapa>
       </div>
 
       {/* rodapé: tipo + medidas + salvar */}
@@ -175,6 +238,35 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
                 {t === 'poligono' ? '⬠ Polígono (área)' : '⎯ Linha (distância)'}
               </button>
             ))}
+            {offsetM > 0 && (
+              <span className="ml-auto self-center text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: '#1e3a8a', color: '#93c5fd' }}>
+                offset {offsetM.toFixed(1)} m {offsetLado === 'esq' ? '←' : '→'}
+              </span>
+            )}
+          </div>
+
+          {/* gravar caminhada / pausar-retomar / finalizar */}
+          <div className="flex gap-1.5 mb-2">
+            {!gravando ? (
+              <button onClick={iniciarGravacao}
+                className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold text-white"
+                style={{ background: '#166534' }}>
+                <Play size={14} /> Gravar caminhada
+              </button>
+            ) : (
+              <>
+                <button onClick={() => setPausado(p => !p)}
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold"
+                  style={{ background: pausado ? '#166534' : '#78350f', color: pausado ? '#86efac' : '#fde68a' }}>
+                  {pausado ? <><Play size={14} /> Retomar</> : <><Pause size={14} /> Pausar</>}
+                </button>
+                <button onClick={finalizarGravacao}
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold text-white"
+                  style={{ background: '#2e5fa3' }}>
+                  <Flag size={14} /> Finalizar
+                </button>
+              </>
+            )}
           </div>
 
           {coords.length === 0 ? (
@@ -213,6 +305,49 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
           )}
         </div>
       </div>
+
+      {/* offset lateral */}
+      {mostraOffset && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center" style={{ background: 'rgba(0,0,0,0.6)' }} onClick={() => setMostraOffset(false)}>
+          <div className="w-full max-w-md rounded-t-2xl p-5 space-y-4" style={{ background: AZUL, paddingBottom: 'max(20px, env(safe-area-inset-bottom))' }}
+            onClick={e => e.stopPropagation()}>
+            <p className="text-sm font-bold" style={{ color: TXT }}>Offset lateral</p>
+            <p className="text-[11px]" style={{ color: SUB }}>
+              Desloca os vértices para o lado, perpendicular à direção de caminhada — útil quando você anda paralelo à divisa (ex.: 2,5 m à direita da cerca).
+            </p>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setOffsetM(v => Math.max(0, Math.round((v - 0.5) * 10) / 10))}
+                className="w-10 h-10 rounded-lg text-lg font-bold" style={{ background: BORDA, color: '#93c5fd' }}>−</button>
+              <input type="number" step="0.1" min="0" value={offsetM}
+                onChange={e => setOffsetM(Math.max(0, Math.round((Number(e.target.value) || 0) * 10) / 10))}
+                className="flex-1 text-center rounded-lg px-2 py-2 text-lg font-black outline-none"
+                style={{ background: '#0a1929', color: '#4ade80', border: '1px solid #2e5fa3' }} />
+              <span className="text-xs font-bold" style={{ color: SUB }}>m</span>
+              <button onClick={() => setOffsetM(v => Math.round((v + 0.5) * 10) / 10)}
+                className="w-10 h-10 rounded-lg text-lg font-bold" style={{ background: BORDA, color: '#93c5fd' }}>+</button>
+            </div>
+            <div className="flex gap-2">
+              {(['esq', 'dir'] as const).map(l => (
+                <button key={l} onClick={() => setOffsetLado(l)}
+                  className="flex-1 py-2.5 rounded-xl text-xs font-bold"
+                  style={{ background: offsetLado === l ? '#2e5fa3' : BORDA, color: offsetLado === l ? '#fff' : '#94a3b8' }}>
+                  {l === 'esq' ? '← Esquerda' : 'Direita →'}
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => { setOffsetM(0); setMostraOffset(false); }}
+                className="flex-1 py-2.5 rounded-xl text-xs font-bold" style={{ background: BORDA, color: '#94a3b8' }}>
+                Sem offset
+              </button>
+              <button onClick={() => setMostraOffset(false)}
+                className="flex-1 py-2.5 rounded-xl text-xs font-bold text-white" style={{ background: 'var(--invicta-green-dark)' }}>
+                Aplicar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* medições salvas */}
       {mostraSalvas && (

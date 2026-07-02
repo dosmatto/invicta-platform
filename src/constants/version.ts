@@ -1,6 +1,10 @@
-export const APP_VERSION = '1.6.1';
+export const APP_VERSION = '1.7.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.7.0': [
+    'Medição estilo FieldRover: GRAVAR CAMINHADA — caminhe a divisa e o app marca os vértices sozinho (a cada ~3 m); PAUSAR no meio (desviar de obstáculo/descansar) e RETOMAR, que emenda a linha de onde parou; FINALIZAR liga os pontos automaticamente (fecha o polígono) e mostra a área',
+    'Medição com OFFSET lateral em metros (1 casa decimal, esquerda/direita): desloca os vértices perpendicular à direção de caminhada — para quando você anda paralelo à cerca/divisa. Vale tanto na gravação quanto no vértice manual (botão +)',
+  ],
   '1.6.1': [
     'CORREÇÃO: a limpeza de geometria da 1.6.0 estava agressiva demais e passou a REJEITAR polígonos válidos (aparecia "anel degenerado / nenhum polígono aproveitável"). Reescrita com mudança MÍNIMA: um polígono já fechado passa INTACTO; só corrige o que está de fato quebrado (linha aberta vira polígono; remove só vértices duplicados exatos e ESPÍCULAS reais de vai-e-volta, por ângulo — cantos normais são preservados) e NUNCA degenera (na dúvida, mantém o anel original). Importação individual e em massa voltam a funcionar',
   ],
