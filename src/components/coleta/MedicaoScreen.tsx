@@ -1,18 +1,21 @@
 'use client';
 
-// Módulo de MEDIÇÃO do app de campo: desenha polígono (área em ha + perímetro)
-// ou linha (distância) tocando no mapa OU marcando vértices na posição do GPS
-// enquanto caminha. Medições podem ser salvas com nome (localStorage) e
-// reabertas depois — tudo funciona offline.
+// Módulo de MEDIÇÃO GPS do app de campo (spec Sistema_Medicoes_GPS_Invicta.md).
+// Desenha polígono (área) ou linha (distância) tocando no mapa, marcando no GPS
+// ou GRAVANDO A CAMINHADA — registra 1 ponto/seg em movimento, com filtro de
+// precisão. Pausar/retomar, finalizar (fecha o polígono), cancelar. Cada ponto
+// guarda metadados (precisão, velocidade, hora). Offline; sincroniza depois.
 
-import { useMemo, useState, useEffect, useRef } from 'react';
+import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import turfArea from '@turf/area';
 import { MapaColeta } from './MapaColeta';
 import { useGps } from './useGps';
 import {
   distanciaM, formatarDist,
-  MedicaoCampo, TipoMedicao, getMedicoes, salvarMedicao, excluirMedicao,
+  MedicaoCampo, PontoMedicao, TipoMedicao, CATEGORIAS_MEDICAO,
+  getMedicoes, salvarMedicao, excluirMedicao,
 } from '@/lib/coleta';
+import { getTalhoes, getSafras } from '@/lib/store';
 import { emailUsuario } from '@/lib/auth';
 import {
   ChevronLeft, Crosshair, Layers, Maximize2, Plus, Undo2, Trash2, List, X, AlertTriangle, Save,
@@ -22,10 +25,12 @@ import {
 const AZUL_ESC = '#061525', AZUL = '#0a1929', BORDA = '#1a3a6b', TXT = '#e2e8f0', SUB = '#64748b';
 const EMPTY_FC: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
 
-const PASSO_GRAVACAO_M = 3; // distância mínima entre vértices ao gravar caminhando
+// Parâmetros da captura (spec seções 4.3 e 15) — configuráveis no futuro.
+const CAPTURA_MS = 1000;   // 1 ponto por segundo
+const MIN_MOVE_M = 0.7;    // só grava se andou ≥ 0,7 m (em movimento)
+const MAX_ACC_M = 25;      // ignora leituras com precisão pior que 25 m
 
-// Aplica um OFFSET lateral (m) perpendicular à direção de caminhada. Útil quando
-// o GPS/veículo anda paralelo à divisa (ex.: 2,5 m à direita da cerca).
+// Aplica um OFFSET lateral (m) perpendicular à direção de caminhada.
 function aplicarOffset(
   lng: number, lat: number, prevLng: number, prevLat: number,
   offM: number, lado: 'esq' | 'dir',
@@ -33,15 +38,14 @@ function aplicarOffset(
   if (!offM) return [lng, lat];
   const mLat = 1 / 110540;
   const mLng = 1 / (111320 * Math.cos((lat * Math.PI) / 180));
-  let dx = (lng - prevLng) / mLng, dy = (lat - prevLat) / mLat; // direção (m)
+  let dx = (lng - prevLng) / mLng, dy = (lat - prevLat) / mLat;
   const len = Math.hypot(dx, dy);
-  if (len < 0.5) return [lng, lat]; // parado → sem direção confiável
+  if (len < 0.5) return [lng, lat];
   dx /= len; dy /= len;
-  const [px, py] = lado === 'esq' ? [-dy, dx] : [dy, -dx]; // perpendicular
+  const [px, py] = lado === 'esq' ? [-dy, dx] : [dy, -dx];
   return [lng + px * offM * mLng, lat + py * offM * mLat];
 }
 
-// medidas de uma sequência de vértices
 function medir(tipo: TipoMedicao, coords: [number, number][]) {
   let compr = 0;
   for (let i = 1; i < coords.length; i++) {
@@ -57,67 +61,111 @@ function medir(tipo: TipoMedicao, coords: [number, number][]) {
   return { areaHa: turfArea(fc) / 10000, perimetroM: compr + fechamento };
 }
 
+function fmtTempo(s: number) {
+  const m = Math.floor(s / 60), r = s % 60;
+  return `${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`;
+}
+
 export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
-  const { userPos, gpsErro } = useGps();
+  const { userPos, velKmH, gpsErro } = useGps();
   const [tipo, setTipo] = useState<TipoMedicao>('poligono');
-  const [coords, setCoords] = useState<[number, number][]>([]);
+  const [pontos, setPontos] = useState<PontoMedicao[]>([]);
   const [modo, setModo] = useState<'sat' | 'ruas'>('sat');
-  const [seguir, setSeguir] = useState(true); // abre seguindo o GPS
+  const [seguir, setSeguir] = useState(true);
   const [pedidoGps, setPedidoGps] = useState(0);
   const [pedidoEnquadrar, setPedidoEnquadrar] = useState(0);
   const [mostraSalvas, setMostraSalvas] = useState(false);
+  const [mostraSalvar, setMostraSalvar] = useState(false);
   const [salvas, setSalvas] = useState<MedicaoCampo[]>(() => getMedicoes());
   const [msg, setMsg] = useState('');
 
-  // ── gravação de caminhada (estilo FieldRover) ──
-  const [gravando, setGravando] = useState(false); // sessão de caminhada ativa
-  const [pausado, setPausado] = useState(false);    // pausado no meio (retoma emendando)
-  const [offsetM, setOffsetM] = useState(0);        // offset lateral em metros (1 casa)
+  // gravação de caminhada
+  const [gravando, setGravando] = useState(false);
+  const [pausado, setPausado] = useState(false);
+  const [finalizado, setFinalizado] = useState(false); // fecha o polígono só ao finalizar
+  const [elapsed, setElapsed] = useState(0);            // segundos gravando
+  const [offsetM, setOffsetM] = useState(0);
   const [offsetLado, setOffsetLado] = useState<'esq' | 'dir'>('dir');
   const [mostraOffset, setMostraOffset] = useState(false);
-  const ultimaPosRef = useRef<[number, number] | null>(null);   // última leitura crua do GPS
-  const ultimoGravadoRef = useRef<[number, number] | null>(null); // último vértice gravado (cru)
 
-  // Grava vértices automaticamente enquanto o operador caminha (com offset).
+  const userPosRef = useRef(userPos); userPosRef.current = userPos;
+  const velRef = useRef(velKmH); velRef.current = velKmH;
+  const pausadoRef = useRef(pausado); pausadoRef.current = pausado;
+  const offsetRef = useRef({ m: offsetM, lado: offsetLado }); offsetRef.current = { m: offsetM, lado: offsetLado };
+  const ultimoGravadoRef = useRef<[number, number] | null>(null); // último ponto gravado (cru, p/ espaçamento e direção)
+
+  const coords = useMemo(() => pontos.map(p => [p.lng, p.lat] as [number, number]), [pontos]);
+
+  const pushPonto = useCallback((lng: number, lat: number, meta?: Partial<PontoMedicao>) => {
+    setPontos(ps => [...ps, { lng, lat, em: new Date().toISOString(), ...meta }]);
+  }, []);
+
+  // ── motor de captura: 1 tick/seg enquanto grava (spec 4.2/4.3) ──
   useEffect(() => {
-    if (!userPos) return;
-    const cur: [number, number] = [userPos.lng, userPos.lat];
-    const prev = ultimaPosRef.current;
-    ultimaPosRef.current = cur;
-    if (!gravando || pausado) return;
-    const ultimo = ultimoGravadoRef.current;
-    if (ultimo && distanciaM(ultimo[0], ultimo[1], cur[0], cur[1]) < PASSO_GRAVACAO_M) return;
-    const ponto = prev ? aplicarOffset(cur[0], cur[1], prev[0], prev[1], offsetM, offsetLado) : cur;
-    ultimoGravadoRef.current = cur;
-    setCoords(c => [...c, ponto]);
-  }, [userPos, gravando, pausado, offsetM, offsetLado]);
+    if (!gravando) return;
+    const id = setInterval(() => {
+      setElapsed(e => e + 1);
+      if (pausadoRef.current) return;
+      const p = userPosRef.current;
+      if (!p) return;
+      if (p.acc > MAX_ACC_M) { setMsg(`GPS impreciso (±${Math.round(p.acc)} m) — ponto ignorado.`); return; }
+      const ultimo = ultimoGravadoRef.current;
+      if (ultimo && distanciaM(ultimo[0], ultimo[1], p.lng, p.lat) < MIN_MOVE_M) return; // parado
+      const { m, lado } = offsetRef.current;
+      const pt = ultimo ? aplicarOffset(p.lng, p.lat, ultimo[0], ultimo[1], m, lado) : [p.lng, p.lat];
+      ultimoGravadoRef.current = [p.lng, p.lat];
+      pushPonto(pt[0], pt[1], { precisaoM: Math.round(p.acc), velKmH: velRef.current ?? undefined });
+      setMsg('');
+    }, CAPTURA_MS);
+    return () => clearInterval(id);
+  }, [gravando, pushPonto]);
 
   function iniciarGravacao() {
-    setGravando(true); setPausado(false); setMsg('');
+    setGravando(true); setPausado(false); setFinalizado(false); setMsg('');
+    if (pontos.length === 0) setElapsed(0);
     setSeguir(true); setPedidoGps(x => x + 1);
-    ultimoGravadoRef.current = null; // 1º ponto é gravado já na próxima leitura
+    ultimoGravadoRef.current = null;
   }
   function finalizarGravacao() {
-    setGravando(false); setPausado(false);
-    if (tipo === 'poligono' && coords.length >= 3) setMsg('Caminhada finalizada — pontos ligados automaticamente.');
-    else if (coords.length >= 2) setMsg('Caminhada finalizada.');
+    setGravando(false); setPausado(false); setFinalizado(true);
+    setMsg(tipo === 'poligono' && pontos.length >= 3
+      ? 'Finalizado — pontos ligados automaticamente (polígono fechado).'
+      : 'Finalizado.');
     setSeguir(false); setPedidoEnquadrar(x => x + 1);
+  }
+  function cancelar() {
+    if (pontos.length && !confirm('Deseja cancelar esta medição?\nOs pontos registrados serão descartados.')) return;
+    setPontos([]); setGravando(false); setPausado(false); setFinalizado(false);
+    setElapsed(0); setMsg(''); ultimoGravadoRef.current = null;
+  }
+
+  function addVerticeGps() {
+    const p = userPosRef.current;
+    if (!p) { setMsg('Aguardando o GPS…'); return; }
+    setMsg('');
+    const ultimo = ultimoGravadoRef.current;
+    const { m, lado } = offsetRef.current;
+    const pt = ultimo ? aplicarOffset(p.lng, p.lat, ultimo[0], ultimo[1], m, lado) : [p.lng, p.lat];
+    ultimoGravadoRef.current = [p.lng, p.lat];
+    pushPonto(pt[0], pt[1], { precisaoM: Math.round(p.acc), velKmH: velRef.current ?? undefined });
   }
 
   const medidas = useMemo(() => medir(tipo, coords), [tipo, coords]);
 
+  // Durante a caminhada (não finalizado) o polígono é um CONTORNO ABERTO (spec 4.4).
   const desenho: GeoJSON.FeatureCollection = useMemo(() => {
     if (coords.length === 0) return EMPTY_FC;
     const feats: GeoJSON.Feature[] = coords.map(c => ({
       type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: c },
     }));
-    if (tipo === 'poligono' && coords.length >= 3) {
+    const fecharPoligono = tipo === 'poligono' && coords.length >= 3 && !gravando;
+    if (fecharPoligono) {
       feats.push({ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [[...coords, coords[0]]] } });
     } else if (coords.length >= 2) {
       feats.push({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: coords } });
     }
     return { type: 'FeatureCollection', features: feats };
-  }, [tipo, coords]);
+  }, [tipo, coords, gravando]);
 
   const bboxDesenho = useMemo<[number, number, number, number] | null>(() => {
     if (coords.length < 2) return null;
@@ -129,38 +177,32 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
     return [a - mLng, b - mLat, c + mLng, d + mLat];
   }, [coords]);
 
-  function addVerticeGps() {
-    if (!userPos) { setMsg('Aguardando o GPS…'); return; }
-    setMsg('');
-    const prev = ultimaPosRef.current;
-    const ponto: [number, number] = prev
-      ? aplicarOffset(userPos.lng, userPos.lat, prev[0], prev[1], offsetM, offsetLado)
-      : [userPos.lng, userPos.lat];
-    ultimoGravadoRef.current = [userPos.lng, userPos.lat];
-    setCoords(c => [...c, ponto]);
-  }
-
-  function salvar() {
-    const nome = prompt('Nome da medição:', `Medição ${salvas.length + 1}`);
-    if (!nome?.trim()) return;
+  function onSalvo(dados: { nome: string; categoria: string; obs: string; talhaoId: string; talhaoNome: string; safra: string }) {
     salvarMedicao({
-      id: Date.now().toString(36), nome: nome.trim(), tipo, coords,
+      id: Date.now().toString(36), nome: dados.nome, tipo, coords, pontos,
+      categoria: dados.categoria || undefined, obs: dados.obs || undefined,
+      talhaoId: dados.talhaoId || undefined, talhaoNome: dados.talhaoNome || undefined,
+      safra: dados.safra || undefined,
       criadoEm: new Date().toISOString(), operador: emailUsuario() || undefined,
     });
     setSalvas(getMedicoes());
-    setMsg(`✓ "${nome.trim()}" salva no aparelho — sobe pra plataforma na sincronização.`);
+    setMostraSalvar(false);
+    setMsg(`✓ "${dados.nome}" salva — sobe pra plataforma na sincronização.`);
   }
 
   function abrir(m: MedicaoCampo) {
-    setTipo(m.tipo); setCoords(m.coords); setMostraSalvas(false);
-    setSeguir(false);
+    setTipo(m.tipo);
+    setPontos(m.pontos ?? m.coords.map(([lng, lat]) => ({ lng, lat, em: m.criadoEm })));
+    setMostraSalvas(false); setSeguir(false); setFinalizado(true);
     setPedidoEnquadrar(x => x + 1);
   }
 
-  function excluir(id: string) {
-    excluirMedicao(id);
-    setSalvas(getMedicoes());
-  }
+  function excluir(id: string) { excluirMedicao(id); setSalvas(getMedicoes()); }
+
+  const statusGps = !userPos ? { txt: 'sem sinal', cor: '#f87171' }
+    : userPos.acc <= 8 ? { txt: `±${Math.round(userPos.acc)} m`, cor: '#4ade80' }
+    : userPos.acc <= 20 ? { txt: `±${Math.round(userPos.acc)} m`, cor: '#fbbf24' }
+    : { txt: `±${Math.round(userPos.acc)} m (fraco)`, cor: '#f87171' };
 
   return (
     <div className="fixed inset-0" style={{ background: AZUL }}>
@@ -172,7 +214,7 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
         onSelecionarPonto={() => {}}
         onGestoUsuario={() => setSeguir(false)}
         desenho={desenho}
-        onClickMapa={(lng, lat) => { setMsg(''); setCoords(c => [...c, [lng, lat]]); }}
+        onClickMapa={(lng, lat) => { if (!gravando) { setMsg(''); setFinalizado(false); pushPonto(lng, lat); } }}
       />
 
       {/* topo */}
@@ -182,9 +224,9 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
           <ChevronLeft size={16} />
         </button>
         <div className="flex-1 min-w-0">
-          <p className="text-xs font-bold" style={{ color: TXT }}>Medição</p>
+          <p className="text-xs font-bold" style={{ color: TXT }}>Medição GPS</p>
           <p className="text-[10px]" style={{ color: gravando && !pausado ? '#f87171' : SUB }}>
-            {gravando ? (pausado ? '⏸ Pausado — retoma emendando' : '● Gravando caminhada…') : 'Toque no mapa, marque no GPS ou grave a caminhada'}
+            {gravando ? (pausado ? '⏸ Pausado — retoma emendando' : '● Gravando · 1 ponto/seg') : 'Toque no mapa, marque no GPS ou grave a caminhada'}
           </p>
         </div>
         <button onClick={() => setMostraSalvas(true)} className="p-1.5 rounded-lg flex-shrink-0" style={{ background: BORDA, color: '#93c5fd' }} title="Medições salvas">
@@ -192,12 +234,25 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
         </button>
       </div>
 
-      {/* GPS / avisos */}
+      {/* painel ao vivo (spec seção 7) */}
       <div className="absolute left-3 flex flex-col gap-1" style={{ top: 'calc(56px + env(safe-area-inset-top))' }}>
-        {userPos && (
-          <div className="px-2.5 py-1.5 rounded-lg text-[10px] font-semibold"
-            style={{ background: 'rgba(6,21,37,0.85)', color: userPos.acc <= 8 ? '#4ade80' : userPos.acc <= 20 ? '#fbbf24' : '#f87171' }}>
-            GPS ±{Math.round(userPos.acc)} m
+        {(gravando || coords.length > 0) && (
+          <div className="px-3 py-2 rounded-xl text-[10px] leading-relaxed" style={{ background: 'rgba(6,21,37,0.9)', border: `1px solid ${BORDA}`, color: '#cbd5e1' }}>
+            <div className="flex items-center gap-3">
+              <span style={{ color: '#93c5fd' }}>{tipo === 'poligono' ? 'Polígono' : 'Linha'}</span>
+              {gravando && <span className="font-bold" style={{ color: '#fff' }}>⏱ {fmtTempo(elapsed)}</span>}
+            </div>
+            <div className="flex items-center gap-3 mt-0.5">
+              <span><b style={{ color: '#fff' }}>{pontos.length}</b> pts</span>
+              <span>{formatarDist(medidas.perimetroM)}</span>
+              {tipo === 'poligono' && medidas.areaHa != null && (
+                <span style={{ color: '#4ade80' }}><b>{medidas.areaHa.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}</b> ha</span>
+              )}
+            </div>
+            <div className="flex items-center gap-3 mt-0.5">
+              <span style={{ color: statusGps.cor }}>GPS {statusGps.txt}</span>
+              {velKmH != null && velKmH > 0.7 && <span>{velKmH.toFixed(0)} km/h</span>}
+            </div>
           </div>
         )}
         {gpsErro && (
@@ -215,11 +270,11 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
         <BotaoMapa onClick={() => setModo(m => (m === 'sat' ? 'ruas' : 'sat'))} titulo="Satélite / Ruas"><Layers size={18} /></BotaoMapa>
         <BotaoMapa onClick={addVerticeGps} titulo="Marcar vértice no meu GPS"><Plus size={18} /></BotaoMapa>
         <BotaoMapa ativo={offsetM > 0} onClick={() => setMostraOffset(true)} titulo="Offset lateral (m)"><MoveHorizontal size={18} /></BotaoMapa>
-        <BotaoMapa onClick={() => setCoords(c => c.slice(0, -1))} titulo="Desfazer último vértice"><Undo2 size={18} /></BotaoMapa>
-        <BotaoMapa onClick={() => { setCoords([]); setMsg(''); setGravando(false); setPausado(false); ultimoGravadoRef.current = null; }} titulo="Limpar desenho"><Trash2 size={18} /></BotaoMapa>
+        <BotaoMapa onClick={() => setPontos(ps => ps.slice(0, -1))} titulo="Desfazer último ponto"><Undo2 size={18} /></BotaoMapa>
+        <BotaoMapa onClick={cancelar} titulo="Cancelar medição"><Trash2 size={18} /></BotaoMapa>
       </div>
 
-      {/* rodapé: tipo + medidas + salvar */}
+      {/* rodapé */}
       <div className="absolute bottom-0 left-0 right-0" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
         {msg && (
           <p className="mx-3 mb-1.5 px-3 py-1.5 rounded-lg text-[10px]"
@@ -228,8 +283,8 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
         <div className="px-4 py-3" style={{ background: 'rgba(6,21,37,0.95)', borderTop: `1px solid ${BORDA}` }}>
           <div className="flex gap-1.5 mb-2">
             {(['poligono', 'linha'] as TipoMedicao[]).map(t => (
-              <button key={t} onClick={() => setTipo(t)}
-                className="px-3 py-1.5 rounded-full text-[11px] font-bold"
+              <button key={t} onClick={() => setTipo(t)} disabled={gravando}
+                className="px-3 py-1.5 rounded-full text-[11px] font-bold disabled:opacity-50"
                 style={{
                   background: tipo === t ? '#2e5fa3' : BORDA,
                   color: tipo === t ? '#fff' : '#94a3b8',
@@ -245,14 +300,22 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
             )}
           </div>
 
-          {/* gravar caminhada / pausar-retomar / finalizar */}
+          {/* gravar / pausar-retomar / finalizar / cancelar */}
           <div className="flex gap-1.5 mb-2">
             {!gravando ? (
-              <button onClick={iniciarGravacao}
-                className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold text-white"
-                style={{ background: '#166534' }}>
-                <Play size={14} /> Gravar caminhada
-              </button>
+              <>
+                <button onClick={iniciarGravacao}
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold text-white"
+                  style={{ background: '#166534' }}>
+                  <Play size={14} /> {pontos.length ? 'Retomar caminhada' : 'Gravar caminhada'}
+                </button>
+                {pontos.length > 0 && (
+                  <button onClick={cancelar}
+                    className="px-3 py-2 rounded-xl text-xs font-bold" style={{ background: '#7f1d1d', color: '#fca5a5' }}>
+                    Cancelar
+                  </button>
+                )}
+              </>
             ) : (
               <>
                 <button onClick={() => setPausado(p => !p)}
@@ -265,13 +328,17 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
                   style={{ background: '#2e5fa3' }}>
                   <Flag size={14} /> Finalizar
                 </button>
+                <button onClick={cancelar}
+                  className="px-3 py-2 rounded-xl text-xs font-bold" style={{ background: '#7f1d1d', color: '#fca5a5' }}>
+                  <X size={14} />
+                </button>
               </>
             )}
           </div>
 
           {coords.length === 0 ? (
             <p className="text-[11px] py-1" style={{ color: SUB }}>
-              Toque no mapa para marcar os vértices — ou caminhe e use o botão <strong style={{ color: '#93c5fd' }}>+</strong> para marcar onde você está.
+              <strong style={{ color: '#93c5fd' }}>Gravar caminhada</strong> registra 1 ponto/seg enquanto você anda a área. Ou toque no mapa / use o <strong style={{ color: '#93c5fd' }}>+</strong> para marcar vértices.
             </p>
           ) : (
             <div className="flex items-end justify-between gap-3">
@@ -282,7 +349,7 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
                       {medidas.areaHa.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} ha
                     </p>
                     <p className="text-[10px]" style={{ color: SUB }}>
-                      Perímetro {formatarDist(medidas.perimetroM)} · {coords.length} vértices
+                      Perímetro {formatarDist(medidas.perimetroM)} · {pontos.length} pontos
                     </p>
                   </>
                 ) : (
@@ -291,12 +358,12 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
                       {formatarDist(medidas.perimetroM)}
                     </p>
                     <p className="text-[10px]" style={{ color: SUB }}>
-                      {tipo === 'poligono' ? 'Marque pelo menos 3 vértices para fechar a área' : `${coords.length} vértices`}
+                      {tipo === 'poligono' ? 'Pelo menos 3 pontos para fechar a área' : `${pontos.length} pontos`}
                     </p>
                   </>
                 )}
               </div>
-              <button onClick={salvar} disabled={coords.length < 2}
+              <button onClick={() => setMostraSalvar(true)} disabled={coords.length < 2 || gravando}
                 className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold text-white disabled:opacity-40"
                 style={{ background: 'var(--invicta-green-dark)' }}>
                 <Save size={13} /> Salvar
@@ -313,7 +380,7 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
             onClick={e => e.stopPropagation()}>
             <p className="text-sm font-bold" style={{ color: TXT }}>Offset lateral</p>
             <p className="text-[11px]" style={{ color: SUB }}>
-              Desloca os vértices para o lado, perpendicular à direção de caminhada — útil quando você anda paralelo à divisa (ex.: 2,5 m à direita da cerca).
+              Desloca os pontos para o lado, perpendicular à direção de caminhada — útil quando você anda paralelo à divisa (ex.: 2,5 m à direita da cerca).
             </p>
             <div className="flex items-center gap-2">
               <button onClick={() => setOffsetM(v => Math.max(0, Math.round((v - 0.5) * 10) / 10))}
@@ -349,6 +416,12 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
         </div>
       )}
 
+      {/* salvar (nome, categoria, talhão, ciclo, observação) */}
+      {mostraSalvar && (
+        <SalvarDialog tipo={tipo} medidas={medidas} nSugerido={salvas.length + 1}
+          onFechar={() => setMostraSalvar(false)} onSalvar={onSalvo} />
+      )}
+
       {/* medições salvas */}
       {mostraSalvas && (
         <div className="fixed inset-0 z-50 flex flex-col" style={{ background: AZUL_ESC }}>
@@ -366,12 +439,14 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
                   <div key={m.id} className="flex items-center gap-3 px-3 py-2.5 rounded-xl"
                     style={{ background: '#0b1d3a', border: `1px solid ${BORDA}` }}>
                     <button onClick={() => abrir(m)} className="flex-1 min-w-0 text-left">
-                      <p className="text-xs font-bold truncate" style={{ color: TXT }}>{m.nome}</p>
+                      <p className="text-xs font-bold truncate" style={{ color: TXT }}>
+                        {m.nome}{m.categoria ? <span className="font-normal" style={{ color: '#93c5fd' }}> · {m.categoria}</span> : ''}
+                      </p>
                       <p className="text-[10px]" style={{ color: SUB }}>
                         {m.tipo === 'poligono' && md.areaHa != null
                           ? `${md.areaHa.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} ha · perím. ${formatarDist(md.perimetroM)}`
                           : formatarDist(md.perimetroM)}
-                        {' · '}{new Date(m.criadoEm).toLocaleDateString('pt-BR')}
+                        {m.talhaoNome ? ` · ${m.talhaoNome}` : ''}
                         {' · '}{m.syncPendente ? 'a enviar' : 'na nuvem ✓'}
                       </p>
                     </button>
@@ -386,6 +461,97 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ── diálogo de salvamento (spec seção 10) ─────────────────────────────────────
+function SalvarDialog({ tipo, medidas, nSugerido, onFechar, onSalvar }: {
+  tipo: TipoMedicao;
+  medidas: { areaHa: number | null; perimetroM: number };
+  nSugerido: number;
+  onFechar: () => void;
+  onSalvar: (d: { nome: string; categoria: string; obs: string; talhaoId: string; talhaoNome: string; safra: string }) => void;
+}) {
+  const talhoes = useMemo(() => getTalhoes(), []);
+  const safras = useMemo(() => getSafras(), []);
+  const [nome, setNome] = useState(`Medição ${nSugerido}`);
+  const [categoria, setCategoria] = useState<string>(tipo === 'poligono' ? 'Mancha' : 'Carreador');
+  const [obs, setObs] = useState('');
+  const [talhaoId, setTalhaoId] = useState('');
+  const [safra, setSafra] = useState(() => safras.find(s => s.ativa)?.nome ?? '');
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center" style={{ background: 'rgba(0,0,0,0.65)' }} onClick={onFechar}>
+      <div className="w-full max-w-md rounded-t-2xl flex flex-col" style={{ background: AZUL, maxHeight: '92dvh' }} onClick={e => e.stopPropagation()}>
+        <div className="flex items-center gap-2 px-5 py-3.5" style={{ borderBottom: `1px solid ${BORDA}` }}>
+          <p className="text-sm font-black flex-1" style={{ color: TXT }}>Salvar medição</p>
+          <button onClick={onFechar} className="p-1" style={{ color: SUB }}><X size={18} /></button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3.5">
+          <p className="text-[11px] font-semibold" style={{ color: '#4ade80' }}>
+            {tipo === 'poligono' && medidas.areaHa != null
+              ? `${medidas.areaHa.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} ha · perímetro ${formatarDist(medidas.perimetroM)}`
+              : `${formatarDist(medidas.perimetroM)}`}
+          </p>
+
+          <div>
+            <label className="text-[10px] font-semibold block mb-1" style={{ color: SUB }}>Nome *</label>
+            <input value={nome} onChange={e => setNome(e.target.value)}
+              className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{ background: BORDA, color: TXT, border: '1px solid #2e5fa3' }} />
+          </div>
+
+          <div>
+            <label className="text-[10px] font-semibold block mb-1" style={{ color: SUB }}>Categoria</label>
+            <div className="flex gap-1.5 flex-wrap">
+              {CATEGORIAS_MEDICAO.map(c => (
+                <button key={c} onClick={() => setCategoria(c)}
+                  className="px-2.5 py-1.5 rounded-lg text-[11px] font-bold"
+                  style={{ background: categoria === c ? '#2e5fa3' : BORDA, color: categoria === c ? '#fff' : '#94a3b8' }}>
+                  {c}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2.5">
+            <div>
+              <label className="text-[10px] font-semibold block mb-1" style={{ color: SUB }}>Talhão (opcional)</label>
+              <select value={talhaoId} onChange={e => setTalhaoId(e.target.value)}
+                className="w-full rounded-lg px-2 py-2 text-xs outline-none" style={{ background: BORDA, color: TXT, border: '1px solid #2e5fa3' }}>
+                <option value="">— nenhum —</option>
+                {talhoes.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-[10px] font-semibold block mb-1" style={{ color: SUB }}>Ciclo</label>
+              <select value={safra} onChange={e => setSafra(e.target.value)}
+                className="w-full rounded-lg px-2 py-2 text-xs outline-none" style={{ background: BORDA, color: TXT, border: '1px solid #2e5fa3' }}>
+                <option value="">—</option>
+                {safras.map(s => <option key={s.id} value={s.nome}>{s.nome}</option>)}
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="text-[10px] font-semibold block mb-1" style={{ color: SUB }}>Observação</label>
+            <textarea value={obs} onChange={e => setObs(e.target.value)} rows={2}
+              className="w-full rounded-lg px-3 py-2 text-xs outline-none resize-none" style={{ background: BORDA, color: TXT, border: '1px solid #2e5fa3' }} />
+          </div>
+        </div>
+
+        <div className="px-5 py-3.5" style={{ borderTop: `1px solid ${BORDA}`, paddingBottom: 'max(14px, env(safe-area-inset-bottom))' }}>
+          <button onClick={() => nome.trim() && onSalvar({
+            nome: nome.trim(), categoria, obs,
+            talhaoId, talhaoNome: talhoes.find(t => t.id === talhaoId)?.nome ?? '', safra,
+          })}
+            disabled={!nome.trim()}
+            className="w-full py-3 rounded-xl text-sm font-black text-white disabled:opacity-40" style={{ background: '#16a34a' }}>
+            ✓ Salvar medição
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

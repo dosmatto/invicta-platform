@@ -1,6 +1,11 @@
-export const APP_VERSION = '1.7.0';
+export const APP_VERSION = '1.8.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.8.0': [
+    'Medição GPS agora 100% no modelo do spec: captura por TEMPO — 1 ponto por segundo enquanto você anda — com deslocamento mínimo (0,7 m, "só grava em movimento") e FILTRO DE PRECISÃO (ignora leitura pior que ±25 m, avisando). Cada ponto guarda precisão, velocidade e hora',
+    'Painel AO VIVO durante a caminhada: tipo, tempo decorrido, nº de pontos, distância, área parcial, status/precisão do GPS e velocidade. Durante o percurso o polígono fica como CONTORNO ABERTO e só fecha ao FINALIZAR (liga último→primeiro)',
+    'Botão CANCELAR com confirmação ("os pontos serão descartados") e SALVAMENTO completo: nome, categoria (Área de coleta/Falha/Mancha/Carreador/Divisa/Estrada/Erosão/Talhão/Outro), talhão, ciclo e observação — tudo sobe pra plataforma na sincronização',
+  ],
   '1.7.0': [
     'Medição estilo FieldRover: GRAVAR CAMINHADA — caminhe a divisa e o app marca os vértices sozinho (a cada ~3 m); PAUSAR no meio (desviar de obstáculo/descansar) e RETOMAR, que emenda a linha de onde parou; FINALIZAR liga os pontos automaticamente (fecha o polígono) e mostra a área',
     'Medição com OFFSET lateral em metros (1 casa decimal, esquerda/direita): desloca os vértices perpendicular à direção de caminhada — para quando você anda paralelo à cerca/divisa. Vale tanto na gravação quanto no vértice manual (botão +)',

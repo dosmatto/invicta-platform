@@ -253,11 +253,31 @@ export async function contarFotosPendentes(): Promise<number> {
 
 export type TipoMedicao = 'poligono' | 'linha';
 
+// Categorias do spec (Sistema de Medições GPS, seção 10)
+export const CATEGORIAS_MEDICAO = [
+  'Área de coleta', 'Falha', 'Mancha', 'Carreador', 'Divisa', 'Estrada', 'Erosão', 'Talhão', 'Outro',
+] as const;
+
+// Ponto registrado com metadados (spec seções 4.2 e 14.2)
+export interface PontoMedicao {
+  lng: number;
+  lat: number;
+  precisaoM?: number;
+  velKmH?: number;
+  em: string;        // data/hora do registro
+}
+
 export interface MedicaoCampo {
   id: string;
   nome: string;
   tipo: TipoMedicao;
   coords: [number, number][];
+  pontos?: PontoMedicao[];   // metadados na mesma ordem de coords
+  categoria?: string;
+  obs?: string;
+  talhaoId?: string;
+  talhaoNome?: string;
+  safra?: string;            // ciclo
   criadoEm: string;
   operador?: string;
   syncPendente: boolean;
