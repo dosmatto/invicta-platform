@@ -305,6 +305,21 @@ export interface ConteudoEtiqueta {
   dy: number;
 }
 
+// Variável de Análise (catálogo tipo "Preferências de Análise"): a variável que
+// o laudo traz (pH, P, K…), com sigla/nome/unidade de referência e os sinônimos
+// usados no auto-mapeamento das planilhas. A unidade/extrator REAIS de cada
+// laboratório ficam no PerfilLab (o mesmo K pode vir mmolc/dm³ ou cmolc/dm³).
+export interface ConteudoVariavel {
+  tipo: 'variavel';
+  varId: string;        // id estável (chave em laudos/legendas/padrões)
+  sigla: string;
+  nome: string;
+  unidade: string;      // unidade de REFERÊNCIA (exibição padrão)
+  sinonimos: string[];  // p/ auto-mapear colunas da planilha
+  usar: boolean;        // desativada = fora do mapeamento e dos editores
+  ordem: number;        // ordem de exibição
+}
+
 // Fase R1 — Equações de Recomendação (categoria 'equacoes'). Uma equação calcula
 // uma DOSE a partir dos atributos de fertilidade (álgebra de mapas). O script é
 // avaliado pelo motor (lib/recomendacao/motor.ts) — pixel a pixel na Fase R3.

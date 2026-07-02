@@ -18,7 +18,9 @@ import {
   type ConteudoSafra,
   type ConteudoGrade,
   type ConteudoEtiqueta,
+  type ConteudoVariavel,
 } from './biblioteca';
+import { ELEMENTOS_LAB, simboloElemento, norm as normLab } from './lab';
 
 export interface Cliente {
   id: string;
@@ -632,6 +634,111 @@ export function saveConfigEtiqueta(c: ConfigEtiqueta) {
       nome: 'Etiquetas (Pimaco)', conteudo, escopo: empresaAtivaId() ? 'empresa' : 'meu',
     });
   }
+}
+
+// ── Variáveis de Análise (catálogo, tipo "Preferências de Análise") ─────────
+// Cadastro editável das variáveis dos laudos (sigla/nome/unidade/sinônimos/usar).
+// Semeado a partir do ELEMENTOS_LAB fixo; itens vivem na Biblioteca (categoria
+// preferencias-analise, conteudo.tipo === 'variavel'). Os ids do seed são as
+// CHAVES usadas em laudos/legendas/padrões — por isso não podem ser excluídos
+// (só desativados); variáveis criadas pelo usuário podem.
+export interface VariavelAnalise {
+  id: string;
+  sigla: string;
+  nome: string;
+  unidade: string;
+  sinonimos: string[];
+  usar: boolean;
+  ordem: number;
+}
+
+const VAR_SEED_INFO: Record<string, { nome: string; unidade: string }> = {
+  ph: { nome: 'Acidez (pH)', unidade: '' },
+  p: { nome: 'Fósforo', unidade: 'mg/dm³' },
+  k: { nome: 'Potássio', unidade: 'cmolc/dm³' },
+  ca: { nome: 'Cálcio', unidade: 'cmolc/dm³' },
+  mg: { nome: 'Magnésio', unidade: 'cmolc/dm³' },
+  al: { nome: 'Alumínio', unidade: 'cmolc/dm³' },
+  ctc: { nome: 'CTC (pH 7)', unidade: 'cmolc/dm³' },
+  v: { nome: 'Saturação por Bases', unidade: '%' },
+  m: { nome: 'Saturação por Alumínio', unidade: '%' },
+  mo: { nome: 'Matéria Orgânica', unidade: 'g/dm³' },
+  s: { nome: 'Enxofre', unidade: 'mg/dm³' },
+  b: { nome: 'Boro', unidade: 'mg/dm³' },
+  zn: { nome: 'Zinco', unidade: 'mg/dm³' },
+  cu: { nome: 'Cobre', unidade: 'mg/dm³' },
+  mn: { nome: 'Manganês', unidade: 'mg/dm³' },
+  textura: { nome: 'Textura (Argila)', unidade: '%' },
+};
+export const VARIAVEIS_SEED: VariavelAnalise[] = ELEMENTOS_LAB.map((el, i) => ({
+  id: el.id, sigla: el.simbolo,
+  nome: VAR_SEED_INFO[el.id]?.nome ?? el.simbolo,
+  unidade: VAR_SEED_INFO[el.id]?.unidade ?? '',
+  sinonimos: [...el.sinonimos], usar: true, ordem: i,
+}));
+const VAR_SEED_IDS = new Set(VARIAVEIS_SEED.map(v => v.id));
+
+function _itensVariaveis(): ItemBiblioteca<ConteudoVariavel>[] {
+  return bibListar<ConteudoVariavel>('preferencias-analise').filter(i => i.conteudo?.tipo === 'variavel');
+}
+function _deConteudo(c: ConteudoVariavel): VariavelAnalise {
+  return { id: c.varId, sigla: c.sigla, nome: c.nome, unidade: c.unidade, sinonimos: c.sinonimos ?? [], usar: c.usar !== false, ordem: c.ordem ?? 999 };
+}
+
+// Semeia o catálogo na 1ª abertura (idempotente; só quando não há nenhuma variável).
+export function garantirVariaveisAnalise() {
+  if (typeof window === 'undefined' || _itensVariaveis().length > 0) return;
+  for (const v of VARIAVEIS_SEED) {
+    bibCriar<ConteudoVariavel>('preferencias-analise', {
+      nome: `Variável: ${v.sigla}`,
+      conteudo: { tipo: 'variavel', varId: v.id, sigla: v.sigla, nome: v.nome, unidade: v.unidade, sinonimos: v.sinonimos, usar: true, ordem: v.ordem },
+      escopo: empresaAtivaId() ? 'empresa' : 'meu',
+    });
+  }
+}
+
+// Catálogo completo (fallback = seed em memória, p/ quem nunca abriu o painel).
+export function getVariaveisAnalise(): VariavelAnalise[] {
+  const itens = _itensVariaveis();
+  if (itens.length === 0) return VARIAVEIS_SEED;
+  return itens.map(i => _deConteudo(i.conteudo)).sort((a, b) => a.ordem - b.ordem || a.sigla.localeCompare(b.sigla));
+}
+export function getVariaveisAtivas(): VariavelAnalise[] {
+  return getVariaveisAnalise().filter(v => v.usar);
+}
+
+export function saveVariavelAnalise(v: VariavelAnalise) {
+  garantirVariaveisAnalise();  // edição implica materializar o seed
+  const it = _itensVariaveis().find(i => i.conteudo.varId === v.id);
+  const conteudo: ConteudoVariavel = { tipo: 'variavel', varId: v.id, sigla: v.sigla, nome: v.nome, unidade: v.unidade, sinonimos: v.sinonimos, usar: v.usar, ordem: v.ordem };
+  if (it) bibAtualizar<ConteudoVariavel>('preferencias-analise', it.id, { nome: `Variável: ${v.sigla}`, conteudo });
+  else bibCriar<ConteudoVariavel>('preferencias-analise', { nome: `Variável: ${v.sigla}`, conteudo, escopo: empresaAtivaId() ? 'empresa' : 'meu' });
+}
+
+// Cria uma variável NOVA (id derivado da sigla, único). Devolve a variável criada.
+export function novaVariavelAnalise(dados: Omit<VariavelAnalise, 'id' | 'ordem'>): VariavelAnalise {
+  garantirVariaveisAnalise();
+  const existentes = getVariaveisAnalise();
+  let id = normLab(dados.sigla) || 'var';
+  while (existentes.some(v => v.id === id)) id += 'x';
+  const v: VariavelAnalise = { ...dados, id, ordem: Math.max(0, ...existentes.map(x => x.ordem)) + 1 };
+  saveVariavelAnalise(v);
+  return v;
+}
+
+// Exclui variável criada pelo usuário. As do seed não podem (são chave de dados
+// existentes) — devolve false; desative com usar=false.
+export function deleteVariavelAnalise(id: string): boolean {
+  if (VAR_SEED_IDS.has(id)) return false;
+  const it = _itensVariaveis().find(i => i.conteudo.varId === id);
+  if (it) bibExcluir('preferencias-analise', it.id);
+  return true;
+}
+
+// Sigla p/ exibição — catálogo primeiro, fallback na lista fixa (ids antigos).
+export function siglaVariavel(id: string): string {
+  const v = getVariaveisAnalise().find(x => x.id === id);
+  return v?.sigla ?? simboloElemento(id);
 }
 
 // ── Laboratório: perfis de mapeamento + importações de resultados ───────────

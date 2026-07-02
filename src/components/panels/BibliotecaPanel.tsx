@@ -17,12 +17,14 @@ import { ehAdmin } from '@/lib/empresa';
 // Slug interno: as categorias da Biblioteca + a aba especial "Usuários".
 type SlugBiblioteca = CategoriaBiblioteca | 'usuarios';
 import { EtiquetaLayoutPicker } from '../talhao/EtiquetaLayoutPicker';
-import { PERFIS_BUILTIN, ELEMENTOS_LAB, simboloElemento } from '@/lib/lab';
+import { PERFIS_BUILTIN, norm as normSinonimo } from '@/lib/lab';
 import {
   getPadroesAmostragem, savePadraoAmostragem, updatePadraoAmostragem, deletePadraoAmostragem,
   getPadroesElementos, savePadraoElementos, updatePadraoElementos, deletePadraoElementos,
   getConfigEtiqueta, saveConfigEtiqueta, getLegendasPorAtributo,
-  type PadraoElementos, type PadraoAmostragem, type ProfundidadeConfig, type ConfigEtiqueta,
+  getVariaveisAnalise, getVariaveisAtivas, garantirVariaveisAnalise,
+  saveVariavelAnalise, novaVariavelAnalise, deleteVariavelAnalise, siglaVariavel,
+  type PadraoElementos, type PadraoAmostragem, type ProfundidadeConfig, type ConfigEtiqueta, type VariavelAnalise,
 } from '@/lib/store';
 
 const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
@@ -408,10 +410,21 @@ function PerfisSistema() {
   );
 }
 
+type DetalhesLab = Record<string, { unidade?: string; extrator?: string }>;
+
 function LabEditor({ state, onClose }: { state: LabEditState; onClose: () => void }) {
   const [nome, setNome] = useState(state.nome);
   const [configJson, setConfigJson] = useState(state.configJson);
   const [erro, setErro] = useState('');
+  // Unidade/extrator por variável deste laboratório (parte do PerfilLabConfig).
+  const [detalhes, setDetalhes] = useState<DetalhesLab>(() => {
+    try { return (JSON.parse(state.configJson) as { detalhes?: DetalhesLab }).detalhes ?? {}; } catch { return {}; }
+  });
+  const elsMapeados = useMemo<string[]>(() => {
+    try { return Object.keys((JSON.parse(configJson) as { elementos?: Record<string, number> }).elementos ?? {}); } catch { return []; }
+  }, [configJson]);
+  const setDet = (id: string, patch: { unidade?: string; extrator?: string }) =>
+    setDetalhes(d => ({ ...d, [id]: { ...d[id], ...patch } }));
 
   function salvar() {
     setErro('');
@@ -421,9 +434,16 @@ function LabEditor({ state, onClose }: { state: LabEditState; onClose: () => voi
     try { cfg = JSON.parse(configJson); }
     catch (e) { setErro('JSON inválido: ' + (e instanceof Error ? e.message : String(e))); return; }
     if (!cfg || typeof cfg !== 'object') { setErro('Config precisa ser um objeto JSON.'); return; }
-    const cfgObj = cfg as { colId?: unknown; elementos?: unknown };
+    const cfgObj = cfg as { colId?: unknown; elementos?: unknown; detalhes?: DetalhesLab };
     if (typeof cfgObj.colId !== 'number') { setErro('Campo "colId" precisa ser numérico.'); return; }
     if (!cfgObj.elementos || typeof cfgObj.elementos !== 'object') { setErro('Campo "elementos" precisa ser objeto.'); return; }
+    // grava os detalhes preenchidos (unidade/extrator por variável) no perfil
+    const dLimpo: DetalhesLab = {};
+    for (const [id, d] of Object.entries(detalhes)) {
+      const unidade = d.unidade?.trim(), extrator = d.extrator?.trim();
+      if (unidade || extrator) dLimpo[id] = { ...(unidade ? { unidade } : {}), ...(extrator ? { extrator } : {}) };
+    }
+    if (Object.keys(dLimpo).length) cfgObj.detalhes = dLimpo; else delete cfgObj.detalhes;
 
     if (state.id) {
       atualizar<ConteudoLaboratorio>('laboratorios', state.id, {
@@ -455,6 +475,35 @@ function LabEditor({ state, onClose }: { state: LabEditState; onClose: () => voi
           <input value={nome} onChange={e => setNome(e.target.value)} placeholder="ex: Fundação ABC"
             className="w-full rounded px-2 py-1.5 text-[11px] outline-none" style={inputStyle} />
         </div>
+
+        {/* Unidade + extrator POR VARIÁVEL deste laboratório (K pode ser mmolc/dm³
+            Mehlich num lab e cmolc/dm³ Resina em outro). Vive no perfil (detalhes). */}
+        {elsMapeados.length > 0 && (
+          <div>
+            <label className="text-[10px] font-semibold block mb-1" style={{ color: '#cbd5e1' }}>Unidade e extrator deste laboratório (por variável)</label>
+            <div className="grid items-center gap-x-2 px-1 pb-1 text-[9px] font-bold uppercase" style={{ gridTemplateColumns: '52px 1fr 1fr', color: '#475569' }}>
+              <span>Var.</span><span>Unidade</span><span>Extrator / método</span>
+            </div>
+            <div className="space-y-1">
+              {elsMapeados.map(id => (
+                <div key={id} className="grid items-center gap-x-2" style={{ gridTemplateColumns: '52px 1fr 1fr' }}>
+                  <span className="text-[10px] font-mono font-bold truncate" style={{ color: '#93c5fd' }}>{siglaVariavel(id)}</span>
+                  <input value={detalhes[id]?.unidade ?? ''} onChange={e => setDet(id, { unidade: e.target.value })}
+                    placeholder="ex: mmolc/dm³" list="unidades-analise-lab"
+                    className="rounded px-2 py-1 text-[10px] outline-none" style={inputStyle} />
+                  <input value={detalhes[id]?.extrator ?? ''} onChange={e => setDet(id, { extrator: e.target.value })}
+                    placeholder="ex: Mehlich / Resina"
+                    className="rounded px-2 py-1 text-[10px] outline-none" style={inputStyle} />
+                </div>
+              ))}
+            </div>
+            <p className="text-[9px] mt-1" style={{ color: '#64748b' }}>Deixe em branco para usar a unidade de referência do catálogo (Preferências de Análise › Variáveis).</p>
+            <datalist id="unidades-analise-lab">
+              {['mg/dm³', 'cmolc/dm³', 'mmolc/dm³', 'g/dm³', 'g/kg', '%', 'dag/kg'].map(u => <option key={u} value={u} />)}
+            </datalist>
+          </div>
+        )}
+
         <div>
           <label className="text-[10px] font-semibold block mb-1" style={{ color: '#cbd5e1' }}>Config (JSON do PerfilLabConfig)</label>
           <textarea value={configJson} onChange={e => setConfigJson(e.target.value)}
@@ -731,12 +780,12 @@ function PerfilEditor({ state, onClose }: { state: PerfilEditState; onClose: () 
         <div>
           <label className="text-[10px] font-semibold block mb-1" style={{ color: '#cbd5e1' }}>Legendas por elemento</label>
           <div className="space-y-1">
-            {ELEMENTOS_LAB.map(el => {
+            {getVariaveisAtivas().map(el => {
               const legs = getLegendasPorAtributo(el.id);
               const valor = legPorEl[el.id] ?? '';
               return (
                 <div key={el.id} className="flex items-center gap-2">
-                  <span className="text-[10px] font-mono flex-shrink-0" style={{ width: 60, color: '#93c5fd' }}>{simboloElemento(el.id)}</span>
+                  <span className="text-[10px] font-mono flex-shrink-0" style={{ width: 60, color: '#93c5fd' }}>{el.sigla}</span>
                   <select value={valor} onChange={e => setLeg(el.id, e.target.value)}
                     disabled={legs.length === 0}
                     className="flex-1 rounded px-2 py-1 text-[10px] outline-none" style={inputStyle}>
@@ -797,6 +846,34 @@ function ConteudoSafras() {
 function ConteudoPreferencias() {
   const def = CATEGORIAS.find(c => c.slug === 'preferencias-analise')!;
   const Icon = def.icone;
+  const [sub, setSub] = useState<'variaveis' | 'etiqueta'>('variaveis');
+  return (
+    <section className="flex-1 flex flex-col overflow-hidden relative">
+      <div className="px-4 py-3 flex-shrink-0" style={{ borderBottom: '1px solid #1a3a6b' }}>
+        <div className="flex items-center gap-2 mb-1">
+          <Icon size={14} style={{ color: '#93c5fd' }} />
+          <h3 className="text-sm font-bold uppercase tracking-wide" style={{ color: '#e2e8f0' }}>{def.nome}</h3>
+        </div>
+        <p className="text-[10px]" style={{ color: '#64748b' }}>Variáveis dos laudos (sigla, nome, unidade) e o modelo de etiqueta.</p>
+      </div>
+      <div className="flex gap-1 px-3 pt-2 flex-shrink-0">
+        {([
+          { id: 'variaveis', label: 'Variáveis de Análise' },
+          { id: 'etiqueta', label: 'Etiquetas' },
+        ] as { id: 'variaveis' | 'etiqueta'; label: string }[]).map(t => (
+          <button key={t.id} onClick={() => setSub(t.id)}
+            className="flex-1 py-1 rounded text-[10px] font-bold"
+            style={{ background: sub === t.id ? 'var(--invicta-blue-mid)' : '#1a3a6b', color: sub === t.id ? '#fff' : '#64748b' }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+      {sub === 'variaveis' ? <PrefVariaveis /> : <PrefEtiqueta />}
+    </section>
+  );
+}
+
+function PrefEtiqueta() {
   const [etq, setEtq] = useState<ConfigEtiqueta>(() => getConfigEtiqueta());
   function atualizar(patch: Partial<ConfigEtiqueta>) {
     const novo = { ...etq, ...patch };
@@ -804,28 +881,139 @@ function ConteudoPreferencias() {
     saveConfigEtiqueta(novo);
   }
   return (
-    <section className="flex-1 flex flex-col overflow-hidden">
-      <div className="px-4 py-3 flex-shrink-0" style={{ borderBottom: '1px solid #1a3a6b' }}>
-        <div className="flex items-center gap-2 mb-1">
-          <Icon size={14} style={{ color: '#93c5fd' }} />
-          <h3 className="text-sm font-bold uppercase tracking-wide" style={{ color: '#e2e8f0' }}>{def.nome}</h3>
-        </div>
-        <p className="text-[10px]" style={{ color: '#64748b' }}>{def.descricao}</p>
+    <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2">
+      <div className="rounded-lg p-2" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
+        <div className="text-[11px] font-bold mb-2" style={{ color: '#e2e8f0' }}>Etiquetas (Pimaco)</div>
+        <EtiquetaLayoutPicker
+          layoutId={etq.layoutId} setLayoutId={id => atualizar({ layoutId: id })}
+          dx={etq.dx} dy={etq.dy}
+          setDx={v => atualizar({ dx: v })} setDy={v => atualizar({ dy: v })}
+        />
       </div>
-      <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2">
-        <div className="rounded-lg p-2" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
-          <div className="text-[11px] font-bold mb-2" style={{ color: '#e2e8f0' }}>Etiquetas (Pimaco)</div>
-          <EtiquetaLayoutPicker
-            layoutId={etq.layoutId} setLayoutId={id => atualizar({ layoutId: id })}
-            dx={etq.dx} dy={etq.dy}
-            setDx={v => atualizar({ dx: v })} setDy={v => atualizar({ dy: v })}
-          />
-        </div>
-        <p className="text-[9px]" style={{ color: '#475569' }}>
-          Também acessível em Configurações › Etiquetas — as duas telas editam o mesmo padrão.
+      <p className="text-[9px]" style={{ color: '#475569' }}>
+        Também acessível em Configurações › Etiquetas — as duas telas editam o mesmo padrão.
+      </p>
+    </div>
+  );
+}
+
+// ── Variáveis de Análise (catálogo tipo InCeres: Sigla · Nome · Unidade · Usar) ──
+function PrefVariaveis() {
+  const [refresh, setRefresh] = useState(0);
+  const [edit, setEdit] = useState<{ v: VariavelAnalise | null } | null>(null); // v=null → nova
+  useEffect(() => { garantirVariaveisAnalise(); setRefresh(x => x + 1); }, []);
+  const vars = useMemo(() => getVariaveisAnalise(), [refresh]);   // eslint-disable-line react-hooks/exhaustive-deps
+
+  function toggleUsar(v: VariavelAnalise) {
+    saveVariavelAnalise({ ...v, usar: !v.usar });
+    setRefresh(x => x + 1);
+  }
+  function del(v: VariavelAnalise) {
+    if (!confirm(`Excluir a variável "${v.sigla}"?`)) return;
+    if (!deleteVariavelAnalise(v.id)) { alert('Esta variável é do sistema (chave de dados existentes) — desative-a em vez de excluir.'); return; }
+    setRefresh(x => x + 1);
+  }
+
+  return (
+    <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="px-3 pt-2 flex-shrink-0">
+        <button onClick={() => setEdit({ v: null })}
+          className="w-full py-1.5 rounded text-[10px] font-bold text-white flex items-center justify-center gap-1"
+          style={{ background: 'var(--invicta-green-dark)' }}>
+          <Plus size={11} /> Nova variável
+        </button>
+        <p className="text-[9px] mt-1" style={{ color: '#64748b' }}>
+          A unidade aqui é a de referência — a unidade/extrator de CADA laboratório fica no perfil do Laboratório.
         </p>
       </div>
-    </section>
+      <div className="flex-1 overflow-y-auto px-3 py-2">
+        <div className="grid items-center gap-x-2 px-2 pb-1 text-[9px] font-bold uppercase" style={{ gridTemplateColumns: '52px 1fr 76px 44px 40px', color: '#475569' }}>
+          <span>Sigla</span><span>Nome</span><span>Unidade</span><span>Usar</span><span />
+        </div>
+        <div className="space-y-1">
+          {vars.map(v => (
+            <div key={v.id} className="grid items-center gap-x-2 p-2 rounded-lg" style={{ gridTemplateColumns: '52px 1fr 76px 44px 40px', background: '#061525', border: '1px solid #1a3a6b', opacity: v.usar ? 1 : 0.55 }}>
+              <span className="text-[10px] font-mono font-bold truncate" style={{ color: '#93c5fd' }}>{v.sigla}</span>
+              <span className="text-[10px] truncate" style={{ color: '#e2e8f0' }}>{v.nome}</span>
+              <span className="text-[9px] truncate" style={{ color: '#94a3b8' }}>{v.unidade || '—'}</span>
+              <button onClick={() => toggleUsar(v)} className="py-0.5 rounded text-[9px] font-bold"
+                style={{ background: v.usar ? 'var(--invicta-green-dark)' : '#1a3a6b', color: v.usar ? '#fff' : '#64748b' }}>
+                {v.usar ? 'Sim' : 'Não'}
+              </button>
+              <div className="flex items-center gap-1 justify-end">
+                <button onClick={() => setEdit({ v })} title="Editar" className="p-1 rounded hover:bg-white/10" style={{ color: '#93c5fd' }}><Edit3 size={11} /></button>
+                <button onClick={() => del(v)} title="Excluir" className="p-1 rounded hover:bg-white/10" style={{ color: '#f87171' }}><Trash2 size={11} /></button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      {edit && <VariavelEditor variavel={edit.v} onClose={() => { setEdit(null); setRefresh(x => x + 1); }} />}
+    </div>
+  );
+}
+
+function VariavelEditor({ variavel, onClose }: { variavel: VariavelAnalise | null; onClose: () => void }) {
+  const [sigla, setSigla] = useState(variavel?.sigla ?? '');
+  const [nome, setNome] = useState(variavel?.nome ?? '');
+  const [unidade, setUnidade] = useState(variavel?.unidade ?? '');
+  const [sinonimos, setSinonimos] = useState((variavel?.sinonimos ?? []).join(', '));
+  const [erro, setErro] = useState('');
+
+  function salvar() {
+    setErro('');
+    const s = sigla.trim();
+    if (!s) { setErro('Dê uma sigla (ex.: K, pH SMP).'); return; }
+    const sins = sinonimos.split(',').map(x => normSinonimo(x)).filter(Boolean);
+    if (sins.length === 0) sins.push(normSinonimo(s));
+    const dados = { sigla: s, nome: nome.trim() || s, unidade: unidade.trim(), sinonimos: sins, usar: variavel?.usar ?? true };
+    if (variavel) saveVariavelAnalise({ ...variavel, ...dados });
+    else novaVariavelAnalise(dados);
+    onClose();
+  }
+
+  return (
+    <div className="absolute inset-0 z-10 flex flex-col" style={{ background: 'var(--invicta-blue-dark)' }}>
+      <div className="flex items-center justify-between px-4 py-2 flex-shrink-0" style={{ borderBottom: '1px solid #1a3a6b' }}>
+        <span className="text-[11px] font-bold uppercase" style={{ color: '#e2e8f0' }}>{variavel ? `Editar ${variavel.sigla}` : 'Nova variável de análise'}</span>
+        <button onClick={onClose} className="p-1 rounded hover:bg-white/10" style={{ color: '#cbd5e1' }}><X size={12} /></button>
+      </div>
+      <div className="flex-1 overflow-y-auto p-3 space-y-3">
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="text-[10px] font-semibold block mb-1" style={{ color: '#cbd5e1' }}>Sigla</label>
+            <input value={sigla} onChange={e => setSigla(e.target.value)} placeholder="ex: pH SMP"
+              className="w-full rounded px-2 py-1.5 text-[11px] outline-none" style={inputStyle} />
+          </div>
+          <div>
+            <label className="text-[10px] font-semibold block mb-1" style={{ color: '#cbd5e1' }}>Unidade (referência)</label>
+            <input value={unidade} onChange={e => setUnidade(e.target.value)} placeholder="ex: cmolc/dm³" list="unidades-analise"
+              className="w-full rounded px-2 py-1.5 text-[11px] outline-none" style={inputStyle} />
+            <datalist id="unidades-analise">
+              {['mg/dm³', 'cmolc/dm³', 'mmolc/dm³', 'g/dm³', 'g/kg', '%', 'mS/m', 'dag/kg'].map(u => <option key={u} value={u} />)}
+            </datalist>
+          </div>
+        </div>
+        <div>
+          <label className="text-[10px] font-semibold block mb-1" style={{ color: '#cbd5e1' }}>Nome</label>
+          <input value={nome} onChange={e => setNome(e.target.value)} placeholder="ex: pH SMP (índice de calagem)"
+            className="w-full rounded px-2 py-1.5 text-[11px] outline-none" style={inputStyle} />
+        </div>
+        <div>
+          <label className="text-[10px] font-semibold block mb-1" style={{ color: '#cbd5e1' }}>Sinônimos (para achar a coluna na planilha — separados por vírgula)</label>
+          <input value={sinonimos} onChange={e => setSinonimos(e.target.value)} placeholder="ex: phsmp, smp, indicesmp"
+            className="w-full rounded px-2 py-1.5 text-[11px] outline-none" style={inputStyle} />
+          <p className="text-[9px] mt-1" style={{ color: '#64748b' }}>São comparados com o cabeçalho da planilha (sem acento/maiúsculas). Evite repetir sinônimos de outra variável.</p>
+        </div>
+        {erro && (
+          <div className="px-2 py-1.5 rounded text-[10px]" style={{ background: '#3a1a1a', color: '#fca5a5', border: '1px solid #7f1d1d' }}>{erro}</div>
+        )}
+      </div>
+      <div className="flex gap-2 px-3 py-2 flex-shrink-0" style={{ borderTop: '1px solid #1a3a6b' }}>
+        <button onClick={onClose} className="flex-1 py-1.5 rounded text-[10px] font-bold" style={{ background: '#1a3a6b', color: '#cbd5e1' }}>Cancelar</button>
+        <button onClick={salvar} className="flex-1 py-1.5 rounded text-[10px] font-bold text-white flex items-center justify-center gap-1" style={{ background: 'var(--invicta-green-dark)' }}><Save size={11} /> Salvar</button>
+      </div>
+    </div>
   );
 }
 
@@ -890,7 +1078,7 @@ function GradesElementos() {
               <div key={p.id} className="p-2 rounded-lg flex items-center gap-2" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
                 <div className="flex-1 min-w-0">
                   <div className="text-[11px] font-bold truncate" style={{ color: '#e2e8f0' }}>{p.nome}</div>
-                  <div className="text-[9px] truncate" style={{ color: '#64748b' }}>{p.elementos.map(simboloElemento).join(', ')}</div>
+                  <div className="text-[9px] truncate" style={{ color: '#64748b' }}>{p.elementos.map(siglaVariavel).join(', ')}</div>
                 </div>
                 <button onClick={() => setEdit({ id: p.id, nome: p.nome, elementos: [...p.elementos] })} title="Editar" className="p-1 rounded hover:bg-white/10" style={{ color: '#93c5fd' }}><Edit3 size={11} /></button>
                 <button onClick={() => del(p)} title="Excluir" className="p-1 rounded hover:bg-white/10" style={{ color: '#f87171' }}><Trash2 size={11} /></button>
@@ -937,13 +1125,13 @@ function ElementosEditor({ state, onClose }: { state: { id: string | null; nome:
         <div>
           <label className="text-[10px] font-semibold block mb-1" style={{ color: '#cbd5e1' }}>Elementos ({els.length})</label>
           <div className="grid grid-cols-3 gap-1">
-            {ELEMENTOS_LAB.map(el => {
+            {getVariaveisAtivas().map(el => {
               const on = els.includes(el.id);
               return (
                 <button key={el.id} onClick={() => toggle(el.id)}
                   className="py-1 rounded text-[10px] font-bold"
                   style={{ background: on ? 'var(--invicta-green-dark)' : '#1a3a6b', color: on ? '#fff' : '#94a3b8' }}>
-                  {el.simbolo}
+                  {el.sigla}
                 </button>
               );
             })}

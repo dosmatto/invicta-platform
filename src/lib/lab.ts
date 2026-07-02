@@ -92,6 +92,9 @@ export interface PerfilLabConfig {
   regexProfundidade?: string;
   colCampanha?: number;             // ex: Ordem de Serviço / data
   elementos: Record<string, number>; // elementId -> índice de coluna
+  // Unidade/extrator REAIS deste laboratório por variável (ex.: k -> mmolc/dm³ ·
+  // Mehlich). Opcional/retrocompatível; a unidade de referência fica no catálogo.
+  detalhes?: Record<string, { unidade?: string; extrator?: string }>;
 }
 
 export interface ResultadoAmostra {
@@ -161,7 +164,12 @@ export function aplicarPerfil(aoa: string[][], cfg: PerfilLabConfig, filtroTalha
 
 // Detecta um perfil simples (colunas limpas) a partir dos cabeçalhos — para labs
 // novos com layout direto (uma coluna por elemento + nº/profundidade).
-export function autoConfig(aoa: string[][]): { config: PerfilLabConfig; headers: string[] } {
+// `vars` = catálogo de variáveis a mapear (padrão: a lista fixa; o caller passa
+// as Variáveis de Análise ativas da Biblioteca p/ incluir as criadas pelo usuário).
+export function autoConfig(
+  aoa: string[][],
+  vars: { id: string; sinonimos: string[] }[] = ELEMENTOS_LAB,
+): { config: PerfilLabConfig; headers: string[] } {
   let hi = 0;
   for (let i = 0; i < Math.min(aoa.length, 15); i++) {
     if ((aoa[i] ?? []).filter(c => String(c).trim()).length >= 3) { hi = i; break; }
@@ -176,7 +184,7 @@ export function autoConfig(aoa: string[][]): { config: PerfilLabConfig; headers:
   if (colProf >= 0) usados.add(colProf);
 
   const elementos: Record<string, number> = {};
-  for (const el of ELEMENTOS_LAB) {
+  for (const el of vars) {
     const idx = headers.findIndex((h, i) => {
       if (usados.has(i)) return false;
       const n = norm(h);

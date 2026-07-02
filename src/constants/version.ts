@@ -1,6 +1,11 @@
-export const APP_VERSION = '1.0.1';
+export const APP_VERSION = '1.1.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.1.0': [
+    'Biblioteca › Preferências de Análise ganhou a aba VARIÁVEIS DE ANÁLISE — o cadastro das variáveis dos laudos (Sigla · Nome · Unidade · Usar), no estilo do InCeres. As 16 variáveis atuais viram cadastro editável (semeadas na 1ª abertura) e dá para CRIAR novas (ex.: pH SMP), com sinônimos para o auto-mapeamento das planilhas. As do sistema podem ser desativadas (não excluídas, pois são chave de dados)',
+    'Laboratórios: cada perfil agora registra a UNIDADE e o EXTRATOR/MÉTODO de cada variável DAQUELE laboratório (ex.: K em mmolc/dm³ · Mehlich num lab; cmolc/dm³ · Resina em outro) — editável no perfil (Biblioteca › Laboratórios) e exibido na importação do laudo',
+    'O auto-mapeamento de planilhas e os editores (Padrão de Elementos, Perfis) passam a usar o catálogo de variáveis (incluindo as criadas por você)',
+  ],
   '1.0.1': [
     'Seletor de legenda agora também no NDVI e na Produtividade — quando há mais de uma legenda do módulo, você escolhe qual aplicar (fixa, quartil, mín–máx…) e o mapa recolore na hora; a escolha fica lembrada. Mesmo seletor que já existia na Condutividade, agora reaproveitado (componente único)',
   ],

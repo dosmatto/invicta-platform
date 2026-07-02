@@ -4,10 +4,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import {
   getSafras, getGrades, getPerfisLab, salvarPerfilLab, deletePerfilLab,
-  getImportacoesLab, saveImportacaoLab, deleteImportacaoLab,
+  getImportacoesLab, saveImportacaoLab, deleteImportacaoLab, getVariaveisAtivas, siglaVariavel,
   GradeAmostragem, ImportacaoLab,
 } from '@/lib/store';
-import { lerArquivo, aplicarPerfil, autoConfig, PERFIS_BUILTIN, simboloElemento, norm, numerosDaGrade, PerfilLabConfig } from '@/lib/lab';
+import { lerArquivo, aplicarPerfil, autoConfig, PERFIS_BUILTIN, norm, numerosDaGrade, PerfilLabConfig } from '@/lib/lab';
 import { pode } from '@/lib/empresa';
 import { Upload, Save, Trash2, CheckCircle2, AlertTriangle, FlaskConical } from 'lucide-react';
 
@@ -45,7 +45,7 @@ export function LabImportSection() {
 
   // perfil/config selecionado
   const { cfg, perfilNome, ehAuto } = useMemo<{ cfg: PerfilLabConfig | null; perfilNome: string; ehAuto: boolean }>(() => {
-    if (perfilId === 'auto') return { cfg: aoa ? autoConfig(aoa).config : null, perfilNome: nomeNovoLab.trim() || 'Novo laboratório', ehAuto: true };
+    if (perfilId === 'auto') return { cfg: aoa ? autoConfig(aoa, getVariaveisAtivas()).config : null, perfilNome: nomeNovoLab.trim() || 'Novo laboratório', ehAuto: true };
     const b = PERFIS_BUILTIN.find(p => p.id === perfilId);
     if (b) return { cfg: b.config, perfilNome: b.nome, ehAuto: false };
     const c = perfis.find(p => p.id === perfilId);
@@ -165,7 +165,10 @@ export function LabImportSection() {
             </div>
           )}
           <p className="text-[10px]" style={{ color: '#cbd5e1' }}>
-            <strong style={{ color: '#86efac' }}>{resultadosFinais.length}</strong> amostras · {elementosFinais.map(simboloElemento).join(', ') || 'nenhum elemento'}
+            <strong style={{ color: '#86efac' }}>{resultadosFinais.length}</strong> amostras · {elementosFinais.map(id => {
+              const d = cfg?.detalhes?.[id];
+              return siglaVariavel(id) + (d?.unidade ? ` (${d.unidade}${d.extrator ? ' · ' + d.extrator : ''})` : '');
+            }).join(', ') || 'nenhum elemento'}
             {foraDaGrade > 0 && <span style={{ color: '#fbbf24' }}> · {foraDaGrade} fora da grade</span>}
           </p>
           {resultadosFinais.length === 0 && <p className="text-[9px]" style={{ color: '#fbbf24' }}>Nenhuma amostra — confira o perfil e o talhão.</p>}
@@ -198,7 +201,7 @@ export function LabImportSection() {
                   <button onClick={() => { deleteImportacaoLab(imp.id); recarregar(); }} title="Excluir" className="p-1 rounded" style={{ color: '#f87171' }}><Trash2 size={11} /></button>
                 </div>
                 <p className="text-[9px] mt-0.5 pl-5" style={{ color: '#64748b' }}>
-                  {imp.resultados.length} amostras · {imp.elementos.map(simboloElemento).join(', ')} · {new Date(imp.criadoEm).toLocaleDateString('pt-BR')}
+                  {imp.resultados.length} amostras · {imp.elementos.map(siglaVariavel).join(', ')} · {new Date(imp.criadoEm).toLocaleDateString('pt-BR')}
                 </p>
               </div>
             ))}
