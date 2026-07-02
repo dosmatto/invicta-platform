@@ -158,7 +158,7 @@ const K_PERMISSOES = 'inv_permissoes';
 
 export type Capacidade =
   | 'cadastro' | 'excluirProdutor' | 'amostragem' | 'importarLaudo'
-  | 'fertilidade' | 'recomendacoes' | 'biblioteca' | 'relatorios';
+  | 'fertilidade' | 'ndvi' | 'recomendacoes' | 'biblioteca' | 'relatorios';
 
 export const CAPACIDADES: Array<{ id: Capacidade; label: string; curto: string }> = [
   { id: 'cadastro', label: 'Cadastrar/editar Cliente·Fazenda·Talhão', curto: 'Cadastro' },
@@ -166,6 +166,7 @@ export const CAPACIDADES: Array<{ id: Capacidade; label: string; curto: string }
   { id: 'amostragem', label: 'Amostragem (grades, etiquetas, SHP/KML)', curto: 'Amostragem' },
   { id: 'importarLaudo', label: 'Importar laudo de laboratório', curto: 'Importar laudo' },
   { id: 'fertilidade', label: 'Processar fertilidade (interpolar/zona)', curto: 'Fertilidade' },
+  { id: 'ndvi', label: 'Gerar mapas de NDVI / satélite', curto: 'NDVI' },
   { id: 'recomendacoes', label: 'Recomendações (simular/cenários/arquivos)', curto: 'Recomendações' },
   { id: 'biblioteca', label: 'Biblioteca (criar/editar)', curto: 'Biblioteca' },
   { id: 'relatorios', label: 'Gerar relatórios (PDF)', curto: 'Relatórios' },
@@ -182,11 +183,11 @@ export const ROTULO_CURTO: Record<string, string> = {
 };
 
 type Caps = Record<Capacidade, boolean>;
-const TODAS = (v: boolean): Caps => ({ cadastro: v, excluirProdutor: v, amostragem: v, importarLaudo: v, fertilidade: v, recomendacoes: v, biblioteca: v, relatorios: v });
+const TODAS = (v: boolean): Caps => ({ cadastro: v, excluirProdutor: v, amostragem: v, importarLaudo: v, fertilidade: v, ndvi: v, recomendacoes: v, biblioteca: v, relatorios: v });
 const DEFAULTS_PERMISSOES: Record<string, Caps> = {
   owner: TODAS(true),
   admin: TODAS(true),
-  agronomo: { ...TODAS(false), recomendacoes: true, relatorios: true },
+  agronomo: { ...TODAS(false), ndvi: true, recomendacoes: true, relatorios: true },
   operador: { ...TODAS(false), amostragem: true },
   editor: TODAS(true),    // legado
   viewer: TODAS(false),   // legado

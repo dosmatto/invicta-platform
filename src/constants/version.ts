@@ -1,6 +1,10 @@
-export const APP_VERSION = '1.9.0';
+export const APP_VERSION = '1.9.1';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.9.1': [
+    'Permissões: nova atribuição "Gerar mapas de NDVI / satélite" — liberada por padrão para Owner, Admin e AGRÔNOMO (ajustável na matriz de permissões). Quem não tem a permissão vê a aba NDVI apenas informativa',
+    'Convite de usuário: quando o Supabase bloqueia por limite de e-mail, o aviso agora explica o que fazer (desligar "Confirm email" em Authentication → Providers → Email, ou criar a conta em Authentication → Users) em vez de só mostrar "email rate limit exceeded"',
+  ],
   '1.9.0': [
     'NOVO no painel web — REPOSITÓRIO DE MEDIÇÕES (ícone "Medições" na barra lateral): lista tudo que o app de campo enviou pra nuvem (áreas e linhas), com categoria, área/distância, talhão vinculado, operador e data. Fecha o ciclo campo → escritório',
     'Por medição: ver no mapa, BAIXAR em SHP (.zip)/KML/GeoJSON, e — para polígonos — CRIAR um talhão novo (escolhendo cliente/fazenda) ou SUBSTITUIR o limite de um talhão existente, além de excluir',

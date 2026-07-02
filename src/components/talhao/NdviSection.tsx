@@ -20,6 +20,7 @@ import {
   type RespNdvi, type CenaDisponivel, type FonteNdvi,
 } from '@/lib/msr';
 import { cloudSalvarMapa, cloudCarregarMapasPorPrefixo, cloudExcluirMapasPorPrefixo, cloudPodeGravar } from '@/lib/cloud';
+import { pode } from '@/lib/empresa';
 import type { Legenda } from '@/lib/legendas';
 import { Satellite, Loader2, AlertTriangle, Calendar, Image as ImageIcon, Contrast, Check, Star } from 'lucide-react';
 
@@ -221,6 +222,21 @@ export function NdviSection() {
   candidatos.forEach(c => { if (c.data) porData.set(c.data, { ...c, carregada: !!cenas[c.data] }); });
   Object.values(cenas).forEach(m => { const d = m.resp.cena.data; if (d && !porData.has(d)) porData.set(d, { ...m.resp.cena, carregada: true }); });
   const lista = [...porData.values()].sort((a, b) => (b.data ?? '').localeCompare(a.data ?? ''));
+
+  // Gerar NDVI é uma permissão (Owner/Admin/Agrônomo por padrão). Sem ela, a
+  // aba só informa — nada de listar cenas/processar.
+  if (!pode('ndvi')) {
+    return (
+      <div className="px-4 py-6">
+        <div className="flex items-start gap-2 p-3 rounded-lg" style={{ background: '#0b1d3a', border: '1px solid #1a3a6b' }}>
+          <AlertTriangle size={14} style={{ color: '#fbbf24' }} className="flex-shrink-0 mt-0.5" />
+          <p className="text-[11px]" style={{ color: '#94a3b8' }}>
+            Seu perfil não tem permissão para gerar mapas de NDVI / satélite. Peça a um administrador para liberar a permissão <strong style={{ color: '#cbd5e1' }}>NDVI</strong>.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="px-4 py-3 space-y-3">

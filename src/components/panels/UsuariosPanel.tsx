@@ -67,7 +67,12 @@ export function UsuariosPanel() {
       definirPapelEmail(e, papelNovo, extraProd); // conta já existe: só atribui o papel
       setConvite({ email: e, msg: 'A conta de login já existia — papel atribuído. (Sem senha provisória nova; gere outra se precisar.)' });
     } else {
-      setAviso('Falha ao convidar: ' + (r.erro ?? '') + '. O papel NÃO foi atribuído.');
+      const err = (r.erro ?? '').toLowerCase();
+      if (err.includes('rate limit') || err.includes('email rate')) {
+        setAviso('O Supabase bloqueou o envio de e-mail (limite do plano). Desligue "Confirm email" em Authentication → Providers → Email e convide de novo — ou crie a conta manualmente em Authentication → Users. O papel NÃO foi atribuído.');
+      } else {
+        setAviso('Falha ao convidar: ' + (r.erro ?? '') + '. O papel NÃO foi atribuído.');
+      }
       setConvidando(false);
       return;
     }
