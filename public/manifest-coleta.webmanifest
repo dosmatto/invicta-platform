@@ -1,0 +1,15 @@
+{
+  "name": "INVICTA Coleta de Solo",
+  "short_name": "Coleta",
+  "description": "Coleta de solo em campo — offline, GPS e sincronização com a Plataforma INVICTA",
+  "start_url": "/coleta",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#061525",
+  "theme_color": "#0a1929",
+  "icons": [
+    { "src": "/icons/coleta-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icons/coleta-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

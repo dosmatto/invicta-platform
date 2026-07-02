@@ -1,6 +1,12 @@
-export const APP_VERSION = '1.2.0';
+export const APP_VERSION = '1.3.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.3.0': [
+    '📱 NOVO — App de COLETA DE SOLO em campo (/coleta): PWA instalável no celular/tablet (Android/iOS) que roda o dia inteiro SEM internet. Fluxo: produtor → fazenda → talhão → ciclo → área de coleta (as grades de amostragem da plataforma) → mapa com navegação GPS até cada ponto',
+    'Navegação GPS: posição/precisão/velocidade contínuas, linha até o ponto, RAIO PERMITIDO configurável (5–50 m) — ao entrar no raio o aparelho VIBRA + apita e o botão "Iniciar coleta" habilita. Confirmação registra horário, operador, coordenada real, profundidades, umidade/compactação/problemas/observações e FOTOS (antes/durante/após)',
+    'Offline de verdade: service worker (o app abre sem internet), botão "Baixar mapa offline" (tiles de satélite do talhão ficam no aparelho), coletas e fotos guardadas localmente (localStorage + IndexedDB) e SINCRONIZAÇÃO automática (ao voltar a conexão) e manual — coletas viram docs no Supabase (merge por data, vários aparelhos na mesma grade sem conflito) e fotos sobem pro Storage (bucket "coletas")',
+    'Status por cor no mapa e na lista (pendente/coletado/pulado/cancelado + sincronizado), filtros, lista ordenada por proximidade, tela sempre ligada durante o trabalho, sat/ruas, instalar na tela inicial',
+  ],
   '1.2.0': [
     'Cadastro de talhões EM MASSA na fazenda (#31): botão "Importar em massa (KML/SHP)" ao lado de "Novo Talhão". Aceita VÁRIOS arquivos de uma vez (.kml, .zip shapefile, .geojson) — 1 arquivo por talhão, ou 1 arquivo com vários talhões nomeados (feições com o mesmo nome são agrupadas num talhão só, glebas somadas e furos descontados)',
     'Antes de gravar, tela de revisão: nome editável, área calculada, pré-visualização de todos os polígonos no mapa e seleção do que entra. Se o nome bater com um talhão já existente, ATUALIZA o limite dele em vez de criar duplicado (badge "atualiza limite" × "novo")',
