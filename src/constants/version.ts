@@ -1,6 +1,9 @@
-export const APP_VERSION = '1.8.0';
+export const APP_VERSION = '1.8.1';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.8.1': [
+    'Medição: a FREQUÊNCIA de gravação virou opção (1 / 2 / 3 / 4 / 5 segundos por ponto) no botão de ajustes — intervalos maiores geram menos pontos em áreas grandes e economizam bateria; dá pra mudar até no meio da caminhada. O cronômetro continua em segundos reais e o offset lateral ficou no mesmo painel de ajustes',
+  ],
   '1.8.0': [
     'Medição GPS agora 100% no modelo do spec: captura por TEMPO — 1 ponto por segundo enquanto você anda — com deslocamento mínimo (0,7 m, "só grava em movimento") e FILTRO DE PRECISÃO (ignora leitura pior que ±25 m, avisando). Cada ponto guarda precisão, velocidade e hora',
     'Painel AO VIVO durante a caminhada: tipo, tempo decorrido, nº de pontos, distância, área parcial, status/precisão do GPS e velocidade. Durante o percurso o polígono fica como CONTORNO ABERTO e só fecha ao FINALIZAR (liga último→primeiro)',

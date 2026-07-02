@@ -19,14 +19,15 @@ import { getTalhoes, getSafras } from '@/lib/store';
 import { emailUsuario } from '@/lib/auth';
 import {
   ChevronLeft, Crosshair, Layers, Maximize2, Plus, Undo2, Trash2, List, X, AlertTriangle, Save,
-  Play, Pause, Flag, MoveHorizontal,
+  Play, Pause, Flag, SlidersHorizontal,
 } from 'lucide-react';
 
 const AZUL_ESC = '#061525', AZUL = '#0a1929', BORDA = '#1a3a6b', TXT = '#e2e8f0', SUB = '#64748b';
 const EMPTY_FC: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
 
-// Parâmetros da captura (spec seções 4.3 e 15) — configuráveis no futuro.
-const CAPTURA_MS = 1000;   // 1 ponto por segundo
+// Parâmetros da captura (spec seções 4.3 e 15).
+const TICK_MS = 1000;      // base do cronômetro (1 s); a gravação amostra a cada N ticks
+const FREQS = [1, 2, 3, 4, 5] as const; // frequência de gravação (segundos)
 const MIN_MOVE_M = 0.7;    // só grava se andou ≥ 0,7 m (em movimento)
 const MAX_ACC_M = 25;      // ignora leituras com precisão pior que 25 m
 
@@ -86,12 +87,15 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
   const [elapsed, setElapsed] = useState(0);            // segundos gravando
   const [offsetM, setOffsetM] = useState(0);
   const [offsetLado, setOffsetLado] = useState<'esq' | 'dir'>('dir');
-  const [mostraOffset, setMostraOffset] = useState(false);
+  const [freqS, setFreqS] = useState(1);   // grava 1 ponto a cada freqS segundos
+  const [mostraAjustes, setMostraAjustes] = useState(false);
 
   const userPosRef = useRef(userPos); userPosRef.current = userPos;
   const velRef = useRef(velKmH); velRef.current = velKmH;
   const pausadoRef = useRef(pausado); pausadoRef.current = pausado;
   const offsetRef = useRef({ m: offsetM, lado: offsetLado }); offsetRef.current = { m: offsetM, lado: offsetLado };
+  const freqRef = useRef(freqS); freqRef.current = freqS;
+  const tickRef = useRef(0); // contador de ticks p/ amostrar a cada freqS
   const ultimoGravadoRef = useRef<[number, number] | null>(null); // último ponto gravado (cru, p/ espaçamento e direção)
 
   const coords = useMemo(() => pontos.map(p => [p.lng, p.lat] as [number, number]), [pontos]);
@@ -100,12 +104,16 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
     setPontos(ps => [...ps, { lng, lat, em: new Date().toISOString(), ...meta }]);
   }, []);
 
-  // ── motor de captura: 1 tick/seg enquanto grava (spec 4.2/4.3) ──
+  // ── motor de captura: cronômetro de 1 s; amostra a cada freqS ticks (spec 4.2/4.3) ──
   useEffect(() => {
     if (!gravando) return;
+    tickRef.current = 0;
     const id = setInterval(() => {
-      setElapsed(e => e + 1);
+      setElapsed(e => e + 1);            // tempo decorrido em segundos reais
       if (pausadoRef.current) return;
+      tickRef.current += 1;
+      if (tickRef.current < freqRef.current) return; // ainda não é hora de gravar
+      tickRef.current = 0;
       const p = userPosRef.current;
       if (!p) return;
       if (p.acc > MAX_ACC_M) { setMsg(`GPS impreciso (±${Math.round(p.acc)} m) — ponto ignorado.`); return; }
@@ -116,7 +124,7 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
       ultimoGravadoRef.current = [p.lng, p.lat];
       pushPonto(pt[0], pt[1], { precisaoM: Math.round(p.acc), velKmH: velRef.current ?? undefined });
       setMsg('');
-    }, CAPTURA_MS);
+    }, TICK_MS);
     return () => clearInterval(id);
   }, [gravando, pushPonto]);
 
@@ -226,7 +234,7 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
         <div className="flex-1 min-w-0">
           <p className="text-xs font-bold" style={{ color: TXT }}>Medição GPS</p>
           <p className="text-[10px]" style={{ color: gravando && !pausado ? '#f87171' : SUB }}>
-            {gravando ? (pausado ? '⏸ Pausado — retoma emendando' : '● Gravando · 1 ponto/seg') : 'Toque no mapa, marque no GPS ou grave a caminhada'}
+            {gravando ? (pausado ? '⏸ Pausado — retoma emendando' : `● Gravando · 1 ponto/${freqS}s`) : 'Toque no mapa, marque no GPS ou grave a caminhada'}
           </p>
         </div>
         <button onClick={() => setMostraSalvas(true)} className="p-1.5 rounded-lg flex-shrink-0" style={{ background: BORDA, color: '#93c5fd' }} title="Medições salvas">
@@ -269,7 +277,7 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
         <BotaoMapa onClick={() => { setSeguir(false); setPedidoEnquadrar(x => x + 1); }} titulo="Enquadrar o desenho"><Maximize2 size={18} /></BotaoMapa>
         <BotaoMapa onClick={() => setModo(m => (m === 'sat' ? 'ruas' : 'sat'))} titulo="Satélite / Ruas"><Layers size={18} /></BotaoMapa>
         <BotaoMapa onClick={addVerticeGps} titulo="Marcar vértice no meu GPS"><Plus size={18} /></BotaoMapa>
-        <BotaoMapa ativo={offsetM > 0} onClick={() => setMostraOffset(true)} titulo="Offset lateral (m)"><MoveHorizontal size={18} /></BotaoMapa>
+        <BotaoMapa ativo={offsetM > 0 || freqS > 1} onClick={() => setMostraAjustes(true)} titulo="Ajustes (frequência, offset)"><SlidersHorizontal size={18} /></BotaoMapa>
         <BotaoMapa onClick={() => setPontos(ps => ps.slice(0, -1))} titulo="Desfazer último ponto"><Undo2 size={18} /></BotaoMapa>
         <BotaoMapa onClick={cancelar} titulo="Cancelar medição"><Trash2 size={18} /></BotaoMapa>
       </div>
@@ -293,11 +301,18 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
                 {t === 'poligono' ? '⬠ Polígono (área)' : '⎯ Linha (distância)'}
               </button>
             ))}
-            {offsetM > 0 && (
-              <span className="ml-auto self-center text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: '#1e3a8a', color: '#93c5fd' }}>
-                offset {offsetM.toFixed(1)} m {offsetLado === 'esq' ? '←' : '→'}
-              </span>
-            )}
+            <span className="ml-auto self-center flex items-center gap-1.5">
+              {freqS > 1 && (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: '#1e3a8a', color: '#93c5fd' }}>
+                  {freqS}s/ponto
+                </span>
+              )}
+              {offsetM > 0 && (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: '#1e3a8a', color: '#93c5fd' }}>
+                  offset {offsetM.toFixed(1)} m {offsetLado === 'esq' ? '←' : '→'}
+                </span>
+              )}
+            </span>
           </div>
 
           {/* gravar / pausar-retomar / finalizar / cancelar */}
@@ -373,11 +388,34 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
         </div>
       </div>
 
-      {/* offset lateral */}
-      {mostraOffset && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center" style={{ background: 'rgba(0,0,0,0.6)' }} onClick={() => setMostraOffset(false)}>
+      {/* ajustes: frequência de gravação + offset lateral */}
+      {mostraAjustes && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center" style={{ background: 'rgba(0,0,0,0.6)' }} onClick={() => setMostraAjustes(false)}>
           <div className="w-full max-w-md rounded-t-2xl p-5 space-y-4" style={{ background: AZUL, paddingBottom: 'max(20px, env(safe-area-inset-bottom))' }}
             onClick={e => e.stopPropagation()}>
+            <p className="text-sm font-bold" style={{ color: TXT }}>Ajustes da medição</p>
+
+            {/* frequência de gravação */}
+            <div>
+              <label className="text-[11px] font-semibold block mb-1.5" style={{ color: '#93c5fd' }}>
+                Gravar 1 ponto a cada:
+              </label>
+              <div className="flex gap-1.5">
+                {FREQS.map(f => (
+                  <button key={f} onClick={() => setFreqS(f)}
+                    className="flex-1 py-2.5 rounded-xl text-xs font-bold"
+                    style={{ background: freqS === f ? '#2e5fa3' : BORDA, color: freqS === f ? '#fff' : '#94a3b8', border: `1px solid ${freqS === f ? '#60a5fa' : BORDA}` }}>
+                    {f}s
+                  </button>
+                ))}
+              </div>
+              <p className="text-[10px] mt-1" style={{ color: SUB }}>
+                Intervalos maiores geram menos pontos (bom para áreas grandes e para economizar bateria). Pode mudar até no meio da gravação.
+              </p>
+            </div>
+
+            <div className="h-px" style={{ background: BORDA }} />
+
             <p className="text-sm font-bold" style={{ color: TXT }}>Offset lateral</p>
             <p className="text-[11px]" style={{ color: SUB }}>
               Desloca os pontos para o lado, perpendicular à direção de caminhada — útil quando você anda paralelo à divisa (ex.: 2,5 m à direita da cerca).
@@ -403,11 +441,11 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
               ))}
             </div>
             <div className="flex gap-2">
-              <button onClick={() => { setOffsetM(0); setMostraOffset(false); }}
+              <button onClick={() => { setOffsetM(0); }}
                 className="flex-1 py-2.5 rounded-xl text-xs font-bold" style={{ background: BORDA, color: '#94a3b8' }}>
                 Sem offset
               </button>
-              <button onClick={() => setMostraOffset(false)}
+              <button onClick={() => setMostraAjustes(false)}
                 className="flex-1 py-2.5 rounded-xl text-xs font-bold text-white" style={{ background: 'var(--invicta-green-dark)' }}>
                 Aplicar
               </button>
