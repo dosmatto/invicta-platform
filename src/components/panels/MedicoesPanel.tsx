@@ -15,6 +15,7 @@ import {
   baixarShp, baixarKML, baixarGeoJSON, criarTalhaoDaMedicao, substituirLimiteTalhao,
 } from '@/lib/medicoesRepo';
 import { getClientes, getFazendas, getTalhoes } from '@/lib/store';
+import { escopoClienteIds, emailUsuario } from '@/lib/empresa';
 import {
   RefreshCw, Loader2, Ruler, MapPin, Eye, Download, Plus, Repeat, Trash2, X, CheckCircle2, CloudUpload,
 } from 'lucide-react';
@@ -32,7 +33,18 @@ export function MedicoesPanel() {
 
   const recarregar = useCallback(async () => {
     setCarregando(true);
-    setMeds(await carregarMedicoes());
+    const todas = await carregarMedicoes();
+    // Vínculo (consultoria): usuário limitado vê só medições dos SEUS talhões
+    // (getTalhoes já vem filtrado pelo escopo) + as que ele mesmo criou.
+    const esc = escopoClienteIds();
+    if (!esc) { setMeds(todas); }
+    else {
+      const meusTalhoes = new Set(getTalhoes().map(t => t.id));
+      const meu = emailUsuario();
+      setMeds(todas.filter(m =>
+        (m.talhaoId && meusTalhoes.has(m.talhaoId)) || (!!meu && m.operador === meu),
+      ));
+    }
     setCarregando(false);
   }, []);
   useEffect(() => { void recarregar(); }, [recarregar]);

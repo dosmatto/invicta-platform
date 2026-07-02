@@ -17,7 +17,10 @@ import {
 } from '@/lib/empresa';
 import { getClientes, type Cliente } from '@/lib/store';
 import { criarUsuarioConvite } from '@/lib/auth';
-import { UserPlus, Trash2, AlertTriangle, ShieldCheck, SlidersHorizontal, Copy, Loader2, KeyRound, CreditCard, Plus } from 'lucide-react';
+import { UserPlus, Trash2, AlertTriangle, ShieldCheck, SlidersHorizontal, Copy, Loader2, KeyRound, CreditCard, Plus, Building2, X } from 'lucide-react';
+
+// Papéis cujo acesso pode ser LIMITADO a clientes específicos (consultoria).
+const PAPEIS_VINCULAVEIS: PapelMembro[] = ['agronomo', 'operador'];
 
 const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
 // Papéis cujas permissões o Owner edita (Owner é sempre tudo, não aparece aqui).
@@ -37,6 +40,7 @@ export function UsuariosPanel() {
   const [planoNovo, setPlanoNovo] = useState('');
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [planos, setPlanos] = useState<PlanoAssinatura[]>([]);
+  const [vincDe, setVincDe] = useState<RegistroPapel | null>(null);
 
   function recarregar() { setPapeis(getPapeis()); setPerms(getPermissoes()); setClientes(getClientes()); setPlanos(getPlanos()); }
   useEffect(() => {
@@ -104,6 +108,16 @@ export function UsuariosPanel() {
     if (!souOwner) return;
     definirPermissao(papel, cap, !perms[papel]?.[cap]);
     recarregar();
+  }
+
+  function toggleVinculo(reg: RegistroPapel, clienteId: string) {
+    if (!souOwner) return;
+    const atual = reg.clientesVinculados ?? [];
+    const novo = atual.includes(clienteId) ? atual.filter(x => x !== clienteId) : [...atual, clienteId];
+    definirPapelEmail(reg.email, reg.papel, { clientesVinculados: novo });
+    const atualizado = getPapeis().find(p => p.email === reg.email) ?? null;
+    setVincDe(atualizado);
+    setPapeis(getPapeis());
   }
 
   return (
@@ -192,6 +206,13 @@ export function UsuariosPanel() {
                 {PAPEIS_ATRIBUIVEIS.map(p => <option key={p} value={p}>{ROTULO_PAPEL[p]}</option>)}
                 {!PAPEIS_ATRIBUIVEIS.includes(r.papel) && <option value={r.papel}>{ROTULO_PAPEL[r.papel] ?? r.papel}</option>}
               </select>
+              {PAPEIS_VINCULAVEIS.includes(r.papel) && (
+                <button onClick={() => setVincDe(r)} disabled={!souOwner} title="Clientes que este usuário pode acessar"
+                  className="px-1.5 py-0.5 rounded text-[9px] font-bold flex items-center gap-0.5"
+                  style={{ background: '#1a3a6b', color: (r.clientesVinculados?.length ?? 0) ? '#86efac' : '#93c5fd' }}>
+                  <Building2 size={10} /> {(r.clientesVinculados?.length ?? 0) || 'todos'}
+                </button>
+              )}
               <button onClick={() => remover(r.email)} disabled={!souOwner}
                 className="p-1 rounded" style={{ color: '#f87171', background: '#1a3a6b', opacity: souOwner ? 1 : 0.5 }}>
                 <Trash2 size={10} />
@@ -281,6 +302,53 @@ export function UsuariosPanel() {
               </tbody>
             </table>
           )}
+        </div>
+      )}
+
+      {/* Vínculos de clientes (consultoria) */}
+      {vincDe && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ background: 'rgba(0,0,0,0.65)' }} onClick={() => setVincDe(null)}>
+          <div className="w-full max-w-sm rounded-2xl flex flex-col" style={{ background: 'var(--invicta-blue)', border: '1px solid #1a3a6b', maxHeight: '80vh' }}
+            onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-2 px-4 py-3" style={{ borderBottom: '1px solid #1a3a6b' }}>
+              <Building2 size={14} style={{ color: '#93c5fd' }} />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold truncate" style={{ color: '#e2e8f0' }}>Clientes de {ROTULO_PAPEL[vincDe.papel]}</p>
+                <p className="text-[10px] truncate" style={{ color: '#64748b' }}>{vincDe.email}</p>
+              </div>
+              <button onClick={() => setVincDe(null)} className="p-1" style={{ color: '#64748b' }}><X size={16} /></button>
+            </div>
+            <div className="px-4 py-2 text-[10px]" style={{ color: '#94a3b8', borderBottom: '1px solid #0f2240' }}>
+              {(vincDe.clientesVinculados?.length ?? 0) === 0
+                ? '⚠ Sem nenhum marcado = acesso a TODOS os clientes. Marque para limitar.'
+                : `Vê ${vincDe.clientesVinculados!.length} de ${clientes.length} cliente(s).`}
+            </div>
+            <div className="flex-1 overflow-y-auto p-2 space-y-1">
+              {clientes.length === 0 && <p className="text-[11px] py-6 text-center" style={{ color: '#64748b' }}>Nenhum cliente cadastrado.</p>}
+              {clientes.map(c => {
+                const marcado = (vincDe.clientesVinculados ?? []).includes(c.id);
+                return (
+                  <label key={c.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer"
+                    style={{ background: marcado ? '#0f2a1a' : '#0b1d3a' }}>
+                    <input type="checkbox" checked={marcado} onChange={() => toggleVinculo(vincDe, c.id)}
+                      className="accent-green-600" style={{ width: 15, height: 15 }} />
+                    <span className="text-xs truncate" style={{ color: marcado ? '#86efac' : '#cbd5e1' }}>{c.nome}</span>
+                  </label>
+                );
+              })}
+            </div>
+            <div className="px-4 py-2.5 flex items-center gap-2" style={{ borderTop: '1px solid #1a3a6b' }}>
+              <button onClick={() => { definirPapelEmail(vincDe.email, vincDe.papel, { clientesVinculados: [] }); setVincDe(getPapeis().find(p => p.email === vincDe.email) ?? null); setPapeis(getPapeis()); }}
+                className="text-[10px] font-bold" style={{ color: '#93c5fd' }}>
+                Limpar (ver todos)
+              </button>
+              <div className="flex-1" />
+              <button onClick={() => setVincDe(null)}
+                className="px-4 py-1.5 rounded-lg text-xs font-bold text-white" style={{ background: 'var(--invicta-green-dark)' }}>
+                Concluir
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

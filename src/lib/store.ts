@@ -6,7 +6,7 @@ import type { ResultadoAmostra, PerfilLabConfig } from './lab';
 import type { Legenda } from './legendas';
 import type { AmbienteProdutivo } from './meap/tipos';
 import { cloudPushLista } from './cloud';
-import { empresaAtivaId, uidUsuario } from './empresa';
+import { empresaAtivaId, uidUsuario, escopoClienteIds } from './empresa';
 import {
   listar as bibListar,
   obter as bibObter,
@@ -352,8 +352,16 @@ function comEmpresa<T extends object>(item: T): T {
 
 // ── Clientes ──────────────────────────────────────────────────────────────
 
+// Escopo de fazendas derivado do vínculo de clientes (consultoria).
+function fazendasNoEscopo(esc: Set<string>): Set<string> {
+  return new Set(loadFiltrado<Fazenda>('inv_fazendas').filter(f => esc.has(f.clienteId)).map(f => f.id));
+}
+
 export function getClientes(): Cliente[] {
-  return loadFiltrado<Cliente>('inv_clientes').sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  const esc = escopoClienteIds();
+  let all = loadFiltrado<Cliente>('inv_clientes');
+  if (esc) all = all.filter(c => esc.has(c.id));
+  return all.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
 }
 
 export function saveCliente(c: Omit<Cliente, 'id' | 'criadoEm'>): Cliente {
@@ -397,7 +405,9 @@ export function excluirProdutorCascata(clienteId: string): { talhaoIds: string[]
 // ── Fazendas ──────────────────────────────────────────────────────────────
 
 export function getFazendas(clienteId?: string): Fazenda[] {
-  const all = loadFiltrado<Fazenda>('inv_fazendas');
+  const esc = escopoClienteIds();
+  let all = loadFiltrado<Fazenda>('inv_fazendas');
+  if (esc) all = all.filter(f => esc.has(f.clienteId));
   return clienteId ? all.filter(f => f.clienteId === clienteId) : all;
 }
 
@@ -418,7 +428,9 @@ export function updateFazenda(id: string, data: Partial<Fazenda>) {
 // ── Talhões ───────────────────────────────────────────────────────────────
 
 export function getTalhoes(fazendaId?: string): Talhao[] {
-  const all = loadFiltrado<Talhao>('inv_talhoes');
+  const esc = escopoClienteIds();
+  let all = loadFiltrado<Talhao>('inv_talhoes');
+  if (esc) { const fz = fazendasNoEscopo(esc); all = all.filter(t => fz.has(t.fazendaId)); }
   return fazendaId ? all.filter(t => t.fazendaId === fazendaId) : all;
 }
 

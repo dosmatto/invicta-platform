@@ -32,6 +32,7 @@ export interface RegistroPapel {
   id: string; email: string; papel: PapelMembro; senhaProvisoria?: boolean;
   clienteId?: string;  // produtor: qual Cliente ele é (escopo do portal)
   planoId?: string;    // produtor: qual plano de assinatura (seções liberadas)
+  clientesVinculados?: string[]; // agrônomo/operador: clientes que ele pode acessar (vazio = todos)
 }
 const PAPEIS_SEED: Array<{ email: string; papel: PapelMembro }> = [
   { email: 'william@invicta.agr.br', papel: 'owner' },
@@ -106,7 +107,7 @@ export function papelDoEmail(email: string | null): PapelMembro | null {
 }
 export function definirPapelEmail(
   email: string, papel: PapelMembro,
-  extra?: { senhaProvisoria?: boolean; clienteId?: string; planoId?: string },
+  extra?: { senhaProvisoria?: boolean; clienteId?: string; planoId?: string; clientesVinculados?: string[] },
 ) {
   const e = normEmail(email);
   if (!e) return;
@@ -355,6 +356,21 @@ export function ehAdmin(_e?: Empresa | null): boolean {
 export function podeEditar(_e?: Empresa | null): boolean {
   const p = papelDoUsuario();
   return p === 'owner' || p === 'admin' || p === 'editor';
+}
+
+// ── Escopo por VÍNCULO (consultoria) ─────────────────────────────────────────
+// Quais CLIENTES o usuário logado pode enxergar. `null` = sem restrição (vê
+// todos). Owner/Admin/Editor sempre veem tudo. Produtor vê só o próprio cliente.
+// Agrônomo/Operador: se tiverem clientes vinculados, só esses; se NÃO tiverem
+// nenhum vínculo definido, mantêm acesso total (retrocompatível — nada quebra
+// até você atribuir vínculos). Usado por getClientes/getFazendas/getTalhoes.
+export function escopoClienteIds(): Set<string> | null {
+  const papel = papelDoUsuario();
+  if (!papel || papel === 'owner' || papel === 'admin' || papel === 'editor') return null;
+  const reg = meuRegistro();
+  if (papel === 'produtor') return new Set(reg?.clienteId ? [reg.clienteId] : []);
+  const vinc = reg?.clientesVinculados;
+  return vinc && vinc.length ? new Set(vinc) : null;
 }
 
 // Boot — chamada uma vez por sessão (idempotente).

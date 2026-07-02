@@ -1,6 +1,10 @@
-export const APP_VERSION = '1.9.1';
+export const APP_VERSION = '1.10.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.10.0': [
+    'PERMISSÕES POR VÍNCULO (consultoria): em Usuários, cada Agrônomo/Operador ganhou o botão de clientes (🏢) — o Owner escolhe QUAIS clientes aquele usuário pode acessar. Sem nenhum marcado = vê todos (retrocompatível); ao marcar, ele passa a enxergar SÓ os clientes/fazendas/talhões vinculados, na plataforma E no app de campo',
+    'O filtro vale para todo o sistema (lista de clientes, fazendas, talhões) e para o Repositório de Medições — um usuário limitado vê apenas as medições dos seus talhões (e as que ele mesmo registrou). Owner e Admin continuam vendo tudo',
+  ],
   '1.9.1': [
     'Permissões: nova atribuição "Gerar mapas de NDVI / satélite" — liberada por padrão para Owner, Admin e AGRÔNOMO (ajustável na matriz de permissões). Quem não tem a permissão vê a aba NDVI apenas informativa',
     'Convite de usuário: quando o Supabase bloqueia por limite de e-mail, o aviso agora explica o que fazer (desligar "Confirm email" em Authentication → Providers → Email, ou criar a conta em Authentication → Users) em vez de só mostrar "email rate limit exceeded"',
