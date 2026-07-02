@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Image from 'next/image';
 import { Loader2, LogIn } from 'lucide-react';
-import { loginEmailSenha, mensagemErroLogin } from '@/lib/auth';
+import { loginEmailSenha, loginOffline, mensagemErroLogin } from '@/lib/auth';
 
 export function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -16,9 +16,22 @@ export function LoginScreen() {
     if (!email.trim() || !senha) return;
     setErro(''); setCarregando(true);
     try {
+      // Sem internet: confere a senha contra o acesso salvo neste aparelho
+      // (login OFFLINE do app de campo — a senha nunca fica salva, só um hash).
+      if (!navigator.onLine) {
+        await loginOffline(email, senha);
+        return;
+      }
       await loginEmailSenha(email, senha);
       // Sucesso: o AppProvider reage ao onAuthStateChanged e renderiza o app.
     } catch (err) {
+      const msg = ((err as { message?: string })?.message ?? '').toLowerCase();
+      const semRede = !navigator.onLine || msg.includes('network') || msg.includes('fetch');
+      if (semRede) {
+        // a rede caiu no meio do login online → tenta o offline como fallback
+        try { await loginOffline(email, senha); return; }
+        catch (e2) { setErro((e2 as Error).message); setCarregando(false); return; }
+      }
       setErro(mensagemErroLogin(err));
       setCarregando(false);
     }
@@ -54,6 +67,9 @@ export function LoginScreen() {
           {carregando ? <><Loader2 size={16} className="animate-spin" /> Entrando…</> : <><LogIn size={16} /> Entrar</>}
         </button>
 
+        <p className="text-center text-[10px]" style={{ color: '#475569' }}>
+          Sem internet? Se você já entrou neste aparelho, o mesmo e-mail e senha funcionam offline.
+        </p>
         <p className="text-center text-[10px]" style={{ color: '#475569' }}>INVICTA AP · invictaap.com.br</p>
       </form>
     </div>

@@ -11,7 +11,7 @@ import {
   getClientes, getFazendas, getTalhoes, getSafras, getGrades,
   Talhao, GradeAmostragem, PontoAmostragem,
 } from '@/lib/store';
-import { emailUsuario, logout } from '@/lib/auth';
+import { emailUsuario, logout, modoOffline } from '@/lib/auth';
 import { bootCloud } from '@/lib/cloud';
 import {
   RegistroColeta, StatusPonto, COR_STATUS, ROTULO_STATUS,
@@ -107,6 +107,10 @@ export default function ColetaPage() {
 
   const sincronizar = useCallback(async () => {
     if (!navigator.onLine) { setMsgSync('Sem internet — os dados ficam guardados no aparelho.'); return; }
+    if (modoOffline()) {
+      setMsgSync('Você entrou no modo offline. Agora que há internet, saia e entre de novo para enviar os dados.');
+      return;
+    }
     setSincronizando(true); setMsgSync('');
     try {
       const enviados = await pushColetasPendentes();

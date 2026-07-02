@@ -104,7 +104,8 @@ export async function pushColetasPendentes(): Promise<number> {
   let enviados = 0;
   for (const c of pendentes) {
     try {
-      await salvarDocSupabase(COLECAO, c.id, { ...c, syncPendente: false });
+      const ok = await salvarDocSupabase(COLECAO, c.id, { ...c, syncPendente: false });
+      if (!ok) continue;  // servidor recusou (sem sessão/RLS) → segue pendente
       c.syncPendente = false;
       enviados++;
     } catch { /* offline/erro: continua pendente */ }

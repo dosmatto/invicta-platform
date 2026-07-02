@@ -1,6 +1,11 @@
-export const APP_VERSION = '1.4.0';
+export const APP_VERSION = '1.5.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.5.0': [
+    'LOGIN OFFLINE no app de campo: depois do 1º login com internet, o aparelho guarda um verificador seguro da senha (hash PBKDF2 — a senha em si NUNCA é salva). Sem internet, o mesmo e-mail e senha entram no app normalmente (coletas/medições continuam funcionando; os dados ficam pendentes)',
+    'No modo offline, o botão Sincronizar avisa com clareza: ao voltar a internet é preciso sair e entrar de novo (login de verdade) para enviar os dados — e o envio agora só marca como sincronizado o que o servidor CONFIRMOU (antes um erro silencioso podia marcar coleta como enviada sem ela ter subido)',
+    'Trocar a senha também atualiza o acesso offline do aparelho',
+  ],
   '1.4.0': [
     'App de campo (/coleta): nova TELA INICIAL com os módulos — Amostragem de Solo (o fluxo de coleta) e Medição; a casa preparada pra receber os próximos módulos de campo',
     'NOVO módulo MEDIÇÃO: polígono (ÁREA em ha + perímetro) e linha (DISTÂNCIA) — marque vértices tocando no mapa ou caminhando com o botão + (vértice na sua posição GPS); desfazer/limpar/enquadrar; medições podem ser SALVAS com nome no aparelho e reabertas depois (tudo offline)',

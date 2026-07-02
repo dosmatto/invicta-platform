@@ -193,16 +193,19 @@ export async function marcarMapasMigrados(): Promise<void> {
 }
 
 // ── Coleções consultadas por CAMPO (ex.: talhaoId), fora do boot ──────────────
-// Usadas por cenários (inv_cenarios) e relatórios (inv_relatorios). Guardadas no
-// app_kv (colecao+item_id+dados), consultadas por um campo do jsonb.
-export async function salvarDocSupabase(colecao: string, id: string, dados: object): Promise<void> {
+// Usadas por cenários (inv_cenarios), relatórios (inv_relatorios) e coletas de
+// campo (inv_coletas). Guardadas no app_kv (colecao+item_id+dados), consultadas
+// por um campo do jsonb. Retorna se gravou de fato (RLS/sessão podem recusar —
+// o sync de campo usa isso pra NÃO marcar como enviado o que o servidor negou).
+export async function salvarDocSupabase(colecao: string, id: string, dados: object): Promise<boolean> {
   const sb = getSupabase();
-  if (!sb) return;
+  if (!sb) return false;
   const up = await sb.from('app_kv').upsert(
     { colecao, item_id: id, dados, atualizado_em: new Date().toISOString() },
     { onConflict: 'colecao,item_id' },
   );
-  if (up.error) console.warn(`[supabase] salvar ${colecao}:`, up.error.message);
+  if (up.error) { console.warn(`[supabase] salvar ${colecao}:`, up.error.message); return false; }
+  return true;
 }
 
 export async function carregarDocsPorCampoSupabase<T>(colecao: string, campo: string, valor: string): Promise<T[]> {
