@@ -1,6 +1,9 @@
-export const APP_VERSION = '1.0.0';
+export const APP_VERSION = '1.0.1';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.0.1': [
+    'Seletor de legenda agora também no NDVI e na Produtividade — quando há mais de uma legenda do módulo, você escolhe qual aplicar (fixa, quartil, mín–máx…) e o mapa recolore na hora; a escolha fica lembrada. Mesmo seletor que já existia na Condutividade, agora reaproveitado (componente único)',
+  ],
   '1.0.0': [
     '🎉 Versão 1.0 — a plataforma entrou em PRODUÇÃO com o banco definitivo. Dados, login, mapas e geometria (PostGIS) no Supabase/Postgres (São Paulo); processamento (krigagem/IDW/satélite) no Render; app na Vercel. A migração do Firebase para o Supabase está concluída — nada mais depende de rodar backend/banco na sua máquina.',
     'Marco de tudo que veio até aqui: Fertilidade, Amostragem, Zonas de Manejo (MEAP), Condutividade, NDVI/Satélite (Sentinel-2 + CBERS-4A), Produtividade, Recomendações/Cenários, Relatórios e a Biblioteca de Padrões — agora sobre uma base geoespacial de verdade.',

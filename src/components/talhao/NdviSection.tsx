@@ -7,7 +7,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useApp } from '@/context/AppContext';
-import { getTalhoes, getLegendasPorAtributo } from '@/lib/store';
+import { getTalhoes } from '@/lib/store';
+import { SeletorLegenda, legendasDoModulo, usePrefLegenda } from './SeletorLegenda';
 import {
   extrairPoligono, coordsFromBounds, comprimirGrid, descomprimirGrid,
   decodeGrid, type Grid,
@@ -69,8 +70,11 @@ export function NdviSection() {
   const [carregandoImg, setCarregandoImg] = useState(false);
   const [salvos, setSalvos] = useState<Record<string, boolean>>({}); // cenas MANTIDAS (persistidas) por data
 
-  // Legenda NDVI oficial -> versão CONTÍNUA (sem mexer no seed do sistema).
-  const legNdvi: Legenda | undefined = useMemo(() => getLegendasPorAtributo('ndvi')[0], []);
+  // Legenda NDVI: o usuário escolhe entre as de NDVI (seletor) -> versão CONTÍNUA.
+  const legendasNdvi = useMemo(() => legendasDoModulo('ndvi'), []);
+  const [legNdviId, escolherLegNdvi] = usePrefLegenda('inv_leg_pref_ndvi');
+  const legNdvi: Legenda | undefined = useMemo(
+    () => legendasNdvi.find(l => l.id === legNdviId) ?? legendasNdvi[0], [legendasNdvi, legNdviId]);
   const corStops = useMemo(() => legNdvi ? rampaVisualStops({ ...legNdvi, estilo: 'continuo' }) : [], [legNdvi]);
   const gradCss = useMemo(
     () => corStops.length ? `linear-gradient(to right, ${corStops.map(([p, [r, g, b]]) => `rgb(${r},${g},${b}) ${(p * 100).toFixed(1)}%`).join(', ')})` : 'transparent',
@@ -357,6 +361,8 @@ export function NdviSection() {
               <div className="text-[9px] leading-relaxed" style={{ color: '#64748b' }}>
                 grade {sel.resp.stats.nx}×{sel.resp.stats.ny} · pixel <strong style={{ color: '#94a3b8' }}>{sel.resp.stats.pixel_m} m</strong> · {sel.resp.stats.n} px válidos
               </div>
+
+              <SeletorLegenda legendas={legendasNdvi} valorId={legNdvi?.id} onEscolher={escolherLegNdvi} />
 
               <div>
                 <div className="h-4 rounded" style={{ border: '1px solid rgba(255,255,255,0.1)', background: gradCss }} />

@@ -25,6 +25,7 @@ import {
 } from '@/lib/produtividade';
 import { cloudSalvarMapa, cloudCarregarMapasPorPrefixo, cloudPodeGravar } from '@/lib/cloud';
 import { ComparadorProdNdvi } from '@/components/talhao/ComparadorProdNdvi';
+import { SeletorLegenda, legendasDoModulo, usePrefLegenda } from './SeletorLegenda';
 import type { Legenda } from '@/lib/legendas';
 import { Upload, Loader2, AlertTriangle, Save, Star, Trash2, Eye, Wand2, FileSpreadsheet, Plus, Layers, ChevronDown, ChevronUp } from 'lucide-react';
 
@@ -76,6 +77,10 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
   const [res, setRes] = useState<RespInterp | null>(null);
   const [stats, setStats] = useState<StatsProd | null>(null);
   const [legenda, setLegenda] = useState<Legenda | null>(null);
+  // Seletor de legenda (por padrão a da cultura; o usuário pode trocar). A escolha lembra.
+  const legendasProd = useMemo(() => legendasDoModulo('produtividade'), []);
+  const [legProdId, escolherLegProd] = usePrefLegenda('inv_leg_pref_produtividade');
+  const legendaInicial = (c: string) => legendasProd.find(l => l.id === legProdId) ?? legendaDaCultura(c);
   const [relatorio, setRelatorio] = useState<RelatorioColheita | null>(null);
   const [fresco, setFresco] = useState(false);
 
@@ -159,7 +164,7 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
     if (!poligono) { setErro('Limite do talhão não encontrado — abra o talhão no mapa.'); setEstado('erro'); return; }
     const machines = pontosPorMaq.filter(m => m.pontos.length).map(m => ({ nome: m.nome, pontos: m.pontos }));
     if (machines.reduce((s, m) => s + m.pontos.length, 0) < 10) { setErro('Poucos pontos importados.'); setEstado('erro'); return; }
-    const leg = legendaDaCultura(cultura);
+    const leg = legendaInicial(cultura);
     if (!leg) { setErro('Legenda de produtividade não encontrada.'); setEstado('erro'); return; }
     setEstado('processando'); setErro('');
     try {
@@ -196,7 +201,7 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
   function verVersao(v: MapaProdutividade) {
     const r = rasters[v.id];
     if (!r) { setErro('Raster desta versão não está na nuvem (reprocesse).'); return; }
-    const leg = legendaDaCultura(v.cultura);
+    const leg = legendaInicial(v.cultura);
     setLegenda(leg ?? null); setRelatorio(null);
     setRes({ bounds: r.bounds, grid: r.grid, png: '', stats: { n: 0, modelo: 'idw', min: v.stats.minKgha, max: v.stats.maxKgha, nx: 0, ny: 0, pixel_m: v.params.pixelM, rmse: null, variograma: null } });
     setStats({ nUsados: v.stats.nUsados, areaHa: v.stats.areaHa, producaoTotalKg: v.stats.producaoTotalKg, mediaKgha: v.stats.mediaKgha, minKgha: v.stats.minKgha, maxKgha: v.stats.maxKgha, cv: v.stats.cv, histograma: [] });
@@ -347,6 +352,8 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
             </div>
           )}
           {stats.histograma.length > 0 && <Histograma h={stats.histograma} unidade={unidade} />}
+          <SeletorLegenda legendas={legendasProd} valorId={legenda.id}
+            onEscolher={id => { const l = legendasProd.find(x => x.id === id); if (l) { setLegenda(l); escolherLegProd(id); } }} />
           <div className="h-3.5 rounded" style={{ border: '1px solid rgba(255,255,255,0.1)', background: gradienteCss(legenda) }} />
           <p className="text-[9px]" style={{ color: '#64748b' }}>{legenda.nome} · pixel {res.stats?.pixel_m ?? pixelM} m</p>
           {fresco && (
