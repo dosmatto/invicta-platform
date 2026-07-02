@@ -1,7 +1,5 @@
 import { kml } from '@tmcw/togeojson';
 import turfArea from '@turf/area';
-import { union as turfUnion } from '@turf/union';
-import { featureCollection } from '@turf/helpers';
 import { classeZona, classeReconhecida } from './zonas';
 
 export interface GeoUploadResult {
@@ -147,16 +145,21 @@ function computeOuterArea(geojson: GeoJSON.FeatureCollection): number {
   return Math.round(total * 100) / 100;
 }
 
-// ── Saneamento de LIMITES (polígonos de talhão) ──────────────────────────────
-// Arquivos de campo vêm com defeitos comuns: "polígono" desenhado como LINHA
-// aberta, vértices duplicados, ESPÍCULAS (vai-e-volta) e auto-interseções.
-// Aqui limpamos automaticamente sem comprometer o resto do polígono:
-//  • LineString quase fechada (pontas próximas) → fecha e vira Polygon;
-//  • remove vértices duplicados/colineares e espículas;
-//  • auto-interseção → união do polígono com ele mesmo (polygon-clipping);
-//  • anéis degenerados (<4 posições) são descartados com aviso.
+// ── Saneamento de LIMITES (polígonos de talhão) — CONSERVADOR ────────────────
+// Princípio: mudança MÍNIMA. Um polígono já fechado e válido passa INTACTO.
+// Só intervimos no que está de fato quebrado, e nunca produzimos um resultado
+// pior do que não fazer nada (na dúvida, mantém o anel original):
+//  • LineString (limite desenhado como linha) → fecha ligando fim→início;
+//  • remove só vértices DUPLICADOS exatos (mesma coordenada repetida);
+//  • remove só ESPÍCULAS reais (agulha: o traçado vai e volta ~sobre si mesmo)
+//    — critério por ÂNGULO, então CANTOS normais (até bem fechados) ficam;
+//  • NÃO faz simplificação de colineares nem união (isso destruía polígonos).
 
 type Pos = GeoJSON.Position;
+
+const TOL_DUP_M = 0.10;      // vértices a < 10 cm = mesma coordenada (duplicado)
+const COS_ESPICULA = 0.985;  // arestas quase paralelas (ângulo < ~10°) = agulha
+const PERNA_ESPICULA_M = 12; // só remove agulha se a perna curta for pequena
 
 // distância aproximada em metros (equiretangular — suficiente p/ épsilons locais)
 function dM(a: Pos, b: Pos): number {
@@ -166,47 +169,57 @@ function dM(a: Pos, b: Pos): number {
   return Math.sqrt(x * x + y * y);
 }
 
-// limpa um anel: fecha, tira duplicados, colineares e espículas (iterativo)
-function limparAnel(anel: Pos[]): Pos[] | null {
-  let pts = anel.slice();
-  // remove o fechamento pra trabalhar aberto
-  if (pts.length > 1 && dM(pts[0], pts[pts.length - 1]) < 0.05) pts = pts.slice(0, -1);
-
-  for (let passo = 0; passo < 5; passo++) {
-    const antes = pts.length;
-    // duplicados consecutivos
-    pts = pts.filter((p, i) => i === 0 || dM(pts[i - 1], p) > 0.05);
-    // colineares e espículas
-    const manter: Pos[] = [];
-    for (let i = 0; i < pts.length; i++) {
-      const a = pts[(i - 1 + pts.length) % pts.length];
-      const b = pts[i];
-      const c = pts[(i + 1) % pts.length];
-      const ab = dM(a, b), bc = dM(b, c), ac = dM(a, c);
-      const colinear = ab + bc - ac < 0.5;                       // B em cima da reta A–C
-      const espicula = ac < 0.02 * (ab + bc) && ab + bc > 2;     // sai e volta (vai-e-volta)
-      if (!colinear && !espicula) manter.push(b);
-    }
-    pts = manter;
-    if (pts.length === antes) break;
+// anel ABERTO (sem repetir o 1º ponto no fim) e sem duplicados consecutivos
+function semDuplicados(anel: Pos[]): Pos[] {
+  const abertos = anel.slice();
+  if (abertos.length > 1 && dM(abertos[0], abertos[abertos.length - 1]) < TOL_DUP_M) abertos.pop();
+  const out: Pos[] = [];
+  for (const p of abertos) {
+    if (out.length === 0 || dM(out[out.length - 1], p) > TOL_DUP_M) out.push(p);
   }
-
-  if (pts.length < 3) return null;
-  return [...pts, pts[0]]; // fecha
+  // fechamento circular: se o último coincide com o primeiro, remove
+  while (out.length > 1 && dM(out[0], out[out.length - 1]) < TOL_DUP_M) out.pop();
+  return out;
 }
 
-// tenta consertar auto-interseção unindo o polígono com ele mesmo
-function autoUniao(geom: GeoJSON.Polygon | GeoJSON.MultiPolygon): GeoJSON.Polygon | GeoJSON.MultiPolygon {
-  try {
-    const f: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon> = { type: 'Feature', properties: {}, geometry: geom };
-    const u = turfUnion(featureCollection([f, f]));
-    return u?.geometry ?? geom;
-  } catch { return geom; }
+// remove APENAS espículas (agulhas): vértice B cujas arestas B→A e B→C apontam
+// quase na MESMA direção (o traçado sai e volta). Iterativo e reindexado.
+function tirarEspiculas(anelAberto: Pos[]): { anel: Pos[]; removidos: number } {
+  const pts = anelAberto.slice();
+  let removidos = 0, mudou = true, guarda = 0;
+  while (mudou && pts.length > 3 && guarda++ < anelAberto.length + 5) {
+    mudou = false;
+    for (let i = 0; i < pts.length; i++) {
+      const n = pts.length;
+      const A = pts[(i - 1 + n) % n], B = pts[i], C = pts[(i + 1) % n];
+      const ux = A[0] - B[0], uy = A[1] - B[1];
+      const vx = C[0] - B[0], vy = C[1] - B[1];
+      const lu = Math.hypot(ux, uy), lv = Math.hypot(vx, vy);
+      if (lu === 0 || lv === 0) continue;
+      const cos = (ux * vx + uy * vy) / (lu * lv);   // ~+1 quando B→A ≈ B→C (agulha)
+      const pernaCurta = Math.min(dM(A, B), dM(B, C));
+      if (cos > COS_ESPICULA && pernaCurta < PERNA_ESPICULA_M) {
+        pts.splice(i, 1); removidos++; mudou = true; break; // reindexa
+      }
+    }
+  }
+  return { anel: pts, removidos };
+}
+
+// Limpa um anel com o MÍNIMO. Nunca degenera: se a limpeza deixar < 3 pontos,
+// cai pro anel sem-duplicados (que já tem ≥ 3). Retorna anel FECHADO ou null
+// só quando realmente não há 3 pontos distintos.
+function limparAnel(anel: Pos[]): { fechado: Pos[] | null; espiculas: number } {
+  const base = semDuplicados(anel);
+  if (base.length < 3) return { fechado: null, espiculas: 0 };
+  const { anel: semAgulha, removidos } = tirarEspiculas(base);
+  const usar = semAgulha.length >= 3 ? semAgulha : base;
+  return { fechado: [...usar, usar[0]], espiculas: removidos };
 }
 
 export function sanearLimites(entrada: GeoJSON.FeatureCollection): { fc: GeoJSON.FeatureCollection; avisos: string[] } {
   const avisos: string[] = [];
-  let linhasFechadas = 0, descartadas = 0, aneisDescartados = 0;
+  let linhasFechadas = 0, espiculas = 0, descartadas = 0;
 
   const saida: GeoJSON.Feature[] = [];
   const anexarPoligono = (coordenadas: Pos[][][], props: GeoJSON.GeoJsonProperties) => {
@@ -214,9 +227,10 @@ export function sanearLimites(entrada: GeoJSON.FeatureCollection): { fc: GeoJSON
     for (const anelSet of coordenadas) {
       const limpos: Pos[][] = [];
       for (const anel of anelSet) {
-        const l = limparAnel(anel);
-        if (l) limpos.push(l);
-        else aneisDescartados++;
+        const r = limparAnel(anel);
+        espiculas += r.espiculas;
+        if (r.fechado) limpos.push(r.fechado);
+        // furo degenerado é só ignorado — o anel externo segue
       }
       if (limpos.length) polys.push(limpos);
     }
@@ -224,19 +238,15 @@ export function sanearLimites(entrada: GeoJSON.FeatureCollection): { fc: GeoJSON
     const geom: GeoJSON.Polygon | GeoJSON.MultiPolygon = polys.length === 1
       ? { type: 'Polygon', coordinates: polys[0] }
       : { type: 'MultiPolygon', coordinates: polys };
-    saida.push({ type: 'Feature', properties: props ?? {}, geometry: autoUniao(geom) });
+    saida.push({ type: 'Feature', properties: props ?? {}, geometry: geom });
   };
 
+  // Limite desenhado como LINHA: fecha ligando fim→início (o "finalizar" liga os
+  // pontos). Aproveita o traçado como está — só remove duplicados/agulhas.
   const tratarLinha = (coords: Pos[], props: GeoJSON.GeoJsonProperties) => {
-    if (coords.length < 4) { descartadas++; return; }
-    let compr = 0;
-    for (let i = 1; i < coords.length; i++) compr += dM(coords[i - 1], coords[i]);
-    const abertura = dM(coords[0], coords[coords.length - 1]);
-    // pontas próximas em relação ao tamanho → era pra ser um polígono
-    if (abertura <= Math.max(20, compr * 0.02)) {
-      linhasFechadas++;
-      anexarPoligono([[coords]], props);
-    } else descartadas++;
+    if (semDuplicados(coords).length < 3) { descartadas++; return; }
+    linhasFechadas++;
+    anexarPoligono([[coords]], props);
   };
 
   const visitar = (geom: GeoJSON.Geometry | null | undefined, props: GeoJSON.GeoJsonProperties) => {
@@ -251,9 +261,9 @@ export function sanearLimites(entrada: GeoJSON.FeatureCollection): { fc: GeoJSON
 
   entrada.features.forEach(f => visitar(f.geometry, f.properties));
 
-  if (linhasFechadas) avisos.push(`${linhasFechadas} linha(s) aberta(s) foram fechadas e viraram polígono automaticamente.`);
-  if (aneisDescartados) avisos.push(`${aneisDescartados} anel(éis) degenerado(s) removido(s).`);
-  if (descartadas) avisos.push(`${descartadas} feição(ões) descartada(s) (não formam polígono).`);
+  if (linhasFechadas) avisos.push(`${linhasFechadas} limite(s) em linha fechado(s) para formar polígono.`);
+  if (espiculas) avisos.push(`${espiculas} espícula(s) (vértice de vai-e-volta) removida(s).`);
+  if (descartadas) avisos.push(`${descartadas} feição(ões) sem polígono ignorada(s).`);
 
   return { fc: { type: 'FeatureCollection', features: saida }, avisos };
 }

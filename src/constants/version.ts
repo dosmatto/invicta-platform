@@ -1,6 +1,9 @@
-export const APP_VERSION = '1.6.0';
+export const APP_VERSION = '1.6.1';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.6.1': [
+    'CORREÇÃO: a limpeza de geometria da 1.6.0 estava agressiva demais e passou a REJEITAR polígonos válidos (aparecia "anel degenerado / nenhum polígono aproveitável"). Reescrita com mudança MÍNIMA: um polígono já fechado passa INTACTO; só corrige o que está de fato quebrado (linha aberta vira polígono; remove só vértices duplicados exatos e ESPÍCULAS reais de vai-e-volta, por ângulo — cantos normais são preservados) e NUNCA degenera (na dúvida, mantém o anel original). Importação individual e em massa voltam a funcionar',
+  ],
   '1.6.0': [
     'Importação de limites agora LIMPA geometria defeituosa automaticamente (individual e em massa): polígono desenhado como LINHA ABERTA é fechado e recuperado, espículas (vai-e-volta) e vértices duplicados são removidos, auto-interseções são consertadas — sem comprometer o resto do polígono; o que foi corrigido aparece como aviso',
     'Importação em massa: botão com resposta de verdade — mostra "Importando…", conclui com "✓ X criados · Y atualizados" e QUALQUER erro aparece na tela (antes falhava em silêncio); a gravação virou UMA operação em lote (muito mais rápida com dezenas de polígonos)',
