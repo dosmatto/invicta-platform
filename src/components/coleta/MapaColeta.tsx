@@ -52,9 +52,12 @@ interface Props {
   pedidoEnquadrar: number;  // contador: enquadrar a área (bbox) no mapa
   onSelecionarPonto: (ordem: number) => void;
   onGestoUsuario: () => void; // usuário arrastou/deu zoom → o pai desliga o "seguir"
+  // Medição: desenho (polígono/linha + vértices) e clique livre no mapa
+  desenho?: GeoJSON.FeatureCollection | null;
+  onClickMapa?: (lng: number, lat: number) => void;
 }
 
-export function MapaColeta({ talhaoGeo, bbox, pontos, userPos, alvo, raioM, modo, seguirGps, pedidoGps, pedidoEnquadrar, onSelecionarPonto, onGestoUsuario }: Props) {
+export function MapaColeta({ talhaoGeo, bbox, pontos, userPos, alvo, raioM, modo, seguirGps, pedidoGps, pedidoEnquadrar, onSelecionarPonto, onGestoUsuario, desenho, onClickMapa }: Props) {
   const divRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const prontoRef = useRef(false);
@@ -64,6 +67,8 @@ export function MapaColeta({ talhaoGeo, bbox, pontos, userPos, alvo, raioM, modo
   onSelRef.current = onSelecionarPonto;
   const onGestoRef = useRef(onGestoUsuario);
   onGestoRef.current = onGestoUsuario;
+  const onClickMapaRef = useRef(onClickMapa);
+  onClickMapaRef.current = onClickMapa;
   const userPosRef = useRef(userPos);
   userPosRef.current = userPos;
   const bboxRef = useRef(bbox);
@@ -86,6 +91,7 @@ export function MapaColeta({ talhaoGeo, bbox, pontos, userPos, alvo, raioM, modo
       map.addSource('raio', { type: 'geojson', data: EMPTY_FC });
       map.addSource('rota', { type: 'geojson', data: EMPTY_FC });
       map.addSource('pontos', { type: 'geojson', data: EMPTY_FC });
+      map.addSource('desenho', { type: 'geojson', data: EMPTY_FC });
       map.addSource('user-acc', { type: 'geojson', data: EMPTY_FC });
       map.addSource('user', { type: 'geojson', data: EMPTY_FC });
 
@@ -111,6 +117,19 @@ export function MapaColeta({ talhaoGeo, bbox, pontos, userPos, alvo, raioM, modo
           'text-allow-overlap': false,
         },
         paint: { 'text-color': '#fff', 'text-halo-color': '#0a1929', 'text-halo-width': 1.2 } });
+      // desenho da medição (polígono/linha + vértices)
+      map.addLayer({ id: 'desenho-fill', type: 'fill', source: 'desenho',
+        filter: ['==', ['geometry-type'], 'Polygon'],
+        paint: { 'fill-color': '#4ade80', 'fill-opacity': 0.22 } });
+      map.addLayer({ id: 'desenho-line', type: 'line', source: 'desenho',
+        filter: ['any', ['==', ['geometry-type'], 'LineString'], ['==', ['geometry-type'], 'Polygon']],
+        paint: { 'line-color': '#4ade80', 'line-width': 2.5 } });
+      map.addLayer({ id: 'desenho-vertices', type: 'circle', source: 'desenho',
+        filter: ['==', ['geometry-type'], 'Point'],
+        paint: {
+          'circle-radius': 5.5, 'circle-color': '#fff',
+          'circle-stroke-width': 2, 'circle-stroke-color': '#16a34a',
+        } });
       map.addLayer({ id: 'user-acc-fill', type: 'fill', source: 'user-acc',
         paint: { 'fill-color': '#3b82f6', 'fill-opacity': 0.15 } });
       map.addLayer({ id: 'user-dot', type: 'circle', source: 'user',
@@ -122,6 +141,10 @@ export function MapaColeta({ talhaoGeo, bbox, pontos, userPos, alvo, raioM, modo
       map.on('click', 'pontos-circulo', (e) => {
         const f = e.features?.[0];
         if (f?.properties && f.properties.ordem != null) onSelRef.current(Number(f.properties.ordem));
+      });
+      // clique livre no mapa (medição: adicionar vértice onde tocar)
+      map.on('click', (e) => {
+        onClickMapaRef.current?.(e.lngLat.lng, e.lngLat.lat);
       });
       // gesto do USUÁRIO (arrastar/pinça/scroll) — movimentos programáticos
       // (easeTo do seguir) não têm originalEvent e não disparam isto
@@ -174,6 +197,13 @@ export function MapaColeta({ talhaoGeo, bbox, pontos, userPos, alvo, raioM, modo
       (map.getSource('pontos') as maplibregl.GeoJSONSource)?.setData(pontos);
     });
   }, [pontos]);
+
+  // desenho da medição
+  useEffect(() => {
+    quandoPronto(map => {
+      (map.getSource('desenho') as maplibregl.GeoJSONSource)?.setData(desenho ?? EMPTY_FC);
+    });
+  }, [desenho]);
 
   // alvo: raio permitido + linha de navegação
   useEffect(() => {

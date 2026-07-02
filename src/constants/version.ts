@@ -1,6 +1,10 @@
-export const APP_VERSION = '1.3.1';
+export const APP_VERSION = '1.4.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.4.0': [
+    'App de campo (/coleta): nova TELA INICIAL com os módulos — Amostragem de Solo (o fluxo de coleta) e Medição; a casa preparada pra receber os próximos módulos de campo',
+    'NOVO módulo MEDIÇÃO: polígono (ÁREA em ha + perímetro) e linha (DISTÂNCIA) — marque vértices tocando no mapa ou caminhando com o botão + (vértice na sua posição GPS); desfazer/limpar/enquadrar; medições podem ser SALVAS com nome no aparelho e reabertas depois (tudo offline)',
+  ],
   '1.3.1': [
     'Coleta (celular): PINÇA e ARRASTAR do mapa corrigidos — o CSS do MapLibre agora vai embutido no app (antes vinha de CDN, que falhava no celular/offline) e o modo "seguir GPS" desliga sozinho quando você mexe no mapa (antes ele puxava a câmera de volta a cada segundo e travava o gesto)',
     'Coleta: novo botão VER A ÁREA (⛶) — enquadra o talhão/grade no mapa de onde você estiver (com fallback pelos pontos da grade quando o talhão não tem bbox); o botão de GPS (⌖) agora VAI até sua posição num toque e segue você até você arrastar o mapa',

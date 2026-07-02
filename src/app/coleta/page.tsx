@@ -22,15 +22,20 @@ import {
   TipoFoto, FotoColeta,
 } from '@/lib/coleta';
 import type { PosOperador } from '@/components/coleta/MapaColeta';
+import { useGps } from '@/components/coleta/useGps';
 import {
   ChevronLeft, ChevronRight, MapPin, Crosshair, Layers, List, Download,
   RefreshCw, LogOut, Settings, Camera, CheckCircle2, X, Wifi, WifiOff,
-  Loader2, AlertTriangle, Navigation, CloudUpload, Maximize2,
+  Loader2, AlertTriangle, Navigation, CloudUpload, Maximize2, Ruler, Grid3x3,
 } from 'lucide-react';
 
 const MapaColeta = dynamic(
   () => import('@/components/coleta/MapaColeta').then(m => ({ default: m.MapaColeta })),
   { ssr: false, loading: () => <div className="absolute inset-0" style={{ background: '#0a1929' }} /> },
+);
+const MedicaoScreen = dynamic(
+  () => import('@/components/coleta/MedicaoScreen').then(m => ({ default: m.MedicaoScreen })),
+  { ssr: false, loading: () => <div className="fixed inset-0" style={{ background: '#0a1929' }} /> },
 );
 
 const AZUL_ESC = '#061525', AZUL = '#0a1929', BORDA = '#1a3a6b', TXT = '#e2e8f0', SUB = '#64748b';
@@ -64,6 +69,7 @@ const SEL_VAZIA: Selecao = {
 };
 
 export default function ColetaPage() {
+  const [modulo, setModulo] = useState<'amostragem' | 'medicao' | null>(null);
   const [sel, setSel] = useState<Selecao>(SEL_VAZIA);
   const [reload, setReload] = useState(0);
   const [online, setOnline] = useState(true);
@@ -128,21 +134,107 @@ export default function ColetaPage() {
     }
   }, [sel.gradeId]);
 
+  if (modulo === 'medicao') {
+    return <MedicaoScreen onVoltar={() => setModulo(null)} />;
+  }
+  if (modulo !== 'amostragem') {
+    return <TelaInicio online={online} pend={pend} sincronizar={sincronizar}
+      sincronizando={sincronizando} msgSync={msgSync} instalar={instalar} onEscolher={setModulo} />;
+  }
   if (!sel.gradeId) {
     return <TelaSelecao sel={sel} setSel={setSel} online={online} pend={pend}
-      sincronizar={sincronizar} sincronizando={sincronizando} msgSync={msgSync} instalar={instalar} />;
+      sincronizar={sincronizar} sincronizando={sincronizando} msgSync={msgSync} instalar={instalar}
+      onHome={() => setModulo(null)} />;
   }
   return <TelaMapa sel={sel} setSel={setSel} online={online} pend={pend} reload={reload}
     setReload={setReload} sincronizar={sincronizar} sincronizando={sincronizando} msgSync={msgSync} />;
 }
 
+// ═══ Tela 0 — Início (módulos do app de campo) ════════════════════════════════
+
+const MODULOS: { id: 'amostragem' | 'medicao'; icone: React.ElementType; cor: string; corIcone: string; titulo: string; desc: string }[] = [
+  { id: 'amostragem', icone: Grid3x3, cor: '#166534', corIcone: '#86efac', titulo: 'Amostragem de Solo', desc: 'Navegue por GPS até os pontos da grade e registre as coletas (offline)' },
+  { id: 'medicao', icone: Ruler, cor: '#1e3a8a', corIcone: '#93c5fd', titulo: 'Medição', desc: 'Meça áreas (polígono) e distâncias (linha) tocando no mapa ou caminhando com o GPS' },
+];
+
+function TelaInicio({ online, pend, sincronizar, sincronizando, msgSync, instalar, onEscolher }: {
+  online: boolean; pend: { regs: number; fotos: number };
+  sincronizar: () => Promise<void>; sincronizando: boolean; msgSync: string;
+  instalar: (() => void) | null;
+  onEscolher: (m: 'amostragem' | 'medicao') => void;
+}) {
+  return (
+    <div className="min-h-screen flex flex-col" style={{ background: AZUL_ESC }}>
+      <header className="flex items-center justify-between px-4 py-3 flex-shrink-0"
+        style={{ background: AZUL, borderBottom: `1px solid ${BORDA}` }}>
+        <Image src="/images/logo-branca.png" alt="Invicta" width={88} height={26} priority
+          style={{ objectFit: 'contain', height: 26, width: 'auto' }} />
+        <div className="flex items-center gap-2">
+          {online
+            ? <span className="flex items-center gap-1 text-[10px] font-bold" style={{ color: '#4ade80' }}><Wifi size={13} /> Online</span>
+            : <span className="flex items-center gap-1 text-[10px] font-bold" style={{ color: '#fbbf24' }}><WifiOff size={13} /> Offline</span>}
+          <button onClick={() => logout()} className="p-1.5 rounded" style={{ color: '#93c5fd' }} title="Sair">
+            <LogOut size={16} />
+          </button>
+        </div>
+      </header>
+
+      <div className="px-4 py-2.5 flex items-center gap-2 flex-wrap" style={{ background: '#0b1d3a', borderBottom: `1px solid ${BORDA}` }}>
+        <button onClick={() => void sincronizar()} disabled={sincronizando}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold text-white disabled:opacity-50"
+          style={{ background: 'var(--invicta-blue-mid)' }}>
+          {sincronizando ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />} Sincronizar
+        </button>
+        {(pend.regs > 0 || pend.fotos > 0) && (
+          <span className="flex items-center gap-1 text-[10px] font-semibold" style={{ color: '#fbbf24' }}>
+            <CloudUpload size={12} /> {pend.regs} coleta(s) · {pend.fotos} foto(s) a enviar
+          </span>
+        )}
+        {instalar && (
+          <button onClick={instalar} className="ml-auto px-3 py-1.5 rounded-lg text-[11px] font-bold"
+            style={{ background: '#166534', color: '#86efac' }}>
+            📲 Instalar app
+          </button>
+        )}
+      </div>
+      {msgSync && <p className="px-4 py-1.5 text-[10px]" style={{ color: '#94a3b8', background: '#0b1d3a' }}>{msgSync}</p>}
+
+      <main className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
+        <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: '#93c5fd' }}>Módulos de campo</p>
+        {MODULOS.map(m => (
+          <button key={m.id} onClick={() => onEscolher(m.id)}
+            className="w-full flex items-center gap-4 px-4 py-5 rounded-2xl text-left active:opacity-70"
+            style={{ background: '#0b1d3a', border: `1px solid ${BORDA}` }}>
+            <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: m.cor }}>
+              <m.icone size={22} style={{ color: m.corIcone }} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-base font-bold" style={{ color: TXT }}>{m.titulo}</p>
+              <p className="text-[11px] mt-0.5 leading-snug" style={{ color: SUB }}>{m.desc}</p>
+            </div>
+            <ChevronRight size={18} style={{ color: SUB }} className="flex-shrink-0" />
+          </button>
+        ))}
+        <p className="text-[10px] pt-1" style={{ color: '#334155' }}>
+          Mais módulos chegam aqui conforme forem liberados.
+        </p>
+      </main>
+
+      <p className="text-center text-[10px] py-2" style={{ color: '#334155' }}>
+        {emailUsuario() || ''} · INVICTA Campo
+      </p>
+    </div>
+  );
+}
+
 // ═══ Tela 1 — Seleção ═════════════════════════════════════════════════════════
 
-function TelaSelecao({ sel, setSel, online, pend, sincronizar, sincronizando, msgSync, instalar }: {
+function TelaSelecao({ sel, setSel, online, pend, sincronizar, sincronizando, msgSync, instalar, onHome }: {
   sel: Selecao; setSel: (s: Selecao) => void; online: boolean;
   pend: { regs: number; fotos: number };
   sincronizar: () => Promise<void>; sincronizando: boolean; msgSync: string;
   instalar: (() => void) | null;
+  onHome: () => void;
 }) {
   const produtores = useMemo(() => getClientes(), []);
   const fazendas = useMemo(() => sel.produtorId ? getFazendas(sel.produtorId) : [], [sel.produtorId]);
@@ -164,7 +256,8 @@ function TelaSelecao({ sel, setSel, online, pend, sincronizar, sincronizando, ms
     if (sel.safra) setSel({ ...sel, safra: null });
     else if (sel.talhaoId) setSel({ ...sel, talhaoId: null, talhao: '' });
     else if (sel.fazendaId) setSel({ ...sel, fazendaId: null, fazenda: '' });
-    else setSel({ ...sel, produtorId: null, produtor: '' });
+    else if (sel.produtorId) setSel({ ...sel, produtorId: null, produtor: '' });
+    else onHome();
   }
 
   return (
@@ -207,11 +300,9 @@ function TelaSelecao({ sel, setSel, online, pend, sincronizar, sincronizando, ms
 
       {/* breadcrumb */}
       <div className="px-4 py-2.5 flex items-center gap-1.5 text-[11px] flex-wrap" style={{ borderBottom: `1px solid ${BORDA}` }}>
-        {passos.length > 0 && (
-          <button onClick={voltar} className="p-1 rounded mr-1" style={{ background: BORDA, color: '#93c5fd' }}>
-            <ChevronLeft size={14} />
-          </button>
-        )}
+        <button onClick={voltar} className="p-1 rounded mr-1" style={{ background: BORDA, color: '#93c5fd' }}>
+          <ChevronLeft size={14} />
+        </button>
         {passos.length === 0 && <span style={{ color: SUB }}>Selecione o produtor para começar</span>}
         {passos.map((p, i) => (
           <span key={p.rotulo} className="flex items-center gap-1.5">
@@ -334,29 +425,12 @@ function TelaMapa({ sel, setSel, online, pend, reload, setReload, sincronizar, s
   const [pedidoEnquadrar, setPedidoEnquadrar] = useState(0);
   const [filtro, setFiltro] = useState<StatusPonto | 'todos'>('todos');
   const [alvoOrdem, setAlvoOrdem] = useState<number | null>(null);
-  const [userPos, setUserPos] = useState<PosOperador | null>(null);
-  const [velKmH, setVelKmH] = useState<number | null>(null);
-  const [gpsErro, setGpsErro] = useState('');
+  const { userPos, velKmH, gpsErro } = useGps();
   const [mostraLista, setMostraLista] = useState(false);
   const [mostraCfg, setMostraCfg] = useState(false);
   const [coletando, setColetando] = useState(false);
   const [baixando, setBaixando] = useState<{ feitos: number; total: number } | null>(null);
   const avisadoRef = useRef(false);
-
-  // GPS contínuo
-  useEffect(() => {
-    if (!navigator.geolocation) { setGpsErro('GPS não disponível neste aparelho.'); return; }
-    const id = navigator.geolocation.watchPosition(
-      pos => {
-        setGpsErro('');
-        setUserPos({ lng: pos.coords.longitude, lat: pos.coords.latitude, acc: pos.coords.accuracy ?? 0 });
-        setVelKmH(pos.coords.speed != null ? pos.coords.speed * 3.6 : null);
-      },
-      err => setGpsErro(err.code === 1 ? 'Permita o acesso à localização para navegar.' : 'Sem sinal de GPS.'),
-      { enableHighAccuracy: true, maximumAge: 1000, timeout: 20000 },
-    );
-    return () => navigator.geolocation.clearWatch(id);
-  }, []);
 
   // tela ligada durante o trabalho (quando o navegador suporta)
   useEffect(() => {
