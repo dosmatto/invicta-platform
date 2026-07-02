@@ -1,6 +1,10 @@
-export const APP_VERSION = '1.3.0';
+export const APP_VERSION = '1.3.1';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.3.1': [
+    'Coleta (celular): PINÇA e ARRASTAR do mapa corrigidos — o CSS do MapLibre agora vai embutido no app (antes vinha de CDN, que falhava no celular/offline) e o modo "seguir GPS" desliga sozinho quando você mexe no mapa (antes ele puxava a câmera de volta a cada segundo e travava o gesto)',
+    'Coleta: novo botão VER A ÁREA (⛶) — enquadra o talhão/grade no mapa de onde você estiver (com fallback pelos pontos da grade quando o talhão não tem bbox); o botão de GPS (⌖) agora VAI até sua posição num toque e segue você até você arrastar o mapa',
+  ],
   '1.3.0': [
     '📱 NOVO — App de COLETA DE SOLO em campo (/coleta): PWA instalável no celular/tablet (Android/iOS) que roda o dia inteiro SEM internet. Fluxo: produtor → fazenda → talhão → ciclo → área de coleta (as grades de amostragem da plataforma) → mapa com navegação GPS até cada ponto',
     'Navegação GPS: posição/precisão/velocidade contínuas, linha até o ponto, RAIO PERMITIDO configurável (5–50 m) — ao entrar no raio o aparelho VIBRA + apita e o botão "Iniciar coleta" habilita. Confirmação registra horário, operador, coordenada real, profundidades, umidade/compactação/problemas/observações e FOTOS (antes/durante/após)',

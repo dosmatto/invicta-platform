@@ -35,7 +35,8 @@ function ehTileOuGlyph(url) {
   return (
     url.hostname === 'server.arcgisonline.com' ||
     url.hostname === 'tile.openstreetmap.org' ||
-    url.hostname === 'fonts.openmaptiles.org'
+    url.hostname === 'fonts.openmaptiles.org' ||
+    url.hostname === 'cdn.jsdelivr.net'
   );
 }
 

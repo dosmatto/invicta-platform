@@ -344,6 +344,8 @@ export async function baixarTilesOffline(
 
 export function registrarSWColeta() {
   if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
+  // Em dev (localhost) o SW serviria chunks VELHOS (sem hash) — não registra.
+  if (/^(localhost|127\.0\.0\.1)$/.test(location.hostname)) return;
   navigator.serviceWorker.register('/sw-coleta.js').catch(() => {});
 }
 

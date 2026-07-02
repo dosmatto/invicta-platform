@@ -25,7 +25,7 @@ import type { PosOperador } from '@/components/coleta/MapaColeta';
 import {
   ChevronLeft, ChevronRight, MapPin, Crosshair, Layers, List, Download,
   RefreshCw, LogOut, Settings, Camera, CheckCircle2, X, Wifi, WifiOff,
-  Loader2, AlertTriangle, Navigation, CloudUpload,
+  Loader2, AlertTriangle, Navigation, CloudUpload, Maximize2,
 } from 'lucide-react';
 
 const MapaColeta = dynamic(
@@ -310,6 +310,19 @@ function TelaMapa({ sel, setSel, online, pend, reload, setReload, sincronizar, s
     [sel.talhaoId],
   );
   const talhaoFC = useMemo(() => talhaoComoFC(talhao), [talhao]);
+
+  // bbox pra enquadrar: o do talhão, ou (fallback) o dos pontos da grade
+  const bboxArea = useMemo<[number, number, number, number] | null>(() => {
+    if (talhao?.bbox) return talhao.bbox;
+    if (!grade || grade.pontos.length === 0) return null;
+    let [a, b, c, d] = [Infinity, Infinity, -Infinity, -Infinity];
+    for (const p of grade.pontos) {
+      a = Math.min(a, p.lng); b = Math.min(b, p.lat);
+      c = Math.max(c, p.lng); d = Math.max(d, p.lat);
+    }
+    const mLng = (c - a) * 0.1 || 0.002, mLat = (d - b) * 0.1 || 0.002;
+    return [a - mLng, b - mLat, c + mLng, d + mLat];
+  }, [talhao, grade]);
   const coletas = useMemo(() => (sel.gradeId ? getColetas(sel.gradeId) : []),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [sel.gradeId, reload]);
@@ -317,6 +330,8 @@ function TelaMapa({ sel, setSel, online, pend, reload, setReload, sincronizar, s
   const [cfg, setCfg] = useState(() => getConfigColeta());
   const [modo, setModo] = useState<'sat' | 'ruas'>('sat');
   const [seguir, setSeguir] = useState(false);
+  const [pedidoGps, setPedidoGps] = useState(0);
+  const [pedidoEnquadrar, setPedidoEnquadrar] = useState(0);
   const [filtro, setFiltro] = useState<StatusPonto | 'todos'>('todos');
   const [alvoOrdem, setAlvoOrdem] = useState<number | null>(null);
   const [userPos, setUserPos] = useState<PosOperador | null>(null);
@@ -435,10 +450,12 @@ function TelaMapa({ sel, setSel, online, pend, reload, setReload, sincronizar, s
   return (
     <div className="fixed inset-0" style={{ background: AZUL }}>
       <MapaColeta
-        talhaoGeo={talhaoFC} bbox={talhao?.bbox ?? null} pontos={pontosFC}
+        talhaoGeo={talhaoFC} bbox={bboxArea} pontos={pontosFC}
         userPos={userPos} alvo={alvoPonto ? { lng: alvoPonto.lng, lat: alvoPonto.lat } : null}
         raioM={cfg.raioM} modo={modo} seguirGps={seguir}
+        pedidoGps={pedidoGps} pedidoEnquadrar={pedidoEnquadrar}
         onSelecionarPonto={ordem => { setAlvoOrdem(ordem); avisadoRef.current = false; }}
+        onGestoUsuario={() => setSeguir(false)}
       />
 
       {/* topo: voltar + contexto + sync */}
@@ -495,7 +512,11 @@ function TelaMapa({ sel, setSel, online, pend, reload, setReload, sincronizar, s
 
       {/* botões laterais */}
       <div className="absolute right-3 flex flex-col gap-2" style={{ top: 'calc(56px + env(safe-area-inset-top))' }}>
-        <BotaoMapa ativo={seguir} onClick={() => setSeguir(s => !s)} titulo="Centralizar no GPS"><Crosshair size={18} /></BotaoMapa>
+        <BotaoMapa ativo={seguir}
+          onClick={() => { setSeguir(true); setPedidoGps(x => x + 1); }}
+          titulo="Ir para onde estou (GPS)"><Crosshair size={18} /></BotaoMapa>
+        <BotaoMapa onClick={() => { setSeguir(false); setPedidoEnquadrar(x => x + 1); }}
+          titulo="Ver a área de coleta"><Maximize2 size={18} /></BotaoMapa>
         <BotaoMapa onClick={() => setModo(m => (m === 'sat' ? 'ruas' : 'sat'))} titulo="Satélite / Ruas"><Layers size={18} /></BotaoMapa>
         <BotaoMapa onClick={() => setMostraLista(true)} titulo="Lista de pontos"><List size={18} /></BotaoMapa>
         <BotaoMapa onClick={() => void baixarMapa()} titulo="Baixar mapa offline">

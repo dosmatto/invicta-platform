@@ -6,6 +6,9 @@
 
 import { useEffect, useRef } from 'react';
 import maplibregl from 'maplibre-gl';
+// CSS embutido no bundle (não depende do CDN — essencial pro offline e pros
+// gestos de toque no celular: sem ele o touch-action do canvas não é aplicado).
+import 'maplibre-gl/dist/maplibre-gl.css';
 import { circuloGeo } from '@/lib/coleta';
 
 const EMPTY_FC: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
@@ -45,10 +48,13 @@ interface Props {
   raioM: number;
   modo: 'sat' | 'ruas';
   seguirGps: boolean;
+  pedidoGps: number;        // contador: ir agora até a posição do GPS
+  pedidoEnquadrar: number;  // contador: enquadrar a área (bbox) no mapa
   onSelecionarPonto: (ordem: number) => void;
+  onGestoUsuario: () => void; // usuário arrastou/deu zoom → o pai desliga o "seguir"
 }
 
-export function MapaColeta({ talhaoGeo, bbox, pontos, userPos, alvo, raioM, modo, seguirGps, onSelecionarPonto }: Props) {
+export function MapaColeta({ talhaoGeo, bbox, pontos, userPos, alvo, raioM, modo, seguirGps, pedidoGps, pedidoEnquadrar, onSelecionarPonto, onGestoUsuario }: Props) {
   const divRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const prontoRef = useRef(false);
@@ -56,6 +62,12 @@ export function MapaColeta({ talhaoGeo, bbox, pontos, userPos, alvo, raioM, modo
   const ajustouRef = useRef(false);
   const onSelRef = useRef(onSelecionarPonto);
   onSelRef.current = onSelecionarPonto;
+  const onGestoRef = useRef(onGestoUsuario);
+  onGestoRef.current = onGestoUsuario;
+  const userPosRef = useRef(userPos);
+  userPosRef.current = userPos;
+  const bboxRef = useRef(bbox);
+  bboxRef.current = bbox;
 
   // init (uma vez)
   useEffect(() => {
@@ -111,11 +123,20 @@ export function MapaColeta({ talhaoGeo, bbox, pontos, userPos, alvo, raioM, modo
         const f = e.features?.[0];
         if (f?.properties && f.properties.ordem != null) onSelRef.current(Number(f.properties.ordem));
       });
+      // gesto do USUÁRIO (arrastar/pinça/scroll) — movimentos programáticos
+      // (easeTo do seguir) não têm originalEvent e não disparam isto
+      map.on('movestart', (e) => {
+        if ((e as { originalEvent?: Event }).originalEvent) onGestoRef.current();
+      });
       map.on('mouseenter', 'pontos-circulo', () => { map.getCanvas().style.cursor = 'pointer'; });
       map.on('mouseleave', 'pontos-circulo', () => { map.getCanvas().style.cursor = ''; });
 
       prontoRef.current = true;
       filaRef.current.splice(0).forEach(fn => fn(map));
+    });
+
+    map.on('error', (e) => {
+      console.warn('[mapa-coleta]', (e as { error?: Error }).error?.message ?? e);
     });
 
     return () => { map.remove(); mapRef.current = null; prontoRef.current = false; filaRef.current = []; };
@@ -181,5 +202,27 @@ export function MapaColeta({ talhaoGeo, bbox, pontos, userPos, alvo, raioM, modo
     });
   }, [userPos, seguirGps]);
 
-  return <div ref={divRef} className="absolute inset-0" />;
+  // "ir para o GPS" (um toque no botão): voa até a posição atual
+  useEffect(() => {
+    if (!pedidoGps) return;
+    quandoPronto(map => {
+      const p = userPosRef.current;
+      if (p) map.easeTo({ center: [p.lng, p.lat], zoom: Math.max(map.getZoom(), 16), duration: 700 });
+    });
+  }, [pedidoGps]);
+
+  // "ver a área": enquadra o talhão/grade, de onde quer que o operador esteja
+  useEffect(() => {
+    if (!pedidoEnquadrar) return;
+    quandoPronto(map => {
+      const bb = bboxRef.current;
+      if (bb) map.fitBounds([[bb[0], bb[1]], [bb[2], bb[3]]], { padding: 40, duration: 700 });
+    });
+  }, [pedidoEnquadrar]);
+
+  // Estilo INLINE de propósito: o CSS do MapLibre aplica `.maplibregl-map
+  // { position: relative }` no container e, conforme a ordem dos stylesheets,
+  // vencia a classe `absolute` — o mapa colapsava pra ALTURA 0 (tela "preta").
+  // Inline ganha de qualquer classe. touchAction none garante pinça/arrastar.
+  return <div ref={divRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', touchAction: 'none' }} />;
 }
