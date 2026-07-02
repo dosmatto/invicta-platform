@@ -15,7 +15,7 @@ import { emailUsuario, logout, modoOffline } from '@/lib/auth';
 import { bootCloud } from '@/lib/cloud';
 import {
   RegistroColeta, StatusPonto, COR_STATUS, ROTULO_STATUS,
-  getColetas, upsertColeta, idColeta, pushColetasPendentes, pullColetas,
+  getColetas, upsertColeta, idColeta, pushColetasPendentes, pullColetas, pushMedicoesPendentes,
   contarPendentesSync, contarFotosPendentes, salvarFoto, fotosDaColeta,
   comprimirFoto, subirFotosPendentes, distanciaM, formatarDist, avisoDentroRaio,
   baixarTilesOffline, registrarSWColeta, getConfigColeta, saveConfigColeta,
@@ -115,11 +115,13 @@ export default function ColetaPage() {
     try {
       const enviados = await pushColetasPendentes();
       const fotos = await subirFotosPendentes();
+      const medicoes = await pushMedicoesPendentes().catch(() => 0);
       await bootCloud().catch(() => {});
       let recebidas = 0;
       if (sel.gradeId) recebidas = await pullColetas(sel.gradeId).catch(() => 0);
       setMsgSync(
         `✓ ${enviados} coleta(s) e ${fotos.enviadas} foto(s) enviadas` +
+        (medicoes ? ` · ${medicoes} medição(ões)` : '') +
         (recebidas ? ` · ${recebidas} recebida(s)` : '') +
         (fotos.erro ? ` — ⚠ ${fotos.erro}` : ''),
       );

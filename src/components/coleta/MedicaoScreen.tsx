@@ -9,30 +9,17 @@ import { useMemo, useState } from 'react';
 import turfArea from '@turf/area';
 import { MapaColeta } from './MapaColeta';
 import { useGps } from './useGps';
-import { distanciaM, formatarDist } from '@/lib/coleta';
+import {
+  distanciaM, formatarDist,
+  MedicaoCampo, TipoMedicao, getMedicoes, salvarMedicao, excluirMedicao,
+} from '@/lib/coleta';
+import { emailUsuario } from '@/lib/auth';
 import {
   ChevronLeft, Crosshair, Layers, Maximize2, Plus, Undo2, Trash2, List, X, AlertTriangle, Save,
 } from 'lucide-react';
 
 const AZUL_ESC = '#061525', AZUL = '#0a1929', BORDA = '#1a3a6b', TXT = '#e2e8f0', SUB = '#64748b';
 const EMPTY_FC: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
-
-type TipoMedicao = 'poligono' | 'linha';
-
-interface Medicao {
-  id: string;
-  nome: string;
-  tipo: TipoMedicao;
-  coords: [number, number][];
-  criadoEm: string;
-}
-
-const KEY = 'inv_medicoes';
-
-function loadMedicoes(): Medicao[] {
-  try { return JSON.parse(localStorage.getItem(KEY) ?? '[]'); } catch { return []; }
-}
-function saveMedicoes(l: Medicao[]) { localStorage.setItem(KEY, JSON.stringify(l)); }
 
 // medidas de uma sequência de vértices
 function medir(tipo: TipoMedicao, coords: [number, number][]) {
@@ -59,7 +46,7 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
   const [pedidoGps, setPedidoGps] = useState(0);
   const [pedidoEnquadrar, setPedidoEnquadrar] = useState(0);
   const [mostraSalvas, setMostraSalvas] = useState(false);
-  const [salvas, setSalvas] = useState<Medicao[]>(() => loadMedicoes());
+  const [salvas, setSalvas] = useState<MedicaoCampo[]>(() => getMedicoes());
   const [msg, setMsg] = useState('');
 
   const medidas = useMemo(() => medir(tipo, coords), [tipo, coords]);
@@ -96,23 +83,23 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
   function salvar() {
     const nome = prompt('Nome da medição:', `Medição ${salvas.length + 1}`);
     if (!nome?.trim()) return;
-    const m: Medicao = {
-      id: Date.now().toString(36), nome: nome.trim(), tipo, coords, criadoEm: new Date().toISOString(),
-    };
-    const lista = [...salvas, m];
-    saveMedicoes(lista); setSalvas(lista);
-    setMsg(`✓ "${m.nome}" salva no aparelho.`);
+    salvarMedicao({
+      id: Date.now().toString(36), nome: nome.trim(), tipo, coords,
+      criadoEm: new Date().toISOString(), operador: emailUsuario() || undefined,
+    });
+    setSalvas(getMedicoes());
+    setMsg(`✓ "${nome.trim()}" salva no aparelho — sobe pra plataforma na sincronização.`);
   }
 
-  function abrir(m: Medicao) {
+  function abrir(m: MedicaoCampo) {
     setTipo(m.tipo); setCoords(m.coords); setMostraSalvas(false);
     setSeguir(false);
     setPedidoEnquadrar(x => x + 1);
   }
 
   function excluir(id: string) {
-    const lista = salvas.filter(m => m.id !== id);
-    saveMedicoes(lista); setSalvas(lista);
+    excluirMedicao(id);
+    setSalvas(getMedicoes());
   }
 
   return (
@@ -250,6 +237,7 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
                           ? `${md.areaHa.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} ha · perím. ${formatarDist(md.perimetroM)}`
                           : formatarDist(md.perimetroM)}
                         {' · '}{new Date(m.criadoEm).toLocaleDateString('pt-BR')}
+                        {' · '}{m.syncPendente ? 'a enviar' : 'na nuvem ✓'}
                       </p>
                     </button>
                     <button onClick={() => { if (confirm(`Excluir "${m.nome}"?`)) excluir(m.id); }}

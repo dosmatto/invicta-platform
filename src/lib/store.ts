@@ -436,6 +436,26 @@ export function updateTalhao(id: string, data: Partial<Talhao>) {
   if (idx >= 0) { talhoes[idx] = { ...talhoes[idx], ...data }; save('inv_talhoes', talhoes); }
 }
 
+// Importação em massa: aplica TODAS as criações/atualizações numa gravação só
+// (1 write no localStorage + 1 push da lista pra nuvem). Item a item, N talhões
+// geravam N pushes da lista inteira — lento e sem resposta visível na UI.
+export function importarTalhoesLote(
+  novos: Omit<Talhao, 'id' | 'criadoEm'>[],
+  atualizacoes: { id: string; data: Partial<Talhao> }[],
+): { criados: number; atualizados: number } {
+  const talhoes = load<Talhao>('inv_talhoes');
+  let atualizados = 0;
+  for (const a of atualizacoes) {
+    const idx = talhoes.findIndex(t => t.id === a.id);
+    if (idx >= 0) { talhoes[idx] = { ...talhoes[idx], ...a.data }; atualizados++; }
+  }
+  for (const n of novos) {
+    talhoes.push(comEmpresa({ ...n, id: uid(), criadoEm: new Date().toISOString() }));
+  }
+  save('inv_talhoes', talhoes);
+  return { criados: novos.length, atualizados };
+}
+
 export function deleteTalhao(id: string) {
   save('inv_talhoes', load<Talhao>('inv_talhoes').filter(t => t.id !== id));
 }

@@ -1,6 +1,11 @@
-export const APP_VERSION = '1.5.0';
+export const APP_VERSION = '1.6.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.6.0': [
+    'Importação de limites agora LIMPA geometria defeituosa automaticamente (individual e em massa): polígono desenhado como LINHA ABERTA é fechado e recuperado, espículas (vai-e-volta) e vértices duplicados são removidos, auto-interseções são consertadas — sem comprometer o resto do polígono; o que foi corrigido aparece como aviso',
+    'Importação em massa: botão com resposta de verdade — mostra "Importando…", conclui com "✓ X criados · Y atualizados" e QUALQUER erro aparece na tela (antes falhava em silêncio); a gravação virou UMA operação em lote (muito mais rápida com dezenas de polígonos)',
+    'Medições do app de campo agora SOBEM PRA NUVEM na sincronização (não se perdem se o aparelho sumir) — a lista mostra "a enviar / na nuvem ✓"; o repositório na plataforma (baixar SHP, virar talhão, substituir limite) é a próxima etapa',
+  ],
   '1.5.0': [
     'LOGIN OFFLINE no app de campo: depois do 1º login com internet, o aparelho guarda um verificador seguro da senha (hash PBKDF2 — a senha em si NUNCA é salva). Sem internet, o mesmo e-mail e senha entram no app normalmente (coletas/medições continuam funcionando; os dados ficam pendentes)',
     'No modo offline, o botão Sincronizar avisa com clareza: ao voltar a internet é preciso sair e entrar de novo (login de verdade) para enviar os dados — e o envio agora só marca como sincronizado o que o servidor CONFIRMOU (antes um erro silencioso podia marcar coleta como enviada sem ela ter subido)',

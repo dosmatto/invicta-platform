@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useApp } from '@/context/AppContext';
-import { getFazendas, getTalhoes, saveTalhao, updateTalhao, updateFazenda, Fazenda, Talhao } from '@/lib/store';
+import { getFazendas, getTalhoes, saveTalhao, importarTalhoesLote, updateFazenda, Fazenda, Talhao } from '@/lib/store';
 import { pode } from '@/lib/empresa';
 import { detectarMunicipiosFazenda } from '@/lib/geocode';
 import { prepararTalhoesEmMassa, CandidatoTalhao } from '@/lib/geo';
@@ -312,6 +312,7 @@ function ImportadorTalhoes({ fazendaId, existentes, onFechar, onImportado }: {
   const [linhas, setLinhas] = useState<LinhaImport[]>([]);
   const [erros, setErros] = useState<string[]>([]);
   const [lendo, setLendo] = useState(false);
+  const [importando, setImportando] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [resumo, setResumo] = useState('');
 
@@ -347,21 +348,34 @@ function ImportadorTalhoes({ fazendaId, existentes, onFechar, onImportado }: {
 
   function limparPreview() { setUploadedGeo(null); setUploadedBbox(null); }
 
-  function importar() {
-    let criados = 0, atualizados = 0;
-    for (const l of linhas) {
-      if (!l.incluir) continue;
-      const dados = {
-        geojson: JSON.stringify(l.geojson), bbox: l.bbox,
-        areaHa: l.areaHa, areaHaSemHoles: l.areaHaBruta, status: 'ativo' as const,
-      };
-      if (l.existenteId) { updateTalhao(l.existenteId, dados); atualizados++; }
-      else { saveTalhao({ fazendaId, nome: l.nome, ...dados }); criados++; }
+  async function importar() {
+    if (importando) return;
+    setImportando(true); setResumo('');
+    await new Promise(r => setTimeout(r, 30)); // deixa o "Importando…" aparecer
+    try {
+      const novos: Parameters<typeof importarTalhoesLote>[0] = [];
+      const atualizacoes: Parameters<typeof importarTalhoesLote>[1] = [];
+      for (const l of linhas) {
+        if (!l.incluir) continue;
+        const dados = {
+          geojson: JSON.stringify(l.geojson), bbox: l.bbox,
+          areaHa: l.areaHa, areaHaSemHoles: l.areaHaBruta, status: 'ativo' as const,
+        };
+        if (l.existenteId) atualizacoes.push({ id: l.existenteId, data: dados });
+        else novos.push({ fazendaId, nome: l.nome, ...dados });
+      }
+      const r = importarTalhoesLote(novos, atualizacoes);
+      limparPreview();
+      setLinhas([]); setErros([]);
+      setResumo(`✓ ${r.criados} talhão(ões) criado(s)${r.atualizados ? ` · ${r.atualizados} limite(s) atualizado(s)` : ''}.`);
+      onImportado();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'erro inesperado';
+      setResumo(/quota/i.test(msg)
+        ? '⚠ Sem espaço no navegador para gravar tudo — importe em lotes menores.'
+        : `⚠ Falha ao importar: ${msg}`);
     }
-    limparPreview();
-    setLinhas([]); setErros([]);
-    setResumo(`${criados} talhão(ões) criado(s)${atualizados ? ` · ${atualizados} limite(s) atualizado(s)` : ''}.`);
-    onImportado();
+    setImportando(false);
   }
 
   const incluidos = linhas.filter(l => l.incluir);
@@ -451,10 +465,12 @@ function ImportadorTalhoes({ fazendaId, existentes, onFechar, onImportado }: {
               className="flex-1 py-2 rounded text-xs font-semibold" style={{ background: '#1a3a6b', color: '#94a3b8' }}>
               Cancelar
             </button>
-            <button onClick={importar} disabled={incluidos.length === 0}
-              className="flex-1 py-2 rounded text-xs font-bold text-white disabled:opacity-40"
+            <button onClick={() => void importar()} disabled={incluidos.length === 0 || importando}
+              className="flex-1 py-2 rounded text-xs font-bold text-white disabled:opacity-40 flex items-center justify-center gap-1.5"
               style={{ background: 'var(--invicta-green-dark)' }}>
-              Importar {incluidos.length} talhão(ões)
+              {importando
+                ? <><Loader2 size={12} className="animate-spin" /> Importando…</>
+                : <>Importar {incluidos.length} talhão(ões)</>}
             </button>
           </div>
         </>

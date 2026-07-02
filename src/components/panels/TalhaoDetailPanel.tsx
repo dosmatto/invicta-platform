@@ -15,7 +15,7 @@ import {
   getGrades, getImportacoesLab, getImportacoesCompactacao, getLegendas, Talhao, Safra,
 } from '@/lib/store';
 import type { Legenda } from '@/lib/legendas';
-import { parseGeoFile, normalizarZonas } from '@/lib/geo';
+import { parseGeoFile, parseLimiteTalhao, normalizarZonas } from '@/lib/geo';
 import { classeZona } from '@/lib/zonas';
 import { cloudCarregarMapasPorPrefixo } from '@/lib/cloud';
 import { descomprimirGrid, coordsFromBounds, type RespInterp } from '@/lib/fertilidade';
@@ -33,14 +33,17 @@ function GeoSection({ talhao, onUploaded }: { talhao: Talhao | null; onUploaded:
   const inputRef = useRef<HTMLInputElement>(null);
   const [estado, setEstado] = useState<'idle' | 'loading' | 'ok' | 'erro'>('idle');
   const [erroMsg, setErroMsg] = useState('');
+  const [avisos, setAvisos] = useState<string[]>([]);
   const [dragging, setDragging] = useState(false);
 
   const temGeo = !!talhao?.geojson;
 
   async function processar(file: File) {
-    setEstado('loading'); setErroMsg('');
+    setEstado('loading'); setErroMsg(''); setAvisos([]);
     try {
-      const result = await parseGeoFile(file);
+      // saneia defeitos comuns (linha aberta → polígono, espículas, auto-interseção)
+      const result = await parseLimiteTalhao(file);
+      setAvisos(result.avisos);
       updateTalhao(talhao!.id, {
         geojson: JSON.stringify(result.geojson), bbox: result.bbox,
         areaHa: result.areaHa, areaHaSemHoles: result.areaHaBruta, status: 'ativo',
@@ -80,6 +83,9 @@ function GeoSection({ talhao, onUploaded }: { talhao: Talhao | null; onUploaded:
           )}
         </div>
         {estado === 'erro' && <p className="mt-2 text-[10px] text-center" style={{ color: '#f87171' }}>{erroMsg}</p>}
+        {avisos.map((a, i) => (
+          <p key={i} className="mt-1.5 text-[10px]" style={{ color: '#fbbf24' }}>⚠ {a}</p>
+        ))}
         {temGeo && estado === 'idle' && (
           <button onClick={() => { try { setUploadedGeo(JSON.parse(talhao!.geojson!) as GeoJSON.FeatureCollection); setUploadedBbox(talhao!.bbox!); } catch {} }}
             className="mt-2 w-full py-1.5 rounded text-[10px] font-semibold transition-opacity hover:opacity-80" style={{ background: '#1a3a6b', color: '#93c5fd' }}>

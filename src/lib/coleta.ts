@@ -12,7 +12,7 @@
 //  • Tiles offline: Cache Storage 'coleta-tiles' (o mesmo que o service worker usa).
 
 import { getSupabase } from './supabase';
-import { usarDadosSupabase, salvarDocSupabase, carregarDocsPorCampoSupabase } from './supabaseData';
+import { usarDadosSupabase, salvarDocSupabase, carregarDocsPorCampoSupabase, excluirDocSupabase } from './supabaseData';
 
 // ── Registros de coleta ───────────────────────────────────────────────────────
 
@@ -244,6 +244,69 @@ export async function subirFotosPendentes(): Promise<{ enviadas: number; erro?: 
 
 export async function contarFotosPendentes(): Promise<number> {
   return (await todasFotos()).filter(f => !f.sync).length;
+}
+
+// ── Medições de campo (polígonos/linhas) ─────────────────────────────────────
+// Ficam no aparelho E sobem pra nuvem (docs no app_kv, colecao 'inv_medicoes')
+// pra não se perder — na plataforma vira o repositório de medições (SHP,
+// virar talhão, substituir limite…).
+
+export type TipoMedicao = 'poligono' | 'linha';
+
+export interface MedicaoCampo {
+  id: string;
+  nome: string;
+  tipo: TipoMedicao;
+  coords: [number, number][];
+  criadoEm: string;
+  operador?: string;
+  syncPendente: boolean;
+}
+
+const KEY_MED = 'inv_medicoes';
+const COLECAO_MED = 'inv_medicoes';
+
+export function getMedicoes(): MedicaoCampo[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const lista = JSON.parse(localStorage.getItem(KEY_MED) ?? '[]') as MedicaoCampo[];
+    // medições antigas (antes da sync) não têm a flag — considera pendente
+    return lista.map(m => ({ ...m, syncPendente: m.syncPendente !== false }));
+  } catch { return []; }
+}
+
+function saveMedicoesLocal(lista: MedicaoCampo[]) {
+  localStorage.setItem(KEY_MED, JSON.stringify(lista));
+}
+
+export function salvarMedicao(m: Omit<MedicaoCampo, 'syncPendente'>): MedicaoCampo {
+  const nova: MedicaoCampo = { ...m, syncPendente: true };
+  const lista = getMedicoes().filter(x => x.id !== m.id);
+  lista.push(nova);
+  saveMedicoesLocal(lista);
+  void pushMedicoesPendentes().catch(() => {});
+  return nova;
+}
+
+export function excluirMedicao(id: string) {
+  saveMedicoesLocal(getMedicoes().filter(m => m.id !== id));
+  if (usarDadosSupabase() && navigator.onLine) void excluirDocSupabase(COLECAO_MED, id).catch(() => {});
+}
+
+export async function pushMedicoesPendentes(): Promise<number> {
+  if (!usarDadosSupabase() || (typeof navigator !== 'undefined' && !navigator.onLine)) return 0;
+  const lista = getMedicoes();
+  let enviadas = 0;
+  for (const m of lista.filter(x => x.syncPendente)) {
+    try {
+      const ok = await salvarDocSupabase(COLECAO_MED, m.id, { ...m, syncPendente: false });
+      if (!ok) continue;
+      m.syncPendente = false;
+      enviadas++;
+    } catch { /* segue pendente */ }
+  }
+  if (enviadas) saveMedicoesLocal(lista);
+  return enviadas;
 }
 
 // ── GPS / geometria ───────────────────────────────────────────────────────────
