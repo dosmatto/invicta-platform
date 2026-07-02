@@ -145,6 +145,70 @@ function computeOuterArea(geojson: GeoJSON.FeatureCollection): number {
   return Math.round(total * 100) / 100;
 }
 
+// ── Cadastro de talhões em massa ────────────────────────────────────────────
+// Vários arquivos de uma vez (ou 1 arquivo com vários talhões) → candidatos.
+// Regras: se as feições têm campo de nome, agrupa por nome (glebas com o mesmo
+// nome viram UM talhão, com furos descontados); sem nomes, o arquivo inteiro é
+// UM talhão com o nome do arquivo.
+export interface CandidatoTalhao {
+  nome: string;
+  geojson: GeoJSON.FeatureCollection;
+  bbox: [number, number, number, number];
+  areaHa: number;
+  areaHaBruta: number;
+  arquivo: string;
+}
+
+function campoNomeTalhao(feats: GeoJSON.Feature[]): string | null {
+  const chaves = new Set<string>();
+  feats.forEach(f => Object.keys(f.properties ?? {}).forEach(k => chaves.add(k)));
+  const temValor = (k: string) =>
+    feats.some(f => String((f.properties as Record<string, unknown> | null)?.[k] ?? '').trim());
+  for (const re of [/^(nome|name)$/i, /talh/i, /^(label|title|titulo)$/i]) {
+    const k = [...chaves].find(c => re.test(c) && temValor(c));
+    if (k) return k;
+  }
+  return null;
+}
+
+export async function prepararTalhoesEmMassa(files: File[]): Promise<{ candidatos: CandidatoTalhao[]; erros: string[] }> {
+  const candidatos: CandidatoTalhao[] = [];
+  const erros: string[] = [];
+
+  for (const file of files) {
+    try {
+      const r = await parseGeoFile(file);
+      const polis = r.geojson.features.filter(f =>
+        f.geometry && (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon'));
+      if (polis.length === 0) { erros.push(`${file.name}: nenhum polígono encontrado.`); continue; }
+
+      const base = file.name.replace(/\.[^.]+$/, '');
+      const campoNome = campoNomeTalhao(polis);
+
+      // agrupa por nome; feições sem nome caem no grupo do arquivo
+      const grupos = new Map<string, GeoJSON.Feature[]>();
+      if (!campoNome) {
+        grupos.set(base, polis);
+      } else {
+        for (const f of polis) {
+          const nome = String((f.properties as Record<string, unknown> | null)?.[campoNome] ?? '').trim() || base;
+          const arr = grupos.get(nome) ?? [];
+          arr.push(f);
+          grupos.set(nome, arr);
+        }
+      }
+
+      for (const [nome, feats] of grupos) {
+        const m = computeResult({ type: 'FeatureCollection', features: feats });
+        candidatos.push({ nome, geojson: m.geojson, bbox: m.bbox, areaHa: m.areaHa, areaHaBruta: m.areaHaBruta, arquivo: file.name });
+      }
+    } catch (e: unknown) {
+      erros.push(`${file.name}: ${e instanceof Error ? e.message : 'erro ao processar.'}`);
+    }
+  }
+  return { candidatos, erros };
+}
+
 // ── Zonas de manejo ─────────────────────────────────────────────────────────
 // Normaliza um arquivo de zonas (SHP/KML/GeoJSON) para o formato que o app usa:
 // cada feição vira { id, classe, areaHa }. Auto-detecta o campo de classe (o que

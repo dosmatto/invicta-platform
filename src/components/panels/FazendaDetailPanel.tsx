@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useApp } from '@/context/AppContext';
-import { getFazendas, getTalhoes, saveTalhao, updateFazenda, Fazenda, Talhao } from '@/lib/store';
+import { getFazendas, getTalhoes, saveTalhao, updateTalhao, updateFazenda, Fazenda, Talhao } from '@/lib/store';
 import { pode } from '@/lib/empresa';
 import { detectarMunicipiosFazenda } from '@/lib/geocode';
-import { ChevronLeft, ChevronRight, Plus, Map, AlertTriangle, Save, X, ExternalLink, MapPin, Loader2 } from 'lucide-react';
+import { prepararTalhoesEmMassa, CandidatoTalhao } from '@/lib/geo';
+import { ChevronLeft, ChevronRight, Plus, Map, AlertTriangle, Save, X, ExternalLink, MapPin, Loader2, Upload, CheckCircle2 } from 'lucide-react';
 import { PanelSection, PanelButton, StatusBadge } from './_shared';
 
 export function FazendaDetailPanel() {
@@ -14,6 +15,7 @@ export function FazendaDetailPanel() {
   const [fazenda, setFazenda] = useState<Fazenda | null>(null);
   const [talhoes, setTalhoes] = useState<Talhao[]>([]);
   const [mostraForm, setMostraForm] = useState(false);
+  const [mostraImport, setMostraImport] = useState(false);
   const [form, setForm] = useState({ nome: '' });
   const [salvando, setSalvando] = useState(false);
   const [detectando, setDetectando] = useState(false);
@@ -195,13 +197,21 @@ export function FazendaDetailPanel() {
                   </button>
                 </div>
               </div>
+            ) : mostraImport ? (
+              <ImportadorTalhoes fazendaId={nav.fazendaId!} existentes={talhoes}
+                onFechar={() => setMostraImport(false)} onImportado={reload} />
             ) : (
               <>
-                <div className="p-3">
+                <div className="p-3 space-y-2">
                   <button onClick={() => setMostraForm(true)}
                     className="w-full flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-semibold text-white"
                     style={{ background: 'var(--invicta-green-dark)' }}>
                     <Plus size={12} /> Novo Talhão
+                  </button>
+                  <button onClick={() => setMostraImport(true)}
+                    className="w-full flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-semibold"
+                    style={{ background: '#1a3a6b', color: '#93c5fd' }}>
+                    <Upload size={12} /> Importar em massa (KML / SHP)
                   </button>
                 </div>
 
@@ -279,6 +289,176 @@ export function FazendaDetailPanel() {
           </PanelSection>
         )}
       </div>
+    </div>
+  );
+}
+
+// ── Importação de talhões em massa (#31) ─────────────────────────────────────
+// Vários KML/SHP/GeoJSON de uma vez → revisão (nome editável, área, novo ×
+// atualiza limite) → grava tudo. Nome igual a talhão existente = atualiza o
+// limite dele em vez de criar duplicado.
+
+type LinhaImport = CandidatoTalhao & { incluir: boolean; existenteId: string | null };
+
+function normNome(s: string) {
+  return s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
+function ImportadorTalhoes({ fazendaId, existentes, onFechar, onImportado }: {
+  fazendaId: string; existentes: Talhao[]; onFechar: () => void; onImportado: () => void;
+}) {
+  const { setUploadedGeo, setUploadedBbox } = useApp();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [linhas, setLinhas] = useState<LinhaImport[]>([]);
+  const [erros, setErros] = useState<string[]>([]);
+  const [lendo, setLendo] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const [resumo, setResumo] = useState('');
+
+  const casarExistente = (nome: string) =>
+    existentes.find(t => normNome(t.nome) === normNome(nome))?.id ?? null;
+
+  async function processar(files: File[]) {
+    if (!files.length) return;
+    setLendo(true); setResumo('');
+    const r = await prepararTalhoesEmMassa(files);
+    const novas = r.candidatos.map(c => ({ ...c, incluir: true, existenteId: casarExistente(c.nome) }));
+    setLinhas(prev => [...prev, ...novas]);
+    setErros(prev => [...prev, ...r.erros]);
+    setLendo(false);
+  }
+
+  // pré-visualização no mapa: todos os candidatos marcados
+  useEffect(() => {
+    const inc = linhas.filter(l => l.incluir);
+    if (!inc.length) return;
+    setUploadedGeo({ type: 'FeatureCollection', features: inc.flatMap(l => l.geojson.features) });
+    let [a, b, c, d] = [Infinity, Infinity, -Infinity, -Infinity];
+    inc.forEach(l => {
+      a = Math.min(a, l.bbox[0]); b = Math.min(b, l.bbox[1]);
+      c = Math.max(c, l.bbox[2]); d = Math.max(d, l.bbox[3]);
+    });
+    setUploadedBbox([a, b, c, d]);
+  }, [linhas, setUploadedGeo, setUploadedBbox]);
+
+  function setLinha(i: number, patch: Partial<LinhaImport>) {
+    setLinhas(prev => prev.map((l, j) => (j === i ? { ...l, ...patch } : l)));
+  }
+
+  function limparPreview() { setUploadedGeo(null); setUploadedBbox(null); }
+
+  function importar() {
+    let criados = 0, atualizados = 0;
+    for (const l of linhas) {
+      if (!l.incluir) continue;
+      const dados = {
+        geojson: JSON.stringify(l.geojson), bbox: l.bbox,
+        areaHa: l.areaHa, areaHaSemHoles: l.areaHaBruta, status: 'ativo' as const,
+      };
+      if (l.existenteId) { updateTalhao(l.existenteId, dados); atualizados++; }
+      else { saveTalhao({ fazendaId, nome: l.nome, ...dados }); criados++; }
+    }
+    limparPreview();
+    setLinhas([]); setErros([]);
+    setResumo(`${criados} talhão(ões) criado(s)${atualizados ? ` · ${atualizados} limite(s) atualizado(s)` : ''}.`);
+    onImportado();
+  }
+
+  const incluidos = linhas.filter(l => l.incluir);
+  const areaTotal = incluidos.reduce((s, l) => s + l.areaHa, 0);
+
+  return (
+    <div className="p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-bold uppercase tracking-wide" style={{ color: '#93c5fd' }}>Importar talhões em massa</p>
+        <button onClick={() => { limparPreview(); onFechar(); }} className="p-1 rounded hover:bg-white/10" style={{ color: '#64748b' }}>
+          <X size={14} />
+        </button>
+      </div>
+
+      <div
+        onDragOver={e => { e.preventDefault(); setDragging(true); }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={e => { e.preventDefault(); setDragging(false); processar([...e.dataTransfer.files]); }}
+        onClick={() => inputRef.current?.click()}
+        className="border-2 border-dashed rounded-lg py-4 text-center cursor-pointer transition-colors"
+        style={{ borderColor: dragging ? '#60a5fa' : '#1e3a5f', background: dragging ? '#0f2240' : 'transparent' }}>
+        {lendo ? (
+          <div className="flex flex-col items-center gap-2">
+            <Loader2 size={18} className="animate-spin" style={{ color: '#60a5fa' }} />
+            <p className="text-[10px]" style={{ color: '#64748b' }}>Processando arquivos...</p>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center gap-1.5">
+            <Upload size={18} style={{ color: '#475569' }} />
+            <p className="text-[10px] font-semibold" style={{ color: '#94a3b8' }}>Arraste VÁRIOS arquivos ou clique</p>
+            <p className="text-[9px] px-3" style={{ color: '#475569' }}>
+              .kml · .zip (shapefile) · .geojson — 1 arquivo por talhão, ou 1 arquivo com vários talhões nomeados (glebas com o mesmo nome viram um talhão só)
+            </p>
+          </div>
+        )}
+      </div>
+      <input ref={inputRef} type="file" multiple accept=".kml,.zip,.geojson,.json" className="hidden"
+        onChange={e => { processar([...(e.target.files ?? [])]); e.target.value = ''; }} />
+
+      {erros.map((er, i) => (
+        <p key={i} className="text-[10px]" style={{ color: '#f87171' }}>⚠ {er}</p>
+      ))}
+      {resumo && (
+        <p className="text-[11px] font-semibold flex items-center gap-1.5" style={{ color: '#4ade80' }}>
+          <CheckCircle2 size={13} /> {resumo}
+        </p>
+      )}
+
+      {linhas.length > 0 && (
+        <>
+          <div className="space-y-1.5 max-h-72 overflow-y-auto pr-0.5">
+            {linhas.map((l, i) => (
+              <div key={i} className="flex items-center gap-2 p-2 rounded-lg"
+                style={{ background: '#0b1d3a', border: '1px solid #1a3a6b', opacity: l.incluir ? 1 : 0.45 }}>
+                <input type="checkbox" checked={l.incluir} onChange={e => setLinha(i, { incluir: e.target.checked })}
+                  className="flex-shrink-0 accent-green-600" />
+                <div className="flex-1 min-w-0">
+                  <input value={l.nome}
+                    onChange={e => setLinha(i, { nome: e.target.value, existenteId: casarExistente(e.target.value) })}
+                    className="w-full bg-transparent text-xs font-semibold outline-none"
+                    style={{ color: '#e2e8f0', borderBottom: '1px dashed #1a3a6b' }} />
+                  <p className="text-[10px] mt-0.5" style={{ color: '#64748b' }}>
+                    {l.areaHa.toLocaleString('pt-BR')} ha · {l.arquivo}
+                  </p>
+                </div>
+                {l.existenteId ? (
+                  <span className="flex-shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ background: '#78350f', color: '#fde68a' }}>
+                    atualiza limite
+                  </span>
+                ) : (
+                  <span className="flex-shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ background: '#166534', color: '#86efac' }}>
+                    novo
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <div className="flex items-center justify-between text-[10px]" style={{ color: '#94a3b8' }}>
+            <span>{incluidos.length} de {linhas.length} selecionado(s)</span>
+            <span className="font-bold" style={{ color: '#86efac' }}>
+              {areaTotal.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} ha
+            </span>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => { limparPreview(); onFechar(); }}
+              className="flex-1 py-2 rounded text-xs font-semibold" style={{ background: '#1a3a6b', color: '#94a3b8' }}>
+              Cancelar
+            </button>
+            <button onClick={importar} disabled={incluidos.length === 0}
+              className="flex-1 py-2 rounded text-xs font-bold text-white disabled:opacity-40"
+              style={{ background: 'var(--invicta-green-dark)' }}>
+              Importar {incluidos.length} talhão(ões)
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

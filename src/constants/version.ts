@@ -1,6 +1,10 @@
-export const APP_VERSION = '1.1.1';
+export const APP_VERSION = '1.2.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.2.0': [
+    'Cadastro de talhões EM MASSA na fazenda (#31): botão "Importar em massa (KML/SHP)" ao lado de "Novo Talhão". Aceita VÁRIOS arquivos de uma vez (.kml, .zip shapefile, .geojson) — 1 arquivo por talhão, ou 1 arquivo com vários talhões nomeados (feições com o mesmo nome são agrupadas num talhão só, glebas somadas e furos descontados)',
+    'Antes de gravar, tela de revisão: nome editável, área calculada, pré-visualização de todos os polígonos no mapa e seleção do que entra. Se o nome bater com um talhão já existente, ATUALIZA o limite dele em vez de criar duplicado (badge "atualiza limite" × "novo")',
+  ],
   '1.1.1': [
     'Zerada de erros: o Início agora mostra a VISÃO GERAL REAL (produtores, fazendas, talhões, área total, incompletos e a safra ativa) — antes eram números fixos em 0 (mock antigo). O bloco "Processamentos Recentes / SIMULADO" (fake) foi removido',
     'Corrigido o erro vermelho do mapa no Console (circle-radius com "zoom" dentro de "case" — inválido no MapLibre); os pontos de amostragem/EC seguem com o mesmo comportamento visual',
