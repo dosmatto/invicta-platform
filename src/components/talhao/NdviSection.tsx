@@ -266,7 +266,15 @@ export function NdviSection() {
         const cs = await listarCenasNdvi({ poligono, dataIni, dataFim, nuvemMax: f === 'sentinel' ? nv : 100, fonte: f });
         return cs.map(c => ({ ...c, fonte: f }));
       }));
-      const juntas = resultados.flat().sort((a, b) => (b.data ?? '').localeCompare(a.data ?? ''));
+      // 1 card por fonte+data: talhão na emenda de tiles repete a mesma passagem
+      // em 2+ cenas — fica a de menor nuvem (ou a primeira, sem metadado).
+      const porChave = new Map<string, Cand>();
+      for (const c of resultados.flat()) {
+        const ch = chaveDe(c.fonte, c.data);
+        const atual = porChave.get(ch);
+        if (!atual || (c.nuvem ?? 101) < (atual.nuvem ?? 101)) porChave.set(ch, c);
+      }
+      const juntas = [...porChave.values()].sort((a, b) => (b.data ?? '').localeCompare(a.data ?? ''));
       setCandidatos(juntas);
       setEstado('idle');
       if (juntas.length === 0) {

@@ -1,6 +1,9 @@
-export const APP_VERSION = '1.11.0';
+export const APP_VERSION = '1.11.1';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.11.1': [
+    'CORREÇÃO: cards de imagem duplicados quando o talhão fica na EMENDA de duas cenas do satélite (a mesma passagem/data vinha como 2+ tiles vizinhos no catálogo) — agora fica 1 card por data e fonte, escolhendo a cena de menor nuvem',
+  ],
   '1.11.0': [
     'NDVI/Satélite — IV1 do spec de Índices Vegetativos: a busca agora mostra CARDS com PRÉVIA RGB do talhão (miniatura leve por cena, Sentinel-2 e CBERS-4A) — nada é processado nem salvo automaticamente ao listar',
     'Ao tocar num card abre a CONFERÊNCIA: a prévia RGB fina aparece no mapa (com o contorno do talhão e zoom) para avaliar nuvem/sombra/cultura/solo exposto; só então você decide "Processar NDVI" ou "Rejeitar" a imagem (rejeição fica marcada no card)',
