@@ -175,6 +175,32 @@ export function simplificarAnel(pts: Anel, tolM: number, fechado: boolean): Anel
   return out.length >= 3 ? out : pts;
 }
 
+// ── Reduzir vértices SEM alterar a geometria (remove colineares/redundantes) ──
+// Diferente do simplificar (Douglas-Peucker, que pode "cortar" curvas): aqui um
+// vértice só sai se ficar a menos de `tolM` da reta entre o vértice ANTERIOR
+// mantido e o PRÓXIMO — ou seja, é redundante. O contorno fica visualmente igual.
+export function reduzirColineares(pts: Anel, tolM: number, fechado: boolean): Anel {
+  const piso = fechado ? 3 : 2;   // triângulo / segmento — nunca degenera
+  if (pts.length <= piso) return pts;
+  let cur = pts.slice();
+  for (let iter = 0; iter < 6; iter++) {
+    const out: Anel = [];
+    const n = cur.length;
+    let removeu = false;
+    for (let i = 0; i < n; i++) {
+      if (!fechado && (i === 0 || i === n - 1)) { out.push(cur[i]); continue; }
+      const prev = out.length ? out[out.length - 1] : cur[(i - 1 + n) % n];
+      const next = cur[(i + 1) % n];
+      if (distPontoSegM(cur[i], prev, next) < tolM) { removeu = true; continue; }
+      out.push(cur[i]);
+    }
+    if (out.length < piso) break;   // não desce do mínimo — mantém a versão anterior
+    cur = out;
+    if (!removeu) break;
+  }
+  return cur;
+}
+
 // ── Suavizar (Chaikin, 1 iteração) ────────────────────────────────────────────
 
 export function suavizarAnel(pts: Anel, fechado: boolean): Anel {

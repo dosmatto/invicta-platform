@@ -1,6 +1,10 @@
-export const APP_VERSION = '1.18.0';
+export const APP_VERSION = '1.18.1';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.18.1': [
+    'EDITOR DE TRAÇADO mais claro: a barra virou duas partes — em cima o título + medidas e o botão SALVAR (verde, sempre visível, não some mais no meio das ferramentas); logo abaixo uma PALETA com TODAS as ferramentas à vista, separadas em Modo (Mover/Remover/Cortar/Buraco — a ativa fica destacada) e Ações (Reduzir/Simplificar/Suavizar/Desfazer)',
+    'Nova ferramenta REDUZIR: tira os vértices redundantes SEM mudar o contorno (só remove pontos que estão praticamente em cima da reta entre os vizinhos, tolerância 0,3 m) — diferente do Simplificar, que é mais agressivo e pode mexer levemente no desenho. Ideal para enxugar contornos densos (caminhada de GPS, importados com muitos pontos)',
+  ],
   '1.18.0': [
     'EDITOR DE TRAÇADO (tela cheia, sobre o satélite) nas MEDIÇÕES e no LIMITE DO TALHÃO: arraste vértices, toque no ponto azul entre dois vértices para INSERIR, modo remover, SIMPLIFICAR (tira vértices redundantes, tolerância 1,5 m) e SUAVIZAR cantos — com desfazer e área/perímetro ao vivo',
     'CORTAR EM DOIS: desenhe uma linha atravessando a área e ela vira 2 polígonos — na medição cria "nome (2)", no talhão cria um novo talhão na fazenda. RECORTAR BURACO/ILHA: desenhe o contorno de benfeitoria/mata/açude dentro da área e ele vira um furo (a área desconta na hora)',

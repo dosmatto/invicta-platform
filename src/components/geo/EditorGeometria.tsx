@@ -10,15 +10,16 @@
 // primeira é a "principal", as demais viram novos registros no chamador).
 
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import {
   GeoEditavel, Anel, extrairEditavel, paraFC, bboxDe,
-  areaHaDe, perimetroMDe, simplificarAnel, suavizarAnel,
+  areaHaDe, perimetroMDe, simplificarAnel, suavizarAnel, reduzirColineares,
   cortarAnel, validarFuro, pontoNoAnel,
 } from '@/lib/geoEditor';
 import {
-  Move, Eraser, Scissors, CircleDashed, Minimize2, Waves, Undo2, X, Check, MousePointerClick,
+  Move, Eraser, Scissors, CircleDashed, Minimize2, Shrink, Waves, Undo2, X, Check, MousePointerClick,
 } from 'lucide-react';
 
 const EMPTY_FC: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
@@ -318,6 +319,27 @@ export function EditorGeometria({ titulo, fc, onSalvar, onFechar }: {
     setMsg('◎ Recorte aplicado — a área já desconta o buraco.');
   }
 
+  // reduzir SEM alterar o contorno (tira só vértices redundantes/colineares)
+  function reduzir() {
+    if (!parte) return;
+    empurrarHist();
+    const antes = nVerts;
+    setPartes(ps => {
+      const novo = clonar(ps);
+      const p = novo[ativaRef.current];
+      p.anel = reduzirColineares(p.anel, 0.3, p.tipo === 'poligono');
+      p.furos = p.furos.map(f => reduzirColineares(f, 0.3, true));
+      return novo;
+    });
+    setTimeout(() => {
+      const p = partesRef.current[ativaRef.current];
+      const depois = p ? p.anel.length + p.furos.reduce((s, f) => s + f.length, 0) : 0;
+      setMsg(depois < antes
+        ? `Reduzido: ${antes} → ${depois} vértices — contorno preservado (tolerância 0,3 m).`
+        : 'Nenhum vértice redundante — o contorno já está enxuto.');
+    }, 0);
+  }
+
   function simplificar() {
     if (!parte) return;
     empurrarHist();
@@ -332,7 +354,7 @@ export function EditorGeometria({ titulo, fc, onSalvar, onFechar }: {
     setTimeout(() => {
       const p = partesRef.current[ativaRef.current];
       const depois = p ? p.anel.length + p.furos.reduce((s, f) => s + f.length, 0) : 0;
-      setMsg(`Simplificado: de ${antes} para ${depois} vértices (tolerância 1,5 m).`);
+      setMsg(`Simplificado: de ${antes} para ${depois} vértices (tolerância 1,5 m — pode mexer levemente no contorno).`);
     }, 0);
   }
 
@@ -369,44 +391,51 @@ export function EditorGeometria({ titulo, fc, onSalvar, onFechar }: {
   const ehPoli = parte?.tipo === 'poligono';
 
   if (invalido) {
-    return (
-      <div className="fixed inset-0 z-[100] flex items-center justify-center px-6" style={{ background: 'rgba(0,0,0,0.8)' }}>
+    return createPortal(
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center px-6" style={{ background: 'rgba(0,0,0,0.8)' }}>
         <div className="rounded-2xl p-6 max-w-sm text-center space-y-3" style={{ background: '#0a1929', border: '1px solid #1a3a6b' }}>
           <p className="text-sm font-bold" style={{ color: '#e2e8f0' }}>Não consegui montar a geometria</p>
           <p className="text-xs" style={{ color: '#94a3b8' }}>O arquivo não tem um polígono nem linhas que formem um contorno editável.</p>
           <button onClick={onFechar} className="px-4 py-2 rounded-lg text-xs font-bold text-white" style={{ background: 'var(--invicta-blue-mid)' }}>Fechar</button>
         </div>
-      </div>
+      </div>,
+      document.body,
     );
   }
 
-  return (
-    <div className="fixed inset-0 z-[100] flex flex-col" style={{ background: '#061525' }}>
-      {/* barra superior */}
-      <div className="flex items-center gap-2 px-3 py-2 flex-wrap flex-shrink-0"
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex flex-col" style={{ background: '#061525' }}>
+      {/* HEADER: título + medidas + Cancelar/Salvar (sempre visíveis) */}
+      <div className="flex items-center gap-2 px-3 py-2 flex-shrink-0"
         style={{ background: '#0a1929', borderBottom: '1px solid #1a3a6b', paddingTop: 'max(8px, env(safe-area-inset-top))' }}>
-        <p className="text-xs font-bold truncate" style={{ color: '#e2e8f0', maxWidth: 220 }}>✏ {titulo}</p>
-        <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
-          {ha != null ? `${ha.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} ha · ` : ''}
-          {(perM / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 2 })} km · {nVerts} vértices
-          {partes.length > 1 ? ` · parte ${ativa + 1}/${partes.length}` : ''}
-        </span>
-
-        <div className="flex items-center gap-1 ml-auto">
-          <Ferramenta icone={Move} rotulo="Mover" ativa={modo === 'mover'} onClick={() => setModo('mover')} />
-          <Ferramenta icone={Eraser} rotulo="Remover" ativa={modo === 'remover'} onClick={() => setModo('remover')} />
-          {ehPoli && <Ferramenta icone={Scissors} rotulo="Cortar" ativa={modo === 'cortar'} onClick={() => setModo('cortar')} />}
-          {ehPoli && <Ferramenta icone={CircleDashed} rotulo="Buraco" ativa={modo === 'buraco'} onClick={() => setModo('buraco')} />}
-          <span className="w-px h-6 mx-0.5" style={{ background: '#1a3a6b' }} />
-          <Ferramenta icone={Minimize2} rotulo="Simplificar" onClick={simplificar} />
-          <Ferramenta icone={Waves} rotulo="Suavizar" onClick={suavizar} />
-          <Ferramenta icone={Undo2} rotulo="Desfazer" desabilitada={!hist.length} onClick={desfazer} />
-          <span className="w-px h-6 mx-0.5" style={{ background: '#1a3a6b' }} />
-          <button onClick={onFechar} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold"
-            style={{ background: '#7f1d1d', color: '#fca5a5' }}><X size={13} /> Cancelar</button>
-          <button onClick={salvar} className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-bold text-white"
-            style={{ background: '#16a34a' }}><Check size={13} /> Salvar</button>
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-bold truncate" style={{ color: '#e2e8f0' }}>✏ {titulo}</p>
+          <p className="text-[10px] truncate" style={{ color: '#93c5fd' }}>
+            {ha != null ? `${ha.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} ha · ` : ''}
+            {(perM / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 2 })} km · {nVerts} vértices
+            {partes.length > 1 ? ` · parte ${ativa + 1}/${partes.length}` : ''}
+          </p>
         </div>
+        <button onClick={onFechar} className="flex items-center gap-1 px-3 py-2 rounded-lg text-[11px] font-bold flex-shrink-0"
+          style={{ background: '#7f1d1d', color: '#fca5a5' }}><X size={14} /> Cancelar</button>
+        <button onClick={salvar} className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-black text-white flex-shrink-0 shadow"
+          style={{ background: '#16a34a' }}><Check size={15} /> Salvar</button>
+      </div>
+
+      {/* PALETA: todas as ferramentas visíveis — modos (alternam) + ações */}
+      <div className="flex items-center gap-1 px-2 py-1.5 overflow-x-auto flex-shrink-0"
+        style={{ background: '#0b1d3a', borderBottom: '1px solid #1a3a6b' }}>
+        <span className="text-[9px] font-bold uppercase tracking-wider px-1 flex-shrink-0" style={{ color: '#64748b' }}>Modo</span>
+        <Ferramenta icone={Move} rotulo="Mover" ativa={modo === 'mover'} onClick={() => setModo('mover')} />
+        <Ferramenta icone={Eraser} rotulo="Remover" ativa={modo === 'remover'} onClick={() => setModo('remover')} />
+        {ehPoli && <Ferramenta icone={Scissors} rotulo="Cortar" ativa={modo === 'cortar'} onClick={() => setModo('cortar')} />}
+        {ehPoli && <Ferramenta icone={CircleDashed} rotulo="Buraco" ativa={modo === 'buraco'} onClick={() => setModo('buraco')} />}
+        <span className="w-px h-6 mx-1 flex-shrink-0" style={{ background: '#1a3a6b' }} />
+        <span className="text-[9px] font-bold uppercase tracking-wider px-1 flex-shrink-0" style={{ color: '#64748b' }}>Ações</span>
+        <Ferramenta icone={Shrink} rotulo="Reduzir" onClick={reduzir} />
+        <Ferramenta icone={Minimize2} rotulo="Simplificar" onClick={simplificar} />
+        <Ferramenta icone={Waves} rotulo="Suavizar" onClick={suavizar} />
+        <Ferramenta icone={Undo2} rotulo="Desfazer" desabilitada={!hist.length} onClick={desfazer} />
       </div>
 
       {/* mapa */}
@@ -432,7 +461,8 @@ export function EditorGeometria({ titulo, fc, onSalvar, onFechar }: {
       <p className="px-4 py-2 text-[11px] flex-shrink-0" style={{ background: '#0a1929', borderTop: '1px solid #1a3a6b', color: msg.startsWith('⚠') ? '#fbbf24' : '#94a3b8', paddingBottom: 'max(8px, env(safe-area-inset-bottom))' }}>
         {msg || DICAS[modo]}
       </p>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -441,8 +471,8 @@ function Ferramenta({ icone: Icone, rotulo, ativa, desabilitada, onClick }: {
 }) {
   return (
     <button onClick={onClick} disabled={desabilitada} title={rotulo}
-      className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-[11px] font-bold disabled:opacity-35"
-      style={{ background: ativa ? '#2e5fa3' : '#1a3a6b', color: ativa ? '#fff' : '#93c5fd' }}>
+      className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold disabled:opacity-35 flex-shrink-0 whitespace-nowrap"
+      style={{ background: ativa ? '#2e5fa3' : '#1a3a6b', color: ativa ? '#fff' : '#93c5fd', outline: ativa ? '1.5px solid #60a5fa' : 'none' }}>
       <Icone size={13} /> {rotulo}
     </button>
   );
