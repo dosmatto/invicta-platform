@@ -153,6 +153,50 @@ export function rasterizarPontos(
   return { dataUrl: canvas.toDataURL('image/png'), bounds: [w, s, e, n], min: mn, max: mx };
 }
 
+export interface Classe5 { min: number; max: number; n: number; cor: string }
+
+// Rasteriza os pontos em 5 CLASSES por QUANTIS (quintis): cada classe ~20% dos
+// pontos, então a cor mostra a DISTRIBUIÇÃO (não é dominada por outliers). A cor
+// de cada classe é amostrada na rampa da legenda (baixa→alta). Devolve a legenda
+// das classes (faixa + contagem) p/ a UI.
+export function rasterizarPontos5(
+  pts: PontoXYV[], dominio: [number, number], stops: Array<[number, [number, number, number]]>, k = 5,
+): { dataUrl: string; bounds: [number, number, number, number]; classes: Classe5[] } | null {
+  if (typeof document === 'undefined' || pts.length === 0) return null;
+  const vals = pts.map(p => p.valor).filter(v => isFinite(v)).sort((a, b) => a - b);
+  if (!vals.length) return null;
+  // quebras por quantil (k-1 internas)
+  const breaks: number[] = [];
+  for (let i = 1; i < k; i++) breaks.push(vals[Math.min(vals.length - 1, Math.floor((i / k) * vals.length))]);
+  const [dmin, dmax] = dominio;
+  const paleta = Array.from({ length: k }, (_, i) => corDoValor(dmin + ((i + 0.5) / k) * (dmax - dmin), dominio, stops));
+  const classeDe = (v: number) => { let c = 0; while (c < breaks.length && v > breaks[c]) c++; return c; };
+
+  let w = Infinity, s = Infinity, e = -Infinity, n = -Infinity;
+  for (const p of pts) { if (p.lng < w) w = p.lng; if (p.lng > e) e = p.lng; if (p.lat < s) s = p.lat; if (p.lat > n) n = p.lat; }
+  const spanX = (e - w) || 1e-4, spanY = (n - s) || 1e-4;
+  w -= spanX * 0.02; e += spanX * 0.02; s -= spanY * 0.02; n += spanY * 0.02;
+  const sx = e - w, sy = n - s;
+  const W = 900, H = Math.max(2, Math.min(1400, Math.round(W * sy / sx)));
+  const canvas = document.createElement('canvas'); canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d'); if (!ctx) return null;
+  const clsN = new Array(k).fill(0);
+  for (const p of pts) {
+    const c = classeDe(p.valor); clsN[c]++;
+    const x = ((p.lng - w) / sx) * W, y = (1 - (p.lat - s) / sy) * H;
+    ctx.fillStyle = paleta[c];
+    ctx.beginPath(); ctx.arc(x, y, 2.6, 0, 6.2832); ctx.fill();
+  }
+  const classes: Classe5[] = [];
+  let lo = vals[0];
+  for (let i = 0; i < k; i++) {
+    const hi = i < breaks.length ? breaks[i] : vals[vals.length - 1];
+    classes.push({ min: lo, max: hi, n: clsN[i], cor: paleta[i] });
+    lo = hi;
+  }
+  return { dataUrl: canvas.toDataURL('image/png'), bounds: [w, s, e, n], classes };
+}
+
 // Cor (rgb) de um valor segundo a rampa da legenda — p/ desenhar os pontos como mapa.
 export function corDoValor(v: number, dominio: [number, number], stops: Array<[number, [number, number, number]]>): string {
   const [dmin, dmax] = dominio;

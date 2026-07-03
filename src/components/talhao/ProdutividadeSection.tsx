@@ -13,10 +13,11 @@ import {
   setMapaProdutividadeOficial, deleteMapaProdutividade, type MapaProdutividade,
 } from '@/lib/store';
 import {
-  extrairPoligono, coordsFromBounds, gradienteCss, comprimirGrid, descomprimirGrid,
+  extrairPoligono, coordsFromBounds, gradienteCss, comprimirGrid, descomprimirGrid, rampaDaLegenda,
   type RespInterp, type Grid,
 } from '@/lib/fertilidade';
 import { colorirGridComLegenda } from '@/lib/raster';
+import { rasterizarPontos5, type Classe5 } from '@/lib/condutividade';
 import {
   parseCsvTexto, autoColunas, pontosDeCsv, lerShapefilePontos, pontosDeGeojson,
   processarColheita, statsDoGrid, legendaDaCultura, emUnidade, rotuloUnidade, sugerirFiltroBruto,
@@ -83,6 +84,8 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
   const legendaInicial = (c: string) => legendasProd.find(l => l.id === legProdId) ?? legendaDaCultura(c);
   const [relatorio, setRelatorio] = useState<RelatorioColheita | null>(null);
   const [fresco, setFresco] = useState(false);
+  const [verBrutos, setVerBrutos] = useState(false);   // preview dos pontos crus em 5 classes
+  const [classesBrutos, setClassesBrutos] = useState<Classe5[] | null>(null);
 
   const [versoes, setVersoes] = useState<MapaProdutividade[]>([]);
   const [rasters, setRasters] = useState<Record<string, { bounds: [number, number, number, number]; grid: Grid }>>({});
@@ -106,16 +109,6 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
     })();
   }, [nav.talhaoId, safra]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Render no mapa
-  useEffect(() => {
-    if (!res?.grid?.b64 || !legenda) { setFertilidadeOverlay(null); setFertilidadeLabels(null); return; }
-    let url: string | undefined;
-    try { url = colorirGridComLegenda(res.grid, legenda).dataUrl; } catch (e) { console.warn('[prod] colorir falhou:', e); }
-    if (!url && res.png) url = res.png;
-    if (!url) { setFertilidadeOverlay(null); return; }
-    setFertilidadeOverlay({ url, coordinates: coordsFromBounds(res.bounds), opacity: 1 });
-    setFertilidadeLabels(null);
-  }, [res, legenda, setFertilidadeOverlay, setFertilidadeLabels]);
   useEffect(() => () => { setFertilidadeOverlay(null); setFertilidadeLabels(null); }, [setFertilidadeOverlay, setFertilidadeLabels]);
 
   async function adicionarMaquina(file: File) {
@@ -148,6 +141,24 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
     pontos: m.csv ? pontosDeCsv(m.csv, { lat: colLat, lng: colLng, valor: colVal }) : m.fc ? pontosDeGeojson(m.fc, colVal) : [] as PontoColheita[],
   })), [maqs, colLat, colLng, colVal]);
   const nPontosTotal = useMemo(() => pontosPorMaq.reduce((s, m) => s + m.pontos.length, 0), [pontosPorMaq]);
+  const pontosBrutos = useMemo(() => pontosPorMaq.flatMap(m => m.pontos), [pontosPorMaq]);
+
+  // Overlay no mapa: preview dos pontos BRUTOS em 5 classes (quintis) OU o grid processado.
+  useEffect(() => {
+    if (verBrutos && legenda && pontosBrutos.length) {
+      const { dominio, stops } = rampaDaLegenda(legenda);
+      const img = rasterizarPontos5(pontosBrutos, dominio, stops);
+      if (img) { setFertilidadeOverlay({ url: img.dataUrl, coordinates: coordsFromBounds(img.bounds), opacity: 1 }); setFertilidadeLabels(null); setClassesBrutos(img.classes); return; }
+    }
+    setClassesBrutos(null);
+    if (!res?.grid?.b64 || !legenda) { setFertilidadeOverlay(null); setFertilidadeLabels(null); return; }
+    let url: string | undefined;
+    try { url = colorirGridComLegenda(res.grid, legenda).dataUrl; } catch (e) { console.warn('[prod] colorir falhou:', e); }
+    if (!url && res.png) url = res.png;
+    if (!url) { setFertilidadeOverlay(null); return; }
+    setFertilidadeOverlay({ url, coordinates: coordsFromBounds(res.bounds), opacity: 1 });
+    setFertilidadeLabels(null);
+  }, [verBrutos, pontosBrutos, res, legenda, setFertilidadeOverlay, setFertilidadeLabels]);
 
   // Auto-sugere o filtro bruto pelos dados (até o usuário editar manualmente).
   useEffect(() => {
@@ -311,6 +322,24 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
             </div>
           )}
           <p className="text-[10px]" style={{ color: '#94a3b8' }}>{fmt(nPontosTotal)} pontos importados de {maqs.length} {maqs.length === 1 ? 'máquina' : 'máquinas'}.</p>
+          {legenda && (
+            <div className="mt-1">
+              <button onClick={() => setVerBrutos(v => !v)}
+                className="flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded" style={{ background: verBrutos ? '#2e5fa3' : '#1a3a6b', color: verBrutos ? '#fff' : '#93c5fd' }}>
+                <Eye size={11} /> {verBrutos ? 'Ocultar pontos brutos' : 'Ver pontos brutos (5 classes)'}
+              </button>
+              {verBrutos && classesBrutos && (
+                <div className="flex gap-1 flex-wrap mt-1">
+                  {classesBrutos.map((c, i) => (
+                    <span key={i} className="flex items-center gap-1 text-[8px] px-1 py-0.5 rounded" style={{ background: '#061525', border: '1px solid #1a3a6b', color: '#cbd5e1' }}>
+                      <span className="inline-block w-2 h-2 rounded-sm flex-shrink-0" style={{ background: c.cor }} />
+                      {fmt(c.min)}–{fmt(c.max)} <span style={{ color: '#64748b' }}>({c.n})</span>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </Etapa>
       )}
 

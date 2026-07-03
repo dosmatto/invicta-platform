@@ -19,7 +19,7 @@ import {
 } from '@/lib/fertilidade';
 import { colorirGridComLegenda, temGrid } from '@/lib/raster';
 import { cloudSalvarMapa, cloudCarregarMapasPorPrefixo, cloudExcluirMapasPorPrefixo } from '@/lib/cloud';
-import { parseArquivoPontos, pontosCondutividade, avaliarQualidade, CORES_QUALIDADE, sugerirProfundidadesCEa, ehColunaAltitude, prepararPontosKrigagem, limparPontosEC, rasterizarPontos, type ArquivoPontos, type RelatorioLimpeza } from '@/lib/condutividade';
+import { parseArquivoPontos, pontosCondutividade, avaliarQualidade, CORES_QUALIDADE, sugerirProfundidadesCEa, ehColunaAltitude, prepararPontosKrigagem, limparPontosEC, rasterizarPontos5, type ArquivoPontos, type RelatorioLimpeza, type Classe5 } from '@/lib/condutividade';
 import type { Legenda } from '@/lib/legendas';
 import { Upload, Loader2, Zap, Eraser, AlertTriangle, Save, Trash2, Play, Plus, Layers, Star, Gauge, Mountain, SlidersHorizontal, ChevronDown, ChevronUp, RotateCcw } from 'lucide-react';
 
@@ -87,7 +87,7 @@ export function CondutividadeSection() {
   const [vista, setVista] = useState<'bruto' | 'limpo' | 'mapa'>('mapa');  // o que o mapa mostra
   const [limpos, setLimpos] = useState<Record<string, { pontos: Ponto[]; rel: RelatorioLimpeza }>>({});
   const [limpando, setLimpando] = useState(false);
-  const [vistaInfo, setVistaInfo] = useState<{ n: number; min: number; max: number } | null>(null);  // pontos plotados
+  const [vistaInfo, setVistaInfo] = useState<{ n: number; classes: Classe5[] } | null>(null);  // pontos plotados em 5 classes
   const [params, setParams] = useState<ParamsLimpeza>({ ...PARAMS_LIMPEZA_PADRAO });
   // C2 — krigagem MANUAL (Modo 2): método/modelo do variograma/pixel ('auto' = como antes).
   const [krigModo, setKrigModo] = useState<'auto' | 'manual'>('auto');
@@ -160,10 +160,10 @@ export function CondutividadeSection() {
     if ((vista === 'bruto' || vista === 'limpo') && legenda) {
       const pts = vista === 'bruto' ? pontosDe(profundidade) : (limpos[profundidade]?.pontos ?? []);
       const { dominio, stops } = rampaDaLegenda(legenda);
-      const img = rasterizarPontos(pts, dominio, stops);
+      const img = rasterizarPontos5(pts, dominio, stops);
       if (!img) { setFertilidadeOverlay(null); setVistaInfo(null); return; }
       setFertilidadeOverlay({ url: img.dataUrl, coordinates: coordsFromBounds(img.bounds), opacity: 1 });
-      setVistaInfo({ n: pts.length, min: img.min, max: img.max });
+      setVistaInfo({ n: pts.length, classes: img.classes });
       return;
     }
     // Mapa krigado (raster)
@@ -509,10 +509,19 @@ export function CondutividadeSection() {
               })}
             </div>
             {(vista === 'bruto' || vista === 'limpo') && vistaInfo && (
-              <p className="text-[9px] flex items-center gap-1.5" style={{ color: '#86efac' }}>
-                <span className="inline-block w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: '#86efac' }} />
-                {vistaInfo.n.toLocaleString('pt-BR')} pontos ({vista === 'bruto' ? 'brutos' : 'limpos'}) · {legenda?.simbolo ?? 'CEa'} {fmt(vistaInfo.min)}–{fmt(vistaInfo.max)} {legenda?.unidade ?? ''}
-              </p>
+              <div className="space-y-1">
+                <p className="text-[9px]" style={{ color: '#86efac' }}>
+                  {vistaInfo.n.toLocaleString('pt-BR')} pontos ({vista === 'bruto' ? 'brutos' : 'limpos'}) em 5 classes por quintis · {legenda?.simbolo ?? 'CEa'} {legenda?.unidade ?? ''}
+                </p>
+                <div className="flex gap-1 flex-wrap">
+                  {vistaInfo.classes.map((c, i) => (
+                    <span key={i} className="flex items-center gap-1 text-[8px] px-1 py-0.5 rounded" style={{ background: '#061525', border: '1px solid #1a3a6b', color: '#cbd5e1' }}>
+                      <span className="inline-block w-2 h-2 rounded-sm flex-shrink-0" style={{ background: c.cor }} />
+                      {fmt(c.min)}–{fmt(c.max)} <span style={{ color: '#64748b' }}>({c.n})</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
             )}
             {/* Parâmetros da limpeza (recolhível; vêm com padrão, editáveis) */}
             <div>

@@ -1,6 +1,10 @@
-export const APP_VERSION = '1.22.0';
+export const APP_VERSION = '1.23.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.23.0': [
+    'CONDUTIVIDADE — os pontos BRUTOS e LIMPOS no mapa agora aparecem em 5 CLASSES por quintis (cada classe ~20% dos pontos), com uma mini-legenda de faixa + contagem. Fica muito mais fácil enxergar a distribuição e o efeito da limpeza do que na rampa contínua (que era dominada pelos extremos)',
+    'PRODUTIVIDADE/COLHEITA — novo botão "Ver pontos brutos (5 classes)": pré-visualize as leituras da colhedora classificadas em quintis ANTES de processar, para bater o olho na dispersão e nos outliers',
+  ],
   '1.22.0': [
     'CONVERSÃO DE UNIDADES entre laboratórios na importação de laudo: cada lab reporta em unidades diferentes (bases em cmolc/dm³ ou mmolc/dm³ ou mg/dm³; MO em g/dm³, g/kg ou %). Agora, na prévia da importação, você escolhe a unidade de cada variável NAQUELE laudo e a plataforma converte para o padrão dela (bases mmolc/dm³, P/micros mg/dm³, MO g/dm³) — os dados de labs diferentes ficam comparáveis',
     'Conversões corretas por elemento: cmolc↔mmolc (×10), mg/dm³→mmolc pelo peso equivalente (K ÷39,1 · Ca ÷20,0 · Mg ÷12,2), MO %↔g/dm³ (×10), argila g/kg↔% (÷10). As variáveis que serão convertidas aparecem destacadas; quem não informa unidade (ou já está no padrão) fica igual (nada muda nas importações antigas)',
