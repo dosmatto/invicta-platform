@@ -17,6 +17,7 @@ import { calcularCVZonas } from '@/lib/meap/cv';
 import { unirFeatures, limparZona } from '@/lib/meap/fundir';
 import { extrairPoligono, coordsFromBounds, decodeGrid, type RespGerarZonas, type RespAnalisarZonas } from '@/lib/fertilidade';
 import { extrairEditavel, paraFeature, areaHaDe } from '@/lib/geoEditor';
+import booleanIntersects from '@turf/boolean-intersects';
 import { colorirGrid, colorirGridComLegenda } from '@/lib/raster';
 import { rampaVisualStops } from '@/lib/legendas';
 import { classeZona, classeReconhecida, corZonaPorPosicao, ORDEM_CLASSES } from '@/lib/zonas';
@@ -450,6 +451,51 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
     setSelZonas(new Set());
   }
 
+  // RECLASSIFICAR: muda a zona (potencial) de UM polígono — o agrônomo corrige a
+  // classe de uma mancha sem mexer na geometria.
+  function reclassificarZona(id: string, novoRank: number) {
+    empurrarHistEdit();
+    setFeatsEdit(fs => fs.map(f => idDaFeat(f) === id
+      ? { ...f, properties: { ...(f.properties ?? {}), potencialRank: novoRank } }
+      : f));
+    setSelZonas(new Set());
+  }
+
+  // ABSORVER FRAGMENTOS (13.03 §2): manchas < área mínima são fundidas ao VIZINHO
+  // de CLASSE MAIS PRÓXIMA (empate → maior). Itera até não haver mais fragmento
+  // absorvível (fragmento sem vizinho fica).
+  function absorverFragmentos() {
+    const limite = res?.stats.area_min_ha && res.stats.area_min_ha > 0 ? res.stats.area_min_ha : 0.5;
+    const areaDe = (f: GeoJSON.Feature) => Number((f.properties as { areaHa?: number })?.areaHa ?? 0);
+    const rankDe = (f: GeoJSON.Feature) => Number((f.properties as { potencialRank?: number })?.potencialRank ?? 0);
+    if (featsEdit.length < 2) return;
+    empurrarHistEdit();
+    let feats = featsEdit.slice();
+    const minM2 = Math.max(limite * 10000, 1000);
+    let guard = 0;
+    while (guard++ < 400) {
+      const frags = feats.filter(f => areaDe(f) > 0 && areaDe(f) < limite).sort((a, b) => areaDe(a) - areaDe(b));
+      if (!frags.length) break;
+      let absorveu = false;
+      for (const f of frags) {
+        const fId = idDaFeat(f), fr = rankDe(f);
+        const vizinhos = feats.filter(o => idDaFeat(o) !== fId && f.geometry && o.geometry && booleanIntersects(o as GeoJSON.Feature, f as GeoJSON.Feature));
+        if (!vizinhos.length) continue;
+        vizinhos.sort((a, b) => Math.abs(rankDe(a) - fr) - Math.abs(rankDe(b) - fr) || areaDe(b) - areaDe(a));
+        const n = vizinhos[0];
+        const { geometry, areaHa } = unirFeatures([n, f], minM2);
+        const merged: GeoJSON.Feature = { type: 'Feature', geometry, properties: { ...(n.properties ?? {}), areaHa } };
+        feats = feats.filter(x => idDaFeat(x) !== fId && idDaFeat(x) !== idDaFeat(n));
+        feats.push(merged);
+        absorveu = true;
+        break;   // adjacências mudaram → recomeça
+      }
+      if (!absorveu) break;   // só sobraram fragmentos isolados (sem vizinho)
+    }
+    setFeatsEdit(feats.sort((a, b) => idDaFeat(a).localeCompare(idDaFeat(b))));
+    setSelZonas(new Set());
+  }
+
   // Etapa 4 — Gerar: clusteriza o nº ESCOLHIDO + área mínima (avaliação vem depois).
   async function gerar() {
     if (!carregadas || chaves.length === 0 || nClasses < 2) return;
@@ -529,6 +575,10 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
     const labels = rotulosPotencial(total);
     return arr.map((g, i) => ({ ...g, num: String(i + 1).padStart(2, '0'), label: labels[i] ?? g.classe, cor: corZonaPorPosicao(i, total) }));
   }, [versao]);
+
+  // Fragmentos = manchas abaixo da área mínima (parametrizável; default 0,5 ha do spec).
+  const limiteFrag = res?.stats.area_min_ha && res.stats.area_min_ha > 0 ? res.stats.area_min_ha : 0.5;
+  const nFrag = featsEdit.length > 1 ? zonas.filter(z => z.areaHa > 0 && z.areaHa < limiteFrag).length : 0;
 
   return (
     <div className="p-3 space-y-3">
@@ -817,6 +867,13 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
                           <button onClick={refazerEdit} disabled={!redoEdit.length} title="Refazer" className="p-0.5 rounded disabled:opacity-30" style={{ color: '#93c5fd' }}><Redo2 size={12} /></button>
                         </>
                       )}
+                      {nFrag > 0 && (
+                        <button onClick={absorverFragmentos}
+                          title={`Fundir ${nFrag} fragmento(s) menor(es) que ${limiteFrag.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} ha no vizinho de classe mais próxima`}
+                          className="flex items-center gap-1 text-[9px] px-2 py-0.5 rounded font-bold text-white" style={{ background: '#0e7490' }}>
+                          <Sparkles size={10} /> Absorver {nFrag} frag.
+                        </button>
+                      )}
                       {selZonas.size >= 2 && (
                         <button onClick={fundirSelecionadas} className="flex items-center gap-1 text-[9px] px-2 py-0.5 rounded font-bold text-white" style={{ background: '#5b21b6' }}>
                           <Combine size={10} /> Fundir {selZonas.size}
@@ -842,6 +899,10 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
                               <span className="text-[9px] px-1.5 py-0.5 rounded font-semibold flex-shrink-0" style={{ background: h.bg, color: h.cor }}>CV {m.cvValidacao.toLocaleString('pt-BR')}%</span>
                             )}
                           </button>
+                          <select value={z.rank} onChange={e => reclassificarZona(z.id, Number(e.target.value))} title="Reclassificar: mudar a zona deste polígono"
+                            className="flex-shrink-0 text-[9px] rounded px-1 py-0.5 outline-none cursor-pointer" style={{ background: '#0b1f3a', color: '#93c5fd', border: '1px solid #1a3a6b' }}>
+                            {potenciais.map(pt => <option key={pt.rank} value={pt.rank}>Zona {pt.num}</option>)}
+                          </select>
                           <button onClick={() => editarZona(z.id)} title="Editar / cortar esta zona"
                             className="p-1 rounded flex-shrink-0" style={{ background: '#1a3a6b', color: '#c4b5fd' }}>
                             <Pencil size={11} />
@@ -853,7 +914,7 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
                   <p className="text-[9px] mt-1 leading-relaxed" style={{ color: '#6d5b9e' }}>
                     {selZonas.size >= 2
                       ? 'A fusão dissolve as divisas num polígono só; ele herda a zona da MAIOR parte. Não muda o nº de zonas oficiais (só junta polígonos).'
-                      : 'Editar (✏) abre o editor da zona: cortar em duas, mover/inserir vértices, recortar buraco ou simplificar. Um corte cria uma nova mancha com a mesma classe.'}
+                      : 'Cada mancha: o seletor muda a ZONA (reclassificar), ✏ abre o editor (cortar/mover/buraco). Marque 2+ p/ fundir. "Absorver" funde manchas menores que a área mínima no vizinho de classe mais próxima.'}
                   </p>
                 </div>
 

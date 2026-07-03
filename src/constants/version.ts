@@ -1,6 +1,10 @@
-export const APP_VERSION = '1.20.0';
+export const APP_VERSION = '1.21.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.21.0': [
+    'ZONAS DE MANEJO — RECLASSIFICAR polígono: cada mancha da lista ganhou um seletor de zona; se o agrônomo achar que aquele pedaço é de outra classe, é só escolher a zona certa (muda a cor/classe na hora, sem mexer na geometria)',
+    'ABSORVER FRAGMENTOS (regra 13.03 do MEAP): um botão funde as manchas menores que a área mínima na zona VIZINHA de classe mais próxima — o mapa fica operável para o maquinário. Mostra quantos fragmentos existem; fragmentos sem vizinho (ilhas soltas) são preservados. Tudo entra no Desfazer/Refazer',
+  ],
   '1.20.0': [
     'IMPORTAÇÃO DE TALHÕES agora BLOQUEIA sobreposição: ao importar (individual ou em massa), o sistema confere se o polígono invade a área de outro talhão — do próprio lote ou já cadastrado. Se houver sobreposição real (talhões que só encostam na divisa NÃO contam), a importação fica travada até você resolver',
     'Para resolver, o botão "Corrigir" abre o editor de traçado naquela peça: arraste os nós, corte ou recorte para tirar a invasão — a área é reconferida na hora e, ficando limpo, o botão de importar/gravar libera. Na massa, cada linha em conflito mostra com quem sobrepõe e quantos hectares',

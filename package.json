@@ -14,6 +14,7 @@
     "@supabase/supabase-js": "^2.108.2",
     "@tmcw/togeojson": "^7.1.2",
     "@turf/area": "^7.3.5",
+    "@turf/boolean-intersects": "^7.3.5",
     "@turf/helpers": "^7.3.5",
     "@turf/intersect": "^7.3.5",
     "@turf/union": "^7.3.5",
