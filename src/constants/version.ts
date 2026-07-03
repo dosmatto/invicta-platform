@@ -1,6 +1,10 @@
-export const APP_VERSION = '1.14.0';
+export const APP_VERSION = '1.15.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.15.0': [
+    'Condutividade C3 — a EC OFICIAL do talhão virou fonte da ZONA DE MANEJO: as profundidades (e extras como Altimetria) aparecem como camadas no MEAP, com peso próprio — dá pra gerar zona SÓ com EC (marque só as camadas EC) ou multivariável (EC + fertilidade + índices)',
+    'EC também entrou no COMPARADOR de camadas (grupo Condutividade): compare EC × produtividade, EC × NDVI, EC 0–20 × 20–40 — com correlação espacial e PDF',
+  ],
   '1.14.0': [
     'IV4 — LINHA DO TEMPO dos índices salvos na aba NDVI/Satélite: gráfico da MÉDIA de cada índice ao longo das datas mantidas (uma série por índice+sensor, cores próprias). Tocar num ponto abre o mapa daquela data; clicar na série oculta/mostra — a evolução do vigor da lavoura na safra num relance',
     'Cenas REJEITADAS agora são salvas na NUVEM por talhão (antes ficavam só no navegador): a rejeição feita num computador vale em qualquer outro aparelho. Offline continua funcionando com o registro local e sincroniza na próxima abertura',

@@ -128,7 +128,7 @@ export function ComparacaoCompleta({ safraNome, onClose }: { safraNome: string; 
     } finally { setGerando(false); }
   }
 
-  const grupos: CamadaComparavel['grupo'][] = ['Produtividade', 'NDVI', 'Fertilidade'];
+  const grupos: CamadaComparavel['grupo'][] = ['Produtividade', 'NDVI', 'Condutividade', 'Fertilidade'];
   const opcoes = (atual: string, set: (s: string) => void) => (
     <select value={atual} onChange={e => set(e.target.value)} className="w-full rounded px-2 py-1.5 text-xs outline-none" style={{ background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' }}>
       {grupos.map(g => {

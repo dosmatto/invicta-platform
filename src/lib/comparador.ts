@@ -4,9 +4,9 @@
 // OFICIAIS/co-registráveis do talhão (Produtividade, NDVI, Fertilidade…) como
 // grids no mesmo formato, e oferece correlação espacial + distribuição por classe.
 
-import { getMapasProdutividade, getImportacoesLab, getLegendasPorAtributo } from '@/lib/store';
+import { getMapasProdutividade, getImportacoesLab, getLegendasPorAtributo, getLegendas } from '@/lib/store';
 import { carregarGridsTalhao } from '@/lib/recomendacao/aplicar';
-import { carregarNdviSalvos } from '@/lib/meap/gerar';
+import { carregarNdviSalvos, carregarEcOficial, rotuloEc } from '@/lib/meap/gerar';
 import { cloudCarregarMapasPorPrefixo } from '@/lib/cloud';
 import { decodeGrid, descomprimirGrid, type Grid } from '@/lib/fertilidade';
 import { legendaDaCultura } from '@/lib/produtividade';
@@ -14,7 +14,7 @@ import type { Legenda } from '@/lib/legendas';
 
 export interface CamadaComparavel {
   id: string;
-  grupo: 'Produtividade' | 'NDVI' | 'Fertilidade';
+  grupo: 'Produtividade' | 'NDVI' | 'Fertilidade' | 'Condutividade';
   nome: string;
   sub?: string;
   bounds: [number, number, number, number];
@@ -46,6 +46,13 @@ export async function listarCamadas(talhaoId: string, safra: string): Promise<Ca
   const nd = await carregarNdviSalvos(talhaoId);
   const ndviLeg = getLegendasPorAtributo('ndvi')[0];
   if (ndviLeg) for (const n of nd) out.push({ id: `ndvi_${n.data}_${n.nut}`, grupo: 'NDVI', nome: `${n.indice} ${ddmm(n.data)}`, sub: n.nut.startsWith('ndvi_cbers') ? 'CBERS' : 'S2', bounds: n.bounds, grid: { b64: n.b64, shape: n.shape }, legenda: ndviLeg, unidade: 'índice' });
+
+  // Condutividade elétrica OFICIAL (C3) — variável fixa do talhão
+  const ec = await carregarEcOficial(talhaoId);
+  if (ec.length) {
+    const ecLeg = getLegendas().find(l => l.atributoId === 'condutividade' || l.categoria === 'condutividade');
+    if (ecLeg) for (const e of ec) out.push({ id: `ec_${e.prof}`, grupo: 'Condutividade', nome: rotuloEc(e.prof), sub: 'oficial', bounds: e.bounds, grid: { b64: e.b64, shape: e.shape }, legenda: ecLeg, unidade: ecLeg.unidade });
+  }
 
   // Fertilidade (importação de laboratório mais recente)
   const imp = getImportacoesLab(talhaoId)[0];

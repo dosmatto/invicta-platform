@@ -5,7 +5,7 @@
 // camadas escolhidas, empilha e manda o backend clusterizar (k-means/FCM) com
 // índices FPI/NCE para escolher o nº de zonas. Preview apenas (persistir = M3).
 
-import { getImportacoesLab, getGrades } from '@/lib/store';
+import { getImportacoesLab, getGrades, getCondutividade } from '@/lib/store';
 import { carregarGridsTalhao } from '@/lib/recomendacao/aplicar';
 import { analisarZonas, gerarZonas, decodeGrid, descomprimirGrid, type RespAnalisarZonas, type RespGerarZonas, type Grid } from '@/lib/fertilidade';
 import { cloudCarregarMapasPorPrefixo } from '@/lib/cloud';
@@ -91,6 +91,32 @@ export async function carregarNdviSalvos(talhaoId: string): Promise<NdviCamada[]
   return out;
 }
 
+// ── Condutividade elétrica OFICIAL como camada do MEAP (C3) ──────────────────
+export interface EcCamada { chave: string; prof: string; bounds: [number, number, number, number]; b64: string; shape: [number, number] }
+
+export async function carregarEcOficial(talhaoId: string): Promise<EcCamada[]> {
+  const lev = getCondutividade(talhaoId).find(l => l.oficial);
+  if (!lev) return [];
+  const pref = `condutividade__${talhaoId}__${lev.id}__`;
+  const docs = await cloudCarregarMapasPorPrefixo<{ resp: { bounds: [number, number, number, number]; grid?: Grid } }>(pref);
+  const out: EcCamada[] = [];
+  for (const d of docs) {
+    const prof = d.id.slice(pref.length);
+    const resp = d.dados?.resp;
+    let grid = resp?.grid;
+    if (!resp || !grid) continue;
+    if (grid.comp === 'gz') { try { grid = await descomprimirGrid(grid); } catch { continue; } }
+    out.push({ chave: `ec__${prof}`, prof, bounds: resp.bounds, b64: grid.b64, shape: grid.shape });
+  }
+  out.sort((a, b) => a.prof.localeCompare(b.prof));
+  return out;
+}
+
+// Rótulo amigável da camada de EC (profundidades '00_20' etc.; extras = nome).
+export function rotuloEc(prof: string): string {
+  return prof === 'altitude' ? 'Altimetria' : `EC ${prof.replace('_', '–')}`;
+}
+
 // Carrega as camadas já interpoladas do talhão (fertilidade) + os NDVI mantidos,
 // como camadas selecionáveis co-registradas na MESMA malha de referência.
 export async function carregarCamadas(talhaoId: string): Promise<CamadasCarregadas | null> {
@@ -128,6 +154,21 @@ export async function carregarCamadas(talhaoId: string): Promise<CamadasCarregad
       // para o backend reconhecer o potencial (RANK_SIMBOLOS).
       const fonteLabel = n.nut.startsWith('ndvi_cbers') ? 'CBERS' : 'S2';
       camadas.push({ chave: n.chave, nut: n.nut, prof: n.prof, simbolo: `${n.indice} ${fonteLabel}`, b64, shape });
+    }
+  }
+
+  // 3) Condutividade elétrica OFICIAL (variável fixa do talhão) — C3: a EC
+  //    entra como fonte do zoneamento, reamostrada pra malha de referência.
+  const ec = await carregarEcOficial(talhaoId);
+  if (!bounds && ec.length) {
+    const ref = ec.reduce((a, b) => (b.shape[0] * b.shape[1] > a.shape[0] * a.shape[1] ? b : a));
+    bounds = ref.bounds;
+    shape = capShape(ref.shape, 160);
+  }
+  if (bounds && shape) {
+    for (const e of ec) {
+      const b64 = (e.shape[0] === shape[0] && e.shape[1] === shape[1]) ? e.b64 : reamostrarB64(e.b64, e.shape, shape);
+      camadas.push({ chave: e.chave, nut: `ec_${e.prof}`, prof: e.prof, simbolo: rotuloEc(e.prof), b64, shape });
     }
   }
 
