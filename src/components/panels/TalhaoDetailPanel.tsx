@@ -9,13 +9,15 @@
 //     Produtividade [em breve], visualizáveis no mapa.
 
 import { useState, useEffect, useRef } from 'react';
+import dynamic from 'next/dynamic';
 import { useApp } from '@/context/AppContext';
 import {
-  getTalhoes, getSafras, saveSafra, updateTalhao, deleteTalhao,
+  getTalhoes, getSafras, saveSafra, updateTalhao, saveTalhao, deleteTalhao,
   getGrades, getImportacoesLab, getImportacoesCompactacao, getLegendas, Talhao, Safra,
 } from '@/lib/store';
 import type { Legenda } from '@/lib/legendas';
 import { parseGeoFile, parseLimiteTalhao, normalizarZonas } from '@/lib/geo';
+import { extrairEditavel, paraFC, bboxDe, areaHaDe, areaHaSemFuros } from '@/lib/geoEditor';
 import { classeZona } from '@/lib/zonas';
 import { cloudCarregarMapasPorPrefixo } from '@/lib/cloud';
 import { descomprimirGrid, coordsFromBounds, type RespInterp } from '@/lib/fertilidade';
@@ -27,6 +29,11 @@ import {
 
 type MapaNuvem = { resp: RespInterp; labels: GeoJSON.FeatureCollection; interpoladoEm?: string };
 
+const EditorGeometria = dynamic(
+  () => import('@/components/geo/EditorGeometria').then(m => ({ default: m.EditorGeometria })),
+  { ssr: false },
+);
+
 // ── seção de limite geográfico (atualizar polígono) ──────────────────────────
 function GeoSection({ talhao, onUploaded }: { talhao: Talhao | null; onUploaded: (areaHa: number) => void }) {
   const { setUploadedGeo, setUploadedBbox } = useApp();
@@ -35,8 +42,40 @@ function GeoSection({ talhao, onUploaded }: { talhao: Talhao | null; onUploaded:
   const [erroMsg, setErroMsg] = useState('');
   const [avisos, setAvisos] = useState<string[]>([]);
   const [dragging, setDragging] = useState(false);
+  const [editando, setEditando] = useState(false);
 
   const temGeo = !!talhao?.geojson;
+
+  function fcDoTalhao(): GeoJSON.FeatureCollection | null {
+    try { return JSON.parse(talhao!.geojson!) as GeoJSON.FeatureCollection; } catch { return null; }
+  }
+
+  // aplica o editor: 1ª parte substitui o limite; partes extras (corte) viram
+  // NOVOS talhões na mesma fazenda (sem dados de safra — só o polígono).
+  function aplicarEdicao(fcs: GeoJSON.FeatureCollection[]) {
+    if (!talhao) return;
+    const eds = fcs.map(extrairEditavel).filter((e): e is NonNullable<typeof e> => !!e && e.tipo === 'poligono');
+    if (!eds.length) { setEditando(false); setErroMsg('Edição sem polígono — nada salvo.'); setEstado('erro'); return; }
+    const [prim, ...resto] = eds;
+    const fc = paraFC(prim, { nome: talhao.nome });
+    const area = areaHaDe(prim) ?? 0;
+    updateTalhao(talhao.id, {
+      geojson: JSON.stringify(fc), bbox: bboxDe(prim),
+      areaHa: area, areaHaSemHoles: areaHaSemFuros(prim) ?? area, status: 'ativo',
+    });
+    resto.forEach((ed, i) => {
+      const nome = `${talhao.nome} (${i + 2})`;
+      saveTalhao({
+        fazendaId: talhao.fazendaId, nome,
+        areaHa: areaHaDe(ed) ?? 0, areaHaSemHoles: areaHaSemFuros(ed) ?? 0,
+        status: 'ativo', geojson: JSON.stringify(paraFC(ed, { nome })), bbox: bboxDe(ed),
+      });
+    });
+    setUploadedGeo(fc); setUploadedBbox(bboxDe(prim));
+    setEditando(false); setEstado('ok'); setErroMsg('');
+    setAvisos(resto.length ? [`Talhão dividido: ${resto.length} novo(s) talhão(ões) criado(s) na fazenda.`] : []);
+    onUploaded(area);
+  }
 
   async function processar(file: File) {
     setEstado('loading'); setErroMsg(''); setAvisos([]);
@@ -86,14 +125,29 @@ function GeoSection({ talhao, onUploaded }: { talhao: Talhao | null; onUploaded:
         {avisos.map((a, i) => (
           <p key={i} className="mt-1.5 text-[10px]" style={{ color: '#fbbf24' }}>⚠ {a}</p>
         ))}
-        {temGeo && estado === 'idle' && (
-          <button onClick={() => { try { setUploadedGeo(JSON.parse(talhao!.geojson!) as GeoJSON.FeatureCollection); setUploadedBbox(talhao!.bbox!); } catch {} }}
-            className="mt-2 w-full py-1.5 rounded text-[10px] font-semibold transition-opacity hover:opacity-80" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
-            Mostrar no mapa
-          </button>
+        {temGeo && estado !== 'loading' && (
+          <div className="mt-2 grid grid-cols-2 gap-1.5">
+            <button onClick={() => { try { setUploadedGeo(JSON.parse(talhao!.geojson!) as GeoJSON.FeatureCollection); setUploadedBbox(talhao!.bbox!); } catch {} }}
+              className="py-1.5 rounded text-[10px] font-semibold transition-opacity hover:opacity-80" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
+              Mostrar no mapa
+            </button>
+            <button onClick={() => setEditando(true)}
+              className="flex items-center justify-center gap-1 py-1.5 rounded text-[10px] font-semibold transition-opacity hover:opacity-80" style={{ background: '#5b21b6', color: '#ddd6fe' }}>
+              <Pencil size={11} /> Editar traçado
+            </button>
+          </div>
         )}
         <input ref={inputRef} type="file" accept=".kml,.zip,.geojson,.json" className="hidden" onChange={onFileChange} />
       </div>
+
+      {editando && talhao && (() => {
+        const fc = fcDoTalhao();
+        if (!fc) { setEditando(false); return null; }
+        return (
+          <EditorGeometria titulo={`Limite — ${talhao.nome}`} fc={fc}
+            onSalvar={aplicarEdicao} onFechar={() => setEditando(false)} />
+        );
+      })()}
     </div>
   );
 }

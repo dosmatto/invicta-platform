@@ -1,6 +1,13 @@
-export const APP_VERSION = '1.17.0';
+export const APP_VERSION = '1.18.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.18.0': [
+    'EDITOR DE TRAÇADO (tela cheia, sobre o satélite) nas MEDIÇÕES e no LIMITE DO TALHÃO: arraste vértices, toque no ponto azul entre dois vértices para INSERIR, modo remover, SIMPLIFICAR (tira vértices redundantes, tolerância 1,5 m) e SUAVIZAR cantos — com desfazer e área/perímetro ao vivo',
+    'CORTAR EM DOIS: desenhe uma linha atravessando a área e ela vira 2 polígonos — na medição cria "nome (2)", no talhão cria um novo talhão na fazenda. RECORTAR BURACO/ILHA: desenhe o contorno de benfeitoria/mata/açude dentro da área e ele vira um furo (a área desconta na hora)',
+    'O editor abre pelo botão "Editar traçado" no painel de Medições e na ficha do talhão (Limite do Talhão) — e também conserta talhão salvo como LINHAS (emenda e fecha o contorno automaticamente, caso IFEGI 03)',
+    'APP DE CAMPO e PÁGINA DO TALHÃO agora mostram a VERSÃO no rodapé (confira se o aparelho está atualizado)',
+    'CONFIGURAÇÕES arrumada: saiu o "motor de interpolação local" (era da época do backend na máquina; o status do servidor de processamento na NUVEM aparece no lugar), saíram as linhas decorativas sem função (Integrações, Dados da empresa, Backup) e o carregador de dados de teste — ficou Versão + Servidor, Etiquetas, Changelog e Sobre',
+  ],
   '1.17.0': [
     'APP DE CAMPO — nova aba GRADES: além do passo a passo (Produtor→Fazenda→Talhão→Ciclo), agora dá pra escolher a SAFRA e ver TODAS as grades numa lista só, com busca por nome (grade ou talhão), filtros de status (Nova / Iniciada / Finalizada) e de sincronização (Sincronizadas / Pendentes) — igual ao fluxo que você pediu',
     'MAPAS OFFLINE mais fáceis: cada grade da lista tem um botão de BAIXAR o mapa de satélite do seu talhão pro celular, e um botão "Baixar todos" pega os mapas de todos os talhões da safra de uma vez (sem rebaixar imagens repetidas de talhões vizinhos) — prepare tudo no Wi-Fi antes de ir a campo',

@@ -35,11 +35,19 @@ export function perimetroM(coords: [number, number][], fechar: boolean): number 
   return s;
 }
 
+// anéis do polígono (externo + furos), já fechados
+function aneisFechados(m: MedicaoCampo): GeoJSON.Position[][] {
+  return [
+    [...m.coords, m.coords[0]],
+    ...(m.furos ?? []).filter(f => f.length >= 3).map(f => [...f, f[0]]),
+  ];
+}
+
 export function areaHaMedicao(m: MedicaoCampo): number | null {
   if (!ehPoligono(m)) return null;
   const fc: GeoJSON.FeatureCollection = {
     type: 'FeatureCollection',
-    features: [{ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [[...m.coords, m.coords[0]]] } }],
+    features: [{ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: aneisFechados(m) } }],
   };
   return Math.round((turfArea(fc) / 10000) * 100) / 100;
 }
@@ -53,7 +61,7 @@ export function medicaoParaFC(m: MedicaoCampo): GeoJSON.FeatureCollection {
   if (ehPoligono(m)) {
     props.area_ha = areaHaMedicao(m);
     props.perim_m = Math.round(perimetroM(m.coords, true));
-    return { type: 'FeatureCollection', features: [{ type: 'Feature', properties: props, geometry: { type: 'Polygon', coordinates: [[...m.coords, m.coords[0]]] } }] };
+    return { type: 'FeatureCollection', features: [{ type: 'Feature', properties: props, geometry: { type: 'Polygon', coordinates: aneisFechados(m) } }] };
   }
   props.dist_m = Math.round(perimetroM(m.coords, false));
   return { type: 'FeatureCollection', features: [{ type: 'Feature', properties: props, geometry: { type: 'LineString', coordinates: m.coords } }] };
@@ -84,8 +92,10 @@ export function baixarGeoJSON(m: MedicaoCampo): void {
 
 export function baixarKML(m: MedicaoCampo): void {
   const coordsStr = (cs: [number, number][]) => cs.map(([lng, lat]) => `${lng},${lat},0`).join(' ');
+  const furosKml = (m.furos ?? []).filter(f => f.length >= 3)
+    .map(f => `<innerBoundaryIs><LinearRing><coordinates>${coordsStr([...f, f[0]])}</coordinates></LinearRing></innerBoundaryIs>`).join('');
   const geo = ehPoligono(m)
-    ? `<Polygon><outerBoundaryIs><LinearRing><coordinates>${coordsStr([...m.coords, m.coords[0]])}</coordinates></LinearRing></outerBoundaryIs></Polygon>`
+    ? `<Polygon><outerBoundaryIs><LinearRing><coordinates>${coordsStr([...m.coords, m.coords[0]])}</coordinates></LinearRing></outerBoundaryIs>${furosKml}</Polygon>`
     : `<LineString><coordinates>${coordsStr(m.coords)}</coordinates></LineString>`;
   const kml = `<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2"><Document>

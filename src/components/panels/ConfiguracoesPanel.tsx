@@ -1,14 +1,36 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { PanelSection, PanelRow } from './_shared';
 import { APP_VERSION, CHANGELOG } from '@/constants/version';
 import { EtiquetaLayoutPicker } from '../talhao/EtiquetaLayoutPicker';
 import { getConfigEtiqueta, saveConfigEtiqueta } from '@/lib/store';
-import { useApp } from '@/context/AppContext';
-import { carregarTalhaoTeste } from '@/lib/teste';
-import { InterpoladorSection } from '../config/InterpoladorSection';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { INTERP_URL, BACKEND_LOCAL } from '@/lib/interpUrl';
+import { ChevronDown, ChevronRight, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
+
+// Status do servidor de processamento (nuvem) — só informação, sem instalação.
+function ServidorNuvem() {
+  const [status, setStatus] = useState<'checando' | 'ok' | 'off'>('checando');
+  const [motor, setMotor] = useState('');
+  useEffect(() => {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 12_000);
+    fetch(`${INTERP_URL}/health`, { signal: ctrl.signal, cache: 'no-store' })
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(j => { setMotor(String(j?.v ?? '')); setStatus('ok'); })
+      .catch(() => setStatus('off'))
+      .finally(() => clearTimeout(t));
+    return () => { clearTimeout(t); ctrl.abort(); };
+  }, []);
+  return (
+    <div className="px-4 py-2 flex items-center gap-2 text-xs" style={{ color: 'var(--sidebar-section)' }}>
+      <span className="flex-1">Processamento de mapas {BACKEND_LOCAL ? '(local — dev)' : '(nuvem)'}</span>
+      {status === 'checando' && <><Loader2 size={13} className="animate-spin" style={{ color: '#60a5fa' }} /><span style={{ color: '#60a5fa' }}>verificando…</span></>}
+      {status === 'ok' && <><CheckCircle2 size={13} style={{ color: '#4ade80' }} /><span style={{ color: '#4ade80' }}>Online{motor ? ` · ${motor}` : ''}</span></>}
+      {status === 'off' && <><XCircle size={13} style={{ color: '#f87171' }} /><span style={{ color: '#f87171' }}>Sem resposta (acordando? tente já já)</span></>}
+    </div>
+  );
+}
 
 export function ConfiguracoesPanel() {
   const versoes = Object.entries(CHANGELOG);
@@ -16,20 +38,6 @@ export function ConfiguracoesPanel() {
   const [mostrarAnteriores, setMostrarAnteriores] = useState(false);
   const [abertos, setAbertos] = useState<Record<string, boolean>>({});
   const [etq, setEtq] = useState(() => getConfigEtiqueta());
-
-  const { setNav, setActivePanel, setUploadedGeo, setUploadedBbox, setMapMode } = useApp();
-  const [carregandoTeste, setCarregandoTeste] = useState(false);
-  const [erroTeste, setErroTeste] = useState('');
-  async function carregarTeste() {
-    setCarregandoTeste(true); setErroTeste('');
-    try {
-      const t = await carregarTalhaoTeste();
-      setNav({ produtorId: t.produtorId, produtor: t.produtor, fazendaId: t.fazendaId, fazenda: t.fazenda, talhaoId: t.talhaoId, talhao: t.talhao, safra: t.safra, area: t.area });
-      setUploadedGeo(t.geojson); setUploadedBbox(t.bbox); setMapMode('satellite');
-      setActivePanel(`talhao-${t.talhaoId}`);
-    } catch (e) { setErroTeste(e instanceof Error ? e.message : 'Erro ao carregar.'); }
-    finally { setCarregandoTeste(false); }
-  }
 
   function atualizarEtq(patch: Partial<typeof etq>) {
     const novo = { ...etq, ...patch };
@@ -44,11 +52,8 @@ export function ConfiguracoesPanel() {
   return (
     <div className="h-full overflow-y-auto">
       <PanelSection title="Plataforma">
-        {['Dados da empresa', 'Backup de dados'].map(i => <PanelRow key={i} label={i} value="›" />)}
         <PanelRow label="Versão do sistema" value={`v${APP_VERSION}`} />
-      </PanelSection>
-      <PanelSection title="Integrações">
-        {['Motor QGIS', 'Firebase', 'Laboratórios parceiros', 'Vercel / Deploy'].map(i => <PanelRow key={i} label={i} value="›" />)}
+        <ServidorNuvem />
       </PanelSection>
 
       <PanelSection title="Etiquetas">
@@ -58,24 +63,6 @@ export function ConfiguracoesPanel() {
             dx={etq.dx} dy={etq.dy}
             setDx={v => atualizarEtq({ dx: v })} setDy={v => atualizarEtq({ dy: v })}
           />
-        </div>
-      </PanelSection>
-
-      <PanelSection title="Interpolação (motor local)">
-        <InterpoladorSection />
-      </PanelSection>
-
-      <PanelSection title="Dados de teste">
-        <div className="px-4 py-3 space-y-2">
-          <p className="text-[10px]" style={{ color: 'var(--sidebar-section)' }}>
-            Cria o talhão <strong style={{ color: '#e2e8f0' }}>IGEFI 07</strong> (polígono + 39 pontos + análise Fundação ABC) para testar a interpolação de fertilidade.
-          </p>
-          <button onClick={carregarTeste} disabled={carregandoTeste}
-            className="w-full py-1.5 rounded text-[11px] font-bold text-white"
-            style={{ background: carregandoTeste ? '#1a3a6b' : 'var(--invicta-green-dark)' }}>
-            {carregandoTeste ? 'Carregando…' : 'Carregar talhão-teste IGEFI 07'}
-          </button>
-          {erroTeste && <p className="text-[10px]" style={{ color: '#f87171' }}>{erroTeste}</p>}
         </div>
       </PanelSection>
 

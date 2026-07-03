@@ -296,6 +296,7 @@ export interface MedicaoCampo {
   nome: string;
   tipo: TipoMedicao;
   coords: [number, number][];
+  furos?: [number, number][][]; // recortes internos (editor da plataforma)
   pontos?: PontoMedicao[];   // metadados na mesma ordem de coords
   categoria?: string;
   obs?: string;

@@ -6,19 +6,26 @@
 // limite de um talhão existente. Fecha o ciclo campo → escritório.
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import dynamic from 'next/dynamic';
 import { useApp } from '@/context/AppContext';
 import {
-  MedicaoCampo, carregarMedicoes, excluirMedicao, formatarDist,
+  MedicaoCampo, carregarMedicoes, excluirMedicao, salvarMedicao, formatarDist,
 } from '@/lib/coleta';
 import {
   ehPoligono, areaHaMedicao, perimetroM, bboxMedicao, medicaoParaFC,
   baixarShp, baixarKML, baixarGeoJSON, criarTalhaoDaMedicao, substituirLimiteTalhao,
 } from '@/lib/medicoesRepo';
+import { extrairEditavel } from '@/lib/geoEditor';
 import { getClientes, getFazendas, getTalhoes } from '@/lib/store';
 import { escopoClienteIds, emailUsuario } from '@/lib/empresa';
 import {
-  RefreshCw, Loader2, Ruler, MapPin, Eye, Download, Plus, Repeat, Trash2, X, CheckCircle2, CloudUpload,
+  RefreshCw, Loader2, Ruler, MapPin, Eye, Download, Plus, Repeat, Trash2, X, CheckCircle2, CloudUpload, Pencil,
 } from 'lucide-react';
+
+const EditorGeometria = dynamic(
+  () => import('@/components/geo/EditorGeometria').then(m => ({ default: m.EditorGeometria })),
+  { ssr: false },
+);
 
 const BORDA = '#1a3a6b', TXT = '#e2e8f0', SUB = '#64748b';
 
@@ -29,6 +36,7 @@ export function MedicoesPanel() {
   const [sel, setSel] = useState<string | null>(null);
   const [filtro, setFiltro] = useState<'todos' | 'poligono' | 'linha'>('todos');
   const [acao, setAcao] = useState<{ m: MedicaoCampo; tipo: 'criar' | 'substituir' } | null>(null);
+  const [editando, setEditando] = useState<MedicaoCampo | null>(null);
   const [msg, setMsg] = useState('');
 
   const recarregar = useCallback(async () => {
@@ -65,6 +73,33 @@ export function MedicoesPanel() {
     if (!confirm(`Excluir a medição "${m.nome}"?`)) return;
     excluirMedicao(m.id);
     setMsg(`"${m.nome}" excluída.`);
+    await recarregar();
+  }
+
+  // aplica o resultado do editor: a 1ª parte ATUALIZA a medição; as demais
+  // (depois de um corte) viram NOVAS medições "nome (2)", "nome (3)"…
+  async function aplicarEdicao(m: MedicaoCampo, fcs: GeoJSON.FeatureCollection[]) {
+    const eds = fcs.map(extrairEditavel).filter((e): e is NonNullable<typeof e> => !!e);
+    if (!eds.length) { setEditando(null); setMsg('⚠ Edição vazia — nada salvo.'); return; }
+    const [prim, ...resto] = eds;
+    // pontos (metadados da caminhada) deixam de corresponder após editar → saem
+    salvarMedicao({
+      ...m, coords: prim.anel,
+      furos: prim.tipo === 'poligono' && prim.furos.length ? prim.furos : undefined,
+      pontos: undefined,
+    });
+    resto.forEach((ed, i) => {
+      salvarMedicao({
+        id: `med_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`,
+        nome: `${m.nome} (${i + 2})`,
+        tipo: 'poligono', coords: ed.anel,
+        furos: ed.furos.length ? ed.furos : undefined,
+        categoria: m.categoria, obs: m.obs, talhaoId: m.talhaoId, talhaoNome: m.talhaoNome,
+        safra: m.safra, criadoEm: new Date().toISOString(), operador: m.operador,
+      });
+    });
+    setEditando(null);
+    setMsg(resto.length ? `"${m.nome}" editada e dividida em ${eds.length} áreas.` : `"${m.nome}" editada.`);
     await recarregar();
   }
 
@@ -142,6 +177,7 @@ export function MedicoesPanel() {
 
                   <div className="grid grid-cols-2 gap-1.5">
                     <BotaoAcao icon={<Eye size={12} />} label="Ver no mapa" onClick={() => verNoMapa(m)} />
+                    <BotaoAcao icon={<Pencil size={12} />} label="Editar traçado" cor="#5b21b6" onClick={() => setEditando(m)} />
                     <BotaoAcao icon={<Download size={12} />} label="Baixar SHP" onClick={() => void baixarShp(m).catch(() => setMsg('Falha ao gerar SHP.'))} />
                     <BotaoAcao icon={<Download size={12} />} label="Baixar KML" onClick={() => baixarKML(m)} />
                     <BotaoAcao icon={<Download size={12} />} label="GeoJSON" onClick={() => baixarGeoJSON(m)} />
@@ -164,6 +200,12 @@ export function MedicoesPanel() {
         <TalhaoDialog m={acao.m} tipo={acao.tipo}
           onFechar={() => setAcao(null)}
           onFeito={txt => { setAcao(null); setMsg(txt); }} />
+      )}
+
+      {editando && (
+        <EditorGeometria titulo={editando.nome} fc={medicaoParaFC(editando)}
+          onSalvar={fcs => void aplicarEdicao(editando, fcs)}
+          onFechar={() => setEditando(null)} />
       )}
     </div>
   );

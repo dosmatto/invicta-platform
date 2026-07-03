@@ -29,6 +29,7 @@ import { NdviSection } from '@/components/talhao/NdviSection';
 import { ProdutividadeSection } from '@/components/talhao/ProdutividadeSection';
 import { papelDoUsuario, meuRegistro, planoPorId } from '@/lib/empresa';
 import { tocarBackend } from '@/lib/interpUrl';
+import { APP_VERSION } from '@/constants/version';
 import {
   ChevronLeft, Home, Leaf, Grid3x3, Layers, BarChart3, FileSpreadsheet,
   Activity, Satellite, FolderOpen, FileText, Clock, Zap, Mountain,
@@ -233,6 +234,10 @@ export function TalhaoPage({ id }: { id: string }) {
               <EmBreve label={TABS.find(t => t.id === tabAtivo)?.label ?? ''} />
             )}
           </div>
+
+          <p className="text-center text-[10px] py-1.5 flex-shrink-0" style={{ color: '#334155', borderTop: '1px solid #0f2240' }}>
+            INVICTA Platform · v{APP_VERSION}
+          </p>
         </aside>
 
         {/* Mapa do talhão */}
