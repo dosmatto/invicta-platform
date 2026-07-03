@@ -11,7 +11,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import {
   getTalhoes, getLegendas, getCondutividade, saveCondutividade, deleteCondutividade,
-  setCondutividadeOficial, setProfundidadeOficialCondutividade, type LevantamentoCondutividade,
+  setCondutividadeOficial, setProfundidadeOficialCondutividade, addRodadaCondutividade,
+  type LevantamentoCondutividade, type RodadaCondutividade,
 } from '@/lib/store';
 import {
   interpolar, rampaDaLegenda, gradienteCss, coordsFromBounds, extrairPoligono,
@@ -21,7 +22,7 @@ import { colorirGridComLegenda, temGrid } from '@/lib/raster';
 import { cloudSalvarMapa, cloudCarregarMapasPorPrefixo, cloudExcluirMapasPorPrefixo } from '@/lib/cloud';
 import { parseArquivoPontos, pontosCondutividade, avaliarQualidade, CORES_QUALIDADE, sugerirProfundidadesCEa, ehColunaAltitude, prepararPontosKrigagem, limparPontosEC, rasterizarPontos5, type ArquivoPontos, type RelatorioLimpeza, type Classe5 } from '@/lib/condutividade';
 import type { Legenda } from '@/lib/legendas';
-import { Upload, Loader2, Zap, Eraser, AlertTriangle, Save, Trash2, Play, Plus, Layers, Star, Gauge, Mountain, SlidersHorizontal, ChevronDown, ChevronUp, RotateCcw, Download } from 'lucide-react';
+import { Upload, Loader2, Zap, Eraser, AlertTriangle, Save, Trash2, Play, Plus, Layers, Star, Gauge, Mountain, SlidersHorizontal, ChevronDown, ChevronUp, RotateCcw, Download, History } from 'lucide-react';
 
 const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
 const fmt = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
@@ -98,6 +99,7 @@ export function CondutividadeSection() {
   // Variograma manual completo (C2.b) — só entra quando o ALCANCE é preenchido.
   const [krigVar, setKrigVar] = useState({ patamar: '', alcance: '', pepita: '', vizinhos: '', anisoRatio: '', anisoAngle: '' });
   const [paramsAberto, setParamsAberto] = useState(false);
+  const [histAberto, setHistAberto] = useState(false);   // painel de histórico de processamento (C4.1)
   const setParam = (k: keyof ParamsLimpeza, v: number) => setParams(p => ({ ...p, [k]: v }));
   const [cache, setCache] = useState<Record<string, MapaPronto>>({});
 
@@ -260,6 +262,8 @@ export function CondutividadeSection() {
     // Usa os pontos LIMPOS se a limpeza já rodou; senão os brutos.
     const pts = limpos[prof]?.pontos ?? pontosDe(prof);
     if (pts.length < 3) { setErro(`${prof}: menos de 3 pontos válidos.`); setEstado('erro'); return; }
+    // C4.1 — nunca sobrescrever sem confirmação: reprocessar guarda a rodada atual no histórico.
+    if (cache[prof] && !confirm(`Já existe um mapa processado para "${prof}". Reprocessar substitui o mapa atual — a rodada anterior fica guardada no histórico. Continuar?`)) return;
     setEstado('processando'); setErro('');
     try {
       const { dominio, stops } = rampaDaLegenda(legenda);
@@ -295,6 +299,17 @@ export function CondutividadeSection() {
         const gridGz = resp.grid ? await comprimirGrid(resp.grid) : undefined;
         const dados: MapaPronto = { resp: { ...resp, png: '', grid: gridGz }, labels };
         cloudSalvarMapa(idNuvem(nav.talhaoId, levId, prof), dados);
+        // C4.1 — registra a rodada no histórico da profundidade (parâmetros + qualidade).
+        const q = avaliarQualidade({ n: resp.stats.n, rmse: resp.stats.rmse, min: resp.stats.min, max: resp.stats.max, percRemovido: limpos[prof]?.rel?.perc_removido ?? null });
+        addRodadaCondutividade(levId, prof, {
+          metodo: manual ? 'manual' : 'auto',
+          krig: { metodo: manual ? krigMetodo : 'krige', modelo: (manual && krigMetodo === 'krige') ? krigModelo : resp.stats.modelo, pixel: manual ? krigPixel : 20, variograma: varManual },
+          usouLimpeza: !!limpos[prof],
+          limpeza: limpos[prof] ? { ...params } : null,
+          stats: { modelo: resp.stats.modelo, rmse: resp.stats.rmse, n: resp.stats.n, min: resp.stats.min, max: resp.stats.max },
+          qualidade: { classe: q.classe, percRemovido: q.percRemovido },
+        });
+        setLevs(getCondutividade(nav.talhaoId));
       }
     } catch (e) {
       setEstado('erro'); setErro(e instanceof Error ? e.message : 'Falha ao interpolar.');
@@ -316,6 +331,27 @@ export function CondutividadeSection() {
     if (!lev || !nav.talhaoId) return;
     setProfundidadeOficialCondutividade(lev.id, prof);
     setLevs(getCondutividade(nav.talhaoId));
+  }
+
+  // C4.1 — repõe os controles de krigagem a partir de uma rodada do histórico, para
+  // reproduzir aquele processamento (depois o usuário clica em Interpolar).
+  function usarParametros(r: RodadaCondutividade) {
+    if (r.limpeza) setParams(p => ({ ...p, ...(r.limpeza as Partial<ParamsLimpeza>) }));
+    if (r.metodo === 'auto') { setKrigModo('auto'); return; }
+    setKrigModo('manual');
+    setKrigMetodo(r.krig.metodo);
+    if (r.krig.modelo) setKrigModelo(r.krig.modelo);
+    if (r.krig.pixel) setKrigPixel(r.krig.pixel);
+    const v = r.krig.variograma;
+    setKrigVar({
+      alcance: v?.alcance != null ? String(v.alcance) : '',
+      patamar: v?.patamar != null ? String(v.patamar) : '',
+      pepita: v?.pepita != null ? String(v.pepita) : '',
+      vizinhos: v?.vizinhos != null ? String(v.vizinhos) : '',
+      anisoRatio: v?.aniso_ratio != null ? String(v.aniso_ratio) : '',
+      anisoAngle: v?.aniso_angle != null ? String(v.aniso_angle) : '',
+    });
+    setParamsAberto(true);
   }
 
   function excluirLevantamento() {
@@ -766,6 +802,44 @@ export function CondutividadeSection() {
                 </div>
               </div>
               <p className="text-[9px]" style={{ color: '#64748b' }}>{legenda.atributo} · {legenda.unidade} ({legenda.metodo})</p>
+            </div>
+          )}
+
+          {/* C4.1 — Histórico de processamento desta profundidade (parâmetros + qualidade por rodada) */}
+          {lev && (lev.rodadas?.[profundidade]?.length ?? 0) > 0 && (
+            <div className="rounded-lg p-2.5" style={{ background: '#0a1a2f', border: '1px solid #1a3a6b' }}>
+              <button onClick={() => setHistAberto(h => !h)} className="w-full flex items-center justify-between text-[10px] font-semibold" style={{ color: '#93c5fd' }}>
+                <span className="flex items-center gap-1.5"><History size={12} /> Histórico de processamento · {lev.rodadas![profundidade].length}</span>
+                {histAberto ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+              </button>
+              {histAberto && (
+                <div className="mt-2 space-y-1.5">
+                  {[...lev.rodadas![profundidade]].reverse().map((r, i) => {
+                    const atual = i === 0;
+                    return (
+                      <div key={r.id} className="flex items-center gap-2 rounded px-2 py-1.5" style={{ background: atual ? '#0f2a1a' : '#0d1f38', border: `1px solid ${atual ? '#2a5a3a' : '#1a3a6b'}` }}>
+                        <div className="flex-1 min-w-0 text-[9px]">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-bold" style={{ color: atual ? '#86efac' : '#cbd5e1' }}>{r.metodo === 'manual' ? 'Manual' : 'Automática'}</span>
+                            <span style={{ color: '#64748b' }}>· {r.krig.metodo === 'idw' ? 'IDW' : r.stats.modelo}</span>
+                            {atual && <span className="px-1 rounded text-[8px]" style={{ background: '#0f3a22', color: '#86efac' }}>atual</span>}
+                          </div>
+                          <div style={{ color: '#94a3b8' }}>
+                            {r.stats.rmse != null && <>RMSE {fmt(r.stats.rmse)} · </>}Qualidade {r.qualidade.classe}
+                            {r.qualidade.percRemovido != null && r.qualidade.percRemovido > 0 && <> · {Math.round(r.qualidade.percRemovido)}% removido</>}
+                            {' · '}{new Date(r.criadoEm).toLocaleDateString('pt-BR')} {new Date(r.criadoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                          </div>
+                        </div>
+                        {!atual && (
+                          <button onClick={() => usarParametros(r)} title="Repor estes parâmetros nos controles (depois clique em Interpolar)" className="shrink-0 flex items-center gap-1 px-1.5 py-1 rounded text-[9px]" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
+                            <RotateCcw size={10} /> Usar
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
         </>

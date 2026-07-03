@@ -136,6 +136,26 @@ export interface PontoCondutividade { lng: number; lat: number; valores: Record<
 // Variável extra do MESMO arquivo (ex.: Altitude, Velocidade) importada junto da
 // CEa. `fixa` = marcada para virar uma Variável Fixa do Talhão (uso futuro).
 export interface ExtraCondutividade { coluna: string; fixa: boolean; }
+// C4.1 — HISTÓRICO de processamento: cada interpolação de uma profundidade vira
+// uma "rodada" com os parâmetros usados + estatísticas + qualidade, para o usuário
+// ver como cada mapa foi gerado (auto × manual) e reproduzir. A rodada mais recente
+// da profundidade é a ATIVA (o raster salvo na nuvem é sempre o dela). Só metadados
+// (leve, sincroniza no próprio levantamento); o raster não é duplicado por rodada.
+export interface RodadaCondutividade {
+  id: string;
+  criadoEm: string;
+  metodo: 'auto' | 'manual';
+  krig: {
+    metodo: 'krige' | 'idw';
+    modelo?: string;
+    pixel?: number;
+    variograma?: { modelo?: string; alcance?: number; patamar?: number; pepita?: number; vizinhos?: number; aniso_ratio?: number; aniso_angle?: number } | null;
+  };
+  usouLimpeza: boolean;
+  limpeza: Record<string, number> | null;   // params do MapFilter usados (null se pontos brutos)
+  stats: { modelo: string; rmse: number | null; n: number; min: number | null; max: number | null };
+  qualidade: { classe: string; percRemovido: number | null };
+}
 export interface LevantamentoCondutividade {
   id: string;
   talhaoId: string;
@@ -146,6 +166,7 @@ export interface LevantamentoCondutividade {
   extras?: ExtraCondutividade[];  // outras variáveis importadas junto (altitude…)
   oficial: boolean;               // versão oficial (1 por talhão)
   pontos: PontoCondutividade[];   // valores incluem profundidades + extras
+  rodadas?: Record<string, RodadaCondutividade[]>;  // histórico de processamento por profundidade (C4.1)
   criadoEm: string;
 }
 
@@ -186,6 +207,20 @@ export function setProfundidadeOficialCondutividade(id: string, prof: string) {
   if (!alvo) return;
   alvo.profundidadeOficial = prof;
   save('inv_condutividade', lista);
+}
+
+// C4.1 — registra uma rodada de processamento no histórico da profundidade (a mais
+// recente vira a ativa). Mantém as últimas 20 por profundidade. Devolve a rodada criada.
+export function addRodadaCondutividade(levId: string, prof: string, dados: Omit<RodadaCondutividade, 'id' | 'criadoEm'>): RodadaCondutividade | null {
+  const lista = load<LevantamentoCondutividade>('inv_condutividade');
+  const alvo = lista.find(l => l.id === levId);
+  if (!alvo) return null;
+  const rodada: RodadaCondutividade = { ...dados, id: uid(), criadoEm: new Date().toISOString() };
+  const rodadas = { ...(alvo.rodadas ?? {}) };
+  rodadas[prof] = [...(rodadas[prof] ?? []), rodada].slice(-20);
+  alvo.rodadas = rodadas;
+  save('inv_condutividade', lista);
+  return rodada;
 }
 
 // ── Mapas de Colheita / Produtividade (Módulo 12, P1) ───────────────────────

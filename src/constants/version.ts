@@ -1,6 +1,10 @@
-export const APP_VERSION = '1.26.0';
+export const APP_VERSION = '1.27.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.27.0': [
+    'CONDUTIVIDADE C4.1 — HISTÓRICO DE PROCESSAMENTO: cada interpolação de uma profundidade agora fica registrada como uma "rodada", guardando como o mapa foi feito — Automática ou Manual, modelo do variograma, RMSE, qualidade, % removido e a data. Um painel "Histórico de processamento" no card lista todas as rodadas (a mais recente marcada como "atual")',
+    'REPROCESSAR NÃO SOBRESCREVE ÀS CEGAS: interpolar de novo uma profundidade que já tem mapa agora PEDE CONFIRMAÇÃO — a rodada anterior fica guardada no histórico (nunca se perde). Cada rodada do histórico tem "Usar", que repõe os parâmetros daquele processamento nos controles (limpeza + krigagem) para você reproduzi-lo e clicar em Interpolar',
+  ],
   '1.26.0': [
     'CONDUTIVIDADE C2.b — EXPORTAR GeoTIFF: o mapa krigado agora tem o botão "GeoTIFF" (no card de qualidade) que baixa o raster georreferenciado (EPSG:4326, 1 banda, sem-dado = -9999) idêntico ao que está na tela — abre direto no QGIS/ArcGIS ou vai para o software da máquina. O arquivo sai nomeado por talhão + atributo + profundidade',
     'CONDUTIVIDADE — o "% removido" na limpeza agora conta no ÍNDICE DE QUALIDADE: acima de 30% dos pontos descartados o índice avisa "dado ruidoso", e acima de 40% ele rebaixa a nota em um nível (um mapa pode ficar liso, mas o levantamento bruto tinha muito ruído). Fecha a fase C2.b (variograma manual + GeoTIFF + % no índice)',
