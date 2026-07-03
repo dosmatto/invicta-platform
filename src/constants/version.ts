@@ -1,6 +1,12 @@
-export const APP_VERSION = '1.10.0';
+export const APP_VERSION = '1.11.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.11.0': [
+    'NDVI/Satélite — IV1 do spec de Índices Vegetativos: a busca agora mostra CARDS com PRÉVIA RGB do talhão (miniatura leve por cena, Sentinel-2 e CBERS-4A) — nada é processado nem salvo automaticamente ao listar',
+    'Ao tocar num card abre a CONFERÊNCIA: a prévia RGB fina aparece no mapa (com o contorno do talhão e zoom) para avaliar nuvem/sombra/cultura/solo exposto; só então você decide "Processar NDVI" ou "Rejeitar" a imagem (rejeição fica marcada no card)',
+    'Nuvem máxima do Sentinel-2 agora padrão 5% — sem resultados, o app sugere ampliar para 10/15% com um clique; nova opção de fonte "Todos" (lista Sentinel-2 e CBERS-4A juntos, cada card identificado)',
+    'Estados por card: rejeitada, vista, NDVI processado (✓) e mantida (★). Cenas já mantidas continuam abrindo direto como antes — nada muda no que estava salvo',
+  ],
   '1.10.0': [
     'PERMISSÕES POR VÍNCULO (consultoria): em Usuários, cada Agrônomo/Operador ganhou o botão de clientes (🏢) — o Owner escolhe QUAIS clientes aquele usuário pode acessar. Sem nenhum marcado = vê todos (retrocompatível); ao marcar, ele passa a enxergar SÓ os clientes/fazendas/talhões vinculados, na plataforma E no app de campo',
     'O filtro vale para todo o sistema (lista de clientes, fazendas, talhões) e para o Repositório de Medições — um usuário limitado vê apenas as medições dos seus talhões (e as que ele mesmo registrou). Owner e Admin continuam vendo tudo',

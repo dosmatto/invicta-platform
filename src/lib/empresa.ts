@@ -7,7 +7,7 @@
 // Por enquanto o Firestore continua usando os paths antigos (`inv_*` raiz);
 // a hierarquia `/empresas/{eid}/...` entra na Fase 1.5.
 
-import { usuarioAtual } from './auth';
+import { usuarioAtual, firebaseConfigurado } from './auth';
 import { cloudPushLista } from './cloud';
 
 export type PapelMembro = 'owner' | 'admin' | 'agronomo' | 'operador' | 'produtor' | 'editor' | 'viewer';
@@ -222,7 +222,9 @@ export function definirPermissao(papel: PapelMembro, cap: Capacidade, valor: boo
 }
 
 // O usuário logado tem a capacidade? Owner sempre sim; sem papel (bloqueado) = não.
+// Modo LOCAL (sem auth configurado, ex.: demo) não tem papéis — libera tudo.
 export function pode(cap: Capacidade, papel: PapelMembro | null = papelDoUsuario()): boolean {
+  if (!firebaseConfigurado) return true;
   if (!papel) return false;
   if (papel === 'owner') return true;
   return getPermissoes()[papel]?.[cap] ?? DEFAULTS_PERMISSOES[papel]?.[cap] ?? false;
