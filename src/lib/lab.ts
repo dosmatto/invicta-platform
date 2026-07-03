@@ -6,6 +6,7 @@
 // Agronômica. Validado contra arquivos reais (Fundação ABC, Interpartner).
 
 import type { GradeAmostragem } from './store';
+import { converterParaCanonico } from './unidades';
 
 export const ELEMENTOS_LAB: { id: string; simbolo: string; sinonimos: string[] }[] = [
   { id: 'ph',  simbolo: 'pH',  sinonimos: ['ph', 'phcacl2', 'phcacl', 'phh2o', 'phagua', 'phsmp'] },
@@ -147,7 +148,9 @@ export function aplicarPerfil(aoa: string[][], cfg: PerfilLabConfig, filtroTalha
     const valores: Record<string, number> = {};
     for (const [elId, idx] of Object.entries(cfg.elementos)) {
       const v = parseNum(row[idx]);
-      if (v != null) valores[elId] = v;
+      // Converte a unidade DAQUELE lab (cfg.detalhes) → unidade canônica da
+      // plataforma (mmolc/dm³, mg/dm³, g/dm³…) p/ os dados serem comparáveis.
+      if (v != null) valores[elId] = converterParaCanonico(elId, v, cfg.detalhes?.[elId]?.unidade);
     }
     if (Object.keys(valores).length === 0) { ignoradas++; continue; }
     if (campanha) campanhas.add(campanha);

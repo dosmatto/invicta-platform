@@ -8,6 +8,7 @@ import {
   GradeAmostragem, ImportacaoLab,
 } from '@/lib/store';
 import { lerArquivo, aplicarPerfil, autoConfig, PERFIS_BUILTIN, norm, numerosDaGrade, PerfilLabConfig } from '@/lib/lab';
+import { unidadesDe, unidadeCanonica, precisaConverter } from '@/lib/unidades';
 import { pode } from '@/lib/empresa';
 import { Upload, Save, Trash2, CheckCircle2, AlertTriangle, FlaskConical } from 'lucide-react';
 
@@ -33,6 +34,8 @@ export function LabImportSection() {
   const [erro, setErro] = useState('');
   const [resumo, setResumo] = useState('');
   const [importacoes, setImportacoes] = useState<ImportacaoLab[]>([]);
+  const [unidadeOverride, setUnidadeOverride] = useState<Record<string, string>>({});
+  useEffect(() => { setUnidadeOverride({}); }, [perfilId]);   // troca de lab zera os overrides
 
   function recarregar() {
     if (!nav.talhaoId || !safraNome) return;
@@ -53,7 +56,16 @@ export function LabImportSection() {
     return { cfg: null, perfilNome: '', ehAuto: false };
   }, [perfilId, aoa, perfis, nomeNovoLab]);
 
-  const aplic = useMemo(() => (aoa && cfg) ? aplicarPerfil(aoa, cfg) : null, [aoa, cfg]);
+  // Aplica os overrides de unidade escolhidos na tela sobre o perfil.
+  const cfgEfetivo = useMemo<PerfilLabConfig | null>(() => {
+    if (!cfg) return null;
+    if (Object.keys(unidadeOverride).length === 0) return cfg;
+    const det: NonNullable<PerfilLabConfig['detalhes']> = { ...(cfg.detalhes ?? {}) };
+    for (const [elId, u] of Object.entries(unidadeOverride)) det[elId] = { ...(det[elId] ?? {}), unidade: u };
+    return { ...cfg, detalhes: det };
+  }, [cfg, unidadeOverride]);
+
+  const aplic = useMemo(() => (aoa && cfgEfetivo) ? aplicarPerfil(aoa, cfgEfetivo) : null, [aoa, cfgEfetivo]);
 
   const talhaoAuto = aplic ? (aplic.talhoes.find(t => matchN(t, nav.talhao)) ?? aplic.talhoes[0] ?? '') : '';
   const talhaoEscolhido = talhaoFiltro || talhaoAuto;
@@ -68,7 +80,7 @@ export function LabImportSection() {
   const foraDaGrade = grade ? resultadosFinais.filter(r => !numerosGrade.has(r.numero)).length : 0;
 
   async function onFile(file: File) {
-    setEstado('loading'); setErro(''); setResumo(''); setTalhaoFiltro(''); setCampanhaFiltro('');
+    setEstado('loading'); setErro(''); setResumo(''); setTalhaoFiltro(''); setCampanhaFiltro(''); setUnidadeOverride({});
     try {
       const m = await lerArquivo(file);
       if (m.length < 2) throw new Error('Não consegui ler linhas do arquivo.');
@@ -92,9 +104,9 @@ export function LabImportSection() {
   }
 
   function salvarPerfil() {
-    if (!ehAuto || !cfg) return;
+    if (!ehAuto || !cfgEfetivo) return;
     if (!nomeNovoLab.trim()) { setErro('Dê um nome ao laboratório para salvar o perfil.'); setEstado('erro'); return; }
-    salvarPerfilLab(nomeNovoLab.trim(), cfg);
+    salvarPerfilLab(nomeNovoLab.trim(), cfgEfetivo);   // guarda as unidades escolhidas
     const novos = getPerfisLab(); setPerfis(novos);
     const achado = novos.find(p => p.nome.toLowerCase() === nomeNovoLab.trim().toLowerCase());
     if (achado) setPerfilId(achado.id);
@@ -172,6 +184,32 @@ export function LabImportSection() {
             {foraDaGrade > 0 && <span style={{ color: '#fbbf24' }}> · {foraDaGrade} fora da grade</span>}
           </p>
           {resultadosFinais.length === 0 && <p className="text-[9px]" style={{ color: '#fbbf24' }}>Nenhuma amostra — confira o perfil e o talhão.</p>}
+
+          {/* Unidade de cada variável NESTE laudo → converte p/ o padrão da plataforma */}
+          {elementosFinais.some(elId => unidadesDe(elId).length > 1) && (
+            <div>
+              <p className="text-[9px] font-semibold mb-1" style={{ color: '#64748b' }}>Unidade no laudo → convertida p/ o padrão da plataforma</p>
+              <div className="grid grid-cols-2 gap-x-2 gap-y-1">
+                {elementosFinais.filter(elId => unidadesDe(elId).length > 1).map(elId => {
+                  const atual = cfgEfetivo?.detalhes?.[elId]?.unidade ?? unidadeCanonica(elId);
+                  const conv = precisaConverter(elId, atual);
+                  return (
+                    <div key={elId} className="flex items-center gap-1">
+                      <span className="text-[10px] font-bold w-7 flex-shrink-0" style={{ color: conv ? '#fbbf24' : '#cbd5e1' }}>{siglaVariavel(elId)}</span>
+                      <select value={atual} onChange={e => setUnidadeOverride(o => ({ ...o, [elId]: e.target.value }))}
+                        className="flex-1 min-w-0 rounded px-1 py-0.5 text-[10px] outline-none"
+                        style={{ background: '#1a3a6b', color: '#e2e8f0', border: `1px solid ${conv ? '#b45309' : '#2e5fa3'}` }}>
+                        {unidadesDe(elId).map(u => <option key={u} value={u}>{u}</option>)}
+                      </select>
+                    </div>
+                  );
+                })}
+              </div>
+              {elementosFinais.some(elId => precisaConverter(elId, cfgEfetivo?.detalhes?.[elId]?.unidade ?? unidadeCanonica(elId))) && (
+                <p className="text-[9px] mt-0.5" style={{ color: '#fbbf24' }}>⚠ As destacadas serão CONVERTIDAS ao importar (→ padrão da plataforma).</p>
+              )}
+            </div>
+          )}
 
           <div className="flex gap-2">
             {ehAuto && (

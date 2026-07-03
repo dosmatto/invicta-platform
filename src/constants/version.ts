@@ -1,6 +1,10 @@
-export const APP_VERSION = '1.21.0';
+export const APP_VERSION = '1.22.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.22.0': [
+    'CONVERSÃO DE UNIDADES entre laboratórios na importação de laudo: cada lab reporta em unidades diferentes (bases em cmolc/dm³ ou mmolc/dm³ ou mg/dm³; MO em g/dm³, g/kg ou %). Agora, na prévia da importação, você escolhe a unidade de cada variável NAQUELE laudo e a plataforma converte para o padrão dela (bases mmolc/dm³, P/micros mg/dm³, MO g/dm³) — os dados de labs diferentes ficam comparáveis',
+    'Conversões corretas por elemento: cmolc↔mmolc (×10), mg/dm³→mmolc pelo peso equivalente (K ÷39,1 · Ca ÷20,0 · Mg ÷12,2), MO %↔g/dm³ (×10), argila g/kg↔% (÷10). As variáveis que serão convertidas aparecem destacadas; quem não informa unidade (ou já está no padrão) fica igual (nada muda nas importações antigas)',
+  ],
   '1.21.0': [
     'ZONAS DE MANEJO — RECLASSIFICAR polígono: cada mancha da lista ganhou um seletor de zona; se o agrônomo achar que aquele pedaço é de outra classe, é só escolher a zona certa (muda a cor/classe na hora, sem mexer na geometria)',
     'ABSORVER FRAGMENTOS (regra 13.03 do MEAP): um botão funde as manchas menores que a área mínima na zona VIZINHA de classe mais próxima — o mapa fica operável para o maquinário. Mostra quantos fragmentos existem; fragmentos sem vizinho (ilhas soltas) são preservados. Tudo entra no Desfazer/Refazer',
