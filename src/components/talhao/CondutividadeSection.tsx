@@ -94,6 +94,8 @@ export function CondutividadeSection() {
   const [krigMetodo, setKrigMetodo] = useState<'krige' | 'idw'>('krige');
   const [krigModelo, setKrigModelo] = useState('spherical');
   const [krigPixel, setKrigPixel] = useState(20);
+  // Variograma manual completo (C2.b) — só entra quando o ALCANCE é preenchido.
+  const [krigVar, setKrigVar] = useState({ patamar: '', alcance: '', pepita: '', vizinhos: '', anisoRatio: '', anisoAngle: '' });
   const [paramsAberto, setParamsAberto] = useState(false);
   const setParam = (k: keyof ParamsLimpeza, v: number) => setParams(p => ({ ...p, [k]: v }));
   const [cache, setCache] = useState<Record<string, MapaPronto>>({});
@@ -266,11 +268,24 @@ export function CondutividadeSection() {
       const { pontos: ptsK, binM, original } = prepararPontosKrigagem(pts);
       setBinMsg(b => ({ ...b, [prof]: binM > 0 ? `krigagem · ${ptsK.length} células de ${original} pts (grade ${binM.toFixed(0)} m)` : `krigagem · ${ptsK.length} pts` }));
       const manual = krigModo === 'manual';
+      const nn = (s: string) => parseFloat(s.replace(',', '.'));
+      // Variograma manual completo: ativa só se o usuário informou o ALCANCE.
+      const varManual = (manual && krigMetodo === 'krige' && krigVar.alcance.trim() && isFinite(nn(krigVar.alcance)))
+        ? {
+            modelo: krigModelo, alcance: nn(krigVar.alcance),
+            ...(krigVar.patamar.trim() ? { patamar: nn(krigVar.patamar) } : {}),
+            ...(krigVar.pepita.trim() ? { pepita: nn(krigVar.pepita) } : {}),
+            ...(krigVar.vizinhos.trim() ? { vizinhos: Math.round(nn(krigVar.vizinhos)) } : {}),
+            ...(krigVar.anisoRatio.trim() ? { aniso_ratio: nn(krigVar.anisoRatio) } : {}),
+            ...(krigVar.anisoAngle.trim() ? { aniso_angle: nn(krigVar.anisoAngle) } : {}),
+          }
+        : null;
       const resp = await interpolar({
         pontos: ptsK, poligono, dominio, stops,
         metodo: manual ? krigMetodo : 'krige',
         pixelM: manual ? krigPixel : 20,
-        modeloFixo: manual && krigMetodo === 'krige' ? krigModelo : null,
+        modeloFixo: manual && krigMetodo === 'krige' && !varManual ? krigModelo : null,
+        variogramaManual: varManual,
       });
       const labels: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };  // EC denso → sem rótulo por ponto
       setCache(c => ({ ...c, [prof]: { resp, labels } }));
@@ -561,7 +576,7 @@ export function CondutividadeSection() {
                         </button>
                       ))}
                     </div>
-                    {krigModo === 'manual' && (
+                    {krigModo === 'manual' && (<>
                       <div className="grid grid-cols-3 gap-1.5">
                         <div>
                           <label className="text-[8px] block mb-0.5" style={{ color: '#64748b' }}>Método</label>
@@ -588,8 +603,21 @@ export function CondutividadeSection() {
                           </select>
                         </div>
                       </div>
-                    )}
-                    <p className="text-[8px]" style={{ color: '#475569' }}>Vale para a próxima interpolação. Alcance/pepita/patamar manuais e export GeoTIFF entram na próxima fase.</p>
+                      {krigMetodo === 'krige' && (
+                        <div className="pt-1 mt-1 space-y-1" style={{ borderTop: '1px solid #0f2240' }}>
+                          <p className="text-[8px]" style={{ color: '#64748b' }}>Variograma manual (opcional) — preencha o <strong style={{ color: '#93c5fd' }}>Alcance</strong> para o backend usar estes valores no lugar do auto-ajuste</p>
+                          <div className="grid grid-cols-3 gap-1.5">
+                            <VarIn label="Alcance (m)" v={krigVar.alcance} on={s => setKrigVar(k => ({ ...k, alcance: s }))} ph="150" />
+                            <VarIn label="Patamar" v={krigVar.patamar} on={s => setKrigVar(k => ({ ...k, patamar: s }))} ph="sill" />
+                            <VarIn label="Pepita" v={krigVar.pepita} on={s => setKrigVar(k => ({ ...k, pepita: s }))} ph="nugget" />
+                            <VarIn label="Vizinhos" v={krigVar.vizinhos} on={s => setKrigVar(k => ({ ...k, vizinhos: s }))} ph="todos" />
+                            <VarIn label="Anisotropia" v={krigVar.anisoRatio} on={s => setKrigVar(k => ({ ...k, anisoRatio: s }))} ph="1" />
+                            <VarIn label="Ângulo (°)" v={krigVar.anisoAngle} on={s => setKrigVar(k => ({ ...k, anisoAngle: s }))} ph="0" />
+                          </div>
+                        </div>
+                      )}
+                    </>)}
+                    <p className="text-[8px]" style={{ color: '#475569' }}>Vale para a próxima interpolação. O variograma manual só entra quando o Alcance é preenchido; senão o modelo escolhido é auto-ajustado.</p>
                   </div>
                 </div>
               )}
@@ -710,6 +738,17 @@ export function CondutividadeSection() {
           )}
         </>
       )}
+    </div>
+  );
+}
+
+// Campo de texto compacto do variograma manual (aceita vazio = "não informado").
+function VarIn({ label, v, on, ph }: { label: string; v: string; on: (s: string) => void; ph: string }) {
+  return (
+    <div>
+      <label className="text-[8px] block mb-0.5" style={{ color: '#64748b' }}>{label}</label>
+      <input value={v} onChange={e => on(e.target.value)} placeholder={ph} inputMode="decimal"
+        className="w-full rounded px-1 py-1 text-[9px] outline-none" style={{ background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' }} />
     </div>
   );
 }

@@ -51,6 +51,7 @@ class ReqInterp(BaseModel):
     pixel_m: float = 20.0
     metodo: str = "krige"             # 'krige' (padrao) | 'idw' (explicito)
     modelo_fixo: str | None = None    # fixa o variograma (spherical/exponential/gaussian) ou None=auto
+    variograma_manual: dict[str, Any] | None = None  # C2.b: {modelo, patamar, alcance, pepita, vizinhos, aniso_ratio, aniso_angle}
 
 
 @app.get("/health")
@@ -73,7 +74,7 @@ def health():
 def interpolar(req: ReqInterp):
     pts = [{"lng": p.lng, "lat": p.lat, "valor": p.valor} for p in req.pontos]
     try:
-        return interp.interpolar(pts, req.poligono, req.dominio, req.stops, req.pixel_m, req.metodo, req.modelo_fixo)
+        return interp.interpolar(pts, req.poligono, req.dominio, req.stops, req.pixel_m, req.metodo, req.modelo_fixo, req.variograma_manual)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:  # pragma: no cover

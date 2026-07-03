@@ -49,7 +49,7 @@ AMPLITUDE_MIN = 0.30
 NUGGET_MAX = 0.10
 # Versao do motor de interpolacao (conferir em GET /health para saber se o
 # backend foi reiniciado com o codigo novo).
-VERSION = "interp-15-fcm-rapido"
+VERSION = "interp-16-variograma-manual"
 
 
 def _nlags(n: int) -> int:
@@ -161,6 +161,36 @@ def _krige_fixo(xm, ym, z, gxm, gym, modelo, psill, rng, nugget):
     return np.ma.filled(np.asarray(zhat, dtype=float), np.nan), [float(psill), float(rng), float(nugget)]
 
 
+def _krige_manual(xm, ym, z, gxm, gym, modelo, psill, rng, nugget,
+                  vizinhos=None, aniso_ratio=1.0, aniso_angle=0.0):
+    """Krigagem com variograma 100% MANUAL (C2.b): patamar/alcance/pepita
+    explicitos + nº de vizinhos (n_closest_points) + anisotropia (razao/angulo).
+    O usuario manda os parametros; nao ha auto-ajuste nem anti-degeneracao."""
+    kw = {}
+    try:
+        r = float(aniso_ratio or 1.0)
+        if r and r != 1.0:
+            kw["anisotropy_scaling"] = r
+            kw["anisotropy_angle"] = float(aniso_angle or 0.0)
+    except (TypeError, ValueError):
+        pass
+    ok = OrdinaryKriging(
+        xm, ym, z, variogram_model=modelo,
+        variogram_parameters=[float(psill), float(rng), float(nugget)],
+        pseudo_inv=True, enable_plotting=False, verbose=False, **kw,
+    )
+    ex = {}
+    try:
+        nv = int(vizinhos) if vizinhos else 0
+        if 0 < nv < len(z):
+            ex["n_closest_points"] = nv
+            ex["backend"] = "loop"   # n_closest_points exige o backend 'loop'
+    except (TypeError, ValueError):
+        pass
+    zhat, _ = ok.execute("grid", gxm, gym, **ex)
+    return np.ma.filled(np.asarray(zhat, dtype=float), np.nan), [float(psill), float(rng), float(nugget)]
+
+
 def _krige_constrangido(xm, ym, z, gxm, gym, modelo, spacing):
     """Krigagem com variograma SENSATO fixo, para quando o auto-ajuste degenera
     (pepita ~= patamar / alcance < espacamento -> krige preve a media -> mapa
@@ -234,7 +264,8 @@ def _png_data_url(rgba: np.ndarray) -> str:
 
 # ---------------------------------------------------------------- grid bruto
 def gerar_grid(points: list[dict], polygon_geojson: dict, pixel_m: float = 20.0,
-               metodo: str = "krige", modelo_fixo: str | None = None) -> dict[str, Any]:
+               metodo: str = "krige", modelo_fixo: str | None = None,
+               variograma_manual: dict | None = None) -> dict[str, Any]:
     """Interpola UM atributo e devolve o grid bruto recortado + eixos geograficos.
     Reusado por interpolar() (que colore) e por zonar() (que classifica e vetoriza).
     O grid devolvido NAO esta invertido (grid[j, i] <-> gx[i], gy[j], gy ascendente).
@@ -267,58 +298,74 @@ def gerar_grid(points: list[dict], polygon_geojson: dict, pixel_m: float = 20.0,
         if not _HAS_PYKRIGE:
             raise ValueError("Krigagem indisponivel no backend.")
         try:
-            grid, modelo, params, rmse = _krige(xm, ym, z, gxm, gym, modelo_fixo)
-            psill, alcance, pepita = params[0], params[1], params[2]
-            patamar = psill + pepita
-            variograma = {
-                "alcance_m": round(alcance, 1),  # range (metros)
-                "patamar": round(patamar, 4),    # sill = psill + nugget
-                "pepita": round(pepita, 4),      # nugget
-            }
-            # Guarda anti-degeneracao: variograma com pepita ~= patamar (sem
-            # estrutura) ou alcance < espacamento das amostras => krigagem prediz
-            # a MEDIA em todo lugar (mapa uniforme que ignora os pontos). Nesse
-            # caso cai para IDW (interpolador exato, honra os pontos) e SINALIZA
-            # via modelo="idw". So no modo automatico (respeita modelo forcado).
-            espacamento = _espacamento_mediano(xm, ym)
-            estrutura = (psill / patamar) if patamar > 0 else 0.0
-            amp_dados = float(np.max(z) - np.min(z)) or 1.0
-            amp_krige = _amplitude_no_poligono(grid, gx, gy, poly)
-            degenerada = (estrutura < ESTRUTURA_MIN) or (alcance < espacamento) or (amp_krige < AMPLITUDE_MIN * amp_dados)
-            if degenerada and not modelo_fixo:
-                # Auto-ajuste degenerou (krige -> media -> mapa uniforme). Refaz a
-                # KRIGAGEM com um variograma plausivel (honra os pontos e varia),
-                # em vez de cair para IDW (que o usuario nao quer em fertilidade).
-                grid2, params2 = _krige_constrangido(xm, ym, z, gxm, gym, modelo, espacamento)
-                amp2 = _amplitude_no_poligono(grid2, gx, gy, poly)
-                if amp2 >= AMPLITUDE_MIN * amp_dados:
-                    grid, params, rmse = grid2, params2, None
+            man = variograma_manual if isinstance(variograma_manual, dict) else None
+            if man and man.get("alcance"):
+                # VARIOGRAMA MANUAL (C2.b): o usuario manda patamar/alcance/pepita
+                # + vizinhos + anisotropia. Sem auto-ajuste nem anti-degeneracao.
+                modelo = str(modelo_fixo or man.get("modelo") or "spherical")
+                patamar = float(man.get("patamar") or 0.0) or (float(np.var(z)) or 1.0)
+                pepita = max(0.0, min(float(man.get("pepita") or 0.0), patamar * 0.99))
+                alcance = float(man["alcance"])
+                psill = max(patamar - pepita, 1e-9)
+                grid, params = _krige_manual(
+                    xm, ym, z, gxm, gym, modelo, psill, alcance, pepita,
+                    man.get("vizinhos"), man.get("aniso_ratio", 1.0), man.get("aniso_angle", 0.0),
+                )
+                rmse = None
+                variograma = {"alcance_m": round(alcance, 1), "patamar": round(patamar, 4), "pepita": round(pepita, 4), "manual": True}
+            else:
+                grid, modelo, params, rmse = _krige(xm, ym, z, gxm, gym, modelo_fixo)
+                psill, alcance, pepita = params[0], params[1], params[2]
+                patamar = psill + pepita
+                variograma = {
+                    "alcance_m": round(alcance, 1),  # range (metros)
+                    "patamar": round(patamar, 4),    # sill = psill + nugget
+                    "pepita": round(pepita, 4),      # nugget
+                }
+                # Guarda anti-degeneracao: variograma com pepita ~= patamar (sem
+                # estrutura) ou alcance < espacamento das amostras => krigagem prediz
+                # a MEDIA em todo lugar (mapa uniforme que ignora os pontos). Nesse
+                # caso cai para IDW (interpolador exato, honra os pontos) e SINALIZA
+                # via modelo="idw". So no modo automatico (respeita modelo forcado).
+                espacamento = _espacamento_mediano(xm, ym)
+                estrutura = (psill / patamar) if patamar > 0 else 0.0
+                amp_dados = float(np.max(z) - np.min(z)) or 1.0
+                amp_krige = _amplitude_no_poligono(grid, gx, gy, poly)
+                degenerada = (estrutura < ESTRUTURA_MIN) or (alcance < espacamento) or (amp_krige < AMPLITUDE_MIN * amp_dados)
+                if degenerada and not modelo_fixo:
+                    # Auto-ajuste degenerou (krige -> media -> mapa uniforme). Refaz a
+                    # KRIGAGEM com um variograma plausivel (honra os pontos e varia),
+                    # em vez de cair para IDW (que o usuario nao quer em fertilidade).
+                    grid2, params2 = _krige_constrangido(xm, ym, z, gxm, gym, modelo, espacamento)
+                    amp2 = _amplitude_no_poligono(grid2, gx, gy, poly)
+                    if amp2 >= AMPLITUDE_MIN * amp_dados:
+                        grid, params, rmse = grid2, params2, None
+                        variograma = {
+                            "alcance_m": round(params2[1], 1),
+                            "patamar": round(params2[0] + params2[2], 4),
+                            "pepita": round(params2[2], 4),
+                            "ajustado": True,  # variograma plausivel (auto-ajuste tinha degenerado)
+                        }
+                    else:
+                        # Nem o variograma plausivel variou (dados praticamente constantes) -> IDW.
+                        grid = _idw(xm, ym, z, gxm, gym)
+                        modelo = "idw"
+                        rmse = None
+                        variograma = None
+                elif (not modelo_fixo) and (pepita > NUGGET_MAX * patamar):
+                    # Tem estrutura, mas a pepita alta faz a krigagem ALISAR demais
+                    # (os extremos viram a media da vizinhanca -> o mapa nao bate com
+                    # os pontos). Capa a pepita mantendo alcance/modelo -> a krigagem
+                    # passa mais perto dos pontos (honra as amostras). Continua krigagem.
+                    nugget_cap = NUGGET_MAX * patamar
+                    grid, params2 = _krige_fixo(xm, ym, z, gxm, gym, modelo, patamar - nugget_cap, alcance, nugget_cap)
+                    params, rmse = params2, None
                     variograma = {
                         "alcance_m": round(params2[1], 1),
                         "patamar": round(params2[0] + params2[2], 4),
                         "pepita": round(params2[2], 4),
-                        "ajustado": True,  # variograma plausivel (auto-ajuste tinha degenerado)
+                        "ajustado": True,
                     }
-                else:
-                    # Nem o variograma plausivel variou (dados praticamente constantes) -> IDW.
-                    grid = _idw(xm, ym, z, gxm, gym)
-                    modelo = "idw"
-                    rmse = None
-                    variograma = None
-            elif (not modelo_fixo) and (pepita > NUGGET_MAX * patamar):
-                # Tem estrutura, mas a pepita alta faz a krigagem ALISAR demais
-                # (os extremos viram a media da vizinhanca -> o mapa nao bate com
-                # os pontos). Capa a pepita mantendo alcance/modelo -> a krigagem
-                # passa mais perto dos pontos (honra as amostras). Continua krigagem.
-                nugget_cap = NUGGET_MAX * patamar
-                grid, params2 = _krige_fixo(xm, ym, z, gxm, gym, modelo, patamar - nugget_cap, alcance, nugget_cap)
-                params, rmse = params2, None
-                variograma = {
-                    "alcance_m": round(params2[1], 1),
-                    "patamar": round(params2[0] + params2[2], 4),
-                    "pepita": round(params2[2], 4),
-                    "ajustado": True,
-                }
         except Exception as e:
             raise ValueError(
                 f"Krigagem nao convergiu com {len(z)} pontos (colineares/insuficientes?). [{e}]"
@@ -335,8 +382,9 @@ def gerar_grid(points: list[dict], polygon_geojson: dict, pixel_m: float = 20.0,
 # ---------------------------------------------------------------- entrada
 def interpolar(points: list[dict], polygon_geojson: dict, dominio, stops,
                pixel_m: float = 20.0, metodo: str = "krige",
-               modelo_fixo: str | None = None) -> dict[str, Any]:
-    g = gerar_grid(points, polygon_geojson, pixel_m, metodo, modelo_fixo)
+               modelo_fixo: str | None = None,
+               variograma_manual: dict | None = None) -> dict[str, Any]:
+    g = gerar_grid(points, polygon_geojson, pixel_m, metodo, modelo_fixo, variograma_manual)
     grid, gx, gy = g["grid"], g["gx"], g["gy"]
 
     rgba = _colorize(grid, dominio, stops)

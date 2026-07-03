@@ -85,6 +85,18 @@ export async function descomprimirGrid(grid: Grid): Promise<Grid> {
   return { shape: grid.shape, b64: cru };
 }
 
+// Variograma 100% manual (C2.b) — quando presente, o backend usa esses parâmetros
+// direto (sem auto-ajuste nem anti-degeneração).
+export interface VariogramaManual {
+  modelo?: string;        // spherical | exponential | gaussian
+  patamar?: number;       // sill
+  alcance: number;        // range (m) — obrigatório p/ ativar o modo manual
+  pepita?: number;        // nugget
+  vizinhos?: number;      // n_closest_points (0/undefined = todos)
+  aniso_ratio?: number;   // anisotropia: razão do eixo maior/menor (1 = isotrópico)
+  aniso_angle?: number;   // anisotropia: ângulo (graus)
+}
+
 export async function interpolar(params: {
   pontos: PontoInterp[];
   poligono: GeoJSON.Polygon | GeoJSON.MultiPolygon;
@@ -93,6 +105,7 @@ export async function interpolar(params: {
   pixelM?: number;
   metodo?: 'krige' | 'idw';
   modeloFixo?: string | null;
+  variogramaManual?: VariogramaManual | null;
 }): Promise<RespInterp> {
   const r = await postBackend('/interpolar', {
     pontos: params.pontos,
@@ -102,6 +115,7 @@ export async function interpolar(params: {
     pixel_m: params.pixelM ?? 20,
     metodo: params.metodo ?? 'krige',
     modelo_fixo: params.modeloFixo ?? null,
+    variograma_manual: params.variogramaManual ?? null,
   });
   if (!r.ok) {
     let msg = `Backend respondeu ${r.status}`;

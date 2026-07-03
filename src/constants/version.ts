@@ -1,6 +1,9 @@
-export const APP_VERSION = '1.24.0';
+export const APP_VERSION = '1.25.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.25.0': [
+    'CONDUTIVIDADE C2.b — VARIOGRAMA MANUAL completo: na krigagem Modo 2 (Manual), além do modelo e do pixel, agora dá pra fixar Alcance, Patamar, Pepita, nº de Vizinhos e Anisotropia (razão + ângulo). Preencha o Alcance para o backend usar exatamente esses parâmetros, sem auto-ajuste — controle total do geoestatístico',
+  ],
   '1.24.0': [
     'APP DE CAMPO — novo módulo NDVI / MANCHA: no Wi-Fi, escolha o talhão e BAIXE um índice (NDVI, SAVI…) já colorido para o aparelho; no campo, sem sinal, abra a mancha sobre o satélite e TOQUE nela para navegar por GPS até lá (distância + linha até o alvo). Tudo offline, reaproveitando a bússola/GPS da amostragem',
     'Os índices baixados ficam guardados no aparelho (com miniatura) e podem ser removidos; a lista da nuvem mostra o que já foi processado na plataforma para aquele talhão',
