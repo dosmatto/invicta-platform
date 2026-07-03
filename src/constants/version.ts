@@ -1,6 +1,9 @@
-export const APP_VERSION = '1.23.0';
+export const APP_VERSION = '1.23.1';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.23.1': [
+    'TABELA DE PREÇOS ÚNICA nas Equações (Biblioteca › Equações): registre o preço de um produto uma vez (custo/tonelada, frete, aplicação) e reaproveite em qualquer equação — o editor tem “Salvar na tabela” e um seletor “Puxar produto salvo” que preenche os custos. Salvar o mesmo produto atualiza o preço (não duplica); a tabela sincroniza entre aparelhos',
+  ],
   '1.23.0': [
     'CONDUTIVIDADE — os pontos BRUTOS e LIMPOS no mapa agora aparecem em 5 CLASSES por quintis (cada classe ~20% dos pontos), com uma mini-legenda de faixa + contagem. Fica muito mais fácil enxergar a distribuição e o efeito da limpeza do que na rampa contínua (que era dominada pelos extremos)',
     'PRODUTIVIDADE/COLHEITA — novo botão "Ver pontos brutos (5 classes)": pré-visualize as leituras da colhedora classificadas em quintis ANTES de processar, para bater o olho na dispersão e nos outliers',

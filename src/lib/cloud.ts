@@ -41,6 +41,7 @@ const KEYS_LISTA = [
   'inv_meap_ambientes',                // MEAP — Ambientes Produtivos / Zonas de Manejo (M1)
   'inv_meap_zoneamentos',              // MEAP — zoneamentos salvos (1 padrão → Amostragem)
   'inv_produtividade',                 // Módulo 12 — Mapas de Colheita (metadados/versões; raster sob demanda)
+  'inv_precos',                        // #33 — Tabela de preços única (produtos/frete/aplicação) reusada nas Equações
   'inv_empresas',                      // multi-tenant — empresas/membros (sync entre máquinas)
   'inv_papeis',                        // papéis por e-mail (owner/admin/…) — fonte da verdade de acesso
   'inv_permissoes',                    // capacidades por papel (U2, editável pelo Owner)

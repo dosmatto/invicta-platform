@@ -624,6 +624,39 @@ export function deleteGrade(id: string) {
   save('inv_grades', load<GradeAmostragem>('inv_grades').filter(g => g.id !== id));
 }
 
+// ── #33 Tabela de preços única (produtos/frete/aplicação) reusada nas Equações ──
+export interface PrecoProduto {
+  id: string;
+  produto: string;
+  custoTonelada: number | null;   // R$/t do produto
+  freteHa: number;                // R$/ha
+  aplicacaoHa: number;            // R$/ha
+  atualizadoEm: string;
+}
+
+export function getPrecosProdutos(): PrecoProduto[] {
+  return loadFiltrado<PrecoProduto>('inv_precos').sort((a, b) => (a.produto || '').localeCompare(b.produto || ''));
+}
+
+// Upsert por NOME do produto (case-insensitive) — a "tabela única": salvar o mesmo
+// produto atualiza o preço em vez de duplicar.
+export function savePrecoProduto(p: Omit<PrecoProduto, 'id' | 'atualizadoEm'>): PrecoProduto {
+  const lista = load<PrecoProduto>('inv_precos');
+  const nome = (p.produto || '').trim();
+  const idx = lista.findIndex(x => (x.produto || '').trim().toLowerCase() === nome.toLowerCase());
+  const reg: PrecoProduto = comEmpresa({
+    ...(idx >= 0 ? lista[idx] : { id: uid() }),
+    ...p, produto: nome, atualizadoEm: new Date().toISOString(),
+  });
+  if (idx >= 0) lista[idx] = reg; else lista.push(reg);
+  save('inv_precos', lista);
+  return reg;
+}
+
+export function deletePrecoProduto(id: string) {
+  save('inv_precos', load<PrecoProduto>('inv_precos').filter(p => p.id !== id));
+}
+
 // Marca uma grade para processar, desmarcando as outras do mesmo talhão+safra.
 export function marcarParaProcessar(id: string) {
   const lista = load<GradeAmostragem>('inv_grades');

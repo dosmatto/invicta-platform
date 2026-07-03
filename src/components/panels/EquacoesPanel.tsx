@@ -16,7 +16,8 @@ import {
 import type { CategoriaBiblioteca } from '@/lib/biblioteca';
 import { ATRIBUTOS_EQUACAO, validar, testarEscalar, atributoPorToken } from '@/lib/recomendacao/motor';
 import { pode } from '@/lib/empresa';
-import { Plus, Edit3, Trash2, Power, Copy, X, Save, Play, ChevronRight, Search, SaveAll } from 'lucide-react';
+import { getPrecosProdutos, savePrecoProduto, type PrecoProduto } from '@/lib/store';
+import { Plus, Edit3, Trash2, Power, Copy, X, Save, Play, ChevronRight, Search, SaveAll, Tag } from 'lucide-react';
 
 const SLUG: CategoriaBiblioteca = 'equacoes';
 const SEM_GRUPO = 'Sem grupo';
@@ -339,9 +340,47 @@ function Detalhes(p: {
   culturas: string; setCulturas: (s: string) => void; fases: string; setFases: (s: string) => void;
   descricao: string; setDescricao: (s: string) => void;
 }) {
+  // #33 — Tabela de preços única: puxa/salva produto+custos de um repositório central.
+  const [precos, setPrecos] = useState<PrecoProduto[]>(() => getPrecosProdutos());
+  function puxarPreco(id: string) {
+    const t = precos.find(x => x.id === id); if (!t) return;
+    p.setProduto(t.produto);
+    p.setCusto(t.custoTonelada != null ? String(t.custoTonelada) : '');
+    p.setFrete(t.freteHa ? String(t.freteHa) : '');
+    p.setAplicacao(t.aplicacaoHa ? String(t.aplicacaoHa) : '');
+  }
+  function salvarNaTabela() {
+    if (!p.produto.trim()) return;
+    savePrecoProduto({
+      produto: p.produto.trim(),
+      custoTonelada: p.custo.trim() ? parseNum(p.custo) : null,
+      freteHa: p.frete.trim() ? (parseNum(p.frete) || 0) : 0,
+      aplicacaoHa: p.aplicacao.trim() ? (parseNum(p.aplicacao) || 0) : 0,
+    });
+    setPrecos(getPrecosProdutos());
+  }
+
   return (
     <div className="space-y-2">
       <Campo label="Nome"><input value={p.nome} onChange={e => p.setNome(e.target.value)} placeholder="ex: 001 - Calagem 60% Ca" className={txt} style={inputStyle} /></Campo>
+
+      {/* Tabela de preços única (#33): puxar produto salvo ou salvar o atual */}
+      <div className="p-2 rounded" style={{ background: '#0b1f3a', border: '1px solid #1a3a6b' }}>
+        <div className="flex items-center gap-1 mb-1"><Tag size={11} style={{ color: '#93c5fd' }} /><span className="text-[10px] font-bold" style={{ color: '#93c5fd' }}>Tabela de preços</span></div>
+        {precos.length > 0 ? (
+          <div className="flex items-center gap-1">
+            <select value="" onChange={e => { puxarPreco(e.target.value); e.currentTarget.selectedIndex = 0; }} className="flex-1 rounded px-1.5 py-1 text-[10px] outline-none" style={inputStyle}>
+              <option value="">— puxar produto salvo —</option>
+              {precos.map(t => <option key={t.id} value={t.id}>{t.produto}{t.custoTonelada != null ? ` · R$ ${t.custoTonelada}/t` : ''}{t.freteHa ? ` · frete ${t.freteHa}` : ''}</option>)}
+            </select>
+          </div>
+        ) : <p className="text-[9px]" style={{ color: '#64748b' }}>Nenhum produto salvo ainda — preencha os custos abaixo e clique em “Salvar na tabela”.</p>}
+        <button onClick={salvarNaTabela} disabled={!p.produto.trim()}
+          className="mt-1 w-full flex items-center justify-center gap-1 py-1 rounded text-[10px] font-semibold disabled:opacity-40" style={{ background: '#1a3a6b', color: '#86efac' }}>
+          <Save size={10} /> Salvar “{p.produto.trim() || '…'}” na tabela
+        </button>
+      </div>
+
       <div className="grid grid-cols-2 gap-2">
         <Campo label="Produto"><input value={p.produto} onChange={e => p.setProduto(e.target.value)} placeholder="ex: Calcário" className={txt} style={inputStyle} /></Campo>
         <Campo label="Custo / tonelada (R$)"><input value={p.custo} onChange={e => p.setCusto(e.target.value)} placeholder="ex: 180" inputMode="decimal" className={txt} style={inputStyle} /></Campo>
