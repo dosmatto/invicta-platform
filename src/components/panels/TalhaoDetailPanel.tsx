@@ -19,6 +19,7 @@ import {
 import type { Legenda } from '@/lib/legendas';
 import { parseGeoFile, parseLimiteTalhao, normalizarZonas } from '@/lib/geo';
 import { extrairEditavel, paraFC, bboxDe, areaHaDe, areaHaSemFuros } from '@/lib/geoEditor';
+import { conflitosDe, talhaoParaAlvo, type AlvoOverlap, type Conflito } from '@/lib/overlap';
 import { carregarEcOficial, rotuloEc, type EcCamada } from '@/lib/meap/gerar';
 import { classeZona } from '@/lib/zonas';
 import { cloudCarregarMapasPorPrefixo } from '@/lib/cloud';
@@ -40,11 +41,14 @@ const EditorGeometria = dynamic(
 function GeoSection({ talhao, onUploaded }: { talhao: Talhao | null; onUploaded: (areaHa: number) => void }) {
   const { setUploadedGeo, setUploadedBbox } = useApp();
   const inputRef = useRef<HTMLInputElement>(null);
-  const [estado, setEstado] = useState<'idle' | 'loading' | 'ok' | 'erro'>('idle');
+  const [estado, setEstado] = useState<'idle' | 'loading' | 'ok' | 'erro' | 'conflito'>('idle');
   const [erroMsg, setErroMsg] = useState('');
   const [avisos, setAvisos] = useState<string[]>([]);
   const [dragging, setDragging] = useState(false);
   const [editando, setEditando] = useState(false);
+  // Geometria parseada/editada AGUARDANDO resolução de sobreposição (não gravada).
+  const [pendente, setPendente] = useState<{ fc: GeoJSON.FeatureCollection; bbox: [number, number, number, number]; areaHa: number; areaHaBruta: number } | null>(null);
+  const [conflitos, setConflitos] = useState<Conflito[]>([]);
 
   const temGeo = !!talhao?.geojson;
 
@@ -52,19 +56,36 @@ function GeoSection({ talhao, onUploaded }: { talhao: Talhao | null; onUploaded:
     try { return JSON.parse(talhao!.geojson!) as GeoJSON.FeatureCollection; } catch { return null; }
   }
 
+  // Sobreposição do novo limite contra os OUTROS talhões da fazenda (não o próprio).
+  function checarConflitos(fc: GeoJSON.FeatureCollection, bbox: [number, number, number, number]): Conflito[] {
+    if (!talhao) return [];
+    const existentes = getTalhoes(talhao.fazendaId)
+      .filter(t => t.id !== talhao.id)
+      .map(t => talhaoParaAlvo(t))
+      .filter((a): a is AlvoOverlap => !!a);
+    return conflitosDe({ id: talhao.id, nome: talhao.nome, fc, bbox }, [], existentes);
+  }
+
   // aplica o editor: 1ª parte substitui o limite; partes extras (corte) viram
-  // NOVOS talhões na mesma fazenda (sem dados de safra — só o polígono).
+  // NOVOS talhões na mesma fazenda. Antes de gravar, CHECA sobreposição — se houver,
+  // não grava e cai no estado 'conflito' (o usuário reabre o editor p/ corrigir).
   function aplicarEdicao(fcs: GeoJSON.FeatureCollection[]) {
     if (!talhao) return;
     const eds = fcs.map(extrairEditavel).filter((e): e is NonNullable<typeof e> => !!e && e.tipo === 'poligono');
     if (!eds.length) { setEditando(false); setErroMsg('Edição sem polígono — nada salvo.'); setEstado('erro'); return; }
     const [prim, ...resto] = eds;
     const fc = paraFC(prim, { nome: talhao.nome });
+    const bbox = bboxDe(prim);
     const area = areaHaDe(prim) ?? 0;
-    updateTalhao(talhao.id, {
-      geojson: JSON.stringify(fc), bbox: bboxDe(prim),
-      areaHa: area, areaHaSemHoles: areaHaSemFuros(prim) ?? area, status: 'ativo',
-    });
+    const areaBruta = areaHaSemFuros(prim) ?? area;
+    setUploadedGeo(fc); setUploadedBbox(bbox);
+    const cs = checarConflitos(fc, bbox);
+    if (cs.length) {
+      setEditando(false); setPendente({ fc, bbox, areaHa: area, areaHaBruta: areaBruta });
+      setConflitos(cs); setEstado('conflito'); setAvisos([]);
+      return;
+    }
+    updateTalhao(talhao.id, { geojson: JSON.stringify(fc), bbox, areaHa: area, areaHaSemHoles: areaBruta, status: 'ativo' });
     resto.forEach((ed, i) => {
       const nome = `${talhao.nome} (${i + 2})`;
       saveTalhao({
@@ -73,23 +94,28 @@ function GeoSection({ talhao, onUploaded }: { talhao: Talhao | null; onUploaded:
         status: 'ativo', geojson: JSON.stringify(paraFC(ed, { nome })), bbox: bboxDe(ed),
       });
     });
-    setUploadedGeo(fc); setUploadedBbox(bboxDe(prim));
-    setEditando(false); setEstado('ok'); setErroMsg('');
+    setEditando(false); setPendente(null); setConflitos([]); setEstado('ok'); setErroMsg('');
     setAvisos(resto.length ? [`Talhão dividido: ${resto.length} novo(s) talhão(ões) criado(s) na fazenda.`] : []);
     onUploaded(area);
   }
 
   async function processar(file: File) {
-    setEstado('loading'); setErroMsg(''); setAvisos([]);
+    setEstado('loading'); setErroMsg(''); setAvisos([]); setPendente(null); setConflitos([]);
     try {
       // saneia defeitos comuns (linha aberta → polígono, espículas, auto-interseção)
       const result = await parseLimiteTalhao(file);
+      setUploadedGeo(result.geojson); setUploadedBbox(result.bbox);
+      const cs = checarConflitos(result.geojson, result.bbox);
+      if (cs.length) {
+        setPendente({ fc: result.geojson, bbox: result.bbox, areaHa: result.areaHa, areaHaBruta: result.areaHaBruta });
+        setConflitos(cs); setAvisos(result.avisos); setEstado('conflito');
+        return;
+      }
       setAvisos(result.avisos);
       updateTalhao(talhao!.id, {
         geojson: JSON.stringify(result.geojson), bbox: result.bbox,
         areaHa: result.areaHa, areaHaSemHoles: result.areaHaBruta, status: 'ativo',
       });
-      setUploadedGeo(result.geojson); setUploadedBbox(result.bbox);
       setEstado('ok'); onUploaded(result.areaHa);
     } catch (e: unknown) {
       setEstado('erro'); setErroMsg(e instanceof Error ? e.message : 'Erro ao processar arquivo.');
@@ -127,7 +153,21 @@ function GeoSection({ talhao, onUploaded }: { talhao: Talhao | null; onUploaded:
         {avisos.map((a, i) => (
           <p key={i} className="mt-1.5 text-[10px]" style={{ color: '#fbbf24' }}>⚠ {a}</p>
         ))}
-        {temGeo && estado !== 'loading' && (
+        {estado === 'conflito' && (
+          <div className="mt-2 p-2 rounded-lg" style={{ background: '#2a0f12', border: '1px solid #7f1d1d' }}>
+            <p className="text-[10px] font-bold flex items-center gap-1" style={{ color: '#fca5a5' }}>
+              <AlertTriangle size={12} /> Sobreposição — este limite invade outro talhão
+            </p>
+            <p className="text-[9px] mt-1 leading-snug" style={{ color: '#fca5a5' }}>
+              Sobrepõe {conflitos.map(c => `${c.nome} (${c.haSobrep.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} ha)`).join(' · ')}. O limite <strong>não foi gravado</strong> — corrija o traçado (arraste os nós ou corte) para poder salvar.
+            </p>
+            <button onClick={() => setEditando(true)}
+              className="mt-2 w-full flex items-center justify-center gap-1 py-1.5 rounded text-[10px] font-bold" style={{ background: '#7f1d1d', color: '#fecaca' }}>
+              <Pencil size={11} /> Corrigir traçado
+            </button>
+          </div>
+        )}
+        {temGeo && estado !== 'loading' && estado !== 'conflito' && (
           <div className="mt-2 grid grid-cols-2 gap-1.5">
             <button onClick={() => { try { setUploadedGeo(JSON.parse(talhao!.geojson!) as GeoJSON.FeatureCollection); setUploadedBbox(talhao!.bbox!); } catch {} }}
               className="py-1.5 rounded text-[10px] font-semibold transition-opacity hover:opacity-80" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
@@ -143,10 +183,10 @@ function GeoSection({ talhao, onUploaded }: { talhao: Talhao | null; onUploaded:
       </div>
 
       {editando && talhao && (() => {
-        const fc = fcDoTalhao();
+        const fc = pendente?.fc ?? fcDoTalhao();
         if (!fc) { setEditando(false); return null; }
         return (
-          <EditorGeometria titulo={`Limite — ${talhao.nome}`} fc={fc}
+          <EditorGeometria titulo={pendente ? `Corrigir sobreposição — ${talhao.nome}` : `Limite — ${talhao.nome}`} fc={fc}
             onSalvar={aplicarEdicao} onFechar={() => setEditando(false)} />
         );
       })()}

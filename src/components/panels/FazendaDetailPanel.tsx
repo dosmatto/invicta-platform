@@ -1,13 +1,20 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
+import dynamic from 'next/dynamic';
 import { useApp } from '@/context/AppContext';
 import { getFazendas, getTalhoes, saveTalhao, importarTalhoesLote, updateFazenda, Fazenda, Talhao } from '@/lib/store';
 import { pode } from '@/lib/empresa';
 import { detectarMunicipiosFazenda } from '@/lib/geocode';
 import { prepararTalhoesEmMassa, CandidatoTalhao } from '@/lib/geo';
-import { ChevronLeft, ChevronRight, Plus, Map, AlertTriangle, Save, X, ExternalLink, MapPin, Loader2, Upload, CheckCircle2 } from 'lucide-react';
+import { conflitosDe, talhaoParaAlvo, areaHaFC, bboxDeFeatures, type AlvoOverlap, type Conflito } from '@/lib/overlap';
+import { ChevronLeft, ChevronRight, Plus, Map, AlertTriangle, Save, X, ExternalLink, MapPin, Loader2, Upload, CheckCircle2, Pencil } from 'lucide-react';
 import { PanelSection, PanelButton, StatusBadge } from './_shared';
+
+const EditorGeometria = dynamic(
+  () => import('@/components/geo/EditorGeometria').then(m => ({ default: m.EditorGeometria })),
+  { ssr: false },
+);
 
 export function FazendaDetailPanel() {
   const { nav, setNav, setActivePanel, setMapMode, setUploadedGeo, setUploadedBbox, setTalhoesFazenda } = useApp();
@@ -315,6 +322,38 @@ function ImportadorTalhoes({ fazendaId, existentes, onFechar, onImportado }: {
   const [importando, setImportando] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [resumo, setResumo] = useState('');
+  const [editandoLinha, setEditandoLinha] = useState<number | null>(null);
+
+  // Talhões já cadastrados (da fazenda) como alvos de sobreposição.
+  const existentesAlvo = useMemo(
+    () => existentes.map(t => talhaoParaAlvo(t)).filter((a): a is AlvoOverlap => !!a),
+    [existentes],
+  );
+
+  // SOBREPOSIÇÃO por linha (índice → conflitos): cada talhão do lote é checado
+  // contra os OUTROS do lote e contra os já cadastrados (pulando o que atualiza).
+  const conflitos = useMemo(() => {
+    const alvos = linhas.map((l, i) => ({ id: `L${i}`, nome: l.nome, fc: l.geojson, bbox: l.bbox, _i: i, incluir: l.incluir, existenteId: l.existenteId }));
+    const incl = alvos.filter(a => a.incluir);
+    const map = new globalThis.Map<number, Conflito[]>();
+    for (const a of incl) {
+      const outros = incl.filter(o => o._i !== a._i);
+      const exist = existentesAlvo.filter(e => e.id !== a.existenteId);
+      const cs = conflitosDe(a, outros, exist);
+      if (cs.length) map.set(a._i, cs);
+    }
+    return map;
+  }, [linhas, existentesAlvo]);
+  const temConflito = conflitos.size > 0;
+
+  function aplicarEdicaoLinha(i: number, fcs: GeoJSON.FeatureCollection[]) {
+    setEditandoLinha(null);
+    const feats = fcs.flatMap(fc => fc.features).filter(f => f.geometry);
+    if (!feats.length) return;
+    const fc: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: feats };
+    const areaHa = Math.round(areaHaFC(fc) * 100) / 100;
+    setLinha(i, { geojson: fc, bbox: bboxDeFeatures(feats), areaHa, areaHaBruta: areaHa });
+  }
 
   const casarExistente = (nome: string) =>
     existentes.find(t => normNome(t.nome) === normNome(nome))?.id ?? null;
@@ -349,7 +388,7 @@ function ImportadorTalhoes({ fazendaId, existentes, onFechar, onImportado }: {
   function limparPreview() { setUploadedGeo(null); setUploadedBbox(null); }
 
   async function importar() {
-    if (importando) return;
+    if (importando || temConflito) return;   // sobreposição bloqueia a importação
     setImportando(true); setResumo('');
     await new Promise(r => setTimeout(r, 30)); // deixa o "Importando…" aparecer
     try {
@@ -427,31 +466,42 @@ function ImportadorTalhoes({ fazendaId, existentes, onFechar, onImportado }: {
       {linhas.length > 0 && (
         <>
           <div className="space-y-1.5 max-h-72 overflow-y-auto pr-0.5">
-            {linhas.map((l, i) => (
-              <div key={i} className="flex items-center gap-2 p-2 rounded-lg"
-                style={{ background: '#0b1d3a', border: '1px solid #1a3a6b', opacity: l.incluir ? 1 : 0.45 }}>
-                <input type="checkbox" checked={l.incluir} onChange={e => setLinha(i, { incluir: e.target.checked })}
-                  className="flex-shrink-0 accent-green-600" />
-                <div className="flex-1 min-w-0">
-                  <input value={l.nome}
-                    onChange={e => setLinha(i, { nome: e.target.value, existenteId: casarExistente(e.target.value) })}
-                    className="w-full bg-transparent text-xs font-semibold outline-none"
-                    style={{ color: '#e2e8f0', borderBottom: '1px dashed #1a3a6b' }} />
-                  <p className="text-[10px] mt-0.5" style={{ color: '#64748b' }}>
-                    {l.areaHa.toLocaleString('pt-BR')} ha · {l.arquivo}
-                  </p>
+            {linhas.map((l, i) => {
+              const cs = conflitos.get(i);
+              const temC = !!cs?.length;
+              return (
+                <div key={i} className="rounded-lg"
+                  style={{ background: '#0b1d3a', border: `1px solid ${temC ? '#b91c1c' : '#1a3a6b'}`, opacity: l.incluir ? 1 : 0.45 }}>
+                  <div className="flex items-center gap-2 p-2">
+                    <input type="checkbox" checked={l.incluir} onChange={e => setLinha(i, { incluir: e.target.checked })}
+                      className="flex-shrink-0 accent-green-600" />
+                    <div className="flex-1 min-w-0">
+                      <input value={l.nome}
+                        onChange={e => setLinha(i, { nome: e.target.value, existenteId: casarExistente(e.target.value) })}
+                        className="w-full bg-transparent text-xs font-semibold outline-none"
+                        style={{ color: '#e2e8f0', borderBottom: '1px dashed #1a3a6b' }} />
+                      <p className="text-[10px] mt-0.5" style={{ color: '#64748b' }}>
+                        {l.areaHa.toLocaleString('pt-BR')} ha · {l.arquivo}
+                      </p>
+                    </div>
+                    {temC && (
+                      <button onClick={() => setEditandoLinha(i)} title="Corrigir sobreposição (arrastar nós / cortar)"
+                        className="flex-shrink-0 flex items-center gap-1 text-[9px] font-bold px-1.5 py-1 rounded" style={{ background: '#7f1d1d', color: '#fecaca' }}>
+                        <Pencil size={10} /> Corrigir
+                      </button>
+                    )}
+                    {l.existenteId
+                      ? <span className="flex-shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ background: '#78350f', color: '#fde68a' }}>atualiza limite</span>
+                      : <span className="flex-shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ background: '#166534', color: '#86efac' }}>novo</span>}
+                  </div>
+                  {temC && (
+                    <p className="px-2 pb-1.5 text-[9px] leading-snug" style={{ color: '#fca5a5' }}>
+                      ⚠ sobrepõe {cs!.map(c => `${c.nome} (${c.haSobrep.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} ha${c.onde === 'existente' ? ', já cadastrado' : ''})`).join(' · ')}
+                    </p>
+                  )}
                 </div>
-                {l.existenteId ? (
-                  <span className="flex-shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ background: '#78350f', color: '#fde68a' }}>
-                    atualiza limite
-                  </span>
-                ) : (
-                  <span className="flex-shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ background: '#166534', color: '#86efac' }}>
-                    novo
-                  </span>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           <div className="flex items-center justify-between text-[10px]" style={{ color: '#94a3b8' }}>
@@ -460,20 +510,32 @@ function ImportadorTalhoes({ fazendaId, existentes, onFechar, onImportado }: {
               {areaTotal.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} ha
             </span>
           </div>
+          {temConflito && (
+            <p className="text-[10px] font-semibold flex items-center gap-1.5 px-2 py-1.5 rounded" style={{ background: '#2a0f12', color: '#fca5a5', border: '1px solid #7f1d1d' }}>
+              <AlertTriangle size={12} className="flex-shrink-0" /> {conflitos.size} talhão(ões) com sobreposição — clique em <strong>Corrigir</strong> (arraste os nós ou corte) para poder importar.
+            </p>
+          )}
           <div className="flex gap-2">
             <button onClick={() => { limparPreview(); onFechar(); }}
               className="flex-1 py-2 rounded text-xs font-semibold" style={{ background: '#1a3a6b', color: '#94a3b8' }}>
               Cancelar
             </button>
-            <button onClick={() => void importar()} disabled={incluidos.length === 0 || importando}
+            <button onClick={() => void importar()} disabled={incluidos.length === 0 || importando || temConflito}
               className="flex-1 py-2 rounded text-xs font-bold text-white disabled:opacity-40 flex items-center justify-center gap-1.5"
               style={{ background: 'var(--invicta-green-dark)' }}>
               {importando
                 ? <><Loader2 size={12} className="animate-spin" /> Importando…</>
+                : temConflito ? <>Resolva a sobreposição</>
                 : <>Importar {incluidos.length} talhão(ões)</>}
             </button>
           </div>
         </>
+      )}
+
+      {editandoLinha != null && linhas[editandoLinha] && (
+        <EditorGeometria titulo={`Corrigir — ${linhas[editandoLinha].nome}`} fc={linhas[editandoLinha].geojson}
+          onSalvar={fcs => aplicarEdicaoLinha(editandoLinha, fcs)}
+          onFechar={() => setEditandoLinha(null)} />
       )}
     </div>
   );
