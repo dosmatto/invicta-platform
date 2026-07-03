@@ -8,6 +8,7 @@
 // ordenação Alta→Baixa manual + sugerida. Preview no mapa (não persiste).
 
 import { useEffect, useMemo, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { useApp } from '@/context/AppContext';
 import { getZoneamentosMeap, saveZoneamentoMeap, deleteZoneamentoMeap, setZoneamentoPadraoMeap, removerAdocaoMeap, getTalhoes, getLegendasPorAtributo, type Talhao, type ZoneamentoMeap } from '@/lib/store';
 import { obterOuAdotarAmbiente } from '@/lib/meap/adocao';
@@ -15,12 +16,18 @@ import { carregarCamadas, analisarMulti, gerarMulti, dadosLabCV, type CamadasCar
 import { calcularCVZonas } from '@/lib/meap/cv';
 import { unirFeatures, limparZona } from '@/lib/meap/fundir';
 import { extrairPoligono, coordsFromBounds, decodeGrid, type RespGerarZonas, type RespAnalisarZonas } from '@/lib/fertilidade';
+import { extrairEditavel, paraFeature, areaHaDe } from '@/lib/geoEditor';
 import { colorirGrid, colorirGridComLegenda } from '@/lib/raster';
 import { rampaVisualStops } from '@/lib/legendas';
 import { classeZona, classeReconhecida, corZonaPorPosicao, ORDEM_CLASSES } from '@/lib/zonas';
 import { simboloElemento } from '@/lib/lab';
 import type { AmbienteProdutivo, Homogeneidade, MetricasZonaMeap } from '@/lib/meap/tipos';
-import { Layers, AlertTriangle, Wand2, Loader2, X, Check, ChevronUp, ChevronDown, Save, Star, Trash2, Eye, BarChart3, Sparkles, Combine, CheckSquare, Square } from 'lucide-react';
+import { Layers, AlertTriangle, Wand2, Loader2, X, Check, ChevronUp, ChevronDown, Save, Star, Trash2, Eye, BarChart3, Sparkles, Combine, CheckSquare, Square, Pencil, Undo2, Redo2 } from 'lucide-react';
+
+const EditorGeometria = dynamic(
+  () => import('@/components/geo/EditorGeometria').then(m => ({ default: m.EditorGeometria })),
+  { ssr: false },
+);
 
 const HOMOG: Record<Homogeneidade, { label: string; cor: string; bg: string }> = {
   alta: { label: 'Homogênea', cor: '#86efac', bg: '#0f2a1a' },
@@ -167,6 +174,9 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
   const [ordemRanks, setOrdemRanks] = useState<number[]>([]);  // potenciais (ranks) na ordem Alta→Baixa
   const [featsEdit, setFeatsEdit] = useState<GeoJSON.Feature[]>([]);  // zonas EDITÁVEIS (fusão manual) — espelham res.features
   const [selZonas, setSelZonas] = useState<Set<string>>(new Set());  // zonas marcadas p/ fundir
+  const [histEdit, setHistEdit] = useState<GeoJSON.Feature[][]>([]);  // desfazer (snapshots de featsEdit)
+  const [redoEdit, setRedoEdit] = useState<GeoJSON.Feature[][]>([]);  // refazer
+  const [editandoZona, setEditandoZona] = useState<{ id: string; nome: string; fc: GeoJSON.FeatureCollection } | null>(null);
 
   // Zoneamentos salvos (vários por talhão; um é o "padrão" usado pela Amostragem)
   const [zoneamentos, setZoneamentos] = useState<ZoneamentoMeap[]>([]);
@@ -223,6 +233,7 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
     }
     setFeatsEdit(limpas);
     setSelZonas(new Set());
+    setHistEdit([]); setRedoEdit([]);   // nova geração zera o histórico de edições
   }, [res]);
 
   // Potencial (rótulo + cor) por rank, conforme a ordem atual (posição = potencial).
@@ -372,11 +383,59 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
   // Fusão MANUAL: une as zonas marcadas num único polígono (dissolve as divisas).
   // A zona resultante herda o potencial do MAIOR constituinte e o id da maior;
   // as demais são removidas.
+  // ── Histórico de edições (desfazer/refazer) do featsEdit ──────────────────────
+  function empurrarHistEdit() { setHistEdit(h => [...h.slice(-29), featsEdit]); setRedoEdit([]); }
+  function desfazerEdit() {
+    if (!histEdit.length) return;
+    setRedoEdit(r => [...r, featsEdit]);
+    setFeatsEdit(histEdit[histEdit.length - 1]);
+    setHistEdit(h => h.slice(0, -1));
+    setSelZonas(new Set());
+  }
+  function refazerEdit() {
+    if (!redoEdit.length) return;
+    setHistEdit(h => [...h, featsEdit]);
+    setFeatsEdit(redoEdit[redoEdit.length - 1]);
+    setRedoEdit(r => r.slice(0, -1));
+    setSelZonas(new Set());
+  }
+
+  // Abre o editor de geometria numa zona (corte/vértices/buraco/simplificar).
+  function editarZona(id: string) {
+    const f = featsEdit.find(x => idDaFeat(x) === id);
+    if (!f?.geometry) return;
+    const z = zonas.find(x => x.id === id);
+    setEditandoZona({
+      id, nome: z ? `Zona ${numDeRank.get(z.rank) ?? '—'} · ${z.potencial}` : 'Zona',
+      fc: { type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry: f.geometry }] },
+    });
+  }
+  // Aplica o resultado do editor: a 1ª parte mantém o id; um corte gera partes
+  // extras (mesmo potencial, id novo). Recalcula a área de cada parte.
+  function aplicarEdicaoZona(id: string, fcs: GeoJSON.FeatureCollection[]) {
+    const orig = featsEdit.find(f => idDaFeat(f) === id);
+    if (!orig) { setEditandoZona(null); return; }
+    const props = (orig.properties ?? {}) as Record<string, unknown>;
+    const eds = fcs.map(extrairEditavel).filter((e): e is NonNullable<ReturnType<typeof extrairEditavel>> => !!e && e.tipo === 'poligono');
+    if (!eds.length) { setEditandoZona(null); return; }
+    empurrarHistEdit();
+    const novas: GeoJSON.Feature[] = eds.map((ed, i) => ({
+      type: 'Feature',
+      geometry: paraFeature(ed).geometry,
+      properties: { ...props, id: i === 0 ? id : `${id}_${i + 1}`, areaHa: areaHaDe(ed) ?? 0 },
+    }));
+    const resto = featsEdit.filter(f => idDaFeat(f) !== id);
+    setFeatsEdit([...resto, ...novas].sort((a, b) => idDaFeat(a).localeCompare(idDaFeat(b))));
+    setSelZonas(new Set());
+    setEditandoZona(null);
+  }
+
   function fundirSelecionadas() {
     if (selZonas.size < 2) return;
     const sel = featsEdit.filter(f => selZonas.has(idDaFeat(f)));
     const resto = featsEdit.filter(f => !selZonas.has(idDaFeat(f)));
     if (sel.length < 2) return;
+    empurrarHistEdit();
     const areaDe = (f: GeoJSON.Feature) => Number((f.properties as { areaHa?: number })?.areaHa ?? 0);
     const maior = sel.reduce((a, b) => (areaDe(b) > areaDe(a) ? b : a));
     const mp = (maior.properties ?? {}) as { id?: string; potencialRank?: number; classe?: string };
@@ -749,42 +808,53 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
                 <div>
                   <div className="flex items-center justify-between mb-1 gap-2">
                     <p className="text-[9px]" style={{ color: '#a78bfa' }}>
-                      Polígonos ({zonas.length}) — partes das zonas · marque 2+ p/ fundir{varCVsimbolo && <> · CV por <strong style={{ color: '#e9d5ff' }}>{varCVsimbolo}</strong></>}
+                      Polígonos ({zonas.length}) — partes das zonas · marque 2+ p/ fundir, ou Editar p/ cortar{varCVsimbolo && <> · CV por <strong style={{ color: '#e9d5ff' }}>{varCVsimbolo}</strong></>}
                     </p>
-                    {selZonas.size >= 2 && (
-                      <button onClick={fundirSelecionadas} className="flex items-center gap-1 text-[9px] px-2 py-0.5 rounded font-bold text-white flex-shrink-0" style={{ background: '#5b21b6' }}>
-                        <Combine size={10} /> Fundir {selZonas.size}
-                      </button>
-                    )}
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      {(histEdit.length > 0 || redoEdit.length > 0) && (
+                        <>
+                          <button onClick={desfazerEdit} disabled={!histEdit.length} title="Desfazer" className="p-0.5 rounded disabled:opacity-30" style={{ color: '#93c5fd' }}><Undo2 size={12} /></button>
+                          <button onClick={refazerEdit} disabled={!redoEdit.length} title="Refazer" className="p-0.5 rounded disabled:opacity-30" style={{ color: '#93c5fd' }}><Redo2 size={12} /></button>
+                        </>
+                      )}
+                      {selZonas.size >= 2 && (
+                        <button onClick={fundirSelecionadas} className="flex items-center gap-1 text-[9px] px-2 py-0.5 rounded font-bold text-white" style={{ background: '#5b21b6' }}>
+                          <Combine size={10} /> Fundir {selZonas.size}
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <div className="space-y-1">
                     {zonas.map(z => {
                       const on = selZonas.has(z.id);
+                      const m = cvPorZona[z.id];
+                      const h = m?.homogeneidade ? HOMOG[m.homogeneidade] : null;
                       return (
-                        <button key={z.id} onClick={() => toggleSelZona(z.id)} title="Marcar para fundir"
-                          className="w-full flex items-center gap-2 px-2 py-1 rounded text-left"
+                        <div key={z.id} className="w-full flex items-center gap-2 px-2 py-1 rounded"
                           style={{ background: on ? '#1a1033' : '#061525', border: `1px solid ${on ? '#a78bfa' : '#1a3a6b'}` }}>
-                          {on ? <CheckSquare size={12} className="flex-shrink-0" style={{ color: '#a78bfa' }} /> : <Square size={12} className="flex-shrink-0" style={{ color: '#475569' }} />}
-                          <span className="inline-block w-3 h-3 rounded-sm flex-shrink-0" style={{ background: z.cor, border: '1px solid #fff' }} />
-                          <span className="text-[10px] font-bold px-1 rounded flex-shrink-0" style={{ background: '#0b1f3a', color: '#93c5fd' }}>Zona {numDeRank.get(z.rank) ?? '—'}</span>
-                          <span className="text-[10px]" style={{ color: '#cbd5e1' }}>{z.potencial}</span>
-                          <span className="text-[10px] ml-auto" style={{ color: '#64748b' }}>{z.areaHa.toLocaleString('pt-BR')} ha</span>
-                          {(() => {
-                            const m = cvPorZona[z.id];
-                            const h = m?.homogeneidade ? HOMOG[m.homogeneidade] : null;
-                            return h && m?.cvValidacao != null
-                              ? <span className="text-[9px] px-1.5 py-0.5 rounded font-semibold flex-shrink-0" style={{ background: h.bg, color: h.cor }}>CV {m.cvValidacao.toLocaleString('pt-BR')}%</span>
-                              : null;
-                          })()}
-                        </button>
+                          <button onClick={() => toggleSelZona(z.id)} title="Marcar para fundir" className="flex items-center gap-2 flex-1 min-w-0 text-left">
+                            {on ? <CheckSquare size={12} className="flex-shrink-0" style={{ color: '#a78bfa' }} /> : <Square size={12} className="flex-shrink-0" style={{ color: '#475569' }} />}
+                            <span className="inline-block w-3 h-3 rounded-sm flex-shrink-0" style={{ background: z.cor, border: '1px solid #fff' }} />
+                            <span className="text-[10px] font-bold px-1 rounded flex-shrink-0" style={{ background: '#0b1f3a', color: '#93c5fd' }}>Zona {numDeRank.get(z.rank) ?? '—'}</span>
+                            <span className="text-[10px] truncate" style={{ color: '#cbd5e1' }}>{z.potencial}</span>
+                            <span className="text-[10px] ml-auto flex-shrink-0" style={{ color: '#64748b' }}>{z.areaHa.toLocaleString('pt-BR')} ha</span>
+                            {h && m?.cvValidacao != null && (
+                              <span className="text-[9px] px-1.5 py-0.5 rounded font-semibold flex-shrink-0" style={{ background: h.bg, color: h.cor }}>CV {m.cvValidacao.toLocaleString('pt-BR')}%</span>
+                            )}
+                          </button>
+                          <button onClick={() => editarZona(z.id)} title="Editar / cortar esta zona"
+                            className="p-1 rounded flex-shrink-0" style={{ background: '#1a3a6b', color: '#c4b5fd' }}>
+                            <Pencil size={11} />
+                          </button>
+                        </div>
                       );
                     })}
                   </div>
-                  {selZonas.size >= 2 && (
-                    <p className="text-[9px] mt-1 leading-relaxed" style={{ color: '#6d5b9e' }}>
-                      A fusão dissolve as divisas num polígono só; ele herda a zona da MAIOR parte. Não muda o nº de zonas oficiais (só junta polígonos).
-                    </p>
-                  )}
+                  <p className="text-[9px] mt-1 leading-relaxed" style={{ color: '#6d5b9e' }}>
+                    {selZonas.size >= 2
+                      ? 'A fusão dissolve as divisas num polígono só; ele herda a zona da MAIOR parte. Não muda o nº de zonas oficiais (só junta polígonos).'
+                      : 'Editar (✏) abre o editor da zona: cortar em duas, mover/inserir vértices, recortar buraco ou simplificar. Um corte cria uma nova mancha com a mesma classe.'}
+                  </p>
                 </div>
 
                 <p className="text-[9px] leading-relaxed" style={{ color: '#6d5b9e' }}>
@@ -824,6 +894,12 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
             </div>
           ))}
         </div>
+      )}
+
+      {editandoZona && (
+        <EditorGeometria titulo={editandoZona.nome} fc={editandoZona.fc}
+          onSalvar={fcs => aplicarEdicaoZona(editandoZona.id, fcs)}
+          onFechar={() => setEditandoZona(null)} />
       )}
     </div>
   );

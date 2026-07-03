@@ -1,6 +1,10 @@
-export const APP_VERSION = '1.18.4';
+export const APP_VERSION = '1.19.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.19.0': [
+    'ZONAS DE MANEJO — EDITAR/CORTAR zona: cada polígono da lista ganhou o botão ✏ que abre o editor de geometria naquela zona. Lá dá pra CORTAR a zona em duas (a nova mancha herda a mesma classe), mover/inserir/remover vértices, recortar buraco ou simplificar — o mesmo editor das medições/limites, agora dentro do MEAP',
+    'DESFAZER / REFAZER as edições de zonas (fusão, corte, ajuste de vértices): botões ↶ ↷ no cabeçalho dos polígonos, com histórico de até 30 passos. Uma nova geração de zonas zera o histórico',
+  ],
   '1.18.4': [
     'GERAR ZONAS POR SIMILARIDADE bem mais rápido: o motor de agrupamento (FCM) passou a calcular distâncias por multiplicação de matriz em vez de montar um tensor gigante a cada passo, e a etapa "Analisar (FPI × NCE)" agora usa uma amostra representativa dos pixels (a escolha do nº de zonas não muda) — o "Analisar" caiu de ~11 s para ~3 s nos testes, e a geração final também acelerou. A sugestão de nº de zonas continua idêntica e determinística',
   ],
