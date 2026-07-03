@@ -84,6 +84,75 @@ export async function buscarNdviSentinel(params: {
   });
 }
 
+// ── Índices vegetativos sob demanda (IV2) ────────────────────────────────────
+
+export interface InfoIndice { id: string; nome: string; resumo: string; bandas: string[] }
+
+export const INDICES: InfoIndice[] = [
+  { id: 'NDVI',   nome: 'NDVI',   resumo: 'Vigor vegetativo geral',            bandas: ['red', 'nir'] },
+  { id: 'SAVI',   nome: 'SAVI',   resumo: 'Vigor com correção de solo exposto', bandas: ['red', 'nir'] },
+  { id: 'MSAVI2', nome: 'MSAVI',  resumo: 'Correção de solo automática',        bandas: ['red', 'nir'] },
+  { id: 'EVI2',   nome: 'EVI2',   resumo: 'Vigor sem saturar em biomassa alta', bandas: ['red', 'nir'] },
+  { id: 'EVI',    nome: 'EVI',    resumo: 'Vigor realçado (usa azul)',          bandas: ['blue', 'red', 'nir'] },
+  { id: 'GNDVI',  nome: 'GNDVI',  resumo: 'Vigor/clorofila com banda verde',    bandas: ['green', 'nir'] },
+  { id: 'NDWI',   nome: 'NDWI',   resumo: 'Água / encharcamento',               bandas: ['green', 'nir'] },
+  { id: 'NDRE',   nome: 'NDRE',   resumo: 'Clorofila/N em lavoura fechada',     bandas: ['rededge', 'nir'] },
+  { id: 'NDMI',   nome: 'NDMI',   resumo: 'Umidade da vegetação',               bandas: ['nir', 'swir'] },
+  { id: 'VARI',   nome: 'VARI',   resumo: 'Verdor usando só RGB',               bandas: ['blue', 'green', 'red'] },
+  { id: 'ExG',    nome: 'ExG',    resumo: 'Excesso de verde (RGB)',             bandas: ['blue', 'green', 'red'] },
+  { id: 'GLI',    nome: 'GLI',    resumo: 'Verdor folhar (RGB)',                bandas: ['blue', 'green', 'red'] },
+];
+
+const BANDAS_FONTE: Record<FonteNdvi, Set<string>> = {
+  sentinel: new Set(['blue', 'green', 'red', 'nir', 'rededge', 'swir']),
+  cbers: new Set(['blue', 'green', 'red', 'nir']),
+};
+const NOME_BANDA: Record<string, string> = { blue: 'Azul', green: 'Verde', red: 'Vermelho', nir: 'NIR', rededge: 'Red Edge', swir: 'SWIR' };
+
+// Disponibilidade dinâmica por bandas do sensor (spec seção 11).
+export function indicesDisponiveis(fonte: FonteNdvi): { ok: InfoIndice[]; bloqueados: { ind: InfoIndice; motivo: string }[] } {
+  const tem = BANDAS_FONTE[fonte];
+  const ok: InfoIndice[] = [];
+  const bloqueados: { ind: InfoIndice; motivo: string }[] = [];
+  for (const ind of INDICES) {
+    const falta = ind.bandas.filter(b => !tem.has(b));
+    if (falta.length === 0) ok.push(ind);
+    else bloqueados.push({ ind, motivo: `esta imagem não possui a banda ${falta.map(b => NOME_BANDA[b] ?? b).join(' e ')}` });
+  }
+  return { ok, bloqueados };
+}
+
+export interface ResIndice {
+  grid: Grid;
+  stats: RespNdvi['stats'] & { pct_validos?: number };
+  formula: string;
+  bandas: string[];
+}
+
+export interface RespIndices {
+  bounds: [number, number, number, number];
+  cena: CenaNdvi;
+  mascara: boolean;                       // máscara de nuvem/sombra aplicada (SCL)
+  resultados: Record<string, ResIndice>;  // por índice selecionado
+}
+
+// Calcula SÓ os índices selecionados da cena (bandas sob demanda no backend).
+export async function buscarIndices(params: {
+  poligono: GeoJSON.Polygon | GeoJSON.MultiPolygon;
+  cenaId: string;
+  fonte: FonteNdvi;
+  indices: string[];
+  pixelM?: number;
+}): Promise<RespIndices> {
+  return postMsr('/indices', {
+    poligono: params.poligono,
+    cena_id: params.cenaId,
+    fonte: params.fonte,
+    indices: params.indices,
+    pixel_m: params.pixelM ?? (params.fonte === 'cbers' ? 2 : 10),
+  });
+}
+
 // POST no backend do MSR com tratamento padrão (backend desligado / erro 4xx-5xx).
 async function postMsr<T>(rota: string, body: unknown): Promise<T> {
   let r: Response;

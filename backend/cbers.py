@@ -183,6 +183,82 @@ def gerar_ndvi(polygon_geojson: dict, data_ini: str, data_fim: str,
     }
 
 
+# ---------------------------------------------------------------- índices sob demanda (IV2)
+# WPM não tem Red Edge nem SWIR — NDRE/NDMI indisponíveis (o front bloqueia; aqui valida).
+ASSETS_BANDA = {"blue": ASSET_BLUE, "green": ASSET_GREEN, "red": ASSET_RED, "nir": ASSET_NIR}
+DN_MAX = 1023.0  # WPM L4-DN é 10 bits -> pseudo-refletância 0–1 p/ as fórmulas com constantes
+
+
+def gerar_indices(polygon_geojson: dict, cena_id: str, indices: list[str],
+                  pixel_m: float = 2.0) -> dict[str, Any]:
+    """Índices selecionados da cena CBERS-4A: bandas 8 m normalizadas (DN/1023),
+    NIR com injeção de detalhe da PAN (2 m, como no NDVI), sem máscara de nuvem
+    (WPM não tem banda de qualidade)."""
+    import indices as cat
+    _erro_dep()
+    if not indices:
+        raise ValueError("Nenhum índice selecionado.")
+    faltam = [i for i in indices if any(b not in ASSETS_BANDA for b in cat.CATALOGO.get(i, {}).get("bandas", ["?"]))]
+    if faltam:
+        raise ValueError(f"Índice(s) indisponível(is) no CBERS-4A (sem Red Edge/SWIR): {', '.join(faltam)}")
+
+    poly = shape(polygon_geojson)
+    minx, miny, maxx, maxy = poly.bounds
+    item = _item_por_id(cena_id)
+    if item is None:
+        raise ValueError(f"Cena CBERS {cena_id} não encontrada.")
+
+    nx, ny = _grid_dims(minx, miny, maxx, maxy, pixel_m)
+    dst = from_bounds(minx, miny, maxx, maxy, nx, ny)
+
+    necessarias = cat.bandas_necessarias(indices)
+    bandas: dict[str, np.ndarray] = {}
+    for nome in necessarias:
+        bandas[nome] = _reproj(_href(item, ASSETS_BANDA[nome]), dst, nx, ny) / DN_MAX
+
+    # Detalhe de 2 m: injeta a alta frequência da PAN no NIR (igual ao NDVI).
+    if "nir" in bandas:
+        pan = _reproj(_href(item, ASSET_PAN), dst, nx, ny) / DN_MAX
+        nir = bandas["nir"]
+        valido = np.isfinite(pan) & np.isfinite(nir)
+        p = np.where(np.isfinite(pan), pan, 0.0).astype("float32")
+        plow = gaussian_filter(p, sigma=2.0)
+        phigh = p - plow
+        mn = float(np.nanmean(nir[valido])) if valido.any() else 1.0
+        mp = float(np.nanmean(plow[valido])) if valido.any() else 1.0
+        bandas["nir"] = nir + GANHO_PAN * (mn / max(mp, 1e-6)) * phigh
+
+    gx = minx + (np.arange(nx) + 0.5) * (maxx - minx) / nx
+    gy = maxy - (np.arange(ny) + 0.5) * (maxy - miny) / ny
+    import shapely as _sh
+    XX, YY = np.meshgrid(gx, gy)
+    dentro = _sh.contains(poly, _sh.points(XX.ravel(), YY.ravel())).reshape(XX.shape)
+    n_dentro = int(dentro.sum())
+
+    pix = ((maxx - minx) / nx * 111320.0 * math.cos(math.radians((miny + maxy) / 2.0))
+           + (maxy - miny) / ny * 111320.0) / 2.0
+
+    resultados: dict[str, Any] = {}
+    for ind in indices:
+        g = cat.calcular(ind, bandas)
+        g = np.where(dentro, g, np.nan).astype("float32")
+        st = cat.stats_de(g, n_dentro)
+        st.update({"nx": int(nx), "ny": int(ny), "pixel_m": round(pix, 1), "indice": ind})
+        resultados[ind] = {
+            "grid": {"b64": base64.b64encode(g.tobytes()).decode(), "shape": [int(ny), int(nx)]},
+            "stats": st,
+            "formula": cat.CATALOGO[ind]["formula"],
+            "bandas": cat.CATALOGO[ind]["bandas"],
+        }
+
+    return {
+        "bounds": [minx, miny, maxx, maxy],
+        "cena": _meta(item),
+        "mascara": False,
+        "resultados": resultados,
+    }
+
+
 def _brovey(pan, R, G, B) -> np.ndarray:
     """Pan-sharpening Brovey de RGB com a PAN + stretch 2–98% p/ 0–255 (uint8)."""
     synth = np.nanmean(np.stack([R, G, B]), axis=0)

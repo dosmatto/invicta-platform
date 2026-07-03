@@ -18,11 +18,11 @@ import {
 import { colorirGrid } from '@/lib/raster';
 import { rampaVisualStops } from '@/lib/legendas';
 import {
-  buscarNdviSentinel, listarCenasNdvi, buscarImagemSatelite,
+  listarCenasNdvi, buscarImagemSatelite, buscarIndices, indicesDisponiveis,
   type RespNdvi, type CenaDisponivel, type FonteNdvi,
 } from '@/lib/msr';
 import { cloudSalvarMapa, cloudCarregarMapasPorPrefixo, cloudExcluirMapasPorPrefixo, cloudPodeGravar } from '@/lib/cloud';
-import { pode } from '@/lib/empresa';
+import { pode, emailUsuario } from '@/lib/empresa';
 import type { Legenda } from '@/lib/legendas';
 import {
   Satellite, Loader2, AlertTriangle, Image as ImageIcon, Contrast, Check, Star,
@@ -35,19 +35,27 @@ const isoDate = (d: Date) => d.toISOString().slice(0, 10);
 const ddmmyy = (s?: string | null) => s ? new Date(s + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' }) : '—';
 const OPACIDADE = 1;
 
-type MapaNdvi = { resp: RespNdvi; criadoEm: string };
+// resp + metadados do índice (fórmula/bandas/máscara/usuário — spec seção 13)
+type MapaNdvi = {
+  resp: RespNdvi; criadoEm: string;
+  indice?: string; formula?: string; bandas?: string[]; mascara?: boolean;
+  usuario?: string; salvoEm?: string;
+};
 type Imagem = { bounds: [number, number, number, number]; png: string };
 type FonteBusca = FonteNdvi | 'todos';
 type Cand = CenaDisponivel & { fonte: FonteNdvi };
 
-const pixelDe = (fonte: FonteNdvi) => (fonte === 'cbers' ? 2 : 10);            // NDVI + imagem final
+const pixelDe = (fonte: FonteNdvi) => (fonte === 'cbers' ? 2 : 10);            // índices + imagem final
 const PIXEL_THUMB: Record<FonteNdvi, number> = { sentinel: 24, cbers: 20 };    // miniatura do card
 const PIXEL_PREVIA: Record<FonteNdvi, number> = { sentinel: 10, cbers: 6 };    // conferência
 const NUVEM_PADRAO = 5;
 
 const prefixoNuvem = (talhaoId: string, fonte: FonteNdvi) => `${talhaoId}__ndvi${fonte === 'cbers' ? 'cbers' : ''}__`;
-const idNuvem = (talhaoId: string, fonte: FonteNdvi, data: string) => `${prefixoNuvem(talhaoId, fonte)}NDVI__${data}`;
-const chaveDe = (fonte: FonteNdvi, data: string | null) => `${fonte}:${data ?? ''}`;
+const idNuvem = (talhaoId: string, fonte: FonteNdvi, data: string, indice = 'NDVI') =>
+  `${prefixoNuvem(talhaoId, fonte)}${indice}__${data}`;
+// chave de RESULTADO (fonte:data:INDICE) e de CENA (fonte:data — thumbs/prévias)
+const chaveDe = (fonte: FonteNdvi, data: string | null, indice = 'NDVI') => `${fonte}:${data ?? ''}:${indice}`;
+const chaveCena = (fonte: FonteNdvi, data: string | null) => `${fonte}:${data ?? ''}`;
 const ROTULO_FONTE: Record<FonteNdvi, string> = { sentinel: 'Sentinel-2', cbers: 'CBERS-4A' };
 
 // ── Cenas rejeitadas (estado persistido no aparelho) ─────────────────────────
@@ -92,6 +100,7 @@ export function NdviSection() {
   const thumbsRef = useRef(thumbs); thumbsRef.current = thumbs;
   const [previas, setPrevias] = useState<Record<string, Imagem>>({});   // conferência (RGB fino)
   const [previaDe, setPreviaDe] = useState<Cand | null>(null);          // card em conferência
+  const [selIdx, setSelIdx] = useState<Record<string, boolean>>({ NDVI: true }); // índices marcados p/ processar
   const [carregandoPrevia, setCarregandoPrevia] = useState(false);
   const [vistas, setVistas] = useState<Record<string, boolean>>({});    // visualizadas (sessão)
   const [rejeitadas, setRejeitadas] = useState<Record<string, boolean>>({});
@@ -127,11 +136,16 @@ export function NdviSection() {
 
   const sel = selKey ? cenas[selKey] : undefined;
   const fonteSel = (selKey.split(':')[0] || 'sentinel') as FonteNdvi;
+  const dataSel = selKey.split(':')[1] || '';
+  const indSel = selKey.split(':')[2] || 'NDVI';
+  const chaveCenaSel = chaveCena(fonteSel, dataSel);
 
+  // NDVI tem domínio fixo 0–1 (toggle de contraste); os demais índices variam
+  // por cena → sempre esticados p2–p98 (o rodapé mostra o intervalo real).
   const dominio = useMemo<[number, number]>(() => {
     if (!sel?.resp.grid) return [0, 1];
-    return contraste ? percentis(sel.resp.grid, 2, 98) : [0, 1];
-  }, [sel, contraste]);
+    return (contraste || indSel !== 'NDVI') ? percentis(sel.resp.grid, 2, 98) : [0, 1];
+  }, [sel, contraste, indSel]);
 
   const idRejeicao = (c: Cand) => `${nav.talhaoId}:${c.fonte}:${c.id}`;
 
@@ -152,7 +166,8 @@ export function NdviSection() {
     (async () => {
       const novo: Record<string, MapaNdvi> = {};
       for (const f of ['sentinel', 'cbers'] as FonteNdvi[]) {
-        const carregados = await cloudCarregarMapasPorPrefixo<MapaNdvi>(prefixoNuvem(nav.talhaoId!, f));
+        const pref = prefixoNuvem(nav.talhaoId!, f);
+        const carregados = await cloudCarregarMapasPorPrefixo<MapaNdvi>(pref);
         for (const c of carregados) {
           const m = c.dados;
           const data = m.resp?.cena?.data;
@@ -161,7 +176,9 @@ export function NdviSection() {
             try { m.resp.grid = await descomprimirGrid(m.resp.grid); }
             catch (e) { console.warn('[ndvi] falha ao descomprimir grid:', e); }
           }
-          novo[chaveDe(f, data)] = m;
+          // índice vem do id (…__INDICE__data); mapas antigos são NDVI
+          const indice = m.indice ?? c.id.slice(pref.length).split('__')[0] ?? 'NDVI';
+          novo[chaveDe(f, data, indice)] = { ...m, indice };
         }
       }
       if (Object.keys(novo).length === 0) return;
@@ -176,14 +193,14 @@ export function NdviSection() {
   useEffect(() => {
     setFertilidadeLabels(null);
     if (previaDe) {
-      const img = previas[chaveDe(previaDe.fonte, previaDe.data)];
+      const img = previas[chaveCena(previaDe.fonte, previaDe.data)];
       if (img) setFertilidadeOverlay({ url: img.png, coordinates: coordsFromBounds(img.bounds), opacity: OPACIDADE });
       else setFertilidadeOverlay(null);
       return;
     }
     if (!legNdvi || !selKey) { setFertilidadeOverlay(null); return; }
     if (modo === 'imagem') {
-      const img = imagens[selKey];
+      const img = imagens[chaveCena(fonteSel, dataSel)];
       if (!img) { setFertilidadeOverlay(null); return; }
       setFertilidadeOverlay({ url: img.png, coordinates: coordsFromBounds(img.bounds), opacity: OPACIDADE });
       return;
@@ -195,21 +212,21 @@ export function NdviSection() {
     catch (e) { console.warn('[ndvi] colorir falhou:', e); }
     if (!url) { setFertilidadeOverlay(null); return; }
     setFertilidadeOverlay({ url, coordinates: coordsFromBounds(m.resp.bounds), opacity: OPACIDADE });
-  }, [cenas, imagens, previas, previaDe, selKey, modo, dominio, corStops, legNdvi, setFertilidadeOverlay, setFertilidadeLabels]);
+  }, [cenas, imagens, previas, previaDe, selKey, fonteSel, dataSel, modo, dominio, corStops, legNdvi, setFertilidadeOverlay, setFertilidadeLabels]);
 
   // Miniaturas RGB dos cards (leves, 2 por vez) — só das que ainda não têm.
   useEffect(() => {
     if (!poligono || candidatos.length === 0) return;
     let vivo = true;
-    const fila = candidatos.filter(c => c.data && !thumbsRef.current[chaveDe(c.fonte, c.data)]);
+    const fila = candidatos.filter(c => c.data && !thumbsRef.current[chaveCena(c.fonte, c.data)]);
     if (fila.length === 0) return;
-    setThumbs(t => ({ ...t, ...Object.fromEntries(fila.map(c => [chaveDe(c.fonte, c.data), 'loading'])) }));
+    setThumbs(t => ({ ...t, ...Object.fromEntries(fila.map(c => [chaveCena(c.fonte, c.data), 'loading'])) }));
     (async () => {
       const worker = async () => {
         while (vivo) {
           const c = fila.shift();
           if (!c) return;
-          const ch = chaveDe(c.fonte, c.data);
+          const ch = chaveCena(c.fonte, c.data);
           try {
             const img = await buscarImagemSatelite({ poligono, cenaId: c.id, fonte: c.fonte, pixelM: PIXEL_THUMB[c.fonte] });
             if (vivo) setThumbs(t => ({ ...t, [ch]: img.png }));
@@ -227,7 +244,7 @@ export function NdviSection() {
   // Prévia FINA da conferência (RGB no mapa).
   useEffect(() => {
     if (!previaDe || !poligono) return;
-    const ch = chaveDe(previaDe.fonte, previaDe.data);
+    const ch = chaveCena(previaDe.fonte, previaDe.data);
     if (previas[ch]) return;
     let vivo = true;
     setCarregandoPrevia(true);
@@ -239,14 +256,15 @@ export function NdviSection() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [previaDe, poligono]);
 
-  // Imagem FINA do modo "Imagem" (resultado).
+  // Imagem FINA do modo "Imagem" (resultado) — cache por CENA.
   useEffect(() => {
     if (modo !== 'imagem' || !selKey || !sel || !poligono || previaDe) return;
-    if (imagens[selKey]) return;
+    const chCena = chaveCena(fonteSel, dataSel);
+    if (imagens[chCena]) return;
     let vivo = true;
     setCarregandoImg(true);
     buscarImagemSatelite({ poligono, cenaId: sel.resp.cena.id, fonte: fonteSel, pixelM: pixelDe(fonteSel) })
-      .then(img => { if (vivo) setImagens(prev => ({ ...prev, [selKey]: { bounds: img.bounds, png: img.png } })); })
+      .then(img => { if (vivo) setImagens(prev => ({ ...prev, [chCena]: { bounds: img.bounds, png: img.png } })); })
       .catch(e => { if (vivo) setErro(e instanceof Error ? e.message : 'Falha ao buscar imagem.'); })
       .finally(() => { if (vivo) setCarregandoImg(false); });
     return () => { vivo = false; };
@@ -290,47 +308,70 @@ export function NdviSection() {
     }
   }
 
+  // resultados já calculados de uma CENA (qualquer índice)
+  const indicesDaCena = (fonte: FonteNdvi, data: string | null) =>
+    Object.keys(cenas).filter(k => k.startsWith(chaveCena(fonte, data) + ':'));
+
   function abrirCard(c: Cand) {
-    const ch = chaveDe(c.fonte, c.data);
-    if (cenas[ch]) { setSelKey(ch); setPreviaDe(null); return; }  // já processada → resultado
-    setVistas(v => ({ ...v, [ch]: true }));
+    const feitos = indicesDaCena(c.fonte, c.data);
+    if (feitos.length && !rejeitadas[idRejeicao(c)]) {
+      // já processada → mostra resultado (NDVI primeiro), mas mantém a conferência acessível
+      const ndvi = feitos.find(k => k.endsWith(':NDVI'));
+      setSelKey(ndvi ?? feitos[0]); setPreviaDe(null);
+      return;
+    }
+    setVistas(v => ({ ...v, [chaveCena(c.fonte, c.data)]: true }));
     setErro('');
     setPreviaDe(c);
     setSelKey('');
   }
 
-  // Processa o NDVI da cena em conferência (só após confirmação do usuário).
-  async function processarNdvi(c: Cand) {
+  // Processa SÓ os índices selecionados da cena em conferência (spec seções 10/12).
+  async function processarIndices(c: Cand) {
     if (!poligono) return;
+    const escolhidos = indicesDisponiveis(c.fonte).ok.map(i => i.id).filter(id => selIdx[id]);
+    if (escolhidos.length === 0) { setErro('Selecione pelo menos um índice.'); return; }
     setCarregandoId(c.id); setErro('');
     try {
-      const resp = await buscarNdviSentinel({ poligono, dataIni, dataFim, cenaId: c.id, fonte: c.fonte, pixelM: pixelDe(c.fonte) });
-      const d = resp.cena.data ?? c.data ?? '';
-      const ch = chaveDe(c.fonte, d);
-      setCenas(prev => ({ ...prev, [ch]: { resp, criadoEm: new Date().toISOString() } }));
-      setSelKey(ch);
+      const r = await buscarIndices({ poligono, cenaId: c.id, fonte: c.fonte, indices: escolhidos, pixelM: pixelDe(c.fonte) });
+      const d = r.cena.data ?? c.data ?? '';
+      const agora = new Date().toISOString();
+      const novos: Record<string, MapaNdvi> = {};
+      for (const [ind, res] of Object.entries(r.resultados)) {
+        novos[chaveDe(c.fonte, d, ind)] = {
+          resp: { bounds: r.bounds, grid: res.grid, stats: res.stats, cena: r.cena },
+          criadoEm: agora, indice: ind, formula: res.formula, bandas: res.bandas,
+          mascara: r.mascara, usuario: emailUsuario() ?? undefined,
+        };
+      }
+      setCenas(prev => ({ ...prev, ...novos }));
+      const primeiro = novos[chaveDe(c.fonte, d, 'NDVI')] ? chaveDe(c.fonte, d, 'NDVI') : Object.keys(novos)[0];
+      setSelKey(primeiro);
       setPreviaDe(null);
       setModo('ndvi');
     } catch (e) {
-      setErro(e instanceof Error ? e.message : 'Falha ao calcular NDVI da cena.');
+      setErro(e instanceof Error ? e.message : 'Falha ao calcular os índices da cena.');
     } finally {
       setCarregandoId('');
     }
   }
 
+  // Manter o ÍNDICE selecionado (vira camada oficial, com metadados — spec seção 13).
   async function manterCena() {
     if (!sel || !selKey || !nav.talhaoId) return;
-    if (!cloudPodeGravar()) { setErro('Faça login para manter a cena salva.'); return; }
-    const data = selKey.split(':')[1];
+    if (!cloudPodeGravar()) { setErro('Faça login para manter a camada salva.'); return; }
     const gz = await comprimirGrid(sel.resp.grid);
-    cloudSalvarMapa(idNuvem(nav.talhaoId, fonteSel, data), { resp: { ...sel.resp, grid: gz }, criadoEm: sel.criadoEm });
+    cloudSalvarMapa(idNuvem(nav.talhaoId, fonteSel, dataSel, indSel), {
+      resp: { ...sel.resp, grid: gz }, criadoEm: sel.criadoEm,
+      indice: indSel, formula: sel.formula, bandas: sel.bandas, mascara: sel.mascara,
+      usuario: sel.usuario ?? emailUsuario() ?? undefined, salvoEm: new Date().toISOString(),
+    });
     setSalvos(s => ({ ...s, [selKey]: true }));
   }
 
   function removerCena() {
     if (!selKey || !nav.talhaoId) return;
-    const data = selKey.split(':')[1];
-    cloudExcluirMapasPorPrefixo(idNuvem(nav.talhaoId, fonteSel, data));
+    cloudExcluirMapasPorPrefixo(idNuvem(nav.talhaoId, fonteSel, dataSel, indSel));
     setSalvos(s => ({ ...s, [selKey]: false }));
   }
 
@@ -358,8 +399,11 @@ export function NdviSection() {
   }
 
   const listando = estado === 'listando';
-  const chavePrevia = previaDe ? chaveDe(previaDe.fonte, previaDe.data) : '';
+  const chavePrevia = previaDe ? chaveCena(previaDe.fonte, previaDe.data) : '';
   const mantidas = Object.keys(cenas).sort((a, b) => b.split(':')[1].localeCompare(a.split(':')[1]));
+  const dispPrevia = previaDe ? indicesDisponiveis(previaDe.fonte) : null;
+  const nSel = dispPrevia ? dispPrevia.ok.filter(i => selIdx[i.id]).length : 0;
+  const indicesCenaSel = selKey ? indicesDaCena(fonteSel, dataSel) : [];
 
   return (
     <div className="px-4 py-3 space-y-3">
@@ -441,18 +485,19 @@ export function NdviSection() {
           </label>
           <div className="grid grid-cols-2 gap-2 max-h-[420px] overflow-y-auto pr-1">
             {candidatos.map(c => {
-              const ch = chaveDe(c.fonte, c.data);
+              const ch = chaveCena(c.fonte, c.data);
               const thumb = thumbs[ch];
               const rejeitada = !!rejeitadas[idRejeicao(c)];
-              const processada = !!cenas[ch];
-              const salva = !!salvos[ch];
+              const feitos = indicesDaCena(c.fonte, c.data);
+              const processada = feitos.length > 0;
+              const salva = feitos.some(k => salvos[k]);
               const emConf = chavePrevia === ch && !!previaDe;
               return (
                 <button key={`${c.fonte}-${c.id}`} onClick={() => abrirCard(c)}
                   className="rounded-lg overflow-hidden text-left"
                   style={{
                     background: '#0b1d3a', opacity: rejeitada ? 0.45 : 1,
-                    border: `1px solid ${emConf ? '#60a5fa' : selKey === ch ? '#4ade80' : '#1a3a6b'}`,
+                    border: `1px solid ${emConf ? '#60a5fa' : selKey.startsWith(ch + ':') ? '#4ade80' : '#1a3a6b'}`,
                   }}>
                   <div className="relative w-full h-20 flex items-center justify-center" style={{ background: '#061525' }}>
                     {thumb && thumb !== 'loading' && thumb !== 'err'
@@ -471,7 +516,7 @@ export function NdviSection() {
                     <p className="text-[10px] font-bold" style={{ color: '#e2e8f0' }}>{ddmmyy(c.data)}</p>
                     <p className="text-[8px] flex items-center gap-1" style={{ color: '#64748b' }}>
                       ☁ {c.nuvem != null ? `${Math.round(c.nuvem)}%` : '—'}
-                      {processada && <span className="flex items-center gap-0.5" style={{ color: '#86efac' }}><Check size={8} /> NDVI</span>}
+                      {processada && <span className="flex items-center gap-0.5" style={{ color: '#86efac' }}><Check size={8} /> {feitos.length} índice{feitos.length > 1 ? 's' : ''}</span>}
                       {!processada && vistas[ch] && <Eye size={8} style={{ color: '#475569' }} />}
                     </p>
                   </div>
@@ -504,13 +549,36 @@ export function NdviSection() {
             ☁ {previaDe.nuvem != null ? `${fmt2(previaDe.nuvem)}%` : 'não informado'} · {previaDe.plataforma ?? ROTULO_FONTE[previaDe.fonte]} · prévia {PIXEL_PREVIA[previaDe.fonte]} m
             {previaDe.nuvem != null && previaDe.nuvem > 20 && <span style={{ color: '#fbbf24' }}> · ⚠ nuvem alta</span>}
           </div>
+          {/* Escolha dos índices (spec seção 10/11) — só os marcados são processados */}
+          {dispPrevia && (
+            <div>
+              <p className="text-[10px] font-semibold mb-1" style={{ color: '#64748b' }}>Índices a processar</p>
+              <div className="grid grid-cols-2 gap-1">
+                {dispPrevia.ok.map(i => (
+                  <label key={i.id} className="flex items-center gap-1.5 px-1.5 py-1 rounded cursor-pointer"
+                    style={{ background: selIdx[i.id] ? '#0f2a1a' : '#0b1d3a', border: `1px solid ${selIdx[i.id] ? '#166534' : '#1a3a6b'}` }}
+                    title={`${i.resumo} · usa ${i.bandas.join(' + ')}`}>
+                    <input type="checkbox" checked={!!selIdx[i.id]} onChange={() => setSelIdx(s => ({ ...s, [i.id]: !s[i.id] }))}
+                      className="accent-green-600" style={{ width: 12, height: 12 }} />
+                    <span className="text-[10px] font-bold" style={{ color: selIdx[i.id] ? '#86efac' : '#94a3b8' }}>{i.nome}</span>
+                    <span className="text-[8px] truncate" style={{ color: '#475569' }}>{i.resumo}</span>
+                  </label>
+                ))}
+              </div>
+              {dispPrevia.bloqueados.length > 0 && (
+                <p className="text-[8px] mt-1" style={{ color: '#64748b' }}>
+                  {dispPrevia.bloqueados.map(b => `${b.ind.nome} indisponível — ${b.motivo}`).join(' · ')}
+                </p>
+              )}
+            </div>
+          )}
           <div className="flex gap-1.5">
-            <button onClick={() => processarNdvi(previaDe)} disabled={carregandoId === previaDe.id}
-              className="flex-[2] py-1.5 rounded text-[10px] font-bold text-white flex items-center justify-center gap-1"
+            <button onClick={() => processarIndices(previaDe)} disabled={carregandoId === previaDe.id || nSel === 0}
+              className="flex-[2] py-1.5 rounded text-[10px] font-bold text-white flex items-center justify-center gap-1 disabled:opacity-50"
               style={{ background: 'var(--invicta-green-dark)' }}>
               {carregandoId === previaDe.id
-                ? <><Loader2 size={11} className="animate-spin" /> Processando NDVI…</>
-                : <><Play size={11} /> Processar NDVI ({pixelDe(previaDe.fonte)} m{previaDe.fonte === 'cbers' ? ', ~20–30 s' : ''})</>}
+                ? <><Loader2 size={11} className="animate-spin" /> Processando {nSel} índice(s)…</>
+                : <><Play size={11} /> Processar {nSel} índice(s) ({pixelDe(previaDe.fonte)} m{previaDe.fonte === 'cbers' ? ', ~20–40 s' : ''})</>}
             </button>
             <button onClick={() => toggleRejeitada(previaDe)}
               className="flex-1 py-1.5 rounded text-[10px] font-bold flex items-center justify-center gap-1"
@@ -519,7 +587,7 @@ export function NdviSection() {
             </button>
           </div>
           <p className="text-[8px]" style={{ color: '#475569' }}>
-            Nada é salvo agora: o NDVI processado só vira camada oficial quando você clicar em “Manter”.
+            Nada é salvo agora: cada índice processado só vira camada oficial quando você clicar em “Manter”.
           </p>
         </div>
       )}
@@ -532,14 +600,14 @@ export function NdviSection() {
           </label>
           <div className="flex flex-wrap gap-1 max-h-32 overflow-y-auto pr-1">
             {mantidas.map(k => {
-              const [f, d] = k.split(':') as [FonteNdvi, string];
+              const [f, d, ind] = k.split(':') as [FonteNdvi, string, string];
               const ativa = k === selKey;
               return (
                 <button key={k} onClick={() => { setSelKey(k); setPreviaDe(null); }}
                   className="px-2 py-1 rounded text-[10px] font-bold flex items-center gap-1"
                   style={{ background: ativa ? 'var(--invicta-blue-mid)' : '#1a3a6b', color: ativa ? '#fff' : (salvos[k] ? '#86efac' : '#93c5fd') }}>
                   {salvos[k] ? <Star size={10} fill="currentColor" /> : <Check size={10} />}
-                  {ddmmyy(d)}
+                  {ind ?? 'NDVI'} · {ddmmyy(d)}
                   <span style={{ color: ativa ? '#cbd5e1' : '#64748b', fontWeight: 400 }}>· {f === 'cbers' ? 'C4A' : 'S2'}</span>
                 </button>
               );
@@ -554,17 +622,34 @@ export function NdviSection() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-1.5 text-[10px]" style={{ color: '#86efac' }}>
               <Satellite size={12} />
-              {sel.resp.cena.plataforma ?? 'Satélite'} · {ddmmyy(sel.resp.cena.data)} · {sel.resp.stats.pixel_m} m
+              <strong>{indSel}</strong> · {sel.resp.cena.plataforma ?? 'Satélite'} · {ddmmyy(sel.resp.cena.data)} · {sel.resp.stats.pixel_m} m
             </div>
             {sel.resp.cena.nuvem != null && (
               <span className="text-[10px]" style={{ color: '#64748b' }}>☁ {fmt2(sel.resp.cena.nuvem)}%</span>
             )}
           </div>
 
+          {/* índices calculados desta cena — troca com 1 toque */}
+          {indicesCenaSel.length > 1 && (
+            <div className="flex flex-wrap gap-1">
+              {indicesCenaSel.map(k => {
+                const ind = k.split(':')[2] ?? 'NDVI';
+                const ativa = k === selKey;
+                return (
+                  <button key={k} onClick={() => setSelKey(k)}
+                    className="px-1.5 py-0.5 rounded text-[9px] font-bold"
+                    style={{ background: ativa ? '#2e5fa3' : '#1a3a6b', color: ativa ? '#fff' : (salvos[k] ? '#86efac' : '#93c5fd') }}>
+                    {salvos[k] ? '★ ' : ''}{ind}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
           <div className="flex gap-1">
             <button onClick={() => setModo('ndvi')} className="flex-1 py-1 rounded text-[10px] font-bold flex items-center justify-center gap-1"
               style={{ background: modo === 'ndvi' ? 'var(--invicta-blue-mid)' : '#1a3a6b', color: modo === 'ndvi' ? '#fff' : '#93c5fd' }}>
-              <Satellite size={11} /> NDVI
+              <Satellite size={11} /> {indSel}
             </button>
             <button onClick={() => setModo('imagem')} className="flex-1 py-1 rounded text-[10px] font-bold flex items-center justify-center gap-1"
               style={{ background: modo === 'imagem' ? 'var(--invicta-blue-mid)' : '#1a3a6b', color: modo === 'imagem' ? '#fff' : '#93c5fd' }}>
@@ -574,20 +659,25 @@ export function NdviSection() {
 
           {modo === 'ndvi' ? (
             <>
-              <button onClick={() => setContraste(v => !v)}
-                className="w-full py-1 rounded text-[10px] font-semibold flex items-center justify-center gap-1"
-                style={{ background: contraste ? 'var(--invicta-green-dark)' : '#1a3a6b', color: contraste ? '#fff' : '#93c5fd' }}>
-                <Contrast size={11} /> Contraste {contraste ? 'realçado' : 'normal'}
-              </button>
+              {indSel === 'NDVI' && (
+                <button onClick={() => setContraste(v => !v)}
+                  className="w-full py-1 rounded text-[10px] font-semibold flex items-center justify-center gap-1"
+                  style={{ background: contraste ? 'var(--invicta-green-dark)' : '#1a3a6b', color: contraste ? '#fff' : '#93c5fd' }}>
+                  <Contrast size={11} /> Contraste {contraste ? 'realçado' : 'normal'}
+                </button>
+              )}
 
               <div className="grid grid-cols-3 gap-2 text-center">
-                <Metrica rotulo="NDVI médio" valor={fmt2(sel.resp.stats.media)} destaque />
+                <Metrica rotulo={`${indSel} médio`} valor={fmt2(sel.resp.stats.media)} destaque />
                 <Metrica rotulo="mínimo" valor={fmt2(sel.resp.stats.min)} />
                 <Metrica rotulo="máximo" valor={fmt2(sel.resp.stats.max)} />
               </div>
 
               <div className="text-[9px] leading-relaxed" style={{ color: '#64748b' }}>
                 grade {sel.resp.stats.nx}×{sel.resp.stats.ny} · pixel <strong style={{ color: '#94a3b8' }}>{sel.resp.stats.pixel_m} m</strong> · {sel.resp.stats.n} px válidos
+                {(sel.resp.stats as { pct_validos?: number }).pct_validos != null && <> ({(sel.resp.stats as { pct_validos?: number }).pct_validos}%)</>}
+                {sel.mascara && <span style={{ color: '#86efac' }}> · máscara de nuvem aplicada</span>}
+                {sel.formula && <><br />fórmula: <span style={{ color: '#94a3b8' }}>{sel.formula}</span></>}
               </div>
 
               <SeletorLegenda legendas={legendasNdvi} valorId={legNdvi?.id} onEscolher={escolherLegNdvi} />
@@ -600,13 +690,13 @@ export function NdviSection() {
                   <span>{fmt2(dominio[1])}</span>
                 </div>
                 <p className="text-[9px] mt-0.5" style={{ color: '#64748b' }}>
-                  {legNdvi.nome} · contínua{contraste ? ' · contraste realçado (p2–p98)' : ''}{fonteSel === 'cbers' ? ' · 2 m (PAN)' : ''}
+                  {legNdvi.nome} · contínua{(contraste || indSel !== 'NDVI') ? ' · esticada p2–p98' : ''}{fonteSel === 'cbers' ? ' · 2 m (PAN)' : ''}
                 </p>
               </div>
             </>
           ) : (
             <div className="text-[10px]" style={{ color: '#93c5fd' }}>
-              {carregandoImg && !imagens[selKey]
+              {carregandoImg && !imagens[chaveCenaSel]
                 ? <span className="flex items-center gap-1"><Loader2 size={12} className="animate-spin" /> Carregando imagem de satélite…</span>
                 : <span className="flex items-center gap-1"><ImageIcon size={12} /> Cor verdadeira{fonteSel === 'cbers' ? ' (CBERS-4A 2 m, pan-sharpened)' : ' (Sentinel-2)'}, recortada no talhão.</span>}
             </div>
@@ -616,7 +706,7 @@ export function NdviSection() {
             salvos[selKey] ? (
               <div className="flex items-center justify-between gap-2">
                 <span className="text-[9px] flex items-center gap-1" style={{ color: '#86efac' }}>
-                  <Star size={11} fill="#86efac" /> Mantida — disponível como fonte na Zona de Manejo
+                  <Star size={11} fill="#86efac" /> {indSel} mantido — disponível como fonte na Zona de Manejo
                 </span>
                 <button onClick={removerCena} className="text-[10px] font-semibold" style={{ color: '#93c5fd' }}>Remover</button>
               </div>
@@ -624,7 +714,7 @@ export function NdviSection() {
               <button onClick={manterCena} disabled={!cloudPodeGravar()}
                 className="w-full py-1.5 rounded text-[10px] font-bold flex items-center justify-center gap-1 disabled:opacity-50"
                 style={{ background: 'var(--invicta-blue-mid)', color: '#fff' }}>
-                <Star size={12} /> Manter esta cena{!cloudPodeGravar() ? ' (faça login)' : ''}
+                <Star size={12} /> Manter {indSel} desta cena{!cloudPodeGravar() ? ' (faça login)' : ''}
               </button>
             )
           )}

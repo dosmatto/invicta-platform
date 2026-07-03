@@ -225,6 +225,98 @@ def gerar_ndvi(polygon_geojson: dict, data_ini: str, data_fim: str,
     }
 
 
+# ---------------------------------------------------------------- índices sob demanda (IV2)
+# Assets do earth-search v1 por banda interna padronizada.
+ASSETS_BANDA = {
+    "blue": ["blue", "B02"], "green": ["green", "B03"], "red": ["red", "B04"],
+    "nir": ["nir", "B08"], "rededge": ["rededge", "B05"], "swir": ["swir16", "B11"],
+}
+ASSET_SCL = ["scl", "SCL"]
+# Classes SCL mascaradas: 0 nodata, 1 saturado, 3 sombra de nuvem, 8/9 nuvem, 10 cirrus.
+SCL_RUIM = (0, 1, 3, 8, 9, 10)
+
+
+def _ler_scl(item, dst_transform, nx: int, ny: int) -> np.ndarray | None:
+    """Máscara booleana (True = pixel BOM) da banda SCL; None se a cena não tem."""
+    try:
+        href, _s, _o, _n = _asset(item, ASSET_SCL)
+    except ValueError:
+        return None
+    dst = np.full((ny, nx), np.nan, dtype="float32")
+    with rasterio.Env(**_GDAL_ENV):
+        with rasterio.open(href) as src:
+            reproject(
+                source=rasterio.band(src, 1), destination=dst,
+                src_transform=src.transform, src_crs=src.crs, src_nodata=0,
+                dst_transform=dst_transform, dst_crs="EPSG:4326", dst_nodata=np.nan,
+                resampling=Resampling.nearest,
+            )
+    cls = np.nan_to_num(dst, nan=0.0).astype("int16")
+    return ~np.isin(cls, SCL_RUIM)
+
+
+def gerar_indices(polygon_geojson: dict, cena_id: str, indices: list[str],
+                  pixel_m: float = 10.0) -> dict[str, Any]:
+    """Calcula SÓ os índices pedidos da cena escolhida: baixa apenas as bandas
+    necessárias, aplica a máscara SCL (nuvem/sombra) e recorta no talhão."""
+    import indices as cat
+    if not _HAS_MSR:
+        raise ValueError("Dependências do MSR ausentes no backend (rasterio / pystac-client).")
+    if not indices:
+        raise ValueError("Nenhum índice selecionado.")
+    poly = shape(polygon_geojson)
+    minx, miny, maxx, maxy = poly.bounds
+    item = _item_por_id(cena_id)
+    if item is None:
+        raise ValueError(f"Cena {cena_id} não encontrada.")
+
+    nx, ny = _grid_dims(minx, miny, maxx, maxy, pixel_m)
+    dst_transform = from_bounds(minx, miny, maxx, maxy, nx, ny)
+
+    bandas: dict[str, np.ndarray] = {}
+    for nome in cat.bandas_necessarias(indices):
+        assets = ASSETS_BANDA.get(nome)
+        if not assets:
+            raise ValueError(f"Sentinel-2 sem banda {nome}.")
+        href, sc, of, nd = _asset(item, assets)
+        bandas[nome] = _ler_reproj(href, sc, of, nd, dst_transform, nx, ny)
+
+    boa = _ler_scl(item, dst_transform, nx, ny)
+    if boa is not None:
+        for nome in bandas:
+            bandas[nome] = np.where(boa, bandas[nome], np.nan)
+
+    gx = minx + (np.arange(nx) + 0.5) * (maxx - minx) / nx
+    gy = maxy - (np.arange(ny) + 0.5) * (maxy - miny) / ny
+    XX, YY = np.meshgrid(gx, gy)
+    dentro = shapely.contains(poly, shapely.points(XX.ravel(), YY.ravel())).reshape(XX.shape)
+    n_dentro = int(dentro.sum())
+
+    pix_y = (maxy - miny) / ny * 111320.0
+    pix_x = (maxx - minx) / nx * 111320.0 * math.cos(math.radians((miny + maxy) / 2.0))
+    pix = round((pix_x + pix_y) / 2.0, 1)
+
+    resultados: dict[str, Any] = {}
+    for ind in indices:
+        g = cat.calcular(ind, bandas)
+        g = np.where(dentro, g, np.nan).astype("float32")
+        st = cat.stats_de(g, n_dentro)
+        st.update({"nx": int(nx), "ny": int(ny), "pixel_m": pix, "indice": ind})
+        resultados[ind] = {
+            "grid": {"b64": base64.b64encode(g.tobytes()).decode(), "shape": [int(ny), int(nx)]},
+            "stats": st,
+            "formula": cat.CATALOGO[ind]["formula"],
+            "bandas": cat.CATALOGO[ind]["bandas"],
+        }
+
+    return {
+        "bounds": [minx, miny, maxx, maxy],
+        "cena": _cena_meta(item),
+        "mascara": bool(boa is not None),
+        "resultados": resultados,
+    }
+
+
 # ---------------------------------------------------------------- imagem (cor verdadeira)
 def _png_data_url(rgba: np.ndarray) -> str:
     img = Image.fromarray(rgba, mode="RGBA")

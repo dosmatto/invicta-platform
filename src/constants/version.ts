@@ -1,6 +1,11 @@
-export const APP_VERSION = '1.11.1';
+export const APP_VERSION = '1.12.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.12.0': [
+    'IV2 — MOTOR DE ÍNDICES: na conferência da imagem você agora escolhe QUAIS índices processar — NDVI, SAVI, MSAVI, EVI, EVI2, GNDVI, NDWI, VARI, ExG e GLI (Sentinel-2 também NDRE e NDMI). O backend baixa SÓ as bandas necessárias e calcula só o que você marcou; nada é salvo automaticamente',
+    'Sentinel-2 com MÁSCARA DE NUVEM/SOMBRA (banda SCL): pixels de nuvem, sombra e cirrus são descartados dos índices; o resultado mostra o % de pixels válidos. No CBERS-4A, NDRE/NDMI aparecem como indisponíveis com o motivo (sem Red Edge/SWIR)',
+    'Cada índice processado tem seu próprio mapa, estatísticas e botão MANTER individual (vira camada oficial com metadados: fórmula, bandas, máscara, % válidos, usuário e data) — e entra como fonte na Zona de Manejo. Índices que não forem NDVI usam escala automática p2–p98',
+  ],
   '1.11.1': [
     'CORREÇÃO: cards de imagem duplicados quando o talhão fica na EMENDA de duas cenas do satélite (a mesma passagem/data vinha como 2+ tiles vizinhos no catálogo) — agora fica 1 card por data e fonte, escolhendo a cena de menor nuvem',
   ],

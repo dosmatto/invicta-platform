@@ -175,6 +175,28 @@ def ndvi_imagem(req: ReqImagem):
         raise HTTPException(status_code=500, detail=f"falha ao gerar imagem: {e}")
 
 
+class ReqIndices(BaseModel):
+    poligono: dict[str, Any]
+    cena_id: str
+    indices: list[str]                # ex.: ["NDVI","SAVI"] — calcula SÓ estes
+    pixel_m: float = 10.0
+    fonte: str = "sentinel"           # 'sentinel' | 'cbers'
+
+
+@app.post("/indices")
+def indices_vegetativos(req: ReqIndices):
+    """Índices vegetativos SOB DEMANDA (IV2): baixa só as bandas necessárias da
+    cena escolhida, aplica máscara SCL (Sentinel) e devolve 1 grid por índice."""
+    try:
+        if req.fonte == "cbers":
+            return cbers.gerar_indices(req.poligono, req.cena_id, req.indices, req.pixel_m)
+        return msr.gerar_indices(req.poligono, req.cena_id, req.indices, req.pixel_m)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:  # pragma: no cover
+        raise HTTPException(status_code=500, detail=f"falha ao gerar índices: {e}")
+
+
 class ReqColheita(BaseModel):
     machines: list[dict[str, Any]]    # [{nome, pontos:[{lng,lat,valor,vel?,larg?}]}]
     params: dict[str, Any]
