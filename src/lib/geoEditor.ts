@@ -29,10 +29,10 @@ export function distM(a: [number, number], b: [number, number]): number {
 const tiraFecho = (r: Anel): Anel =>
   r.length > 1 && r[0][0] === r[r.length - 1][0] && r[0][1] === r[r.length - 1][1] ? r.slice(0, -1) : r;
 
-// Monta o editável a partir de um FeatureCollection qualquer: usa o MAIOR
-// polígono (com furos); sem polígono, emenda as LineStrings — se formarem um
-// contorno (≥3 pts), vira polígono editável (caso IFEGI 03, salvo como linhas).
-export function extrairEditavel(fc: GeoJSON.FeatureCollection): GeoEditavel | null {
+// Monta os editáveis de um FeatureCollection: UM por polígono (com furos) — assim
+// um talhão MultiPolygon (2+ pedaços) carrega TODOS os pedaços no editor, não só o
+// maior. Sem polígono, emenda as LineStrings num contorno ("salvo como linhas").
+export function extrairEditaveis(fc: GeoJSON.FeatureCollection): GeoEditavel[] {
   const polys: { anel: Anel; furos: Anel[] }[] = [];
   const linhas: Anel[] = [];
   const walk = (g: GeoJSON.Geometry | null | undefined) => {
@@ -57,9 +57,9 @@ export function extrairEditavel(fc: GeoJSON.FeatureCollection): GeoEditavel | nu
 
   if (polys.length) {
     polys.sort((a, b) => areaM2(b.anel) - areaM2(a.anel));
-    return { tipo: 'poligono', anel: polys[0].anel, furos: polys[0].furos };
+    return polys.map(p => ({ tipo: 'poligono' as const, anel: p.anel, furos: p.furos }));
   }
-  if (linhas.length === 1) return { tipo: 'linha', anel: tiraFecho(linhas[0]), furos: [] };
+  if (linhas.length === 1) return [{ tipo: 'linha', anel: tiraFecho(linhas[0]), furos: [] }];
   if (linhas.length > 1) {
     // emenda na ordem, tirando pontos repetidos na junção
     const anel: Anel = [];
@@ -68,9 +68,14 @@ export function extrairEditavel(fc: GeoJSON.FeatureCollection): GeoEditavel | nu
       if (!u || distM(u, p) > 0.05) anel.push(p);
     }
     const fechado = tiraFecho(anel);
-    if (fechado.length >= 3) return { tipo: 'poligono', anel: fechado, furos: [] };
+    if (fechado.length >= 3) return [{ tipo: 'poligono', anel: fechado, furos: [] }];
   }
-  return null;
+  return [];
+}
+
+// Compat: 1 editável (o maior polígono / o contorno). Onde só faz sentido um.
+export function extrairEditavel(fc: GeoJSON.FeatureCollection): GeoEditavel | null {
+  return extrairEditaveis(fc)[0] ?? null;
 }
 
 export function paraFeature(g: GeoEditavel, props: GeoJSON.GeoJsonProperties = {}): GeoJSON.Feature {

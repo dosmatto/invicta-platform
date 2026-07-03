@@ -13,13 +13,13 @@ import { useState, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { useApp } from '@/context/AppContext';
 import {
-  getTalhoes, getSafras, saveSafra, updateTalhao, saveTalhao, deleteTalhao,
+  getTalhoes, getSafras, saveSafra, updateTalhao, deleteTalhao,
   getGrades, getImportacoesLab, getImportacoesCompactacao, getCondutividade, getLegendas, Talhao, Safra,
 } from '@/lib/store';
 import type { Legenda } from '@/lib/legendas';
 import { parseGeoFile, parseLimiteTalhao, normalizarZonas } from '@/lib/geo';
-import { extrairEditavel, paraFC, bboxDe, areaHaDe, areaHaSemFuros } from '@/lib/geoEditor';
-import { conflitosDe, talhaoParaAlvo, type AlvoOverlap, type Conflito } from '@/lib/overlap';
+import { extrairEditavel, paraFeature, areaHaDe, areaHaSemFuros } from '@/lib/geoEditor';
+import { conflitosDe, talhaoParaAlvo, bboxDeFeatures, type AlvoOverlap, type Conflito } from '@/lib/overlap';
 import { carregarEcOficial, rotuloEc, type EcCamada } from '@/lib/meap/gerar';
 import { classeZona } from '@/lib/zonas';
 import { cloudCarregarMapasPorPrefixo } from '@/lib/cloud';
@@ -66,18 +66,18 @@ function GeoSection({ talhao, onUploaded }: { talhao: Talhao | null; onUploaded:
     return conflitosDe({ id: talhao.id, nome: talhao.nome, fc, bbox }, [], existentes);
   }
 
-  // aplica o editor: 1ª parte substitui o limite; partes extras (corte) viram
-  // NOVOS talhões na mesma fazenda. Antes de gravar, CHECA sobreposição — se houver,
-  // não grava e cai no estado 'conflito' (o usuário reabre o editor p/ corrigir).
+  // aplica o editor: TODAS as partes formam a nova geometria do talhão (um talhão
+  // pode ter vários pedaços = MultiPolygon). Nada é descartado. Antes de gravar,
+  // CHECA sobreposição — se houver, não grava e cai no estado 'conflito'.
   function aplicarEdicao(fcs: GeoJSON.FeatureCollection[]) {
     if (!talhao) return;
     const eds = fcs.map(extrairEditavel).filter((e): e is NonNullable<typeof e> => !!e && e.tipo === 'poligono');
     if (!eds.length) { setEditando(false); setErroMsg('Edição sem polígono — nada salvo.'); setEstado('erro'); return; }
-    const [prim, ...resto] = eds;
-    const fc = paraFC(prim, { nome: talhao.nome });
-    const bbox = bboxDe(prim);
-    const area = areaHaDe(prim) ?? 0;
-    const areaBruta = areaHaSemFuros(prim) ?? area;
+    const feats = eds.map(ed => paraFeature(ed, { nome: talhao.nome }));
+    const fc: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: feats };
+    const bbox = bboxDeFeatures(feats);
+    const area = Math.round(eds.reduce((s, ed) => s + (areaHaDe(ed) ?? 0), 0) * 100) / 100;
+    const areaBruta = Math.round(eds.reduce((s, ed) => s + (areaHaSemFuros(ed) ?? 0), 0) * 100) / 100;
     setUploadedGeo(fc); setUploadedBbox(bbox);
     const cs = checarConflitos(fc, bbox);
     if (cs.length) {
@@ -86,16 +86,8 @@ function GeoSection({ talhao, onUploaded }: { talhao: Talhao | null; onUploaded:
       return;
     }
     updateTalhao(talhao.id, { geojson: JSON.stringify(fc), bbox, areaHa: area, areaHaSemHoles: areaBruta, status: 'ativo' });
-    resto.forEach((ed, i) => {
-      const nome = `${talhao.nome} (${i + 2})`;
-      saveTalhao({
-        fazendaId: talhao.fazendaId, nome,
-        areaHa: areaHaDe(ed) ?? 0, areaHaSemHoles: areaHaSemFuros(ed) ?? 0,
-        status: 'ativo', geojson: JSON.stringify(paraFC(ed, { nome })), bbox: bboxDe(ed),
-      });
-    });
     setEditando(false); setPendente(null); setConflitos([]); setEstado('ok'); setErroMsg('');
-    setAvisos(resto.length ? [`Talhão dividido: ${resto.length} novo(s) talhão(ões) criado(s) na fazenda.`] : []);
+    setAvisos(eds.length > 1 ? [`Talhão salvo com ${eds.length} pedaços.`] : []);
     onUploaded(area);
   }
 

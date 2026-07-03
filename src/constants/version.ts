@@ -1,6 +1,9 @@
-export const APP_VERSION = '1.23.1';
+export const APP_VERSION = '1.23.2';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.23.2': [
+    'CORREÇÃO importante no editor de traçado: talhão com VÁRIOS PEDAÇOS (ex.: IGEFI 03, 2 áreas separadas) agora carrega TODOS os pedaços para edição — antes só abria o maior e, ao salvar, o outro sumia. Ao salvar, todos os pedaços continuam no mesmo talhão (nada é descartado nem vira talhão novo)',
+  ],
   '1.23.1': [
     'TABELA DE PREÇOS ÚNICA nas Equações (Biblioteca › Equações): registre o preço de um produto uma vez (custo/tonelada, frete, aplicação) e reaproveite em qualquer equação — o editor tem “Salvar na tabela” e um seletor “Puxar produto salvo” que preenche os custos. Salvar o mesmo produto atualiza o preço (não duplica); a tabela sincroniza entre aparelhos',
   ],

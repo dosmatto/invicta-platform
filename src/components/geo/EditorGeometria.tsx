@@ -14,7 +14,7 @@ import { createPortal } from 'react-dom';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import {
-  GeoEditavel, Anel, extrairEditavel, paraFC, bboxDe,
+  GeoEditavel, Anel, extrairEditaveis, paraFC, bboxDe,
   areaHaDe, perimetroMDe, simplificarAnel, suavizarAnel, reduzirColineares,
   cortarAnel, validarFuro, pontoNoAnel,
 } from '@/lib/geoEditor';
@@ -75,9 +75,9 @@ export function EditorGeometria({ titulo, fc, onSalvar, onFechar }: {
 
   // carrega a geometria inicial
   useEffect(() => {
-    const ed = extrairEditavel(fc);
-    if (!ed) { setInvalido(true); return; }
-    setPartes([ed]);
+    const eds = extrairEditaveis(fc);
+    if (!eds.length) { setInvalido(true); return; }
+    setPartes(eds);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
