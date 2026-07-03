@@ -1,6 +1,9 @@
-export const APP_VERSION = '1.18.3';
+export const APP_VERSION = '1.18.4';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.18.4': [
+    'GERAR ZONAS POR SIMILARIDADE bem mais rápido: o motor de agrupamento (FCM) passou a calcular distâncias por multiplicação de matriz em vez de montar um tensor gigante a cada passo, e a etapa "Analisar (FPI × NCE)" agora usa uma amostra representativa dos pixels (a escolha do nº de zonas não muda) — o "Analisar" caiu de ~11 s para ~3 s nos testes, e a geração final também acelerou. A sugestão de nº de zonas continua idêntica e determinística',
+  ],
   '1.18.3': [
     'Ficha do talhão (painel) — "Mapas definitivos": entrou a CONDUTIVIDADE (CEa) como mapa real (mostra a profundidade oficial, com "Ver no mapa"), e saiu a Produtividade da lista — porque produtividade é POR SAFRA, não uma variável fixa do talhão (ela continua na página completa do talhão). Altimetria segue como "em breve"',
   ],

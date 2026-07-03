@@ -49,7 +49,7 @@ AMPLITUDE_MIN = 0.30
 NUGGET_MAX = 0.10
 # Versao do motor de interpolacao (conferir em GET /health para saber se o
 # backend foi reiniciado com o codigo novo).
-VERSION = "interp-14-loo-amostra"
+VERSION = "interp-15-fcm-rapido"
 
 
 def _nlags(n: int) -> int:
@@ -413,18 +413,25 @@ def _normalizar_colunas(X: np.ndarray) -> np.ndarray:
 
 
 def _fcm(X: np.ndarray, c: int, m: float = 2.0, max_iter: int = 150, tol: float = 1e-5, seed: int = 0):
-    """Fuzzy c-means (numpy). Devolve a matriz de pertinência U (n, c)."""
+    """Fuzzy c-means (numpy). Devolve a matriz de pertinência U (n, c).
+
+    Distância euclidiana calculada por PRODUTO DE MATRIZ (BLAS) via a identidade
+    ||x-μ||² = ||x||² + ||μ||² - 2·x·μ, em vez do tensor (n, c, L) que a versão
+    anterior materializava a cada iteração (custo de tempo/memória que deixava o
+    'gerar zonas' lento). Resultado idêntico."""
     rng = np.random.default_rng(seed)
     n = X.shape[0]
     U = rng.random((n, c))
     U /= U.sum(axis=1, keepdims=True)
     p = 2.0 / (m - 1.0)
+    x2 = np.einsum("ij,ij->i", X, X)[:, None]        # (n,1) = ||x||²
     centers = np.zeros((c, X.shape[1]))
     for _ in range(max_iter):
         Um = U ** m
         centers = (Um.T @ X) / Um.sum(axis=0)[:, None]
-        d = np.linalg.norm(X[:, None, :] - centers[None, :, :], axis=2)
-        d = np.fmax(d, 1e-10)
+        c2 = np.einsum("ij,ij->i", centers, centers)[None, :]   # (1,c) = ||μ||²
+        d2 = x2 + c2 - 2.0 * (X @ centers.T)                    # (n,c) = dist²
+        d = np.fmax(np.sqrt(np.fmax(d2, 0.0)), 1e-10)
         inv = d ** (-p)
         Unew = inv / inv.sum(axis=1, keepdims=True)
         if np.linalg.norm(Unew - U) < tol:
@@ -532,20 +539,30 @@ def analisar_multi(camadas: list[dict], bounds, dims, algoritmo: str = "fcm",
     """ETAPA 1 — Analisar: FPI/NCE para 2..c_max + sugestão. Não gera nem vetoriza zonas."""
     rows, cols = int(dims[0]), int(dims[1])
     _stack, _finite, idx, Xn = _stack_xn(camadas, rows, cols, pesos)
-    if idx.shape[0] < max(int(c_max), 3):
+    n_pix = idx.shape[0]
+    if n_pix < max(int(c_max), 3):
         raise ValueError("pixels insuficientes (camadas com pouca sobreposição válida)")
+    # A escolha do nº de zonas (curva FPI/NCE) não precisa de TODOS os pixels nem da
+    # convergência total do FCM — uma amostra representativa + menos iterações dão a
+    # MESMA curva e rodam muito mais rápido. A GERAÇÃO final (gerar_multi) segue com
+    # todos os pixels e convergência plena.
+    CAP_ANALISAR = 4000
+    Xa = Xn
+    if n_pix > CAP_ANALISAR:
+        samp = np.random.default_rng(seed).choice(n_pix, CAP_ANALISAR, replace=False)
+        Xa = Xn[samp]
     indices = []
     ca = max(2, int(c_min)); cb = max(ca, int(c_max))
     for c in range(ca, cb + 1):
-        if idx.shape[0] <= c:
+        if Xa.shape[0] <= c:
             break
-        U, _ = _fcm(Xn, c, seed=seed)
+        U, _ = _fcm(Xa, c, max_iter=60, seed=seed)
         fpi, nce = _fpi_nce(U)
         indices.append({"c": c, "fpi": round(fpi, 4), "nce": round(nce, 4)})
     sug, conf, just = _sugestao_zonas(indices)
     return {
         "indices": indices, "sugestao_c": sug, "confianca": conf, "justificativa": just,
-        "stats": {"algoritmo": algoritmo, "n_pixels": int(idx.shape[0]), "n_camadas": len(camadas)},
+        "stats": {"algoritmo": algoritmo, "n_pixels": int(n_pix), "n_camadas": len(camadas)},
     }
 
 
