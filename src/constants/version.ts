@@ -1,6 +1,11 @@
-export const APP_VERSION = '1.16.0';
+export const APP_VERSION = '1.16.1';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.16.1': [
+    'CORREÇÃO: sumiu de vez a mensagem antiga "Interpolador desligado nesta máquina… dê dois cliques em start.bat" — ela era da época do backend local e ainda aparecia quando o servidor da NUVEM estava dormindo (ele hiberna sem uso e leva ~1 min para acordar)',
+    'Agora o app ACORDA o servidor sozinho: abrir a página do talhão já dispara a subida, e qualquer processamento (fertilidade, zonas de manejo, satélite, colheita, condutividade) que encontrar o servidor dormindo espera ele acordar e REPETE a chamada automaticamente — sem erro e sem clique extra',
+    'Se mesmo assim o servidor não responder (~1,5 min), a mensagem nova explica a situação real ("Servidor de processamento indisponível… tente de novo em ~1 minuto") — a instrução do start.bat só aparece no modo de desenvolvimento local',
+  ],
   '1.16.0': [
     'Condutividade C2 — ASSISTENTE de limpeza: um clique sugere os parâmetros pelo tamanho do talhão (Global 85% · Local 15%, ou 10% em talhões < 30 ha · Raio 100 m), sempre editáveis',
     'KRIGAGEM MANUAL (Modo 2): no painel de parâmetros dá pra trocar de Automática para Manual e escolher o MÉTODO (Krigagem/IDW), o MODELO do variograma (esférico/exponencial/gaussiano) e o PIXEL (10–30 m) da interpolação. Alcance/pepita/patamar manuais e export GeoTIFF ficam para a próxima fase',

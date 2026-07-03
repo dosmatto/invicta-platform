@@ -5,7 +5,7 @@
 // interpolado, recortado e colorido) + bounds para sobrepor no mapa.
 
 import { stopsParaBackend, gradienteCssDaLegenda, type Legenda } from './legendas';
-import { INTERP_URL } from './interpUrl';
+import { postBackend, BACKEND_LOCAL } from './interpUrl';
 
 export type Stop = [number, [number, number, number]];
 
@@ -94,24 +94,15 @@ export async function interpolar(params: {
   metodo?: 'krige' | 'idw';
   modeloFixo?: string | null;
 }): Promise<RespInterp> {
-  let r: Response;
-  try {
-    r = await fetch(`${INTERP_URL}/interpolar`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        pontos: params.pontos,
-        poligono: params.poligono,
-        dominio: params.dominio,
-        stops: params.stops,
-        pixel_m: params.pixelM ?? 20,
-        metodo: params.metodo ?? 'krige',
-        modelo_fixo: params.modeloFixo ?? null,
-      }),
-    });
-  } catch {
-    throw new Error('Interpolador desligado nesta máquina. Dê dois cliques em backend\\start.bat (Windows) ou backend/start.command (Mac), espere a janela abrir, e tente de novo.');
-  }
+  const r = await postBackend('/interpolar', {
+    pontos: params.pontos,
+    poligono: params.poligono,
+    dominio: params.dominio,
+    stops: params.stops,
+    pixel_m: params.pixelM ?? 20,
+    metodo: params.metodo ?? 'krige',
+    modelo_fixo: params.modeloFixo ?? null,
+  });
   if (!r.ok) {
     let msg = `Backend respondeu ${r.status}`;
     try { const j = await r.json(); if (j?.detail) msg = String(j.detail); } catch {}
@@ -125,23 +116,14 @@ export async function interpolar(params: {
 //   ANALISAR (FPI/NCE 2..12 + sugestão) → o usuário decide o nº de zonas →
 //   GERAR (clusteriza o nº escolhido + área mínima + vetoriza). Qualidade (CV…) é avaliada DEPOIS.
 
-const ZON_OFF = 'Interpolador desligado nesta máquina. Dê dois cliques em backend\\start.bat (Windows) ou backend/start.command (Mac), espere a janela abrir, e tente de novo.';
-
 async function postZonear(rota: string, body: unknown): Promise<Response> {
-  let r: Response;
-  try {
-    r = await fetch(`${INTERP_URL}${rota}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-  } catch {
-    throw new Error(ZON_OFF);
-  }
+  const r = await postBackend(rota, body);
   if (r.status === 404) {
-    // A rota não existe → o backend local está DESATUALIZADO (versão anterior ao
-    // split de zonas). Precisa atualizar o código e reiniciar o backend.
-    throw new Error('Backend local DESATUALIZADO: feche a janela do backend e reabra pelo atalho "INVICTA Backend" (ele atualiza as rotas de zonas). Se persistir, atualize o código do backend nesta máquina.');
+    // A rota não existe → o backend é mais antigo que o app (nuvem: deploy do
+    // servidor ainda propagando; local: janela aberta com código velho).
+    throw new Error(BACKEND_LOCAL
+      ? 'Backend local DESATUALIZADO: feche a janela do backend e reabra pelo atalho "INVICTA Backend" (ele atualiza as rotas de zonas). Se persistir, atualize o código do backend nesta máquina.'
+      : 'O servidor de processamento ainda não tem esta função — ele deve estar sendo atualizado. Tente de novo em alguns minutos.');
   }
   if (!r.ok) {
     let msg = `Backend respondeu ${r.status}`;

@@ -8,7 +8,7 @@ export {
   type ArquivoPontos,
   type PontoBruto,
 } from './compactacao';
-import { INTERP_URL } from './interpUrl';
+import { postBackend } from './interpUrl';
 
 const semAcento = (s: string) => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
@@ -116,15 +116,7 @@ export interface RelatorioLimpeza {
 // Filtra os pontos ANTES de interpolar (mesma metodologia do MapFilter da colheita):
 // filtro bruto (percentil) + MapFilter global + local anisotrópico. Não interpola.
 export async function limparPontosEC(pontos: PontoXYV[], params: Record<string, number> = {}): Promise<{ pontos: PontoXYV[]; relatorio: RelatorioLimpeza }> {
-  let r: Response;
-  try {
-    r = await fetch(`${INTERP_URL}/limpar-pontos`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pontos, params }),
-    });
-  } catch {
-    throw new Error('Interpolador desligado nesta máquina. Abra o backend (atalho INVICTA Backend) e tente de novo.');
-  }
+  const r = await postBackend('/limpar-pontos', { pontos, params });
   if (!r.ok) {
     let msg = `Backend respondeu ${r.status}`;
     try { const j = await r.json(); if (j?.detail) msg = String(j.detail); } catch {}

@@ -6,7 +6,7 @@
 // reusar `decodeGrid`/`colorirGridComLegenda`/overlay do mapa.
 
 import type { Grid } from './fertilidade';
-import { INTERP_URL } from './interpUrl';
+import { postBackend } from './interpUrl';
 
 export interface CenaNdvi {
   id: string;
@@ -153,18 +153,9 @@ export async function buscarIndices(params: {
   });
 }
 
-// POST no backend do MSR com tratamento padrão (backend desligado / erro 4xx-5xx).
+// POST no backend do MSR com tratamento padrão (backend fora do ar / erro 4xx-5xx).
 async function postMsr<T>(rota: string, body: unknown): Promise<T> {
-  let r: Response;
-  try {
-    r = await fetch(`${INTERP_URL}${rota}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-  } catch {
-    throw new Error('Backend desligado nesta máquina. Dê dois cliques em backend\\start.bat (Windows) ou backend/start.command (Mac), espere a janela abrir, e tente de novo.');
-  }
+  const r = await postBackend(rota, body);
   if (!r.ok) {
     let msg = `Backend respondeu ${r.status}`;
     try { const j = await r.json(); if (j?.detail) msg = String(j.detail); } catch {}

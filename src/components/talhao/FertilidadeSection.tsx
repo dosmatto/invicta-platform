@@ -20,6 +20,7 @@ import { stopsParaBackend, dominioDaLegenda, paresDaClasse } from '@/lib/legenda
 import type { Legenda } from '@/lib/legendas';
 import { Play, Layers, Loader2, Eraser, AlertTriangle, Activity, Settings, BookOpen, Save, FileDown } from 'lucide-react';
 import { cloudSalvarMapa, cloudCarregarMapasPorPrefixo, cloudExcluirMapasPorPrefixo, cloudPodeGravar } from '@/lib/cloud';
+import { MSG_BACKEND_FORA } from '@/lib/interpUrl';
 import { pode } from '@/lib/empresa';
 import { listar as bibListar, criar as bibCriar, type ConteudoPerfil, type ItemBiblioteca } from '@/lib/biblioteca';
 
@@ -424,7 +425,7 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
         try { await processarUm(nut, prof); }
         catch (e) {
           const msg = e instanceof Error ? e.message : '';
-          if (msg.includes('Interpolador desligado')) { backendOff = true; break; }
+          if (msg === MSG_BACKEND_FORA) { backendOff = true; break; }
           falhas.push(`${sim} ${prof}`);
         }
       }
@@ -433,7 +434,7 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
     setProgresso(null);
     if (backendOff) {
       setEstado('erro');
-      setErro('Interpolador desligado nesta máquina. Veja Configurações → Interpolação.');
+      setErro(MSG_BACKEND_FORA);
     } else {
       setEstado(falhas.length === total ? 'erro' : 'pronto');
       setErro(falhas.length ? `Não processou: ${falhas.join(', ')}.` : '');

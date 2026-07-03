@@ -28,6 +28,7 @@ import { MeapSection } from '@/components/talhao/MeapSection';
 import { NdviSection } from '@/components/talhao/NdviSection';
 import { ProdutividadeSection } from '@/components/talhao/ProdutividadeSection';
 import { papelDoUsuario, meuRegistro, planoPorId } from '@/lib/empresa';
+import { tocarBackend } from '@/lib/interpUrl';
 import {
   ChevronLeft, Home, Leaf, Grid3x3, Layers, BarChart3, FileSpreadsheet,
   Activity, Satellite, FolderOpen, FileText, Clock, Zap, Mountain,
@@ -100,6 +101,10 @@ export function TalhaoPage({ id }: { id: string }) {
       }
     }
   }, [id, setNav, setMapMode, setUploadedGeo, setUploadedBbox]);
+
+  // O servidor da nuvem adormece sem uso — o 1º toque já dispara a subida,
+  // para os módulos (fertilidade, zonas, satélite…) o encontrarem acordado.
+  useEffect(() => { tocarBackend(); }, []);
 
   // Safras: começa pela ativa (ou a primeira).
   useEffect(() => {

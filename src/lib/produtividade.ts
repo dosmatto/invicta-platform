@@ -9,7 +9,7 @@ import { interpolar, rampaDaLegenda, decodeGrid, type RespInterp } from '@/lib/f
 import { getLegendasPorAtributo } from '@/lib/store';
 import { parseShapefile } from '@/lib/geo';
 import type { Legenda } from '@/lib/legendas';
-import { INTERP_URL } from '@/lib/interpUrl';
+import { postBackend } from '@/lib/interpUrl';
 
 export interface PontoColheita { lng: number; lat: number; valor: number; }
 export type Unidade = 'kg/ha' | 'sc/ha' | 't/ha';
@@ -211,18 +211,10 @@ export async function processarColheita(params: {
   legenda: Legenda;
 }): Promise<RespInterp & { relatorio: RelatorioColheita }> {
   const { dominio, stops } = rampaDaLegenda(params.legenda);
-  let r: Response;
-  try {
-    r = await fetch(`${INTERP_URL}/colheita-processar`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        machines: params.machines, params: params.cleaning, poligono: params.poligono,
-        pixel_m: params.pixelM, media_real: params.mediaRealKgha, dominio, stops,
-      }),
-    });
-  } catch {
-    throw new Error('Backend desligado nesta máquina. Dê dois cliques em backend\\start.bat e tente de novo.');
-  }
+  const r = await postBackend('/colheita-processar', {
+    machines: params.machines, params: params.cleaning, poligono: params.poligono,
+    pixel_m: params.pixelM, media_real: params.mediaRealKgha, dominio, stops,
+  });
   if (!r.ok) {
     let msg = `Backend respondeu ${r.status}`;
     try { const j = await r.json(); if (j?.detail) msg = String(j.detail); } catch {}
