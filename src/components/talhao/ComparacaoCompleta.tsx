@@ -105,6 +105,9 @@ export function ComparacaoCompleta({ safraNome, onClose }: { safraNome: string; 
   const areaA = useMemo(() => (camA && stA ? areaHa(camA.grid, camA.bounds, stA.n) : 0), [camA, stA]);
   const areaB = useMemo(() => (camB && stB ? areaHa(camB.grid, camB.bounds, stB.n) : 0), [camB, stB]);
   const corr = useMemo(() => (camA && camB ? correlacao(camA.grid, camB.grid) : null), [camA, camB]);
+  // Sensores diferentes (S2 × CBERS): comparação é apoio visual, não equivalência.
+  const crossSensor = !!(camA?.grupo === 'NDVI' && camB?.grupo === 'NDVI'
+    && camA.sub && camB.sub && camA.sub !== camB.sub);
   const distA = useMemo(() => (camA ? areaPorClasse(camA.grid, camA.legenda) : []), [camA]);
   const distB = useMemo(() => (camB ? areaPorClasse(camB.grid, camB.legenda) : []), [camB]);
 
@@ -157,6 +160,12 @@ export function ComparacaoCompleta({ safraNome, onClose }: { safraNome: string; 
         <div className="flex-1 flex items-center justify-center px-8 text-center"><p className="text-xs" style={{ color: '#fbbf24' }}>Precisa de pelo menos 2 camadas salvas (Produtividade, NDVI mantido ou mapas de Fertilidade) para comparar.</p></div>
       ) : (
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {crossSensor && (
+            <div className="p-2.5 rounded-lg text-[10px]" style={{ background: '#2d1a00', border: '1px solid #92400e', color: '#fbbf24' }}>
+              ⚠ <strong>Atenção: esta comparação utiliza sensores diferentes</strong> ({camA?.sub} × {camB?.sub}).
+              Diferenças de resolução, data, bandas e calibração podem alterar os valores. Use como apoio visual e agronômico, não como equivalência absoluta.
+            </div>
+          )}
           {/* Dois mapas */}
           <div className="grid grid-cols-2 gap-4">
             {[{ cam: camA, img: imgA, st: stA, area: areaA, set: setIdA, id: idA }, { cam: camB, img: imgB, st: stB, area: areaB, set: setIdB, id: idB }].map((lado, i) => (

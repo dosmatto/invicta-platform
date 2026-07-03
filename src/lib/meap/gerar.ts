@@ -64,21 +64,27 @@ function capShape(s: [number, number], maxSide: number): [number, number] {
   return [Math.max(2, Math.round(s[0] * k)), Math.max(2, Math.round(s[1] * k))];
 }
 
-export interface NdviCamada { chave: string; nut: string; prof: string; data: string; bounds: [number, number, number, number]; b64: string; shape: [number, number]; }
+export interface NdviCamada { chave: string; nut: string; prof: string; data: string; indice: string; bounds: [number, number, number, number]; b64: string; shape: [number, number]; }
 
-// Carrega os NDVI MANTIDOS (Sentinel + CBERS) do talhão a partir da nuvem.
+// Carrega os ÍNDICES MANTIDOS (NDVI, SAVI… — Sentinel + CBERS) do talhão.
+// IV2: o mesmo prefixo guarda vários índices (id …__INDICE__data) — a chave e o
+// rótulo agora incluem o índice (dois índices da mesma data não colidem).
 export async function carregarNdviSalvos(talhaoId: string): Promise<NdviCamada[]> {
   const fontes: Array<['s2' | 'cbers', string]> = [['s2', `${talhaoId}__ndvi__`], ['cbers', `${talhaoId}__ndvicbers__`]];
   const out: NdviCamada[] = [];
   for (const [fonte, pref] of fontes) {
-    const docs = await cloudCarregarMapasPorPrefixo<{ resp: { bounds: [number, number, number, number]; grid?: Grid; cena?: { data?: string } } }>(pref);
+    const docs = await cloudCarregarMapasPorPrefixo<{ indice?: string; resp: { bounds: [number, number, number, number]; grid?: Grid; cena?: { data?: string } } }>(pref);
     for (const d of docs) {
       const resp = d.dados?.resp;
       let grid = resp?.grid;
       const data = resp?.cena?.data;
       if (!resp || !data || !grid) continue;
       if (grid.comp === 'gz') { try { grid = await descomprimirGrid(grid); } catch { continue; } }
-      out.push({ chave: `ndvi_${fonte}__${data}`, nut: `ndvi_${fonte}`, prof: data, data, bounds: resp.bounds, b64: grid.b64, shape: grid.shape });
+      const indice = d.dados?.indice ?? d.id.slice(pref.length).split('__')[0] ?? 'NDVI';
+      out.push({
+        chave: `ndvi_${fonte}__${indice}__${data}`, nut: `ndvi_${fonte}_${indice.toLowerCase()}`,
+        prof: data, data, indice, bounds: resp.bounds, b64: grid.b64, shape: grid.shape,
+      });
     }
   }
   out.sort((a, b) => b.data.localeCompare(a.data)); // mais recentes primeiro
@@ -120,8 +126,8 @@ export async function carregarCamadas(talhaoId: string): Promise<CamadasCarregad
       const b64 = (n.shape[0] === shape[0] && n.shape[1] === shape[1]) ? n.b64 : reamostrarB64(n.b64, n.shape, shape);
       // Diferencia a origem no rótulo (Sentinel vs CBERS); o 1º token segue "NDVI"
       // para o backend reconhecer o potencial (RANK_SIMBOLOS).
-      const fonteLabel = n.nut === 'ndvi_cbers' ? 'CBERS' : 'S2';
-      camadas.push({ chave: n.chave, nut: n.nut, prof: n.prof, simbolo: `NDVI ${fonteLabel}`, b64, shape });
+      const fonteLabel = n.nut.startsWith('ndvi_cbers') ? 'CBERS' : 'S2';
+      camadas.push({ chave: n.chave, nut: n.nut, prof: n.prof, simbolo: `${n.indice} ${fonteLabel}`, b64, shape });
     }
   }
 

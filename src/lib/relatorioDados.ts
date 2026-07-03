@@ -10,7 +10,9 @@ import {
 import type { Legenda } from './legendas';
 import { cloudCarregarMapasPorPrefixo } from './cloud';
 import { descomprimirGrid, decodeGrid, extrairPoligono, type RespInterp } from './fertilidade';
-import { colorirGridComLegenda, temGrid } from './raster';
+import { colorirGridComLegenda, colorirGrid, temGrid } from './raster';
+import { rampaVisualStops } from './legendas';
+import { carregarNdviSalvos } from './meap/gerar';
 import type { DadosRelatorioFert, ProfundidadeRel } from './relatorioFertilidade';
 
 type MapaCarregado = { resp: RespInterp; labels: GeoJSON.FeatureCollection; interpoladoEm?: string };
@@ -126,6 +128,32 @@ export async function carregarContextoRelatorio(
     return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
   });
 
+  // Índices vegetativos MANTIDOS (IV3): entram como capítulos extras no fim —
+  // cada data vira um painel (no lugar da "profundidade"). Legenda = NDVI oficial.
+  const legNdvi = legendas.find(l => l.atributoId === 'ndvi');
+  if (legNdvi) {
+    try {
+      const ddmmaa = (s: string) => new Date(s + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' });
+      const nd = await carregarNdviSalvos(talhaoId);
+      const porNut = new Map<string, { simbolo: string; datas: string[] }>();
+      for (const n of nd) {
+        const fonteLabel = n.nut.startsWith('ndvi_cbers') ? 'CBERS-4A' : 'Sentinel-2';
+        const rot = ddmmaa(n.data);
+        mapas[`${n.nut}__${rot}`] = {
+          resp: { bounds: n.bounds, grid: { b64: n.b64, shape: n.shape } } as RespInterp,
+          labels: { type: 'FeatureCollection', features: [] },
+        };
+        const e = porNut.get(n.nut) ?? { simbolo: `${n.indice} ${fonteLabel}`, datas: [] };
+        if (!e.datas.includes(rot)) e.datas.push(rot);
+        porNut.set(n.nut, e);
+      }
+      for (const [nut, e] of porNut) {
+        legendaPorNut[nut] = legNdvi;
+        elementos.push({ nut, atributo: `Índice vegetativo — ${e.simbolo}`, simbolo: e.simbolo, profundidades: e.datas });
+      }
+    } catch { /* índices são opcionais no relatório */ }
+  }
+
   const dataInterpolacao = new Date(dataMaisRecente || importacao?.criadoEm || Date.now())
     .toLocaleDateString('pt-BR', { month: '2-digit', year: 'numeric' });
 
@@ -154,7 +182,15 @@ export function montarPaginas(ctx: ContextoRelatorio, nutsSelecionados: string[]
       if (!m) continue;
       const st = statsRaster(m.resp);
       if (!st) continue;
-      const url = temGrid(m.resp) ? colorirGridComLegenda(m.resp.grid, leg).dataUrl : m.resp.png;
+      // Índices satelitais que não são NDVI variam de faixa por cena → render
+      // contínuo esticado min–máx (igual à tela); NDVI e fertilidade usam a legenda.
+      const indiceNaoNdvi = nut.startsWith('ndvi_') && !nut.endsWith('_ndvi');
+      let url: string | undefined;
+      if (temGrid(m.resp)) {
+        url = indiceNaoNdvi
+          ? colorirGrid(m.resp.grid, [st.min, st.max], rampaVisualStops({ ...leg, estilo: 'continuo' })).dataUrl
+          : colorirGridComLegenda(m.resp.grid, leg).dataUrl;
+      } else url = m.resp.png;
       if (!url) continue;
       profundidades.push({
         profundidade: prof, rasterPng: url, bounds: m.resp.bounds,

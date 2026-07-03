@@ -42,10 +42,10 @@ export async function listarCamadas(talhaoId: string, safra: string): Promise<Ca
     }
   }
 
-  // NDVI mantidos
+  // Índices vegetativos mantidos (NDVI, SAVI, NDRE… — IV2)
   const nd = await carregarNdviSalvos(talhaoId);
   const ndviLeg = getLegendasPorAtributo('ndvi')[0];
-  if (ndviLeg) for (const n of nd) out.push({ id: `ndvi_${n.data}_${n.nut}`, grupo: 'NDVI', nome: `NDVI ${ddmm(n.data)}`, sub: n.nut === 'ndvi_cbers' ? 'CBERS' : 'S2', bounds: n.bounds, grid: { b64: n.b64, shape: n.shape }, legenda: ndviLeg, unidade: 'índice' });
+  if (ndviLeg) for (const n of nd) out.push({ id: `ndvi_${n.data}_${n.nut}`, grupo: 'NDVI', nome: `${n.indice} ${ddmm(n.data)}`, sub: n.nut.startsWith('ndvi_cbers') ? 'CBERS' : 'S2', bounds: n.bounds, grid: { b64: n.b64, shape: n.shape }, legenda: ndviLeg, unidade: 'índice' });
 
   // Fertilidade (importação de laboratório mais recente)
   const imp = getImportacoesLab(talhaoId)[0];

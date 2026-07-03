@@ -1,6 +1,11 @@
-export const APP_VERSION = '1.12.0';
+export const APP_VERSION = '1.13.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.13.0': [
+    'IV3 — Índices integrados aos outros módulos: na ZONA DE MANEJO cada índice mantido aparece com o nome certo (ex.: "SAVI S2", "NDRE CBERS") — antes tudo era rotulado NDVI e dois índices da mesma data colidiam',
+    'COMPARADOR: os índices entram na lista de camadas com nome e sensor; comparar Sentinel-2 × CBERS-4A mostra o AVISO de calibração (resolução, data, bandas — apoio visual, não equivalência absoluta)',
+    'GERADOR DE RELATÓRIOS: os índices mantidos viram capítulos do PDF (cada data = um painel, com sensor e estatísticas); índices que não são NDVI saem com escala contínua min–máx da cena',
+  ],
   '1.12.0': [
     'IV2 — MOTOR DE ÍNDICES: na conferência da imagem você agora escolhe QUAIS índices processar — NDVI, SAVI, MSAVI, EVI, EVI2, GNDVI, NDWI, VARI, ExG e GLI (Sentinel-2 também NDRE e NDMI). O backend baixa SÓ as bandas necessárias e calcula só o que você marcou; nada é salvo automaticamente',
     'Sentinel-2 com MÁSCARA DE NUVEM/SOMBRA (banda SCL): pixels de nuvem, sombra e cirrus são descartados dos índices; o resultado mostra o % de pixels válidos. No CBERS-4A, NDRE/NDMI aparecem como indisponíveis com o motivo (sem Red Edge/SWIR)',
