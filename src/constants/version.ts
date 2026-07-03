@@ -1,6 +1,10 @@
-export const APP_VERSION = '1.23.2';
+export const APP_VERSION = '1.24.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.24.0': [
+    'APP DE CAMPO — novo módulo NDVI / MANCHA: no Wi-Fi, escolha o talhão e BAIXE um índice (NDVI, SAVI…) já colorido para o aparelho; no campo, sem sinal, abra a mancha sobre o satélite e TOQUE nela para navegar por GPS até lá (distância + linha até o alvo). Tudo offline, reaproveitando a bússola/GPS da amostragem',
+    'Os índices baixados ficam guardados no aparelho (com miniatura) e podem ser removidos; a lista da nuvem mostra o que já foi processado na plataforma para aquele talhão',
+  ],
   '1.23.2': [
     'CORREÇÃO importante no editor de traçado: talhão com VÁRIOS PEDAÇOS (ex.: IGEFI 03, 2 áreas separadas) agora carrega TODOS os pedaços para edição — antes só abria o maior e, ao salvar, o outro sumia. Ao salvar, todos os pedaços continuam no mesmo talhão (nada é descartado nem vira talhão novo)',
   ],

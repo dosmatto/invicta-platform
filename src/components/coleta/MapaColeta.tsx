@@ -55,9 +55,11 @@ interface Props {
   // Medição: desenho (polígono/linha + vértices) e clique livre no mapa
   desenho?: GeoJSON.FeatureCollection | null;
   onClickMapa?: (lng: number, lat: number) => void;
+  // Mancha (#37): PNG de NDVI já colorido, sobreposto ao satélite (offline)
+  ndviOverlay?: { url: string; bounds: [number, number, number, number] } | null;
 }
 
-export function MapaColeta({ talhaoGeo, bbox, pontos, userPos, alvo, raioM, modo, seguirGps, pedidoGps, pedidoEnquadrar, onSelecionarPonto, onGestoUsuario, desenho, onClickMapa }: Props) {
+export function MapaColeta({ talhaoGeo, bbox, pontos, userPos, alvo, raioM, modo, seguirGps, pedidoGps, pedidoEnquadrar, onSelecionarPonto, onGestoUsuario, desenho, onClickMapa, ndviOverlay }: Props) {
   const divRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const prontoRef = useRef(false);
@@ -204,6 +206,22 @@ export function MapaColeta({ talhaoGeo, bbox, pontos, userPos, alvo, raioM, modo
       (map.getSource('desenho') as maplibregl.GeoJSONSource)?.setData(desenho ?? EMPTY_FC);
     });
   }, [desenho]);
+
+  // overlay do NDVI (#37) — recria a fonte/camada image a cada mudança
+  useEffect(() => {
+    quandoPronto(map => {
+      const SRC = 'ndvi-img', LYR = 'ndvi-img-layer';
+      if (map.getLayer(LYR)) { try { map.removeLayer(LYR); } catch {} }
+      if (map.getSource(SRC)) { try { map.removeSource(SRC); } catch {} }
+      if (!ndviOverlay) return;
+      const [w, s, e, n] = ndviOverlay.bounds;
+      try {
+        map.addSource(SRC, { type: 'image', url: ndviOverlay.url, coordinates: [[w, n], [e, n], [e, s], [w, s]] });
+        // abaixo do contorno do talhão (talhao-line) p/ a borda e os pontos ficarem por cima
+        map.addLayer({ id: LYR, type: 'raster', source: SRC, paint: { 'raster-opacity': 0.85, 'raster-fade-duration': 0 } }, 'talhao-line');
+      } catch (err) { console.warn('[mapa-coleta] ndvi overlay:', err); }
+    });
+  }, [ndviOverlay]);
 
   // alvo: raio permitido + linha de navegação
   useEffect(() => {

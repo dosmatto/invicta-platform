@@ -516,6 +516,39 @@ export function saveConfigColeta(cfg: ConfigColeta) {
   localStorage.setItem(KEY_CFG, JSON.stringify(cfg));
 }
 
+// ── Manchas de NDVI baixadas p/ o campo (offline) — #37 ──────────────────────
+// Ao preparar no Wi-Fi, o índice escolhido é COLORIDO num PNG e guardado no
+// aparelho (com o bbox), pra navegar até a mancha no campo SEM sinal.
+export interface ManchaOffline {
+  id: string;                 // talhaoId__indice__data
+  talhaoId: string;
+  talhaoNome: string;
+  indice: string;             // 'NDVI', 'SAVI'…
+  data: string;               // 'AAAA-MM-DD'
+  fonte: string;              // 'S2' | 'CBERS'
+  dataUrl: string;            // PNG já colorido (offline)
+  bounds: [number, number, number, number];   // [w,s,e,n] da imagem
+  criadoEm: string;
+}
+
+const KEY_MANCHAS = 'inv_manchas';
+
+export function getManchasOffline(): ManchaOffline[] {
+  if (typeof window === 'undefined') return [];
+  try { return JSON.parse(localStorage.getItem(KEY_MANCHAS) ?? '[]'); } catch { return []; }
+}
+export function getManchasDoTalhao(talhaoId: string): ManchaOffline[] {
+  return getManchasOffline().filter(m => m.talhaoId === talhaoId).sort((a, b) => b.data.localeCompare(a.data));
+}
+export function salvarManchaOffline(m: ManchaOffline) {
+  const lista = getManchasOffline().filter(x => x.id !== m.id);
+  lista.push(m);
+  try { localStorage.setItem(KEY_MANCHAS, JSON.stringify(lista)); } catch { /* sem espaço */ }
+}
+export function excluirMancha(id: string) {
+  try { localStorage.setItem(KEY_MANCHAS, JSON.stringify(getManchasOffline().filter(m => m.id !== id))); } catch { /* sem storage */ }
+}
+
 // ── Carimbo da última sincronização (mostrado no topo da lista) ───────────────
 const KEY_ULT_SYNC = 'inv_coleta_ultimo_sync';
 

@@ -30,7 +30,7 @@ import {
   ChevronLeft, ChevronRight, MapPin, Crosshair, Layers, List, Download,
   RefreshCw, LogOut, Settings, Camera, CheckCircle2, X, Wifi, WifiOff,
   Loader2, AlertTriangle, Navigation, CloudUpload, Maximize2, Ruler, Grid3x3,
-  Search, DownloadCloud, Eye,
+  Search, DownloadCloud, Eye, Satellite,
 } from 'lucide-react';
 
 const MapaColeta = dynamic(
@@ -39,6 +39,10 @@ const MapaColeta = dynamic(
 );
 const MedicaoScreen = dynamic(
   () => import('@/components/coleta/MedicaoScreen').then(m => ({ default: m.MedicaoScreen })),
+  { ssr: false, loading: () => <div className="fixed inset-0" style={{ background: '#0a1929' }} /> },
+);
+const ManchaScreen = dynamic(
+  () => import('@/components/coleta/ManchaScreen').then(m => ({ default: m.ManchaScreen })),
   { ssr: false, loading: () => <div className="fixed inset-0" style={{ background: '#0a1929' }} /> },
 );
 
@@ -73,7 +77,7 @@ const SEL_VAZIA: Selecao = {
 };
 
 export default function ColetaPage() {
-  const [modulo, setModulo] = useState<'amostragem' | 'medicao' | null>(null);
+  const [modulo, setModulo] = useState<'amostragem' | 'medicao' | 'mancha' | null>(null);
   const [sel, setSel] = useState<Selecao>(SEL_VAZIA);
   const [reload, setReload] = useState(0);
   const [online, setOnline] = useState(true);
@@ -148,6 +152,9 @@ export default function ColetaPage() {
   if (modulo === 'medicao') {
     return <MedicaoScreen onVoltar={() => setModulo(null)} />;
   }
+  if (modulo === 'mancha') {
+    return <ManchaScreen onVoltar={() => setModulo(null)} />;
+  }
   if (modulo !== 'amostragem') {
     return <TelaInicio online={online} pend={pend} sincronizar={sincronizar}
       sincronizando={sincronizando} msgSync={msgSync} instalar={instalar} onEscolher={setModulo} />;
@@ -163,16 +170,18 @@ export default function ColetaPage() {
 
 // ═══ Tela 0 — Início (módulos do app de campo) ════════════════════════════════
 
-const MODULOS: { id: 'amostragem' | 'medicao'; icone: React.ElementType; cor: string; corIcone: string; titulo: string; desc: string }[] = [
+type ModuloId = 'amostragem' | 'medicao' | 'mancha';
+const MODULOS: { id: ModuloId; icone: React.ElementType; cor: string; corIcone: string; titulo: string; desc: string }[] = [
   { id: 'amostragem', icone: Grid3x3, cor: '#166534', corIcone: '#86efac', titulo: 'Amostragem de Solo', desc: 'Navegue por GPS até os pontos da grade e registre as coletas (offline)' },
   { id: 'medicao', icone: Ruler, cor: '#1e3a8a', corIcone: '#93c5fd', titulo: 'Medição', desc: 'Meça áreas (polígono) e distâncias (linha) tocando no mapa ou caminhando com o GPS' },
+  { id: 'mancha', icone: Satellite, cor: '#3730a3', corIcone: '#a5b4fc', titulo: 'NDVI / Mancha', desc: 'Baixe o mapa de NDVI no Wi-Fi e navegue por GPS até a mancha no campo (offline)' },
 ];
 
 function TelaInicio({ online, pend, sincronizar, sincronizando, msgSync, instalar, onEscolher }: {
   online: boolean; pend: { regs: number; fotos: number };
   sincronizar: () => Promise<void>; sincronizando: boolean; msgSync: string;
   instalar: (() => void) | null;
-  onEscolher: (m: 'amostragem' | 'medicao') => void;
+  onEscolher: (m: ModuloId) => void;
 }) {
   return (
     <div className="min-h-screen flex flex-col" style={{ background: AZUL_ESC }}>
