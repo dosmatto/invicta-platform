@@ -89,6 +89,11 @@ export function CondutividadeSection() {
   const [limpando, setLimpando] = useState(false);
   const [vistaInfo, setVistaInfo] = useState<{ n: number; min: number; max: number } | null>(null);  // pontos plotados
   const [params, setParams] = useState<ParamsLimpeza>({ ...PARAMS_LIMPEZA_PADRAO });
+  // C2 — krigagem MANUAL (Modo 2): método/modelo do variograma/pixel ('auto' = como antes).
+  const [krigModo, setKrigModo] = useState<'auto' | 'manual'>('auto');
+  const [krigMetodo, setKrigMetodo] = useState<'krige' | 'idw'>('krige');
+  const [krigModelo, setKrigModelo] = useState('spherical');
+  const [krigPixel, setKrigPixel] = useState(20);
   const [paramsAberto, setParamsAberto] = useState(false);
   const setParam = (k: keyof ParamsLimpeza, v: number) => setParams(p => ({ ...p, [k]: v }));
   const [cache, setCache] = useState<Record<string, MapaPronto>>({});
@@ -260,7 +265,13 @@ export function CondutividadeSection() {
       // as médias (variograma automático + validação cruzada → RMSE p/ a qualidade).
       const { pontos: ptsK, binM, original } = prepararPontosKrigagem(pts);
       setBinMsg(b => ({ ...b, [prof]: binM > 0 ? `krigagem · ${ptsK.length} células de ${original} pts (grade ${binM.toFixed(0)} m)` : `krigagem · ${ptsK.length} pts` }));
-      const resp = await interpolar({ pontos: ptsK, poligono, dominio, stops, metodo: 'krige', pixelM: 20, modeloFixo: null });
+      const manual = krigModo === 'manual';
+      const resp = await interpolar({
+        pontos: ptsK, poligono, dominio, stops,
+        metodo: manual ? krigMetodo : 'krige',
+        pixelM: manual ? krigPixel : 20,
+        modeloFixo: manual && krigMetodo === 'krige' ? krigModelo : null,
+      });
       const labels: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };  // EC denso → sem rótulo por ponto
       setCache(c => ({ ...c, [prof]: { resp, labels } }));
       setEstado('pronto'); setVista('mapa');
@@ -516,10 +527,61 @@ export function CondutividadeSection() {
                   <ParamRow label="Local — faixa ± dos vizinhos (%)" hint="remove quem destoa dos vizinhos" value={Math.round(params.mf_local_v * 100)} step={5} min={0} onChange={v => setParam('mf_local_v', v / 100)} />
                   <ParamRow label="Local — tolerância do eixo (°)" hint="ângulo ao longo da passada" value={params.mf_aniso_tol} step={5} min={0} onChange={v => setParam('mf_aniso_tol', v)} />
                   <ParamRow label="Local — mínimo de vizinhos" value={params.mf_min_neighbors} step={1} min={1} onChange={v => setParam('mf_min_neighbors', Math.round(v))} />
-                  <button onClick={() => setParams({ ...PARAMS_LIMPEZA_PADRAO })} className="flex items-center gap-1 text-[9px] font-semibold" style={{ color: '#fbbf24' }}>
-                    <RotateCcw size={10} /> Restaurar padrões
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <button onClick={() => setParams({ ...PARAMS_LIMPEZA_PADRAO })} className="flex items-center gap-1 text-[9px] font-semibold" style={{ color: '#fbbf24' }}>
+                      <RotateCcw size={10} /> Restaurar padrões
+                    </button>
+                    {/* C2 — assistente: sugere pelo tamanho do talhão (spec: Global 85% · Local 15%/10% pequenos · Raio 100 m) */}
+                    <button onClick={() => setParams(p => ({ ...p, mf_global_v: 0.85, mf_local_v: (nav.area || 0) < 30 ? 0.10 : 0.15, mf_local_r: 100 }))}
+                      title={`Global 85% · Local ${(nav.area || 0) < 30 ? '10' : '15'}% · Raio 100 m`}
+                      className="flex items-center gap-1 text-[9px] font-semibold" style={{ color: '#4ade80' }}>
+                      ✨ Sugerir pelo talhão ({fmt(nav.area || 0)} ha)
+                    </button>
+                  </div>
                   <p className="text-[8px] leading-relaxed" style={{ color: '#475569' }}>Mude um parâmetro e clique em <strong>Limpar</strong> de novo para ver quantos/quais pontos saem (compare em &quot;Pontos limpos&quot;).</p>
+
+                  {/* C2 — Krigagem Modo 2 (manual): método, variograma e pixel */}
+                  <div className="pt-1.5 mt-1 space-y-1.5" style={{ borderTop: '1px solid #0f2240' }}>
+                    <p className="text-[9px] font-bold uppercase tracking-wide" style={{ color: '#64748b' }}>Interpolação</p>
+                    <div className="flex gap-1">
+                      {(['auto', 'manual'] as const).map(m => (
+                        <button key={m} onClick={() => setKrigModo(m)}
+                          className="flex-1 py-1 rounded text-[9px] font-bold"
+                          style={{ background: krigModo === m ? 'var(--invicta-blue-mid)' : '#1a3a6b', color: krigModo === m ? '#fff' : '#93c5fd' }}>
+                          {m === 'auto' ? 'Automática (variograma auto)' : 'Manual (Modo 2)'}
+                        </button>
+                      ))}
+                    </div>
+                    {krigModo === 'manual' && (
+                      <div className="grid grid-cols-3 gap-1.5">
+                        <div>
+                          <label className="text-[8px] block mb-0.5" style={{ color: '#64748b' }}>Método</label>
+                          <select value={krigMetodo} onChange={e => setKrigMetodo(e.target.value as 'krige' | 'idw')}
+                            className="w-full rounded px-1 py-1 text-[9px] outline-none" style={{ background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' }}>
+                            <option value="krige">Krigagem</option>
+                            <option value="idw">IDW</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-[8px] block mb-0.5" style={{ color: '#64748b' }}>Variograma</label>
+                          <select value={krigModelo} onChange={e => setKrigModelo(e.target.value)} disabled={krigMetodo !== 'krige'}
+                            className="w-full rounded px-1 py-1 text-[9px] outline-none disabled:opacity-50" style={{ background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' }}>
+                            <option value="spherical">Esférico</option>
+                            <option value="exponential">Exponencial</option>
+                            <option value="gaussian">Gaussiano</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-[8px] block mb-0.5" style={{ color: '#64748b' }}>Pixel (m)</label>
+                          <select value={krigPixel} onChange={e => setKrigPixel(Number(e.target.value))}
+                            className="w-full rounded px-1 py-1 text-[9px] outline-none" style={{ background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' }}>
+                            {[10, 15, 20, 25, 30].map(p => <option key={p} value={p}>{p}</option>)}
+                          </select>
+                        </div>
+                      </div>
+                    )}
+                    <p className="text-[8px]" style={{ color: '#475569' }}>Vale para a próxima interpolação. Alcance/pepita/patamar manuais e export GeoTIFF entram na próxima fase.</p>
+                  </div>
                 </div>
               )}
             </div>

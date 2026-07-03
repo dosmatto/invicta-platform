@@ -1,6 +1,10 @@
-export const APP_VERSION = '1.15.0';
+export const APP_VERSION = '1.16.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.16.0': [
+    'Condutividade C2 — ASSISTENTE de limpeza: um clique sugere os parâmetros pelo tamanho do talhão (Global 85% · Local 15%, ou 10% em talhões < 30 ha · Raio 100 m), sempre editáveis',
+    'KRIGAGEM MANUAL (Modo 2): no painel de parâmetros dá pra trocar de Automática para Manual e escolher o MÉTODO (Krigagem/IDW), o MODELO do variograma (esférico/exponencial/gaussiano) e o PIXEL (10–30 m) da interpolação. Alcance/pepita/patamar manuais e export GeoTIFF ficam para a próxima fase',
+  ],
   '1.15.0': [
     'Condutividade C3 — a EC OFICIAL do talhão virou fonte da ZONA DE MANEJO: as profundidades (e extras como Altimetria) aparecem como camadas no MEAP, com peso próprio — dá pra gerar zona SÓ com EC (marque só as camadas EC) ou multivariável (EC + fertilidade + índices)',
     'EC também entrou no COMPARADOR de camadas (grupo Condutividade): compare EC × produtividade, EC × NDVI, EC 0–20 × 20–40 — com correlação espacial e PDF',
