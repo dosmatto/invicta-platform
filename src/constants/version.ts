@@ -1,6 +1,9 @@
-export const APP_VERSION = '1.18.2';
+export const APP_VERSION = '1.18.3';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.18.3': [
+    'Ficha do talhão (painel) — "Mapas definitivos": entrou a CONDUTIVIDADE (CEa) como mapa real (mostra a profundidade oficial, com "Ver no mapa"), e saiu a Produtividade da lista — porque produtividade é POR SAFRA, não uma variável fixa do talhão (ela continua na página completa do talhão). Altimetria segue como "em breve"',
+  ],
   '1.18.2': [
     'Convite de usuário: o link de confirmação de e-mail agora aponta sempre para a app publicada (origem atual), nunca mais para localhost — reforço contra o erro "não é possível acessar localhost" que aparecia quando o projeto está com confirmação de e-mail ligada e a Site URL mal configurada. Obs.: o ideal continua sendo manter a confirmação de e-mail DESLIGADA no Supabase (o convite já cria a senha provisória)',
   ],

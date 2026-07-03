@@ -5,26 +5,28 @@
 // passou a ser INFORMATIVA + 1 ação:
 //   • Limite Geográfico — atualizar/substituir o polígono do talhão;
 //   • Resumo da safra — o que existe na safra (grade, lab, fertilidade, compactação);
-//   • Mapas definitivos — Zonas de manejo, Textura (Argila) [reais], Altimetria e
-//     Produtividade [em breve], visualizáveis no mapa.
+//   • Mapas definitivos — Zonas de manejo, Textura (Argila) e Condutividade (CEa)
+//     [reais] e Altimetria [em breve], visualizáveis no mapa. (Produtividade é
+//     POR SAFRA, não variável fixa do talhão — fica na página completa do talhão.)
 
 import { useState, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { useApp } from '@/context/AppContext';
 import {
   getTalhoes, getSafras, saveSafra, updateTalhao, saveTalhao, deleteTalhao,
-  getGrades, getImportacoesLab, getImportacoesCompactacao, getLegendas, Talhao, Safra,
+  getGrades, getImportacoesLab, getImportacoesCompactacao, getCondutividade, getLegendas, Talhao, Safra,
 } from '@/lib/store';
 import type { Legenda } from '@/lib/legendas';
 import { parseGeoFile, parseLimiteTalhao, normalizarZonas } from '@/lib/geo';
 import { extrairEditavel, paraFC, bboxDe, areaHaDe, areaHaSemFuros } from '@/lib/geoEditor';
+import { carregarEcOficial, rotuloEc, type EcCamada } from '@/lib/meap/gerar';
 import { classeZona } from '@/lib/zonas';
 import { cloudCarregarMapasPorPrefixo } from '@/lib/cloud';
 import { descomprimirGrid, coordsFromBounds, type RespInterp } from '@/lib/fertilidade';
 import { colorirGridComLegenda, temGrid } from '@/lib/raster';
 import {
   ChevronLeft, Layers, Upload, MapPin, CheckCircle2, AlertTriangle, Plus, X, Save,
-  ExternalLink, Trash2, Pencil, Grid3x3, TestTube, Leaf, Activity, Mountain, BarChart3, Eye, Loader2,
+  ExternalLink, Trash2, Pencil, Grid3x3, TestTube, Leaf, Activity, Mountain, BarChart3, Zap, Eye, Loader2,
 } from 'lucide-react';
 
 type MapaNuvem = { resp: RespInterp; labels: GeoJSON.FeatureCollection; interpoladoEm?: string };
@@ -210,6 +212,8 @@ function MapasDefinitivos({ talhao, safra, onZonas }: { talhao: Talhao | null; s
   const [zonaMsg, setZonaMsg] = useState('');
   const [argila, setArgila] = useState<{ resp: RespInterp; legenda: Legenda } | null>(null);
   const [argilaLoad, setArgilaLoad] = useState(false);
+  const [ec, setEc] = useState<EcCamada | null>(null);
+  const [ecLoad, setEcLoad] = useState(false);
 
   const temZonas = !!talhao?.zonasGeojson;
 
@@ -236,6 +240,25 @@ function MapasDefinitivos({ talhao, safra, onZonas }: { talhao: Talhao | null; s
     })();
     return () => { cancel = true; };
   }, [talhao?.id, safra]);
+
+  // Condutividade elétrica OFICIAL — variável FIXA do talhão (não é por safra).
+  // Mostra a profundidade marcada como oficial (ou a 1ª de EC, se não houver).
+  useEffect(() => {
+    let cancel = false; setEc(null);
+    if (!talhao?.id) return;
+    setEcLoad(true);
+    (async () => {
+      try {
+        const camadas = await carregarEcOficial(talhao.id);
+        const profOf = getCondutividade(talhao.id).find(l => l.oficial)?.profundidadeOficial;
+        const ecs = camadas.filter(c => c.prof !== 'altitude');
+        const escolhida = ecs.find(c => c.prof === profOf) ?? ecs[0] ?? null;
+        if (!cancel) setEc(escolhida);
+      } catch { if (!cancel) setEc(null); }
+      finally { if (!cancel) setEcLoad(false); }
+    })();
+    return () => { cancel = true; };
+  }, [talhao?.id]);
 
   function publicarZonas(fc: GeoJSON.FeatureCollection) {
     const features = fc.features.filter(f => f.geometry).map(f => {
@@ -271,6 +294,18 @@ function MapasDefinitivos({ talhao, safra, onZonas }: { talhao: Talhao | null; s
     setMapMode('satellite');
   }
 
+  function verEc() {
+    if (!ec) return;
+    const leg = getLegendas().find(l => l.atributoId === 'condutividade' || l.categoria === 'condutividade');
+    if (!leg) return;
+    let url: string | undefined;
+    try { url = colorirGridComLegenda({ b64: ec.b64, shape: ec.shape }, leg).dataUrl; } catch {}
+    if (!url) return;
+    setFertilidadeLabels(null);
+    setFertilidadeOverlay({ url, coordinates: coordsFromBounds(ec.bounds), opacity: 1 });
+    setMapMode('satellite');
+  }
+
   return (
     <div>
       <div className="px-4 py-2 flex items-center gap-2" style={{ background: '#0a1929', borderBottom: '1px solid #0f2240' }}>
@@ -290,9 +325,12 @@ function MapasDefinitivos({ talhao, safra, onZonas }: { talhao: Talhao | null; s
       <DefRow icon={BarChart3} cor="#f59e0b" label="Textura (Argila)"
         estado={argilaLoad ? 'load' : argila ? 'ver' : 'vazio'} onVer={verArgila} />
 
+      {/* Condutividade elétrica (CEa) — variável fixa do talhão */}
+      <DefRow icon={Zap} cor="#22d3ee" label={ec ? `Condutividade · ${rotuloEc(ec.prof)}` : 'Condutividade (CEa)'}
+        estado={ecLoad ? 'load' : ec ? 'ver' : 'vazio'} onVer={verEc} />
+
       {/* Em breve */}
       <DefRow icon={Mountain} cor="#94a3b8" label="Altimetria" estado="breve" />
-      <DefRow icon={BarChart3} cor="#f472b6" label="Produtividade" estado="breve" />
     </div>
   );
 }
