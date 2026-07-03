@@ -1,6 +1,9 @@
-export const APP_VERSION = '1.18.1';
+export const APP_VERSION = '1.18.2';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.18.2': [
+    'Convite de usuário: o link de confirmação de e-mail agora aponta sempre para a app publicada (origem atual), nunca mais para localhost — reforço contra o erro "não é possível acessar localhost" que aparecia quando o projeto está com confirmação de e-mail ligada e a Site URL mal configurada. Obs.: o ideal continua sendo manter a confirmação de e-mail DESLIGADA no Supabase (o convite já cria a senha provisória)',
+  ],
   '1.18.1': [
     'EDITOR DE TRAÇADO mais claro: a barra virou duas partes — em cima o título + medidas e o botão SALVAR (verde, sempre visível, não some mais no meio das ferramentas); logo abaixo uma PALETA com TODAS as ferramentas à vista, separadas em Modo (Mover/Remover/Cortar/Buraco — a ativa fica destacada) e Ações (Reduzir/Simplificar/Suavizar/Desfazer)',
     'Nova ferramenta REDUZIR: tira os vértices redundantes SEM mudar o contorno (só remove pontos que estão praticamente em cima da reta entre os vizinhos, tolerância 0,3 m) — diferente do Simplificar, que é mais agressivo e pode mexer levemente no desenho. Ideal para enxugar contornos densos (caminhada de GPS, importados com muitos pontos)',

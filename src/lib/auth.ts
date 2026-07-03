@@ -187,7 +187,12 @@ export async function criarUsuarioConvite(email: string, senha: string): Promise
   if (usarSupabase) {
     const sb = getSupabaseEfemero();
     if (!sb) return { ok: false, erro: 'Supabase não configurado.' };
-    const { data, error } = await sb.auth.signUp({ email: e, password: senha });
+    // Se "Confirm email" estiver LIGADO no projeto, o link de confirmação usa a
+    // Site URL do Supabase — que não pode ser localhost. Fixamos o redirect na
+    // ORIGEM atual (o admin convida a partir da app publicada) como reforço, pra
+    // o link nunca cair em localhost mesmo com a Site URL mal configurada.
+    const emailRedirectTo = typeof window !== 'undefined' ? window.location.origin : undefined;
+    const { data, error } = await sb.auth.signUp({ email: e, password: senha, options: emailRedirectTo ? { emailRedirectTo } : undefined });
     if (error) {
       const m = (error.message || '').toLowerCase();
       if (m.includes('already registered') || m.includes('already exists') || m.includes('already been registered'))
