@@ -1,6 +1,10 @@
-export const APP_VERSION = '1.13.0';
+export const APP_VERSION = '1.14.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.14.0': [
+    'IV4 — LINHA DO TEMPO dos índices salvos na aba NDVI/Satélite: gráfico da MÉDIA de cada índice ao longo das datas mantidas (uma série por índice+sensor, cores próprias). Tocar num ponto abre o mapa daquela data; clicar na série oculta/mostra — a evolução do vigor da lavoura na safra num relance',
+    'Cenas REJEITADAS agora são salvas na NUVEM por talhão (antes ficavam só no navegador): a rejeição feita num computador vale em qualquer outro aparelho. Offline continua funcionando com o registro local e sincroniza na próxima abertura',
+  ],
   '1.13.0': [
     'IV3 — Índices integrados aos outros módulos: na ZONA DE MANEJO cada índice mantido aparece com o nome certo (ex.: "SAVI S2", "NDRE CBERS") — antes tudo era rotulado NDVI e dois índices da mesma data colidiam',
     'COMPARADOR: os índices entram na lista de camadas com nome e sensor; comparar Sentinel-2 × CBERS-4A mostra o AVISO de calibração (resolução, data, bandas — apoio visual, não equivalência absoluta)',

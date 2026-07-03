@@ -22,6 +22,7 @@ import {
   type RespNdvi, type CenaDisponivel, type FonteNdvi,
 } from '@/lib/msr';
 import { cloudSalvarMapa, cloudCarregarMapasPorPrefixo, cloudExcluirMapasPorPrefixo, cloudPodeGravar } from '@/lib/cloud';
+import { getRejeitadasLocal, carregarRejeitadas, marcarRejeitada } from '@/lib/cenaEstados';
 import { pode, emailUsuario } from '@/lib/empresa';
 import type { Legenda } from '@/lib/legendas';
 import {
@@ -58,16 +59,7 @@ const chaveDe = (fonte: FonteNdvi, data: string | null, indice = 'NDVI') => `${f
 const chaveCena = (fonte: FonteNdvi, data: string | null) => `${fonte}:${data ?? ''}`;
 const ROTULO_FONTE: Record<FonteNdvi, string> = { sentinel: 'Sentinel-2', cbers: 'CBERS-4A' };
 
-// ── Cenas rejeitadas (estado persistido no aparelho) ─────────────────────────
-const K_REJ = 'inv_ndvi_rejeitadas';
-function getRejeitadas(): Record<string, boolean> {
-  try { return JSON.parse(localStorage.getItem(K_REJ) ?? '{}'); } catch { return {}; }
-}
-function marcarRejeitada(id: string, v: boolean) {
-  const r = getRejeitadas();
-  if (v) r[id] = true; else delete r[id];
-  localStorage.setItem(K_REJ, JSON.stringify(r));
-}
+// Cenas rejeitadas: persistidas na NUVEM por talhão (IV4) — ver lib/cenaEstados.
 
 // p-ésimo percentil de um grid (p em 0..100). Usado pelo contraste.
 function percentis(grid: Grid, pLo: number, pHi: number): [number, number] {
@@ -161,8 +153,9 @@ export function NdviSection() {
   useEffect(() => {
     setCenas({}); setImagens({}); setPrevias({}); setCandidatos([]); setThumbs({});
     setSelKey(''); setPreviaDe(null); setEstado('idle'); setErro(''); setSalvos({});
-    setRejeitadas(getRejeitadas());
+    setRejeitadas(getRejeitadasLocal());
     if (!nav.talhaoId) return;
+    void carregarRejeitadas(nav.talhaoId).then(setRejeitadas).catch(() => {});
     (async () => {
       const novo: Record<string, MapaNdvi> = {};
       for (const f of ['sentinel', 'cbers'] as FonteNdvi[]) {
@@ -376,10 +369,11 @@ export function NdviSection() {
   }
 
   function toggleRejeitada(c: Cand) {
+    if (!nav.talhaoId) return;
     const id = idRejeicao(c);
     const nova = !rejeitadas[id];
-    marcarRejeitada(id, nova);
-    setRejeitadas(getRejeitadas());
+    marcarRejeitada(nav.talhaoId, id, nova);   // local + nuvem (vale em qualquer aparelho)
+    setRejeitadas(getRejeitadasLocal());
     if (nova) setPreviaDe(null);
   }
 
@@ -616,6 +610,12 @@ export function NdviSection() {
         </div>
       )}
 
+      {/* Linha do tempo dos índices salvos (IV4 — histórico do talhão) */}
+      {!previaDe && (
+        <TimelineIndices cenas={cenas} salvos={salvos} selKey={selKey}
+          onSel={k => { setSelKey(k); setPreviaDe(null); }} />
+      )}
+
       {/* Resultado — cena processada selecionada */}
       {sel && !previaDe && (
         <div className="space-y-2 p-2.5 rounded-lg" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
@@ -720,6 +720,79 @@ export function NdviSection() {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Linha do tempo dos índices salvos (IV4 — spec seção 19) ──────────────────
+// Média de cada índice mantido ao longo das datas; 1 série por índice+sensor.
+const CORES_SERIE = ['#4ade80', '#60a5fa', '#f472b6', '#fbbf24', '#a78bfa', '#f87171', '#34d399', '#fb923c'];
+
+function TimelineIndices({ cenas, salvos, selKey, onSel }: {
+  cenas: Record<string, MapaNdvi>; salvos: Record<string, boolean>;
+  selKey: string; onSel: (k: string) => void;
+}) {
+  const [ocultas, setOcultas] = useState<Record<string, boolean>>({});
+  const pontos = useMemo(() => Object.entries(cenas)
+    .filter(([k, m]) => salvos[k] && m.resp?.stats?.media != null && m.resp?.cena?.data)
+    .map(([k, m]) => {
+      const [f, d, ind] = k.split(':');
+      return { k, serie: `${ind ?? 'NDVI'} ${f === 'cbers' ? 'C4A' : 'S2'}`, data: d, media: m.resp.stats.media as number };
+    })
+    .sort((a, b) => a.data.localeCompare(b.data)), [cenas, salvos]);
+  const series = useMemo(() => [...new Set(pontos.map(p => p.serie))], [pontos]);
+  if (pontos.length < 2) return null;
+
+  const datas = [...new Set(pontos.map(p => p.data))].sort();
+  const visiveis = pontos.filter(p => !ocultas[p.serie]);
+  const base = visiveis.length ? visiveis : pontos;
+  let lo = Math.min(...base.map(p => p.media)), hi = Math.max(...base.map(p => p.media));
+  if (hi - lo < 0.05) { lo -= 0.05; hi += 0.05; }
+  const W = 300, H = 90, PL = 30, PR = 8, PT = 8, PB = 16;
+  const x = (d: string) => PL + (datas.length === 1 ? 0 : (datas.indexOf(d) / (datas.length - 1)) * (W - PL - PR));
+  const y = (v: number) => PT + (1 - (v - lo) / (hi - lo)) * (H - PT - PB);
+  const cor = (s: string) => CORES_SERIE[series.indexOf(s) % CORES_SERIE.length];
+
+  return (
+    <div className="p-2.5 rounded-lg space-y-1.5" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
+      <p className="text-[10px] font-semibold" style={{ color: '#93c5fd' }}>Linha do tempo — média dos índices salvos</p>
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 90 }}>
+        <text x={PL - 4} y={y(hi) + 3} textAnchor="end" fontSize={7} fill="#64748b">{hi.toFixed(2)}</text>
+        <text x={PL - 4} y={y(lo) + 3} textAnchor="end" fontSize={7} fill="#64748b">{lo.toFixed(2)}</text>
+        <line x1={PL} y1={PT} x2={PL} y2={H - PB} stroke="#1a3a6b" strokeWidth={0.5} />
+        <line x1={PL} y1={H - PB} x2={W - PR} y2={H - PB} stroke="#1a3a6b" strokeWidth={0.5} />
+        <text x={PL} y={H - 4} fontSize={7} fill="#64748b">{ddmmyy(datas[0])}</text>
+        <text x={W - PR} y={H - 4} textAnchor="end" fontSize={7} fill="#64748b">{ddmmyy(datas[datas.length - 1])}</text>
+        {series.filter(s => !ocultas[s]).map(s => {
+          const ps = pontos.filter(p => p.serie === s);
+          return (
+            <g key={s}>
+              {ps.length > 1 && (
+                <polyline points={ps.map(p => `${x(p.data)},${y(p.media)}`).join(' ')}
+                  fill="none" stroke={cor(s)} strokeWidth={1.2} opacity={0.85} />
+              )}
+              {ps.map(p => (
+                <circle key={p.k} cx={x(p.data)} cy={y(p.media)} r={p.k === selKey ? 3.5 : 2.5}
+                  fill={cor(s)} stroke={p.k === selKey ? '#fff' : 'none'} strokeWidth={1}
+                  style={{ cursor: 'pointer' }} onClick={() => onSel(p.k)}>
+                  <title>{s} · {ddmmyy(p.data)} · média {p.media.toFixed(2)}</title>
+                </circle>
+              ))}
+            </g>
+          );
+        })}
+      </svg>
+      <div className="flex flex-wrap gap-1">
+        {series.map(s => (
+          <button key={s} onClick={() => setOcultas(o => ({ ...o, [s]: !o[s] }))}
+            className="px-1.5 py-0.5 rounded-full text-[9px] font-bold flex items-center gap-1"
+            style={{ background: '#0b1d3a', border: '1px solid #1a3a6b', color: ocultas[s] ? '#475569' : cor(s), opacity: ocultas[s] ? 0.6 : 1 }}>
+            <span style={{ width: 7, height: 7, borderRadius: 4, background: ocultas[s] ? '#475569' : cor(s), display: 'inline-block' }} />
+            {s}
+          </button>
+        ))}
+      </div>
+      <p className="text-[8px]" style={{ color: '#475569' }}>Toque num ponto para abrir o mapa daquela data. Clique numa série para ocultar/mostrar.</p>
     </div>
   );
 }
