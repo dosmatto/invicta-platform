@@ -1,6 +1,11 @@
-export const APP_VERSION = '1.16.1';
+export const APP_VERSION = '1.17.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.17.0': [
+    'APP DE CAMPO — nova aba GRADES: além do passo a passo (Produtor→Fazenda→Talhão→Ciclo), agora dá pra escolher a SAFRA e ver TODAS as grades numa lista só, com busca por nome (grade ou talhão), filtros de status (Nova / Iniciada / Finalizada) e de sincronização (Sincronizadas / Pendentes) — igual ao fluxo que você pediu',
+    'MAPAS OFFLINE mais fáceis: cada grade da lista tem um botão de BAIXAR o mapa de satélite do seu talhão pro celular, e um botão "Baixar todos" pega os mapas de todos os talhões da safra de uma vez (sem rebaixar imagens repetidas de talhões vizinhos) — prepare tudo no Wi-Fi antes de ir a campo',
+    'A tela mostra a hora da "Última atualização" (última sincronização) no topo, para você saber se os dados estão frescos',
+  ],
   '1.16.1': [
     'CORREÇÃO: sumiu de vez a mensagem antiga "Interpolador desligado nesta máquina… dê dois cliques em start.bat" — ela era da época do backend local e ainda aparecia quando o servidor da NUVEM estava dormindo (ele hiberna sem uso e leva ~1 min para acordar)',
     'Agora o app ACORDA o servidor sozinho: abrir a página do talhão já dispara a subida, e qualquer processamento (fertilidade, zonas de manejo, satélite, colheita, condutividade) que encontrar o servidor dormindo espera ele acordar e REPETE a chamada automaticamente — sem erro e sem clique extra',

@@ -32,6 +32,30 @@ export const ROTULO_STATUS: Record<StatusPonto, string> = {
   cancelado: 'Cancelado',
 };
 
+// ── Status agregado da GRADE (derivado das coletas dos seus pontos) ───────────
+export type StatusGrade = 'nova' | 'iniciada' | 'finalizada';
+
+export const ROTULO_GRADE: Record<StatusGrade, string> = {
+  nova: 'Nova', iniciada: 'Iniciada', finalizada: 'Finalizada',
+};
+export const COR_GRADE: Record<StatusGrade, string> = {
+  nova: '#93c5fd', iniciada: '#fbbf24', finalizada: '#22c55e',
+};
+
+// Um ponto "resolvido" = tem coleta com status diferente de pendente (coletado,
+// pulado ou cancelado). Nova = nada resolvido; Finalizada = todos os pontos.
+export function statusGrade(coletas: RegistroColeta[], nPontos: number): StatusGrade {
+  const resolvidos = coletas.filter(c => c.status !== 'pendente').length;
+  if (resolvidos === 0) return 'nova';
+  if (nPontos > 0 && resolvidos >= nPontos) return 'finalizada';
+  return 'iniciada';
+}
+
+// Tem alguma coleta ainda não enviada pra nuvem?
+export function gradeTemPendencia(coletas: RegistroColeta[]): boolean {
+  return coletas.some(c => c.syncPendente);
+}
+
 export interface RegistroColeta {
   id: string;              // `${gradeId}__${ordem}`
   gradeId: string;
@@ -405,11 +429,8 @@ function tileXY(lng: number, lat: number, z: number): [number, number] {
   return [x, y];
 }
 
-// Baixa os tiles de satélite do bbox (z 12–17) pro cache usado pelo mapa.
-export async function baixarTilesOffline(
-  bbox: [number, number, number, number],
-  onProgresso?: (feitos: number, total: number) => void,
-): Promise<{ total: number; ok: number }> {
+// URLs dos tiles de satélite que cobrem o bbox (z 12–17).
+function urlsTiles(bbox: [number, number, number, number]): string[] {
   const urls: string[] = [];
   for (let z = 12; z <= 17; z++) {
     const [x0, y1] = tileXY(bbox[0], bbox[1], z);
@@ -420,6 +441,14 @@ export async function baixarTilesOffline(
       }
     }
   }
+  return urls;
+}
+
+// Baixa uma lista de tiles pro Cache Storage (o mesmo que o mapa lê).
+async function baixarUrls(
+  urls: string[],
+  onProgresso?: (feitos: number, total: number) => void,
+): Promise<{ total: number; ok: number }> {
   const cache = await caches.open(CACHE_TILES);
   let ok = 0, feitos = 0;
   const LOTE = 8;
@@ -437,6 +466,25 @@ export async function baixarTilesOffline(
     }));
   }
   return { total: urls.length, ok };
+}
+
+// Baixa os tiles de satélite do bbox (z 12–17) pro cache usado pelo mapa.
+export async function baixarTilesOffline(
+  bbox: [number, number, number, number],
+  onProgresso?: (feitos: number, total: number) => void,
+): Promise<{ total: number; ok: number }> {
+  return baixarUrls(urlsTiles(bbox), onProgresso);
+}
+
+// Baixa vários bboxes de uma vez, com DEDUP dos tiles sobrepostos entre talhões
+// vizinhos (o "baixar todos da safra" não rebaixa a mesma imagem).
+export async function baixarTilesVarios(
+  bboxes: [number, number, number, number][],
+  onProgresso?: (feitos: number, total: number) => void,
+): Promise<{ total: number; ok: number }> {
+  const set = new Set<string>();
+  for (const b of bboxes) for (const u of urlsTiles(b)) set.add(u);
+  return baixarUrls([...set], onProgresso);
 }
 
 // ── Service worker / instalação ───────────────────────────────────────────────
@@ -465,4 +513,14 @@ export function getConfigColeta(): ConfigColeta {
 
 export function saveConfigColeta(cfg: ConfigColeta) {
   localStorage.setItem(KEY_CFG, JSON.stringify(cfg));
+}
+
+// ── Carimbo da última sincronização (mostrado no topo da lista) ───────────────
+const KEY_ULT_SYNC = 'inv_coleta_ultimo_sync';
+
+export function marcarUltimoSync() {
+  try { localStorage.setItem(KEY_ULT_SYNC, new Date().toISOString()); } catch { /* sem storage */ }
+}
+export function ultimoSync(): string | null {
+  try { return localStorage.getItem(KEY_ULT_SYNC); } catch { return null; }
 }

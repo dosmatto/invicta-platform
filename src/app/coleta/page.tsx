@@ -18,7 +18,9 @@ import {
   getColetas, upsertColeta, idColeta, pushColetasPendentes, pullColetas, pushMedicoesPendentes,
   contarPendentesSync, contarFotosPendentes, salvarFoto, fotosDaColeta,
   comprimirFoto, subirFotosPendentes, distanciaM, formatarDist, avisoDentroRaio,
-  baixarTilesOffline, registrarSWColeta, getConfigColeta, saveConfigColeta,
+  baixarTilesOffline, baixarTilesVarios, registrarSWColeta, getConfigColeta, saveConfigColeta,
+  StatusGrade, ROTULO_GRADE, COR_GRADE, statusGrade, gradeTemPendencia,
+  ultimoSync, marcarUltimoSync,
   TipoFoto, FotoColeta,
 } from '@/lib/coleta';
 import type { PosOperador } from '@/components/coleta/MapaColeta';
@@ -27,6 +29,7 @@ import {
   ChevronLeft, ChevronRight, MapPin, Crosshair, Layers, List, Download,
   RefreshCw, LogOut, Settings, Camera, CheckCircle2, X, Wifi, WifiOff,
   Loader2, AlertTriangle, Navigation, CloudUpload, Maximize2, Ruler, Grid3x3,
+  Search, DownloadCloud, Eye,
 } from 'lucide-react';
 
 const MapaColeta = dynamic(
@@ -119,6 +122,7 @@ export default function ColetaPage() {
       await bootCloud().catch(() => {});
       let recebidas = 0;
       if (sel.gradeId) recebidas = await pullColetas(sel.gradeId).catch(() => 0);
+      marcarUltimoSync();
       setMsgSync(
         `✓ ${enviados} coleta(s) e ${fotos.enviadas} foto(s) enviadas` +
         (medicoes ? ` · ${medicoes} medição(ões)` : '') +
@@ -250,6 +254,8 @@ function TelaSelecao({ sel, setSel, online, pend, sincronizar, sincronizando, ms
     () => sel.talhaoId && sel.safra ? getGrades(sel.talhaoId, sel.safra) : [],
     [sel.talhaoId, sel.safra],
   );
+  const [aba, setAba] = useState<'navegar' | 'grades'>('navegar');
+  const ult = ultimoSync();
 
   const passos = [
     { rotulo: 'Produtor', valor: sel.produtor },
@@ -303,57 +309,234 @@ function TelaSelecao({ sel, setSel, online, pend, sincronizar, sincronizando, ms
         )}
       </div>
       {msgSync && <p className="px-4 py-1.5 text-[10px]" style={{ color: '#94a3b8', background: '#0b1d3a' }}>{msgSync}</p>}
+      {ult && (
+        <p className="px-4 py-1 text-[10px] flex-shrink-0" style={{ color: '#475569', background: '#0a1929' }}>
+          Última atualização em {new Date(ult).toLocaleString('pt-BR')}
+        </p>
+      )}
 
-      {/* breadcrumb */}
-      <div className="px-4 py-2.5 flex items-center gap-1.5 text-[11px] flex-wrap" style={{ borderBottom: `1px solid ${BORDA}` }}>
-        <button onClick={voltar} className="p-1 rounded mr-1" style={{ background: BORDA, color: '#93c5fd' }}>
-          <ChevronLeft size={14} />
-        </button>
-        {passos.length === 0 && <span style={{ color: SUB }}>Selecione o produtor para começar</span>}
-        {passos.map((p, i) => (
-          <span key={p.rotulo} className="flex items-center gap-1.5">
-            {i > 0 && <ChevronRight size={11} style={{ color: SUB }} />}
-            <span style={{ color: SUB }}>{p.rotulo}:</span>
-            <span className="font-bold" style={{ color: TXT }}>{p.valor}</span>
-          </span>
+      {/* abas: navegar (passo a passo) | grades (lista filtrável) */}
+      <div className="flex gap-1.5 px-4 py-2 flex-shrink-0" style={{ borderBottom: `1px solid ${BORDA}` }}>
+        {([['navegar', 'Navegar'], ['grades', 'Grades']] as const).map(([id, r]) => (
+          <button key={id} onClick={() => setAba(id)}
+            className="px-3.5 py-1.5 rounded-lg text-[11px] font-bold"
+            style={{ background: aba === id ? '#2e5fa3' : BORDA, color: aba === id ? '#fff' : '#94a3b8' }}>
+            {r}
+          </button>
         ))}
       </div>
 
-      {/* lista do passo atual */}
-      <main className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
-        {!sel.produtorId ? (
-          <Lista titulo="Produtor" vazio="Nenhum produtor sincronizado — conecte e sincronize."
-            itens={produtores.map(p => ({ id: p.id, nome: p.nome }))}
-            onEscolher={it => setSel({ ...sel, produtorId: it.id, produtor: it.nome })} />
-        ) : !sel.fazendaId ? (
-          <Lista titulo="Fazenda" vazio="Nenhuma fazenda deste produtor."
-            itens={fazendas.map(f => ({ id: f.id, nome: f.nome, sub: f.municipio || undefined }))}
-            onEscolher={it => setSel({ ...sel, fazendaId: it.id, fazenda: it.nome })} />
-        ) : !sel.talhaoId ? (
-          <Lista titulo="Talhão" vazio="Nenhum talhão com limite geográfico nesta fazenda."
-            itens={talhoes.map(t => ({ id: t.id, nome: t.nome, sub: `${t.areaHa.toLocaleString('pt-BR')} ha` }))}
-            onEscolher={it => {
-              const t = talhoes.find(x => x.id === it.id)!;
-              setSel({ ...sel, talhaoId: t.id, talhao: t.nome });
-            }} />
-        ) : !sel.safra ? (
-          <Lista titulo="Ciclo (safra)" vazio="Nenhuma safra cadastrada."
-            itens={safras.map(s => ({ id: s.nome, nome: s.nome, sub: s.ativa ? 'safra ativa' : undefined }))}
-            onEscolher={it => setSel({ ...sel, safra: it.id })} />
-        ) : (
-          <Lista titulo="Área de coleta (grade)" vazio="Nenhuma grade de amostragem deste talhão nesta safra — gere a grade na plataforma e sincronize."
-            itens={grades.map(g => ({
-              id: g.id, nome: g.nome,
-              sub: `${g.pontos.length} pontos · ${g.profundidades.map(p => p.rotulo).join(' / ')} · ${g.metodo === 'zonas' ? 'por zonas' : 'grade'}`,
-            }))}
-            onEscolher={it => setSel({ ...sel, gradeId: it.id })} />
-        )}
-      </main>
+      {aba === 'grades' ? (
+        <AbaGrades sel={sel} setSel={setSel} />
+      ) : (
+        <>
+          {/* breadcrumb */}
+          <div className="px-4 py-2.5 flex items-center gap-1.5 text-[11px] flex-wrap" style={{ borderBottom: `1px solid ${BORDA}` }}>
+            <button onClick={voltar} className="p-1 rounded mr-1" style={{ background: BORDA, color: '#93c5fd' }}>
+              <ChevronLeft size={14} />
+            </button>
+            {passos.length === 0 && <span style={{ color: SUB }}>Selecione o produtor para começar</span>}
+            {passos.map((p, i) => (
+              <span key={p.rotulo} className="flex items-center gap-1.5">
+                {i > 0 && <ChevronRight size={11} style={{ color: SUB }} />}
+                <span style={{ color: SUB }}>{p.rotulo}:</span>
+                <span className="font-bold" style={{ color: TXT }}>{p.valor}</span>
+              </span>
+            ))}
+          </div>
+
+          {/* lista do passo atual */}
+          <main className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
+            {!sel.produtorId ? (
+              <Lista titulo="Produtor" vazio="Nenhum produtor sincronizado — conecte e sincronize."
+                itens={produtores.map(p => ({ id: p.id, nome: p.nome }))}
+                onEscolher={it => setSel({ ...sel, produtorId: it.id, produtor: it.nome })} />
+            ) : !sel.fazendaId ? (
+              <Lista titulo="Fazenda" vazio="Nenhuma fazenda deste produtor."
+                itens={fazendas.map(f => ({ id: f.id, nome: f.nome, sub: f.municipio || undefined }))}
+                onEscolher={it => setSel({ ...sel, fazendaId: it.id, fazenda: it.nome })} />
+            ) : !sel.talhaoId ? (
+              <Lista titulo="Talhão" vazio="Nenhum talhão com limite geográfico nesta fazenda."
+                itens={talhoes.map(t => ({ id: t.id, nome: t.nome, sub: `${t.areaHa.toLocaleString('pt-BR')} ha` }))}
+                onEscolher={it => {
+                  const t = talhoes.find(x => x.id === it.id)!;
+                  setSel({ ...sel, talhaoId: t.id, talhao: t.nome });
+                }} />
+            ) : !sel.safra ? (
+              <Lista titulo="Ciclo (safra)" vazio="Nenhuma safra cadastrada."
+                itens={safras.map(s => ({ id: s.nome, nome: s.nome, sub: s.ativa ? 'safra ativa' : undefined }))}
+                onEscolher={it => setSel({ ...sel, safra: it.id })} />
+            ) : (
+              <Lista titulo="Área de coleta (grade)" vazio="Nenhuma grade de amostragem deste talhão nesta safra — gere a grade na plataforma e sincronize."
+                itens={grades.map(g => ({
+                  id: g.id, nome: g.nome,
+                  sub: `${g.pontos.length} pontos · ${g.profundidades.map(p => p.rotulo).join(' / ')} · ${g.metodo === 'zonas' ? 'por zonas' : 'grade'}`,
+                }))}
+                onEscolher={it => setSel({ ...sel, gradeId: it.id })} />
+            )}
+          </main>
+        </>
+      )}
 
       <p className="text-center text-[10px] py-2" style={{ color: '#334155' }}>
         {emailUsuario() || ''} · INVICTA Coleta de Solo
       </p>
     </div>
+  );
+}
+
+// ── Aba Grades: lista plana filtrável (safra + busca + status + sync) ─────────
+function selDaGrade(g: GradeAmostragem): Selecao {
+  const t = getTalhoes().find(x => x.id === g.talhaoId) ?? null;
+  const f = t ? getFazendas().find(x => x.id === t.fazendaId) ?? null : null;
+  const c = f ? getClientes().find(x => x.id === f.clienteId) ?? null : null;
+  return {
+    produtorId: c?.id ?? null, produtor: c?.nome ?? '',
+    fazendaId: f?.id ?? null, fazenda: f?.nome ?? '',
+    talhaoId: g.talhaoId, talhao: t?.nome ?? '',
+    safra: g.safra, gradeId: g.id,
+  };
+}
+
+function AbaGrades({ sel, setSel }: { sel: Selecao; setSel: (s: Selecao) => void }) {
+  const safras = useMemo(() => getSafras(), []);
+  const [safraSel, setSafraSel] = useState(
+    sel.safra || safras.find(s => s.ativa)?.nome || safras[0]?.nome || '',
+  );
+  const [busca, setBusca] = useState('');
+  const [fStatus, setFStatus] = useState<'todas' | StatusGrade>('todas');
+  const [fSync, setFSync] = useState<'todas' | 'sinc' | 'pend'>('todas');
+  const [baixando, setBaixando] = useState<{ feitos: number; total: number } | null>(null);
+  const [msg, setMsg] = useState('');
+
+  // talhões visíveis (getTalhoes já vem filtrado pelo escopo do usuário)
+  const talhoesVis = useMemo(() => {
+    const m = new Map<string, Talhao>();
+    for (const t of getTalhoes()) m.set(t.id, t);
+    return m;
+  }, []);
+
+  const linhas = useMemo(() => {
+    return getGrades(undefined, safraSel)
+      .filter(g => talhoesVis.has(g.talhaoId))
+      .map(g => {
+        const t = talhoesVis.get(g.talhaoId)!;
+        const cols = getColetas(g.id);
+        return {
+          g, t,
+          st: statusGrade(cols, g.pontos.length),
+          feitos: cols.filter(c => c.status !== 'pendente').length,
+          pend: gradeTemPendencia(cols),
+        };
+      });
+  }, [safraSel, talhoesVis]);
+
+  const filtradas = useMemo(() => {
+    const q = busca.trim().toLowerCase();
+    return linhas.filter(l => {
+      if (q && !`${l.g.nome} ${l.t.nome}`.toLowerCase().includes(q)) return false;
+      if (fStatus !== 'todas' && l.st !== fStatus) return false;
+      if (fSync === 'sinc' && l.pend) return false;
+      if (fSync === 'pend' && !l.pend) return false;
+      return true;
+    });
+  }, [linhas, busca, fStatus, fSync]);
+
+  async function baixarUma(t: Talhao) {
+    if (!t.bbox || baixando) return;
+    setBaixando({ feitos: 0, total: 1 }); setMsg('');
+    const r = await baixarTilesOffline(t.bbox, (f, tot) => setBaixando({ feitos: f, total: tot }));
+    setBaixando(null);
+    setMsg(`Mapa de ${t.nome}: ${r.ok}/${r.total} imagens no aparelho.`);
+  }
+  async function baixarTodas() {
+    const bboxes = [...new Map(
+      filtradas.filter(l => l.t.bbox).map(l => [l.t.id, l.t.bbox!]),
+    ).values()];
+    if (bboxes.length === 0 || baixando) return;
+    setBaixando({ feitos: 0, total: 1 }); setMsg('');
+    const r = await baixarTilesVarios(bboxes, (f, tot) => setBaixando({ feitos: f, total: tot }));
+    setBaixando(null);
+    setMsg(`Mapas de ${bboxes.length} talhão(ões): ${r.ok}/${r.total} imagens no aparelho.`);
+  }
+
+  const chip = (ativo: boolean) => ({
+    background: ativo ? '#2e5fa3' : BORDA, color: ativo ? '#fff' : '#94a3b8',
+  });
+
+  return (
+    <>
+      {/* safra + baixar todos */}
+      <div className="px-4 py-2.5 flex items-center gap-2 flex-shrink-0" style={{ borderBottom: `1px solid #0f2240` }}>
+        <select value={safraSel} onChange={e => setSafraSel(e.target.value)}
+          className="flex-1 rounded-lg px-2 py-2 text-xs font-bold outline-none"
+          style={{ background: BORDA, color: TXT, border: '1px solid #2e5fa3' }}>
+          {safras.map(s => <option key={s.nome} value={s.nome}>{s.nome}{s.ativa ? ' (ativa)' : ''}</option>)}
+        </select>
+        <button onClick={() => void baixarTodas()} disabled={!!baixando || filtradas.length === 0}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-bold text-white disabled:opacity-40"
+          style={{ background: '#166534' }} title="Baixar os mapas de todos os talhões da lista">
+          {baixando ? <Loader2 size={13} className="animate-spin" /> : <DownloadCloud size={13} />}
+          Baixar todos
+        </button>
+      </div>
+
+      {/* busca */}
+      <div className="px-4 py-2 flex-shrink-0">
+        <div className="flex items-center gap-2 rounded-lg px-2.5 py-2" style={{ background: BORDA, border: '1px solid #2e5fa3' }}>
+          <Search size={13} style={{ color: SUB }} />
+          <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Filtrar pelo nome da grade ou talhão"
+            className="flex-1 bg-transparent text-xs outline-none" style={{ color: TXT }} />
+        </div>
+      </div>
+
+      {/* filtros de status + sincronização */}
+      <div className="px-4 pb-2 flex gap-1.5 flex-wrap flex-shrink-0">
+        {([['todas', 'Todas'], ['nova', 'Nova'], ['iniciada', 'Iniciada'], ['finalizada', 'Finalizada']] as const).map(([id, r]) => (
+          <button key={id} onClick={() => setFStatus(id)} className="px-2.5 py-1 rounded-full text-[10px] font-bold" style={chip(fStatus === id)}>{r}</button>
+        ))}
+        <span className="w-px my-0.5" style={{ background: BORDA }} />
+        {([['sinc', 'Sincronizadas'], ['pend', 'Pendentes']] as const).map(([id, r]) => (
+          <button key={id} onClick={() => setFSync(fSync === id ? 'todas' : id)} className="px-2.5 py-1 rounded-full text-[10px] font-bold" style={chip(fSync === id)}>{r}</button>
+        ))}
+      </div>
+
+      {baixando && (
+        <p className="px-4 py-1 text-[10px] flex-shrink-0" style={{ color: '#86efac' }}>
+          Baixando mapas… {baixando.feitos}/{baixando.total}
+        </p>
+      )}
+      {msg && <p className="px-4 py-1 text-[10px] flex-shrink-0" style={{ color: '#94a3b8' }}>{msg}</p>}
+
+      <main className="flex-1 overflow-y-auto px-4 py-2 space-y-2">
+        {filtradas.length === 0 ? (
+          <p className="text-xs py-8 text-center" style={{ color: SUB }}>
+            Nenhuma grade nesta safra com esses filtros. Gere a grade na plataforma e sincronize.
+          </p>
+        ) : filtradas.map(({ g, t, st, feitos, pend }) => (
+          <div key={g.id} className="flex items-center gap-3 px-3.5 py-3 rounded-xl"
+            style={{ background: '#0b1d3a', border: `1px solid ${BORDA}` }}>
+            <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: COR_GRADE[st] }} />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold truncate" style={{ color: TXT }}>{g.nome}</p>
+              <p className="text-[10px] truncate" style={{ color: SUB }}>
+                {t.nome} · {g.pontos.length} pts · {feitos}/{g.pontos.length}
+                <span style={{ color: COR_GRADE[st] }}> · {ROTULO_GRADE[st]}</span>
+                {pend ? <span style={{ color: '#fbbf24' }}> · a enviar</span> : ''}
+              </p>
+            </div>
+            <button onClick={() => setSel(selDaGrade(g))} title="Abrir no mapa"
+              className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: BORDA, color: '#93c5fd' }}>
+              <Eye size={15} />
+            </button>
+            <button onClick={() => void baixarUma(t)} disabled={!t.bbox || !!baixando} title="Baixar mapa offline"
+              className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 disabled:opacity-40" style={{ background: BORDA, color: '#86efac' }}>
+              <Download size={15} />
+            </button>
+          </div>
+        ))}
+      </main>
+    </>
   );
 }
 
