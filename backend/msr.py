@@ -229,7 +229,7 @@ def gerar_ndvi(polygon_geojson: dict, data_ini: str, data_fim: str,
 # Assets do earth-search v1 por banda interna padronizada.
 ASSETS_BANDA = {
     "blue": ["blue", "B02"], "green": ["green", "B03"], "red": ["red", "B04"],
-    "nir": ["nir", "B08"], "rededge": ["rededge", "B05"], "swir": ["swir16", "B11"],
+    "nir": ["nir", "B08"], "rededge": ["rededge1", "rededge", "B05"], "swir": ["swir16", "swir", "B11"],
 }
 ASSET_SCL = ["scl", "SCL"]
 # Classes SCL mascaradas: 0 nodata, 1 saturado, 3 sombra de nuvem, 8/9 nuvem, 10 cirrus.
