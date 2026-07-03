@@ -23,7 +23,8 @@ import { rampaVisualStops } from '@/lib/legendas';
 import { classeZona, classeReconhecida, corZonaPorPosicao, ORDEM_CLASSES } from '@/lib/zonas';
 import { simboloElemento } from '@/lib/lab';
 import type { AmbienteProdutivo, Homogeneidade, MetricasZonaMeap } from '@/lib/meap/tipos';
-import { Layers, AlertTriangle, Wand2, Loader2, X, Check, ChevronUp, ChevronDown, Save, Star, Trash2, Eye, BarChart3, Sparkles, Combine, CheckSquare, Square, Pencil, Undo2, Redo2 } from 'lucide-react';
+import { Layers, AlertTriangle, Wand2, Loader2, X, Check, ChevronUp, ChevronDown, Save, Star, Trash2, Eye, BarChart3, Sparkles, Combine, CheckSquare, Square, Pencil, Undo2, Redo2, FlaskConical } from 'lucide-react';
+import { LaboratorioZonas } from './LaboratorioZonas';
 
 const EditorGeometria = dynamic(
   () => import('@/components/geo/EditorGeometria').then(m => ({ default: m.EditorGeometria })),
@@ -182,6 +183,7 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
   // Zoneamentos salvos (vários por talhão; um é o "padrão" usado pela Amostragem)
   const [zoneamentos, setZoneamentos] = useState<ZoneamentoMeap[]>([]);
   const [vendoId, setVendoId] = useState<string | null>(null);  // zoneamento salvo em visualização no mapa
+  const [labAberto, setLabAberto] = useState(false);            // Laboratório de Zonas (C4.2)
   const [previewCh, setPreviewCh] = useState<string | null>(null);  // camada em pré-visualização no mapa
   const [refreshAmb, setRefreshAmb] = useState(0);  // força re-derivar o ambiente adotado (após remover)
   const [fundoCh, setFundoCh] = useState<string | null>(null);  // camada de FUNDO sob as zonas (Avaliar)
@@ -526,7 +528,8 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
     const primeiro = zoneamentos.length === 0;
     const novo = saveZoneamentoMeap({
       talhaoId: talhao.id, nome: `Zoneamento ${zoneamentos.length + 1}`, padrao: primeiro, fc,
-      meta: { camadas: cams, algoritmo: res.stats.algoritmo, nPotenciais: potenciais.length, areaMinHa: res.stats.area_min_ha, nZonas: potenciais.length, nPoligonos: zonas.length, cvMedio },
+      meta: { camadas: cams, algoritmo: res.stats.algoritmo, nPotenciais: potenciais.length, areaMinHa: res.stats.area_min_ha, nZonas: potenciais.length, nPoligonos: zonas.length, cvMedio,
+        chaves: [...chaves], pesos: chaves.reduce((o, k) => { o[k] = pesos[k] ?? 1; return o; }, {} as Record<string, number>) },
     });
     if (primeiro) setZoneamentoPadraoMeap(talhao.id, novo.id);  // grava em talhao.zonasGeojson → Amostragem
     recarregarZon();
@@ -933,6 +936,9 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
           <div className="flex items-center gap-2">
             <Star size={12} style={{ color: '#fbbf24' }} />
             <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color: '#cbd5e1' }}>Zoneamentos salvos ({zoneamentos.length})</span>
+            <button onClick={() => setLabAberto(true)} title="Comparar os cenários de zona (métricas + concordância)" className="ml-auto flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded" style={{ background: '#1e3a5f', color: '#93c5fd' }}>
+              <FlaskConical size={11} /> Laboratório
+            </button>
           </div>
           {zoneamentos.map(z => (
             <div key={z.id} onClick={() => setVendoId(vendoId === z.id ? null : z.id)} title="Clique para ver no mapa"
@@ -961,6 +967,10 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
         <EditorGeometria titulo={editandoZona.nome} fc={editandoZona.fc}
           onSalvar={fcs => aplicarEdicaoZona(editandoZona.id, fcs)}
           onFechar={() => setEditandoZona(null)} />
+      )}
+
+      {labAberto && zoneamentos.length > 0 && (
+        <LaboratorioZonas zoneamentos={zoneamentos} onClose={() => setLabAberto(false)} />
       )}
     </div>
   );

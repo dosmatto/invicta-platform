@@ -1,6 +1,10 @@
-export const APP_VERSION = '1.27.0';
+export const APP_VERSION = '1.28.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.28.0': [
+    'ZONAS DE MANEJO — LABORATÓRIO DE ZONAS (Condutividade C4.2): novo botão "Laboratório" no bloco de Zoneamentos salvos (aba Zonas de Manejo) abre uma bancada que COMPARA todos os cenários de zona do talhão numa tabela — variáveis + pesos, método, nº de zonas/polígonos, área média por zona, CV médio e homogeneidade — com o MELHOR cenário destacado (menor CV médio = zonas mais homogêneas por dentro, que costumam representar melhor a realidade)',
+    'CONCORDÂNCIA ESPACIAL entre dois cenários: escolha Cenário A × Cenário B e veja o % de área onde os dois classificam o potencial no mesmo terço (alto/médio/baixo) — é a comparação "Zona só-Condutividade × Multivariável" da spec, com barras de área por classe de cada cenário lado a lado. Cada zoneamento agora guarda os pesos por camada usados, para a comparação ser justa. Fecha a fase C4',
+  ],
   '1.27.0': [
     'CONDUTIVIDADE C4.1 — HISTÓRICO DE PROCESSAMENTO: cada interpolação de uma profundidade agora fica registrada como uma "rodada", guardando como o mapa foi feito — Automática ou Manual, modelo do variograma, RMSE, qualidade, % removido e a data. Um painel "Histórico de processamento" no card lista todas as rodadas (a mais recente marcada como "atual")',
     'REPROCESSAR NÃO SOBRESCREVE ÀS CEGAS: interpolar de novo uma profundidade que já tem mapa agora PEDE CONFIRMAÇÃO — a rodada anterior fica guardada no histórico (nunca se perde). Cada rodada do histórico tem "Usar", que repõe os parâmetros daquele processamento nos controles (limpeza + krigagem) para você reproduzi-lo e clicar em Interpolar',
