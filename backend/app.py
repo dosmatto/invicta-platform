@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -79,6 +79,28 @@ def interpolar(req: ReqInterp):
         raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:  # pragma: no cover
         raise HTTPException(status_code=500, detail=f"falha na interpolacao: {e}")
+
+
+class ReqGeoTiff(BaseModel):
+    grid_b64: str                     # Float32 (norte no topo), rows*cols — o grid do /interpolar
+    shape: list[int]                  # [rows, cols]
+    bounds: list[float]               # [w, s, e, n]
+    filename: str = "mapa.tif"
+
+
+@app.post("/grid-geotiff")
+def grid_geotiff(req: ReqGeoTiff):
+    """Exporta um grid JA interpolado como GeoTIFF (EPSG:4326). Reaproveita o
+    raster que o front ja tem — o download bate pixel a pixel com o mapa exibido."""
+    try:
+        data = interp.grid_para_geotiff(req.grid_b64, req.shape, req.bounds)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:  # pragma: no cover
+        raise HTTPException(status_code=500, detail=f"falha ao gerar GeoTIFF: {e}")
+    fn = req.filename if req.filename.lower().endswith(".tif") else f"{req.filename}.tif"
+    return Response(content=data, media_type="image/tiff",
+                    headers={"Content-Disposition": f'attachment; filename="{fn}"'})
 
 
 class Camada(BaseModel):

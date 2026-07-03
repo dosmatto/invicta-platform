@@ -15,13 +15,13 @@ import {
 } from '@/lib/store';
 import {
   interpolar, rampaDaLegenda, gradienteCss, coordsFromBounds, extrairPoligono,
-  comprimirGrid, descomprimirGrid, type RespInterp,
+  comprimirGrid, descomprimirGrid, exportarGeotiff, type RespInterp,
 } from '@/lib/fertilidade';
 import { colorirGridComLegenda, temGrid } from '@/lib/raster';
 import { cloudSalvarMapa, cloudCarregarMapasPorPrefixo, cloudExcluirMapasPorPrefixo } from '@/lib/cloud';
 import { parseArquivoPontos, pontosCondutividade, avaliarQualidade, CORES_QUALIDADE, sugerirProfundidadesCEa, ehColunaAltitude, prepararPontosKrigagem, limparPontosEC, rasterizarPontos5, type ArquivoPontos, type RelatorioLimpeza, type Classe5 } from '@/lib/condutividade';
 import type { Legenda } from '@/lib/legendas';
-import { Upload, Loader2, Zap, Eraser, AlertTriangle, Save, Trash2, Play, Plus, Layers, Star, Gauge, Mountain, SlidersHorizontal, ChevronDown, ChevronUp, RotateCcw } from 'lucide-react';
+import { Upload, Loader2, Zap, Eraser, AlertTriangle, Save, Trash2, Play, Plus, Layers, Star, Gauge, Mountain, SlidersHorizontal, ChevronDown, ChevronUp, RotateCcw, Download } from 'lucide-react';
 
 const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
 const fmt = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
@@ -87,6 +87,7 @@ export function CondutividadeSection() {
   const [vista, setVista] = useState<'bruto' | 'limpo' | 'mapa'>('mapa');  // o que o mapa mostra
   const [limpos, setLimpos] = useState<Record<string, { pontos: Ponto[]; rel: RelatorioLimpeza }>>({});
   const [limpando, setLimpando] = useState(false);
+  const [exportando, setExportando] = useState(false);  // baixando GeoTIFF do mapa
   const [vistaInfo, setVistaInfo] = useState<{ n: number; classes: Classe5[] } | null>(null);  // pontos plotados em 5 classes
   const [params, setParams] = useState<ParamsLimpeza>({ ...PARAMS_LIMPEZA_PADRAO });
   // C2 — krigagem MANUAL (Modo 2): método/modelo do variograma/pixel ('auto' = como antes).
@@ -333,8 +334,31 @@ export function CondutividadeSection() {
   const processando = estado === 'processando';
   const mapasSalvos = Object.keys(cache).length;
   const qual = cache[profundidade]
-    ? avaliarQualidade({ n: cache[profundidade].resp.stats.n, rmse: cache[profundidade].resp.stats.rmse, min: cache[profundidade].resp.stats.min, max: cache[profundidade].resp.stats.max })
+    ? avaliarQualidade({ n: cache[profundidade].resp.stats.n, rmse: cache[profundidade].resp.stats.rmse, min: cache[profundidade].resp.stats.min, max: cache[profundidade].resp.stats.max, percRemovido: limpos[profundidade]?.rel?.perc_removido ?? null })
     : null;
+
+  // Baixa o mapa krigado atual como GeoTIFF (EPSG:4326) — abre em QGIS/máquina.
+  async function baixarGeotiff() {
+    const c = cache[profundidade];
+    if (!c?.resp.grid || exportando) return;
+    setExportando(true);
+    try {
+      const talhaoNome = getTalhoes().find(t => t.id === nav.talhaoId)?.nome ?? 'talhao';
+      const simb = camadaSel?.legenda.simbolo ?? legenda?.simbolo ?? 'CEa';
+      const base = `${talhaoNome}_${simb}_${profundidade}`
+        .normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w.-]+/g, '_');
+      const nomeArq = `${base || 'condutividade'}.tif`;
+      const blob = await exportarGeotiff(c.resp.grid, c.resp.bounds, nomeArq);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = nomeArq; a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Falha ao exportar GeoTIFF');
+    } finally {
+      setExportando(false);
+    }
+  }
 
   return (
     <div className="px-4 py-3 space-y-3">
@@ -695,9 +719,16 @@ export function CondutividadeSection() {
                 <div className="flex items-center gap-1.5 text-[10px]" style={{ color: '#86efac' }}>
                   <Zap size={12} /> {cache[profundidade].resp.stats.modelo}{binMsg[profundidade] ? ` · ${binMsg[profundidade]}` : ` · ${cache[profundidade].resp.stats.n} pts`}
                 </div>
-                <button onClick={() => limparProf(profundidade)} title="Apagar o mapa interpolado" className="flex items-center gap-1 text-[10px]" style={{ color: '#93c5fd' }}>
-                  <Trash2 size={11} /> Apagar
-                </button>
+                <div className="flex items-center gap-3">
+                  {cache[profundidade].resp.grid && (
+                    <button onClick={baixarGeotiff} disabled={exportando} title="Baixar o mapa como GeoTIFF (EPSG:4326) — abre em QGIS/máquina" className="flex items-center gap-1 text-[10px] disabled:opacity-50" style={{ color: '#86efac' }}>
+                      {exportando ? <Loader2 size={11} className="animate-spin" /> : <Download size={11} />} GeoTIFF
+                    </button>
+                  )}
+                  <button onClick={() => limparProf(profundidade)} title="Apagar o mapa interpolado" className="flex items-center gap-1 text-[10px]" style={{ color: '#93c5fd' }}>
+                    <Trash2 size={11} /> Apagar
+                  </button>
+                </div>
               </div>
 
               {/* Índice de Qualidade */}
@@ -710,7 +741,8 @@ export function CondutividadeSection() {
                   </span>
                 </div>
                 <p className="text-[9px] mt-1 leading-relaxed" style={{ color: '#94a3b8' }}>
-                  {qual.motivo} {qual.rmse != null && <>RMSE {fmt(qual.rmse)} {legenda.unidade}.</>} Limpeza dos dados entra na próxima fase.
+                  {qual.motivo} {qual.rmse != null && <>RMSE {fmt(qual.rmse)} {legenda.unidade}.</>}
+                  {qual.percRemovido != null && qual.percRemovido > 0 && qual.percRemovido < 30 && <> Limpeza: {qual.percRemovido}% dos pontos removidos.</>}
                 </p>
               </div>
 

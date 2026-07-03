@@ -68,13 +68,15 @@ export interface QualidadeEC {
   classe: ClasseQualidade;
   apto: boolean;             // apto p/ gerar Zonas de Manejo (MEAP)
   motivo: string;
+  percRemovido: number | null;  // % de pontos brutos descartados na limpeza (C2)
 }
 
 // Classifica a qualidade do levantamento a partir do erro da validação cruzada
-// (krigagem) normalizado pela amplitude dos valores. Sem limpeza ainda (C1), o
-// "percentual removido" entra na C2; aqui a qualidade é honesta sobre o que há.
-export function avaliarQualidade(opts: { n: number; rmse: number | null; min: number | null; max: number | null }): QualidadeEC {
+// (krigagem) normalizado pela amplitude dos valores + o % de pontos descartados
+// na limpeza (C2.b): muita coisa removida = dado bruto ruidoso.
+export function avaliarQualidade(opts: { n: number; rmse: number | null; min: number | null; max: number | null; percRemovido?: number | null }): QualidadeEC {
   const { n, rmse, min, max } = opts;
+  const percRemovido = opts.percRemovido ?? null;
   const ampl = (min != null && max != null && max > min) ? max - min : null;
   const rmseRel = (rmse != null && ampl) ? rmse / ampl : null;
 
@@ -86,13 +88,23 @@ export function avaliarQualidade(opts: { n: number; rmse: number | null; min: nu
   else if (rmseRel < 0.25) classe = 'Regular';
   else classe = 'Baixa';
 
+  // Descarte alto na limpeza rebaixa 1 nível (Excelente→Boa…): o mapa pode até
+  // ficar liso, mas o levantamento bruto tinha muito ruído.
+  const ORDEM: ClasseQualidade[] = ['Baixa', 'Regular', 'Boa', 'Excelente'];
+  if (percRemovido != null && percRemovido >= 40 && n >= 10) {
+    classe = ORDEM[Math.max(0, ORDEM.indexOf(classe) - 1)];
+  }
+
   const apto = classe !== 'Baixa' && n >= 10;
-  const motivo = n < 10
+  const base = n < 10
     ? 'Poucos pontos válidos (mín. ~10) para um mapa confiável.'
     : rmseRel == null
       ? 'Sem erro de validação cruzada disponível (avaliação parcial).'
       : `Erro relativo da validação cruzada de ${(rmseRel * 100).toFixed(0)}% da amplitude.`;
-  return { n, rmse, rmseRel, classe, apto, motivo };
+  const motivo = (percRemovido != null && percRemovido >= 30 && n >= 10)
+    ? `${base} ${Math.round(percRemovido)}% dos pontos brutos foram descartados na limpeza (dado ruidoso).`
+    : base;
+  return { n, rmse, rmseRel, classe, apto, motivo, percRemovido };
 }
 
 export const CORES_QUALIDADE: Record<ClasseQualidade, { cor: string; bg: string }> = {

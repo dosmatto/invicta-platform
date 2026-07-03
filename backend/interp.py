@@ -49,7 +49,7 @@ AMPLITUDE_MIN = 0.30
 NUGGET_MAX = 0.10
 # Versao do motor de interpolacao (conferir em GET /health para saber se o
 # backend foi reiniciado com o codigo novo).
-VERSION = "interp-16-variograma-manual"
+VERSION = "interp-17-geotiff"
 
 
 def _nlags(n: int) -> int:
@@ -412,6 +412,35 @@ def interpolar(points: list[dict], polygon_geojson: dict, dominio, stops,
     grid_b64 = base64.b64encode(grid_oriented.tobytes()).decode()
     grid_meta = {"b64": grid_b64, "shape": [int(grid_oriented.shape[0]), int(grid_oriented.shape[1])]}
     return {"bounds": g["bounds"], "png": _png_data_url(rgba), "stats": stats, "grid": grid_meta}
+
+
+def grid_para_geotiff(grid_b64: str, shape: list[int], bounds: list[float]) -> bytes:
+    """Embrulha um grid JA calculado (Float32, norte no topo, como o `grid` de
+    `gerar_interp`) num GeoTIFF EPSG:4326 de 1 banda. Reaproveita o raster exibido
+    (nao reinterpola) => o arquivo baixado e identico ao mapa na tela.
+
+    NaN (fora do poligono) vira nodata=-9999 (os valores de CEa/atributos sao
+    positivos e pequenos, nunca colidem). Compressao deflate. Bytes prontos p/ download."""
+    import rasterio  # pesado (GDAL) — import tardio p/ nao onerar a subida do servico
+    from rasterio.io import MemoryFile
+    from rasterio.transform import from_bounds
+
+    rows, cols = int(shape[0]), int(shape[1])
+    arr = np.frombuffer(base64.b64decode(grid_b64), dtype="<f4").astype("float32")
+    if arr.size != rows * cols:
+        raise ValueError(f"grid nao corresponde ao shape: {arr.size} != {rows}x{cols}")
+    arr = arr.reshape(rows, cols)  # linha 0 = norte (casa com o grid orientado)
+
+    w, s, e, n = (float(x) for x in bounds)
+    NODATA = -9999.0
+    out = np.where(np.isfinite(arr), arr, NODATA).astype("float32")
+    transform = from_bounds(w, s, e, n, cols, rows)  # row 0 no norte
+    with MemoryFile() as mem:
+        with mem.open(driver="GTiff", height=rows, width=cols, count=1,
+                      dtype="float32", crs="EPSG:4326", transform=transform,
+                      nodata=NODATA, compress="deflate") as ds:
+            ds.write(out, 1)
+        return mem.read()
 
 
 # ---------------------------------------------------------------- zoneamento

@@ -85,6 +85,24 @@ export async function descomprimirGrid(grid: Grid): Promise<Grid> {
   return { shape: grid.shape, b64: cru };
 }
 
+// Exporta um grid JÁ interpolado como GeoTIFF (EPSG:4326, 1 banda, nodata=-9999)
+// via backend (rasterio) — o arquivo baixado é idêntico ao mapa exibido. Descomprime
+// o grid antes (o backend espera Float32 cru). Devolve o Blob p/ o chamador baixar.
+export async function exportarGeotiff(
+  grid: Grid,
+  bounds: [number, number, number, number],
+  filename: string,
+): Promise<Blob> {
+  const cru = await descomprimirGrid(grid);
+  const r = await postBackend('/grid-geotiff', { grid_b64: cru.b64, shape: cru.shape, bounds, filename });
+  if (!r.ok) {
+    let msg = `Backend respondeu ${r.status}`;
+    try { const j = await r.json(); if (j?.detail) msg = String(j.detail); } catch {}
+    throw new Error(msg);
+  }
+  return r.blob();
+}
+
 // Variograma 100% manual (C2.b) — quando presente, o backend usa esses parâmetros
 // direto (sem auto-ajuste nem anti-degeneração).
 export interface VariogramaManual {

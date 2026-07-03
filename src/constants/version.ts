@@ -1,6 +1,10 @@
-export const APP_VERSION = '1.25.0';
+export const APP_VERSION = '1.26.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.26.0': [
+    'CONDUTIVIDADE C2.b — EXPORTAR GeoTIFF: o mapa krigado agora tem o botão "GeoTIFF" (no card de qualidade) que baixa o raster georreferenciado (EPSG:4326, 1 banda, sem-dado = -9999) idêntico ao que está na tela — abre direto no QGIS/ArcGIS ou vai para o software da máquina. O arquivo sai nomeado por talhão + atributo + profundidade',
+    'CONDUTIVIDADE — o "% removido" na limpeza agora conta no ÍNDICE DE QUALIDADE: acima de 30% dos pontos descartados o índice avisa "dado ruidoso", e acima de 40% ele rebaixa a nota em um nível (um mapa pode ficar liso, mas o levantamento bruto tinha muito ruído). Fecha a fase C2.b (variograma manual + GeoTIFF + % no índice)',
+  ],
   '1.25.0': [
     'CONDUTIVIDADE C2.b — VARIOGRAMA MANUAL completo: na krigagem Modo 2 (Manual), além do modelo e do pixel, agora dá pra fixar Alcance, Patamar, Pepita, nº de Vizinhos e Anisotropia (razão + ângulo). Preencha o Alcance para o backend usar exatamente esses parâmetros, sem auto-ajuste — controle total do geoestatístico',
   ],
