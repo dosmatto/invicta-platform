@@ -63,6 +63,47 @@ export async function buscarMde(params: {
   return r.json();
 }
 
+// ── F2+F3: Análise topográfica (derivados + agronômicos) ────────────────────
+export type SensibilidadeDrenagem = 'baixa' | 'media' | 'alta';
+
+export interface RespMdeAnalise {
+  fonte: string;
+  rotulo: string;
+  bounds: [number, number, number, number];
+  shape: [number, number];
+  grids: Record<'aspecto' | 'curv_perfil' | 'curv_plano' | 'curv_geral' | 'tpi' | 'tri' | 'fluxo_log' | 'twi' | 'ls', Grid>;
+  pngs: { curvas: string; drenagem: string; classes: string };
+  meta: {
+    intervalo_curvas_m: number;
+    limiar_drenagem_ha: number;
+    cell_ha: number;
+    k_tpi_px: number;
+    classes: { codigo: number; nome: string; cor: string; ha: number; pct: number }[];
+    ranges: Record<string, [number, number]>;
+  };
+}
+
+export async function buscarAnaliseMde(params: {
+  poligono: GeoJSON.Polygon | GeoJSON.MultiPolygon;
+  fonte?: string;                 // fonte da base OFICIAL (consistência com o aprovado)
+  bufferM?: number;
+  sensibilidade?: SensibilidadeDrenagem;
+}): Promise<RespMdeAnalise> {
+  const r = await postBackend('/mde-analise', {
+    poligono: params.poligono,
+    fonte: params.fonte ?? 'auto',
+    buffer_m: params.bufferM ?? 300,
+    sensibilidade: params.sensibilidade ?? 'media',
+  });
+  if (r.status === 404) throw new Error('O servidor ainda não tem a análise topográfica — deve estar sendo atualizado. Tente em alguns minutos.');
+  if (!r.ok) {
+    let msg = `Backend respondeu ${r.status}`;
+    try { const j = await r.json(); if (j?.detail) msg = String(j.detail); } catch {}
+    throw new Error(msg);
+  }
+  return r.json();
+}
+
 // ── Persistência da base aprovada (nuvem) ────────────────────────────────────
 export const prefixoMde = (talhaoId: string, mdeId: string) => `mde__${talhaoId}__${mdeId}__`;
 

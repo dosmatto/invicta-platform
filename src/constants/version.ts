@@ -1,6 +1,11 @@
-export const APP_VERSION = '1.30.0';
+export const APP_VERSION = '1.31.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.31.0': [
+    'MDE FASES 2+3 — ANÁLISE TOPOGRÁFICA AGRONÔMICA: com a base oficial aprovada, um clique em "Gerar análise" calcula na nuvem TODOS os derivados do relevo: ASPECTO (direção da vertente), CURVATURAS (geral, perfil e plano — acúmulo × dispersão de água), TPI (posição topográfica), TRI (rugosidade), FLUXO ACUMULADO (com preenchimento de depressões + D8), CURVAS DE NÍVEL (intervalo automático) — sempre com buffer, sem erro de borda',
+    'INDICADORES AGRONÔMICOS: TWI (umidade topográfica — do seco/escoamento ao acúmulo/encharcamento), LS FACTOR (fator topográfico da erosão), REDE DE DRENAGEM POTENCIAL com sensibilidade ajustável (baixa = só linhas principais ≥2 ha · média ≥0,75 ha · alta ≥0,25 ha) e CLASSES TOPOGRÁFICAS do talhão (Topo / Ombro / Meia encosta / Baixada / Depressão / Linha de fluxo / Risco de erosão) com ÁREA E % POR CLASSE',
+    'Cada camada abre no mapa com legenda própria (divergentes centradas no zero; aspecto em rampa circular N→L→S→O) e sai em GeoTIFF (EPSG:4326) — pronto pro QGIS. Motor validado com relevos sintéticos de gabarito (vale em V concentra o fluxo no talvegue, morro convexo × tigela côncava nas duas curvaturas, poço interno preenchido) e com dados reais. Falta a F4: integração com Zonas de Manejo, cruzamentos e relatório',
+  ],
   '1.30.0': [
     'NOVO MÓDULO — MDE / ANÁLISE TOPOGRÁFICA (Fase 1 de 4): a aba "Altimetria (MDE)" saiu do "em breve" e virou real. Um clique busca o Modelo Digital de Elevação do talhão em fontes públicas (Copernicus DEM GLO-30 → NASADEM/SRTM automático; FABDEM/ALOS aparecem como indisponíveis com o motivo — licença/chave) e processa TUDO na nuvem: altitude, declividade e relevo sombreado, sempre com BUFFER ao redor do talhão (nunca derivamos no limite seco — sem erro de borda)',
     'PRÉVIA para validação antes de salvar: mapa hipsométrico (verde→marrom, relativo à área), declividade em classes de relevo (plano → montanhoso), relevo sombreado, estatísticas (mín/média/máx/amplitude/declividade), histograma de altitude e AVISOS de qualidade (área sem dados, talhão pequeno para 30 m, relevo plano, amplitude suspeita)',

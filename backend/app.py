@@ -101,6 +101,25 @@ def mde_gerar(req: ReqMde):
         raise HTTPException(status_code=500, detail=f"falha no MDE: {e}")
 
 
+class ReqMdeAnalise(BaseModel):
+    poligono: dict[str, Any]
+    fonte: str = "auto"               # base aprovada: passar a fonte dela (sem 'auto' cai na ordem)
+    buffer_m: float = 300.0
+    sensibilidade: str = "media"      # rede de drenagem: 'baixa' | 'media' | 'alta' (spec 7.7)
+
+
+@app.post("/mde-analise")
+def mde_analise(req: ReqMdeAnalise):
+    """MDE F2+F3: derivados topográficos (aspecto/curvaturas/TPI/TRI/fluxo) +
+    análise agronômica (TWI/LS/drenagem/classes topográficas) numa chamada."""
+    try:
+        return mde.gerar_analise(req.poligono, req.fonte, req.buffer_m, req.sensibilidade)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:  # pragma: no cover
+        raise HTTPException(status_code=500, detail=f"falha na análise topográfica: {e}")
+
+
 class ReqGeoTiff(BaseModel):
     grid_b64: str                     # Float32 (norte no topo), rows*cols — o grid do /interpolar
     shape: list[int]                  # [rows, cols]

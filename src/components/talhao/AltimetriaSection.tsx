@@ -11,20 +11,19 @@ import { useEffect, useMemo, useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import { getTalhoes, getLegendas, getMdes, saveMde, setMdeOficial, deleteMde, type MdeTalhao } from '@/lib/store';
 import { extrairPoligono, coordsFromBounds, exportarGeotiff, gradienteCss, type Grid } from '@/lib/fertilidade';
-import { colorirGridComLegenda } from '@/lib/raster';
+import { colorirGridComLegenda, colorirGrid } from '@/lib/raster';
 import { tocarBackend } from '@/lib/interpUrl';
 import { emailUsuario } from '@/lib/auth';
 import {
   buscarMde, salvarMdeNaNuvem, carregarMdeDaNuvem, excluirMdeDaNuvem, normalizarGrid0a100,
-  FONTES_MDE, FONTES_MDE_INDISPONIVEIS, type FonteMde, type RespMde, type MdeCarregado,
+  buscarAnaliseMde, FONTES_MDE, FONTES_MDE_INDISPONIVEIS,
+  type FonteMde, type RespMde, type MdeCarregado, type RespMdeAnalise, type SensibilidadeDrenagem,
 } from '@/lib/mde';
 import type { Legenda } from '@/lib/legendas';
-import { Mountain, Loader2, Search, CheckCircle2, AlertTriangle, Trash2, Download, Star, Layers } from 'lucide-react';
+import { Mountain, Loader2, Search, CheckCircle2, AlertTriangle, Trash2, Download, Star, Layers, Play, Waves } from 'lucide-react';
 
 const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
 const fmt = (v: number, d = 1) => v.toLocaleString('pt-BR', { maximumFractionDigits: d });
-
-type CamadaVista = 'alt' | 'decl' | 'hs';
 
 // Legenda de DECLIVIDADE (graus) — classes de relevo (Embrapa) fixas. Efêmera
 // (objeto local): não entra na Biblioteca; F2+ pode oficializá-la.
@@ -43,6 +42,47 @@ const LEG_DECL: Legenda = {
   ],
   criadoEm: '', atualizadoEm: '',
 };
+
+// Legenda efêmera RELATIVA (minmax): estica as cores entre o mín e o máx do
+// grid — serve para TPI/TRI/TWI/LS/fluxo/curvaturas (os divergentes chegam com
+// range simétrico do backend, então o zero fica no centro).
+function legRel(id: string, nome: string, unidade: string, cores: string[]): Legenda {
+  return {
+    id, nome, atributoId: id, atributo: nome, simbolo: nome, unidade, metodo: 'MDE',
+    fonte: 'INVICTA', categoria: 'altimetria-elevacao', invertida: false,
+    tipoEscala: 'gradiente', estilo: 'continuo', escalaRelativa: 'minmax',
+    classes: cores.map((c, i) => ({
+      nome: `${i + 1}`, valorMin: null, valorMax: null,
+      corInicio: c, corFim: cores[i + 1] ?? c, larguraVisual: 100 / cores.length, ordem: i + 1,
+    })),
+    criadoEm: '', atualizadoEm: '',
+  };
+}
+
+// Camadas da análise topográfica (F2+F3). Contrato com backend/mde.py.
+interface CamadaAnalise {
+  id: string; rotulo: string; grupo: 'Derivados' | 'Análise agronômica';
+  tipo: 'grid' | 'png'; leg?: Legenda; rotMin?: string; rotMax?: string; desc?: string;
+}
+const DIV_AZ_VERM = ['#1d4ed8', '#93c5fd', '#f8fafc', '#fca5a5', '#b91c1c'];
+const CAMADAS_ANALISE: CamadaAnalise[] = [
+  { id: 'aspecto', rotulo: 'Aspecto (direção da vertente)', grupo: 'Derivados', tipo: 'grid', rotMin: 'N', rotMax: 'N', desc: 'Para onde a encosta “olha” (N→E→S→O)' },
+  { id: 'curvas', rotulo: 'Curvas de nível', grupo: 'Derivados', tipo: 'png' },
+  { id: 'curv_geral', rotulo: 'Curvatura geral', grupo: 'Derivados', tipo: 'grid', leg: legRel('curv_geral', 'Curvatura geral', '1/m', DIV_AZ_VERM), rotMin: 'côncavo (acúmulo)', rotMax: 'convexo (dispersão)' },
+  { id: 'curv_perfil', rotulo: 'Curvatura de perfil', grupo: 'Derivados', tipo: 'grid', leg: legRel('curv_perfil', 'Curv. perfil', '1/m', DIV_AZ_VERM), rotMin: 'côncava (desacelera/deposita)', rotMax: 'convexa (acelera fluxo)' },
+  { id: 'curv_plano', rotulo: 'Curvatura de plano', grupo: 'Derivados', tipo: 'grid', leg: legRel('curv_plano', 'Curv. plano', '1/m', DIV_AZ_VERM), rotMin: 'convergente (concentra água)', rotMax: 'divergente (dispersa)' },
+  { id: 'tpi', rotulo: 'TPI — posição topográfica', grupo: 'Derivados', tipo: 'grid', leg: legRel('tpi', 'TPI', 'm', ['#1d4ed8', '#93c5fd', '#f8fafc', '#d7ccc8', '#6d4c41']), rotMin: 'baixada/depressão', rotMax: 'topo' },
+  { id: 'tri', rotulo: 'TRI — rugosidade', grupo: 'Derivados', tipo: 'grid', leg: legRel('tri', 'TRI', 'm', ['#fef9c3', '#fbbf24', '#c2410c', '#7c2d92']), rotMin: 'suave', rotMax: 'acidentado' },
+  { id: 'fluxo_log', rotulo: 'Fluxo acumulado', grupo: 'Derivados', tipo: 'grid', leg: legRel('fluxo_log', 'Fluxo', 'log₁₀ células', ['#f0f9ff', '#7dd3fc', '#0284c7', '#0c2f5e']), rotMin: 'pouco', rotMax: 'muito' },
+  { id: 'twi', rotulo: 'TWI — umidade topográfica', grupo: 'Análise agronômica', tipo: 'grid', leg: legRel('twi', 'TWI', '', ['#fde68a', '#a7f3d0', '#38bdf8', '#1e3a8a']), rotMin: 'seco / escoamento', rotMax: 'acúmulo / encharcamento' },
+  { id: 'ls', rotulo: 'LS Factor — risco de erosão', grupo: 'Análise agronômica', tipo: 'grid', leg: legRel('ls', 'LS', '', ['#16a34a', '#facc15', '#f97316', '#dc2626']), rotMin: 'baixo', rotMax: 'crítico' },
+  { id: 'drenagem', rotulo: 'Rede de drenagem / enxurrada', grupo: 'Análise agronômica', tipo: 'png' },
+  { id: 'classes', rotulo: 'Classes topográficas', grupo: 'Análise agronômica', tipo: 'png' },
+];
+// aspecto: rampa CIRCULAR fixa 0–360° (N azul → E verde → S amarelo → O vermelho → N azul)
+const STOPS_ASPECTO: Array<[number, [number, number, number]]> = [
+  [0, [59, 130, 246]], [0.25, [34, 197, 94]], [0.5, [234, 179, 8]], [0.75, [239, 68, 68]], [1, [59, 130, 246]],
+];
 
 export function AltimetriaSection() {
   const { nav, uploadedGeo, setFertilidadeOverlay, setFertilidadeLabels } = useApp();
@@ -66,14 +106,18 @@ export function AltimetriaSection() {
   const [previa, setPrevia] = useState<RespMde | null>(null);       // prévia AINDA não aprovada
   const [salvando, setSalvando] = useState(false);
   const [oficialDados, setOficialDados] = useState<(MdeCarregado & { meta: MdeTalhao }) | null>(null);
-  const [camada, setCamada] = useState<CamadaVista>('alt');
-  const [exportando, setExportando] = useState<'alt' | 'decl' | null>(null);
+  const [camada, setCamada] = useState<string>('alt');   // 'alt'|'decl'|'hs' (F1) ou 'a:<id>' (análise)
+  const [exportando, setExportando] = useState<string | null>(null);
+  // F2+F3 — análise topográfica (derivados + agronômicos)
+  const [analise, setAnalise] = useState<RespMdeAnalise | null>(null);
+  const [gerandoAnalise, setGerandoAnalise] = useState(false);
+  const [sensib, setSensib] = useState<SensibilidadeDrenagem>('media');
 
   const oficial = mdes.find(m => m.oficial) ?? null;
 
   useEffect(() => { tocarBackend(); }, []);
   useEffect(() => {
-    setPrevia(null); setErro(''); setOficialDados(null); setCamada('alt');
+    setPrevia(null); setErro(''); setOficialDados(null); setCamada('alt'); setAnalise(null);
     setMdes(nav.talhaoId ? getMdes(nav.talhaoId) : []);
   }, [nav.talhaoId]);
 
@@ -89,27 +133,40 @@ export function AltimetriaSection() {
 
   useEffect(() => () => { setFertilidadeOverlay(null); setFertilidadeLabels(null); }, [setFertilidadeOverlay, setFertilidadeLabels]);
 
-  // Render da camada escolhida (da prévia OU da oficial carregada).
+  // Render da camada escolhida (prévia F1, oficial carregada, ou análise F2+F3).
   useEffect(() => {
-    const fonteDados = previa ?? oficialDados;
-    if (!fonteDados) { setFertilidadeOverlay(null); return; }
-    const bounds = fonteDados.bounds;
     let url = '';
+    let bounds: [number, number, number, number] | null = null;
     try {
-      if (camada === 'hs') {
-        url = (previa ? previa.hillshade_png : oficialDados?.hillshadePng) ?? '';
-      } else if (camada === 'alt' && legendaAlt) {
-        const g: Grid | null = previa ? previa.elevacao : oficialDados?.elevacao ?? null;
-        if (g) url = colorirGridComLegenda(normalizarGrid0a100(g), legendaAlt).dataUrl;
-      } else if (camada === 'decl') {
-        const g: Grid | null = previa ? previa.declividade : oficialDados?.declividade ?? null;
-        if (g) url = colorirGridComLegenda(g, LEG_DECL).dataUrl;
+      if (camada.startsWith('a:') && analise) {
+        const key = camada.slice(2);
+        bounds = analise.bounds;
+        const def = CAMADAS_ANALISE.find(c => c.id === key);
+        if (def?.tipo === 'png') url = analise.pngs[key as 'curvas' | 'drenagem' | 'classes'] ?? '';
+        else if (key === 'aspecto') url = colorirGrid(analise.grids.aspecto, [0, 360], STOPS_ASPECTO).dataUrl;
+        else if (def?.leg) {
+          const g = analise.grids[key as keyof RespMdeAnalise['grids']];
+          if (g) url = colorirGridComLegenda(g, def.leg).dataUrl;
+        }
+      } else {
+        const fonteDados = previa ?? oficialDados;
+        if (!fonteDados) { setFertilidadeOverlay(null); return; }
+        bounds = fonteDados.bounds;
+        if (camada === 'hs') {
+          url = (previa ? previa.hillshade_png : oficialDados?.hillshadePng) ?? '';
+        } else if (camada === 'alt' && legendaAlt) {
+          const g: Grid | null = previa ? previa.elevacao : oficialDados?.elevacao ?? null;
+          if (g) url = colorirGridComLegenda(normalizarGrid0a100(g), legendaAlt).dataUrl;
+        } else if (camada === 'decl') {
+          const g: Grid | null = previa ? previa.declividade : oficialDados?.declividade ?? null;
+          if (g) url = colorirGridComLegenda(g, LEG_DECL).dataUrl;
+        }
       }
     } catch { /* grid inválido */ }
-    if (!url) { setFertilidadeOverlay(null); return; }
+    if (!url || !bounds) { setFertilidadeOverlay(null); return; }
     setFertilidadeOverlay({ url, coordinates: coordsFromBounds(bounds), opacity: 1 });
     setFertilidadeLabels(null);
-  }, [previa, oficialDados, camada, legendaAlt, setFertilidadeOverlay, setFertilidadeLabels]);
+  }, [previa, oficialDados, analise, camada, legendaAlt, setFertilidadeOverlay, setFertilidadeLabels]);
 
   async function buscar() {
     if (!poligono || buscando) return;
@@ -155,6 +212,39 @@ export function AltimetriaSection() {
     deleteMde(m.id);
     setMdes(getMdes(nav.talhaoId ?? undefined));
     if (oficialDados?.meta.id === m.id) setOficialDados(null);
+  }
+
+  // F2+F3 — gera derivados + análise agronômica a partir da FONTE da base
+  // oficial (spec §6: produtos após a aprovação da base).
+  async function gerarAnalise() {
+    if (!poligono || !oficial || gerandoAnalise) return;
+    setGerandoAnalise(true); setErro('');
+    try {
+      const r = await buscarAnaliseMde({ poligono, fonte: oficial.fonte, sensibilidade: sensib });
+      setAnalise(r);
+      setCamada('a:classes');   // abre já na camada mais interpretada
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Falha na análise topográfica.');
+    } finally { setGerandoAnalise(false); }
+  }
+
+  // GeoTIFF de uma camada GRID da análise (aspecto/tpi/twi/ls/…).
+  async function baixarGeotiffAnalise(key: string) {
+    if (!analise || exportando) return;
+    const g = analise.grids[key as keyof RespMdeAnalise['grids']];
+    if (!g) return;
+    setExportando(key);
+    try {
+      const nomeT = getTalhoes().find(t => t.id === nav.talhaoId)?.nome ?? 'talhao';
+      const base = `${nomeT}_${key}`.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w.-]+/g, '_');
+      const blob = await exportarGeotiff(g, analise.bounds, `${base}.tif`);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `${base}.tif`; a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Falha ao exportar GeoTIFF.');
+    } finally { setExportando(null); }
   }
 
   async function baixarGeotiff(qual: 'alt' | 'decl') {
@@ -309,6 +399,96 @@ export function AltimetriaSection() {
               <button onClick={() => { setPrevia(null); setErro(''); }} className="w-full py-1.5 rounded text-[10px]" style={{ background: '#1a3a6b', color: '#cbd5e1' }}>
                 Descartar prévia
               </button>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* F2+F3 — Análise topográfica (após a aprovação da base; spec §6) */}
+      {oficial && (
+        <div className="rounded-lg p-2.5 space-y-2" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
+          <p className="text-[11px] font-semibold flex items-center gap-1.5" style={{ color: '#93c5fd' }}>
+            <Waves size={13} /> Análise topográfica agronômica
+          </p>
+
+          <div className="flex gap-1 items-end">
+            <label className="flex-1 text-[9px]" style={{ color: '#64748b' }}>Sensibilidade da rede de drenagem
+              <select value={sensib} onChange={e => setSensib(e.target.value as SensibilidadeDrenagem)} className="w-full rounded px-2 py-1.5 text-xs outline-none mt-0.5" style={inputStyle}>
+                <option value="baixa">Baixa — só linhas principais (≥ 2 ha contribuindo)</option>
+                <option value="media">Média — linhas intermediárias (≥ 0,75 ha)</option>
+                <option value="alta">Alta — mais linhas secundárias (≥ 0,25 ha)</option>
+              </select>
+            </label>
+            <button onClick={() => void gerarAnalise()} disabled={gerandoAnalise}
+              className="px-3 py-1.5 rounded text-xs font-bold text-white flex items-center gap-1.5 disabled:opacity-50"
+              style={{ background: 'var(--invicta-green-dark)' }}>
+              {gerandoAnalise ? <><Loader2 size={12} className="animate-spin" /> Gerando…</> : <><Play size={12} /> {analise ? 'Gerar de novo' : 'Gerar análise'}</>}
+            </button>
+          </div>
+          <p className="text-[9px] leading-relaxed" style={{ color: '#475569' }}>
+            Gera TPI, TWI, LS Factor, curvaturas, rugosidade, fluxo, curvas de nível, rede de drenagem e a classificação do relevo — tudo derivado da base oficial ({oficial.rotuloFonte}), com buffer.
+          </p>
+
+          {analise && (
+            <>
+              <div>
+                <label className="text-[9px] font-semibold block mb-0.5" style={{ color: '#64748b' }}>Camada no mapa</label>
+                <select value={camada.startsWith('a:') ? camada : ''} onChange={e => { if (e.target.value) setCamada(e.target.value); }}
+                  className="w-full rounded px-2 py-1.5 text-xs outline-none" style={inputStyle}>
+                  <option value="">— escolher camada da análise —</option>
+                  {(['Derivados', 'Análise agronômica'] as const).map(gr => (
+                    <optgroup key={gr} label={gr}>
+                      {CAMADAS_ANALISE.filter(c => c.grupo === gr).map(c => <option key={c.id} value={`a:${c.id}`}>{c.rotulo}</option>)}
+                    </optgroup>
+                  ))}
+                </select>
+              </div>
+
+              {/* Legenda/contexto da camada ativa da análise */}
+              {camada.startsWith('a:') && (() => {
+                const key = camada.slice(2);
+                const def = CAMADAS_ANALISE.find(c => c.id === key);
+                if (!def) return null;
+                const rng = analise.meta.ranges[key];
+                return (
+                  <div className="space-y-1.5">
+                    {key === 'aspecto' && (
+                      <div>
+                        <div className="relative h-4 rounded overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.1)', background: 'linear-gradient(90deg,#3b82f6,#22c55e,#eab308,#ef4444,#3b82f6)' }} />
+                        <div className="flex justify-between text-[8px] mt-0.5" style={{ color: '#94a3b8' }}><span>N</span><span>L</span><span>S</span><span>O</span><span>N</span></div>
+                      </div>
+                    )}
+                    {def.leg && (
+                      <div>
+                        <div className="relative h-4 rounded overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.1)', background: gradienteCss(def.leg) }} />
+                        <div className="flex justify-between text-[8px] mt-0.5" style={{ color: '#94a3b8' }}>
+                          <span>{def.rotMin}{rng ? ` (${fmt(rng[0], 2)})` : ''}</span>
+                          <span>{def.rotMax}{rng ? ` (${fmt(rng[1], 2)})` : ''}</span>
+                        </div>
+                      </div>
+                    )}
+                    {key === 'curvas' && <p className="text-[9px]" style={{ color: '#94a3b8' }}>Curvas de nível a cada <strong>{analise.meta.intervalo_curvas_m} m</strong> (traço marrom). Derivadas do MDE global — não substituem levantamento de precisão.</p>}
+                    {key === 'drenagem' && <p className="text-[9px]" style={{ color: '#94a3b8' }}>Caminhos preferenciais da água (área contribuinte ≥ {analise.meta.limiar_drenagem_ha} ha). Linhas de enxurrada potenciais — tendência, não medição.</p>}
+                    {key === 'classes' && (
+                      <div className="space-y-0.5">
+                        {analise.meta.classes.map(c => (
+                          <div key={c.codigo} className="flex items-center gap-2 text-[9px]">
+                            <span className="w-3 h-3 rounded-sm flex-shrink-0" style={{ background: c.cor }} />
+                            <span className="flex-1" style={{ color: '#cbd5e1' }}>{c.nome}</span>
+                            <span style={{ color: '#94a3b8' }}>{fmt(c.ha)} ha · {fmt(c.pct)}%</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {def.tipo === 'grid' && (
+                      <button onClick={() => void baixarGeotiffAnalise(key)} disabled={!!exportando}
+                        className="flex items-center gap-1 text-[9px] disabled:opacity-50" style={{ color: '#86efac' }}>
+                        {exportando === key ? <Loader2 size={10} className="animate-spin" /> : <Download size={10} />} GeoTIFF desta camada
+                      </button>
+                    )}
+                  </div>
+                );
+              })()}
             </>
           )}
         </div>
