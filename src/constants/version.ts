@@ -1,6 +1,9 @@
-export const APP_VERSION = '1.38.0';
+export const APP_VERSION = '1.39.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.39.0': [
+    'MDE F4.c — RELATÓRIO PDF DO RELEVO: na análise topográfica, o botão "Relatório PDF do relevo" gera um documento A4 (2 páginas) com cabeçalho (produtor/fazenda/talhão/fonte/resolução), estatísticas (altitude mín/média/máx/amplitude e declividade média), tabelas de ÁREA POR CLASSE DE RELEVO e por classe de declividade, observações agronômicas automáticas (relevo predominante, % em risco de erosão, baixadas com acúmulo de água, linhas de fluxo) e os MAPAS de altitude, declividade, TPI, TWI e classes topográficas compostos sobre o satélite. Fecha o módulo MDE conforme a spec (§17)',
+  ],
   '1.38.0': [
     'MDE F4.b — CRUZAMENTO POR CLASSE DE RELEVO: na análise topográfica, depois de gerar as classes (Topo/Ombro/Meia encosta/Baixada/Depressão/Linha de fluxo/Risco de erosão), escolha uma variável — produtividade, NDVI, fertilidade, condutividade — e veja a MÉDIA dela em cada classe de relevo + a DIFERENÇA em relação à média do talhão (ex.: quanto a baixada produz acima/abaixo da média). É a resposta direta a "por que essa área rende mais ou menos"',
     'O cruzamento é geoespacial e funciona mesmo com resoluções e recortes diferentes entre a variável e o relevo (alinhamento por coordenada real, só sobre pixels válidos). Motor validado (backend: grid de códigos das classes bate 100% com as áreas; cruzamento: 6/6). Próximo (F4.c): relatório PDF do MDE',

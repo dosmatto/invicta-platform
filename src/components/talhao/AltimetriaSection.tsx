@@ -22,7 +22,7 @@ import {
 } from '@/lib/mde';
 import type { Legenda } from '@/lib/legendas';
 import { CruzamentoRelevo } from '@/components/talhao/CruzamentoRelevo';
-import { Mountain, Loader2, Search, CheckCircle2, AlertTriangle, Trash2, Download, Star, Layers, Play, Waves } from 'lucide-react';
+import { Mountain, Loader2, Search, CheckCircle2, AlertTriangle, Trash2, Download, Star, Layers, Play, Waves, FileText } from 'lucide-react';
 
 const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
 const fmt = (v: number, d = 1) => v.toLocaleString('pt-BR', { maximumFractionDigits: d });
@@ -117,6 +117,7 @@ export function AltimetriaSection() {
   const [salvandoZonas, setSalvandoZonas] = useState(false);
   const [nSalvasZonas, setNSalvasZonas] = useState(0);   // camadas topo já no MEAP
   const [zonasMsg, setZonasMsg] = useState('');
+  const [gerandoPdf, setGerandoPdf] = useState(false);
 
   const oficial = mdes.find(m => m.oficial) ?? null;
 
@@ -250,6 +251,22 @@ export function AltimetriaSection() {
     if (!nav.talhaoId) return;
     excluirCamadasTopoMde(nav.talhaoId);
     setNSalvasZonas(0); setZonasMsg('Camadas topográficas removidas do MEAP (Altitude e Declividade continuam vindo da base).');
+  }
+
+  // F4.c — relatório PDF do MDE (§17). Usa a base oficial (elev/decl) + a análise.
+  async function baixarPdf() {
+    if (!analise || !oficial || gerandoPdf) return;
+    const elev = oficialDados?.elevacao ?? previa?.elevacao ?? null;
+    const decl = oficialDados?.declividade ?? previa?.declividade ?? null;
+    const bb = oficialDados?.bounds ?? previa?.bounds ?? null;
+    if (!elev || !decl || !bb) { setErro('Abra os mapas da base oficial (Altitude/Declividade) antes de gerar o relatório.'); return; }
+    setGerandoPdf(true); setErro('');
+    try {
+      const { gerarPdfMde } = await import('@/lib/mdeRelatorio');
+      await gerarPdfMde({ talhaoId: nav.talhaoId!, oficial, analise, elevacao: elev, declividade: decl, baseBounds: bb });
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Falha ao gerar o PDF.');
+    } finally { setGerandoPdf(false); }
   }
 
   // GeoTIFF de uma camada GRID da análise (aspecto/tpi/twi/ls/…).
@@ -490,6 +507,13 @@ export function AltimetriaSection() {
 
               {/* F4.b — Cruzamento por classe de relevo (§12.1) */}
               <CruzamentoRelevo analise={analise} talhaoId={nav.talhaoId!} />
+
+              {/* F4.c — Relatório PDF do MDE (§17) */}
+              <button onClick={() => void baixarPdf()} disabled={gerandoPdf}
+                className="w-full py-1.5 rounded text-[10px] font-bold flex items-center justify-center gap-1.5 disabled:opacity-50"
+                style={{ background: '#1a3a6b', color: '#93c5fd', border: '1px solid #2e5fa3' }}>
+                {gerandoPdf ? <><Loader2 size={11} className="animate-spin" /> Gerando PDF…</> : <><FileText size={11} /> Relatório PDF do relevo</>}
+              </button>
 
               {/* Legenda/contexto da camada ativa da análise */}
               {camada.startsWith('a:') && (() => {
