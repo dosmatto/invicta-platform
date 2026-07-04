@@ -198,3 +198,39 @@ export async function carregarHistoricoDiagnosticos(talhaoId: string, safraNome?
 export async function carregarDiagnostico(talhaoId: string, safraNome?: string): Promise<DiagnosticoIa | null> {
   return (await carregarHistoricoDiagnosticos(talhaoId, safraNome))[0] ?? null;
 }
+
+// ── F3: Chat do talhão (§19) — Q&A livre sobre o contexto ────────────────────
+export interface MsgChat { role: 'user' | 'assistant'; content: string }
+
+async function postIa<T>(rota: string, body: unknown): Promise<T> {
+  const r = await postBackend(rota, body);
+  if (r.status === 404) throw new Error('O servidor ainda não tem este recurso de IA — deve estar sendo atualizado. Tente em alguns minutos.');
+  if (!r.ok) {
+    let msg = `Backend respondeu ${r.status}`;
+    try { const j = await r.json(); if (j?.detail) msg = String(j.detail); } catch {}
+    throw new Error(msg);
+  }
+  return r.json();
+}
+
+// Faz uma pergunta sobre o talhão; `historico` mantém o fio da conversa.
+export async function chatTalhao(talhaoId: string, safraNome: string | undefined, pergunta: string, historico: MsgChat[] = []): Promise<{ resposta: string; custoEstimado?: number }> {
+  const contexto = await montarContextoTalhao(talhaoId, safraNome);
+  const j = await postIa<{ resposta: string; custo_estimado?: number }>('/ia-chat', { contexto, pergunta, historico });
+  return { resposta: j.resposta, custoEstimado: j.custo_estimado };
+}
+
+// ── F3: Explicador de recomendação (§18) ─────────────────────────────────────
+export interface ExplicacaoReco {
+  explicacao_tecnica: string;
+  explicacao_produtor: string;
+  justificativa_maiores_doses: string;
+  justificativa_menores_doses: string;
+  inconsistencias: string[];
+  nivel_de_confianca: 'alto' | 'medio' | 'baixo';
+}
+
+export async function explicarRecomendacao(dados: Record<string, unknown>): Promise<{ resposta: ExplicacaoReco; custoEstimado?: number }> {
+  const j = await postIa<{ resposta: ExplicacaoReco; custo_estimado?: number }>('/ia-explicar-recomendacao', { dados });
+  return { resposta: j.resposta, custoEstimado: j.custo_estimado };
+}

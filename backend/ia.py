@@ -19,7 +19,7 @@ import urllib.error
 import urllib.request
 from typing import Any
 
-VERSION = "ia-2-historico"
+VERSION = "ia-3-chat-explicador"
 
 URL_OPENAI = "https://api.openai.com/v1/chat/completions"
 MODELO_PADRAO = "gpt-4o"          # diagnostico completo = modelo avancado (secao 6)
@@ -109,27 +109,17 @@ def _validar(resp: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-def diagnostico_talhao(contexto: dict[str, Any], tipo_analise: str = "diagnostico_integrado") -> dict[str, Any]:
-    """Chama a OpenAI com o contexto resumido e devolve o diagnostico validado
-    + metadados de auditoria (modelo, tokens)."""
+def _chamar(messages: list[dict[str, str]], json_mode: bool = True, temperature: float = 0.3) -> dict[str, Any]:
+    """Chamada única à OpenAI (REST puro) com tratamento de erro compartilhado.
+    Devolve {texto, modelo, tokens_entrada, tokens_saida, custo_estimado}."""
     chave = os.environ.get("OPENAI_API_KEY")
     if not chave:
         raise ValueError("IA não configurada no servidor: defina OPENAI_API_KEY no painel do Render (Environment).")
-    if not isinstance(contexto, dict) or not contexto:
-        raise ValueError("contexto vazio — a plataforma não montou os dados do talhão")
-
     modelo = os.environ.get("OPENAI_MODEL", MODELO_PADRAO)
-    corpo = json.dumps({
-        "model": modelo,
-        "response_format": {"type": "json_object"},
-        "temperature": 0.3,
-        "messages": [
-            {"role": "system", "content": PROMPT_SISTEMA},
-            {"role": "user", "content": "Dados do talhão (tipo de análise: " + str(tipo_analise) + "):\n" + json.dumps(contexto, ensure_ascii=False)},
-        ],
-    }).encode()
-
-    req = urllib.request.Request(URL_OPENAI, data=corpo, method="POST", headers={
+    payload: dict[str, Any] = {"model": modelo, "temperature": temperature, "messages": messages}
+    if json_mode:
+        payload["response_format"] = {"type": "json_object"}
+    req = urllib.request.Request(URL_OPENAI, data=json.dumps(payload).encode(), method="POST", headers={
         "Content-Type": "application/json",
         "Authorization": f"Bearer {chave}",
     })
@@ -150,17 +140,111 @@ def diagnostico_talhao(contexto: dict[str, Any], tipo_analise: str = "diagnostic
 
     try:
         texto = j["choices"][0]["message"]["content"]
-        bruto = json.loads(texto)
     except Exception as e:  # noqa: BLE001
         raise ValueError(f"resposta da IA fora do formato esperado: {e}") from e
-
     uso = j.get("usage", {})
     ti, to = int(uso.get("prompt_tokens", 0)), int(uso.get("completion_tokens", 0))
     modelo_usado = j.get("model", modelo)
+    return {"texto": texto, "modelo": modelo_usado, "tokens_entrada": ti, "tokens_saida": to,
+            "custo_estimado": _custo_usd(modelo_usado, ti, to)}
+
+
+def diagnostico_talhao(contexto: dict[str, Any], tipo_analise: str = "diagnostico_integrado") -> dict[str, Any]:
+    """Chama a OpenAI com o contexto resumido e devolve o diagnostico validado
+    + metadados de auditoria (modelo, tokens)."""
+    if not isinstance(contexto, dict) or not contexto:
+        raise ValueError("contexto vazio — a plataforma não montou os dados do talhão")
+    r = _chamar([
+        {"role": "system", "content": PROMPT_SISTEMA},
+        {"role": "user", "content": "Dados do talhão (tipo de análise: " + str(tipo_analise) + "):\n" + json.dumps(contexto, ensure_ascii=False)},
+    ], json_mode=True)
+    try:
+        bruto = json.loads(r["texto"])
+    except Exception as e:  # noqa: BLE001
+        raise ValueError(f"resposta da IA fora do formato esperado: {e}") from e
     return {
         "resposta": _validar(bruto),
-        "modelo": modelo_usado,
-        "tokens_entrada": ti,
-        "tokens_saida": to,
-        "custo_estimado": _custo_usd(modelo_usado, ti, to),
+        "modelo": r["modelo"], "tokens_entrada": r["tokens_entrada"],
+        "tokens_saida": r["tokens_saida"], "custo_estimado": r["custo_estimado"],
     }
+
+
+# ── F3: Chat do talhao (secao 19) — resposta em TEXTO usando so o contexto ──
+PROMPT_CHAT = """Você é a IA agronômica da plataforma Invicta. Responda à pergunta do usuário usando SOMENTE os dados do talhão fornecidos em JSON.
+
+Regras:
+- Use apenas os dados fornecidos; não invente valores, mapas ou histórico.
+- Se a resposta não estiver nos dados, diga claramente que o dado não está disponível na plataforma.
+- Seja técnico, direto e em português do Brasil. Respostas curtas (1 a 4 parágrafos).
+- Não dê recomendação definitiva de dose sem regra agronômica; sugira investigação quando fizer sentido."""
+
+
+def chat_talhao(contexto: dict[str, Any], pergunta: str, historico: list[dict[str, str]] | None = None) -> dict[str, Any]:
+    """Q&A livre sobre o talhao. `historico` = mensagens anteriores
+    [{role:'user'|'assistant', content:str}] p/ manter o fio da conversa."""
+    if not isinstance(contexto, dict) or not contexto:
+        raise ValueError("contexto vazio — a plataforma não montou os dados do talhão")
+    if not str(pergunta or "").strip():
+        raise ValueError("pergunta vazia")
+    msgs = [
+        {"role": "system", "content": PROMPT_CHAT},
+        {"role": "system", "content": "Dados do talhão (JSON):\n" + json.dumps(contexto, ensure_ascii=False)},
+    ]
+    for m in (historico or [])[-8:]:   # limita o histórico enviado (custo)
+        if m.get("role") in ("user", "assistant") and m.get("content"):
+            msgs.append({"role": m["role"], "content": str(m["content"])[:2000]})
+    msgs.append({"role": "user", "content": str(pergunta)[:2000]})
+    r = _chamar(msgs, json_mode=False, temperature=0.4)
+    return {"resposta": r["texto"].strip(), "modelo": r["modelo"],
+            "tokens_entrada": r["tokens_entrada"], "tokens_saida": r["tokens_saida"],
+            "custo_estimado": r["custo_estimado"]}
+
+
+# ── F3: Explicador de Recomendacao (secao 18) — JSON estruturado ──
+PROMPT_EXPLICAR = """Você é a IA agronômica da plataforma Invicta. Explique a RECOMENDAÇÃO fornecida (doses por zona/talhão), usando SOMENTE os dados fornecidos.
+
+Regras:
+- Não invente números; use as doses, metas e dados de fertilidade fornecidos.
+- Explique POR QUE as maiores e as menores doses; aponte inconsistências se houver.
+- Não altere as doses; você EXPLICA a recomendação, não a refaz.
+- Português do Brasil, técnico e claro.
+
+Responda ESTRITAMENTE em JSON:
+{
+  "explicacao_tecnica": "",
+  "explicacao_produtor": "",
+  "justificativa_maiores_doses": "",
+  "justificativa_menores_doses": "",
+  "inconsistencias": [],
+  "nivel_de_confianca": "alto | medio | baixo"
+}"""
+
+_CAMPOS_EXPLICAR = ["explicacao_tecnica", "explicacao_produtor",
+                    "justificativa_maiores_doses", "justificativa_menores_doses",
+                    "inconsistencias", "nivel_de_confianca"]
+
+
+def explicar_recomendacao(dados: dict[str, Any]) -> dict[str, Any]:
+    """Explica um mapa/tabela de recomendacao (doses por zona + fertilidade +
+    metas + cultura + produto + custo). Devolve JSON validado."""
+    if not isinstance(dados, dict) or not dados:
+        raise ValueError("dados da recomendação vazios")
+    r = _chamar([
+        {"role": "system", "content": PROMPT_EXPLICAR},
+        {"role": "user", "content": "Recomendação a explicar (JSON):\n" + json.dumps(dados, ensure_ascii=False)},
+    ], json_mode=True)
+    try:
+        b = json.loads(r["texto"])
+    except Exception as e:  # noqa: BLE001
+        raise ValueError(f"resposta da IA fora do formato esperado: {e}") from e
+    out: dict[str, Any] = {}
+    for c in _CAMPOS_EXPLICAR:
+        v = b.get(c)
+        if c == "inconsistencias":
+            out[c] = [str(x) for x in v] if isinstance(v, list) else ([] if v is None else [str(v)])
+        else:
+            out[c] = str(v) if v is not None else ""
+    if out["nivel_de_confianca"] not in ("alto", "medio", "baixo"):
+        out["nivel_de_confianca"] = "medio"
+    return {"resposta": out, "modelo": r["modelo"], "tokens_entrada": r["tokens_entrada"],
+            "tokens_saida": r["tokens_saida"], "custo_estimado": r["custo_estimado"]}

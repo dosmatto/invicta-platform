@@ -140,6 +140,38 @@ def ia_diagnostico(req: ReqIaDiagnostico):
         raise HTTPException(status_code=500, detail=f"falha no diagnóstico de IA: {e}")
 
 
+class ReqIaChat(BaseModel):
+    contexto: dict[str, Any]
+    pergunta: str
+    historico: list[dict[str, str]] | None = None   # [{role, content}] anteriores
+
+
+@app.post("/ia-chat")
+def ia_chat(req: ReqIaChat):
+    """IA F3: Chat do Talhão — Q&A livre usando só o contexto do talhão."""
+    try:
+        return ia.chat_talhao(req.contexto, req.pergunta, req.historico)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:  # pragma: no cover
+        raise HTTPException(status_code=500, detail=f"falha no chat de IA: {e}")
+
+
+class ReqIaExplicar(BaseModel):
+    dados: dict[str, Any]                            # doses/zona + fertilidade + metas + cultura + produto + custo
+
+
+@app.post("/ia-explicar-recomendacao")
+def ia_explicar(req: ReqIaExplicar):
+    """IA F3: Explicador de Recomendação (§18) — explica as doses sem alterá-las."""
+    try:
+        return ia.explicar_recomendacao(req.dados)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:  # pragma: no cover
+        raise HTTPException(status_code=500, detail=f"falha ao explicar recomendação: {e}")
+
+
 class ReqGeoTiff(BaseModel):
     grid_b64: str                     # Float32 (norte no topo), rows*cols — o grid do /interpolar
     shape: list[int]                  # [rows, cols]

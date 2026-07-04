@@ -1,6 +1,10 @@
-export const APP_VERSION = '1.34.0';
+export const APP_VERSION = '1.35.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.35.0': [
+    'IA F3 — PERGUNTAR SOBRE ESTE TALHÃO (chat): no Resumo do talhão, um chat onde você pergunta em linguagem livre ("qual o principal limitante?", "onde investigar compactação?", "esse talhão tem estabilidade produtiva?") e a IA responde usando SÓ os dados do talhão — mantém o fio da conversa e mostra o custo de cada resposta. Perguntas sugeridas com um clique',
+    'IA F3 — EXPLICAR RECOMENDAÇÃO: na aba Recomendações, depois de calcular as doses, o botão "Explicar com IA" gera uma explicação técnica + em linguagem para o produtor, justifica as maiores e as menores doses, aponta inconsistências e dá o nível de confiança — sem NUNCA alterar as doses (a IA explica, não refaz). Ambos reusam o mesmo pacote de dados seguro do diagnóstico',
+  ],
   '1.34.0': [
     'IA F2 — HISTÓRICO E CUSTO DO DIAGNÓSTICO: cada vez que você gera/atualiza o diagnóstico do talhão, a análise anterior fica GUARDADA (não é mais sobrescrita). O card ganhou um "Histórico" que lista as análises daquele talhão/safra por data — clique para reabrir uma versão antiga e comparar como o diagnóstico evoluiu (e volte para a atual num toque)',
     'CONTROLE DE CUSTO: cada diagnóstico agora mostra o modelo usado, os tokens e o CUSTO ESTIMADO em dólar; o histórico soma o total gasto no talhão. A estimativa cobre gpt-4o, gpt-4o-mini e gpt-4.1 (atualizável no servidor) — assim dá para acompanhar o gasto de IA por área. Tudo continua salvo com o contexto para auditoria',

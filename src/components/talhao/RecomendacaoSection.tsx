@@ -7,7 +7,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useApp } from '@/context/AppContext';
-import { getImportacoesLab, getTalhoes, type ImportacaoLab } from '@/lib/store';
+import { getImportacoesLab, getTalhoes, getPlantio, type ImportacaoLab } from '@/lib/store';
+import { ExplicadorRecomendacaoIa } from '@/components/talhao/ExplicadorRecomendacaoIa';
 import { pode } from '@/lib/empresa';
 import { listar as bibListar, type ItemBiblioteca, type ConteudoEquacao, type ConteudoRecomendacao } from '@/lib/biblioteca';
 import { carregarGridsTalhao, calcularDose, dividirDoseEmPassadas, type DoseCalculada } from '@/lib/recomendacao/aplicar';
@@ -396,6 +397,25 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
               </div>
             </div>
           )}
+
+          {/* IA F3 — Explicador de Recomendação (§18): explica as doses sem alterá-las */}
+          <ExplicadorRecomendacaoIa dados={{
+            talhao: getTalhoes().find(t => t.id === nav.talhaoId)?.nome ?? null,
+            cultura: (nav.talhaoId && safra ? getPlantio(nav.talhaoId, safra) : '') || null,
+            safra: safra || null,
+            area_ha: fin?.area ?? null,
+            custo_total_reais: fin ? Math.round(fin.custoTotal * 100) / 100 : null,
+            custo_ha_reais: fin ? Math.round(fin.custoHa * 100) / 100 : null,
+            produtos: doses.map(d => ({
+              equacao: d.nomeEquacao, produto: d.produto || null, unidade: d.unidade,
+              dose_min: Math.round(d.stats.min * 100) / 100,
+              dose_media: Math.round(d.stats.media * 100) / 100,
+              dose_max: Math.round(d.stats.max * 100) / 100,
+              toneladas: Math.round(d.toneladas * 10) / 10,
+              custo_ha_reais: Math.round(d.custoHa * 100) / 100,
+              marcado_para_uso: !!d.usar,
+            })),
+          }} />
 
           {/* status do auto-save */}
           {salvoMsg && (
