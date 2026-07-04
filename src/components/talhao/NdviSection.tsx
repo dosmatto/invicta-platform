@@ -25,9 +25,12 @@ import { cloudSalvarMapa, cloudCarregarMapasPorPrefixo, cloudExcluirMapasPorPref
 import { getRejeitadasLocal, carregarRejeitadas, marcarRejeitada } from '@/lib/cenaEstados';
 import { pode, emailUsuario } from '@/lib/empresa';
 import type { Legenda } from '@/lib/legendas';
+import { ComposicaoTemporalPanel, ListaComposicoes } from './ComposicaoTemporalPanel';
+import { getComposicoes } from '@/lib/store';
+import { carregarNdviSalvos, type NdviCamada } from '@/lib/meap/gerar';
 import {
   Satellite, Loader2, AlertTriangle, Image as ImageIcon, Contrast, Check, Star,
-  Eye, XCircle, RotateCcw, Play, X,
+  Eye, XCircle, RotateCcw, Play, X, Layers3,
 } from 'lucide-react';
 
 const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
@@ -75,8 +78,11 @@ function percentis(grid: Grid, pLo: number, pHi: number): [number, number] {
   return [lo, hi];
 }
 
-export function NdviSection() {
+export function NdviSection({ safraNome }: { safraNome?: string } = {}) {
   const { nav, uploadedGeo, setFertilidadeOverlay, setFertilidadeLabels } = useApp();
+  // IV5 — organização em ABAS (spec Composição Temporal): buscar & processar |
+  // composição temporal | camadas salvas. O fluxo existente vive na 1ª.
+  const [abaIv, setAbaIv] = useState<'buscar' | 'comp' | 'salvas'>('buscar');
 
   const hoje = useMemo(() => new Date(), []);
   const [fonteBusca, setFonteBusca] = useState<FonteBusca>('sentinel');
@@ -401,6 +407,19 @@ export function NdviSection() {
 
   return (
     <div className="px-4 py-3 space-y-3">
+      {/* Abas do módulo de Índices Vegetativos (IV5) */}
+      <div className="flex gap-1">
+        {([['buscar', 'Imagens & índices'], ['comp', 'Composição temporal'], ['salvas', 'Camadas salvas']] as const).map(([a, r]) => (
+          <button key={a} onClick={() => setAbaIv(a)} className="flex-1 py-1.5 rounded text-[10px] font-bold"
+            style={{ background: abaIv === a ? 'var(--invicta-blue-mid)' : '#0f2240', color: abaIv === a ? '#fff' : '#93c5fd', border: '1px solid #1a3a6b' }}>
+            {r}
+          </button>
+        ))}
+      </div>
+
+      {abaIv === 'comp' && <ComposicaoTemporalPanel safraNome={safraNome} />}
+      {abaIv === 'salvas' && <CamadasSalvasView talhaoId={nav.talhaoId ?? ''} />}
+      {abaIv === 'buscar' && (<>
       {!cloudPodeGravar() && (
         <div className="flex items-start gap-2 p-2.5 rounded-lg" style={{ background: '#2d1a00', border: '1px solid #92400e' }}>
           <AlertTriangle size={13} style={{ color: '#fbbf24' }} className="flex-shrink-0 mt-0.5" />
@@ -720,6 +739,46 @@ export function NdviSection() {
           )}
         </div>
       )}
+      </>)}
+    </div>
+  );
+}
+
+// ── Aba "Camadas salvas" (IV5, etapa 4 da spec): tudo que está aprovado ──────
+// Índices individuais mantidos (nuvem) + composições temporais. Gestão (ver no
+// mapa/excluir) fica nas abas de origem; aqui é o inventário do talhão.
+function CamadasSalvasView({ talhaoId }: { talhaoId: string }) {
+  const [inds, setInds] = useState<NdviCamada[]>([]);
+  const [carregando, setCarregando] = useState(true);
+  useEffect(() => {
+    let vivo = true;
+    setCarregando(true);
+    if (!talhaoId) { setCarregando(false); return; }
+    carregarNdviSalvos(talhaoId).then(cs => { if (vivo) setInds(cs); }).catch(() => {}).finally(() => { if (vivo) setCarregando(false); });
+    return () => { vivo = false; };
+  }, [talhaoId]);
+  const comps = talhaoId ? getComposicoes(talhaoId) : [];
+
+  return (
+    <div className="space-y-3">
+      <div className="rounded-lg p-2.5 space-y-1" style={{ background: '#0a1a2f', border: '1px solid #1a3a6b' }}>
+        <p className="text-[10px] font-bold flex items-center gap-1.5" style={{ color: '#93c5fd' }}><Star size={11} /> Índices individuais mantidos ({inds.length})</p>
+        {carregando ? (
+          <p className="text-[10px] flex items-center gap-1.5" style={{ color: '#64748b' }}><Loader2 size={11} className="animate-spin" /> Carregando…</p>
+        ) : inds.length === 0 ? (
+          <p className="text-[10px]" style={{ color: '#64748b' }}>Nenhum índice mantido — processe e mantenha na aba Imagens & índices.</p>
+        ) : (
+          inds.map(c => (
+            <p key={c.chave} className="text-[9px]" style={{ color: '#cbd5e1' }}>
+              <strong>{c.indice}</strong> · {new Date(c.data + 'T00:00:00').toLocaleDateString('pt-BR')} · {c.nut.startsWith('ndvi_cbers') ? 'CBERS-4A' : 'Sentinel-2'} · {c.shape[0]}×{c.shape[1]} px
+            </p>
+          ))
+        )}
+      </div>
+      <ListaComposicoes salvas={comps} />
+      <p className="text-[9px] leading-relaxed" style={{ color: '#475569' }}>
+        <Layers3 size={9} className="inline mr-0.5" /> As camadas aprovadas (índices e composições aptas) ficam disponíveis na Zona de Manejo (Sensoriamento Remoto), no comparador e nos relatórios.
+      </p>
     </div>
   );
 }

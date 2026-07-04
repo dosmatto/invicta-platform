@@ -5,7 +5,7 @@
 // camadas escolhidas, empilha e manda o backend clusterizar (k-means/FCM) com
 // índices FPI/NCE para escolher o nº de zonas. Preview apenas (persistir = M3).
 
-import { getImportacoesLab, getGrades, getCondutividade } from '@/lib/store';
+import { getImportacoesLab, getGrades, getCondutividade, getComposicoes } from '@/lib/store';
 import { carregarGridsTalhao } from '@/lib/recomendacao/aplicar';
 import { analisarZonas, gerarZonas, decodeGrid, descomprimirGrid, type RespAnalisarZonas, type RespGerarZonas, type Grid } from '@/lib/fertilidade';
 import { cloudCarregarMapasPorPrefixo } from '@/lib/cloud';
@@ -29,7 +29,7 @@ export interface CamadasCarregadas {
 
 // ── NDVI mantido como camada do MEAP ────────────────────────────────────────
 // Reamostragem bilinear NaN-aware (mesma extensão, malhas diferentes).
-function encodeF32(a: Float32Array): string {
+export function encodeF32(a: Float32Array): string {
   const u8 = new Uint8Array(a.buffer, a.byteOffset, a.byteLength);
   let s = ''; const CH = 0x8000;
   for (let i = 0; i < u8.length; i += CH) s += String.fromCharCode(...u8.subarray(i, i + CH));
@@ -88,6 +88,33 @@ export async function carregarNdviSalvos(talhaoId: string): Promise<NdviCamada[]
     }
   }
   out.sort((a, b) => b.data.localeCompare(a.data)); // mais recentes primeiro
+  return out;
+}
+
+// ── Composições Temporais de Índices (IV5) como camadas do MEAP ─────────────
+// Só as APROVADAS e APTAS p/ zonas entram (spec: "disponibilidade para zonas de
+// manejo"). Categoria Sensoriamento Remoto — o 1º token do símbolo segue o
+// índice ("NDVI Mediana") p/ o backend reconhecer o potencial.
+export interface ComposicaoCamada { chave: string; nut: string; nome: string; simbolo: string; bounds: [number, number, number, number]; b64: string; shape: [number, number]; }
+
+export async function carregarComposicoes(talhaoId: string): Promise<ComposicaoCamada[]> {
+  const metas = getComposicoes(talhaoId).filter(c => c.aprovada && c.aptoZonas);
+  const out: ComposicaoCamada[] = [];
+  for (const m of metas) {
+    const docs = await cloudCarregarMapasPorPrefixo<{ resp: { bounds: [number, number, number, number]; grid?: Grid } }>(`composicao__${talhaoId}__${m.id}`);
+    for (const d of docs) {
+      const resp = d.dados?.resp;
+      let grid = resp?.grid;
+      if (!resp || !grid) continue;
+      if (grid.comp === 'gz') { try { grid = await descomprimirGrid(grid); } catch { continue; } }
+      const rotMetodo = m.metodo.charAt(0).toUpperCase() + m.metodo.slice(1);
+      out.push({
+        chave: `comp__${m.id}`, nut: `comp_${m.indice.toLowerCase()}`,
+        nome: m.nome, simbolo: `${m.indice} ${rotMetodo}`,
+        bounds: resp.bounds, b64: grid.b64, shape: grid.shape,
+      });
+    }
+  }
   return out;
 }
 
@@ -154,6 +181,20 @@ export async function carregarCamadas(talhaoId: string): Promise<CamadasCarregad
       // para o backend reconhecer o potencial (RANK_SIMBOLOS).
       const fonteLabel = n.nut.startsWith('ndvi_cbers') ? 'CBERS' : 'S2';
       camadas.push({ chave: n.chave, nut: n.nut, prof: n.prof, simbolo: `${n.indice} ${fonteLabel}`, b64, shape });
+    }
+  }
+
+  // 2.5) Composições temporais aprovadas/aptas (IV5) — Sensoriamento Remoto.
+  const comps = await carregarComposicoes(talhaoId);
+  if (!bounds && comps.length) {
+    const ref = comps.reduce((a, b) => (b.shape[0] * b.shape[1] > a.shape[0] * a.shape[1] ? b : a));
+    bounds = ref.bounds;
+    shape = capShape(ref.shape, 160);
+  }
+  if (bounds && shape) {
+    for (const cp of comps) {
+      const b64 = (cp.shape[0] === shape[0] && cp.shape[1] === shape[1]) ? cp.b64 : reamostrarB64(cp.b64, cp.shape, shape);
+      camadas.push({ chave: cp.chave, nut: cp.nut, prof: 'comp', simbolo: cp.simbolo, b64, shape });
     }
   }
 

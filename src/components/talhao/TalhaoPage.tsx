@@ -228,7 +228,7 @@ export function TalhaoPage({ id }: { id: string }) {
             {tabAtivo === 'condutividade' && <CondutividadeSection />}
             {tabAtivo === 'altimetria' && <AltimetriaSection />}
             {tabAtivo === 'produtividade' && <ProdutividadeSection safraNome={safraSel} />}
-            {tabAtivo === 'ndvi' && <NdviSection />}
+            {tabAtivo === 'ndvi' && <NdviSection safraNome={safraSel} />}
             {tabAtivo === 'recomendacoes' && <RecomendacaoSection safraNome={safraSel} />}
             {tabAtivo === 'arquivos' && <ArquivosSection safraNome={safraSel} />}
             {tabAtivo === 'relatorios' && <GeradorRelatorios safraNome={safraSel} />}

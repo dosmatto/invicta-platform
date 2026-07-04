@@ -1,6 +1,11 @@
-export const APP_VERSION = '1.31.0';
+export const APP_VERSION = '1.32.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.32.0': [
+    'ÍNDICES VEGETATIVOS — COMPOSIÇÃO TEMPORAL (IV5): o módulo NDVI/Satélite foi organizado em 3 ABAS — Imagens & índices (o fluxo de sempre), Composição temporal (nova) e Camadas salvas (inventário). Na composição, escolha o índice base (NDVI ou qualquer outro mantido), marque 2+ DATAS APROVADAS e o MÉTODO — Mediana (padrão, robusta a ruído), Média, Máximo ou Mínimo — e gere uma camada composta mais estável do período, que reduz o efeito de nuvem/sombra/estresse de uma data isolada',
+    'O alinhamento entre imagens é automático mesmo entre sensores (Sentinel-2 10 m × CBERS-4A 2 m): tudo é reamostrado para a grade mais fina usando a posição geográfica real de cada pixel; a composição só usa PIXELS VÁLIDOS (nuvem/sombra descartadas na origem). NADA é salvo automaticamente: o resultado abre em PRÉVIA no mapa com estatísticas e % de pixels válidos — só o botão "Aprovar e salvar" grava',
+    'Camada aprovada com ≥2 imagens e ≥70% de pixels válidos fica APTA PARA ZONAS DE MANEJO e aparece no MEAP (Sensoriamento Remoto, ex.: "NDVI Mediana"); abaixo disso é salva como camada de CONSULTA com aviso. Cada composição registra índice, método, sensores, datas, resolução, % válidos, máscara, cultura/safra, autor e nomes (amigável + técnico)',
+  ],
   '1.31.0': [
     'MDE FASES 2+3 — ANÁLISE TOPOGRÁFICA AGRONÔMICA: com a base oficial aprovada, um clique em "Gerar análise" calcula na nuvem TODOS os derivados do relevo: ASPECTO (direção da vertente), CURVATURAS (geral, perfil e plano — acúmulo × dispersão de água), TPI (posição topográfica), TRI (rugosidade), FLUXO ACUMULADO (com preenchimento de depressões + D8), CURVAS DE NÍVEL (intervalo automático) — sempre com buffer, sem erro de borda',
     'INDICADORES AGRONÔMICOS: TWI (umidade topográfica — do seco/escoamento ao acúmulo/encharcamento), LS FACTOR (fator topográfico da erosão), REDE DE DRENAGEM POTENCIAL com sensibilidade ajustável (baixa = só linhas principais ≥2 ha · média ≥0,75 ha · alta ≥0,25 ha) e CLASSES TOPOGRÁFICAS do talhão (Topo / Ombro / Meia encosta / Baixada / Depressão / Linha de fluxo / Risco de erosão) com ÁREA E % POR CLASSE',

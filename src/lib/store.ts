@@ -165,6 +165,49 @@ export function deleteGradeCompactacao(id: string) {
   save('inv_grades_compact', load<GradeCompactacao>('inv_grades_compact').filter(g => g.id !== id));
 }
 
+// ── Composição Temporal de Índices (IV5) ────────────────────────────────────
+// Metadados da camada composta (mediana/média/máx/mín de 2+ cenas do mesmo
+// índice). Produtor/fazenda derivam do talhaoId (não duplicamos ids). O raster
+// fica na nuvem (inv_mapas_fert, id composicao__<talhaoId>__<id>) e SÓ existe
+// se o usuário APROVOU o resultado (nada é salvo automaticamente).
+export interface ComposicaoTemporal {
+  id: string;
+  talhaoId: string;
+  safra?: string;
+  cultura?: string;
+  indice: string;                 // índice base (NDVI, SAVI…)
+  metodo: string;                 // mediana | media | maximo | minimo
+  sensores: string[];             // ['Sentinel-2', 'CBERS-4A']
+  datas: string[];                // datas das cenas usadas (ISO)
+  resolucaoPx: [number, number];  // [rows, cols] da grade final
+  pctValidos: number;             // % de pixels válidos do composto
+  mascaraNuvem: boolean;          // origem já veio com máscara de nuvem/sombra
+  nome: string;                   // amigável ("NDVI Mediana — Vegetativo Soja 2026")
+  nomeTecnico: string;            // automático (comp_ndvi_mediana_...)
+  aprovada: boolean;              // sempre true ao salvar (só salva aprovada)
+  aptoZonas: boolean;             // validação p/ Zonas de Manejo (≥2 cenas + % válidos)
+  usuario?: string;
+  criadoEm: string;
+}
+
+export function getComposicoes(talhaoId?: string): ComposicaoTemporal[] {
+  let lista = loadFiltrado<ComposicaoTemporal>('inv_composicoes');
+  if (talhaoId) lista = lista.filter(c => c.talhaoId === talhaoId);
+  return lista.sort((a, b) => (b.criadoEm ?? '').localeCompare(a.criadoEm ?? ''));
+}
+
+export function saveComposicao(data: Omit<ComposicaoTemporal, 'id' | 'criadoEm'>): ComposicaoTemporal {
+  const lista = load<ComposicaoTemporal>('inv_composicoes');
+  const nova: ComposicaoTemporal = comEmpresa({ ...data, id: uid(), criadoEm: new Date().toISOString() });
+  lista.push(nova);
+  save('inv_composicoes', lista);
+  return nova;
+}
+
+export function deleteComposicao(id: string) {
+  save('inv_composicoes', load<ComposicaoTemporal>('inv_composicoes').filter(c => c.id !== id));
+}
+
 // ── MDE / Altimetria (Variável Fixa do Talhão) — F1 ─────────────────────────
 // Metadados das bases de MDE aprovadas (spec 20.3/21): a base APROVADA vira a
 // oficial; versões antigas ficam no histórico (nunca apagar automaticamente).
@@ -514,6 +557,7 @@ export function excluirProdutorCascata(clienteId: string): { talhaoIds: string[]
   save('inv_compactacao', load<ImportacaoCompactacao>('inv_compactacao').filter(c => !tal.has(c.talhaoId)));
   save('inv_grades_compact', load<GradeCompactacao>('inv_grades_compact').filter(g => !tal.has(g.talhaoId)));
   save('inv_mde', load<MdeTalhao>('inv_mde').filter(m => !tal.has(m.talhaoId)));
+  save('inv_composicoes', load<ComposicaoTemporal>('inv_composicoes').filter(c => !tal.has(c.talhaoId)));
   save('inv_condutividade', load<LevantamentoCondutividade>('inv_condutividade').filter(c => !tal.has(c.talhaoId)));
   save('inv_talhoes', load<Talhao>('inv_talhoes').filter(t => !tal.has(t.id)));
   save('inv_fazendas', load<Fazenda>('inv_fazendas').filter(f => !fazIds.has(f.id)));
