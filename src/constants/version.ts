@@ -1,6 +1,10 @@
-export const APP_VERSION = '1.39.0';
+export const APP_VERSION = '1.40.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.40.0': [
+    'MDE PRÓPRIO (a partir dos seus pontos de elevação): além do MDE automático (satélite), agora a aba Altimetria tem o modo "MDE próprio (pontos)". Suba um arquivo de pontos com altitude — o export da CONDUTIVIDADE, da COLHEITA ou um levantamento RTK (SHP/KML/GeoJSON/CSV/XLSX) — escolha a coluna de elevação, e a plataforma interpola um Modelo Digital de Elevação SÓ do seu talhão, geralmente bem mais detalhado que os 30 m do satélite',
+    'O MDE próprio segue exatamente o mesmo caminho do automático: prévia (hipsométrico/declividade/relevo sombreado + estatísticas) → aprovar como base oficial → derivados e análise agronômica (TPI, TWI, LS, classes de relevo) já vêm juntos → entra nas Zonas de Manejo, no cruzamento por classe e no relatório PDF, e exporta GeoTIFF. Validado com superfície de elevação de gabarito (recupera o relevo e a declividade corretos)',
+  ],
   '1.39.0': [
     'MDE F4.c — RELATÓRIO PDF DO RELEVO: na análise topográfica, o botão "Relatório PDF do relevo" gera um documento A4 (2 páginas) com cabeçalho (produtor/fazenda/talhão/fonte/resolução), estatísticas (altitude mín/média/máx/amplitude e declividade média), tabelas de ÁREA POR CLASSE DE RELEVO e por classe de declividade, observações agronômicas automáticas (relevo predominante, % em risco de erosão, baixadas com acúmulo de água, linhas de fluxo) e os MAPAS de altitude, declividade, TPI, TWI e classes topográficas compostos sobre o satélite. Fecha o módulo MDE conforme a spec (§17)',
   ],

@@ -7,7 +7,7 @@
 // OFICIAL do talhão (metadados no store `inv_mde`; rasters na nuvem com
 // prefixo mde__). Exporta GeoTIFF reusando o /grid-geotiff.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import { getTalhoes, getLegendas, getMdes, saveMde, setMdeOficial, deleteMde, getMdeCamadasTopo, type MdeTalhao } from '@/lib/store';
 import { extrairPoligono, coordsFromBounds, exportarGeotiff, gradienteCss, type Grid } from '@/lib/fertilidade';
@@ -16,13 +16,14 @@ import { tocarBackend } from '@/lib/interpUrl';
 import { emailUsuario } from '@/lib/auth';
 import {
   buscarMde, salvarMdeNaNuvem, carregarMdeDaNuvem, excluirMdeDaNuvem, normalizarGrid0a100,
-  buscarAnaliseMde, salvarCamadasTopoMde, excluirCamadasTopoMde, CAMADAS_TOPO_ZONA,
+  buscarAnaliseMde, buscarMdePontos, salvarCamadasTopoMde, excluirCamadasTopoMde, CAMADAS_TOPO_ZONA,
   FONTES_MDE, FONTES_MDE_INDISPONIVEIS,
   type FonteMde, type RespMde, type MdeCarregado, type RespMdeAnalise, type SensibilidadeDrenagem,
 } from '@/lib/mde';
+import { parseArquivoPontos, type ArquivoPontos } from '@/lib/compactacao';
 import type { Legenda } from '@/lib/legendas';
 import { CruzamentoRelevo } from '@/components/talhao/CruzamentoRelevo';
-import { Mountain, Loader2, Search, CheckCircle2, AlertTriangle, Trash2, Download, Star, Layers, Play, Waves, FileText } from 'lucide-react';
+import { Mountain, Loader2, Search, CheckCircle2, AlertTriangle, Trash2, Download, Star, Layers, Play, Waves, FileText, Upload } from 'lucide-react';
 
 const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
 const fmt = (v: number, d = 1) => v.toLocaleString('pt-BR', { maximumFractionDigits: d });
@@ -103,6 +104,11 @@ export function AltimetriaSection() {
 
   const [mdes, setMdes] = useState<MdeTalhao[]>([]);
   const [fonte, setFonte] = useState<FonteMde>('auto');
+  const [modoFonte, setModoFonte] = useState<'auto' | 'proprio'>('auto');   // F5 — MDE próprio por pontos
+  const [arqPontos, setArqPontos] = useState<ArquivoPontos | null>(null);
+  const [colElev, setColElev] = useState('');
+  const [analiseProprio, setAnaliseProprio] = useState<RespMdeAnalise | null>(null);   // análise já calculada pelo /mde-pontos
+  const inputPontosRef = useRef<HTMLInputElement>(null);
   const [buscando, setBuscando] = useState(false);
   const [erro, setErro] = useState('');
   const [previa, setPrevia] = useState<RespMde | null>(null);       // prévia AINDA não aprovada
@@ -124,6 +130,7 @@ export function AltimetriaSection() {
   useEffect(() => { tocarBackend(); }, []);
   useEffect(() => {
     setPrevia(null); setErro(''); setOficialDados(null); setCamada('alt'); setAnalise(null);
+    setModoFonte('auto'); setArqPontos(null); setColElev(''); setAnaliseProprio(null);
     setMdes(nav.talhaoId ? getMdes(nav.talhaoId) : []);
     setNSalvasZonas(nav.talhaoId ? getMdeCamadasTopo(nav.talhaoId).length : 0); setZonasMsg('');
   }, [nav.talhaoId]);
@@ -177,12 +184,44 @@ export function AltimetriaSection() {
 
   async function buscar() {
     if (!poligono || buscando) return;
-    setBuscando(true); setErro(''); setPrevia(null);
+    setBuscando(true); setErro(''); setPrevia(null); setAnaliseProprio(null);
     try {
       const r = await buscarMde({ poligono, fonte });
       setPrevia(r); setCamada('alt');
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Falha ao buscar o MDE.');
+    } finally { setBuscando(false); }
+  }
+
+  // F5 — MDE próprio: lê o arquivo de pontos e adivinha a coluna de elevação.
+  async function onFilePontos(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]; if (e.target) e.target.value = '';
+    if (!file) return;
+    setErro(''); setArqPontos(null);
+    try {
+      const r = await parseArquivoPontos(file);
+      setArqPontos(r);
+      const auto = r.colunasNumericas.find(c => /(altitude|altimetr|eleva|elevation|\bcota\b|\baltura\b|\bz\b)/i.test(c.normalize('NFD').replace(/[̀-ͯ]/g, ''))) ?? r.colunasNumericas[0] ?? '';
+      setColElev(auto);
+    } catch (err) {
+      setErro(err instanceof Error ? err.message : 'Falha ao ler o arquivo de pontos.');
+    }
+  }
+
+  async function gerarProprio() {
+    if (!poligono || !arqPontos || !colElev || buscando) return;
+    const pontos = arqPontos.pontos
+      .map(p => ({ lng: p.lng, lat: p.lat, valor: typeof p.props[colElev] === 'number' ? p.props[colElev] as number : parseFloat(String(p.props[colElev]).replace(',', '.')) }))
+      .filter(p => isFinite(p.valor) && isFinite(p.lng) && isFinite(p.lat));
+    if (pontos.length < 10) { setErro(`Poucos pontos com elevação válida na coluna "${colElev}" (${pontos.length}).`); return; }
+    setBuscando(true); setErro(''); setPrevia(null); setAnaliseProprio(null);
+    try {
+      const r = await buscarMdePontos({ pontos, poligono });
+      const { analise: an, n_pontos, ...base } = r;
+      setPrevia(base as RespMde); setAnaliseProprio(an); setCamada('alt');
+      void n_pontos;
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Falha ao gerar o MDE próprio.');
     } finally { setBuscando(false); }
   }
 
@@ -202,6 +241,8 @@ export function AltimetriaSection() {
       await salvarMdeNaNuvem(nav.talhaoId, meta.id, previa);
       setMdes(getMdes(nav.talhaoId));
       setPrevia(null);   // o autoload assume com a oficial recém-salva
+      // MDE próprio: a análise já veio pronta do /mde-pontos — mostra sem novo cálculo.
+      if (analiseProprio) { setAnalise(analiseProprio); setAnaliseProprio(null); }
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Falha ao salvar o MDE.');
     } finally { setSalvando(false); }
@@ -225,6 +266,10 @@ export function AltimetriaSection() {
   // oficial (spec §6: produtos após a aprovação da base).
   async function gerarAnalise() {
     if (!poligono || !oficial || gerandoAnalise) return;
+    if (oficial.fonte === 'proprio') {
+      setErro('MDE próprio: para refazer a análise, gere a prévia de novo a partir dos pontos (no topo). Altitude e Declividade já estão salvas.');
+      return;
+    }
     setGerandoAnalise(true); setErro('');
     try {
       const r = await buscarAnaliseMde({ poligono, fonte: oficial.fonte, sensibilidade: sensib });
@@ -334,19 +379,61 @@ export function AltimetriaSection() {
 
       {/* Busca */}
       <div className="rounded-lg p-2.5 space-y-2" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
-        <p className="text-[11px] font-semibold flex items-center gap-1.5" style={{ color: '#93c5fd' }}><Mountain size={13} /> {oficial ? 'Buscar outra base' : 'Buscar o MDE do talhão'}</p>
-        <div>
-          <label className="text-[9px] font-semibold block mb-0.5" style={{ color: '#64748b' }}>Fonte</label>
-          <select value={fonte} onChange={e => setFonte(e.target.value as FonteMde)} className="w-full rounded px-2 py-1.5 text-xs outline-none" style={inputStyle}>
-            {FONTES_MDE.map(f => <option key={f.id} value={f.id}>{f.rotulo}</option>)}
-            {FONTES_MDE_INDISPONIVEIS.map(f => <option key={f.rotulo} disabled>{f.rotulo} — {f.motivo}</option>)}
-          </select>
+        <p className="text-[11px] font-semibold flex items-center gap-1.5" style={{ color: '#93c5fd' }}><Mountain size={13} /> {oficial ? 'Nova base de MDE' : 'MDE do talhão'}</p>
+
+        {/* Modo: automático (satélite) × próprio (pontos de elevação) */}
+        <div className="flex gap-1">
+          {([['auto', 'Automático (satélite)'], ['proprio', 'MDE próprio (pontos)']] as const).map(([m, r]) => (
+            <button key={m} onClick={() => { setModoFonte(m); setErro(''); }} className="flex-1 py-1.5 rounded text-[10px] font-bold"
+              style={{ background: modoFonte === m ? 'var(--invicta-blue-mid)' : '#1a3a6b', color: modoFonte === m ? '#fff' : '#93c5fd' }}>
+              {r}
+            </button>
+          ))}
         </div>
-        <button onClick={() => void buscar()} disabled={buscando || !poligono}
-          className="w-full py-2 rounded text-xs font-bold text-white flex items-center justify-center gap-1.5 disabled:opacity-40"
-          style={{ background: 'var(--invicta-green-dark)' }}>
-          {buscando ? <><Loader2 size={13} className="animate-spin" /> Buscando e processando (~10–30 s)…</> : <><Search size={13} /> Buscar MDE</>}
-        </button>
+
+        {modoFonte === 'auto' ? (
+          <>
+            <div>
+              <label className="text-[9px] font-semibold block mb-0.5" style={{ color: '#64748b' }}>Fonte</label>
+              <select value={fonte} onChange={e => setFonte(e.target.value as FonteMde)} className="w-full rounded px-2 py-1.5 text-xs outline-none" style={inputStyle}>
+                {FONTES_MDE.map(f => <option key={f.id} value={f.id}>{f.rotulo}</option>)}
+                {FONTES_MDE_INDISPONIVEIS.map(f => <option key={f.rotulo} disabled>{f.rotulo} — {f.motivo}</option>)}
+              </select>
+            </div>
+            <button onClick={() => void buscar()} disabled={buscando || !poligono}
+              className="w-full py-2 rounded text-xs font-bold text-white flex items-center justify-center gap-1.5 disabled:opacity-40"
+              style={{ background: 'var(--invicta-green-dark)' }}>
+              {buscando ? <><Loader2 size={13} className="animate-spin" /> Buscando e processando (~10–30 s)…</> : <><Search size={13} /> Buscar MDE</>}
+            </button>
+          </>
+        ) : (
+          <>
+            <p className="text-[9px] leading-relaxed" style={{ color: '#94a3b8' }}>
+              Suba um arquivo de <strong>pontos de elevação</strong> (o export da condutividade, da colheita ou um RTK — SHP/KML/GeoJSON/CSV/XLSX) e escolha a coluna de altitude; a plataforma interpola um DEM próprio.
+            </p>
+            <button onClick={() => inputPontosRef.current?.click()}
+              className="w-full flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-semibold"
+              style={{ background: '#1a3a6b', color: '#93c5fd', border: '1px dashed #2e5fa3' }}>
+              <Upload size={13} /> {arqPontos ? `${arqPontos.pontos.length} pontos lidos — trocar arquivo` : 'Escolher arquivo de pontos'}
+            </button>
+            <input ref={inputPontosRef} type="file" accept=".zip,.kml,.geojson,.json,.csv,.txt,.xls,.xlsx" className="hidden" onChange={onFilePontos} />
+            {arqPontos && (
+              <>
+                <div>
+                  <label className="text-[9px] font-semibold block mb-0.5" style={{ color: '#64748b' }}>Coluna de elevação (altitude)</label>
+                  <select value={colElev} onChange={e => setColElev(e.target.value)} className="w-full rounded px-2 py-1.5 text-xs outline-none" style={inputStyle}>
+                    {arqPontos.colunas.map(c => <option key={c} value={c} disabled={!arqPontos.colunasNumericas.includes(c)}>{c}{arqPontos.colunasNumericas.includes(c) ? '' : ' (texto)'}</option>)}
+                  </select>
+                </div>
+                <button onClick={() => void gerarProprio()} disabled={buscando || !poligono || !colElev}
+                  className="w-full py-2 rounded text-xs font-bold text-white flex items-center justify-center gap-1.5 disabled:opacity-40"
+                  style={{ background: 'var(--invicta-green-dark)' }}>
+                  {buscando ? <><Loader2 size={13} className="animate-spin" /> Interpolando o relevo…</> : <><Play size={13} /> Gerar MDE próprio</>}
+                </button>
+              </>
+            )}
+          </>
+        )}
         {!poligono && <p className="text-[9px]" style={{ color: '#fbbf24' }}>Limite do talhão não encontrado.</p>}
         {erro && <p className="text-[10px]" style={{ color: '#f87171' }}>{erro}</p>}
       </div>

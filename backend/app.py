@@ -104,6 +104,26 @@ def mde_gerar(req: ReqMde):
         raise HTTPException(status_code=500, detail=f"falha no MDE: {e}")
 
 
+class ReqMdePontos(BaseModel):
+    pontos: list[dict[str, Any]]      # [{lng, lat, valor=elevação}] — export de EC/colheita/RTK
+    poligono: dict[str, Any]
+    pixel_m: float = 10.0
+    buffer_m: float = 200.0
+    sensibilidade: str = "media"
+
+
+@app.post("/mde-pontos")
+def mde_pontos(req: ReqMdePontos):
+    """MDE F5: MDE PRÓPRIO a partir de pontos de elevação (interpola + base +
+    análise numa chamada)."""
+    try:
+        return mde.gerar_mde_pontos(req.pontos, req.poligono, req.pixel_m, req.buffer_m, req.sensibilidade)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:  # pragma: no cover
+        raise HTTPException(status_code=500, detail=f"falha no MDE próprio: {e}")
+
+
 class ReqMdeAnalise(BaseModel):
     poligono: dict[str, Any]
     fonte: str = "auto"               # base aprovada: passar a fonte dela (sem 'auto' cai na ordem)

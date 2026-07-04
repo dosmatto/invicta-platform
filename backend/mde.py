@@ -51,7 +51,7 @@ _GDAL_ENV = dict(
     GDAL_HTTP_RETRY_DELAY="1",
 )
 
-VERSION = "mde-3-classes-cod"
+VERSION = "mde-4-proprio-pontos"
 
 FONTES = {
     "cop30": "Copernicus DEM GLO-30 (30 m)",
@@ -172,7 +172,7 @@ def _b64(grid: np.ndarray) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------- principal
-def gerar_mde(poligono: dict, fonte: str = "auto", buffer_m: float = 300.0) -> dict[str, Any]:
+def gerar_mde(poligono: dict, fonte: str = "auto", buffer_m: float = 300.0, elev_transform=None) -> dict[str, Any]:
     if not _HAS_RASTERIO:
         raise ValueError("rasterio indisponível no servidor — MDE requer rasterio")
     geom = shape(poligono)
@@ -187,25 +187,28 @@ def gerar_mde(poligono: dict, fonte: str = "auto", buffer_m: float = 300.0) -> d
     dlng = bm / (111320.0 * max(0.2, math.cos(math.radians(lat_c))))
     bb = (w - dlng, s - dlat, e + dlng, n + dlat)
 
-    tiles = _tiles_1grau(*bb)
-
-    ordem = ["cop30", "srtm"] if fonte == "auto" else [fonte]
     avisos: list[str] = []
-    elev = transform = usado = None
-    erros: list[str] = []
-    for f in ordem:
-        if f not in FONTES:
-            raise ValueError(f"fonte desconhecida: {f} (disponíveis: cop30, srtm; FABDEM/ALOS indisponíveis nesta fase)")
-        try:
-            elev, transform = _ler_fonte(f, tiles, bb)
-            usado = f
-            break
-        except Exception as ex:  # noqa: BLE001 — tenta a próxima fonte (spec 19)
-            erros.append(f"{FONTES[f]}: {ex}")
-    if elev is None or usado is None:
-        raise ValueError("falha ao obter o MDE — " + " | ".join(erros))
-    if fonte == "auto" and usado != "cop30":
-        avisos.append(f"Copernicus indisponível agora — usando {FONTES[usado]}. ({erros[0] if erros else ''})")
+    if elev_transform is not None:                 # MDE próprio (pontos/raster): grid injetado
+        elev, transform = elev_transform
+        usado = "proprio"
+    else:
+        tiles = _tiles_1grau(*bb)
+        ordem = ["cop30", "srtm"] if fonte == "auto" else [fonte]
+        elev = transform = usado = None
+        erros: list[str] = []
+        for f in ordem:
+            if f not in FONTES:
+                raise ValueError(f"fonte desconhecida: {f} (disponíveis: cop30, srtm; FABDEM/ALOS indisponíveis nesta fase)")
+            try:
+                elev, transform = _ler_fonte(f, tiles, bb)
+                usado = f
+                break
+            except Exception as ex:  # noqa: BLE001 — tenta a próxima fonte (spec 19)
+                erros.append(f"{FONTES[f]}: {ex}")
+        if elev is None or usado is None:
+            raise ValueError("falha ao obter o MDE — " + " | ".join(erros))
+        if fonte == "auto" and usado != "cop30":
+            avisos.append(f"Copernicus indisponível agora — usando {FONTES[usado]}. ({erros[0] if erros else ''})")
 
     # derivados no grid BUFFERIZADO
     decl, hs = _derivados(elev, transform, lat_c)
@@ -254,10 +257,11 @@ def gerar_mde(poligono: dict, fonte: str = "auto", buffer_m: float = 300.0) -> d
     # histograma (24 faixas)
     counts, _ = np.histogram(fin, bins=24, range=(alt_min, alt_max if amplitude > 0 else alt_min + 1.0))
 
+    res_m = round((abs(float(transform.a)) * 111320.0 * math.cos(math.radians(lat_c)) + abs(float(transform.e)) * 111320.0) / 2.0)
     return {
         "fonte": usado,
-        "rotulo": FONTES[usado],
-        "resolucao_m": 30,
+        "rotulo": FONTES.get(usado, "MDE próprio (pontos)"),
+        "resolucao_m": res_m,
         "bounds": bounds,
         "shape": [int(elev_c.shape[0]), int(elev_c.shape[1])],
         "elevacao": _b64(elev_c),
@@ -457,7 +461,7 @@ def _rng(a: np.ndarray) -> list[float]:
 
 
 def gerar_analise(poligono: dict, fonte: str = "auto", buffer_m: float = 300.0,
-                  sensibilidade: str = "media") -> dict[str, Any]:
+                  sensibilidade: str = "media", elev_transform=None) -> dict[str, Any]:
     """F2+F3: derivados + analise agronomica numa chamada. Recalcula da FONTE
     (rapido) para ter o buffer; devolve grids Float32 (contrato do interp) +
     PNGs prontos (curvas de nivel, drenagem, classes) + areas por classe."""
@@ -473,22 +477,26 @@ def gerar_analise(poligono: dict, fonte: str = "auto", buffer_m: float = 300.0,
     dlat = bm / 111320.0
     dlng = bm / (111320.0 * max(0.2, math.cos(math.radians(lat_c))))
     bb = (w - dlng, s - dlat, e + dlng, n + dlat)
-    tiles = _tiles_1grau(*bb)
 
-    ordem = ["cop30", "srtm"] if fonte == "auto" else [fonte]
-    elev = transform = usado = None
-    erros = []
-    for f in ordem:
-        if f not in FONTES:
-            raise ValueError(f"fonte desconhecida: {f}")
-        try:
-            elev, transform = _ler_fonte(f, tiles, bb)
-            usado = f
-            break
-        except Exception as ex:  # noqa: BLE001
-            erros.append(f"{FONTES[f]}: {ex}")
-    if elev is None or usado is None:
-        raise ValueError("falha ao obter o MDE — " + " | ".join(erros))
+    if elev_transform is not None:                 # MDE próprio (pontos/raster): grid injetado
+        elev, transform = elev_transform
+        usado = "proprio"
+    else:
+        tiles = _tiles_1grau(*bb)
+        ordem = ["cop30", "srtm"] if fonte == "auto" else [fonte]
+        elev = transform = usado = None
+        erros = []
+        for f in ordem:
+            if f not in FONTES:
+                raise ValueError(f"fonte desconhecida: {f}")
+            try:
+                elev, transform = _ler_fonte(f, tiles, bb)
+                usado = f
+                break
+            except Exception as ex:  # noqa: BLE001
+                erros.append(f"{FONTES[f]}: {ex}")
+        if elev is None or usado is None:
+            raise ValueError("falha ao obter o MDE — " + " | ".join(erros))
 
     px_x = abs(float(transform.a)) * 111320.0 * math.cos(math.radians(lat_c))
     px_y = abs(float(transform.e)) * 111320.0
@@ -605,7 +613,7 @@ def gerar_analise(poligono: dict, fonte: str = "auto", buffer_m: float = 300.0,
     cod_f = np.where(cod > 0, cod.astype("float32"), np.nan)
 
     return {
-        "fonte": usado, "rotulo": FONTES[usado], "bounds": bounds,
+        "fonte": usado, "rotulo": FONTES.get(usado, "MDE próprio"), "bounds": bounds,
         "shape": [int(shape_sub[0]), int(shape_sub[1])],
         "grids": {
             "aspecto": _b64(aspecto_c), "curv_perfil": _b64(perfil_c),
@@ -629,3 +637,73 @@ def gerar_analise(poligono: dict, fonte: str = "auto", buffer_m: float = 300.0,
             },
         },
     }
+
+
+# ════════════════════════════════════════════════════════════ F5 — MDE próprio
+# A partir de PONTOS de elevação (exports de condutividade/colheita/RTK): a
+# plataforma interpola um DEM e roda o MESMO pipeline (base + análise). O grid é
+# INJETADO em gerar_mde/gerar_analise via elev_transform (sem buscar tiles).
+
+def _interp_pontos(lngs, lats, zs, bb, pixel_m, lat_c):
+    """Interpola pontos de elevação num grid regular sobre `bb` (norte no topo).
+    Linear (Delaunay) + preenchimento por vizinho mais próximo nos buracos."""
+    from scipy.interpolate import griddata
+    from rasterio.transform import from_bounds as _fb
+    w, s, e, n = bb
+    wm = (e - w) * 111320.0 * math.cos(math.radians(lat_c))
+    hm = (n - s) * 111320.0
+    cols = int(max(8, min(600, round(wm / max(1.0, pixel_m)))))
+    rows = int(max(8, min(600, round(hm / max(1.0, pixel_m)))))
+    gx = np.linspace(w, e, cols)
+    gy = np.linspace(n, s, rows)                    # linha 0 = norte
+    GX, GY = np.meshgrid(gx, gy)
+    pts = np.column_stack([np.asarray(lngs, float), np.asarray(lats, float)])
+    z = np.asarray(zs, float)
+    try:
+        elev = griddata(pts, z, (GX, GY), method="linear")
+        buracos = ~np.isfinite(elev)
+        if buracos.any():
+            near = griddata(pts, z, (GX, GY), method="nearest")
+            elev[buracos] = near[buracos]
+    except Exception:                                # Qhull (poucos/colineares) -> nearest
+        elev = griddata(pts, z, (GX, GY), method="nearest")
+    transform = _fb(w, s, e, n, cols, rows)
+    return elev.astype("float32"), transform
+
+
+def gerar_mde_pontos(pontos: list[dict], poligono: dict, pixel_m: float = 10.0,
+                     buffer_m: float = 200.0, sensibilidade: str = "media") -> dict[str, Any]:
+    """MDE PRÓPRIO por pontos de elevação. Devolve base (contrato do /mde) +
+    'analise' (contrato do /mde-analise) numa só chamada."""
+    if not _HAS_RASTERIO:
+        raise ValueError("rasterio indisponível no servidor")
+    lngs, lats, zs = [], [], []
+    for p in pontos or []:
+        try:
+            v = float(p.get("valor"))
+            lng, lat = float(p.get("lng")), float(p.get("lat"))
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(v) and math.isfinite(lng) and math.isfinite(lat):
+            lngs.append(lng); lats.append(lat); zs.append(v)
+    if len(zs) < 10:
+        raise ValueError(f"poucos pontos de elevação válidos ({len(zs)}) — mínimo 10")
+
+    geom = shape(poligono)
+    if geom.is_empty:
+        raise ValueError("polígono vazio")
+    w, s, e, n = geom.bounds
+    lat_c = (s + n) / 2.0
+    bm = max(60.0, min(float(buffer_m or 200.0), 2000.0))
+    dlat = bm / 111320.0
+    dlng = bm / (111320.0 * max(0.2, math.cos(math.radians(lat_c))))
+    bb = (w - dlng, s - dlat, e + dlng, n + dlat)
+
+    elev, transform = _interp_pontos(lngs, lats, zs, bb, pixel_m, lat_c)
+
+    base = gerar_mde(poligono, buffer_m=bm, elev_transform=(elev, transform))
+    base["rotulo"] = f"MDE próprio · {len(zs)} pontos"
+    analise = gerar_analise(poligono, buffer_m=bm, sensibilidade=sensibilidade, elev_transform=(elev, transform))
+    base["n_pontos"] = len(zs)
+    base["analise"] = analise
+    return base

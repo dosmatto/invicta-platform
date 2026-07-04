@@ -64,6 +64,30 @@ export async function buscarMde(params: {
   return r.json();
 }
 
+// ── F5: MDE próprio a partir de pontos de elevação (condutividade/colheita/RTK) ─
+export interface PontoElev { lng: number; lat: number; valor: number; }
+
+export async function buscarMdePontos(params: {
+  pontos: PontoElev[];
+  poligono: GeoJSON.Polygon | GeoJSON.MultiPolygon;
+  pixelM?: number;
+  bufferM?: number;
+  sensibilidade?: SensibilidadeDrenagem;
+}): Promise<RespMde & { analise: RespMdeAnalise; n_pontos: number }> {
+  const r = await postBackend('/mde-pontos', {
+    pontos: params.pontos, poligono: params.poligono,
+    pixel_m: params.pixelM ?? 10, buffer_m: params.bufferM ?? 200,
+    sensibilidade: params.sensibilidade ?? 'media',
+  });
+  if (r.status === 404) throw new Error('O servidor ainda não tem o MDE próprio — deve estar sendo atualizado. Tente em alguns minutos.');
+  if (!r.ok) {
+    let msg = `Backend respondeu ${r.status}`;
+    try { const j = await r.json(); if (j?.detail) msg = String(j.detail); } catch {}
+    throw new Error(msg);
+  }
+  return r.json();
+}
+
 // ── F2+F3: Análise topográfica (derivados + agronômicos) ────────────────────
 export type SensibilidadeDrenagem = 'baixa' | 'media' | 'alta';
 
