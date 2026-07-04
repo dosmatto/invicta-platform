@@ -19,7 +19,7 @@ import urllib.error
 import urllib.request
 from typing import Any
 
-VERSION = "ia-3-chat-explicador"
+VERSION = "ia-4-regras"
 
 URL_OPENAI = "https://api.openai.com/v1/chat/completions"
 MODELO_PADRAO = "gpt-4o"          # diagnostico completo = modelo avancado (secao 6)
@@ -60,6 +60,7 @@ Regras obrigatórias:
 - Separe o que é evidência forte, hipótese e recomendação de investigação.
 - Nunca gere recomendação definitiva de dose sem regra agronômica validada pela plataforma.
 - Sempre informe o nível de confiança da análise.
+- Quando o contexto trouxer "sinais_agronomicos" (evidências já classificadas pela plataforma), considere-os; e alinhe o "nivel_de_confianca" ao "qualidade_dados" informado.
 - Responda em português do Brasil.
 
 Gere a resposta ESTRITAMENTE em JSON com os seguintes campos:

@@ -15,6 +15,7 @@ import {
 } from './store';
 import { decodeGrid } from './fertilidade';
 import { carregarNdviSalvos } from './meap/gerar';
+import { avaliarRegras, type AvaliacaoRegras } from './iaRegras';
 import { postBackend } from './interpUrl';
 import { salvarDocSupabase, carregarDocsPorCampoSupabase, usarDadosSupabase } from './supabaseData';
 import { emailUsuario } from './empresa';
@@ -150,7 +151,20 @@ export async function montarContextoTalhao(talhaoId: string, safraNome?: string)
   else ausentes.push('compactação (penetrometria)');
 
   ctx.dados_ausentes = ausentes;
+
+  // F4 — motor de regras (§17): evidências já classificadas + score de qualidade
+  // (§16). Determinístico; entra no contexto para GROUNDING da IA e é exibido.
+  const reg = avaliarRegras(ctx as Parameters<typeof avaliarRegras>[0]);
+  if (reg.sinais.length) ctx.sinais_agronomicos = reg.sinais.map(s => `[${s.tipo}] ${s.texto}`);
+  ctx.qualidade_dados = { nivel: reg.qualidade.nivel, motivos: reg.qualidade.motivos };
   return ctx;
+}
+
+// Avalia as regras determinísticas do talhão (sem IA, sem custo) — usado no card
+// para exibir os sinais + score de qualidade antes mesmo de gerar o diagnóstico.
+export async function avaliarRegrasTalhao(talhaoId: string, safraNome?: string): Promise<AvaliacaoRegras> {
+  const ctx = await montarContextoTalhao(talhaoId, safraNome);
+  return avaliarRegras(ctx as Parameters<typeof avaliarRegras>[0]);
 }
 
 // ── Gerar (chama a IA via backend) + salvar p/ auditoria ─────────────────────

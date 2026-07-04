@@ -5,11 +5,16 @@
 // só os botões Gerar/Atualizar disparam a análise (custo controlado).
 
 import { useEffect, useMemo, useState } from 'react';
-import { gerarDiagnostico, carregarHistoricoDiagnosticos, type DiagnosticoIa } from '@/lib/ia';
-import { Sparkles, Loader2, AlertTriangle, RefreshCw, ChevronDown, ChevronUp, History, Clock } from 'lucide-react';
+import { gerarDiagnostico, carregarHistoricoDiagnosticos, avaliarRegrasTalhao, type DiagnosticoIa } from '@/lib/ia';
+import type { AvaliacaoRegras, TipoSinal } from '@/lib/iaRegras';
+import { Sparkles, Loader2, AlertTriangle, RefreshCw, ChevronDown, ChevronUp, History, Clock, Gauge } from 'lucide-react';
 
 const usd = (v?: number) => (v == null ? '—' : `US$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 4 })}`);
 const dataHora = (s: string) => `${new Date(s).toLocaleDateString('pt-BR')} ${new Date(s).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+
+const COR_SINAL: Record<TipoSinal, string> = { limitante: '#f87171', risco: '#fbbf24', oportunidade: '#86efac' };
+const COR_QUAL: Record<string, string> = { alto: '#86efac', medio: '#fbbf24', baixo: '#f87171' };
+const ROT_QUAL: Record<string, string> = { alto: 'Alta', medio: 'Média', baixo: 'Baixa' };
 
 const COR_POT: Record<string, string> = { alto: '#86efac', medio: '#fbbf24', baixo: '#f87171', indefinido: '#94a3b8' };
 const ROT_POT: Record<string, string> = { alto: 'Alto', medio: 'Médio', baixo: 'Baixo', indefinido: 'Indefinido' };
@@ -23,14 +28,17 @@ export function DiagnosticoIaCard({ talhaoId, safraNome }: { talhaoId: string; s
   const [erro, setErro] = useState('');
   const [tecAberto, setTecAberto] = useState(false);
   const [histAberto, setHistAberto] = useState(false);
+  const [regras, setRegras] = useState<AvaliacaoRegras | null>(null);
 
   useEffect(() => {
     let vivo = true;
-    setHistorico([]); setVerId(null); setErro(''); setCarregando(true); setHistAberto(false);
+    setHistorico([]); setVerId(null); setErro(''); setCarregando(true); setHistAberto(false); setRegras(null);
     carregarHistoricoDiagnosticos(talhaoId, safraNome)
       .then(h => { if (vivo) setHistorico(h); })
       .catch(() => {})
       .finally(() => { if (vivo) setCarregando(false); });
+    // sinais + score de qualidade (determinístico, sem custo de IA)
+    avaliarRegrasTalhao(talhaoId, safraNome).then(a => { if (vivo) setRegras(a); }).catch(() => {});
     return () => { vivo = false; };
   }, [talhaoId, safraNome]);
 
@@ -61,6 +69,25 @@ export function DiagnosticoIaCard({ talhaoId, safraNome }: { talhaoId: string; s
           </button>
         )}
       </div>
+
+      {/* Sinais agronômicos (regras determinísticas §17) + qualidade dos dados (§16) — sem custo de IA */}
+      {regras && (regras.sinais.length > 0 || regras.qualidade.nivel) && (
+        <div className="rounded p-2 space-y-1" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
+          <div className="flex items-center gap-1.5">
+            <Gauge size={11} style={{ color: COR_QUAL[regras.qualidade.nivel] }} />
+            <span className="text-[9px] font-bold uppercase" style={{ color: '#93c5fd' }}>Sinais das regras</span>
+            <span className="text-[8px] px-1.5 py-0.5 rounded font-bold ml-auto" style={{ background: '#0f2240', color: COR_QUAL[regras.qualidade.nivel] }}>
+              Qualidade dos dados: {ROT_QUAL[regras.qualidade.nivel]}
+            </span>
+          </div>
+          {regras.sinais.length > 0 ? regras.sinais.map(s => (
+            <p key={s.codigo} className="text-[10px] flex items-start gap-1" style={{ color: '#cbd5e1' }}>
+              <span style={{ color: COR_SINAL[s.tipo] }}>●</span> {s.texto}
+            </p>
+          )) : <p className="text-[9px]" style={{ color: '#64748b' }}>Nenhum sinal automático nas regras atuais.</p>}
+          {regras.qualidade.motivos.length > 0 && <p className="text-[8px]" style={{ color: '#475569' }}>{regras.qualidade.motivos.join(' · ')}</p>}
+        </div>
+      )}
 
       {carregando ? (
         <p className="text-[10px] flex items-center gap-1.5" style={{ color: '#64748b' }}><Loader2 size={11} className="animate-spin" /> Verificando diagnóstico salvo…</p>

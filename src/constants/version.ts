@@ -1,6 +1,10 @@
-export const APP_VERSION = '1.35.0';
+export const APP_VERSION = '1.36.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.36.0': [
+    'IA F4 — MOTOR DE REGRAS AGRONÔMICAS + QUALIDADE DOS DADOS: o card de IA do talhão agora mostra, ANTES e sem custo de IA, os "Sinais das regras" — checagens automáticas do próprio dado: K na CTC < 2% (limitação de potássio), V% < 50% (acidez), pH baixo + Al alto (toxidez), NDVI médio baixo (vigor), produtividade instável entre safras, e zona de alto potencial quando a fertilidade está boa e estável. Cada sinal é marcado como limitante, risco ou oportunidade',
+    'SCORE DE QUALIDADE DOS DADOS (Alta/Média/Baixa): avalia a completude do talhão (fertilidade + produtividade + dados espaciais como NDVI, condutividade, relevo e zonas). Esses sinais e o score entram no contexto enviado à IA como evidências JÁ CLASSIFICADAS, então o diagnóstico fica mais fundamentado e o nível de confiança passa a acompanhar a qualidade real dos dados. Motor determinístico validado (16/16 testes)',
+  ],
   '1.35.0': [
     'IA F3 — PERGUNTAR SOBRE ESTE TALHÃO (chat): no Resumo do talhão, um chat onde você pergunta em linguagem livre ("qual o principal limitante?", "onde investigar compactação?", "esse talhão tem estabilidade produtiva?") e a IA responde usando SÓ os dados do talhão — mantém o fio da conversa e mostra o custo de cada resposta. Perguntas sugeridas com um clique',
     'IA F3 — EXPLICAR RECOMENDAÇÃO: na aba Recomendações, depois de calcular as doses, o botão "Explicar com IA" gera uma explicação técnica + em linguagem para o produtor, justifica as maiores e as menores doses, aponta inconsistências e dá o nível de confiança — sem NUNCA alterar as doses (a IA explica, não refaz). Ambos reusam o mesmo pacote de dados seguro do diagnóstico',
