@@ -1,6 +1,11 @@
-export const APP_VERSION = '1.32.0';
+export const APP_VERSION = '1.33.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.33.0': [
+    'IA — DIAGNÓSTICO INTELIGENTE POR TALHÃO (Fase 1): novo card "Diagnóstico com IA" no Resumo do talhão. Um clique monta um RESUMO dos dados que o talhão já tem (fertilidade média do laudo, produtividade histórica oficial, NDVI e composições, condutividade elétrica, relevo/MDE, zonas de manejo, compactação) e a IA agronômica devolve um diagnóstico estruturado: potencial do talhão, principais limitantes, evidências, hipóteses, oportunidades de manejo, riscos, dados ausentes e um resumo em linguagem simples para o produtor',
+    'Regras de segurança da spec: a IA usa SOMENTE os dados fornecidos pela plataforma (nada inventado), sempre informa o NÍVEL DE CONFIANÇA, a chave da OpenAI fica só no servidor (nunca no navegador), e cada diagnóstico é salvo COM o contexto enviado — auditável. Abrir a tela mostra o diagnóstico salvo; a IA só roda de novo no botão Atualizar (custo controlado)',
+    'Para ATIVAR: crie a chave na OpenAI e adicione OPENAI_API_KEY no Environment do serviço no Render (instruções com o suporte). Sem a chave, o card explica exatamente o que falta. Próximas fases: histórico/créditos, explicador de recomendação, chat do talhão',
+  ],
   '1.32.0': [
     'ÍNDICES VEGETATIVOS — COMPOSIÇÃO TEMPORAL (IV5): o módulo NDVI/Satélite foi organizado em 3 ABAS — Imagens & índices (o fluxo de sempre), Composição temporal (nova) e Camadas salvas (inventário). Na composição, escolha o índice base (NDVI ou qualquer outro mantido), marque 2+ DATAS APROVADAS e o MÉTODO — Mediana (padrão, robusta a ruído), Média, Máximo ou Mínimo — e gere uma camada composta mais estável do período, que reduz o efeito de nuvem/sombra/estresse de uma data isolada',
     'O alinhamento entre imagens é automático mesmo entre sensores (Sentinel-2 10 m × CBERS-4A 2 m): tudo é reamostrado para a grade mais fina usando a posição geográfica real de cada pixel; a composição só usa PIXELS VÁLIDOS (nuvem/sombra descartadas na origem). NADA é salvo automaticamente: o resultado abre em PRÉVIA no mapa com estatísticas e % de pixels válidos — só o botão "Aprovar e salvar" grava',

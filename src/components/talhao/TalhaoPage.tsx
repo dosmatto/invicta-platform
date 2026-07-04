@@ -20,6 +20,7 @@ import { AmostragemModulo } from '@/components/talhao/AmostragemModulo';
 import { CompactacaoSection } from '@/components/talhao/CompactacaoSection';
 import { CondutividadeSection } from '@/components/talhao/CondutividadeSection';
 import { AltimetriaSection } from '@/components/talhao/AltimetriaSection';
+import { DiagnosticoIaCard } from '@/components/talhao/DiagnosticoIaCard';
 import { RecomendacaoSection } from '@/components/talhao/RecomendacaoSection';
 import { ArquivosSection } from '@/components/talhao/ArquivosSection';
 import { LabImportSection } from '@/components/talhao/LabImportSection';
@@ -285,6 +286,9 @@ function ResumoTab({ talhao, fazenda, safraNome, cultura }: { talhao: Talhao; fa
           </div>
         ))}
       </div>
+
+      {/* IA F1 — Diagnóstico Inteligente por Talhão (mostra o salvo; gerar é manual) */}
+      <DiagnosticoIaCard talhaoId={talhao.id} safraNome={safraNome} />
 
       <div className="p-3 rounded-lg flex items-start gap-2" style={{ background: '#0a1929', border: '1px solid #1a3a6b' }}>
         <Clock size={13} style={{ color: '#93c5fd' }} className="mt-0.5 flex-shrink-0" />

@@ -16,6 +16,7 @@ import msr
 import cbers
 import colheita
 import mde
+import ia
 
 app = FastAPI(title="INVICTA - Interpolacao de Fertilidade", version="0.1.0")
 
@@ -69,6 +70,8 @@ def health():
         "cbers_err": getattr(cbers, "_ERR", ""),
         "colheita_v": getattr(colheita, "VERSION", "?"),
         "mde_v": getattr(mde, "VERSION", "?"),
+        "ia_v": getattr(ia, "VERSION", "?"),
+        "ia_configurada": ia.configurada(),
     }
 
 
@@ -118,6 +121,23 @@ def mde_analise(req: ReqMdeAnalise):
         raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:  # pragma: no cover
         raise HTTPException(status_code=500, detail=f"falha na análise topográfica: {e}")
+
+
+class ReqIaDiagnostico(BaseModel):
+    contexto: dict[str, Any]              # pacote resumido montado pela plataforma (secao 9)
+    tipo_analise: str = "diagnostico_integrado"
+
+
+@app.post("/ia-diagnostico")
+def ia_diagnostico(req: ReqIaDiagnostico):
+    """IA F1: Diagnóstico Inteligente por Talhão (RAG — a IA só vê o contexto
+    resumido; chave OPENAI_API_KEY apenas no servidor)."""
+    try:
+        return ia.diagnostico_talhao(req.contexto, req.tipo_analise)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:  # pragma: no cover
+        raise HTTPException(status_code=500, detail=f"falha no diagnóstico de IA: {e}")
 
 
 class ReqGeoTiff(BaseModel):
