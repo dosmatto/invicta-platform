@@ -157,6 +157,96 @@ export async function pullColetas(gradeId: string): Promise<number> {
   return novas;
 }
 
+// ── Leituras de COMPACTAÇÃO (penetrômetro) — #36 ─────────────────────────────
+// Mesmo modelo offline-first das coletas: localStorage `inv_leituras_compact`
+// (leitura síncrona) + espelho na nuvem como docs individuais no app_kv
+// (item_id = gradeId__ordem), merge por atualizadoEm. A grade vem da PLATAFORMA
+// (store.ts GradeCompactacao); o processamento também é lá (vira ImportacaoCompactacao).
+
+export interface LeituraCompactacao {
+  id: string;                        // `${gradeId}__${ordem}`
+  gradeId: string;
+  talhaoId: string;
+  safra: string;
+  ordem: number;                     // índice do ponto na grade
+  codigo: string;                    // "C-014"
+  status: StatusPonto;               // coletado | pulado | cancelado
+  valores: Record<string, number>;   // profundidade → resistência (na unidade da grade)
+  lngReal?: number;
+  latReal?: number;
+  precisaoM?: number;
+  distanciaAlvoM?: number;
+  horario?: string;                  // ISO da confirmação
+  operador?: string;                 // e-mail
+  obs?: string;
+  syncPendente: boolean;
+  atualizadoEm: string;
+}
+
+const KEY_LEIT = 'inv_leituras_compact';
+const COLECAO_LEIT = 'inv_leituras_compact';
+
+function loadLeituras(): LeituraCompactacao[] {
+  if (typeof window === 'undefined') return [];
+  try { return JSON.parse(localStorage.getItem(KEY_LEIT) ?? '[]'); } catch { return []; }
+}
+function saveLeituras(lista: LeituraCompactacao[]) {
+  localStorage.setItem(KEY_LEIT, JSON.stringify(lista));
+}
+
+export function getLeiturasCompact(gradeId?: string): LeituraCompactacao[] {
+  const all = loadLeituras();
+  return gradeId ? all.filter(l => l.gradeId === gradeId) : all;
+}
+
+export function upsertLeituraCompact(reg: Omit<LeituraCompactacao, 'syncPendente' | 'atualizadoEm'>): LeituraCompactacao {
+  const lista = loadLeituras();
+  const novo: LeituraCompactacao = { ...reg, syncPendente: true, atualizadoEm: new Date().toISOString() };
+  const idx = lista.findIndex(l => l.id === novo.id);
+  if (idx >= 0) lista[idx] = novo; else lista.push(novo);
+  saveLeituras(lista);
+  void pushLeiturasCompactPendentes().catch(() => {});
+  return novo;
+}
+
+export function contarLeiturasPendentesSync(): number {
+  return loadLeituras().filter(l => l.syncPendente).length;
+}
+
+export async function pushLeiturasCompactPendentes(): Promise<number> {
+  if (!usarDadosSupabase() || (typeof navigator !== 'undefined' && !navigator.onLine)) return 0;
+  const lista = loadLeituras();
+  const pendentes = lista.filter(l => l.syncPendente);
+  let enviados = 0;
+  for (const l of pendentes) {
+    try {
+      const ok = await salvarDocSupabase(COLECAO_LEIT, l.id, { ...l, syncPendente: false });
+      if (!ok) continue;
+      l.syncPendente = false;
+      enviados++;
+    } catch { /* offline/erro: continua pendente */ }
+  }
+  if (enviados) saveLeituras(lista);
+  return enviados;
+}
+
+export async function pullLeiturasCompact(gradeId: string): Promise<number> {
+  if (!usarDadosSupabase() || !navigator.onLine) return 0;
+  const remotas = await carregarDocsPorCampoSupabase<LeituraCompactacao>(COLECAO_LEIT, 'gradeId', gradeId);
+  if (!remotas.length) return 0;
+  const lista = loadLeituras();
+  let novas = 0;
+  for (const r of remotas) {
+    const idx = lista.findIndex(l => l.id === r.id);
+    if (idx < 0) { lista.push({ ...r, syncPendente: false }); novas++; }
+    else if (!lista[idx].syncPendente && r.atualizadoEm > lista[idx].atualizadoEm) {
+      lista[idx] = { ...r, syncPendente: false }; novas++;
+    }
+  }
+  if (novas) saveLeituras(lista);
+  return novas;
+}
+
 // ── Fotos (IndexedDB) ─────────────────────────────────────────────────────────
 
 export type TipoFoto = 'antes' | 'durante' | 'depois';

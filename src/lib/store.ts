@@ -127,6 +127,44 @@ export function deleteImportacaoCompactacao(id: string) {
   save('inv_compactacao', load<ImportacaoCompactacao>('inv_compactacao').filter(i => i.id !== id));
 }
 
+// ── Grade de amostragem de COMPACTAÇÃO (#36) ────────────────────────────────
+// Criada NA PLATAFORMA (gerarGrid do lib/grid.ts sobre o polígono); o app de
+// campo navega até cada ponto e registra as leituras do penetrômetro POR
+// PROFUNDIDADE (lib/coleta.ts LeituraCompactacao). De volta, as leituras viram
+// uma ImportacaoCompactacao e o processamento é o fluxo normal da aba.
+export interface PontoGradeCompact { ordem: number; lng: number; lat: number; }
+export interface GradeCompactacao {
+  id: string;
+  talhaoId: string;
+  safra: string;
+  nome: string;                   // "Grade compactação 1"
+  profundidades: string[];        // rótulos das leituras (ex.: '0-10', '10-20' cm)
+  unidade: string;                // 'MPa' | 'kgf/cm²' (rótulo dos inputs no campo)
+  densidade: number;              // ha por ponto
+  distanciaBorda: number;         // m
+  pontos: PontoGradeCompact[];
+  criadoEm: string;
+}
+
+export function getGradesCompactacao(talhaoId?: string, safra?: string): GradeCompactacao[] {
+  let lista = loadFiltrado<GradeCompactacao>('inv_grades_compact');
+  if (talhaoId) lista = lista.filter(g => g.talhaoId === talhaoId);
+  if (safra) lista = lista.filter(g => g.safra === safra);
+  return lista.sort((a, b) => (b.criadoEm ?? '').localeCompare(a.criadoEm ?? ''));
+}
+
+export function saveGradeCompactacao(data: Omit<GradeCompactacao, 'id' | 'criadoEm'>): GradeCompactacao {
+  const lista = load<GradeCompactacao>('inv_grades_compact');
+  const nova: GradeCompactacao = comEmpresa({ ...data, id: uid(), criadoEm: new Date().toISOString() });
+  lista.push(nova);
+  save('inv_grades_compact', lista);
+  return nova;
+}
+
+export function deleteGradeCompactacao(id: string) {
+  save('inv_grades_compact', load<GradeCompactacao>('inv_grades_compact').filter(g => g.id !== id));
+}
+
 // ── Condutividade Elétrica (Variável Fixa do Talhão) ─────────────────────────
 // Diferente da compactação (por safra), a EC é uma característica ESTRUTURAL do
 // talhão: fica vinculada permanentemente ao talhão e pode ter várias VERSÕES ao
@@ -430,6 +468,7 @@ export function excluirProdutorCascata(clienteId: string): { talhaoIds: string[]
   save('inv_grades', load<GradeAmostragem>('inv_grades').filter(g => !tal.has(g.talhaoId)));
   save('inv_plantios', load<Plantio>('inv_plantios').filter(p => !tal.has(p.talhaoId)));
   save('inv_compactacao', load<ImportacaoCompactacao>('inv_compactacao').filter(c => !tal.has(c.talhaoId)));
+  save('inv_grades_compact', load<GradeCompactacao>('inv_grades_compact').filter(g => !tal.has(g.talhaoId)));
   save('inv_condutividade', load<LevantamentoCondutividade>('inv_condutividade').filter(c => !tal.has(c.talhaoId)));
   save('inv_talhoes', load<Talhao>('inv_talhoes').filter(t => !tal.has(t.id)));
   save('inv_fazendas', load<Fazenda>('inv_fazendas').filter(f => !fazIds.has(f.id)));

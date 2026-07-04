@@ -16,6 +16,7 @@ import { bootCloud } from '@/lib/cloud';
 import {
   RegistroColeta, StatusPonto, COR_STATUS, ROTULO_STATUS,
   getColetas, upsertColeta, idColeta, pushColetasPendentes, pullColetas, pushMedicoesPendentes,
+  pushLeiturasCompactPendentes, contarLeiturasPendentesSync,
   contarPendentesSync, contarFotosPendentes, salvarFoto, fotosDaColeta,
   comprimirFoto, subirFotosPendentes, distanciaM, formatarDist, avisoDentroRaio,
   baixarTilesOffline, baixarTilesVarios, registrarSWColeta, getConfigColeta, saveConfigColeta,
@@ -30,7 +31,7 @@ import {
   ChevronLeft, ChevronRight, MapPin, Crosshair, Layers, List, Download,
   RefreshCw, LogOut, Settings, Camera, CheckCircle2, X, Wifi, WifiOff,
   Loader2, AlertTriangle, Navigation, CloudUpload, Maximize2, Ruler, Grid3x3,
-  Search, DownloadCloud, Eye, Satellite,
+  Search, DownloadCloud, Eye, Satellite, Gauge,
 } from 'lucide-react';
 
 const MapaColeta = dynamic(
@@ -43,6 +44,10 @@ const MedicaoScreen = dynamic(
 );
 const ManchaScreen = dynamic(
   () => import('@/components/coleta/ManchaScreen').then(m => ({ default: m.ManchaScreen })),
+  { ssr: false, loading: () => <div className="fixed inset-0" style={{ background: '#0a1929' }} /> },
+);
+const CompactacaoScreen = dynamic(
+  () => import('@/components/coleta/CompactacaoScreen').then(m => ({ default: m.CompactacaoScreen })),
   { ssr: false, loading: () => <div className="fixed inset-0" style={{ background: '#0a1929' }} /> },
 );
 
@@ -77,7 +82,7 @@ const SEL_VAZIA: Selecao = {
 };
 
 export default function ColetaPage() {
-  const [modulo, setModulo] = useState<'amostragem' | 'medicao' | 'mancha' | null>(null);
+  const [modulo, setModulo] = useState<'amostragem' | 'medicao' | 'mancha' | 'compactacao' | null>(null);
   const [sel, setSel] = useState<Selecao>(SEL_VAZIA);
   const [reload, setReload] = useState(0);
   const [online, setOnline] = useState(true);
@@ -109,7 +114,7 @@ export default function ColetaPage() {
   }, []);
 
   const atualizarPendentes = useCallback(async () => {
-    setPend({ regs: contarPendentesSync(), fotos: await contarFotosPendentes().catch(() => 0) });
+    setPend({ regs: contarPendentesSync() + contarLeiturasPendentesSync(), fotos: await contarFotosPendentes().catch(() => 0) });
   }, []);
   useEffect(() => { void atualizarPendentes(); }, [reload, atualizarPendentes]);
 
@@ -124,6 +129,7 @@ export default function ColetaPage() {
       const enviados = await pushColetasPendentes();
       const fotos = await subirFotosPendentes();
       const medicoes = await pushMedicoesPendentes().catch(() => 0);
+      const leituras = await pushLeiturasCompactPendentes().catch(() => 0);
       await bootCloud().catch(() => {});
       let recebidas = 0;
       if (sel.gradeId) recebidas = await pullColetas(sel.gradeId).catch(() => 0);
@@ -131,6 +137,7 @@ export default function ColetaPage() {
       setMsgSync(
         `✓ ${enviados} coleta(s) e ${fotos.enviadas} foto(s) enviadas` +
         (medicoes ? ` · ${medicoes} medição(ões)` : '') +
+        (leituras ? ` · ${leituras} leitura(s) de compactação` : '') +
         (recebidas ? ` · ${recebidas} recebida(s)` : '') +
         (fotos.erro ? ` — ⚠ ${fotos.erro}` : ''),
       );
@@ -155,6 +162,9 @@ export default function ColetaPage() {
   if (modulo === 'mancha') {
     return <ManchaScreen onVoltar={() => setModulo(null)} />;
   }
+  if (modulo === 'compactacao') {
+    return <CompactacaoScreen onVoltar={() => setModulo(null)} />;
+  }
   if (modulo !== 'amostragem') {
     return <TelaInicio online={online} pend={pend} sincronizar={sincronizar}
       sincronizando={sincronizando} msgSync={msgSync} instalar={instalar} onEscolher={setModulo} />;
@@ -170,11 +180,12 @@ export default function ColetaPage() {
 
 // ═══ Tela 0 — Início (módulos do app de campo) ════════════════════════════════
 
-type ModuloId = 'amostragem' | 'medicao' | 'mancha';
+type ModuloId = 'amostragem' | 'medicao' | 'mancha' | 'compactacao';
 const MODULOS: { id: ModuloId; icone: React.ElementType; cor: string; corIcone: string; titulo: string; desc: string }[] = [
   { id: 'amostragem', icone: Grid3x3, cor: '#166534', corIcone: '#86efac', titulo: 'Amostragem de Solo', desc: 'Navegue por GPS até os pontos da grade e registre as coletas (offline)' },
   { id: 'medicao', icone: Ruler, cor: '#1e3a8a', corIcone: '#93c5fd', titulo: 'Medição', desc: 'Meça áreas (polígono) e distâncias (linha) tocando no mapa ou caminhando com o GPS' },
   { id: 'mancha', icone: Satellite, cor: '#3730a3', corIcone: '#a5b4fc', titulo: 'NDVI / Mancha', desc: 'Baixe o mapa de NDVI no Wi-Fi e navegue por GPS até a mancha no campo (offline)' },
+  { id: 'compactacao', icone: Gauge, cor: '#78350f', corIcone: '#fbbf24', titulo: 'Compactação', desc: 'Navegue até os pontos da grade e registre as leituras do penetrômetro por profundidade (offline)' },
 ];
 
 function TelaInicio({ online, pend, sincronizar, sincronizando, msgSync, instalar, onEscolher }: {

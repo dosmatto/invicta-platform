@@ -1,6 +1,11 @@
-export const APP_VERSION = '1.28.0';
+export const APP_VERSION = '1.29.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.29.0': [
+    'APP DE CAMPO — novo módulo COMPACTAÇÃO (#36): o ciclo completo do penetrômetro. Na PLATAFORMA (aba Compactação → "Grade de compactação"), crie a grade de pontos do talhão (densidade em ha/ponto, distância da borda, profundidades — padrão 0-10/10-20/20-30/30-40 cm — e unidade MPa ou kgf/cm²), com "ver pontos no mapa"',
+    'No CAMPO (novo card Compactação no app), o operador escolhe a grade, navega por GPS até cada ponto (distância + raio de 15 m com vibração ao chegar) e registra a leitura do penetrômetro POR PROFUNDIDADE + observação — tudo offline; pontos coloridos por status (pendente/coletado/pulado) e multi-aparelho (leituras de outros celulares aparecem)',
+    'De volta à plataforma, "Buscar leituras do campo" mostra o progresso (X/N coletados) e "Virar levantamento" transforma as leituras num levantamento de penetrometria normal — que interpola por profundidade no fluxo que já existia. As leituras sincronizam no botão Sincronizar do app (contam nos pendentes)',
+  ],
   '1.28.0': [
     'ZONAS DE MANEJO — LABORATÓRIO DE ZONAS (Condutividade C4.2): novo botão "Laboratório" no bloco de Zoneamentos salvos (aba Zonas de Manejo) abre uma bancada que COMPARA todos os cenários de zona do talhão numa tabela — variáveis + pesos, método, nº de zonas/polígonos, área média por zona, CV médio e homogeneidade — com o MELHOR cenário destacado (menor CV médio = zonas mais homogêneas por dentro, que costumam representar melhor a realidade)',
     'CONCORDÂNCIA ESPACIAL entre dois cenários: escolha Cenário A × Cenário B e veja o % de área onde os dois classificam o potencial no mesmo terço (alto/médio/baixo) — é a comparação "Zona só-Condutividade × Multivariável" da spec, com barras de área por classe de cada cenário lado a lado. Cada zoneamento agora guarda os pesos por camada usados, para a comparação ser justa. Fecha a fase C4',

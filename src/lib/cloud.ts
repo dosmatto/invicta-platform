@@ -36,6 +36,7 @@ const KEYS_LISTA = [
   'inv_lab', 'inv_legendas',
   'inv_plantios',                      // Fase 8.B — cultura por talhão+safra
   'inv_compactacao',                   // Fase 8.C — penetrometria por profundidade
+  'inv_grades_compact',                // #36 — grades de compactação (plataforma cria; app de campo coleta)
   'inv_condutividade',                 // Condutividade Elétrica — Variável Fixa do Talhão (versões/oficial)
   'inv_paletas',                       // paletas de cor salvas (barras reutilizáveis nas legendas)
   'inv_meap_ambientes',                // MEAP — Ambientes Produtivos / Zonas de Manejo (M1)

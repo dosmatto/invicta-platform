@@ -95,3 +95,36 @@ export function pontosCompactacao(pontos: PontoBruto[], colunas: string[]) {
     return { lng: p.lng, lat: p.lat, valores };
   });
 }
+
+// #36 — Converte as LEITURAS DE CAMPO (app: penetrômetro por ponto da grade) nos
+// pontos de uma ImportacaoCompactacao. Só leituras COLETADAS com algum valor
+// finito entram; a coordenada é a REAL do registro (onde o operador estava) e,
+// sem ela, a do ponto planejado da grade. Puro (testável em Node).
+export interface LeituraCampoCompact {
+  ordem: number;
+  status: string;                    // só 'coletado' entra
+  valores: Record<string, number>;
+  lngReal?: number;
+  latReal?: number;
+}
+export function leiturasParaPontos(
+  leituras: LeituraCampoCompact[],
+  pontosGrade: { ordem: number; lng: number; lat: number }[],
+): { lng: number; lat: number; valores: Record<string, number> }[] {
+  const alvo = new Map(pontosGrade.map(p => [p.ordem, p]));
+  const out: { lng: number; lat: number; valores: Record<string, number> }[] = [];
+  for (const l of leituras) {
+    if (l.status !== 'coletado') continue;
+    const valores: Record<string, number> = {};
+    for (const [prof, v] of Object.entries(l.valores ?? {})) {
+      if (typeof v === 'number' && isFinite(v)) valores[prof] = v;
+    }
+    if (Object.keys(valores).length === 0) continue;
+    const plan = alvo.get(l.ordem);
+    const lng = l.lngReal ?? plan?.lng;
+    const lat = l.latReal ?? plan?.lat;
+    if (lng == null || lat == null) continue;
+    out.push({ lng, lat, valores });
+  }
+  return out;
+}
