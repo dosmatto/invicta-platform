@@ -165,6 +165,50 @@ export function deleteGradeCompactacao(id: string) {
   save('inv_grades_compact', load<GradeCompactacao>('inv_grades_compact').filter(g => g.id !== id));
 }
 
+// ── MDE / Altimetria (Variável Fixa do Talhão) — F1 ─────────────────────────
+// Metadados das bases de MDE aprovadas (spec 20.3/21): a base APROVADA vira a
+// oficial; versões antigas ficam no histórico (nunca apagar automaticamente).
+// Os rasters (elevação/declividade/hillshade) ficam na nuvem (inv_mapas_fert,
+// prefixo mde__<talhaoId>__<id>__), como os demais mapas.
+export interface MdeTalhao {
+  id: string;
+  talhaoId: string;
+  fonte: string;                  // 'cop30' | 'srtm' | (futuras)
+  rotuloFonte: string;            // "Copernicus DEM GLO-30 (30 m)"
+  resolucaoM: number;
+  stats: { alt_min: number; alt_med: number; alt_max: number; amplitude: number; decl_media: number | null; decl_max: number | null };
+  usuario?: string;               // quem aprovou
+  oficial: boolean;               // 1 por talhão
+  criadoEm: string;
+}
+
+export function getMdes(talhaoId?: string): MdeTalhao[] {
+  let lista = loadFiltrado<MdeTalhao>('inv_mde');
+  if (talhaoId) lista = lista.filter(m => m.talhaoId === talhaoId);
+  return lista.sort((a, b) => (b.criadoEm ?? '').localeCompare(a.criadoEm ?? ''));
+}
+
+export function saveMde(data: Omit<MdeTalhao, 'id' | 'criadoEm'>): MdeTalhao {
+  const lista = load<MdeTalhao>('inv_mde');
+  const novo: MdeTalhao = comEmpresa({ ...data, id: uid(), criadoEm: new Date().toISOString() });
+  if (novo.oficial) lista.forEach(m => { if (m.talhaoId === novo.talhaoId) m.oficial = false; });
+  lista.push(novo);
+  save('inv_mde', lista);
+  return novo;
+}
+
+export function setMdeOficial(id: string) {
+  const lista = load<MdeTalhao>('inv_mde');
+  const alvo = lista.find(m => m.id === id);
+  if (!alvo) return;
+  lista.forEach(m => { if (m.talhaoId === alvo.talhaoId) m.oficial = m.id === id; });
+  save('inv_mde', lista);
+}
+
+export function deleteMde(id: string) {
+  save('inv_mde', load<MdeTalhao>('inv_mde').filter(m => m.id !== id));
+}
+
 // ── Condutividade Elétrica (Variável Fixa do Talhão) ─────────────────────────
 // Diferente da compactação (por safra), a EC é uma característica ESTRUTURAL do
 // talhão: fica vinculada permanentemente ao talhão e pode ter várias VERSÕES ao
@@ -469,6 +513,7 @@ export function excluirProdutorCascata(clienteId: string): { talhaoIds: string[]
   save('inv_plantios', load<Plantio>('inv_plantios').filter(p => !tal.has(p.talhaoId)));
   save('inv_compactacao', load<ImportacaoCompactacao>('inv_compactacao').filter(c => !tal.has(c.talhaoId)));
   save('inv_grades_compact', load<GradeCompactacao>('inv_grades_compact').filter(g => !tal.has(g.talhaoId)));
+  save('inv_mde', load<MdeTalhao>('inv_mde').filter(m => !tal.has(m.talhaoId)));
   save('inv_condutividade', load<LevantamentoCondutividade>('inv_condutividade').filter(c => !tal.has(c.talhaoId)));
   save('inv_talhoes', load<Talhao>('inv_talhoes').filter(t => !tal.has(t.id)));
   save('inv_fazendas', load<Fazenda>('inv_fazendas').filter(f => !fazIds.has(f.id)));

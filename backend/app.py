@@ -15,6 +15,7 @@ import interp
 import msr
 import cbers
 import colheita
+import mde
 
 app = FastAPI(title="INVICTA - Interpolacao de Fertilidade", version="0.1.0")
 
@@ -67,6 +68,7 @@ def health():
         "cbers_v": getattr(cbers, "VERSION", "?"),
         "cbers_err": getattr(cbers, "_ERR", ""),
         "colheita_v": getattr(colheita, "VERSION", "?"),
+        "mde_v": getattr(mde, "VERSION", "?"),
     }
 
 
@@ -79,6 +81,24 @@ def interpolar(req: ReqInterp):
         raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:  # pragma: no cover
         raise HTTPException(status_code=500, detail=f"falha na interpolacao: {e}")
+
+
+class ReqMde(BaseModel):
+    poligono: dict[str, Any]          # GeoJSON Polygon/MultiPolygon (talhão ou fazenda)
+    fonte: str = "auto"               # 'auto' | 'cop30' | 'srtm'
+    buffer_m: float = 300.0           # buffer antes dos derivados (spec 5.2)
+
+
+@app.post("/mde")
+def mde_gerar(req: ReqMde):
+    """MDE F1: busca a base (Copernicus→SRTM), deriva altitude/declividade/hillshade
+    com buffer e devolve a prévia (grids + stats + histograma + avisos)."""
+    try:
+        return mde.gerar_mde(req.poligono, req.fonte, req.buffer_m)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:  # pragma: no cover
+        raise HTTPException(status_code=500, detail=f"falha no MDE: {e}")
 
 
 class ReqGeoTiff(BaseModel):

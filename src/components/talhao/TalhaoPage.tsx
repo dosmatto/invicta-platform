@@ -19,6 +19,7 @@ import { FertilidadeSection } from '@/components/talhao/FertilidadeSection';
 import { AmostragemModulo } from '@/components/talhao/AmostragemModulo';
 import { CompactacaoSection } from '@/components/talhao/CompactacaoSection';
 import { CondutividadeSection } from '@/components/talhao/CondutividadeSection';
+import { AltimetriaSection } from '@/components/talhao/AltimetriaSection';
 import { RecomendacaoSection } from '@/components/talhao/RecomendacaoSection';
 import { ArquivosSection } from '@/components/talhao/ArquivosSection';
 import { LabImportSection } from '@/components/talhao/LabImportSection';
@@ -47,7 +48,7 @@ type TabId =
 // Ordem de TRABALHO do talhão (não-`pronto` = "em breve", cai no placeholder EmBreve).
 const TABS: Array<{ id: TabId; label: string; icon: React.ElementType; pronto: boolean }> = [
   { id: 'resumo',        label: 'Resumo',          icon: Home,            pronto: true },
-  { id: 'altimetria',    label: 'Altimetria (MDE)', icon: Mountain,       pronto: false },
+  { id: 'altimetria',    label: 'Altimetria (MDE)', icon: Mountain,       pronto: true },
   { id: 'condutividade', label: 'Condutividade',   icon: Zap,             pronto: true },
   { id: 'zonas',         label: 'Zonas de Manejo', icon: Layers,          pronto: true },
   { id: 'amostragem',    label: 'Amostragem',      icon: Grid3x3,         pronto: true },
@@ -225,12 +226,13 @@ export function TalhaoPage({ id }: { id: string }) {
             {tabAtivo === 'zonas' && talhao && <MeapSection talhao={talhao} safraNome={safraSel} />}
             {tabAtivo === 'compactacao' && <CompactacaoSection safraNome={safraSel} />}
             {tabAtivo === 'condutividade' && <CondutividadeSection />}
+            {tabAtivo === 'altimetria' && <AltimetriaSection />}
             {tabAtivo === 'produtividade' && <ProdutividadeSection safraNome={safraSel} />}
             {tabAtivo === 'ndvi' && <NdviSection />}
             {tabAtivo === 'recomendacoes' && <RecomendacaoSection safraNome={safraSel} />}
             {tabAtivo === 'arquivos' && <ArquivosSection safraNome={safraSel} />}
             {tabAtivo === 'relatorios' && <GeradorRelatorios safraNome={safraSel} />}
-            {!['resumo', 'fertilidade', 'amostragem', 'zonas', 'compactacao', 'condutividade', 'produtividade', 'ndvi', 'recomendacoes', 'arquivos', 'relatorios'].includes(tabAtivo) && (
+            {!['resumo', 'fertilidade', 'amostragem', 'zonas', 'compactacao', 'condutividade', 'altimetria', 'produtividade', 'ndvi', 'recomendacoes', 'arquivos', 'relatorios'].includes(tabAtivo) && (
               <EmBreve label={TABS.find(t => t.id === tabAtivo)?.label ?? ''} />
             )}
           </div>

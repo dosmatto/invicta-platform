@@ -1,6 +1,11 @@
-export const APP_VERSION = '1.29.0';
+export const APP_VERSION = '1.30.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.30.0': [
+    'NOVO MÓDULO — MDE / ANÁLISE TOPOGRÁFICA (Fase 1 de 4): a aba "Altimetria (MDE)" saiu do "em breve" e virou real. Um clique busca o Modelo Digital de Elevação do talhão em fontes públicas (Copernicus DEM GLO-30 → NASADEM/SRTM automático; FABDEM/ALOS aparecem como indisponíveis com o motivo — licença/chave) e processa TUDO na nuvem: altitude, declividade e relevo sombreado, sempre com BUFFER ao redor do talhão (nunca derivamos no limite seco — sem erro de borda)',
+    'PRÉVIA para validação antes de salvar: mapa hipsométrico (verde→marrom, relativo à área), declividade em classes de relevo (plano → montanhoso), relevo sombreado, estatísticas (mín/média/máx/amplitude/declividade), histograma de altitude e AVISOS de qualidade (área sem dados, talhão pequeno para 30 m, relevo plano, amplitude suspeita)',
+    'APROVAR transforma a base no MDE OFICIAL do talhão (variável fixa): metadados + rasters salvos na nuvem (carregam sem reprocessar), substituição pede confirmação e a base anterior fica no HISTÓRICO de versões (restaurar = 1 clique). Exportar GeoTIFF (EPSG:4326) da altitude e da declividade — abre no QGIS. Fases seguintes: derivados (TPI/TRI/curvatura/fluxo), análise agronômica (TWI/LS/drenagem/classes) e integrações',
+  ],
   '1.29.0': [
     'APP DE CAMPO — novo módulo COMPACTAÇÃO (#36): o ciclo completo do penetrômetro. Na PLATAFORMA (aba Compactação → "Grade de compactação"), crie a grade de pontos do talhão (densidade em ha/ponto, distância da borda, profundidades — padrão 0-10/10-20/20-30/30-40 cm — e unidade MPa ou kgf/cm²), com "ver pontos no mapa"',
     'No CAMPO (novo card Compactação no app), o operador escolhe a grade, navega por GPS até cada ponto (distância + raio de 15 m com vibração ao chegar) e registra a leitura do penetrômetro POR PROFUNDIDADE + observação — tudo offline; pontos coloridos por status (pendente/coletado/pulado) e multi-aparelho (leituras de outros celulares aparecem)',
