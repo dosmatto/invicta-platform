@@ -19,11 +19,33 @@ import urllib.error
 import urllib.request
 from typing import Any
 
-VERSION = "ia-1-diagnostico"
+VERSION = "ia-2-historico"
 
 URL_OPENAI = "https://api.openai.com/v1/chat/completions"
 MODELO_PADRAO = "gpt-4o"          # diagnostico completo = modelo avancado (secao 6)
 _TIMEOUT = 120
+
+# Preco aproximado por 1M de tokens (USD in, USD out) — SO p/ estimar custo na
+# auditoria (secao 14); a cobranca real e a da OpenAI. Atualizavel. Match por
+# prefixo mais LONGO primeiro (gpt-4o-mini antes de gpt-4o).
+_PRECO_USD_1M = {
+    "gpt-4o-mini": (0.15, 0.60),
+    "gpt-4o": (2.50, 10.00),
+    "gpt-4.1-mini": (0.40, 1.60),
+    "gpt-4.1-nano": (0.10, 0.40),
+    "gpt-4.1": (2.00, 8.00),
+    "o4-mini": (1.10, 4.40),
+}
+_PRECO_PADRAO = (2.50, 10.00)
+
+
+def _custo_usd(modelo: str, ti: int, to: int) -> float:
+    p_in, p_out = _PRECO_PADRAO
+    for pref in sorted(_PRECO_USD_1M, key=len, reverse=True):
+        if modelo.startswith(pref):
+            p_in, p_out = _PRECO_USD_1M[pref]
+            break
+    return round((ti / 1_000_000) * p_in + (to / 1_000_000) * p_out, 5)
 
 # Prompt fixo do Diagnostico Inteligente por Talhao (secao 10 da spec).
 PROMPT_SISTEMA = """Você é uma IA agronômica da plataforma Invicta, especializada em Agricultura de Precisão, fertilidade de solos, produtividade, sensoriamento remoto e zonas de manejo.
@@ -133,9 +155,12 @@ def diagnostico_talhao(contexto: dict[str, Any], tipo_analise: str = "diagnostic
         raise ValueError(f"resposta da IA fora do formato esperado: {e}") from e
 
     uso = j.get("usage", {})
+    ti, to = int(uso.get("prompt_tokens", 0)), int(uso.get("completion_tokens", 0))
+    modelo_usado = j.get("model", modelo)
     return {
         "resposta": _validar(bruto),
-        "modelo": j.get("model", modelo),
-        "tokens_entrada": int(uso.get("prompt_tokens", 0)),
-        "tokens_saida": int(uso.get("completion_tokens", 0)),
+        "modelo": modelo_usado,
+        "tokens_entrada": ti,
+        "tokens_saida": to,
+        "custo_estimado": _custo_usd(modelo_usado, ti, to),
     }

@@ -4,26 +4,31 @@
 // Abrir a tela mostra o diagnóstico SALVO (nunca chama a IA sozinho — §14);
 // só os botões Gerar/Atualizar disparam a análise (custo controlado).
 
-import { useEffect, useState } from 'react';
-import { gerarDiagnostico, carregarDiagnostico, type DiagnosticoIa } from '@/lib/ia';
-import { Sparkles, Loader2, AlertTriangle, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { gerarDiagnostico, carregarHistoricoDiagnosticos, type DiagnosticoIa } from '@/lib/ia';
+import { Sparkles, Loader2, AlertTriangle, RefreshCw, ChevronDown, ChevronUp, History, Clock } from 'lucide-react';
+
+const usd = (v?: number) => (v == null ? '—' : `US$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 4 })}`);
+const dataHora = (s: string) => `${new Date(s).toLocaleDateString('pt-BR')} ${new Date(s).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
 
 const COR_POT: Record<string, string> = { alto: '#86efac', medio: '#fbbf24', baixo: '#f87171', indefinido: '#94a3b8' };
 const ROT_POT: Record<string, string> = { alto: 'Alto', medio: 'Médio', baixo: 'Baixo', indefinido: 'Indefinido' };
 const COR_CONF: Record<string, string> = { alto: '#86efac', medio: '#fbbf24', baixo: '#f87171' };
 
 export function DiagnosticoIaCard({ talhaoId, safraNome }: { talhaoId: string; safraNome?: string }) {
-  const [diag, setDiag] = useState<DiagnosticoIa | null>(null);
+  const [historico, setHistorico] = useState<DiagnosticoIa[]>([]);
+  const [verId, setVerId] = useState<string | null>(null);   // qual diagnóstico do histórico está aberto (null = o mais recente)
   const [carregando, setCarregando] = useState(true);
   const [gerando, setGerando] = useState(false);
   const [erro, setErro] = useState('');
   const [tecAberto, setTecAberto] = useState(false);
+  const [histAberto, setHistAberto] = useState(false);
 
   useEffect(() => {
     let vivo = true;
-    setDiag(null); setErro(''); setCarregando(true);
-    carregarDiagnostico(talhaoId, safraNome)
-      .then(d => { if (vivo) setDiag(d); })
+    setHistorico([]); setVerId(null); setErro(''); setCarregando(true); setHistAberto(false);
+    carregarHistoricoDiagnosticos(talhaoId, safraNome)
+      .then(h => { if (vivo) setHistorico(h); })
       .catch(() => {})
       .finally(() => { if (vivo) setCarregando(false); });
     return () => { vivo = false; };
@@ -33,12 +38,16 @@ export function DiagnosticoIaCard({ talhaoId, safraNome }: { talhaoId: string; s
     if (gerando) return;
     setGerando(true); setErro('');
     try {
-      setDiag(await gerarDiagnostico(talhaoId, safraNome));
+      const novo = await gerarDiagnostico(talhaoId, safraNome);
+      setHistorico(h => [novo, ...h]);
+      setVerId(null);   // mostra o recém-gerado (o mais recente)
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Falha ao gerar o diagnóstico.');
     } finally { setGerando(false); }
   }
 
+  const diag = useMemo(() => (verId ? historico.find(d => d.id === verId) : historico[0]) ?? null, [historico, verId]);
+  const custoTotal = useMemo(() => historico.reduce((s, d) => s + (d.custoEstimado ?? 0), 0), [historico]);
   const r = diag?.resposta;
 
   return (
@@ -76,8 +85,13 @@ export function DiagnosticoIaCard({ talhaoId, safraNome }: { talhaoId: string; s
               Confiança: {r.nivel_de_confianca}
             </span>
             <span style={{ color: '#475569' }}>
-              {new Date(diag.criadoEm).toLocaleDateString('pt-BR')} {new Date(diag.criadoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} · {diag.modelo}
+              {dataHora(diag.criadoEm)} · {diag.modelo} · {(diag.tokensEntrada + diag.tokensSaida).toLocaleString('pt-BR')} tokens · {usd(diag.custoEstimado)}
             </span>
+            {verId && historico[0] && diag.id !== historico[0].id && (
+              <button onClick={() => setVerId(null)} className="px-1.5 py-0.5 rounded font-bold" style={{ background: '#78350f', color: '#fde68a' }}>
+                versão antiga · ver a atual
+              </button>
+            )}
           </div>
 
           <p className="text-[11px] leading-relaxed" style={{ color: '#e2e8f0' }}>{r.diagnostico_geral}</p>
@@ -112,6 +126,33 @@ export function DiagnosticoIaCard({ talhaoId, safraNome }: { talhaoId: string; s
               {r.dados_ausentes_relevantes.length > 0 && <div><p className="font-bold text-[9px] uppercase" style={{ color: '#64748b' }}>Dados ausentes</p>{r.dados_ausentes_relevantes.map((x, i) => <p key={i}>• {x}</p>)}</div>}
               <div><p className="font-bold text-[9px] uppercase" style={{ color: '#93c5fd' }}>Resumo técnico interno</p><p>{r.resumo_tecnico_interno}</p></div>
               <p style={{ color: '#475569' }}>Justificativa da confiança: {r.justificativa_confianca}</p>
+            </div>
+          )}
+
+          {/* Histórico de diagnósticos (§13-14) — cada geração fica guardada */}
+          {historico.length > 1 && (
+            <div className="pt-1" style={{ borderTop: '1px solid #0f2240' }}>
+              <button onClick={() => setHistAberto(a => !a)} className="w-full flex items-center justify-between text-[9px] font-semibold" style={{ color: '#64748b' }}>
+                <span className="flex items-center gap-1"><History size={10} /> Histórico · {historico.length} análises · {usd(custoTotal)} no total</span>
+                {histAberto ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+              </button>
+              {histAberto && (
+                <div className="mt-1 space-y-1">
+                  {historico.map((d, i) => {
+                    const ativo = d.id === diag.id;
+                    return (
+                      <button key={d.id} onClick={() => setVerId(i === 0 ? null : d.id)}
+                        className="w-full flex items-center gap-2 text-[9px] rounded px-2 py-1 text-left"
+                        style={{ background: ativo ? '#0f2240' : '#061525', border: `1px solid ${ativo ? '#2e5fa3' : '#1a3a6b'}` }}>
+                        <Clock size={9} style={{ color: '#64748b' }} className="flex-shrink-0" />
+                        <span className="flex-1" style={{ color: '#cbd5e1' }}>{dataHora(d.criadoEm)}{i === 0 ? ' · atual' : ''}</span>
+                        <span style={{ color: COR_POT[d.resposta.potencial_do_talhao] }}>{ROT_POT[d.resposta.potencial_do_talhao]}</span>
+                        <span style={{ color: '#475569' }}>{usd(d.custoEstimado)}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
         </div>

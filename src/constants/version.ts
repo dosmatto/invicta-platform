@@ -1,6 +1,10 @@
-export const APP_VERSION = '1.33.0';
+export const APP_VERSION = '1.34.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.34.0': [
+    'IA F2 — HISTÓRICO E CUSTO DO DIAGNÓSTICO: cada vez que você gera/atualiza o diagnóstico do talhão, a análise anterior fica GUARDADA (não é mais sobrescrita). O card ganhou um "Histórico" que lista as análises daquele talhão/safra por data — clique para reabrir uma versão antiga e comparar como o diagnóstico evoluiu (e volte para a atual num toque)',
+    'CONTROLE DE CUSTO: cada diagnóstico agora mostra o modelo usado, os tokens e o CUSTO ESTIMADO em dólar; o histórico soma o total gasto no talhão. A estimativa cobre gpt-4o, gpt-4o-mini e gpt-4.1 (atualizável no servidor) — assim dá para acompanhar o gasto de IA por área. Tudo continua salvo com o contexto para auditoria',
+  ],
   '1.33.0': [
     'IA — DIAGNÓSTICO INTELIGENTE POR TALHÃO (Fase 1): novo card "Diagnóstico com IA" no Resumo do talhão. Um clique monta um RESUMO dos dados que o talhão já tem (fertilidade média do laudo, produtividade histórica oficial, NDVI e composições, condutividade elétrica, relevo/MDE, zonas de manejo, compactação) e a IA agronômica devolve um diagnóstico estruturado: potencial do talhão, principais limitantes, evidências, hipóteses, oportunidades de manejo, riscos, dados ausentes e um resumo em linguagem simples para o produtor',
     'Regras de segurança da spec: a IA usa SOMENTE os dados fornecidos pela plataforma (nada inventado), sempre informa o NÍVEL DE CONFIANÇA, a chave da OpenAI fica só no servidor (nunca no navegador), e cada diagnóstico é salvo COM o contexto enviado — auditável. Abrir a tela mostra o diagnóstico salvo; a IA só roda de novo no botão Atualizar (custo controlado)',

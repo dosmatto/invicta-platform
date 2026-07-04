@@ -35,7 +35,7 @@ export interface RespostaIa {
 }
 
 export interface DiagnosticoIa {
-  id: string;                     // `${talhaoId}__${safra||'geral'}`
+  id: string;                     // `${talhaoId}__${safra||'geral'}__${ts}` — único por geração (histórico)
   talhaoId: string;
   safra?: string;
   contexto: Record<string, unknown>;   // auditoria: exatamente o que a IA viu
@@ -43,9 +43,13 @@ export interface DiagnosticoIa {
   modelo: string;
   tokensEntrada: number;
   tokensSaida: number;
+  custoEstimado?: number;         // USD (estimativa p/ controle de custo — §14)
   usuario?: string;
   criadoEm: string;
 }
+
+// Chave-base do talhão+safra (todos os diagnósticos daquela combinação começam com ela).
+const baseId = (talhaoId: string, safraNome?: string) => `${talhaoId}__${safraNome || 'geral'}`;
 
 const COLECAO = 'inv_ia_diagnosticos';
 
@@ -159,12 +163,13 @@ export async function gerarDiagnostico(talhaoId: string, safraNome?: string): Pr
     try { const j = await r.json(); if (j?.detail) msg = String(j.detail); } catch {}
     throw new Error(msg);
   }
-  const j = await r.json() as { resposta: RespostaIa; modelo: string; tokens_entrada: number; tokens_saida: number };
+  const j = await r.json() as { resposta: RespostaIa; modelo: string; tokens_entrada: number; tokens_saida: number; custo_estimado?: number };
   const diag: DiagnosticoIa = {
-    id: `${talhaoId}__${safraNome || 'geral'}`,
+    id: `${baseId(talhaoId, safraNome)}__${Date.now()}`,   // único → cada geração fica no histórico (§13-14)
     talhaoId, safra: safraNome || undefined,
     contexto, resposta: j.resposta,
     modelo: j.modelo, tokensEntrada: j.tokens_entrada, tokensSaida: j.tokens_saida,
+    custoEstimado: j.custo_estimado,
     usuario: emailUsuario() || undefined,
     criadoEm: new Date().toISOString(),
   };
@@ -174,12 +179,22 @@ export async function gerarDiagnostico(talhaoId: string, safraNome?: string): Pr
   return diag;
 }
 
-// Carrega o diagnóstico SALVO (não chama a IA — §14).
-export async function carregarDiagnostico(talhaoId: string, safraNome?: string): Promise<DiagnosticoIa | null> {
-  if (!usarDadosSupabase()) return null;
+// Histórico de diagnósticos do talhão (todos; filtra pela safra se informada),
+// mais recentes primeiro. Abrir a tela usa isto — NÃO chama a IA (§14).
+export async function carregarHistoricoDiagnosticos(talhaoId: string, safraNome?: string): Promise<DiagnosticoIa[]> {
+  if (!usarDadosSupabase()) return [];
   try {
     const docs = await carregarDocsPorCampoSupabase<DiagnosticoIa>(COLECAO, 'talhaoId', talhaoId);
-    const alvo = `${talhaoId}__${safraNome || 'geral'}`;
-    return docs.find(d => d.id === alvo) ?? docs.sort((a, b) => (b.criadoEm ?? '').localeCompare(a.criadoEm ?? ''))[0] ?? null;
-  } catch { return null; }
+    const pre = `${baseId(talhaoId, safraNome)}__`;
+    // registros novos: id começa com a base+ts; legados (sem ts): id === base.
+    const doTalhao = safraNome !== undefined
+      ? docs.filter(d => d.id.startsWith(pre) || d.id === baseId(talhaoId, safraNome))
+      : docs;
+    return doTalhao.sort((a, b) => (b.criadoEm ?? '').localeCompare(a.criadoEm ?? ''));
+  } catch { return []; }
+}
+
+// Diagnóstico mais recente da combinação talhão+safra (o exibido por padrão).
+export async function carregarDiagnostico(talhaoId: string, safraNome?: string): Promise<DiagnosticoIa | null> {
+  return (await carregarHistoricoDiagnosticos(talhaoId, safraNome))[0] ?? null;
 }
