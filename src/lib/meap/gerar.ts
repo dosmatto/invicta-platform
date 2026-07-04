@@ -5,7 +5,7 @@
 // camadas escolhidas, empilha e manda o backend clusterizar (k-means/FCM) com
 // índices FPI/NCE para escolher o nº de zonas. Preview apenas (persistir = M3).
 
-import { getImportacoesLab, getGrades, getCondutividade, getComposicoes } from '@/lib/store';
+import { getImportacoesLab, getGrades, getCondutividade, getComposicoes, getMdes, getMdeCamadasTopo } from '@/lib/store';
 import { carregarGridsTalhao } from '@/lib/recomendacao/aplicar';
 import { analisarZonas, gerarZonas, decodeGrid, descomprimirGrid, type RespAnalisarZonas, type RespGerarZonas, type Grid } from '@/lib/fertilidade';
 import { cloudCarregarMapasPorPrefixo } from '@/lib/cloud';
@@ -118,6 +118,39 @@ export async function carregarComposicoes(talhaoId: string): Promise<ComposicaoC
   return out;
 }
 
+// ── Camadas topográficas (MDE) como fonte do MEAP (F4) ──────────────────────
+// Altitude + Declividade vêm da BASE OFICIAL (sempre); TPI/TWI/LS… entram só se
+// o usuário salvou "para Zonas de Manejo" (mdecam__). Categoria Relevo.
+export interface TopoCamada { chave: string; nut: string; simbolo: string; bounds: [number, number, number, number]; b64: string; shape: [number, number]; }
+
+export async function carregarMdeCamadas(talhaoId: string): Promise<TopoCamada[]> {
+  const out: TopoCamada[] = [];
+  // 1) base oficial → Altitude + Declividade
+  const oficial = getMdes(talhaoId).find(m => m.oficial);
+  if (oficial) {
+    const docs = await cloudCarregarMapasPorPrefixo<{ bounds: [number, number, number, number]; elevacao?: Grid; declividade?: Grid }>(`mde__${talhaoId}__${oficial.id}__`);
+    for (const d of docs) {
+      for (const [campo, simbolo, nut] of [['elevacao', 'Altitude', 'mde_alt'], ['declividade', 'Declividade', 'mde_decl']] as const) {
+        let g = d.dados?.[campo];
+        if (!g) continue;
+        if (g.comp === 'gz') { try { g = await descomprimirGrid(g); } catch { continue; } }
+        out.push({ chave: `topo__${nut}`, nut, simbolo, bounds: d.dados.bounds, b64: g.b64, shape: g.shape });
+      }
+    }
+  }
+  // 2) camadas topográficas salvas (TPI/TWI/LS…)
+  for (const meta of getMdeCamadasTopo(talhaoId)) {
+    const docs = await cloudCarregarMapasPorPrefixo<{ resp: { bounds: [number, number, number, number]; grid?: Grid } }>(`mdecam__${talhaoId}__${meta.key}`);
+    for (const d of docs) {
+      let g = d.dados?.resp?.grid;
+      if (!g) continue;
+      if (g.comp === 'gz') { try { g = await descomprimirGrid(g); } catch { continue; } }
+      out.push({ chave: `topo__${meta.key}`, nut: `mde_${meta.key}`, simbolo: meta.rotulo, bounds: d.dados.resp.bounds, b64: g.b64, shape: g.shape });
+    }
+  }
+  return out;
+}
+
 // ── Condutividade elétrica OFICIAL como camada do MEAP (C3) ──────────────────
 export interface EcCamada { chave: string; prof: string; bounds: [number, number, number, number]; b64: string; shape: [number, number] }
 
@@ -210,6 +243,20 @@ export async function carregarCamadas(talhaoId: string): Promise<CamadasCarregad
     for (const e of ec) {
       const b64 = (e.shape[0] === shape[0] && e.shape[1] === shape[1]) ? e.b64 : reamostrarB64(e.b64, e.shape, shape);
       camadas.push({ chave: e.chave, nut: `ec_${e.prof}`, prof: e.prof, simbolo: rotuloEc(e.prof), b64, shape });
+    }
+  }
+
+  // 4) Relevo (MDE F4): Altitude/Declividade da base oficial + TPI/TWI/LS… salvas.
+  const topo = await carregarMdeCamadas(talhaoId);
+  if (!bounds && topo.length) {
+    const ref = topo.reduce((a, b) => (b.shape[0] * b.shape[1] > a.shape[0] * a.shape[1] ? b : a));
+    bounds = ref.bounds;
+    shape = capShape(ref.shape, 160);
+  }
+  if (bounds && shape) {
+    for (const t of topo) {
+      const b64 = (t.shape[0] === shape[0] && t.shape[1] === shape[1]) ? t.b64 : reamostrarB64(t.b64, t.shape, shape);
+      camadas.push({ chave: t.chave, nut: t.nut, prof: 'relevo', simbolo: t.simbolo, b64, shape });
     }
   }
 

@@ -1,6 +1,10 @@
-export const APP_VERSION = '1.36.0';
+export const APP_VERSION = '1.37.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.37.0': [
+    'MDE F4 — RELEVO NAS ZONAS DE MANEJO: o relevo virou fonte oficial do zoneamento. Assim que você aprova a base altimétrica, ALTITUDE e DECLIVIDADE já ficam disponíveis como camadas na Zona de Manejo (grupo Relevo). E na análise topográfica, o botão "Salvar para Zonas de Manejo" envia também TPI, TWI, LS Factor, TRI, fluxo, aspecto e curvatura — para você escolhê-las (com peso próprio) junto de fertilidade, condutividade, NDVI e produtividade ao gerar as zonas (análise multicritério da spec)',
+    'Cada camada topográfica entra reamostrada na malha de referência do talhão (co-registrada com as demais), pode ser removida do MEAP a qualquer momento e sincroniza entre aparelhos. Próximo passo do módulo (F4.b): cruzamento produtividade × classe de relevo (topo/encosta/baixada) e relatório PDF do MDE',
+  ],
   '1.36.0': [
     'IA F4 — MOTOR DE REGRAS AGRONÔMICAS + QUALIDADE DOS DADOS: o card de IA do talhão agora mostra, ANTES e sem custo de IA, os "Sinais das regras" — checagens automáticas do próprio dado: K na CTC < 2% (limitação de potássio), V% < 50% (acidez), pH baixo + Al alto (toxidez), NDVI médio baixo (vigor), produtividade instável entre safras, e zona de alto potencial quando a fertilidade está boa e estável. Cada sinal é marcado como limitante, risco ou oportunidade',
     'SCORE DE QUALIDADE DOS DADOS (Alta/Média/Baixa): avalia a completude do talhão (fertilidade + produtividade + dados espaciais como NDVI, condutividade, relevo e zonas). Esses sinais e o score entram no contexto enviado à IA como evidências JÁ CLASSIFICADAS, então o diagnóstico fica mais fundamentado e o nível de confiança passa a acompanhar a qualidade real dos dados. Motor determinístico validado (16/16 testes)',

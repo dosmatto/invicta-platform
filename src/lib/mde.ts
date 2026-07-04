@@ -9,6 +9,7 @@
 import { postBackend } from './interpUrl';
 import { comprimirGrid, descomprimirGrid, type Grid } from './fertilidade';
 import { cloudSalvarMapa, cloudCarregarMapasPorPrefixo, cloudExcluirMapasPorPrefixo } from './cloud';
+import { setMdeCamadasTopo, limparMdeCamadasTopo } from './store';
 
 export type FonteMde = 'auto' | 'cop30' | 'srtm';
 
@@ -144,6 +145,45 @@ export async function carregarMdeDaNuvem(talhaoId: string, mdeId: string): Promi
 
 export function excluirMdeDaNuvem(talhaoId: string, mdeId: string): void {
   cloudExcluirMapasPorPrefixo(prefixoMde(talhaoId, mdeId));
+}
+
+// ── F4: camadas topográficas → Zonas de Manejo ──────────────────────────────
+// Camadas da ANÁLISE (F2/F3) que o usuário pode salvar como fonte do MEAP.
+// Altitude e Declividade NÃO entram aqui (vêm direto da base oficial).
+export const CAMADAS_TOPO_ZONA: { key: keyof RespMdeAnalise['grids']; rotulo: string }[] = [
+  { key: 'tpi', rotulo: 'TPI' },
+  { key: 'twi', rotulo: 'TWI' },
+  { key: 'ls', rotulo: 'LS Factor' },
+  { key: 'tri', rotulo: 'TRI' },
+  { key: 'fluxo_log', rotulo: 'Fluxo acumulado' },
+  { key: 'aspecto', rotulo: 'Aspecto' },
+  { key: 'curv_geral', rotulo: 'Curvatura geral' },
+];
+
+const prefixoCam = (talhaoId: string, key: string) => `mdecam__${talhaoId}__${key}`;
+
+// Persiste (gzip) as camadas escolhidas + registra o conjunto no store.
+export async function salvarCamadasTopoMde(
+  talhaoId: string,
+  analise: RespMdeAnalise,
+  keys: (keyof RespMdeAnalise['grids'])[],
+): Promise<void> {
+  // limpa as antigas na nuvem (as que não forem re-salvas somem)
+  cloudExcluirMapasPorPrefixo(`mdecam__${talhaoId}__`);
+  const registros: { key: string; rotulo: string }[] = [];
+  for (const key of keys) {
+    const g = analise.grids[key];
+    if (!g) continue;
+    const gz = await comprimirGrid(g);
+    cloudSalvarMapa(prefixoCam(talhaoId, key), { resp: { bounds: analise.bounds, grid: gz } });
+    registros.push({ key, rotulo: CAMADAS_TOPO_ZONA.find(c => c.key === key)?.rotulo ?? key });
+  }
+  setMdeCamadasTopo(talhaoId, registros);
+}
+
+export function excluirCamadasTopoMde(talhaoId: string): void {
+  cloudExcluirMapasPorPrefixo(`mdecam__${talhaoId}__`);
+  limparMdeCamadasTopo(talhaoId);
 }
 
 // ── Apoio de visualização ────────────────────────────────────────────────────

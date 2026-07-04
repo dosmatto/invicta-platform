@@ -9,14 +9,15 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useApp } from '@/context/AppContext';
-import { getTalhoes, getLegendas, getMdes, saveMde, setMdeOficial, deleteMde, type MdeTalhao } from '@/lib/store';
+import { getTalhoes, getLegendas, getMdes, saveMde, setMdeOficial, deleteMde, getMdeCamadasTopo, type MdeTalhao } from '@/lib/store';
 import { extrairPoligono, coordsFromBounds, exportarGeotiff, gradienteCss, type Grid } from '@/lib/fertilidade';
 import { colorirGridComLegenda, colorirGrid } from '@/lib/raster';
 import { tocarBackend } from '@/lib/interpUrl';
 import { emailUsuario } from '@/lib/auth';
 import {
   buscarMde, salvarMdeNaNuvem, carregarMdeDaNuvem, excluirMdeDaNuvem, normalizarGrid0a100,
-  buscarAnaliseMde, FONTES_MDE, FONTES_MDE_INDISPONIVEIS,
+  buscarAnaliseMde, salvarCamadasTopoMde, excluirCamadasTopoMde, CAMADAS_TOPO_ZONA,
+  FONTES_MDE, FONTES_MDE_INDISPONIVEIS,
   type FonteMde, type RespMde, type MdeCarregado, type RespMdeAnalise, type SensibilidadeDrenagem,
 } from '@/lib/mde';
 import type { Legenda } from '@/lib/legendas';
@@ -112,6 +113,9 @@ export function AltimetriaSection() {
   const [analise, setAnalise] = useState<RespMdeAnalise | null>(null);
   const [gerandoAnalise, setGerandoAnalise] = useState(false);
   const [sensib, setSensib] = useState<SensibilidadeDrenagem>('media');
+  const [salvandoZonas, setSalvandoZonas] = useState(false);
+  const [nSalvasZonas, setNSalvasZonas] = useState(0);   // camadas topo já no MEAP
+  const [zonasMsg, setZonasMsg] = useState('');
 
   const oficial = mdes.find(m => m.oficial) ?? null;
 
@@ -119,6 +123,7 @@ export function AltimetriaSection() {
   useEffect(() => {
     setPrevia(null); setErro(''); setOficialDados(null); setCamada('alt'); setAnalise(null);
     setMdes(nav.talhaoId ? getMdes(nav.talhaoId) : []);
+    setNSalvasZonas(nav.talhaoId ? getMdeCamadasTopo(nav.talhaoId).length : 0); setZonasMsg('');
   }, [nav.talhaoId]);
 
   // Autoload da base OFICIAL (nuvem) quando não há prévia em andamento.
@@ -226,6 +231,24 @@ export function AltimetriaSection() {
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Falha na análise topográfica.');
     } finally { setGerandoAnalise(false); }
+  }
+
+  // F4 — envia as camadas topográficas (TPI/TWI/LS…) para as Zonas de Manejo.
+  async function salvarZonas() {
+    if (!analise || !nav.talhaoId || salvandoZonas) return;
+    setSalvandoZonas(true); setZonasMsg('');
+    try {
+      await salvarCamadasTopoMde(nav.talhaoId, analise, CAMADAS_TOPO_ZONA.map(c => c.key));
+      setNSalvasZonas(CAMADAS_TOPO_ZONA.length);
+      setZonasMsg('✓ Relevo disponível nas Zonas de Manejo (grupo Relevo). Escolha as camadas e os pesos ao gerar as zonas.');
+    } catch (e) {
+      setZonasMsg(e instanceof Error ? e.message : 'Falha ao salvar para zonas.');
+    } finally { setSalvandoZonas(false); }
+  }
+  function removerZonas() {
+    if (!nav.talhaoId) return;
+    excluirCamadasTopoMde(nav.talhaoId);
+    setNSalvasZonas(0); setZonasMsg('Camadas topográficas removidas do MEAP (Altitude e Declividade continuam vindo da base).');
   }
 
   // GeoTIFF de uma camada GRID da análise (aspecto/tpi/twi/ls/…).
@@ -442,6 +465,26 @@ export function AltimetriaSection() {
                     </optgroup>
                   ))}
                 </select>
+              </div>
+
+              {/* F4 — enviar o relevo para as Zonas de Manejo */}
+              <div className="rounded p-2 space-y-1" style={{ background: '#0a1a2f', border: '1px solid #1a3a6b' }}>
+                <p className="text-[9px] leading-relaxed" style={{ color: '#94a3b8' }}>
+                  <Layers size={9} className="inline mr-0.5" /> Use o relevo nas <strong>Zonas de Manejo</strong>: Altitude e Declividade já entram da base oficial; salve TPI, TWI, LS e derivados para escolhê-los (com peso) ao gerar zonas.
+                </p>
+                <div className="flex gap-1">
+                  <button onClick={() => void salvarZonas()} disabled={salvandoZonas}
+                    className="flex-1 py-1.5 rounded text-[10px] font-bold text-white flex items-center justify-center gap-1 disabled:opacity-50" style={{ background: 'var(--invicta-green-dark)' }}>
+                    {salvandoZonas ? <Loader2 size={11} className="animate-spin" /> : <Layers size={11} />} {nSalvasZonas > 0 ? 'Atualizar camadas p/ Zonas' : 'Salvar para Zonas de Manejo'}
+                  </button>
+                  {nSalvasZonas > 0 && (
+                    <button onClick={removerZonas} title="Remover as camadas topográficas do MEAP" className="px-2 py-1.5 rounded text-[10px]" style={{ background: '#1a3a6b', color: '#f87171' }}>
+                      <Trash2 size={12} />
+                    </button>
+                  )}
+                </div>
+                {nSalvasZonas > 0 && <p className="text-[9px]" style={{ color: '#86efac' }}>{nSalvasZonas} camada(s) topográfica(s) no MEAP.</p>}
+                {zonasMsg && <p className="text-[9px]" style={{ color: zonasMsg.startsWith('✓') || zonasMsg.startsWith(String(nSalvasZonas)) ? '#86efac' : '#fbbf24' }}>{zonasMsg}</p>}
               </div>
 
               {/* Legenda/contexto da camada ativa da análise */}

@@ -252,6 +252,33 @@ export function deleteMde(id: string) {
   save('inv_mde', load<MdeTalhao>('inv_mde').filter(m => m.id !== id));
 }
 
+// ── Camadas topográficas salvas p/ Zonas de Manejo (MDE F4) ─────────────────
+// Metadados das camadas derivadas (TPI/TWI/LS…) que o usuário mandou para o
+// MEAP. O raster fica na nuvem (mdecam__<talhaoId>__<key>); Altitude e
+// Declividade da base oficial NÃO entram aqui (já vêm da própria base).
+export interface MdeCamadaTopo {
+  id: string;
+  talhaoId: string;
+  key: string;                    // tpi | twi | ls | tri | fluxo_log | aspecto | curv_*
+  rotulo: string;                 // "TPI", "TWI", "LS Factor"…
+  criadoEm: string;
+}
+
+export function getMdeCamadasTopo(talhaoId: string): MdeCamadaTopo[] {
+  return loadFiltrado<MdeCamadaTopo>('inv_mde_camadas').filter(c => c.talhaoId === talhaoId);
+}
+
+// Substitui o conjunto salvo do talhão (upsert por key).
+export function setMdeCamadasTopo(talhaoId: string, itens: { key: string; rotulo: string }[]): void {
+  const outros = load<MdeCamadaTopo>('inv_mde_camadas').filter(c => c.talhaoId !== talhaoId);
+  const novos: MdeCamadaTopo[] = itens.map(i => comEmpresa({ id: uid(), talhaoId, key: i.key, rotulo: i.rotulo, criadoEm: new Date().toISOString() }));
+  save('inv_mde_camadas', [...outros, ...novos]);
+}
+
+export function limparMdeCamadasTopo(talhaoId: string): void {
+  save('inv_mde_camadas', load<MdeCamadaTopo>('inv_mde_camadas').filter(c => c.talhaoId !== talhaoId));
+}
+
 // ── Condutividade Elétrica (Variável Fixa do Talhão) ─────────────────────────
 // Diferente da compactação (por safra), a EC é uma característica ESTRUTURAL do
 // talhão: fica vinculada permanentemente ao talhão e pode ter várias VERSÕES ao
@@ -557,6 +584,7 @@ export function excluirProdutorCascata(clienteId: string): { talhaoIds: string[]
   save('inv_compactacao', load<ImportacaoCompactacao>('inv_compactacao').filter(c => !tal.has(c.talhaoId)));
   save('inv_grades_compact', load<GradeCompactacao>('inv_grades_compact').filter(g => !tal.has(g.talhaoId)));
   save('inv_mde', load<MdeTalhao>('inv_mde').filter(m => !tal.has(m.talhaoId)));
+  save('inv_mde_camadas', load<MdeCamadaTopo>('inv_mde_camadas').filter(c => !tal.has(c.talhaoId)));
   save('inv_composicoes', load<ComposicaoTemporal>('inv_composicoes').filter(c => !tal.has(c.talhaoId)));
   save('inv_condutividade', load<LevantamentoCondutividade>('inv_condutividade').filter(c => !tal.has(c.talhaoId)));
   save('inv_talhoes', load<Talhao>('inv_talhoes').filter(t => !tal.has(t.id)));
