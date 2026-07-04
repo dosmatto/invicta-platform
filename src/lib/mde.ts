@@ -7,7 +7,7 @@
 // e o colorirGridComLegenda colore sem código novo.
 
 import { postBackend } from './interpUrl';
-import { comprimirGrid, descomprimirGrid, type Grid } from './fertilidade';
+import { comprimirGrid, descomprimirGrid, decodeGrid, type Grid } from './fertilidade';
 import { cloudSalvarMapa, cloudCarregarMapasPorPrefixo, cloudExcluirMapasPorPrefixo } from './cloud';
 import { setMdeCamadasTopo, limparMdeCamadasTopo } from './store';
 
@@ -73,6 +73,7 @@ export interface RespMdeAnalise {
   bounds: [number, number, number, number];
   shape: [number, number];
   grids: Record<'aspecto' | 'curv_perfil' | 'curv_plano' | 'curv_geral' | 'tpi' | 'tri' | 'fluxo_log' | 'twi' | 'ls', Grid>;
+  classes_cod: Grid;               // F4.b — códigos das classes por pixel (NaN fora)
   pngs: { curvas: string; drenagem: string; classes: string };
   meta: {
     intervalo_curvas_m: number;
@@ -103,6 +104,62 @@ export async function buscarAnaliseMde(params: {
     throw new Error(msg);
   }
   return r.json();
+}
+
+// ── F4.b: cruzamento de uma variável por CLASSE de relevo (§12.1) ────────────
+// Geo-aware: amostra o grid da variável (produtividade, NDVI, fertilidade…) na
+// coordenada de cada pixel de classe — funciona entre resoluções/recortes.
+function amostraBilinear(vals: Float32Array, rows: number, cols: number, bounds: [number, number, number, number], lng: number, lat: number): number {
+  const [w, s, e, n] = bounds;
+  const fx = ((lng - w) / (e - w)) * cols - 0.5;
+  const fy = ((n - lat) / (n - s)) * rows - 0.5;
+  if (fx < -0.5 || fy < -0.5 || fx > cols - 0.5 || fy > rows - 0.5) return NaN;
+  const x0 = Math.max(0, Math.min(cols - 1, Math.floor(fx)));
+  const y0 = Math.max(0, Math.min(rows - 1, Math.floor(fy)));
+  const x1 = Math.min(cols - 1, x0 + 1), y1 = Math.min(rows - 1, y0 + 1);
+  const wx = Math.max(0, Math.min(1, fx - x0)), wy = Math.max(0, Math.min(1, fy - y0));
+  const v00 = vals[y0 * cols + x0], v01 = vals[y0 * cols + x1], v10 = vals[y1 * cols + x0], v11 = vals[y1 * cols + x1];
+  let num = 0, den = 0;
+  const w00 = (1 - wx) * (1 - wy), w01 = wx * (1 - wy), w10 = (1 - wx) * wy, w11 = wx * wy;
+  if (isFinite(v00)) { num += v00 * w00; den += w00; }
+  if (isFinite(v01)) { num += v01 * w01; den += w01; }
+  if (isFinite(v10)) { num += v10 * w10; den += w10; }
+  if (isFinite(v11)) { num += v11 * w11; den += w11; }
+  return den > 0.25 ? num / den : NaN;
+}
+
+export interface LinhaCruzamento { codigo: number; nome: string; cor: string; areaHa: number; media: number | null; n: number; diffPct: number | null; }
+
+export function mediaPorClasse(
+  classes: { grid: Grid; bounds: [number, number, number, number] },
+  variavel: { grid: Grid; bounds: [number, number, number, number] },
+  classesMeta: { codigo: number; nome: string; cor: string; ha: number }[],
+): { linhas: LinhaCruzamento[]; mediaGeral: number | null } {
+  const cg = decodeGrid(classes.grid);
+  const vg = decodeGrid(variavel.grid);
+  const acc = new Map<number, { sum: number; n: number }>();
+  const [w, s, e, n] = classes.bounds;
+  for (let j = 0; j < cg.rows; j++) {
+    const lat = n - ((j + 0.5) / cg.rows) * (n - s);
+    for (let i = 0; i < cg.cols; i++) {
+      const code = cg.valores[j * cg.cols + i];
+      if (!isFinite(code) || code <= 0) continue;
+      const lng = w + ((i + 0.5) / cg.cols) * (e - w);
+      const v = amostraBilinear(vg.valores, vg.rows, vg.cols, variavel.bounds, lng, lat);
+      if (!isFinite(v)) continue;
+      const k = Math.round(code);
+      const a = acc.get(k) ?? { sum: 0, n: 0 }; a.sum += v; a.n++; acc.set(k, a);
+    }
+  }
+  let gs = 0, gn = 0; acc.forEach(a => { gs += a.sum; gn += a.n; });
+  const mediaGeral = gn > 0 ? gs / gn : null;
+  const linhas = classesMeta.map(c => {
+    const a = acc.get(c.codigo);
+    const media = a && a.n > 0 ? a.sum / a.n : null;
+    const diffPct = (media != null && mediaGeral != null && mediaGeral !== 0) ? ((media - mediaGeral) / mediaGeral) * 100 : null;
+    return { codigo: c.codigo, nome: c.nome, cor: c.cor, areaHa: c.ha, media, n: a?.n ?? 0, diffPct };
+  }).filter(l => l.n > 0);
+  return { linhas, mediaGeral };
 }
 
 // ── Persistência da base aprovada (nuvem) ────────────────────────────────────

@@ -21,6 +21,7 @@ import {
   type FonteMde, type RespMde, type MdeCarregado, type RespMdeAnalise, type SensibilidadeDrenagem,
 } from '@/lib/mde';
 import type { Legenda } from '@/lib/legendas';
+import { CruzamentoRelevo } from '@/components/talhao/CruzamentoRelevo';
 import { Mountain, Loader2, Search, CheckCircle2, AlertTriangle, Trash2, Download, Star, Layers, Play, Waves } from 'lucide-react';
 
 const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
@@ -486,6 +487,9 @@ export function AltimetriaSection() {
                 {nSalvasZonas > 0 && <p className="text-[9px]" style={{ color: '#86efac' }}>{nSalvasZonas} camada(s) topográfica(s) no MEAP.</p>}
                 {zonasMsg && <p className="text-[9px]" style={{ color: zonasMsg.startsWith('✓') || zonasMsg.startsWith(String(nSalvasZonas)) ? '#86efac' : '#fbbf24' }}>{zonasMsg}</p>}
               </div>
+
+              {/* F4.b — Cruzamento por classe de relevo (§12.1) */}
+              <CruzamentoRelevo analise={analise} talhaoId={nav.talhaoId!} />
 
               {/* Legenda/contexto da camada ativa da análise */}
               {camada.startsWith('a:') && (() => {

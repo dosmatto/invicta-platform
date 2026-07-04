@@ -1,6 +1,10 @@
-export const APP_VERSION = '1.37.0';
+export const APP_VERSION = '1.38.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.38.0': [
+    'MDE F4.b — CRUZAMENTO POR CLASSE DE RELEVO: na análise topográfica, depois de gerar as classes (Topo/Ombro/Meia encosta/Baixada/Depressão/Linha de fluxo/Risco de erosão), escolha uma variável — produtividade, NDVI, fertilidade, condutividade — e veja a MÉDIA dela em cada classe de relevo + a DIFERENÇA em relação à média do talhão (ex.: quanto a baixada produz acima/abaixo da média). É a resposta direta a "por que essa área rende mais ou menos"',
+    'O cruzamento é geoespacial e funciona mesmo com resoluções e recortes diferentes entre a variável e o relevo (alinhamento por coordenada real, só sobre pixels válidos). Motor validado (backend: grid de códigos das classes bate 100% com as áreas; cruzamento: 6/6). Próximo (F4.c): relatório PDF do MDE',
+  ],
   '1.37.0': [
     'MDE F4 — RELEVO NAS ZONAS DE MANEJO: o relevo virou fonte oficial do zoneamento. Assim que você aprova a base altimétrica, ALTITUDE e DECLIVIDADE já ficam disponíveis como camadas na Zona de Manejo (grupo Relevo). E na análise topográfica, o botão "Salvar para Zonas de Manejo" envia também TPI, TWI, LS Factor, TRI, fluxo, aspecto e curvatura — para você escolhê-las (com peso próprio) junto de fertilidade, condutividade, NDVI e produtividade ao gerar as zonas (análise multicritério da spec)',
     'Cada camada topográfica entra reamostrada na malha de referência do talhão (co-registrada com as demais), pode ser removida do MEAP a qualquer momento e sincroniza entre aparelhos. Próximo passo do módulo (F4.b): cruzamento produtividade × classe de relevo (topo/encosta/baixada) e relatório PDF do MDE',

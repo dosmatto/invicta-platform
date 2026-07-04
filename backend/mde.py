@@ -51,7 +51,7 @@ _GDAL_ENV = dict(
     GDAL_HTTP_RETRY_DELAY="1",
 )
 
-VERSION = "mde-2-analise"
+VERSION = "mde-3-classes-cod"
 
 FONTES = {
     "cop30": "Copernicus DEM GLO-30 (30 m)",
@@ -600,6 +600,10 @@ def gerar_analise(poligono: dict, fonte: str = "auto", buffer_m: float = 300.0,
                              "ha": round(npx * cell_ha, 2),
                              "pct": round(100.0 * npx / max(1, n_area), 1)})
 
+    # grid de CODIGOS das classes (F4.b): float32, NaN fora — p/ cruzar variáveis
+    # por classe de relevo no front (produtividade média por classe etc.).
+    cod_f = np.where(cod > 0, cod.astype("float32"), np.nan)
+
     return {
         "fonte": usado, "rotulo": FONTES[usado], "bounds": bounds,
         "shape": [int(shape_sub[0]), int(shape_sub[1])],
@@ -609,6 +613,7 @@ def gerar_analise(poligono: dict, fonte: str = "auto", buffer_m: float = 300.0,
             "tpi": _b64(tpi_c), "tri": _b64(tri_c), "fluxo_log": _b64(fluxo_c),
             "twi": _b64(twi_c), "ls": _b64(ls_c),
         },
+        "classes_cod": _b64(cod_f),
         "pngs": {"curvas": png_curvas, "drenagem": png_dren, "classes": png_classes},
         "meta": {
             "intervalo_curvas_m": intervalo,
