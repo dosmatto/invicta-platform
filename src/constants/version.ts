@@ -1,6 +1,9 @@
-export const APP_VERSION = '1.46.0';
+export const APP_VERSION = '1.47.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.47.0': [
+    'APP DE CAMPO — CABEÇALHO NO iPhone: a barra de status do iOS (relógio/bateria) não cobre mais os botões do topo. O estilo da barra passou a RESERVAR o espaço dela em vez de sobrepor o app. IMPORTANTE no iPhone: para valer, remova o ícone antigo da tela de início e adicione de novo (o iOS guarda essa configuração em cache).',
+  ],
   '1.46.0': [
     'LISTAS DE FAZENDA E TALHÃO ENXUTAS: mesmo padrão minimalista da lista de clientes — fonte menor, avatar e espaçamentos compactos e sem a setinha ">". Na lista de talhões, o botão de abrir a página completa aparece só ao passar o mouse; o status (Ativo/Incompleto) e a área continuam visíveis. Na lista de fazendas do cliente, a área somada segue à mostra. Nomes de fazenda e talhão cabem melhor.',
   ],

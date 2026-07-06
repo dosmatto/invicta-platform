@@ -8,7 +8,10 @@ export const metadata: Metadata = {
   title: 'INVICTA Coleta de Solo',
   description: 'Coleta de solo em campo — offline, GPS e sincronização com a Plataforma INVICTA',
   manifest: '/manifest-coleta.webmanifest',
-  appleWebApp: { capable: true, statusBarStyle: 'black-translucent', title: 'INVICTA Coleta' },
+  // statusBarStyle 'default' faz o iOS RESERVAR a barra de status (relogio/bateria)
+  // em vez de sobrepor o conteudo — antes ('black-translucent') os botoes do
+  // cabecalho ficavam por baixo do relogio/bateria e nao davam pra tocar no iPhone.
+  appleWebApp: { capable: true, statusBarStyle: 'default', title: 'INVICTA Coleta' },
   icons: { icon: '/icons/coleta-192.png', apple: '/icons/coleta-192.png' },
 };
 
