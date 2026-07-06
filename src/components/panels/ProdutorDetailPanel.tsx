@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { useApp } from '@/context/AppContext';
-import { getClientes, getFazendas, saveFazenda, updateCliente, deleteCliente, Cliente, Fazenda } from '@/lib/store';
-import { ChevronLeft, ChevronRight, Plus, Building2, Phone, Mail, Edit2, Save, X, Trash2 } from 'lucide-react';
+import { getClientes, getFazendas, getTalhoes, saveFazenda, updateCliente, deleteCliente, Cliente, Fazenda } from '@/lib/store';
+import { ChevronLeft, ChevronRight, Plus, Building2, Phone, Mail, Edit2, Save, X, Trash2, Pencil } from 'lucide-react';
 import { PanelSection, PanelButton, MockIndicator } from './_shared';
 
 const ESTADOS_BR = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'];
@@ -29,8 +29,19 @@ export function ProdutorDetailPanel() {
   const [salvando, setSalvando] = useState(false);
   const [editando, setEditando] = useState(false);
   const [editForm, setEditForm] = useState<Partial<Cliente>>({});
+  const [renomeando, setRenomeando] = useState(false);
+  const [nomeTemp, setNomeTemp] = useState('');
+  const [areasFaz, setAreasFaz] = useState<Record<string, number>>({});
 
   function iniciarEdicaoCliente() { if (cliente) { setEditForm({ ...cliente }); setEditando(true); } }
+  function salvarRenomeProdutor() {
+    const novo = nomeTemp.trim();
+    if (!cliente || !novo) { setRenomeando(false); return; }
+    updateCliente(cliente.id, { nome: novo });
+    setCliente(getClientes().find(c => c.id === cliente.id) ?? null);
+    setNav({ produtor: novo.toUpperCase() });
+    setRenomeando(false);
+  }
   function salvarEdicaoCliente() {
     if (!cliente) return;
     updateCliente(cliente.id, editForm);
@@ -49,7 +60,11 @@ export function ProdutorDetailPanel() {
     if (!nav.produtorId) return;
     const clientes = getClientes();
     setCliente(clientes.find(c => c.id === nav.produtorId) ?? null);
-    setFazendas(getFazendas(nav.produtorId));
+    const fz = getFazendas(nav.produtorId);
+    setFazendas(fz);
+    const map: Record<string, number> = {};
+    for (const f of fz) map[f.id] = getTalhoes(f.id).reduce((s, t) => s + (t.areaHa || 0), 0);
+    setAreasFaz(map);
   }, [nav.produtorId]);
 
   function abrirFazenda(f: Fazenda) {
@@ -94,7 +109,20 @@ export function ProdutorDetailPanel() {
             {cliente.nome.charAt(0)}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-base font-bold truncate" style={{ color: '#fff' }}>{cliente.nome}</p>
+            {renomeando ? (
+              <div className="flex items-center gap-1">
+                <input autoFocus value={nomeTemp} onChange={e => setNomeTemp(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') salvarRenomeProdutor(); if (e.key === 'Escape') setRenomeando(false); }}
+                  className="rounded px-1.5 py-0.5 text-sm font-bold outline-none" style={{ background: '#1a3a6b', color: '#fff', border: '1px solid #2e5fa3', width: 170 }} />
+                <button onClick={salvarRenomeProdutor} title="Salvar" className="p-1" style={{ color: '#4ade80' }}><Save size={13} /></button>
+                <button onClick={() => setRenomeando(false)} title="Cancelar" className="p-1" style={{ color: '#94a3b8' }}><X size={13} /></button>
+              </div>
+            ) : (
+              <p className="text-base font-bold flex items-center gap-1.5 min-w-0" style={{ color: '#fff' }}>
+                <span className="truncate">{cliente.nome}</span>
+                <button onClick={() => { setNomeTemp(cliente.nome); setRenomeando(true); }} title="Renomear cliente" className="p-0.5 flex-shrink-0" style={{ color: '#64748b' }}><Pencil size={12} /></button>
+              </p>
+            )}
             <p className="text-xs mt-0.5" style={{ color: '#64748b' }}>
               {cliente.tipoPessoa} · {cliente.documento || '—'}
             </p>
@@ -207,6 +235,11 @@ export function ProdutorDetailPanel() {
                         <p className="text-[10px]" style={{ color: '#64748b' }}>
                           {f.sigla ? `${f.sigla} · ` : ''}{f.municipio} · {f.estado}{f.car ? ` · CAR: ${f.car}` : ''}
                         </p>
+                        {areasFaz[f.id] > 0 && (
+                          <p className="text-[10px] font-semibold" style={{ color: '#86efac' }}>
+                            {areasFaz[f.id].toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ha
+                          </p>
+                        )}
                       </div>
                       <ChevronRight size={14} style={{ color: '#64748b' }} />
                     </button>

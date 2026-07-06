@@ -40,7 +40,7 @@ export function IconSidebar() {
             activePanel?.startsWith('talhao-')
           ));
         return (
-          <button key={item.id} onClick={() => handleClick(item.id)} title={item.label}
+          <button key={item.id} onClick={() => handleClick(item.id)}
             className="flex flex-col items-center gap-1 w-full px-1 py-2.5 rounded-md transition-all"
             style={{
               background: isActive ? 'var(--invicta-blue)' : 'transparent',

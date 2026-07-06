@@ -1,6 +1,12 @@
-export const APP_VERSION = '1.43.0';
+export const APP_VERSION = '1.44.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.44.0': [
+    'NOMES EM CAIXA ALTA: cliente, fazenda e talhão agora ficam SEMPRE em maiúsculas — nas listas, cabeçalhos, breadcrumbs e relatórios. Vale para novos cadastros e, uma vez, para tudo que já estava salvo (recálculo idempotente no primeiro carregamento).',
+    'RENOMEAR MAIS FÁCIL: o CLIENTE também ganhou o lápis de renomear no cabeçalho do painel (fazenda e talhão já tinham) — dá para corrigir o nome na hora, sem abrir o formulário de edição.',
+    'ÁREA DA FAZENDA NA LISTA: além da área total dentro da fazenda, a LISTA de fazendas do cliente agora mostra a área somada dos talhões de cada fazenda.',
+    'MENU LATERAL: removida a "dica" flutuante (tooltip) que aparecia sobre a tela ao passar o mouse nos ícones — o rótulo já fica embaixo de cada ícone, então era redundante e atrapalhava.',
+  ],
   '1.43.0': [
     'ÁREA IGUAL AO QGIS (geodésica): o cálculo de área dos talhões passou a usar a base GEODÉSICA do elipsoide WGS84 — a mesma do QGIS — no lugar da esfera usada antes, que superestimava ~0,2% no Sul do Brasil. Vale para novas importações, para a edição de geometria e, UMA vez, para TODAS as áreas já salvas (recalculadas a partir do próprio contorno, sem reimportar nada). Efeito: as áreas caem ~0,2% e passam a coincidir com o QGIS.',
     'Validação: a correção varia de ~0,21% (perto de 25°S) a ~0,28% (perto de 21°S) conforme a latitude de cada talhão, batendo com a comparação por fazenda que você levantou (média 0,22%). O recálculo é idempotente (parte da geometria), então rodar em vários aparelhos não acumula erro.',

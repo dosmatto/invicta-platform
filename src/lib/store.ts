@@ -552,9 +552,14 @@ export function getClientes(): Cliente[] {
   return all.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
 }
 
+// Nome de cliente/fazenda/talhao fica SEMPRE em caixa alta (decisao do usuario).
+function comNome<T extends { nome?: string }>(o: T): T {
+  return typeof o.nome === 'string' ? { ...o, nome: o.nome.toUpperCase() } : o;
+}
+
 export function saveCliente(c: Omit<Cliente, 'id' | 'criadoEm'>): Cliente {
   const clientes = load<Cliente>('inv_clientes');
-  const novo: Cliente = comEmpresa({ ...c, id: uid(), criadoEm: new Date().toISOString() });
+  const novo: Cliente = comEmpresa(comNome({ ...c, id: uid(), criadoEm: new Date().toISOString() }));
   clientes.push(novo);
   save('inv_clientes', clientes);
   return novo;
@@ -563,7 +568,7 @@ export function saveCliente(c: Omit<Cliente, 'id' | 'criadoEm'>): Cliente {
 export function updateCliente(id: string, data: Partial<Cliente>) {
   const clientes = load<Cliente>('inv_clientes');
   const idx = clientes.findIndex(c => c.id === id);
-  if (idx >= 0) { clientes[idx] = { ...clientes[idx], ...data }; save('inv_clientes', clientes); }
+  if (idx >= 0) { clientes[idx] = comNome({ ...clientes[idx], ...data }); save('inv_clientes', clientes); }
 }
 
 export function deleteCliente(id: string) {
@@ -605,7 +610,7 @@ export function getFazendas(clienteId?: string): Fazenda[] {
 
 export function saveFazenda(f: Omit<Fazenda, 'id' | 'criadoEm'>): Fazenda {
   const fazendas = load<Fazenda>('inv_fazendas');
-  const nova: Fazenda = comEmpresa({ ...f, id: uid(), criadoEm: new Date().toISOString() });
+  const nova: Fazenda = comEmpresa(comNome({ ...f, id: uid(), criadoEm: new Date().toISOString() }));
   fazendas.push(nova);
   save('inv_fazendas', fazendas);
   return nova;
@@ -614,7 +619,7 @@ export function saveFazenda(f: Omit<Fazenda, 'id' | 'criadoEm'>): Fazenda {
 export function updateFazenda(id: string, data: Partial<Fazenda>) {
   const fazendas = load<Fazenda>('inv_fazendas');
   const idx = fazendas.findIndex(f => f.id === id);
-  if (idx >= 0) { fazendas[idx] = { ...fazendas[idx], ...data }; save('inv_fazendas', fazendas); }
+  if (idx >= 0) { fazendas[idx] = comNome({ ...fazendas[idx], ...data }); save('inv_fazendas', fazendas); }
 }
 
 // ── Talhões ───────────────────────────────────────────────────────────────
@@ -628,7 +633,7 @@ export function getTalhoes(fazendaId?: string): Talhao[] {
 
 export function saveTalhao(t: Omit<Talhao, 'id' | 'criadoEm'>): Talhao {
   const talhoes = load<Talhao>('inv_talhoes');
-  const novo: Talhao = comEmpresa({ ...t, id: uid(), criadoEm: new Date().toISOString() });
+  const novo: Talhao = comEmpresa(comNome({ ...t, id: uid(), criadoEm: new Date().toISOString() }));
   talhoes.push(novo);
   save('inv_talhoes', talhoes);
   return novo;
@@ -637,7 +642,7 @@ export function saveTalhao(t: Omit<Talhao, 'id' | 'criadoEm'>): Talhao {
 export function updateTalhao(id: string, data: Partial<Talhao>) {
   const talhoes = load<Talhao>('inv_talhoes');
   const idx = talhoes.findIndex(t => t.id === id);
-  if (idx >= 0) { talhoes[idx] = { ...talhoes[idx], ...data }; save('inv_talhoes', talhoes); }
+  if (idx >= 0) { talhoes[idx] = comNome({ ...talhoes[idx], ...data }); save('inv_talhoes', talhoes); }
 }
 
 // Importação em massa: aplica TODAS as criações/atualizações numa gravação só
@@ -651,10 +656,10 @@ export function importarTalhoesLote(
   let atualizados = 0;
   for (const a of atualizacoes) {
     const idx = talhoes.findIndex(t => t.id === a.id);
-    if (idx >= 0) { talhoes[idx] = { ...talhoes[idx], ...a.data }; atualizados++; }
+    if (idx >= 0) { talhoes[idx] = comNome({ ...talhoes[idx], ...a.data }); atualizados++; }
   }
   for (const n of novos) {
-    talhoes.push(comEmpresa({ ...n, id: uid(), criadoEm: new Date().toISOString() }));
+    talhoes.push(comEmpresa(comNome({ ...n, id: uid(), criadoEm: new Date().toISOString() })));
   }
   save('inv_talhoes', talhoes);
   return { criados: novos.length, atualizados };
@@ -688,6 +693,26 @@ export function migrarAreasGeodesicasV1() {
   }
   if (mudou) save('inv_talhoes', talhoes);
   localStorage.setItem('inv_migrado_area_geo_v1', '1');
+}
+
+// Nome de cliente/fazenda/talhao SEMPRE em caixa alta (decisao do usuario).
+// Idempotente (toUpperCase de algo ja maiusculo nao muda). So marca a flag quando
+// ja havia dados hidratados, pra nao pular a migracao num boot vazio.
+export function migrarNomesMaiusculosV1() {
+  if (typeof window === 'undefined') return;
+  if (localStorage.getItem('inv_migrado_nomes_ca_v1') === '1') return;
+  let temDados = false;
+  for (const key of ['inv_clientes', 'inv_fazendas', 'inv_talhoes'] as const) {
+    const lista = load<{ nome?: string }>(key);
+    if (lista.length === 0) continue;
+    temDados = true;
+    let mudou = false;
+    for (const it of lista) {
+      if (typeof it.nome === 'string' && it.nome !== it.nome.toUpperCase()) { it.nome = it.nome.toUpperCase(); mudou = true; }
+    }
+    if (mudou) save(key, lista);
+  }
+  if (temDados) localStorage.setItem('inv_migrado_nomes_ca_v1', '1');
 }
 
 // ── Safras ────────────────────────────────────────────────────────────────
