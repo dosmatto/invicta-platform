@@ -86,20 +86,29 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
   const [refNome, setRefNome] = useState('');
   const [mostraRef, setMostraRef] = useState(false);
   const inputRefArq = useRef<HTMLInputElement>(null);
-  // talhões com limite, AGRUPADOS por produtor · fazenda (só os autorizados)
-  const talhoesAgrupados = useMemo(() => {
-    const nomeProd = new Map(getClientes().map(c => [c.id, c.nome]));
+  // talhões com limite, em ÁRVORE produtor → fazenda → talhão (só os autorizados)
+  const arvoreRef = useMemo(() => {
+    const clientes = getClientes();
     const fazById = new Map(getFazendas().map(f => [f.id, f]));
-    const grupos = new Map<string, { titulo: string; talhoes: Talhao[] }>();
+    const porFaz = new Map<string, { id: string; nome: string; clienteId: string; talhoes: Talhao[] }>();
     for (const t of getTalhoes().filter(t => !!t.geojson)) {
       const f = fazById.get(t.fazendaId);
-      const prod = f ? nomeProd.get(f.clienteId) : '';
-      const titulo = f ? `${prod ? prod + ' · ' : ''}${f.nome}` : 'Sem fazenda';
-      const g = grupos.get(t.fazendaId) ?? { titulo, talhoes: [] };
-      g.talhoes.push(t); grupos.set(t.fazendaId, g);
+      if (!f) continue;
+      const e = porFaz.get(f.id) ?? { id: f.id, nome: f.nome, clienteId: f.clienteId, talhoes: [] };
+      e.talhoes.push(t); porFaz.set(f.id, e);
     }
-    return [...grupos.values()].sort((a, b) => a.titulo.localeCompare(b.titulo, 'pt-BR'));
+    const porProd = new Map<string, { id: string; nome: string; fazendas: { id: string; nome: string; talhoes: Talhao[] }[] }>();
+    for (const f of porFaz.values()) {
+      const nome = clientes.find(c => c.id === f.clienteId)?.nome ?? '(sem produtor)';
+      const p = porProd.get(f.clienteId) ?? { id: f.clienteId, nome, fazendas: [] };
+      p.fazendas.push({ id: f.id, nome: f.nome, talhoes: f.talhoes }); porProd.set(f.clienteId, p);
+    }
+    const prods = [...porProd.values()].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+    prods.forEach(p => p.fazendas.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')));
+    return prods;
   }, []);
+  const [drillProd, setDrillProd] = useState<string | null>(null);
+  const [drillFaz, setDrillFaz] = useState<string | null>(null);
   const bboxRef2 = useMemo(() => bboxDeFC(referencia), [referencia]);
 
   // gravação de caminhada
@@ -338,7 +347,7 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
         <BotaoMapa ativo={seguir} onClick={() => { setSeguir(true); setPedidoGps(x => x + 1); }} titulo="Ir para onde estou (GPS)"><Crosshair size={18} /></BotaoMapa>
         <BotaoMapa onClick={() => { setSeguir(false); setPedidoEnquadrar(x => x + 1); }} titulo="Enquadrar o desenho"><Maximize2 size={18} /></BotaoMapa>
         <BotaoMapa onClick={() => setModo(m => (m === 'sat' ? 'ruas' : 'sat'))} titulo="Satélite / Ruas"><Layers size={18} /></BotaoMapa>
-        <BotaoMapa ativo={!!referencia} onClick={() => { setSalvas(getMedicoes()); setMostraRef(true); }} titulo="Camada de referência"><Shapes size={18} /></BotaoMapa>
+        <BotaoMapa ativo={!!referencia} onClick={() => { setSalvas(getMedicoes()); setDrillProd(null); setDrillFaz(null); setMostraRef(true); }} titulo="Camada de referência"><Shapes size={18} /></BotaoMapa>
         <BotaoMapa onClick={addVerticeGps} titulo="Marcar vértice no meu GPS"><Plus size={18} /></BotaoMapa>
         <BotaoMapa ativo={offsetM > 0 || freqS > 1} onClick={() => setMostraAjustes(true)} titulo="Ajustes (frequência, offset)"><SlidersHorizontal size={18} /></BotaoMapa>
         <BotaoMapa onClick={() => setPontos(ps => ps.slice(0, -1))} titulo="Desfazer último ponto"><Undo2 size={18} /></BotaoMapa>
@@ -555,18 +564,33 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
                 onChange={e => { const f = e.target.files?.[0]; if (f) void refDeArquivo(f); e.currentTarget.value = ''; }} />
             </label>
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-wide mb-1.5" style={{ color: SUB }}>Talhões</p>
-              {talhoesAgrupados.length === 0
-                ? <p className="text-[11px]" style={{ color: SUB }}>Nenhum talhão com limite disponível.</p>
-                : talhoesAgrupados.map(g => (
-                  <div key={g.titulo} className="mb-2">
-                    <p className="text-[10px] font-semibold px-1 mb-1 truncate" style={{ color: '#93c5fd' }}>{g.titulo}</p>
-                    {g.talhoes.map(t => (
-                      <button key={t.id} onClick={() => usarRef(fcDoTalhao(t), t.nome)}
-                        className="w-full text-left px-3 py-2 rounded-lg mb-1 text-xs" style={{ background: '#0b1d3a', color: TXT }}>{t.nome}</button>
+              <p className="text-[10px] font-bold uppercase tracking-wide mb-1.5" style={{ color: SUB }}>Talhão (produtor › fazenda › talhão)</p>
+              {(() => {
+                const btn = 'w-full text-left px-3 py-2.5 rounded-lg mb-1 text-xs flex items-center justify-between gap-2';
+                if (drillProd && drillFaz) {   // nível 3: talhões da fazenda
+                  const faz = arvoreRef.find(p => p.id === drillProd)?.fazendas.find(f => f.id === drillFaz);
+                  return (<>
+                    <button onClick={() => setDrillFaz(null)} className={btn} style={{ background: BORDA, color: '#93c5fd' }}>‹ {faz?.nome ?? 'Fazenda'}</button>
+                    {faz?.talhoes.map(t => (
+                      <button key={t.id} onClick={() => usarRef(fcDoTalhao(t), t.nome)} className={btn} style={{ background: '#0b1d3a', color: TXT }}>{t.nome}</button>
                     ))}
-                  </div>
-                ))}
+                  </>);
+                }
+                if (drillProd) {                // nível 2: fazendas do produtor
+                  const prod = arvoreRef.find(p => p.id === drillProd);
+                  return (<>
+                    <button onClick={() => setDrillProd(null)} className={btn} style={{ background: BORDA, color: '#93c5fd' }}>‹ {prod?.nome ?? 'Produtor'}</button>
+                    {prod?.fazendas.map(f => (
+                      <button key={f.id} onClick={() => setDrillFaz(f.id)} className={btn} style={{ background: '#0b1d3a', color: TXT }}>{f.nome}<span style={{ color: SUB }}>›</span></button>
+                    ))}
+                  </>);
+                }
+                return arvoreRef.length === 0   // nível 1: produtores
+                  ? <p className="text-[11px]" style={{ color: SUB }}>Nenhum talhão com limite disponível.</p>
+                  : arvoreRef.map(p => (
+                    <button key={p.id} onClick={() => setDrillProd(p.id)} className={btn} style={{ background: '#0b1d3a', color: TXT }}>{p.nome}<span style={{ color: SUB }}>›</span></button>
+                  ));
+              })()}
             </div>
             <div>
               <p className="text-[10px] font-bold uppercase tracking-wide mb-1.5" style={{ color: SUB }}>Medições salvas</p>
