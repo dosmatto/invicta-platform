@@ -1,6 +1,9 @@
-export const APP_VERSION = '1.47.0';
+export const APP_VERSION = '1.48.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.48.0': [
+    'APP DE CAMPO — CAMADA DE REFERÊNCIA NA MEDIÇÃO: durante a medição GPS, um novo botão (ícone de formas) deixa abrir no mapa, em LARANJA, um TALHÃO, uma MEDIÇÃO já salva ou um ARQUIVO (KML/SHP/GeoJSON, offline) só como guia — não entra na medição. Ex.: ver o limite do talhão enquanto mede por dentro, ou seguir um contorno recebido. Toque no botão para escolher/remover a referência.',
+  ],
   '1.47.0': [
     'APP DE CAMPO — CABEÇALHO NO iPhone: a barra de status do iOS (relógio/bateria) não cobre mais os botões do topo. O estilo da barra passou a RESERVAR o espaço dela em vez de sobrepor o app. IMPORTANTE no iPhone: para valer, remova o ícone antigo da tela de início e adicione de novo (o iOS guarda essa configuração em cache).',
   ],

@@ -15,11 +15,12 @@ import {
   MedicaoCampo, PontoMedicao, TipoMedicao, CATEGORIAS_MEDICAO,
   getMedicoes, salvarMedicao, excluirMedicao,
 } from '@/lib/coleta';
-import { getTalhoes, getSafras } from '@/lib/store';
+import { getTalhoes, getSafras, Talhao } from '@/lib/store';
+import { parseGeoFile } from '@/lib/geo';
 import { emailUsuario } from '@/lib/auth';
 import {
   ChevronLeft, Crosshair, Layers, Maximize2, Plus, Undo2, Trash2, List, X, AlertTriangle, Save,
-  Play, Pause, Flag, SlidersHorizontal,
+  Play, Pause, Flag, SlidersHorizontal, Shapes, Upload,
 } from 'lucide-react';
 
 const AZUL_ESC = '#061525', AZUL = '#0a1929', BORDA = '#1a3a6b', TXT = '#e2e8f0', SUB = '#64748b';
@@ -79,6 +80,13 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
   const [mostraSalvar, setMostraSalvar] = useState(false);
   const [salvas, setSalvas] = useState<MedicaoCampo[]>(() => getMedicoes());
   const [msg, setMsg] = useState('');
+  // #2: camada de referência (talhão/medição/arquivo) visível durante a medição
+  const [referencia, setReferencia] = useState<GeoJSON.FeatureCollection | null>(null);
+  const [refNome, setRefNome] = useState('');
+  const [mostraRef, setMostraRef] = useState(false);
+  const inputRefArq = useRef<HTMLInputElement>(null);
+  const talhoesComGeo = useMemo(() => getTalhoes().filter(t => !!t.geojson), []);
+  const bboxRef2 = useMemo(() => bboxDeFC(referencia), [referencia]);
 
   // gravação de caminhada
   const [gravando, setGravando] = useState(false);
@@ -207,6 +215,42 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
 
   function excluir(id: string) { excluirMedicao(id); setSalvas(getMedicoes()); }
 
+  // #2 — referência: talhão, medição salva ou arquivo (KML/SHP/GeoJSON, offline)
+  function fcDoTalhao(t: Talhao): GeoJSON.FeatureCollection | null {
+    if (!t.geojson) return null;
+    try {
+      const o = JSON.parse(t.geojson);
+      if (o?.type === 'FeatureCollection') return o;
+      if (o?.type === 'Feature') return { type: 'FeatureCollection', features: [o] };
+      return { type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry: o }] };
+    } catch { return null; }
+  }
+  function fcDaMedicao(m: MedicaoCampo): GeoJSON.FeatureCollection {
+    const geom: GeoJSON.Geometry = m.tipo === 'poligono' && m.coords.length >= 3
+      ? { type: 'Polygon', coordinates: [[...m.coords, m.coords[0]]] }
+      : { type: 'LineString', coordinates: m.coords };
+    return { type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry: geom }] };
+  }
+  function usarRef(fc: GeoJSON.FeatureCollection | null, nome: string) {
+    if (!fc) return;
+    setReferencia(fc); setRefNome(nome); setMostraRef(false); setSeguir(false); setPedidoEnquadrar(x => x + 1);
+  }
+  async function refDeArquivo(file: File) {
+    try { const r = await parseGeoFile(file); usarRef(r.geojson, file.name); }
+    catch (e) { setMostraRef(false); setMsg('Não consegui ler o arquivo: ' + (e instanceof Error ? e.message : 'formato inválido')); }
+  }
+  function bboxDeFC(fc: GeoJSON.FeatureCollection | null): [number, number, number, number] | null {
+    if (!fc) return null;
+    let a = Infinity, b = Infinity, c = -Infinity, d = -Infinity;
+    const scan = (co: unknown): void => {
+      if (!Array.isArray(co)) return;
+      if (typeof co[0] === 'number') { const x = co[0] as number, y = co[1] as number; if (x < a) a = x; if (y < b) b = y; if (x > c) c = x; if (y > d) d = y; return; }
+      for (const e of co) scan(e);
+    };
+    for (const f of fc.features) if (f.geometry && 'coordinates' in f.geometry) scan((f.geometry as { coordinates: unknown }).coordinates);
+    return Number.isFinite(a) ? [a, b, c, d] : null;
+  }
+
   const statusGps = !userPos ? { txt: 'sem sinal', cor: '#f87171' }
     : userPos.acc <= 8 ? { txt: `±${Math.round(userPos.acc)} m`, cor: '#4ade80' }
     : userPos.acc <= 20 ? { txt: `±${Math.round(userPos.acc)} m`, cor: '#fbbf24' }
@@ -215,13 +259,14 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
   return (
     <div className="fixed inset-0" style={{ background: AZUL }}>
       <MapaColeta
-        talhaoGeo={null} bbox={bboxDesenho} pontos={EMPTY_FC}
+        talhaoGeo={null} bbox={bboxDesenho ?? bboxRef2} pontos={EMPTY_FC}
         userPos={userPos} alvo={null} raioM={0}
         modo={modo} seguirGps={seguir}
         pedidoGps={pedidoGps} pedidoEnquadrar={pedidoEnquadrar}
         onSelecionarPonto={() => {}}
         onGestoUsuario={() => setSeguir(false)}
         desenho={desenho}
+        referencia={referencia}
         onClickMapa={(lng, lat) => { if (!gravando) { setMsg(''); setFinalizado(false); pushPonto(lng, lat); } }}
       />
 
@@ -276,6 +321,7 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
         <BotaoMapa ativo={seguir} onClick={() => { setSeguir(true); setPedidoGps(x => x + 1); }} titulo="Ir para onde estou (GPS)"><Crosshair size={18} /></BotaoMapa>
         <BotaoMapa onClick={() => { setSeguir(false); setPedidoEnquadrar(x => x + 1); }} titulo="Enquadrar o desenho"><Maximize2 size={18} /></BotaoMapa>
         <BotaoMapa onClick={() => setModo(m => (m === 'sat' ? 'ruas' : 'sat'))} titulo="Satélite / Ruas"><Layers size={18} /></BotaoMapa>
+        <BotaoMapa ativo={!!referencia} onClick={() => { setSalvas(getMedicoes()); setMostraRef(true); }} titulo="Camada de referência"><Shapes size={18} /></BotaoMapa>
         <BotaoMapa onClick={addVerticeGps} titulo="Marcar vértice no meu GPS"><Plus size={18} /></BotaoMapa>
         <BotaoMapa ativo={offsetM > 0 || freqS > 1} onClick={() => setMostraAjustes(true)} titulo="Ajustes (frequência, offset)"><SlidersHorizontal size={18} /></BotaoMapa>
         <BotaoMapa onClick={() => setPontos(ps => ps.slice(0, -1))} titulo="Desfazer último ponto"><Undo2 size={18} /></BotaoMapa>
@@ -458,6 +504,50 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
       {mostraSalvar && (
         <SalvarDialog tipo={tipo} medidas={medidas} nSugerido={salvas.length + 1}
           onFechar={() => setMostraSalvar(false)} onSalvar={onSalvo} />
+      )}
+
+      {/* #2 — escolher camada de referência */}
+      {mostraRef && (
+        <div className="fixed inset-0 z-50 flex flex-col" style={{ background: AZUL_ESC }}>
+          <div className="flex items-center gap-2 px-4 py-3" style={{ borderBottom: `1px solid ${BORDA}`, paddingTop: 'max(12px, env(safe-area-inset-top))' }}>
+            <button onClick={() => setMostraRef(false)} className="p-1.5 rounded-lg" style={{ background: BORDA, color: '#93c5fd' }}><X size={16} /></button>
+            <p className="text-sm font-bold" style={{ color: TXT }}>Camada de referência</p>
+          </div>
+          <div className="flex-1 overflow-y-auto p-3 space-y-3">
+            <p className="text-[11px]" style={{ color: SUB }}>Mostra um polígono/linha/pontos no mapa (em laranja) enquanto você mede. É só referência — não entra na medição.</p>
+            {referencia && (
+              <button onClick={() => { setReferencia(null); setRefNome(''); }}
+                className="w-full px-3 py-2.5 rounded-xl text-xs font-bold" style={{ background: '#7f1d1d', color: '#fca5a5' }}>
+                Remover referência{refNome ? ` — ${refNome}` : ''}
+              </button>
+            )}
+            <label className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-xs font-bold cursor-pointer" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
+              <Upload size={14} /> Abrir arquivo (KML / SHP / GeoJSON)
+              <input ref={inputRefArq} type="file" accept=".kml,.kmz,.zip,.geojson,.json" className="hidden"
+                onChange={e => { const f = e.target.files?.[0]; if (f) void refDeArquivo(f); e.currentTarget.value = ''; }} />
+            </label>
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-wide mb-1.5" style={{ color: SUB }}>Talhões</p>
+              {talhoesComGeo.length === 0
+                ? <p className="text-[11px]" style={{ color: SUB }}>Nenhum talhão com limite disponível.</p>
+                : talhoesComGeo.map(t => (
+                  <button key={t.id} onClick={() => usarRef(fcDoTalhao(t), t.nome)}
+                    className="w-full text-left px-3 py-2 rounded-lg mb-1 text-xs" style={{ background: '#0b1d3a', color: TXT }}>{t.nome}</button>
+                ))}
+            </div>
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-wide mb-1.5" style={{ color: SUB }}>Medições salvas</p>
+              {salvas.length === 0
+                ? <p className="text-[11px]" style={{ color: SUB }}>Nenhuma medição salva.</p>
+                : salvas.map(m => (
+                  <button key={m.id} onClick={() => usarRef(fcDaMedicao(m), m.nome)}
+                    className="w-full text-left px-3 py-2 rounded-lg mb-1 text-xs" style={{ background: '#0b1d3a', color: TXT }}>
+                    {m.nome} · <span style={{ color: '#93c5fd' }}>{m.tipo === 'poligono' ? 'área' : 'linha'}</span>
+                  </button>
+                ))}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* medições salvas */}

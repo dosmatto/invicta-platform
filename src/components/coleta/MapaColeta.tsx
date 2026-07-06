@@ -57,9 +57,11 @@ interface Props {
   onClickMapa?: (lng: number, lat: number) => void;
   // Mancha (#37): PNG de NDVI já colorido, sobreposto ao satélite (offline)
   ndviOverlay?: { url: string; bounds: [number, number, number, number] } | null;
+  // #2: camada de REFERÊNCIA (talhão/medição/arquivo) visível durante a medição
+  referencia?: GeoJSON.FeatureCollection | null;
 }
 
-export function MapaColeta({ talhaoGeo, bbox, pontos, userPos, alvo, raioM, modo, seguirGps, pedidoGps, pedidoEnquadrar, onSelecionarPonto, onGestoUsuario, desenho, onClickMapa, ndviOverlay }: Props) {
+export function MapaColeta({ talhaoGeo, bbox, pontos, userPos, alvo, raioM, modo, seguirGps, pedidoGps, pedidoEnquadrar, onSelecionarPonto, onGestoUsuario, desenho, onClickMapa, ndviOverlay, referencia }: Props) {
   const divRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const prontoRef = useRef(false);
@@ -90,6 +92,7 @@ export function MapaColeta({ talhaoGeo, bbox, pontos, userPos, alvo, raioM, modo
 
     map.on('load', () => {
       map.addSource('talhao', { type: 'geojson', data: EMPTY_FC });
+      map.addSource('referencia', { type: 'geojson', data: EMPTY_FC });
       map.addSource('raio', { type: 'geojson', data: EMPTY_FC });
       map.addSource('rota', { type: 'geojson', data: EMPTY_FC });
       map.addSource('pontos', { type: 'geojson', data: EMPTY_FC });
@@ -99,6 +102,16 @@ export function MapaColeta({ talhaoGeo, bbox, pontos, userPos, alvo, raioM, modo
 
       map.addLayer({ id: 'talhao-line', type: 'line', source: 'talhao',
         paint: { 'line-color': '#60a5fa', 'line-width': 2 } });
+      // #2: referência (laranja tracejado) — abaixo do desenho/pontos da medição
+      map.addLayer({ id: 'ref-fill', type: 'fill', source: 'referencia',
+        filter: ['==', ['geometry-type'], 'Polygon'],
+        paint: { 'fill-color': '#f59e0b', 'fill-opacity': 0.08 } });
+      map.addLayer({ id: 'ref-line', type: 'line', source: 'referencia',
+        filter: ['any', ['==', ['geometry-type'], 'LineString'], ['==', ['geometry-type'], 'Polygon']],
+        paint: { 'line-color': '#f59e0b', 'line-width': 2, 'line-dasharray': [2, 1.5] } });
+      map.addLayer({ id: 'ref-pontos', type: 'circle', source: 'referencia',
+        filter: ['==', ['geometry-type'], 'Point'],
+        paint: { 'circle-radius': 5, 'circle-color': '#f59e0b', 'circle-stroke-width': 1.5, 'circle-stroke-color': '#0a1929' } });
       map.addLayer({ id: 'raio-fill', type: 'fill', source: 'raio',
         paint: { 'fill-color': '#4ade80', 'fill-opacity': 0.12 } });
       map.addLayer({ id: 'raio-line', type: 'line', source: 'raio',
@@ -192,6 +205,13 @@ export function MapaColeta({ talhaoGeo, bbox, pontos, userPos, alvo, raioM, modo
       }
     });
   }, [talhaoGeo, bbox]);
+
+  // #2: camada de referência
+  useEffect(() => {
+    quandoPronto(map => {
+      (map.getSource('referencia') as maplibregl.GeoJSONSource)?.setData(referencia ?? EMPTY_FC);
+    });
+  }, [referencia]);
 
   // pontos
   useEffect(() => {
