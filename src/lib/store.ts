@@ -7,6 +7,7 @@ import type { Legenda } from './legendas';
 import type { AmbienteProdutivo } from './meap/tipos';
 import { cloudPushLista } from './cloud';
 import { lerListaLocal, gravarListaLocal } from './localComprimido';
+import { areaHaGeo, areaHaGeoBruta } from './areaGeo';
 import { empresaAtivaId, uidUsuario, escopoClienteIds } from './empresa';
 import {
   listar as bibListar,
@@ -661,6 +662,32 @@ export function importarTalhoesLote(
 
 export function deleteTalhao(id: string) {
   save('inv_talhoes', load<Talhao>('inv_talhoes').filter(t => t.id !== id));
+}
+
+// Recalcula as areas dos talhoes para a base GEODESICA (elipsoide WGS84, igual
+// QGIS). O calculo antigo (turf) usa uma esfera e superestima ~0,2%. Idempotente:
+// recalcula A PARTIR DA GEOMETRIA, entao rodar de novo da o mesmo valor (nao
+// acumula) — seguro mesmo com varios aparelhos. So toca talhoes com geojson
+// valido; area 0 / sem geometria fica intacta. Roda 1x por navegador (flag).
+export function migrarAreasGeodesicasV1() {
+  if (typeof window === 'undefined') return;
+  if (localStorage.getItem('inv_migrado_area_geo_v1') === '1') return;
+  const talhoes = load<Talhao>('inv_talhoes');
+  if (talhoes.length === 0) return;   // dados ainda nao hidratados — tenta no proximo boot (nao queima a flag)
+  let mudou = false;
+  for (const t of talhoes) {
+    if (!t.geojson) continue;
+    let fc: GeoJSON.GeoJSON;
+    try { fc = JSON.parse(t.geojson) as GeoJSON.GeoJSON; } catch { continue; }
+    const net = areaHaGeo(fc);
+    if (!(net > 0)) continue;
+    const bruta = areaHaGeoBruta(fc);
+    if (t.areaHa !== net) { t.areaHa = net; mudou = true; }
+    const g = bruta > 0 ? bruta : net;
+    if (t.areaHaSemHoles !== g) { t.areaHaSemHoles = g; mudou = true; }
+  }
+  if (mudou) save('inv_talhoes', talhoes);
+  localStorage.setItem('inv_migrado_area_geo_v1', '1');
 }
 
 // ── Safras ────────────────────────────────────────────────────────────────

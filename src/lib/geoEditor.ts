@@ -7,6 +7,8 @@
 // Cálculos em graus (interseções são invariantes à escala por eixo) e distâncias
 // em metros via projeção equiretangular local — suficiente pra talhões.
 
+import { areaHaGeo } from './areaGeo';
+
 export type Anel = [number, number][];  // [lng, lat], aberto
 
 export interface GeoEditavel {
@@ -103,6 +105,9 @@ export function bboxDe(g: GeoEditavel): [number, number, number, number] {
 
 // ── Área / perímetro ──────────────────────────────────────────────────────────
 
+// Area planar aproximada (equiretangular) — SO uso interno: ordenar poligonos por
+// tamanho e checar partes degeneradas no corte. A area do TALHAO (areaHaDe /
+// areaHaSemFuros, abaixo) e GEODESICA (igual QGIS).
 function areaM2(anel: Anel): number {
   if (anel.length < 3) return 0;
   let lat0 = 0;
@@ -117,15 +122,18 @@ function areaM2(anel: Anel): number {
   return Math.abs(s) / 2;
 }
 
+const fecha = (r: Anel): [number, number][] => [...r, r[0]];
+
 export function areaHaDe(g: GeoEditavel): number | null {
-  if (g.tipo !== 'poligono') return null;
-  const ha = (areaM2(g.anel) - g.furos.reduce((s, f) => s + areaM2(f), 0)) / 10000;
-  return Math.round(ha * 100) / 100;
+  if (g.tipo !== 'poligono' || g.anel.length < 3) return null;
+  const poly: GeoJSON.Polygon = { type: 'Polygon', coordinates: [fecha(g.anel), ...g.furos.map(fecha)] };
+  return areaHaGeo(poly);
 }
 
 export function areaHaSemFuros(g: GeoEditavel): number | null {
-  if (g.tipo !== 'poligono') return null;
-  return Math.round((areaM2(g.anel) / 10000) * 100) / 100;
+  if (g.tipo !== 'poligono' || g.anel.length < 3) return null;
+  const poly: GeoJSON.Polygon = { type: 'Polygon', coordinates: [fecha(g.anel)] };
+  return areaHaGeo(poly);
 }
 
 export function perimetroMDe(g: GeoEditavel): number {

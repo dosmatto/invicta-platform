@@ -1,5 +1,6 @@
 import { kml } from '@tmcw/togeojson';
 import turfArea from '@turf/area';
+import { areaM2Geo } from './areaGeo';
 import { classeZona, classeReconhecida } from './zonas';
 
 export interface GeoUploadResult {
@@ -100,7 +101,7 @@ function computeResult(geojson: GeoJSON.FeatureCollection): GeoUploadResult {
   const center: [number, number] = [(minLng + maxLng) / 2, (minLat + maxLat) / 2];
 
   // Área com turf (inclui desconto de holes automaticamente)
-  const areaM2 = turfArea(geojson);
+  const areaM2 = areaM2Geo(geojson);
   const areaHa = Math.round((areaM2 / 10000) * 100) / 100;
 
   // Área bruta (só outer rings, sem holes)
@@ -133,7 +134,7 @@ function computeOuterArea(geojson: GeoJSON.FeatureCollection): number {
           coordinates: [polygonCoords[0]],
         }}],
       };
-      total += turfArea(outerOnly) / 10000;
+      total += areaM2Geo(outerOnly) / 10000;
     }
 
     if (geom.type === 'Polygon') {

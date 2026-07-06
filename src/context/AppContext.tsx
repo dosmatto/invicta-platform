@@ -8,7 +8,7 @@ import { empresaIfEmpty, adotarEmpresasLocais, garantirEmpresaInvicta, uidUsuari
 import { limparBaseOperacional } from '@/lib/admin/manutencao';
 import { TrocaSenhaObrigatoria } from '@/components/auth/TrocaSenhaObrigatoria';
 import { migrarLaboratoriosV1, migrarSafrasV1, migrarGradesV1, migrarPreferenciasV1, reKeyDonoBiblioteca } from '@/lib/biblioteca';
-import { seedLegendasSistema } from '@/lib/store';
+import { seedLegendasSistema, migrarAreasGeodesicasV1 } from '@/lib/store';
 import { LEGENDAS_OFICIAIS } from '@/constants/legendasSeedOficial';
 import { firebaseConfigurado } from '@/lib/firebase';
 import { observarAuth, logout, type User } from '@/lib/auth';
@@ -138,6 +138,7 @@ export function AppProvider({ children, redirectProdutorParaPortal }: { children
     function migracoesLocais() {
       empresaIfEmpty();                 // Empresa Pessoal + ativa, idempotente
       migrarLaboratoriosV1(); migrarSafrasV1(); migrarGradesV1(); migrarPreferenciasV1();
+      migrarAreasGeodesicasV1();               // areas dos talhoes -> geodesico (igual QGIS)
       seedLegendasSistema(LEGENDAS_OFICIAIS); // legendas oficiais (sistema)
     }
 

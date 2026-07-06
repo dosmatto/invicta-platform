@@ -1,6 +1,10 @@
-export const APP_VERSION = '1.42.0';
+export const APP_VERSION = '1.43.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.43.0': [
+    'ÁREA IGUAL AO QGIS (geodésica): o cálculo de área dos talhões passou a usar a base GEODÉSICA do elipsoide WGS84 — a mesma do QGIS — no lugar da esfera usada antes, que superestimava ~0,2% no Sul do Brasil. Vale para novas importações, para a edição de geometria e, UMA vez, para TODAS as áreas já salvas (recalculadas a partir do próprio contorno, sem reimportar nada). Efeito: as áreas caem ~0,2% e passam a coincidir com o QGIS.',
+    'Validação: a correção varia de ~0,21% (perto de 25°S) a ~0,28% (perto de 21°S) conforme a latitude de cada talhão, batendo com a comparação por fazenda que você levantou (média 0,22%). O recálculo é idempotente (parte da geometria), então rodar em vários aparelhos não acumula erro.',
+  ],
   '1.42.0': [
     'FAZENDA — RENOMEAR + ÁREA TOTAL: no painel da fazenda agora dá para EDITAR o nome (lápis ao lado do nome) e o resumo mostra a ÁREA TOTAL (soma dos talhões) — no cabeçalho e na aba Dados. O nome do talhão já podia ser editado pelo lápis no painel do talhão.',
   ],
