@@ -1,6 +1,9 @@
-export const APP_VERSION = '1.51.0';
+export const APP_VERSION = '1.52.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.52.0': [
+    'TALHÕES EM ORDEM ALFABÉTICA em todo o sistema (app de campo e plataforma): as listas de talhões passam a vir sempre ordenadas por nome.',
+  ],
   '1.51.0': [
     'APP DE CAMPO — MEDIÇÃO POR PONTOS: além de Polígono (área) e Linha (distância), agora tem o modo "• Ponto(s)". Marque pontos tocando no mapa OU no seu GPS (botão +) — para registrar locais específicos (falha, obstáculo, ponto de amostra, referência, etc.). Salva como pontos, com filtro "Pontos" no repositório de Medições e nos downloads (SHP/KML/GeoJSON).',
   ],

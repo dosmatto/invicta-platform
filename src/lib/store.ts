@@ -628,6 +628,7 @@ export function getTalhoes(fazendaId?: string): Talhao[] {
   const esc = escopoClienteIds();
   let all = loadFiltrado<Talhao>('inv_talhoes');
   if (esc) { const fz = fazendasNoEscopo(esc); all = all.filter(t => fz.has(t.fazendaId)); }
+  all.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));   // sempre em ordem alfabética
   return fazendaId ? all.filter(t => t.fazendaId === fazendaId) : all;
 }
 
