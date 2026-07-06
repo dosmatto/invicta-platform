@@ -27,6 +27,8 @@ export function FazendaDetailPanel() {
   const [salvando, setSalvando] = useState(false);
   const [detectando, setDetectando] = useState(false);
   const [msgMunicipio, setMsgMunicipio] = useState('');
+  const [renomeando, setRenomeando] = useState(false);
+  const [nomeTemp, setNomeTemp] = useState('');
 
   async function detectarMunicipio() {
     if (!nav.fazendaId || detectando) return;
@@ -116,7 +118,18 @@ export function FazendaDetailPanel() {
     }, 300);
   }
 
+  function salvarRenomeFazenda() {
+    const novo = nomeTemp.trim();
+    if (!nav.fazendaId || !novo) { setRenomeando(false); return; }
+    updateFazenda(nav.fazendaId, { nome: novo });
+    setFazenda(f => (f ? { ...f, nome: novo } : f));
+    setNav({ fazenda: novo });
+    setRenomeando(false);
+  }
+
   const incompletos = talhoes.filter(t => t.status === 'incompleto').length;
+  const areaTotal = talhoes.reduce((s, t) => s + (t.areaHa || 0), 0);
+  const areaFmt = (n: number) => n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   if (!fazenda) return (
     <div className="flex items-center justify-center p-8">
@@ -143,10 +156,26 @@ export function FazendaDetailPanel() {
             <Map size={18} style={{ color: '#86efac' }} />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-base font-bold truncate" style={{ color: '#fff' }}>{fazenda.nome}</p>
+            {renomeando ? (
+              <div className="flex items-center gap-1">
+                <input autoFocus value={nomeTemp} onChange={e => setNomeTemp(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') salvarRenomeFazenda(); if (e.key === 'Escape') setRenomeando(false); }}
+                  className="rounded px-1.5 py-0.5 text-sm font-bold outline-none" style={{ background: '#1a3a6b', color: '#fff', border: '1px solid #2e5fa3', width: 160 }} />
+                <button onClick={salvarRenomeFazenda} title="Salvar" className="p-1" style={{ color: '#4ade80' }}><Save size={13} /></button>
+                <button onClick={() => setRenomeando(false)} title="Cancelar" className="p-1" style={{ color: '#94a3b8' }}><X size={13} /></button>
+              </div>
+            ) : (
+              <p className="text-base font-bold flex items-center gap-1.5 min-w-0" style={{ color: '#fff' }}>
+                <span className="truncate">{fazenda.nome}</span>
+                {pode('cadastro') && (
+                  <button onClick={() => { setNomeTemp(fazenda.nome); setRenomeando(true); }} title="Renomear fazenda" className="p-0.5 flex-shrink-0" style={{ color: '#64748b' }}><Pencil size={12} /></button>
+                )}
+              </p>
+            )}
             <p className="text-xs mt-0.5" style={{ color: '#64748b' }}>{fazenda.municipio} · {fazenda.estado}</p>
             <p className="text-xs font-semibold mt-1" style={{ color: '#86efac' }}>
               {talhoes.length} talhão{talhoes.length !== 1 ? 'ões' : ''}
+              {areaTotal > 0 ? ` · ${areaFmt(areaTotal)} ha` : ''}
               {fazenda.car ? ` · CAR: ${fazenda.car}` : ''}
             </p>
           </div>
@@ -270,6 +299,7 @@ export function FazendaDetailPanel() {
           <PanelSection>
             {[
               { label: 'Nome', value: fazenda.nome },
+              { label: 'Área total', value: areaTotal > 0 ? `${areaFmt(areaTotal)} ha` : '—' },
               { label: 'Município', value: fazenda.municipio || '—' },
               { label: 'Estado', value: fazenda.estado },
               { label: 'CAR', value: fazenda.car || '—' },

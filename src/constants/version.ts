@@ -1,6 +1,9 @@
-export const APP_VERSION = '1.41.0';
+export const APP_VERSION = '1.42.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.42.0': [
+    'FAZENDA — RENOMEAR + ÁREA TOTAL: no painel da fazenda agora dá para EDITAR o nome (lápis ao lado do nome) e o resumo mostra a ÁREA TOTAL (soma dos talhões) — no cabeçalho e na aba Dados. O nome do talhão já podia ser editado pelo lápis no painel do talhão.',
+  ],
   '1.41.0': [
     'CORREÇÃO IMPORTANTE — "Sem espaço no navegador para gravar tudo": a importação de talhões (e o salvamento de outros dados) travava com esse erro quando o cache do navegador enchia. Causa: o localStorage tem teto de ~5–10 MB e só os polígonos de todas as fazendas passavam de 7 MB — somados à condutividade (~2 MB) estouravam o limite, e a partir daí NADA mais gravava, nem uma importação pequena. Agora as chaves pesadas (talhões, condutividade, produtividade, composições, MDE, zonas de manejo, compactação, grades) são COMPRIMIDAS antes de ir para o cache local, reduzindo cerca de 10× o espaço ocupado — os ~10 MB viram ~1–2 MB e a folga volta a ser enorme',
     'A compressão é transparente e SEM PERDA: a nuvem (Supabase) continua guardando os dados normalmente — muda apenas o espelho local do navegador. A leitura reconhece sozinha tanto os valores antigos (não comprimidos) quanto os novos, então nada precisa ser reimportado. Depois de atualizar, faça UM recarregamento forçado (Ctrl+Shift+R): o cache é reescrito já comprimido e o espaço é liberado automaticamente',
