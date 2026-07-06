@@ -18,6 +18,7 @@ import {
 } from '@/lib/store';
 import type { Legenda } from '@/lib/legendas';
 import { parseGeoFile, parseLimiteTalhao, normalizarZonas } from '@/lib/geo';
+import { montarLinkCampo, paraFC } from '@/lib/campoLink';
 import { extrairEditavel, paraFeature, areaHaDe, areaHaSemFuros } from '@/lib/geoEditor';
 import { conflitosDe, talhaoParaAlvo, bboxDeFeatures, type AlvoOverlap, type Conflito } from '@/lib/overlap';
 import { carregarEcOficial, rotuloEc, type EcCamada } from '@/lib/meap/gerar';
@@ -27,7 +28,7 @@ import { descomprimirGrid, coordsFromBounds, type RespInterp } from '@/lib/ferti
 import { colorirGridComLegenda, temGrid } from '@/lib/raster';
 import {
   ChevronLeft, Layers, Upload, MapPin, CheckCircle2, AlertTriangle, Plus, X, Save,
-  ExternalLink, Trash2, Pencil, Grid3x3, TestTube, Leaf, Activity, Mountain, BarChart3, Zap, Eye, Loader2,
+  ExternalLink, Trash2, Pencil, Grid3x3, TestTube, Leaf, Activity, Mountain, BarChart3, Zap, Eye, Loader2, Share2,
 } from 'lucide-react';
 
 type MapaNuvem = { resp: RespInterp; labels: GeoJSON.FeatureCollection; interpoladoEm?: string };
@@ -418,6 +419,24 @@ export function TalhaoDetailPanel() {
     voltarFazenda();
   }
 
+  // #3 — Link do prestador: gera um link só com o polígono deste talhão. O
+  // prestador abre no celular e vê só a área + o GPS dele, sem login nem mais nada.
+  async function gerarLinkPrestador() {
+    if (!talhao?.geojson) { alert('Este talhão ainda não tem limite geográfico.'); return; }
+    let o: unknown;
+    try { o = JSON.parse(talhao.geojson); } catch { alert('Geometria inválida.'); return; }
+    const fc = paraFC(o);
+    if (!fc) { alert('Geometria inválida.'); return; }
+    const url = montarLinkCampo(window.location.origin, nav.talhao || talhao.nome, fc);
+    try {
+      if (navigator.share) { await navigator.share({ title: `Área: ${talhao.nome}`, url }); return; }
+    } catch { /* usuário cancelou o compartilhamento — cai pro copiar */ }
+    try {
+      await navigator.clipboard.writeText(url);
+      alert('Link copiado! Cole no WhatsApp/mensagem para o prestador.\n\nEle abre e vê só essa área + o GPS dele — nada mais.');
+    } catch { prompt('Copie o link do prestador:', url); }
+  }
+
   useEffect(() => {
     if (!nav.talhaoId) return;
     const t = getTalhoes().find(x => x.id === nav.talhaoId) ?? null;
@@ -495,6 +514,11 @@ export function TalhaoDetailPanel() {
             className="mt-3 w-full flex items-center justify-center gap-1.5 py-2 rounded text-xs font-bold text-white transition-opacity hover:opacity-90"
             style={{ background: 'var(--invicta-blue-mid)' }}>
             <ExternalLink size={13} /> Abrir página completa do talhão
+          </button>
+          <button onClick={gerarLinkPrestador} disabled={!talhao?.geojson}
+            className="mt-2 w-full flex items-center justify-center gap-1.5 py-2 rounded text-xs font-bold transition-opacity hover:opacity-90 disabled:opacity-40"
+            style={{ background: '#1a3a6b', color: '#93c5fd' }}>
+            <Share2 size={13} /> Link do prestador (só o mapa)
           </button>
 
           <button onClick={apagarTalhao}

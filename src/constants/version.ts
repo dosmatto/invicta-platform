@@ -1,6 +1,10 @@
-export const APP_VERSION = '1.48.0';
+export const APP_VERSION = '1.49.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.49.0': [
+    'LINK DO PRESTADOR DE SERVIÇO: no painel do talhão, o botão "Link do prestador (só o mapa)" gera um link para mandar por WhatsApp/mensagem. Quem recebe abre no celular e vê SÓ o polígono daquele talhão + o GPS dele para navegar até/dentro da área — sem login, sem menus, sem nenhum outro dado. Ideal para enviar a área a quem vai distribuir esterco, aplicar, roçar, etc.',
+    'A geometria viaja DENTRO do próprio link (compactada) — nada é guardado em servidor e o prestador não acessa mais nada do sistema. A página é a rota pública /campo. (Áreas com contorno muito detalhado geram links longos; talhões normais ficam curtos.)',
+  ],
   '1.48.0': [
     'APP DE CAMPO — CAMADA DE REFERÊNCIA NA MEDIÇÃO: durante a medição GPS, um novo botão (ícone de formas) deixa abrir no mapa, em LARANJA, um TALHÃO, uma MEDIÇÃO já salva ou um ARQUIVO (KML/SHP/GeoJSON, offline) só como guia — não entra na medição. Ex.: ver o limite do talhão enquanto mede por dentro, ou seguir um contorno recebido. Toque no botão para escolher/remover a referência.',
   ],
