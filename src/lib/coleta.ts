@@ -365,7 +365,7 @@ export async function contarFotosPendentes(): Promise<number> {
 // pra não se perder — na plataforma vira o repositório de medições (SHP,
 // virar talhão, substituir limite…).
 
-export type TipoMedicao = 'poligono' | 'linha';
+export type TipoMedicao = 'poligono' | 'linha' | 'ponto';
 
 // Categorias do spec (Sistema de Medições GPS, seção 10)
 export const CATEGORIAS_MEDICAO = [

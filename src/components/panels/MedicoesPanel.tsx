@@ -34,7 +34,7 @@ export function MedicoesPanel() {
   const [meds, setMeds] = useState<MedicaoCampo[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [sel, setSel] = useState<string | null>(null);
-  const [filtro, setFiltro] = useState<'todos' | 'poligono' | 'linha'>('todos');
+  const [filtro, setFiltro] = useState<'todos' | 'poligono' | 'linha' | 'ponto'>('todos');
   const [acao, setAcao] = useState<{ m: MedicaoCampo; tipo: 'criar' | 'substituir' } | null>(null);
   const [editando, setEditando] = useState<MedicaoCampo | null>(null);
   const [msg, setMsg] = useState('');
@@ -119,7 +119,7 @@ export function MedicoesPanel() {
 
       {/* filtros */}
       <div className="flex gap-1.5 px-4 py-2 flex-shrink-0" style={{ borderBottom: `1px solid #0f2240` }}>
-        {([['todos', 'Todas'], ['poligono', 'Áreas'], ['linha', 'Linhas']] as const).map(([f, r]) => (
+        {([['todos', 'Todas'], ['poligono', 'Áreas'], ['linha', 'Linhas'], ['ponto', 'Pontos']] as const).map(([f, r]) => (
           <button key={f} onClick={() => setFiltro(f)}
             className="px-2.5 py-1 rounded-full text-[10px] font-bold"
             style={{ background: filtro === f ? '#2e5fa3' : BORDA, color: filtro === f ? '#fff' : '#94a3b8' }}>

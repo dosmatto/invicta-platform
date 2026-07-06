@@ -63,6 +63,10 @@ export function medicaoParaFC(m: MedicaoCampo): GeoJSON.FeatureCollection {
     props.perim_m = Math.round(perimetroM(m.coords, true));
     return { type: 'FeatureCollection', features: [{ type: 'Feature', properties: props, geometry: { type: 'Polygon', coordinates: aneisFechados(m) } }] };
   }
+  if (m.tipo === 'ponto') {
+    props.pontos = m.coords.length;
+    return { type: 'FeatureCollection', features: m.coords.map(c => ({ type: 'Feature', properties: props, geometry: { type: 'Point', coordinates: c } })) };
+  }
   props.dist_m = Math.round(perimetroM(m.coords, false));
   return { type: 'FeatureCollection', features: [{ type: 'Feature', properties: props, geometry: { type: 'LineString', coordinates: m.coords } }] };
 }

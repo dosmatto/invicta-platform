@@ -49,6 +49,7 @@ function aplicarOffset(
 }
 
 function medir(tipo: TipoMedicao, coords: [number, number][]) {
+  if (tipo === 'ponto') return { areaHa: null as number | null, perimetroM: 0 };
   let compr = 0;
   for (let i = 1; i < coords.length; i++) {
     compr += distanciaM(coords[i - 1][0], coords[i - 1][1], coords[i][0], coords[i][1]);
@@ -190,7 +191,7 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
     const fecharPoligono = tipo === 'poligono' && coords.length >= 3 && !gravando;
     if (fecharPoligono) {
       feats.push({ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [[...coords, coords[0]]] } });
-    } else if (coords.length >= 2) {
+    } else if (tipo !== 'ponto' && coords.length >= 2) {
       feats.push({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: coords } });
     }
     return { type: 'FeatureCollection', features: feats };
@@ -239,6 +240,9 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
     } catch { return null; }
   }
   function fcDaMedicao(m: MedicaoCampo): GeoJSON.FeatureCollection {
+    if (m.tipo === 'ponto') {
+      return { type: 'FeatureCollection', features: m.coords.map(c => ({ type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: c } })) };
+    }
     const geom: GeoJSON.Geometry = m.tipo === 'poligono' && m.coords.length >= 3
       ? { type: 'Polygon', coordinates: [[...m.coords, m.coords[0]]] }
       : { type: 'LineString', coordinates: m.coords };
@@ -305,12 +309,12 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
         {(gravando || coords.length > 0) && (
           <div className="px-3 py-2 rounded-xl text-[10px] leading-relaxed" style={{ background: 'rgba(6,21,37,0.9)', border: `1px solid ${BORDA}`, color: '#cbd5e1' }}>
             <div className="flex items-center gap-3">
-              <span style={{ color: '#93c5fd' }}>{tipo === 'poligono' ? 'Polígono' : 'Linha'}</span>
+              <span style={{ color: '#93c5fd' }}>{tipo === 'poligono' ? 'Polígono' : tipo === 'linha' ? 'Linha' : 'Pontos'}</span>
               {gravando && <span className="font-bold" style={{ color: '#fff' }}>⏱ {fmtTempo(elapsed)}</span>}
             </div>
             <div className="flex items-center gap-3 mt-0.5">
               <span><b style={{ color: '#fff' }}>{pontos.length}</b> pts</span>
-              <span>{formatarDist(medidas.perimetroM)}</span>
+              {tipo !== 'ponto' && <span>{formatarDist(medidas.perimetroM)}</span>}
               {tipo === 'poligono' && medidas.areaHa != null && (
                 <span style={{ color: '#4ade80' }}><b>{medidas.areaHa.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}</b> ha</span>
               )}
@@ -349,7 +353,7 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
         )}
         <div className="px-4 py-3" style={{ background: 'rgba(6,21,37,0.95)', borderTop: `1px solid ${BORDA}` }}>
           <div className="flex gap-1.5 mb-2">
-            {(['poligono', 'linha'] as TipoMedicao[]).map(t => (
+            {(['poligono', 'linha', 'ponto'] as TipoMedicao[]).map(t => (
               <button key={t} onClick={() => setTipo(t)} disabled={gravando}
                 className="px-3 py-1.5 rounded-full text-[11px] font-bold disabled:opacity-50"
                 style={{
@@ -357,7 +361,7 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
                   color: tipo === t ? '#fff' : '#94a3b8',
                   border: `1px solid ${tipo === t ? '#60a5fa' : BORDA}`,
                 }}>
-                {t === 'poligono' ? '⬠ Polígono (área)' : '⎯ Linha (distância)'}
+                {t === 'poligono' ? '⬠ Polígono' : t === 'linha' ? '⎯ Linha' : '• Ponto(s)'}
               </button>
             ))}
             <span className="ml-auto self-center flex items-center gap-1.5">
@@ -374,7 +378,8 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
             </span>
           </div>
 
-          {/* gravar / pausar-retomar / finalizar / cancelar */}
+          {/* gravar / pausar-retomar / finalizar / cancelar — escondido no modo Ponto */}
+          {tipo !== 'ponto' && (
           <div className="flex gap-1.5 mb-2">
             {!gravando ? (
               <>
@@ -409,10 +414,13 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
               </>
             )}
           </div>
+          )}
 
           {coords.length === 0 ? (
             <p className="text-[11px] py-1" style={{ color: SUB }}>
-              <strong style={{ color: '#93c5fd' }}>Gravar caminhada</strong> registra 1 ponto/seg enquanto você anda a área. Ou toque no mapa / use o <strong style={{ color: '#93c5fd' }}>+</strong> para marcar vértices.
+              {tipo === 'ponto'
+                ? <>Toque no mapa ou use o <strong style={{ color: '#93c5fd' }}>+</strong> (GPS) para marcar pontos.</>
+                : <><strong style={{ color: '#93c5fd' }}>Gravar caminhada</strong> registra 1 ponto/seg enquanto você anda a área. Ou toque no mapa / use o <strong style={{ color: '#93c5fd' }}>+</strong> para marcar vértices.</>}
             </p>
           ) : (
             <div className="flex items-end justify-between gap-3">
@@ -426,6 +434,13 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
                       Perímetro {formatarDist(medidas.perimetroM)} · {pontos.length} pontos
                     </p>
                   </>
+                ) : tipo === 'ponto' ? (
+                  <>
+                    <p className="text-2xl font-black leading-tight" style={{ color: '#4ade80' }}>
+                      {pontos.length} ponto{pontos.length !== 1 ? 's' : ''}
+                    </p>
+                    <p className="text-[10px]" style={{ color: SUB }}>marque no mapa ou no GPS (+)</p>
+                  </>
                 ) : (
                   <>
                     <p className="text-2xl font-black leading-tight" style={{ color: '#4ade80' }}>
@@ -437,7 +452,7 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
                   </>
                 )}
               </div>
-              <button onClick={() => setMostraSalvar(true)} disabled={coords.length < 2 || gravando}
+              <button onClick={() => setMostraSalvar(true)} disabled={coords.length < (tipo === 'ponto' ? 1 : 2) || gravando}
                 className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold text-white disabled:opacity-40"
                 style={{ background: 'var(--invicta-green-dark)' }}>
                 <Save size={13} /> Salvar
