@@ -13,6 +13,7 @@
 // Sem variáveis NEXT_PUBLIC_FIREBASE_*, tudo aqui é no-op.
 
 import { getFb, firebaseConfigurado } from './firebase';
+import { lerRawLocal, gravarRawLocal, lerListaLocal } from './localComprimido';
 import { collection, deleteDoc, doc, endAt, getDoc, getDocs, orderBy, query, setDoc, startAt } from 'firebase/firestore';
 import { usarDadosSupabase, bootSupabaseData, pushListaSupabase, pushObjSupabase,
   salvarMapaSupabase, carregarMapasPorPrefixoSupabase, excluirMapasPorPrefixoSupabase,
@@ -70,7 +71,7 @@ export function cloudPodeGravar(): boolean {
 }
 
 function lerLocal(key: string): { id: string }[] {
-  try { return JSON.parse(localStorage.getItem(key) ?? '[]'); } catch { return []; }
+  return lerListaLocal<{ id: string }>(key);
 }
 
 async function hidratarLista(key: string) {
@@ -81,7 +82,7 @@ async function hidratarLista(key: string) {
 
   if (nuvem.size > 0) {
     const arr = [...nuvem.values()].map(j => JSON.parse(j));
-    localStorage.setItem(key, JSON.stringify(arr));
+    gravarRawLocal(key, JSON.stringify(arr));
   } else {
     // nuvem vazia: sobe o que existir localmente (migração inicial)
     for (const rec of lerLocal(key)) {
@@ -100,9 +101,9 @@ async function hidratarObj(key: string) {
   const m = new Map<string, string>();
   if (snap.exists()) {
     const j = (snap.data() as { json?: string }).json;
-    if (j) { localStorage.setItem(key, j); m.set(key, j); }
+    if (j) { gravarRawLocal(key, j); m.set(key, j); }
   } else {
-    const local = localStorage.getItem(key);
+    const local = lerRawLocal(key);
     if (local) { await setDoc(ref, { json: local }); m.set(key, local); }
   }
   espelho[key] = m;

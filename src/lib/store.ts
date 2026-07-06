@@ -6,6 +6,7 @@ import type { ResultadoAmostra, PerfilLabConfig } from './lab';
 import type { Legenda } from './legendas';
 import type { AmbienteProdutivo } from './meap/tipos';
 import { cloudPushLista } from './cloud';
+import { lerListaLocal, gravarListaLocal } from './localComprimido';
 import { empresaAtivaId, uidUsuario, escopoClienteIds } from './empresa';
 import {
   listar as bibListar,
@@ -500,13 +501,12 @@ export interface GradeAmostragem {
 // ── Helpers ───────────────────────────────────────────────────────────────
 
 function load<T>(key: string): T[] {
-  if (typeof window === 'undefined') return [];
-  try { return JSON.parse(localStorage.getItem(key) ?? '[]'); } catch { return []; }
+  return lerListaLocal<T>(key);
 }
 
 function save<T>(key: string, data: T[]) {
   if (typeof window === 'undefined') return;
-  localStorage.setItem(key, JSON.stringify(data));
+  gravarListaLocal(key, data);       // comprime as chaves pesadas (localComprimido)
   cloudPushLista(key, data); // espelha na nuvem quando configurada (no-op sem Firebase)
 }
 

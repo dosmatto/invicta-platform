@@ -7,6 +7,7 @@
 // Exposto em window.invLimparBase pelo AppContext (só para admin).
 
 import { cloudPushLista, cloudExcluirColecao } from '../cloud';
+import { lerRawLocal } from '../localComprimido';
 
 // Dados de TRABALHO (apagam). Tudo o mais fica: inv_bib_*, inv_legendas,
 // inv_safras, inv_padroes_*, inv_lab_perfis, inv_empresas/ativa, inv_config,
@@ -25,7 +26,7 @@ export function backupBase(): void {
   for (let i = 0; i < localStorage.length; i++) {
     const k = localStorage.key(i);
     if (!k || !k.startsWith('inv_')) continue;
-    const raw = localStorage.getItem(k);
+    const raw = lerRawLocal(k);
     try { dump[k] = raw ? JSON.parse(raw) : null; } catch { dump[k] = raw; }
   }
   const blob = new Blob([JSON.stringify({ geradoEm: new Date().toISOString(), dados: dump }, null, 2)], { type: 'application/json' });

@@ -14,6 +14,7 @@
 // pra ligar o Auth Supabase não forçar os dados (evita tela vazia antes do import).
 
 import { getSupabase, supabaseConfigurado } from './supabase';
+import { lerRawLocal, gravarRawLocal, lerListaLocal } from './localComprimido';
 
 const TABELA_TALHOES_KEY = 'inv_talhoes';
 const ITEM_OBJ = '__obj__';  // item_id usado p/ guardar uma config (objeto único) no app_kv
@@ -28,7 +29,7 @@ export function usarDadosSupabase(): boolean {
 type Rec = { id?: unknown; empresaId?: string; fazendaId?: string; nome?: string; areaHa?: number };
 
 function lerLocalLista(key: string): unknown[] {
-  try { return JSON.parse(localStorage.getItem(key) ?? '[]'); } catch { return []; }
+  return lerListaLocal(key);
 }
 
 // ── D3 — AUTO-CARGA: na 1ª vez (Postgres vazio), semeia a partir dos dados ────
@@ -55,7 +56,7 @@ async function seedSeVazio(keysLista: string[], keysObj: string[]): Promise<void
     if (arr.length) await pushListaSupabase(key, arr);
   }
   for (const key of keysObj) {
-    const v = localStorage.getItem(key);
+    const v = lerRawLocal(key);
     if (v != null) await pushObjSupabase(key, v);
   }
   console.log('[supabase] seed concluído.');
@@ -71,7 +72,7 @@ export async function bootSupabaseData(keysLista: string[], keysObj: string[]): 
   // Talhões (tabela dedicada) → inv_talhoes
   const talhoes = await sb.from('talhoes').select('dados');
   if (talhoes.error) throw talhoes.error;
-  localStorage.setItem(TABELA_TALHOES_KEY, JSON.stringify((talhoes.data ?? []).map(r => r.dados)));
+  gravarRawLocal(TABELA_TALHOES_KEY, JSON.stringify((talhoes.data ?? []).map(r => r.dados)));
 
   // app_kv → só as coleções de listas/config (os MAPAS ficam fora do boot)
   const kv = await sb.from('app_kv').select('colecao, item_id, dados').in('colecao', [...keysLista, ...keysObj]);
@@ -84,11 +85,11 @@ export async function bootSupabaseData(keysLista: string[], keysObj: string[]): 
   }
   for (const key of keysLista) {
     if (key === TABELA_TALHOES_KEY) continue;
-    localStorage.setItem(key, JSON.stringify(porColecao[key] ?? []));
+    gravarRawLocal(key, JSON.stringify(porColecao[key] ?? []));
   }
   for (const key of keysObj) {
     const o = objs[key] as { valor?: string } | undefined;
-    if (o?.valor != null) localStorage.setItem(key, o.valor);
+    if (o?.valor != null) gravarRawLocal(key, o.valor);
   }
 }
 

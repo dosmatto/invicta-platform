@@ -1,6 +1,10 @@
-export const APP_VERSION = '1.40.0';
+export const APP_VERSION = '1.41.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.41.0': [
+    'CORREÇÃO IMPORTANTE — "Sem espaço no navegador para gravar tudo": a importação de talhões (e o salvamento de outros dados) travava com esse erro quando o cache do navegador enchia. Causa: o localStorage tem teto de ~5–10 MB e só os polígonos de todas as fazendas passavam de 7 MB — somados à condutividade (~2 MB) estouravam o limite, e a partir daí NADA mais gravava, nem uma importação pequena. Agora as chaves pesadas (talhões, condutividade, produtividade, composições, MDE, zonas de manejo, compactação, grades) são COMPRIMIDAS antes de ir para o cache local, reduzindo cerca de 10× o espaço ocupado — os ~10 MB viram ~1–2 MB e a folga volta a ser enorme',
+    'A compressão é transparente e SEM PERDA: a nuvem (Supabase) continua guardando os dados normalmente — muda apenas o espelho local do navegador. A leitura reconhece sozinha tanto os valores antigos (não comprimidos) quanto os novos, então nada precisa ser reimportado. Depois de atualizar, faça UM recarregamento forçado (Ctrl+Shift+R): o cache é reescrito já comprimido e o espaço é liberado automaticamente',
+  ],
   '1.40.0': [
     'MDE PRÓPRIO (a partir dos seus pontos de elevação): além do MDE automático (satélite), agora a aba Altimetria tem o modo "MDE próprio (pontos)". Suba um arquivo de pontos com altitude — o export da CONDUTIVIDADE, da COLHEITA ou um levantamento RTK (SHP/KML/GeoJSON/CSV/XLSX) — escolha a coluna de elevação, e a plataforma interpola um Modelo Digital de Elevação SÓ do seu talhão, geralmente bem mais detalhado que os 30 m do satélite',
     'O MDE próprio segue exatamente o mesmo caminho do automático: prévia (hipsométrico/declividade/relevo sombreado + estatísticas) → aprovar como base oficial → derivados e análise agronômica (TPI, TWI, LS, classes de relevo) já vêm juntos → entra nas Zonas de Manejo, no cruzamento por classe e no relatório PDF, e exporta GeoTIFF. Validado com superfície de elevação de gabarito (recupera o relevo e a declividade corretos)',
