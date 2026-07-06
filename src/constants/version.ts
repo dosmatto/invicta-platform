@@ -1,6 +1,9 @@
-export const APP_VERSION = '1.44.0';
+export const APP_VERSION = '1.45.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.45.0': [
+    'LISTA DE CLIENTES MAIS ENXUTA: fonte do nome um pouco menor, avatar e espaçamentos mais compactos, e o nome agora ocupa a largura toda — os botões de editar/excluir aparecem só ao passar o mouse na linha. Assim cabe muito mais do nome do produtor sem cortar. Também saiu a setinha ">" (a linha inteira já abre o cliente).',
+  ],
   '1.44.0': [
     'NOMES EM CAIXA ALTA: cliente, fazenda e talhão agora ficam SEMPRE em maiúsculas — nas listas, cabeçalhos, breadcrumbs e relatórios. Vale para novos cadastros e, uma vez, para tudo que já estava salvo (recálculo idempotente no primeiro carregamento).',
     'RENOMEAR MAIS FÁCIL: o CLIENTE também ganhou o lápis de renomear no cabeçalho do painel (fazenda e talhão já tinham) — dá para corrigir o nome na hora, sem abrir o formulário de edição.',

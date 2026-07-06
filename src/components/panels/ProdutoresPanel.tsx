@@ -5,7 +5,7 @@ import { useApp } from '@/context/AppContext';
 import { getClientes, saveCliente, updateCliente, excluirProdutorCascata, Cliente } from '@/lib/store';
 import { pode } from '@/lib/empresa';
 import { cloudExcluirMapasPorPrefixo, cloudExcluirPorPrefixo } from '@/lib/cloud';
-import { Plus, Search, ChevronRight, X, Save, Users, Pencil, Trash2, AlertTriangle } from 'lucide-react';
+import { Plus, Search, X, Save, Users, Pencil, Trash2, AlertTriangle } from 'lucide-react';
 
 const FORM_VAZIO = {
   nome: '', sigla: '', tipoPessoa: 'PF' as 'PF' | 'PJ',
@@ -256,35 +256,39 @@ export function ProdutoresPanel() {
                 </div>
                 {porLetra[letra].map(c => (
                   <div key={c.id}
-                    className="w-full flex items-center gap-1 pr-2 transition-colors"
+                    className="group w-full flex items-center transition-colors"
                     style={{ borderBottom: '1px solid #0f2240' }}
                     onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'var(--sidebar-item-hover)'}
                     onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}>
-                    <button onClick={() => abrirCliente(c)} className="flex-1 min-w-0 flex items-center gap-3 px-4 py-3 text-left">
-                      <div className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0"
+                    <button onClick={() => abrirCliente(c)} className="flex-1 min-w-0 flex items-center gap-2.5 px-3 py-2.5 text-left">
+                      <div className="w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs flex-shrink-0"
                         style={{ background: 'var(--invicta-blue-mid)', color: '#fff' }}>
                         {c.nome.charAt(0).toUpperCase()}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold truncate" style={{ color: '#e2e8f0' }}>{c.nome}</p>
-                        <p className="text-[10px] truncate" style={{ color: '#64748b' }}>
-                          {c.sigla ? `${c.sigla} · ` : ''}{c.tipoPessoa} · {c.cidade} · {c.estado}
+                        <p className="text-[13px] font-semibold truncate leading-tight" style={{ color: '#e2e8f0' }}>{c.nome}</p>
+                        <p className="text-[10px] truncate mt-0.5" style={{ color: '#64748b' }}>
+                          {c.sigla ? `${c.sigla} · ` : ''}{c.tipoPessoa}{c.cidade ? ` · ${c.cidade}` : ''} · {c.estado}
                         </p>
                       </div>
                     </button>
-                    {podeCadastro && (
-                      <button onClick={() => abrirEdicao(c)} title="Editar cliente"
-                        className="p-1.5 rounded flex-shrink-0" style={{ color: '#93c5fd' }}>
-                        <Pencil size={13} />
-                      </button>
+                    {/* Ações (editar/excluir) aparecem ao passar o mouse — na lista, o nome usa a largura toda */}
+                    {(podeCadastro || podeExcluir) && (
+                      <div className="hidden group-hover:flex items-center gap-0.5 pr-2 flex-shrink-0">
+                        {podeCadastro && (
+                          <button onClick={() => abrirEdicao(c)} title="Editar cliente"
+                            className="p-1.5 rounded hover:bg-white/10" style={{ color: '#93c5fd' }}>
+                            <Pencil size={13} />
+                          </button>
+                        )}
+                        {podeExcluir && (
+                          <button onClick={() => { setAlvoExcluir(c); setTxtConfirma(''); }} title="Excluir cliente"
+                            className="p-1.5 rounded hover:bg-white/10" style={{ color: '#f87171' }}>
+                            <Trash2 size={13} />
+                          </button>
+                        )}
+                      </div>
                     )}
-                    {podeExcluir && (
-                      <button onClick={() => { setAlvoExcluir(c); setTxtConfirma(''); }} title="Excluir cliente"
-                        className="p-1.5 rounded flex-shrink-0" style={{ color: '#f87171' }}>
-                        <Trash2 size={13} />
-                      </button>
-                    )}
-                    <ChevronRight size={14} style={{ color: '#64748b' }} className="flex-shrink-0" />
                   </div>
                 ))}
               </div>
