@@ -15,7 +15,7 @@ import {
   MedicaoCampo, PontoMedicao, TipoMedicao, CATEGORIAS_MEDICAO,
   getMedicoes, salvarMedicao, excluirMedicao,
 } from '@/lib/coleta';
-import { getTalhoes, getSafras, Talhao } from '@/lib/store';
+import { getTalhoes, getSafras, getFazendas, getClientes, Talhao } from '@/lib/store';
 import { parseGeoFile } from '@/lib/geo';
 import { emailUsuario } from '@/lib/auth';
 import {
@@ -85,7 +85,20 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
   const [refNome, setRefNome] = useState('');
   const [mostraRef, setMostraRef] = useState(false);
   const inputRefArq = useRef<HTMLInputElement>(null);
-  const talhoesComGeo = useMemo(() => getTalhoes().filter(t => !!t.geojson), []);
+  // talhões com limite, AGRUPADOS por produtor · fazenda (só os autorizados)
+  const talhoesAgrupados = useMemo(() => {
+    const nomeProd = new Map(getClientes().map(c => [c.id, c.nome]));
+    const fazById = new Map(getFazendas().map(f => [f.id, f]));
+    const grupos = new Map<string, { titulo: string; talhoes: Talhao[] }>();
+    for (const t of getTalhoes().filter(t => !!t.geojson)) {
+      const f = fazById.get(t.fazendaId);
+      const prod = f ? nomeProd.get(f.clienteId) : '';
+      const titulo = f ? `${prod ? prod + ' · ' : ''}${f.nome}` : 'Sem fazenda';
+      const g = grupos.get(t.fazendaId) ?? { titulo, talhoes: [] };
+      g.talhoes.push(t); grupos.set(t.fazendaId, g);
+    }
+    return [...grupos.values()].sort((a, b) => a.titulo.localeCompare(b.titulo, 'pt-BR'));
+  }, []);
   const bboxRef2 = useMemo(() => bboxDeFC(referencia), [referencia]);
 
   // gravação de caminhada
@@ -528,11 +541,16 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
             </label>
             <div>
               <p className="text-[10px] font-bold uppercase tracking-wide mb-1.5" style={{ color: SUB }}>Talhões</p>
-              {talhoesComGeo.length === 0
+              {talhoesAgrupados.length === 0
                 ? <p className="text-[11px]" style={{ color: SUB }}>Nenhum talhão com limite disponível.</p>
-                : talhoesComGeo.map(t => (
-                  <button key={t.id} onClick={() => usarRef(fcDoTalhao(t), t.nome)}
-                    className="w-full text-left px-3 py-2 rounded-lg mb-1 text-xs" style={{ background: '#0b1d3a', color: TXT }}>{t.nome}</button>
+                : talhoesAgrupados.map(g => (
+                  <div key={g.titulo} className="mb-2">
+                    <p className="text-[10px] font-semibold px-1 mb-1 truncate" style={{ color: '#93c5fd' }}>{g.titulo}</p>
+                    {g.talhoes.map(t => (
+                      <button key={t.id} onClick={() => usarRef(fcDoTalhao(t), t.nome)}
+                        className="w-full text-left px-3 py-2 rounded-lg mb-1 text-xs" style={{ background: '#0b1d3a', color: TXT }}>{t.nome}</button>
+                    ))}
+                  </div>
                 ))}
             </div>
             <div>

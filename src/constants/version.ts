@@ -1,6 +1,9 @@
-export const APP_VERSION = '1.49.0';
+export const APP_VERSION = '1.50.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.50.0': [
+    'APP DE CAMPO — na escolha da camada de referência (na medição), os talhões agora vêm ORGANIZADOS por produtor · fazenda, com um cabeçalho por fazenda, em vez de uma lista solta — bem mais fácil achar o talhão certo quando há muitos.',
+  ],
   '1.49.0': [
     'LINK DO PRESTADOR DE SERVIÇO: no painel do talhão, o botão "Link do prestador (só o mapa)" gera um link para mandar por WhatsApp/mensagem. Quem recebe abre no celular e vê SÓ o polígono daquele talhão + o GPS dele para navegar até/dentro da área — sem login, sem menus, sem nenhum outro dado. Ideal para enviar a área a quem vai distribuir esterco, aplicar, roçar, etc.',
     'A geometria viaja DENTRO do próprio link (compactada) — nada é guardado em servidor e o prestador não acessa mais nada do sistema. A página é a rota pública /campo. (Áreas com contorno muito detalhado geram links longos; talhões normais ficam curtos.)',
