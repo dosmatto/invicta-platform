@@ -1,6 +1,9 @@
-export const APP_VERSION = '1.45.0';
+export const APP_VERSION = '1.46.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.46.0': [
+    'LISTAS DE FAZENDA E TALHÃO ENXUTAS: mesmo padrão minimalista da lista de clientes — fonte menor, avatar e espaçamentos compactos e sem a setinha ">". Na lista de talhões, o botão de abrir a página completa aparece só ao passar o mouse; o status (Ativo/Incompleto) e a área continuam visíveis. Na lista de fazendas do cliente, a área somada segue à mostra. Nomes de fazenda e talhão cabem melhor.',
+  ],
   '1.45.0': [
     'LISTA DE CLIENTES MAIS ENXUTA: fonte do nome um pouco menor, avatar e espaçamentos mais compactos, e o nome agora ocupa a largura toda — os botões de editar/excluir aparecem só ao passar o mouse na linha. Assim cabe muito mais do nome do produtor sem cortar. Também saiu a setinha ">" (a linha inteira já abre o cliente).',
   ],

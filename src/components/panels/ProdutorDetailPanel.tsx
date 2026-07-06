@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useApp } from '@/context/AppContext';
 import { getClientes, getFazendas, getTalhoes, saveFazenda, updateCliente, deleteCliente, Cliente, Fazenda } from '@/lib/store';
-import { ChevronLeft, ChevronRight, Plus, Building2, Phone, Mail, Edit2, Save, X, Trash2, Pencil } from 'lucide-react';
+import { ChevronLeft, Plus, Building2, Phone, Mail, Edit2, Save, X, Trash2, Pencil } from 'lucide-react';
 import { PanelSection, PanelButton, MockIndicator } from './_shared';
 
 const ESTADOS_BR = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'];
@@ -222,16 +222,16 @@ export function ProdutorDetailPanel() {
                 ) : (
                   fazendas.map(f => (
                     <button key={f.id} onClick={() => abrirFazenda(f)}
-                      className="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors"
+                      className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left transition-colors"
                       style={{ borderBottom: '1px solid #0f2240' }}
                       onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'var(--sidebar-item-hover)'}
                       onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}>
-                      <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                      <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
                         style={{ background: '#166534' }}>
-                        <Building2 size={14} style={{ color: '#86efac' }} />
+                        <Building2 size={13} style={{ color: '#86efac' }} />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold truncate" style={{ color: '#e2e8f0' }}>{f.nome}</p>
+                        <p className="text-[13px] font-semibold truncate leading-tight" style={{ color: '#e2e8f0' }}>{f.nome}</p>
                         <p className="text-[10px]" style={{ color: '#64748b' }}>
                           {f.sigla ? `${f.sigla} · ` : ''}{f.municipio} · {f.estado}{f.car ? ` · CAR: ${f.car}` : ''}
                         </p>
@@ -241,7 +241,6 @@ export function ProdutorDetailPanel() {
                           </p>
                         )}
                       </div>
-                      <ChevronRight size={14} style={{ color: '#64748b' }} />
                     </button>
                   ))
                 )}

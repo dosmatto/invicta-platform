@@ -8,7 +8,7 @@ import { pode } from '@/lib/empresa';
 import { detectarMunicipiosFazenda } from '@/lib/geocode';
 import { prepararTalhoesEmMassa, CandidatoTalhao } from '@/lib/geo';
 import { conflitosDe, talhaoParaAlvo, areaHaFC, bboxDeFeatures, type AlvoOverlap, type Conflito } from '@/lib/overlap';
-import { ChevronLeft, ChevronRight, Plus, Map, AlertTriangle, Save, X, ExternalLink, MapPin, Loader2, Upload, CheckCircle2, Pencil } from 'lucide-react';
+import { ChevronLeft, Plus, Map, AlertTriangle, Save, X, ExternalLink, MapPin, Loader2, Upload, CheckCircle2, Pencil } from 'lucide-react';
 import { PanelSection, PanelButton, StatusBadge } from './_shared';
 
 const EditorGeometria = dynamic(
@@ -260,17 +260,17 @@ export function FazendaDetailPanel() {
                 ) : (
                   talhoes.map(t => (
                     <div key={t.id} role="button" tabIndex={0} onClick={() => abrirTalhao(t)}
-                      className="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors cursor-pointer"
+                      className="group w-full flex items-center gap-2.5 px-3 py-2.5 text-left transition-colors cursor-pointer"
                       style={{ borderBottom: '1px solid #0f2240' }}
                       onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'var(--sidebar-item-hover)'}
                       onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}>
-                      <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                      <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
                         style={{ background: t.status === 'ativo' ? '#166534' : '#78350f' }}>
-                        <Map size={14} style={{ color: t.status === 'ativo' ? '#86efac' : '#fde68a' }} />
+                        <Map size={13} style={{ color: t.status === 'ativo' ? '#86efac' : '#fde68a' }} />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold truncate" style={{ color: '#e2e8f0' }}>{t.nome}</p>
-                        <p className="text-[11px]" style={{ color: '#64748b' }}>
+                        <p className="text-[13px] font-semibold truncate leading-tight" style={{ color: '#e2e8f0' }}>{t.nome}</p>
+                        <p className="text-[10px] truncate mt-0.5" style={{ color: '#64748b' }}>
                           {t.areaHa > 0 ? `${t.areaHa.toLocaleString('pt-BR')} ha` : 'Área não definida'}
                         </p>
                       </div>
@@ -278,10 +278,9 @@ export function FazendaDetailPanel() {
                         <StatusBadge status={t.status} />
                         <button onClick={e => { e.stopPropagation(); window.open(`/talhao/${t.id}`, '_blank'); }}
                           title="Abrir página completa do talhão (nova aba)"
-                          className="p-1 rounded transition-colors hover:bg-white/10" style={{ color: '#93c5fd' }}>
+                          className="p-1 rounded hidden group-hover:block hover:bg-white/10" style={{ color: '#93c5fd' }}>
                           <ExternalLink size={14} />
                         </button>
-                        <ChevronRight size={14} style={{ color: '#64748b' }} />
                       </div>
                     </div>
                   ))
