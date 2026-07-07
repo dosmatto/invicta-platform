@@ -7,7 +7,7 @@ import {
   getImportacoesLab, saveImportacaoLab, deleteImportacaoLab, getVariaveisAtivas, siglaVariavel,
   GradeAmostragem, ImportacaoLab,
 } from '@/lib/store';
-import { lerArquivo, aplicarPerfil, autoConfig, PERFIS_BUILTIN, norm, numerosDaGrade, parseNum, ELEMENTOS_LAB, PerfilLabConfig, type ResultadoAmostra } from '@/lib/lab';
+import { lerArquivo, aplicarPerfil, autoConfig, PERFIS_BUILTIN, norm, numerosDaGrade, valorLab, ELEMENTOS_LAB, PerfilLabConfig, type ResultadoAmostra } from '@/lib/lab';
 import { unidadesDe, unidadeCanonica, precisaConverter } from '@/lib/unidades';
 import { detectarOutliers, chaveAmostra, contarOutliers } from '@/lib/labOutliers';
 import { LabPreviewTable } from './LabPreviewTable';
@@ -112,8 +112,8 @@ export function LabImportSection() {
       if (!ed) return r;
       const valores = { ...r.valores };
       for (const [elId, txt] of Object.entries(ed)) {
-        const n = parseNum(txt);
-        if (n == null) delete valores[elId]; else valores[elId] = n;   // vazio/ inválido = sem valor
+        const n = valorLab(txt);
+        if (n == null) delete valores[elId]; else valores[elId] = n;   // N.D./"<x" = 0; vazio/inválido = sem valor
       }
       return { ...r, valores };
     }), [resultadosFinais, edicoes, excluidos]);

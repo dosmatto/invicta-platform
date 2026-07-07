@@ -43,6 +43,19 @@ export function parseNum(s: string | number | null | undefined): number | null {
   return isFinite(v) ? v : null;
 }
 
+// Valor de LABORATÓRIO: número normal; tokens de "não detectado" (N.D., N.D, ND,
+// N/D) e "abaixo do limite de detecção" (<x) viram ZERO — o laudo mediu e não
+// achou, então 0 é o valor agronômico correto. Célula VAZIA, texto qualquer e
+// ">x" continuam SEM valor (não inventa zero para o que não foi analisado).
+export function valorLab(s: string | number | null | undefined): number | null {
+  const v = parseNum(s);
+  if (v != null) return v;
+  const t = String(s ?? '').trim().toLowerCase();
+  if (!t) return null;
+  if (/^n[\s./-]?d\.?$/.test(t) || t.startsWith('<')) return 0;
+  return null;
+}
+
 // ── Leitura do arquivo → matriz de strings (aoa) ─────────────────────────────
 function splitLinhaCSV(l: string, delim: string): string[] {
   const out: string[] = []; let cur = ''; let q = false;
@@ -152,7 +165,7 @@ export function aplicarPerfil(aoa: string[][], cfg: PerfilLabConfig, filtroTalha
 
     const valores: Record<string, number> = {};
     for (const [elId, idx] of Object.entries(cfg.elementos)) {
-      const v = parseNum(row[idx]);
+      const v = valorLab(row[idx]);   // N.D./N/D e "<x" viram 0; vazio segue sem valor
       // Converte a unidade DAQUELE lab (cfg.detalhes) → unidade canônica da
       // plataforma (mmolc/dm³, mg/dm³, g/dm³…) p/ os dados serem comparáveis.
       if (v != null) valores[elId] = converterParaCanonico(elId, v, cfg.detalhes?.[elId]?.unidade);

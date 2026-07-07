@@ -1,6 +1,9 @@
-export const APP_VERSION = '1.66.0';
+export const APP_VERSION = '1.67.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.67.0': [
+    'IMPORTAÇÃO DE LABORATÓRIO — "N.D." E "<x" VIRAM ZERO: valores de laudo marcados como não detectado (N.D., N.D, ND, N/D) ou abaixo do limite de detecção (ex.: "<0,5") agora entram como 0 (o laboratório mediu e não achou). Célula VAZIA, texto qualquer e ">x" continuam SEM valor — não inventamos zero para o que não foi analisado. Vale também ao digitar na prévia editável.',
+  ],
   '1.66.0': [
     'USUÁRIOS AGRUPADOS POR CATEGORIA no painel de acesso: Equipe interna → Produtores → Prestadores de serviço, com o convite organizado nos mesmos grupos. Para prestadores: campo "Validade (dias)" no convite, badge na lista ("expira em N dias" / "EXPIRADO", com a data no tooltip) e botão RENOVAR com os dias que você escolher.',
   ],
