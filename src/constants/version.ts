@@ -1,6 +1,11 @@
-export const APP_VERSION = '1.55.0';
+export const APP_VERSION = '1.56.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.56.0': [
+    'IMPORTAÇÃO DE LABORATÓRIO COM PRÉVIA EDITÁVEL E DETECÇÃO DE OUTLIERS: antes de importar (qualquer planilha/perfil), abre uma tabela com todas as amostras onde você confere, corrige valores célula a célula e pode excluir amostras. Nada é gravado até clicar em Importar.',
+    'DESTAQUE DE POSSÍVEIS OUTLIERS por variável: VERMELHO = valor fora da faixa plausível (erro de unidade/digitação, ex.: pH 85); ÂMBAR = valor que destoa das demais amostras do lote (estatístico, regra do IQR/Tukey). O botão Importar mostra quantos ainda faltam revisar. Trava de segurança da entrada de dados.',
+    'CHECAGEM DE PROFUNDIDADE (VIOLETA): para P, MO e V% — que devem cair da superfície para o fundo — a prévia compara as camadas do mesmo ponto e sinaliza quando o horizonte mais fundo (ex.: 20-40) tem valor MAIOR que a superfície (0-20), indício de troca de amostra ou erro de digitação.',
+  ],
   '1.55.0': [
     'ORDEM CANÔNICA DAS EQUAÇÕES NA RECOMENDAÇÃO: ao montar e ao PROCESSAR uma recomendação, as equações saem sempre agrupadas na ordem Calcário → Gesso → Fosfatagem/P → KCL → outros — igual à numeração 01-19 / 20-29 / 30+ do app antigo, mas automático pelo campo GRUPO (não precisa mais numerar o nome). Vale também para recomendações já salvas (reordenam ao abrir/processar).',
     'AFINAR A ORDEM DENTRO DO GRUPO: a equação ganhou o campo "Ordem no grupo" (opcional). O grupo define o bloco; esse número posiciona a equação dentro do bloco (menor primeiro). Vazio = ordena por nome. A tela de Equações passou a exibir os grupos nessa mesma ordem canônica.',

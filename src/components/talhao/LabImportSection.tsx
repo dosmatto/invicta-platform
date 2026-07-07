@@ -7,8 +7,10 @@ import {
   getImportacoesLab, saveImportacaoLab, deleteImportacaoLab, getVariaveisAtivas, siglaVariavel,
   GradeAmostragem, ImportacaoLab,
 } from '@/lib/store';
-import { lerArquivo, aplicarPerfil, autoConfig, PERFIS_BUILTIN, norm, numerosDaGrade, PerfilLabConfig } from '@/lib/lab';
+import { lerArquivo, aplicarPerfil, autoConfig, PERFIS_BUILTIN, norm, numerosDaGrade, parseNum, ELEMENTOS_LAB, PerfilLabConfig, type ResultadoAmostra } from '@/lib/lab';
 import { unidadesDe, unidadeCanonica, precisaConverter } from '@/lib/unidades';
+import { detectarOutliers, chaveAmostra, contarOutliers } from '@/lib/labOutliers';
+import { LabPreviewTable } from './LabPreviewTable';
 import { pode } from '@/lib/empresa';
 import { Upload, Save, Trash2, CheckCircle2, AlertTriangle, FlaskConical } from 'lucide-react';
 
@@ -35,7 +37,11 @@ export function LabImportSection() {
   const [resumo, setResumo] = useState('');
   const [importacoes, setImportacoes] = useState<ImportacaoLab[]>([]);
   const [unidadeOverride, setUnidadeOverride] = useState<Record<string, string>>({});
-  useEffect(() => { setUnidadeOverride({}); }, [perfilId]);   // troca de lab zera os overrides
+  // Camada editável da prévia: correções por célula (texto cru) e amostras excluídas.
+  // Só se aplicam ao confirmar; trocar de lab/arquivo zera tudo.
+  const [edicoes, setEdicoes] = useState<Record<string, Record<string, string>>>({});
+  const [excluidos, setExcluidos] = useState<Set<string>>(new Set());
+  useEffect(() => { setUnidadeOverride({}); setEdicoes({}); setExcluidos(new Set()); }, [perfilId]);
 
   function recarregar() {
     if (!nav.talhaoId || !safraNome) return;
@@ -76,11 +82,44 @@ export function LabImportSection() {
     (campanhasTalhao.length === 0 || !campanhaEscolhida || r.campanha === campanhaEscolhida)
   ) : [];
   const elementosFinais = [...new Set(resultadosFinais.flatMap(r => Object.keys(r.valores)))];
+  // Colunas da tabela na ordem agronômica canônica (pH, P, K, Ca…); ids desconhecidos ao fim.
+  const idxEl = (id: string) => { const i = ELEMENTOS_LAB.findIndex(e => e.id === id); return i < 0 ? 999 : i; };
+  const elementosOrdenados = [...elementosFinais].sort((a, b) => idxEl(a) - idxEl(b));
+
+  // Valor exibido numa célula: edição do usuário (texto cru) ou o valor original.
+  const valorTexto = (r: ResultadoAmostra, elId: string): string => {
+    const t = edicoes[chaveAmostra(r)]?.[elId];
+    if (t !== undefined) return t;
+    const v = r.valores[elId];
+    return v != null ? String(v) : '';
+  };
+  const editarValor = (r: ResultadoAmostra, elId: string, texto: string) =>
+    setEdicoes(prev => { const k = chaveAmostra(r); return { ...prev, [k]: { ...(prev[k] ?? {}), [elId]: texto } }; });
+  const toggleExcluir = (r: ResultadoAmostra) =>
+    setExcluidos(prev => { const k = chaveAmostra(r), n = new Set(prev); n.has(k) ? n.delete(k) : n.add(k); return n; });
+
+  // Resultados após aplicar edições e exclusões — é o que será realmente importado.
+  const resultadosEditados = resultadosFinais
+    .filter(r => !excluidos.has(chaveAmostra(r)))
+    .map(r => {
+      const ed = edicoes[chaveAmostra(r)];
+      if (!ed) return r;
+      const valores = { ...r.valores };
+      for (const [elId, txt] of Object.entries(ed)) {
+        const n = parseNum(txt);
+        if (n == null) delete valores[elId]; else valores[elId] = n;   // vazio/ inválido = sem valor
+      }
+      return { ...r, valores };
+    });
+  const elementosImport = [...new Set(resultadosEditados.flatMap(r => Object.keys(r.valores)))];
+  const outliers = detectarOutliers(resultadosEditados, elementosOrdenados);
+  const nOutliers = contarOutliers(outliers);
+
   const numerosGrade = numerosDaGrade(grade);
-  const foraDaGrade = grade ? resultadosFinais.filter(r => !numerosGrade.has(r.numero)).length : 0;
+  const foraDaGrade = grade ? resultadosEditados.filter(r => !numerosGrade.has(r.numero)).length : 0;
 
   async function onFile(file: File) {
-    setEstado('loading'); setErro(''); setResumo(''); setTalhaoFiltro(''); setCampanhaFiltro(''); setUnidadeOverride({});
+    setEstado('loading'); setErro(''); setResumo(''); setTalhaoFiltro(''); setCampanhaFiltro(''); setUnidadeOverride({}); setEdicoes({}); setExcluidos(new Set());
     try {
       const m = await lerArquivo(file);
       if (m.length < 2) throw new Error('Não consegui ler linhas do arquivo.');
@@ -92,13 +131,13 @@ export function LabImportSection() {
   function onFileChange(e: React.ChangeEvent<HTMLInputElement>) { const f = e.target.files?.[0]; if (f) onFile(f); e.target.value = ''; }
 
   function importar() {
-    if (!nav.talhaoId || !safraNome || resultadosFinais.length === 0) { setErro('Nada para importar (confira perfil, talhão e campanha).'); setEstado('erro'); return; }
+    if (!nav.talhaoId || !safraNome || resultadosEditados.length === 0) { setErro('Nada para importar (confira perfil, talhão e campanha).'); setEstado('erro'); return; }
     saveImportacaoLab({
       talhaoId: nav.talhaoId, safra: safraNome, gradeId: grade?.id ?? '',
       laboratorio: perfilNome, campanha: campanhaEscolhida,
-      resultados: resultadosFinais, elementos: elementosFinais,
+      resultados: resultadosEditados, elementos: elementosImport,
     });
-    setResumo(`${resultadosFinais.length} amostras importadas · ${elementosFinais.length} elementos${foraDaGrade > 0 ? ` · ${foraDaGrade} fora da grade` : ''}`);
+    setResumo(`${resultadosEditados.length} amostras importadas · ${elementosImport.length} elementos${foraDaGrade > 0 ? ` · ${foraDaGrade} fora da grade` : ''}`);
     setAoa(null); setEstado('idle');
     recarregar();
   }
@@ -177,13 +216,13 @@ export function LabImportSection() {
             </div>
           )}
           <p className="text-[10px]" style={{ color: '#cbd5e1' }}>
-            <strong style={{ color: '#86efac' }}>{resultadosFinais.length}</strong> amostras · {elementosFinais.map(id => {
+            <strong style={{ color: '#86efac' }}>{resultadosEditados.length}</strong> amostras · {elementosOrdenados.map(id => {
               const d = cfg?.detalhes?.[id];
               return siglaVariavel(id) + (d?.unidade ? ` (${d.unidade}${d.extrator ? ' · ' + d.extrator : ''})` : '');
             }).join(', ') || 'nenhum elemento'}
             {foraDaGrade > 0 && <span style={{ color: '#fbbf24' }}> · {foraDaGrade} fora da grade</span>}
           </p>
-          {resultadosFinais.length === 0 && <p className="text-[9px]" style={{ color: '#fbbf24' }}>Nenhuma amostra — confira o perfil e o talhão.</p>}
+          {resultadosEditados.length === 0 && <p className="text-[9px]" style={{ color: '#fbbf24' }}>Nenhuma amostra — confira o perfil e o talhão.</p>}
 
           {/* Unidade de cada variável NESTE laudo → converte p/ o padrão da plataforma */}
           {elementosFinais.some(elId => unidadesDe(elId).length > 1) && (
@@ -211,16 +250,30 @@ export function LabImportSection() {
             </div>
           )}
 
+          {/* Prévia editável com detecção de outliers — trava de qualidade da entrada */}
+          {resultadosFinais.length > 0 && (
+            <LabPreviewTable
+              resultados={resultadosFinais}
+              elementos={elementosOrdenados}
+              sigla={siglaVariavel}
+              valorTexto={valorTexto}
+              onEditar={editarValor}
+              excluidos={excluidos}
+              onToggleExcluir={toggleExcluir}
+              outliers={outliers}
+            />
+          )}
+
           <div className="flex gap-2">
             {ehAuto && (
               <button onClick={salvarPerfil} className="flex-1 py-1.5 rounded text-[10px] font-semibold flex items-center justify-center gap-1" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
                 <Save size={11} /> Salvar perfil
               </button>
             )}
-            <button onClick={importar} disabled={resultadosFinais.length === 0}
+            <button onClick={importar} disabled={resultadosEditados.length === 0}
               className="flex-1 py-1.5 rounded text-[10px] font-bold text-white flex items-center justify-center gap-1"
-              style={{ background: resultadosFinais.length ? 'var(--invicta-green-dark)' : '#1a3a6b', opacity: resultadosFinais.length ? 1 : 0.6 }}>
-              <FlaskConical size={11} /> Importar
+              style={{ background: resultadosEditados.length ? 'var(--invicta-green-dark)' : '#1a3a6b', opacity: resultadosEditados.length ? 1 : 0.6 }}>
+              <FlaskConical size={11} /> Importar{nOutliers > 0 ? ` (${nOutliers} a revisar)` : ''}
             </button>
           </div>
         </div>
