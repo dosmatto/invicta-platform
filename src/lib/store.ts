@@ -605,6 +605,7 @@ export function getFazendas(clienteId?: string): Fazenda[] {
   const esc = escopoClienteIds();
   let all = loadFiltrado<Fazenda>('inv_fazendas');
   if (esc) all = all.filter(f => esc.has(f.clienteId));
+  all.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));   // sempre em ordem alfabética
   return clienteId ? all.filter(f => f.clienteId === clienteId) : all;
 }
 

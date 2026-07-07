@@ -1,6 +1,9 @@
-export const APP_VERSION = '1.53.0';
+export const APP_VERSION = '1.54.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.54.0': [
+    'FAZENDAS EM ORDEM ALFABÉTICA em todo o sistema (app de campo e plataforma): as listas de fazendas passam a vir sempre ordenadas por nome, igual já acontecia com os talhões.',
+  ],
   '1.53.0': [
     'APP DE CAMPO — na medição, escolher um TALHÃO como referência agora segue o mesmo caminho do app: produtor › fazenda › talhão, um nível de cada vez (com voltar), em vez de mostrar tudo de uma vez.',
   ],
