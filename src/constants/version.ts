@@ -1,6 +1,10 @@
-export const APP_VERSION = '1.68.0';
+export const APP_VERSION = '1.69.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.69.0': [
+    'RESETAR SENHA no painel de usuários: botão de chave em cada usuário gera uma senha provisória NOVA para conta que já existe (ex.: esqueceu a senha ou o convite se perdeu) — e reativa a troca obrigatória no 1º acesso. O reset também CONFIRMA o e-mail da conta, destravando quem ficou preso na confirmação pendente.',
+    'CONVITE MAIS ROBUSTO: quando o servidor estiver configurado (SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY + INVICTA_ADMIN_EMAILS no Render), criar usuário passa a ser feito pelo backend com a conta já confirmada — SEM depender do toggle "Confirm email" do Supabase. Sem a configuração, o caminho antigo continua valendo. Ações de admin exigem login de um e-mail da lista de administradores (a chave pública não basta).',
+  ],
   '1.68.0': [
     'NUMERAR EQUAÇÕES DIRETO NA LISTA: cada equação ganhou um campinho de Nº na frente do nome (tela Equações). Digite o número e saia do campo (ou Enter) — salva e a lista se reordena na hora. Menor número primeiro dentro do grupo; vazio = ordena por nome. É o jeito rápido de aplicar a numeração 01-19 / 20-29 / 30+ nas equações já existentes.',
   ],

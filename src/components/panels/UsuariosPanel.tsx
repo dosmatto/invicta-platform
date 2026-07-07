@@ -18,6 +18,8 @@ import {
 } from '@/lib/empresa';
 import { getClientes, type Cliente } from '@/lib/store';
 import { criarUsuarioConvite } from '@/lib/auth';
+import { resetarSenhaAdmin } from '@/lib/authAdmin';
+import { tocarBackend } from '@/lib/interpUrl';
 import { UserPlus, Trash2, AlertTriangle, ShieldCheck, SlidersHorizontal, Copy, Loader2, KeyRound, CreditCard, Plus, Building2, X, RefreshCw } from 'lucide-react';
 
 // Ordem das seções da lista agrupada por categoria.
@@ -49,10 +51,12 @@ export function UsuariosPanel() {
   const [planos, setPlanos] = useState<PlanoAssinatura[]>([]);
   const [vincDe, setVincDe] = useState<RegistroPapel | null>(null);
   const [renovarDias, setRenovarDias] = useState<Record<string, string>>({});  // texto cru por e-mail
+  const [resetando, setResetando] = useState('');   // e-mail com reset de senha em andamento
 
   function recarregar() { setPapeis(getPapeis()); setPerms(getPermissoes()); setClientes(getClientes()); setPlanos(getPlanos()); }
   useEffect(() => {
     recarregar();
+    tocarBackend();   // acorda o servidor da nuvem (usado pelo Resetar senha/convite)
     const onCh = () => recarregar();
     if (typeof window !== 'undefined') window.addEventListener('inv:empresa', onCh);
     return () => { if (typeof window !== 'undefined') window.removeEventListener('inv:empresa', onCh); };
@@ -110,6 +114,26 @@ export function UsuariosPanel() {
     const dias = clampDias(renovarDias[email]);
     renovarValidade(email, dias);
     recarregar();
+  }
+
+  // Gera uma senha provisória NOVA para uma conta que já existe (via backend
+  // admin) e reativa a troca obrigatória no 1º acesso. Ex.: usuário esqueceu a
+  // senha ou o convite antigo se perdeu.
+  async function resetarSenha(r: RegistroPapel) {
+    if (!souOwner || resetando) return;
+    setAviso(''); setConvite(null); setResetando(r.email);
+    const senha = gerarSenhaProvisoria();
+    const resp = await resetarSenhaAdmin(r.email, senha);
+    if (resp.ok) {
+      definirPapelEmail(r.email, r.papel, { senhaProvisoria: true });  // troca obrigatória no 1º acesso
+      setConvite({ email: r.email, senha, msg: 'Senha redefinida. Passe a senha provisória ao usuário — ele troca no 1º acesso.' });
+      recarregar();
+    } else if (resp.naoConfigurado) {
+      setAviso('Resetar senha precisa do servidor configurado: no RENDER, defina SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY (Supabase → Project Settings → API keys) e INVICTA_ADMIN_EMAILS (seu e-mail). Detalhe: ' + (resp.erro ?? ''));
+    } else {
+      setAviso('Falha ao resetar a senha: ' + (resp.erro ?? ''));
+    }
+    setResetando('');
   }
 
   function remover(email: string) {
@@ -274,6 +298,13 @@ export function UsuariosPanel() {
                         className="px-1.5 py-0.5 rounded text-[9px] font-bold flex items-center gap-0.5"
                         style={{ background: '#1a3a6b', color: (r.clientesVinculados?.length ?? 0) ? '#86efac' : '#93c5fd' }}>
                         <Building2 size={10} /> {(r.clientesVinculados?.length ?? 0) || 'todos'}
+                      </button>
+                    )}
+                    {souOwner && (
+                      <button onClick={() => resetarSenha(r)} disabled={!!resetando}
+                        title="Resetar senha (gera nova senha provisória; ele troca no 1º acesso)"
+                        className="p-1 rounded hover:bg-white/10" style={{ color: '#fbbf24' }}>
+                        {resetando === r.email ? <Loader2 size={11} className="animate-spin" /> : <KeyRound size={11} />}
                       </button>
                     )}
                     <button onClick={() => remover(r.email)} disabled={!souOwner}

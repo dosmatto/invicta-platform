@@ -8,11 +8,12 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Response
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+import admin_usuarios
 import interp
 import msr
 import cbers
@@ -57,6 +58,44 @@ async def _allow_private_network(request, call_next):
     resp = await call_next(request)
     resp.headers["Access-Control-Allow-Private-Network"] = "true"
     return resp
+
+
+# ── Admin de usuarios (Supabase Auth via service_role — ver admin_usuarios.py) ──
+# Guard duplo: (1) envs configuradas no Render (senao 503 e o front usa o caminho
+# antigo); (2) o access_token do CHAMADOR e validado no GoTrue e o e-mail dele
+# conferido em INVICTA_ADMIN_EMAILS — a X-Api-Key publica NAO basta para admin.
+
+
+class ReqAdminUsuario(BaseModel):
+    email: str
+    senha: str
+
+
+def _exigir_admin(request: Request) -> None:
+    if not admin_usuarios.configurado():
+        raise HTTPException(503, "Admin de usuarios nao configurado no servidor — defina SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY e INVICTA_ADMIN_EMAILS no Render.")
+    auth = request.headers.get("authorization") or ""
+    token = auth[7:] if auth.lower().startswith("bearer ") else ""
+    if not admin_usuarios.chamador_eh_admin(token):
+        raise HTTPException(403, "Apenas administradores autorizados podem executar esta acao.")
+
+
+@app.post("/admin-usuarios/resetar-senha")
+def admin_resetar_senha(req: ReqAdminUsuario, request: Request):
+    _exigir_admin(request)
+    ok, erro = admin_usuarios.resetar_senha(req.email.strip().lower(), req.senha)
+    if not ok:
+        raise HTTPException(400, erro)
+    return {"ok": True}
+
+
+@app.post("/admin-usuarios/criar")
+def admin_criar_usuario(req: ReqAdminUsuario, request: Request):
+    _exigir_admin(request)
+    resultado, erro = admin_usuarios.criar_usuario(req.email.strip().lower(), req.senha)
+    if resultado == "erro":
+        raise HTTPException(400, erro)
+    return {"ok": True, "jaExiste": resultado == "ja_existe"}
 
 
 class Ponto(BaseModel):

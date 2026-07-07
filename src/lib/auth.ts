@@ -199,6 +199,14 @@ export async function trocarSenha(novaSenha: string): Promise<void> {
 export async function criarUsuarioConvite(email: string, senha: string): Promise<{ ok: boolean; jaExiste?: boolean; erro?: string }> {
   const e = normEmail(email);
   if (usarSupabase) {
+    // 1º: caminho ADMIN via backend (cria a conta já confirmada — não depende do
+    // toggle "Confirm email" do projeto). Se o backend não estiver configurado
+    // p/ isso (503/404/fora do ar), cai no caminho antigo de signUp abaixo.
+    const { criarUsuarioAdmin } = await import('./authAdmin');
+    const viaAdmin = await criarUsuarioAdmin(e, senha);
+    if (viaAdmin.ok) return viaAdmin.jaExiste ? { ok: false, jaExiste: true } : { ok: true };
+    if (!viaAdmin.naoConfigurado) return { ok: false, erro: viaAdmin.erro };
+
     const sb = getSupabaseEfemero();
     if (!sb) return { ok: false, erro: 'Supabase não configurado.' };
     // Se "Confirm email" estiver LIGADO no projeto, o link de confirmação usa a
