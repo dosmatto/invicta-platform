@@ -1,6 +1,9 @@
-export const APP_VERSION = '1.57.0';
+export const APP_VERSION = '1.58.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.58.0': [
+    'SINCRONIZAÇÃO COM O SUPABASE REESCRITA (segurança dos dados): cada gravação agora envia só o que MUDOU (diff por registro) em vez de reescrever a coleção inteira; os envios da mesma coleção entram numa FILA (nunca mais um envio antigo apaga registro recém-criado por um mais novo); e falha de envio deixa a coleção marcada como pendente com REENVIO automático ao voltar a internet + evento inv:sync para a interface sinalizar.',
+  ],
   '1.57.0': [
     'CORREÇÃO CRÍTICA na importação de laboratório: em arquivos com VÁRIOS talhões (cada um numerando pontos 1..N), amostras de talhões diferentes com mesmo número/profundidade/campanha eram FUNDIDAS e uma delas sumia. A chave de identificação agora inclui o talhão — nada muda para arquivos de talhão único ou com protocolo do laboratório.',
     'Na prévia editável, correções e exclusões também passam a ser identificadas por talhão (não vazam mais entre talhões ao trocar o filtro).',

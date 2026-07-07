@@ -93,52 +93,189 @@ export async function bootSupabaseData(keysLista: string[], keysObj: string[]): 
   }
 }
 
-// ── GRAVAÇÃO: upsert da lista inteira + remoção do que saiu ───────────────────
-export async function pushListaSupabase(key: string, lista: unknown[]): Promise<void> {
-  const sb = getSupabase();
-  if (!sb) return;
-  const recs = lista as Rec[];
-  const ids = recs.map(r => String(r.id));
-  const agora = new Date().toISOString();
+// ── GRAVAÇÃO: fila por chave + diff por id + erro visível/retry ────────────────
+//
+// Antes: cada save reescrevia a coleção INTEIRA (upsert de tudo + delete not-in),
+// sem fila (pushes concorrentes se sobrepunham: o delete de um push antigo podia
+// apagar registro recém-criado por um mais novo) e com falha só em console.warn.
+//
+// Agora:
+//  1. FILA POR CHAVE (promise-chain): pushes da mesma chave são serializados; se
+//     chegarem várias gravações enquanto um push roda, só a ÚLTIMA fica pendente
+//     (coalescing — as intermediárias são descartadas).
+//  2. DIFF POR ID (espelho em memória): 1º push da sessão p/ a chave faz o sync
+//     completo (poda órfãos remotos uma vez); os seguintes enviam upsert só dos
+//     ids novos/alterados e delete só dos removidos.
+//  3. ERRO VISÍVEL + RETRY: em falha, mantém a chave pendente e dispara o evento
+//     `inv:sync` (status 'erro'); em sucesso, dispara 'ok'. Um listener de `online`
+//     (registrado uma vez, lazy) re-tenta os pendentes.
 
-  if (key === TABELA_TALHOES_KEY) {
-    const rows = recs.map(r => ({
-      id: String(r.id), empresa_id: r.empresaId ?? null, fazenda_id: r.fazendaId ?? null,
-      nome: r.nome ?? '', area_ha: r.areaHa ?? null, dados: r, atualizado_em: agora,
-    }));
-    if (rows.length) {
-      const up = await sb.from('talhoes').upsert(rows, { onConflict: 'id' });
-      if (up.error) { console.warn('[supabase] upsert talhoes:', up.error.message); return; }
-    }
-    let del = sb.from('talhoes').delete();
-    if (ids.length) del = del.not('id', 'in', `(${ids.join(',')})`);
-    const d = await del;
-    if (d.error) console.warn('[supabase] delete talhoes:', d.error.message);
-    return;
-  }
+// Espelho por chave (id → JSON.stringify(rec)); ausente = ainda não sincronizou
+// nesta sessão (força o sync completo no 1º push).
+const espelhoSb: Record<string, Map<string, string>> = {};
 
-  const rows = recs.map(r => ({
-    colecao: key, item_id: String(r.id), empresa_id: r.empresaId ?? null, dados: r, atualizado_em: agora,
-  }));
-  if (rows.length) {
-    const up = await sb.from('app_kv').upsert(rows, { onConflict: 'colecao,item_id' });
-    if (up.error) { console.warn(`[supabase] upsert ${key}:`, up.error.message); return; }
-  }
-  let del = sb.from('app_kv').delete().eq('colecao', key);
-  if (ids.length) del = del.not('item_id', 'in', `(${ids.join(',')})`);
-  const d = await del;
-  if (d.error) console.warn(`[supabase] delete ${key}:`, d.error.message);
+// Fila por chave: promise-chain do push em andamento (encadeia o próximo).
+const filaSb: Record<string, Promise<void>> = {};
+// Última lista pendente por chave (coalescing) — a mais recente vence.
+const pendenteSb: Record<string, { lista: unknown[]; obj?: false } | { json: string; obj: true }> = {};
+// Chaves que falharam e aguardam retry (guardam a última carga).
+const errosSb: Record<string, { lista: unknown[]; obj?: false } | { json: string; obj: true }> = {};
+
+let onlineRegistrado = false;
+
+// Sinaliza o status do sync p/ a UI (SSR-safe).
+function emitirSync(key: string, status: 'ok' | 'erro') {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent('inv:sync', { detail: { key, status } }));
 }
 
-// Config (objeto único, ex.: inv_etiqueta_cfg) → 1 linha no app_kv.
-export async function pushObjSupabase(key: string, json: string): Promise<void> {
+// Registra (uma vez) o listener de reconexão que re-tenta as chaves pendentes.
+function garantirRetryOnline() {
+  if (onlineRegistrado || typeof window === 'undefined') return;
+  onlineRegistrado = true;
+  window.addEventListener('online', () => {
+    for (const [key, carga] of Object.entries(errosSb)) {
+      delete errosSb[key];
+      enfileirar(key, carga);   // re-enfileira a última carga que falhou
+    }
+  });
+}
+
+// Enfileira um push (lista ou obj) na chave, com coalescing e drenagem serial.
+function enfileirar(
+  key: string,
+  carga: { lista: unknown[]; obj?: false } | { json: string; obj: true },
+): Promise<void> {
+  garantirRetryOnline();
+  pendenteSb[key] = carga;   // coalescing: a última carga pendente vence
+  const anterior = filaSb[key] ?? Promise.resolve();
+  const proxima = anterior
+    .catch(() => {})          // isola a falha do anterior (não trava a fila)
+    .then(async () => {
+      const p = pendenteSb[key];
+      if (!p) return;         // já drenado por um push que enfileirou depois
+      delete pendenteSb[key];
+      await drenar(key, p);
+    });
+  filaSb[key] = proxima;
+  return proxima;
+}
+
+// Executa UM push já desenfileirado. Em falha, marca a chave como pendente de
+// retry e emite 'erro'; em sucesso, emite 'ok'.
+async function drenar(
+  key: string,
+  carga: { lista: unknown[]; obj?: false } | { json: string; obj: true },
+): Promise<void> {
   const sb = getSupabase();
   if (!sb) return;
+  const ok = carga.obj
+    ? await syncObj(sb, key, carga.json)
+    : await syncLista(sb, key, carga.lista);
+  if (ok) { delete errosSb[key]; emitirSync(key, 'ok'); }
+  else { errosSb[key] = carga; emitirSync(key, 'erro'); }
+}
+
+// Diff+sync de uma LISTA. Retorna true se gravou tudo sem erro.
+// 1º push da chave (espelho ausente): sync completo (upsert de tudo + delete
+// not-in — poda órfãos remotos). Seguintes: upsert só do que mudou, delete só
+// do que saiu. O espelho SÓ é atualizado no sucesso (falha → retenta o diff).
+async function syncLista(sb: NonNullable<ReturnType<typeof getSupabase>>, key: string, lista: unknown[]): Promise<boolean> {
+  const recs = lista as Rec[];
+  const agora = new Date().toISOString();
+  const talhoes = key === TABELA_TALHOES_KEY;
+
+  // Estado desejado: id → JSON do registro.
+  const next = new Map<string, string>();
+  for (const r of recs) next.set(String(r.id), JSON.stringify(r));
+
+  const prev = espelhoSb[key];
+  const primeira = prev === undefined;
+
+  // Ids a fazer upsert (novos/alterados) e a deletar (saíram).
+  let idsUpsert: string[];
+  let idsDelete: string[];
+  if (primeira) {
+    idsUpsert = [...next.keys()];                 // tudo
+    idsDelete = [];                                // no 1º push, poda via not-in
+  } else {
+    idsUpsert = [...next.keys()].filter(id => prev.get(id) !== next.get(id));
+    idsDelete = [...prev.keys()].filter(id => !next.has(id));
+    if (!idsUpsert.length && !idsDelete.length) return true;   // nada mudou
+  }
+
+  const recPorId = new Map<string, Rec>();
+  for (const r of recs) recPorId.set(String(r.id), r);
+
+  if (talhoes) {
+    if (idsUpsert.length) {
+      const rows = idsUpsert.map(id => {
+        const r = recPorId.get(id)!;
+        return { id, empresa_id: r.empresaId ?? null, fazenda_id: r.fazendaId ?? null,
+          nome: r.nome ?? '', area_ha: r.areaHa ?? null, dados: r, atualizado_em: agora };
+      });
+      const up = await sb.from('talhoes').upsert(rows, { onConflict: 'id' });
+      if (up.error) { console.warn('[supabase] upsert talhoes:', up.error.message); return false; }
+    }
+    if (primeira) {
+      // Poda órfãos remotos: apaga o que não está na lista atual (uma vez).
+      let del = sb.from('talhoes').delete();
+      const ids = [...next.keys()];
+      if (ids.length) del = del.not('id', 'in', `(${ids.join(',')})`);
+      const d = await del;
+      if (d.error) { console.warn('[supabase] delete talhoes:', d.error.message); return false; }
+    } else if (idsDelete.length) {
+      const d = await sb.from('talhoes').delete().in('id', idsDelete);
+      if (d.error) { console.warn('[supabase] delete talhoes:', d.error.message); return false; }
+    }
+  } else {
+    if (idsUpsert.length) {
+      const rows = idsUpsert.map(id => {
+        const r = recPorId.get(id)!;
+        return { colecao: key, item_id: id, empresa_id: r.empresaId ?? null, dados: r, atualizado_em: agora };
+      });
+      const up = await sb.from('app_kv').upsert(rows, { onConflict: 'colecao,item_id' });
+      if (up.error) { console.warn(`[supabase] upsert ${key}:`, up.error.message); return false; }
+    }
+    if (primeira) {
+      let del = sb.from('app_kv').delete().eq('colecao', key);
+      const ids = [...next.keys()];
+      if (ids.length) del = del.not('item_id', 'in', `(${ids.join(',')})`);
+      const d = await del;
+      if (d.error) { console.warn(`[supabase] delete ${key}:`, d.error.message); return false; }
+    } else if (idsDelete.length) {
+      const d = await sb.from('app_kv').delete().eq('colecao', key).in('item_id', idsDelete);
+      if (d.error) { console.warn(`[supabase] delete ${key}:`, d.error.message); return false; }
+    }
+  }
+
+  espelhoSb[key] = next;   // só atualiza o espelho no sucesso
+  return true;
+}
+
+// Grava o obj único (1 linha). Retorna true se ok.
+async function syncObj(sb: NonNullable<ReturnType<typeof getSupabase>>, key: string, json: string): Promise<boolean> {
   const up = await sb.from('app_kv').upsert(
     { colecao: key, item_id: ITEM_OBJ, dados: { valor: json }, atualizado_em: new Date().toISOString() },
     { onConflict: 'colecao,item_id' },
   );
-  if (up.error) console.warn(`[supabase] upsert obj ${key}:`, up.error.message);
+  if (up.error) { console.warn(`[supabase] upsert obj ${key}:`, up.error.message); return false; }
+  return true;
+}
+
+// API pública: enfileira o push da lista (fila por chave + diff + retry).
+export async function pushListaSupabase(key: string, lista: unknown[]): Promise<void> {
+  const sb = getSupabase();
+  if (!sb) return;
+  return enfileirar(key, { lista });
+}
+
+// Config (objeto único, ex.: inv_etiqueta_cfg) → 1 linha no app_kv.
+// Entra na mesma fila por chave e no mesmo tratamento de erro/pendência.
+export async function pushObjSupabase(key: string, json: string): Promise<void> {
+  const sb = getSupabase();
+  if (!sb) return;
+  return enfileirar(key, { json, obj: true });
 }
 
 // ── Mapas (rasters) — D1.3 ────────────────────────────────────────────────────
