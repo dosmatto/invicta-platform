@@ -1,6 +1,9 @@
-export const APP_VERSION = '1.60.0';
+export const APP_VERSION = '1.61.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.61.0': [
+    'PLATAFORMA MAIS RÁPIDA (cache de leitura): as listas do armazenamento local (talhões, clientes, grades, importações…) agora são descomprimidas e interpretadas UMA vez e servidas de um cache em memória — antes, cada tela refazia esse trabalho pesado a cada leitura (40+ pontos do app). O cache é invalidado automaticamente em toda gravação e também quando OUTRA aba grava (evento storage), então /coleta e /painel abertos juntos continuam coerentes.',
+  ],
   '1.60.0': [
     'APP DE CAMPO MAIS LEVE NA CAMINHADA: durante a medição por caminhada, o perímetro passou a ser somado de forma INCREMENTAL (só o novo trecho) e a área exibida ao vivo é recalculada a cada 10 pontos — antes, cada ponto do GPS reprocessava a caminhada inteira (ficava cada vez mais pesado e gastava mais bateria em áreas grandes). Os valores SALVOS não mudam: ao finalizar/salvar o cálculo completo roda como sempre.',
   ],

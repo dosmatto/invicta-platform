@@ -37,6 +37,34 @@ const COMPRIMIR = new Set<string>([
   'inv_plantios',         // cultura por talhao+safra
 ]);
 
+// ── Cache de leitura em memoria ─────────────────────────────────────────────
+// TODO getter do store (getTalhoes, getFazendas...) chama lerListaLocal, que
+// ate aqui fazia getItem + descompressao LZString (chaves de MBs) + JSON.parse
+// da lista INTEIRA a CADA chamada, sem cache - o maior custo de CPU da app
+// (40+ call sites, alguns componentes fazem 3+ leituras por render). Este cache
+// guarda o resultado JA PARSEADO por chave.
+//
+// So cacheia o PARSE de LISTAS (lerListaLocal). lerRawLocal continua sem cache
+// (serve para strings cruas). Invariante: o cache reflete o estado logico em
+// memoria do app - toda escrita (gravarListaLocal/gravarRawLocal) o atualiza ou
+// invalida, e escritas de OUTRAS abas o invalidam via evento 'storage'.
+const cacheListas = new Map<string, unknown[]>();
+
+// Registro (lazy, 1x, SSR-safe) do listener cross-tab. O evento 'storage' so
+// dispara em abas que NAO fizeram a escrita - exatamente o que precisamos: se
+// /coleta grava, /painel (mesma origem, outra aba) invalida sua entrada e
+// reparsea na proxima leitura. e.key === null => localStorage.clear() (invalida
+// tudo).
+let listenerStorageRegistrado = false;
+function registrarListenerStorage(): void {
+  if (listenerStorageRegistrado || typeof window === 'undefined') return;
+  listenerStorageRegistrado = true;
+  window.addEventListener('storage', (e: StorageEvent) => {
+    if (e.key === null) { cacheListas.clear(); return; }
+    cacheListas.delete(e.key);
+  });
+}
+
 // Le a STRING JSON crua de uma chave (descomprime se estiver marcada). null se
 // a chave nao existe. Funciona para QUALQUER chave (comprimida, JSON puro ou fora
 // da whitelist).
@@ -58,6 +86,10 @@ export function lerRawLocal(key: string): string | null {
 // na nuvem).
 export function gravarRawLocal(key: string, json: string): void {
   if (typeof window === 'undefined') return;
+  // Invalida a entrada de lista: a string crua acabou de mudar (usado tambem pelo
+  // boot da nuvem em cloud.ts/supabaseData.ts, que gravam JSON de listas por aqui).
+  // A proxima lerListaLocal reparsea a partir da string nova.
+  cacheListas.delete(key);
   const valor = COMPRIMIR.has(key) ? MARCA + LZString.compressToUTF16(json) : json;
   try {
     localStorage.setItem(key, valor);
@@ -72,12 +104,39 @@ export function gravarRawLocal(key: string, json: string): void {
 }
 
 // Acucar para o caso comum: lista de objetos.
+// HIT -> devolve COPIA RASA (`[...cached]`): o chamador pode dar push/splice/sort
+// no array sem corromper o cache. Os OBJETOS internos sao compartilhados (rapido);
+// consumidores que mutam item in-place devem salvar depois (padrao getLegendas).
+// MISS -> caminho antigo (lerRawLocal + JSON.parse), guarda e devolve copia.
 export function lerListaLocal<T>(key: string): T[] {
+  registrarListenerStorage();
+  const cached = cacheListas.get(key);
+  if (cached) return [...cached] as T[];
   const json = lerRawLocal(key);
-  if (!json) return [];
-  try { return JSON.parse(json) as T[]; } catch { return []; }
+  let lista: T[];
+  if (!json) {
+    lista = [];
+  } else {
+    try { lista = JSON.parse(json) as T[]; } catch { lista = []; }
+  }
+  cacheListas.set(key, lista as unknown[]);
+  return [...lista];
 }
 
 export function gravarListaLocal<T>(key: string, data: T[]): void {
-  gravarRawLocal(key, JSON.stringify(data));
+  // Guardamos uma copia rasa de `data` como novo valor do cache. O cache passa a
+  // refletir o dado que o app tentou salvar, sem precisar reparsear na leitura
+  // seguinte. Copia (nao o array recebido) para o cache nao seguir mutacoes
+  // futuras que o chamador faca no array dele.
+  const copia = [...data] as unknown[];
+  try {
+    gravarRawLocal(key, JSON.stringify(data)); // faz cacheListas.delete(key) internamente
+  } finally {
+    // DECISAO (quota): mesmo se gravarRawLocal lancar por quota estourada, deixamos
+    // o cache com o dado NOVO - o app segue coerente em memoria com o que tentou
+    // salvar; o aviso de quota ('inv:quota-erro' + Error, ja existentes) sinaliza
+    // que o disco nao acompanhou. O finally garante isso apos o delete interno do
+    // gravarRawLocal, tanto no sucesso quanto no erro.
+    cacheListas.set(key, copia);
+  }
 }
