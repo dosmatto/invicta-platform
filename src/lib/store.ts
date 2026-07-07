@@ -505,10 +505,22 @@ function load<T>(key: string): T[] {
   return lerListaLocal<T>(key);
 }
 
+// Aviso de quota estourada: só 1x por sessão pra não martelar o usuário com
+// alert() a cada save() subsequente enquanto o armazenamento seguir cheio.
+let avisouQuotaCheia = false;
+
 function save<T>(key: string, data: T[]) {
   if (typeof window === 'undefined') return;
-  gravarListaLocal(key, data);       // comprime as chaves pesadas (localComprimido)
-  cloudPushLista(key, data); // espelha na nuvem quando configurada (no-op sem Firebase)
+  try {
+    gravarListaLocal(key, data);       // comprime as chaves pesadas (localComprimido)
+  } catch (e) {
+    console.error(`[store] falha ao gravar "${key}" no localStorage:`, e);
+    if (!avisouQuotaCheia) {
+      avisouQuotaCheia = true;
+      alert('Armazenamento local cheio — os últimos dados NÃO foram salvos no cache deste navegador. Eles ainda serão enviados à nuvem, mas libere espaço (ex.: limpe dados de outros sites) para o cache local voltar a funcionar.');
+    }
+  }
+  cloudPushLista(key, data); // espelha na nuvem quando configurada (no-op sem Firebase) - mesmo se o save local falhou acima
 }
 
 function uid() {

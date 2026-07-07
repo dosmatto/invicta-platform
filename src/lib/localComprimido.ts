@@ -51,12 +51,24 @@ export function lerRawLocal(key: string): string | null {
   return raw;
 }
 
-// Grava uma STRING JSON, comprimindo se a chave estiver na whitelist. Deixa um
-// eventual erro de quota propagar - o chamador decide como avisar o usuario.
+// Grava uma STRING JSON, comprimindo se a chave estiver na whitelist. Se o
+// localStorage estourar a quota, avisa via evento 'inv:quota-erro' (a UI pode
+// escutar e mostrar um aviso) e relança um Error com mensagem clara em PT-BR -
+// o chamador (store.ts/biblioteca.ts) decide o que fazer (ex.: ainda espelhar
+// na nuvem).
 export function gravarRawLocal(key: string, json: string): void {
   if (typeof window === 'undefined') return;
   const valor = COMPRIMIR.has(key) ? MARCA + LZString.compressToUTF16(json) : json;
-  localStorage.setItem(key, valor);
+  try {
+    localStorage.setItem(key, valor);
+  } catch (e) {
+    const quota = e instanceof DOMException && (e.name === 'QuotaExceededError' || e.code === 22);
+    if (quota) {
+      window.dispatchEvent(new CustomEvent('inv:quota-erro', { detail: { key } }));
+      throw new Error('Armazenamento local cheio — dados não foram salvos no cache do navegador.');
+    }
+    throw e;
+  }
 }
 
 // Acucar para o caso comum: lista de objetos.

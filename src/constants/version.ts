@@ -1,6 +1,10 @@
-export const APP_VERSION = '1.58.0';
+export const APP_VERSION = '1.59.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.59.0': [
+    'ARMAZENAMENTO CHEIO AGORA AVISA: se o cache local do navegador estourar a cota, o app mostra um alerta claro (1x por sessão) e dispara o evento inv:quota-erro — antes a gravação falhava em silêncio e os dados sumiam no recarregar. O espelho na nuvem continua sendo enviado mesmo com o cache cheio.',
+    'CORREÇÃO no editor de Equações: valores com separador de milhar (ex.: R$ 1.234,56) eram lidos errado (viravam 1,234). Agora usa o mesmo leitor de números robusto da importação de laboratório.',
+  ],
   '1.58.0': [
     'SINCRONIZAÇÃO COM O SUPABASE REESCRITA (segurança dos dados): cada gravação agora envia só o que MUDOU (diff por registro) em vez de reescrever a coleção inteira; os envios da mesma coleção entram numa FILA (nunca mais um envio antigo apaga registro recém-criado por um mais novo); e falha de envio deixa a coleção marcada como pendente com REENVIO automático ao voltar a internet + evento inv:sync para a interface sinalizar.',
   ],

@@ -108,10 +108,22 @@ function load<T>(slug: CategoriaBiblioteca): ItemBiblioteca<T>[] {
   if (typeof window === 'undefined') return [];
   try { return JSON.parse(localStorage.getItem(chaveCat(slug)) ?? '[]'); } catch { return []; }
 }
+// Aviso de quota estourada: só 1x por sessão pra não martelar o usuário com
+// alert() a cada save() subsequente enquanto o armazenamento seguir cheio.
+let avisouQuotaCheia = false;
+
 function save<T>(slug: CategoriaBiblioteca, data: ItemBiblioteca<T>[]) {
   if (typeof window === 'undefined') return;
-  localStorage.setItem(chaveCat(slug), JSON.stringify(data));
-  cloudPushLista(chaveCat(slug), data); // espelha na nuvem se a chave estiver na lista (no-op caso contrário)
+  try {
+    localStorage.setItem(chaveCat(slug), JSON.stringify(data));
+  } catch (e) {
+    console.error(`[biblioteca] falha ao gravar "${chaveCat(slug)}" no localStorage:`, e);
+    if (!avisouQuotaCheia) {
+      avisouQuotaCheia = true;
+      alert('Armazenamento local cheio — os últimos dados NÃO foram salvos no cache deste navegador. Eles ainda serão enviados à nuvem, mas libere espaço (ex.: limpe dados de outros sites) para o cache local voltar a funcionar.');
+    }
+  }
+  cloudPushLista(chaveCat(slug), data); // espelha na nuvem se a chave estiver na lista (no-op caso contrário) - mesmo se o save local falhou acima
   window.dispatchEvent(new CustomEvent('inv:biblioteca', { detail: { slug } }));
 }
 

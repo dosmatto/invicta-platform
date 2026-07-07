@@ -17,6 +17,7 @@ import type { CategoriaBiblioteca } from '@/lib/biblioteca';
 import { ATRIBUTOS_EQUACAO, validar, testarEscalar, atributoPorToken } from '@/lib/recomendacao/motor';
 import { pode } from '@/lib/empresa';
 import { getPrecosProdutos, savePrecoProduto, type PrecoProduto } from '@/lib/store';
+import { parseNum } from '@/lib/lab';
 import { Plus, Edit3, Trash2, Power, Copy, X, Save, Play, ChevronRight, Search, SaveAll, Tag } from 'lucide-react';
 
 const SLUG: CategoriaBiblioteca = 'equacoes';
@@ -24,7 +25,6 @@ const SEM_GRUPO = 'Sem grupo';
 const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
 
 const listaDe = (s: string) => s.split(',').map(x => x.trim()).filter(Boolean);
-const parseNum = (s: string) => parseFloat(s.replace(',', '.'));
 
 // Rampa de cores da dose (verde → vermelho) — âncoras interpoladas para QUALQUER nº de classes.
 const RAMPA_DOSE = ['#1b7a1f', '#3fa336', '#6fbf3f', '#9ccc4e', '#cddb39', '#ffe93b', '#ffc107', '#ff9800', '#fb5a23', '#e23b2e'];
@@ -247,7 +247,7 @@ function EquacaoEditor({ item, onClose }: { item: ItemBiblioteca<ConteudoEquacao
       unidadeTratamento: unTrat.trim(),
       tratamento,
       grupo: grupo.trim() || undefined,
-      ordem: Number.isFinite(parseNum(ordem)) ? parseNum(ordem) : undefined,
+      ordem: parseNum(ordem) ?? undefined,
       culturas: listaDe(culturas),
       fases: listaDe(fases),
       naoNegativo: naoNeg,
@@ -451,7 +451,7 @@ function Equacao(p: {
     for (const v of p.val.vars) {
       const raw = testVals[v];
       const at = atributoPorToken(v);
-      valores[v] = raw != null && raw.trim() ? parseNum(raw) : (at?.exemplo ?? NaN);
+      valores[v] = raw != null && raw.trim() ? (parseNum(raw) ?? NaN) : (at?.exemplo ?? NaN);
     }
     return testarEscalar(p.script, p.constantes, valores, {
       naoNegativo: p.naoNeg, doseMinima: parseNum(p.doseMinima) || 0, abaixoMinimo: p.abaixoMinimo,
