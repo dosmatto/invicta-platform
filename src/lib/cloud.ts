@@ -12,9 +12,8 @@
 // limitações de tipos do Firestore (ex.: arrays aninhados de GeoJSON).
 // Sem variáveis NEXT_PUBLIC_FIREBASE_*, tudo aqui é no-op.
 
-import { getFb, firebaseConfigurado } from './firebase';
+import { getFb, ensureFb, getFirestoreFns, firebaseConfigurado } from './firebase';
 import { lerRawLocal, gravarRawLocal, lerListaLocal } from './localComprimido';
-import { collection, deleteDoc, doc, endAt, getDoc, getDocs, orderBy, query, setDoc, startAt } from 'firebase/firestore';
 import { usarDadosSupabase, bootSupabaseData, pushListaSupabase, pushObjSupabase,
   salvarMapaSupabase, carregarMapasPorPrefixoSupabase, excluirMapasPorPrefixoSupabase,
   mapasJaMigrados, marcarMapasMigrados,
@@ -76,6 +75,7 @@ function lerLocal(key: string): { id: string }[] {
 
 async function hidratarLista(key: string) {
   const fb = getFb()!;
+  const { collection, doc, getDocs, setDoc } = await getFirestoreFns();
   const snap = await getDocs(collection(fb.db, key));
   const nuvem = new Map<string, string>();
   snap.forEach(d => { const j = (d.data() as { json?: string }).json; if (j) nuvem.set(d.id, j); });
@@ -96,6 +96,7 @@ async function hidratarLista(key: string) {
 
 async function hidratarObj(key: string) {
   const fb = getFb()!;
+  const { doc, getDoc, setDoc } = await getFirestoreFns();
   const ref = doc(fb.db, 'inv_config', key);
   const snap = await getDoc(ref);
   const m = new Map<string, string>();
@@ -130,7 +131,7 @@ export async function bootCloud(): Promise<boolean> {
     return ativo;
   }
   if (!firebaseConfigurado) return false;
-  const fb = getFb();
+  const fb = await ensureFb();
   if (!fb?.auth.currentUser) { console.warn('[nuvem] sem usuário logado — nuvem inativa.'); ativo = false; return false; }
   const trabalho = (async () => {
     // Em paralelo — antes era sequencial (16 coleções uma a uma), o que
@@ -164,6 +165,7 @@ export function cloudPushLista(key: string, lista: unknown[]) {
   for (const rec of lista as { id: unknown }[]) next.set(String(rec.id), JSON.stringify(rec));
   espelho[key] = next;
   (async () => {
+    const { doc, setDoc, deleteDoc } = await getFirestoreFns();
     for (const [id, json] of next) {
       if (prev.get(id) !== json) await setDoc(doc(fb.db, key, id), { id, json });
     }
@@ -181,8 +183,10 @@ export function cloudPushObj(key: string, json: string) {
   const fb = getFb();
   if (!fb) return;
   espelho[key] = new Map([[key, json]]);
-  setDoc(doc(fb.db, 'inv_config', key), { json })
-    .catch(e => console.warn(`[nuvem] falha ao gravar ${key}:`, e));
+  (async () => {
+    const { doc, setDoc } = await getFirestoreFns();
+    await setDoc(doc(fb.db, 'inv_config', key), { json });
+  })().catch(e => console.warn(`[nuvem] falha ao gravar ${key}:`, e));
 }
 
 // ── Mapas de fertilidade (carregados sob demanda, não no boot) ──────────────
@@ -196,9 +200,11 @@ export function cloudSalvarMapa(id: string, dados: object) {
   if (!cloudPodeGravar()) { console.warn('[nuvem] sem login — mapa NÃO foi salvo (não persiste):', id); return; }
   const fb = getFb();
   if (!fb) return;
-  setDoc(doc(fb.db, COL_MAPAS, id), { json: JSON.stringify(dados) })
-    .then(() => console.log('[nuvem] mapa salvo:', id))
-    .catch(e => console.warn(`[nuvem] falha ao salvar mapa ${id}:`, e));
+  (async () => {
+    const { doc, setDoc } = await getFirestoreFns();
+    await setDoc(doc(fb.db, COL_MAPAS, id), { json: JSON.stringify(dados) });
+    console.log('[nuvem] mapa salvo:', id);
+  })().catch(e => console.warn(`[nuvem] falha ao salvar mapa ${id}:`, e));
 }
 
 export async function cloudCarregarMapasPorPrefixo<T>(prefixo: string): Promise<Array<{ id: string; dados: T }>> {
@@ -207,6 +213,7 @@ export async function cloudCarregarMapasPorPrefixo<T>(prefixo: string): Promise<
   const fb = getFb();
   if (!fb) return [];
   try {
+    const { collection, query, orderBy, startAt, endAt, getDocs } = await getFirestoreFns();
     const q = query(collection(fb.db, COL_MAPAS), orderBy('__name__'), startAt(prefixo), endAt(prefixo + ''));
     const snap = await getDocs(q);
     const out: Array<{ id: string; dados: T }> = [];
@@ -228,6 +235,7 @@ export async function cloudExcluirMapasPorPrefixo(prefixo: string) {
   const fb = getFb();
   if (!fb) return;
   try {
+    const { collection, query, orderBy, startAt, endAt, getDocs, deleteDoc } = await getFirestoreFns();
     const q = query(collection(fb.db, COL_MAPAS), orderBy('__name__'), startAt(prefixo), endAt(prefixo + ''));
     const snap = await getDocs(q);
     await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
@@ -240,9 +248,10 @@ export async function cloudExcluirMapasPorPrefixo(prefixo: string) {
 async function migrarMapasParaSupabaseSeVazio() {
   try {
     if (await mapasJaMigrados()) return;                // já concluiu (flag) — não relê o Firestore
-    const fb = getFb();
+    const fb = await ensureFb();
     console.log('[nuvem][mig-mapas] Firebase logado (ponte)?', !!fb?.auth.currentUser);
     if (!fb?.auth.currentUser) return;                  // sem ponte Firebase agora — tenta na próxima carga
+    const { collection, getDocs } = await getFirestoreFns();
     const snap = await getDocs(collection(fb.db, COL_MAPAS));
     console.log('[nuvem][mig-mapas] copiando', snap.size, 'mapas do Firestore → Supabase…');
     for (const d of snap.docs) {
@@ -260,8 +269,9 @@ async function migrarMapasParaSupabaseSeVazio() {
 async function migrarColecaoParaSupabaseSeVazio(colecao: string, transform: (d: unknown) => object | null) {
   try {
     if (await colecaoJaMigrada(colecao)) return;
-    const fb = getFb();
+    const fb = await ensureFb();
     if (!fb?.auth.currentUser) return;
+    const { collection, getDocs } = await getFirestoreFns();
     const snap = await getDocs(collection(fb.db, colecao));
     for (const d of snap.docs) {
       const obj = transform(d.data());
@@ -279,6 +289,7 @@ export async function cloudExcluirPorPrefixo(key: string, prefixo: string) {
   const fb = getFb();
   if (!fb) return;
   try {
+    const { collection, query, orderBy, startAt, endAt, getDocs, deleteDoc } = await getFirestoreFns();
     const q = query(collection(fb.db, key), orderBy('__name__'), startAt(prefixo), endAt(prefixo + ''));
     const snap = await getDocs(q);
     await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
@@ -291,6 +302,7 @@ export async function cloudExcluirColecao(key: string) {
   const fb = getFb();
   if (!fb) return;
   try {
+    const { collection, getDocs, deleteDoc } = await getFirestoreFns();
     const snap = await getDocs(collection(fb.db, key));
     await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
   } catch (e) { console.warn('[nuvem] falha ao excluir coleção', key, e); }

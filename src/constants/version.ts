@@ -1,6 +1,9 @@
-export const APP_VERSION = '1.62.0';
+export const APP_VERSION = '1.63.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.63.0': [
+    'APP MAIS LEVE NO NAVEGADOR: o SDK do Firebase (usado só como ponte legada durante a migração para o Supabase) deixou de entrar no pacote inicial do app — agora é baixado sob demanda, apenas quando/se for realmente usado. Nenhuma mudança de comportamento; com o Supabase ativo, o Firebase nem chega a ser baixado nos fluxos de dados.',
+  ],
   '1.62.0': [
     'PROTEÇÃO ANTI-ABUSO DO BACKEND (opcional, ativada por variáveis de ambiente): o servidor de processamento passa a poder exigir uma chave (X-Api-Key) em todos os endpoints — inclusive os que consomem APIs pagas (IA, satélite) — e a restringir os domínios permitidos (CORS). SEM as variáveis configuradas no Render/Vercel, nada muda. /health continua aberto (é o que acorda o serviço).',
   ],

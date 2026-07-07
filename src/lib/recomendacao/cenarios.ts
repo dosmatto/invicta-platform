@@ -6,10 +6,9 @@
 // sob demanda por talhão (FORA do sync de listas). Doc = { campos de consulta +
 // json } — os grids vão GZIP dentro do json (cabe no limite de 1 MB/doc).
 
-import { getFb } from '../firebase';
+import { ensureFb, getFirestoreFns } from '../firebase';
 import { emailUsuario } from '../auth';
 import { usarDadosSupabase, salvarDocSupabase, carregarDocsPorCampoSupabase, excluirDocSupabase } from '../supabaseData';
-import { collection, deleteDoc, doc, getDocs, query, setDoc, where } from 'firebase/firestore';
 import { comprimirGrid, descomprimirGrid, type Grid } from '../fertilidade';
 import type { DoseCalculada } from './aplicar';
 
@@ -38,8 +37,9 @@ export async function salvarCenario(meta: Omit<Cenario, 'id' | 'geradoEm' | 'ger
   const doses = await Promise.all(meta.doses.map(async d => ({ ...d, grid: await comprimirGrid(d.grid as Grid) })));
   const cen: Cenario = { ...meta, doses, id, geradoEm: Date.now(), geradoPor: emailUsuario() ?? '' };
   if (usarDadosSupabase()) { await salvarDocSupabase(COL, id, cen); return cen; }
-  const fb = getFb();
+  const fb = await ensureFb();
   if (!fb) throw new Error('Nuvem indisponível para salvar o cenário.');
+  const { doc, setDoc } = await getFirestoreFns();
   await setDoc(doc(fb.db, COL, id), {
     id, talhaoId: cen.talhaoId, safra: cen.safra, geradoEm: cen.geradoEm, json: JSON.stringify(cen),
   });
@@ -51,9 +51,10 @@ export async function listarCenarios(talhaoId: string, safra?: string): Promise<
     const out = await carregarDocsPorCampoSupabase<Cenario>(COL, 'talhaoId', talhaoId);
     return out.filter(c => !safra || c.safra === safra).sort((a, b) => b.geradoEm - a.geradoEm);
   }
-  const fb = getFb();
+  const fb = await ensureFb();
   if (!fb) return [];
   try {
+    const { collection, query, getDocs, where } = await getFirestoreFns();
     const snap = await getDocs(query(collection(fb.db, COL), where('talhaoId', '==', talhaoId)));
     const out: Cenario[] = [];
     snap.forEach(d => { try { out.push(JSON.parse((d.data() as { json: string }).json) as Cenario); } catch { /* ignora doc inválido */ } });
@@ -77,8 +78,9 @@ export async function descomprimirCenario(cen: Cenario): Promise<Cenario> {
 export async function marcarCenarioOficial(cen: Cenario, oficial: boolean): Promise<void> {
   const atualizado: Cenario = { ...cen, oficial };
   if (usarDadosSupabase()) { await salvarDocSupabase(COL, cen.id, atualizado); return; }
-  const fb = getFb();
+  const fb = await ensureFb();
   if (!fb) throw new Error('Nuvem indisponível.');
+  const { doc, setDoc } = await getFirestoreFns();
   await setDoc(doc(fb.db, COL, cen.id), {
     id: cen.id, talhaoId: cen.talhaoId, safra: cen.safra, geradoEm: cen.geradoEm, json: JSON.stringify(atualizado),
   });
@@ -86,7 +88,8 @@ export async function marcarCenarioOficial(cen: Cenario, oficial: boolean): Prom
 
 export async function excluirCenario(id: string): Promise<void> {
   if (usarDadosSupabase()) { await excluirDocSupabase(COL, id); return; }
-  const fb = getFb();
+  const fb = await ensureFb();
   if (!fb) return;
+  const { doc, deleteDoc } = await getFirestoreFns();
   await deleteDoc(doc(fb.db, COL, id));
 }

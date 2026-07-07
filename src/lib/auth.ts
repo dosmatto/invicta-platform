@@ -14,9 +14,8 @@
 //
 // As assinaturas exportadas são as mesmas de antes — os consumidores não mudam.
 
-import { getFb, firebaseConfigurado, entrarAnonimo, criarUsuarioConvite as criarUsuarioConviteFb } from './firebase';
+import { getFb, ensureFb, firebaseConfigurado, entrarAnonimo, criarUsuarioConvite as criarUsuarioConviteFb } from './firebase';
 import { getSupabase, getSupabaseEfemero, supabaseConfigurado } from './supabase';
-import { onAuthStateChanged, signInWithEmailAndPassword, signOut as fbSignOut, updatePassword } from 'firebase/auth';
 
 export { firebaseConfigurado };
 
@@ -126,9 +125,19 @@ export function observarAuth(cb: (u: User | null) => void): () => void {
     });
     return () => { notificarObs = null; data.subscription.unsubscribe(); };
   }
-  const fb = getFb();
-  if (!fb) { cb(null); return () => {}; }
-  return onAuthStateChanged(fb.auth, u => cb(u ? { uid: u.uid, email: u.email } : null));
+  // Ramo Firebase puro: a inscrição real só é possível depois do SDK carregar
+  // (dynamic import). Mantemos a API síncrona (retorna o unsubscribe já) e
+  // conectamos o listener assim que `ensureFb()` resolver.
+  let cancelado = false;
+  let unsubReal: (() => void) | null = null;
+  ensureFb().then(async (fb) => {
+    if (!fb) { cb(null); return; }
+    if (cancelado) return;
+    const { onAuthStateChanged } = await import('firebase/auth');
+    if (cancelado) return;
+    unsubReal = onAuthStateChanged(fb.auth, u => cb(u ? { uid: u.uid, email: u.email } : null));
+  });
+  return () => { cancelado = true; unsubReal?.(); };
 }
 
 export async function loginEmailSenha(email: string, senha: string): Promise<void> {
@@ -142,8 +151,9 @@ export async function loginEmailSenha(email: string, senha: string): Promise<voi
     if (data.session?.user) void salvarVerificadorOffline(e, senha, data.session.user.id);
     return; // a ponte anônima é estabelecida pelo observador (onAuthStateChange)
   }
-  const fb = getFb();
+  const fb = await ensureFb();
   if (!fb) throw new Error('Firebase não configurado.');
+  const { signInWithEmailAndPassword } = await import('firebase/auth');
   await signInWithEmailAndPassword(fb.auth, e, senha);
 }
 
@@ -157,7 +167,10 @@ export async function logout(): Promise<void> {
   }
   // sempre encerra a sessão Firebase (real ou anônima da ponte)
   const fb = getFb();
-  if (fb?.auth.currentUser) await fbSignOut(fb.auth).catch(() => {});
+  if (fb?.auth.currentUser) {
+    const { signOut: fbSignOut } = await import('firebase/auth');
+    await fbSignOut(fb.auth).catch(() => {});
+  }
 }
 
 // Troca a senha do usuário logado (usado na troca obrigatória do 1º acesso).
@@ -172,8 +185,9 @@ export async function trocarSenha(novaSenha: string): Promise<void> {
     if (u?.email) void salvarVerificadorOffline(u.email, novaSenha, u.uid);
     return;
   }
-  const fb = getFb();
+  const fb = await ensureFb();
   if (!fb?.auth.currentUser) throw new Error('Não autenticado.');
+  const { updatePassword } = await import('firebase/auth');
   await updatePassword(fb.auth.currentUser, novaSenha);
 }
 
