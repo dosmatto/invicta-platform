@@ -10,7 +10,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  CATEGORIAS, listar, criar, atualizar, excluir, ativar,
+  CATEGORIAS, listar, criar, atualizar, excluir, ativar, blocoDaEquacao, compararEquacoes,
   type ItemBiblioteca, type ConteudoEquacao, type ConstanteEquacao, type EstiloRecomendacao,
 } from '@/lib/biblioteca';
 import type { CategoriaBiblioteca } from '@/lib/biblioteca';
@@ -79,15 +79,21 @@ export function EquacoesPanel() {
     return itens.filter(i => `${i.nome} ${i.conteudo.produto ?? ''} ${i.conteudo.grupo ?? ''} ${(i.conteudo.culturas ?? []).join(' ')}`.toLowerCase().includes(f));
   }, [itens, filtro]);
 
-  // Agrupa por Grupo (rótulo livre); "Sem grupo" por último. Cabeçalhos recolhem.
+  // Agrupa por Grupo (rótulo livre). Cabeçalhos na ordem canônica dos blocos
+  // (Calcário → Gesso → Fosfatagem → KCL → outros); "Sem grupo" por último.
+  // Dentro do grupo, ordena por ordem fina → nome. Cabeçalhos recolhem.
   const grupos = useMemo(() => {
     const m = new Map<string, ItemBiblioteca<ConteudoEquacao>[]>();
     for (const it of filtrados) {
       const g = it.conteudo.grupo?.trim() || SEM_GRUPO;
       (m.get(g) ?? m.set(g, []).get(g)!).push(it);
     }
-    return [...m.entries()].sort(([a], [b]) =>
-      a === SEM_GRUPO ? 1 : b === SEM_GRUPO ? -1 : a.localeCompare(b, 'pt-BR'));
+    for (const lista of m.values()) lista.sort(compararEquacoes);
+    const rankGrupo = (g: string) => g === SEM_GRUPO ? Infinity : blocoDaEquacao({ grupo: g } as ConteudoEquacao);
+    return [...m.entries()].sort(([a], [b]) => {
+      const ra = rankGrupo(a), rb = rankGrupo(b);
+      return ra !== rb ? ra - rb : a.localeCompare(b, 'pt-BR');
+    });
   }, [filtrados]);
   const [colapsados, setColapsados] = useState<Set<string>>(new Set());
   const toggleGrupo = (g: string) => setColapsados(prev => {
@@ -209,6 +215,7 @@ function EquacaoEditor({ item, onClose }: { item: ItemBiblioteca<ConteudoEquacao
   const [unTrat, setUnTrat] = useState(c?.unidadeTratamento ?? 'kg/ha');
   const [tratamento, setTratamento] = useState<'taxa-variada' | 'taxa-fixa'>(c?.tratamento ?? 'taxa-variada');
   const [grupo, setGrupo] = useState(c?.grupo ?? '');
+  const [ordem, setOrdem] = useState(c?.ordem != null ? String(c.ordem) : '');
   // grupos já existentes (autocomplete do campo Grupo)
   const gruposExistentes = useMemo(() => {
     const set = new Set<string>();
@@ -240,6 +247,7 @@ function EquacaoEditor({ item, onClose }: { item: ItemBiblioteca<ConteudoEquacao
       unidadeTratamento: unTrat.trim(),
       tratamento,
       grupo: grupo.trim() || undefined,
+      ordem: Number.isFinite(parseNum(ordem)) ? parseNum(ordem) : undefined,
       culturas: listaDe(culturas),
       fases: listaDe(fases),
       naoNegativo: naoNeg,
@@ -292,7 +300,7 @@ function EquacaoEditor({ item, onClose }: { item: ItemBiblioteca<ConteudoEquacao
 
       <div className="flex-1 overflow-y-auto p-3 space-y-4">
         <Secao titulo="Detalhes">
-          <Detalhes {...{ nome, setNome, produto, setProduto, custo, setCusto, frete, setFrete, aplicacao, setAplicacao, profundidade, setProfundidade, unEq, setUnEq, unTrat, setUnTrat, tratamento, setTratamento, grupo, setGrupo, gruposExistentes, culturas, setCulturas, fases, setFases, descricao, setDescricao }} />
+          <Detalhes {...{ nome, setNome, produto, setProduto, custo, setCusto, frete, setFrete, aplicacao, setAplicacao, profundidade, setProfundidade, unEq, setUnEq, unTrat, setUnTrat, tratamento, setTratamento, grupo, setGrupo, ordem, setOrdem, gruposExistentes, culturas, setCulturas, fases, setFases, descricao, setDescricao }} />
         </Secao>
         <Secao titulo="Equação">
           <Equacao {...{ constantes, setConstantes, script, setScript, scriptRef, naoNeg, setNaoNeg, doseMinima, setDoseMinima, abaixoMinimo, setAbaixoMinimo, doseMaxima, setDoseMaxima, unTrat, val, inserirToken }} />
@@ -336,7 +344,7 @@ function Detalhes(p: {
   aplicacao: string; setAplicacao: (s: string) => void; profundidade: string; setProfundidade: (s: string) => void;
   unEq: string; setUnEq: (s: string) => void;
   unTrat: string; setUnTrat: (s: string) => void; tratamento: 'taxa-variada' | 'taxa-fixa'; setTratamento: (s: 'taxa-variada' | 'taxa-fixa') => void;
-  grupo: string; setGrupo: (s: string) => void; gruposExistentes: string[];
+  grupo: string; setGrupo: (s: string) => void; ordem: string; setOrdem: (s: string) => void; gruposExistentes: string[];
   culturas: string; setCulturas: (s: string) => void; fases: string; setFases: (s: string) => void;
   descricao: string; setDescricao: (s: string) => void;
 }) {
@@ -408,10 +416,15 @@ function Detalhes(p: {
           ))}
         </div>
       </Campo>
-      <Campo label="Grupo (organiza a lista)">
-        <input value={p.grupo} onChange={e => p.setGrupo(e.target.value)} placeholder="ex: Calcário, Gesso, KCl" list="grupos-equacoes" className={txt} style={inputStyle} />
-        <datalist id="grupos-equacoes">{p.gruposExistentes.map(g => <option key={g} value={g} />)}</datalist>
-      </Campo>
+      <div className="grid grid-cols-[1fr_auto] gap-2">
+        <Campo label="Grupo (organiza a lista)">
+          <input value={p.grupo} onChange={e => p.setGrupo(e.target.value)} placeholder="ex: Calcário, Gesso, KCl" list="grupos-equacoes" className={txt} style={inputStyle} />
+          <datalist id="grupos-equacoes">{p.gruposExistentes.map(g => <option key={g} value={g} />)}</datalist>
+        </Campo>
+        <Campo label="Ordem no grupo">
+          <input value={p.ordem} onChange={e => p.setOrdem(e.target.value)} placeholder="ex: 1" inputMode="numeric" className={txt} style={{ ...inputStyle, width: 72 }} title="Ordem fina dentro do grupo (menor primeiro). Vazio = por nome. O grupo já define o bloco: Calcário → Gesso → Fosfatagem → KCL." />
+        </Campo>
+      </div>
       <div className="grid grid-cols-2 gap-2">
         <Campo label="Culturas (vírgula)"><input value={p.culturas} onChange={e => p.setCulturas(e.target.value)} placeholder="Soja, Milho" className={txt} style={inputStyle} /></Campo>
         <Campo label="Fases (vírgula)"><input value={p.fases} onChange={e => p.setFases(e.target.value)} placeholder="Pré-plantio" className={txt} style={inputStyle} /></Campo>

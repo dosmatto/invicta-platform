@@ -1,6 +1,10 @@
-export const APP_VERSION = '1.54.0';
+export const APP_VERSION = '1.55.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.55.0': [
+    'ORDEM CANÔNICA DAS EQUAÇÕES NA RECOMENDAÇÃO: ao montar e ao PROCESSAR uma recomendação, as equações saem sempre agrupadas na ordem Calcário → Gesso → Fosfatagem/P → KCL → outros — igual à numeração 01-19 / 20-29 / 30+ do app antigo, mas automático pelo campo GRUPO (não precisa mais numerar o nome). Vale também para recomendações já salvas (reordenam ao abrir/processar).',
+    'AFINAR A ORDEM DENTRO DO GRUPO: a equação ganhou o campo "Ordem no grupo" (opcional). O grupo define o bloco; esse número posiciona a equação dentro do bloco (menor primeiro). Vazio = ordena por nome. A tela de Equações passou a exibir os grupos nessa mesma ordem canônica.',
+  ],
   '1.54.0': [
     'FAZENDAS EM ORDEM ALFABÉTICA em todo o sistema (app de campo e plataforma): as listas de fazendas passam a vir sempre ordenadas por nome, igual já acontecia com os talhões.',
   ],

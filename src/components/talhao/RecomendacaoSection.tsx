@@ -10,7 +10,7 @@ import { useApp } from '@/context/AppContext';
 import { getImportacoesLab, getTalhoes, getPlantio, type ImportacaoLab } from '@/lib/store';
 import { ExplicadorRecomendacaoIa } from '@/components/talhao/ExplicadorRecomendacaoIa';
 import { pode } from '@/lib/empresa';
-import { listar as bibListar, type ItemBiblioteca, type ConteudoEquacao, type ConteudoRecomendacao } from '@/lib/biblioteca';
+import { listar as bibListar, compararEquacoes, type ItemBiblioteca, type ConteudoEquacao, type ConteudoRecomendacao } from '@/lib/biblioteca';
 import { carregarGridsTalhao, calcularDose, dividirDoseEmPassadas, type DoseCalculada } from '@/lib/recomendacao/aplicar';
 import { salvarCenario, listarCenarios, descomprimirCenario, excluirCenario, type Cenario } from '@/lib/recomendacao/cenarios';
 import { colorirDose } from '@/lib/raster';
@@ -121,7 +121,7 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
       itens = [eqSel];
     } else {
       if (!recSel) { setErro('Escolha uma recomendação.'); setEstado('erro'); return; }
-      itens = recSel.conteudo.equacaoIds.map(id => equacoes.find(e => e.id === id)).filter(Boolean) as ItemBiblioteca<ConteudoEquacao>[];
+      itens = (recSel.conteudo.equacaoIds.map(id => equacoes.find(e => e.id === id)).filter(Boolean) as ItemBiblioteca<ConteudoEquacao>[]).sort(compararEquacoes);
       if (itens.length === 0) { setErro('A recomendação não tem equações ativas.'); setEstado('erro'); return; }
     }
     setEstado('carregando');
@@ -223,7 +223,7 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
       const area = talhao?.areaHa ?? 0;
       const cens: Cenario[] = [];
       for (const r of recs) {
-        const itens = r.conteudo.equacaoIds.map(id => equacoes.find(e => e.id === id)).filter(Boolean) as ItemBiblioteca<ConteudoEquacao>[];
+        const itens = (r.conteudo.equacaoIds.map(id => equacoes.find(e => e.id === id)).filter(Boolean) as ItemBiblioteca<ConteudoEquacao>[]).sort(compararEquacoes);
         const ok: DoseCalculada[] = [];
         for (const it of itens) { try { ok.push(calcularDose(it, grids, area)); } catch { /* sem mapa p/ essa equação */ } }
         if (ok.length === 0) continue;

@@ -341,6 +341,7 @@ export interface ConteudoEquacao {
   unidadeTratamento: string;         // unidade da dose de saída (ex.: kg/ha, t/ha)
   tratamento: 'taxa-variada' | 'taxa-fixa';
   grupo?: string;                    // rótulo livre p/ organizar a lista (ex.: Calcário, Gesso, KCl)
+  ordem?: number;                    // ordem fina DENTRO do grupo (menor primeiro); vazio = por nome
   culturas: string[];
   fases: string[];
   naoNegativo: boolean;              // dose < 0 vira 0
@@ -357,6 +358,49 @@ export interface ConteudoEquacao {
 export interface ConteudoRecomendacao {
   equacaoIds: string[];
   culturas: string[];
+}
+
+// ─── Ordem canônica das equações numa recomendação ─────────────────────────
+// Modelo híbrido: o GRUPO define o bloco (Calcário → Gesso → Fosfatagem/P →
+// KCL → outros) e o campo `ordem` afina a posição DENTRO do bloco; sem `ordem`,
+// desempata por nome. Usado ao adicionar/salvar e ao processar, para as doses
+// saírem sempre agrupadas (como a numeração 01-19 / 20-29 / 30+ do app antigo).
+const _ORDEM_BLOCOS: { rank: number; palavras: string[] }[] = [
+  { rank: 1, palavras: ['calcar', 'calag'] },                       // Calcário / Calagem
+  { rank: 2, palavras: ['gesso', 'gessag'] },                       // Gesso / Gessagem
+  { rank: 3, palavras: ['fosfat', 'fosfor', 'map', 'sst', 'ssp', 'arad'] }, // Fosfatagem / P
+  { rank: 4, palavras: ['kcl', 'potass', 'cloreto de pot'] },       // KCL / Potássio
+];
+const _RANK_OUTROS = 90;
+
+function _semAcento(s: string): string {
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+}
+
+// Rank do bloco a partir do grupo (com fallback no produto).
+export function blocoDaEquacao(c: ConteudoEquacao): number {
+  const chave = _semAcento(`${c.grupo ?? ''} ${c.produto ?? ''}`);
+  for (const b of _ORDEM_BLOCOS) if (b.palavras.some(p => chave.includes(p))) return b.rank;
+  return _RANK_OUTROS;
+}
+
+// Comparador híbrido: bloco → ordem fina → nome.
+export function compararEquacoes(a: ItemBiblioteca<ConteudoEquacao>, b: ItemBiblioteca<ConteudoEquacao>): number {
+  const ba = blocoDaEquacao(a.conteudo), bb = blocoDaEquacao(b.conteudo);
+  if (ba !== bb) return ba - bb;
+  const oa = a.conteudo.ordem ?? Number.POSITIVE_INFINITY;
+  const ob = b.conteudo.ordem ?? Number.POSITIVE_INFINITY;
+  if (oa !== ob) return oa - ob;
+  return a.nome.localeCompare(b.nome, 'pt-BR');
+}
+
+// Reordena IDs na ordem canônica. IDs órfãos (equação removida) vão para o fim,
+// preservando sua ordem relativa — nada é descartado.
+export function ordenarIdsEquacoes(ids: string[], eqPorId: Map<string, ItemBiblioteca<ConteudoEquacao>>): string[] {
+  const resolvidos = ids.filter(id => eqPorId.has(id));
+  const orfaos = ids.filter(id => !eqPorId.has(id));
+  resolvidos.sort((x, y) => compararEquacoes(eqPorId.get(x)!, eqPorId.get(y)!));
+  return [...resolvidos, ...orfaos];
 }
 
 export function migrarLaboratoriosV1() {

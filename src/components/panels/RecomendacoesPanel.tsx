@@ -7,7 +7,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
-  CATEGORIAS, listar, criar, atualizar, excluir, ativar,
+  CATEGORIAS, listar, criar, atualizar, excluir, ativar, ordenarIdsEquacoes,
   type ItemBiblioteca, type ConteudoRecomendacao, type ConteudoEquacao,
   type CategoriaBiblioteca,
 } from '@/lib/biblioteca';
@@ -126,6 +126,14 @@ function RecomendacaoEditor({ item, onClose }: { item: ItemBiblioteca<ConteudoRe
 
   const equacoes = useMemo(() => listar<ConteudoEquacao>('equacoes'), []);
   const eqPorId = useMemo(() => new Map(equacoes.map(e => [e.id, e] as const)), [equacoes]);
+  // Ao abrir, normaliza a ordem das equações já salvas para a ordem canônica
+  // (bloco por grupo → ordem fina → nome). Devolve a mesma ref se já estiver ok.
+  useEffect(() => {
+    setEquacaoIds(prev => {
+      const ord = ordenarIdsEquacoes(prev, eqPorId);
+      return ord.length === prev.length && ord.every((id, i) => id === prev[i]) ? prev : ord;
+    });
+  }, [eqPorId]);
   const disponiveis = useMemo(() => {
     const f = buscaEq.trim().toLowerCase();
     return equacoes
@@ -219,7 +227,7 @@ function RecomendacaoEditor({ item, onClose }: { item: ItemBiblioteca<ConteudoRe
                     {equacaoIds.length === equacoes.length ? 'Todas as equações já foram adicionadas.' : 'Nada encontrado.'}
                   </p>
                 ) : disponiveis.map(eq => (
-                  <button key={eq.id} onClick={() => { setEquacaoIds([...equacaoIds, eq.id]); }}
+                  <button key={eq.id} onClick={() => { setEquacaoIds(ordenarIdsEquacoes([...equacaoIds, eq.id], eqPorId)); }}
                     className="w-full p-1.5 rounded text-left flex items-center gap-2 hover:bg-white/5" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
                     <Plus size={11} style={{ color: '#22c55e', flexShrink: 0 }} />
                     <div className="flex-1 min-w-0">
