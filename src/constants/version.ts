@@ -1,6 +1,9 @@
-export const APP_VERSION = '1.65.0';
+export const APP_VERSION = '1.66.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.66.0': [
+    'USUÁRIOS AGRUPADOS POR CATEGORIA no painel de acesso: Equipe interna → Produtores → Prestadores de serviço, com o convite organizado nos mesmos grupos. Para prestadores: campo "Validade (dias)" no convite, badge na lista ("expira em N dias" / "EXPIRADO", com a data no tooltip) e botão RENOVAR com os dias que você escolher.',
+  ],
   '1.65.0': [
     'PAPEL "PRESTADOR DE SERVIÇO" com VALIDADE DE LOGIN EM DIAS: novo papel para prestadores de amostragem (permissão só de Amostragem), com validade definida pelo Owner ao convidar. Expirou → o login é bloqueado com a mensagem "Seu acesso expirou em {data} — fale com o administrador". Sem validade definida = nunca expira (nada muda para os usuários atuais).',
     'CONVITE SEM E-MAIL DE CONFIRMAÇÃO, com diagnóstico: se o projeto Supabase ainda estiver exigindo confirmação por e-mail (a causa do convite travar), o app agora DETECTA na hora e mostra o passo exato para desligar (Authentication → Sign In / Providers → Email → Confirm email OFF). Mesma instrução na mensagem de erro de login do convidado.',

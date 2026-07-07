@@ -13,11 +13,15 @@ import {
   getPlanos, salvarPlano, atualizarPlano, excluirPlano, toggleSecaoPlano, SECOES_PORTAL,
   ehOwner, emailUsuario,
   CAPACIDADES, PAPEIS_ATRIBUIVEIS, ROTULO_PAPEL, ROTULO_CURTO,
-  type PapelMembro, type RegistroPapel, type Capacidade, type PlanoAssinatura, type SecaoPortal,
+  categoriaDoPapel, NOME_CATEGORIA, renovarValidade, diasRestantes,
+  type PapelMembro, type RegistroPapel, type Capacidade, type PlanoAssinatura, type SecaoPortal, type CategoriaUsuario,
 } from '@/lib/empresa';
 import { getClientes, type Cliente } from '@/lib/store';
 import { criarUsuarioConvite } from '@/lib/auth';
-import { UserPlus, Trash2, AlertTriangle, ShieldCheck, SlidersHorizontal, Copy, Loader2, KeyRound, CreditCard, Plus, Building2, X } from 'lucide-react';
+import { UserPlus, Trash2, AlertTriangle, ShieldCheck, SlidersHorizontal, Copy, Loader2, KeyRound, CreditCard, Plus, Building2, X, RefreshCw } from 'lucide-react';
+
+// Ordem das seções da lista agrupada por categoria.
+const ORDEM_CATEGORIAS: CategoriaUsuario[] = ['equipe', 'produtores', 'prestadores'];
 
 // Papéis cujo acesso pode ser LIMITADO a clientes específicos (consultoria).
 const PAPEIS_VINCULAVEIS: PapelMembro[] = ['agronomo', 'operador'];
@@ -27,6 +31,8 @@ const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid
 const PAPEIS_CONFIG: PapelMembro[] = ['admin', 'agronomo', 'operador'];
 // Senha provisória simples (≥6 chars; letras+dígitos). Ex.: Inv54321
 const gerarSenhaProvisoria = () => 'Inv' + Math.floor(10000 + Math.random() * 90000);
+// Dias de validade digitados livremente; clamp 1..365 (vazio/inválido = 30) só ao usar.
+const clampDias = (s?: string) => Math.max(1, Math.min(365, parseInt(s ?? '', 10) || 30));
 
 export function UsuariosPanel() {
   const [papeis, setPapeis] = useState<RegistroPapel[]>([]);
@@ -38,9 +44,11 @@ export function UsuariosPanel() {
   const [convite, setConvite] = useState<{ email: string; senha?: string; msg: string } | null>(null);
   const [clienteNovo, setClienteNovo] = useState('');
   const [planoNovo, setPlanoNovo] = useState('');
+  const [validadeDiasNovo, setValidadeDiasNovo] = useState('30');   // texto cru; clamp só ao usar
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [planos, setPlanos] = useState<PlanoAssinatura[]>([]);
   const [vincDe, setVincDe] = useState<RegistroPapel | null>(null);
+  const [renovarDias, setRenovarDias] = useState<Record<string, string>>({});  // texto cru por e-mail
 
   function recarregar() { setPapeis(getPapeis()); setPerms(getPermissoes()); setClientes(getClientes()); setPlanos(getPlanos()); }
   useEffect(() => {
@@ -66,9 +74,11 @@ export function UsuariosPanel() {
     const r = await criarUsuarioConvite(e, senha);
     if (r.ok) {
       definirPapelEmail(e, papelNovo, { senhaProvisoria: true, ...extraProd }); // papel + troca no 1º acesso
+      if (papelNovo === 'prestador') renovarValidade(e, clampDias(validadeDiasNovo)); // registro já existe: define validadeAte
       setConvite({ email: e, senha, msg: 'Conta criada. Passe a senha provisória ao usuário — ele troca no 1º acesso.' });
     } else if (r.jaExiste) {
       definirPapelEmail(e, papelNovo, extraProd); // conta já existe: só atribui o papel
+      if (papelNovo === 'prestador') renovarValidade(e, clampDias(validadeDiasNovo));
       setConvite({ email: e, msg: 'A conta de login já existia — papel atribuído. (Sem senha provisória nova; gere outra se precisar.)' });
     } else {
       const err = (r.erro ?? '').toLowerCase();
@@ -92,6 +102,13 @@ export function UsuariosPanel() {
   function trocar(email: string, p: PapelMembro) {
     if (!souOwner) return;
     definirPapelEmail(email, p);
+    recarregar();
+  }
+
+  function renovar(email: string) {
+    if (!souOwner) return;
+    const dias = clampDias(renovarDias[email]);
+    renovarValidade(email, dias);
     recarregar();
   }
 
@@ -146,8 +163,24 @@ export function UsuariosPanel() {
               className="flex-1 rounded px-2 py-1.5 text-[11px] outline-none" style={inputStyle} />
             <select value={papelNovo} onChange={e => setPapelNovo(e.target.value as PapelMembro)} disabled={convidando}
               className="rounded px-2 py-1 text-[11px] outline-none" style={inputStyle}>
-              {PAPEIS_ATRIBUIVEIS.map(p => <option key={p} value={p}>{ROTULO_PAPEL[p]}</option>)}
+              {ORDEM_CATEGORIAS.map(cat => {
+                const opcoes = PAPEIS_ATRIBUIVEIS.filter(p => categoriaDoPapel(p) === cat);
+                if (opcoes.length === 0) return null;
+                return (
+                  <optgroup key={cat} label={NOME_CATEGORIA[cat]}>
+                    {opcoes.map(p => <option key={p} value={p}>{ROTULO_PAPEL[p]}</option>)}
+                  </optgroup>
+                );
+              })}
             </select>
+            {papelNovo === 'prestador' && (
+              <label className="flex items-center gap-1 text-[10px]" style={{ color: '#64748b' }}>
+                Validade (dias)
+                <input type="number" min={1} max={365} value={validadeDiasNovo} disabled={convidando}
+                  onChange={e => setValidadeDiasNovo(e.target.value)}
+                  className="w-14 rounded px-1.5 py-1 text-[11px] outline-none" style={inputStyle} />
+              </label>
+            )}
             <button onClick={add} disabled={convidando} className="px-3 py-1 rounded text-[10px] font-bold text-white flex items-center gap-1 disabled:opacity-50"
               style={{ background: 'var(--invicta-green-dark)' }}>
               {convidando ? <Loader2 size={11} className="animate-spin" /> : <UserPlus size={11} />} Convidar
@@ -192,36 +225,73 @@ export function UsuariosPanel() {
         <p className="text-[10px]" style={{ color: '#64748b' }}>Só o Owner pode adicionar ou alterar papéis.</p>
       )}
 
-      {/* Lista de usuários */}
-      <div className="p-3 rounded-lg" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
-        <p className="text-[10px] uppercase tracking-wider mb-2" style={{ color: '#475569' }}>Usuários do sistema ({papeis.length})</p>
-        <div className="space-y-1.5">
-          {papeis.map(r => (
-            <div key={r.id} className="flex items-center gap-2 p-1.5 rounded" style={{ background: '#0b1d3a' }}>
-              <code className="flex-1 text-[10px] truncate" style={{ color: '#cbd5e1' }}>
-                {r.email}{r.email === meuEmail && <span style={{ color: '#86efac' }}> (você)</span>}
-              </code>
-              <select value={r.papel} onChange={e => trocar(r.email, e.target.value as PapelMembro)} disabled={!souOwner}
-                className="rounded px-1 py-0.5 text-[10px] outline-none" style={inputStyle}>
-                {PAPEIS_ATRIBUIVEIS.map(p => <option key={p} value={p}>{ROTULO_PAPEL[p]}</option>)}
-                {!PAPEIS_ATRIBUIVEIS.includes(r.papel) && <option value={r.papel}>{ROTULO_PAPEL[r.papel] ?? r.papel}</option>}
-              </select>
-              {PAPEIS_VINCULAVEIS.includes(r.papel) && (
-                <button onClick={() => setVincDe(r)} disabled={!souOwner} title="Clientes que este usuário pode acessar"
-                  className="px-1.5 py-0.5 rounded text-[9px] font-bold flex items-center gap-0.5"
-                  style={{ background: '#1a3a6b', color: (r.clientesVinculados?.length ?? 0) ? '#86efac' : '#93c5fd' }}>
-                  <Building2 size={10} /> {(r.clientesVinculados?.length ?? 0) || 'todos'}
-                </button>
-              )}
-              <button onClick={() => remover(r.email)} disabled={!souOwner}
-                className="p-1 rounded" style={{ color: '#f87171', background: '#1a3a6b', opacity: souOwner ? 1 : 0.5 }}>
-                <Trash2 size={10} />
-              </button>
+      {/* Lista de usuários — agrupada por categoria (Equipe interna / Produtores / Prestadores) */}
+      {ORDEM_CATEGORIAS.map(cat => {
+        const doCat = papeis.filter(r => categoriaDoPapel(r.papel) === cat);
+        if (doCat.length === 0) return null;
+        return (
+          <div key={cat} className="p-3 rounded-lg" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
+            <p className="text-[10px] uppercase tracking-wider mb-2" style={{ color: '#475569' }}>{NOME_CATEGORIA[cat]} ({doCat.length})</p>
+            <div className="space-y-1.5">
+              {doCat.map(r => {
+                const dias = r.papel === 'prestador' ? diasRestantes(r) : null;
+                return (
+                  <div key={r.id} className="flex items-center gap-2 p-1.5 rounded flex-wrap" style={{ background: '#0b1d3a' }}>
+                    <code className="flex-1 text-[10px] truncate" style={{ color: '#cbd5e1' }}>
+                      {r.email}{r.email === meuEmail && <span style={{ color: '#86efac' }}> (você)</span>}
+                    </code>
+                    {r.papel === 'prestador' && (
+                      <>
+                        <span
+                          title={r.validadeAte ? `Expira em ${new Date(r.validadeAte).toLocaleDateString('pt-BR')}` : 'Sem validade definida'}
+                          className="px-1.5 py-0.5 rounded text-[9px] font-bold"
+                          style={
+                            dias === null
+                              ? { background: '#1a3a6b', color: '#94a3b8' }
+                              : dias > 0
+                              ? { background: '#0f2a1a', color: '#86efac' }
+                              : { background: '#3a1220', color: '#f87171' }
+                          }>
+                          {dias === null ? 'sem validade' : dias > 0 ? `expira em ${dias} dia${dias === 1 ? '' : 's'}` : 'EXPIRADO'}
+                        </span>
+                        <input type="number" min={1} max={365} value={renovarDias[r.email] ?? '30'} disabled={!souOwner}
+                          onChange={e => setRenovarDias(prev => ({ ...prev, [r.email]: e.target.value }))}
+                          className="w-12 rounded px-1 py-0.5 text-[10px] outline-none" style={inputStyle} />
+                        <button onClick={() => renovar(r.email)} disabled={!souOwner} title="Renovar validade"
+                          className="px-1.5 py-0.5 rounded text-[9px] font-bold flex items-center gap-0.5"
+                          style={{ background: '#1a3a6b', color: '#93c5fd' }}>
+                          <RefreshCw size={10} /> Renovar
+                        </button>
+                      </>
+                    )}
+                    <select value={r.papel} onChange={e => trocar(r.email, e.target.value as PapelMembro)} disabled={!souOwner}
+                      className="rounded px-1 py-0.5 text-[10px] outline-none" style={inputStyle}>
+                      {PAPEIS_ATRIBUIVEIS.map(p => <option key={p} value={p}>{ROTULO_PAPEL[p]}</option>)}
+                      {!PAPEIS_ATRIBUIVEIS.includes(r.papel) && <option value={r.papel}>{ROTULO_PAPEL[r.papel] ?? r.papel}</option>}
+                    </select>
+                    {PAPEIS_VINCULAVEIS.includes(r.papel) && (
+                      <button onClick={() => setVincDe(r)} disabled={!souOwner} title="Clientes que este usuário pode acessar"
+                        className="px-1.5 py-0.5 rounded text-[9px] font-bold flex items-center gap-0.5"
+                        style={{ background: '#1a3a6b', color: (r.clientesVinculados?.length ?? 0) ? '#86efac' : '#93c5fd' }}>
+                        <Building2 size={10} /> {(r.clientesVinculados?.length ?? 0) || 'todos'}
+                      </button>
+                    )}
+                    <button onClick={() => remover(r.email)} disabled={!souOwner}
+                      className="p-1 rounded" style={{ color: '#f87171', background: '#1a3a6b', opacity: souOwner ? 1 : 0.5 }}>
+                      <Trash2 size={10} />
+                    </button>
+                  </div>
+                );
+              })}
             </div>
-          ))}
-          {papeis.length === 0 && <p className="text-[10px]" style={{ color: '#64748b' }}>Nenhum usuário com papel ainda.</p>}
+          </div>
+        );
+      })}
+      {papeis.length === 0 && (
+        <div className="p-3 rounded-lg" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
+          <p className="text-[10px]" style={{ color: '#64748b' }}>Nenhum usuário com papel ainda.</p>
         </div>
-      </div>
+      )}
 
       {/* Permissões por papel (matriz) — só Owner edita */}
       {souOwner && (
