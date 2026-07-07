@@ -1,6 +1,9 @@
-export const APP_VERSION = '1.59.0';
+export const APP_VERSION = '1.60.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.60.0': [
+    'APP DE CAMPO MAIS LEVE NA CAMINHADA: durante a medição por caminhada, o perímetro passou a ser somado de forma INCREMENTAL (só o novo trecho) e a área exibida ao vivo é recalculada a cada 10 pontos — antes, cada ponto do GPS reprocessava a caminhada inteira (ficava cada vez mais pesado e gastava mais bateria em áreas grandes). Os valores SALVOS não mudam: ao finalizar/salvar o cálculo completo roda como sempre.',
+  ],
   '1.59.0': [
     'ARMAZENAMENTO CHEIO AGORA AVISA: se o cache local do navegador estourar a cota, o app mostra um alerta claro (1x por sessão) e dispara o evento inv:quota-erro — antes a gravação falhava em silêncio e os dados sumiam no recarregar. O espelho na nuvem continua sendo enviado mesmo com o cache cheio.',
     'CORREÇÃO no editor de Equações: valores com separador de milhar (ex.: R$ 1.234,56) eram lidos errado (viravam 1,234). Agora usa o mesmo leitor de números robusto da importação de laboratório.',

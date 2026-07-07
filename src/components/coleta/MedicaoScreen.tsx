@@ -64,6 +64,20 @@ function medir(tipo: TipoMedicao, coords: [number, number][]) {
   return { areaHa: turfArea(fc) / 10000, perimetroM: compr + fechamento };
 }
 
+// Perímetro do caminho ABERTO (sem fechamento), somando os segmentos.
+// Usado pelo cálculo incremental (o fechamento do polígono entra à parte).
+function comprAberto(coords: [number, number][]): number {
+  let compr = 0;
+  for (let i = 1; i < coords.length; i++) {
+    compr += distanciaM(coords[i - 1][0], coords[i - 1][1], coords[i][0], coords[i][1]);
+  }
+  return compr;
+}
+
+// De quantos em quantos pontos novos a ÁREA exibida ao vivo é recalculada
+// (turfArea é O(n)). O valor salvo continua vindo do medir() completo.
+const AREA_THROTTLE = 10;
+
 function fmtTempo(s: number) {
   const m = Math.floor(s / 60), r = s % 60;
   return `${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`;
@@ -129,7 +143,75 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
   const tickRef = useRef(0); // contador de ticks p/ amostrar a cada freqS
   const ultimoGravadoRef = useRef<[number, number] | null>(null); // último ponto gravado (cru, p/ espaçamento e direção)
 
-  const coords = useMemo(() => pontos.map(p => [p.lng, p.lat] as [number, number]), [pontos]);
+  // ── estado derivado INCREMENTAL (evita O(n) por ponto durante a caminhada) ──
+  // coordsRef espelha `pontos` como [lng,lat]; perimAbertoRef acumula o
+  // comprimento do caminho ABERTO. A sincronização roda num useEffect keyed em
+  // `pontos` (refs só são acessados em efeitos/handlers). Caminho quente = APPEND
+  // puro (mesmo array + N no fim): soma só os novos segmentos. Qualquer outra
+  // mudança de `pontos` (reset/limpar, desfazer/slice, reabrir salva) reconstrói
+  // coordsRef e o perímetro do zero. As medidas exibidas vivem em STATE
+  // (medidasView) para o render nunca ler refs meio-sincronizados.
+  const coordsRef = useRef<[number, number][]>([]);
+  const perimAbertoRef = useRef(0);          // soma dos segmentos (caminho aberto)
+  const prevPontosRef = useRef<PontoMedicao[]>([]); // identidade anterior de `pontos`
+  const areaAcumRef = useRef(0);             // pontos gravados desde o último turfArea
+  const areaHaRef = useRef<number | null>(null); // última área calculada (p/ throttle)
+
+  const [medidasView, setMedidasView] = useState<{ areaHa: number | null; perimetroM: number }>({ areaHa: null, perimetroM: 0 });
+
+  // Atualiza medidasView a partir dos refs. Perímetro sempre EXATO (acumulador +
+  // fechamento se polígono); área só recalcula (turfArea) quando `areaCompleta`,
+  // senão mantém a última (throttle) — afeta apenas a EXIBIÇÃO ao vivo.
+  const recomputarMedidas = useCallback((tp: TipoMedicao, areaCompleta: boolean) => {
+    const cs = coordsRef.current;
+    if (tp === 'ponto') { setMedidasView({ areaHa: null, perimetroM: 0 }); return; }
+    const fecha = tp === 'poligono' && cs.length >= 3;
+    const fechamento = fecha ? distanciaM(cs[cs.length - 1][0], cs[cs.length - 1][1], cs[0][0], cs[0][1]) : 0;
+    if (fecha && areaCompleta) {
+      const anel = [...cs, cs[0]];
+      areaHaRef.current = turfArea({ type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [anel] } }] }) / 10000;
+      areaAcumRef.current = 0;
+    } else if (!fecha) {
+      areaHaRef.current = null;
+    }
+    setMedidasView({ areaHa: fecha ? areaHaRef.current : null, perimetroM: perimAbertoRef.current + fechamento });
+  }, []);
+
+  // Sincroniza refs ↔ `pontos` e recalcula medidas. Roda quando `pontos`, `tipo`
+  // ou `gravando` mudam. Caminho quente = APPEND puro (só soma novos segmentos);
+  // reset/desfazer/reabrir reconstrói do zero e força área completa. Mudança só
+  // de tipo/gravando não gera novos pontos (append de 0), mas força área completa
+  // — garante que ao alternar tipo ou ao finalizar (fecha o polígono) o valor
+  // exibido fique exato.
+  useEffect(() => {
+    const prev = prevPontosRef.current;
+    const cs = coordsRef.current;
+    const ehAppend = pontos.length >= prev.length && cs.length === prev.length
+      && (prev.length === 0 || pontos[prev.length - 1] === prev[prev.length - 1]);
+    let reconstruiu = false, novos = 0;
+    if (ehAppend) {
+      for (let i = prev.length; i < pontos.length; i++) {
+        const p = pontos[i];
+        if (cs.length > 0) perimAbertoRef.current += distanciaM(cs[cs.length - 1][0], cs[cs.length - 1][1], p.lng, p.lat);
+        cs.push([p.lng, p.lat]);
+      }
+      novos = pontos.length - prev.length;
+    } else {
+      const nc = pontos.map(p => [p.lng, p.lat] as [number, number]);
+      coordsRef.current = nc;
+      perimAbertoRef.current = comprAberto(nc);
+      reconstruiu = true;
+    }
+    prevPontosRef.current = pontos;
+    areaAcumRef.current += novos;
+    // Área com THROTTLE: turfArea a cada AREA_THROTTLE pontos gravados; fora de
+    // gravação (toque/GPS manual, pausa, finalização), em reconstrução ou quando
+    // não houve novos pontos (troca de tipo/estado) recalcula na hora.
+    const areaCompleta = reconstruiu || !gravando || novos === 0 || areaAcumRef.current >= AREA_THROTTLE;
+    recomputarMedidas(tipo, areaCompleta);
+  }, [pontos, tipo, gravando, recomputarMedidas]);
+
+  const nCoords = pontos.length; // == coordsRef.current.length (guardas de UI)
 
   const pushPonto = useCallback((lng: number, lat: number, meta?: Partial<PontoMedicao>) => {
     setPontos(ps => [...ps, { lng, lat, em: new Date().toISOString(), ...meta }]);
@@ -189,34 +271,45 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
     pushPonto(pt[0], pt[1], { precisaoM: Math.round(p.acc), velKmH: velRef.current ?? undefined });
   }
 
-  const medidas = useMemo(() => medir(tipo, coords), [tipo, coords]);
+  // Medidas exibidas ao vivo: perímetro sempre exato (acumulador), área com
+  // throttle. O caminho de SALVAR usa medir(tipo, coords) completo (ver onSalvo
+  // e SalvarDialog), então o valor gravado é idêntico ao original.
+  const medidas = medidasView;
 
   // Durante a caminhada (não finalizado) o polígono é um CONTORNO ABERTO (spec 4.4).
+  // Recria só o FeatureCollection por atualização (comportamento visível idêntico
+  // ao anterior, atualiza a cada ponto). Deriva de `pontos` diretamente — a
+  // otimização de O(n²) está no perímetro/área (acumulador + throttle), não aqui.
   const desenho: GeoJSON.FeatureCollection = useMemo(() => {
-    if (coords.length === 0) return EMPTY_FC;
-    const feats: GeoJSON.Feature[] = coords.map(c => ({
-      type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: c },
+    if (pontos.length === 0) return EMPTY_FC;
+    const feats: GeoJSON.Feature[] = pontos.map(p => ({
+      type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: [p.lng, p.lat] },
     }));
-    const fecharPoligono = tipo === 'poligono' && coords.length >= 3 && !gravando;
+    const fecharPoligono = tipo === 'poligono' && pontos.length >= 3 && !gravando;
     if (fecharPoligono) {
-      feats.push({ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [[...coords, coords[0]]] } });
-    } else if (tipo !== 'ponto' && coords.length >= 2) {
-      feats.push({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: coords } });
+      const anel = pontos.map(p => [p.lng, p.lat] as [number, number]);
+      anel.push([pontos[0].lng, pontos[0].lat]);
+      feats.push({ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [anel] } });
+    } else if (tipo !== 'ponto' && pontos.length >= 2) {
+      feats.push({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: pontos.map(p => [p.lng, p.lat]) } });
     }
     return { type: 'FeatureCollection', features: feats };
-  }, [tipo, coords, gravando]);
+  }, [tipo, gravando, pontos]);
 
   const bboxDesenho = useMemo<[number, number, number, number] | null>(() => {
-    if (coords.length < 2) return null;
+    if (pontos.length < 2) return null;
     let [a, b, c, d] = [Infinity, Infinity, -Infinity, -Infinity];
-    for (const [lng, lat] of coords) {
+    for (const { lng, lat } of pontos) {
       a = Math.min(a, lng); b = Math.min(b, lat); c = Math.max(c, lng); d = Math.max(d, lat);
     }
     const mLng = (c - a) * 0.15 || 0.001, mLat = (d - b) * 0.15 || 0.001;
     return [a - mLng, b - mLat, c + mLng, d + mLat];
-  }, [coords]);
+  }, [pontos]);
 
   function onSalvo(dados: { nome: string; categoria: string; obs: string; talhaoId: string; talhaoNome: string; safra: string }) {
+    // coords derivado direto de `pontos` no ato de salvar — idêntico ao original
+    // (pontos.map). Resultado salvo NÃO muda com a otimização ao vivo.
+    const coords = pontos.map(p => [p.lng, p.lat] as [number, number]);
     salvarMedicao({
       id: Date.now().toString(36), nome: dados.nome, tipo, coords, pontos,
       categoria: dados.categoria || undefined, obs: dados.obs || undefined,
@@ -315,7 +408,7 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
 
       {/* painel ao vivo (spec seção 7) */}
       <div className="absolute left-3 flex flex-col gap-1" style={{ top: 'calc(56px + env(safe-area-inset-top))' }}>
-        {(gravando || coords.length > 0) && (
+        {(gravando || nCoords > 0) && (
           <div className="px-3 py-2 rounded-xl text-[10px] leading-relaxed" style={{ background: 'rgba(6,21,37,0.9)', border: `1px solid ${BORDA}`, color: '#cbd5e1' }}>
             <div className="flex items-center gap-3">
               <span style={{ color: '#93c5fd' }}>{tipo === 'poligono' ? 'Polígono' : tipo === 'linha' ? 'Linha' : 'Pontos'}</span>
@@ -425,7 +518,7 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
           </div>
           )}
 
-          {coords.length === 0 ? (
+          {nCoords === 0 ? (
             <p className="text-[11px] py-1" style={{ color: SUB }}>
               {tipo === 'ponto'
                 ? <>Toque no mapa ou use o <strong style={{ color: '#93c5fd' }}>+</strong> (GPS) para marcar pontos.</>
@@ -461,7 +554,7 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
                   </>
                 )}
               </div>
-              <button onClick={() => setMostraSalvar(true)} disabled={coords.length < (tipo === 'ponto' ? 1 : 2) || gravando}
+              <button onClick={() => setMostraSalvar(true)} disabled={nCoords < (tipo === 'ponto' ? 1 : 2) || gravando}
                 className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold text-white disabled:opacity-40"
                 style={{ background: 'var(--invicta-green-dark)' }}>
                 <Save size={13} /> Salvar
@@ -539,7 +632,7 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
 
       {/* salvar (nome, categoria, talhão, ciclo, observação) */}
       {mostraSalvar && (
-        <SalvarDialog tipo={tipo} medidas={medidas} nSugerido={salvas.length + 1}
+        <SalvarDialog tipo={tipo} medidas={medir(tipo, pontos.map(p => [p.lng, p.lat]))} nSugerido={salvas.length + 1}
           onFechar={() => setMostraSalvar(false)} onSalvar={onSalvo} />
       )}
 
