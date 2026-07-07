@@ -1,6 +1,9 @@
-export const APP_VERSION = '1.67.0';
+export const APP_VERSION = '1.68.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.68.0': [
+    'NUMERAR EQUAÇÕES DIRETO NA LISTA: cada equação ganhou um campinho de Nº na frente do nome (tela Equações). Digite o número e saia do campo (ou Enter) — salva e a lista se reordena na hora. Menor número primeiro dentro do grupo; vazio = ordena por nome. É o jeito rápido de aplicar a numeração 01-19 / 20-29 / 30+ nas equações já existentes.',
+  ],
   '1.67.0': [
     'IMPORTAÇÃO DE LABORATÓRIO — "N.D." E "<x" VIRAM ZERO: valores de laudo marcados como não detectado (N.D., N.D, ND, N/D) ou abaixo do limite de detecção (ex.: "<0,5") agora entram como 0 (o laboratório mediu e não achou). Célula VAZIA, texto qualquer e ">x" continuam SEM valor — não inventamos zero para o que não foi analisado. Vale também ao digitar na prévia editável.',
   ],

@@ -104,6 +104,14 @@ export function EquacoesPanel() {
     if (!confirm(`Excluir a equação "${it.nome}"?`)) return;
     excluir(SLUG, it.id);
   }
+  // Nº de ordem editado DIRETO na lista (blur/Enter): salva e a lista se
+  // reordena sozinha (o save dispara 'inv:biblioteca' → refresh → sort).
+  function salvarOrdem(it: ItemBiblioteca<ConteudoEquacao>, txt: string) {
+    const n = txt.trim() === '' ? undefined : parseFloat(txt.replace(',', '.'));
+    const novo = n != null && Number.isFinite(n) ? n : undefined;
+    if (novo === it.conteudo.ordem) return;
+    atualizar<ConteudoEquacao>(SLUG, it.id, { conteudo: { ...it.conteudo, ordem: novo } });
+  }
   // Clona como COMPARTILHADA (não como 'meu') para o outro usuário também ver.
   function clonar(it: ItemBiblioteca<ConteudoEquacao>) {
     criar<ConteudoEquacao>(SLUG, { nome: `${it.nome} (cópia)`, descricao: it.descricao, conteudo: it.conteudo, escopo: 'empresa' });
@@ -158,6 +166,13 @@ export function EquacoesPanel() {
                       {lista.map(it => (
                         <div key={it.id} className="p-2 rounded-lg" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
                           <div className="flex items-center gap-2">
+                            {podeBib && (
+                              <input type="number" defaultValue={it.conteudo.ordem ?? ''} placeholder="nº"
+                                title="Nº de ordem dentro do grupo (menor primeiro; vazio = ordena por nome). Salva ao sair do campo."
+                                onBlur={e => salvarOrdem(it, e.target.value)}
+                                onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                                className="w-10 rounded px-1 py-0.5 text-[10px] text-center outline-none flex-shrink-0" style={inputStyle} />
+                            )}
                             <div className="flex-1 min-w-0">
                               <div className="text-[11px] font-bold truncate" style={{ color: '#e2e8f0' }}>{it.nome}</div>
                               <div className="text-[9px] truncate" style={{ color: '#64748b' }}>
