@@ -6,7 +6,8 @@
     "dev": "next dev -p 3100",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "teste:convite": "node scripts/teste-convite.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",

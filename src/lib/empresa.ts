@@ -10,7 +10,7 @@
 import { usuarioAtual, firebaseConfigurado } from './auth';
 import { cloudPushLista } from './cloud';
 
-export type PapelMembro = 'owner' | 'admin' | 'agronomo' | 'operador' | 'produtor' | 'editor' | 'viewer';
+export type PapelMembro = 'owner' | 'admin' | 'agronomo' | 'operador' | 'produtor' | 'prestador' | 'editor' | 'viewer';
 
 export interface Empresa {
   id: string;
@@ -33,7 +33,10 @@ export interface RegistroPapel {
   clienteId?: string;  // produtor: qual Cliente ele é (escopo do portal)
   planoId?: string;    // produtor: qual plano de assinatura (seções liberadas)
   clientesVinculados?: string[]; // agrônomo/operador: clientes que ele pode acessar (vazio = todos)
+  validadeAte?: string;  // prestador: ISO date; login expira nesta data (ausente = nunca expira)
 }
+// Alias público (nome usado pela UI/consumidores). Mesma forma de RegistroPapel.
+export type PapelUsuario = RegistroPapel;
 const PAPEIS_SEED: Array<{ email: string; papel: PapelMembro }> = [
   { email: 'william@invicta.agr.br', papel: 'owner' },
   { email: 'jhon@invicta.agr.br', papel: 'admin' },
@@ -107,7 +110,7 @@ export function papelDoEmail(email: string | null): PapelMembro | null {
 }
 export function definirPapelEmail(
   email: string, papel: PapelMembro,
-  extra?: { senhaProvisoria?: boolean; clienteId?: string; planoId?: string; clientesVinculados?: string[] },
+  extra?: { senhaProvisoria?: boolean; clienteId?: string; planoId?: string; clientesVinculados?: string[]; validadeAte?: string },
 ) {
   const e = normEmail(email);
   if (!e) return;
@@ -154,6 +157,55 @@ export function seedPapeis() {
   if (mudou) save(K_PAPEIS, lista);
 }
 
+// ── Categorias de usuário (derivadas do papel) ───────────────────────────────
+// Agrupa os papéis em 3 baldes para a UI de gestão de usuários.
+export type CategoriaUsuario = 'equipe' | 'produtores' | 'prestadores';
+export function categoriaDoPapel(p: PapelMembro): CategoriaUsuario {
+  if (p === 'produtor') return 'produtores';
+  if (p === 'prestador') return 'prestadores';
+  return 'equipe'; // owner/admin/agronomo/operador/editor/viewer
+}
+export const NOME_CATEGORIA: Record<CategoriaUsuario, string> = {
+  equipe: 'Equipe interna',
+  produtores: 'Produtores',
+  prestadores: 'Prestadores de serviço',
+};
+
+// ── Validade de login (prestadores) ──────────────────────────────────────────
+// Fim do dia local a partir de "hoje + dias" (inclusivo — vale o dia inteiro).
+function fimDoDiaEmDias(dias: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + dias);
+  d.setHours(23, 59, 59, 999);
+  return d.toISOString();
+}
+// Renova (ou define) a validade do login por N dias, contando HOJE como o 1º:
+// validadeAte = fim do dia de hoje + (dias - 1). Assim "renovar 30" exibe
+// "expira em 30 dias" (o Math.ceil de diasRestantes conta o resto de hoje como 1)
+// e "1 dia" vale só até o fim de hoje.
+export function renovarValidade(email: string, dias: number) {
+  const e = normEmail(email);
+  if (!e) return;
+  const lista = load<RegistroPapel>(K_PAPEIS);
+  const idx = lista.findIndex(p => p.email === e);
+  if (idx < 0) return;
+  lista[idx] = { ...lista[idx], validadeAte: fimDoDiaEmDias(Math.max(1, dias) - 1) };
+  save(K_PAPEIS, lista);
+}
+// Login expirado? SÓ true se houver validadeAte no passado (sem validade = nunca).
+export function loginExpirado(p: PapelUsuario | null | undefined): boolean {
+  if (!p?.validadeAte) return false;
+  const t = Date.parse(p.validadeAte);
+  return Number.isFinite(t) && t < Date.now();
+}
+// Dias inteiros até expirar (null sem validade; negativo se já expirado).
+export function diasRestantes(p: PapelUsuario): number | null {
+  if (!p.validadeAte) return null;
+  const t = Date.parse(p.validadeAte);
+  if (!Number.isFinite(t)) return null;
+  return Math.ceil((t - Date.now()) / 86_400_000);
+}
+
 // ── Capacidades / Permissões por papel (U2 — configurável pelo Owner) ────────
 const K_PERMISSOES = 'inv_permissoes';
 
@@ -174,13 +226,13 @@ export const CAPACIDADES: Array<{ id: Capacidade; label: string; curto: string }
 ];
 
 // Papéis atribuíveis na UI (Owner sempre tudo; Amostrador = fase futura).
-export const PAPEIS_ATRIBUIVEIS: PapelMembro[] = ['owner', 'admin', 'agronomo', 'operador', 'produtor'];
+export const PAPEIS_ATRIBUIVEIS: PapelMembro[] = ['owner', 'admin', 'agronomo', 'operador', 'produtor', 'prestador'];
 export const ROTULO_PAPEL: Record<string, string> = {
-  owner: 'Owner', admin: 'Admin', agronomo: 'Agrônomo', operador: 'Operador de campo', produtor: 'Produtor', editor: 'Editor', viewer: 'Viewer',
+  owner: 'Owner', admin: 'Admin', agronomo: 'Agrônomo', operador: 'Operador de campo', produtor: 'Produtor', prestador: 'Prestador de serviço', editor: 'Editor', viewer: 'Viewer',
 };
 // Rótulo curto p/ cabeçalhos estreitos (matriz de permissões).
 export const ROTULO_CURTO: Record<string, string> = {
-  owner: 'Owner', admin: 'Admin', agronomo: 'Agrôn.', operador: 'Oper.', produtor: 'Produtor', editor: 'Editor', viewer: 'Viewer',
+  owner: 'Owner', admin: 'Admin', agronomo: 'Agrôn.', operador: 'Oper.', produtor: 'Produtor', prestador: 'Prestador', editor: 'Editor', viewer: 'Viewer',
 };
 
 type Caps = Record<Capacidade, boolean>;
@@ -190,6 +242,7 @@ const DEFAULTS_PERMISSOES: Record<string, Caps> = {
   admin: TODAS(true),
   agronomo: { ...TODAS(false), ndvi: true, recomendacoes: true, relatorios: true },
   operador: { ...TODAS(false), amostragem: true },
+  prestador: { ...TODAS(false), amostragem: true }, // prestador de coleta: só amostragem (app de campo)
   editor: TODAS(true),    // legado
   viewer: TODAS(false),   // legado
 };

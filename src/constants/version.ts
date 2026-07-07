@@ -1,6 +1,11 @@
-export const APP_VERSION = '1.64.0';
+export const APP_VERSION = '1.65.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.65.0': [
+    'PAPEL "PRESTADOR DE SERVIÇO" com VALIDADE DE LOGIN EM DIAS: novo papel para prestadores de amostragem (permissão só de Amostragem), com validade definida pelo Owner ao convidar. Expirou → o login é bloqueado com a mensagem "Seu acesso expirou em {data} — fale com o administrador". Sem validade definida = nunca expira (nada muda para os usuários atuais).',
+    'CONVITE SEM E-MAIL DE CONFIRMAÇÃO, com diagnóstico: se o projeto Supabase ainda estiver exigindo confirmação por e-mail (a causa do convite travar), o app agora DETECTA na hora e mostra o passo exato para desligar (Authentication → Sign In / Providers → Email → Confirm email OFF). Mesma instrução na mensagem de erro de login do convidado.',
+    'TESTE AUTOMATIZADO DO FLUXO: novo script "npm run teste:convite" cria um usuário de teste real, loga com a senha provisória, troca a senha e confere que a antiga deixa de valer — diagnóstico de ponta a ponta.',
+  ],
   '1.64.0': [
     'REFINAMENTOS DA REVISÃO FINAL na importação de laboratório: (1) planilhas de célula mesclada (talhão preenchido só na 1ª linha de cada ponto) voltam a fundir as linhas macro+micro do mesmo ponto — a linha sem talhão herda o da anterior, e ainda passa a entrar no filtro por talhão; (2) a prévia editável foi memoizada — filtro, ordenação e detecção de outliers não recomputam mais a cada tecla em campos não relacionados.',
   ],

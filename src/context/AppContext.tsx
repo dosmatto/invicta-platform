@@ -4,7 +4,7 @@ import { createContext, useContext, useState, useEffect, useCallback, ReactNode 
 import { useRouter } from 'next/navigation';
 import { seedIfEmpty } from '@/lib/seed';
 import { bootCloud } from '@/lib/cloud';
-import { empresaIfEmpty, adotarEmpresasLocais, garantirEmpresaInvicta, uidUsuario, ehOwner, seedPapeis, seedPermissoes, seedPlanos, papelDoEmail, papelDoUsuario, emailUsuario, precisaTrocarSenha } from '@/lib/empresa';
+import { empresaIfEmpty, adotarEmpresasLocais, garantirEmpresaInvicta, uidUsuario, ehOwner, seedPapeis, seedPermissoes, seedPlanos, papelDoEmail, papelDoUsuario, emailUsuario, precisaTrocarSenha, meuRegistro, loginExpirado } from '@/lib/empresa';
 import { limparBaseOperacional } from '@/lib/admin/manutencao';
 import { TrocaSenhaObrigatoria } from '@/components/auth/TrocaSenhaObrigatoria';
 import { migrarLaboratoriosV1, migrarSafrasV1, migrarGradesV1, migrarPreferenciasV1, reKeyDonoBiblioteca } from '@/lib/biblioteca';
@@ -134,6 +134,9 @@ export function AppProvider({ children, redirectProdutorParaPortal }: { children
   const [acessoBloqueado, setAcessoBloqueado] = useState(false);
   // Fase U3: 1º acesso com senha provisória → troca obrigatória.
   const [trocaSenha, setTrocaSenha] = useState(false);
+  // Prestador com validade de login vencida → bloqueado com mensagem própria.
+  const [validadeExpirada, setValidadeExpirada] = useState(false);
+  const [dataExpiracao, setDataExpiracao] = useState<string | null>(null);
   useEffect(() => {
     function migracoesLocais() {
       empresaIfEmpty();                 // Empresa Pessoal + ativa, idempotente
@@ -152,7 +155,7 @@ export function AppProvider({ children, redirectProdutorParaPortal }: { children
 
     const unsub = observarAuth(async (user) => {
       setUsuario(user);
-      if (!user) { setDadosProntos(false); setAcessoBloqueado(false); setTrocaSenha(false); return; }
+      if (!user) { setDadosProntos(false); setAcessoBloqueado(false); setTrocaSenha(false); setValidadeExpirada(false); setDataExpiracao(null); return; }
       setDadosProntos(false);
       await bootCloud().catch(() => {});       // hidrata empresas/dados/papéis da nuvem
       seedPapeis();                            // garante owner/admin oficiais (idempotente)
@@ -163,8 +166,13 @@ export function AppProvider({ children, redirectProdutorParaPortal }: { children
       reKeyDonoBiblioteca();                   // A3.4: dono da Biblioteca pessoal uid→e-mail (idempotente)
       migracoesLocais();
       const autorizado = !!papelDoEmail(emailUsuario());
+      // Validade de login (prestador): papel existe mas venceu → bloqueio próprio.
+      const reg = meuRegistro();
+      const expirado = autorizado && loginExpirado(reg);
       setAcessoBloqueado(!autorizado);                 // e-mail sem papel = bloqueado
-      setTrocaSenha(autorizado && precisaTrocarSenha()); // convidado no 1º acesso
+      setValidadeExpirada(expirado);                   // login com validade vencida
+      setDataExpiracao(expirado ? (reg?.validadeAte ?? null) : null);
+      setTrocaSenha(autorizado && !expirado && precisaTrocarSenha()); // convidado no 1º acesso
       setDadosProntos(true);
     });
     return () => unsub();
@@ -244,6 +252,20 @@ export function AppProvider({ children, redirectProdutorParaPortal }: { children
         </div>
       ) : trocaSenha ? (
         <TrocaSenhaObrigatoria email={usuario?.email ?? ''} onDone={() => setTrocaSenha(false)} />
+      ) : validadeExpirada ? (
+        <div className="fixed inset-0 flex flex-col items-center justify-center gap-4 px-6 text-center" style={{ background: '#061525' }}>
+          <div className="max-w-sm space-y-2">
+            <p className="text-base font-bold" style={{ color: '#e2e8f0' }}>Acesso expirado</p>
+            <p className="text-xs" style={{ color: '#94a3b8' }}>
+              Seu acesso expirou em <strong style={{ color: '#cbd5e1' }}>
+                {dataExpiracao ? new Date(dataExpiracao).toLocaleDateString('pt-BR') : '—'}
+              </strong>. Fale com o administrador para renovar.
+            </p>
+          </div>
+          <button onClick={() => logout()} className="px-4 py-2 rounded text-xs font-bold text-white" style={{ background: 'var(--invicta-blue-mid)' }}>
+            Sair
+          </button>
+        </div>
       ) : acessoBloqueado ? (
         <div className="fixed inset-0 flex flex-col items-center justify-center gap-4 px-6 text-center" style={{ background: '#061525' }}>
           <div className="max-w-sm space-y-2">

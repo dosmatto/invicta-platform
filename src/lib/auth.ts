@@ -214,8 +214,14 @@ export async function criarUsuarioConvite(email: string, senha: string): Promise
       return { ok: false, erro: error.message };
     }
     // Supabase "obfusca" usuário existente devolvendo user sem identities.
+    // ORDEM IMPORTA: essa checagem vem ANTES da de confirmação pendente — usuário
+    // já existente também volta sem session, mas com identities VAZIAS.
     if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0)
       return { ok: false, jaExiste: true };
+    // "Confirm email" LIGADO no projeto: signUp devolve user (com identities) porém
+    // SEM session — o convite por senha provisória não funciona nesse modo.
+    if (data.user && !data.session)
+      return { ok: false, erro: 'O Supabase está exigindo confirmação por e-mail — o convite por senha provisória não funciona assim. Desligue: painel do Supabase → Authentication → Sign in / Providers → Email → desmarque "Confirm email" e salve. Depois convide de novo.' };
     return { ok: true };
   }
   return criarUsuarioConviteFb(e, senha);
@@ -234,7 +240,7 @@ export function mensagemErroLogin(err: unknown): string {
     || msg.includes('invalid login credentials') || msg.includes('invalid email or password'))
     return 'E-mail ou senha incorretos.';
   if (msg.includes('email not confirmed'))
-    return 'E-mail ainda não confirmado no Supabase (Authentication → Users).';
+    return 'Seu e-mail exige confirmação no Supabase. Peça ao administrador para desligar: painel do Supabase → Authentication → Sign in / Providers → Email → desmarque "Confirm email" e salve. Depois entre de novo.';
   if (code.includes('operation-not-allowed'))
     return 'Login por e-mail/senha não está habilitado no Firebase (Authentication → Sign-in method → E-mail/senha).';
   if (code.includes('too-many-requests') || msg.includes('rate limit')) return 'Muitas tentativas. Aguarde alguns instantes e tente de novo.';
