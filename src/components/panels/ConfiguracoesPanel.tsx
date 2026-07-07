@@ -5,7 +5,7 @@ import { PanelSection, PanelRow } from './_shared';
 import { APP_VERSION, CHANGELOG } from '@/constants/version';
 import { EtiquetaLayoutPicker } from '../talhao/EtiquetaLayoutPicker';
 import { getConfigEtiqueta, saveConfigEtiqueta } from '@/lib/store';
-import { INTERP_URL, BACKEND_LOCAL } from '@/lib/interpUrl';
+import { INTERP_URL, BACKEND_LOCAL, headersBackend } from '@/lib/interpUrl';
 import { ChevronDown, ChevronRight, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
 
 // Status do servidor de processamento (nuvem) — só informação, sem instalação.
@@ -15,7 +15,7 @@ function ServidorNuvem() {
   useEffect(() => {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), 12_000);
-    fetch(`${INTERP_URL}/health`, { signal: ctrl.signal, cache: 'no-store' })
+    fetch(`${INTERP_URL}/health`, { signal: ctrl.signal, cache: 'no-store', headers: headersBackend() })
       .then(r => r.ok ? r.json() : Promise.reject())
       .then(j => { setMotor(String(j?.v ?? '')); setStatus('ok'); })
       .catch(() => setStatus('off'))

@@ -5,10 +5,12 @@ ou use o start.ps1 / start.bat desta pasta.
 """
 from __future__ import annotations
 
+import os
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 import interp
@@ -20,13 +22,31 @@ import ia
 
 app = FastAPI(title="INVICTA - Interpolacao de Fertilidade", version="0.1.0")
 
+# Protecao anti-abuso OPT-IN (sem a env definida, nada muda: continua sem auth).
+API_KEY = os.environ.get("INVICTA_API_KEY", "")
+
+# CORS restringivel OPT-IN (sem a env definida, mantem ["*"] como hoje).
+_origins_env = os.environ.get("INVICTA_ALLOWED_ORIGINS", "")
+ALLOWED_ORIGINS = [o.strip() for o in _origins_env.split(",") if o.strip()] if _origins_env else ["*"]
+
 # Local: front em localhost:3100 chama este servico em 127.0.0.1:8800.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_methods=["*"],
-    allow_headers=["*"],
+    allow_headers=["*", "X-Api-Key"],
 )
+
+
+# Exige X-Api-Key em todos os endpoints (exceto /health e preflight OPTIONS)
+# quando INVICTA_API_KEY estiver definida no ambiente. Sem a env, este
+# middleware e um no-op — comportamento identico ao anterior.
+@app.middleware("http")
+async def _exigir_api_key(request, call_next):
+    if API_KEY and request.method != "OPTIONS" and request.url.path != "/health":
+        if request.headers.get("x-api-key") != API_KEY:
+            return JSONResponse(status_code=401, content={"detail": "Nao autorizado: chave de API ausente ou invalida."})
+    return await call_next(request)
 
 
 # Permite que o app publicado (HTTPS) acesse este backend LOCAL em 127.0.0.1

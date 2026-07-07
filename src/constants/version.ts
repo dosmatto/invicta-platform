@@ -1,6 +1,9 @@
-export const APP_VERSION = '1.61.0';
+export const APP_VERSION = '1.62.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.62.0': [
+    'PROTEÇÃO ANTI-ABUSO DO BACKEND (opcional, ativada por variáveis de ambiente): o servidor de processamento passa a poder exigir uma chave (X-Api-Key) em todos os endpoints — inclusive os que consomem APIs pagas (IA, satélite) — e a restringir os domínios permitidos (CORS). SEM as variáveis configuradas no Render/Vercel, nada muda. /health continua aberto (é o que acorda o serviço).',
+  ],
   '1.61.0': [
     'PLATAFORMA MAIS RÁPIDA (cache de leitura): as listas do armazenamento local (talhões, clientes, grades, importações…) agora são descomprimidas e interpretadas UMA vez e servidas de um cache em memória — antes, cada tela refazia esse trabalho pesado a cada leitura (40+ pontos do app). O cache é invalidado automaticamente em toda gravação e também quando OUTRA aba grava (evento storage), então /coleta e /painel abertos juntos continuam coerentes.',
   ],
