@@ -1,6 +1,10 @@
-export const APP_VERSION = '1.56.0';
+export const APP_VERSION = '1.57.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.57.0': [
+    'CORREÇÃO CRÍTICA na importação de laboratório: em arquivos com VÁRIOS talhões (cada um numerando pontos 1..N), amostras de talhões diferentes com mesmo número/profundidade/campanha eram FUNDIDAS e uma delas sumia. A chave de identificação agora inclui o talhão — nada muda para arquivos de talhão único ou com protocolo do laboratório.',
+    'Na prévia editável, correções e exclusões também passam a ser identificadas por talhão (não vazam mais entre talhões ao trocar o filtro).',
+  ],
   '1.56.0': [
     'IMPORTAÇÃO DE LABORATÓRIO COM PRÉVIA EDITÁVEL E DETECÇÃO DE OUTLIERS: antes de importar (qualquer planilha/perfil), abre uma tabela com todas as amostras onde você confere, corrige valores célula a célula e pode excluir amostras. Nada é gravado até clicar em Importar.',
     'DESTAQUE DE POSSÍVEIS OUTLIERS por variável: VERMELHO = valor fora da faixa plausível (erro de unidade/digitação, ex.: pH 85); ÂMBAR = valor que destoa das demais amostras do lote (estatístico, regra do IQR/Tukey). O botão Importar mostra quantos ainda faltam revisar. Trava de segurança da entrada de dados.',

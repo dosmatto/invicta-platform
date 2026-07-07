@@ -155,7 +155,10 @@ export function aplicarPerfil(aoa: string[][], cfg: PerfilLabConfig, filtroTalha
     if (Object.keys(valores).length === 0) { ignoradas++; continue; }
     if (campanha) campanhas.add(campanha);
 
-    const key = (cfg.colProtocolo != null && row[cfg.colProtocolo]) ? String(row[cfg.colProtocolo]) : `${campanha}|${numero}|${norm(prof)}`;
+    // Protocolo é único por amostra; no fallback, inclui o talhão pois em arquivos
+    // multi-talhão cada talhão renumera pontos 1..N (sem talhão, amostras de
+    // talhões diferentes com mesmo nº/prof/campanha se fundiriam e uma sumiria).
+    const key = (cfg.colProtocolo != null && row[cfg.colProtocolo]) ? String(row[cfg.colProtocolo]) : `${norm(talhao)}|${campanha}|${numero}|${norm(prof)}`;
     const ex = mapa.get(key);
     if (ex) Object.assign(ex.valores, valores);
     else mapa.set(key, { numero, profundidade: prof, talhao, campanha, valores });

@@ -44,9 +44,11 @@ const SEVERIDADE: Record<TipoOutlier, number> = { faixa: 3, profundidade: 2, est
 // fundo tiver valor MAIOR que o mais raso, é suspeito (troca/erro de amostra).
 export const VARS_DECRESCEM_COM_PROFUNDIDADE = ['p', 'mo', 'v'];
 
-// Chave única de uma amostra dentro do lote (campanha + ponto + profundidade).
-export function chaveAmostra(r: { campanha: string; numero: number; profundidade: string }): string {
-  return `${r.campanha}|${r.numero}|${r.profundidade}`;
+// Chave única de uma amostra dentro do lote (talhão + campanha + ponto + profundidade).
+// Inclui o talhão pois pontos são renumerados 1..N por talhão — sem ele, edições/
+// exclusões da prévia vazariam entre talhões distintos com mesma chave ao trocar o filtro.
+export function chaveAmostra(r: { talhao: string; campanha: string; numero: number; profundidade: string }): string {
+  return `${r.talhao}|${r.campanha}|${r.numero}|${r.profundidade}`;
 }
 
 const arred = (n: number) => Math.round(n * 100) / 100;
