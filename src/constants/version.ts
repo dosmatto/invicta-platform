@@ -1,6 +1,9 @@
-export const APP_VERSION = '1.63.0';
+export const APP_VERSION = '1.64.0';
 
 export const CHANGELOG: Record<string, string[]> = {
+  '1.64.0': [
+    'REFINAMENTOS DA REVISÃO FINAL na importação de laboratório: (1) planilhas de célula mesclada (talhão preenchido só na 1ª linha de cada ponto) voltam a fundir as linhas macro+micro do mesmo ponto — a linha sem talhão herda o da anterior, e ainda passa a entrar no filtro por talhão; (2) a prévia editável foi memoizada — filtro, ordenação e detecção de outliers não recomputam mais a cada tecla em campos não relacionados.',
+  ],
   '1.63.0': [
     'APP MAIS LEVE NO NAVEGADOR: o SDK do Firebase (usado só como ponte legada durante a migração para o Supabase) deixou de entrar no pacote inicial do app — agora é baixado sob demanda, apenas quando/se for realmente usado. Nenhuma mudança de comportamento; com o Supabase ativo, o Firebase nem chega a ser baixado nos fluxos de dados.',
   ],

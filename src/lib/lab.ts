@@ -125,6 +125,7 @@ export function aplicarPerfil(aoa: string[][], cfg: PerfilLabConfig, filtroTalha
   const talhoes = new Set<string>();
   const campanhas = new Set<string>();
   let ignoradas = 0;
+  let talhaoAnterior = '';   // p/ herdar em planilha de célula mesclada (talhão só na 1ª linha)
 
   for (const row of dados) {
     const idText = String(row[cfg.colId] ?? '');
@@ -136,6 +137,10 @@ export function aplicarPerfil(aoa: string[][], cfg: PerfilLabConfig, filtroTalha
     let talhao = '';
     if (cfg.colTalhao != null) talhao = String(row[cfg.colTalhao] ?? '').trim();
     else if (reTal) { const m = idText.match(reTal); if (m) talhao = m[1].trim(); }
+    // Célula mesclada: linha sem talhão herda o da linha anterior (senão as linhas
+    // macro+micro do mesmo ponto ganham chaves diferentes e não fundem, e a linha
+    // ficaria de fora do filtro por talhão).
+    if (talhao) talhaoAnterior = talhao; else talhao = talhaoAnterior;
     if (talhao) talhoes.add(talhao);
     if (f && talhao && !(norm(talhao).includes(f) || f.includes(norm(talhao)))) { ignoradas++; continue; }
 

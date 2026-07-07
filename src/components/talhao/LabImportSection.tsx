@@ -77,14 +77,20 @@ export function LabImportSection() {
   const talhaoEscolhido = talhaoFiltro || talhaoAuto;
   const campanhasTalhao = aplic ? [...new Set(aplic.resultados.filter(r => matchN(r.talhao, talhaoEscolhido)).map(r => r.campanha).filter(Boolean))] : [];
   const campanhaEscolhida = campanhaFiltro || campanhasTalhao[0] || '';
-  const resultadosFinais = aplic ? aplic.resultados.filter(r =>
+  // Cadeia da prévia memoizada: cada tecla digitada muda `edicoes` e re-renderiza;
+  // sem memo, o filtro + detecção de outliers recomputariam por tecla (pesa em
+  // lotes grandes). As deps garantem recomputo só quando os insumos mudam.
+  const campanhasKey = campanhasTalhao.length;   // só o "há campanhas?" afeta o filtro
+  const resultadosFinais = useMemo(() => aplic ? aplic.resultados.filter(r =>
     (!talhaoEscolhido || matchN(r.talhao, talhaoEscolhido)) &&
-    (campanhasTalhao.length === 0 || !campanhaEscolhida || r.campanha === campanhaEscolhida)
-  ) : [];
-  const elementosFinais = [...new Set(resultadosFinais.flatMap(r => Object.keys(r.valores)))];
-  // Colunas da tabela na ordem agronômica canônica (pH, P, K, Ca…); ids desconhecidos ao fim.
-  const idxEl = (id: string) => { const i = ELEMENTOS_LAB.findIndex(e => e.id === id); return i < 0 ? 999 : i; };
-  const elementosOrdenados = [...elementosFinais].sort((a, b) => idxEl(a) - idxEl(b));
+    (campanhasKey === 0 || !campanhaEscolhida || r.campanha === campanhaEscolhida)
+  ) : [], [aplic, talhaoEscolhido, campanhaEscolhida, campanhasKey]);
+  const elementosOrdenados = useMemo(() => {
+    const elementosFinais = [...new Set(resultadosFinais.flatMap(r => Object.keys(r.valores)))];
+    // Colunas da tabela na ordem agronômica canônica (pH, P, K, Ca…); ids desconhecidos ao fim.
+    const idxEl = (id: string) => { const i = ELEMENTOS_LAB.findIndex(e => e.id === id); return i < 0 ? 999 : i; };
+    return elementosFinais.sort((a, b) => idxEl(a) - idxEl(b));
+  }, [resultadosFinais]);
 
   // Valor exibido numa célula: edição do usuário (texto cru) ou o valor original.
   const valorTexto = (r: ResultadoAmostra, elId: string): string => {
@@ -99,7 +105,7 @@ export function LabImportSection() {
     setExcluidos(prev => { const k = chaveAmostra(r), n = new Set(prev); n.has(k) ? n.delete(k) : n.add(k); return n; });
 
   // Resultados após aplicar edições e exclusões — é o que será realmente importado.
-  const resultadosEditados = resultadosFinais
+  const resultadosEditados = useMemo(() => resultadosFinais
     .filter(r => !excluidos.has(chaveAmostra(r)))
     .map(r => {
       const ed = edicoes[chaveAmostra(r)];
@@ -110,9 +116,9 @@ export function LabImportSection() {
         if (n == null) delete valores[elId]; else valores[elId] = n;   // vazio/ inválido = sem valor
       }
       return { ...r, valores };
-    });
-  const elementosImport = [...new Set(resultadosEditados.flatMap(r => Object.keys(r.valores)))];
-  const outliers = detectarOutliers(resultadosEditados, elementosOrdenados);
+    }), [resultadosFinais, edicoes, excluidos]);
+  const elementosImport = useMemo(() => [...new Set(resultadosEditados.flatMap(r => Object.keys(r.valores)))], [resultadosEditados]);
+  const outliers = useMemo(() => detectarOutliers(resultadosEditados, elementosOrdenados), [resultadosEditados, elementosOrdenados]);
   const nOutliers = contarOutliers(outliers);
 
   const numerosGrade = numerosDaGrade(grade);
@@ -225,11 +231,11 @@ export function LabImportSection() {
           {resultadosEditados.length === 0 && <p className="text-[9px]" style={{ color: '#fbbf24' }}>Nenhuma amostra — confira o perfil e o talhão.</p>}
 
           {/* Unidade de cada variável NESTE laudo → converte p/ o padrão da plataforma */}
-          {elementosFinais.some(elId => unidadesDe(elId).length > 1) && (
+          {elementosOrdenados.some(elId => unidadesDe(elId).length > 1) && (
             <div>
               <p className="text-[9px] font-semibold mb-1" style={{ color: '#64748b' }}>Unidade no laudo → convertida p/ o padrão da plataforma</p>
               <div className="grid grid-cols-2 gap-x-2 gap-y-1">
-                {elementosFinais.filter(elId => unidadesDe(elId).length > 1).map(elId => {
+                {elementosOrdenados.filter(elId => unidadesDe(elId).length > 1).map(elId => {
                   const atual = cfgEfetivo?.detalhes?.[elId]?.unidade ?? unidadeCanonica(elId);
                   const conv = precisaConverter(elId, atual);
                   return (
@@ -244,7 +250,7 @@ export function LabImportSection() {
                   );
                 })}
               </div>
-              {elementosFinais.some(elId => precisaConverter(elId, cfgEfetivo?.detalhes?.[elId]?.unidade ?? unidadeCanonica(elId))) && (
+              {elementosOrdenados.some(elId => precisaConverter(elId, cfgEfetivo?.detalhes?.[elId]?.unidade ?? unidadeCanonica(elId))) && (
                 <p className="text-[9px] mt-0.5" style={{ color: '#fbbf24' }}>⚠ As destacadas serão CONVERTIDAS ao importar (→ padrão da plataforma).</p>
               )}
             </div>
