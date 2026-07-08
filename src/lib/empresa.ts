@@ -33,6 +33,7 @@ export interface RegistroPapel {
   clienteId?: string;  // produtor: qual Cliente ele é (escopo do portal)
   planoId?: string;    // produtor: qual plano de assinatura (seções liberadas)
   clientesVinculados?: string[]; // agrônomo/operador: clientes que ele pode acessar (vazio = todos)
+  talhoesVinculados?: string[];  // restringe AINDA MAIS dentro dos clientes permitidos; vazio/ausente = todos os talhões dos clientes visíveis
   validadeAte?: string;  // prestador: ISO date; login expira nesta data (ausente = nunca expira)
 }
 // Alias público (nome usado pela UI/consumidores). Mesma forma de RegistroPapel.
@@ -110,7 +111,7 @@ export function papelDoEmail(email: string | null): PapelMembro | null {
 }
 export function definirPapelEmail(
   email: string, papel: PapelMembro,
-  extra?: { senhaProvisoria?: boolean; clienteId?: string; planoId?: string; clientesVinculados?: string[]; validadeAte?: string },
+  extra?: { senhaProvisoria?: boolean; clienteId?: string; planoId?: string; clientesVinculados?: string[]; talhoesVinculados?: string[]; validadeAte?: string },
 ) {
   const e = normEmail(email);
   if (!e) return;
@@ -425,6 +426,20 @@ export function escopoClienteIds(): Set<string> | null {
   const reg = meuRegistro();
   if (papel === 'produtor') return new Set(reg?.clienteId ? [reg.clienteId] : []);
   const vinc = reg?.clientesVinculados;
+  return vinc && vinc.length ? new Set(vinc) : null;
+}
+
+// Quais TALHÕES o usuário logado pode enxergar (granularidade fina DENTRO dos
+// clientes já permitidos por escopoClienteIds). `null` = sem restrição por
+// talhão. Owner/Admin/Editor sempre null. Qualquer papel não-privilegiado
+// (agrônomo/operador/prestador/produtor) fica restrito SÓ SE tiver
+// `talhoesVinculados` não-vazio; senão null (retrocompatível — nada muda até
+// você atribuir vínculos de talhão). Usado por getTalhoes.
+export function escopoTalhaoIds(): Set<string> | null {
+  const papel = papelDoUsuario();
+  if (!papel || papel === 'owner' || papel === 'admin' || papel === 'editor') return null;
+  const reg = meuRegistro();
+  const vinc = reg?.talhoesVinculados;
   return vinc && vinc.length ? new Set(vinc) : null;
 }
 

@@ -1,5 +1,9 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '1.75.0': [
+    'PERMISSÃO POR TALHÃO: além do vínculo por cliente, agora dá para restringir um usuário a TALHÕES específicos — no painel de Usuários, o modal de acesso ganhou a seção "Talhões" com busca. Caso típico: prestador de amostragem vê SÓ os talhões do serviço contratado (plataforma e app de campo). Sem restrição marcada, nada muda.',
+    'O botão de vínculos também aparece para o papel Prestador de serviço.',
+  ],
   '1.74.0': [
     'LINK DO PRESTADOR NAS MEDIÇÕES SALVAS: o link público (abre só a área, sem login) agora pode ser gerado de qualquer medição guardada — botão de corrente na lista de medições salvas do APP DE CAMPO e botão "Link do prestador" no repositório de Medições do painel. Polígonos preservam os furos; linhas e pontos também viram link.',
   ],

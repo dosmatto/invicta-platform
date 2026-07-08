@@ -8,7 +8,7 @@ import type { AmbienteProdutivo } from './meap/tipos';
 import { cloudPushLista } from './cloud';
 import { lerListaLocal, gravarListaLocal } from './localComprimido';
 import { areaHaGeo, areaHaGeoBruta } from './areaGeo';
-import { empresaAtivaId, uidUsuario, escopoClienteIds } from './empresa';
+import { empresaAtivaId, uidUsuario, escopoClienteIds, escopoTalhaoIds } from './empresa';
 import {
   listar as bibListar,
   obter as bibObter,
@@ -641,6 +641,8 @@ export function getTalhoes(fazendaId?: string): Talhao[] {
   const esc = escopoClienteIds();
   let all = loadFiltrado<Talhao>('inv_talhoes');
   if (esc) { const fz = fazendasNoEscopo(esc); all = all.filter(t => fz.has(t.fazendaId)); }
+  const escT = escopoTalhaoIds();   // granularidade fina: restringe aos talhões vinculados
+  if (escT) all = all.filter(t => escT.has(t.id));
   all.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));   // sempre em ordem alfabética
   return fazendaId ? all.filter(t => t.fazendaId === fazendaId) : all;
 }

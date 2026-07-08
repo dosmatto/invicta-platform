@@ -16,7 +16,7 @@ import {
   categoriaDoPapel, NOME_CATEGORIA, renovarValidade, diasRestantes,
   type PapelMembro, type RegistroPapel, type Capacidade, type PlanoAssinatura, type SecaoPortal, type CategoriaUsuario,
 } from '@/lib/empresa';
-import { getClientes, type Cliente } from '@/lib/store';
+import { getClientes, getFazendas, getTalhoes, type Cliente, type Fazenda, type Talhao } from '@/lib/store';
 import { criarUsuarioConvite } from '@/lib/auth';
 import { resetarSenhaAdmin } from '@/lib/authAdmin';
 import { tocarBackend } from '@/lib/interpUrl';
@@ -25,8 +25,9 @@ import { UserPlus, Trash2, AlertTriangle, ShieldCheck, SlidersHorizontal, Copy, 
 // Ordem das seções da lista agrupada por categoria.
 const ORDEM_CATEGORIAS: CategoriaUsuario[] = ['equipe', 'produtores', 'prestadores'];
 
-// Papéis cujo acesso pode ser LIMITADO a clientes específicos (consultoria).
-const PAPEIS_VINCULAVEIS: PapelMembro[] = ['agronomo', 'operador'];
+// Papéis cujo acesso pode ser LIMITADO a clientes/talhões específicos (consultoria).
+// Inclui prestador (ex.: prestador de amostragem vê só os talhões contratados).
+const PAPEIS_VINCULAVEIS: PapelMembro[] = ['agronomo', 'operador', 'prestador'];
 
 import { inputStyle } from '@/constants/ui';
 // Papéis cujas permissões o Owner edita (Owner é sempre tudo, não aparece aqui).
@@ -48,12 +49,15 @@ export function UsuariosPanel() {
   const [planoNovo, setPlanoNovo] = useState('');
   const [validadeDiasNovo, setValidadeDiasNovo] = useState('30');   // texto cru; clamp só ao usar
   const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [fazendas, setFazendas] = useState<Fazenda[]>([]);
+  const [talhoes, setTalhoes] = useState<Talhao[]>([]);
   const [planos, setPlanos] = useState<PlanoAssinatura[]>([]);
   const [vincDe, setVincDe] = useState<RegistroPapel | null>(null);
+  const [buscaTalhao, setBuscaTalhao] = useState('');   // filtro do modal de talhões
   const [renovarDias, setRenovarDias] = useState<Record<string, string>>({});  // texto cru por e-mail
   const [resetando, setResetando] = useState('');   // e-mail com reset de senha em andamento
 
-  function recarregar() { setPapeis(getPapeis()); setPerms(getPermissoes()); setClientes(getClientes()); setPlanos(getPlanos()); }
+  function recarregar() { setPapeis(getPapeis()); setPerms(getPermissoes()); setClientes(getClientes()); setFazendas(getFazendas()); setTalhoes(getTalhoes()); setPlanos(getPlanos()); }
   useEffect(() => {
     recarregar();
     tocarBackend();   // acorda o servidor da nuvem (usado pelo Resetar senha/convite)
@@ -158,6 +162,23 @@ export function UsuariosPanel() {
     definirPapelEmail(reg.email, reg.papel, { clientesVinculados: novo });
     const atualizado = getPapeis().find(p => p.email === reg.email) ?? null;
     setVincDe(atualizado);
+    setPapeis(getPapeis());
+  }
+
+  // Vínculo por TALHÃO (granularidade fina — restringe dentro dos clientes já permitidos).
+  function toggleVincTalhao(reg: RegistroPapel, talhaoId: string) {
+    if (!souOwner) return;
+    const atual = reg.talhoesVinculados ?? [];
+    const novo = atual.includes(talhaoId) ? atual.filter(x => x !== talhaoId) : [...atual, talhaoId];
+    definirPapelEmail(reg.email, reg.papel, { talhoesVinculados: novo });
+    setVincDe(getPapeis().find(p => p.email === reg.email) ?? null);
+    setPapeis(getPapeis());
+  }
+
+  function limparTalhoes(reg: RegistroPapel) {
+    if (!souOwner) return;
+    definirPapelEmail(reg.email, reg.papel, { talhoesVinculados: [] });
+    setVincDe(getPapeis().find(p => p.email === reg.email) ?? null);
     setPapeis(getPapeis());
   }
 
@@ -293,13 +314,18 @@ export function UsuariosPanel() {
                       {PAPEIS_ATRIBUIVEIS.map(p => <option key={p} value={p}>{ROTULO_PAPEL[p]}</option>)}
                       {!PAPEIS_ATRIBUIVEIS.includes(r.papel) && <option value={r.papel}>{ROTULO_PAPEL[r.papel] ?? r.papel}</option>}
                     </select>
-                    {PAPEIS_VINCULAVEIS.includes(r.papel) && (
-                      <button onClick={() => setVincDe(r)} disabled={!souOwner} title="Clientes que este usuário pode acessar"
-                        className="px-1.5 py-0.5 rounded text-[9px] font-bold flex items-center gap-0.5"
-                        style={{ background: '#1a3a6b', color: (r.clientesVinculados?.length ?? 0) ? '#86efac' : '#93c5fd' }}>
-                        <Building2 size={10} /> {(r.clientesVinculados?.length ?? 0) || 'todos'}
-                      </button>
-                    )}
+                    {PAPEIS_VINCULAVEIS.includes(r.papel) && (() => {
+                      const nCli = r.clientesVinculados?.length ?? 0;
+                      const nTal = r.talhoesVinculados?.length ?? 0;
+                      return (
+                        <button onClick={() => { setBuscaTalhao(''); setVincDe(r); }} disabled={!souOwner}
+                          title={`Acesso: ${nCli || 'todos'} cliente(s)${nTal ? ` · ${nTal} talhão(ões)` : ''}`}
+                          className="px-1.5 py-0.5 rounded text-[9px] font-bold flex items-center gap-0.5"
+                          style={{ background: '#1a3a6b', color: (nCli || nTal) ? '#86efac' : '#93c5fd' }}>
+                          <Building2 size={10} /> {nCli || 'todos'}{nTal ? ` · ${nTal}t` : ''}
+                        </button>
+                      );
+                    })()}
                     {souOwner && (
                       <button onClick={() => resetarSenha(r)} disabled={!!resetando}
                         title="Resetar senha (gera nova senha provisória; ele troca no 1º acesso)"
@@ -414,7 +440,7 @@ export function UsuariosPanel() {
             <div className="flex items-center gap-2 px-4 py-3" style={{ borderBottom: '1px solid #1a3a6b' }}>
               <Building2 size={14} style={{ color: '#93c5fd' }} />
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-bold truncate" style={{ color: '#e2e8f0' }}>Clientes de {ROTULO_PAPEL[vincDe.papel]}</p>
+                <p className="text-sm font-bold truncate" style={{ color: '#e2e8f0' }}>Acesso de {ROTULO_PAPEL[vincDe.papel]}</p>
                 <p className="text-[10px] truncate" style={{ color: '#64748b' }}>{vincDe.email}</p>
               </div>
               <button onClick={() => setVincDe(null)} className="p-1" style={{ color: '#64748b' }}><X size={16} /></button>
@@ -423,21 +449,97 @@ export function UsuariosPanel() {
               {(vincDe.clientesVinculados?.length ?? 0) === 0
                 ? '⚠ Sem nenhum marcado = acesso a TODOS os clientes. Marque para limitar.'
                 : `Vê ${vincDe.clientesVinculados!.length} de ${clientes.length} cliente(s).`}
+              {(vincDe.talhoesVinculados?.length ?? 0) > 0 && (
+                <span style={{ color: '#86efac' }}> · Vê {vincDe.talhoesVinculados!.length} de {talhoes.length} talhão(ões).</span>
+              )}
             </div>
-            <div className="flex-1 overflow-y-auto p-2 space-y-1">
-              {clientes.length === 0 && <p className="text-[11px] py-6 text-center" style={{ color: '#64748b' }}>Nenhum cliente cadastrado.</p>}
-              {clientes.map(c => {
-                const marcado = (vincDe.clientesVinculados ?? []).includes(c.id);
-                return (
-                  <label key={c.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer"
-                    style={{ background: marcado ? '#0f2a1a' : '#0b1d3a' }}>
-                    <input type="checkbox" checked={marcado} onChange={() => toggleVinculo(vincDe, c.id)}
-                      className="accent-green-600" style={{ width: 15, height: 15 }} />
-                    <span className="text-xs truncate" style={{ color: marcado ? '#86efac' : '#cbd5e1' }}>{c.nome}</span>
-                  </label>
-                );
-              })}
-            </div>
+            {(() => {
+              const talSel = new Set(vincDe.talhoesVinculados ?? []);
+              const totalTal = talhoes.length;
+              return (
+                <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                  {clientes.length === 0 && <p className="text-[11px] py-6 text-center" style={{ color: '#64748b' }}>Nenhum cliente cadastrado.</p>}
+                  {clientes.map(c => {
+                    const marcado = (vincDe.clientesVinculados ?? []).includes(c.id);
+                    return (
+                      <label key={c.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer"
+                        style={{ background: marcado ? '#0f2a1a' : '#0b1d3a' }}>
+                        <input type="checkbox" checked={marcado} onChange={() => toggleVinculo(vincDe, c.id)}
+                          className="accent-green-600" style={{ width: 15, height: 15 }} />
+                        <span className="text-xs truncate" style={{ color: marcado ? '#86efac' : '#cbd5e1' }}>{c.nome}</span>
+                      </label>
+                    );
+                  })}
+
+                  {/* Talhões (opcional — deixa mais restrito) */}
+                  {(() => {
+                    // Clientes considerados: os marcados; se nenhum marcado, todos.
+                    const cliMarc = new Set(vincDe.clientesVinculados ?? []);
+                    const cliAlvo = cliMarc.size ? cliMarc : new Set(clientes.map(c => c.id));
+                    const fazById = new Map(fazendas.map(f => [f.id, f]));
+                    const cliById = new Map(clientes.map(c => [c.id, c]));
+                    // Talhões dos clientes-alvo, com rótulos "TALHÃO — FAZENDA (CLIENTE)".
+                    const linhas = talhoes.map(t => {
+                      const faz = fazById.get(t.fazendaId);
+                      const cli = faz ? cliById.get(faz.clienteId) : undefined;
+                      return { t, faz, cli, cliId: faz?.clienteId };
+                    }).filter(l => l.cliId && cliAlvo.has(l.cliId));
+                    const q = buscaTalhao.trim().toLowerCase();
+                    const filtradas = q
+                      ? linhas.filter(l =>
+                          (l.t.nome ?? '').toLowerCase().includes(q) ||
+                          (l.faz?.nome ?? '').toLowerCase().includes(q) ||
+                          (l.cli?.nome ?? '').toLowerCase().includes(q))
+                      : linhas;
+                    const LIMITE = 80;
+                    const exibidas = filtradas.slice(0, LIMITE);
+                    return (
+                      <div className="mt-3 pt-2" style={{ borderTop: '1px solid #0f2240' }}>
+                        <p className="text-[10px] uppercase tracking-wider mb-1 px-1" style={{ color: '#475569' }}>
+                          Talhões (opcional — deixa mais restrito)
+                        </p>
+                        <input value={buscaTalhao} onChange={e => setBuscaTalhao(e.target.value)}
+                          placeholder="Buscar talhão / fazenda / cliente…"
+                          className="w-full rounded px-2 py-1.5 text-[11px] outline-none mb-1" style={inputStyle} />
+                        {filtradas.length === 0 && (
+                          <p className="text-[10px] py-3 text-center" style={{ color: '#64748b' }}>
+                            {q ? 'Nenhum talhão encontrado.' : 'Nenhum talhão nos clientes selecionados.'}
+                          </p>
+                        )}
+                        {exibidas.map(l => {
+                          const marcado = talSel.has(l.t.id);
+                          return (
+                            <label key={l.t.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer"
+                              style={{ background: marcado ? '#0f2a1a' : '#0b1d3a' }}>
+                              <input type="checkbox" checked={marcado} onChange={() => toggleVincTalhao(vincDe, l.t.id)}
+                                className="accent-green-600" style={{ width: 15, height: 15 }} />
+                              <span className="text-[11px] truncate" style={{ color: marcado ? '#86efac' : '#cbd5e1' }}>
+                                {l.t.nome} <span style={{ color: '#64748b' }}>— {l.faz?.nome ?? '—'} ({l.cli?.nome ?? '—'})</span>
+                              </span>
+                            </label>
+                          );
+                        })}
+                        {filtradas.length > LIMITE && (
+                          <p className="text-[10px] py-1.5 text-center" style={{ color: '#fbbf24' }}>
+                            Mostrando {LIMITE} de {filtradas.length} — refine a busca.
+                          </p>
+                        )}
+                        {talSel.size > 0 && (
+                          <button onClick={() => limparTalhoes(vincDe)} className="mt-1 text-[10px] font-bold px-1" style={{ color: '#93c5fd' }}>
+                            Todos os talhões (limpar restrição)
+                          </button>
+                        )}
+                        <p className="text-[9px] mt-1 px-1" style={{ color: '#64748b' }}>
+                          {talSel.size > 0
+                            ? `Vê ${talSel.size} de ${totalTal} talhão(ões).`
+                            : 'Sem talhão marcado = vê todos os talhões dos clientes permitidos.'}
+                        </p>
+                      </div>
+                    );
+                  })()}
+                </div>
+              );
+            })()}
             <div className="px-4 py-2.5 flex items-center gap-2" style={{ borderTop: '1px solid #1a3a6b' }}>
               <button onClick={() => { definirPapelEmail(vincDe.email, vincDe.papel, { clientesVinculados: [] }); setVincDe(getPapeis().find(p => p.email === vincDe.email) ?? null); setPapeis(getPapeis()); }}
                 className="text-[10px] font-bold" style={{ color: '#93c5fd' }}>
