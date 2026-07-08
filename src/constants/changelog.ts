@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '1.72.0': [
+    'MIGRAÇÃO CONCLUÍDA — FIREBASE REMOVIDO: o app agora é 100% Supabase (auth + dados). O SDK do Firebase saiu do projeto por completo (código e dependência) — bundle menor, menos peças móveis. Comportamento idêntico; o login offline (verificador local) continua funcionando.',
+  ],
   '1.71.0': [
     'INDICADOR DE SINCRONIZAÇÃO: quando algum envio à nuvem falha (ex.: sem internet), aparece um aviso discreto "não sincronizado" (bolinha âmbar na barra lateral do painel e no rodapé do app de campo) com as coleções pendentes no tooltip — some sozinho quando o reenvio automático conclui. Armazenamento local cheio aparece em vermelho.',
   ],

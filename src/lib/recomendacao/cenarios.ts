@@ -2,11 +2,10 @@
 
 // Fase R3.B — persistência de Cenários (na nuvem). Um cenário guarda os mapas de
 // DOSE (um por equação) + financeiro, para reabrir e comparar (R4). Igual ao
-// histórico de relatórios, fica na coleção Firestore `inv_cenarios`, consultado
-// sob demanda por talhão (FORA do sync de listas). Doc = { campos de consulta +
-// json } — os grids vão GZIP dentro do json (cabe no limite de 1 MB/doc).
+// histórico de relatórios, fica na coleção `inv_cenarios` (Supabase), consultado
+// sob demanda por talhão (FORA do sync de listas). Os grids vão GZIP dentro do
+// registro.
 
-import { ensureFb, getFirestoreFns } from '../firebase';
 import { emailUsuario } from '../auth';
 import { usarDadosSupabase, salvarDocSupabase, carregarDocsPorCampoSupabase, excluirDocSupabase } from '../supabaseData';
 import { comprimirGrid, descomprimirGrid, type Grid } from '../fertilidade';
@@ -36,33 +35,15 @@ export async function salvarCenario(meta: Omit<Cenario, 'id' | 'geradoEm' | 'ger
   // comprime os grids (gzip) p/ caber no doc.
   const doses = await Promise.all(meta.doses.map(async d => ({ ...d, grid: await comprimirGrid(d.grid as Grid) })));
   const cen: Cenario = { ...meta, doses, id, geradoEm: Date.now(), geradoPor: emailUsuario() ?? '' };
-  if (usarDadosSupabase()) { await salvarDocSupabase(COL, id, cen); return cen; }
-  const fb = await ensureFb();
-  if (!fb) throw new Error('Nuvem indisponível para salvar o cenário.');
-  const { doc, setDoc } = await getFirestoreFns();
-  await setDoc(doc(fb.db, COL, id), {
-    id, talhaoId: cen.talhaoId, safra: cen.safra, geradoEm: cen.geradoEm, json: JSON.stringify(cen),
-  });
+  if (!usarDadosSupabase()) throw new Error('Nuvem indisponível para salvar o cenário.');
+  await salvarDocSupabase(COL, id, cen);
   return cen;
 }
 
 export async function listarCenarios(talhaoId: string, safra?: string): Promise<Cenario[]> {
-  if (usarDadosSupabase()) {
-    const out = await carregarDocsPorCampoSupabase<Cenario>(COL, 'talhaoId', talhaoId);
-    return out.filter(c => !safra || c.safra === safra).sort((a, b) => b.geradoEm - a.geradoEm);
-  }
-  const fb = await ensureFb();
-  if (!fb) return [];
-  try {
-    const { collection, query, getDocs, where } = await getFirestoreFns();
-    const snap = await getDocs(query(collection(fb.db, COL), where('talhaoId', '==', talhaoId)));
-    const out: Cenario[] = [];
-    snap.forEach(d => { try { out.push(JSON.parse((d.data() as { json: string }).json) as Cenario); } catch { /* ignora doc inválido */ } });
-    return out.filter(c => !safra || c.safra === safra).sort((a, b) => b.geradoEm - a.geradoEm);
-  } catch (e) {
-    console.warn('[cenarios] falha ao listar:', e);
-    return [];
-  }
+  if (!usarDadosSupabase()) return [];
+  const out = await carregarDocsPorCampoSupabase<Cenario>(COL, 'talhaoId', talhaoId);
+  return out.filter(c => !safra || c.safra === safra).sort((a, b) => b.geradoEm - a.geradoEm);
 }
 
 // Descomprime os grids das doses p/ visualizar/recolorir ao reabrir.
@@ -77,19 +58,11 @@ export async function descomprimirCenario(cen: Cenario): Promise<Cenario> {
 // os grids como estão (gz) — sem recomprimir.
 export async function marcarCenarioOficial(cen: Cenario, oficial: boolean): Promise<void> {
   const atualizado: Cenario = { ...cen, oficial };
-  if (usarDadosSupabase()) { await salvarDocSupabase(COL, cen.id, atualizado); return; }
-  const fb = await ensureFb();
-  if (!fb) throw new Error('Nuvem indisponível.');
-  const { doc, setDoc } = await getFirestoreFns();
-  await setDoc(doc(fb.db, COL, cen.id), {
-    id: cen.id, talhaoId: cen.talhaoId, safra: cen.safra, geradoEm: cen.geradoEm, json: JSON.stringify(atualizado),
-  });
+  if (!usarDadosSupabase()) throw new Error('Nuvem indisponível.');
+  await salvarDocSupabase(COL, cen.id, atualizado);
 }
 
 export async function excluirCenario(id: string): Promise<void> {
-  if (usarDadosSupabase()) { await excluirDocSupabase(COL, id); return; }
-  const fb = await ensureFb();
-  if (!fb) return;
-  const { doc, deleteDoc } = await getFirestoreFns();
-  await deleteDoc(doc(fb.db, COL, id));
+  if (!usarDadosSupabase()) return;
+  await excluirDocSupabase(COL, id);
 }

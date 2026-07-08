@@ -520,7 +520,7 @@ function save<T>(key: string, data: T[]) {
       alert('Armazenamento local cheio — os últimos dados NÃO foram salvos no cache deste navegador. Eles ainda serão enviados à nuvem, mas libere espaço (ex.: limpe dados de outros sites) para o cache local voltar a funcionar.');
     }
   }
-  cloudPushLista(key, data); // espelha na nuvem quando configurada (no-op sem Firebase) - mesmo se o save local falhou acima
+  cloudPushLista(key, data); // espelha na nuvem quando configurada (no-op sem Supabase) - mesmo se o save local falhou acima
 }
 
 function uid() {

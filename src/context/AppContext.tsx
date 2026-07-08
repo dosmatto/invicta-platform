@@ -10,8 +10,7 @@ import { TrocaSenhaObrigatoria } from '@/components/auth/TrocaSenhaObrigatoria';
 import { migrarLaboratoriosV1, migrarSafrasV1, migrarGradesV1, migrarPreferenciasV1, reKeyDonoBiblioteca } from '@/lib/biblioteca';
 import { seedLegendasSistema, migrarAreasGeodesicasV1, migrarNomesMaiusculosV1 } from '@/lib/store';
 import { LEGENDAS_OFICIAIS } from '@/constants/legendasSeedOficial';
-import { firebaseConfigurado } from '@/lib/firebase';
-import { observarAuth, logout, type User } from '@/lib/auth';
+import { authConfigurado, observarAuth, logout, type User } from '@/lib/auth';
 import { LoginScreen } from '@/components/auth/LoginScreen';
 
 export type MapMode = 'street' | 'satellite';
@@ -126,9 +125,9 @@ export function AppProvider({ children, redirectProdutorParaPortal }: { children
   const [activePanel, setActivePanel] = useState<string | null>('dashboard');
   const [mapMode, setMapMode] = useState<MapMode>('satellite');
 
-  // Login obrigatório quando o Firebase está configurado: o boot da nuvem só
-  // roda depois de autenticar. Sem Firebase, modo local com seed de demo.
-  const [usuario, setUsuario] = useState<User | null | undefined>(firebaseConfigurado ? undefined : null);
+  // Login obrigatório quando a auth (Supabase) está configurada: o boot da nuvem
+  // só roda depois de autenticar. Sem auth, modo local com seed de demo.
+  const [usuario, setUsuario] = useState<User | null | undefined>(authConfigurado ? undefined : null);
   const [dadosProntos, setDadosProntos] = useState(false);
   // Fase U1: e-mail sem papel atribuído (inv_papeis) = acesso bloqueado.
   const [acessoBloqueado, setAcessoBloqueado] = useState(false);
@@ -146,7 +145,7 @@ export function AppProvider({ children, redirectProdutorParaPortal }: { children
       seedLegendasSistema(LEGENDAS_OFICIAIS); // legendas oficiais (sistema)
     }
 
-    if (!firebaseConfigurado) {
+    if (!authConfigurado) {
       seedIfEmpty();
       migracoesLocais();
       setDadosProntos(true);
@@ -240,11 +239,11 @@ export function AppProvider({ children, redirectProdutorParaPortal }: { children
       fertilidadeOverlay, setFertilidadeOverlay,
       fertilidadeLabels, setFertilidadeLabels,
     }}>
-      {firebaseConfigurado && usuario === undefined ? (
+      {authConfigurado && usuario === undefined ? (
         <div className="fixed inset-0 flex items-center justify-center" style={{ background: '#061525' }}>
           <p className="text-xs font-semibold" style={{ color: '#64748b' }}>Verificando acesso…</p>
         </div>
-      ) : firebaseConfigurado && usuario === null ? (
+      ) : authConfigurado && usuario === null ? (
         <LoginScreen />
       ) : !dadosProntos ? (
         <div className="fixed inset-0 flex items-center justify-center" style={{ background: '#061525' }}>

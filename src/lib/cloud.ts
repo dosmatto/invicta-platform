@@ -1,29 +1,23 @@
 'use client';
 
-// Espelho do store local (localStorage) no Firestore — fase 1 da nuvem.
+// Espelho do store local (localStorage) na nuvem (Supabase/Postgres).
 //
 // O app continua lendo o localStorage de forma síncrona (nenhuma tela muda).
 // A nuvem entra em dois momentos:
-//   1. boot: baixa todas as coleções e substitui o cache local (se a nuvem
-//      estiver vazia e o local não, sobe o local — migração da 1ª máquina);
-//   2. gravação: cada save() espelha o diff (por id) no Firestore.
+//   1. boot: baixa todas as coleções e substitui o cache local;
+//   2. gravação: cada save() espelha a lista/objeto no Supabase.
 //
-// Cada registro vira um doc {id, json} — JSON serializado para evitar
-// limitações de tipos do Firestore (ex.: arrays aninhados de GeoJSON).
-// Sem variáveis NEXT_PUBLIC_FIREBASE_*, tudo aqui é no-op.
+// Sem NEXT_PUBLIC_SUPABASE_* (ou com NEXT_PUBLIC_USE_SUPABASE_DATA != 'true'),
+// tudo aqui é no-op e o app roda 100% local (localStorage), como antes.
 
-import { getFb, ensureFb, getFirestoreFns, firebaseConfigurado } from './firebase';
-import { lerRawLocal, gravarRawLocal, lerListaLocal } from './localComprimido';
+import { usuarioAtual } from './auth';
 import { usarDadosSupabase, bootSupabaseData, pushListaSupabase, pushObjSupabase,
   salvarMapaSupabase, carregarMapasPorPrefixoSupabase, excluirMapasPorPrefixoSupabase,
-  mapasJaMigrados, marcarMapasMigrados,
-  salvarDocSupabase, colecaoJaMigrada, marcarColecaoMigrada } from './supabaseData';
+  excluirDocsPorPrefixoSupabase, excluirColecaoSupabase } from './supabaseData';
 
 // Coleções (arrays de registros com id) espelhadas 1:1 com as chaves locais
 const KEYS_LISTA = [
   'inv_clientes', 'inv_fazendas', 'inv_talhoes',
-  // Antigas (Fase 5 migra para inv_bib_*). Mantidas para HIDRATAR dados de
-  // quem já usa Firestore; após migração viram espelho inerte (nada grava nelas).
   'inv_safras', 'inv_padroes_elem', 'inv_padroes_amos',
   'inv_grades',                        // grades reais (GradeAmostragem) — não muda
   'inv_bib_laboratorios',              // Fase 3
@@ -54,256 +48,70 @@ const KEYS_LISTA = [
 // Configurações (objeto único por chave) — coleção 'inv_config', doc = chave
 const KEYS_OBJ = ['inv_etiqueta_cfg'];
 
-const TIMEOUT_BOOT_MS = 20000;
-
-// Último estado conhecido da nuvem (key -> id -> json) para diff nas gravações
-const espelho: Record<string, Map<string, string>> = {};
 let ativo = false;
 
 export const cloudAtivo = () => ativo;
 
-// Pode gravar/ler docs independentes (mapas) basta estar logado — NÃO depende do
-// boot ter terminado de hidratar todas as listas (que é o que `ativo` indica).
-// Mapas são docs autônomos (setDoc por id), então não precisam do espelho/diff.
+// Pode gravar/ler docs independentes (mapas) basta a nuvem estar configurada e
+// haver um usuário logado. Mapas são docs autônomos (upsert por id).
 export function cloudPodeGravar(): boolean {
-  return firebaseConfigurado && !!getFb()?.auth.currentUser;
-}
-
-function lerLocal(key: string): { id: string }[] {
-  return lerListaLocal<{ id: string }>(key);
-}
-
-async function hidratarLista(key: string) {
-  const fb = getFb()!;
-  const { collection, doc, getDocs, setDoc } = await getFirestoreFns();
-  const snap = await getDocs(collection(fb.db, key));
-  const nuvem = new Map<string, string>();
-  snap.forEach(d => { const j = (d.data() as { json?: string }).json; if (j) nuvem.set(d.id, j); });
-
-  if (nuvem.size > 0) {
-    const arr = [...nuvem.values()].map(j => JSON.parse(j));
-    gravarRawLocal(key, JSON.stringify(arr));
-  } else {
-    // nuvem vazia: sobe o que existir localmente (migração inicial)
-    for (const rec of lerLocal(key)) {
-      const json = JSON.stringify(rec);
-      await setDoc(doc(fb.db, key, String(rec.id)), { id: String(rec.id), json });
-      nuvem.set(String(rec.id), json);
-    }
-  }
-  espelho[key] = nuvem;
-}
-
-async function hidratarObj(key: string) {
-  const fb = getFb()!;
-  const { doc, getDoc, setDoc } = await getFirestoreFns();
-  const ref = doc(fb.db, 'inv_config', key);
-  const snap = await getDoc(ref);
-  const m = new Map<string, string>();
-  if (snap.exists()) {
-    const j = (snap.data() as { json?: string }).json;
-    if (j) { gravarRawLocal(key, j); m.set(key, j); }
-  } else {
-    const local = lerRawLocal(key);
-    if (local) { await setDoc(ref, { json: local }); m.set(key, local); }
-  }
-  espelho[key] = m;
+  return usarDadosSupabase() && !!usuarioAtual();
 }
 
 // Baixa tudo antes do app renderizar. Retorna true se a nuvem está ativa.
 export async function bootCloud(): Promise<boolean> {
   if (typeof window === 'undefined') return false;
-  // Dados no Supabase/Postgres (D1.2) — substitui o Firestore quando o interruptor
-  // está ligado. Hidrata o cache local a partir das tabelas e segue o fluxo normal.
-  if (usarDadosSupabase()) {
-    try {
-      await bootSupabaseData(KEYS_LISTA, KEYS_OBJ);
-      ativo = true;
-      console.log('[nuvem] ATIVA — dados no Supabase (Postgres).');
-      await migrarMapasParaSupabaseSeVazio();   // 1ª vez: leva os mapas do Firestore p/ o Supabase
-      // cenários (doc traz o objeto no campo `json`) e relatórios (objeto direto)
-      await migrarColecaoParaSupabaseSeVazio('inv_cenarios', (d) => {
-        try { return JSON.parse((d as { json?: string }).json ?? 'null'); } catch { return null; }
-      });
-      await migrarColecaoParaSupabaseSeVazio('inv_relatorios', (d) => (d ?? null) as object | null);
-    }
-    catch (e) { console.warn('[nuvem] Supabase indisponível, usando dados locais:', e); ativo = false; }
-    return ativo;
-  }
-  if (!firebaseConfigurado) return false;
-  const fb = await ensureFb();
-  if (!fb?.auth.currentUser) { console.warn('[nuvem] sem usuário logado — nuvem inativa.'); ativo = false; return false; }
-  const trabalho = (async () => {
-    // Em paralelo — antes era sequencial (16 coleções uma a uma), o que
-    // estourava o timeout em conexões lentas e deixava a nuvem inativa.
-    await Promise.all(KEYS_LISTA.map(k => hidratarLista(k)));
-    await Promise.all(KEYS_OBJ.map(k => hidratarObj(k)));
-  })();
-  const timeout = new Promise<never>((_, rej) =>
-    setTimeout(() => rej(new Error('timeout ao conectar na nuvem')), TIMEOUT_BOOT_MS));
+  if (!usarDadosSupabase()) return false;
   try {
-    await Promise.race([trabalho, timeout]);
+    await bootSupabaseData(KEYS_LISTA, KEYS_OBJ);
     ativo = true;
-    console.log('[nuvem] ATIVA — sincronizando com o Firestore.');
+    console.log('[nuvem] ATIVA — dados no Supabase (Postgres).');
   } catch (e) {
-    // segue 100% local nesta sessão (sem push, para não corromper o espelho)
-    console.warn('[nuvem] indisponível, usando dados locais:', e);
+    console.warn('[nuvem] Supabase indisponível, usando dados locais:', e);
     ativo = false;
   }
   return ativo;
 }
 
-// Espelha uma gravação de lista (diff por id contra o último estado conhecido)
+// Espelha uma gravação de lista no Supabase.
 export function cloudPushLista(key: string, lista: unknown[]) {
   if (!KEYS_LISTA.includes(key)) return;
-  if (usarDadosSupabase()) { void pushListaSupabase(key, lista); return; }
-  if (!ativo) return;
-  const fb = getFb();
-  if (!fb) return;
-  const prev = espelho[key] ?? new Map<string, string>();
-  const next = new Map<string, string>();
-  for (const rec of lista as { id: unknown }[]) next.set(String(rec.id), JSON.stringify(rec));
-  espelho[key] = next;
-  (async () => {
-    const { doc, setDoc, deleteDoc } = await getFirestoreFns();
-    for (const [id, json] of next) {
-      if (prev.get(id) !== json) await setDoc(doc(fb.db, key, id), { id, json });
-    }
-    for (const id of prev.keys()) {
-      if (!next.has(id)) await deleteDoc(doc(fb.db, key, id));
-    }
-  })().catch(e => console.warn(`[nuvem] falha ao gravar ${key}:`, e));
+  if (!usarDadosSupabase()) return;
+  void pushListaSupabase(key, lista);
 }
 
-// Espelha uma configuração (objeto único)
+// Espelha uma configuração (objeto único) no Supabase.
 export function cloudPushObj(key: string, json: string) {
   if (!KEYS_OBJ.includes(key)) return;
-  if (usarDadosSupabase()) { void pushObjSupabase(key, json); return; }
-  if (!ativo) return;
-  const fb = getFb();
-  if (!fb) return;
-  espelho[key] = new Map([[key, json]]);
-  (async () => {
-    const { doc, setDoc } = await getFirestoreFns();
-    await setDoc(doc(fb.db, 'inv_config', key), { json });
-  })().catch(e => console.warn(`[nuvem] falha ao gravar ${key}:`, e));
+  if (!usarDadosSupabase()) return;
+  void pushObjSupabase(key, json);
 }
 
 // ── Mapas de fertilidade (carregados sob demanda, não no boot) ──────────────
-// Coleção 'inv_mapas_fert'. O id de cada doc carrega o contexto inteiro
-// (talhao/importacao/metodo/pixel/variograma/nutriente/profundidade) para
-// permitir busca por prefixo sem indices secundarios.
-const COL_MAPAS = 'inv_mapas_fert';
-
 export function cloudSalvarMapa(id: string, dados: object) {
-  if (usarDadosSupabase()) { void salvarMapaSupabase(id, dados); return; }
+  if (!usarDadosSupabase()) return;
   if (!cloudPodeGravar()) { console.warn('[nuvem] sem login — mapa NÃO foi salvo (não persiste):', id); return; }
-  const fb = getFb();
-  if (!fb) return;
-  (async () => {
-    const { doc, setDoc } = await getFirestoreFns();
-    await setDoc(doc(fb.db, COL_MAPAS, id), { json: JSON.stringify(dados) });
-    console.log('[nuvem] mapa salvo:', id);
-  })().catch(e => console.warn(`[nuvem] falha ao salvar mapa ${id}:`, e));
+  void salvarMapaSupabase(id, dados);
 }
 
 export async function cloudCarregarMapasPorPrefixo<T>(prefixo: string): Promise<Array<{ id: string; dados: T }>> {
-  if (usarDadosSupabase()) return carregarMapasPorPrefixoSupabase<T>(prefixo);
-  if (!cloudPodeGravar()) return [];
-  const fb = getFb();
-  if (!fb) return [];
-  try {
-    const { collection, query, orderBy, startAt, endAt, getDocs } = await getFirestoreFns();
-    const q = query(collection(fb.db, COL_MAPAS), orderBy('__name__'), startAt(prefixo), endAt(prefixo + ''));
-    const snap = await getDocs(q);
-    const out: Array<{ id: string; dados: T }> = [];
-    snap.forEach(d => {
-      const j = (d.data() as { json?: string }).json;
-      if (j) { try { out.push({ id: d.id, dados: JSON.parse(j) as T }); } catch {} }
-    });
-    console.log(`[nuvem] mapas carregados p/ prefixo "${prefixo}":`, out.length, '(ativo=' + ativo + ')');
-    return out;
-  } catch (e) {
-    console.warn('[nuvem] falha ao carregar mapas:', e);
-    return [];
-  }
+  if (!usarDadosSupabase()) return [];
+  return carregarMapasPorPrefixoSupabase<T>(prefixo);
 }
 
 export async function cloudExcluirMapasPorPrefixo(prefixo: string) {
-  if (usarDadosSupabase()) return excluirMapasPorPrefixoSupabase(prefixo);
-  if (!cloudPodeGravar()) return;
-  const fb = getFb();
-  if (!fb) return;
-  try {
-    const { collection, query, orderBy, startAt, endAt, getDocs, deleteDoc } = await getFirestoreFns();
-    const q = query(collection(fb.db, COL_MAPAS), orderBy('__name__'), startAt(prefixo), endAt(prefixo + ''));
-    const snap = await getDocs(q);
-    await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
-  } catch (e) { console.warn('[nuvem] falha ao excluir mapas:', e); }
-}
-
-// Migração ÚNICA dos mapas Firestore → Supabase (na 1ª carga com dados no Postgres).
-// Lê toda a coleção de mapas do Firestore (via a ponte anônima) e grava no Supabase.
-// Idempotente: só roda quando o Supabase ainda não tem nenhum mapa.
-async function migrarMapasParaSupabaseSeVazio() {
-  try {
-    if (await mapasJaMigrados()) return;                // já concluiu (flag) — não relê o Firestore
-    const fb = await ensureFb();
-    console.log('[nuvem][mig-mapas] Firebase logado (ponte)?', !!fb?.auth.currentUser);
-    if (!fb?.auth.currentUser) return;                  // sem ponte Firebase agora — tenta na próxima carga
-    const { collection, getDocs } = await getFirestoreFns();
-    const snap = await getDocs(collection(fb.db, COL_MAPAS));
-    console.log('[nuvem][mig-mapas] copiando', snap.size, 'mapas do Firestore → Supabase…');
-    for (const d of snap.docs) {
-      const j = (d.data() as { json?: string }).json;
-      if (!j) continue;
-      try { await salvarMapaSupabase(d.id, JSON.parse(j)); } catch {}
-    }
-    await marcarMapasMigrados();                        // marca como concluído (idempotente)
-    console.log('[nuvem][mig-mapas] concluído.');
-  } catch (e) { console.warn('[nuvem] falha ao migrar mapas:', e); }
-}
-
-// Migração única genérica de uma coleção Firestore → Supabase (cenários, relatórios).
-// `transform` converte o doc do Firestore no objeto a guardar (ou null p/ pular).
-async function migrarColecaoParaSupabaseSeVazio(colecao: string, transform: (d: unknown) => object | null) {
-  try {
-    if (await colecaoJaMigrada(colecao)) return;
-    const fb = await ensureFb();
-    if (!fb?.auth.currentUser) return;
-    const { collection, getDocs } = await getFirestoreFns();
-    const snap = await getDocs(collection(fb.db, colecao));
-    for (const d of snap.docs) {
-      const obj = transform(d.data());
-      if (obj) { try { await salvarDocSupabase(colecao, d.id, obj); } catch {} }
-    }
-    await marcarColecaoMigrada(colecao);
-    console.log(`[nuvem][mig] ${colecao}: ${snap.size} migrados p/ o Supabase`);
-  } catch (e) { console.warn(`[nuvem][mig] falha em ${colecao}:`, e); }
+  if (!usarDadosSupabase()) return;
+  return excluirMapasPorPrefixoSupabase(prefixo);
 }
 
 // Apaga por prefixo de id em QUALQUER coleção (ex.: inv_cenarios id `cen_<talhao>_…`).
-// U+F8FF é o sentinela alto do Firestore para o fim do intervalo de prefixo.
 export async function cloudExcluirPorPrefixo(key: string, prefixo: string) {
-  if (!cloudPodeGravar()) return;
-  const fb = getFb();
-  if (!fb) return;
-  try {
-    const { collection, query, orderBy, startAt, endAt, getDocs, deleteDoc } = await getFirestoreFns();
-    const q = query(collection(fb.db, key), orderBy('__name__'), startAt(prefixo), endAt(prefixo + ''));
-    const snap = await getDocs(q);
-    await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
-  } catch (e) { console.warn('[nuvem] falha ao excluir por prefixo', key, prefixo, e); }
+  if (!usarDadosSupabase()) return;
+  return excluirDocsPorPrefixoSupabase(key, prefixo);
 }
 
 // Apaga TODOS os docs de uma coleção (usado na limpeza total da base).
 export async function cloudExcluirColecao(key: string) {
-  if (!cloudPodeGravar()) return;
-  const fb = getFb();
-  if (!fb) return;
-  try {
-    const { collection, getDocs, deleteDoc } = await getFirestoreFns();
-    const snap = await getDocs(collection(fb.db, key));
-    await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
-  } catch (e) { console.warn('[nuvem] falha ao excluir coleção', key, e); }
+  if (!usarDadosSupabase()) return;
+  return excluirColecaoSupabase(key);
 }

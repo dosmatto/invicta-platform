@@ -1,9 +1,8 @@
 'use client';
 
-// Inicialização do Supabase — totalmente OPCIONAL nesta etapa (A3.1).
-// Sem as variáveis NEXT_PUBLIC_SUPABASE_* este módulo é no-op e nada muda
-// (mesmo padrão do firebase.ts). Aqui só fica o CLIENTE; a troca do provedor
-// de login (auth.ts) vem na A3.2, depois das contas migradas.
+// Inicialização do Supabase — provedor único de auth + dados.
+// Sem as variáveis NEXT_PUBLIC_SUPABASE_* este módulo é no-op e o app roda 100%
+// local (localStorage). Aqui só fica o CLIENTE; a auth vive em auth.ts.
 //
 // A `anon key` é pública por design (vai no front, protegida por RLS). A
 // `service_role key` NUNCA entra aqui — ela só roda em script/servidor.
@@ -30,8 +29,7 @@ export function getSupabase(): SupabaseClient | null {
 
 // Cliente EFÊMERO (sem persistência) — para ações que NÃO devem mexer na sessão
 // do admin, como criar usuário (signUp). Cada chamada devolve um cliente novo,
-// descartável; a sessão que o signUp gerar fica só na memória dele. Mesma ideia
-// do "app secundário in-memory" do Firebase.
+// descartável; a sessão que o signUp gerar fica só na memória dele.
 export function getSupabaseEfemero(): SupabaseClient | null {
   if (!supabaseConfigurado || typeof window === 'undefined') return null;
   return createClient(url!, anonKey!, {

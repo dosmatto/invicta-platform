@@ -370,6 +370,22 @@ export async function excluirDocSupabase(colecao: string, id: string): Promise<v
   if (r.error) console.warn(`[supabase] excluir ${colecao}:`, r.error.message);
 }
 
+// Apaga por prefixo de item_id em QUALQUER coleção (ex.: inv_cenarios id `cen_<talhao>_…`).
+export async function excluirDocsPorPrefixoSupabase(colecao: string, prefixo: string): Promise<void> {
+  const sb = getSupabase();
+  if (!sb) return;
+  const r = await sb.from('app_kv').delete().eq('colecao', colecao).like('item_id', escLike(prefixo) + '%');
+  if (r.error) console.warn(`[supabase] excluir por prefixo ${colecao}:`, r.error.message);
+}
+
+// Apaga TODOS os docs de uma coleção (usado na limpeza total da base).
+export async function excluirColecaoSupabase(colecao: string): Promise<void> {
+  const sb = getSupabase();
+  if (!sb) return;
+  const r = await sb.from('app_kv').delete().eq('colecao', colecao);
+  if (r.error) console.warn(`[supabase] excluir coleção ${colecao}:`, r.error.message);
+}
+
 // Flag genérica de "coleção já migrada do Firestore" (evita reler).
 export async function colecaoJaMigrada(nome: string): Promise<boolean> {
   const sb = getSupabase();

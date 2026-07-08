@@ -4,10 +4,10 @@
 //
 // Cada usuário tem ao menos uma "Empresa Pessoal" auto-criada no 1º boot.
 // A empresa ativa fica em localStorage e segrega a visão dos cadastros.
-// Por enquanto o Firestore continua usando os paths antigos (`inv_*` raiz);
+// A nuvem (Supabase) usa as chaves `inv_*` como coleções (via cloud.ts);
 // a hierarquia `/empresas/{eid}/...` entra na Fase 1.5.
 
-import { usuarioAtual, firebaseConfigurado } from './auth';
+import { usuarioAtual, authConfigurado } from './auth';
 import { cloudPushLista } from './cloud';
 
 export type PapelMembro = 'owner' | 'admin' | 'agronomo' | 'operador' | 'produtor' | 'prestador' | 'editor' | 'viewer';
@@ -50,7 +50,7 @@ function load<T>(key: string): T[] {
 function save<T>(key: string, data: T[]) {
   if (typeof window === 'undefined') return;
   localStorage.setItem(key, JSON.stringify(data));
-  cloudPushLista(key, data as { id: unknown }[]); // espelha empresas na nuvem (no-op sem Firebase/login)
+  cloudPushLista(key, data as { id: unknown }[]); // espelha na nuvem (no-op sem Supabase configurado)
 }
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
 
@@ -78,7 +78,7 @@ export function uidUsuario(): string {
 
 // Ids ANTIGOS do dono (uid do provedor + uid local persistido) e o id NOVO por
 // e-mail. Usado pela migração que re-chaveia a Biblioteca pessoal (donoUsuarioId)
-// quando o uid muda. Roda no boot: no Firebase temos uid+e-mail juntos.
+// quando o uid muda. Roda no boot com uid+e-mail do usuário logado.
 export function idsReKeyDono(): { oldIds: string[]; newId: string } | null {
   if (typeof window === 'undefined') return null;
   const email = emailUsuario();
@@ -277,7 +277,7 @@ export function definirPermissao(papel: PapelMembro, cap: Capacidade, valor: boo
 // O usuário logado tem a capacidade? Owner sempre sim; sem papel (bloqueado) = não.
 // Modo LOCAL (sem auth configurado, ex.: demo) não tem papéis — libera tudo.
 export function pode(cap: Capacidade, papel: PapelMembro | null = papelDoUsuario()): boolean {
-  if (!firebaseConfigurado) return true;
+  if (!authConfigurado) return true;
   if (!papel) return false;
   if (papel === 'owner') return true;
   return getPermissoes()[papel]?.[cap] ?? DEFAULTS_PERMISSOES[papel]?.[cap] ?? false;

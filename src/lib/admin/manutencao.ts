@@ -37,7 +37,7 @@ export function backupBase(): void {
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
-// Apaga a base OPERACIONAL (localStorage + Firestore), preservando a Biblioteca.
+// Apaga a base OPERACIONAL (localStorage + nuvem Supabase), preservando a Biblioteca.
 // Faz backup automático antes. Exige a frase exata para evitar acidente.
 export async function limparBaseOperacional(confirmacao: string): Promise<void> {
   if (confirmacao !== 'APAGAR TUDO') {
