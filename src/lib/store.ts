@@ -863,12 +863,58 @@ export function getGrades(talhaoId?: string, safra?: string, metodo?: 'grid' | '
   return all.sort((a, b) => a.criadoEm.localeCompare(b.criadoEm));
 }
 
+// Assinatura de conteúdo de uma grade: se duas grades têm a mesma assinatura,
+// são a MESMA grade (salvamento repetido). Usada pela trava do saveGrade e pela
+// migração de duplicadas.
+function assinaturaGrade(g: Pick<GradeAmostragem, 'talhaoId' | 'safra' | 'epoca' | 'metodo' | 'pontos'>): string {
+  const pts = (g.pontos ?? []).map(p => [p.ordem, p.lng, p.lat, p.numero ?? null]);
+  return `${g.talhaoId}|${g.safra}|${g.epoca}|${g.metodo ?? 'grid'}|${JSON.stringify(pts)}`;
+}
+
 export function saveGrade(g: Omit<GradeAmostragem, 'id' | 'criadoEm'>): GradeAmostragem {
   const lista = load<GradeAmostragem>('inv_grades');
+  // Trava de idempotência: salvar de novo uma grade EXATAMENTE igual (mesmo
+  // talhão/safra/época/método/pontos) devolve a existente em vez de duplicar
+  // (protege contra duplo clique/re-execução — caso real: 5x "JCASA 01").
+  const k = assinaturaGrade(g);
+  const igual = lista.find(x => assinaturaGrade(x) === k);
+  if (igual) return igual;
   const nova: GradeAmostragem = comEmpresa({ ...g, id: uid(), criadoEm: new Date().toISOString() });
   lista.push(nova);
   save('inv_grades', lista);
   return nova;
+}
+
+// Remove grades DUPLICADAS exatas (mesma assinatura), mantendo por grupo: todas
+// as REFERENCIADAS por laudos (inv_lab.gradeId) ou coletas de campo
+// (inv_coletas/inv_leituras_compact.gradeId) e, se nenhuma for referenciada, a
+// mais ANTIGA. Corrige salvamentos repetidos históricos (5x "JCASA 01", 06/2026).
+// Idempotente: roda no boot; a flag só é gravada quando já há dados hidratados.
+export function migrarGradesDuplicadasV1() {
+  if (typeof window === 'undefined') return;
+  if (localStorage.getItem('inv_migrado_grades_dup_v1') === '1') return;
+  const lista = load<GradeAmostragem>('inv_grades');
+  if (lista.length === 0) return;   // sem dados ainda (nuvem não hidratou) — tenta no próximo boot
+  const referenciadas = new Set<string>();
+  for (const key of ['inv_lab', 'inv_coletas', 'inv_leituras_compact']) {
+    for (const r of load<{ gradeId?: string }>(key)) if (r.gradeId) referenciadas.add(r.gradeId);
+  }
+  const grupos = new Map<string, GradeAmostragem[]>();
+  for (const g of lista) {
+    const k = assinaturaGrade(g);
+    (grupos.get(k) ?? grupos.set(k, []).get(k)!).push(g);
+  }
+  const manter = new Set<string>();
+  for (const grupo of grupos.values()) {
+    const usadas = grupo.filter(g => referenciadas.has(g.id));
+    if (usadas.length > 0) usadas.forEach(g => manter.add(g.id));
+    else {
+      const antiga = [...grupo].sort((a, b) => (a.criadoEm ?? '').localeCompare(b.criadoEm ?? ''))[0];
+      manter.add(antiga.id);
+    }
+  }
+  if (manter.size < lista.length) save('inv_grades', lista.filter(g => manter.has(g.id)));
+  localStorage.setItem('inv_migrado_grades_dup_v1', '1');
 }
 
 export function updateGrade(id: string, data: Partial<GradeAmostragem>) {

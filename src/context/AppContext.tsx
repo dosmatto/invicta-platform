@@ -8,7 +8,7 @@ import { empresaIfEmpty, adotarEmpresasLocais, garantirEmpresaInvicta, uidUsuari
 import { limparBaseOperacional } from '@/lib/admin/manutencao';
 import { TrocaSenhaObrigatoria } from '@/components/auth/TrocaSenhaObrigatoria';
 import { migrarLaboratoriosV1, migrarSafrasV1, migrarGradesV1, migrarPreferenciasV1, reKeyDonoBiblioteca } from '@/lib/biblioteca';
-import { seedLegendasSistema, migrarAreasGeodesicasV1, migrarNomesMaiusculosV1 } from '@/lib/store';
+import { seedLegendasSistema, migrarAreasGeodesicasV1, migrarNomesMaiusculosV1, migrarGradesDuplicadasV1 } from '@/lib/store';
 import { LEGENDAS_OFICIAIS } from '@/constants/legendasSeedOficial';
 import { authConfigurado, observarAuth, logout, type User } from '@/lib/auth';
 import { LoginScreen } from '@/components/auth/LoginScreen';
@@ -142,6 +142,7 @@ export function AppProvider({ children, redirectProdutorParaPortal }: { children
       migrarLaboratoriosV1(); migrarSafrasV1(); migrarGradesV1(); migrarPreferenciasV1();
       migrarAreasGeodesicasV1();               // areas dos talhoes -> geodesico (igual QGIS)
       migrarNomesMaiusculosV1();               // nomes cliente/fazenda/talhao -> CAIXA ALTA
+      migrarGradesDuplicadasV1();              // remove grades salvas em duplicidade (ex.: duplo clique)
       seedLegendasSistema(LEGENDAS_OFICIAIS); // legendas oficiais (sistema)
     }
 
