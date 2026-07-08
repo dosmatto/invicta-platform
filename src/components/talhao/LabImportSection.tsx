@@ -14,7 +14,7 @@ import { LabPreviewTable } from './LabPreviewTable';
 import { pode } from '@/lib/empresa';
 import { Upload, Save, Trash2, CheckCircle2, AlertTriangle, FlaskConical } from 'lucide-react';
 
-const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
+import { inputStyle } from '@/constants/ui';
 const matchN = (a: string, b: string) => { if (!a || !b) return false; const x = norm(a), y = norm(b); return x.includes(y) || y.includes(x); };
 
 export function LabImportSection() {

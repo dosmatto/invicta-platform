@@ -24,8 +24,8 @@ import { parseArquivoPontos, pontosCondutividade, avaliarQualidade, CORES_QUALID
 import type { Legenda } from '@/lib/legendas';
 import { Upload, Loader2, Zap, Eraser, AlertTriangle, Save, Trash2, Play, Plus, Layers, Star, Gauge, Mountain, SlidersHorizontal, ChevronDown, ChevronUp, RotateCcw, Download, History } from 'lucide-react';
 
-const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
-const fmt = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
+import { inputStyle } from '@/constants/ui';
+import { fmtMax2 as fmt } from '@/lib/formato';
 
 // Parâmetros padrão da limpeza (MapFilter). Vêm preenchidos e são editáveis.
 const PARAMS_LIMPEZA_PADRAO = { p_clip: 1, mf_global_v: 0.5, mf_local_r: 25, mf_local_v: 0.15, mf_aniso_tol: 25, mf_min_neighbors: 4 } as const;

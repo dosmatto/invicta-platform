@@ -17,6 +17,7 @@ import {
 } from '@/lib/comparador';
 import { gerarRelatorioComparacao, type LadoComparacao } from '@/lib/relatorioComparacao';
 import type { Legenda } from '@/lib/legendas';
+import { rotulosLegenda } from '@/lib/formato';
 import { X, Loader2, FileDown, GitCompare } from 'lucide-react';
 
 const fmt = (v: number | null | undefined, d = 0) => (v == null ? '—' : v.toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d }));
@@ -27,16 +28,6 @@ function areaHa(grid: Grid, bounds: [number, number, number, number], nFinitos: 
   const dx = ((e - w) / cols) * 111320 * Math.cos((lat0 * Math.PI) / 180);
   const dy = ((n - s) / rows) * 111320;
   return (nFinitos * Math.max(0, dx) * Math.max(0, dy)) / 1e4;
-}
-
-function rotulosLegenda(leg: Legenda): { pos: number; txt: string }[] {
-  let acc = 0; const out: { pos: number; txt: string }[] = [];
-  for (let i = 0; i < leg.classes.length - 1; i++) {
-    acc += leg.classes[i].larguraVisual;
-    const b = leg.classes[i].valorMax;
-    if (b != null) out.push({ pos: acc / 100, txt: b.toLocaleString('pt-BR') });
-  }
-  return out;
 }
 
 function rangeLabel(c: { valorMin?: number | null; valorMax?: number | null }): string {

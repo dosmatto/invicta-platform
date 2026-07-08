@@ -25,8 +25,8 @@ import type { Legenda } from '@/lib/legendas';
 import { CruzamentoRelevo } from '@/components/talhao/CruzamentoRelevo';
 import { Mountain, Loader2, Search, CheckCircle2, AlertTriangle, Trash2, Download, Star, Layers, Play, Waves, FileText, Upload } from 'lucide-react';
 
-const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
-const fmt = (v: number, d = 1) => v.toLocaleString('pt-BR', { maximumFractionDigits: d });
+import { inputStyle } from '@/constants/ui';
+import { fmtMax1 as fmt } from '@/lib/formato';
 
 // Legenda de DECLIVIDADE (graus) — classes de relevo (Embrapa) fixas. Efêmera
 // (objeto local): não entra na Biblioteca; F2+ pode oficializá-la.

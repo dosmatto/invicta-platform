@@ -7,7 +7,7 @@ import { parseGeoFile } from '@/lib/geo';
 import { chavesDePropriedades, detectarCampoId, pontosDaFC, montarGradeImportada } from '@/lib/importarGrade';
 import { Upload, Save, AlertTriangle, CheckCircle2, MapPin } from 'lucide-react';
 
-const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
+import { inputStyle } from '@/constants/ui';
 
 function fcDePontos(pontos: PontoAmostragem[]): GeoJSON.FeatureCollection {
   return {

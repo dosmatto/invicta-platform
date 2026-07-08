@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { PanelSection, PanelRow } from './_shared';
-import { APP_VERSION, CHANGELOG } from '@/constants/version';
+import { APP_VERSION } from '@/constants/version';
+import { CHANGELOG } from '@/constants/changelog';
 import { EtiquetaLayoutPicker } from '../talhao/EtiquetaLayoutPicker';
 import { getConfigEtiqueta, saveConfigEtiqueta } from '@/lib/store';
 import { INTERP_URL, BACKEND_LOCAL, headersBackend } from '@/lib/interpUrl';

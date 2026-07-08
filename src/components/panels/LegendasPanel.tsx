@@ -17,7 +17,7 @@ import {
   Save, X, ArrowUp, ArrowDown, AlertTriangle, Check, Unlock,
 } from 'lucide-react';
 
-const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
+import { inputStyle } from '@/constants/ui';
 const fmt = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits: 3 });
 
 // Atributos NÃO-laboratório que também usam legenda (a chave atributoId liga a

@@ -28,7 +28,7 @@ const ORDEM_CATEGORIAS: CategoriaUsuario[] = ['equipe', 'produtores', 'prestador
 // Papéis cujo acesso pode ser LIMITADO a clientes específicos (consultoria).
 const PAPEIS_VINCULAVEIS: PapelMembro[] = ['agronomo', 'operador'];
 
-const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
+import { inputStyle } from '@/constants/ui';
 // Papéis cujas permissões o Owner edita (Owner é sempre tudo, não aparece aqui).
 const PAPEIS_CONFIG: PapelMembro[] = ['admin', 'agronomo', 'operador'];
 // Senha provisória simples (≥6 chars; letras+dígitos). Ex.: Inv54321

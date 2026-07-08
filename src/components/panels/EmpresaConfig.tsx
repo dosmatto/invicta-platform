@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { empresaAtiva, updateEmpresa, deleteEmpresa, ehAdmin, type Empresa } from '@/lib/empresa';
 import { Building2, Trash2, Save, ShieldCheck } from 'lucide-react';
 
-const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
+import { inputStyle } from '@/constants/ui';
 
 export function EmpresaConfig() {
   const [empresa, setEmpresa] = useState<Empresa | null>(null);

@@ -26,8 +26,8 @@ import { parseArquivoPontos, pontosCompactacao, type ArquivoPontos } from '@/lib
 import type { Legenda } from '@/lib/legendas';
 import { Upload, Loader2, Activity, Eraser, AlertTriangle, Save, Trash2, Play, Plus, Layers, Grid3x3, RefreshCw, MapPin, ChevronDown, ChevronUp } from 'lucide-react';
 
-const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
-const fmt = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
+import { inputStyle } from '@/constants/ui';
+import { fmtMax2 as fmt } from '@/lib/formato';
 
 type Ponto = { lng: number; lat: number; valor: number };
 type MapaPronto = { resp: RespInterp; labels: GeoJSON.FeatureCollection };

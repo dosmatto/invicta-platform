@@ -19,7 +19,7 @@ import { compor, nomeTecnico, METODOS_COMPOSICAO, MIN_PCT_VALIDOS_ZONAS, type Me
 import { emailUsuario } from '@/lib/empresa';
 import { Layers3, Loader2, CheckCircle2, AlertTriangle, Trash2, Eye, Play } from 'lucide-react';
 
-const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
+import { inputStyle } from '@/constants/ui';
 const fmt = (v: number, d = 2) => v.toLocaleString('pt-BR', { maximumFractionDigits: d });
 const ddmmyy = (s: string) => new Date(s + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' });
 

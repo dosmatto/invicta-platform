@@ -27,7 +27,7 @@ import {
   type PadraoElementos, type PadraoAmostragem, type ProfundidadeConfig, type ConfigEtiqueta, type VariavelAnalise,
 } from '@/lib/store';
 
-const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
+import { inputStyle } from '@/constants/ui';
 
 export function BibliotecaPanel() {
   const [slug, setSlug] = useState<SlugBiblioteca>('legendas');

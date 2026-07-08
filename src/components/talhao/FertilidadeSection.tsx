@@ -24,7 +24,7 @@ import { MSG_BACKEND_FORA } from '@/lib/interpUrl';
 import { pode } from '@/lib/empresa';
 import { listar as bibListar, criar as bibCriar, type ConteudoPerfil, type ItemBiblioteca } from '@/lib/biblioteca';
 
-const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
+import { inputStyle } from '@/constants/ui';
 const fmt = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits: 1 });
 // Rótulo do valor no ponto do mapa: pH e K com 1 casa decimal; os demais inteiros.
 const casasPonto = (nut: string) => (nut === 'ph' || nut === 'k') ? 1 : 0;
@@ -378,11 +378,11 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
     const resp = await interpolar({ pontos: pts, poligono: poligono!, dominio, stops, metodo, pixelM, modeloFixo: modeloFixo || null });
     const labels = fcLabels(pts, nut);
     const interpoladoEm = new Date().toISOString();
-    // Sessão guarda o PNG do backend como fallback (~10-30 KB). Quem economiza é o Firestore.
+    // Sessão guarda o PNG do backend como fallback (~10-30 KB). Quem economiza é a nuvem.
     setCache(c => ({ ...c, [ck(nut, prof)]: { resp, labels, interpoladoEm } }));
     if (nav.talhaoId && importacaoId) {
       // Com grid: descarta o PNG (colorimos local a partir do grid, gzipado p/
-      // caber no limite de 1 MB/doc do Firestore). SEM grid (backend antigo que
+      // caber no limite de tamanho por registro da nuvem). SEM grid (backend antigo que
       // não devolve grid): MANTÉM o PNG do backend como fallback — senão o mapa
       // não renderiza (era a causa de "interpolado mas não aparece").
       const gridGz = resp.grid ? await comprimirGrid(resp.grid) : undefined;
@@ -395,7 +395,7 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
         dados = JSON.stringify(soPng).length <= 950_000
           ? soPng
           : { resp: { ...resp, png: '', grid: undefined }, labels, interpoladoEm };
-        console.warn(`[fertilidade] mapa grande p/ Firestore — salvando ${dados.resp.png ? 'só PNG' : 'só metadados'} de ${nut} ${prof}.`);
+        console.warn(`[fertilidade] mapa grande p/ a nuvem — salvando ${dados.resp.png ? 'só PNG' : 'só metadados'} de ${nut} ${prof}.`);
       }
       cloudSalvarMapa(idNuvem(nav.talhaoId, importacaoId, metodo, pixelM, modeloFixo, nut, prof), dados);
     }

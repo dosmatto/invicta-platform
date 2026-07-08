@@ -8,7 +8,7 @@ import { useCallback, useState } from 'react';
 import { getLegendas } from '@/lib/store';
 import type { Legenda } from '@/lib/legendas';
 
-const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
+import { inputStyle } from '@/constants/ui';
 
 // Legendas de um módulo: por atributoId OU categoria (ex.: 'produtividade' / 'ndvi').
 export function legendasDoModulo(atributoId: string, categoria?: string): Legenda[] {

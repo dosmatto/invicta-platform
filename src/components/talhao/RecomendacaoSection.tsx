@@ -19,8 +19,8 @@ import { ComparadorCenarios } from '@/components/talhao/ComparadorCenarios';
 import { montarBookOficial, abrirOuBaixar } from '@/lib/recomendacao/relatorioCenarios';
 import { Play, Loader2, AlertTriangle, Wand2, Save, FolderOpen, Trash2, Eye, GitCompare, FileText, Star } from 'lucide-react';
 
-const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
-const fmt = (v: number, dec = 0) => v.toLocaleString('pt-BR', { maximumFractionDigits: dec, minimumFractionDigits: dec });
+import { inputStyle } from '@/constants/ui';
+import { fmtDec as fmt } from '@/lib/formato';
 
 // Converte o limite (t/ha ou kg/ha) p/ a unidade da dose e divide em passadas.
 function limiteNaUnidadeDaDose(limite: number, unidLimite: 't/ha' | 'kg/ha', unidDose: string): number {

@@ -41,7 +41,7 @@ const ESTADO: Record<AmbienteProdutivo['estado'], string> = {
   'em-formacao': 'Em formação', 'em-consolidacao': 'Em consolidação', 'consolidada': 'Consolidada',
 };
 
-const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
+import { inputStyle } from '@/constants/ui';
 
 // Rótulos ordinais de POTENCIAL por nº de classes (espelha o backend).
 const ZLAB: Record<number, string[]> = {

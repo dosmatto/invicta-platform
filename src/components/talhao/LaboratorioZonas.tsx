@@ -10,8 +10,7 @@ import { createPortal } from 'react-dom';
 import { X, FlaskConical, Star, Award, Loader2 } from 'lucide-react';
 import type { ZoneamentoMeap } from '@/lib/store';
 import { resumoCenario, idMelhorCenario, concordanciaEspacial, areaPorPotencial, type Concordancia } from '@/lib/meap/laboratorio';
-
-const fmt = (v: number, d = 1) => v.toLocaleString('pt-BR', { maximumFractionDigits: d });
+import { fmtMax1 as fmt } from '@/lib/formato';
 const CORES_HOMOG: Record<string, string> = { alta: '#86efac', media: '#fbbf24', baixa: '#f87171' };
 const ROTULO_HOMOG: Record<string, string> = { alta: 'Alta', media: 'Média', baixa: 'Baixa' };
 

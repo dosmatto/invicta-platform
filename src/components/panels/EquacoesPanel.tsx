@@ -22,7 +22,7 @@ import { Plus, Edit3, Trash2, Power, Copy, X, Save, Play, ChevronRight, Search, 
 
 const SLUG: CategoriaBiblioteca = 'equacoes';
 const SEM_GRUPO = 'Sem grupo';
-const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
+import { inputStyle } from '@/constants/ui';
 
 const listaDe = (s: string) => s.split(',').map(x => x.trim()).filter(Boolean);
 

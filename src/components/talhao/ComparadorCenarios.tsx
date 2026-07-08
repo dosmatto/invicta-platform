@@ -11,8 +11,7 @@ import { colorirDose } from '@/lib/raster';
 import type { Cenario } from '@/lib/recomendacao/cenarios';
 import { gerarPdfComparador } from '@/lib/recomendacao/relatorioCenarios';
 import { X, Star, FileDown, Loader2 } from 'lucide-react';
-
-const fmt = (v: number, dec = 0) => v.toLocaleString('pt-BR', { maximumFractionDigits: dec, minimumFractionDigits: dec });
+import { fmtDec as fmt } from '@/lib/formato';
 
 export function ComparadorCenarios({ cenarios, onClose }: { cenarios: Cenario[]; onClose: () => void }) {
   const produtos = useMemo(() => {

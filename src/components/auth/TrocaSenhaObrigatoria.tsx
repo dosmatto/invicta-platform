@@ -9,7 +9,7 @@ import { trocarSenha, logout } from '@/lib/auth';
 import { limparSenhaProvisoria } from '@/lib/empresa';
 import { KeyRound, Loader2 } from 'lucide-react';
 
-const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
+import { inputStyle } from '@/constants/ui';
 
 export function TrocaSenhaObrigatoria({ email, onDone }: { email: string; onDone: () => void }) {
   const [s1, setS1] = useState('');

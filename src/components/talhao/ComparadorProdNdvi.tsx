@@ -13,12 +13,12 @@ import { cloudCarregarMapasPorPrefixo } from '@/lib/cloud';
 import { colorirGrid, colorirGridComLegenda } from '@/lib/raster';
 import { rampaVisualStops, type Legenda } from '@/lib/legendas';
 import { legendaDaCultura, emUnidade, type Unidade } from '@/lib/produtividade';
+import { rotulosLegenda, fmtMinMax0 as fmt } from '@/lib/formato';
 import { gerarRelatorioComparacao, type LadoComparacao } from '@/lib/relatorioComparacao';
 import { ComparacaoCompleta } from '@/components/talhao/ComparacaoCompleta';
 import { MatrizFatores } from '@/components/talhao/MatrizFatores';
 import { Loader2, FileDown, GitCompare, Maximize2, Brain } from 'lucide-react';
 
-const fmt = (v: number, d = 0) => v.toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d });
 const prefixoProd = (talhaoId: string) => `${talhaoId}__prod__`;
 
 // Reamostragem bilinear NaN-aware (mesma extensão) — p/ co-registrar NDVI na malha da produtividade.
@@ -54,16 +54,6 @@ function pearson(prod: Grid, ndvi: Grid): number | null {
   const vx = sxx / n - (sx / n) ** 2, vy = syy / n - (sy / n) ** 2;
   const d = Math.sqrt(vx * vy);
   return d > 0 ? cov / d : null;
-}
-
-function rotulosLegenda(leg: Legenda): { pos: number; txt: string }[] {
-  let acc = 0; const out: { pos: number; txt: string }[] = [];
-  for (let i = 0; i < leg.classes.length - 1; i++) {
-    acc += leg.classes[i].larguraVisual;
-    const b = leg.classes[i].valorMax;
-    if (b != null) out.push({ pos: acc / 100, txt: b.toLocaleString('pt-BR') });
-  }
-  return out;
 }
 
 type ProdView = { rec: MapaProdutividade; grid: Grid; bounds: [number, number, number, number]; legenda: Legenda };

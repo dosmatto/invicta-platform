@@ -13,7 +13,7 @@ import { carregarCamadas } from '@/lib/meap/gerar';
 import { mediaPorClasse, type RespMdeAnalise, type LinhaCruzamento } from '@/lib/mde';
 import { GitCompare, Loader2, ArrowUp, ArrowDown } from 'lucide-react';
 
-const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
+import { inputStyle } from '@/constants/ui';
 const fmt = (v: number | null, d = 1) => (v == null ? '—' : v.toLocaleString('pt-BR', { maximumFractionDigits: d }));
 
 interface OpcaoVar { id: string; rotulo: string; unidade: string; grid: Grid; bounds: [number, number, number, number]; }

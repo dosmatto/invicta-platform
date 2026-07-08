@@ -30,7 +30,7 @@ function selecionar(n: number, percentual: number, modo: 'regular' | 'aleatorio'
   return new Set(shuffleSeed(Array.from({ length: n }, (_, i) => i), seed).slice(0, count));
 }
 
-const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
+import { inputStyle } from '@/constants/ui';
 
 // Reatribui ordem 0..N-1 (labels sem buracos) mantendo a ordem do array
 function resequenciar(pontos: PontoAmostragem[]): PontoAmostragem[] {

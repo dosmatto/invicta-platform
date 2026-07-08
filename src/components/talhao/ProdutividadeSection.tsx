@@ -30,8 +30,8 @@ import { SeletorLegenda, legendasDoModulo, usePrefLegenda } from './SeletorLegen
 import type { Legenda } from '@/lib/legendas';
 import { Upload, Loader2, AlertTriangle, Save, Star, Trash2, Eye, Wand2, FileSpreadsheet, Plus, Layers, ChevronDown, ChevronUp } from 'lucide-react';
 
-const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
-const fmt = (v: number, d = 0) => v.toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d });
+import { inputStyle } from '@/constants/ui';
+import { fmtMinMax0 as fmt } from '@/lib/formato';
 const CULTURAS = ['soja', 'milho', 'trigo', 'feijao', 'outro'];
 const EPOCAS: Array<{ v: string; l: string }> = [{ v: '', l: '—' }, { v: 'verao', l: 'Verão' }, { v: 'safrinha', l: 'Safrinha' }, { v: 'inverno', l: 'Inverno' }];
 const prefixoProd = (talhaoId: string) => `${talhaoId}__prod__`;

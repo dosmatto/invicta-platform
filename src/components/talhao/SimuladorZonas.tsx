@@ -18,7 +18,7 @@ interface ZonaFeat {
   geometry: GeoJSON.Geometry;
 }
 
-const inputStyle = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
+import { inputStyle } from '@/constants/ui';
 const COR_PONTO = '#0f172a';
 
 export function SimuladorZonas({ safraNome: safraProp }: { safraNome?: string } = {}) {
