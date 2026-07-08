@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { APP_VERSION } from '@/constants/version';
+import { SyncBadge } from '@/components/shared/SyncBadge';
 
 const MENU = [
   { id: 'dashboard',       label: 'Início',   icon: LayoutDashboard },
@@ -58,6 +59,9 @@ export function IconSidebar() {
         );
       })}
       <div className="flex-1" />
+      <div className="flex justify-center py-1 flex-shrink-0">
+        <SyncBadge iconOnly />
+      </div>
       <div className="py-2 text-center text-[9px] font-mono flex-shrink-0"
         style={{ color: '#2e5fa3', borderTop: '1px solid #1a3a6b', width: '100%' }}>
         v{APP_VERSION}

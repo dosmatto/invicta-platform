@@ -26,6 +26,7 @@ import {
 } from '@/lib/coleta';
 import type { PosOperador } from '@/components/coleta/MapaColeta';
 import { useGps } from '@/components/coleta/useGps';
+import { SyncBadge } from '@/components/shared/SyncBadge';
 import { APP_VERSION } from '@/constants/version';
 import {
   ChevronLeft, ChevronRight, MapPin, Crosshair, Layers, List, Download,
@@ -251,8 +252,9 @@ function TelaInicio({ online, pend, sincronizar, sincronizando, msgSync, instala
         </p>
       </main>
 
-      <p className="text-center text-[10px] py-2" style={{ color: '#334155' }}>
+      <p className="flex items-center justify-center gap-2 text-[10px] py-2" style={{ color: '#334155' }}>
         {emailUsuario() || ''} · INVICTA Campo · v{APP_VERSION}
+        <SyncBadge />
       </p>
     </div>
   );
@@ -399,8 +401,9 @@ function TelaSelecao({ sel, setSel, online, pend, sincronizar, sincronizando, ms
         </>
       )}
 
-      <p className="text-center text-[10px] py-2" style={{ color: '#334155' }}>
+      <p className="flex items-center justify-center gap-2 text-[10px] py-2" style={{ color: '#334155' }}>
         {emailUsuario() || ''} · INVICTA Coleta de Solo · v{APP_VERSION}
+        <SyncBadge />
       </p>
     </div>
   );

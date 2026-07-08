@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '1.71.0': [
+    'INDICADOR DE SINCRONIZAÇÃO: quando algum envio à nuvem falha (ex.: sem internet), aparece um aviso discreto "não sincronizado" (bolinha âmbar na barra lateral do painel e no rodapé do app de campo) com as coleções pendentes no tooltip — some sozinho quando o reenvio automático conclui. Armazenamento local cheio aparece em vermelho.',
+  ],
   '1.70.0': [
     'LIMPEZA INTERNA: estilo de inputs unificado (antes copiado em 24 arquivos), funções de formatação e rótulos de legenda deduplicadas, e o histórico de versões saiu do pacote comum do app (só a tela de Configurações o carrega) — páginas um pouco mais leves.',
     'SEGURANÇA DO SITE: novos cabeçalhos de proteção (anti MIME-sniffing, anti clickjacking e política de referrer) em todas as páginas.',
