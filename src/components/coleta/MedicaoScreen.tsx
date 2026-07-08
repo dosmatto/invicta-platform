@@ -18,9 +18,10 @@ import {
 import { getTalhoes, getSafras, getFazendas, getClientes, Talhao } from '@/lib/store';
 import { parseGeoFile } from '@/lib/geo';
 import { emailUsuario } from '@/lib/auth';
+import { fcDeMedicao, compartilharLinkCampo } from '@/lib/campoLink';
 import {
   ChevronLeft, Crosshair, Layers, Maximize2, Plus, Undo2, Trash2, List, X, AlertTriangle, Save,
-  Play, Pause, Flag, SlidersHorizontal, Shapes, Upload,
+  Play, Pause, Flag, SlidersHorizontal, Shapes, Upload, Link2,
 } from 'lucide-react';
 
 const AZUL_ESC = '#061525', AZUL = '#0a1929', BORDA = '#1a3a6b', TXT = '#e2e8f0', SUB = '#64748b';
@@ -713,6 +714,7 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
             ) : (
               salvas.map(m => {
                 const md = medir(m.tipo, m.coords);
+                const fcLink = fcDeMedicao(m);
                 return (
                   <div key={m.id} className="flex items-center gap-3 px-3 py-2.5 rounded-xl"
                     style={{ background: '#0b1d3a', border: `1px solid ${BORDA}` }}>
@@ -727,6 +729,14 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
                         {m.talhaoNome ? ` · ${m.talhaoNome}` : ''}
                         {' · '}{m.syncPendente ? 'a enviar' : 'na nuvem ✓'}
                       </p>
+                    </button>
+                    <button
+                      onClick={() => { if (fcLink) void compartilharLinkCampo(m.nome, fcLink); }}
+                      disabled={!fcLink}
+                      className="p-1.5 rounded disabled:opacity-30"
+                      style={{ color: '#93c5fd' }}
+                      title={fcLink ? 'Link do prestador (abre só esta área, sem login)' : 'sem geometria'}>
+                      <Link2 size={14} />
                     </button>
                     <button onClick={() => { if (confirm(`Excluir "${m.nome}"?`)) excluir(m.id); }}
                       className="p-1.5 rounded" style={{ color: '#f87171' }}>

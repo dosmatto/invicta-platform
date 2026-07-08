@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '1.74.0': [
+    'LINK DO PRESTADOR NAS MEDIÇÕES SALVAS: o link público (abre só a área, sem login) agora pode ser gerado de qualquer medição guardada — botão de corrente na lista de medições salvas do APP DE CAMPO e botão "Link do prestador" no repositório de Medições do painel. Polígonos preservam os furos; linhas e pontos também viram link.',
+  ],
   '1.73.0': [
     'GRADES DUPLICADAS CORRIGIDAS (caso JCASA 01): uma limpeza automática remove grades salvas em duplicidade (mesmo talhão, safra, época e pontos idênticos), mantendo a mais antiga — e preservando qualquer uma que já esteja ligada a laudo ou coleta de campo. Roda sozinha ao abrir o app e sincroniza para todos os aparelhos.',
     'TRAVA ANTI-DUPLICATA: salvar uma grade exatamente igual a uma existente (ex.: duplo clique no botão) agora reaproveita a existente em vez de criar outra cópia.',

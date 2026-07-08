@@ -31,6 +31,43 @@ export function lerCampoHash(hash: string): CampoPayload | null {
   } catch { return null; }
 }
 
+// Constroi um FeatureCollection a partir de uma medicao salva (poligono/linha/
+// ponto). Poligono: anel externo FECHADO + `furos` como aneis internos fechados.
+// Linha: LineString. Ponto (ou qualquer sobra com >=1 coord): um Point por coord.
+// Sem coords -> null.
+function fecharAnel(anel: [number, number][]): [number, number][] {
+  if (anel.length < 3) return anel;
+  const p = anel[0], u = anel[anel.length - 1];
+  return p[0] === u[0] && p[1] === u[1] ? anel : [...anel, p];
+}
+export function fcDeMedicao(m: { tipo: string; coords: [number, number][]; furos?: [number, number][][] }): GeoJSON.FeatureCollection | null {
+  const coords = m.coords ?? [];
+  if (coords.length === 0) return null;
+  if (m.tipo === 'poligono' && coords.length >= 3) {
+    const aneis = [fecharAnel(coords), ...(m.furos ?? []).filter(f => f.length >= 3).map(fecharAnel)];
+    return { type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: aneis } }] };
+  }
+  if (m.tipo === 'linha' && coords.length >= 2) {
+    return { type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: coords } }] };
+  }
+  // ponto (ou qualquer tipo que nao coube acima) -> um Feature Point por coord
+  return { type: 'FeatureCollection', features: coords.map(c => ({ type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: c } })) };
+}
+
+// Fluxo compartilhar -> copiar -> prompt do "link do prestador". Reusado pelo
+// talhao e pelas medicoes salvas. Monta o link e tenta navigator.share; se nao
+// houver ou o usuario cancelar, copia pro clipboard; por fim, prompt.
+export async function compartilharLinkCampo(nome: string, fc: GeoJSON.FeatureCollection): Promise<void> {
+  const url = montarLinkCampo(window.location.origin, nome, fc);
+  try {
+    if (navigator.share) { await navigator.share({ title: `Área: ${nome}`, url }); return; }
+  } catch { /* usuario cancelou o compartilhamento — cai pro copiar */ }
+  try {
+    await navigator.clipboard.writeText(url);
+    alert('Link copiado! Cole no WhatsApp/mensagem para o prestador.\n\nEle abre e vê só essa área + o GPS dele — nada mais.');
+  } catch { prompt('Copie o link do prestador:', url); }
+}
+
 // Normaliza um GeoJSON (FC/Feature/Geometry) para FeatureCollection.
 export function paraFC(o: unknown): GeoJSON.FeatureCollection | null {
   const g = o as { type?: string; geometry?: GeoJSON.Geometry };

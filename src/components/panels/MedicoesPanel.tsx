@@ -16,10 +16,11 @@ import {
   baixarShp, baixarKML, baixarGeoJSON, criarTalhaoDaMedicao, substituirLimiteTalhao,
 } from '@/lib/medicoesRepo';
 import { extrairEditavel } from '@/lib/geoEditor';
+import { fcDeMedicao, compartilharLinkCampo } from '@/lib/campoLink';
 import { getClientes, getFazendas, getTalhoes } from '@/lib/store';
 import { escopoClienteIds, emailUsuario } from '@/lib/empresa';
 import {
-  RefreshCw, Loader2, Ruler, MapPin, Eye, Download, Plus, Repeat, Trash2, X, CheckCircle2, CloudUpload, Pencil,
+  RefreshCw, Loader2, Ruler, MapPin, Eye, Download, Plus, Repeat, Trash2, X, CheckCircle2, CloudUpload, Pencil, Link2,
 } from 'lucide-react';
 
 const EditorGeometria = dynamic(
@@ -177,6 +178,15 @@ export function MedicoesPanel() {
 
                   <div className="grid grid-cols-2 gap-1.5">
                     <BotaoAcao icon={<Eye size={12} />} label="Ver no mapa" onClick={() => verNoMapa(m)} />
+                    {(() => {
+                      const fcLink = fcDeMedicao(m);
+                      return (
+                        <BotaoAcao icon={<Link2 size={12} />} label="Link do prestador" cor="#1a3a6b"
+                          disabled={!fcLink}
+                          title={fcLink ? 'Link do prestador (abre só esta área, sem login)' : 'sem geometria'}
+                          onClick={() => { if (fcLink) void compartilharLinkCampo(m.nome, fcLink); }} />
+                      );
+                    })()}
                     <BotaoAcao icon={<Pencil size={12} />} label="Editar traçado" cor="#5b21b6" onClick={() => setEditando(m)} />
                     <BotaoAcao icon={<Download size={12} />} label="Baixar SHP" onClick={() => void baixarShp(m).catch(() => setMsg('Falha ao gerar SHP.'))} />
                     <BotaoAcao icon={<Download size={12} />} label="Baixar KML" onClick={() => baixarKML(m)} />
@@ -211,10 +221,10 @@ export function MedicoesPanel() {
   );
 }
 
-function BotaoAcao({ icon, label, onClick, cor }: { icon: React.ReactNode; label: string; onClick: () => void; cor?: string }) {
+function BotaoAcao({ icon, label, onClick, cor, disabled, title }: { icon: React.ReactNode; label: string; onClick: () => void; cor?: string; disabled?: boolean; title?: string }) {
   return (
-    <button onClick={onClick}
-      className="flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[11px] font-bold text-white active:opacity-70"
+    <button onClick={onClick} disabled={disabled} title={title}
+      className="flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[11px] font-bold text-white active:opacity-70 disabled:opacity-40"
       style={{ background: cor ?? 'var(--invicta-blue-mid)' }}>
       {icon}{label}
     </button>

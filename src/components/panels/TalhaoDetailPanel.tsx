@@ -18,7 +18,7 @@ import {
 } from '@/lib/store';
 import type { Legenda } from '@/lib/legendas';
 import { parseGeoFile, parseLimiteTalhao, normalizarZonas } from '@/lib/geo';
-import { montarLinkCampo, paraFC } from '@/lib/campoLink';
+import { paraFC, compartilharLinkCampo } from '@/lib/campoLink';
 import { extrairEditavel, paraFeature, areaHaDe, areaHaSemFuros } from '@/lib/geoEditor';
 import { conflitosDe, talhaoParaAlvo, bboxDeFeatures, type AlvoOverlap, type Conflito } from '@/lib/overlap';
 import { carregarEcOficial, rotuloEc, type EcCamada } from '@/lib/meap/gerar';
@@ -427,14 +427,7 @@ export function TalhaoDetailPanel() {
     try { o = JSON.parse(talhao.geojson); } catch { alert('Geometria inválida.'); return; }
     const fc = paraFC(o);
     if (!fc) { alert('Geometria inválida.'); return; }
-    const url = montarLinkCampo(window.location.origin, nav.talhao || talhao.nome, fc);
-    try {
-      if (navigator.share) { await navigator.share({ title: `Área: ${talhao.nome}`, url }); return; }
-    } catch { /* usuário cancelou o compartilhamento — cai pro copiar */ }
-    try {
-      await navigator.clipboard.writeText(url);
-      alert('Link copiado! Cole no WhatsApp/mensagem para o prestador.\n\nEle abre e vê só essa área + o GPS dele — nada mais.');
-    } catch { prompt('Copie o link do prestador:', url); }
+    await compartilharLinkCampo(nav.talhao || talhao.nome, fc);
   }
 
   useEffect(() => {
