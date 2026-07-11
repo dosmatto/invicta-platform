@@ -7,6 +7,7 @@
 import type { Legenda } from './legendas';
 import { rampaVisualStops } from './legendas';
 import { capturarMapaFertilidade } from './capturaMapa';
+import { imagemParaPdf } from './pdfImagem';
 
 type RGB = [number, number, number];
 type Stop = [number, RGB];
@@ -63,7 +64,7 @@ function desenharBarra(doc: Doc, leg: Legenda, x: number, y: number, w: number, 
 
 export async function gerarRelatorioComparacao(d: DadosComparacao): Promise<void> {
   const { jsPDF } = await import('jspdf');
-  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' }) as unknown as Doc;
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4', compress: true }) as unknown as Doc;
   const W = 297, M = 12, gap = 10;
 
   doc.setFont('helvetica', 'bold'); doc.setFontSize(15);
@@ -84,7 +85,8 @@ export async function gerarRelatorioComparacao(d: DadosComparacao): Promise<void
     });
     doc.setFont('helvetica', 'bold'); doc.setFontSize(11);
     doc.text(lado.titulo, x0, mapTop - 2);
-    doc.addImage(png, 'PNG', x0, mapTop, colW, mapH);
+    const jpg = await imagemParaPdf(png, colW);
+    doc.addImage(jpg.data, jpg.formato, x0, mapTop, colW, mapH);
     doc.setDrawColor(180); doc.rect(x0, mapTop, colW, mapH);
     doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5);
     doc.text(lado.subtitulo, x0, mapTop + mapH + 6);

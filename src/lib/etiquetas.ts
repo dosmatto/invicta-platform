@@ -119,7 +119,7 @@ export async function gerarEtiquetasPDF(itens: EtiquetaItem[], layout: LayoutEti
   // abre a aba JÁ no gesto do clique (antes do await) para não cair no bloqueio de pop-up
   const aba = typeof window !== 'undefined' ? window.open('', '_blank') : null;
   const { jsPDF } = await import('jspdf');
-  const doc = new jsPDF({ unit: 'mm', format: [layout.pageW, layout.pageH] });
+  const doc = new jsPDF({ unit: 'mm', format: [layout.pageW, layout.pageH], compress: true });
   desenharEtiquetas(doc, itens, layout, ajuste);
   const arquivo = `${nomeArquivo.replace(/[^\w.\-]+/g, '_')}.pdf`;
   if (aba) {

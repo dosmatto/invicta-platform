@@ -10,6 +10,7 @@ import type { jsPDF as JsPDF } from 'jspdf';
 import type { Legenda } from './legendas';
 import { rampaVisualStops, valorParaPosicaoVisual, dominioDaLegenda } from './legendas';
 import { capturarMapaFertilidade } from './capturaMapa';
+import { imagemParaPdf, reduzirLogo } from './pdfImagem';
 
 export interface ProfundidadeRel {
   profundidade: string;
@@ -55,10 +56,14 @@ function carregarImg(src: string): Promise<HTMLImageElement> {
 
 interface Logos { inv: HTMLImageElement | null; branca: HTMLImageElement | null; cli: HTMLImageElement | null; }
 async function carregarLogos(cliUrl?: string | null): Promise<Logos> {
+  const inv = await carregarImg('/images/logo-colorida.png').catch(() => null);
+  const cli = cliUrl ? await carregarImg(cliUrl).catch(() => null) : null;
+  // Logos entram uma vez no PDF, mas a colorida (2111px) e a do cliente (upload
+  // livre, pode ser enorme) são exageradas p/ ~50 mm impressos → reduz p/ ~480px.
   return {
-    inv: await carregarImg('/images/logo-colorida.png').catch(() => null),
+    inv: inv ? await reduzirLogo(inv) : null,
     branca: await carregarImg('/images/logo-branca.png').catch(() => null),
-    cli: cliUrl ? await carregarImg(cliUrl).catch(() => null) : null,
+    cli: cli ? await reduzirLogo(cli) : null,
   };
 }
 
@@ -155,9 +160,10 @@ async function desenharPaginaMapa(doc: JsPDF, d: DadosRelatorioFert, logos: Logo
   doc.setDrawColor(...NAVY); doc.setLineWidth(0.8); doc.line(0, 26.5, W, 26.5);
 
   // ── MAPAS ──
+  const mapsJpg = await Promise.all(imgs.map(im => imagemParaPdf(im, frameW)));
   d.profundidades.forEach((p, i) => {
     const x = startX + i * (frameW + gap);
-    doc.addImage(imgs[i], 'PNG', x, mapsY, frameW, mapsH);
+    doc.addImage(mapsJpg[i].data, mapsJpg[i].formato, x, mapsY, frameW, mapsH);
     doc.setDrawColor(...LINE); doc.setLineWidth(0.4); doc.rect(x, mapsY, frameW, mapsH, 'S');
     doc.setFillColor(...NAVY); doc.roundedRect(x + 3, mapsY + 3, 24, 7.5, 1.5, 1.5, 'F');
     doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(9);
@@ -264,7 +270,8 @@ async function desenharCapa(doc: JsPDF, paginas: DadosRelatorioFert[], logos: Lo
   doc.text(`Produtor: ${san(d.produtor) || '—'}`, W / 2, 49, { align: 'center' });
 
   // ── Satélite do talhão (destaque) ──
-  doc.addImage(hero, 'PNG', heroX, heroY, heroW, heroH);
+  const heroJpg = await imagemParaPdf(hero, heroW);
+  doc.addImage(heroJpg.data, heroJpg.formato, heroX, heroY, heroW, heroH);
   doc.setDrawColor(...LINE); doc.setLineWidth(0.4); doc.rect(heroX, heroY, heroW, heroH, 'S');
   doc.setFillColor(...NAVY); doc.roundedRect(heroX + 3, heroY + 3, Math.min(70, 8 + san(d.talhao).length * 2.4), 8, 1.5, 1.5, 'F');
   doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
@@ -314,7 +321,7 @@ async function gerarDoc(paginas: DadosRelatorioFert[], nomeArquivo: string, comC
   try {
     const logos = await carregarLogos(paginas[0]?.logoClienteUrl);
     const { jsPDF } = await import('jspdf');
-    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4', compress: true });
     if (comCapa) await desenharCapa(doc, paginas, logos); // página 1 = capa
     for (let i = 0; i < paginas.length; i++) {
       if (comCapa || i > 0) doc.addPage('a4', 'landscape');

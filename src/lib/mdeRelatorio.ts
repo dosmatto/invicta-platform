@@ -13,6 +13,7 @@ import { colorirGrid } from './raster';
 import { extrairPoligono, decodeGrid, type Grid } from './fertilidade';
 import { getTalhoes, getFazendas, getClientes, getPlantio, type MdeTalhao } from './store';
 import { abrirOuBaixar } from './recomendacao/relatorioCenarios';
+import { imagemParaPdf } from './pdfImagem';
 import type { RespMdeAnalise } from './mde';
 
 type RGB = [number, number, number];
@@ -127,10 +128,10 @@ export async function gerarPdfMde(params: {
     const logo = await carregarImg('/images/logo-branca.png').catch(() => null);
 
     const { jsPDF } = await import('jspdf');
-    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4', compress: true });
     paginaResumo(doc, ctx, oficial, analise, decls, obs, logo);
     doc.addPage();
-    paginaMapas(doc, ctx, oficial, mapas, logo);
+    await paginaMapas(doc, ctx, oficial, mapas, logo);
 
     abrirOuBaixar(doc.output('blob'), aba, `mde-${san(ctx.talhao) || 'talhao'}.pdf`);
   } catch (e) {
@@ -203,7 +204,7 @@ function tabela(doc: JsPDF, x: number, y: number, w: number, titulo: string, lin
   }
 }
 
-function paginaMapas(doc: JsPDF, ctx: Ctx, oficial: MdeTalhao, mapas: { titulo: string; img: string | null }[], logo: HTMLImageElement | null) {
+async function paginaMapas(doc: JsPDF, ctx: Ctx, oficial: MdeTalhao, mapas: { titulo: string; img: string | null }[], logo: HTMLImageElement | null) {
   const W = 297, M = 6;
   cabecalho(doc, ctx, oficial, 'MAPAS DO RELEVO', logo);
   doc.setFontSize(12); doc.setTextColor(...GREEN); doc.setFont('helvetica', 'bold'); doc.text('Mapas topográficos', M, 30);
@@ -215,7 +216,7 @@ function paginaMapas(doc: JsPDF, ctx: Ctx, oficial: MdeTalhao, mapas: { titulo: 
     doc.setFontSize(7.5); doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold');
     doc.text(san(mapas[i].titulo), x + fw / 2, y + 4.8, { align: 'center', maxWidth: fw - 3 });
     const img = mapas[i].img;
-    if (img) doc.addImage(img, 'PNG', x, y + 7, fw, mh - 7);
+    if (img) { const j = await imagemParaPdf(img, fw); doc.addImage(j.data, j.formato, x, y + 7, fw, mh - 7); }
     else { doc.setFillColor(240, 242, 245); doc.rect(x, y + 7, fw, mh - 7, 'F'); doc.setTextColor(...GRAY); doc.setFontSize(7); doc.setFont('helvetica', 'normal'); doc.text('mapa indisponível', x + fw / 2, y + mh / 2, { align: 'center' }); }
   }
   doc.setFontSize(7.5); doc.setTextColor(...GRAY); doc.setFont('helvetica', 'normal');

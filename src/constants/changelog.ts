@@ -1,5 +1,9 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '1.78.0': [
+    'PDFs ATÉ 5-10x MENORES, SEM PERDA VISÍVEL: todos os relatórios (MDE, Comparação, Fertilidade, Recomendações) passaram a comprimir o arquivo e a embutir os MAPAS como JPEG de alta qualidade no tamanho certo de impressão (200 dpi) — antes cada mapa ia como PNG cheio. Textos e tabelas continuam vetoriais (nítidos em qualquer zoom); legendas em gradiente e logos com transparência seguem em PNG.',
+    'NOME DA EQUAÇÃO NOS MAPAS DE RECOMENDAÇÃO DO PDF: no comparador de cenários e no mapa oficial, cada mapa agora traz o nome da equação usada (o método) como subtítulo — na tela isso já aparecia em cada card.',
+  ],
   '1.77.0': [
     'APP DE CAMPO — COR PRÓPRIA PARA 2+ PROFUNDIDADES: no mapa da amostragem, ponto pendente que exige mais de uma profundidade (ex.: 00-20 E 20-40) aparece em VIOLETA — dá para enxergar de longe onde coletar mais de uma camada. Coletado continua verde (o status manda), selecionado continua azul. A legenda "● 2+ profundidades" aparece quando a grade tem pontos assim; o painel do ponto já mostra as profundidades.',
   ],

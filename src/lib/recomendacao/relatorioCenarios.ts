@@ -8,6 +8,7 @@
 
 import type { jsPDF as JsPDF } from 'jspdf';
 import { capturarMapaFertilidade } from '../capturaMapa';
+import { imagemParaPdf } from '../pdfImagem';
 import { colorirDose } from '../raster';
 import { hexToRgb } from '../legendas';
 import { extrairPoligono, decodeGrid } from '../fertilidade';
@@ -65,7 +66,7 @@ export async function montarPdfComparador(cenarios: Cenario[]): Promise<Blob> {
 
   const logoBranca = await carregarImg('/images/logo-branca.png').catch(() => null);
   const { jsPDF } = await import('jspdf');
-  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4', compress: true });
   let primeira = true;
   for (const prod of produtos) {
     if (!primeira) doc.addPage();
@@ -116,6 +117,7 @@ async function desenharPagina(doc: JsPDF, produto: string, cenarios: Cenario[], 
   // Mapas
   const n = cenarios.length, gap = 5, mapsY = 33, mapsH = 80;
   const frameW = (W - 2 * M - (n - 1) * gap) / n;
+  const HEAD_H = 8, SUB_H = 4.2;   // título (cenário) + subtítulo (equação) de cada quadro
   const capturas = await Promise.all(doses.map(async d => {
     if (!d || !estilo) return null;
     try { const png = colorirDose(d.grid, estilo).dataUrl;
@@ -124,12 +126,19 @@ async function desenharPagina(doc: JsPDF, produto: string, cenarios: Cenario[], 
   }));
   for (let i = 0; i < n; i++) {
     const x = M + i * (frameW + gap), rec = i === recIdx;
-    doc.setFillColor(...(rec ? GREEN : NAVY)); doc.rect(x, mapsY, frameW, 8, 'F');
+    doc.setFillColor(...(rec ? GREEN : NAVY)); doc.rect(x, mapsY, frameW, HEAD_H, 'F');
     doc.setFontSize(8.5); doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold');
     doc.text((rec ? '* ' : '') + san(cenarios[i].nome), x + frameW / 2, mapsY + 5.4, { align: 'center', maxWidth: frameW - 4 });
+    // subtítulo — nome da EQUAÇÃO que gerou esta dose (deixa claro qual método/fórmula)
+    const nomeEq = doses[i]?.nomeEquacao;
+    if (nomeEq) {
+      doc.setFontSize(7); doc.setTextColor(...GRAY); doc.setFont('helvetica', 'normal');
+      doc.text(san(nomeEq), x + frameW / 2, mapsY + HEAD_H + 3, { align: 'center', maxWidth: frameW - 4 });
+    }
+    const imgY = mapsY + HEAD_H + SUB_H, imgH = mapsH - HEAD_H - SUB_H;
     const img = capturas[i];
-    if (img) doc.addImage(img, 'PNG', x, mapsY + 8, frameW, mapsH - 8);
-    else { doc.setFillColor(240, 242, 245); doc.rect(x, mapsY + 8, frameW, mapsH - 8, 'F'); doc.setTextColor(...GRAY); doc.setFontSize(8); doc.setFont('helvetica', 'normal'); doc.text('sem este produto', x + frameW / 2, mapsY + mapsH / 2, { align: 'center' }); }
+    if (img) { const j = await imagemParaPdf(img, frameW); doc.addImage(j.data, j.formato, x, imgY, frameW, imgH); }
+    else { doc.setFillColor(240, 242, 245); doc.rect(x, imgY, frameW, imgH, 'F'); doc.setTextColor(...GRAY); doc.setFontSize(8); doc.setFont('helvetica', 'normal'); doc.text('sem este produto', x + frameW / 2, imgY + imgH / 2, { align: 'center' }); }
     if (rec) { doc.setDrawColor(...GREEN); doc.setLineWidth(0.8); doc.rect(x, mapsY, frameW, mapsH); doc.setLineWidth(0.2); }
   }
 
@@ -260,7 +269,14 @@ async function desenharPaginaOficial(doc: JsPDF, dose: DoseCalculada, cenNome: s
   }
 
   const SX = M, SW = 82; let y = 22;
-  doc.setFontSize(11); doc.setTextColor(...GREEN); doc.setFont('helvetica', 'bold'); doc.text('Recomendação oficial', SX, y); y += 6;
+  doc.setFontSize(11); doc.setTextColor(...GREEN); doc.setFont('helvetica', 'bold'); doc.text('Recomendação oficial', SX, y); y += 4.2;
+  // subtítulo — nome da EQUAÇÃO que gerou esta dose (método/fórmula usado)
+  if (dose.nomeEquacao) {
+    doc.setFontSize(7.5); doc.setTextColor(...GRAY); doc.setFont('helvetica', 'normal');
+    doc.text(san(dose.nomeEquacao), SX, y, { maxWidth: SW });
+    y += 3.4;
+  }
+  y += 2;
   y = secaoH(doc, SX, y, 'Produtor / fazenda / cultura');
   doc.setFontSize(9); doc.setTextColor(40, 48, 58); doc.setFont('helvetica', 'bold'); doc.text(san(ctx.produtor) || '—', SX, y); y += 4;
   doc.setFontSize(8); doc.setTextColor(...GRAY); doc.setFont('helvetica', 'normal'); doc.text(`${san(ctx.fazenda)} · ${san(ctx.cultura) || '—'}`, SX, y); y += 6;
@@ -294,7 +310,7 @@ async function desenharPaginaOficial(doc: JsPDF, dose: DoseCalculada, cenNome: s
 
   const mx = M + 86, my = 20, mw = W - mx - M, mh = H - my - 11;
   doc.setFillColor(36, 48, 24); doc.rect(mx, my, mw, mh, 'F');
-  if (mapImg) doc.addImage(mapImg, 'PNG', mx, my, mw, mh);
+  if (mapImg) { const j = await imagemParaPdf(mapImg, mw); doc.addImage(j.data, j.formato, mx, my, mw, mh); }
 
   doc.setFillColor(...NAVY); doc.rect(0, H - 9, W, 9, 'F');
   if (logo) { const h = 4.5, w = h * (logo.naturalWidth / logo.naturalHeight); doc.addImage(logo, 'PNG', M, H - 7, w, h); }
@@ -313,7 +329,7 @@ export async function montarBookOficial(cenarios: Cenario[]): Promise<Blob> {
   const ctx: Ctx = { fazenda: faz?.nome ?? '', talhao: tal?.nome ?? '', safra, cultura: getPlantio(tId, safra), produtor: cli?.nome ?? '', areaHa: tal?.areaHa ?? 0, poligono };
   const logo = await carregarImg('/images/logo-branca.png').catch(() => null);
   const { jsPDF } = await import('jspdf');
-  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4', compress: true });
   let primeira = true;
   for (const cen of cenarios) {
     for (const dose of cen.doses) {
