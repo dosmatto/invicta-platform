@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '1.76.0': [
+    'CORREÇÃO NO GRID DE AMOSTRAGEM: as edições manuais dos pontos (mover, adicionar, excluir) agora são salvas de verdade. Editar uma grade JÁ SALVA ganhou o botão "Salvar alterações" (grava por cima, sem criar cópia) — antes, o salvar guardava só o grid gerado no início e as edições se perdiam. Os números dos pontos são preservados (o vínculo com o laboratório não muda).',
+  ],
   '1.75.0': [
     'PERMISSÃO POR TALHÃO: além do vínculo por cliente, agora dá para restringir um usuário a TALHÕES específicos — no painel de Usuários, o modal de acesso ganhou a seção "Talhões" com busca. Caso típico: prestador de amostragem vê SÓ os talhões do serviço contratado (plataforma e app de campo). Sem restrição marcada, nada muda.',
     'O botão de vínculos também aparece para o papel Prestador de serviço.',

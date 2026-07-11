@@ -75,6 +75,10 @@ export function SimuladorAmostragem({ safraNome: safraProp }: { safraNome?: stri
   // Edição manual: pontos "congelados" + ponto extra pendente (aguardando escolha de profundidades)
   const [pontosManuais, setPontosManuais] = useState<PontoAmostragem[] | null>(null);
   const [gradeViewId, setGradeViewId] = useState<string | null>(null); // grade salva exibida no mapa
+  // A qual grade SALVA os pontosManuais pertencem (null = edição da simulação ao
+  // vivo). Evita "Salvar alterações" gravar pontos de outra origem por cima de
+  // uma grade salva (ex.: editar ao vivo e depois clicar no olho de uma grade).
+  const [gradeEditandoId, setGradeEditandoId] = useState<string | null>(null);
   const [addPendente, setAddPendente] = useState<{ lng: number; lat: number } | null>(null);
   const [profsExtra, setProfsExtra] = useState<boolean[]>([]);
 
@@ -86,6 +90,7 @@ export function SimuladorAmostragem({ safraNome: safraProp }: { safraNome?: stri
     setDensidade(padrao.densidadeHaPonto);
     setProfs(padrao.profundidades.map(p => ({ ...p })));
     setPontosManuais(null);
+    setGradeEditandoId(null);
     setGradeViewId(null);
     setEdicaoAtiva(false);
   }, [padrao, setEdicaoAtiva]);
@@ -115,10 +120,12 @@ export function SimuladorAmostragem({ safraNome: safraProp }: { safraNome?: stri
   // prioridade sobre a simulação ao vivo.
   useEffect(() => {
     const vista = gradeViewId ? grades.find(g => g.id === gradeViewId) : null;
-    const pts = vista ? vista.pontos : pontosEfetivos;
+    // Edições manuais (pontosManuais) têm prioridade — inclusive ao editar uma
+    // grade salva em visualização (senão o mapa mostraria os pontos originais).
+    const pts = (vista && gradeEditandoId !== gradeViewId) ? vista.pontos : pontosEfetivos;
     setPontosSimulados(pts.length ? fcDePontos(pts) : null);
     return () => setPontosSimulados(null);
-  }, [gradeViewId, grades, pontosEfetivos, setPontosSimulados]);
+  }, [gradeViewId, gradeEditandoId, grades, pontosManuais, pontosEfetivos, setPontosSimulados]);
 
   // Aplica eventos de edição vindos do mapa (arrastar / adicionar / remover)
   useEffect(() => {
@@ -151,20 +158,31 @@ export function SimuladorAmostragem({ safraNome: safraProp }: { safraNome?: stri
   // Ao mudar qualquer parâmetro, descarta a edição manual (a grade é regerada)
   function alterarParam<T>(setter: (v: T) => void, v: T) {
     if (pontosManuais) setPontosManuais(null);
+    setGradeEditandoId(null);
     setGradeViewId(null);
     setter(v);
   }
   function setProfPct(i: number, v: number) {
     if (pontosManuais) setPontosManuais(null);
+    setGradeEditandoId(null);
     setGradeViewId(null);
     setProfs(prev => prev.map((p, idx) => idx === i ? { ...p, percentual: v } : p));
   }
   const nomeElem = (id: string) => padroesElem.find(p => p.id === id)?.nome ?? '—';
 
   // ── Edição manual ──
-  function iniciarEdicao() { setGradeViewId(null); setPontosManuais(gerados.map(p => ({ ...p }))); setEdicaoModo('mover'); setEdicaoAtiva(true); }
+  // Inicia a edição a partir da grade salva em visualização (se houver) ou da
+  // simulação ao vivo. Mantém gradeViewId p/ saber se salva por cima (update).
+  function iniciarEdicao() {
+    const vista = gradeViewId ? grades.find(g => g.id === gradeViewId) : null;
+    const base = vista ? vista.pontos : gerados;
+    setPontosManuais(base.map(p => ({ ...p })));
+    setGradeEditandoId(vista ? vista.id : null);   // registra a ORIGEM das edições
+    setEdicaoModo('mover');
+    setEdicaoAtiva(true);
+  }
   function concluirEdicao() { setEdicaoAtiva(false); }
-  function descartarEdicao() { setPontosManuais(null); setEdicaoAtiva(false); }
+  function descartarEdicao() { setPontosManuais(null); setGradeEditandoId(null); setEdicaoAtiva(false); }
   function confirmarAddPonto() {
     if (!addPendente) return;
     const rotulos = profs.filter((_, i) => profsExtra[i]).map(p => p.rotulo);
@@ -200,6 +218,20 @@ export function SimuladorAmostragem({ safraNome: safraProp }: { safraNome?: stri
       paraProcessar: primeira, // primeira grade da safra já vira a "a processar"
     });
     setPontosManuais(null);
+    setGradeEditandoId(null);
+    setEdicaoAtiva(false);
+    recarregarGrades();
+  }
+
+  // Está editando (com pontos manuais) uma grade JÁ salva em visualização.
+  const editandoSalva = gradeEditandoId != null && pontosManuais != null;
+  // Salva as edições manuais POR CIMA da grade salva DE ORIGEM (updateGrade),
+  // em vez de criar uma grade nova. resequenciar já preserva o `numero`.
+  function salvarAlteracoesGrade() {
+    if (!gradeEditandoId || pontosEfetivos.length === 0) return;
+    updateGrade(gradeEditandoId, { pontos: pontosEfetivos, customizado: true });
+    setPontosManuais(null);
+    setGradeEditandoId(null);
     setEdicaoAtiva(false);
     recarregarGrades();
   }
@@ -467,13 +499,21 @@ export function SimuladorAmostragem({ safraNome: safraProp }: { safraNome?: stri
             </div>
           )}
 
-          {/* Salvar grade */}
+          {/* Salvar grade nova OU salvar as edições por cima da grade salva */}
           {pode('amostragem') && (
-            <button onClick={salvarGrade}
-              className="w-full py-2.5 rounded text-sm font-bold text-white flex items-center justify-center gap-2"
-              style={{ background: 'var(--invicta-green-dark)' }}>
-              <Save size={14} /> Salvar grade
-            </button>
+            editandoSalva ? (
+              <button onClick={salvarAlteracoesGrade}
+                className="w-full py-2.5 rounded text-sm font-bold text-white flex items-center justify-center gap-2"
+                style={{ background: 'var(--invicta-blue-mid)' }}>
+                <Save size={14} /> Salvar alterações
+              </button>
+            ) : (
+              <button onClick={salvarGrade}
+                className="w-full py-2.5 rounded text-sm font-bold text-white flex items-center justify-center gap-2"
+                style={{ background: 'var(--invicta-green-dark)' }}>
+                <Save size={14} /> Salvar grade
+              </button>
+            )
           )}
         </>
       )}
