@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '1.77.0': [
+    'APP DE CAMPO — COR PRÓPRIA PARA 2+ PROFUNDIDADES: no mapa da amostragem, ponto pendente que exige mais de uma profundidade (ex.: 00-20 E 20-40) aparece em VIOLETA — dá para enxergar de longe onde coletar mais de uma camada. Coletado continua verde (o status manda), selecionado continua azul. A legenda "● 2+ profundidades" aparece quando a grade tem pontos assim; o painel do ponto já mostra as profundidades.',
+  ],
   '1.76.0': [
     'CORREÇÃO NO GRID DE AMOSTRAGEM: as edições manuais dos pontos (mover, adicionar, excluir) agora são salvas de verdade. Editar uma grade JÁ SALVA ganhou o botão "Salvar alterações" (grava por cima, sem criar cópia) — antes, o salvar guardava só o grid gerado no início e as edições se perdiam. Os números dos pontos são preservados (o vínculo com o laboratório não muda).',
   ],

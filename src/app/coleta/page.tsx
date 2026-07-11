@@ -53,6 +53,12 @@ const CompactacaoScreen = dynamic(
 );
 
 const AZUL_ESC = '#061525', AZUL = '#0a1929', BORDA = '#1a3a6b', TXT = '#e2e8f0', SUB = '#64748b';
+// Ponto de AMOSTRAGEM pendente com 2+ profundidades (ex.: 00-20 e 20-40): cor
+// à parte pra dar pra enxergar de longe, no satélite, onde vai coletar mais de
+// uma camada. Só se aplica enquanto pendente — coletado mantém a cor de status
+// (o status importa mais que a profundidade). Não conflita com COR_STATUS nem
+// com o azul de "selecionado" (#60a5fa).
+const COR_MULTI_PROF = '#a78bfa';
 
 function codigoPonto(p: PontoAmostragem): string {
   return `P-${String(p.numero ?? p.ordem + 1).padStart(3, '0')}`;
@@ -670,16 +676,23 @@ function TelaMapa({ sel, setSel, online, pend, reload, setReload, sincronizar, s
     if (!grade) return { type: 'FeatureCollection', features: [] };
     const feats: GeoJSON.Feature[] = grade.pontos
       .filter(p => filtro === 'todos' || statusDe(p.ordem) === filtro || p.ordem === alvoOrdem)
-      .map(p => ({
-        type: 'Feature',
-        properties: {
-          ordem: p.ordem,
-          codigo: codigoPonto(p),
-          cor: p.ordem === alvoOrdem ? '#60a5fa' : COR_STATUS[statusDe(p.ordem)],
-          sel: p.ordem === alvoOrdem,
-        },
-        geometry: { type: 'Point', coordinates: [p.lng, p.lat] },
-      }));
+      .map(p => {
+        const status = statusDe(p.ordem);
+        const multiProf = (p.profundidades?.length ?? 0) > 1;
+        const cor = p.ordem === alvoOrdem
+          ? '#60a5fa'
+          : (multiProf && status === 'pendente') ? COR_MULTI_PROF : COR_STATUS[status];
+        return {
+          type: 'Feature' as const,
+          properties: {
+            ordem: p.ordem,
+            codigo: codigoPonto(p),
+            cor,
+            sel: p.ordem === alvoOrdem,
+          },
+          geometry: { type: 'Point' as const, coordinates: [p.lng, p.lat] },
+        };
+      });
     return { type: 'FeatureCollection', features: feats };
   }, [grade, filtro, alvoOrdem, statusDe]);
 
@@ -695,6 +708,12 @@ function TelaMapa({ sel, setSel, online, pend, reload, setReload, sincronizar, s
     if (dentroRaio && !avisadoRef.current) { avisadoRef.current = true; avisoDentroRaio(); }
     if (!dentroRaio) avisadoRef.current = false;
   }, [dentroRaio]);
+
+  // grade tem algum ponto com 2+ profundidades? (só então mostra a legenda da cor)
+  const temMultiProf = useMemo(
+    () => grade?.pontos.some(p => (p.profundidades?.length ?? 0) > 1) ?? false,
+    [grade],
+  );
 
   const progresso = useMemo(() => {
     if (!grade) return { feitos: 0, total: 0 };
@@ -837,6 +856,12 @@ function TelaMapa({ sel, setSel, online, pend, reload, setReload, sincronizar, s
             </button>
           ))}
         </div>
+        {temMultiProf && (
+          <p className="px-3 pb-1.5 -mt-1 flex items-center gap-1 text-[9px]" style={{ color: SUB }}>
+            <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: COR_MULTI_PROF }} />
+            2+ profundidades
+          </p>
+        )}
 
         <div style={{ background: 'rgba(6,21,37,0.95)', borderTop: `1px solid ${BORDA}` }}>
           {!alvoPonto ? (
