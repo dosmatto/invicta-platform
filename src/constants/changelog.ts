@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '1.79.0': [
+    'BACKUP PRÓPRIO DOS DADOS: em Configurações (só o Owner), novo botão "Exportar backup (.json)" baixa TODOS os dados (produtores, fazendas, talhões, grades, laudos, medições, biblioteca, papéis…) num arquivo datado — guarde no Drive/OneDrive; recomendado exportar mensalmente. E a RESTAURAÇÃO (zona de risco, exige digitar RESTAURAR + confirmação) regrava o navegador e a nuvem a partir do arquivo. Senhas e chaves por-dispositivo ficam de fora por segurança; mapas de fertilidade processados são deriváveis e podem ser reprocessados.',
+  ],
   '1.78.0': [
     'PDFs ATÉ 5-10x MENORES, SEM PERDA VISÍVEL: todos os relatórios (MDE, Comparação, Fertilidade, Recomendações) passaram a comprimir o arquivo e a embutir os MAPAS como JPEG de alta qualidade no tamanho certo de impressão (200 dpi) — antes cada mapa ia como PNG cheio. Textos e tabelas continuam vetoriais (nítidos em qualquer zoom); legendas em gradiente e logos com transparência seguem em PNG.',
     'NOME DA EQUAÇÃO NOS MAPAS DE RECOMENDAÇÃO DO PDF: no comparador de cenários e no mapa oficial, cada mapa agora traz o nome da equação usada (o método) como subtítulo — na tela isso já aparecia em cada card.',

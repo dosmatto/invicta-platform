@@ -7,7 +7,9 @@ import { CHANGELOG } from '@/constants/changelog';
 import { EtiquetaLayoutPicker } from '../talhao/EtiquetaLayoutPicker';
 import { getConfigEtiqueta, saveConfigEtiqueta } from '@/lib/store';
 import { INTERP_URL, BACKEND_LOCAL, headersBackend } from '@/lib/interpUrl';
-import { ChevronDown, ChevronRight, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
+import { ehOwner } from '@/lib/empresa';
+import { exportarBackup, restaurarBackup } from '@/lib/backup';
+import { ChevronDown, ChevronRight, CheckCircle2, XCircle, Loader2, Download, AlertTriangle } from 'lucide-react';
 
 // Status do servidor de processamento (nuvem) — só informação, sem instalação.
 function ServidorNuvem() {
@@ -33,12 +35,117 @@ function ServidorNuvem() {
   );
 }
 
+// Backup próprio dos dados (Owner-only). Exporta tudo num JSON datado e restaura.
+function BackupSection() {
+  const [resumoExport, setResumoExport] = useState('');
+  const [arquivo, setArquivo] = useState<File | null>(null);
+  const [confirmacao, setConfirmacao] = useState('');
+  const [resultado, setResultado] = useState<{ ok: boolean; msg: string } | null>(null);
+
+  function exportar() {
+    try {
+      const { nomeArquivo, blob, resumo } = exportarBackup();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = nomeArquivo;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setResumoExport(`Backup gerado: ${resumo}`);
+    } catch (e) {
+      setResumoExport(`Erro ao gerar backup: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  async function restaurar() {
+    if (!arquivo) return;
+    const aviso =
+      'ATENÇÃO: isto SUBSTITUI os dados deste navegador E da nuvem pelos do arquivo.\n\n' +
+      'Os dados atuais serão sobrescritos. Continuar?';
+    if (!confirm(aviso)) return;
+    try {
+      const texto = await arquivo.text();
+      const r = restaurarBackup(texto);
+      if (r.ok) {
+        setResultado({ ok: true, msg: r.resumo ?? 'Restaurado.' });
+        alert(`Restauração concluída: ${r.resumo ?? ''}. A página será recarregada.`);
+        location.reload();
+      } else {
+        setResultado({ ok: false, msg: r.erro ?? 'Falha ao restaurar.' });
+      }
+    } catch (e) {
+      setResultado({ ok: false, msg: e instanceof Error ? e.message : String(e) });
+    }
+  }
+
+  return (
+    <PanelSection title="Backup dos dados">
+      <div className="px-4 py-3 space-y-3">
+        {/* Exportar */}
+        <div className="space-y-2">
+          <button onClick={exportar}
+            className="flex items-center gap-2 px-3 py-2 rounded text-xs font-semibold text-white transition-opacity hover:opacity-90"
+            style={{ background: 'var(--invicta-blue-mid)' }}>
+            <Download size={14} /> Exportar backup (.json)
+          </button>
+          {resumoExport && (
+            <p className="text-[11px] leading-relaxed" style={{ color: '#4ade80' }}>{resumoExport}</p>
+          )}
+          <p className="text-[10px] leading-relaxed" style={{ color: 'var(--sidebar-section)' }}>
+            Guarde o arquivo fora deste computador (Drive/OneDrive). Recomendado: exportar
+            mensalmente e após grandes importações.
+          </p>
+        </div>
+
+        {/* Zona de risco — restauração */}
+        <div className="rounded p-3 space-y-2" style={{ border: '1px solid #b45309' }}>
+          <div className="flex items-center gap-1.5 text-[11px] font-bold" style={{ color: '#fbbf24' }}>
+            <AlertTriangle size={13} /> Zona de risco — restaurar backup
+          </div>
+          <p className="text-[10px] leading-relaxed" style={{ color: '#fbbf24' }}>
+            A restauração substitui os dados deste navegador E da nuvem pelos do arquivo.
+          </p>
+          <input type="file" accept="application/json,.json"
+            onChange={e => { setArquivo(e.target.files?.[0] ?? null); setResultado(null); }}
+            className="block w-full text-[11px]"
+            style={{ color: 'var(--sidebar-section)' }} />
+          <div className="space-y-1">
+            <label className="text-[10px]" style={{ color: '#fbbf24' }}>
+              Digite RESTAURAR para habilitar:
+            </label>
+            <input type="text" value={confirmacao}
+              onChange={e => setConfirmacao(e.target.value)}
+              placeholder="RESTAURAR"
+              className="block w-full px-2 py-1 rounded text-xs"
+              style={{ background: 'var(--sidebar-item-hover)', color: '#e2e8f0', border: '1px solid #b45309' }} />
+          </div>
+          <button onClick={restaurar}
+            disabled={!arquivo || confirmacao.trim().toUpperCase() !== 'RESTAURAR'}
+            className="px-3 py-2 rounded text-xs font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ background: '#b45309' }}>
+            Restaurar backup
+          </button>
+          {resultado && (
+            <p className="text-[11px] leading-relaxed" style={{ color: resultado.ok ? '#4ade80' : '#f87171' }}>
+              {resultado.msg}
+            </p>
+          )}
+        </div>
+      </div>
+    </PanelSection>
+  );
+}
+
 export function ConfiguracoesPanel() {
   const versoes = Object.entries(CHANGELOG);
   const [atual, ...anteriores] = versoes;          // a primeira é a mais recente
   const [mostrarAnteriores, setMostrarAnteriores] = useState(false);
   const [abertos, setAbertos] = useState<Record<string, boolean>>({});
   const [etq, setEtq] = useState(() => getConfigEtiqueta());
+  const [owner, setOwner] = useState(false);
+  useEffect(() => { setOwner(ehOwner()); }, []); // só no cliente (evita hydration mismatch)
 
   function atualizarEtq(patch: Partial<typeof etq>) {
     const novo = { ...etq, ...patch };
@@ -66,6 +173,8 @@ export function ConfiguracoesPanel() {
           />
         </div>
       </PanelSection>
+
+      {owner && <BackupSection />}
 
       <PanelSection title="Changelog">
         {/* Última versão — sempre visível */}
