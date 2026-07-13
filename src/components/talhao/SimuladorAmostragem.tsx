@@ -155,14 +155,22 @@ export function SimuladorAmostragem({ safraNome: safraProp }: { safraNome?: stri
     profs.some((p, i) => p.percentual !== padrao.profundidades[i]?.percentual)
   ) : false) || pontosManuais !== null;
 
-  // Ao mudar qualquer parâmetro, descarta a edição manual (a grade é regerada)
+  // Ao mudar qualquer parâmetro a grade é regerada — se houver edições manuais
+  // NÃO salvas, avisa antes de descartar (era descarte silencioso: o usuário
+  // editava pontos, mexia num slider e o salvar gravava o grid regenerado).
+  function confirmarDescarte(): boolean {
+    if (!pontosManuais) return true;
+    return confirm('Você tem edições manuais de pontos NÃO salvas. Mudar este parâmetro regenera o grid e DESCARTA as edições. Continuar?');
+  }
   function alterarParam<T>(setter: (v: T) => void, v: T) {
+    if (!confirmarDescarte()) return;
     if (pontosManuais) setPontosManuais(null);
     setGradeEditandoId(null);
     setGradeViewId(null);
     setter(v);
   }
   function setProfPct(i: number, v: number) {
+    if (!confirmarDescarte()) return;
     if (pontosManuais) setPontosManuais(null);
     setGradeEditandoId(null);
     setGradeViewId(null);
@@ -210,7 +218,7 @@ export function SimuladorAmostragem({ safraNome: safraProp }: { safraNome?: stri
     if (!padrao || pontosEfetivos.length === 0 || !nav.talhaoId || !safraNome) return;
     const n = getGrades(nav.talhaoId, safraNome, 'grid').length + 1;
     const primeira = getGrades(nav.talhaoId, safraNome, 'grid').length === 0;
-    saveGrade({
+    const salva = saveGrade({
       talhaoId: nav.talhaoId, safra: safraNome, epoca, nome: `Grade ${n}`, metodo: 'grid',
       padraoAmostragemId: padrao.id, padraoNome: padrao.nome, customizado,
       densidade, distanciaBorda, rotacao: rotacaoEfetiva, aleatoriedade, modoSel,
@@ -220,6 +228,10 @@ export function SimuladorAmostragem({ safraNome: safraProp }: { safraNome?: stri
     setPontosManuais(null);
     setGradeEditandoId(null);
     setEdicaoAtiva(false);
+    // Deixa a grade recém-salva EM VISTA: editar pontos em seguida parte DELA
+    // e o botão vira "Salvar alterações" (grava por cima) — antes, a 2ª edição
+    // partia do grid regenerado e criava uma "Grade 2", deixando a 1ª intacta.
+    setGradeViewId(salva.id);
     recarregarGrades();
   }
 

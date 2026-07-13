@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '1.80.0': [
+    'GRID — FIM DA PERDA SILENCIOSA DE EDIÇÕES: (1) se você editou pontos manualmente e mexer em qualquer parâmetro (densidade, borda, rotação, sorteio…), o app agora AVISA que o grid será regenerado e pede confirmação antes de descartar as edições — antes descartava em silêncio e o salvar gravava o grid regenerado; (2) a grade recém-salva fica selecionada ("em vista"): editar pontos em seguida parte DELA e o botão vira "Salvar alterações" (grava por cima) — antes criava uma Grade 2 e a original ficava com o grid inicial.',
+  ],
   '1.79.0': [
     'BACKUP PRÓPRIO DOS DADOS: em Configurações (só o Owner), novo botão "Exportar backup (.json)" baixa TODOS os dados (produtores, fazendas, talhões, grades, laudos, medições, biblioteca, papéis…) num arquivo datado — guarde no Drive/OneDrive; recomendado exportar mensalmente. E a RESTAURAÇÃO (zona de risco, exige digitar RESTAURAR + confirmação) regrava o navegador e a nuvem a partir do arquivo. Senhas e chaves por-dispositivo ficam de fora por segurança; mapas de fertilidade processados são deriváveis e podem ser reprocessados.',
   ],
