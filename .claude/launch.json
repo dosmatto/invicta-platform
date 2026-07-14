@@ -8,6 +8,12 @@
       "port": 3100
     },
     {
+      "name": "invicta-local",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["scripts/dev-local.sh"],
+      "port": 3100
+    },
+    {
       "name": "invicta-prod",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["start", "--", "--port", "3006"],
