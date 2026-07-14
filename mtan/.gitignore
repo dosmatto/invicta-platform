@@ -1,0 +1,6 @@
+# Bancada offline — NÃO versionar dados/derivados (contêm nomes de produtores,
+# fazendas e talhões da base FAIXA RICA). Só o código (mtan_lib.py) vai ao repo.
+.venv/
+__pycache__/
+*.pyc
+out/

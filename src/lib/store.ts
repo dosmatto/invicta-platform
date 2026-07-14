@@ -647,6 +647,47 @@ export function getTalhoes(fazendaId?: string): Talhao[] {
   return fazendaId ? all.filter(t => t.fazendaId === fazendaId) : all;
 }
 
+// Centroide de cada talhão cadastrado (para o mapa de visão geral do Início).
+// Usa o bbox se houver; senão calcula do geojson. Talhão sem geometria é
+// ignorado (não tem onde plotar). Traz município/estado da fazenda.
+export interface TalhaoCentroide {
+  id: string; nome: string; fazenda: string;
+  municipio: string; estado: string;
+  lng: number; lat: number;
+}
+
+export function getTalhoesCentroides(): TalhaoCentroide[] {
+  const fazendas = new Map(getFazendas().map(f => [f.id, f]));
+  const out: TalhaoCentroide[] = [];
+  for (const t of getTalhoes()) {
+    let cx: number | null = null, cy: number | null = null;
+    if (t.bbox && t.bbox.length === 4 && t.bbox.every(Number.isFinite)) {
+      cx = (t.bbox[0] + t.bbox[2]) / 2; cy = (t.bbox[1] + t.bbox[3]) / 2;
+    } else if (t.geojson) {
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      const walk = (g: GeoJSON.Geometry) => {
+        if (g.type === 'Polygon') g.coordinates.forEach(r => r.forEach(([a, b]) => { if (a < minX) minX = a; if (b < minY) minY = b; if (a > maxX) maxX = a; if (b > maxY) maxY = b; }));
+        else if (g.type === 'MultiPolygon') g.coordinates.forEach(p => p.forEach(r => r.forEach(([a, b]) => { if (a < minX) minX = a; if (b < minY) minY = b; if (a > maxX) maxX = a; if (b > maxY) maxY = b; })));
+      };
+      try {
+        const gj = JSON.parse(t.geojson) as GeoJSON.GeoJSON;
+        if (gj.type === 'FeatureCollection') gj.features.forEach(f => f.geometry && walk(f.geometry));
+        else if (gj.type === 'Feature') gj.geometry && walk(gj.geometry);
+        else walk(gj as GeoJSON.Geometry);
+      } catch { /* geojson inválido — ignora */ }
+      if (Number.isFinite(minX)) { cx = (minX + maxX) / 2; cy = (minY + maxY) / 2; }
+    }
+    if (cx == null || cy == null) continue;
+    const fz = fazendas.get(t.fazendaId);
+    out.push({
+      id: t.id, nome: t.nome, fazenda: fz?.nome ?? '',
+      municipio: fz?.municipio || '—', estado: (fz?.estado || '').toUpperCase(),
+      lng: cx, lat: cy,
+    });
+  }
+  return out;
+}
+
 export function saveTalhao(t: Omit<Talhao, 'id' | 'criadoEm'>): Talhao {
   const talhoes = load<Talhao>('inv_talhoes');
   const novo: Talhao = comEmpresa(comNome({ ...t, id: uid(), criadoEm: new Date().toISOString() }));

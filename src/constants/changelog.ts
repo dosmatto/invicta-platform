@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '1.81.0': [
+    'TELA INÍCIO — MAPA DE VISÃO GERAL DOS TALHÕES: ao abrir o Início, o mapa mostra um ponto (centroide) por talhão cadastrado, COLORIDO POR MUNICÍPIO, com legenda ao lado. Começa em mapa de RUAS (visualiza melhor as divisas) e enquadrado no Paraná; um botão alterna "Paraná" ⇄ "Todos" (útil porque juntar Tocantins deixa tudo pequeno). Clicar num ponto abre o talhão. Talhão sem geometria não entra (não tem onde plotar).',
+  ],
   '1.80.0': [
     'GRID — FIM DA PERDA SILENCIOSA DE EDIÇÕES: (1) se você editou pontos manualmente e mexer em qualquer parâmetro (densidade, borda, rotação, sorteio…), o app agora AVISA que o grid será regenerado e pede confirmação antes de descartar as edições — antes descartava em silêncio e o salvar gravava o grid regenerado; (2) a grade recém-salva fica selecionada ("em vista"): editar pontos em seguida parte DELA e o botão vira "Salvar alterações" (grava por cima) — antes criava uma Grade 2 e a original ficava com o grid inicial.',
   ],

@@ -6,6 +6,13 @@ import { useApp } from '@/context/AppContext';
 import { TALHAO_KML_URLS } from '@/constants/mocks';
 import { parseKML } from '@/lib/geo';
 import { ESCRITORIO_INVICTA } from '@/lib/seed';
+import { getTalhoesCentroides } from '@/lib/store';
+import { mapaCoresMunicipio } from '@/lib/coresMunicipio';
+
+// Visão geral do Início: estado padrão = Paraná (Tocantins junto deixa tudo
+// minúsculo). 'todos' mostra o país inteiro.
+type OverviewEstado = 'PR' | 'todos';
+const ehPR = (uf: string) => uf === 'PR' || uf.startsWith('PARAN');
 
 // ── Estilo único com OSM + Satélite — toggle de visibilidade, sem setStyle() ──
 const COMBINED_STYLE: maplibregl.StyleSpecification = {
@@ -47,7 +54,7 @@ export function MapView() {
   const readyRef    = useRef(false); // true depois de 'load'
   const [mapReady, setMapReady] = useState(false);
 
-  const { mapMode, setMapMode, nav, setNav, setActivePanel,
+  const { mapMode, setMapMode, nav, setNav, activePanel, setActivePanel,
           uploadedGeo, setUploadedGeo,
           uploadedBbox, setUploadedBbox,
           pontosSimulados, talhoesFazenda, zonasManejo, zonasFundo, zonasOpacidade,
@@ -55,6 +62,12 @@ export function MapView() {
           edicaoAtiva, edicaoModo, setPontoEvent, setZonaEvent } = useApp();
 
   const [kmlLoading, setKmlLoading] = useState(false);
+
+  // Visão geral (Início): pontos-centroide dos talhões coloridos por município.
+  const emVisaoGeral = activePanel === 'dashboard';
+  const [ovEstado, setOvEstado] = useState<OverviewEstado>('PR');
+  const [ovLegenda, setOvLegenda] = useState<{ municipio: string; cor: string; n: number }[]>([]);
+  const [ovTotais, setOvTotais] = useState<{ pr: number; outros: number }>({ pr: 0, outros: 0 });
 
   // refs para os handlers de edição acessarem valores atuais sem re-registrar
   const pontosRef = useRef<GeoJSON.FeatureCollection | null>(null);
@@ -140,6 +153,17 @@ export function MapView() {
         layout: { 'text-field': ['get','label'], 'text-size': 9, 'text-offset': [0,1.3], 'text-font': ['Open Sans Regular'] },
         paint:  { 'text-color': '#fff', 'text-halo-color': '#000', 'text-halo-width': 1.2 } });
 
+      // Visão geral do Início — 1 ponto por talhão, cor por município (property 'cor')
+      map.addSource('overview-pts', { type: 'geojson', data: EMPTY_FC });
+      map.addLayer({ id: 'overview-circle', type: 'circle', source: 'overview-pts',
+        paint: {
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 4, 4, 8, 6, 12, 8],
+          'circle-color': ['get', 'cor'],
+          'circle-stroke-color': '#ffffff',
+          'circle-stroke-width': 1.5,
+          'circle-stroke-opacity': 0.9,
+        } });
+
       // Rótulos de valor da fertilidade (valor da variável em cada ponto de amostragem)
       map.addSource('fert-labels', { type: 'geojson', data: EMPTY_FC });
       map.addLayer({ id: 'fert-labels-text', type: 'symbol', source: 'fert-labels',
@@ -192,6 +216,76 @@ export function MapView() {
       }
     }
   }, [talhoesFazenda, mapReady]);
+
+  // ── 3b. Visão geral do Início: centroides por município + fit + legenda ────
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    const src = map.getSource('overview-pts') as maplibregl.GeoJSONSource | undefined;
+    if (!src) return;
+
+    if (!emVisaoGeral) { src.setData(EMPTY_FC); setOvLegenda([]); return; }
+
+    const todos = getTalhoesCentroides();
+    const cores = mapaCoresMunicipio(todos.map(t => t.municipio));
+    const prCount = todos.filter(t => ehPR(t.estado)).length;
+    setOvTotais({ pr: prCount, outros: todos.length - prCount });
+
+    const lista = ovEstado === 'PR' ? todos.filter(t => ehPR(t.estado)) : todos;
+    const fc: GeoJSON.FeatureCollection = {
+      type: 'FeatureCollection',
+      features: lista.map(t => ({
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [t.lng, t.lat] },
+        properties: { talhaoId: t.id, nome: t.nome, fazenda: t.fazenda,
+          municipio: t.municipio, cor: cores[t.municipio] ?? '#64748b' },
+      })),
+    };
+    src.setData(fc);
+
+    // legenda: municípios presentes na seleção, ordenados por contagem desc
+    const cont = new Map<string, number>();
+    lista.forEach(t => cont.set(t.municipio, (cont.get(t.municipio) ?? 0) + 1));
+    setOvLegenda(Array.from(cont.entries())
+      .map(([municipio, n]) => ({ municipio, cor: cores[municipio] ?? '#64748b', n }))
+      .sort((a, b) => b.n - a.n || a.municipio.localeCompare(b.municipio, 'pt-BR')));
+
+    if (lista.length) {
+      let minLng = Infinity, minLat = Infinity, maxLng = -Infinity, maxLat = -Infinity;
+      lista.forEach(t => { if (t.lng < minLng) minLng = t.lng; if (t.lat < minLat) minLat = t.lat; if (t.lng > maxLng) maxLng = t.lng; if (t.lat > maxLat) maxLat = t.lat; });
+      map.resize();
+      if (minLng === maxLng && minLat === maxLat) map.jumpTo({ center: [minLng, minLat], zoom: 12 });
+      else map.fitBounds([[minLng, minLat], [maxLng, maxLat]], { padding: 70, duration: 0, maxZoom: 12 });
+    }
+  }, [emVisaoGeral, ovEstado, mapReady]);
+
+  // Ao ENTRAR na visão geral, mapa de ruas por padrão (visualiza melhor as
+  // divisas municipais). Não força depois — o usuário pode alternar para satélite.
+  useEffect(() => {
+    if (emVisaoGeral && mapReady) setMapMode('street');
+  }, [emVisaoGeral, mapReady, setMapMode]);
+
+  // Clique num centroide da visão geral → abre o talhão
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    const abrir = (e: maplibregl.MapLayerMouseEvent) => {
+      const p = e.features?.[0]?.properties;
+      if (!p?.talhaoId) return;
+      setNav({ talhaoId: String(p.talhaoId), talhao: String(p.nome ?? '') });
+      setActivePanel(`talhao-${p.talhaoId}`);
+    };
+    const enter = () => { map.getCanvas().style.cursor = 'pointer'; };
+    const leave = () => { map.getCanvas().style.cursor = ''; };
+    map.on('click', 'overview-circle', abrir);
+    map.on('mouseenter', 'overview-circle', enter);
+    map.on('mouseleave', 'overview-circle', leave);
+    return () => {
+      map.off('click', 'overview-circle', abrir);
+      map.off('mouseenter', 'overview-circle', enter);
+      map.off('mouseleave', 'overview-circle', leave);
+    };
+  }, [mapReady, setNav, setActivePanel]);
 
   // Clique num talhão da fazenda → abre o talhão (como link)
   useEffect(() => {
@@ -465,6 +559,37 @@ export function MapView() {
             <circle cx="12" cy="12" r="10" stroke="white" strokeWidth="3" strokeDasharray="40 20" />
           </svg>
           Carregando geometria...
+        </div>
+      )}
+
+      {/* Visão geral: seletor de estado + legenda por município */}
+      {emVisaoGeral && (
+        <div className="absolute top-4 right-4 z-10 flex flex-col gap-2 items-end">
+          <div className="flex rounded-lg overflow-hidden shadow-lg" style={{ border: '2px solid rgba(255,255,255,0.2)' }}>
+            {([['PR', `Paraná (${ovTotais.pr})`], ['todos', `Todos (${ovTotais.pr + ovTotais.outros})`]] as const).map(([val, rot]) => (
+              <button key={val} onClick={() => setOvEstado(val)}
+                className="px-3 py-1.5 text-xs font-semibold transition-colors"
+                style={{
+                  background: ovEstado === val ? 'rgba(26,58,107,0.95)' : 'rgba(15,34,64,0.85)',
+                  color: ovEstado === val ? '#fff' : '#94a3b8',
+                }}>
+                {rot}
+              </button>
+            ))}
+          </div>
+          {ovLegenda.length > 0 && (
+            <div className="rounded-lg shadow-lg px-3 py-2 max-h-[60vh] overflow-y-auto"
+              style={{ background: 'rgba(15,34,64,0.92)', border: '1px solid rgba(255,255,255,0.12)' }}>
+              <div className="text-[10px] font-bold uppercase tracking-wide mb-1.5" style={{ color: '#94a3b8' }}>Município</div>
+              {ovLegenda.map(l => (
+                <div key={l.municipio} className="flex items-center gap-2 py-0.5 text-xs" style={{ color: '#e2e8f0' }}>
+                  <span className="inline-block rounded-full flex-shrink-0" style={{ width: 11, height: 11, background: l.cor, border: '1.5px solid #fff' }} />
+                  <span className="flex-1 whitespace-nowrap">{l.municipio}</span>
+                  <span className="tabular-nums" style={{ color: '#94a3b8' }}>{l.n}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
