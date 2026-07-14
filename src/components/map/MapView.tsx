@@ -8,6 +8,7 @@ import { parseKML } from '@/lib/geo';
 import { ESCRITORIO_INVICTA } from '@/lib/seed';
 import { getTalhoesCentroides } from '@/lib/store';
 import { mapaCoresMunicipio } from '@/lib/coresMunicipio';
+import { lerCache, municipioReal, geocodarFaltantes, corrigirCadastroMunicipios, faltamGeocodar } from '@/lib/geocodeMunicipio';
 
 // Visão geral do Início: estado padrão = Paraná (Tocantins junto deixa tudo
 // minúsculo). 'todos' mostra o país inteiro.
@@ -68,6 +69,11 @@ export function MapView() {
   const [ovEstado, setOvEstado] = useState<OverviewEstado>('PR');
   const [ovLegenda, setOvLegenda] = useState<{ municipio: string; cor: string; n: number }[]>([]);
   const [ovTotais, setOvTotais] = useState<{ pr: number; outros: number }>({ pr: 0, outros: 0 });
+  const [geoTick, setGeoTick] = useState(0); // incrementa conforme o geocoding resolve pontos
+  const [geoProg, setGeoProg] = useState<{ feitos: number; total: number } | null>(null);
+  const geoRodouRef = useRef(false); // geocoding roda uma vez por sessão de visão geral
+  const ovFitRef = useRef<string>(''); // último recorte enquadrado (evita refit por tick)
+  const PENDENTE = '⏳ classificando…';
 
   // refs para os handlers de edição acessarem valores atuais sem re-registrar
   const pontosRef = useRef<GeoJSON.FeatureCollection | null>(null);
@@ -224,40 +230,79 @@ export function MapView() {
     const src = map.getSource('overview-pts') as maplibregl.GeoJSONSource | undefined;
     if (!src) return;
 
-    if (!emVisaoGeral) { src.setData(EMPTY_FC); setOvLegenda([]); return; }
+    if (!emVisaoGeral) { src.setData(EMPTY_FC); setOvLegenda([]); ovFitRef.current = ''; return; }
 
     const todos = getTalhoesCentroides();
-    const cores = mapaCoresMunicipio(todos.map(t => t.municipio));
+    // Município pela POSIÇÃO REAL (geocoding); cai em "classificando…" enquanto
+    // o ponto ainda não foi resolvido. NUNCA usa o campo do cadastro para colorir.
+    const cache = lerCache();
+    const munDe = (t: (typeof todos)[number]) => municipioReal(t.lng, t.lat, cache) ?? PENDENTE;
+    const cores = mapaCoresMunicipio(todos.map(munDe).filter(m => m !== PENDENTE));
+    cores[PENDENTE] = '#94a3b8'; // cinza neutro p/ pendentes
     const prCount = todos.filter(t => ehPR(t.estado)).length;
     setOvTotais({ pr: prCount, outros: todos.length - prCount });
 
     const lista = ovEstado === 'PR' ? todos.filter(t => ehPR(t.estado)) : todos;
     const fc: GeoJSON.FeatureCollection = {
       type: 'FeatureCollection',
-      features: lista.map(t => ({
-        type: 'Feature',
-        geometry: { type: 'Point', coordinates: [t.lng, t.lat] },
-        properties: { talhaoId: t.id, nome: t.nome, fazenda: t.fazenda,
-          municipio: t.municipio, cor: cores[t.municipio] ?? '#64748b' },
-      })),
+      features: lista.map(t => {
+        const m = munDe(t);
+        return {
+          type: 'Feature' as const,
+          geometry: { type: 'Point' as const, coordinates: [t.lng, t.lat] },
+          properties: { talhaoId: t.id, nome: t.nome, fazenda: t.fazenda,
+            municipio: m, cor: cores[m] ?? '#64748b' },
+        };
+      }),
     };
     src.setData(fc);
 
-    // legenda: municípios presentes na seleção, ordenados por contagem desc
+    // legenda: municípios reais presentes na seleção, ordenados por contagem desc
     const cont = new Map<string, number>();
-    lista.forEach(t => cont.set(t.municipio, (cont.get(t.municipio) ?? 0) + 1));
+    lista.forEach(t => { const m = munDe(t); cont.set(m, (cont.get(m) ?? 0) + 1); });
     setOvLegenda(Array.from(cont.entries())
       .map(([municipio, n]) => ({ municipio, cor: cores[municipio] ?? '#64748b', n }))
       .sort((a, b) => b.n - a.n || a.municipio.localeCompare(b.municipio, 'pt-BR')));
 
-    if (lista.length) {
+    // Enquadra só quando o RECORTE muda (entrar na visão / trocar PR⇄Todos) —
+    // não a cada tick de geocoding, senão o mapa "pularia" durante a classificação.
+    const fitSig = `${emVisaoGeral}|${ovEstado}`;
+    if (lista.length && ovFitRef.current !== fitSig) {
+      ovFitRef.current = fitSig;
       let minLng = Infinity, minLat = Infinity, maxLng = -Infinity, maxLat = -Infinity;
       lista.forEach(t => { if (t.lng < minLng) minLng = t.lng; if (t.lat < minLat) minLat = t.lat; if (t.lng > maxLng) maxLng = t.lng; if (t.lat > maxLat) maxLat = t.lat; });
       map.resize();
       if (minLng === maxLng && minLat === maxLat) map.jumpTo({ center: [minLng, minLat], zoom: 12 });
       else map.fitBounds([[minLng, minLat], [maxLng, maxLat]], { padding: 70, duration: 0, maxZoom: 12 });
     }
-  }, [emVisaoGeral, ovEstado, mapReady]);
+  }, [emVisaoGeral, ovEstado, mapReady, geoTick]);
+
+  // Geocodifica em 2º plano os talhões ainda sem município real (1x por sessão),
+  // recolorindo conforme resolve; ao terminar, corrige o cadastro pela posição.
+  useEffect(() => {
+    if (!emVisaoGeral || !mapReady || geoRodouRef.current) return;
+    const centroides = getTalhoesCentroides();
+    if (faltamGeocodar(centroides) === 0) {
+      // já tudo em cache — só garante o cadastro corrigido uma vez
+      geoRodouRef.current = true;
+      corrigirCadastroMunicipios(centroides);
+      return;
+    }
+    geoRodouRef.current = true;
+    let vivo = true;
+    (async () => {
+      await geocodarFaltantes(centroides, (feitos, total) => {
+        if (!vivo) return;
+        setGeoProg({ feitos, total });
+        setGeoTick(v => v + 1); // recolore o mapa incrementalmente
+      });
+      if (!vivo) return;
+      corrigirCadastroMunicipios(centroides); // grava município real no cadastro
+      setGeoProg(null);
+      setGeoTick(v => v + 1);
+    })();
+    return () => { vivo = false; };
+  }, [emVisaoGeral, mapReady]);
 
   // Ao ENTRAR na visão geral, mapa de ruas por padrão (visualiza melhor as
   // divisas municipais). Não força depois — o usuário pode alternar para satélite.
@@ -577,6 +622,15 @@ export function MapView() {
               </button>
             ))}
           </div>
+          {geoProg && (
+            <div className="rounded-lg shadow-lg px-3 py-1.5 flex items-center gap-2 text-xs font-semibold"
+              style={{ background: 'rgba(26,58,107,0.95)', color: '#fff' }}>
+              <svg className="animate-spin w-3 h-3" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="12" r="10" stroke="white" strokeWidth="3" strokeDasharray="40 20" />
+              </svg>
+              Classificando por localização… {geoProg.feitos}/{geoProg.total}
+            </div>
+          )}
           {ovLegenda.length > 0 && (
             <div className="rounded-lg shadow-lg px-3 py-2 max-h-[60vh] overflow-y-auto"
               style={{ background: 'rgba(15,34,64,0.92)', border: '1px solid rgba(255,255,255,0.12)' }}>

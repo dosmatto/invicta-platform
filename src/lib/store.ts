@@ -651,7 +651,7 @@ export function getTalhoes(fazendaId?: string): Talhao[] {
 // Usa o bbox se houver; senão calcula do geojson. Talhão sem geometria é
 // ignorado (não tem onde plotar). Traz município/estado da fazenda.
 export interface TalhaoCentroide {
-  id: string; nome: string; fazenda: string;
+  id: string; nome: string; fazendaId: string; fazenda: string;
   municipio: string; estado: string;
   lng: number; lat: number;
 }
@@ -680,7 +680,7 @@ export function getTalhoesCentroides(): TalhaoCentroide[] {
     if (cx == null || cy == null) continue;
     const fz = fazendas.get(t.fazendaId);
     out.push({
-      id: t.id, nome: t.nome, fazenda: fz?.nome ?? '',
+      id: t.id, nome: t.nome, fazendaId: t.fazendaId, fazenda: fz?.nome ?? '',
       municipio: fz?.municipio || '—', estado: (fz?.estado || '').toUpperCase(),
       lng: cx, lat: cy,
     });

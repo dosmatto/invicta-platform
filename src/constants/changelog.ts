@@ -1,5 +1,9 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '1.82.0': [
+    'MAPA DO INÍCIO CLASSIFICA PELO MUNICÍPIO REAL (não pelo cadastro): a cor de cada talhão passa a vir da POSIÇÃO geográfica do ponto (geocodificação OSM, feita 1x e guardada em cache), acabando com a bagunça de antes — "Carambeí" vs "CARAMBEÍ" viravam cores diferentes, talhões sem município ficavam cinza e apareciam strings tipo "Arapoti / Pinhalão". Enquanto classifica, mostra "Classificando por localização… X/Y".',
+    'CADASTRO SE CORRIGE PELA LOCALIZAÇÃO: ao classificar, o município de cada fazenda é atualizado automaticamente para o município REAL predominante dos seus talhões (ex.: fazenda cadastrada em Carambeí mas cujos talhões estão em Tibagi passa a constar Tibagi).',
+  ],
   '1.81.0': [
     'TELA INÍCIO — MAPA DE VISÃO GERAL DOS TALHÕES: ao abrir o Início, o mapa mostra um ponto (centroide) por talhão cadastrado, COLORIDO POR MUNICÍPIO, com legenda ao lado. Começa em mapa de RUAS (visualiza melhor as divisas) e enquadrado no Paraná; um botão alterna "Paraná" ⇄ "Todos" (útil porque juntar Tocantins deixa tudo pequeno). Clicar num ponto abre o talhão. Talhão sem geometria não entra (não tem onde plotar).',
   ],
