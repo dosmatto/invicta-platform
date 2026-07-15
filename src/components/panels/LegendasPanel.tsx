@@ -12,6 +12,7 @@ import {
   CATEGORIAS_LEGENDA,
 } from '@/lib/legendas';
 import { ELEMENTOS_LAB } from '@/lib/lab';
+import { RAMPAS, coresDaRampa, corNaRampa, gradienteCssRampa } from '@/lib/estiloPresets';
 import {
   Plus, Edit3, Copy, Trash2, Download, Upload, ChevronLeft, BookOpen,
   Save, X, ArrowUp, ArrowDown, AlertTriangle, Check, Unlock,
@@ -287,6 +288,22 @@ function LegendaEditor({ legenda, onClose }: { legenda: Legenda | null; onClose:
     savePaleta(nome, cores);
     setPaletas(getPaletas());
   }
+
+  // Rampas prontas (estilo QGIS): pinta as classes com o TRECHO da rampa que
+  // cada uma ocupa (classe i vai de i/n a (i+1)/n) — gradiente contínuo na barra.
+  const [rampaInv, setRampaInv] = useState(false);
+  function aplicarRampa(id: string) {
+    const cores = coresDaRampa(id, rampaInv);
+    setForm(f => {
+      const n = Math.max(1, f.classes.length);
+      return { ...f, classes: f.classes.map((c, i) => ({
+        ...c,
+        corInicio: corNaRampa(i / n, cores),
+        corFim: corNaRampa((i + 1) / n, cores),
+        corBase: undefined,
+      })) };
+    });
+  }
   function excluirPaleta(id: string) { deletePaleta(id); setPaletas(getPaletas()); }
 
   function patch<K extends keyof typeof form>(k: K, v: typeof form[K]) {
@@ -455,6 +472,25 @@ function LegendaEditor({ legenda, onClose }: { legenda: Legenda | null; onClose:
           <div className="flex gap-1">
             <button onClick={resetClasses5} title="Padrão 5 classes" className="px-2 py-1 rounded text-[9px] font-semibold" style={{ background: '#1a3a6b', color: '#93c5fd' }}>5 padrão</button>
             <button onClick={addClasse} className="px-2 py-1 rounded text-[9px] font-bold text-white" style={{ background: 'var(--invicta-blue)' }}>+ classe</button>
+          </div>
+        </div>
+
+        {/* Rampas prontas (estilo QGIS) — clicou, pinta as classes na hora */}
+        <div className="space-y-1">
+          <div className="flex items-center gap-1.5">
+            <span className="text-[9px] font-semibold" style={{ color: '#64748b' }}>Rampas de cor</span>
+            <label className="ml-auto flex items-center gap-1 text-[9px]" style={{ color: '#cbd5e1' }}>
+              <input type="checkbox" checked={rampaInv} onChange={e => setRampaInv(e.target.checked)} /> Inverter
+            </label>
+          </div>
+          <div className="grid grid-cols-2 gap-1.5">
+            {Object.entries(RAMPAS).map(([id, r]) => (
+              <button key={id} onClick={() => aplicarRampa(id)} title={`Aplicar a rampa ${r.nome} às classes`}
+                className="rounded overflow-hidden text-left" style={{ border: '1px solid #2e5fa3' }}>
+                <div className="h-2.5" style={{ background: gradienteCssRampa(rampaInv ? [...r.cores].reverse() : r.cores) }} />
+                <div className="px-1.5 py-0.5 text-[9px] font-semibold truncate" style={{ color: '#94a3b8', background: '#0b1f3a' }}>{r.nome}</div>
+              </button>
+            ))}
           </div>
         </div>
 

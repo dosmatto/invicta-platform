@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '1.89.0': [
+    'RAMPAS DE CORES TAMBÉM NAS LEGENDAS: no editor de legendas (Biblioteca), o bloco "Rampas de cor" aplica Padrão/Spectral/RdYlGn/Turbo às classes com um clique — cada classe recebe o trecho da rampa que ocupa (gradiente contínuo na barra), com opção Inverter. Convive com as paletas salvas: aplica a rampa, ajusta o que quiser e salva como paleta.',
+  ],
   '1.88.0': [
     'RAMPAS DE CORES NAS EQUAÇÕES (estilo QGIS): no Estilo do mapa, além do padrão verde→vermelho, agora dá para escolher SPECTRAL, RdYlGn e TURBO — cartões com a pré-visualização do gradiente; clicou, as classes recolorem na hora. Checkbox "Inverter" vira o sentido da rampa (como no QGIS). A rampa escolhida fica salva na equação e é usada pelo "Distribuir cores" e ao adicionar/remover classes.',
   ],
