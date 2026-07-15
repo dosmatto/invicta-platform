@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '1.83.0': [
+    'RECOMENDAÇÃO — "DIVIDIR CLASSES AUTOMATICAMENTE" AGORA FUNCIONA: no estilo do mapa da equação, ligando a chave, as classes de cor passam a dividir o intervalo da própria equação (Dose mínima viável → Dose máxima) em faixas iguais, em vez de ficar presas em 1.000…10.000. Ex.: mínima 50 e máxima 500 com 10 classes vira 95, 140, 185 … 500 (piso 50 = a máquina não aplica menos que isso; abaixo vira 0). Mudou a mínima/máxima na equação, as classes se reajustam sozinhas; você controla só a quantidade de classes e as cores (os limites ficam calculados). Antes a chave não fazia nada.',
+  ],
   '1.82.0': [
     'MAPA DO INÍCIO CLASSIFICA PELO MUNICÍPIO REAL (não pelo cadastro): a cor de cada talhão passa a vir da POSIÇÃO geográfica do ponto (geocodificação OSM, feita 1x e guardada em cache), acabando com a bagunça de antes — "Carambeí" vs "CARAMBEÍ" viravam cores diferentes, talhões sem município ficavam cinza e apareciam strings tipo "Arapoti / Pinhalão". Enquanto classifica, mostra "Classificando por localização… X/Y".',
     'CADASTRO SE CORRIGE PELA LOCALIZAÇÃO: ao classificar, o município de cada fazenda é atualizado automaticamente para o município REAL predominante dos seus talhões (ex.: fazenda cadastrada em Carambeí mas cujos talhões estão em Tibagi passa a constar Tibagi).',

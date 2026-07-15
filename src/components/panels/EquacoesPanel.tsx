@@ -41,6 +41,14 @@ function corNaRampa(t: number): string {
 const distribuirCores = <T extends { cor: string }>(classes: T[]): T[] =>
   classes.map((c, i) => ({ ...c, cor: corNaRampa(classes.length <= 1 ? 1 : i / (classes.length - 1)) }));
 
+// Limites superiores de N classes dividindo [min, max] em partes iguais.
+// Ex.: (50, 500, 10) → 95, 140, 185, … 500 (piso 50 fica implícito; abaixo = 0).
+const arred2 = (x: number) => Math.round(x * 100) / 100;
+function limitesDivididos(min: number, max: number, n: number): number[] {
+  const passo = (max - min) / n;
+  return Array.from({ length: n }, (_, i) => arred2(min + (i + 1) * passo));
+}
+
 function estiloPadrao(): EstiloRecomendacao {
   // 10 faixas padrão (verde → vermelho), limites de 1.000 em 1.000 kg/ha.
   return {
@@ -321,7 +329,8 @@ function EquacaoEditor({ item, onClose }: { item: ItemBiblioteca<ConteudoEquacao
           <Equacao {...{ constantes, setConstantes, script, setScript, scriptRef, naoNeg, setNaoNeg, doseMinima, setDoseMinima, abaixoMinimo, setAbaixoMinimo, doseMaxima, setDoseMaxima, unTrat, val, inserirToken }} />
         </Secao>
         <Secao titulo="Estilo do mapa">
-          <Estilo estilo={estilo} setEstilo={setEstilo} unidade={unTrat} />
+          <Estilo estilo={estilo} setEstilo={setEstilo} unidade={unTrat}
+            doseMin={parseNum(doseMinima) || 0} doseMax={parseNum(doseMaxima) || 0} />
         </Secao>
       </div>
 
@@ -591,7 +600,30 @@ function Equacao(p: {
   );
 }
 
-function Estilo({ estilo, setEstilo, unidade }: { estilo: EstiloRecomendacao; setEstilo: (e: EstiloRecomendacao) => void; unidade: string }) {
+function Estilo({ estilo, setEstilo, unidade, doseMin, doseMax }: {
+  estilo: EstiloRecomendacao;
+  setEstilo: (e: EstiloRecomendacao | ((prev: EstiloRecomendacao) => EstiloRecomendacao)) => void;
+  unidade: string; doseMin: number; doseMax: number;
+}) {
+  const auto = estilo.dividirAuto;
+  const intervaloValido = doseMax > doseMin;   // precisa de mínima E máxima na equação
+  const nClasses = estilo.classes.length;
+
+  // Divisão automática: com a chave ligada e intervalo válido, os limites das
+  // classes passam a dividir [doseMin, doseMax] em partes iguais — o usuário
+  // controla só a QUANTIDADE de classes e as cores. Piso = dose mínima (abaixo
+  // dela a máquina não aplica → 0). Usa updater funcional p/ não sobrescrever
+  // uma troca de cor feita entre renders e p/ não entrar em laço.
+  useEffect(() => {
+    if (!auto || !intervaloValido) return;
+    setEstilo(prev => {
+      if (!prev.dividirAuto || prev.classes.length < 1) return prev;
+      const lims = limitesDivididos(doseMin, doseMax, prev.classes.length);
+      if (prev.classes.every((c, i) => c.limiteSuperior === lims[i])) return prev;
+      return { ...prev, classes: prev.classes.map((c, i) => ({ ...c, limiteSuperior: lims[i] })) };
+    });
+  }, [auto, doseMin, doseMax, nClasses, intervaloValido, setEstilo]);
+
   function setClasse(i: number, patch: Partial<{ cor: string; limiteSuperior: number }>) {
     setEstilo({ ...estilo, classes: estilo.classes.map((c, idx) => idx === i ? { ...c, ...patch } : c) });
   }
@@ -628,6 +660,14 @@ function Estilo({ estilo, setEstilo, unidade }: { estilo: EstiloRecomendacao; se
         </div>
       </div>
 
+      {auto && (
+        <p className="text-[9px] -mt-1" style={{ color: intervaloValido ? '#7dd3fc' : '#fca5a5' }}>
+          {intervaloValido
+            ? `Classes dividindo ${doseMin}–${doseMax}${unidade ? ` ${unidade}` : ''} da equação em ${nClasses} faixa(s) iguais. Ajuste só o nº de classes e as cores.`
+            : 'Defina a Dose mínima viável e a Dose máxima na equação acima para dividir automaticamente.'}
+        </p>
+      )}
+
       <div>
         <div className="flex items-center justify-between mb-1">
           <label className="text-[10px] font-semibold" style={{ color: '#cbd5e1' }}>Classes</label>
@@ -641,7 +681,10 @@ function Estilo({ estilo, setEstilo, unidade }: { estilo: EstiloRecomendacao; se
             <div key={i} className="flex gap-1.5 items-center">
               <input type="color" value={c.cor} onChange={e => setClasse(i, { cor: e.target.value })} className="w-7 h-6 rounded cursor-pointer" style={{ background: 'transparent', border: '1px solid #2e5fa3' }} />
               <span className="text-[9px]" style={{ color: '#64748b' }}>até</span>
-              <input value={String(c.limiteSuperior)} onChange={e => setClasse(i, { limiteSuperior: parseNum(e.target.value) || 0 })} inputMode="decimal" className="flex-1 rounded px-2 py-1 text-[10px] font-mono outline-none" style={inputStyle} />
+              <input value={String(c.limiteSuperior)} onChange={e => setClasse(i, { limiteSuperior: parseNum(e.target.value) || 0 })}
+                readOnly={auto} title={auto ? 'Calculado pela divisão automática' : undefined}
+                inputMode="decimal" className="flex-1 rounded px-2 py-1 text-[10px] font-mono outline-none"
+                style={{ ...inputStyle, ...(auto ? { opacity: 0.6, cursor: 'not-allowed' } : {}) }} />
               <button onClick={() => rmClasse(i)} className="p-1 rounded hover:bg-white/10" style={{ color: '#f87171' }}><Trash2 size={10} /></button>
             </div>
           ))}
