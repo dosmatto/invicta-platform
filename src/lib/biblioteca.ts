@@ -342,6 +342,8 @@ export interface EstiloRecomendacao {
   classes: ClasseEstiloRec[];   // ordenadas por limiteSuperior crescente
   dividirAuto: boolean;
   zeroTransparente: boolean;
+  rampa?: string;               // id da rampa de cores (RAMPAS em estiloPresets); ausente = 'padrao'
+  rampaInvertida?: boolean;     // inverte o sentido da rampa (como no QGIS)
 }
 // Preset de divisão de classes reutilizável (Calcário/Gesso, KCl, P, ou do usuário).
 export interface PresetEstiloRec {

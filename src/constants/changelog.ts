@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '1.88.0': [
+    'RAMPAS DE CORES NAS EQUAÇÕES (estilo QGIS): no Estilo do mapa, além do padrão verde→vermelho, agora dá para escolher SPECTRAL, RdYlGn e TURBO — cartões com a pré-visualização do gradiente; clicou, as classes recolorem na hora. Checkbox "Inverter" vira o sentido da rampa (como no QGIS). A rampa escolhida fica salva na equação e é usada pelo "Distribuir cores" e ao adicionar/remover classes.',
+  ],
   '1.87.0': [
     'LANÇAMENTOS NÃO SE PERDEM MAIS QUANDO A CONEXÃO CAI: antes, se o usuário lançava dados sem internet (ou a conexão caía no meio) e recarregava a página, o app trazia os dados da nuvem POR CIMA do que estava no aparelho — apagando os lançamentos que não tinham subido. Agora cada gravação fica marcada como "pendente" até a nuvem CONFIRMAR; ao recarregar, o app MESCLA o pendente com a nuvem (nada some) e re-envia sozinho. O reenvio também ficou mais insistente: tenta ao voltar a internet, ao voltar para a aba e a cada 45 s.',
   ],

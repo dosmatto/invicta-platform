@@ -18,7 +18,7 @@ import { ATRIBUTOS_EQUACAO, validar, testarEscalar, atributoPorToken } from '@/l
 import { pode } from '@/lib/empresa';
 import { getPrecosProdutos, savePrecoProduto, type PrecoProduto,
   getPresetsEstilo, savePresetEstilo, deletePresetEstilo } from '@/lib/store';
-import { distribuirCores, PRESETS_SISTEMA } from '@/lib/estiloPresets';
+import { distribuirCores, PRESETS_SISTEMA, RAMPAS, coresDaRampa, gradienteCssRampa } from '@/lib/estiloPresets';
 import type { PresetEstiloRec } from '@/lib/biblioteca';
 import { parseNum } from '@/lib/lab';
 import { Plus, Edit3, Trash2, Power, Copy, X, Save, Play, ChevronRight, Search, SaveAll, Tag } from 'lucide-react';
@@ -614,16 +614,23 @@ function Estilo({ estilo, setEstilo, unidade, doseMin, doseMax }: {
     });
   }, [auto, doseMin, doseMax, nClasses, intervaloValido, setEstilo]);
 
+  // Âncoras da rampa escolhida no estilo (com inversão) — usadas em toda redistribuição.
+  const rampaCores = coresDaRampa(estilo.rampa, estilo.rampaInvertida);
+
   function setClasse(i: number, patch: Partial<{ cor: string; limiteSuperior: number }>) {
     setEstilo({ ...estilo, classes: estilo.classes.map((c, idx) => idx === i ? { ...c, ...patch } : c) });
   }
   function addClasse() {
     const ult = estilo.classes[estilo.classes.length - 1];
     const novas = [...estilo.classes, { cor: '#e23b2e', limiteSuperior: (ult?.limiteSuperior ?? 0) + 1000 }];
-    setEstilo({ ...estilo, classes: distribuirCores(novas) });   // re-espalha verde→vermelho
+    setEstilo({ ...estilo, classes: distribuirCores(novas, rampaCores) });   // re-espalha na rampa atual
   }
   function rmClasse(i: number) {
-    setEstilo({ ...estilo, classes: distribuirCores(estilo.classes.filter((_, idx) => idx !== i)) });
+    setEstilo({ ...estilo, classes: distribuirCores(estilo.classes.filter((_, idx) => idx !== i), rampaCores) });
+  }
+  function trocarRampa(id: string, invertida: boolean) {
+    const cores = coresDaRampa(id, invertida);
+    setEstilo({ ...estilo, rampa: id, rampaInvertida: invertida, classes: distribuirCores(estilo.classes, cores) });
   }
 
   // ── Presets de divisão de classes (sistema + do usuário) ──────────────────
@@ -680,6 +687,30 @@ function Estilo({ estilo, setEstilo, unidade, doseMin, doseMax }: {
         </button>
       </div>
 
+      {/* Rampa de cores (estilo QGIS): escolha + inverter — redistribui as classes na hora */}
+      <div>
+        <div className="flex items-center justify-between mb-1">
+          <label className="text-[10px] font-semibold" style={{ color: '#cbd5e1' }}>Rampa de cores</label>
+          <label className="flex items-center gap-1.5 text-[10px]" style={{ color: '#cbd5e1' }}>
+            <input type="checkbox" checked={!!estilo.rampaInvertida}
+              onChange={e => trocarRampa(estilo.rampa ?? 'padrao', e.target.checked)} /> Inverter
+          </label>
+        </div>
+        <div className="grid grid-cols-2 gap-1.5">
+          {Object.entries(RAMPAS).map(([id, r]) => {
+            const ativa = (estilo.rampa ?? 'padrao') === id;
+            return (
+              <button key={id} onClick={() => trocarRampa(id, !!estilo.rampaInvertida)} title={r.nome}
+                className="rounded overflow-hidden text-left"
+                style={{ border: ativa ? '2px solid #22d3ee' : '1px solid #2e5fa3', opacity: ativa ? 1 : 0.85 }}>
+                <div className="h-2.5" style={{ background: gradienteCssRampa(estilo.rampaInvertida ? [...r.cores].reverse() : r.cores) }} />
+                <div className="px-1.5 py-0.5 text-[9px] font-semibold truncate" style={{ color: ativa ? '#7dd3fc' : '#94a3b8', background: '#0b1f3a' }}>{r.nome}</div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       <div className="h-3 rounded overflow-hidden flex" style={{ border: '1px solid #2e5fa3' }}>
         {estilo.classes.map((c, i) => <div key={i} className="flex-1" style={{ background: c.cor }} />)}
       </div>
@@ -710,7 +741,7 @@ function Estilo({ estilo, setEstilo, unidade, doseMin, doseMax }: {
         <div className="flex items-center justify-between mb-1">
           <label className="text-[10px] font-semibold" style={{ color: '#cbd5e1' }}>Classes</label>
           <div className="flex items-center gap-1">
-            <button onClick={() => setEstilo({ ...estilo, classes: distribuirCores(estilo.classes) })} title="Reaplica a rampa verde→vermelho em todas as classes" className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: '#1a3a6b', color: '#93c5fd' }}>Distribuir cores</button>
+            <button onClick={() => setEstilo({ ...estilo, classes: distribuirCores(estilo.classes, rampaCores) })} title="Reaplica a rampa escolhida em todas as classes" className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: '#1a3a6b', color: '#93c5fd' }}>Distribuir cores</button>
             <button onClick={addClasse} className="text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1" style={{ background: '#1a3a6b', color: '#93c5fd' }}><Plus size={10} /> Classe</button>
           </div>
         </div>
