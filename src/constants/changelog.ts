@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '1.90.0': [
+    'MANUTENÇÃO — RELIGAR TALHÕES ÓRFÃOS (Configurações, só Owner): quando uma fazenda é apagada e recadastrada, ela ganha outro id interno e os talhões dela "somem" da navegação (continuam salvos, mas apontando para a fazenda antiga). A nova ferramenta procura esses órfãos, agrupa pela sigla do nome (ex.: IGEFI 15 → grupo IGEFI), sugere a fazenda certa, deixa ajustar manualmente e religa tudo numa única gravação — sincronizando na nuvem pelo caminho normal.',
+  ],
   '1.89.0': [
     'RAMPAS DE CORES TAMBÉM NAS LEGENDAS: no editor de legendas (Biblioteca), o bloco "Rampas de cor" aplica Padrão/Spectral/RdYlGn/Turbo às classes com um clique — cada classe recebe o trecho da rampa que ocupa (gradiente contínuo na barra), com opção Inverter. Convive com as paletas salvas: aplica a rampa, ajusta o que quiser e salva como paleta.',
   ],

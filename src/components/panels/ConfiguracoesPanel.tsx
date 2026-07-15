@@ -5,7 +5,7 @@ import { PanelSection, PanelRow } from './_shared';
 import { APP_VERSION } from '@/constants/version';
 import { CHANGELOG } from '@/constants/changelog';
 import { EtiquetaLayoutPicker } from '../talhao/EtiquetaLayoutPicker';
-import { getConfigEtiqueta, saveConfigEtiqueta } from '@/lib/store';
+import { getConfigEtiqueta, saveConfigEtiqueta, getTalhoes, getFazendas, importarTalhoesLote, type Fazenda } from '@/lib/store';
 import { INTERP_URL, BACKEND_LOCAL, headersBackend } from '@/lib/interpUrl';
 import { ehOwner } from '@/lib/empresa';
 import { exportarBackup, restaurarBackup } from '@/lib/backup';
@@ -32,6 +32,95 @@ function ServidorNuvem() {
       {status === 'ok' && <><CheckCircle2 size={13} style={{ color: '#4ade80' }} /><span style={{ color: '#4ade80' }}>Online{motor ? ` · ${motor}` : ''}</span></>}
       {status === 'off' && <><XCircle size={13} style={{ color: '#f87171' }} /><span style={{ color: '#f87171' }}>Sem resposta (acordando? tente já já)</span></>}
     </div>
+  );
+}
+
+// Manutenção (Owner-only): religa talhões ÓRFÃOS — cujo fazendaId aponta para
+// uma fazenda que não existe mais (ex.: fazenda apagada e recadastrada com id
+// novo). Agrupa os órfãos pelo PREFIXO do nome (sigla, ex.: "IGEFI 15" → IGEFI),
+// sugere a fazenda cuja sigla casa, deixa escolher manualmente e grava tudo
+// numa única gravação (sincroniza na nuvem pelo caminho normal).
+function ReligarTalhoesSection() {
+  type Grupo = { prefixo: string; ids: string[]; exemplo: string; fazendaId: string };
+  const [grupos, setGrupos] = useState<Grupo[] | null>(null);
+  const [fazendas, setFazendas] = useState<Fazenda[]>([]);
+  const [resultado, setResultado] = useState('');
+
+  function analisar() {
+    const fz = getFazendas();
+    const fzIds = new Set(fz.map(f => f.id));
+    const orfaos = getTalhoes().filter(t => t.fazendaId && !fzIds.has(t.fazendaId));
+    const porPrefixo = new Map<string, { ids: string[]; exemplo: string }>();
+    for (const t of orfaos) {
+      const pref = (t.nome.trim().split(/\s+/)[0] ?? '').toUpperCase();
+      const g = porPrefixo.get(pref) ?? { ids: [], exemplo: t.nome };
+      g.ids.push(t.id);
+      porPrefixo.set(pref, g);
+    }
+    const sugerir = (pref: string) =>
+      fz.find(f => (f.sigla ?? '').toUpperCase() === pref)?.id
+      ?? fz.find(f => f.nome.trim().split(/\s+/)[0]?.toUpperCase() === pref)?.id ?? '';
+    setFazendas(fz);
+    setGrupos(Array.from(porPrefixo.entries())
+      .map(([prefixo, g]) => ({ prefixo, ids: g.ids, exemplo: g.exemplo, fazendaId: sugerir(prefixo) }))
+      .sort((a, b) => b.ids.length - a.ids.length));
+    setResultado('');
+  }
+
+  function religar() {
+    if (!grupos) return;
+    const prontos = grupos.filter(g => g.fazendaId);
+    const total = prontos.reduce((s, g) => s + g.ids.length, 0);
+    if (!total) { setResultado('Nenhum grupo com fazenda escolhida.'); return; }
+    if (!window.confirm(`Religar ${total} talhão(ões) de ${prontos.length} grupo(s) às fazendas escolhidas?`)) return;
+    const atualizacoes = prontos.flatMap(g => g.ids.map(id => ({ id, data: { fazendaId: g.fazendaId } })));
+    const r = importarTalhoesLote([], atualizacoes);
+    setResultado(`✅ ${r.atualizados} talhão(ões) religados. Sincronizando com a nuvem…`);
+    analisar();   // re-analisa: o que sobrou continua listado
+  }
+
+  const totalOrfaos = grupos?.reduce((s, g) => s + g.ids.length, 0) ?? 0;
+
+  return (
+    <PanelSection title="Manutenção — talhões órfãos">
+      <div className="px-4 py-2 space-y-2">
+        <p className="text-[10px]" style={{ color: '#94a3b8' }}>
+          Talhão órfão = aponta para uma fazenda que não existe mais (ex.: fazenda apagada e recadastrada).
+          Ele some da navegação mesmo estando salvo. Aqui você religa cada grupo à fazenda certa.
+        </p>
+        <button onClick={analisar} className="w-full py-1.5 rounded text-[11px] font-bold text-white" style={{ background: 'var(--invicta-blue)' }}>
+          🔍 Procurar talhões órfãos
+        </button>
+        {grupos !== null && (grupos.length === 0
+          ? <p className="text-[10px] font-semibold" style={{ color: '#4ade80' }}>✅ Nenhum talhão órfão — todos os vínculos estão íntegros.</p>
+          : (
+            <div className="space-y-1.5">
+              <p className="text-[10px] font-semibold" style={{ color: '#fbbf24' }}>
+                ⚠ {totalOrfaos} talhão(ões) órfão(s) em {grupos.length} grupo(s). Confira a fazenda de destino e religue:
+              </p>
+              {grupos.map((g, i) => (
+                <div key={g.prefixo} className="p-2 rounded space-y-1" style={{ background: '#0b1d3a', border: '1px solid #1a3a6b' }}>
+                  <div className="flex items-center gap-2 text-[10px]" style={{ color: '#e2e8f0' }}>
+                    <span className="font-bold">{g.prefixo || '(sem prefixo)'}</span>
+                    <span style={{ color: '#94a3b8' }}>{g.ids.length} talhão(ões) · ex.: {g.exemplo}</span>
+                  </div>
+                  <select value={g.fazendaId}
+                    onChange={e => setGrupos(gs => gs!.map((x, xi) => xi === i ? { ...x, fazendaId: e.target.value } : x))}
+                    className="w-full rounded px-2 py-1 text-[10px] outline-none"
+                    style={{ background: '#0f2240', color: g.fazendaId ? '#e2e8f0' : '#f87171', border: '1px solid #2e5fa3' }}>
+                    <option value="">— escolher fazenda —</option>
+                    {fazendas.map(f => <option key={f.id} value={f.id}>{f.nome}{f.sigla ? ` (${f.sigla})` : ''}</option>)}
+                  </select>
+                </div>
+              ))}
+              <button onClick={religar} className="w-full py-1.5 rounded text-[11px] font-bold text-white" style={{ background: '#166534' }}>
+                🔗 Religar os grupos com fazenda escolhida
+              </button>
+            </div>
+          ))}
+        {resultado && <p className="text-[10px] font-semibold" style={{ color: resultado.startsWith('✅') ? '#4ade80' : '#f87171' }}>{resultado}</p>}
+      </div>
+    </PanelSection>
   );
 }
 
@@ -175,6 +264,7 @@ export function ConfiguracoesPanel() {
       </PanelSection>
 
       {owner && <BackupSection />}
+      {owner && <ReligarTalhoesSection />}
 
       <PanelSection title="Changelog">
         {/* Última versão — sempre visível */}
