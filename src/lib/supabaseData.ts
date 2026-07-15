@@ -32,6 +32,43 @@ function lerLocalLista(key: string): unknown[] {
   return lerListaLocal(key);
 }
 
+// ── Pendências "sujas" (gravadas no aparelho e AINDA não confirmadas na nuvem) ──
+// Persistidas no localStorage para SOBREVIVER a recarregamento/fechamento da aba.
+// Sem isso, o fluxo "lançou → conexão caiu → recarregou" perdia os lançamentos:
+// a fila de retry vivia só na memória e o boot sobrescrevia o local com a nuvem.
+const SUJO_KEY = 'inv_sync_sujo';
+
+function lerSujos(): Record<string, true> {
+  try { return JSON.parse(localStorage.getItem(SUJO_KEY) || '{}'); } catch { return {}; }
+}
+function marcarSujo(key: string) {
+  if (typeof window === 'undefined') return;
+  try { const s = lerSujos(); if (!s[key]) { s[key] = true; localStorage.setItem(SUJO_KEY, JSON.stringify(s)); } } catch {}
+}
+function limparSujo(key: string) {
+  if (typeof window === 'undefined') return;
+  try { const s = lerSujos(); if (s[key]) { delete s[key]; localStorage.setItem(SUJO_KEY, JSON.stringify(s)); } } catch {}
+}
+
+// União por id: registros da nuvem + registros locais (local VENCE no conflito,
+// pois carrega edições ainda não sincronizadas). Locais sem correspondente na
+// nuvem (lançamentos offline) são PRESERVADOS. Efeito colateral aceito: uma
+// exclusão feita offline pode "ressuscitar" no merge — ressuscitar é reversível,
+// perder lançamento não é.
+function mesclarPorId(nuvem: unknown[], local: unknown[]): unknown[] {
+  const mapa = new Map<string, unknown>();
+  const extras: unknown[] = [];
+  for (const r of nuvem) {
+    const id = (r as Rec)?.id;
+    if (id != null) mapa.set(String(id), r); else extras.push(r);
+  }
+  for (const r of local) {
+    const id = (r as Rec)?.id;
+    if (id != null) mapa.set(String(id), r); else extras.push(r);
+  }
+  return [...mapa.values(), ...extras];
+}
+
 // ── D3 — AUTO-CARGA: na 1ª vez (Postgres vazio), semeia a partir dos dados ────
 // locais (que vieram do Firestore). Roda ANTES de hidratar, então a virada do
 // interruptor preserva tudo sem script nem service_role. Idempotente: depois que
@@ -93,9 +130,18 @@ export async function bootSupabaseData(keysLista: string[], keysObj: string[]): 
 
   await seedSeVazio(keysLista, keysObj);   // D3: 1ª vez carrega o Postgres do local
 
+  // Chaves com pendência local não confirmada (lançamentos que a queda de
+  // conexão impediu de subir): o boot NÃO pode sobrescrevê-las com a nuvem —
+  // mescla por id (local vence) e re-envia depois da hidratação.
+  const sujos = lerSujos();
+
   // Talhões (tabela dedicada) → inv_talhoes — paginado (pode passar de 1000).
   const talhoes = await lerTudoPaginado<{ dados: unknown }>(sb, 'talhoes', 'dados');
-  gravarRawLocal(TABELA_TALHOES_KEY, JSON.stringify(talhoes.map(r => r.dados)));
+  {
+    const nuvem = talhoes.map(r => r.dados);
+    const final = sujos[TABELA_TALHOES_KEY] ? mesclarPorId(nuvem, lerLocalLista(TABELA_TALHOES_KEY)) : nuvem;
+    gravarRawLocal(TABELA_TALHOES_KEY, JSON.stringify(final));
+  }
 
   // app_kv → só as coleções de listas/config (os MAPAS ficam fora do boot) — paginado.
   const kv = await lerTudoPaginado<{ colecao: string; item_id: string; dados: unknown }>(
@@ -108,14 +154,25 @@ export async function bootSupabaseData(keysLista: string[], keysObj: string[]): 
   }
   for (const key of keysLista) {
     if (key === TABELA_TALHOES_KEY) continue;
-    gravarRawLocal(key, JSON.stringify(porColecao[key] ?? []));
+    const nuvem = porColecao[key] ?? [];
+    const final = sujos[key] ? mesclarPorId(nuvem, lerLocalLista(key)) : nuvem;
+    gravarRawLocal(key, JSON.stringify(final));
   }
   for (const key of keysObj) {
+    if (sujos[key]) continue;   // config local pendente vence — sobe no re-push abaixo
     const o = objs[key] as { valor?: string } | undefined;
     if (o?.valor != null) gravarRawLocal(key, o.valor);
   }
 
   bootCompleto = true;   // hidratação íntegra → a partir daqui o push pode podar órfãos com segurança
+
+  // Re-envia as pendências recuperadas (mescladas acima). Fire-and-forget: a
+  // fila serializa, marca/limpa a pendência e o SyncBadge mostra o estado.
+  for (const key of Object.keys(sujos)) {
+    if (keysLista.includes(key)) void pushListaSupabase(key, lerLocalLista(key));
+    else if (keysObj.includes(key)) { const v = lerRawLocal(key); if (v != null) void pushObjSupabase(key, v); }
+    else limparSujo(key);   // chave que saiu da whitelist — pendência órfã
+  }
 }
 
 // ── GRAVAÇÃO: fila por chave + diff por id + erro visível/retry ────────────────
@@ -161,15 +218,24 @@ function emitirSync(key: string, status: 'ok' | 'erro') {
 }
 
 // Registra (uma vez) o listener de reconexão que re-tenta as chaves pendentes.
+function retentarPendentes() {
+  for (const [key, carga] of Object.entries(errosSb)) {
+    delete errosSb[key];
+    enfileirar(key, carga);   // re-enfileira a última carga que falhou
+  }
+}
+
 function garantirRetryOnline() {
   if (onlineRegistrado || typeof window === 'undefined') return;
   onlineRegistrado = true;
-  window.addEventListener('online', () => {
-    for (const [key, carga] of Object.entries(errosSb)) {
-      delete errosSb[key];
-      enfileirar(key, carga);   // re-enfileira a última carga que falhou
-    }
-  });
+  // 'online' nem sempre dispara (conexão "cai" com o navegador achando que está
+  // online — servidor fora, wifi fraco). Por isso re-tenta também ao voltar o
+  // foco na aba e num relógio de 45 s enquanto houver pendência.
+  window.addEventListener('online', retentarPendentes);
+  window.addEventListener('focus', retentarPendentes);
+  setInterval(() => {
+    if (Object.keys(errosSb).length && navigator.onLine !== false) retentarPendentes();
+  }, 45_000);
 }
 
 // Enfileira um push (lista ou obj) na chave, com coalescing e drenagem serial.
@@ -178,6 +244,7 @@ function enfileirar(
   carga: { lista: unknown[]; obj?: false } | { json: string; obj: true },
 ): Promise<void> {
   garantirRetryOnline();
+  marcarSujo(key);           // pendência persistente: só limpa com sucesso confirmado
   pendenteSb[key] = carga;   // coalescing: a última carga pendente vence
   const anterior = filaSb[key] ?? Promise.resolve();
   const proxima = anterior
@@ -203,8 +270,13 @@ async function drenar(
   const ok = carga.obj
     ? await syncObj(sb, key, carga.json)
     : await syncLista(sb, key, carga.lista);
-  if (ok) { delete errosSb[key]; emitirSync(key, 'ok'); }
-  else { errosSb[key] = carga; emitirSync(key, 'erro'); }
+  if (ok) {
+    delete errosSb[key];
+    // Limpa a pendência persistente SÓ se não chegou carga mais nova enquanto
+    // este push rodava (a mais nova re-marcou e ainda vai drenar).
+    if (!pendenteSb[key]) limparSujo(key);
+    emitirSync(key, 'ok');
+  } else { errosSb[key] = carga; emitirSync(key, 'erro'); }
 }
 
 // Diff+sync de uma LISTA. Retorna true se gravou tudo sem erro.

@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '1.87.0': [
+    'LANÇAMENTOS NÃO SE PERDEM MAIS QUANDO A CONEXÃO CAI: antes, se o usuário lançava dados sem internet (ou a conexão caía no meio) e recarregava a página, o app trazia os dados da nuvem POR CIMA do que estava no aparelho — apagando os lançamentos que não tinham subido. Agora cada gravação fica marcada como "pendente" até a nuvem CONFIRMAR; ao recarregar, o app MESCLA o pendente com a nuvem (nada some) e re-envia sozinho. O reenvio também ficou mais insistente: tenta ao voltar a internet, ao voltar para a aba e a cada 45 s.',
+  ],
   '1.86.0': [
     'CORREÇÃO CRÍTICA DE SINCRONIZAÇÃO (perda de dados): o carregamento da nuvem lia no máximo 1.000 registros de uma vez (limite do Postgres/PostgREST). Em bases grandes (muitos talhões/plantios/laudos) isso trazia só parte dos dados para o aparelho, e a gravação seguinte "podava" da nuvem tudo que não tinha vindo — apagando fazendas/registros. Agora o carregamento é PAGINADO (traz tudo, sem teto), e a poda de órfãos só roda depois de um carregamento íntegro comprovado (nunca com dados parciais). Isso estanca a perda; dados já apagados precisam ser restaurados de um backup.',
   ],
