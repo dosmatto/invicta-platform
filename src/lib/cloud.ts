@@ -27,6 +27,7 @@ const KEYS_LISTA = [
   'inv_bib_preferencias-analise',      // Fase 5 — Etiqueta
   'inv_bib_equacoes',                  // Fase R1 — Equações de recomendação
   'inv_bib_recomendacoes',             // Fase R2 — Recomendações (conjuntos de equações)
+  'inv_estilo_presets',                // Presets de divisão de classes do estilo de dose
   'inv_lab', 'inv_legendas',
   'inv_plantios',                      // Fase 8.B — cultura por talhão+safra
   'inv_compactacao',                   // Fase 8.C — penetrometria por profundidade

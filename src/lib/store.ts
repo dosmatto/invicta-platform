@@ -21,6 +21,8 @@ import {
   type ConteudoGrade,
   type ConteudoEtiqueta,
   type ConteudoVariavel,
+  type EstiloRecomendacao,
+  type PresetEstiloRec,
 } from './biblioteca';
 import { ELEMENTOS_LAB, simboloElemento, norm as normLab } from './lab';
 
@@ -1333,6 +1335,23 @@ export function getLegendas(): Legenda[] {
 
 export function getLegendasPorAtributo(atributoId: string): Legenda[] {
   return getLegendas().filter(l => l.atributoId === atributoId);
+}
+
+// ── Presets de estilo (divisão de classes) da recomendação ────────────────
+// Presets do usuário (os do sistema são constantes em estiloPresets.ts).
+export function getPresetsEstilo(): PresetEstiloRec[] {
+  return loadFiltrado<PresetEstiloRec>('inv_estilo_presets')
+    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+}
+export function savePresetEstilo(nome: string, estilo: EstiloRecomendacao): PresetEstiloRec {
+  const lista = load<PresetEstiloRec>('inv_estilo_presets');
+  const novo: PresetEstiloRec = comEmpresa({ id: uid(), nome, escopo: 'meu', estilo, criadoEm: new Date().toISOString() });
+  lista.push(novo);
+  save('inv_estilo_presets', lista);
+  return novo;
+}
+export function deletePresetEstilo(id: string) {
+  save('inv_estilo_presets', load<PresetEstiloRec>('inv_estilo_presets').filter(p => p.id !== id));
 }
 
 export function saveLegenda(l: Omit<Legenda, 'id' | 'criadoEm' | 'atualizadoEm'>): Legenda {

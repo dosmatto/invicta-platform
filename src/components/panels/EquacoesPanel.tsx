@@ -16,7 +16,10 @@ import {
 import type { CategoriaBiblioteca } from '@/lib/biblioteca';
 import { ATRIBUTOS_EQUACAO, validar, testarEscalar, atributoPorToken } from '@/lib/recomendacao/motor';
 import { pode } from '@/lib/empresa';
-import { getPrecosProdutos, savePrecoProduto, type PrecoProduto } from '@/lib/store';
+import { getPrecosProdutos, savePrecoProduto, type PrecoProduto,
+  getPresetsEstilo, savePresetEstilo, deletePresetEstilo } from '@/lib/store';
+import { distribuirCores, PRESETS_SISTEMA } from '@/lib/estiloPresets';
+import type { PresetEstiloRec } from '@/lib/biblioteca';
 import { parseNum } from '@/lib/lab';
 import { Plus, Edit3, Trash2, Power, Copy, X, Save, Play, ChevronRight, Search, SaveAll, Tag } from 'lucide-react';
 
@@ -26,20 +29,7 @@ import { inputStyle } from '@/constants/ui';
 
 const listaDe = (s: string) => s.split(',').map(x => x.trim()).filter(Boolean);
 
-// Rampa de cores da dose (verde → vermelho) — âncoras interpoladas para QUALQUER nº de classes.
-const RAMPA_DOSE = ['#1b7a1f', '#3fa336', '#6fbf3f', '#9ccc4e', '#cddb39', '#ffe93b', '#ffc107', '#ff9800', '#fb5a23', '#e23b2e'];
-const hexRgb = (h: string): [number, number, number] => { const n = h.replace('#', ''); return [parseInt(n.slice(0, 2), 16), parseInt(n.slice(2, 4), 16), parseInt(n.slice(4, 6), 16)]; };
-function corNaRampa(t: number): string {
-  const n = RAMPA_DOSE.length;
-  const x = Math.max(0, Math.min(1, t)) * (n - 1);
-  const i = Math.floor(x), f = x - i;
-  if (i >= n - 1) return RAMPA_DOSE[n - 1];
-  const a = hexRgb(RAMPA_DOSE[i]), b = hexRgb(RAMPA_DOSE[i + 1]);
-  return '#' + [0, 1, 2].map(k => Math.round(a[k] + (b[k] - a[k]) * f).toString(16).padStart(2, '0')).join('');
-}
-// Reaplica a rampa nas classes pelo índice (1ª = verde escuro, última = vermelho, intermediárias interpoladas).
-const distribuirCores = <T extends { cor: string }>(classes: T[]): T[] =>
-  classes.map((c, i) => ({ ...c, cor: corNaRampa(classes.length <= 1 ? 1 : i / (classes.length - 1)) }));
+// Rampa de cores (corNaRampa/distribuirCores) e presets do sistema vêm de @/lib/estiloPresets.
 
 // Limites superiores de N classes dividindo [min, max] em partes iguais.
 // Ex.: (50, 500, 10) → 95, 140, 185, … 500 (piso 50 fica implícito; abaixo = 0).
@@ -636,11 +626,59 @@ function Estilo({ estilo, setEstilo, unidade, doseMin, doseMax }: {
     setEstilo({ ...estilo, classes: distribuirCores(estilo.classes.filter((_, idx) => idx !== i)) });
   }
 
+  // ── Presets de divisão de classes (sistema + do usuário) ──────────────────
+  const [presetsUsuario, setPresetsUsuario] = useState<PresetEstiloRec[]>(() => getPresetsEstilo());
+  const [presetSel, setPresetSel] = useState<PresetEstiloRec | null>(null); // último importado (p/ excluir se for meu)
+  function importarPreset(id: string) {
+    const p = [...PRESETS_SISTEMA, ...presetsUsuario].find(x => x.id === id);
+    if (!p) { setPresetSel(null); return; }
+    // clona o estilo do preset (não compartilha referência das classes)
+    setEstilo({ ...p.estilo, classes: p.estilo.classes.map(c => ({ ...c })) });
+    setPresetSel(p);
+  }
+  function salvarPreset() {
+    const nome = window.prompt('Nome do preset (ex.: Calcário faixa fina):')?.trim();
+    if (!nome) return;
+    const novo = savePresetEstilo(nome, estilo);
+    setPresetsUsuario(getPresetsEstilo());
+    setPresetSel(novo);
+  }
+  function excluirPreset() {
+    if (!presetSel || presetSel.escopo === 'sistema') return;
+    if (!window.confirm(`Excluir o preset "${presetSel.nome}"?`)) return;
+    deletePresetEstilo(presetSel.id);
+    setPresetsUsuario(getPresetsEstilo());
+    setPresetSel(null);
+  }
+
   return (
     <div className="space-y-3">
       <p className="text-[9px]" style={{ color: '#64748b' }}>
         Escala fixa de cores por classe de dose{unidade ? ` (${unidade})` : ''}. Menor dose = verde, maior = vermelho. Cada classe vai do limite anterior até o seu <strong>limite superior</strong>.
       </p>
+
+      {/* Presets de divisão de classes — importar pronto ou salvar o atual */}
+      <div className="flex items-center gap-1.5">
+        <select value={presetSel?.id ?? ''} onChange={e => importarPreset(e.target.value)}
+          className="flex-1 rounded px-2 py-1 text-[10px] outline-none" style={inputStyle}>
+          <option value="">Importar preset de classes…</option>
+          <optgroup label="Prontos (sistema)">
+            {PRESETS_SISTEMA.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
+          </optgroup>
+          {presetsUsuario.length > 0 && (
+            <optgroup label="Meus presets">
+              {presetsUsuario.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
+            </optgroup>
+          )}
+        </select>
+        {presetSel && presetSel.escopo !== 'sistema' && (
+          <button onClick={excluirPreset} title="Excluir este preset" className="p-1 rounded hover:bg-white/10" style={{ color: '#f87171' }}><Trash2 size={11} /></button>
+        )}
+        <button onClick={salvarPreset} title="Salvar a divisão atual como um preset reutilizável"
+          className="text-[10px] font-bold px-2 py-1 rounded flex items-center gap-1 whitespace-nowrap" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
+          <Save size={10} /> Salvar preset
+        </button>
+      </div>
 
       <div className="h-3 rounded overflow-hidden flex" style={{ border: '1px solid #2e5fa3' }}>
         {estilo.classes.map((c, i) => <div key={i} className="flex-1" style={{ background: c.cor }} />)}

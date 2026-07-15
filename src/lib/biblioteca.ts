@@ -343,6 +343,14 @@ export interface EstiloRecomendacao {
   dividirAuto: boolean;
   zeroTransparente: boolean;
 }
+// Preset de divisão de classes reutilizável (Calcário/Gesso, KCl, P, ou do usuário).
+export interface PresetEstiloRec {
+  id: string;
+  nome: string;
+  escopo?: 'sistema' | 'meu';   // 'sistema' = pronto, read-only; ausente/'meu' = do usuário
+  estilo: EstiloRecomendacao;
+  criadoEm?: string;
+}
 export interface ConteudoEquacao {
   produto: string;
   custoTonelada: number | null;
