@@ -62,6 +62,30 @@ async function seedSeVazio(keysLista: string[], keysObj: string[]): Promise<void
   console.log('[supabase] seed concluído.');
 }
 
+// Lê TODAS as linhas de uma tabela paginando (PostgREST limita a 1000/consulta).
+// Sem isso, bases grandes carregavam só as 1000 primeiras — hidratação parcial,
+// e um push seguinte podava do Postgres tudo que "faltava" (perda de dados).
+async function lerTudoPaginado<T>(
+  sb: NonNullable<ReturnType<typeof getSupabase>>,
+  tabela: string, colunas: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  filtro?: (q: any) => any,
+): Promise<T[]> {
+  const PAGINA = 1000;
+  const out: T[] = [];
+  for (let de = 0; ; de += PAGINA) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let q: any = sb.from(tabela).select(colunas).range(de, de + PAGINA - 1);
+    if (filtro) q = filtro(q);
+    const r = await q;
+    if (r.error) throw r.error;
+    const linhas = (r.data ?? []) as T[];
+    out.push(...linhas);
+    if (linhas.length < PAGINA) break;   // última página
+  }
+  return out;
+}
+
 // ── BOOT: hidrata o localStorage a partir do Postgres ────────────────────────
 export async function bootSupabaseData(keysLista: string[], keysObj: string[]): Promise<void> {
   const sb = getSupabase();
@@ -69,17 +93,16 @@ export async function bootSupabaseData(keysLista: string[], keysObj: string[]): 
 
   await seedSeVazio(keysLista, keysObj);   // D3: 1ª vez carrega o Postgres do local
 
-  // Talhões (tabela dedicada) → inv_talhoes
-  const talhoes = await sb.from('talhoes').select('dados');
-  if (talhoes.error) throw talhoes.error;
-  gravarRawLocal(TABELA_TALHOES_KEY, JSON.stringify((talhoes.data ?? []).map(r => r.dados)));
+  // Talhões (tabela dedicada) → inv_talhoes — paginado (pode passar de 1000).
+  const talhoes = await lerTudoPaginado<{ dados: unknown }>(sb, 'talhoes', 'dados');
+  gravarRawLocal(TABELA_TALHOES_KEY, JSON.stringify(talhoes.map(r => r.dados)));
 
-  // app_kv → só as coleções de listas/config (os MAPAS ficam fora do boot)
-  const kv = await sb.from('app_kv').select('colecao, item_id, dados').in('colecao', [...keysLista, ...keysObj]);
-  if (kv.error) throw kv.error;
+  // app_kv → só as coleções de listas/config (os MAPAS ficam fora do boot) — paginado.
+  const kv = await lerTudoPaginado<{ colecao: string; item_id: string; dados: unknown }>(
+    sb, 'app_kv', 'colecao, item_id, dados', q => q.in('colecao', [...keysLista, ...keysObj]));
   const porColecao: Record<string, unknown[]> = {};
   const objs: Record<string, unknown> = {};
-  for (const row of kv.data ?? []) {
+  for (const row of kv) {
     if (row.item_id === ITEM_OBJ) objs[row.colecao] = row.dados;
     else (porColecao[row.colecao] ??= []).push(row.dados);
   }
@@ -91,6 +114,8 @@ export async function bootSupabaseData(keysLista: string[], keysObj: string[]): 
     const o = objs[key] as { valor?: string } | undefined;
     if (o?.valor != null) gravarRawLocal(key, o.valor);
   }
+
+  bootCompleto = true;   // hidratação íntegra → a partir daqui o push pode podar órfãos com segurança
 }
 
 // ── GRAVAÇÃO: fila por chave + diff por id + erro visível/retry ────────────────
@@ -113,6 +138,12 @@ export async function bootSupabaseData(keysLista: string[], keysObj: string[]): 
 // Espelho por chave (id → JSON.stringify(rec)); ausente = ainda não sincronizou
 // nesta sessão (força o sync completo no 1º push).
 const espelhoSb: Record<string, Map<string, string>> = {};
+
+// Só depois de um boot ÍNTEGRO (paginado, sem erro) é seguro o 1º push podar
+// órfãos remotos (delete not-in). Se o boot falhou/foi parcial, o local pode
+// estar incompleto — nesse caso NUNCA apagamos do Postgres (só upsert), para
+// não perder dados. Começa false e vira true no fim de bootSupabaseData.
+let bootCompleto = false;
 
 // Fila por chave: promise-chain do push em andamento (encadeia o próximo).
 const filaSb: Record<string, Promise<void>> = {};
@@ -217,14 +248,15 @@ async function syncLista(sb: NonNullable<ReturnType<typeof getSupabase>>, key: s
       const up = await sb.from('talhoes').upsert(rows, { onConflict: 'id' });
       if (up.error) { console.warn('[supabase] upsert talhoes:', up.error.message); return false; }
     }
-    if (primeira) {
+    if (primeira && bootCompleto) {
       // Poda órfãos remotos: apaga o que não está na lista atual (uma vez).
+      // Só com boot íntegro — senão um local parcial apagaria dados reais.
       let del = sb.from('talhoes').delete();
       const ids = [...next.keys()];
       if (ids.length) del = del.not('id', 'in', `(${ids.join(',')})`);
       const d = await del;
       if (d.error) { console.warn('[supabase] delete talhoes:', d.error.message); return false; }
-    } else if (idsDelete.length) {
+    } else if (!primeira && idsDelete.length) {
       const d = await sb.from('talhoes').delete().in('id', idsDelete);
       if (d.error) { console.warn('[supabase] delete talhoes:', d.error.message); return false; }
     }
@@ -237,13 +269,14 @@ async function syncLista(sb: NonNullable<ReturnType<typeof getSupabase>>, key: s
       const up = await sb.from('app_kv').upsert(rows, { onConflict: 'colecao,item_id' });
       if (up.error) { console.warn(`[supabase] upsert ${key}:`, up.error.message); return false; }
     }
-    if (primeira) {
+    if (primeira && bootCompleto) {
+      // Poda órfãos remotos (uma vez) — só com boot íntegro (ver acima).
       let del = sb.from('app_kv').delete().eq('colecao', key);
       const ids = [...next.keys()];
       if (ids.length) del = del.not('item_id', 'in', `(${ids.join(',')})`);
       const d = await del;
       if (d.error) { console.warn(`[supabase] delete ${key}:`, d.error.message); return false; }
-    } else if (idsDelete.length) {
+    } else if (!primeira && idsDelete.length) {
       const d = await sb.from('app_kv').delete().eq('colecao', key).in('item_id', idsDelete);
       if (d.error) { console.warn(`[supabase] delete ${key}:`, d.error.message); return false; }
     }

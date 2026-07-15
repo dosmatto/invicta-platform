@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '1.86.0': [
+    'CORREÇÃO CRÍTICA DE SINCRONIZAÇÃO (perda de dados): o carregamento da nuvem lia no máximo 1.000 registros de uma vez (limite do Postgres/PostgREST). Em bases grandes (muitos talhões/plantios/laudos) isso trazia só parte dos dados para o aparelho, e a gravação seguinte "podava" da nuvem tudo que não tinha vindo — apagando fazendas/registros. Agora o carregamento é PAGINADO (traz tudo, sem teto), e a poda de órfãos só roda depois de um carregamento íntegro comprovado (nunca com dados parciais). Isso estanca a perda; dados já apagados precisam ser restaurados de um backup.',
+  ],
   '1.85.0': [
     'PRESETS DE DIVISÃO DE CLASSES NA EQUAÇÃO: no Estilo do mapa, um seletor "Importar preset de classes" traz padrões prontos — Calcário/Gesso (faixas grandes 1.000…10.000), KCl/Potássio (25…250) e Fósforo/P (20…200) — resolvendo o caso em que doses baixas caíam todas numa classe só. Botão "Salvar preset" guarda a divisão atual como um preset reutilizável (sincroniza na nuvem); presets do usuário podem ser excluídos, os do sistema não.',
   ],
