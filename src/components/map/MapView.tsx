@@ -49,12 +49,16 @@ const COMBINED_STYLE: maplibregl.StyleSpecification = {
 const EMPTY_FC: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
 
 
-export function MapView() {
+export function MapView({ mostrarVisaoGeral = false }: { mostrarVisaoGeral?: boolean } = {}) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef      = useRef<maplibregl.Map | null>(null);
   const readyRef    = useRef(false); // true depois de 'load'
   const [mapReady, setMapReady] = useState(false);
 
+  // mostrarVisaoGeral: só o mapa do painel/Início liga os centroides+legenda por
+  // município. Nas páginas de talhão/coleta/campo (que têm o próprio MapView com
+  // activePanel='dashboard' por padrão) fica desligado — senão a visão geral
+  // vazava por cima do talhão aberto.
   const { mapMode, setMapMode, nav, setNav, activePanel, setActivePanel,
           uploadedGeo, setUploadedGeo,
           uploadedBbox, setUploadedBbox,
@@ -65,7 +69,7 @@ export function MapView() {
   const [kmlLoading, setKmlLoading] = useState(false);
 
   // Visão geral (Início): pontos-centroide dos talhões coloridos por município.
-  const emVisaoGeral = activePanel === 'dashboard';
+  const emVisaoGeral = mostrarVisaoGeral && activePanel === 'dashboard';
   const [ovEstado, setOvEstado] = useState<OverviewEstado>('PR');
   const [ovLegenda, setOvLegenda] = useState<{ municipio: string; cor: string; n: number }[]>([]);
   const [ovTotais, setOvTotais] = useState<{ pr: number; outros: number }>({ pr: 0, outros: 0 });

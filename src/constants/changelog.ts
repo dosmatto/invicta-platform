@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '1.84.0': [
+    'VISÃO GERAL SÓ NA TELA DE ABERTURA: os centroides por município e a legenda passaram a aparecer SOMENTE no mapa do Início. Antes vazavam para a página completa do talhão (que usa o mesmo mapa), aparecendo por cima do talhão aberto.',
+  ],
   '1.83.0': [
     'RECOMENDAÇÃO — "DIVIDIR CLASSES AUTOMATICAMENTE" AGORA FUNCIONA: no estilo do mapa da equação, ligando a chave, as classes de cor passam a dividir o intervalo da própria equação (Dose mínima viável → Dose máxima) em faixas iguais, em vez de ficar presas em 1.000…10.000. Ex.: mínima 50 e máxima 500 com 10 classes vira 95, 140, 185 … 500 (piso 50 = a máquina não aplica menos que isso; abaixo vira 0). Mudou a mínima/máxima na equação, as classes se reajustam sozinhas; você controla só a quantidade de classes e as cores (os limites ficam calculados). Antes a chave não fazia nada.',
   ],

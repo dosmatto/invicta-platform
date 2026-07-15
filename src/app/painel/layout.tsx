@@ -20,7 +20,7 @@ export default function PainelLayout({ children }: { children: React.ReactNode }
           <IconSidebar />
           <SlidePanel />
           <div className="flex-1 relative overflow-hidden">
-            <MapView />
+            <MapView mostrarVisaoGeral />
           </div>
         </div>
       </div>
