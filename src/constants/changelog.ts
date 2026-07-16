@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '1.94.0': [
+    'INÍCIO ABRE LIMPO E RÁPIDO — MAPA GERAL VIROU BOTÃO: a visão geral dos talhões (centroides por município + classificação por localização) não roda mais automaticamente na abertura. O Início volta a abrir direto como antes, e o botão "📍 Mapa geral dos talhões" (canto do mapa) liga a visão geral quando você quiser — com o ✕ para fechar. Tudo dela (classificação, legenda, correção de municípios) só acontece sob demanda.',
+  ],
   '1.93.0': [
     'ABERTURA DA PLATAFORMA MAIS RÁPIDA (2ª rodada da caça à lentidão): (1) talhões antigos sem bbox ganham o bbox GRAVADO de vez (migração única) — antes o polígono inteiro era re-analisado a cada abertura só para plotar o centroide; (2) o boot só regrava/recomprime no aparelho as coleções que MUDARAM na nuvem (a recompressão dos ~MB de talhões a cada abertura era pura perda); (3) o espelho de sincronização nasce pronto no boot — o primeiro save da sessão envia só o que mudou (antes re-enviava a coleção inteira e disparava a poda not-in, que agora não roda mais em operação normal); (4) cronômetro no console ([boot] …ms) para diagnosticar aberturas lentas: mostra quanto foi rede vs. gravação local.',
   ],

@@ -69,7 +69,11 @@ export function MapView({ mostrarVisaoGeral = false }: { mostrarVisaoGeral?: boo
   const [kmlLoading, setKmlLoading] = useState(false);
 
   // Visão geral (Início): pontos-centroide dos talhões coloridos por município.
-  const emVisaoGeral = mostrarVisaoGeral && activePanel === 'dashboard';
+  // SOB DEMANDA (botão) — rodar automático na abertura deixava o Início lento;
+  // agora o painel abre limpo e o usuário liga a visão geral quando quiser.
+  const [ovAtivo, setOvAtivo] = useState(false);
+  const noInicio = mostrarVisaoGeral && activePanel === 'dashboard';
+  const emVisaoGeral = noInicio && ovAtivo;
   const [ovEstado, setOvEstado] = useState<OverviewEstado>('PR');
   const [ovLegenda, setOvLegenda] = useState<{ municipio: string; cor: string; n: number }[]>([]);
   const [ovTotais, setOvTotais] = useState<{ pr: number; outros: number }>({ pr: 0, outros: 0 });
@@ -618,7 +622,14 @@ export function MapView({ mostrarVisaoGeral = false }: { mostrarVisaoGeral?: boo
         </div>
       )}
 
-      {/* Visão geral: seletor de estado + legenda por município */}
+      {/* Visão geral SOB DEMANDA: botão para ligar; ativa, mostra estado+legenda */}
+      {noInicio && !ovAtivo && (
+        <button onClick={() => setOvAtivo(true)}
+          className="absolute top-4 right-4 z-10 px-3 py-1.5 rounded-lg text-xs font-semibold shadow-lg"
+          style={{ background: 'rgba(26,58,107,0.95)', color: '#fff', border: '2px solid rgba(255,255,255,0.2)' }}>
+          📍 Mapa geral dos talhões
+        </button>
+      )}
       {emVisaoGeral && (
         <div className="absolute top-4 right-4 z-10 flex flex-col gap-2 items-end">
           <div className="flex rounded-lg overflow-hidden shadow-lg" style={{ border: '2px solid rgba(255,255,255,0.2)' }}>
@@ -632,6 +643,10 @@ export function MapView({ mostrarVisaoGeral = false }: { mostrarVisaoGeral?: boo
                 {rot}
               </button>
             ))}
+            <button onClick={() => setOvAtivo(false)} title="Fechar o mapa geral"
+              className="px-2 py-1.5 text-xs font-bold" style={{ background: 'rgba(15,34,64,0.85)', color: '#f87171' }}>
+              ✕
+            </button>
           </div>
           {geoProg && (
             <div className="rounded-lg shadow-lg px-3 py-1.5 flex items-center gap-2 text-xs font-semibold"
