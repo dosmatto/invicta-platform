@@ -6,7 +6,7 @@ import { useApp } from '@/context/AppContext';
 import { TALHAO_KML_URLS } from '@/constants/mocks';
 import { parseKML } from '@/lib/geo';
 import { ESCRITORIO_INVICTA } from '@/lib/seed';
-import { getTalhoesCentroides } from '@/lib/store';
+import { getTalhoesCentroides, type TalhaoCentroide } from '@/lib/store';
 import { mapaCoresMunicipio } from '@/lib/coresMunicipio';
 import { lerCache, municipioReal, geocodarFaltantes, corrigirCadastroMunicipios, faltamGeocodar } from '@/lib/geocodeMunicipio';
 
@@ -77,6 +77,10 @@ export function MapView({ mostrarVisaoGeral = false }: { mostrarVisaoGeral?: boo
   const [geoProg, setGeoProg] = useState<{ feitos: number; total: number } | null>(null);
   const geoRodouRef = useRef(false); // geocoding roda uma vez por sessão de visão geral
   const ovFitRef = useRef<string>(''); // último recorte enquadrado (evita refit por tick)
+  // Centroides calculados UMA vez por entrada na visão geral e reusados pelos
+  // ticks do geocoding — recalcular os 916 a cada tick (com parse de geojson
+  // p/ talhão sem bbox) era o principal causador de lentidão (perf v1.92).
+  const ovCentroidesRef = useRef<TalhaoCentroide[] | null>(null);
   const PENDENTE = '⏳ classificando…';
 
   // refs para os handlers de edição acessarem valores atuais sem re-registrar
@@ -234,9 +238,10 @@ export function MapView({ mostrarVisaoGeral = false }: { mostrarVisaoGeral?: boo
     const src = map.getSource('overview-pts') as maplibregl.GeoJSONSource | undefined;
     if (!src) return;
 
-    if (!emVisaoGeral) { src.setData(EMPTY_FC); setOvLegenda([]); ovFitRef.current = ''; return; }
+    if (!emVisaoGeral) { src.setData(EMPTY_FC); setOvLegenda([]); ovFitRef.current = ''; ovCentroidesRef.current = null; return; }
 
-    const todos = getTalhoesCentroides();
+    // Geometria é estável entre ticks do geocoding — calcula 1× e reusa.
+    const todos = ovCentroidesRef.current ?? (ovCentroidesRef.current = getTalhoesCentroides());
     // Município pela POSIÇÃO REAL (geocoding); cai em "classificando…" enquanto
     // o ponto ainda não foi resolvido. NUNCA usa o campo do cadastro para colorir.
     const cache = lerCache();
@@ -285,7 +290,7 @@ export function MapView({ mostrarVisaoGeral = false }: { mostrarVisaoGeral?: boo
   // recolorindo conforme resolve; ao terminar, corrige o cadastro pela posição.
   useEffect(() => {
     if (!emVisaoGeral || !mapReady || geoRodouRef.current) return;
-    const centroides = getTalhoesCentroides();
+    const centroides = ovCentroidesRef.current ?? (ovCentroidesRef.current = getTalhoesCentroides());
     if (faltamGeocodar(centroides) === 0) {
       // já tudo em cache — só garante o cadastro corrigido uma vez
       geoRodouRef.current = true;
@@ -298,7 +303,9 @@ export function MapView({ mostrarVisaoGeral = false }: { mostrarVisaoGeral?: boo
       await geocodarFaltantes(centroides, (feitos, total) => {
         if (!vivo) return;
         setGeoProg({ feitos, total });
-        setGeoTick(v => v + 1); // recolore o mapa incrementalmente
+        // Recolore em LOTES (a cada 5 pontos e no final) — 1 recolorida por
+        // consulta (~1,2s) mantinha o main thread ocupado a sessão inteira.
+        if (feitos % 5 === 0 || feitos === total) setGeoTick(v => v + 1);
       });
       if (!vivo) return;
       corrigirCadastroMunicipios(centroides); // grava município real no cadastro

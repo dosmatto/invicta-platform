@@ -2,7 +2,7 @@
 // local. O mapa de visão geral do Início classifica os talhões pela POSIÇÃO
 // (não pelo município digitado no cadastro, que vinha sujo: caixa diferente,
 // vazio, strings multi-município). Também corrige o cadastro pela posição real.
-import { getFazendas, updateFazenda, type TalhaoCentroide } from './store';
+import { getFazendas, updateFazendasLote, type TalhaoCentroide } from './store';
 
 const CACHE_KEY = 'inv_geo_municipio';
 const NOMINATIM = 'https://nominatim.openstreetmap.org/reverse';
@@ -17,7 +17,12 @@ export function lerCache(): Record<string, string> {
   try { return JSON.parse(localStorage.getItem(CACHE_KEY) || '{}'); } catch { return {}; }
 }
 function salvarCache(c: Record<string, string>) {
-  try { localStorage.setItem(CACHE_KEY, JSON.stringify(c)); } catch { /* quota — ignora */ }
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify(c)); }
+  catch (e) {
+    // Falha silenciosa aqui fazia a classificação RE-RODAR inteira toda sessão
+    // (cache nunca persistia). Ao menos deixa o problema visível no console.
+    console.warn('[geocode] cache de municípios não persistiu (quota?):', e);
+  }
 }
 
 // Município real de um ponto (só do cache; null se ainda não geocodificado).
@@ -49,15 +54,20 @@ export async function geocodarFaltantes(
   centroides.forEach(c => { const k = coordKey(c.lng, c.lat); if (!(k in cache) && !rep.has(k)) rep.set(k, c); });
   const chaves = Array.from(rep.keys());
   let feitos = 0;
+  let desdeUltimaGravacao = 0;
   for (const k of chaves) {
     const c = rep.get(k)!;
     try {
       const m = await reverse(c.lng, c.lat);
-      if (m) { cache[k] = m; salvarCache(cache); }
+      if (m) { cache[k] = m; desdeUltimaGravacao++; }
     } catch { /* rede indisponível — fica pendente p/ próxima sessão */ }
+    // Persiste em LOTE (a cada 10 acertos e no final) — regravar o cache
+    // inteiro a cada consulta era O(n²) ao longo da sessão.
+    if (desdeUltimaGravacao >= 10) { salvarCache(cache); desdeUltimaGravacao = 0; }
     onTick?.(++feitos, chaves.length);
     if (feitos < chaves.length) await sleep(1200);
   }
+  if (desdeUltimaGravacao > 0) salvarCache(cache);
   return cache;
 }
 
@@ -74,14 +84,15 @@ export function corrigirCadastroMunicipios(centroides: TalhaoCentroide[], cache 
     contagem.set(c.fazendaId, cont);
   }
   const fazendas = getFazendas();
-  let mudou = 0;
+  const atualizacoes: { id: string; data: { municipio: string } }[] = [];
   for (const [fid, cont] of contagem) {
     const dominante = Object.entries(cont).sort((a, b) => b[1] - a[1])[0]?.[0];
     if (!dominante) continue;
     const fz = fazendas.find(f => f.id === fid);
-    if (fz && fz.municipio !== dominante) { updateFazenda(fid, { municipio: dominante }); mudou++; }
+    if (fz && fz.municipio !== dominante) atualizacoes.push({ id: fid, data: { municipio: dominante } });
   }
-  return mudou;
+  // LOTE: 1 gravação da lista (e 1 push) — antes eram N gravações completas.
+  return updateFazendasLote(atualizacoes);
 }
 
 // Conveniência: quantos centroides ainda faltam geocodificar.

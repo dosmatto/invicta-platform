@@ -658,36 +658,67 @@ export interface TalhaoCentroide {
   lng: number; lat: number;
 }
 
+// Memo do centroide POR TALHÃO: o JSON.parse do geojson (grande) de talhão sem
+// bbox custava caro a cada chamada — com 916 talhões, megabytes de parsing.
+// A assinatura invalida quando a geometria muda (bbox novo / geojson trocado).
+const memoCentroide = new Map<string, { sig: string; lng: number; lat: number }>();
+
+function centroideDoTalhao(t: Talhao): { lng: number; lat: number } | null {
+  const temBbox = !!(t.bbox && t.bbox.length === 4 && t.bbox.every(Number.isFinite));
+  const sig = temBbox ? `b:${t.bbox!.join(',')}` : `g:${t.geojson?.length ?? 0}`;
+  const hit = memoCentroide.get(t.id);
+  if (hit && hit.sig === sig) return { lng: hit.lng, lat: hit.lat };
+
+  let cx: number | null = null, cy: number | null = null;
+  if (temBbox) {
+    cx = (t.bbox![0] + t.bbox![2]) / 2; cy = (t.bbox![1] + t.bbox![3]) / 2;
+  } else if (t.geojson) {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    const walk = (g: GeoJSON.Geometry) => {
+      if (g.type === 'Polygon') g.coordinates.forEach(r => r.forEach(([a, b]) => { if (a < minX) minX = a; if (b < minY) minY = b; if (a > maxX) maxX = a; if (b > maxY) maxY = b; }));
+      else if (g.type === 'MultiPolygon') g.coordinates.forEach(p => p.forEach(r => r.forEach(([a, b]) => { if (a < minX) minX = a; if (b < minY) minY = b; if (a > maxX) maxX = a; if (b > maxY) maxY = b; })));
+    };
+    try {
+      const gj = JSON.parse(t.geojson) as GeoJSON.GeoJSON;
+      if (gj.type === 'FeatureCollection') gj.features.forEach(f => f.geometry && walk(f.geometry));
+      else if (gj.type === 'Feature') gj.geometry && walk(gj.geometry);
+      else walk(gj as GeoJSON.Geometry);
+    } catch { /* geojson inválido — ignora */ }
+    if (Number.isFinite(minX)) { cx = (minX + maxX) / 2; cy = (minY + maxY) / 2; }
+  }
+  if (cx == null || cy == null) return null;
+  memoCentroide.set(t.id, { sig, lng: cx, lat: cy });
+  return { lng: cx, lat: cy };
+}
+
 export function getTalhoesCentroides(): TalhaoCentroide[] {
   const fazendas = new Map(getFazendas().map(f => [f.id, f]));
   const out: TalhaoCentroide[] = [];
   for (const t of getTalhoes()) {
-    let cx: number | null = null, cy: number | null = null;
-    if (t.bbox && t.bbox.length === 4 && t.bbox.every(Number.isFinite)) {
-      cx = (t.bbox[0] + t.bbox[2]) / 2; cy = (t.bbox[1] + t.bbox[3]) / 2;
-    } else if (t.geojson) {
-      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-      const walk = (g: GeoJSON.Geometry) => {
-        if (g.type === 'Polygon') g.coordinates.forEach(r => r.forEach(([a, b]) => { if (a < minX) minX = a; if (b < minY) minY = b; if (a > maxX) maxX = a; if (b > maxY) maxY = b; }));
-        else if (g.type === 'MultiPolygon') g.coordinates.forEach(p => p.forEach(r => r.forEach(([a, b]) => { if (a < minX) minX = a; if (b < minY) minY = b; if (a > maxX) maxX = a; if (b > maxY) maxY = b; })));
-      };
-      try {
-        const gj = JSON.parse(t.geojson) as GeoJSON.GeoJSON;
-        if (gj.type === 'FeatureCollection') gj.features.forEach(f => f.geometry && walk(f.geometry));
-        else if (gj.type === 'Feature') gj.geometry && walk(gj.geometry);
-        else walk(gj as GeoJSON.Geometry);
-      } catch { /* geojson inválido — ignora */ }
-      if (Number.isFinite(minX)) { cx = (minX + maxX) / 2; cy = (minY + maxY) / 2; }
-    }
-    if (cx == null || cy == null) continue;
+    const c = centroideDoTalhao(t);
+    if (!c) continue;
     const fz = fazendas.get(t.fazendaId);
     out.push({
       id: t.id, nome: t.nome, fazendaId: t.fazendaId, fazenda: fz?.nome ?? '',
       municipio: fz?.municipio || '—', estado: (fz?.estado || '').toUpperCase(),
-      lng: cx, lat: cy,
+      lng: c.lng, lat: c.lat,
     });
   }
   return out;
+}
+
+// Atualização de fazendas em LOTE: 1 load + 1 save (+1 push coalescido), em vez
+// de N gravações da lista inteira — usado pela correção de município do Início.
+export function updateFazendasLote(atualizacoes: { id: string; data: Partial<Fazenda> }[]): number {
+  if (!atualizacoes.length) return 0;
+  const fazendas = load<Fazenda>('inv_fazendas');
+  let mudou = 0;
+  for (const a of atualizacoes) {
+    const idx = fazendas.findIndex(f => f.id === a.id);
+    if (idx >= 0) { fazendas[idx] = comNome({ ...fazendas[idx], ...a.data }); mudou++; }
+  }
+  if (mudou) save('inv_fazendas', fazendas);
+  return mudou;
 }
 
 export function saveTalhao(t: Omit<Talhao, 'id' | 'criadoEm'>): Talhao {

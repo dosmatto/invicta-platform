@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '1.92.0': [
+    'PLATAFORMA RÁPIDA DE NOVO (caça com 5 agentes): a lentidão desde a v1.81/82 era a tela Início recalculando o centroide dos 916 talhões — incluindo a leitura do polígono inteiro de talhões antigos sem bbox — A CADA ponto classificado pela geocodificação (~1,2 s, por minutos). Correções: (1) centroides calculados UMA vez por visita ao Início e memoizados por talhão (parse de polígono só quando a geometria muda); (2) recolorização em lotes de 5 pontos em vez de a cada consulta; (3) cache de municípios gravado em lote (era regravado inteiro a cada consulta) e com aviso se falhar por falta de espaço (falha silenciosa fazia a classificação re-rodar toda sessão); (4) correção de município das fazendas em 1 gravação única (eram até 165 regravações da lista).',
+  ],
   '1.91.0': [
     'LOGIN E ABERTURA NÃO TRAVAM MAIS COM SERVIDOR LENTO: quando o servidor de autenticação está degradado (como hoje), o "Entrando…" ficava pendurado para sempre — agora estoura em 12 s e o app tenta o LOGIN OFFLINE deste aparelho (mesmo e-mail e senha de quem já entrou nele). E o "Verificando acesso…" tem teto de 20 s: se a nuvem demorar, o app ABRE com os dados do aparelho e completa a sincronização em 2º plano — seguro, porque sem carga íntegra não há poda (v1.86) e gravações locais ficam pendentes/mescladas até a nuvem confirmar (v1.87).',
   ],
