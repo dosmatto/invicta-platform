@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '1.96.0': [
+    'NDVI — PDF RÁPIDO PARA O PRODUTOR: na aba NDVI/Satélite do talhão, o novo bloco "📄 Gerar PDF para o produtor" lista os mapas disponíveis (índices MANTIDOS — NDVI/NDRE/etc., Sentinel-2 e CBERS — e imagens RGB carregadas na sessão); marque um ou mais e o PDF sai com 1 mapa por página: logos, produtor/fazenda/talhão/safra/área, mapa com contorno sobre fundo de satélite, barra da legenda com o domínio e rodapé com data. Ideal para enviar por WhatsApp/e-mail.',
+  ],
   '1.95.0': [
     'ABERTURA ~10x MAIS RÁPIDA — BOOT INCREMENTAL: o app baixava a base INTEIRA da nuvem (~9 s de rede, medido) a cada abertura. Agora guarda uma marca d\'água e baixa SÓ O QUE MUDOU desde a última abertura (4 consultas pequenas, <1 s). Segurança: qualquer divergência de contagem (ex.: exclusões), pendência local ou 24 h sem boot completo → cai automaticamente no boot completo (que também ficou mais rápido: talhões e coleções baixam em paralelo).',
     'RELIGAR TALHÕES ÓRFÃOS — CRIAR FAZENDA NA HORA: grupo órfão cuja fazenda não existe mais (apagada e não recadastrada) agora tem o botão "➕ Criar": escolhe o produtor e a fazenda nasce ali mesmo (nome/sigla = prefixo do grupo), já selecionada para religar. O município fica em branco e é preenchido depois pela classificação por localização do mapa geral.',

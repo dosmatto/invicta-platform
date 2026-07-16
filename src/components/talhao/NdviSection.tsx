@@ -417,6 +417,12 @@ export function NdviSection({ safraNome }: { safraNome?: string } = {}) {
         ))}
       </div>
 
+      {/* PDF rápido p/ produtor: escolhe os mapas (índices mantidos + RGB da sessão) */}
+      {poligono && (
+        <GeradorPdfNdvi talhaoId={nav.talhaoId ?? ''} poligono={poligono} legNdvi={legNdvi}
+          imagens={imagens} info={{ produtor: nav.produtor, fazenda: nav.fazenda, talhao: nav.talhao, safra: safraNome ?? nav.safra, areaHa: nav.area }} />
+      )}
+
       {abaIv === 'comp' && <ComposicaoTemporalPanel safraNome={safraNome} />}
       {abaIv === 'salvas' && <CamadasSalvasView talhaoId={nav.talhaoId ?? ''} />}
       {abaIv === 'buscar' && (<>
@@ -747,6 +753,108 @@ export function NdviSection({ safraNome }: { safraNome?: string } = {}) {
 // ── Aba "Camadas salvas" (IV5, etapa 4 da spec): tudo que está aprovado ──────
 // Índices individuais mantidos (nuvem) + composições temporais. Gestão (ver no
 // mapa/excluir) fica nas abas de origem; aqui é o inventário do talhão.
+// ── PDF rápido para o produtor ────────────────────────────────────────────────
+// Marca os mapas (índices MANTIDOS na nuvem + imagens RGB carregadas na sessão)
+// e gera um PDF com 1 mapa por página (relatorioNdvi), pronto pra WhatsApp/e-mail.
+function GeradorPdfNdvi({ talhaoId, poligono, legNdvi, imagens, info }: {
+  talhaoId: string;
+  poligono: GeoJSON.Polygon | GeoJSON.MultiPolygon;
+  legNdvi: Legenda | undefined;
+  imagens: Record<string, Imagem>;
+  info: { produtor: string; fazenda: string; talhao: string; safra: string; areaHa: number };
+}) {
+  const [aberto, setAberto] = useState(false);
+  const [salvos, setSalvosPdf] = useState<NdviCamada[]>([]);
+  const [carregando, setCarregando] = useState(false);
+  const [sel, setSel] = useState<Record<string, boolean>>({});
+  const [gerando, setGerando] = useState(false);
+  const [erro, setErro] = useState('');
+
+  useEffect(() => {
+    if (!aberto || !talhaoId) return;
+    let vivo = true;
+    setCarregando(true);
+    carregarNdviSalvos(talhaoId)
+      .then(cs => { if (vivo) setSalvosPdf(cs); })
+      .catch(() => {})
+      .finally(() => { if (vivo) setCarregando(false); });
+    return () => { vivo = false; };
+  }, [aberto, talhaoId]);
+
+  // Itens disponíveis: RGB da sessão primeiro (mais recentes no topo), depois índices mantidos.
+  const itensRgb = Object.entries(imagens).map(([k, img]) => {
+    const [fonte, data] = k.split(':');
+    return { chave: `rgb:${k}`, titulo: `Imagem real (RGB) · ${ROTULO_FONTE[fonte as FonteNdvi] ?? fonte} · ${ddmmyy(data)}`, img };
+  });
+  const itensIdx = salvos.map(c => ({
+    chave: `idx:${c.chave}`,
+    titulo: `${c.indice} · ${c.nut.startsWith('ndvi_cbers') ? 'CBERS-4A' : 'Sentinel-2'} · ${ddmmyy(c.data)}`,
+    camada: c,
+  }));
+  const nSel = [...itensRgb, ...itensIdx].filter(i => sel[i.chave]).length;
+
+  async function gerar() {
+    if (!legNdvi && itensIdx.some(i => sel[i.chave])) { setErro('Escolha uma legenda de NDVI.'); return; }
+    setGerando(true); setErro('');
+    try {
+      const { gerarRelatorioNdvi } = await import('@/lib/relatorioNdvi');
+      const mapas = [];
+      for (const it of itensIdx) {
+        if (!sel[it.chave]) continue;
+        const grid = { b64: it.camada.b64, shape: it.camada.shape } as Grid;
+        const dominio: [number, number] = it.camada.indice === 'NDVI' ? [0, 1] : percentis(grid, 2, 98);
+        const stops = rampaVisualStops({ ...legNdvi!, estilo: 'continuo' });
+        const png = colorirGrid(grid, dominio, stops).dataUrl;
+        mapas.push({ titulo: it.titulo, png, bounds: it.camada.bounds, legenda: legNdvi, dominio, satelite: true });
+      }
+      for (const it of itensRgb) {
+        if (!sel[it.chave]) continue;
+        mapas.push({ titulo: it.titulo, png: it.img.png, bounds: it.img.bounds, satelite: false });
+      }
+      if (!mapas.length) { setErro('Marque ao menos um mapa.'); setGerando(false); return; }
+      await gerarRelatorioNdvi({ ...info, poligono, mapas });
+    } catch (e) {
+      console.warn('[pdf-ndvi]', e);
+      setErro(e instanceof Error ? e.message : 'Falha ao gerar o PDF.');
+    }
+    setGerando(false);
+  }
+
+  return (
+    <div className="rounded-lg" style={{ background: '#0a1a2f', border: '1px solid #1a3a6b' }}>
+      <button onClick={() => setAberto(v => !v)} className="w-full flex items-center justify-between px-2.5 py-1.5 text-[10px] font-bold" style={{ color: '#93c5fd' }}>
+        <span>📄 Gerar PDF para o produtor</span>
+        <span>{aberto ? '▾' : '▸'}</span>
+      </button>
+      {aberto && (
+        <div className="px-2.5 pb-2.5 space-y-1.5">
+          {carregando && <p className="text-[10px] flex items-center gap-1.5" style={{ color: '#64748b' }}><Loader2 size={11} className="animate-spin" /> Carregando camadas…</p>}
+          {!carregando && itensRgb.length === 0 && itensIdx.length === 0 && (
+            <p className="text-[10px]" style={{ color: '#64748b' }}>
+              Nada disponível ainda — processe e <strong>mantenha</strong> um índice (ou carregue uma imagem RGB) e volte aqui.
+            </p>
+          )}
+          {[...itensRgb, ...itensIdx].map(it => (
+            <label key={it.chave} className="flex items-center gap-2 text-[10px] cursor-pointer" style={{ color: '#cbd5e1' }}>
+              <input type="checkbox" checked={!!sel[it.chave]}
+                onChange={e => setSel(s => ({ ...s, [it.chave]: e.target.checked }))} />
+              {it.titulo}
+            </label>
+          ))}
+          {(itensRgb.length > 0 || itensIdx.length > 0) && (
+            <button onClick={gerar} disabled={gerando || nSel === 0}
+              className="w-full py-1.5 rounded text-[11px] font-bold text-white flex items-center justify-center gap-1.5"
+              style={{ background: nSel && !gerando ? '#166534' : '#1a3a6b', opacity: nSel && !gerando ? 1 : 0.7 }}>
+              {gerando ? <><Loader2 size={12} className="animate-spin" /> Gerando…</> : `📄 Gerar PDF (${nSel} mapa${nSel === 1 ? '' : 's'})`}
+            </button>
+          )}
+          {erro && <p className="text-[10px] font-semibold" style={{ color: '#f87171' }}>{erro}</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CamadasSalvasView({ talhaoId }: { talhaoId: string }) {
   const [inds, setInds] = useState<NdviCamada[]>([]);
   const [carregando, setCarregando] = useState(true);
