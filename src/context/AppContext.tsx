@@ -157,7 +157,18 @@ export function AppProvider({ children, redirectProdutorParaPortal }: { children
       setUsuario(user);
       if (!user) { setDadosProntos(false); setAcessoBloqueado(false); setTrocaSenha(false); setValidadeExpirada(false); setDataExpiracao(null); return; }
       setDadosProntos(false);
-      await bootCloud().catch(() => {});       // hidrata empresas/dados/papéis da nuvem
+      // Hidrata da nuvem com TEMPO-LIMITE: se o Supabase estiver degradado
+      // (pendurado), entra com os dados locais em vez de prender o usuário no
+      // "Verificando acesso…". Seguro: sem boot íntegro NÃO há poda (v1.86) e
+      // gravações locais ficam pendentes/mescladas até confirmar (v1.87). Se o
+      // boot lento terminar depois, ele completa a hidratação em 2º plano.
+      await Promise.race([
+        bootCloud().catch(() => {}),
+        new Promise<void>(res => setTimeout(() => {
+          console.warn('[nuvem] boot demorou >20s — entrando com dados locais; hidratação segue em 2º plano.');
+          res();
+        }, 20_000)),
+      ]);
       seedPapeis();                            // garante owner/admin oficiais (idempotente)
       seedPermissoes();                        // semeia as permissões padrão por papel
       seedPlanos();                            // semeia os planos de assinatura (Básico/Interm./Completo)

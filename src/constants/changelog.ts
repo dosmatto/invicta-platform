@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '1.91.0': [
+    'LOGIN E ABERTURA NÃO TRAVAM MAIS COM SERVIDOR LENTO: quando o servidor de autenticação está degradado (como hoje), o "Entrando…" ficava pendurado para sempre — agora estoura em 12 s e o app tenta o LOGIN OFFLINE deste aparelho (mesmo e-mail e senha de quem já entrou nele). E o "Verificando acesso…" tem teto de 20 s: se a nuvem demorar, o app ABRE com os dados do aparelho e completa a sincronização em 2º plano — seguro, porque sem carga íntegra não há poda (v1.86) e gravações locais ficam pendentes/mescladas até a nuvem confirmar (v1.87).',
+  ],
   '1.90.0': [
     'MANUTENÇÃO — RELIGAR TALHÕES ÓRFÃOS (Configurações, só Owner): quando uma fazenda é apagada e recadastrada, ela ganha outro id interno e os talhões dela "somem" da navegação (continuam salvos, mas apontando para a fazenda antiga). A nova ferramenta procura esses órfãos, agrupa pela sigla do nome (ex.: IGEFI 15 → grupo IGEFI), sugere a fazenda certa, deixa ajustar manualmente e religa tudo numa única gravação — sincronizando na nuvem pelo caminho normal.',
   ],

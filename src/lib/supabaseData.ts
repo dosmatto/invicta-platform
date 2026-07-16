@@ -133,13 +133,16 @@ export async function bootSupabaseData(keysLista: string[], keysObj: string[]): 
   // Chaves com pendência local não confirmada (lançamentos que a queda de
   // conexão impediu de subir): o boot NÃO pode sobrescrevê-las com a nuvem —
   // mescla por id (local vence) e re-envia depois da hidratação.
-  const sujos = lerSujos();
+  // IMPORTANTE: as flags são lidas NA HORA de gravar cada chave (não no início)
+  // — um boot lento que termina em 2º plano precisa respeitar edições feitas
+  // pelo usuário ENQUANTO ele rodava.
+  const ehSujo = (key: string) => !!lerSujos()[key];
 
   // Talhões (tabela dedicada) → inv_talhoes — paginado (pode passar de 1000).
   const talhoes = await lerTudoPaginado<{ dados: unknown }>(sb, 'talhoes', 'dados');
   {
     const nuvem = talhoes.map(r => r.dados);
-    const final = sujos[TABELA_TALHOES_KEY] ? mesclarPorId(nuvem, lerLocalLista(TABELA_TALHOES_KEY)) : nuvem;
+    const final = ehSujo(TABELA_TALHOES_KEY) ? mesclarPorId(nuvem, lerLocalLista(TABELA_TALHOES_KEY)) : nuvem;
     gravarRawLocal(TABELA_TALHOES_KEY, JSON.stringify(final));
   }
 
@@ -155,11 +158,11 @@ export async function bootSupabaseData(keysLista: string[], keysObj: string[]): 
   for (const key of keysLista) {
     if (key === TABELA_TALHOES_KEY) continue;
     const nuvem = porColecao[key] ?? [];
-    const final = sujos[key] ? mesclarPorId(nuvem, lerLocalLista(key)) : nuvem;
+    const final = ehSujo(key) ? mesclarPorId(nuvem, lerLocalLista(key)) : nuvem;
     gravarRawLocal(key, JSON.stringify(final));
   }
   for (const key of keysObj) {
-    if (sujos[key]) continue;   // config local pendente vence — sobe no re-push abaixo
+    if (ehSujo(key)) continue;   // config local pendente vence — sobe no re-push abaixo
     const o = objs[key] as { valor?: string } | undefined;
     if (o?.valor != null) gravarRawLocal(key, o.valor);
   }
@@ -168,7 +171,7 @@ export async function bootSupabaseData(keysLista: string[], keysObj: string[]): 
 
   // Re-envia as pendências recuperadas (mescladas acima). Fire-and-forget: a
   // fila serializa, marca/limpa a pendência e o SyncBadge mostra o estado.
-  for (const key of Object.keys(sujos)) {
+  for (const key of Object.keys(lerSujos())) {
     if (keysLista.includes(key)) void pushListaSupabase(key, lerLocalLista(key));
     else if (keysObj.includes(key)) { const v = lerRawLocal(key); if (v != null) void pushObjSupabase(key, v); }
     else limparSujo(key);   // chave que saiu da whitelist — pendência órfã

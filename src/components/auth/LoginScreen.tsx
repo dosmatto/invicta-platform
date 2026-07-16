@@ -26,9 +26,11 @@ export function LoginScreen() {
       // Sucesso: o AppProvider reage ao onAuthStateChanged e renderiza o app.
     } catch (err) {
       const msg = ((err as { message?: string })?.message ?? '').toLowerCase();
-      const semRede = !navigator.onLine || msg.includes('network') || msg.includes('fetch');
+      // rede caiu OU servidor degradado (pendurado até estourar o tempo-limite)
+      const semRede = !navigator.onLine || msg.includes('network') || msg.includes('fetch')
+        || msg.includes('tempo esgotado') || msg.includes('timeout');
       if (semRede) {
-        // a rede caiu no meio do login online → tenta o offline como fallback
+        // → tenta o offline como fallback (senha conferida contra o hash local)
         try { await loginOffline(email, senha); return; }
         catch (e2) { setErro((e2 as Error).message); setCarregando(false); return; }
       }

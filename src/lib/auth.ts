@@ -112,11 +112,20 @@ export function observarAuth(cb: (u: User | null) => void): () => void {
   return () => { notificarObs = null; data.subscription.unsubscribe(); };
 }
 
+// Corrida com tempo-limite: servidor DEGRADADO (pendura sem responder) não pode
+// prender o usuário no "Entrando…" — estoura em ms e o chamador cai pro offline.
+function comTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<never>((_, rej) => setTimeout(() => rej(new Error('tempo esgotado (servidor sem resposta)')), ms)),
+  ]);
+}
+
 export async function loginEmailSenha(email: string, senha: string): Promise<void> {
   const e = normEmail(email);
   const sb = getSupabase();
   if (!sb) throw new Error('Supabase não configurado.');
-  const { data, error } = await sb.auth.signInWithPassword({ email: e, password: senha });
+  const { data, error } = await comTimeout(sb.auth.signInWithPassword({ email: e, password: senha }), 12_000);
   if (error) throw error;
   // guarda o verificador p/ este aparelho poder logar OFFLINE depois
   if (data.session?.user) void salvarVerificadorOffline(e, senha, data.session.user.id);
