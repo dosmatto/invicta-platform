@@ -36,6 +36,8 @@ import {
 import { inputStyle } from '@/constants/ui';
 const fmt2 = (v: number | null | undefined) => (v == null ? '—' : v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 const isoDate = (d: Date) => d.toISOString().slice(0, 10);
+// Período padrão da busca (todas as fontes): "De" = 3 meses atrás, "Até" = hoje.
+const mesesAtras = (n: number) => { const d = new Date(); d.setMonth(d.getMonth() - n); return isoDate(d); };
 const ddmmyy = (s?: string | null) => s ? new Date(s + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' }) : '—';
 const OPACIDADE = 1;
 
@@ -86,7 +88,7 @@ export function NdviSection({ safraNome }: { safraNome?: string } = {}) {
 
   const hoje = useMemo(() => new Date(), []);
   const [fonteBusca, setFonteBusca] = useState<FonteBusca>('sentinel');
-  const [dataIni, setDataIni] = useState(isoDate(new Date(Date.now() - 90 * 864e5)));
+  const [dataIni, setDataIni] = useState(() => mesesAtras(3));
   const [dataFim, setDataFim] = useState(isoDate(hoje));
   const [nuvemMax, setNuvemMax] = useState(NUVEM_PADRAO);
 
@@ -151,8 +153,7 @@ export function NdviSection({ safraNome }: { safraNome?: string } = {}) {
     if (f === fonteBusca) return;
     setFonteBusca(f);
     setCandidatos([]); setThumbs({}); setPreviaDe(null); setErro(''); setSugerirNuvem(0);
-    const dias = f === 'sentinel' ? 90 : 365;
-    setDataIni(isoDate(new Date(Date.now() - dias * 864e5)));
+    setDataIni(mesesAtras(3)); setDataFim(isoDate(new Date()));
   }
 
   // Autoload das cenas MANTIDAS (as duas fontes) ao abrir o talhão.
@@ -786,11 +787,15 @@ function GeradorPdfNdvi({ talhaoId, poligono, legNdvi, imagens, info }: {
     const [fonte, data] = k.split(':');
     return { chave: `rgb:${k}`, titulo: `Imagem real (RGB) · ${ROTULO_FONTE[fonte as FonteNdvi] ?? fonte} · ${ddmmyy(data)}`, img };
   });
-  const itensIdx = salvos.map(c => ({
-    chave: `idx:${c.chave}`,
-    titulo: `${c.indice} · ${c.nut.startsWith('ndvi_cbers') ? 'CBERS-4A' : 'Sentinel-2'} · ${ddmmyy(c.data)}`,
-    camada: c,
-  }));
+  // NDVI tem escala fixa 0–1 no PDF; a variante "contraste realçado" (p2–p98,
+  // como o botão Contraste do mapa) entra como 2º item selecionável.
+  const itensIdx = salvos.flatMap(c => {
+    const rotulo = `${c.indice} · ${c.nut.startsWith('ndvi_cbers') ? 'CBERS-4A' : 'Sentinel-2'} · ${ddmmyy(c.data)}`;
+    const base = { chave: `idx:${c.chave}`, titulo: rotulo, camada: c, contraste: false };
+    return c.indice === 'NDVI'
+      ? [base, { chave: `idxc:${c.chave}`, titulo: `${rotulo} · contraste realçado`, camada: c, contraste: true }]
+      : [base];
+  });
   const nSel = [...itensRgb, ...itensIdx].filter(i => sel[i.chave]).length;
 
   async function gerar() {
@@ -802,10 +807,18 @@ function GeradorPdfNdvi({ talhaoId, poligono, legNdvi, imagens, info }: {
       for (const it of itensIdx) {
         if (!sel[it.chave]) continue;
         const grid = { b64: it.camada.b64, shape: it.camada.shape } as Grid;
-        const dominio: [number, number] = it.camada.indice === 'NDVI' ? [0, 1] : percentis(grid, 2, 98);
+        const dominio: [number, number] = (!it.contraste && it.camada.indice === 'NDVI') ? [0, 1] : percentis(grid, 2, 98);
         const stops = rampaVisualStops({ ...legNdvi!, estilo: 'continuo' });
         const png = colorirGrid(grid, dominio, stops).dataUrl;
-        mapas.push({ titulo: it.titulo, png, bounds: it.camada.bounds, legenda: legNdvi, dominio, satelite: true });
+        // média p/ a linha do tempo da última página do PDF
+        const { valores } = decodeGrid(grid);
+        let soma = 0, n = 0;
+        for (let i = 0; i < valores.length; i++) { const v = valores[i]; if (isFinite(v)) { soma += v; n++; } }
+        mapas.push({
+          titulo: it.titulo, png, bounds: it.camada.bounds, legenda: legNdvi, dominio, satelite: true,
+          serie: `${it.camada.indice} · ${it.camada.nut.startsWith('ndvi_cbers') ? 'CBERS-4A' : 'Sentinel-2'}`,
+          data: it.camada.data, media: n ? soma / n : undefined,
+        });
       }
       for (const it of itensRgb) {
         if (!sel[it.chave]) continue;

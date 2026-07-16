@@ -1,5 +1,10 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '1.97.0': [
+    'PDF DO NDVI — LINHA DO TEMPO: quando o relatório tem mais de um mapa de índice, a última página traz o gráfico "Linha do tempo — média dos índices" (mesma leitura da aba NDVI): 1 série colorida por índice+satélite, pontos nas datas dos mapas selecionados (eixo proporcional ao tempo), valores sobre os pontos e legenda.',
+    'PDF DO NDVI — VERSÃO CONTRASTADA: cada NDVI mantido agora aparece 2x na lista do PDF — normal (escala fixa 0–1) e "contraste realçado" (escala esticada p2–p98, igual ao botão Contraste do mapa) — escolha a que melhor mostra a variação do talhão em cada caso (dá até para incluir as duas).',
+    'NDVI — PERÍODO PADRÃO DA BUSCA: as datas abrem sempre com "Até" = hoje e "De" = 3 meses atrás, em todas as fontes (trocar para CBERS-4A não puxa mais 12 meses).',
+  ],
   '1.96.0': [
     'NDVI — PDF RÁPIDO PARA O PRODUTOR: na aba NDVI/Satélite do talhão, o novo bloco "📄 Gerar PDF para o produtor" lista os mapas disponíveis (índices MANTIDOS — NDVI/NDRE/etc., Sentinel-2 e CBERS — e imagens RGB carregadas na sessão); marque um ou mais e o PDF sai com 1 mapa por página: logos, produtor/fazenda/talhão/safra/área, mapa com contorno sobre fundo de satélite, barra da legenda com o domínio e rodapé com data. Ideal para enviar por WhatsApp/e-mail.',
   ],
