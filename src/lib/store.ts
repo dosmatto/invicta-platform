@@ -658,6 +658,42 @@ export interface TalhaoCentroide {
   lng: number; lat: number;
 }
 
+// bbox [minX,minY,maxX,maxY] calculado do geojson (string). null se inválido.
+export function bboxDoGeojson(geojson: string): [number, number, number, number] | null {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  const walk = (g: GeoJSON.Geometry) => {
+    if (g.type === 'Polygon') g.coordinates.forEach(r => r.forEach(([a, b]) => { if (a < minX) minX = a; if (b < minY) minY = b; if (a > maxX) maxX = a; if (b > maxY) maxY = b; }));
+    else if (g.type === 'MultiPolygon') g.coordinates.forEach(p => p.forEach(r => r.forEach(([a, b]) => { if (a < minX) minX = a; if (b < minY) minY = b; if (a > maxX) maxX = a; if (b > maxY) maxY = b; })));
+  };
+  try {
+    const gj = JSON.parse(geojson) as GeoJSON.GeoJSON;
+    if (gj.type === 'FeatureCollection') gj.features.forEach(f => f.geometry && walk(f.geometry));
+    else if (gj.type === 'Feature') gj.geometry && walk(gj.geometry);
+    else walk(gj as GeoJSON.Geometry);
+  } catch { return null; }
+  return Number.isFinite(minX) ? [minX, minY, maxX, maxY] : null;
+}
+
+// BACKFILL de bbox (1x por navegador): talhões antigos sem bbox obrigavam a
+// re-analisar o polígono inteiro a CADA abertura da página para plotar o
+// centroide. Grava o bbox de vez (1 save; sincroniza) e o parse some p/ sempre.
+export function migrarBboxTalhoesV1() {
+  try {
+    if (localStorage.getItem('inv_migrado_bbox_v1') === '1') return;
+    const talhoes = load<Talhao>('inv_talhoes');
+    if (!talhoes.length) return;   // dados ainda não hidratados — tenta no próximo boot
+    let mudou = 0;
+    for (const t of talhoes) {
+      const temBbox = !!(t.bbox && t.bbox.length === 4 && t.bbox.every(Number.isFinite));
+      if (temBbox || !t.geojson) continue;
+      const bb = bboxDoGeojson(t.geojson);
+      if (bb) { t.bbox = bb; mudou++; }
+    }
+    if (mudou) { save('inv_talhoes', talhoes); console.info(`[migração] bbox preenchido em ${mudou} talhão(ões).`); }
+    localStorage.setItem('inv_migrado_bbox_v1', '1');
+  } catch { /* tenta no próximo boot */ }
+}
+
 // Memo do centroide POR TALHÃO: o JSON.parse do geojson (grande) de talhão sem
 // bbox custava caro a cada chamada — com 916 talhões, megabytes de parsing.
 // A assinatura invalida quando a geometria muda (bbox novo / geojson trocado).
@@ -673,18 +709,8 @@ function centroideDoTalhao(t: Talhao): { lng: number; lat: number } | null {
   if (temBbox) {
     cx = (t.bbox![0] + t.bbox![2]) / 2; cy = (t.bbox![1] + t.bbox![3]) / 2;
   } else if (t.geojson) {
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    const walk = (g: GeoJSON.Geometry) => {
-      if (g.type === 'Polygon') g.coordinates.forEach(r => r.forEach(([a, b]) => { if (a < minX) minX = a; if (b < minY) minY = b; if (a > maxX) maxX = a; if (b > maxY) maxY = b; }));
-      else if (g.type === 'MultiPolygon') g.coordinates.forEach(p => p.forEach(r => r.forEach(([a, b]) => { if (a < minX) minX = a; if (b < minY) minY = b; if (a > maxX) maxX = a; if (b > maxY) maxY = b; })));
-    };
-    try {
-      const gj = JSON.parse(t.geojson) as GeoJSON.GeoJSON;
-      if (gj.type === 'FeatureCollection') gj.features.forEach(f => f.geometry && walk(f.geometry));
-      else if (gj.type === 'Feature') gj.geometry && walk(gj.geometry);
-      else walk(gj as GeoJSON.Geometry);
-    } catch { /* geojson inválido — ignora */ }
-    if (Number.isFinite(minX)) { cx = (minX + maxX) / 2; cy = (minY + maxY) / 2; }
+    const bb = bboxDoGeojson(t.geojson);
+    if (bb) { cx = (bb[0] + bb[2]) / 2; cy = (bb[1] + bb[3]) / 2; }
   }
   if (cx == null || cy == null) return null;
   memoCentroide.set(t.id, { sig, lng: cx, lat: cy });

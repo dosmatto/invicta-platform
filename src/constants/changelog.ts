@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '1.93.0': [
+    'ABERTURA DA PLATAFORMA MAIS RÁPIDA (2ª rodada da caça à lentidão): (1) talhões antigos sem bbox ganham o bbox GRAVADO de vez (migração única) — antes o polígono inteiro era re-analisado a cada abertura só para plotar o centroide; (2) o boot só regrava/recomprime no aparelho as coleções que MUDARAM na nuvem (a recompressão dos ~MB de talhões a cada abertura era pura perda); (3) o espelho de sincronização nasce pronto no boot — o primeiro save da sessão envia só o que mudou (antes re-enviava a coleção inteira e disparava a poda not-in, que agora não roda mais em operação normal); (4) cronômetro no console ([boot] …ms) para diagnosticar aberturas lentas: mostra quanto foi rede vs. gravação local.',
+  ],
   '1.92.0': [
     'PLATAFORMA RÁPIDA DE NOVO (caça com 5 agentes): a lentidão desde a v1.81/82 era a tela Início recalculando o centroide dos 916 talhões — incluindo a leitura do polígono inteiro de talhões antigos sem bbox — A CADA ponto classificado pela geocodificação (~1,2 s, por minutos). Correções: (1) centroides calculados UMA vez por visita ao Início e memoizados por talhão (parse de polígono só quando a geometria muda); (2) recolorização em lotes de 5 pontos em vez de a cada consulta; (3) cache de municípios gravado em lote (era regravado inteiro a cada consulta) e com aviso se falhar por falta de espaço (falha silenciosa fazia a classificação re-rodar toda sessão); (4) correção de município das fazendas em 1 gravação única (eram até 165 regravações da lista).',
   ],

@@ -123,10 +123,31 @@ async function lerTudoPaginado<T>(
   return out;
 }
 
+// Grava no localStorage SÓ se o conteúdo mudou — a compressão LZ de strings
+// grandes (inv_talhoes ~7MB) a cada abertura era parte da lentidão do boot.
+function gravarSeMudou(key: string, json: string): void {
+  if (lerRawLocal(key) === json) return;   // comparação de string é barata; comprimir não
+  gravarRawLocal(key, json);
+}
+
+// Semeia o espelho de diff com o estado da NUVEM: o 1º save da sessão passa a
+// enviar só o que realmente mudou (antes re-enviava a coleção INTEIRA — 916
+// talhões ≈ MBs — e disparava a poda not-in). Com o espelho semeado, a poda
+// nunca roda em operação normal.
+function seedEspelho(key: string, recs: unknown[]): void {
+  const m = new Map<string, string>();
+  for (const r of recs) {
+    const id = (r as Rec)?.id;
+    if (id != null) m.set(String(id), JSON.stringify(r));
+  }
+  espelhoSb[key] = m;
+}
+
 // ── BOOT: hidrata o localStorage a partir do Postgres ────────────────────────
 export async function bootSupabaseData(keysLista: string[], keysObj: string[]): Promise<void> {
   const sb = getSupabase();
   if (!sb) throw new Error('Supabase não configurado.');
+  const t0 = performance.now();
 
   await seedSeVazio(keysLista, keysObj);   // D3: 1ª vez carrega o Postgres do local
 
@@ -140,15 +161,18 @@ export async function bootSupabaseData(keysLista: string[], keysObj: string[]): 
 
   // Talhões (tabela dedicada) → inv_talhoes — paginado (pode passar de 1000).
   const talhoes = await lerTudoPaginado<{ dados: unknown }>(sb, 'talhoes', 'dados');
+  const tRede1 = performance.now();
   {
     const nuvem = talhoes.map(r => r.dados);
     const final = ehSujo(TABELA_TALHOES_KEY) ? mesclarPorId(nuvem, lerLocalLista(TABELA_TALHOES_KEY)) : nuvem;
-    gravarRawLocal(TABELA_TALHOES_KEY, JSON.stringify(final));
+    gravarSeMudou(TABELA_TALHOES_KEY, JSON.stringify(final));
+    seedEspelho(TABELA_TALHOES_KEY, nuvem);   // espelho = estado da NUVEM (diffs certeiros)
   }
 
   // app_kv → só as coleções de listas/config (os MAPAS ficam fora do boot) — paginado.
   const kv = await lerTudoPaginado<{ colecao: string; item_id: string; dados: unknown }>(
     sb, 'app_kv', 'colecao, item_id, dados', q => q.in('colecao', [...keysLista, ...keysObj]));
+  const tRede2 = performance.now();
   const porColecao: Record<string, unknown[]> = {};
   const objs: Record<string, unknown> = {};
   for (const row of kv) {
@@ -159,15 +183,18 @@ export async function bootSupabaseData(keysLista: string[], keysObj: string[]): 
     if (key === TABELA_TALHOES_KEY) continue;
     const nuvem = porColecao[key] ?? [];
     const final = ehSujo(key) ? mesclarPorId(nuvem, lerLocalLista(key)) : nuvem;
-    gravarRawLocal(key, JSON.stringify(final));
+    gravarSeMudou(key, JSON.stringify(final));
+    seedEspelho(key, nuvem);
   }
   for (const key of keysObj) {
     if (ehSujo(key)) continue;   // config local pendente vence — sobe no re-push abaixo
     const o = objs[key] as { valor?: string } | undefined;
-    if (o?.valor != null) gravarRawLocal(key, o.valor);
+    if (o?.valor != null) gravarSeMudou(key, o.valor);
   }
 
   bootCompleto = true;   // hidratação íntegra → a partir daqui o push pode podar órfãos com segurança
+  const tFim = performance.now();
+  console.info(`[boot] talhões: ${talhoes.length} em ${Math.round(tRede1 - t0)}ms · app_kv: ${kv.length} em ${Math.round(tRede2 - tRede1)}ms · gravação local: ${Math.round(tFim - tRede2)}ms · total ${Math.round(tFim - t0)}ms`);
 
   // Re-envia as pendências recuperadas (mescladas acima). Fire-and-forget: a
   // fila serializa, marca/limpa a pendência e o SyncBadge mostra o estado.
