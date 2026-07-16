@@ -5,7 +5,7 @@ import { PanelSection, PanelRow } from './_shared';
 import { APP_VERSION } from '@/constants/version';
 import { CHANGELOG } from '@/constants/changelog';
 import { EtiquetaLayoutPicker } from '../talhao/EtiquetaLayoutPicker';
-import { getConfigEtiqueta, saveConfigEtiqueta, getTalhoes, getFazendas, importarTalhoesLote, type Fazenda } from '@/lib/store';
+import { getConfigEtiqueta, saveConfigEtiqueta, getTalhoes, getFazendas, getClientes, saveFazenda, importarTalhoesLote, type Fazenda, type Cliente } from '@/lib/store';
 import { INTERP_URL, BACKEND_LOCAL, headersBackend } from '@/lib/interpUrl';
 import { ehOwner } from '@/lib/empresa';
 import { exportarBackup, restaurarBackup } from '@/lib/backup';
@@ -41,9 +41,10 @@ function ServidorNuvem() {
 // sugere a fazenda cuja sigla casa, deixa escolher manualmente e grava tudo
 // numa única gravação (sincroniza na nuvem pelo caminho normal).
 function ReligarTalhoesSection() {
-  type Grupo = { prefixo: string; ids: string[]; exemplo: string; fazendaId: string };
+  type Grupo = { prefixo: string; ids: string[]; exemplo: string; fazendaId: string; clienteNovo: string };
   const [grupos, setGrupos] = useState<Grupo[] | null>(null);
   const [fazendas, setFazendas] = useState<Fazenda[]>([]);
+  const [clientes, setClientes] = useState<Cliente[]>([]);
   const [resultado, setResultado] = useState('');
 
   function analisar() {
@@ -61,10 +62,25 @@ function ReligarTalhoesSection() {
       fz.find(f => (f.sigla ?? '').toUpperCase() === pref)?.id
       ?? fz.find(f => f.nome.trim().split(/\s+/)[0]?.toUpperCase() === pref)?.id ?? '';
     setFazendas(fz);
+    setClientes(getClientes());
     setGrupos(Array.from(porPrefixo.entries())
-      .map(([prefixo, g]) => ({ prefixo, ids: g.ids, exemplo: g.exemplo, fazendaId: sugerir(prefixo) }))
+      .map(([prefixo, g]) => ({ prefixo, ids: g.ids, exemplo: g.exemplo, fazendaId: sugerir(prefixo), clienteNovo: '' }))
       .sort((a, b) => b.ids.length - a.ids.length));
     setResultado('');
+  }
+
+  // Fazenda apagada e NÃO recadastrada: não há o que escolher no dropdown —
+  // cria aqui mesmo (sigla = prefixo do grupo, produtor escolhido) e já deixa
+  // selecionada para religar. Município fica em branco: a classificação por
+  // localização (mapa geral) preenche depois pelo lugar real dos talhões.
+  function criarFazendaDoGrupo(i: number) {
+    if (!grupos) return;
+    const g = grupos[i];
+    if (!g.clienteNovo) { setResultado('Escolha o produtor para criar a fazenda.'); return; }
+    const nova = saveFazenda({ clienteId: g.clienteNovo, nome: g.prefixo, sigla: g.prefixo, municipio: '', estado: 'PR' });
+    setFazendas(getFazendas());
+    setGrupos(gs => gs!.map((x, xi) => xi === i ? { ...x, fazendaId: nova.id } : x));
+    setResultado(`✅ Fazenda "${nova.nome}" criada e selecionada — confira e clique em Religar.`);
   }
 
   function religar() {
@@ -111,6 +127,23 @@ function ReligarTalhoesSection() {
                     <option value="">— escolher fazenda —</option>
                     {fazendas.map(f => <option key={f.id} value={f.id}>{f.nome}{f.sigla ? ` (${f.sigla})` : ''}</option>)}
                   </select>
+                  {!g.fazendaId && (
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[9px] flex-shrink-0" style={{ color: '#94a3b8' }}>ou criar nova p/ o produtor:</span>
+                      <select value={g.clienteNovo}
+                        onChange={e => setGrupos(gs => gs!.map((x, xi) => xi === i ? { ...x, clienteNovo: e.target.value } : x))}
+                        className="flex-1 rounded px-1.5 py-1 text-[10px] outline-none min-w-0"
+                        style={{ background: '#0f2240', color: '#e2e8f0', border: '1px solid #2e5fa3' }}>
+                        <option value="">— produtor —</option>
+                        {clientes.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                      </select>
+                      <button onClick={() => criarFazendaDoGrupo(i)} disabled={!g.clienteNovo}
+                        className="text-[10px] font-bold px-2 py-1 rounded whitespace-nowrap"
+                        style={{ background: g.clienteNovo ? '#166534' : '#1a3a6b', color: g.clienteNovo ? '#fff' : '#64748b' }}>
+                        ➕ Criar {g.prefixo}
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))}
               <button onClick={religar} className="w-full py-1.5 rounded text-[11px] font-bold text-white" style={{ background: '#166534' }}>

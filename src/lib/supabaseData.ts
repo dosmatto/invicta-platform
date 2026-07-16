@@ -143,11 +143,133 @@ function seedEspelho(key: string, recs: unknown[]): void {
   espelhoSb[key] = m;
 }
 
+// ── BOOT INCREMENTAL ─────────────────────────────────────────────────────────
+// Baixar a base INTEIRA (~MBs) a cada abertura custava ~9s de rede. Guardamos a
+// marca d'água (maior atualizado_em visto) e, nas aberturas seguintes, baixamos
+// SÓ o que mudou (2 counts + 2 consultas de delta ≈ <1s). Segurança:
+//  - counts da nuvem ≠ counts locais → cai pro boot COMPLETO (pega exclusões);
+//  - pendências locais (inv_sync_sujo) → boot COMPLETO (merge/espelho corretos);
+//  - 1 boot completo forçado a cada 24h (reconcilia qualquer resíduo).
+const MARCA_KEY = 'inv_boot_marca';
+const FULL_EM_KEY = 'inv_boot_full_em';
+
+function maxIso(a: string | null, b: string | null): string | null {
+  if (!a) return b; if (!b) return a; return a > b ? a : b;
+}
+
+async function bootIncremental(
+  sb: NonNullable<ReturnType<typeof getSupabase>>,
+  keysLista: string[], keysObj: string[], marca: string,
+): Promise<boolean> {
+  const t0 = performance.now();
+  const todasCols = [...keysLista, ...keysObj];
+
+  // counts + deltas em PARALELO (4 consultas pequenas)
+  const [cT, cK, mudTal, mudKv] = await Promise.all([
+    sb.from('talhoes').select('id', { count: 'exact', head: true }),
+    sb.from('app_kv').select('item_id', { count: 'exact', head: true }).in('colecao', todasCols),
+    lerTudoPaginado<{ dados: unknown; atualizado_em: string | null }>(
+      sb, 'talhoes', 'dados, atualizado_em', q => q.gt('atualizado_em', marca)),
+    lerTudoPaginado<{ colecao: string; item_id: string; dados: unknown; atualizado_em: string | null }>(
+      sb, 'app_kv', 'colecao, item_id, dados, atualizado_em', q => q.in('colecao', todasCols).gt('atualizado_em', marca)),
+  ]);
+  if (cT.error || cK.error) throw (cT.error ?? cK.error);
+
+  // counts locais têm que bater — senão houve exclusão/estado divergente → completo
+  let localKv = 0;
+  for (const key of keysLista) { if (key !== TABELA_TALHOES_KEY) localKv += lerLocalLista(key).length; }
+  for (const key of keysObj) { if (lerRawLocal(key) != null) localKv += 1; }
+  const localTal = lerLocalLista(TABELA_TALHOES_KEY).length;
+  if ((cT.count ?? -1) !== localTal + contarNovos(mudTal, TABELA_TALHOES_KEY) ||
+      (cK.count ?? -1) !== localKv + contarNovosKv(mudKv, keysLista, keysObj)) {
+    return false;   // divergência → boot completo reconcilia
+  }
+
+  let novaMarca: string | null = marca;
+
+  // aplica delta dos talhões por id
+  if (mudTal.length) {
+    const lista = lerLocalLista(TABELA_TALHOES_KEY);
+    const porId = new Map(lista.map(r => [String((r as Rec).id), r]));
+    for (const row of mudTal) { porId.set(String((row.dados as Rec).id), row.dados); novaMarca = maxIso(novaMarca, row.atualizado_em); }
+    const final = [...porId.values()];
+    gravarSeMudou(TABELA_TALHOES_KEY, JSON.stringify(final));
+    seedEspelho(TABELA_TALHOES_KEY, final);
+  } else {
+    seedEspelho(TABELA_TALHOES_KEY, lerLocalLista(TABELA_TALHOES_KEY));
+  }
+
+  // aplica delta do app_kv por coleção
+  const porColecao = new Map<string, { item_id: string; dados: unknown }[]>();
+  for (const row of mudKv) {
+    (porColecao.get(row.colecao) ?? porColecao.set(row.colecao, []).get(row.colecao)!)
+      .push({ item_id: row.item_id, dados: row.dados });
+    novaMarca = maxIso(novaMarca, row.atualizado_em);
+  }
+  for (const key of keysLista) {
+    if (key === TABELA_TALHOES_KEY) continue;
+    const mudancas = porColecao.get(key);
+    if (mudancas?.length) {
+      const lista = lerLocalLista(key);
+      const porId = new Map(lista.map(r => [String((r as Rec).id), r]));
+      for (const m of mudancas) porId.set(m.item_id, m.dados);
+      const final = [...porId.values()];
+      gravarSeMudou(key, JSON.stringify(final));
+      seedEspelho(key, final);
+    } else {
+      seedEspelho(key, lerLocalLista(key));
+    }
+  }
+  for (const key of keysObj) {
+    const o = porColecao.get(key)?.find(m => m.item_id === ITEM_OBJ)?.dados as { valor?: string } | undefined;
+    if (o?.valor != null) gravarSeMudou(key, o.valor);
+  }
+
+  if (novaMarca) localStorage.setItem(MARCA_KEY, novaMarca);
+  console.info(`[boot] INCREMENTAL: ${mudTal.length + mudKv.length} mudança(s) em ${Math.round(performance.now() - t0)}ms`);
+  return true;
+}
+
+// Quantos registros do delta são NOVOS (não existem no local) — entram na conta
+// de counts para não confundir "linha nova na nuvem" com divergência.
+function contarNovos(mud: { dados: unknown }[], key: string): number {
+  if (!mud.length) return 0;
+  const ids = new Set(lerLocalLista(key).map(r => String((r as Rec).id)));
+  return mud.filter(m => !ids.has(String((m.dados as Rec).id))).length;
+}
+function contarNovosKv(
+  mud: { colecao: string; item_id: string }[], keysLista: string[], keysObj: string[],
+): number {
+  if (!mud.length) return 0;
+  let n = 0;
+  const idsPorCol = new Map<string, Set<string>>();
+  for (const m of mud) {
+    if (m.colecao === TABELA_TALHOES_KEY) continue;
+    if (keysObj.includes(m.colecao)) { if (lerRawLocal(m.colecao) == null) n++; continue; }
+    if (!keysLista.includes(m.colecao)) continue;
+    let ids = idsPorCol.get(m.colecao);
+    if (!ids) { ids = new Set(lerLocalLista(m.colecao).map(r => String((r as Rec).id))); idsPorCol.set(m.colecao, ids); }
+    if (!ids.has(m.item_id)) n++;
+  }
+  return n;
+}
+
 // ── BOOT: hidrata o localStorage a partir do Postgres ────────────────────────
 export async function bootSupabaseData(keysLista: string[], keysObj: string[]): Promise<void> {
   const sb = getSupabase();
   if (!sb) throw new Error('Supabase não configurado.');
   const t0 = performance.now();
+
+  // Caminho INCREMENTAL: marca presente, sem pendências locais e boot completo
+  // recente (<24h). Qualquer divergência cai no caminho completo abaixo.
+  const marca = typeof window !== 'undefined' ? localStorage.getItem(MARCA_KEY) : null;
+  const fullEm = Number(localStorage.getItem(FULL_EM_KEY) || 0);
+  const semPendencias = Object.keys(lerSujos()).length === 0;
+  if (marca && semPendencias && Date.now() - fullEm < 24 * 3600e3) {
+    try {
+      if (await bootIncremental(sb, keysLista, keysObj, marca)) { bootCompleto = true; return; }
+    } catch (e) { console.warn('[boot] incremental falhou — completo:', e); }
+  }
 
   await seedSeVazio(keysLista, keysObj);   // D3: 1ª vez carrega o Postgres do local
 
@@ -159,19 +281,23 @@ export async function bootSupabaseData(keysLista: string[], keysObj: string[]): 
   // pelo usuário ENQUANTO ele rodava.
   const ehSujo = (key: string) => !!lerSujos()[key];
 
-  // Talhões (tabela dedicada) → inv_talhoes — paginado (pode passar de 1000).
-  const talhoes = await lerTudoPaginado<{ dados: unknown }>(sb, 'talhoes', 'dados');
+  // Talhões + app_kv em PARALELO (antes eram sequenciais — 2 esperas somadas),
+  // trazendo atualizado_em p/ registrar a marca d'água do boot incremental.
+  let novaMarca: string | null = null;
+  const [talhoes, kv] = await Promise.all([
+    lerTudoPaginado<{ dados: unknown; atualizado_em: string | null }>(sb, 'talhoes', 'dados, atualizado_em'),
+    lerTudoPaginado<{ colecao: string; item_id: string; dados: unknown; atualizado_em: string | null }>(
+      sb, 'app_kv', 'colecao, item_id, dados, atualizado_em', q => q.in('colecao', [...keysLista, ...keysObj])),
+  ]);
   const tRede1 = performance.now();
   {
+    for (const r of talhoes) novaMarca = maxIso(novaMarca, r.atualizado_em);
     const nuvem = talhoes.map(r => r.dados);
     const final = ehSujo(TABELA_TALHOES_KEY) ? mesclarPorId(nuvem, lerLocalLista(TABELA_TALHOES_KEY)) : nuvem;
     gravarSeMudou(TABELA_TALHOES_KEY, JSON.stringify(final));
     seedEspelho(TABELA_TALHOES_KEY, nuvem);   // espelho = estado da NUVEM (diffs certeiros)
   }
-
-  // app_kv → só as coleções de listas/config (os MAPAS ficam fora do boot) — paginado.
-  const kv = await lerTudoPaginado<{ colecao: string; item_id: string; dados: unknown }>(
-    sb, 'app_kv', 'colecao, item_id, dados', q => q.in('colecao', [...keysLista, ...keysObj]));
+  for (const r of kv) novaMarca = maxIso(novaMarca, r.atualizado_em);
   const tRede2 = performance.now();
   const porColecao: Record<string, unknown[]> = {};
   const objs: Record<string, unknown> = {};
@@ -193,8 +319,13 @@ export async function bootSupabaseData(keysLista: string[], keysObj: string[]): 
   }
 
   bootCompleto = true;   // hidratação íntegra → a partir daqui o push pode podar órfãos com segurança
+  // registra a marca d'água — as próximas aberturas baixam só o delta
+  try {
+    if (novaMarca) localStorage.setItem(MARCA_KEY, novaMarca);
+    localStorage.setItem(FULL_EM_KEY, String(Date.now()));
+  } catch {}
   const tFim = performance.now();
-  console.info(`[boot] talhões: ${talhoes.length} em ${Math.round(tRede1 - t0)}ms · app_kv: ${kv.length} em ${Math.round(tRede2 - tRede1)}ms · gravação local: ${Math.round(tFim - tRede2)}ms · total ${Math.round(tFim - t0)}ms`);
+  console.info(`[boot] COMPLETO: talhões ${talhoes.length} + app_kv ${kv.length} em ${Math.round(tRede2 - t0)}ms (paralelo) · gravação local ${Math.round(tFim - tRede2)}ms · total ${Math.round(tFim - t0)}ms`);
 
   // Re-envia as pendências recuperadas (mescladas acima). Fire-and-forget: a
   // fila serializa, marca/limpa a pendência e o SyncBadge mostra o estado.
