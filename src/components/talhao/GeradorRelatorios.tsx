@@ -210,35 +210,7 @@ export function GeradorRelatorios({ safraNome }: { safraNome?: string } = {}) {
             Monte um <strong style={{ color: '#cbd5e1' }}>PDF único</strong> com as seções abaixo. As duas vêm marcadas — <strong style={{ color: '#cbd5e1' }}>desmarque uma</strong> para gerar só a outra.
           </p>
 
-          {/* ── Seção RECOMENDAÇÃO ── */}
-          <SecaoHeader on={incluirRec} disabled={!temRec} onToggle={() => setIncluirRec(v => !v)}
-            icon={Wand2} cor="#a78bfa" titulo="Recomendação" sub={temRec ? `${nSelCen}/${cenarios.length} selecionada${cenarios.length === 1 ? '' : 's'}` : 'nenhuma salva'} />
-          {temRec ? (
-            incluirRec && (
-              <div className="space-y-1 pl-1">
-                {cenarios.map(c => {
-                  const on = selCen.has(c.id);
-                  return (
-                    <div key={c.id} className="flex items-center gap-2 p-2 rounded-lg" style={{ background: '#061525', border: `1px solid ${on ? '#2a2350' : '#0f2240'}` }}>
-                      <button onClick={() => toggleCen(c.id)} title={on ? 'Remover' : 'Incluir'}>
-                        {on ? <CheckSquare size={16} style={{ color: '#a78bfa' }} /> : <Square size={16} style={{ color: '#475569' }} />}
-                      </button>
-                      <div className="flex-1 min-w-0">
-                        <span className="text-xs font-bold" style={{ color: on ? '#e2e8f0' : '#64748b' }}>{c.nome}</span>
-                        <span className="text-[10px] ml-1.5" style={{ color: '#64748b' }}>· {c.doses.length} {c.doses.length === 1 ? 'mapa' : 'mapas'}{c.origem === 'equacao' ? ' · equação avulsa' : ''}</span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )
-          ) : (
-            <p className="text-[10px] pl-1" style={{ color: '#475569' }}>
-              Nenhuma recomendação gerada nesta safra. Crie na aba <strong style={{ color: '#64748b' }}>Recomendações</strong> (o “Book”) para incluí-la aqui.
-            </p>
-          )}
-
-          {/* ── Seção FERTILIDADE ── */}
+          {/* ── Seção FERTILIDADE (vem primeiro no PDF) ── */}
           <SecaoHeader on={incluirFert} disabled={!temFert} onToggle={() => setIncluirFert(v => !v)}
             icon={FlaskConical} cor="#4ade80" titulo="Fertilidade" sub={temFert ? `${nSelFert}/${ctx!.elementos.length} selecionado${ctx!.elementos.length === 1 ? '' : 's'}` : 'nenhum mapa'} />
           {temFert ? (
@@ -270,6 +242,34 @@ export function GeradorRelatorios({ safraNome }: { safraNome?: string } = {}) {
           ) : (
             <p className="text-[10px] pl-1" style={{ color: '#475569' }}>
               Nenhum mapa de fertilidade salvo. Processe na aba <strong style={{ color: '#64748b' }}>Fertilidade</strong> (logado) para incluí-la aqui.
+            </p>
+          )}
+
+          {/* ── Seção RECOMENDAÇÃO (vem depois no PDF) ── */}
+          <SecaoHeader on={incluirRec} disabled={!temRec} onToggle={() => setIncluirRec(v => !v)}
+            icon={Wand2} cor="#a78bfa" titulo="Recomendação" sub={temRec ? `${nSelCen}/${cenarios.length} selecionada${cenarios.length === 1 ? '' : 's'}` : 'nenhuma salva'} />
+          {temRec ? (
+            incluirRec && (
+              <div className="space-y-1 pl-1">
+                {cenarios.map(c => {
+                  const on = selCen.has(c.id);
+                  return (
+                    <div key={c.id} className="flex items-center gap-2 p-2 rounded-lg" style={{ background: '#061525', border: `1px solid ${on ? '#2a2350' : '#0f2240'}` }}>
+                      <button onClick={() => toggleCen(c.id)} title={on ? 'Remover' : 'Incluir'}>
+                        {on ? <CheckSquare size={16} style={{ color: '#a78bfa' }} /> : <Square size={16} style={{ color: '#475569' }} />}
+                      </button>
+                      <div className="flex-1 min-w-0">
+                        <span className="text-xs font-bold" style={{ color: on ? '#e2e8f0' : '#64748b' }}>{c.nome}</span>
+                        <span className="text-[10px] ml-1.5" style={{ color: '#64748b' }}>· {c.doses.length} {c.doses.length === 1 ? 'mapa' : 'mapas'}{c.origem === 'equacao' ? ' · equação avulsa' : ''}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )
+          ) : (
+            <p className="text-[10px] pl-1" style={{ color: '#475569' }}>
+              Nenhuma recomendação gerada nesta safra. Crie na aba <strong style={{ color: '#64748b' }}>Recomendações</strong> (o “Book”) para incluí-la aqui.
             </p>
           )}
 

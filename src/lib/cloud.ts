@@ -101,7 +101,20 @@ const KEYS_LISTA_CAMPO = KEYS_LISTA.filter(k => !KEYS_PULAR_CAMPO.has(k));
 export async function bootCloudCampo(): Promise<boolean> {
   if (typeof window === 'undefined') return false;
   if (!usarDadosSupabase()) return false;
-  for (const k of KEYS_PULAR_CAMPO) { try { localStorage.removeItem(k); } catch { /* segue */ } }
+  // Limpa as coleções pesadas que boots antigos deixaram; anota se removeu
+  // alguma (= este aparelho vinha do boot completo antigo).
+  let limpouPesada = false;
+  for (const k of KEYS_PULAR_CAMPO) {
+    try { if (localStorage.getItem(k) != null) { localStorage.removeItem(k); limpouPesada = true; } } catch { /* segue */ }
+  }
+  // Quando o localStorage estava CHEIO, gravações da base (produtores/fazendas/
+  // talhões) falhavam no meio por falta de espaço → a lista local ficava PARCIAL
+  // e o boot incremental (só delta) não a repara. Ao liberar espaço pela 1ª vez,
+  // força um boot COMPLETO (apaga a marca d'água) para re-baixar a base inteira.
+  if (limpouPesada) {
+    try { localStorage.removeItem('inv_boot_marca'); localStorage.removeItem('inv_boot_full_em'); } catch { /* segue */ }
+    console.log('[nuvem] campo: coleções pesadas limpas — forçando boot completo para repor a base.');
+  }
   try {
     await bootSupabaseData(KEYS_LISTA_CAMPO, KEYS_OBJ);
     ativo = true;

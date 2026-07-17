@@ -250,7 +250,7 @@ function kv(doc: JsPDF, x: number, w: number, y: number, k: string, v: string, c
   return y + 5;
 }
 
-async function desenharPaginaOficial(doc: JsPDF, dose: DoseCalculada, cenNome: string, ctx: Ctx, logo: HTMLImageElement | null) {
+async function desenharPaginaOficial(doc: JsPDF, dose: DoseCalculada, cenNome: string, ctx: Ctx, logo: HTMLImageElement | null, numero: number) {
   const W = 297, H = 210, M = 6;
   let mapImg: string | null = null;
   try { mapImg = await capturarMapaFertilidade({ rasterPng: colorirDose(dose.grid, dose.estilo).dataUrl, bounds: dose.bounds, poligono: ctx.poligono, valores: VAZIO, satelite: true, corLimite: '#ffffff', larguraPx: 900, alturaPx: 805 }); } catch { /* segue */ }
@@ -269,9 +269,13 @@ async function desenharPaginaOficial(doc: JsPDF, dose: DoseCalculada, cenNome: s
   }
 
   const SX = M, SW = 82; let y = 22;
-  doc.setFontSize(11); doc.setTextColor(...GREEN); doc.setFont('helvetica', 'bold'); doc.text('Recomendação oficial', SX, y); y += 4.2;
-  // subtítulo — nome da EQUAÇÃO que gerou esta dose (método/fórmula usado)
-  if (dose.nomeEquacao) {
+  // Título = "NN - produto" (ex.: "01 - Calcário", "10 - <fórmula>"). O número
+  // é a posição do mapa dentro da recomendação (ordem das equações).
+  const rotuloMapa = dose.produto || dose.nomeEquacao || 'Recomendação';
+  const titulo = `${String(numero).padStart(2, '0')} - ${rotuloMapa}`;
+  doc.setFontSize(11); doc.setTextColor(...GREEN); doc.setFont('helvetica', 'bold'); doc.text(san(titulo), SX, y, { maxWidth: SW }); y += 4.2;
+  // subtítulo — nome da EQUAÇÃO/fórmula, quando acrescenta info além do rótulo
+  if (dose.nomeEquacao && dose.nomeEquacao !== rotuloMapa) {
     doc.setFontSize(7.5); doc.setTextColor(...GRAY); doc.setFont('helvetica', 'normal');
     doc.text(san(dose.nomeEquacao), SX, y, { maxWidth: SW });
     y += 3.4;
@@ -337,11 +341,13 @@ export async function renderBookOficialNoDoc(
   let precisaPagina = opts?.novaPaginaAntes ?? false;
   let algum = false;
   for (const cen of cenarios) {
+    let numero = 0;   // numeração dos mapas reinicia a cada recomendação (01, 02, …)
     for (const dose of cen.doses) {
+      numero++;
       if (precisaPagina) doc.addPage();
       precisaPagina = true;
       algum = true;
-      await desenharPaginaOficial(doc, dose, cen.nome, ctx, logo);
+      await desenharPaginaOficial(doc, dose, cen.nome, ctx, logo, numero);
     }
   }
   if (!algum) throw new Error('As recomendações não geraram nenhuma dose.');

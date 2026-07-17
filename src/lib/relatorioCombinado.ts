@@ -28,13 +28,14 @@ export async function gerarRelatorioCombinado(args: ArgsRelatorioCombinado): Pro
   try {
     const { jsPDF } = await import('jspdf');
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4', compress: true });
+    // Ordem: FERTILIDADE primeiro (capa + elementos), depois RECOMENDAÇÃO.
     let temConteudo = false;
-    if (temRec) {
-      await renderBookOficialNoDoc(doc, args.recomendacao!, { novaPaginaAntes: false });
+    if (temFert) {
+      await renderFertilidadeNoDoc(doc, args.fertilidade!, { novaPaginaAntes: false, comCapa: true });
       temConteudo = true;
     }
-    if (temFert) {
-      await renderFertilidadeNoDoc(doc, args.fertilidade!, { novaPaginaAntes: temConteudo, comCapa: true });
+    if (temRec) {
+      await renderBookOficialNoDoc(doc, args.recomendacao!, { novaPaginaAntes: temConteudo });
       temConteudo = true;
     }
     const paginas = doc.getNumberOfPages();
