@@ -80,6 +80,39 @@ export async function bootCloud(): Promise<boolean> {
   return ativo;
 }
 
+// Coleções PESADAS ou exclusivas da plataforma que o app de CAMPO (Coleta) NÃO
+// lê. Baixá-las no celular estourava o localStorage ("armazenamento cheio") —
+// só inv_condutividade já passa de 2 MB. O campo é READ-ONLY nelas (cria apenas
+// coletas/medições/leituras, que têm sync próprio por doc), então não baixá-las
+// não afeta a nuvem nem a sincronização.
+const KEYS_PULAR_CAMPO = new Set<string>([
+  'inv_condutividade', 'inv_produtividade', 'inv_mde', 'inv_mde_camadas',
+  'inv_composicoes', 'inv_meap_ambientes', 'inv_meap_zoneamentos',
+  'inv_lab', 'inv_compactacao', 'inv_precos', 'inv_paletas', 'inv_estilo_presets',
+  'inv_bib_laboratorios', 'inv_bib_perfis', 'inv_bib_preferencias-analise',
+  'inv_bib_equacoes', 'inv_bib_recomendacoes',
+  'inv_padroes_elem', 'inv_padroes_amos',
+]);
+const KEYS_LISTA_CAMPO = KEYS_LISTA.filter(k => !KEYS_PULAR_CAMPO.has(k));
+
+// Boot do app de CAMPO: hidrata SÓ as coleções que a Coleta usa e, antes,
+// APAGA do localStorage as coleções pesadas que boots antigos (versão anterior)
+// deixaram — é o que libera o "armazenamento cheio" já na próxima abertura.
+export async function bootCloudCampo(): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
+  if (!usarDadosSupabase()) return false;
+  for (const k of KEYS_PULAR_CAMPO) { try { localStorage.removeItem(k); } catch { /* segue */ } }
+  try {
+    await bootSupabaseData(KEYS_LISTA_CAMPO, KEYS_OBJ);
+    ativo = true;
+    console.log(`[nuvem] ATIVA (campo) — ${KEYS_LISTA_CAMPO.length} coleções; ${KEYS_PULAR_CAMPO.size} pesadas puladas/limpas.`);
+  } catch (e) {
+    console.warn('[nuvem] Supabase indisponível, usando dados locais:', e);
+    ativo = false;
+  }
+  return ativo;
+}
+
 // Espelha uma gravação de lista no Supabase.
 export function cloudPushLista(key: string, lista: unknown[]) {
   if (!KEYS_LISTA.includes(key)) return;

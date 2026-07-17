@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.0.1': [
+    'APP DE CAMPO (COLETA) — FIM DO "ARMAZENAMENTO CHEIO": o app de campo baixava para o celular a BASE INTEIRA da plataforma (condutividade ~2 MB, produtividade, MDE, composições, zonas/MEAP, laudos, preços, equações…) — coleções que a Coleta nem usa — e o armazenamento do navegador estourava. Agora o campo baixa SÓ o que precisa (produtores, fazendas, talhões, grades, safras, legendas e acesso) e, ao abrir, APAGA do aparelho as coleções pesadas que versões anteriores tinham deixado — liberando o espaço na hora. Nada muda na nuvem: o campo só lê essas coleções (as coletas/medições/fotos continuam com sincronização própria).',
+  ],
   '2.0.0': [
     'RELATÓRIO ÚNICO: RECOMENDAÇÃO + FERTILIDADE: a aba Relatórios agora monta um PDF só com DUAS seções — Recomendação (as recomendações/cenários já gerados na aba Recomendações do talhão+safra) e Fertilidade (os mapas de elementos, como antes). As duas vêm MARCADAS por padrão; basta desmarcar uma para gerar só a outra. A Recomendação sai primeiro (1 página por mapa de dose), seguida da capa + páginas da Fertilidade, tudo em A4 paisagem. Cada recomendação e cada elemento é selecionável individualmente; a contagem de páginas aparece no botão. O histórico guarda as duas seções e regenera o PDF combinado ao reabrir.',
   ],

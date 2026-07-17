@@ -3,7 +3,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { seedIfEmpty } from '@/lib/seed';
-import { bootCloud } from '@/lib/cloud';
+import { bootCloud, bootCloudCampo } from '@/lib/cloud';
 import { empresaIfEmpty, adotarEmpresasLocais, garantirEmpresaInvicta, uidUsuario, ehOwner, seedPapeis, seedPermissoes, seedPlanos, papelDoEmail, papelDoUsuario, emailUsuario, precisaTrocarSenha, meuRegistro, loginExpirado } from '@/lib/empresa';
 import { limparBaseOperacional } from '@/lib/admin/manutencao';
 import { TrocaSenhaObrigatoria } from '@/components/auth/TrocaSenhaObrigatoria';
@@ -120,7 +120,7 @@ const AppContext = createContext<AppContextType>({
   setFertilidadeLabels: () => {},
 });
 
-export function AppProvider({ children, redirectProdutorParaPortal }: { children: ReactNode; redirectProdutorParaPortal?: boolean }) {
+export function AppProvider({ children, redirectProdutorParaPortal, modoCampo }: { children: ReactNode; redirectProdutorParaPortal?: boolean; modoCampo?: boolean }) {
   const router = useRouter();
   const [activePanel, setActivePanel] = useState<string | null>('dashboard');
   const [mapMode, setMapMode] = useState<MapMode>('satellite');
@@ -167,7 +167,7 @@ export function AppProvider({ children, redirectProdutorParaPortal }: { children
       // 20s depois mesmo com o boot já concluído (v1.98: aviso falso no console).
       let timerBoot: ReturnType<typeof setTimeout> | undefined;
       await Promise.race([
-        bootCloud().catch(() => {}),
+        (modoCampo ? bootCloudCampo() : bootCloud()).catch(() => {}),
         new Promise<void>(res => { timerBoot = setTimeout(() => {
           console.warn('[nuvem] boot demorou >20s — entrando com dados locais; hidratação segue em 2º plano.');
           res();
@@ -192,7 +192,8 @@ export function AppProvider({ children, redirectProdutorParaPortal }: { children
       setDadosProntos(true);
     });
     return () => unsub();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modoCampo]);
 
   // Console-only (sem botão, decisão do usuário): admin pode zerar a base
   // operacional com  await invLimparBase('APAGAR TUDO')  — preserva a Biblioteca.

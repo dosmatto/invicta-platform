@@ -12,7 +12,7 @@ import {
   Talhao, GradeAmostragem, PontoAmostragem,
 } from '@/lib/store';
 import { emailUsuario, logout, modoOffline } from '@/lib/auth';
-import { bootCloud } from '@/lib/cloud';
+import { bootCloudCampo } from '@/lib/cloud';
 import {
   RegistroColeta, StatusPonto, COR_STATUS, ROTULO_STATUS,
   getColetas, upsertColeta, idColeta, pushColetasPendentes, pullColetas, pushMedicoesPendentes,
@@ -137,7 +137,7 @@ export default function ColetaPage() {
       const fotos = await subirFotosPendentes();
       const medicoes = await pushMedicoesPendentes().catch(() => 0);
       const leituras = await pushLeiturasCompactPendentes().catch(() => 0);
-      await bootCloud().catch(() => {});
+      await bootCloudCampo().catch(() => {});
       let recebidas = 0;
       if (sel.gradeId) recebidas = await pullColetas(sel.gradeId).catch(() => 0);
       marcarUltimoSync();
