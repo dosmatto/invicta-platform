@@ -11,15 +11,18 @@ export interface RegistroRelatorio {
   id: string;
   talhaoId: string;
   safra: string;
-  tipo: string;          // 'Fertilidade'
+  tipo: string;          // 'Fertilidade' | 'Recomendação' | 'Recomendação + Fertilidade'
   titulo: string;        // ex.: "Relatório completo" / "Relatório (3 mapas)"
-  nuts: string[];        // elementos (ids) p/ regenerar o PDF, na ordem
+  nuts: string[];        // elementos (ids) da seção Fertilidade p/ regenerar, na ordem
   elementos: string[];   // símbolos (exibição)
   satelite: boolean;
   valores: boolean;
   paginas: number;
   geradoEm: number;      // Date.now()
   geradoPor: string;     // e-mail do usuário
+  // Combinado (opcional; ausente em registros antigos = só Fertilidade):
+  cenarioIds?: string[]; // ids dos cenários da seção Recomendação p/ regenerar
+  cenarioNomes?: string[]; // nomes das recomendações (exibição)
 }
 
 const COL = 'inv_relatorios';

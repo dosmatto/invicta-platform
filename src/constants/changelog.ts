@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.0.0': [
+    'RELATÓRIO ÚNICO: RECOMENDAÇÃO + FERTILIDADE: a aba Relatórios agora monta um PDF só com DUAS seções — Recomendação (as recomendações/cenários já gerados na aba Recomendações do talhão+safra) e Fertilidade (os mapas de elementos, como antes). As duas vêm MARCADAS por padrão; basta desmarcar uma para gerar só a outra. A Recomendação sai primeiro (1 página por mapa de dose), seguida da capa + páginas da Fertilidade, tudo em A4 paisagem. Cada recomendação e cada elemento é selecionável individualmente; a contagem de páginas aparece no botão. O histórico guarda as duas seções e regenera o PDF combinado ao reabrir.',
+  ],
   '1.99.0': [
     'FIM DO AVISO FALSO "boot demorou >20s": o temporizador de segurança do login (que entra com dados locais se a nuvem travar) não era cancelado quando o boot terminava rápido — então ele disparava 20 s depois e escrevia esse aviso no console mesmo com a abertura tendo levado ~1 s. Agora o timer é cancelado assim que o boot conclui; o aviso só aparece se a nuvem realmente demorar mais de 20 s.',
   ],

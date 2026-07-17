@@ -318,8 +318,14 @@ async function desenharPaginaOficial(doc: JsPDF, dose: DoseCalculada, cenNome: s
 }
 
 // Book: 1 página oficial por dose (produto) de cada cenário/recomendação. 1 PDF.
-export async function montarBookOficial(cenarios: Cenario[]): Promise<Blob> {
-  if (cenarios.length === 0) throw new Error('Nenhuma recomendação selecionada.');
+// Renderiza a seção de Recomendações (1 página por dose) num doc jsPDF JÁ
+// EXISTENTE (A4 paisagem). Reutilizado pelo book só-de-recomendações
+// (montarBookOficial) e pelo relatório COMBINADO (relatorioCombinado.ts).
+// `novaPaginaAntes` = o doc já tem conteúdo antes desta seção.
+export async function renderBookOficialNoDoc(
+  doc: JsPDF, cenarios: Cenario[], opts?: { novaPaginaAntes?: boolean },
+): Promise<void> {
+  if (cenarios.length === 0) return;
   const tId = cenarios[0].talhaoId, safra = cenarios[0].safra;
   const tal = getTalhoes().find(t => t.id === tId) ?? null;
   const faz = tal ? getFazendas().find(f => f.id === tal.fazendaId) ?? null : null;
@@ -328,16 +334,23 @@ export async function montarBookOficial(cenarios: Cenario[]): Promise<Blob> {
   if (!poligono) throw new Error('Talhão sem polígono salvo — não dá para desenhar os mapas.');
   const ctx: Ctx = { fazenda: faz?.nome ?? '', talhao: tal?.nome ?? '', safra, cultura: getPlantio(tId, safra), produtor: cli?.nome ?? '', areaHa: tal?.areaHa ?? 0, poligono };
   const logo = await carregarImg('/images/logo-branca.png').catch(() => null);
-  const { jsPDF } = await import('jspdf');
-  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4', compress: true });
-  let primeira = true;
+  let precisaPagina = opts?.novaPaginaAntes ?? false;
+  let algum = false;
   for (const cen of cenarios) {
     for (const dose of cen.doses) {
-      if (!primeira) doc.addPage();
-      primeira = false;
+      if (precisaPagina) doc.addPage();
+      precisaPagina = true;
+      algum = true;
       await desenharPaginaOficial(doc, dose, cen.nome, ctx, logo);
     }
   }
-  if (primeira) throw new Error('As recomendações não geraram nenhuma dose.');
+  if (!algum) throw new Error('As recomendações não geraram nenhuma dose.');
+}
+
+export async function montarBookOficial(cenarios: Cenario[]): Promise<Blob> {
+  if (cenarios.length === 0) throw new Error('Nenhuma recomendação selecionada.');
+  const { jsPDF } = await import('jspdf');
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4', compress: true });
+  await renderBookOficialNoDoc(doc, cenarios, { novaPaginaAntes: false });
   return doc.output('blob');
 }

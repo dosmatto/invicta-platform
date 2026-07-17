@@ -313,20 +313,40 @@ async function desenharCapa(doc: JsPDF, paginas: DadosRelatorioFert[], logos: Lo
   doc.setFont('helvetica', 'bold'); doc.text('www.invictaap.com.br', W - M, H - 3.8, { align: 'right' });
 }
 
+// Renderiza a seção de Fertilidade (capa opcional + 1 página por elemento) num
+// doc jsPDF JÁ EXISTENTE (A4 paisagem). Reutilizado tanto pelo PDF só-de-
+// fertilidade (gerarDoc) quanto pelo relatório COMBINADO (relatorioCombinado.ts).
+// `novaPaginaAntes` = o doc já tem conteúdo (abre nova página antes da 1ª desta
+// seção); `comCapa` inclui a capa-sumário.
+export async function renderFertilidadeNoDoc(
+  doc: JsPDF, paginas: DadosRelatorioFert[], opts?: { novaPaginaAntes?: boolean; comCapa?: boolean },
+): Promise<void> {
+  if (paginas.length === 0) return;
+  for (const p of paginas) { const erro = validarPagina(p); if (erro) throw new Error(erro); }
+  const comCapa = opts?.comCapa ?? true;
+  const logos = await carregarLogos(paginas[0]?.logoClienteUrl);
+  let precisaPagina = opts?.novaPaginaAntes ?? false;
+  if (comCapa) {
+    if (precisaPagina) doc.addPage('a4', 'landscape');
+    await desenharCapa(doc, paginas, logos);
+    precisaPagina = true;
+  }
+  for (const p of paginas) {
+    if (precisaPagina) doc.addPage('a4', 'landscape');
+    await desenharPaginaMapa(doc, p, logos);
+    precisaPagina = true;
+  }
+}
+
 // Núcleo: monta o PDF (1+ páginas), abre em nova aba (com mensagem de erro na
 // aba se falhar) e RETORNA o Blob (para o caller arquivar no Storage).
 async function gerarDoc(paginas: DadosRelatorioFert[], nomeArquivo: string, comCapa = false): Promise<Blob> {
   const aba = typeof window !== 'undefined' ? window.open('', '_blank') : null;
   if (aba) try { aba.document.write('<!doctype html><meta charset="utf-8"><title>Relatório</title><body style="font-family:system-ui,sans-serif;padding:28px;color:#334155"><p>⏳ Gerando o relatório PDF… aguarde alguns segundos (capturando os mapas).</p></body>'); } catch {}
   try {
-    const logos = await carregarLogos(paginas[0]?.logoClienteUrl);
     const { jsPDF } = await import('jspdf');
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4', compress: true });
-    if (comCapa) await desenharCapa(doc, paginas, logos); // página 1 = capa
-    for (let i = 0; i < paginas.length; i++) {
-      if (comCapa || i > 0) doc.addPage('a4', 'landscape');
-      await desenharPaginaMapa(doc, paginas[i], logos);
-    }
+    await renderFertilidadeNoDoc(doc, paginas, { novaPaginaAntes: false, comCapa });
     const nome = nomeArquivo.replace(/[^\w.\-]+/g, '_') + '.pdf';
     const blob = doc.output('blob');
     if (aba) { const url = URL.createObjectURL(blob); aba.location.href = url; setTimeout(() => URL.revokeObjectURL(url), 60000); }

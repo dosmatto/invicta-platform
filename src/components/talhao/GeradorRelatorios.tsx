@@ -13,11 +13,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import { carregarContextoRelatorio, montarPaginas, type ContextoRelatorio } from '@/lib/relatorioDados';
 import { extrairPoligono } from '@/lib/fertilidade';
-import { gerarRelatorioMultiplo } from '@/lib/relatorioFertilidade';
+import { gerarRelatorioCombinado } from '@/lib/relatorioCombinado';
+import { listarCenarios, descomprimirCenario, type Cenario } from '@/lib/recomendacao/cenarios';
 import { salvarRelatorio, listarRelatorios, excluirRelatorio, type RegistroRelatorio } from '@/lib/relatoriosArquivo';
 import { emailUsuario } from '@/lib/auth';
 import { pode } from '@/lib/empresa';
-import { FileDown, Loader2, ChevronUp, ChevronDown, AlertTriangle, CheckSquare, Square, Satellite, Hash, FileStack, History, Trash2, ExternalLink } from 'lucide-react';
+import { FileDown, Loader2, ChevronUp, ChevronDown, AlertTriangle, CheckSquare, Square, Satellite, Hash, History, Trash2, ExternalLink, Wand2, FlaskConical } from 'lucide-react';
 
 export function GeradorRelatorios({ safraNome }: { safraNome?: string } = {}) {
   const { nav, uploadedGeo } = useApp();
@@ -38,6 +39,13 @@ export function GeradorRelatorios({ safraNome }: { safraNome?: string } = {}) {
   const [erro, setErro] = useState('');
   const [aviso, setAviso] = useState('');
 
+  // Seções do relatório combinado (ambas LIGADAS por padrão; desmarcar uma gera
+  // só a outra). A de Recomendação usa os cenários JÁ salvos na nuvem.
+  const [cenarios, setCenarios] = useState<Cenario[]>([]);
+  const [selCen, setSelCen] = useState<Set<string>>(new Set());
+  const [incluirRec, setIncluirRec] = useState(true);
+  const [incluirFert, setIncluirFert] = useState(true);
+
   const [historico, setHistorico] = useState<RegistroRelatorio[]>([]);
 
   const recarregarHistorico = useCallback(async () => {
@@ -47,14 +55,20 @@ export function GeradorRelatorios({ safraNome }: { safraNome?: string } = {}) {
 
   useEffect(() => {
     let cancel = false;
-    if (!nav.talhaoId || !safra) { setCtx(null); setCarregando(false); return; }
+    if (!nav.talhaoId || !safra) { setCtx(null); setCenarios([]); setCarregando(false); return; }
     setCarregando(true); setErro('');
-    carregarContextoRelatorio(nav.talhaoId, safra, extrairPoligono(uploadedGeoRef.current))
-      .then(c => {
+    const talhaoId = nav.talhaoId;
+    Promise.all([
+      carregarContextoRelatorio(talhaoId, safra, extrairPoligono(uploadedGeoRef.current)),
+      listarCenarios(talhaoId, safra).catch(() => [] as Cenario[]),
+    ])
+      .then(([c, cens]) => {
         if (cancel) return;
         setCtx(c);
         setOrdem(c.elementos.map(e => e.nut));
         setSel(new Set(c.elementos.map(e => e.nut)));
+        setCenarios(cens);
+        setSelCen(new Set(cens.map(x => x.id)));
         setCarregando(false);
       })
       .catch(() => { if (!cancel) { setErro('Falha ao carregar os mapas salvos.'); setCarregando(false); } });
@@ -64,40 +78,67 @@ export function GeradorRelatorios({ safraNome }: { safraNome?: string } = {}) {
   useEffect(() => { recarregarHistorico(); }, [recarregarHistorico]);
 
   function toggle(nut: string) { setSel(s => { const n = new Set(s); if (n.has(nut)) n.delete(nut); else n.add(nut); return n; }); }
+  function toggleCen(id: string) { setSelCen(s => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; }); }
   function mover(i: number, dir: -1 | 1) {
     setOrdem(o => { const n = [...o]; const j = i + dir; if (j < 0 || j >= n.length) return o; [n[i], n[j]] = [n[j], n[i]]; return n; });
   }
 
-  // Gera o PDF (abre na aba) e arquiva no histórico. `nuts` = elementos a incluir.
-  async function executar(nuts: string[], completo: boolean) {
-    if (!ctx) return;
-    if (nuts.length === 0) { setErro('Selecione ao menos um mapa.'); return; }
-    setGerando(true); setErro(''); setAviso('');
+  // Diagnóstico na tela (sem F12) de por que a Fertilidade não gerou páginas.
+  function diagnosticoFert(nuts: string[]): string {
+    if (!ctx) return 'contexto não carregado';
+    const resumo = nuts.slice(0, 4).map(n => {
+      const el = ctx.elementos.find(e => e.nut === n);
+      if (!el) return `${n}:sem-elemento`;
+      const ps = el.profundidades.map(p => {
+        const m = ctx.mapas[`${n}__${p}`];
+        if (!m) return `${p}=sem-mapa`;
+        return `${p}=${m.resp?.grid ? 'grid' : (m.resp?.png ? 'png' : 'VAZIO')}`;
+      }).join(',');
+      return `${n}(${ps})`;
+    }).join('  ');
+    return `Polígono: ${ctx.poligono ? 'OK' : 'FALTANDO'}. Mapas: ${resumo}`;
+  }
+
+  // Gera o PDF combinado (Recomendação + Fertilidade, conforme seções ativas),
+  // abre na aba e arquiva no histórico.
+  async function gerarCombinado() {
+    setErro(''); setAviso('');
+    const nomeTalhao = ctx?.talhao ?? nav.talhao;
+    const nutsSel = ordem.filter(n => sel.has(n));
+    const cenSel = cenarios.filter(c => selCen.has(c.id));
+    const usaRec = incluirRec && cenSel.length > 0;
+    const usaFert = incluirFert && nutsSel.length > 0;
+    if (!usaRec && !usaFert) { setErro('Marque ao menos uma seção com itens selecionados (Recomendação ou Fertilidade).'); return; }
+
+    setGerando(true);
     try {
-      const paginas = montarPaginas(ctx, nuts, { satelite, valores });
-      if (paginas.length === 0) {
-        // Diagnóstico na tela (sem precisar de F12): por que zerou.
-        const resumo = nuts.slice(0, 4).map(n => {
-          const el = ctx.elementos.find(e => e.nut === n);
-          if (!el) return `${n}:sem-elemento`;
-          const ps = el.profundidades.map(p => {
-            const m = ctx.mapas[`${n}__${p}`];
-            if (!m) return `${p}=sem-mapa`;
-            return `${p}=${m.resp?.grid ? 'grid' : (m.resp?.png ? 'png' : 'VAZIO')}`;
-          }).join(',');
-          return `${n}(${ps})`;
-        }).join('  ');
-        setErro(`Sem páginas. Polígono: ${ctx.poligono ? 'OK' : 'FALTANDO'}. Mapas: ${resumo}`);
-        return;
+      // Seção Fertilidade: monta as páginas dos elementos escolhidos.
+      let paginasFert: ReturnType<typeof montarPaginas> = [];
+      if (usaFert && ctx) {
+        paginasFert = montarPaginas(ctx, nutsSel, { satelite, valores });
+        if (paginasFert.length === 0) { setErro(`Fertilidade sem páginas. ${diagnosticoFert(nutsSel)}`); return; }
       }
-      const elPorNut = Object.fromEntries(ctx.elementos.map(e => [e.nut, e]));
-      const simbolos = nuts.map(n => elPorNut[n]?.simbolo ?? n);
-      await gerarRelatorioMultiplo(paginas, `Relatorio_Fertilidade_${ctx.talhao}_${safra}`);
+      // Seção Recomendação: descomprime os grids dos cenários escolhidos.
+      const recDescompr = usaRec ? await Promise.all(cenSel.map(descomprimirCenario)) : [];
+
+      const { paginas } = await gerarRelatorioCombinado({
+        recomendacao: usaRec ? recDescompr : undefined,
+        fertilidade: usaFert ? paginasFert : undefined,
+        nomeArquivo: `Relatorio_${nomeTalhao}_${safra}`,
+      });
+
+      const elPorNut = ctx ? Object.fromEntries(ctx.elementos.map(e => [e.nut, e])) : {};
+      const tipo = usaRec && usaFert ? 'Recomendação + Fertilidade' : usaRec ? 'Recomendação' : 'Fertilidade';
       try {
         await salvarRelatorio({
-          talhaoId: nav.talhaoId!, safra, tipo: 'Fertilidade',
-          titulo: completo ? 'Relatório completo' : `Relatório (${paginas.length} ${paginas.length === 1 ? 'mapa' : 'mapas'})`,
-          nuts, elementos: simbolos, satelite, valores, paginas: paginas.length, geradoPor: emailUsuario() ?? '—',
+          talhaoId: nav.talhaoId!, safra, tipo,
+          titulo: `Relatório (${paginas} ${paginas === 1 ? 'pág' : 'págs'})`,
+          nuts: usaFert ? nutsSel : [],
+          elementos: usaFert ? nutsSel.map(n => elPorNut[n]?.simbolo ?? n) : [],
+          satelite, valores, paginas,
+          cenarioIds: usaRec ? cenSel.map(c => c.id) : [],
+          cenarioNomes: usaRec ? cenSel.map(c => c.nome) : [],
+          geradoPor: emailUsuario() ?? '—',
         });
         await recarregarHistorico();
       } catch (e) {
@@ -109,16 +150,34 @@ export function GeradorRelatorios({ safraNome }: { safraNome?: string } = {}) {
   }
 
   // Reabre um relatório do histórico REGENERANDO o PDF a partir da configuração
-  // salva (sem Storage). Usa o contexto atual se for o mesmo talhão/safra; senão recarrega.
+  // salva (sem Storage). Regenera as duas seções conforme o que foi arquivado.
   async function abrirRelatorio(reg: RegistroRelatorio) {
     setErro('');
     try {
-      const c = (reg.talhaoId === nav.talhaoId && reg.safra === safra && ctx)
-        ? ctx
-        : await carregarContextoRelatorio(reg.talhaoId, reg.safra, extrairPoligono(uploadedGeoRef.current));
-      const paginas = montarPaginas(c, reg.nuts, { satelite: reg.satelite, valores: reg.valores });
-      if (paginas.length === 0) { setErro('Não há mais mapas salvos para regenerar este relatório.'); return; }
-      await gerarRelatorioMultiplo(paginas, `Relatorio_Fertilidade_${c.talhao}_${reg.safra}`);
+      const mesmoCtx = reg.talhaoId === nav.talhaoId && reg.safra === safra;
+      // Fertilidade
+      let paginasFert: ReturnType<typeof montarPaginas> = [];
+      let nomeTalhao = nav.talhao;
+      if (reg.nuts.length > 0) {
+        const c = (mesmoCtx && ctx) ? ctx : await carregarContextoRelatorio(reg.talhaoId, reg.safra, extrairPoligono(uploadedGeoRef.current));
+        nomeTalhao = c.talhao;
+        paginasFert = montarPaginas(c, reg.nuts, { satelite: reg.satelite, valores: reg.valores });
+      }
+      // Recomendação
+      let recDescompr: Cenario[] = [];
+      if (reg.cenarioIds?.length) {
+        const cens = (mesmoCtx && cenarios.length) ? cenarios : await listarCenarios(reg.talhaoId, reg.safra).catch(() => []);
+        const escolhidos = cens.filter(c => reg.cenarioIds!.includes(c.id));
+        recDescompr = await Promise.all(escolhidos.map(descomprimirCenario));
+      }
+      if (paginasFert.length === 0 && recDescompr.length === 0) {
+        setErro('Não há mais mapas/recomendações salvos para regenerar este relatório.'); return;
+      }
+      await gerarRelatorioCombinado({
+        recomendacao: recDescompr.length ? recDescompr : undefined,
+        fertilidade: paginasFert.length ? paginasFert : undefined,
+        nomeArquivo: `Relatorio_${nomeTalhao}_${reg.safra}`,
+      });
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Falha ao reabrir o relatório.');
     }
@@ -129,61 +188,102 @@ export function GeradorRelatorios({ safraNome }: { safraNome?: string } = {}) {
   if (carregando) return <div className="px-4 py-4 flex items-center gap-2 text-xs" style={{ color: '#64748b' }}><Loader2 size={13} className="animate-spin" /> Carregando mapas salvos na nuvem…</div>;
 
   const elPorNut = ctx ? Object.fromEntries(ctx.elementos.map(e => [e.nut, e])) : {};
-  const nSel = ordem.filter(n => sel.has(n)).length;
-  const semMapas = !ctx || ctx.elementos.length === 0;
+  const nSelFert = ordem.filter(n => sel.has(n)).length;
+  const nSelCen = cenarios.filter(c => selCen.has(c.id)).length;
+  const temFert = !!ctx && ctx.elementos.length > 0;
+  const temRec = cenarios.length > 0;
+
+  // Nº de páginas previstas (recomendação = soma das doses; fertilidade = capa + elementos)
+  const pagsRec = incluirRec ? cenarios.filter(c => selCen.has(c.id)).reduce((s, c) => s + c.doses.length, 0) : 0;
+  const pagsFert = incluirFert && nSelFert > 0 ? nSelFert + 1 : 0;
+  const usaRec = incluirRec && nSelCen > 0;
+  const usaFert = incluirFert && nSelFert > 0;
+  const totalPags = pagsRec + pagsFert;
 
   return (
     <div className="px-4 py-3 space-y-4">
-      {semMapas ? (
-        <Aviso texto="Nenhum mapa de fertilidade salvo na nuvem para este talhão/safra. Processe os mapas na aba Fertilidade (logado) e volte aqui." />
+      {!temFert && !temRec ? (
+        <Aviso texto="Nada salvo na nuvem para este talhão/safra ainda. Gere recomendações na aba Recomendações e/ou processe os mapas na aba Fertilidade (logado) e volte aqui." />
       ) : (
         <div className="space-y-3">
           <p className="text-[11px]" style={{ color: '#94a3b8' }}>
-            Relatório de <strong style={{ color: '#cbd5e1' }}>Fertilidade</strong> — selecione e ordene os mapas. Cada elemento vira uma página num PDF único.
+            Monte um <strong style={{ color: '#cbd5e1' }}>PDF único</strong> com as seções abaixo. As duas vêm marcadas — <strong style={{ color: '#cbd5e1' }}>desmarque uma</strong> para gerar só a outra.
           </p>
 
-          <div className="space-y-1">
-            {ordem.map((nut, i) => {
-              const e = elPorNut[nut]; if (!e) return null;
-              const on = sel.has(nut);
-              return (
-                <div key={nut} className="flex items-center gap-2 p-2 rounded-lg" style={{ background: '#061525', border: `1px solid ${on ? '#1a3a6b' : '#0f2240'}` }}>
-                  <button onClick={() => toggle(nut)} title={on ? 'Remover' : 'Incluir'}>
-                    {on ? <CheckSquare size={16} style={{ color: '#4ade80' }} /> : <Square size={16} style={{ color: '#475569' }} />}
-                  </button>
-                  <div className="flex-1 min-w-0">
-                    <span className="text-xs font-bold" style={{ color: on ? '#e2e8f0' : '#64748b' }}>{e.atributo} ({e.simbolo})</span>
-                    <span className="text-[10px] ml-1.5" style={{ color: '#64748b' }}>· {e.profundidades.join(' / ')} cm</span>
-                  </div>
-                  <button onClick={() => mover(i, -1)} disabled={i === 0} className="p-0.5 disabled:opacity-30" style={{ color: '#93c5fd' }}><ChevronUp size={14} /></button>
-                  <button onClick={() => mover(i, 1)} disabled={i === ordem.length - 1} className="p-0.5 disabled:opacity-30" style={{ color: '#93c5fd' }}><ChevronDown size={14} /></button>
-                </div>
-              );
-            })}
-          </div>
+          {/* ── Seção RECOMENDAÇÃO ── */}
+          <SecaoHeader on={incluirRec} disabled={!temRec} onToggle={() => setIncluirRec(v => !v)}
+            icon={Wand2} cor="#a78bfa" titulo="Recomendação" sub={temRec ? `${nSelCen}/${cenarios.length} selecionada${cenarios.length === 1 ? '' : 's'}` : 'nenhuma salva'} />
+          {temRec ? (
+            incluirRec && (
+              <div className="space-y-1 pl-1">
+                {cenarios.map(c => {
+                  const on = selCen.has(c.id);
+                  return (
+                    <div key={c.id} className="flex items-center gap-2 p-2 rounded-lg" style={{ background: '#061525', border: `1px solid ${on ? '#2a2350' : '#0f2240'}` }}>
+                      <button onClick={() => toggleCen(c.id)} title={on ? 'Remover' : 'Incluir'}>
+                        {on ? <CheckSquare size={16} style={{ color: '#a78bfa' }} /> : <Square size={16} style={{ color: '#475569' }} />}
+                      </button>
+                      <div className="flex-1 min-w-0">
+                        <span className="text-xs font-bold" style={{ color: on ? '#e2e8f0' : '#64748b' }}>{c.nome}</span>
+                        <span className="text-[10px] ml-1.5" style={{ color: '#64748b' }}>· {c.doses.length} {c.doses.length === 1 ? 'mapa' : 'mapas'}{c.origem === 'equacao' ? ' · equação avulsa' : ''}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )
+          ) : (
+            <p className="text-[10px] pl-1" style={{ color: '#475569' }}>
+              Nenhuma recomendação gerada nesta safra. Crie na aba <strong style={{ color: '#64748b' }}>Recomendações</strong> (o “Book”) para incluí-la aqui.
+            </p>
+          )}
 
-          <div className="flex gap-2">
-            <ToggleBtn on={satelite} onClick={() => setSatelite(v => !v)} icon={Satellite} label="Satélite" />
-            <ToggleBtn on={valores} onClick={() => setValores(v => !v)} icon={Hash} label="Valores" />
-          </div>
+          {/* ── Seção FERTILIDADE ── */}
+          <SecaoHeader on={incluirFert} disabled={!temFert} onToggle={() => setIncluirFert(v => !v)}
+            icon={FlaskConical} cor="#4ade80" titulo="Fertilidade" sub={temFert ? `${nSelFert}/${ctx!.elementos.length} selecionado${ctx!.elementos.length === 1 ? '' : 's'}` : 'nenhum mapa'} />
+          {temFert ? (
+            incluirFert && (
+              <div className="space-y-1 pl-1">
+                {ordem.map((nut, i) => {
+                  const e = elPorNut[nut]; if (!e) return null;
+                  const on = sel.has(nut);
+                  return (
+                    <div key={nut} className="flex items-center gap-2 p-2 rounded-lg" style={{ background: '#061525', border: `1px solid ${on ? '#1a3a6b' : '#0f2240'}` }}>
+                      <button onClick={() => toggle(nut)} title={on ? 'Remover' : 'Incluir'}>
+                        {on ? <CheckSquare size={16} style={{ color: '#4ade80' }} /> : <Square size={16} style={{ color: '#475569' }} />}
+                      </button>
+                      <div className="flex-1 min-w-0">
+                        <span className="text-xs font-bold" style={{ color: on ? '#e2e8f0' : '#64748b' }}>{e.atributo} ({e.simbolo})</span>
+                        <span className="text-[10px] ml-1.5" style={{ color: '#64748b' }}>· {e.profundidades.join(' / ')} cm</span>
+                      </div>
+                      <button onClick={() => mover(i, -1)} disabled={i === 0} className="p-0.5 disabled:opacity-30" style={{ color: '#93c5fd' }}><ChevronUp size={14} /></button>
+                      <button onClick={() => mover(i, 1)} disabled={i === ordem.length - 1} className="p-0.5 disabled:opacity-30" style={{ color: '#93c5fd' }}><ChevronDown size={14} /></button>
+                    </div>
+                  );
+                })}
+                <div className="flex gap-2 pt-1">
+                  <ToggleBtn on={satelite} onClick={() => setSatelite(v => !v)} icon={Satellite} label="Satélite" />
+                  <ToggleBtn on={valores} onClick={() => setValores(v => !v)} icon={Hash} label="Valores" />
+                </div>
+              </div>
+            )
+          ) : (
+            <p className="text-[10px] pl-1" style={{ color: '#475569' }}>
+              Nenhum mapa de fertilidade salvo. Processe na aba <strong style={{ color: '#64748b' }}>Fertilidade</strong> (logado) para incluí-la aqui.
+            </p>
+          )}
 
           {erro && <p className="text-[10px]" style={{ color: '#f87171' }}>{erro}</p>}
           {aviso && <p className="text-[10px]" style={{ color: '#fbbf24' }}>{aviso}</p>}
 
-          <div className="space-y-1.5">
-            <button onClick={() => executar(ordem.filter(n => sel.has(n)), false)} disabled={gerando || nSel === 0}
-              className="w-full py-2 rounded text-xs font-bold text-white flex items-center justify-center gap-1.5 disabled:opacity-50"
-              style={{ background: 'var(--invicta-blue-mid)' }}>
-              {gerando ? <><Loader2 size={13} className="animate-spin" /> Gerando…</> : <><FileDown size={13} /> Gerar selecionados ({nSel})</>}
-            </button>
-            <button onClick={() => executar(ctx!.elementos.map(e => e.nut), true)} disabled={gerando}
-              className="w-full py-2 rounded text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-50"
-              style={{ background: '#0b2a4a', color: '#bfdbfe', border: '1px solid #1a3a6b' }}>
-              <FileStack size={13} /> Gerar relatório completo (todos os {ctx!.elementos.length} mapas)
-            </button>
-          </div>
+          <button onClick={gerarCombinado} disabled={gerando || (!usaRec && !usaFert)}
+            className="w-full py-2 rounded text-xs font-bold text-white flex items-center justify-center gap-1.5 disabled:opacity-50"
+            style={{ background: 'var(--invicta-blue-mid)' }}>
+            {gerando ? <><Loader2 size={13} className="animate-spin" /> Gerando…</>
+              : <><FileDown size={13} /> Gerar relatório{totalPags > 0 ? ` (${totalPags} ${totalPags === 1 ? 'pág' : 'págs'})` : ''}</>}
+          </button>
           <p className="text-[9px]" style={{ color: '#475569' }}>
-            Usa os mapas já salvos na nuvem (processados na aba Fertilidade). Cada PDF gerado é arquivado no histórico abaixo.
+            Usa o que já está salvo na nuvem (recomendações da aba Recomendações + mapas da aba Fertilidade). Cada PDF gerado é arquivado no histórico abaixo.
           </p>
         </div>
       )}
@@ -221,6 +321,9 @@ function LinhaHistorico({ reg, onAbrir, onExcluir }: { reg: RegistroRelatorio; o
         <div className="text-[10px] mt-0.5 truncate" style={{ color: '#64748b' }}>
           {data} · Safra {reg.safra} · {reg.paginas} {reg.paginas === 1 ? 'pág' : 'págs'}
         </div>
+        {reg.cenarioNomes && reg.cenarioNomes.length > 0 && (
+          <div className="text-[9px] mt-0.5 truncate" style={{ color: '#8b7fd6' }}>Rec: {reg.cenarioNomes.join(' · ')}</div>
+        )}
         {reg.elementos?.length > 0 && (
           <div className="text-[9px] mt-0.5 truncate" style={{ color: '#475569' }}>{reg.elementos.join(' · ')}</div>
         )}
@@ -234,6 +337,23 @@ function LinhaHistorico({ reg, onAbrir, onExcluir }: { reg: RegistroRelatorio; o
         <Trash2 size={15} />
       </button>
     </div>
+  );
+}
+
+// Cabeçalho de seção com master-checkbox (liga/desliga a seção inteira).
+function SecaoHeader({ on, disabled, onToggle, icon: Icon, cor, titulo, sub }: {
+  on: boolean; disabled?: boolean; onToggle: () => void; icon: React.ElementType; cor: string; titulo: string; sub: string;
+}) {
+  const ativo = on && !disabled;
+  return (
+    <button onClick={disabled ? undefined : onToggle} disabled={disabled}
+      className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg disabled:cursor-default"
+      style={{ background: ativo ? '#0b1f38' : '#081627', border: `1px solid ${ativo ? cor + '55' : '#0f2240'}`, opacity: disabled ? 0.6 : 1 }}>
+      {ativo ? <CheckSquare size={16} style={{ color: cor }} /> : <Square size={16} style={{ color: '#475569' }} />}
+      <Icon size={14} style={{ color: ativo ? cor : '#475569' }} />
+      <span className="text-xs font-bold" style={{ color: ativo ? '#e2e8f0' : '#64748b' }}>{titulo}</span>
+      <span className="text-[10px] ml-auto" style={{ color: '#64748b' }}>{sub}</span>
+    </button>
   );
 }
 
