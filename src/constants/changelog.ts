@@ -1,5 +1,12 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '1.98.0': [
+    'ABA NDVI ABRE NA HORA: abrir a aba baixava TODOS os rasters de TODOS os índices mantidos do talhão (megabytes) e descomprimia tudo antes de mostrar qualquer coisa. Agora só os METADADOS (KBs) chegam de imediato — cards, linha do tempo e estatísticas aparecem na hora — e o mapa da cena selecionada baixa sob demanda ("Baixando o mapa desta cena…").',
+    'CACHE LOCAL DE MAPAS (o fim do re-download): todo raster baixado da nuvem (NDVI, fertilidade, produtividade, MDE, condutividade, compactação, composições, zonas) fica guardado no aparelho (IndexedDB) com a versão da nuvem. Reabrir a mesma aba/talhão só consulta uma listagem leve e reaproveita o que já está no aparelho; a rede entra apenas para o que mudou. Vale para todos os módulos.',
+    'CAMADAS SALVAS E PDF DO NDVI INSTANTÂNEOS: a aba "Camadas salvas" e a lista do "Gerar PDF" listam só metadados; os rasters são baixados (ou vêm do cache) apenas ao gerar o PDF, só dos mapas marcados.',
+    'DIAGNÓSTICO DO BOOT: o console agora diz POR QUE uma abertura caiu no boot completo (1ª vez, pendências de sync, reconciliação periódica ou counts divergentes — com os números), para rastrear qualquer abertura lenta que sobrar.',
+    'NOTA: a v1.97 (linha do tempo no PDF, versão contrastada, período padrão de 3 meses) não tinha chegado à produção por uma falha de deploy — sai junto com esta versão.',
+  ],
   '1.97.0': [
     'PDF DO NDVI — LINHA DO TEMPO: quando o relatório tem mais de um mapa de índice, a última página traz o gráfico "Linha do tempo — média dos índices" (mesma leitura da aba NDVI): 1 série colorida por índice+satélite, pontos nas datas dos mapas selecionados (eixo proporcional ao tempo), valores sobre os pontos e legenda.',
     'PDF DO NDVI — VERSÃO CONTRASTADA: cada NDVI mantido agora aparece 2x na lista do PDF — normal (escala fixa 0–1) e "contraste realçado" (escala esticada p2–p98, igual ao botão Contraste do mapa) — escolha a que melhor mostra a variação do talhão em cada caso (dá até para incluir as duas).',

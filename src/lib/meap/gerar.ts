@@ -8,7 +8,7 @@
 import { getImportacoesLab, getGrades, getCondutividade, getComposicoes, getMdes, getMdeCamadasTopo } from '@/lib/store';
 import { carregarGridsTalhao } from '@/lib/recomendacao/aplicar';
 import { analisarZonas, gerarZonas, decodeGrid, descomprimirGrid, type RespAnalisarZonas, type RespGerarZonas, type Grid } from '@/lib/fertilidade';
-import { cloudCarregarMapasPorPrefixo } from '@/lib/cloud';
+import { cloudCarregarMapasPorPrefixo, cloudListarMapasMeta, cloudCarregarMapa } from '@/lib/cloud';
 import { simboloElemento, type ResultadoAmostra } from '@/lib/lab';
 
 export interface CamadaGrid {
@@ -65,6 +65,48 @@ function capShape(s: [number, number], maxSide: number): [number, number] {
 }
 
 export interface NdviCamada { chave: string; nut: string; prof: string; data: string; indice: string; bounds: [number, number, number, number]; b64: string; shape: [number, number]; }
+
+// Metadados de um índice mantido (SEM o raster) — para listas (PDF, Camadas
+// salvas) que não precisam do grid. itemId/atualizadoEm permitem baixar o grid
+// sob demanda com cache local (carregarGridNdvi).
+export interface NdviCamadaMeta {
+  chave: string; nut: string; prof: string; data: string; indice: string;
+  bounds: [number, number, number, number];
+  media?: number | null; nx?: number; ny?: number;
+  itemId: string; atualizadoEm: string | null;
+}
+
+// Lista os índices mantidos do talhão SÓ com metadados (KBs, sem rasters).
+export async function listarNdviSalvos(talhaoId: string): Promise<NdviCamadaMeta[]> {
+  const fontes: Array<['s2' | 'cbers', string]> = [['s2', `${talhaoId}__ndvi__`], ['cbers', `${talhaoId}__ndvicbers__`]];
+  const listas = await Promise.all(fontes.map(([, pref]) => cloudListarMapasMeta(pref)));
+  const out: NdviCamadaMeta[] = [];
+  fontes.forEach(([fonte, pref], i) => {
+    for (const m of listas[i]) {
+      const data = m.cena?.data;
+      if (!data || !m.bounds) continue;
+      const indice = m.indice ?? m.id.slice(pref.length).split('__')[0] ?? 'NDVI';
+      out.push({
+        chave: `ndvi_${fonte}__${indice}__${data}`, nut: `ndvi_${fonte}_${indice.toLowerCase()}`,
+        prof: data, data, indice, bounds: m.bounds,
+        media: m.stats?.media, nx: m.stats?.nx, ny: m.stats?.ny,
+        itemId: m.id, atualizadoEm: m.atualizadoEm,
+      });
+    }
+  });
+  out.sort((a, b) => b.data.localeCompare(a.data));
+  return out;
+}
+
+// Grid (descomprimido) de UM índice mantido — rede só se o cache local não
+// tiver a versão atual.
+export async function carregarGridNdvi(c: NdviCamadaMeta): Promise<Grid | null> {
+  const doc = await cloudCarregarMapa<{ resp?: { grid?: Grid } }>(c.itemId, c.atualizadoEm);
+  let grid = doc?.dados?.resp?.grid;
+  if (!grid?.b64) return null;
+  if (grid.comp === 'gz') { try { grid = await descomprimirGrid(grid); } catch { return null; } }
+  return grid;
+}
 
 // Carrega os ÍNDICES MANTIDOS (NDVI, SAVI… — Sentinel + CBERS) do talhão.
 // IV2: o mesmo prefixo guarda vários índices (id …__INDICE__data) — a chave e o

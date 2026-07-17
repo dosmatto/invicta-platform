@@ -21,13 +21,13 @@ import {
   listarCenasNdvi, buscarImagemSatelite, buscarIndices, indicesDisponiveis,
   type RespNdvi, type CenaDisponivel, type FonteNdvi,
 } from '@/lib/msr';
-import { cloudSalvarMapa, cloudCarregarMapasPorPrefixo, cloudExcluirMapasPorPrefixo, cloudPodeGravar } from '@/lib/cloud';
+import { cloudSalvarMapa, cloudListarMapasMeta, cloudCarregarMapa, cloudExcluirMapasPorPrefixo, cloudPodeGravar } from '@/lib/cloud';
 import { getRejeitadasLocal, carregarRejeitadas, marcarRejeitada } from '@/lib/cenaEstados';
 import { pode, emailUsuario } from '@/lib/empresa';
 import type { Legenda } from '@/lib/legendas';
 import { ComposicaoTemporalPanel, ListaComposicoes } from './ComposicaoTemporalPanel';
 import { getComposicoes } from '@/lib/store';
-import { carregarNdviSalvos, type NdviCamada } from '@/lib/meap/gerar';
+import { listarNdviSalvos, carregarGridNdvi, type NdviCamadaMeta } from '@/lib/meap/gerar';
 import {
   Satellite, Loader2, AlertTriangle, Image as ImageIcon, Contrast, Check, Star,
   Eye, XCircle, RotateCcw, Play, X, Layers3,
@@ -41,11 +41,15 @@ const mesesAtras = (n: number) => { const d = new Date(); d.setMonth(d.getMonth(
 const ddmmyy = (s?: string | null) => s ? new Date(s + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' }) : '—';
 const OPACIDADE = 1;
 
-// resp + metadados do índice (fórmula/bandas/máscara/usuário — spec seção 13)
+// resp + metadados do índice (fórmula/bandas/máscara/usuário — spec seção 13).
+// O grid é OPCIONAL: o autoload traz só metadados (leve); o raster da cena
+// selecionada é baixado sob demanda (nuvemId/nuvemEm → cloudCarregarMapa).
+type RespNdviLocal = Omit<RespNdvi, 'grid'> & { grid?: Grid };
 type MapaNdvi = {
-  resp: RespNdvi; criadoEm: string;
+  resp: RespNdviLocal; criadoEm: string;
   indice?: string; formula?: string; bandas?: string[]; mascara?: boolean;
   usuario?: string; salvoEm?: string;
+  nuvemId?: string; nuvemEm?: string | null;
 };
 type Imagem = { bounds: [number, number, number, number]; png: string };
 type FonteBusca = FonteNdvi | 'todos';
@@ -143,8 +147,9 @@ export function NdviSection({ safraNome }: { safraNome?: string } = {}) {
   // NDVI tem domínio fixo 0–1 (toggle de contraste); os demais índices variam
   // por cena → sempre esticados p2–p98 (o rodapé mostra o intervalo real).
   const dominio = useMemo<[number, number]>(() => {
-    if (!sel?.resp.grid) return [0, 1];
-    return (contraste || indSel !== 'NDVI') ? percentis(sel.resp.grid, 2, 98) : [0, 1];
+    const grid = sel?.resp.grid;
+    if (!grid) return [0, 1];
+    return (contraste || indSel !== 'NDVI') ? percentis(grid, 2, 98) : [0, 1];
   }, [sel, contraste, indSel]);
 
   const idRejeicao = (c: Cand) => `${nav.talhaoId}:${c.fonte}:${c.id}`;
@@ -156,7 +161,9 @@ export function NdviSection({ safraNome }: { safraNome?: string } = {}) {
     setDataIni(mesesAtras(3)); setDataFim(isoDate(new Date()));
   }
 
-  // Autoload das cenas MANTIDAS (as duas fontes) ao abrir o talhão.
+  // Autoload das cenas MANTIDAS (as duas fontes) ao abrir o talhão — SÓ os
+  // METADADOS (KBs). O raster da cena selecionada é baixado sob demanda no
+  // efeito abaixo, com cache local — abrir a aba não baixa mais megabytes.
   useEffect(() => {
     setCenas({}); setImagens({}); setPrevias({}); setCandidatos([]); setThumbs({});
     setSelKey(''); setPreviaDe(null); setEstado('idle'); setErro(''); setSalvos({});
@@ -164,23 +171,30 @@ export function NdviSection({ safraNome }: { safraNome?: string } = {}) {
     if (!nav.talhaoId) return;
     void carregarRejeitadas(nav.talhaoId).then(setRejeitadas).catch(() => {});
     (async () => {
+      const fontes: FonteNdvi[] = ['sentinel', 'cbers'];
+      const listas = await Promise.all(fontes.map(f => cloudListarMapasMeta(prefixoNuvem(nav.talhaoId!, f)).catch(() => [])));
       const novo: Record<string, MapaNdvi> = {};
-      for (const f of ['sentinel', 'cbers'] as FonteNdvi[]) {
+      fontes.forEach((f, i) => {
         const pref = prefixoNuvem(nav.talhaoId!, f);
-        const carregados = await cloudCarregarMapasPorPrefixo<MapaNdvi>(pref);
-        for (const c of carregados) {
-          const m = c.dados;
-          const data = m.resp?.cena?.data;
-          if (!data || !m.resp?.grid) continue;
-          if (m.resp.grid.comp === 'gz') {
-            try { m.resp.grid = await descomprimirGrid(m.resp.grid); }
-            catch (e) { console.warn('[ndvi] falha ao descomprimir grid:', e); }
-          }
+        for (const m of listas[i]) {
+          const data = m.cena?.data;
+          if (!data || !m.bounds) continue;
           // índice vem do id (…__INDICE__data); mapas antigos são NDVI
-          const indice = m.indice ?? c.id.slice(pref.length).split('__')[0] ?? 'NDVI';
-          novo[chaveDe(f, data, indice)] = { ...m, indice };
+          const indice = m.indice ?? m.id.slice(pref.length).split('__')[0] ?? 'NDVI';
+          novo[chaveDe(f, data, indice)] = {
+            resp: {
+              bounds: m.bounds,
+              stats: (m.stats ?? { n: 0, min: null, max: null, media: null, nx: 0, ny: 0, pixel_m: 0, indice }) as RespNdvi['stats'],
+              cena: (m.cena ?? { id: '', data }) as RespNdvi['cena'],
+            },
+            criadoEm: m.criadoEm ?? '', indice,
+            formula: m.formula ?? undefined, bandas: m.bandas ?? undefined,
+            mascara: m.mascara ?? undefined, usuario: m.usuario ?? undefined,
+            salvoEm: m.salvoEm ?? undefined,
+            nuvemId: m.id, nuvemEm: m.atualizadoEm,
+          };
         }
-      }
+      });
       if (Object.keys(novo).length === 0) return;
       setCenas(novo);
       setSalvos(Object.fromEntries(Object.keys(novo).map(k => [k, true])));
@@ -188,6 +202,36 @@ export function NdviSection({ safraNome }: { safraNome?: string } = {}) {
       if (maisRecente) setSelKey(maisRecente);
     })();
   }, [nav.talhaoId]);
+
+  // Grid SOB DEMANDA da cena selecionada (autoload leve não traz rasters):
+  // baixa 1 grid — do cache local se a versão da nuvem não mudou — e injeta na
+  // cena. Cenas processadas nesta sessão já têm grid e não passam por aqui.
+  const [carregandoGrid, setCarregandoGrid] = useState(false);
+  useEffect(() => {
+    const m = selKey ? cenas[selKey] : undefined;
+    if (!m || m.resp.grid || !m.nuvemId) return;
+    let vivo = true;
+    setCarregandoGrid(true);
+    (async () => {
+      try {
+        const doc = await cloudCarregarMapa<{ resp?: { grid?: Grid } }>(m.nuvemId!, m.nuvemEm);
+        let grid = doc?.dados?.resp?.grid;
+        if (!grid?.b64) return;
+        if (grid.comp === 'gz') grid = await descomprimirGrid(grid);
+        if (vivo) {
+          setCenas(prev => prev[selKey]
+            ? { ...prev, [selKey]: { ...prev[selKey], resp: { ...prev[selKey].resp, grid } } }
+            : prev);
+        }
+      } catch (e) {
+        console.warn('[ndvi] grid sob demanda falhou:', e);
+        if (vivo) setErro('Falha ao baixar o mapa desta cena — tente de novo.');
+      } finally {
+        if (vivo) setCarregandoGrid(false);
+      }
+    })();
+    return () => { vivo = false; };
+  }, [selKey, cenas]);
 
   // Render no mapa: prévia RGB (conferência) > NDVI/imagem da cena selecionada.
   useEffect(() => {
@@ -360,6 +404,7 @@ export function NdviSection({ safraNome }: { safraNome?: string } = {}) {
   async function manterCena() {
     if (!sel || !selKey || !nav.talhaoId) return;
     if (!cloudPodeGravar()) { setErro('Faça login para manter a camada salva.'); return; }
+    if (!sel.resp.grid) { setErro('Aguarde o mapa desta cena terminar de carregar.'); return; }
     const gz = await comprimirGrid(sel.resp.grid);
     cloudSalvarMapa(idNuvem(nav.talhaoId, fonteSel, dataSel, indSel), {
       resp: { ...sel.resp, grid: gz }, criadoEm: sel.criadoEm,
@@ -685,6 +730,11 @@ export function NdviSection({ safraNome }: { safraNome?: string } = {}) {
 
           {modo === 'ndvi' ? (
             <>
+              {carregandoGrid && !sel.resp.grid && (
+                <p className="text-[10px] flex items-center gap-1.5" style={{ color: '#93c5fd' }}>
+                  <Loader2 size={12} className="animate-spin" /> Baixando o mapa desta cena…
+                </p>
+              )}
               {indSel === 'NDVI' && (
                 <button onClick={() => setContraste(v => !v)}
                   className="w-full py-1 rounded text-[10px] font-semibold flex items-center justify-center gap-1"
@@ -765,7 +815,7 @@ function GeradorPdfNdvi({ talhaoId, poligono, legNdvi, imagens, info }: {
   info: { produtor: string; fazenda: string; talhao: string; safra: string; areaHa: number };
 }) {
   const [aberto, setAberto] = useState(false);
-  const [salvos, setSalvosPdf] = useState<NdviCamada[]>([]);
+  const [salvos, setSalvosPdf] = useState<NdviCamadaMeta[]>([]);
   const [carregando, setCarregando] = useState(false);
   const [sel, setSel] = useState<Record<string, boolean>>({});
   const [gerando, setGerando] = useState(false);
@@ -775,7 +825,7 @@ function GeradorPdfNdvi({ talhaoId, poligono, legNdvi, imagens, info }: {
     if (!aberto || !talhaoId) return;
     let vivo = true;
     setCarregando(true);
-    carregarNdviSalvos(talhaoId)
+    listarNdviSalvos(talhaoId)   // só metadados — os rasters vêm ao gerar (com cache)
       .then(cs => { if (vivo) setSalvosPdf(cs); })
       .catch(() => {})
       .finally(() => { if (vivo) setCarregando(false); });
@@ -806,18 +856,24 @@ function GeradorPdfNdvi({ talhaoId, poligono, legNdvi, imagens, info }: {
       const mapas = [];
       for (const it of itensIdx) {
         if (!sel[it.chave]) continue;
-        const grid = { b64: it.camada.b64, shape: it.camada.shape } as Grid;
+        // raster sob demanda (cache local; normal+contraste do mesmo NDVI = 1 download)
+        const grid = await carregarGridNdvi(it.camada);
+        if (!grid) { setErro(`Falha ao baixar o mapa "${it.titulo}" — tente de novo.`); setGerando(false); return; }
         const dominio: [number, number] = (!it.contraste && it.camada.indice === 'NDVI') ? [0, 1] : percentis(grid, 2, 98);
         const stops = rampaVisualStops({ ...legNdvi!, estilo: 'continuo' });
         const png = colorirGrid(grid, dominio, stops).dataUrl;
-        // média p/ a linha do tempo da última página do PDF
-        const { valores } = decodeGrid(grid);
-        let soma = 0, n = 0;
-        for (let i = 0; i < valores.length; i++) { const v = valores[i]; if (isFinite(v)) { soma += v; n++; } }
+        // média p/ a linha do tempo: stats da nuvem; mapas antigos sem stats → calcula do grid
+        let media = it.camada.media;
+        if (media == null) {
+          const { valores } = decodeGrid(grid);
+          let soma = 0, n = 0;
+          for (let i = 0; i < valores.length; i++) { const v = valores[i]; if (isFinite(v)) { soma += v; n++; } }
+          media = n ? soma / n : undefined;
+        }
         mapas.push({
           titulo: it.titulo, png, bounds: it.camada.bounds, legenda: legNdvi, dominio, satelite: true,
           serie: `${it.camada.indice} · ${it.camada.nut.startsWith('ndvi_cbers') ? 'CBERS-4A' : 'Sentinel-2'}`,
-          data: it.camada.data, media: n ? soma / n : undefined,
+          data: it.camada.data, media,
         });
       }
       for (const it of itensRgb) {
@@ -869,13 +925,13 @@ function GeradorPdfNdvi({ talhaoId, poligono, legNdvi, imagens, info }: {
 }
 
 function CamadasSalvasView({ talhaoId }: { talhaoId: string }) {
-  const [inds, setInds] = useState<NdviCamada[]>([]);
+  const [inds, setInds] = useState<NdviCamadaMeta[]>([]);
   const [carregando, setCarregando] = useState(true);
   useEffect(() => {
     let vivo = true;
     setCarregando(true);
     if (!talhaoId) { setCarregando(false); return; }
-    carregarNdviSalvos(talhaoId).then(cs => { if (vivo) setInds(cs); }).catch(() => {}).finally(() => { if (vivo) setCarregando(false); });
+    listarNdviSalvos(talhaoId).then(cs => { if (vivo) setInds(cs); }).catch(() => {}).finally(() => { if (vivo) setCarregando(false); });
     return () => { vivo = false; };
   }, [talhaoId]);
   const comps = talhaoId ? getComposicoes(talhaoId) : [];
@@ -891,7 +947,7 @@ function CamadasSalvasView({ talhaoId }: { talhaoId: string }) {
         ) : (
           inds.map(c => (
             <p key={c.chave} className="text-[9px]" style={{ color: '#cbd5e1' }}>
-              <strong>{c.indice}</strong> · {new Date(c.data + 'T00:00:00').toLocaleDateString('pt-BR')} · {c.nut.startsWith('ndvi_cbers') ? 'CBERS-4A' : 'Sentinel-2'} · {c.shape[0]}×{c.shape[1]} px
+              <strong>{c.indice}</strong> · {new Date(c.data + 'T00:00:00').toLocaleDateString('pt-BR')} · {c.nut.startsWith('ndvi_cbers') ? 'CBERS-4A' : 'Sentinel-2'}{c.nx && c.ny ? ` · ${c.ny}×${c.nx} px` : ''}
             </p>
           ))
         )}

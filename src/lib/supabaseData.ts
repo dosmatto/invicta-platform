@@ -180,9 +180,13 @@ async function bootIncremental(
   for (const key of keysLista) { if (key !== TABELA_TALHOES_KEY) localKv += lerLocalLista(key).length; }
   for (const key of keysObj) { if (lerRawLocal(key) != null) localKv += 1; }
   const localTal = lerLocalLista(TABELA_TALHOES_KEY).length;
-  if ((cT.count ?? -1) !== localTal + contarNovos(mudTal, TABELA_TALHOES_KEY) ||
-      (cK.count ?? -1) !== localKv + contarNovosKv(mudKv, keysLista, keysObj)) {
-    return false;   // divergência → boot completo reconcilia
+  const espTal = localTal + contarNovos(mudTal, TABELA_TALHOES_KEY);
+  const espKv = localKv + contarNovosKv(mudKv, keysLista, keysObj);
+  if ((cT.count ?? -1) !== espTal || (cK.count ?? -1) !== espKv) {
+    // divergência → boot completo reconcilia; o log diz ONDE divergiu (diagnóstico
+    // de "todo boot cai no completo")
+    console.info(`[boot] incremental descartado — counts divergem: talhões nuvem ${cT.count} × esperado ${espTal}; kv nuvem ${cK.count} × esperado ${espKv}`);
+    return false;
   }
 
   let novaMarca: string | null = marca;
@@ -269,6 +273,11 @@ export async function bootSupabaseData(keysLista: string[], keysObj: string[]): 
     try {
       if (await bootIncremental(sb, keysLista, keysObj, marca)) { bootCompleto = true; return; }
     } catch (e) { console.warn('[boot] incremental falhou — completo:', e); }
+  } else {
+    // por que o incremental nem foi tentado (diagnóstico de abertura lenta)
+    console.info(`[boot] completo direto — ${!marca ? 'sem marca d\'água (1ª abertura neste navegador)'
+      : !semPendencias ? `pendências locais de sync: ${Object.keys(lerSujos()).join(', ')}`
+      : 'reconciliação periódica (>24h desde o último completo)'}`);
   }
 
   await seedSeVazio(keysLista, keysObj);   // D3: 1ª vez carrega o Postgres do local
@@ -548,11 +557,11 @@ export async function pushObjSupabase(key: string, json: string): Promise<void> 
 // Ficam no app_kv na coleção COL_MAPAS, com o id encodando o contexto inteiro
 // (talhao__importacao__metodo__…). Carregados SOB DEMANDA por prefixo (LIKE),
 // fora do boot. Mesma API do cloud.ts (Firestore).
-export async function salvarMapaSupabase(id: string, dados: object): Promise<void> {
+export async function salvarMapaSupabase(id: string, dados: object, atualizadoEm?: string): Promise<void> {
   const sb = getSupabase();
   if (!sb) return;
   const up = await sb.from('app_kv').upsert(
-    { colecao: COL_MAPAS, item_id: id, dados, atualizado_em: new Date().toISOString() },
+    { colecao: COL_MAPAS, item_id: id, dados, atualizado_em: atualizadoEm ?? new Date().toISOString() },
     { onConflict: 'colecao,item_id' },
   );
   if (up.error) console.warn('[supabase] salvar mapa:', up.error.message);
@@ -565,6 +574,94 @@ export async function carregarMapasPorPrefixoSupabase<T>(prefixo: string): Promi
     .eq('colecao', COL_MAPAS).like('item_id', escLike(prefixo) + '%');
   if (r.error) { console.warn('[supabase] carregar mapas:', r.error.message); return []; }
   return (r.data ?? []).map(row => ({ id: row.item_id as string, dados: row.dados as T }));
+}
+
+// Listagem LEVE por prefixo: só id + atualizado_em (KBs) — base do cache local
+// de mapas (cloud.ts). null = falha (o chamador cai no caminho sem cache).
+export async function listarIdsMapasPorPrefixoSupabase(
+  prefixo: string,
+): Promise<Array<{ id: string; atualizadoEm: string | null }> | null> {
+  const sb = getSupabase();
+  if (!sb) return [];
+  const r = await sb.from('app_kv').select('item_id, atualizado_em')
+    .eq('colecao', COL_MAPAS).like('item_id', escLike(prefixo) + '%');
+  if (r.error) { console.warn('[supabase] listar ids de mapas:', r.error.message); return null; }
+  return (r.data ?? []).map(row => ({ id: row.item_id as string, atualizadoEm: (row.atualizado_em as string | null) ?? null }));
+}
+
+// Baixa mapas completos por LISTA de ids (em lotes — o .in() vai na URL).
+export async function carregarMapasPorIdsSupabase<T>(
+  ids: string[],
+): Promise<Array<{ id: string; dados: T; atualizadoEm: string | null }>> {
+  const sb = getSupabase();
+  if (!sb || !ids.length) return [];
+  const out: Array<{ id: string; dados: T; atualizadoEm: string | null }> = [];
+  const LOTE = 30;
+  for (let i = 0; i < ids.length; i += LOTE) {
+    const r = await sb.from('app_kv').select('item_id, dados, atualizado_em')
+      .eq('colecao', COL_MAPAS).in('item_id', ids.slice(i, i + LOTE));
+    if (r.error) { console.warn('[supabase] carregar mapas por ids:', r.error.message); continue; }
+    for (const row of r.data ?? []) {
+      out.push({ id: row.item_id as string, dados: row.dados as T, atualizadoEm: (row.atualizado_em as string | null) ?? null });
+    }
+  }
+  return out;
+}
+
+// METADADOS de um mapa sem o raster: tudo da linha exceto dados->resp->grid
+// (o grid é ~99% do peso). Serve para listar camadas (aba NDVI, PDF, Camadas
+// salvas) sem baixar megabytes; o grid vem depois, sob demanda e com cache.
+export interface MapaMetaSupabase {
+  id: string;
+  atualizadoEm: string | null;
+  indice?: string | null;
+  formula?: string | null;
+  bandas?: string[] | null;
+  mascara?: boolean | null;
+  usuario?: string | null;
+  criadoEm?: string | null;
+  salvoEm?: string | null;
+  bounds?: [number, number, number, number] | null;
+  stats?: { n?: number; min?: number | null; max?: number | null; media?: number | null; nx?: number; ny?: number; pixel_m?: number; indice?: string } | null;
+  cena?: { id?: string; data?: string | null; plataforma?: string | null; nuvem?: number | null } | null;
+}
+
+export async function listarMapasMetaPorPrefixoSupabase(prefixo: string): Promise<MapaMetaSupabase[] | null> {
+  const sb = getSupabase();
+  if (!sb) return [];
+  const r = await sb.from('app_kv').select(
+    'item_id, atualizado_em, indice:dados->>indice, formula:dados->>formula, bandas:dados->bandas, '
+    + 'mascara:dados->mascara, usuario:dados->>usuario, criadoEm:dados->>criadoEm, salvoEm:dados->>salvoEm, '
+    + 'bounds:dados->resp->bounds, stats:dados->resp->stats, cena:dados->resp->cena',
+  ).eq('colecao', COL_MAPAS).like('item_id', escLike(prefixo) + '%');
+  if (r.error) { console.warn('[supabase] listar mapas (meta):', r.error.message); return null; }
+  return ((r.data ?? []) as unknown as Array<Record<string, unknown>>).map(x => {
+    return {
+      id: x.item_id as string,
+      atualizadoEm: (x.atualizado_em as string | null) ?? null,
+      indice: x.indice as string | null,
+      formula: x.formula as string | null,
+      bandas: x.bandas as string[] | null,
+      mascara: x.mascara as boolean | null,
+      usuario: x.usuario as string | null,
+      criadoEm: x.criadoEm as string | null,
+      salvoEm: x.salvoEm as string | null,
+      bounds: x.bounds as [number, number, number, number] | null,
+      stats: x.stats as MapaMetaSupabase['stats'],
+      cena: x.cena as MapaMetaSupabase['cena'],
+    };
+  });
+}
+
+// Um mapa completo por id (grid incluso).
+export async function carregarMapaSupabase<T>(id: string): Promise<{ id: string; dados: T; atualizadoEm: string | null } | null> {
+  const sb = getSupabase();
+  if (!sb) return null;
+  const r = await sb.from('app_kv').select('item_id, dados, atualizado_em')
+    .eq('colecao', COL_MAPAS).eq('item_id', id).maybeSingle();
+  if (r.error) { console.warn('[supabase] carregar mapa:', r.error.message); return null; }
+  if (!r.data) return null;
+  return { id: r.data.item_id as string, dados: r.data.dados as T, atualizadoEm: (r.data.atualizado_em as string | null) ?? null };
 }
 
 export async function excluirMapasPorPrefixoSupabase(prefixo: string): Promise<void> {

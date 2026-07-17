@@ -13,7 +13,13 @@
 import { usuarioAtual } from './auth';
 import { usarDadosSupabase, bootSupabaseData, pushListaSupabase, pushObjSupabase,
   salvarMapaSupabase, carregarMapasPorPrefixoSupabase, excluirMapasPorPrefixoSupabase,
-  excluirDocsPorPrefixoSupabase, excluirColecaoSupabase } from './supabaseData';
+  excluirDocsPorPrefixoSupabase, excluirColecaoSupabase,
+  listarIdsMapasPorPrefixoSupabase, carregarMapasPorIdsSupabase,
+  listarMapasMetaPorPrefixoSupabase, carregarMapaSupabase,
+  type MapaMetaSupabase } from './supabaseData';
+import { cacheObterMapa, cacheGravarMapa, cacheExcluirMapasPorPrefixo } from './mapaCache';
+
+export type MapaMeta = MapaMetaSupabase;
 
 // Coleções (arrays de registros com id) espelhadas 1:1 com as chaves locais
 const KEYS_LISTA = [
@@ -92,16 +98,62 @@ export function cloudPushObj(key: string, json: string) {
 export function cloudSalvarMapa(id: string, dados: object) {
   if (!usarDadosSupabase()) return;
   if (!cloudPodeGravar()) { console.warn('[nuvem] sem login — mapa NÃO foi salvo (não persiste):', id); return; }
-  void salvarMapaSupabase(id, dados);
+  // Write-through no cache local com o MESMO atualizado_em enviado à nuvem:
+  // a próxima listagem valida o hit sem re-baixar o que acabou de ser salvo.
+  const em = new Date().toISOString();
+  void salvarMapaSupabase(id, dados, em);
+  void cacheGravarMapa(id, em, dados);
 }
 
+// Por prefixo, com CACHE LOCAL (IndexedDB): a rede só carrega a listagem leve
+// (id + atualizado_em) e os mapas ausentes/desatualizados; o resto vem do
+// aparelho. Rasters já vistos abrem sem re-baixar megabytes.
 export async function cloudCarregarMapasPorPrefixo<T>(prefixo: string): Promise<Array<{ id: string; dados: T }>> {
   if (!usarDadosSupabase()) return [];
-  return carregarMapasPorPrefixoSupabase<T>(prefixo);
+  const ids = await listarIdsMapasPorPrefixoSupabase(prefixo);
+  if (ids === null) return carregarMapasPorPrefixoSupabase<T>(prefixo);   // listagem falhou → caminho antigo
+  if (ids.length === 0) return [];
+  const hits = await Promise.all(ids.map(async ({ id, atualizadoEm }) => {
+    const hit = await cacheObterMapa<T>(id);
+    return hit && hit.atualizadoEm === atualizadoEm ? { id, dados: hit.dados } : { id, dados: null as T | null };
+  }));
+  const out: Array<{ id: string; dados: T }> = [];
+  const faltam: string[] = [];
+  for (const h of hits) { if (h.dados != null) out.push({ id: h.id, dados: h.dados }); else faltam.push(h.id); }
+  if (faltam.length) {
+    const rows = await carregarMapasPorIdsSupabase<T>(faltam);
+    for (const r of rows) {
+      void cacheGravarMapa(r.id, r.atualizadoEm, r.dados);   // snapshot síncrono (mapaCache)
+      out.push({ id: r.id, dados: r.dados });
+    }
+  }
+  return out;
+}
+
+// Listagem SÓ de metadados (sem o grid) — para montar listas/abas sem baixar
+// rasters. O grid de um item vem depois com cloudCarregarMapa (cache local).
+export async function cloudListarMapasMeta(prefixo: string): Promise<MapaMeta[]> {
+  if (!usarDadosSupabase()) return [];
+  return (await listarMapasMetaPorPrefixoSupabase(prefixo)) ?? [];
+}
+
+// Um mapa completo por id. Com atualizadoEm (da listagem meta), valida o cache
+// local antes de ir à rede.
+export async function cloudCarregarMapa<T>(id: string, atualizadoEm?: string | null): Promise<{ id: string; dados: T } | null> {
+  if (!usarDadosSupabase()) return null;
+  if (atualizadoEm !== undefined) {
+    const hit = await cacheObterMapa<T>(id);
+    if (hit && hit.atualizadoEm === atualizadoEm) return { id, dados: hit.dados };
+  }
+  const row = await carregarMapaSupabase<T>(id);
+  if (!row) return null;
+  void cacheGravarMapa(row.id, row.atualizadoEm, row.dados);
+  return { id: row.id, dados: row.dados };
 }
 
 export async function cloudExcluirMapasPorPrefixo(prefixo: string) {
   if (!usarDadosSupabase()) return;
+  void cacheExcluirMapasPorPrefixo(prefixo);
   return excluirMapasPorPrefixoSupabase(prefixo);
 }
 
