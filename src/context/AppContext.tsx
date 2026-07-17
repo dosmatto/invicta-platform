@@ -163,13 +163,17 @@ export function AppProvider({ children, redirectProdutorParaPortal }: { children
       // "Verificando acesso…". Seguro: sem boot íntegro NÃO há poda (v1.86) e
       // gravações locais ficam pendentes/mescladas até confirmar (v1.87). Se o
       // boot lento terminar depois, ele completa a hidratação em 2º plano.
+      // O timer é CANCELADO quando o boot ganha a corrida — senão ele dispara
+      // 20s depois mesmo com o boot já concluído (v1.98: aviso falso no console).
+      let timerBoot: ReturnType<typeof setTimeout> | undefined;
       await Promise.race([
         bootCloud().catch(() => {}),
-        new Promise<void>(res => setTimeout(() => {
+        new Promise<void>(res => { timerBoot = setTimeout(() => {
           console.warn('[nuvem] boot demorou >20s — entrando com dados locais; hidratação segue em 2º plano.');
           res();
-        }, 20_000)),
+        }, 20_000); }),
       ]);
+      if (timerBoot) clearTimeout(timerBoot);
       seedPapeis();                            // garante owner/admin oficiais (idempotente)
       seedPermissoes();                        // semeia as permissões padrão por papel
       seedPlanos();                            // semeia os planos de assinatura (Básico/Interm./Completo)

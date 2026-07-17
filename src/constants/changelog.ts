@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '1.99.0': [
+    'FIM DO AVISO FALSO "boot demorou >20s": o temporizador de segurança do login (que entra com dados locais se a nuvem travar) não era cancelado quando o boot terminava rápido — então ele disparava 20 s depois e escrevia esse aviso no console mesmo com a abertura tendo levado ~1 s. Agora o timer é cancelado assim que o boot conclui; o aviso só aparece se a nuvem realmente demorar mais de 20 s.',
+  ],
   '1.98.0': [
     'ABA NDVI ABRE NA HORA: abrir a aba baixava TODOS os rasters de TODOS os índices mantidos do talhão (megabytes) e descomprimia tudo antes de mostrar qualquer coisa. Agora só os METADADOS (KBs) chegam de imediato — cards, linha do tempo e estatísticas aparecem na hora — e o mapa da cena selecionada baixa sob demanda ("Baixando o mapa desta cena…").',
     'CACHE LOCAL DE MAPAS (o fim do re-download): todo raster baixado da nuvem (NDVI, fertilidade, produtividade, MDE, condutividade, compactação, composições, zonas) fica guardado no aparelho (IndexedDB) com a versão da nuvem. Reabrir a mesma aba/talhão só consulta uma listagem leve e reaproveita o que já está no aparelho; a rede entra apenas para o que mudou. Vale para todos os módulos.',
