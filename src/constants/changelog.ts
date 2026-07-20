@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.0.3': [
+    'COLETA — FIM DO TRAVAMENTO AO SALVAR AMOSTRAS COM FOTO: a cada coleta confirmada, o app RE-CARREGAVA todas as fotos do aparelho (os arquivos inteiros) na memória só para contar quantas faltavam sincronizar — então quanto mais fotos, mais lento e travado ficava a cada "OK". Agora a contagem usa um índice e NÃO carrega mais os arquivos; a sincronização também passa a buscar só as fotos pendentes. O app de campo para de degradar ao longo da coleta.',
+  ],
   '2.0.2': [
     'RELATÓRIO COMBINADO — FERTILIDADE PRIMEIRO: no PDF único, a seção de Fertilidade (capa + mapas dos elementos) agora vem ANTES da seção de Recomendação. A ordem das seções na tela também acompanha.',
     'MAPAS DE RECOMENDAÇÃO NUMERADOS: cada página de recomendação passa a ter o número do mapa no título — ex.: “01 - Calcário”, “02 - …”, “10 - <nome da fórmula>” — na ordem das equações da recomendação (reinicia a cada recomendação). Vale tanto no relatório combinado quanto no “Book” da aba Recomendações.',

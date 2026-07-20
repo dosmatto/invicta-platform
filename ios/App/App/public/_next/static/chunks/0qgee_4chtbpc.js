@@ -1,0 +1,1 @@
+(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push(["object"==typeof document?document.currentScript:void 0,53200,t=>{"use strict";var e=t.i(71645),u=t.i(63371);t.s(["default",0,function(){let{setActivePanel:t}=(0,u.useApp)();return(0,e.useEffect)(()=>{t("produtores")},[t]),null}])}]);

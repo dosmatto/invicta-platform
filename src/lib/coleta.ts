@@ -258,6 +258,9 @@ export interface FotoColeta {
   blob: Blob;
   criadoEm: string;
   sync: boolean;
+  pend?: number;   // 1 = pendente de envio, 0 = sincronizada. Índice numérico
+                   // (IndexedDB não indexa boolean) para CONTAR/listar as
+                   // pendentes SEM carregar os blobs na memória.
 }
 
 const DB_NOME = 'inv_coleta';
@@ -265,12 +268,29 @@ const STORE_FOTOS = 'fotos';
 
 function abrirDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NOME, 1);
+    const req = indexedDB.open(DB_NOME, 2);
     req.onupgradeneeded = () => {
       const db = req.result;
+      const txUp = req.transaction!;   // transação de versionchange
+      let st: IDBObjectStore;
       if (!db.objectStoreNames.contains(STORE_FOTOS)) {
-        const st = db.createObjectStore(STORE_FOTOS, { keyPath: 'id' });
+        st = db.createObjectStore(STORE_FOTOS, { keyPath: 'id' });
         st.createIndex('coletaId', 'coletaId');
+      } else {
+        st = txUp.objectStore(STORE_FOTOS);
+      }
+      // v2: índice numérico `pend` para contar/listar pendentes SEM ler os blobs
+      // (antes contarFotosPendentes fazia getAll() de TODAS as fotos a cada
+      // coleta → memória estourava e o app travava). Preenche as fotos antigas.
+      if (!st.indexNames.contains('pend')) {
+        st.createIndex('pend', 'pend');
+        st.openCursor().onsuccess = (e) => {
+          const cur = (e.target as IDBRequest<IDBCursorWithValue>).result;
+          if (!cur) return;
+          const v = cur.value as FotoColeta;
+          if (v.pend === undefined) { v.pend = v.sync ? 0 : 1; cur.update(v); }
+          cur.continue();
+        };
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -290,10 +310,19 @@ function tx<T>(modo: IDBTransactionMode, fn: (st: IDBObjectStore) => IDBRequest<
 export async function salvarFoto(coletaId: string, tipo: TipoFoto, blob: Blob): Promise<FotoColeta> {
   const foto: FotoColeta = {
     id: `${coletaId}__${tipo}_${Date.now().toString(36)}`,
-    coletaId, tipo, blob, criadoEm: new Date().toISOString(), sync: false,
+    coletaId, tipo, blob, criadoEm: new Date().toISOString(), sync: false, pend: 1,
   };
   await tx('readwrite', st => st.put(foto));
   return foto;
+}
+
+// Fotos AINDA NÃO sincronizadas (via índice `pend`) — não carrega as já enviadas.
+export function fotosPendentes(): Promise<FotoColeta[]> {
+  return abrirDB().then(db => new Promise((resolve, reject) => {
+    const req = db.transaction(STORE_FOTOS).objectStore(STORE_FOTOS).index('pend').getAll(IDBKeyRange.only(1));
+    req.onsuccess = () => resolve(req.result as FotoColeta[]);
+    req.onerror = () => reject(req.error);
+  }));
 }
 
 export function fotosDaColeta(coletaId: string): Promise<FotoColeta[]> {
@@ -339,7 +368,7 @@ export async function subirFotosPendentes(): Promise<{ enviadas: number; erro?: 
   if (!usarDadosSupabase() || !navigator.onLine) return { enviadas: 0 };
   const sb = getSupabase();
   if (!sb) return { enviadas: 0 };
-  const fotos = (await todasFotos()).filter(f => !f.sync);
+  const fotos = await fotosPendentes();   // só as não enviadas (não a base inteira)
   let enviadas = 0;
   for (const f of fotos) {
     const path = `${f.coletaId}/${f.id}.jpg`;
@@ -350,14 +379,20 @@ export async function subirFotosPendentes(): Promise<{ enviadas: number; erro?: 
         : r.error.message;
       return { enviadas, erro: msg };
     }
-    await tx('readwrite', st => st.put({ ...f, sync: true }));
+    await tx('readwrite', st => st.put({ ...f, sync: true, pend: 0 }));
     enviadas++;
   }
   return { enviadas };
 }
 
-export async function contarFotosPendentes(): Promise<number> {
-  return (await todasFotos()).filter(f => !f.sync).length;
+// Conta as pendentes pelo ÍNDICE (count) — NÃO carrega os blobs. Roda a cada
+// coleta (atualizarPendentes); antes fazia getAll() de todas as fotos → travava.
+export function contarFotosPendentes(): Promise<number> {
+  return abrirDB().then(db => new Promise((resolve, reject) => {
+    const req = db.transaction(STORE_FOTOS).objectStore(STORE_FOTOS).index('pend').count(IDBKeyRange.only(1));
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  }));
 }
 
 // ── Medições de campo (polígonos/linhas) ─────────────────────────────────────
