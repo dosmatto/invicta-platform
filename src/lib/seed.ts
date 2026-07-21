@@ -7,6 +7,7 @@
 import seedGeo from '@/constants/seedTalhaoGeo.json';
 import seedZonas from '@/constants/seedZonasJraba.json';
 import { Cliente, Fazenda, Talhao, PadraoElementos, PadraoAmostragem } from './store';
+import { lerListaLocal, gravarListaLocal } from './localComprimido';
 
 // ── Localização inicial do mapa: Escritório da Invicta (Carambeí/PR) ──────────
 // Formato MapLibre: [longitude, latitude]
@@ -123,11 +124,13 @@ const SEED_PADROES_AMOSTRAGEM: PadraoAmostragem[] = [
 ];
 
 function mergeUnique<T extends { id: string }>(key: string, seed: T) {
-  const raw = localStorage.getItem(key);
-  const list: T[] = raw ? JSON.parse(raw) : [];
+  // Via localComprimido (e não localStorage cru): inv_talhoes é chave PESADA —
+  // vive no cache em memória + IndexedDB; o acesso cru não enxergaria o valor
+  // migrado e re-injetaria/sombrearia o seed.
+  const list = lerListaLocal<T>(key);
   if (!list.some(item => item.id === seed.id)) {
     list.push(seed);
-    localStorage.setItem(key, JSON.stringify(list));
+    gravarListaLocal(key, list);
   }
 }
 

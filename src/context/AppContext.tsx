@@ -11,6 +11,7 @@ import { migrarLaboratoriosV1, migrarSafrasV1, migrarGradesV1, migrarPreferencia
 import { seedLegendasSistema, migrarAreasGeodesicasV1, migrarNomesMaiusculosV1, migrarGradesDuplicadasV1, migrarBboxTalhoesV1 } from '@/lib/store';
 import { LEGENDAS_OFICIAIS } from '@/constants/legendasSeedOficial';
 import { authConfigurado, observarAuth, logout, type User } from '@/lib/auth';
+import { hidratarCachePesado } from '@/lib/localComprimido';
 import { LoginScreen } from '@/components/auth/LoginScreen';
 
 export type MapMode = 'street' | 'satellite';
@@ -158,10 +159,19 @@ export function AppProvider({ children, redirectProdutorParaPortal, modoCampo }:
       console.info(`[entrada] migrações/seeds locais: ${Math.round(performance.now() - t)}ms`);
     }
 
+    // Hidrata o cache das chaves PESADAS (IndexedDB → memória) ANTES de qualquer
+    // leitura pesada: seeds/migrações locais e, no modo com auth, o boot da nuvem
+    // (bootIncremental compara counts com o local; gravarSeMudou faz diff da
+    // string crua — ler antes da hidratação devolveria "vazio" e podaria dados).
+    // Singleton: só espera de verdade na primeira vez.
+    const hidrata = hidratarCachePesado();
+
     if (!authConfigurado) {
-      seedIfEmpty();
-      migracoesLocais();
-      setDadosProntos(true);
+      hidrata.then(() => {
+        seedIfEmpty();
+        migracoesLocais();
+        setDadosProntos(true);
+      });
       return;
     }
 
@@ -169,6 +179,7 @@ export function AppProvider({ children, redirectProdutorParaPortal, modoCampo }:
       setUsuario(user);
       if (!user) { setDadosProntos(false); setAcessoBloqueado(false); setTrocaSenha(false); setValidadeExpirada(false); setDataExpiracao(null); return; }
       setDadosProntos(false);
+      await hidrata;   // pesadas em memória antes do boot da nuvem (ver acima)
       const tLogin = performance.now();   // [entrada] cronômetro total até a tela liberar
       // Hidrata da nuvem com TEMPO-LIMITE: se o Supabase estiver degradado
       // (pendurado), entra com os dados locais em vez de prender o usuário no

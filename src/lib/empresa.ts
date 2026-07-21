@@ -9,6 +9,7 @@
 
 import { usuarioAtual, authConfigurado } from './auth';
 import { cloudPushLista } from './cloud';
+import { lerListaLocal } from './localComprimido';
 
 export type PapelMembro = 'owner' | 'admin' | 'agronomo' | 'operador' | 'produtor' | 'prestador' | 'editor' | 'viewer';
 
@@ -490,7 +491,10 @@ const NOME_PADRAO_EMPRESA = 'Invicta';
 function contarCadastrosPorEmpresa(): Record<string, number> {
   const out: Record<string, number> = {};
   for (const key of ['inv_clientes', 'inv_fazendas', 'inv_talhoes']) {
-    for (const r of load<{ empresaId?: string }>(key)) {
+    // lerListaLocal (e não o load local, que faz JSON.parse cru do localStorage):
+    // inv_talhoes é chave PESADA — o parse cru já falhava silencioso com o valor
+    // comprimido @@LZ@@ (contava 0) e pós-migração a chave vive na memória/IDB.
+    for (const r of lerListaLocal<{ empresaId?: string }>(key)) {
       if (r.empresaId) out[r.empresaId] = (out[r.empresaId] ?? 0) + 1;
     }
   }

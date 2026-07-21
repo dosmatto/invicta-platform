@@ -7,7 +7,7 @@
 // Exposto em window.invLimparBase pelo AppContext (só para admin).
 
 import { cloudPushLista, cloudExcluirColecao } from '../cloud';
-import { lerRawLocal } from '../localComprimido';
+import { lerRawLocal, limparCachePesado, chavesPesadasEmMemoria } from '../localComprimido';
 
 // Dados de TRABALHO (apagam). Tudo o mais fica: inv_bib_*, inv_legendas,
 // inv_safras, inv_padroes_*, inv_lab_perfis, inv_empresas/ativa, inv_config,
@@ -23,9 +23,15 @@ const COLECOES_DOCS = ['inv_mapas_fert', 'inv_cenarios', 'inv_relatorios'];
 export function backupBase(): void {
   if (typeof window === 'undefined') return;
   const dump: Record<string, unknown> = {};
+  // Enumeração: localStorage + chaves PESADAS que migraram para o IndexedDB
+  // (localStorage.key(i) não as enxerga mais; lerRawLocal lê da memória).
+  const ks = new Set<string>(chavesPesadasEmMemoria());
   for (let i = 0; i < localStorage.length; i++) {
     const k = localStorage.key(i);
-    if (!k || !k.startsWith('inv_')) continue;
+    if (k) ks.add(k);
+  }
+  for (const k of ks) {
+    if (!k.startsWith('inv_')) continue;
     const raw = lerRawLocal(k);
     try { dump[k] = raw ? JSON.parse(raw) : null; } catch { dump[k] = raw; }
   }
@@ -44,6 +50,10 @@ export async function limparBaseOperacional(confirmacao: string): Promise<void> 
     throw new Error('Confirmação inválida. Para apagar a base, rode no Console:  await invLimparBase("APAGAR TUDO")');
   }
   backupBase();
+  // Cache pesado (IndexedDB + memória) some ANTES das gravações — senão a base
+  // "zerada" ressuscitaria do IndexedDB no próximo boot. As pesadas fora de
+  // LISTAS_OPERACIONAIS (condutividade, MDE…) são só cache: a nuvem as repõe.
+  await limparCachePesado();
   for (const key of LISTAS_OPERACIONAIS) {
     localStorage.setItem(key, '[]');
     cloudPushLista(key, []); // cloudPushLista remove da nuvem os docs ausentes na lista nova ([])

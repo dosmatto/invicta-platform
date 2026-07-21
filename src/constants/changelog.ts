@@ -1,5 +1,9 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.1.0': [
+    'FIM DO "ARMAZENAMENTO LOCAL CHEIO": os caches pesados (talhões, condutividade, produtividade, MDE, zonas…) saíram do armazenamento pequeno do navegador (~5-10 MB, que vivia estourando) para o armazenamento GRANDE (IndexedDB, gigabytes). Na primeira abertura desta versão a migração é automática e LIBERA o espaço antigo na hora — nada a fazer, nada muda na nuvem.',
+    'ABERTURA VOLTA A USAR O BOOT RÁPIDO: com o armazenamento cheio, o cache local não conseguia gravar e o app re-baixava a base INTEIRA a cada abertura. Com o espaço liberado, o cache volta a funcionar e a abertura usa de novo o boot rápido (só o que mudou desde a última vez).',
+  ],
   '2.0.5': [
     'ABERTURA NÃO TRAVA MAIS 20s QUANDO A NUVEM CAI: o diagnóstico mostrou que os "15-20s para abrir" NÃO são do app (migrações 0ms, leitura dos talhões 0,4s) — é o boot esperando o servidor Supabase que está intermitentemente fora do ar (erro 522, ~19,5s). O teto de espera caiu de 20s para 12s: quando a nuvem está degradada, o app entra com os dados locais em ~12s em vez de 20s (e termina de sincronizar em 2º plano). Observação: a causa raiz é a instabilidade do backend Supabase — enquanto ela não for resolvida, o login pode ficar lento nas quedas.',
   ],

@@ -18,6 +18,7 @@ import { usarDadosSupabase, bootSupabaseData, pushListaSupabase, pushObjSupabase
   listarMapasMetaPorPrefixoSupabase, carregarMapaSupabase,
   type MapaMetaSupabase } from './supabaseData';
 import { cacheObterMapa, cacheGravarMapa, cacheExcluirMapasPorPrefixo } from './mapaCache';
+import { temPesadaLocal, removerLocal } from './localComprimido';
 
 export type MapaMeta = MapaMetaSupabase;
 
@@ -103,9 +104,15 @@ export async function bootCloudCampo(): Promise<boolean> {
   if (!usarDadosSupabase()) return false;
   // Limpa as coleções pesadas que boots antigos deixaram; anota se removeu
   // alguma (= este aparelho vinha do boot completo antigo).
+  // A presença/remoção cobre os DOIS mundos: localStorage (valores legados) e o
+  // cache pesado em memória/IndexedDB (removerLocal apaga ambos e avisa as
+  // outras abas). A hidratação já rodou (AppContext aguarda antes deste boot),
+  // então temPesadaLocal é confiável.
   let limpouPesada = false;
   for (const k of KEYS_PULAR_CAMPO) {
-    try { if (localStorage.getItem(k) != null) { localStorage.removeItem(k); limpouPesada = true; } } catch { /* segue */ }
+    try {
+      if (localStorage.getItem(k) != null || temPesadaLocal(k)) { removerLocal(k); limpouPesada = true; }
+    } catch { /* segue */ }
   }
   // Quando o localStorage estava CHEIO, gravações da base (produtores/fazendas/
   // talhões) falhavam no meio por falta de espaço → a lista local ficava PARCIAL

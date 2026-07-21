@@ -6,7 +6,7 @@ import type { ResultadoAmostra, PerfilLabConfig } from './lab';
 import type { Legenda } from './legendas';
 import type { AmbienteProdutivo } from './meap/tipos';
 import { cloudPushLista } from './cloud';
-import { lerListaLocal, gravarListaLocal } from './localComprimido';
+import { lerListaLocal, gravarListaLocal, removerLocal } from './localComprimido';
 import { areaHaGeo, areaHaGeoBruta } from './areaGeo';
 import { empresaAtivaId, uidUsuario, escopoClienteIds, escopoTalhaoIds } from './empresa';
 import {
@@ -1508,6 +1508,8 @@ export function destravarLegendasSistema(): number {
 }
 
 export function clearAll() {
+  // removerLocal (e não localStorage.removeItem): inv_talhoes é chave PESADA —
+  // vive no cache em memória + IndexedDB e ressuscitaria de lá.
   ['inv_clientes','inv_fazendas','inv_talhoes','inv_safras','inv_padroes_elem','inv_padroes_amos','inv_grades']
-    .forEach(k => localStorage.removeItem(k));
+    .forEach(k => removerLocal(k));
 }

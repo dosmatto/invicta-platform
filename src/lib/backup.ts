@@ -9,7 +9,7 @@
 // (inv_grades, inv_lab/laudos, inv_talhoes, inv_condutividade, inv_mde…) ENTRAM
 // normalmente, então uma restauração permite reprocessar os mapas.
 
-import { lerRawLocal, gravarRawLocal, gravarListaLocal } from './localComprimido';
+import { lerRawLocal, gravarRawLocal, gravarListaLocal, chavesPesadasEmMemoria } from './localComprimido';
 import { cloudPushLista, cloudPushObj } from './cloud';
 import { APP_VERSION } from '@/constants/version';
 
@@ -59,10 +59,17 @@ export function exportarBackup(): { nomeArquivo: string; blob: Blob; resumo: str
   const chaves: Record<string, unknown> = {};
 
   if (typeof window !== 'undefined') {
+    // Enumeração: localStorage + chaves PESADAS que migraram para o IndexedDB
+    // (localStorage.key(i) não as enxerga mais; lerRawLocal lê da memória, que
+    // pós-hidratação reflete o IndexedDB).
+    const ks = new Set<string>(chavesPesadasEmMemoria());
     for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (!key || !key.startsWith('inv_') || ehEfemera(key)) continue;
-      // lerRawLocal descomprime transparentemente as chaves @@LZ@@.
+      const k = localStorage.key(i);
+      if (k) ks.add(k);
+    }
+    for (const key of ks) {
+      if (!key.startsWith('inv_') || ehEfemera(key)) continue;
+      // lerRawLocal descomprime transparentemente as chaves @@LZ@@ legadas.
       const raw = lerRawLocal(key);
       if (raw == null) continue;
       try {
