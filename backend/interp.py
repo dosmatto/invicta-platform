@@ -49,7 +49,7 @@ AMPLITUDE_MIN = 0.30
 NUGGET_MAX = 0.10
 # Versao do motor de interpolacao (conferir em GET /health para saber se o
 # backend foi reiniciado com o codigo novo).
-VERSION = "interp-17-geotiff"
+VERSION = "interp-18-zonas-divisa-unica"
 
 
 def _nlags(n: int) -> int:
@@ -698,23 +698,39 @@ def gerar_multi(camadas: list[dict], bounds, dims, n_classes: int,
     ey = np.linspace(s - dy / 2.0, n + dy / 2.0, rows + 1)
     grid_snap = min(dx, dy) / 100.0
 
-    zonas = []  # (rank_do_potencial, areaHa, geometria contígua)
+    por_rank = []  # (rank, geometria da classe na malha) — cobertura exata, sem sobreposição
     for r, k in enumerate(presentes):
         jj, ii = np.where(cls == k)
         if jj.size == 0:
             continue
         boxes = shapely.box(ex[ii], ey[jj], ex[ii + 1], ey[jj + 1])
         geom = shapely.union_all(boxes, grid_size=grid_snap)
+        if not geom.is_empty:
+            por_rank.append((r, geom))
+
+    # DIVISA COMPARTILHADA: simplify() POR ZONA quebrava a cobertura — cada lado
+    # da divisa era simplificado sozinho e sobravam slivers de sobreposição/vão
+    # na escadinha. coverage_simplify (GEOS>=3.12) simplifica a cobertura INTEIRA:
+    # a aresta interna vira UMA linha só, usada pelas duas zonas vizinhas.
+    # simplify_boundary=False preserva o contorno externo da malha (o recorte
+    # pelo talhão vem depois). Sem GEOS novo, fica a escadinha exata das células
+    # (sem sobreposição por construção).
+    geoms = [g for _, g in por_rank]
+    if geoms and hasattr(shapely, "coverage_simplify"):
+        try:
+            geoms = list(shapely.coverage_simplify(geoms, dx * 0.5, simplify_boundary=False))
+        except Exception:
+            pass
+
+    zonas = []  # (rank_do_potencial, areaHa, geometria contígua)
+    for (r, _bruta), geom in zip(por_rank, geoms):
         if poly is not None:
             geom = geom.intersection(poly)
         if geom.is_empty:
             continue
-        geom = geom.simplify(dx * 0.5, preserve_topology=True)
-        if geom.is_empty:
-            continue
         # IDENTIDADE ÚNICA: cada parte CONTÍGUA da classe vira uma zona própria
         # (o potencial Alta/Médio/Baixo fica como atributo, não como identidade).
-        partes = list(geom.geoms) if geom.geom_type == "MultiPolygon" else [geom]
+        partes = list(geom.geoms) if geom.geom_type in ("MultiPolygon", "GeometryCollection") else [geom]
         for p in partes:
             if p.is_empty or p.geom_type not in ("Polygon", "MultiPolygon"):
                 continue
