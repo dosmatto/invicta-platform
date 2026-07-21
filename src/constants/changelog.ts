@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.0.5': [
+    'ABERTURA NÃO TRAVA MAIS 20s QUANDO A NUVEM CAI: o diagnóstico mostrou que os "15-20s para abrir" NÃO são do app (migrações 0ms, leitura dos talhões 0,4s) — é o boot esperando o servidor Supabase que está intermitentemente fora do ar (erro 522, ~19,5s). O teto de espera caiu de 20s para 12s: quando a nuvem está degradada, o app entra com os dados locais em ~12s em vez de 20s (e termina de sincronizar em 2º plano). Observação: a causa raiz é a instabilidade do backend Supabase — enquanto ela não for resolvida, o login pode ficar lento nas quedas.',
+  ],
   '2.0.4': [
     'DIAGNÓSTICO DA ABERTURA: o console agora cronometra a fase pós-boot (seeds/migrações e o total até a tela liberar) e as leituras "frias" pesadas do cache local — para rastrear os segundos que a Início ainda leva para abrir mesmo com o boot rápido. Sem mudança visível; só instrumentação.',
   ],

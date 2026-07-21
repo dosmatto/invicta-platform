@@ -177,13 +177,17 @@ export function AppProvider({ children, redirectProdutorParaPortal, modoCampo }:
       // boot lento terminar depois, ele completa a hidratação em 2º plano.
       // O timer é CANCELADO quando o boot ganha a corrida — senão ele dispara
       // 20s depois mesmo com o boot já concluído (v1.98: aviso falso no console).
+      // Teto de 12s (era 20s): quando o Supabase está degradado (522 do Cloudflare
+      // leva ~19,5s), 20s prendia o usuário. Um boot NORMAL é ~1,3s (incremental)
+      // ou ~10s (completo da reconciliação 24h) — 12s cobre esses e corta a espera
+      // nas quedas. A hidratação continua em 2º plano se o boot terminar depois.
       let timerBoot: ReturnType<typeof setTimeout> | undefined;
       await Promise.race([
         (modoCampo ? bootCloudCampo() : bootCloud()).catch(() => {}),
         new Promise<void>(res => { timerBoot = setTimeout(() => {
-          console.warn('[nuvem] boot demorou >20s — entrando com dados locais; hidratação segue em 2º plano.');
+          console.warn('[nuvem] boot demorou >12s — entrando com dados locais; hidratação segue em 2º plano.');
           res();
-        }, 20_000); }),
+        }, 12_000); }),
       ]);
       if (timerBoot) clearTimeout(timerBoot);
       seedPapeis();                            // garante owner/admin oficiais (idempotente)
