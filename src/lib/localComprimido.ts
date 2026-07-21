@@ -112,13 +112,18 @@ export function lerListaLocal<T>(key: string): T[] {
   registrarListenerStorage();
   const cached = cacheListas.get(key);
   if (cached) return [...cached] as T[];
-  const json = lerRawLocal(key);
+  const t0 = performance.now();
+  const json = lerRawLocal(key);   // aqui mora o LZString.decompress das chaves pesadas
   let lista: T[];
   if (!json) {
     lista = [];
   } else {
     try { lista = JSON.parse(json) as T[]; } catch { lista = []; }
   }
+  // [cache] leitura FRIA cara (descompressão+parse) — revela chaves pesadas
+  // (ex.: inv_talhoes ~7MB) que travam o main thread na 1ª leitura.
+  const dt = performance.now() - t0;
+  if (dt > 100) console.info(`[cache] leitura fria "${key}": ${Math.round(dt)}ms (${lista.length} itens)`);
   cacheListas.set(key, lista as unknown[]);
   return [...lista];
 }

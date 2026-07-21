@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.0.4': [
+    'DIAGNÓSTICO DA ABERTURA: o console agora cronometra a fase pós-boot (seeds/migrações e o total até a tela liberar) e as leituras "frias" pesadas do cache local — para rastrear os segundos que a Início ainda leva para abrir mesmo com o boot rápido. Sem mudança visível; só instrumentação.',
+  ],
   '2.0.3': [
     'COLETA — FIM DO TRAVAMENTO AO SALVAR AMOSTRAS COM FOTO: a cada coleta confirmada, o app RE-CARREGAVA todas as fotos do aparelho (os arquivos inteiros) na memória só para contar quantas faltavam sincronizar — então quanto mais fotos, mais lento e travado ficava a cada "OK". Agora a contagem usa um índice e NÃO carrega mais os arquivos; a sincronização também passa a buscar só as fotos pendentes. O app de campo para de degradar ao longo da coleta.',
   ],

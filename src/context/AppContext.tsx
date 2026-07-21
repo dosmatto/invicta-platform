@@ -138,13 +138,24 @@ export function AppProvider({ children, redirectProdutorParaPortal, modoCampo }:
   const [dataExpiracao, setDataExpiracao] = useState<string | null>(null);
   useEffect(() => {
     function migracoesLocais() {
-      empresaIfEmpty();                 // Empresa Pessoal + ativa, idempotente
-      migrarLaboratoriosV1(); migrarSafrasV1(); migrarGradesV1(); migrarPreferenciasV1();
-      migrarAreasGeodesicasV1();               // areas dos talhoes -> geodesico (igual QGIS)
-      migrarBboxTalhoesV1();                   // bbox de talhao antigo (evita parse do poligono a cada abertura)
-      migrarNomesMaiusculosV1();               // nomes cliente/fazenda/talhao -> CAIXA ALTA
-      migrarGradesDuplicadasV1();              // remove grades salvas em duplicidade (ex.: duplo clique)
-      seedLegendasSistema(LEGENDAS_OFICIAIS); // legendas oficiais (sistema)
+      // [entrada] cronômetro por passo — revela qual seed/migração pesa na
+      // abertura da Início (só loga o que passar de 30ms).
+      const t = performance.now();
+      const passo = (nome: string, fn: () => void) => {
+        const a = performance.now(); fn(); const d = performance.now() - a;
+        if (d > 30) console.info(`[entrada] ${nome}: ${Math.round(d)}ms`);
+      };
+      passo('empresaIfEmpty', empresaIfEmpty);
+      passo('migrarLaboratoriosV1', migrarLaboratoriosV1);
+      passo('migrarSafrasV1', migrarSafrasV1);
+      passo('migrarGradesV1', migrarGradesV1);
+      passo('migrarPreferenciasV1', migrarPreferenciasV1);
+      passo('migrarAreasGeodesicasV1', migrarAreasGeodesicasV1);   // parse de geojson dos talhões
+      passo('migrarBboxTalhoesV1', migrarBboxTalhoesV1);           // parse de geojson dos talhões
+      passo('migrarNomesMaiusculosV1', migrarNomesMaiusculosV1);
+      passo('migrarGradesDuplicadasV1', migrarGradesDuplicadasV1);
+      passo('seedLegendasSistema', () => seedLegendasSistema(LEGENDAS_OFICIAIS));
+      console.info(`[entrada] migrações/seeds locais: ${Math.round(performance.now() - t)}ms`);
     }
 
     if (!authConfigurado) {
@@ -158,6 +169,7 @@ export function AppProvider({ children, redirectProdutorParaPortal, modoCampo }:
       setUsuario(user);
       if (!user) { setDadosProntos(false); setAcessoBloqueado(false); setTrocaSenha(false); setValidadeExpirada(false); setDataExpiracao(null); return; }
       setDadosProntos(false);
+      const tLogin = performance.now();   // [entrada] cronômetro total até a tela liberar
       // Hidrata da nuvem com TEMPO-LIMITE: se o Supabase estiver degradado
       // (pendurado), entra com os dados locais em vez de prender o usuário no
       // "Verificando acesso…". Seguro: sem boot íntegro NÃO há poda (v1.86) e
@@ -189,6 +201,7 @@ export function AppProvider({ children, redirectProdutorParaPortal, modoCampo }:
       setValidadeExpirada(expirado);                   // login com validade vencida
       setDataExpiracao(expirado ? (reg?.validadeAte ?? null) : null);
       setTrocaSenha(autorizado && !expirado && precisaTrocarSenha()); // convidado no 1º acesso
+      console.info(`[entrada] boot+seeds+migrações até liberar a tela: ${Math.round(performance.now() - tLogin)}ms`);
       setDadosProntos(true);
     });
     return () => unsub();
