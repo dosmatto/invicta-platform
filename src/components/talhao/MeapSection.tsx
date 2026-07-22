@@ -12,6 +12,7 @@ import dynamic from 'next/dynamic';
 import { useApp } from '@/context/AppContext';
 import { getZoneamentosMeap, saveZoneamentoMeap, deleteZoneamentoMeap, setZoneamentoPadraoMeap, removerAdocaoMeap, getTalhoes, getLegendasPorAtributo, type Talhao, type ZoneamentoMeap, type SuavizacaoMeta, type EdicaoManualMeta, type OperacaoEdicaoZona } from '@/lib/store';
 import { usuarioAtual } from '@/lib/auth';
+import { pode } from '@/lib/empresa';
 import type { RespSuavizarZonas } from '@/lib/fertilidade';
 import { SuavizarLimites } from './SuavizarLimites';
 import { EditorZonasManual } from './EditorZonasManual';
@@ -1088,9 +1089,11 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
                 {z.padrao
                   ? <span className="text-[9px] px-1.5 py-0.5 rounded font-bold flex items-center gap-1 flex-shrink-0" style={{ background: '#3a2e0a', color: '#fbbf24' }}><Star size={8} /> Padrão</span>
                   : <button onClick={e => { e.stopPropagation(); tornarPadrao(z.id); }} className="text-[9px] px-1.5 py-0.5 rounded font-semibold flex-shrink-0" style={{ background: '#1a3a6b', color: '#93c5fd' }}>Tornar padrão</button>}
-                <button onClick={e => { e.stopPropagation(); setEditorZona({ id: z.id, nome: z.nome, fc: z.fc }); setSuav(null); setSuavMapFc(null); }}
-                  title="Editar manualmente (unir/reclassificar/dividir — cria uma NOVA versão)"
-                  className="p-1 rounded flex-shrink-0" style={{ background: '#241748', color: '#c4b5fd' }}><Pencil size={12} /></button>
+                {(pode('zonasUnificar') || pode('zonasReclassificar') || pode('zonasDividir')) && (
+                  <button onClick={e => { e.stopPropagation(); setEditorZona({ id: z.id, nome: z.nome, fc: z.fc }); setSuav(null); setSuavMapFc(null); }}
+                    title="Editar manualmente (unir/reclassificar/dividir — cria uma NOVA versão)"
+                    className="p-1 rounded flex-shrink-0" style={{ background: '#241748', color: '#c4b5fd' }}><Pencil size={12} /></button>
+                )}
                 <button onClick={e => { e.stopPropagation(); setSuav({ origem: { id: z.id, nome: z.nome }, fc: z.fc }); setEditorZona(null); setEditorMapFc(null); }}
                   title="Suavizar limites (cria uma NOVA versão; esta fica intacta)"
                   className="p-1 rounded flex-shrink-0" style={{ background: '#0b3a44', color: '#22d3ee' }}><Spline size={12} /></button>
@@ -1106,13 +1109,24 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
               </p>
             </div>
           ))}
-          {editorZona && (
-            <EditorZonasManual nomeZoneamento={editorZona.nome} fcOriginal={editorZona.fc}
-              areaMinHa={(zoneamentos.find(z => z.id === editorZona.id)?.meta.areaMinHa) ?? 0}
-              onMapFc={setEditorMapFc}
-              onSalvarVersao={salvarVersaoEditada}
-              onClose={() => { setEditorZona(null); setEditorMapFc(null); }} />
-          )}
+          {editorZona && (() => {
+            const zEd = zoneamentos.find(z => z.id === editorZona.id);
+            const chavesEd = zEd?.meta.chaves ?? [];
+            // Camadas p/ estatísticas de raster (§8): as usadas para gerar o
+            // zoneamento (meta.chaves); se não houver, todas as carregadas.
+            const camadasStatsEd = carregadas
+              ? carregadas.camadas.filter(c => (chavesEd.length ? chavesEd.includes(c.chave) : true))
+                  .map(c => ({ simbolo: c.simbolo, prof: c.prof, b64: c.b64, shape: c.shape }))
+              : undefined;
+            return (
+              <EditorZonasManual nomeZoneamento={editorZona.nome} fcOriginal={editorZona.fc}
+                areaMinHa={zEd?.meta.areaMinHa ?? 0}
+                camadasStats={camadasStatsEd} boundsStats={carregadas?.bounds}
+                onMapFc={setEditorMapFc}
+                onSalvarVersao={salvarVersaoEditada}
+                onClose={() => { setEditorZona(null); setEditorMapFc(null); }} />
+            );
+          })()}
           {suav && suav.origem !== 'preview' && (
             <SuavizarLimites titulo={suav.origem.nome} fcOriginal={suav.fc} poligono={poligono}
               onPreview={setSuavMapFc}

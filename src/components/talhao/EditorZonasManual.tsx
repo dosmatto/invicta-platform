@@ -19,9 +19,11 @@ import { unirFeatures, limparZona } from '@/lib/meap/fundir';
 import { extrairEditavel, paraFeature, areaHaDe, perimetroMDe } from '@/lib/geoEditor';
 import { classeZona, classeReconhecida, corZonaPorPosicao } from '@/lib/zonas';
 import { usuarioAtual } from '@/lib/auth';
+import { pode } from '@/lib/empresa';
+import { estatisticasRasterZona } from '@/lib/meap/rasterStats';
 import { useApp } from '@/context/AppContext';
 import type { OperacaoEdicaoZona } from '@/lib/store';
-import { Pencil, Combine, Scissors, Tag, Undo2, Redo2, RotateCcw, Save, X, CheckSquare, Square, AlertTriangle, MousePointerClick, Ruler } from 'lucide-react';
+import { Pencil, Combine, Scissors, Tag, Undo2, Redo2, RotateCcw, Save, X, CheckSquare, Square, AlertTriangle, MousePointerClick, Ruler, Lock, BarChart3 } from 'lucide-react';
 
 const EditorGeometria = dynamic(
   () => import('@/components/geo/EditorGeometria').then(m => ({ default: m.EditorGeometria })),
@@ -41,17 +43,24 @@ function perimetroM(f: Feat): number {
   return ed ? perimetroMDe(ed) : 0;
 }
 
+// Camada (raster já interpolado) p/ as estatísticas por zona (spec §8).
+export interface CamadaStats { simbolo: string; prof: string; b64: string; shape: [number, number]; }
+
 export interface EditorZonasManualProps {
   nomeZoneamento: string;
   fcOriginal: GeoJSON.FeatureCollection;   // zoneamento salvo (não é alterado)
   areaMinHa?: number;                       // piso p/ divisão (spec §4)
+  camadasStats?: CamadaStats[];             // camadas p/ valor médio/mín/máx/desvio
+  boundsStats?: [number, number, number, number];
   onMapFc: (fc: GeoJSON.FeatureCollection | null) => void;   // prévia p/ o mapa
   onSalvarVersao: (fc: GeoJSON.FeatureCollection, log: OperacaoEdicaoZona[]) => void;
   onClose: () => void;
 }
 
-export function EditorZonasManual({ nomeZoneamento, fcOriginal, areaMinHa = 0, onMapFc, onSalvarVersao, onClose }: EditorZonasManualProps) {
+export function EditorZonasManual({ nomeZoneamento, fcOriginal, areaMinHa = 0, camadasStats, boundsStats, onMapFc, onSalvarVersao, onClose }: EditorZonasManualProps) {
   const { zonaEvent, setZonaEvent } = useApp();
+  // Permissões granulares do editor (spec §9). Modo local (bancada) libera tudo.
+  const podeUnif = pode('zonasUnificar'), podeRecl = pode('zonasReclassificar'), podeDiv = pode('zonasDividir'), podeSalvar = pode('zonasSalvar');
 
   // Cópia editável dos polígonos (o original NUNCA é tocado).
   const inicial = useMemo(
@@ -156,6 +165,7 @@ export function EditorZonasManual({ nomeZoneamento, fcOriginal, areaMinHa = 0, o
   // ── UNIFICAR (spec §2): dissolve a divisa interna das selecionadas ──
   function unificar(rankFinal: number) {
     setErro(null);
+    if (!podeUnif) { setErro('Você não tem permissão para unificar zonas.'); return; }
     if (selFeats.length < 2) { setErro('Selecione 2 ou mais zonas vizinhas para unificar.'); return; }
     if (!grupoConexo(selFeats)) { setErro('Só é possível unificar zonas com fronteira compartilhada — a seleção tem zona(s) sem contato com as demais.'); return; }
     const alvo = classes.get(rankFinal);
@@ -176,6 +186,7 @@ export function EditorZonasManual({ nomeZoneamento, fcOriginal, areaMinHa = 0, o
   // ── RECLASSIFICAR (spec §3): só troca a classe, geometria intacta ──
   function reclassificar(rankFinal: number) {
     setErro(null);
+    if (!podeRecl) { setErro('Você não tem permissão para reclassificar zonas.'); return; }
     if (!selFeats.length) { setErro('Selecione ao menos uma zona para reclassificar.'); return; }
     const alvo = classes.get(rankFinal);
     if (!alvo) return;
@@ -194,6 +205,7 @@ export function EditorZonasManual({ nomeZoneamento, fcOriginal, areaMinHa = 0, o
   // ── DIVIDIR (spec §4): abre o editor de corte na zona selecionada ──
   function abrirDivisao() {
     setErro(null);
+    if (!podeDiv) { setErro('Você não tem permissão para dividir zonas.'); return; }
     if (selFeats.length !== 1) { setErro('Selecione exatamente UMA zona para dividir.'); return; }
     const f = selFeats[0];
     setCortando({ id: idDe(f), fc: { type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry: f.geometry! }] } });
@@ -235,6 +247,17 @@ export function EditorZonasManual({ nomeZoneamento, fcOriginal, areaMinHa = 0, o
   const nDiv = log.filter(o => o.tipo === 'dividir').length;
   const temEdicao = log.length > 0;
 
+  // Estatísticas do RASTER da zona selecionada (spec §8): valor médio/mín/máx/
+  // desvio por camada. Recalcula quando a geometria muda (unir/dividir).
+  const rasterStats = useMemo(() => {
+    if (selFeats.length !== 1 || !camadasStats?.length || !boundsStats) return null;
+    const geom = selFeats[0].geometry;
+    return camadasStats.map(c => ({
+      simbolo: c.simbolo, prof: c.prof,
+      st: estatisticasRasterZona(geom, { b64: c.b64, shape: c.shape }, boundsStats),
+    })).filter(x => x.st);
+  }, [selFeats, camadasStats, boundsStats]);
+
   const fmt = (v: number, d = 1) => v.toLocaleString('pt-BR', { maximumFractionDigits: d });
   const chip = (on: boolean) => ({ background: on ? 'var(--invicta-blue-mid)' : '#1a3a6b', color: on ? '#fff' : '#93c5fd', border: `1px solid ${on ? '#60a5fa' : '#1a3a6b'}` });
 
@@ -253,20 +276,29 @@ export function EditorZonasManual({ nomeZoneamento, fcOriginal, areaMinHa = 0, o
         <MousePointerClick size={10} /> Clique nas zonas <strong style={{ color: '#ddd6fe' }}>no mapa</strong> (ou na lista) para selecionar. O original é preservado — as mudanças viram uma <strong style={{ color: '#ddd6fe' }}>nova versão</strong>.
       </p>
 
-      {/* Barra de ferramentas */}
+      {/* Barra de ferramentas (cada operação respeita a permissão — spec §9) */}
       <div className="flex flex-wrap items-center gap-1">
-        <button onClick={() => { setUnifAberto(v => !v); setReclassAberto(false); }} disabled={sel.size < 2}
-          className="flex items-center gap-1 text-[10px] px-2 py-1 rounded font-semibold disabled:opacity-40" style={chip(unifAberto)} title="Unir 2+ zonas vizinhas numa só">
-          <Combine size={11} /> Unificar
-        </button>
-        <button onClick={() => { setReclassAberto(v => !v); setUnifAberto(false); }} disabled={sel.size < 1}
-          className="flex items-center gap-1 text-[10px] px-2 py-1 rounded font-semibold disabled:opacity-40" style={chip(reclassAberto)} title="Trocar a classe da(s) zona(s) selecionada(s)">
-          <Tag size={11} /> Reclassificar
-        </button>
-        <button onClick={abrirDivisao} disabled={sel.size !== 1}
-          className="flex items-center gap-1 text-[10px] px-2 py-1 rounded font-semibold disabled:opacity-40" style={chip(false)} title="Dividir a zona selecionada por uma linha de corte">
-          <Scissors size={11} /> Dividir
-        </button>
+        {podeUnif && (
+          <button onClick={() => { setUnifAberto(v => !v); setReclassAberto(false); }} disabled={sel.size < 2}
+            className="flex items-center gap-1 text-[10px] px-2 py-1 rounded font-semibold disabled:opacity-40" style={chip(unifAberto)} title="Unir 2+ zonas vizinhas numa só">
+            <Combine size={11} /> Unificar
+          </button>
+        )}
+        {podeRecl && (
+          <button onClick={() => { setReclassAberto(v => !v); setUnifAberto(false); }} disabled={sel.size < 1}
+            className="flex items-center gap-1 text-[10px] px-2 py-1 rounded font-semibold disabled:opacity-40" style={chip(reclassAberto)} title="Trocar a classe da(s) zona(s) selecionada(s)">
+            <Tag size={11} /> Reclassificar
+          </button>
+        )}
+        {podeDiv && (
+          <button onClick={abrirDivisao} disabled={sel.size !== 1}
+            className="flex items-center gap-1 text-[10px] px-2 py-1 rounded font-semibold disabled:opacity-40" style={chip(false)} title="Dividir a zona selecionada por uma linha de corte">
+            <Scissors size={11} /> Dividir
+          </button>
+        )}
+        {!podeUnif && !podeRecl && !podeDiv && (
+          <span className="flex items-center gap-1 text-[9px]" style={{ color: '#f59e0b' }}><Lock size={10} /> Sem permissão para editar zonas</span>
+        )}
         <div className="flex items-center gap-1 ml-auto">
           <button onClick={desfazer} disabled={!hist.length} title="Desfazer" className="p-1 rounded disabled:opacity-30" style={{ color: '#c4b5fd' }}><Undo2 size={13} /></button>
           <button onClick={refazer} disabled={!redo.length} title="Refazer" className="p-1 rounded disabled:opacity-30" style={{ color: '#c4b5fd' }}><Redo2 size={13} /></button>
@@ -331,13 +363,30 @@ export function EditorZonasManual({ nomeZoneamento, fcOriginal, areaMinHa = 0, o
         })}
       </div>
 
-      {/* Estatísticas (spec §8) */}
+      {/* Estatísticas geométricas (spec §8) */}
       <div className="flex items-center gap-2 p-1.5 rounded text-[9px]" style={{ background: '#0b1f3a', border: '1px solid #2e2050', color: '#94a3b8' }}>
         <Ruler size={11} style={{ color: '#a78bfa' }} className="flex-shrink-0" />
         <span>{stats.n} zona(s) · {stats.escopo}</span>
         <span>· <strong style={{ color: '#cbd5e1' }}>{fmt(stats.area)} ha</strong> ({fmt(stats.perc * 100, 0)}%)</span>
         <span>· perímetro {fmt(stats.perim / 1000, 2)} km</span>
       </div>
+
+      {/* Estatísticas do raster da zona selecionada (spec §8: médio/mín/máx/desvio) */}
+      {rasterStats && rasterStats.length > 0 && (
+        <div className="p-1.5 rounded space-y-0.5" style={{ background: '#0b1f3a', border: '1px solid #2e2050' }}>
+          <p className="text-[9px] font-semibold flex items-center gap-1" style={{ color: '#a78bfa' }}>
+            <BarChart3 size={10} /> Valores do raster na zona #{idDe(selFeats[0])}
+          </p>
+          {rasterStats.map((c, i) => (
+            <div key={i} className="text-[9px] tabular-nums" style={{ color: '#94a3b8' }}>
+              <strong style={{ color: '#cbd5e1' }}>{c.simbolo} {c.prof}</strong>: méd {fmt(c.st!.media, 2)} · mín {fmt(c.st!.min, 2)} · máx {fmt(c.st!.max, 2)} · dp {fmt(c.st!.desvio, 2)} <span style={{ color: '#475569' }}>(n={c.st!.n})</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {selFeats.length === 1 && camadasStats?.length && rasterStats && rasterStats.length === 0 && (
+        <p className="text-[9px]" style={{ color: '#64748b' }}>Sem valores de raster nesta zona (camadas não cobrem a área).</p>
+      )}
 
       {temEdicao && (
         <p className="text-[9px]" style={{ color: '#a78bfa' }}>
@@ -348,10 +397,11 @@ export function EditorZonasManual({ nomeZoneamento, fcOriginal, areaMinHa = 0, o
       {/* Ações */}
       <div className="flex items-center gap-1.5">
         <button onClick={onClose} className="text-[10px] px-2 py-1.5 rounded font-semibold" style={{ background: '#1a3a6b', color: '#93c5fd' }}>Cancelar</button>
-        <button onClick={() => onSalvarVersao({ type: 'FeatureCollection', features: feats }, log)} disabled={!temEdicao}
+        <button onClick={() => { if (podeSalvar) onSalvarVersao({ type: 'FeatureCollection', features: feats }, log); }} disabled={!temEdicao || !podeSalvar}
+          title={!podeSalvar ? 'Você não tem permissão para salvar zonas' : undefined}
           className="ml-auto flex items-center gap-1 text-[10px] px-3 py-1.5 rounded font-bold text-white disabled:opacity-40"
           style={{ background: '#059669', border: '1px solid #34d399' }}>
-          <Save size={11} /> Salvar como nova versão
+          {podeSalvar ? <Save size={11} /> : <Lock size={11} />} Salvar como nova versão
         </button>
       </div>
       <p className="text-[9px]" style={{ color: '#6d5b9e' }}>O zoneamento original continua na lista e pode ser restaurado a qualquer momento.</p>
