@@ -37,7 +37,6 @@ export function SuavizarLimites({ titulo, fcOriginal, poligono, onPreview, onApl
   const [nivel, setNivel] = useState<NivelSuavizacao>('moderado');
   const [tolM, setTolM] = useState(10);            // personalizado: tolerância (m)
   const [iters, setIters] = useState(2);           // personalizado: iterações Chaikin
-  const [manterExterno, setManterExterno] = useState(true);
   const [corrigirFrag, setCorrigirFrag] = useState(false);
   const [fragMinHa, setFragMinHa] = useState(0.5);
   const [adequarOper, setAdequarOper] = useState(false);
@@ -68,7 +67,6 @@ export function SuavizarLimites({ titulo, fcOriginal, poligono, onPreview, onApl
           iteracoes: nivel === 'personalizado' ? iters : null,
           fragMinHa: corrigirFrag ? fragMinHa : 0,
           larguraMinM: adequarOper ? larguraMinM : 0,
-          manterLimiteExterno: manterExterno,
         });
         if (g === geracao.current) setResp(r);
       } catch (e) {
@@ -79,7 +77,7 @@ export function SuavizarLimites({ titulo, fcOriginal, poligono, onPreview, onApl
     }, 600);
     return () => { if (timer.current) clearTimeout(timer.current); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fcOriginal, poligono, nivel, tolM, iters, manterExterno, corrigirFrag, fragMinHa, adequarOper, larguraMinM]);
+  }, [fcOriginal, poligono, nivel, tolM, iters, corrigirFrag, fragMinHa, adequarOper, larguraMinM]);
 
   // Prévia no mapa: suavizado (ou original, no "antes") + destaque das diferenças.
   useEffect(() => {
@@ -109,7 +107,7 @@ export function SuavizarLimites({ titulo, fcOriginal, poligono, onPreview, onApl
   const corDiff = (pct: number) => Math.abs(pct) > limites.confirma ? '#f87171' : Math.abs(pct) > limites.alerta ? '#fbbf24' : '#86efac';
 
   const restaurarParametros = () => {
-    setNivel('moderado'); setTolM(10); setIters(2); setManterExterno(true);
+    setNivel('moderado'); setTolM(10); setIters(2);
     setCorrigirFrag(false); setFragMinHa(0.5); setAdequarOper(false); setLarguraMinM(24);
     setLimites(LIM_PADRAO); setModoAvancado(false); setConfirmoAlteracao(false);
   };
@@ -134,7 +132,7 @@ export function SuavizarLimites({ titulo, fcOriginal, poligono, onPreview, onApl
         <button onClick={onClose} title="Fechar (nada é alterado)" className="ml-auto p-1 rounded" style={{ color: '#93c5fd' }}><X size={12} /></button>
       </div>
       <p className="text-[9px] leading-relaxed" style={{ color: '#6d8bbe' }}>
-        Arredonda serrilhados e remove excesso de vértices <strong style={{ color: '#a5f3fc' }}>preservando a topologia</strong>: a divisa entre duas zonas continua sendo a <strong style={{ color: '#a5f3fc' }}>mesma linha</strong> (sem sobreposições nem vazios) e o contorno do talhão fica intacto. O original <strong style={{ color: '#a5f3fc' }}>não é alterado</strong> até você aplicar/salvar.
+        Esta ferramenta suaviza <strong style={{ color: '#a5f3fc' }}>somente as divisões internas</strong> entre as zonas. O <strong style={{ color: '#a5f3fc' }}>limite externo permanece exatamente igual ao polígono oficial do talhão</strong> — ele nunca é suavizado nem deslocado, e não muda ao alternar entre antes e depois. A divisa entre duas zonas continua sendo a <strong style={{ color: '#a5f3fc' }}>mesma linha</strong> (sem sobreposições nem vazios) e as zonas preenchem 100% do talhão. O original <strong style={{ color: '#a5f3fc' }}>não é alterado</strong> até você aplicar/salvar.
       </p>
 
       {/* Níveis */}
@@ -182,18 +180,11 @@ export function SuavizarLimites({ titulo, fcOriginal, poligono, onPreview, onApl
         </div>
       )}
 
-      {/* Opções de topologia / fragmentos / operação */}
+      {/* Opções de fragmentos / operação (o limite externo é regra fixa) */}
       <div className="space-y-1">
-        <label className="flex items-center gap-1.5 cursor-pointer">
-          <input type="checkbox" checked={manterExterno} onChange={e => setManterExterno(e.target.checked)} className="accent-cyan-500" />
-          <span className="text-[10px] font-semibold" style={{ color: '#cbd5e1' }}>Manter limite externo do talhão</span>
-          <span className="text-[9px]" style={{ color: '#64748b' }}>(recomendado — só as divisas internas mudam)</span>
-        </label>
-        {!manterExterno && (
-          <p className="text-[9px] flex items-center gap-1 pl-4" style={{ color: '#fbbf24' }}>
-            <AlertTriangle size={9} /> Contorno externo também será suavizado — o resultado continua recortado no talhão oficial.
-          </p>
-        )}
+        <p className="text-[9px] font-semibold" style={{ color: '#64748b' }}>
+          Limite externo do talhão: <strong style={{ color: '#86efac' }}>sempre preservado</strong> (regra fixa — não é opção).
+        </p>
         <label className="flex items-center gap-1.5 cursor-pointer">
           <input type="checkbox" checked={corrigirFrag} onChange={e => setCorrigirFrag(e.target.checked)} className="accent-cyan-500" />
           <span className="text-[10px] font-semibold" style={{ color: '#cbd5e1' }}>Corrigir pequenos fragmentos</span>
@@ -267,10 +258,15 @@ export function SuavizarLimites({ titulo, fcOriginal, poligono, onPreview, onApl
             <span>Tolerância usada: {fmt(r.toleranciaM, 1)} m · {r.iteracoes}× arredondamento</span>
             <span>
               {r.sobreposicaoCorrigidaHa > 0 && <>Sobreposições corrigidas: {fmt(r.sobreposicaoCorrigidaHa, 3)} ha · </>}
-              {r.vaosCorrigidosHa > 0 && <>vazios corrigidos: {fmt(r.vaosCorrigidosHa, 3)} ha · </>}
+              {r.vaosCorrigidosHa > 0 && <>faixas sem zona incorporadas: {fmt(r.vaosCorrigidosHa, 3)} ha · </>}
               fragmentos incorporados: {r.fragmentosIncorporados}
             </span>
           </div>
+          {r.areaTalhaoHa != null && (
+            <p className="text-[9px] pt-0.5" style={{ color: Math.abs(r.difTalhaoPct) < 0.01 ? '#86efac' : '#fbbf24', borderTop: '1px solid #1a3a6b' }}>
+              <Check size={9} className="inline mr-0.5" /> Validação de cobertura: talhão {fmt(r.areaTalhaoHa)} ha · soma das zonas {fmt(r.areaDepoisHa)} ha · diferença {fmt(Math.abs(r.difTalhaoHa), 3)} ha ({fmt(Math.abs(r.difTalhaoPct), 3)}%) — as zonas preenchem o talhão inteiro.
+            </p>
+          )}
           {porZonaOrdenado.length > 0 && (
             <div className="max-h-28 overflow-y-auto">
               <table className="w-full text-[9px]" style={{ color: '#94a3b8' }}>
@@ -301,9 +297,6 @@ export function SuavizarLimites({ titulo, fcOriginal, poligono, onPreview, onApl
           )}
           {r.zonasIncorporadas.length > 0 && (
             <p className="text-[9px]" style={{ color: '#fbbf24' }}>Zonas totalmente incorporadas (fragmento/largura): {r.zonasIncorporadas.join(', ')}.</p>
-          )}
-          {r.vaosPreservadosHa > 0.01 && (
-            <p className="text-[9px]" style={{ color: '#64748b' }}>Buracos legítimos preservados: {fmt(r.vaosPreservadosHa)} ha (áreas sem dado não são preenchidas).</p>
           )}
         </div>
       )}

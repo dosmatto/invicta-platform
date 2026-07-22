@@ -49,7 +49,7 @@ AMPLITUDE_MIN = 0.30
 NUGGET_MAX = 0.10
 # Versao do motor de interpolacao (conferir em GET /health para saber se o
 # backend foi reiniciado com o codigo novo).
-VERSION = "interp-19-suavizar-zonas"
+VERSION = "interp-20-contorno-oficial"
 
 
 def _nlags(n: int) -> int:
@@ -708,25 +708,39 @@ def gerar_multi(camadas: list[dict], bounds, dims, n_classes: int,
         if not geom.is_empty:
             por_rank.append((r, geom))
 
-    # DIVISA COMPARTILHADA: simplify() POR ZONA quebrava a cobertura — cada lado
-    # da divisa era simplificado sozinho e sobravam slivers de sobreposição/vão
-    # na escadinha. coverage_simplify (GEOS>=3.12) simplifica a cobertura INTEIRA:
-    # a aresta interna vira UMA linha só, usada pelas duas zonas vizinhas.
-    # simplify_boundary=False preserva o contorno externo da malha (o recorte
-    # pelo talhão vem depois). Sem GEOS novo, fica a escadinha exata das células
-    # (sem sobreposição por construção).
-    geoms = [g for _, g in por_rank]
-    if geoms and hasattr(shapely, "coverage_simplify"):
-        try:
-            geoms = list(shapely.coverage_simplify(geoms, dx * 0.5, simplify_boundary=False))
-        except Exception:
-            pass
+    # LIMITE EXTERNO = POLÍGONO OFICIAL DO TALHÃO. O raster só decide as divisas
+    # INTERNAS: as classes viram uma partição EXATA do talhão (faces do arranjo
+    # células+talhão; faixas de borda/nodata vão para a vizinha de maior divisa)
+    # e a cobertura é simplificada com simplify_boundary=False — as arestas
+    # internas (escadinha das células) são suavizadas como UMA linha só por
+    # divisa e o contorno do talhão fica EXATAMENTE o cadastrado (sem pixels).
+    dx_m = abs(dx) * 111320.0 * math.cos(math.radians(lat0))
+    dy_m = abs(dy) * 110540.0
+    zonas_finais: list[tuple[int, Any]] = []   # (rank, geometria em graus)
+    if poly is not None and por_rank:
+        ranks_pr = [r for r, _ in por_rank]
+        zl = [_dissolver(_so_poligonos(_tf_local(g, lon0, lat0))) for _, g in por_rank]
+        poly_loc = shapely.make_valid(_tf_local(poly, lon0, lat0))
+        zl, _st = _montar_particao(zl, ranks_pr, poly_loc)
+        if hasattr(shapely, "coverage_simplify"):
+            try:
+                zl = list(shapely.coverage_simplify(zl, min(dx_m, dy_m) * 0.5, simplify_boundary=False))
+            except Exception:
+                pass
+        zonas_finais = [(r, _tf_geo(shapely.make_valid(g), lon0, lat0)) for r, g in zip(ranks_pr, zl)]
+    else:
+        # sem polígono do talhão: mantém a malha (contorno = borda das células)
+        geoms = [g for _, g in por_rank]
+        if geoms and hasattr(shapely, "coverage_simplify"):
+            try:
+                geoms = list(shapely.coverage_simplify(geoms, dx * 0.5, simplify_boundary=False))
+            except Exception:
+                pass
+        zonas_finais = [(r, g) for (r, _), g in zip(por_rank, geoms)]
 
     zonas = []  # (rank_do_potencial, areaHa, geometria contígua)
-    for (r, _bruta), geom in zip(por_rank, geoms):
-        if poly is not None:
-            geom = geom.intersection(poly)
-        if geom.is_empty:
+    for r, geom in zonas_finais:
+        if geom is None or geom.is_empty:
             continue
         # IDENTIDADE ÚNICA: cada parte CONTÍGUA da classe vira uma zona própria
         # (o potencial Alta/Médio/Baixo fica como atributo, não como identidade).
@@ -782,7 +796,9 @@ def gerar_multi(camadas: list[dict], bounds, dims, n_classes: int,
 # Tolerâncias em METROS num plano local equirretangular (como o resto do módulo).
 
 RUIDO_M2 = 250.0          # partes menores que isto são SEMPRE ruído de vetorização
-GAP_ABSORVE_MAX_M2 = 5000.0  # vão sem dono maior que isto é buraco legítimo (nodata): preserva
+# Tolerância da validação de cobertura: |união das zonas − talhão| tem de ficar
+# abaixo disto (m²) — acima é erro de reconstrução e o resultado NÃO é devolvido.
+COBERTURA_TOL_M2 = 5.0
 
 # Níveis simples → (fator sobre o passo mediano da borda, iterações de Chaikin)
 NIVEIS_SUAVIZACAO = {"leve": (0.8, 1), "moderado": (1.6, 2), "intenso": (2.4, 3)}
@@ -823,6 +839,26 @@ def _multi(polys: list):
     if not polys:
         return shapely.Polygon()
     return polys[0] if len(polys) == 1 else shapely.MultiPolygon(polys)
+
+
+def _dissolver(partes: list):
+    """União poligonal LIMPA de partes possivelmente ADJACENTES (faces que
+    compartilham aresta). Nunca devolve GeometryCollection — era isso que
+    quebrava a extração de arestas (boundary=None) em talhões irregulares:
+    MultiPolygon de faces vizinhas é INVÁLIDO e o make_valid vira collection."""
+    partes = [p for p in partes if p is not None and not p.is_empty]
+    if not partes:
+        return shapely.Polygon()
+    return _multi(_so_poligonos(shapely.make_valid(shapely.union_all(partes))))
+
+
+def _borda(geom):
+    """boundary defensivo: GeometryCollection/vazios devolvem linha vazia."""
+    try:
+        b = geom.boundary
+        return b if b is not None else shapely.LineString()
+    except Exception:
+        return shapely.LineString()
 
 
 def _n_vertices(geom) -> int:
@@ -892,8 +928,10 @@ def _suavizar_aresta(linha, tol: float, iters: int):
 
 def _arestas_do_arranjo(zonas_geoms: list):
     """União das bordas da partição → arestas fundidas (quebradas nos nós)."""
-    bordas = shapely.union_all([g.boundary for g in zonas_geoms if g and not g.is_empty])
-    fundidas = shapely.line_merge(bordas)
+    linhas = [_borda(g) for g in zonas_geoms if g and not g.is_empty]
+    if not linhas:
+        return []
+    fundidas = shapely.line_merge(shapely.union_all(linhas))
     return [ln for ln in _so_linhas(fundidas) if ln.length > 0]
 
 
@@ -951,14 +989,15 @@ def _atribuir_faces(faces: list, zonas_geoms: list, moldura) -> list[int]:
 def _vizinha_de(parte, zonas_geoms: list, eu: int, ranks: list) -> int:
     """Vizinha de MAIOR borda compartilhada; empate → classe mais próxima."""
     melhor_len, melhor_dr, dono = 0.0, 1e18, -1
+    borda_p = _borda(parte)
     for j, zg in enumerate(zonas_geoms):
         if j == eu or zg is None or zg.is_empty:
             continue
         try:
-            comum = parte.boundary.intersection(zg.boundary)
+            comum = borda_p.intersection(_borda(zg))
+            L = float(comum.length)
         except Exception:
             continue
-        L = float(comum.length)
         if L <= 0:
             continue
         dr = abs(ranks[j] - ranks[eu]) if eu >= 0 else 0
@@ -967,38 +1006,75 @@ def _vizinha_de(parte, zonas_geoms: list, eu: int, ranks: list) -> int:
     return dono
 
 
-def _montar_particao(zonas_geoms: list, ranks: list, moldura):
-    """Reparte o plano nas faces do arranjo das bordas e atribui cada face a UMA
-    zona — corrige sobreposições e vãos-sliver herdados. Vãos grandes (buracos
-    legítimos, ex.: nodata) são PRESERVADOS. Devolve (novas_geoms, stats)."""
-    linhas = [g.boundary for g in zonas_geoms if g and not g.is_empty]
-    if moldura is not None:
-        linhas.append(moldura.boundary)
-    faces = _polygonizar(linhas)
-    donos = _atribuir_faces(faces, zonas_geoms, moldura)
+def _mais_proxima(parte, zonas_geoms: list) -> int:
+    """Zona espacialmente mais próxima (fallback quando não há borda comum)."""
+    melhor, dono = math.inf, -1
+    for j, zg in enumerate(zonas_geoms):
+        if zg is None or zg.is_empty:
+            continue
+        try:
+            d = float(parte.distance(zg))
+        except Exception:
+            continue
+        if d < melhor:
+            melhor, dono = d, j
+    return dono
 
-    # vãos pequenos → vizinha de maior borda; grandes → preserva o buraco
-    vaos_corrigidos = 0.0
-    vaos_preservados = 0.0
-    por_zona: list[list] = [[] for _ in zonas_geoms]
+
+def _atribuir_e_montar(faces: list, zonas_ref: list, ranks: list, moldura):
+    """Atribui cada face a UMA zona (referência `zonas_ref`) e dissolve por zona.
+    TODAS as faces dentro da moldura acabam com dona (vizinha de maior borda,
+    iterativo; ilhadas → zona mais próxima) — a união das zonas vira EXATAMENTE
+    a moldura: nenhum vazio, nenhuma zona fora. Devolve (novas, vaos_m2)."""
+    donos = _atribuir_faces(faces, zonas_ref, moldura)
+    por_zona: list[list] = [[] for _ in zonas_ref]
     pendentes = []
     for f, d in zip(faces, donos):
         if d >= 0:
             por_zona[d].append(f)
         elif d == -1:
             pendentes.append(f)
-    parciais = [_multi(ps) for ps in por_zona]
-    for f in pendentes:
-        if f.area <= GAP_ABSORVE_MAX_M2:
-            d = _vizinha_de(f, parciais, -1, ranks)
+
+    vaos_m2 = 0.0
+    atuais = [_dissolver(ps) for ps in por_zona]
+    for _ in range(30):                      # vão encostado só em vão: iterativo
+        if not pendentes:
+            break
+        restantes, progrediu = [], False
+        for f in pendentes:
+            d = _vizinha_de(f, atuais, -1, ranks)
             if d >= 0:
                 por_zona[d].append(f)
-                vaos_corrigidos += f.area
-                continue
-        vaos_preservados += f.area
+                atuais[d] = _dissolver([atuais[d], f])
+                vaos_m2 += f.area
+                progrediu = True
+            else:
+                restantes.append(f)
+        pendentes = restantes
+        if not progrediu:
+            break
+    for f in pendentes:                      # sem borda comum: mais próxima
+        d = _mais_proxima(f, atuais)
+        if d >= 0:
+            por_zona[d].append(f)
+            vaos_m2 += f.area
 
-    novas = [shapely.make_valid(_multi(ps)) for ps in por_zona]
-    return novas, {"vaosCorrigidosM2": vaos_corrigidos, "vaosPreservadosM2": vaos_preservados}
+    return [_dissolver(ps) for ps in por_zona], vaos_m2
+
+
+def _montar_particao(zonas_geoms: list, ranks: list, moldura):
+    """Reparte o plano nas faces do arranjo das bordas (zonas + moldura) e
+    atribui cada face a UMA zona — corrige sobreposições e vãos herdados e
+    garante que a união das zonas = moldura (o raster NUNCA define o contorno
+    externo; faixas de borda/nodata vão para a vizinha de maior divisa)."""
+    linhas = [_borda(g) for g in zonas_geoms if g and not g.is_empty]
+    if moldura is not None:
+        linhas.append(_borda(moldura))
+    faces = _polygonizar(linhas)
+    if not faces:
+        raise ValueError("geometria de entrada inválida (não foi possível decompor as zonas em faces)")
+    novas, vaos_m2 = _atribuir_e_montar(faces, zonas_geoms, ranks, moldura)
+    return novas, {"vaosCorrigidosM2": vaos_m2}
 
 
 def _absorver_fragmentos(zonas_geoms: list, ranks: list, frag_min_m2: float, largura_min_m: float):
@@ -1026,8 +1102,8 @@ def _absorver_fragmentos(zonas_geoms: list, ranks: list, frag_min_m2: float, lar
                 d = _vizinha_de(q, zonas_geoms, i, ranks)
                 if d < 0:
                     continue
-                zonas_geoms[i] = zonas_geoms[i].difference(q)
-                zonas_geoms[d] = shapely.make_valid(shapely.union_all([zonas_geoms[d], q]))
+                zonas_geoms[i] = _dissolver(_so_poligonos(zonas_geoms[i].difference(q)))
+                zonas_geoms[d] = _dissolver([zonas_geoms[d], q])
                 n_inc += 1
                 area_inc += q.area
                 mudou = True
@@ -1035,33 +1111,42 @@ def _absorver_fragmentos(zonas_geoms: list, ranks: list, frag_min_m2: float, lar
             break
     return n_inc, area_inc
 
-
 def suavizar_zonas(fc: dict, polygon_geojson: dict | None = None, nivel: str = "moderado",
                    tolerancia_m: float | None = None, iteracoes: int | None = None,
                    frag_min_ha: float = 0.0, largura_min_m: float = 0.0,
                    manter_limite_externo: bool = True) -> dict[str, Any]:
-    """Suaviza os limites das zonas preservando a TOPOLOGIA (divisa = mesma linha
-    para as duas vizinhas; sem sobreposição/vão; contorno do talhão intacto por
-    padrão). Devolve {fc, diff, resumo} — a decisão de aplicar é do usuário."""
+    """Suaviza SOMENTE as divisões internas entre as zonas. REGRAS FIXAS:
+    o limite externo vem do polígono oficial do talhão (nunca do raster, nunca
+    suavizado — `manter_limite_externo` é aceito por compatibilidade mas
+    ignorado: é sempre True); a união das zonas = talhão (sem vazio, sem zona
+    fora, faixas sem dado vão para a vizinha); divisa = mesma linha para as
+    duas vizinhas. Valida a cobertura antes de devolver {fc, diff, resumo}."""
+    del manter_limite_externo  # regra fixa: o contorno oficial NUNCA é alterado
     feats = [f for f in (fc.get("features") or [])
              if f.get("geometry") and f["geometry"].get("type") in ("Polygon", "MultiPolygon")]
     if len(feats) == 0:
-        raise ValueError("nenhuma zona poligonal no FeatureCollection")
+        raise ValueError("geometria de entrada inválida: nenhuma zona poligonal no FeatureCollection")
 
     # 1) valida + projeta para o plano métrico local
     geos = [shapely.make_valid(shape(f["geometry"])) for f in feats]
     todas = shapely.union_all(geos)
     minx, miny, maxx, maxy = todas.bounds
     lon0, lat0 = (minx + maxx) / 2.0, (miny + maxy) / 2.0
-    zonas_loc = [_multi(_so_poligonos(_tf_local(g, lon0, lat0))) for g in geos]
+    zonas_loc = [_dissolver(_so_poligonos(_tf_local(g, lon0, lat0))) for g in geos]
     ranks = [int((f.get("properties") or {}).get("potencialRank") or 0) for f in feats]
     ids = [str((f.get("properties") or {}).get("id") or str(i + 1)) for i, f in enumerate(feats)]
 
     poly_loc = None
     if polygon_geojson:
-        poly_loc = shapely.make_valid(_tf_local(shape(polygon_geojson), lon0, lat0))
+        try:
+            poly_loc = shapely.make_valid(_tf_local(shape(polygon_geojson), lon0, lat0))
+        except Exception as ex:
+            raise ValueError(f"polígono do talhão inválido: {ex}")
+        if poly_loc.is_empty:
+            raise ValueError("polígono do talhão inválido (vazio)")
 
     # métricas de entrada (antes de qualquer correção)
+    area_zonas_entrada = sum(sum(p.area for p in _so_poligonos(g)) for g in zonas_loc)
     vert_antes = [_n_vertices(g) for g in zonas_loc]
     sobre_antes = 0.0
     for i in range(len(zonas_loc)):
@@ -1080,45 +1165,63 @@ def suavizar_zonas(fc: dict, polygon_geojson: dict | None = None, nivel: str = "
     iters = int(iteracoes) if (nivel == "personalizado" and iteracoes is not None) else it_padrao
     iters = min(max(iters, 0), 5)
 
-    # 2) reconstrói a partição (corrige sobreposição/vão herdados)
+    # 2) partição EXATA: união das zonas = talhão (corrige sobreposição/vão e
+    #    contorno pixelado herdados; faixas sem dado → vizinha de maior divisa)
     zonas_loc, st_part = _montar_particao(zonas_loc, ranks, poly_loc)
     area_antes = [sum(p.area for p in _so_poligonos(g)) for g in zonas_loc]
 
     # 3) fragmentos / estreitos (opcional — ruído de vetorização sempre sai)
     n_frag, area_frag = _absorver_fragmentos(zonas_loc, ranks, frag_min_ha * 10000.0, largura_min_m)
 
-    # 4) suaviza as ARESTAS (cada divisa uma vez só, nós fixos)
-    borda_talhao = poly_loc.boundary if poly_loc is not None else None
+    # 4) suaviza SÓ as arestas INTERNAS (cada divisa uma vez, nós fixos). O
+    #    contorno externo (talhão oficial — ou, sem talhão, a borda da própria
+    #    cobertura) fica intacto SEMPRE.
     eps_ext = max(passo * 0.02, 0.05)
-    faixa_ext = borda_talhao.buffer(eps_ext) if borda_talhao is not None else None
+    if poly_loc is not None:
+        faixa_ext = _borda(poly_loc).buffer(eps_ext)
+    else:
+        faixa_ext = _borda(shapely.union_all([g for g in zonas_loc if not g.is_empty])).buffer(eps_ext)
     arestas = _arestas_do_arranjo(zonas_loc)
+    if not arestas:
+        raise ValueError("não foi possível extrair as linhas internas das zonas")
     novas_linhas = []
     for a in arestas:
-        externa = faixa_ext is not None and a.within(faixa_ext)
-        if externa and manter_limite_externo:
-            novas_linhas.append(a)          # contorno do talhão: intocado
+        if a.within(faixa_ext):
+            novas_linhas.append(a)          # limite externo: SEMPRE intocado
         else:
             novas_linhas.append(_suavizar_aresta(a, tol, iters))
 
     # 5) re-polygoniza e re-atribui (divisa única ⇒ sem sobreposição/vão)
-    faces2 = _polygonizar(novas_linhas)
+    try:
+        faces2 = _polygonizar(novas_linhas)
+    except Exception as ex:
+        raise ValueError(f"não foi possível reconstruir as linhas internas: {ex}")
     if not faces2:
-        raise ValueError("suavização degenerou a geometria (tolerância alta demais)")
-    donos2 = _atribuir_faces(faces2, zonas_loc, poly_loc if manter_limite_externo else None)
-    por_zona: list[list] = [[] for _ in zonas_loc]
-    for f, d in zip(faces2, donos2):
-        if d >= 0:
-            por_zona[d].append(f)
-        elif d == -1 and f.area <= GAP_ABSORVE_MAX_M2:
-            dd = _vizinha_de(f, zonas_loc, -1, ranks)
-            if dd >= 0:
-                por_zona[dd].append(f)
-    suaves = [shapely.make_valid(_multi(ps)) for ps in por_zona]
-    if not manter_limite_externo and poly_loc is not None:
-        # externo suavizado (autorizado) — ainda assim recorta no talhão oficial
-        suaves = [shapely.make_valid(g.intersection(poly_loc)) for g in suaves]
+        raise ValueError("não foi possível reconstruir as linhas internas "
+                         "(tolerância incompatível com o tamanho das zonas)")
+    suaves, _vaos2 = _atribuir_e_montar(faces2, zonas_loc, ranks, poly_loc)
 
-    # 6) valida + métricas por zona
+    # 6) VALIDAÇÃO DA COBERTURA (obrigatória): união das zonas = talhão; sem
+    #    sobreposição; sem geometria inválida. Falhou → NÃO devolve resultado.
+    for g in suaves:
+        if not g.is_valid:
+            raise ValueError("erro na reconstrução topológica: geometria final inválida")
+    sobre_depois = 0.0
+    for i in range(len(suaves)):
+        for j in range(i + 1, len(suaves)):
+            inter = suaves[i].intersection(suaves[j])
+            if not inter.is_empty:
+                sobre_depois += sum(p.area for p in _so_poligonos(inter))
+    if sobre_depois > COBERTURA_TOL_M2:
+        raise ValueError(f"erro na reconstrução topológica: sobreposição residual de {sobre_depois:.1f} m²")
+    uni_final = shapely.union_all([g for g in suaves if not g.is_empty])
+    alvo = poly_loc if poly_loc is not None else shapely.union_all([g for g in zonas_loc if not g.is_empty])
+    dif_cobertura = sum(p.area for p in _so_poligonos(alvo.symmetric_difference(uni_final)))
+    if dif_cobertura > max(COBERTURA_TOL_M2, alvo.area * 1e-6):
+        raise ValueError("erro na reconstrução topológica: a união das zonas não fecha com o "
+                         f"limite do talhão (diferença de {dif_cobertura:.1f} m²)")
+
+    # métricas por zona
     zonas_incorporadas, zonas_perdidas = [], []
     por_zona_resumo = []
     total_antes = total_depois = 0.0
@@ -1132,7 +1235,7 @@ def suavizar_zonas(fc: dict, polygon_geojson: dict | None = None, nivel: str = "
         desloc = 0.0
         if a0 > 1.0 and a1 > 1.0:
             try:
-                desloc = float(shapely.hausdorff_distance(g0.boundary, g1.boundary))
+                desloc = float(shapely.hausdorff_distance(_borda(g0), _borda(g1)))
             except Exception:
                 desloc = 0.0
         desloc_max = max(desloc_max, desloc)
@@ -1173,6 +1276,9 @@ def suavizar_zonas(fc: dict, polygon_geojson: dict | None = None, nivel: str = "
         props["areaHa"] = round(_area_ha(geo, lon0, lat0), 2)
         features.append({"type": "Feature", "properties": props, "geometry": mapping(geo)})
 
+    # validação de área p/ a interface (§7): talhão × soma das zonas
+    area_alvo = alvo.area
+    dif_ha = (total_depois - area_alvo) / 10000.0
     maior_diff = max((abs(z["diffPct"]) for z in por_zona_resumo if z["areaAntesHa"] > 0), default=0.0)
     return {
         "fc": {"type": "FeatureCollection", "features": features},
@@ -1182,7 +1288,7 @@ def suavizar_zonas(fc: dict, polygon_geojson: dict | None = None, nivel: str = "
             "passoM": round(passo, 2),
             "toleranciaM": round(tol, 2),
             "iteracoes": iters,
-            "manterLimiteExterno": bool(manter_limite_externo),
+            "manterLimiteExterno": True,   # regra fixa (compatibilidade)
             "fragMinHa": frag_min_ha,
             "larguraMinM": largura_min_m,
             "areaAntesHa": round(total_antes / 10000.0, 2),
@@ -1194,7 +1300,10 @@ def suavizar_zonas(fc: dict, polygon_geojson: dict | None = None, nivel: str = "
             "vertDepois": int(sum(_n_vertices(g) for g in suaves)),
             "sobreposicaoCorrigidaHa": round(sobre_antes / 10000.0, 4),
             "vaosCorrigidosHa": round(st_part["vaosCorrigidosM2"] / 10000.0, 4),
-            "vaosPreservadosHa": round(st_part["vaosPreservadosM2"] / 10000.0, 4),
+            "areaZonasEntradaHa": round(area_zonas_entrada / 10000.0, 2),
+            "areaTalhaoHa": round(area_alvo / 10000.0, 2) if poly_loc is not None else None,
+            "difTalhaoHa": round(dif_ha, 3),
+            "difTalhaoPct": round((total_depois - area_alvo) / area_alvo * 100.0, 3) if area_alvo > 0 else 0.0,
             "fragmentosIncorporados": n_frag,
             "fragmentosAreaHa": round(area_frag / 10000.0, 4),
             "zonasIncorporadas": zonas_incorporadas,

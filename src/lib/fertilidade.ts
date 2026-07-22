@@ -228,9 +228,12 @@ export async function gerarZonas(params: {
 }
 
 // ── SUAVIZAR limites (pós-geração, opcional e reversível) ──
-// O backend trata as zonas como COBERTURA: cada divisa é suavizada UMA vez só
-// (mesma linha p/ as duas vizinhas — sem sobreposição/vão) e o contorno do
-// talhão fica intacto por padrão. Nada é gravado: aplicar é decisão do usuário.
+// O backend trata as zonas como COBERTURA e suaviza SOMENTE as divisões
+// internas — cada divisa vira UMA linha só (mesma p/ as duas vizinhas, sem
+// sobreposição/vão). REGRA FIXA: o limite externo permanece exatamente igual
+// ao polígono oficial do talhão (nunca vem do raster, nunca é suavizado) e a
+// união das zonas preenche 100% do talhão. Nada é gravado: aplicar é decisão
+// do usuário.
 
 export type NivelSuavizacao = 'leve' | 'moderado' | 'intenso' | 'personalizado';
 
@@ -239,10 +242,10 @@ export interface ResumoSuavizacao {
   passoM: number;               // passo mediano da borda (base das tolerâncias)
   toleranciaM: number;          // tolerância efetivamente usada (m)
   iteracoes: number;            // iterações de Chaikin
-  manterLimiteExterno: boolean;
+  manterLimiteExterno: boolean; // sempre true (regra fixa; mantido p/ registro)
   fragMinHa: number;
   larguraMinM: number;
-  areaAntesHa: number;
+  areaAntesHa: number;          // soma das zonas APÓS preencher o talhão (base do Δ%)
   areaDepoisHa: number;
   diffTotalHa: number;
   maiorDiffPct: number;         // maior |Δ área| entre as zonas (%)
@@ -250,8 +253,11 @@ export interface ResumoSuavizacao {
   vertAntes: number;
   vertDepois: number;
   sobreposicaoCorrigidaHa: number;
-  vaosCorrigidosHa: number;
-  vaosPreservadosHa: number;    // buracos legítimos (nodata) mantidos
+  vaosCorrigidosHa: number;     // faixas de borda/nodata incorporadas às vizinhas
+  areaZonasEntradaHa: number;   // soma das zonas como CHEGARAM (antes de preencher)
+  areaTalhaoHa: number | null;  // área oficial do talhão (validação de cobertura)
+  difTalhaoHa: number;          // soma das zonas − talhão (deve ser ~0)
+  difTalhaoPct: number;
   fragmentosIncorporados: number;
   fragmentosAreaHa: number;
   zonasIncorporadas: string[];  // sumiram por absorção AUTORIZADA (fragmento/largura)
@@ -273,7 +279,6 @@ export async function suavizarZonas(params: {
   iteracoes?: number | null;       // só no personalizado
   fragMinHa?: number;              // 0 = não absorver fragmentos
   larguraMinM?: number;            // 0 = não remover trechos estreitos
-  manterLimiteExterno?: boolean;   // padrão true (contorno do talhão intacto)
 }): Promise<RespSuavizarZonas> {
   const r = await postZonear('/zonear-suavizar', {
     fc: params.fc,
@@ -283,7 +288,7 @@ export async function suavizarZonas(params: {
     iteracoes: params.iteracoes ?? null,
     frag_min_ha: params.fragMinHa ?? 0,
     largura_min_m: params.larguraMinM ?? 0,
-    manter_limite_externo: params.manterLimiteExterno ?? true,
+    manter_limite_externo: true,   // REGRA FIXA: o limite oficial nunca é alterado
   });
   return r.json();
 }
