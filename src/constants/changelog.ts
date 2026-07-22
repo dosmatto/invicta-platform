@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.5.4': [
+    'INTERPOLAÇÃO (FERTILIDADE) — PIXEL DE 2 m E PADRÃO 5 m: a krigagem/IDW ganhou a opção de pixel 2 × 2 m (mais detalhe) e o padrão passou de 20 m para 5 m. Opções agora: 2, 5 (padrão), 10 e 20 m. Mapas já interpolados continuam aparecendo normalmente; a resolução só vale para a PRÓXIMA interpolação. Obs.: a grade é limitada a 500×500 células, então em talhões muito grandes o 2 m/5 m é ajustado automaticamente para caber.',
+  ],
   '2.5.3': [
     'EQUAÇÕES — "SALVAR COMO" AGORA PERGUNTA O NOME: ao usar "Salvar como" no editor de equações, o app pede o nome da nova equação (com uma sugestão preenchida) em vez de clonar direto com o nome atual ou "(cópia)". Cancelar não cria nada.',
   ],

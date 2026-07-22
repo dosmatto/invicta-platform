@@ -57,7 +57,7 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
   const [nutriente, setNutriente] = useState('');
   const [profundidade, setProfundidade] = useState('');
   const [metodo, setMetodo] = useState<'krige' | 'idw'>('krige');
-  const [pixelM, setPixelM] = useState(20);
+  const [pixelM, setPixelM] = useState(5);
   const [modeloFixo, setModeloFixo] = useState('');
   const [cfgAberto, setCfgAberto] = useState(false);
   const [estado, setEstado] = useState<'idle' | 'processando' | 'pronto' | 'erro'>('idle');
@@ -651,7 +651,7 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
                   <div className="flex-1">
                     <label className="text-[10px] font-semibold block mb-1" style={{ color: '#64748b' }}>Pixel</label>
                     <select value={pixelM} onChange={e => setPixelM(Number(e.target.value))} className="w-full rounded px-2 py-1 text-[11px] outline-none" style={inputStyle}>
-                      {[5, 10, 20].map(p => <option key={p} value={p}>{p} × {p} m{p === 20 ? ' (padrão)' : ''}</option>)}
+                      {[2, 5, 10, 20].map(p => <option key={p} value={p}>{p} × {p} m{p === 5 ? ' (padrão)' : ''}</option>)}
                     </select>
                   </div>
                   {metodo === 'krige' && (
