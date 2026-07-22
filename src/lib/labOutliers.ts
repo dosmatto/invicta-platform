@@ -31,6 +31,11 @@ export const FAIXAS_PLAUSIVEIS: Record<string, { min: number; max: number }> = {
   cu:      { min: 0,  max: 100 },    // mg/dm³
   mn:      { min: 0,  max: 500 },    // mg/dm³
   textura: { min: 0,  max: 100 },    // %
+  // Colunas calculadas (derivadas na importação):
+  t:       { min: 0,  max: 600 },    // mmolc/dm³ (CTC efetiva)
+  satk:    { min: 0,  max: 100 },    // %
+  satca:   { min: 0,  max: 100 },    // %
+  satmg:   { min: 0,  max: 100 },    // %
 };
 
 export type TipoOutlier = 'faixa' | 'profundidade' | 'estatistico';

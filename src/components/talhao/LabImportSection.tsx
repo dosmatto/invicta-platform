@@ -7,7 +7,7 @@ import {
   getImportacoesLab, saveImportacaoLab, deleteImportacaoLab, getVariaveisAtivas, siglaVariavel,
   GradeAmostragem, ImportacaoLab,
 } from '@/lib/store';
-import { lerArquivo, aplicarPerfil, autoConfig, PERFIS_BUILTIN, norm, numerosDaGrade, valorLab, ELEMENTOS_LAB, PerfilLabConfig, type ResultadoAmostra } from '@/lib/lab';
+import { lerArquivo, aplicarPerfil, autoConfig, PERFIS_BUILTIN, norm, numerosDaGrade, valorLab, calcularDerivados, DERIVADOS_IDS, ELEMENTOS_LAB, PerfilLabConfig, type ResultadoAmostra } from '@/lib/lab';
 import { unidadesDe, unidadeCanonica, precisaConverter } from '@/lib/unidades';
 import { detectarOutliers, chaveAmostra, contarOutliers } from '@/lib/labOutliers';
 import { LabPreviewTable } from './LabPreviewTable';
@@ -104,19 +104,33 @@ export function LabImportSection() {
   const toggleExcluir = (r: ResultadoAmostra) =>
     setExcluidos(prev => { const k = chaveAmostra(r), n = new Set(prev); n.has(k) ? n.delete(k) : n.add(k); return n; });
 
+  // Aplica as edições do usuário (só nas colunas do laudo) e RECALCULA as
+  // colunas derivadas a partir do resultado — usado tanto na prévia quanto no
+  // que será importado.
+  const aplicarEdicoes = (r: ResultadoAmostra): ResultadoAmostra => {
+    const ed = edicoes[chaveAmostra(r)];
+    const valores = { ...r.valores };
+    if (ed) for (const [elId, txt] of Object.entries(ed)) {
+      if (DERIVADOS_IDS.has(elId)) continue;                          // derivadas são calculadas, não editáveis
+      const n = valorLab(txt);
+      if (n == null) delete valores[elId]; else valores[elId] = n;    // N.D./"<x" = 0; vazio/inválido = sem valor
+    }
+    calcularDerivados(valores);                                        // t/CTCef, K%, Ca%, Mg% sempre do estado atual
+    return { ...r, valores };
+  };
+
+  // Prévia (todas as linhas, incl. as marcadas p/ excluir — a linha precisa
+  // aparecer para o usuário restaurar); derivadas recalculadas ao vivo.
+  const resultadosPrevia = useMemo(() => resultadosFinais.map(aplicarEdicoes),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [resultadosFinais, edicoes]);
+
   // Resultados após aplicar edições e exclusões — é o que será realmente importado.
   const resultadosEditados = useMemo(() => resultadosFinais
     .filter(r => !excluidos.has(chaveAmostra(r)))
-    .map(r => {
-      const ed = edicoes[chaveAmostra(r)];
-      if (!ed) return r;
-      const valores = { ...r.valores };
-      for (const [elId, txt] of Object.entries(ed)) {
-        const n = valorLab(txt);
-        if (n == null) delete valores[elId]; else valores[elId] = n;   // N.D./"<x" = 0; vazio/inválido = sem valor
-      }
-      return { ...r, valores };
-    }), [resultadosFinais, edicoes, excluidos]);
+    .map(aplicarEdicoes),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [resultadosFinais, edicoes, excluidos]);
   const elementosImport = useMemo(() => [...new Set(resultadosEditados.flatMap(r => Object.keys(r.valores)))], [resultadosEditados]);
   const outliers = useMemo(() => detectarOutliers(resultadosEditados, elementosOrdenados), [resultadosEditados, elementosOrdenados]);
   const nOutliers = contarOutliers(outliers);
@@ -230,12 +244,13 @@ export function LabImportSection() {
           </p>
           {resultadosEditados.length === 0 && <p className="text-[9px]" style={{ color: '#fbbf24' }}>Nenhuma amostra — confira o perfil e o talhão.</p>}
 
-          {/* Unidade de cada variável NESTE laudo → converte p/ o padrão da plataforma */}
-          {elementosOrdenados.some(elId => unidadesDe(elId).length > 1) && (
+          {/* Unidade de cada variável NESTE laudo → converte p/ o padrão da plataforma.
+              Colunas derivadas (calculadas) não têm unidade de laudo — ficam de fora. */}
+          {elementosOrdenados.some(elId => !DERIVADOS_IDS.has(elId) && unidadesDe(elId).length > 1) && (
             <div>
               <p className="text-[9px] font-semibold mb-1" style={{ color: '#64748b' }}>Unidade no laudo → convertida p/ o padrão da plataforma</p>
               <div className="grid grid-cols-2 gap-x-2 gap-y-1">
-                {elementosOrdenados.filter(elId => unidadesDe(elId).length > 1).map(elId => {
+                {elementosOrdenados.filter(elId => !DERIVADOS_IDS.has(elId) && unidadesDe(elId).length > 1).map(elId => {
                   const atual = cfgEfetivo?.detalhes?.[elId]?.unidade ?? unidadeCanonica(elId);
                   const conv = precisaConverter(elId, atual);
                   return (
@@ -250,17 +265,19 @@ export function LabImportSection() {
                   );
                 })}
               </div>
-              {elementosOrdenados.some(elId => precisaConverter(elId, cfgEfetivo?.detalhes?.[elId]?.unidade ?? unidadeCanonica(elId))) && (
+              {elementosOrdenados.some(elId => !DERIVADOS_IDS.has(elId) && precisaConverter(elId, cfgEfetivo?.detalhes?.[elId]?.unidade ?? unidadeCanonica(elId))) && (
                 <p className="text-[9px] mt-0.5" style={{ color: '#fbbf24' }}>⚠ As destacadas serão CONVERTIDAS ao importar (→ padrão da plataforma).</p>
               )}
             </div>
           )}
 
-          {/* Prévia editável com detecção de outliers — trava de qualidade da entrada */}
-          {resultadosFinais.length > 0 && (
+          {/* Prévia editável com detecção de outliers — trava de qualidade da entrada.
+              Colunas derivadas (t/CTCef, K%, Ca%, Mg%) entram como somente-leitura. */}
+          {resultadosPrevia.length > 0 && (
             <LabPreviewTable
-              resultados={resultadosFinais}
+              resultados={resultadosPrevia}
               elementos={elementosOrdenados}
+              derivados={DERIVADOS_IDS}
               sigla={siglaVariavel}
               valorTexto={valorTexto}
               onEditar={editarValor}

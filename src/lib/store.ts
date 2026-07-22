@@ -1384,8 +1384,34 @@ export interface ZoneamentoMeap {
   nome: string;
   padrao: boolean;
   fc: GeoJSON.FeatureCollection;   // polígonos {id, zona, classe, areaHa, potencialRank}
-  meta: { camadas: string[]; algoritmo: string; nPotenciais: number; areaMinHa: number; nZonas: number; nPoligonos?: number; cvMedio?: number | null; pesos?: Record<string, number>; chaves?: string[]; suavizacao?: SuavizacaoMeta };
+  meta: { camadas: string[]; algoritmo: string; nPotenciais: number; areaMinHa: number; nZonas: number; nPoligonos?: number; cvMedio?: number | null; pesos?: Record<string, number>; chaves?: string[]; suavizacao?: SuavizacaoMeta; edicaoManual?: EdicaoManualMeta };
   criadoEm: string;
+}
+
+// Uma operação do Editor Manual de Zonas (registro/auditoria — spec §3, §5).
+export interface OperacaoEdicaoZona {
+  tipo: 'unificar' | 'reclassificar' | 'dividir';
+  data: string;                  // ISO (data + hora)
+  usuario?: string;
+  motivo?: string;               // opcional
+  // detalhes por tipo
+  zonas?: string[];              // ids envolvidos (unificar/dividir origem)
+  classeFinal?: string;          // unificar/reclassificar → classe resultante
+  classeOriginal?: string;       // reclassificar → classe antes
+  partes?: number;               // dividir → nº de partes geradas
+}
+
+// Registro do Editor Manual aplicado (versão derivada — o original é preservado;
+// a nova versão aponta a origem e carrega o log completo das operações).
+export interface EdicaoManualMeta {
+  operacoes: OperacaoEdicaoZona[];
+  nUnificacoes: number;
+  nReclassificacoes: number;
+  nDivisoes: number;
+  origemId?: string;             // zoneamento de origem (versão restaurável)
+  origemNome?: string;
+  data: string;                  // ISO
+  usuario?: string;
 }
 
 // Registro de uma suavização de limites aplicada (versão derivada — o original

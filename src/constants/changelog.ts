@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.5.0': [
+    'IMPORTAÇÃO DE LAUDO — COLUNAS CALCULADAS: ao importar a tabela do laboratório, a plataforma passa a gerar 4 colunas calculadas ao fim da tabela: t (CTC efetiva = Ca+Mg+K+Al), K%, Ca% e Mg% (saturação de cada base na CTC nominal/pH7). Aparecem na prévia (em azul, itálico, somente-leitura) e são gravadas junto — recalculam sozinhas se você corrigir um valor de Ca/Mg/K/Al/CTC na prévia. Ficam disponíveis para mapear como qualquer variável (é só criar uma legenda para elas).',
+  ],
   '2.4.2': [
     'ZONAS DE MANEJO — SALVAR MAIS VISÍVEL: a etapa Avaliar ganhou um botão GRANDE "Salvar zoneamento" (verde, largura total) no fim do painel, depois da lista de polígonos — o botãozinho do cabeçalho continua como atalho. Nada mudou no que é salvo.',
   ],

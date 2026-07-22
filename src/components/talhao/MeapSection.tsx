@@ -10,10 +10,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useApp } from '@/context/AppContext';
-import { getZoneamentosMeap, saveZoneamentoMeap, deleteZoneamentoMeap, setZoneamentoPadraoMeap, removerAdocaoMeap, getTalhoes, getLegendasPorAtributo, type Talhao, type ZoneamentoMeap, type SuavizacaoMeta } from '@/lib/store';
+import { getZoneamentosMeap, saveZoneamentoMeap, deleteZoneamentoMeap, setZoneamentoPadraoMeap, removerAdocaoMeap, getTalhoes, getLegendasPorAtributo, type Talhao, type ZoneamentoMeap, type SuavizacaoMeta, type EdicaoManualMeta, type OperacaoEdicaoZona } from '@/lib/store';
 import { usuarioAtual } from '@/lib/auth';
 import type { RespSuavizarZonas } from '@/lib/fertilidade';
 import { SuavizarLimites } from './SuavizarLimites';
+import { EditorZonasManual } from './EditorZonasManual';
 import { obterOuAdotarAmbiente } from '@/lib/meap/adocao';
 import { carregarCamadas, analisarMulti, gerarMulti, dadosLabCV, type CamadasCarregadas } from '@/lib/meap/gerar';
 import { calcularCVZonas } from '@/lib/meap/cv';
@@ -189,6 +190,9 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
   // Suavizar limites (S1): alvo (preview em edição OU zoneamento salvo) + prévia p/ o mapa.
   const [suav, setSuav] = useState<{ origem: 'preview' | { id: string; nome: string }; fc: GeoJSON.FeatureCollection } | null>(null);
   const [suavMapFc, setSuavMapFc] = useState<GeoJSON.FeatureCollection | null>(null);
+  // Editor manual: zoneamento salvo em edição manual + prévia p/ o mapa.
+  const [editorZona, setEditorZona] = useState<{ id: string; nome: string; fc: GeoJSON.FeatureCollection } | null>(null);
+  const [editorMapFc, setEditorMapFc] = useState<GeoJSON.FeatureCollection | null>(null);
   const [labAberto, setLabAberto] = useState(false);            // Laboratório de Zonas (C4.2)
   const [previewCh, setPreviewCh] = useState<string | null>(null);  // camada em pré-visualização no mapa
   const [refreshAmb, setRefreshAmb] = useState(0);  // força re-derivar o ambiente adotado (após remover)
@@ -306,11 +310,13 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
     return m;
   }, [potenciais]);
 
-  // Mapa: prioridade = prévia da SUAVIZAÇÃO > zoneamento salvo em visualização >
-  // preview gerado > (prévia de camada) > zonas adotadas.
+  // Mapa: prioridade = EDITOR MANUAL > prévia da SUAVIZAÇÃO > zoneamento salvo em
+  // visualização > preview gerado > (prévia de camada) > zonas adotadas.
   useEffect(() => {
     let fc: GeoJSON.FeatureCollection | null = null;
-    if (suavMapFc) {
+    if (editorMapFc) {
+      fc = editorMapFc;   // já vem pronto (cor + rotulo=id + selecionada)
+    } else if (suavMapFc) {
       fc = featuresParaMapa(suavMapFc);
     } else if (vendoFc) {
       fc = featuresParaMapa(vendoFc);
@@ -327,10 +333,10 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
     if (!fc) { setZonasManejo(null); return; }
     setZonasManejo(fc);
     return () => setZonasManejo(null);
-  }, [suavMapFc, vendoFc, res, zonas, previewCh, numDeRank, talhao.id, talhao.zonasGeojson, refreshAmb, setZonasManejo]);
+  }, [editorMapFc, suavMapFc, vendoFc, res, zonas, previewCh, numDeRank, talhao.id, talhao.zonasGeojson, refreshAmb, setZonasManejo]);
 
-  // Fecha o painel de suavização ao trocar de talhão ou limpar o preview gerado.
-  useEffect(() => { setSuav(null); setSuavMapFc(null); }, [talhao.id]);
+  // Fecha os painéis de edição ao trocar de talhão ou limpar o preview gerado.
+  useEffect(() => { setSuav(null); setSuavMapFc(null); setEditorZona(null); setEditorMapFc(null); }, [talhao.id]);
   useEffect(() => { if (!res) setSuav(s => (s?.origem === 'preview' ? null : s)); }, [res]);
 
   // Prévia: clicar numa camada mostra o raster dela sobre o talhão (fase de
@@ -618,6 +624,35 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
     saveZoneamentoMeap({ talhaoId: talhao.id, nome: nomeVersaoSuavizada(nomeBase, rotuloNivel), padrao: false, fc: fcNovo, meta });
     recarregarZon();
     setSuav(null); setSuavMapFc(null);
+  }
+
+  // ── Editor manual: salvar como NOVA versão (o original é preservado) ──
+  function nomeVersaoEditada(base: string): string {
+    const desejado = `${base} — Ajuste manual`;
+    const nomes = new Set(getZoneamentosMeap(talhao.id).map(z => z.nome));
+    if (!nomes.has(desejado)) return desejado;
+    let n = 2;
+    while (nomes.has(`${desejado} ${n}`)) n++;
+    return `${desejado} ${n}`;
+  }
+  function salvarVersaoEditada(fcNovo: GeoJSON.FeatureCollection, ops: OperacaoEdicaoZona[]) {
+    if (!editorZona) return;
+    const orig = zoneamentos.find(z => z.id === editorZona.id) ?? null;
+    const edicaoManual: EdicaoManualMeta = {
+      operacoes: ops,
+      nUnificacoes: ops.filter(o => o.tipo === 'unificar').length,
+      nReclassificacoes: ops.filter(o => o.tipo === 'reclassificar').length,
+      nDivisoes: ops.filter(o => o.tipo === 'dividir').length,
+      origemId: orig?.id, origemNome: orig?.nome,
+      data: new Date().toISOString(), usuario: usuarioAtual()?.email ?? undefined,
+    };
+    const meta: ZoneamentoMeap['meta'] = {
+      ...(orig?.meta ?? { camadas: [], algoritmo: '—', nPotenciais: 0, areaMinHa: 0, nZonas: 0 }),
+      nPoligonos: fcNovo.features.length, edicaoManual,
+    };
+    saveZoneamentoMeap({ talhaoId: talhao.id, nome: nomeVersaoEditada(orig?.nome ?? 'Zoneamento'), padrao: false, fc: fcNovo, meta });
+    recarregarZon();
+    setEditorZona(null); setEditorMapFc(null);
   }
 
   function tornarPadrao(id: string) {
@@ -1053,7 +1088,10 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
                 {z.padrao
                   ? <span className="text-[9px] px-1.5 py-0.5 rounded font-bold flex items-center gap-1 flex-shrink-0" style={{ background: '#3a2e0a', color: '#fbbf24' }}><Star size={8} /> Padrão</span>
                   : <button onClick={e => { e.stopPropagation(); tornarPadrao(z.id); }} className="text-[9px] px-1.5 py-0.5 rounded font-semibold flex-shrink-0" style={{ background: '#1a3a6b', color: '#93c5fd' }}>Tornar padrão</button>}
-                <button onClick={e => { e.stopPropagation(); setSuav({ origem: { id: z.id, nome: z.nome }, fc: z.fc }); }}
+                <button onClick={e => { e.stopPropagation(); setEditorZona({ id: z.id, nome: z.nome, fc: z.fc }); setSuav(null); setSuavMapFc(null); }}
+                  title="Editar manualmente (unir/reclassificar/dividir — cria uma NOVA versão)"
+                  className="p-1 rounded flex-shrink-0" style={{ background: '#241748', color: '#c4b5fd' }}><Pencil size={12} /></button>
+                <button onClick={e => { e.stopPropagation(); setSuav({ origem: { id: z.id, nome: z.nome }, fc: z.fc }); setEditorZona(null); setEditorMapFc(null); }}
                   title="Suavizar limites (cria uma NOVA versão; esta fica intacta)"
                   className="p-1 rounded flex-shrink-0" style={{ background: '#0b3a44', color: '#22d3ee' }}><Spline size={12} /></button>
                 <button onClick={e => { e.stopPropagation(); excluir(z.id); }} title="Excluir" className="p-1 rounded flex-shrink-0" style={{ color: '#f87171' }}><Trash2 size={12} /></button>
@@ -1063,10 +1101,18 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
                 {z.meta.cvMedio != null && <> · CV médio {z.meta.cvMedio.toLocaleString('pt-BR')}%</>}
                 {z.meta.camadas.length > 0 && <> · {z.meta.camadas.join(', ')}</>}
                 {z.meta.suavizacao && <span style={{ color: '#22d3ee' }}> · suavizado ({z.meta.suavizacao.nivel}{z.meta.suavizacao.origemNome ? ` de "${z.meta.suavizacao.origemNome}"` : ''})</span>}
+                {z.meta.edicaoManual && <span style={{ color: '#c4b5fd' }}> · editado manualmente ({z.meta.edicaoManual.nUnificacoes + z.meta.edicaoManual.nReclassificacoes + z.meta.edicaoManual.nDivisoes} operações{z.meta.edicaoManual.origemNome ? ` de "${z.meta.edicaoManual.origemNome}"` : ''})</span>}
                 {z.padrao && <span style={{ color: '#fbbf24' }}> · usado na Amostragem</span>}
               </p>
             </div>
           ))}
+          {editorZona && (
+            <EditorZonasManual nomeZoneamento={editorZona.nome} fcOriginal={editorZona.fc}
+              areaMinHa={(zoneamentos.find(z => z.id === editorZona.id)?.meta.areaMinHa) ?? 0}
+              onMapFc={setEditorMapFc}
+              onSalvarVersao={salvarVersaoEditada}
+              onClose={() => { setEditorZona(null); setEditorMapFc(null); }} />
+          )}
           {suav && suav.origem !== 'preview' && (
             <SuavizarLimites titulo={suav.origem.nome} fcOriginal={suav.fc} poligono={poligono}
               onPreview={setSuavMapFc}

@@ -27,7 +27,38 @@ export const ELEMENTOS_LAB: { id: string; simbolo: string; sinonimos: string[] }
   { id: 'textura', simbolo: 'Textura', sinonimos: ['textura', 'argila', 'granulometria'] },
 ];
 
-export const simboloElemento = (id: string) => ELEMENTOS_LAB.find(e => e.id === id)?.simbolo ?? id;
+// Colunas CALCULADAS na importação — a plataforma DERIVA a partir das colunas
+// do laudo (não vêm do arquivo). Canônico: t (CTC efetiva) em mmolc/dm³ (soma de
+// cátions); saturações em %. Ficam DEPOIS das colunas do laudo na prévia/tabela.
+export const DERIVADOS_LAB: { id: string; simbolo: string }[] = [
+  { id: 't',     simbolo: 't (CTCef)' },
+  { id: 'satk',  simbolo: 'K%' },
+  { id: 'satca', simbolo: 'Ca%' },
+  { id: 'satmg', simbolo: 'Mg%' },
+];
+export const DERIVADOS_IDS = new Set(DERIVADOS_LAB.map(d => d.id));
+const SIMB_DERIVADO: Record<string, string> = Object.fromEntries(DERIVADOS_LAB.map(d => [d.id, d.simbolo]));
+
+export const simboloElemento = (id: string) =>
+  SIMB_DERIVADO[id] ?? ELEMENTOS_LAB.find(e => e.id === id)?.simbolo ?? id;
+
+// Preenche as colunas calculadas a partir dos valores JÁ canônicos (cátions e
+// CTC em mmolc/dm³):
+//   • t   (CTC efetiva) = Ca + Mg + K + Al  (Al ausente conta como 0)
+//   • K%  = saturação de K na CTC NOMINAL (pH7) = K  / CTC × 100
+//   • Ca% = Ca / CTC × 100      • Mg% = Mg / CTC × 100
+// Sempre recalcula do estado atual (sobrescreve derivados anteriores) e nunca
+// toca nas colunas do laudo. Só grava quando os insumos existem (senão remove,
+// p/ não deixar coluna calculada com valor velho após uma edição na prévia).
+export function calcularDerivados(v: Record<string, number>): void {
+  const r1 = (x: number) => Math.round(x * 10) / 10;
+  const { ca, mg, k, al, ctc } = v;
+  if (ca != null && mg != null && k != null) v.t = r1(ca + mg + k + (al ?? 0)); else delete v.t;
+  const sat = (id: string, base: number | undefined) => {
+    if (ctc != null && ctc > 0 && base != null) v[id] = r1((base / ctc) * 100); else delete v[id];
+  };
+  sat('satk', k); sat('satca', ca); sat('satmg', mg);
+}
 
 export const norm = (s: string) => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9%]/g, '');
 
@@ -182,7 +213,11 @@ export function aplicarPerfil(aoa: string[][], cfg: PerfilLabConfig, filtroTalha
     else mapa.set(key, { numero, profundidade: prof, talhao, campanha, valores });
   }
 
+  // Colunas calculadas (t/CTCef, K%, Ca%, Mg%): só AQUI, com os valores já
+  // fundidos (linhas macro+micro do mesmo ponto já unidas), senão a soma/razão
+  // sairia de uma linha parcial.
   const resultados = [...mapa.values()].sort((a, b) => a.numero - b.numero || a.profundidade.localeCompare(b.profundidade));
+  for (const r of resultados) calcularDerivados(r.valores);
   return { resultados, talhoes: [...talhoes], campanhas: [...campanhas], total: dados.length, ignoradas };
 }
 

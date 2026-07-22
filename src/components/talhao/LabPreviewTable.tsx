@@ -13,6 +13,7 @@ import { Trash2, RotateCcw } from 'lucide-react';
 interface Props {
   resultados: ResultadoAmostra[];          // amostras já filtradas (talhão/campanha)
   elementos: string[];                      // colunas, na ordem desejada
+  derivados?: Set<string>;                  // colunas calculadas (somente-leitura)
   sigla: (elId: string) => string;          // rótulo curto da coluna
   valorTexto: (r: ResultadoAmostra, elId: string) => string;   // valor exibido (edição ou original)
   onEditar: (r: ResultadoAmostra, elId: string, texto: string) => void;
@@ -32,7 +33,8 @@ const COR_FLAG: Record<string, { borda: string; fundo: string }> = {
   estatistico:  { borda: '#f59e0b', fundo: '#2a2100' },
 };
 
-export function LabPreviewTable({ resultados, elementos, sigla, valorTexto, onEditar, excluidos, onToggleExcluir, outliers }: Props) {
+export function LabPreviewTable({ resultados, elementos, derivados, sigla, valorTexto, onEditar, excluidos, onToggleExcluir, outliers }: Props) {
+  const ehDerivado = (elId: string) => derivados?.has(elId) ?? false;
   const nFlags = contarOutliers(outliers);
 
   return (
@@ -55,7 +57,8 @@ export function LabPreviewTable({ resultados, elementos, sigla, valorTexto, onEd
               <th className={th} style={{ color: '#93c5fd', textAlign: 'left' }}>#</th>
               <th className={th} style={{ color: '#93c5fd', textAlign: 'left' }}>Prof</th>
               {elementos.map(elId => (
-                <th key={elId} className={th} style={{ color: '#cbd5e1', background: '#0b1f3a' }}>{sigla(elId)}</th>
+                <th key={elId} className={th} style={{ color: ehDerivado(elId) ? '#7dd3fc' : '#cbd5e1', background: '#0b1f3a', fontStyle: ehDerivado(elId) ? 'italic' : 'normal' }}
+                  title={ehDerivado(elId) ? 'Coluna calculada pela plataforma' : undefined}>{sigla(elId)}</th>
               ))}
               <th className={th} style={{ background: '#0b1f3a' }}></th>
             </tr>
@@ -70,20 +73,22 @@ export function LabPreviewTable({ resultados, elementos, sigla, valorTexto, onEd
                   <td className="px-1.5 py-0.5 text-[10px] font-bold" style={{ color: '#e2e8f0', textDecoration: excl ? 'line-through' : 'none' }}>{r.numero}</td>
                   <td className="px-1.5 py-0.5 text-[9px]" style={{ color: '#64748b' }}>{r.profundidade || '—'}</td>
                   {elementos.map(elId => {
+                    const deriv = ehDerivado(elId);
                     const flag = flags?.[elId];
                     const cor = flag ? COR_FLAG[flag.tipo] : null;
-                    const borda = cor?.borda ?? '#24406b';
-                    const fundo = cor?.fundo ?? '#0b2036';
+                    const borda = cor?.borda ?? (deriv ? '#155e75' : '#24406b');
+                    const fundo = cor?.fundo ?? (deriv ? '#07243040' : '#0b2036');
                     return (
                       <td key={elId} className="px-0.5 py-0.5">
                         <input
                           value={valorTexto(r, elId)}
-                          onChange={e => onEditar(r, elId, e.target.value)}
-                          disabled={excl}
-                          title={flag?.motivo}
+                          onChange={e => { if (!deriv) onEditar(r, elId, e.target.value); }}
+                          disabled={excl || deriv}
+                          readOnly={deriv}
+                          title={deriv ? 'Calculado pela plataforma' : flag?.motivo}
                           inputMode="decimal"
                           className={cellBase}
-                          style={{ background: fundo, color: flag ? '#fde68a' : '#e2e8f0', border: `1px solid ${borda}`, fontWeight: flag ? 700 : 400 }}
+                          style={{ background: fundo, color: flag ? '#fde68a' : deriv ? '#7dd3fc' : '#e2e8f0', border: `1px solid ${borda}`, fontWeight: flag ? 700 : 400, fontStyle: deriv ? 'italic' : 'normal' }}
                         />
                       </td>
                     );
