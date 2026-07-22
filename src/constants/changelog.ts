@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.5.6': [
+    'AUDITORIA DO CADASTRO (conferir os números do Início): novo comando de console invAuditoria() que recomputa Produtores/Fazendas/Talhões/Área e aponta inconsistências que poderiam inflar os totais — ids repetidos, fazendas órfãs (sem produtor), talhões órfãos (sem fazenda) e cadastros repetidos pelo mesmo nome. Só leitura, não altera nada. Também mostra a área separada em "todos" × "só ativos" (o KPI Talhões conta só ativos, a Área somava todos).',
+  ],
   '2.5.5': [
     'CTC EFETIVA NA INTERPOLAÇÃO/EQUAÇÕES: agora existe uma legenda de CTC efetiva (sigla CTCe) criada automaticamente a partir da sua legenda de CTC (mesmas faixas/cores, editável em Legendas). Com ela, a CTCe passa a aparecer na lista de atributos para INTERPOLAR na aba Fertilidade — gere o mapa de CTCe e ele fica disponível para usar nas equações (token CTCe). Feito uma vez por navegador; se você apagar a legenda de CTCe, ela não é recriada.',
   ],

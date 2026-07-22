@@ -1633,6 +1633,86 @@ export function migrarLegendaCtceV1() {
   localStorage.setItem('inv_migrado_leg_ctce_v1', '1');
 }
 
+// Auditoria do cadastro (owner, via console: invAuditoria()). NÃO altera nada —
+// só CONTA e aponta inconsistências que inflam/desencontram os KPIs do Início:
+// ids repetidos, órfãos (fazenda sem produtor / talhão sem fazenda), possíveis
+// duplicatas por NOME (mesmo cadastro 2×) e recomputa as áreas (todos × ativos).
+export interface AuditoriaCadastro {
+  clientes: number; fazendas: number; talhoes: number;
+  talhoesAtivos: number; incompletos: number;
+  areaTotalHa: number; areaAtivosHa: number;
+  idsDuplicados: { clientes: string[]; fazendas: string[]; talhoes: string[] };
+  orfaos: { fazendasSemCliente: number; talhoesSemFazenda: number };
+  duplicatasPorNome: { clientes: number; fazendas: number; talhoes: number };
+}
+
+export function auditoriaCadastro(): AuditoriaCadastro {
+  const clientes = load<Cliente>('inv_clientes');
+  const fazendas = load<Fazenda>('inv_fazendas');
+  const talhoes = load<Talhao>('inv_talhoes');
+
+  const idsRepetidos = (arr: { id: string }[]): string[] => {
+    const vistos = new Set<string>(), dup = new Set<string>();
+    for (const x of arr) { if (vistos.has(x.id)) dup.add(x.id); else vistos.add(x.id); }
+    return [...dup];
+  };
+  const norm = (s: string) => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase();
+  const dupPorChave = <T,>(arr: T[], chave: (x: T) => string): number => {
+    const cont = new Map<string, number>();
+    for (const x of arr) { const k = chave(x); if (!k) continue; cont.set(k, (cont.get(k) ?? 0) + 1); }
+    let n = 0; for (const v of cont.values()) if (v > 1) n += v - 1;
+    return n;   // nº de registros EXCEDENTES (além do 1º de cada chave)
+  };
+
+  const cliIds = new Set(clientes.map(c => c.id));
+  const fazIds = new Set(fazendas.map(f => f.id));
+  const incompletos = talhoes.filter(t => t.status === 'incompleto').length;
+
+  const r: AuditoriaCadastro = {
+    clientes: clientes.length,
+    fazendas: fazendas.length,
+    talhoes: talhoes.length,
+    talhoesAtivos: talhoes.length - incompletos,
+    incompletos,
+    areaTotalHa: Math.round(talhoes.reduce((s, t) => s + (t.areaHa || 0), 0) * 10) / 10,
+    areaAtivosHa: Math.round(talhoes.filter(t => t.status !== 'incompleto').reduce((s, t) => s + (t.areaHa || 0), 0) * 10) / 10,
+    idsDuplicados: {
+      clientes: idsRepetidos(clientes),
+      fazendas: idsRepetidos(fazendas),
+      talhoes: idsRepetidos(talhoes),
+    },
+    orfaos: {
+      fazendasSemCliente: fazendas.filter(f => !cliIds.has(f.clienteId)).length,
+      talhoesSemFazenda: talhoes.filter(t => !fazIds.has(t.fazendaId)).length,
+    },
+    duplicatasPorNome: {
+      clientes: dupPorChave(clientes, c => norm(c.documento) || norm(c.nome)),
+      fazendas: dupPorChave(fazendas, f => `${f.clienteId}|${norm(f.nome)}`),
+      talhoes: dupPorChave(talhoes, t => `${t.fazendaId}|${norm(t.nome)}`),
+    },
+  };
+
+  if (typeof console !== 'undefined') {
+    console.log('%c[Auditoria do cadastro] — comparar com os KPIs do Início', 'font-weight:bold;color:#93c5fd');
+    console.table({
+      Produtores: r.clientes, Fazendas: r.fazendas, 'Talhões (total)': r.talhoes,
+      'Talhões ativos (KPI)': r.talhoesAtivos, Incompletos: r.incompletos,
+      'Área total — todos (ha)': r.areaTotalHa, 'Área — só ativos (ha)': r.areaAtivosHa,
+    });
+    console.table({
+      'IDs repetidos — produtores': r.idsDuplicados.clientes.length,
+      'IDs repetidos — fazendas': r.idsDuplicados.fazendas.length,
+      'IDs repetidos — talhões': r.idsDuplicados.talhoes.length,
+      'Fazendas órfãs (sem produtor)': r.orfaos.fazendasSemCliente,
+      'Talhões órfãos (sem fazenda)': r.orfaos.talhoesSemFazenda,
+      'Produtores repetidos (doc/nome)': r.duplicatasPorNome.clientes,
+      'Fazendas repetidas (mesmo nome no produtor)': r.duplicatasPorNome.fazendas,
+      'Talhões repetidos (mesmo nome na fazenda)': r.duplicatasPorNome.talhoes,
+    });
+  }
+  return r;
+}
+
 // "Destrava" as legendas oficiais (escopo 'sistema', read-only) tornando-as do
 // usuário (escopo 'empresa') — passam a ser editáveis/excluíveis. Como o seed só
 // roda em banco vazio, a conversão é permanente.

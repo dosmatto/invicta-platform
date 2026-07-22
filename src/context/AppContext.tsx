@@ -8,7 +8,7 @@ import { empresaIfEmpty, adotarEmpresasLocais, garantirEmpresaInvicta, uidUsuari
 import { limparBaseOperacional } from '@/lib/admin/manutencao';
 import { TrocaSenhaObrigatoria } from '@/components/auth/TrocaSenhaObrigatoria';
 import { migrarLaboratoriosV1, migrarSafrasV1, migrarGradesV1, migrarPreferenciasV1, reKeyDonoBiblioteca } from '@/lib/biblioteca';
-import { seedLegendasSistema, migrarLegendaCtceV1, migrarAreasGeodesicasV1, migrarNomesMaiusculosV1, migrarGradesDuplicadasV1, migrarBboxTalhoesV1 } from '@/lib/store';
+import { seedLegendasSistema, migrarLegendaCtceV1, auditoriaCadastro, migrarAreasGeodesicasV1, migrarNomesMaiusculosV1, migrarGradesDuplicadasV1, migrarBboxTalhoesV1 } from '@/lib/store';
 import { LEGENDAS_OFICIAIS } from '@/constants/legendasSeedOficial';
 import { authConfigurado, observarAuth, logout, type User } from '@/lib/auth';
 import { hidratarCachePesado } from '@/lib/localComprimido';
@@ -227,7 +227,12 @@ export function AppProvider({ children, redirectProdutorParaPortal, modoCampo }:
   // Console-only (sem botão, decisão do usuário): admin pode zerar a base
   // operacional com  await invLimparBase('APAGAR TUDO')  — preserva a Biblioteca.
   useEffect(() => {
-    if (typeof window === 'undefined' || !dadosProntos || !ehOwner()) return;
+    if (typeof window === 'undefined' || !dadosProntos) return;
+    // Auditoria do cadastro (read-only): confere os KPIs do Início e aponta
+    // ids repetidos / órfãos / duplicatas por nome. Disponível a qualquer login.
+    (window as unknown as { invAuditoria?: typeof auditoriaCadastro }).invAuditoria = auditoriaCadastro;
+    console.info('[invicta] Para conferir os números do Início (duplicidade/órfãos), rode no Console:  invAuditoria()');
+    if (!ehOwner()) return;
     (window as unknown as { invLimparBase?: typeof limparBaseOperacional }).invLimparBase = limparBaseOperacional;
     console.info('[invicta] Owner: para zerar a base (mantendo a Biblioteca), rode no Console:  await invLimparBase("APAGAR TUDO")');
   }, [dadosProntos]);
