@@ -172,10 +172,15 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
     return null;
   }, [uploadedGeo, nav.talhaoId]);
 
-  // só nutrientes que têm pelo menos uma legenda cadastrada
+  // só nutrientes que têm pelo menos uma legenda cadastrada. CTCe ('t') herda a
+  // legenda de CTC ('ctc') enquanto não tiver a própria — assim aparece mesmo
+  // antes da legenda clonada (migrarLegendaCtceV1) existir.
+  const temLegenda = (id: string) =>
+    legendas.some(l => l.atributoId === id) || (id === 't' && legendas.some(l => l.atributoId === 'ctc'));
   const nutrientes = useMemo(() => {
     if (!importacao) return [] as string[];
-    return importacao.elementos.filter(id => legendas.some(l => l.atributoId === id));
+    return importacao.elementos.filter(temLegenda);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [importacao, legendas]);
 
   const profundidades = useMemo(
@@ -186,7 +191,9 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
 
   // helper: legenda escolhida para um atributo (default = primeira do atributo)
   function legendaDe(atributoId: string): Legenda | undefined {
-    const lst = legendas.filter(l => l.atributoId === atributoId);
+    let lst = legendas.filter(l => l.atributoId === atributoId);
+    // CTCe usa a legenda de CTC enquanto não houver uma própria.
+    if (lst.length === 0 && atributoId === 't') lst = legendas.filter(l => l.atributoId === 'ctc');
     if (lst.length === 0) return undefined;
     const escolhida = legendaIdPorAtributo[atributoId];
     return lst.find(l => l.id === escolhida) ?? lst[0];

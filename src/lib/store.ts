@@ -24,7 +24,7 @@ import {
   type EstiloRecomendacao,
   type PresetEstiloRec,
 } from './biblioteca';
-import { ELEMENTOS_LAB, simboloElemento, norm as normLab } from './lab';
+import { ELEMENTOS_LAB, simboloElemento, norm as normLab, calcularDerivados, DERIVADOS_IDS } from './lab';
 
 export interface Cliente {
   id: string;
@@ -1237,8 +1237,19 @@ export function garantirVariaveisAnalise() {
 // Catálogo completo (fallback = seed em memória, p/ quem nunca abriu o painel).
 export function getVariaveisAnalise(): VariavelAnalise[] {
   const itens = _itensVariaveis();
-  if (itens.length === 0) return VARIAVEIS_SEED;
-  return itens.map(i => _deConteudo(i.conteudo)).sort((a, b) => a.ordem - b.ordem || a.sigla.localeCompare(b.sigla));
+  const base = itens.length === 0
+    ? [...VARIAVEIS_SEED]
+    : itens.map(i => _deConteudo(i.conteudo)).sort((a, b) => a.ordem - b.ordem || a.sigla.localeCompare(b.sigla));
+  // Garante a CTC EFETIVA (derivada, sigla CTCe) no catálogo — sem depender de
+  // seed/migração — para ela aparecer nos Perfis (Legendas por elemento) e demais
+  // listas de variáveis. sinônimos vazios: NUNCA é auto-mapeada de coluna de arquivo
+  // (é sempre calculada, ver lab.ts). Ordenada logo após a CTC (T).
+  if (!base.some(v => v.id === 't')) {
+    const ordemCtc = base.find(v => v.id === 'ctc')?.ordem ?? 6;
+    base.push({ id: 't', sigla: 'CTCe', nome: 'CTC efetiva', unidade: 'cmolc/dm³', sinonimos: [], usar: true, ordem: ordemCtc + 0.5 });
+    base.sort((a, b) => a.ordem - b.ordem || a.sigla.localeCompare(b.sigla));
+  }
+  return base;
 }
 export function getVariaveisAtivas(): VariavelAnalise[] {
   return getVariaveisAnalise().filter(v => v.usar);
@@ -1341,11 +1352,27 @@ export function deletePerfilLab(id: string) {
   bibExcluir('laboratorios', id);
 }
 
+// Injeta as colunas CALCULADAS (CTCe/K%/Ca%/Mg%) na LEITURA da importação, para
+// que importações antigas (feitas antes das colunas calculadas) também as exponham
+// — na interpolação (Fertilidade), relatórios etc. Não persiste (recomputa do
+// estado atual, idempotente); só toca o objeto quando há algo novo a acrescentar.
+function importacaoComDerivados(imp: ImportacaoLab): ImportacaoLab {
+  const resultados = imp.resultados.map(r => {
+    const valores = { ...r.valores };
+    calcularDerivados(valores);
+    return { ...r, valores };
+  });
+  const derivPresentes = [...DERIVADOS_IDS].filter(id => resultados.some(r => r.valores[id] != null));
+  if (derivPresentes.every(id => imp.elementos.includes(id)) && derivPresentes.length === 0) return imp;
+  const elementos = [...new Set([...imp.elementos, ...derivPresentes])];
+  return { ...imp, resultados, elementos };
+}
+
 export function getImportacoesLab(talhaoId?: string, safra?: string): ImportacaoLab[] {
   let all = loadFiltrado<ImportacaoLab>('inv_lab');
   if (talhaoId) all = all.filter(i => i.talhaoId === talhaoId);
   if (safra) all = all.filter(i => i.safra === safra);
-  return all.sort((a, b) => b.criadoEm.localeCompare(a.criadoEm));
+  return all.map(importacaoComDerivados).sort((a, b) => b.criadoEm.localeCompare(a.criadoEm));
 }
 
 export function saveImportacaoLab(i: Omit<ImportacaoLab, 'id' | 'criadoEm'>): ImportacaoLab {

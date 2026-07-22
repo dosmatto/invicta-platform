@@ -1,5 +1,10 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.5.7': [
+    'CTC EFETIVA APARECE NA INTERPOLAÇÃO (inclusive em laudos antigos): as colunas calculadas (CTCe/K%/Ca%/Mg%) passam a ser geradas também na LEITURA das importações já salvas — antes só valiam para laudos importados depois da atualização. Agora a CTCe aparece na lista de atributos para interpolar na Fertilidade mesmo em importações antigas, sem reimportar. Ela herda a legenda de CTC enquanto você não criar/ajustar a legenda própria de CTCe.',
+    'CTC EFETIVA NO CATÁLOGO/PERFIS: a CTCe entrou na lista de Variáveis de Análise, então aparece em Biblioteca → Perfis (Legendas por elemento) e demais listas de variáveis. Ela nunca é lida de coluna de arquivo (é sempre calculada de Ca+Mg+K+Al).',
+    'OBS.: se você ainda vê a tela sem a CTCe (ex.: nas Equações), faça um recarregamento forçado (Ctrl/Cmd+Shift+R) — era cache do navegador; a versão publicada já traz a CTCe.',
+  ],
   '2.5.6': [
     'AUDITORIA DO CADASTRO (conferir os números do Início): novo comando de console invAuditoria() que recomputa Produtores/Fazendas/Talhões/Área e aponta inconsistências que poderiam inflar os totais — ids repetidos, fazendas órfãs (sem produtor), talhões órfãos (sem fazenda) e cadastros repetidos pelo mesmo nome. Só leitura, não altera nada. Também mostra a área separada em "todos" × "só ativos" (o KPI Talhões conta só ativos, a Área somava todos).',
   ],
