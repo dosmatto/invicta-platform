@@ -286,11 +286,15 @@ function EquacaoEditor({ item, onClose }: { item: ItemBiblioteca<ConteudoEquacao
     else criar<ConteudoEquacao>(SLUG, { nome: nome.trim(), descricao: descricao.trim() || undefined, conteudo, escopo: 'empresa' });
     onClose();
   }
-  // Salvar como = clona (cria NOVA) a partir das edições atuais, sem mexer na original.
+  // Salvar como = clona (cria NOVA) a partir das edições atuais, sem mexer na
+  // original. PERGUNTA o nome da nova equação (default = sugestão), para o
+  // usuário nomear a cópia em vez de herdar o nome atual / "(cópia)".
   function salvarComo() {
     if (!validarTudo()) return;
     const base = nome.trim();
-    const nomeNovo = item && base === item.nome ? `${base} (cópia)` : base;
+    const sugerido = item && base === item.nome ? `${base} (cópia)` : (base || 'Nova equação');
+    const nomeNovo = window.prompt('Nome da nova equação (Salvar como):', sugerido)?.trim();
+    if (!nomeNovo) return;   // cancelou ou deixou vazio → não cria
     criar<ConteudoEquacao>(SLUG, { nome: nomeNovo, descricao: descricao.trim() || undefined, conteudo: montarConteudo(), escopo: 'empresa' });
     onClose();
   }

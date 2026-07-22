@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.5.3': [
+    'EQUAÇÕES — "SALVAR COMO" AGORA PERGUNTA O NOME: ao usar "Salvar como" no editor de equações, o app pede o nome da nova equação (com uma sugestão preenchida) em vez de clonar direto com o nome atual ou "(cópia)". Cancelar não cria nada.',
+  ],
   '2.5.2': [
     'EQUAÇÕES — CTC EFETIVA DISPONÍVEL: a CTC efetiva (calculada na importação do laudo, sigla CTCe = Ca+Mg+K+Al) entrou na tabela de atributos das equações de recomendação. Agora dá para usar CTCe nas fórmulas (ex.: saturações na CTC efetiva) como qualquer outro atributo — basta ter o mapa de CTCe interpolado na profundidade da equação (aba Fertilidade). A sigla nas colunas calculadas também passou a ser CTCe.',
   ],
