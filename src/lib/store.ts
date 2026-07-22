@@ -1384,8 +1384,28 @@ export interface ZoneamentoMeap {
   nome: string;
   padrao: boolean;
   fc: GeoJSON.FeatureCollection;   // polígonos {id, zona, classe, areaHa, potencialRank}
-  meta: { camadas: string[]; algoritmo: string; nPotenciais: number; areaMinHa: number; nZonas: number; nPoligonos?: number; cvMedio?: number | null; pesos?: Record<string, number>; chaves?: string[] };
+  meta: { camadas: string[]; algoritmo: string; nPotenciais: number; areaMinHa: number; nZonas: number; nPoligonos?: number; cvMedio?: number | null; pesos?: Record<string, number>; chaves?: string[]; suavizacao?: SuavizacaoMeta };
   criadoEm: string;
+}
+
+// Registro de uma suavização de limites aplicada (versão derivada — o original
+// NUNCA é sobrescrito; a nova versão aponta a origem por id/nome).
+export interface SuavizacaoMeta {
+  nivel: string;                 // leve | moderado | intenso | personalizado
+  toleranciaM: number;
+  iteracoes: number;
+  manterLimiteExterno: boolean;
+  fragMinHa: number;
+  larguraMinM: number;
+  diffTotalHa: number;
+  maiorDiffPct: number;
+  vertAntes: number;
+  vertDepois: number;
+  origemId?: string;             // zoneamento de origem (versão original)
+  origemNome?: string;
+  data: string;                  // ISO
+  usuario?: string;
+  observacoes?: string;
 }
 
 export function getZoneamentosMeap(talhaoId: string): ZoneamentoMeap[] {

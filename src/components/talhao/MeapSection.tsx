@@ -10,7 +10,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useApp } from '@/context/AppContext';
-import { getZoneamentosMeap, saveZoneamentoMeap, deleteZoneamentoMeap, setZoneamentoPadraoMeap, removerAdocaoMeap, getTalhoes, getLegendasPorAtributo, type Talhao, type ZoneamentoMeap } from '@/lib/store';
+import { getZoneamentosMeap, saveZoneamentoMeap, deleteZoneamentoMeap, setZoneamentoPadraoMeap, removerAdocaoMeap, getTalhoes, getLegendasPorAtributo, type Talhao, type ZoneamentoMeap, type SuavizacaoMeta } from '@/lib/store';
+import { usuarioAtual } from '@/lib/auth';
+import type { RespSuavizarZonas } from '@/lib/fertilidade';
+import { SuavizarLimites } from './SuavizarLimites';
 import { obterOuAdotarAmbiente } from '@/lib/meap/adocao';
 import { carregarCamadas, analisarMulti, gerarMulti, dadosLabCV, type CamadasCarregadas } from '@/lib/meap/gerar';
 import { calcularCVZonas } from '@/lib/meap/cv';
@@ -23,7 +26,7 @@ import { rampaVisualStops } from '@/lib/legendas';
 import { classeZona, classeReconhecida, corZonaPorPosicao, ORDEM_CLASSES } from '@/lib/zonas';
 import { simboloElemento } from '@/lib/lab';
 import type { AmbienteProdutivo, Homogeneidade, MetricasZonaMeap } from '@/lib/meap/tipos';
-import { Layers, AlertTriangle, Wand2, Loader2, X, Check, ChevronUp, ChevronDown, Save, Star, Trash2, Eye, BarChart3, Sparkles, Combine, CheckSquare, Square, Pencil, Undo2, Redo2, FlaskConical } from 'lucide-react';
+import { Layers, AlertTriangle, Wand2, Loader2, X, Check, ChevronUp, ChevronDown, Save, Star, Trash2, Eye, BarChart3, Sparkles, Combine, CheckSquare, Square, Pencil, Undo2, Redo2, FlaskConical, Spline } from 'lucide-react';
 import { LaboratorioZonas } from './LaboratorioZonas';
 
 const EditorGeometria = dynamic(
@@ -183,6 +186,9 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
   // Zoneamentos salvos (vários por talhão; um é o "padrão" usado pela Amostragem)
   const [zoneamentos, setZoneamentos] = useState<ZoneamentoMeap[]>([]);
   const [vendoId, setVendoId] = useState<string | null>(null);  // zoneamento salvo em visualização no mapa
+  // Suavizar limites (S1): alvo (preview em edição OU zoneamento salvo) + prévia p/ o mapa.
+  const [suav, setSuav] = useState<{ origem: 'preview' | { id: string; nome: string }; fc: GeoJSON.FeatureCollection } | null>(null);
+  const [suavMapFc, setSuavMapFc] = useState<GeoJSON.FeatureCollection | null>(null);
   const [labAberto, setLabAberto] = useState(false);            // Laboratório de Zonas (C4.2)
   const [previewCh, setPreviewCh] = useState<string | null>(null);  // camada em pré-visualização no mapa
   const [refreshAmb, setRefreshAmb] = useState(0);  // força re-derivar o ambiente adotado (após remover)
@@ -300,11 +306,13 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
     return m;
   }, [potenciais]);
 
-  // Mapa: prioridade = zoneamento salvo em visualização > preview gerado >
-  // (prévia de camada: oculta as zonas p/ enxergar o raster) > zonas adotadas.
+  // Mapa: prioridade = prévia da SUAVIZAÇÃO > zoneamento salvo em visualização >
+  // preview gerado > (prévia de camada) > zonas adotadas.
   useEffect(() => {
     let fc: GeoJSON.FeatureCollection | null = null;
-    if (vendoFc) {
+    if (suavMapFc) {
+      fc = featuresParaMapa(suavMapFc);
+    } else if (vendoFc) {
       fc = featuresParaMapa(vendoFc);
     } else if (res && zonas.length) {
       fc = { type: 'FeatureCollection', features: zonas.map(z => ({ type: 'Feature' as const, properties: { cor: z.cor, rotulo: numDeRank.get(z.rank) ?? z.id, classeLabel: z.potencial, selecionada: false }, geometry: z.geometry! })) };
@@ -319,7 +327,11 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
     if (!fc) { setZonasManejo(null); return; }
     setZonasManejo(fc);
     return () => setZonasManejo(null);
-  }, [vendoFc, res, zonas, previewCh, numDeRank, talhao.id, talhao.zonasGeojson, refreshAmb, setZonasManejo]);
+  }, [suavMapFc, vendoFc, res, zonas, previewCh, numDeRank, talhao.id, talhao.zonasGeojson, refreshAmb, setZonasManejo]);
+
+  // Fecha o painel de suavização ao trocar de talhão ou limpar o preview gerado.
+  useEffect(() => { setSuav(null); setSuavMapFc(null); }, [talhao.id]);
+  useEffect(() => { if (!res) setSuav(s => (s?.origem === 'preview' ? null : s)); }, [res]);
 
   // Prévia: clicar numa camada mostra o raster dela sobre o talhão (fase de
   // seleção). Some quando há zonas geradas/visualizadas (aí o mapa mostra as zonas).
@@ -534,6 +546,76 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
     if (primeiro) setZoneamentoPadraoMeap(talhao.id, novo.id);  // grava em talhao.zonasGeojson → Amostragem
     recarregarZon();
     setAmb(obterOuAdotarAmbiente(talhao.id));
+  }
+
+  // ── Suavizar limites (S1) ────────────────────────────────────────────────
+  // FC das zonas ATUAIS em edição (mesma montagem do salvar: cor/zona/classe).
+  function fcAtualParaSuavizar(): GeoJSON.FeatureCollection {
+    return {
+      type: 'FeatureCollection',
+      features: zonas.filter(z => z.geometry).map(z => ({
+        type: 'Feature',
+        properties: { id: z.id, zona: numDeRank.get(z.rank) ?? z.id, classe: z.potencial, cor: z.cor, potencialRank: z.rank, areaHa: z.areaHa },
+        geometry: z.geometry!,
+      })),
+    };
+  }
+
+  // Aplicar no preview em edição: substitui featsEdit (desfazer disponível).
+  function aplicarSuavizacao(fcNovo: GeoJSON.FeatureCollection) {
+    empurrarHistEdit();
+    const novas = fcNovo.features.filter(f => f.geometry).map(f => ({
+      type: 'Feature' as const, geometry: f.geometry!, properties: { ...(f.properties ?? {}) },
+    }));
+    setFeatsEdit(novas.sort((a, b) => idDaFeat(a).localeCompare(idDaFeat(b))));
+    setSelZonas(new Set());
+    setSuav(null); setSuavMapFc(null);
+  }
+
+  // Nome sequencial: nunca sobrescreve — "X — Suavização leve", depois "(2)"…
+  function nomeVersaoSuavizada(base: string, rotuloNivel: string): string {
+    const desejado = `${base} — Suavização ${rotuloNivel.toLowerCase()}`;
+    const nomes = new Set(getZoneamentosMeap(talhao.id).map(z => z.nome));
+    if (!nomes.has(desejado)) return desejado;
+    let n = 2;
+    while (nomes.has(`${desejado} (${n})`)) n++;
+    return `${desejado} (${n})`;
+  }
+
+  // Salvar como NOVA versão: o original fica intacto; a nova carrega os
+  // parâmetros/algoritmo/data/usuário da suavização (rastreável e restaurável).
+  function salvarVersaoSuavizada(fcNovo: GeoJSON.FeatureCollection, resp: RespSuavizarZonas, rotuloNivel: string) {
+    const rs = resp.resumo;
+    const suavMeta: SuavizacaoMeta = {
+      nivel: rs.nivel, toleranciaM: rs.toleranciaM, iteracoes: rs.iteracoes,
+      manterLimiteExterno: rs.manterLimiteExterno, fragMinHa: rs.fragMinHa, larguraMinM: rs.larguraMinM,
+      diffTotalHa: rs.diffTotalHa, maiorDiffPct: rs.maiorDiffPct, vertAntes: rs.vertAntes, vertDepois: rs.vertDepois,
+      data: new Date().toISOString(), usuario: usuarioAtual()?.email ?? undefined,
+    };
+    let nomeBase: string;
+    let meta: ZoneamentoMeap['meta'];
+    if (suav && suav.origem !== 'preview') {
+      const orig = zoneamentos.find(z => z.id === (suav.origem as { id: string }).id) ?? null;
+      nomeBase = orig?.nome ?? 'Zoneamento';
+      meta = {
+        ...(orig?.meta ?? { camadas: [], algoritmo: '—', nPotenciais: 0, areaMinHa: 0, nZonas: 0 }),
+        nPoligonos: fcNovo.features.length,
+        suavizacao: { ...suavMeta, origemId: orig?.id, origemNome: orig?.nome },
+      };
+    } else {
+      const cams = carregadas ? carregadas.camadas.filter(c => chaves.includes(c.chave)).map(c => `${c.simbolo} ${c.prof}`) : [];
+      nomeBase = `Zoneamento ${zoneamentos.length + 1}`;
+      meta = {
+        camadas: cams, algoritmo: res?.stats.algoritmo ?? '—', nPotenciais: potenciais.length,
+        areaMinHa: res?.stats.area_min_ha ?? 0, nZonas: potenciais.length, nPoligonos: fcNovo.features.length,
+        cvMedio: null, chaves: [...chaves],
+        pesos: chaves.reduce((o, k) => { o[k] = pesos[k] ?? 1; return o; }, {} as Record<string, number>),
+        suavizacao: suavMeta,
+      };
+    }
+    saveZoneamentoMeap({ talhaoId: talhao.id, nome: nomeVersaoSuavizada(nomeBase, rotuloNivel), padrao: false, fc: fcNovo, meta });
+    recarregarZon();
+    setSuav(null); setSuavMapFc(null);
   }
 
   function tornarPadrao(id: string) {
@@ -785,13 +867,26 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
               <div className="p-2 rounded space-y-2" style={{ background: '#1a1033', border: '1px solid #5b21b6' }}>
                 <div className="flex items-center gap-2">
                   <EtapaHdr n={4} t="Avaliar" />
-                  <button onClick={salvar} className="ml-auto flex items-center gap-1 text-[9px] px-2 py-0.5 rounded font-bold text-white" style={{ background: '#065f46' }}>
+                  <button onClick={() => setSuav({ origem: 'preview', fc: fcAtualParaSuavizar() })}
+                    title="Suavizar os limites das zonas (opcional; o original é preservado)"
+                    className="ml-auto flex items-center gap-1 text-[9px] px-2 py-0.5 rounded font-bold text-white" style={{ background: '#0e7490' }}>
+                    <Spline size={9} /> Suavizar limites
+                  </button>
+                  <button onClick={salvar} className="flex items-center gap-1 text-[9px] px-2 py-0.5 rounded font-bold text-white" style={{ background: '#065f46' }}>
                     <Save size={9} /> Salvar zoneamento
                   </button>
                   <button onClick={() => setRes(null)} title="Limpar preview" className="flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded font-semibold" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
                     <X size={9} /> Limpar
                   </button>
                 </div>
+
+                {suav?.origem === 'preview' && (
+                  <SuavizarLimites titulo="zonas geradas (em edição)" fcOriginal={suav.fc} poligono={poligono}
+                    onPreview={setSuavMapFc}
+                    onAplicar={fc => aplicarSuavizacao(fc)}
+                    onSalvarVersao={salvarVersaoSuavizada}
+                    onClose={() => { setSuav(null); setSuavMapFc(null); }} />
+                )}
                 <p className="text-[10px]" style={{ color: '#94a3b8' }}>
                   <strong style={{ color: '#e2e8f0' }}>{potenciais.length}</strong> zonas oficiais · <strong style={{ color: '#e2e8f0' }}>{zonas.length}</strong> polígonos · {res.stats.algoritmo === 'fcm' ? 'fuzzy c-means' : 'k-means'} · {res.stats.n_camadas} camadas
                   {res.stats.area_min_ha > 0 && <> · área mín. {res.stats.area_min_ha} ha</>}
@@ -950,16 +1045,26 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
                 {z.padrao
                   ? <span className="text-[9px] px-1.5 py-0.5 rounded font-bold flex items-center gap-1 flex-shrink-0" style={{ background: '#3a2e0a', color: '#fbbf24' }}><Star size={8} /> Padrão</span>
                   : <button onClick={e => { e.stopPropagation(); tornarPadrao(z.id); }} className="text-[9px] px-1.5 py-0.5 rounded font-semibold flex-shrink-0" style={{ background: '#1a3a6b', color: '#93c5fd' }}>Tornar padrão</button>}
+                <button onClick={e => { e.stopPropagation(); setSuav({ origem: { id: z.id, nome: z.nome }, fc: z.fc }); }}
+                  title="Suavizar limites (cria uma NOVA versão; esta fica intacta)"
+                  className="p-1 rounded flex-shrink-0" style={{ background: '#0b3a44', color: '#22d3ee' }}><Spline size={12} /></button>
                 <button onClick={e => { e.stopPropagation(); excluir(z.id); }} title="Excluir" className="p-1 rounded flex-shrink-0" style={{ color: '#f87171' }}><Trash2 size={12} /></button>
               </div>
               <p className="text-[9px] mt-0.5" style={{ color: '#64748b' }}>
                 {z.meta.nZonas} zonas oficiais{z.meta.nPoligonos ? ` · ${z.meta.nPoligonos} polígonos` : ''} · {z.meta.algoritmo === 'fcm' ? 'fuzzy' : 'k-means'}
                 {z.meta.cvMedio != null && <> · CV médio {z.meta.cvMedio.toLocaleString('pt-BR')}%</>}
                 {z.meta.camadas.length > 0 && <> · {z.meta.camadas.join(', ')}</>}
+                {z.meta.suavizacao && <span style={{ color: '#22d3ee' }}> · suavizado ({z.meta.suavizacao.nivel}{z.meta.suavizacao.origemNome ? ` de "${z.meta.suavizacao.origemNome}"` : ''})</span>}
                 {z.padrao && <span style={{ color: '#fbbf24' }}> · usado na Amostragem</span>}
               </p>
             </div>
           ))}
+          {suav && suav.origem !== 'preview' && (
+            <SuavizarLimites titulo={suav.origem.nome} fcOriginal={suav.fc} poligono={poligono}
+              onPreview={setSuavMapFc}
+              onSalvarVersao={salvarVersaoSuavizada}
+              onClose={() => { setSuav(null); setSuavMapFc(null); }} />
+          )}
         </div>
       )}
 

@@ -227,6 +227,67 @@ export async function gerarZonas(params: {
   return r.json();
 }
 
+// ── SUAVIZAR limites (pós-geração, opcional e reversível) ──
+// O backend trata as zonas como COBERTURA: cada divisa é suavizada UMA vez só
+// (mesma linha p/ as duas vizinhas — sem sobreposição/vão) e o contorno do
+// talhão fica intacto por padrão. Nada é gravado: aplicar é decisão do usuário.
+
+export type NivelSuavizacao = 'leve' | 'moderado' | 'intenso' | 'personalizado';
+
+export interface ResumoSuavizacao {
+  nivel: string;
+  passoM: number;               // passo mediano da borda (base das tolerâncias)
+  toleranciaM: number;          // tolerância efetivamente usada (m)
+  iteracoes: number;            // iterações de Chaikin
+  manterLimiteExterno: boolean;
+  fragMinHa: number;
+  larguraMinM: number;
+  areaAntesHa: number;
+  areaDepoisHa: number;
+  diffTotalHa: number;
+  maiorDiffPct: number;         // maior |Δ área| entre as zonas (%)
+  deslocMaxM: number;           // maior deslocamento de linha (Hausdorff, m)
+  vertAntes: number;
+  vertDepois: number;
+  sobreposicaoCorrigidaHa: number;
+  vaosCorrigidosHa: number;
+  vaosPreservadosHa: number;    // buracos legítimos (nodata) mantidos
+  fragmentosIncorporados: number;
+  fragmentosAreaHa: number;
+  zonasIncorporadas: string[];  // sumiram por absorção AUTORIZADA (fragmento/largura)
+  zonasPerdidas: string[];      // sumiram SEM autorização → bloquear aplicação
+  porZona: { id: string; areaAntesHa: number; areaDepoisHa: number; diffHa: number; diffPct: number; vertAntes: number; vertDepois: number; deslocMaxM: number }[];
+}
+
+export interface RespSuavizarZonas {
+  fc: GeoJSON.FeatureCollection;    // zonas suavizadas (propriedades preservadas)
+  diff: GeoJSON.FeatureCollection;  // áreas alteradas (destaque na prévia)
+  resumo: ResumoSuavizacao;
+}
+
+export async function suavizarZonas(params: {
+  fc: GeoJSON.FeatureCollection;
+  poligono?: GeoJSON.Polygon | GeoJSON.MultiPolygon | null;
+  nivel?: NivelSuavizacao;
+  toleranciaM?: number | null;     // só no personalizado
+  iteracoes?: number | null;       // só no personalizado
+  fragMinHa?: number;              // 0 = não absorver fragmentos
+  larguraMinM?: number;            // 0 = não remover trechos estreitos
+  manterLimiteExterno?: boolean;   // padrão true (contorno do talhão intacto)
+}): Promise<RespSuavizarZonas> {
+  const r = await postZonear('/zonear-suavizar', {
+    fc: params.fc,
+    poligono: params.poligono ?? null,
+    nivel: params.nivel ?? 'moderado',
+    tolerancia_m: params.toleranciaM ?? null,
+    iteracoes: params.iteracoes ?? null,
+    frag_min_ha: params.fragMinHa ?? 0,
+    largura_min_m: params.larguraMinM ?? 0,
+    manter_limite_externo: params.manterLimiteExterno ?? true,
+  });
+  return r.json();
+}
+
 // bounds [w,s,e,n] -> coordinates do image source (TL, TR, BR, BL)
 export function coordsFromBounds(
   b: [number, number, number, number],

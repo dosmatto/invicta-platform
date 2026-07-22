@@ -430,6 +430,33 @@ def limpar_pontos(req: ReqLimpar):
         raise HTTPException(status_code=500, detail=f"falha na limpeza: {e}")
 
 
+class ReqSuavizarZonas(BaseModel):
+    fc: dict[str, Any]                # FeatureCollection das zonas (geradas/salvas)
+    poligono: dict[str, Any] | None = None   # limite oficial do talhão
+    nivel: str = "moderado"           # 'leve' | 'moderado' | 'intenso' | 'personalizado'
+    tolerancia_m: float | None = None  # só no personalizado (senão deriva do passo)
+    iteracoes: int | None = None       # só no personalizado (Chaikin 0..5)
+    frag_min_ha: float = 0.0           # 0 = não absorver fragmentos (ruído sempre sai)
+    largura_min_m: float = 0.0         # 0 = não remover trechos estreitos
+    manter_limite_externo: bool = True  # padrão: contorno do talhão INTOCADO
+
+
+@app.post("/zonear-suavizar")
+def zonear_suavizar(req: ReqSuavizarZonas):
+    """SUAVIZAR limites (pós-geração, opcional): trata as zonas como COBERTURA,
+    suaviza cada divisa UMA vez só (mesma linha p/ as duas vizinhas — sem
+    sobreposição/vão), preserva o contorno do talhão por padrão e devolve
+    prévia + resumo (áreas, vértices, deslocamento). Aplicar é decisão do usuário."""
+    try:
+        return interp.suavizar_zonas(req.fc, req.poligono, req.nivel, req.tolerancia_m,
+                                     req.iteracoes, req.frag_min_ha, req.largura_min_m,
+                                     req.manter_limite_externo)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:  # pragma: no cover
+        raise HTTPException(status_code=500, detail=f"falha ao suavizar zonas: {e}")
+
+
 @app.post("/zonear-analisar")
 def zonear_analisar(req: ReqAnalisarZonas):
     """ETAPA 1 (Analisar): só FPI/NCE p/ 2..c_max + sugestão do nº de zonas
