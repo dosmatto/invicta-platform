@@ -63,6 +63,22 @@ export interface Talhao {
   zonasGeojson?: string;    // JSON string do GeoJSON das zonas de manejo (cada feature: {id, classe, areaHa})
   bbox?: [number, number, number, number];
   criadoEm: string;
+  geoVersao?: number;             // versão do limite atual (ausente = 1)
+  geoVersoes?: VersaoPoligono[];  // versões anteriores arquivadas (histórico)
+}
+
+// Versão anterior do limite, arquivada quando o polígono é substituído. Os
+// dados dos ciclos anteriores continuam vinculados à geometria da época —
+// nunca são recalculados/recortados com o limite novo. A versão arquivada só
+// sai da base junto com o próprio talhão.
+export interface VersaoPoligono {
+  versao: number;
+  geojson: string;
+  bbox?: [number, number, number, number];
+  areaHa: number;
+  areaHaSemHoles?: number;
+  arquivadoEm: string;   // ISO
+  safras: string[];      // safras que tinham dados do talhão quando esta versão vigorava
 }
 
 // Plantio: cultura de um talhão numa safra (um por talhão+safra). Talhões
@@ -774,10 +790,42 @@ export function saveTalhao(t: Omit<Talhao, 'id' | 'criadoEm'>): Talhao {
   return novo;
 }
 
+// Safras (nomes) que têm ALGUM dado deste talhão nas coleções por ciclo —
+// usado para anotar a versão arquivada do polígono ("estes ciclos usaram esta
+// geometria"). Informativo: não recalcula nem altera nada do histórico.
+function safrasComDadosDoTalhao(talhaoId: string): string[] {
+  const s = new Set<string>();
+  for (const p of load<Plantio>('inv_plantios')) if (p.talhaoId === talhaoId && p.cultura) s.add(p.safra);
+  for (const g of load<GradeAmostragem>('inv_grades')) if (g.talhaoId === talhaoId) s.add(g.safra);
+  for (const i of load<ImportacaoLab>('inv_lab')) if (i.talhaoId === talhaoId) s.add(i.safra);
+  for (const c of load<ImportacaoCompactacao>('inv_compactacao')) if (c.talhaoId === talhaoId) s.add(c.safra);
+  for (const g of load<GradeCompactacao>('inv_grades_compact')) if (g.talhaoId === talhaoId) s.add(g.safra);
+  for (const m of load<MapaProdutividade>('inv_produtividade')) if (m.talhaoId === talhaoId) s.add(m.safra);
+  for (const c of load<ComposicaoTemporal>('inv_composicoes')) if (c.talhaoId === talhaoId && c.safra) s.add(c.safra);
+  return Array.from(s).sort();
+}
+
+// Substituição de limite: sempre que uma gravação troca o geojson de um talhão
+// que JÁ tinha limite, a versão vigente é arquivada em geoVersoes e geoVersao
+// avança — em QUALQUER caminho (upload, editor, importação em massa, medição de
+// campo). A regra de BLOQUEIO (só substituir com o ciclo atual sem dados) é do
+// chamador — ver lib/trocaPoligono.ts.
+function comVersaoDeLimite(atual: Talhao, data: Partial<Talhao>): Partial<Talhao> {
+  if (data.geojson === undefined || !atual.geojson || data.geojson === atual.geojson) return data;
+  const versao = atual.geoVersao ?? 1;
+  const arquivada: VersaoPoligono = {
+    versao, geojson: atual.geojson, bbox: atual.bbox,
+    areaHa: atual.areaHa, areaHaSemHoles: atual.areaHaSemHoles,
+    arquivadoEm: new Date().toISOString(),
+    safras: safrasComDadosDoTalhao(atual.id),
+  };
+  return { ...data, geoVersao: versao + 1, geoVersoes: [...(atual.geoVersoes ?? []), arquivada] };
+}
+
 export function updateTalhao(id: string, data: Partial<Talhao>) {
   const talhoes = load<Talhao>('inv_talhoes');
   const idx = talhoes.findIndex(t => t.id === id);
-  if (idx >= 0) { talhoes[idx] = comNome({ ...talhoes[idx], ...data }); save('inv_talhoes', talhoes); }
+  if (idx >= 0) { talhoes[idx] = comNome({ ...talhoes[idx], ...comVersaoDeLimite(talhoes[idx], data) }); save('inv_talhoes', talhoes); }
 }
 
 // Importação em massa: aplica TODAS as criações/atualizações numa gravação só
@@ -791,7 +839,7 @@ export function importarTalhoesLote(
   let atualizados = 0;
   for (const a of atualizacoes) {
     const idx = talhoes.findIndex(t => t.id === a.id);
-    if (idx >= 0) { talhoes[idx] = comNome({ ...talhoes[idx], ...a.data }); atualizados++; }
+    if (idx >= 0) { talhoes[idx] = comNome({ ...talhoes[idx], ...comVersaoDeLimite(talhoes[idx], a.data) }); atualizados++; }
   }
   for (const n of novos) {
     talhoes.push(comEmpresa(comNome({ ...n, id: uid(), criadoEm: new Date().toISOString() })));

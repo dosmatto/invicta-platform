@@ -1,5 +1,10 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.3.0': [
+    'SUBSTITUIR POLÍGONO — VERIFICAÇÃO SÓ DO CICLO ATUAL: trocar o limite de um talhão que já tem geometria agora verifica APENAS a safra ATIVA. Se o ciclo atual tiver qualquer dado do talhão (cultura, grades/coletas de amostragem, análises de fertilidade, compactação, mapas de produtividade, composições de sensoriamento, medições de campo ou recomendações/cenários), a troca é BLOQUEADA com a lista do que foi encontrado e o nome do ciclo verificado. Safras anteriores nunca bloqueiam. Vale no upload do talhão, no editor de limite, na importação em massa (linhas "atualiza limite") e no "Substituir limite" das Medições.',
+    'VERSÕES DO POLÍGONO: ao substituir, o limite anterior fica ARQUIVADO no talhão (com as safras que o usaram) e a nova geometria vira a principal para o ciclo atual e os próximos. Nada do histórico é recalculado ou recortado com o limite novo; a ficha do talhão mostra "limite v2, v3…" quando houve substituição.',
+    'Dados estruturais sem ciclo (condutividade, altimetria/MDE, zonas de manejo) não bloqueiam a troca — permanecem como estão, vinculados à geometria da época. Sem safra ativa definida, a substituição é livre e a nova geometria vale para o próximo ciclo criado. Sem internet a troca fica bloqueada por precaução (não dá para conferir as recomendações na nuvem).',
+  ],
   '2.2.0': [
     'EXCLUIR FAZENDA: a página da fazenda (aba Dados) ganhou o botão "Excluir fazenda". Por segurança, é preciso digitar EXCLUIR para confirmar. A exclusão apaga a fazenda, os talhões e tudo ligado a eles (análises, grades, mapas, cenários, zonas de manejo) — no aparelho e na nuvem. Disponível para quem já pode excluir produtor.',
     'EXCLUSÃO DE PRODUTOR MAIS COMPLETA: as zonas de manejo e ambientes (MEAP) dos talhões agora também são apagados na cascata — antes ficavam órfãos na base.',

@@ -9,6 +9,7 @@ import { pode } from '@/lib/empresa';
 import { detectarMunicipiosFazenda } from '@/lib/geocode';
 import { prepararTalhoesEmMassa, CandidatoTalhao } from '@/lib/geo';
 import { conflitosDe, talhaoParaAlvo, areaHaFC, bboxDeFeatures, type AlvoOverlap, type Conflito } from '@/lib/overlap';
+import { verificarTrocaPoligono } from '@/lib/trocaPoligono';
 import { ChevronLeft, Plus, Map, AlertTriangle, Save, X, ExternalLink, MapPin, Loader2, Upload, CheckCircle2, Pencil, Trash2 } from 'lucide-react';
 import { PanelSection, PanelButton, StatusBadge } from './_shared';
 
@@ -495,10 +496,28 @@ function ImportadorTalhoes({ fazendaId, existentes, onFechar, onImportado }: {
     setImportando(true); setResumo('');
     await new Promise(r => setTimeout(r, 30)); // deixa o "Importando…" aparecer
     try {
+      // Linhas "atualiza limite" de talhão que JÁ tem geometria = SUBSTITUIÇÃO:
+      // só permitida com o ciclo atual sem dados (trocaPoligono.ts). As linhas
+      // bloqueadas são puladas e listadas no resumo; as demais seguem normais.
+      const bloqueadaIds = new Set<string>();
+      const bloqueadas: string[] = [];
+      let ciclo: string | null = null;
+      for (const l of linhas) {
+        if (!l.incluir || !l.existenteId) continue;
+        const ex = existentes.find(t => t.id === l.existenteId);
+        if (!ex?.geojson) continue;   // 1º limite do talhão — livre
+        const v = await verificarTrocaPoligono(ex.id);
+        ciclo = v.ciclo;
+        if (!v.permitido) {
+          bloqueadaIds.add(l.existenteId);
+          bloqueadas.push(`${l.nome} (${v.bloqueios.map(b => (b.qtd > 1 ? `${b.qtd} ${b.rotulo}` : b.rotulo)).join(', ')})`);
+        }
+      }
       const novos: Parameters<typeof importarTalhoesLote>[0] = [];
       const atualizacoes: Parameters<typeof importarTalhoesLote>[1] = [];
       for (const l of linhas) {
         if (!l.incluir) continue;
+        if (l.existenteId && bloqueadaIds.has(l.existenteId)) continue;
         const dados = {
           geojson: JSON.stringify(l.geojson), bbox: l.bbox,
           areaHa: l.areaHa, areaHaSemHoles: l.areaHaBruta, status: 'ativo' as const,
@@ -509,7 +528,10 @@ function ImportadorTalhoes({ fazendaId, existentes, onFechar, onImportado }: {
       const r = importarTalhoesLote(novos, atualizacoes);
       limparPreview();
       setLinhas([]); setErros([]);
-      setResumo(`✓ ${r.criados} talhão(ões) criado(s)${r.atualizados ? ` · ${r.atualizados} limite(s) atualizado(s)` : ''}.`);
+      const msgOk = `✓ ${r.criados} talhão(ões) criado(s)${r.atualizados ? ` · ${r.atualizados} limite(s) atualizado(s)` : ''}${ciclo ? ` · ciclo verificado: ${ciclo}` : ''}.`;
+      setResumo(bloqueadas.length
+        ? `${msgOk} ⚠ ${bloqueadas.length} limite(s) NÃO substituído(s) — já há dados no ciclo atual${ciclo ? ` (${ciclo})` : ''}: ${bloqueadas.join(' · ')}. Remova ou transfira essas informações antes de alterar o polígono.`
+        : msgOk);
       onImportado();
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'erro inesperado';

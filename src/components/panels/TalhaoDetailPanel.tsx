@@ -21,6 +21,7 @@ import { parseGeoFile, parseLimiteTalhao, normalizarZonas } from '@/lib/geo';
 import { paraFC, compartilharLinkCampo } from '@/lib/campoLink';
 import { extrairEditavel, paraFeature, areaHaDe, areaHaSemFuros } from '@/lib/geoEditor';
 import { conflitosDe, talhaoParaAlvo, bboxDeFeatures, type AlvoOverlap, type Conflito } from '@/lib/overlap';
+import { verificarTrocaPoligono, mensagemBloqueioTroca, notaCicloVerificado, type VerificacaoTroca } from '@/lib/trocaPoligono';
 import { carregarEcOficial, rotuloEc, type EcCamada } from '@/lib/meap/gerar';
 import { classeZona } from '@/lib/zonas';
 import { cloudCarregarMapasPorPrefixo } from '@/lib/cloud';
@@ -70,8 +71,14 @@ function GeoSection({ talhao, onUploaded }: { talhao: Talhao | null; onUploaded:
   // aplica o editor: TODAS as partes formam a nova geometria do talhão (um talhão
   // pode ter vários pedaços = MultiPolygon). Nada é descartado. Antes de gravar,
   // CHECA sobreposição — se houver, não grava e cai no estado 'conflito'.
-  function aplicarEdicao(fcs: GeoJSON.FeatureCollection[]) {
+  // Substituição de limite existente só com o ciclo atual sem dados (trocaPoligono).
+  async function aplicarEdicao(fcs: GeoJSON.FeatureCollection[]) {
     if (!talhao) return;
+    let verif: VerificacaoTroca | null = null;
+    if (talhao.geojson) {
+      verif = await verificarTrocaPoligono(talhao.id);
+      if (!verif.permitido) { setEditando(false); setErroMsg(mensagemBloqueioTroca(verif)); setEstado('erro'); return; }
+    }
     const eds = fcs.map(extrairEditavel).filter((e): e is NonNullable<typeof e> => !!e && e.tipo === 'poligono');
     if (!eds.length) { setEditando(false); setErroMsg('Edição sem polígono — nada salvo.'); setEstado('erro'); return; }
     const feats = eds.map(ed => paraFeature(ed, { nome: talhao.nome }));
@@ -88,13 +95,23 @@ function GeoSection({ talhao, onUploaded }: { talhao: Talhao | null; onUploaded:
     }
     updateTalhao(talhao.id, { geojson: JSON.stringify(fc), bbox, areaHa: area, areaHaSemHoles: areaBruta, status: 'ativo' });
     setEditando(false); setPendente(null); setConflitos([]); setEstado('ok'); setErroMsg('');
-    setAvisos(eds.length > 1 ? [`Talhão salvo com ${eds.length} pedaços.`] : []);
+    setAvisos([
+      ...(eds.length > 1 ? [`Talhão salvo com ${eds.length} pedaços.`] : []),
+      ...(verif ? [notaCicloVerificado(verif, (talhao.geoVersao ?? 1) + 1)] : []),
+    ]);
     onUploaded(area);
   }
 
   async function processar(file: File) {
     setEstado('loading'); setErroMsg(''); setAvisos([]); setPendente(null); setConflitos([]);
     try {
+      // Substituição de limite existente: só permitida com o CICLO ATUAL sem
+      // dados do talhão (safras anteriores não bloqueiam) — trocaPoligono.ts.
+      let verif: VerificacaoTroca | null = null;
+      if (talhao?.geojson) {
+        verif = await verificarTrocaPoligono(talhao.id);
+        if (!verif.permitido) { setEstado('erro'); setErroMsg(mensagemBloqueioTroca(verif)); return; }
+      }
       // saneia defeitos comuns (linha aberta → polígono, espículas, auto-interseção)
       const result = await parseLimiteTalhao(file);
       setUploadedGeo(result.geojson); setUploadedBbox(result.bbox);
@@ -104,7 +121,7 @@ function GeoSection({ talhao, onUploaded }: { talhao: Talhao | null; onUploaded:
         setConflitos(cs); setAvisos(result.avisos); setEstado('conflito');
         return;
       }
-      setAvisos(result.avisos);
+      setAvisos(verif ? [...result.avisos, notaCicloVerificado(verif, (talhao!.geoVersao ?? 1) + 1)] : result.avisos);
       updateTalhao(talhao!.id, {
         geojson: JSON.stringify(result.geojson), bbox: result.bbox,
         areaHa: result.areaHa, areaHaSemHoles: result.areaHaBruta, status: 'ativo',
@@ -123,7 +140,7 @@ function GeoSection({ talhao, onUploaded }: { talhao: Talhao | null; onUploaded:
         <MapPin size={12} style={{ color: '#93c5fd' }} />
         <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: '#93c5fd' }}>Limite do Talhão</span>
         {temGeo
-          ? <span className="ml-auto flex items-center gap-1 text-[10px] font-semibold" style={{ color: '#4ade80' }}><CheckCircle2 size={11} /> {talhao!.areaHa.toLocaleString('pt-BR')} ha</span>
+          ? <span className="ml-auto flex items-center gap-1 text-[10px] font-semibold" style={{ color: '#4ade80' }}><CheckCircle2 size={11} /> {talhao!.areaHa.toLocaleString('pt-BR')} ha{(talhao!.geoVersao ?? 1) > 1 ? ` · limite v${talhao!.geoVersao}` : ''}</span>
           : <span className="ml-auto flex items-center gap-1 text-[10px] font-semibold" style={{ color: '#fbbf24' }}><AlertTriangle size={11} /> Sem limite</span>}
       </div>
 

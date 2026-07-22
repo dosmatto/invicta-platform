@@ -18,6 +18,7 @@ import {
 import { extrairEditavel } from '@/lib/geoEditor';
 import { fcDeMedicao, compartilharLinkCampo } from '@/lib/campoLink';
 import { getClientes, getFazendas, getTalhoes } from '@/lib/store';
+import { verificarTrocaPoligono, mensagemBloqueioTroca } from '@/lib/trocaPoligono';
 import { escopoClienteIds, emailUsuario } from '@/lib/empresa';
 import {
   RefreshCw, Loader2, Ruler, MapPin, Eye, Download, Plus, Repeat, Trash2, X, CheckCircle2, CloudUpload, Pencil, Link2,
@@ -241,17 +242,29 @@ function TalhaoDialog({ m, tipo, onFechar, onFeito }: {
   const [fazendaId, setFazendaId] = useState('');
   const [talhaoId, setTalhaoId] = useState('');
   const [nome, setNome] = useState(m.nome);
+  const [verificando, setVerificando] = useState(false);
+  const [erroTroca, setErroTroca] = useState('');
   const fazendas = useMemo(() => clienteId ? getFazendas(clienteId) : [], [clienteId]);
   const talhoes = useMemo(() => fazendaId ? getTalhoes(fazendaId) : [], [fazendaId]);
 
-  function confirmar() {
+  async function confirmar() {
     if (tipo === 'criar') {
       if (!fazendaId || !nome.trim()) return;
       criarTalhaoDaMedicao(m, fazendaId, nome);
       onFeito(`Talhão "${nome.trim()}" criado a partir da medição.`);
     } else {
-      if (!talhaoId) return;
+      if (!talhaoId || verificando) return;
       const t = talhoes.find(x => x.id === talhaoId);
+      // Substituição de limite existente: só com o ciclo atual sem dados (trocaPoligono.ts).
+      if (t?.geojson) {
+        setVerificando(true); setErroTroca('');
+        const v = await verificarTrocaPoligono(talhaoId);
+        setVerificando(false);
+        if (!v.permitido) { setErroTroca(mensagemBloqueioTroca(v)); return; }
+        substituirLimiteTalhao(m, talhaoId);
+        onFeito(`Limite de "${t?.nome ?? 'talhão'}" substituído pela medição${v.ciclo ? ` (ciclo verificado: ${v.ciclo}, sem dados)` : ''}. O limite anterior ficou arquivado.`);
+        return;
+      }
       substituirLimiteTalhao(m, talhaoId);
       onFeito(`Limite de "${t?.nome ?? 'talhão'}" substituído pela medição.`);
     }
@@ -299,20 +312,21 @@ function TalhaoDialog({ m, tipo, onFechar, onFeito }: {
         ) : (
           <div>
             <label className="text-[10px] font-semibold block mb-1" style={{ color: SUB }}>Talhão a substituir *</label>
-            <select value={talhaoId} onChange={e => setTalhaoId(e.target.value)} disabled={!fazendaId}
+            <select value={talhaoId} onChange={e => { setTalhaoId(e.target.value); setErroTroca(''); }} disabled={!fazendaId}
               className="w-full rounded-lg px-2 py-2 text-xs outline-none disabled:opacity-50" style={{ background: BORDA, color: TXT, border: '1px solid #2e5fa3' }}>
               <option value="">— selecione —</option>
               {talhoes.map(t => <option key={t.id} value={t.id}>{t.nome}{t.areaHa ? ` (${t.areaHa} ha)` : ''}</option>)}
             </select>
             {talhaoId && <p className="text-[10px] mt-1" style={{ color: '#fbbf24' }}>⚠ O limite atual será substituído pelo desta medição.</p>}
+            {erroTroca && <p className="text-[10px] mt-1.5 leading-snug" style={{ color: '#fca5a5' }}>{erroTroca}</p>}
           </div>
         )}
 
-        <button onClick={confirmar}
-          disabled={tipo === 'criar' ? (!fazendaId || !nome.trim()) : !talhaoId}
+        <button onClick={() => void confirmar()}
+          disabled={(tipo === 'criar' ? (!fazendaId || !nome.trim()) : !talhaoId) || verificando}
           className="w-full py-2.5 rounded-xl text-sm font-bold text-white disabled:opacity-40"
           style={{ background: tipo === 'criar' ? '#16a34a' : '#b45309' }}>
-          {tipo === 'criar' ? 'Criar talhão' : 'Substituir limite'}
+          {tipo === 'criar' ? 'Criar talhão' : verificando ? 'Verificando ciclo…' : 'Substituir limite'}
         </button>
       </div>
     </div>
