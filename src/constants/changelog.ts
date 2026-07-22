@@ -1,5 +1,9 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.2.0': [
+    'EXCLUIR FAZENDA: a página da fazenda (aba Dados) ganhou o botão "Excluir fazenda". Por segurança, é preciso digitar EXCLUIR para confirmar. A exclusão apaga a fazenda, os talhões e tudo ligado a eles (análises, grades, mapas, cenários, zonas de manejo) — no aparelho e na nuvem. Disponível para quem já pode excluir produtor.',
+    'EXCLUSÃO DE PRODUTOR MAIS COMPLETA: as zonas de manejo e ambientes (MEAP) dos talhões agora também são apagados na cascata — antes ficavam órfãos na base.',
+  ],
   '2.1.0': [
     'FIM DO "ARMAZENAMENTO LOCAL CHEIO": os caches pesados (talhões, condutividade, produtividade, MDE, zonas…) saíram do armazenamento pequeno do navegador (~5-10 MB, que vivia estourando) para o armazenamento GRANDE (IndexedDB, gigabytes). Na primeira abertura desta versão a migração é automática e LIBERA o espaço antigo na hora — nada a fazer, nada muda na nuvem.',
     'ABERTURA VOLTA A USAR O BOOT RÁPIDO: com o armazenamento cheio, o cache local não conseguia gravar e o app re-baixava a base INTEIRA a cada abertura. Com o espaço liberado, o cache volta a funcionar e a abertura usa de novo o boot rápido (só o que mudou desde a última vez).',

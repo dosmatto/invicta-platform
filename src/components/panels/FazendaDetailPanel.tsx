@@ -3,12 +3,13 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { useApp } from '@/context/AppContext';
-import { getFazendas, getTalhoes, saveTalhao, importarTalhoesLote, updateFazenda, Fazenda, Talhao } from '@/lib/store';
+import { getFazendas, getTalhoes, saveTalhao, importarTalhoesLote, updateFazenda, excluirFazendaCascata, Fazenda, Talhao } from '@/lib/store';
+import { cloudExcluirMapasPorPrefixo, cloudExcluirPorPrefixo } from '@/lib/cloud';
 import { pode } from '@/lib/empresa';
 import { detectarMunicipiosFazenda } from '@/lib/geocode';
 import { prepararTalhoesEmMassa, CandidatoTalhao } from '@/lib/geo';
 import { conflitosDe, talhaoParaAlvo, areaHaFC, bboxDeFeatures, type AlvoOverlap, type Conflito } from '@/lib/overlap';
-import { ChevronLeft, Plus, Map, AlertTriangle, Save, X, ExternalLink, MapPin, Loader2, Upload, CheckCircle2, Pencil } from 'lucide-react';
+import { ChevronLeft, Plus, Map, AlertTriangle, Save, X, ExternalLink, MapPin, Loader2, Upload, CheckCircle2, Pencil, Trash2 } from 'lucide-react';
 import { PanelSection, PanelButton, StatusBadge } from './_shared';
 
 const EditorGeometria = dynamic(
@@ -29,6 +30,10 @@ export function FazendaDetailPanel() {
   const [msgMunicipio, setMsgMunicipio] = useState('');
   const [renomeando, setRenomeando] = useState(false);
   const [nomeTemp, setNomeTemp] = useState('');
+  const [mostraExcluir, setMostraExcluir] = useState(false);
+  const [txtConfirma, setTxtConfirma] = useState('');
+  const [excluindo, setExcluindo] = useState(false);
+  const podeExcluir = pode('excluirProdutor');   // mesma capacidade da exclusão de produtor
 
   async function detectarMunicipio() {
     if (!nav.fazendaId || detectando) return;
@@ -116,6 +121,23 @@ export function FazendaDetailPanel() {
       setMostraForm(false);
       setSalvando(false);
     }, 300);
+  }
+
+  // Exclusão em cascata (local + nuvem). O save das listas já propaga a remoção
+  // via cloudPushLista; os docs fora das listas (mapas/cenários por talhão) são
+  // apagados aqui pelo prefixo — mesmo fluxo da exclusão de produtor.
+  async function confirmarExclusaoFazenda() {
+    if (!fazenda || excluindo || txtConfirma.trim().toUpperCase() !== 'EXCLUIR') return;
+    setExcluindo(true);
+    try {
+      const { talhaoIds } = excluirFazendaCascata(fazenda.id);
+      for (const tid of talhaoIds) {
+        await cloudExcluirMapasPorPrefixo(`${tid}__`);
+        await cloudExcluirPorPrefixo('inv_cenarios', `cen_${tid}_`);
+      }
+    } finally { setExcluindo(false); }
+    setMostraExcluir(false); setTxtConfirma('');
+    voltarProdutor();
   }
 
   function salvarRenomeFazenda() {
@@ -322,9 +344,61 @@ export function FazendaDetailPanel() {
                 <p className="text-[9px] mt-1" style={{ color: '#475569' }}>Usa o OpenStreetMap a partir do polígono dos talhões.</p>
               </div>
             )}
+            {podeExcluir && (
+              <div className="px-4 py-3" style={{ borderTop: '1px solid #0f2240' }}>
+                <button onClick={() => { setTxtConfirma(''); setMostraExcluir(true); }}
+                  className="w-full py-2 rounded text-xs font-bold flex items-center justify-center gap-2"
+                  style={{ background: '#450a0a', color: '#fca5a5', border: '1px solid #7f1d1d' }}>
+                  <Trash2 size={13} /> Excluir fazenda
+                </button>
+                <p className="text-[9px] mt-1" style={{ color: '#475569' }}>Apaga a fazenda, os talhões e tudo ligado a eles — no aparelho e na nuvem.</p>
+              </div>
+            )}
           </PanelSection>
         )}
       </div>
+
+      {/* Confirmação de exclusão: exige digitar EXCLUIR (mesmo padrão do produtor) */}
+      {mostraExcluir && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.6)' }}
+          onClick={() => { if (!excluindo) { setMostraExcluir(false); setTxtConfirma(''); } }}>
+          <div className="w-full max-w-sm rounded-xl p-4 space-y-3" style={{ background: '#0a1929', border: '1px solid #7f1d1d' }}
+            onClick={e => e.stopPropagation()}>
+            <div className="flex items-start gap-2">
+              <AlertTriangle size={18} style={{ color: '#f87171' }} className="flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-bold" style={{ color: '#fecaca' }}>Excluir fazenda</p>
+                <p className="text-[11px] mt-1" style={{ color: '#94a3b8' }}>
+                  Isto apaga <strong style={{ color: '#e2e8f0' }}>{fazenda.nome}</strong> e <strong>tudo</strong> ligado a ela
+                  ({talhoes.length} talhão{talhoes.length !== 1 ? 'ões' : ''}, análises, grades, mapas e cenários), no aparelho e na nuvem.{' '}
+                  <strong style={{ color: '#fca5a5' }}>Não dá para desfazer.</strong>
+                </p>
+              </div>
+            </div>
+            <div>
+              <label className="text-[10px] font-semibold block mb-1" style={{ color: '#64748b' }}>
+                Para confirmar, digite <span style={{ color: '#fca5a5', fontWeight: 700 }}>EXCLUIR</span>
+              </label>
+              <input autoFocus value={txtConfirma} onChange={e => setTxtConfirma(e.target.value)}
+                placeholder="EXCLUIR" disabled={excluindo}
+                onKeyDown={e => { if (e.key === 'Enter') void confirmarExclusaoFazenda(); }}
+                className="w-full rounded px-3 py-2 text-xs outline-none"
+                style={{ background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' }} />
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => { setMostraExcluir(false); setTxtConfirma(''); }} disabled={excluindo}
+                className="flex-1 py-2 rounded text-xs font-semibold" style={{ background: '#1a3a6b', color: '#cbd5e1' }}>
+                Cancelar
+              </button>
+              <button onClick={() => void confirmarExclusaoFazenda()} disabled={excluindo || txtConfirma.trim().toUpperCase() !== 'EXCLUIR'}
+                className="flex-1 py-2 rounded text-xs font-bold text-white flex items-center justify-center gap-1.5 disabled:opacity-40"
+                style={{ background: '#b91c1c' }}>
+                <Trash2 size={13} /> {excluindo ? 'Excluindo…' : 'Excluir'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
