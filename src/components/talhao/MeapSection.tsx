@@ -574,7 +574,9 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
 
   // Nome sequencial: nunca sobrescreve — "X — Suavização leve", depois "(2)"…
   function nomeVersaoSuavizada(base: string, rotuloNivel: string): string {
-    const desejado = `${base} — Suavização ${rotuloNivel.toLowerCase()}`;
+    const fem: Record<string, string> = { moderado: 'moderada', intenso: 'intensa', personalizado: 'personalizada' };
+    const nivel = rotuloNivel.toLowerCase();
+    const desejado = `${base} — Suavização ${fem[nivel] ?? nivel}`;
     const nomes = new Set(getZoneamentosMeap(talhao.id).map(z => z.nome));
     if (!nomes.has(desejado)) return desejado;
     let n = 2;
