@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.5.2': [
+    'EQUAÇÕES — CTC EFETIVA DISPONÍVEL: a CTC efetiva (calculada na importação do laudo, sigla CTCe = Ca+Mg+K+Al) entrou na tabela de atributos das equações de recomendação. Agora dá para usar CTCe nas fórmulas (ex.: saturações na CTC efetiva) como qualquer outro atributo — basta ter o mapa de CTCe interpolado na profundidade da equação (aba Fertilidade). A sigla nas colunas calculadas também passou a ser CTCe.',
+  ],
   '2.5.1': [
     'EDITOR MANUAL DE ZONAS — ESTATÍSTICAS DO RASTER: ao selecionar UMA zona no editor manual, além de área/perímetro/% do talhão, aparecem os valores do raster dentro da zona por camada usada na geração — média, mínimo, máximo e desvio padrão (recalculados na hora quando você une ou divide zonas). Precisa dos mapas interpolados carregados (aba Fertilidade).',
     'EDITOR MANUAL DE ZONAS — PERMISSÕES: as operações do editor passaram a respeitar 4 permissões por papel (Configurações → Usuários → Permissões): "Zonas: unificar", "Zonas: reclassificar", "Zonas: dividir" e "Zonas: salvar". Por padrão, Owner/Admin/Agrônomo podem tudo; Operador/Prestador não editam zonas. Quem não tem a permissão não vê o botão correspondente (e o lápis de editar some se o papel não pode fazer nenhuma das três).',

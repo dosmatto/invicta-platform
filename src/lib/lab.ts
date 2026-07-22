@@ -31,7 +31,7 @@ export const ELEMENTOS_LAB: { id: string; simbolo: string; sinonimos: string[] }
 // do laudo (não vêm do arquivo). Canônico: t (CTC efetiva) em mmolc/dm³ (soma de
 // cátions); saturações em %. Ficam DEPOIS das colunas do laudo na prévia/tabela.
 export const DERIVADOS_LAB: { id: string; simbolo: string }[] = [
-  { id: 't',     simbolo: 't (CTCef)' },
+  { id: 't',     simbolo: 'CTCe' },
   { id: 'satk',  simbolo: 'K%' },
   { id: 'satca', simbolo: 'Ca%' },
   { id: 'satmg', simbolo: 'Mg%' },

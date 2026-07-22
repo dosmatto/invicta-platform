@@ -19,6 +19,7 @@ export interface AtributoEq { token: string; nut: string; rotulo: string; unidad
 export const ATRIBUTOS_EQUACAO: AtributoEq[] = [
   { token: 'V',   nut: 'v',       rotulo: 'Saturação por bases (V%)', unidade: '%',         exemplo: 45 },
   { token: 'CTC', nut: 'ctc',     rotulo: 'CTC (T)',                  unidade: 'cmolc/dm³', exemplo: 8 },
+  { token: 'CTCe',nut: 't',       rotulo: 'CTC efetiva (t)',          unidade: 'cmolc/dm³', exemplo: 6 },
   { token: 'Ca',  nut: 'ca',      rotulo: 'Cálcio',                   unidade: 'cmolc/dm³', exemplo: 3 },
   { token: 'Mg',  nut: 'mg',      rotulo: 'Magnésio',                 unidade: 'cmolc/dm³', exemplo: 1 },
   { token: 'K',   nut: 'k',       rotulo: 'Potássio',                 unidade: 'cmolc/dm³', exemplo: 0.2 },
