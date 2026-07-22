@@ -1018,8 +1018,14 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
                   </p>
                 </div>
 
+                {/* AÇÃO PRINCIPAL — botão grande e visível (o do cabeçalho é o atalho) */}
+                <button onClick={salvar}
+                  className="w-full py-2.5 rounded text-xs font-bold text-white flex items-center justify-center gap-2"
+                  style={{ background: '#059669', border: '1px solid #34d399', boxShadow: '0 2px 10px rgba(16,185,129,0.35)' }}>
+                  <Save size={14} /> Salvar zoneamento
+                </button>
                 <p className="text-[9px] leading-relaxed" style={{ color: '#6d5b9e' }}>
-                  Clique em <strong style={{ color: '#86efac' }}>Salvar zoneamento</strong> para guardá-lo. Você pode salvar vários e marcar um como <strong style={{ color: '#fbbf24' }}>Padrão</strong> — esse vai para a <strong style={{ color: '#93c5fd' }}>Amostragem</strong> gerar o grid.
+                  Você pode salvar vários zoneamentos e marcar um como <strong style={{ color: '#fbbf24' }}>Padrão</strong> — esse vai para a <strong style={{ color: '#93c5fd' }}>Amostragem</strong> gerar o grid.
                 </p>
               </div>
             )}

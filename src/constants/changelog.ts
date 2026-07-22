@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.4.2': [
+    'ZONAS DE MANEJO — SALVAR MAIS VISÍVEL: a etapa Avaliar ganhou um botão GRANDE "Salvar zoneamento" (verde, largura total) no fim do painel, depois da lista de polígonos — o botãozinho do cabeçalho continua como atalho. Nada mudou no que é salvo.',
+  ],
   '2.4.1': [
     'ZONAS DE MANEJO — LIMITE EXTERNO OFICIAL (backend interp-20): o contorno externo das zonas agora é SEMPRE o polígono cadastrado do talhão — o raster deixou de definir o perímetro. Fim da borda pixelada em degraus: na geração, as classes viram uma partição EXATA do talhão (faixas de borda e áreas sem dado vão para a zona vizinha de maior divisa) e a união das zonas preenche 100% da área oficial. Só as divisas INTERNAS são simplificadas.',
     'SUAVIZAR LIMITES — SÓ DIVISAS INTERNAS (regra fixa): a opção "Manter limite externo" saiu — preservar o contorno oficial agora é obrigatório e automático. A ferramenta também completa zoneamentos antigos que não alcançavam a borda (as faixas incorporadas aparecem no resumo) e mostra a VALIDAÇÃO DE COBERTURA: área do talhão × soma das zonas × diferença (deve ser ~0; senão o backend recusa o resultado).',
