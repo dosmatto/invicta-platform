@@ -1602,6 +1602,37 @@ export function seedLegendasSistema(seed: Legenda[]) {
   notificarLegendas();
 }
 
+// Cria a legenda de CTC EFETIVA (atributoId 't', sigla CTCe) CLONANDO a de CTC
+// (mesma unidade/escala), para a CTCe aparecer na interpolação da Fertilidade e
+// poder ser usada nas equações. A cópia é 'empresa' (editável) — o usuário ajusta
+// as faixas depois. Idempotente: se já houver uma legenda 't' (inclusive uma que
+// o usuário apagou e não quer de volta → flag), não recria; se ainda não houver
+// nenhuma de CTC (base não hidratada / usuário não usa CTC), tenta no próximo boot.
+export function migrarLegendaCtceV1() {
+  if (typeof window === 'undefined') return;
+  if (localStorage.getItem('inv_migrado_leg_ctce_v1') === '1') return;
+  const todas = load<Legenda>('inv_legendas');
+  if (todas.some(l => l.atributoId === 't')) { localStorage.setItem('inv_migrado_leg_ctce_v1', '1'); return; }
+  const base = todas.find(l => l.atributoId === 'ctc');
+  if (!base) return;   // sem CTC ainda — não queima a flag, tenta de novo depois
+  const agora = new Date().toISOString();
+  const nova: Legenda = comEmpresa({
+    ...base,
+    id: uid(),
+    nome: 'CTC efetiva (CTCe)',
+    atributo: 'CTC efetiva',
+    atributoId: 't',
+    simbolo: 'CTCe',
+    escopo: 'empresa',                       // editável (a de CTC pode ser 'sistema')
+    classes: base.classes.map(c => ({ ...c })),
+    criadoEm: agora,
+    atualizadoEm: agora,
+  });
+  save('inv_legendas', [...todas, nova]);
+  notificarLegendas();
+  localStorage.setItem('inv_migrado_leg_ctce_v1', '1');
+}
+
 // "Destrava" as legendas oficiais (escopo 'sistema', read-only) tornando-as do
 // usuário (escopo 'empresa') — passam a ser editáveis/excluíveis. Como o seed só
 // roda em banco vazio, a conversão é permanente.

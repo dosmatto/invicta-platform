@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.5.5': [
+    'CTC EFETIVA NA INTERPOLAÇÃO/EQUAÇÕES: agora existe uma legenda de CTC efetiva (sigla CTCe) criada automaticamente a partir da sua legenda de CTC (mesmas faixas/cores, editável em Legendas). Com ela, a CTCe passa a aparecer na lista de atributos para INTERPOLAR na aba Fertilidade — gere o mapa de CTCe e ele fica disponível para usar nas equações (token CTCe). Feito uma vez por navegador; se você apagar a legenda de CTCe, ela não é recriada.',
+  ],
   '2.5.4': [
     'INTERPOLAÇÃO (FERTILIDADE) — PIXEL DE 2 m E PADRÃO 5 m: a krigagem/IDW ganhou a opção de pixel 2 × 2 m (mais detalhe) e o padrão passou de 20 m para 5 m. Opções agora: 2, 5 (padrão), 10 e 20 m. Mapas já interpolados continuam aparecendo normalmente; a resolução só vale para a PRÓXIMA interpolação. Obs.: a grade é limitada a 500×500 células, então em talhões muito grandes o 2 m/5 m é ajustado automaticamente para caber.',
   ],
