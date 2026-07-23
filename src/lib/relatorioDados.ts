@@ -6,6 +6,7 @@
 
 import {
   getTalhoes, getFazendas, getClientes, getImportacoesLab, getGrades, getLegendas, getPlantio,
+  getVariaveisAnalise,
 } from './store';
 import type { Legenda } from './legendas';
 import { cloudCarregarMapasPorPrefixo } from './cloud';
@@ -123,10 +124,12 @@ export async function carregarContextoRelatorio(
     const profs = [...new Set(Object.keys(mapas).filter(k => k.startsWith(`${nut}__`)).map(k => k.slice(nut.length + 2)))].sort();
     elementos.push({ nut, atributo: leg.atributo, simbolo: leg.simbolo, profundidades: profs });
   }
-  elementos.sort((a, b) => {
-    const ia = ORDEM.indexOf(a.nut), ib = ORDEM.indexOf(b.nut);
-    return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
-  });
+  // Ordem dos elementos no relatório = a ORDEM DO CATÁLOGO (Variáveis de Análise),
+  // que o usuário controla com as setas no Perfil (Legendas por elemento). Fallback
+  // = ORDEM fixa histórica p/ o que não estiver no catálogo.
+  const ordemCat = new Map(getVariaveisAnalise().map(v => [v.id, v.ordem]));
+  const chave = (nut: string) => ordemCat.get(nut) ?? (ORDEM.indexOf(nut) < 0 ? 999 : ORDEM.indexOf(nut));
+  elementos.sort((a, b) => chave(a.nut) - chave(b.nut));
 
   // Índices vegetativos MANTIDOS (IV3): entram como capítulos extras no fim —
   // cada data vira um painel (no lugar da "profundidade"). Legenda = NDVI oficial.

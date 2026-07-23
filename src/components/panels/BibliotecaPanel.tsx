@@ -6,7 +6,7 @@ import {
   type CategoriaBiblioteca, type EscopoBiblioteca, type DefCategoria,
   type ItemBiblioteca, type ConteudoLaboratorio, type ConteudoPerfil,
 } from '@/lib/biblioteca';
-import { Search, Plus, Download, Upload, ChevronRight, Edit3, Trash2, Save, X, Power, Shield } from 'lucide-react';
+import { Search, Plus, Download, Upload, ChevronRight, ChevronUp, ChevronDown, Edit3, Trash2, Save, X, Power, Shield } from 'lucide-react';
 import { LegendasPanel } from './LegendasPanel';
 import { EquacoesPanel } from './EquacoesPanel';
 import { RecomendacoesPanel } from './RecomendacoesPanel';
@@ -22,7 +22,7 @@ import {
   getPadroesAmostragem, savePadraoAmostragem, updatePadraoAmostragem, deletePadraoAmostragem,
   getPadroesElementos, savePadraoElementos, updatePadraoElementos, deletePadraoElementos,
   getConfigEtiqueta, saveConfigEtiqueta, getLegendasPorAtributo,
-  getVariaveisAnalise, getVariaveisAtivas, garantirVariaveisComplementares,
+  getVariaveisAnalise, getVariaveisAtivas, garantirVariaveisComplementares, reordenarVariavelAtiva,
   saveVariavelAnalise, novaVariavelAnalise, deleteVariavelAnalise, siglaVariavel,
   type PadraoElementos, type PadraoAmostragem, type ProfundidadeConfig, type ConfigEtiqueta, type VariavelAnalise,
 } from '@/lib/store';
@@ -698,6 +698,9 @@ function PerfilEditor({ state, onClose }: { state: PerfilEditState; onClose: () 
   const [padrAmId, setPadrAmId] = useState(state.padraoAmostragemId);
   const [legPorEl, setLegPorEl] = useState<Record<string, string>>(state.legendasPorElemento);
   const [erro, setErro] = useState('');
+  const [ordemRefresh, setOrdemRefresh] = useState(0);
+  const variaveisAtivas = useMemo(() => getVariaveisAtivas(), [ordemRefresh]);
+  function mover(id: string, dir: -1 | 1) { reordenarVariavelAtiva(id, dir); setOrdemRefresh(x => x + 1); }
 
   // Lab options = builtins + biblioteca laboratorios (escopo filtrado)
   const labOptions = useMemo(() => {
@@ -779,13 +782,20 @@ function PerfilEditor({ state, onClose }: { state: PerfilEditState; onClose: () 
 
         <div>
           <label className="text-[10px] font-semibold block mb-1" style={{ color: '#cbd5e1' }}>Legendas por elemento</label>
+          <p className="text-[9px] mb-1" style={{ color: '#64748b' }}>As setas reordenam os elementos — essa ordem é o padrão dos elementos no relatório.</p>
           <div className="space-y-1">
-            {getVariaveisAtivas().map(el => {
+            {variaveisAtivas.map((el, i) => {
               const legs = getLegendasPorAtributo(el.id);
               const valor = legPorEl[el.id] ?? '';
               return (
                 <div key={el.id} className="flex items-center gap-2">
-                  <span className="text-[10px] font-mono flex-shrink-0" style={{ width: 60, color: '#93c5fd' }}>{el.sigla}</span>
+                  <div className="flex flex-col flex-shrink-0" style={{ width: 14 }}>
+                    <button onClick={() => mover(el.id, -1)} disabled={i === 0} title="Subir"
+                      className="disabled:opacity-25" style={{ color: '#93c5fd', lineHeight: 0 }}><ChevronUp size={12} /></button>
+                    <button onClick={() => mover(el.id, 1)} disabled={i === variaveisAtivas.length - 1} title="Descer"
+                      className="disabled:opacity-25" style={{ color: '#93c5fd', lineHeight: 0 }}><ChevronDown size={12} /></button>
+                  </div>
+                  <span className="text-[10px] font-mono flex-shrink-0" style={{ width: 52, color: '#93c5fd' }}>{el.sigla}</span>
                   <select value={valor} onChange={e => setLeg(el.id, e.target.value)}
                     disabled={legs.length === 0}
                     className="flex-1 rounded px-2 py-1 text-[10px] outline-none" style={inputStyle}>

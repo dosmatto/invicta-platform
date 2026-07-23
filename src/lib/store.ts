@@ -1309,6 +1309,20 @@ export function saveVariavelAnalise(v: VariavelAnalise) {
   else bibCriar<ConteudoVariavel>('preferencias-analise', { nome: `Variável: ${v.sigla}`, conteudo, escopo: empresaAtivaId() ? 'empresa' : 'meu' });
 }
 
+// Move uma variável ATIVA uma posição para cima (-1) ou baixo (+1) na ordem do
+// catálogo, trocando a `ordem` com a vizinha ativa. Essa ordem é o padrão da
+// ordem dos elementos no relatório (ver relatorioDados). Idempotente nas pontas.
+export function reordenarVariavelAtiva(id: string, dir: -1 | 1) {
+  const ativas = getVariaveisAtivas();   // já ordenadas por `ordem`
+  const i = ativas.findIndex(v => v.id === id);
+  const j = i + dir;
+  if (i < 0 || j < 0 || j >= ativas.length) return;
+  const a = ativas[i], b = ativas[j];
+  if (a.ordem === b.ordem) { saveVariavelAnalise({ ...a, ordem: a.ordem + dir * 0.001 }); return; }
+  saveVariavelAnalise({ ...a, ordem: b.ordem });
+  saveVariavelAnalise({ ...b, ordem: a.ordem });
+}
+
 // Cria uma variável NOVA (id derivado da sigla, único). Devolve a variável criada.
 export function novaVariavelAnalise(dados: Omit<VariavelAnalise, 'id' | 'ordem'>): VariavelAnalise {
   garantirVariaveisAnalise();
