@@ -125,7 +125,12 @@ function ReligarTalhoesSection() {
                     className="w-full rounded px-2 py-1 text-[10px] outline-none"
                     style={{ background: '#0f2240', color: g.fazendaId ? '#e2e8f0' : '#f87171', border: '1px solid #2e5fa3' }}>
                     <option value="">— escolher fazenda —</option>
-                    {fazendas.map(f => <option key={f.id} value={f.id}>{f.nome}{f.sigla ? ` (${f.sigla})` : ''}</option>)}
+                    {[...fazendas]
+                      .map(f => ({ f, prod: clientes.find(c => c.id === f.clienteId)?.nome ?? '(SEM PRODUTOR)' }))
+                      .sort((a, b) => a.prod.localeCompare(b.prod, 'pt-BR') || a.f.nome.localeCompare(b.f.nome, 'pt-BR'))
+                      .map(({ f, prod }) => (
+                        <option key={f.id} value={f.id}>{f.nome}{f.sigla ? ` (${f.sigla})` : ''} — {prod}</option>
+                      ))}
                   </select>
                   {!g.fazendaId && (
                     <div className="flex items-center gap-1.5">

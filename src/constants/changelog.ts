@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.7.4': [
+    'RELIGAR TALHÕES ÓRFÃOS — MOSTRA O PRODUTOR DA FAZENDA: no religador de talhões órfãos (Configurações), a lista de fazendas passou a exibir o PRODUTOR de cada uma ("BOA VISTA — Fulano"), e as opções ficam ordenadas por produtor → fazenda. Antes, fazendas com nome igual (ex.: duas "BOA VISTA") eram indistinguíveis e não dava para saber a qual produtor pertenciam.',
+  ],
   '2.7.3': [
     'LEGENDAS DE K%/Ca%/Mg% CRIADAS E VINCULÁVEIS NO PERFIL: as saturações calculadas ganham legendas automáticas (clonadas da estrutura da V%, mesma escala 0–100%) — com isso K%, Ca% e Mg% deixam de aparecer como "sem legendas cadastradas" nos Perfis e já podem ser vinculadas e interpoladas. IMPORTANTE: as FAIXAS vêm da V% e devem ser ajustadas em Legendas (o nome de cada uma avisa: "— ajustar faixas").',
     'LEGENDAS — LISTA DE ATRIBUTOS COMPLETA: ao criar/editar uma legenda, o campo "ID do atributo" agora sugere TODAS as variáveis do catálogo (K%, Ca%, Mg%, CTCe, H+Al, relações, solúveis…), com sigla e nome — antes só listava os elementos básicos e não dava para descobrir o id dos atributos novos.',
