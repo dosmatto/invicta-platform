@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.6.0': [
+    'INTERPOLAÇÃO — PIXEL 2,5 m e 3 m + FIM DA QUEDA NO 2 m: novas opções de pixel 2,5×2,5 m e 3×3 m (além de 2/5/10/20). E o servidor de processamento não cai mais no 2 m: a 2 m em talhões grandes a grade ficava grande demais e estourava a memória do servidor (aquele erro de "servidor indisponível"/CORS). O teto da grade foi ajustado para caber com folga — em talhão muito grande o pixel fino vira automaticamente um pouco mais grosso, em vez de travar. Recomendado: 3 m dá bom detalhe e roda tranquilo; 5 m segue como padrão.',
+  ],
   '2.5.9': [
     'RELATÓRIO DE RECOMENDAÇÃO — NUMERAÇÃO PELO Nº DA EQUAÇÃO: cada página de mapa passa a usar o número DEFINIDO NA JANELA DE EQUAÇÕES (campo "nº" de cada equação — ex.: Calcário 01–06, Gesso 10–14), em vez de renumerar do 01 a cada bloco. Vale no "Book" das Recomendações e no relatório combinado. Equação sem número definido cai na sequência normal, só para não ficar sem rótulo.',
   ],

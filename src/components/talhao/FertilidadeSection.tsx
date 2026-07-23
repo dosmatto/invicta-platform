@@ -665,7 +665,7 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
                   <div className="flex-1">
                     <label className="text-[10px] font-semibold block mb-1" style={{ color: '#64748b' }}>Pixel</label>
                     <select value={pixelM} onChange={e => setPixelM(Number(e.target.value))} className="w-full rounded px-2 py-1 text-[11px] outline-none" style={inputStyle}>
-                      {[2, 5, 10, 20].map(p => <option key={p} value={p}>{p} × {p} m{p === 5 ? ' (padrão)' : ''}</option>)}
+                      {[2, 2.5, 3, 5, 10, 20].map(p => <option key={p} value={p}>{p} × {p} m{p === 5 ? ' (padrão)' : ''}</option>)}
                     </select>
                   </div>
                   {metodo === 'krige' && (

@@ -31,8 +31,12 @@ except Exception:  # pragma: no cover
     _HAS_PYKRIGE = False
 
 KRIGE_MODELS = ["spherical", "exponential", "gaussian"]
-# Teto de resolucao da malha (por lado) para proteger memoria/CPU
-MAX_CELLS = 500
+# Teto de resolucao da malha (por lado) para proteger memoria/CPU. 400 (era 500):
+# a 2 m em talhoes grandes a grade 500x500 estourava a memoria do plano do Render
+# (512 MB) e derrubava o container; 400x400 (~160k celulas) cabe com folga. Em
+# talhao muito grande o pixel fino vira automaticamente um pouco mais grosso (sem
+# travar); talhoes normais nao chegam nesse teto.
+MAX_CELLS = 400
 # Fracao minima de patamar parcial (psill/sill) para o variograma ser considerado
 # COM estrutura. Abaixo disso = pepita ~= patamar (ruido puro) -> krigagem prediz
 # a media em todo lugar -> mapa uniforme. Nesse caso caimos para IDW.
