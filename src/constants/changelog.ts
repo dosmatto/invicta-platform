@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.7.8': [
+    'NDVI/SATÉLITE — PROCESSAR OUTRO ÍNDICE DA MESMA IMAGEM: depois de processar um índice (ex.: NDVI), o painel do resultado ganhou o botão "Processar outro índice desta imagem". Ele reabre a conferência já com os índices AINDA NÃO feitos pré-marcados (NDRE, etc.) — antes, uma imagem já processada não reabria essa tela e não dava para gerar um índice novo sem refazer tudo.',
+  ],
   '2.7.7': [
     'PIXEL SÓLIDO TAMBÉM NO PDF DA RECOMENDAÇÃO: os mapas dentro do PDF (recomendação/fertilidade) desenhavam o raster ampliado COM suavização, deixando os pixels borrados. Agora o raster é desenhado sem suavização (nearest) — blocos de cor sólidos no PDF, como no mapa da tela. (O satélite e os números dos pontos seguem suaves.)',
     'CASAS DECIMAIS POR VARIÁVEL: em Biblioteca → Preferências de Análise → editar a variável há um novo campo "Casas decimais (exibição)": Padrão (automático), 0, 1 ou 2. Tudo continua como estava por padrão; K%, Ca% e Mg% já vêm com 1 casa decimal. Por ora vale nas estatísticas do relatório de Fertilidade; vamos estender aos demais pontos aos poucos.',

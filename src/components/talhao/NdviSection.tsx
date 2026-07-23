@@ -794,6 +794,21 @@ export function NdviSection({ safraNome }: { safraNome?: string } = {}) {
               </button>
             )
           )}
+
+          {/* Processar OUTRO índice desta MESMA imagem (a cena já está processada):
+              reabre a conferência com os índices ainda NÃO feitos pré-marcados. */}
+          <button onClick={() => {
+            const cand = candidatos.find(c => c.fonte === fonteSel && c.data === dataSel);
+            if (!cand) { setErro('Esta imagem não está mais na lista — refaça a busca para processar outro índice.'); return; }
+            const feitos = new Set(indicesDaCena(cand.fonte, cand.data).map(k => k.split(':')[2]));
+            const pre: Record<string, boolean> = {};
+            for (const i of indicesDisponiveis(cand.fonte).ok) pre[i.id] = !feitos.has(i.id);
+            setSelIdx(pre); setSelKey(''); setPreviaDe(cand);
+          }}
+            className="w-full py-1.5 rounded text-[10px] font-semibold flex items-center justify-center gap-1"
+            style={{ background: '#1a3a6b', color: '#93c5fd' }}>
+            <Play size={11} /> Processar outro índice desta imagem
+          </button>
         </div>
       )}
       </>)}
