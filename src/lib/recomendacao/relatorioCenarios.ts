@@ -13,6 +13,7 @@ import { colorirDose } from '../raster';
 import { hexToRgb } from '../legendas';
 import { extrairPoligono, decodeGrid } from '../fertilidade';
 import { getTalhoes, getFazendas, getClientes, getPlantio } from '../store';
+import { listar as bibListar, type ConteudoEquacao } from '../biblioteca';
 import type { Cenario } from './cenarios';
 import type { DoseCalculada } from './aplicar';
 
@@ -270,7 +271,7 @@ async function desenharPaginaOficial(doc: JsPDF, dose: DoseCalculada, cenNome: s
 
   const SX = M, SW = 82; let y = 22;
   // Título = "NN - produto" (ex.: "01 - Calcário", "10 - <fórmula>"). O número
-  // é a posição do mapa dentro da recomendação (ordem das equações).
+  // é o nº DEFINIDO NA JANELA DE EQUAÇÕES (ConteudoEquacao.ordem), não um contador.
   const rotuloMapa = dose.produto || dose.nomeEquacao || 'Recomendação';
   const titulo = `${String(numero).padStart(2, '0')} - ${rotuloMapa}`;
   doc.setFontSize(11); doc.setTextColor(...GREEN); doc.setFont('helvetica', 'bold'); doc.text(san(titulo), SX, y, { maxWidth: SW }); y += 4.2;
@@ -338,12 +339,20 @@ export async function renderBookOficialNoDoc(
   if (!poligono) throw new Error('Talhão sem polígono salvo — não dá para desenhar os mapas.');
   const ctx: Ctx = { fazenda: faz?.nome ?? '', talhao: tal?.nome ?? '', safra, cultura: getPlantio(tId, safra), produtor: cli?.nome ?? '', areaHa: tal?.areaHa ?? 0, poligono };
   const logo = await carregarImg('/images/logo-branca.png').catch(() => null);
+  // Número de cada mapa = o "nº" DEFINIDO NA JANELA DE EQUAÇÕES (ConteudoEquacao.ordem),
+  // p.ex. Calcário 1–6, Gesso 10–14 — NÃO renumera do 1 a cada bloco. Fallback = sequência
+  // só para equações sem número definido (para nunca ficar sem rótulo).
+  const ordemPorEquacao = new Map<string, number>();
+  for (const it of bibListar<ConteudoEquacao>('equacoes')) {
+    if (typeof it.conteudo?.ordem === 'number') ordemPorEquacao.set(it.id, it.conteudo.ordem);
+  }
   let precisaPagina = opts?.novaPaginaAntes ?? false;
   let algum = false;
   for (const cen of cenarios) {
-    let numero = 0;   // numeração dos mapas reinicia a cada recomendação (01, 02, …)
+    let seq = 0;
     for (const dose of cen.doses) {
-      numero++;
+      seq++;
+      const numero = ordemPorEquacao.get(dose.equacaoId) ?? seq;   // nº das Equações; fallback = sequência
       if (precisaPagina) doc.addPage();
       precisaPagina = true;
       algum = true;

@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.5.9': [
+    'RELATÓRIO DE RECOMENDAÇÃO — NUMERAÇÃO PELO Nº DA EQUAÇÃO: cada página de mapa passa a usar o número DEFINIDO NA JANELA DE EQUAÇÕES (campo "nº" de cada equação — ex.: Calcário 01–06, Gesso 10–14), em vez de renumerar do 01 a cada bloco. Vale no "Book" das Recomendações e no relatório combinado. Equação sem número definido cai na sequência normal, só para não ficar sem rótulo.',
+  ],
   '2.5.8': [
     'SERVIDOR DE PROCESSAMENTO — MENOS "INDISPONÍVEL" NO 1º USO: o servidor de interpolação (nuvem) hiberna quando fica sem uso e leva ~1 min para acordar; nesse intervalo o processamento falhava. Agora o app espera o servidor acordar por até 150s (era 90s), já dá o toque para acordá-lo assim que você entra na aba Fertilidade e mostra o aviso "Aquecendo o servidor de processamento…" enquanto ele sobe, em vez de dar erro. Se ainda assim demorar, é só tentar de novo em ~1 min.',
   ],
