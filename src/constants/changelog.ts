@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.7.12': [
+    'RELATÓRIO — CASAS DECIMAIS DOS PONTOS IGUAL À TELA: os números das amostras no mapa DO RELATÓRIO passam a respeitar as casas decimais da variável (Preferências de Análise), como já acontecia no mapa da tela. K%/Ca%/Mg% agora saem com 1 casa também no PDF (antes vinham inteiros).',
+  ],
   '2.7.11': [
     'PERFIL — REORDENAR ELEMENTOS (define a ordem do relatório): em Biblioteca → Perfis → editar, cada linha de "Legendas por elemento" ganhou setas ↑/↓ para reordenar os elementos. Essa ordem passa a ser o PADRÃO da ordem dos elementos no relatório de Fertilidade (antes era uma ordem fixa). A reordenação vale para o catálogo (Variáveis de Análise) como um todo.',
   ],

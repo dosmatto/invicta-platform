@@ -6,7 +6,7 @@
 
 import {
   getTalhoes, getFazendas, getClientes, getImportacoesLab, getGrades, getLegendas, getPlantio,
-  getVariaveisAnalise,
+  getVariaveisAnalise, casasDecimaisVariavel,
 } from './store';
 import type { Legenda } from './legendas';
 import { cloudCarregarMapasPorPrefixo } from './cloud';
@@ -108,7 +108,9 @@ export async function carregarContextoRelatorio(
       const v = r.valores[nut];
       if (v == null || !isFinite(v)) continue;
       const pt = pontoPorNumero.get(r.numero);
-      const casas = (nut === 'ph' || nut === 'k') ? 1 : 0; // pH e K com 1 casa; demais inteiros
+      // Casas do rótulo do ponto: config da variável (Preferências de Análise) tem
+      // prioridade; senão pH/K = 1, demais 0 — igual ao mapa da tela (satk/satca/satmg=1).
+      const casas = casasDecimaisVariavel(nut) ?? ((nut === 'ph' || nut === 'k') ? 1 : 0);
       if (pt) feats.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [pt.lng, pt.lat] }, properties: { txt: v.toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: casas }) } });
     }
     return { type: 'FeatureCollection', features: feats };
