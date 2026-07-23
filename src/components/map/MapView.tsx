@@ -491,8 +491,11 @@ export function MapView({ mostrarVisaoGeral = false }: { mostrarVisaoGeral?: boo
       : map.getLayer('pontos-circle') ? 'pontos-circle' : undefined;
     try {
       map.addSource(SRC, { type: 'image', url, coordinates });
+      // raster-resampling 'nearest': cada pixel é um bloco de cor SÓLIDO ao dar
+      // zoom (default 'linear' borra e MISTURA as cores das classes nas bordas,
+      // dando a impressão de cor "não pura"). Rótulos/pontos e a borda ficam acima.
       map.addLayer({ id: LYR, type: 'raster', source: SRC,
-        paint: { 'raster-opacity': opacity, 'raster-fade-duration': 0 } }, beforeId);
+        paint: { 'raster-opacity': opacity, 'raster-fade-duration': 0, 'raster-resampling': 'nearest' } }, beforeId);
     } catch (e) { console.warn('[mapa-fert] falha ao desenhar raster:', e); }
   }, [fertilidadeOverlay, mapReady]);
 
@@ -510,7 +513,7 @@ export function MapView({ mostrarVisaoGeral = false }: { mostrarVisaoGeral?: boo
     const beforeId = map.getLayer('zona-fill') ? 'zona-fill' : undefined; // SOB as zonas
     try {
       map.addSource(SRC, { type: 'image', url, coordinates });
-      map.addLayer({ id: LYR, type: 'raster', source: SRC, paint: { 'raster-opacity': opacity, 'raster-fade-duration': 0 } }, beforeId);
+      map.addLayer({ id: LYR, type: 'raster', source: SRC, paint: { 'raster-opacity': opacity, 'raster-fade-duration': 0, 'raster-resampling': 'nearest' } }, beforeId);
     } catch (e) { console.warn('[meap-fundo] falha ao desenhar raster:', e); }
   }, [zonasFundo, mapReady]);
 

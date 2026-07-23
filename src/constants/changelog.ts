@@ -1,5 +1,10 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.7.5': [
+    'K%/Ca%/Mg% — LEGENDAS COM FAIXAS PRÓPRIAS (fim do mapa "todo de uma cor só"): as legendas das saturações eram clonadas da V% (faixas 30–80%), mas K% real é ~1–5%, Ca% ~40–70% e Mg% ~8–25% — tudo caía na 1ª classe e o mapa saía uniforme. Agora cada uma nasce com faixas agronômicas próprias (K%: 1,5/3/5/8 · Ca%: 40/50/60/70 · Mg%: 8/12/18/25) e as legendas antigas já criadas são corrigidas automaticamente. Continuam editáveis em Legendas.',
+    'PIXEL SÓLIDO NO MAPA (cor "mais pura"): os mapas coloridos (recomendação, fertilidade, produtividade, zonas) passam a usar reamostragem "nearest" — cada pixel vira um bloco de cor sólido ao dar zoom, em vez de borrar/misturar as cores das classes nas bordas (era essa mistura que dava a impressão de cor "não pura"). A recomendação já era 100% opaca; isso deixa as bordas nítidas.',
+    'ABRIR TALHÃO DIRETO NA FAZENDA: na lista de talhões da fazenda, o botão "Abrir" (página completa do talhão, nova aba) agora fica SEMPRE visível ao lado do status — antes só aparecia ao passar o mouse.',
+  ],
   '2.7.4': [
     'RELIGAR TALHÕES ÓRFÃOS — MOSTRA O PRODUTOR DA FAZENDA: no religador de talhões órfãos (Configurações), a lista de fazendas passou a exibir o PRODUTOR de cada uma ("BOA VISTA — Fulano"), e as opções ficam ordenadas por produtor → fazenda. Antes, fazendas com nome igual (ex.: duas "BOA VISTA") eram indistinguíveis e não dava para saber a qual produtor pertenciam.',
   ],

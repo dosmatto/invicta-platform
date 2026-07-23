@@ -299,10 +299,11 @@ export function FazendaDetailPanel() {
                       </div>
                       <div className="flex items-center gap-1.5">
                         <StatusBadge status={t.status} />
+                        {/* Abrir a PÁGINA COMPLETA do talhão (nova aba) — sempre visível (antes só no hover) */}
                         <button onClick={e => { e.stopPropagation(); window.open(`/talhao/${t.id}`, '_blank'); }}
                           title="Abrir página completa do talhão (nova aba)"
-                          className="p-1 rounded hidden group-hover:block hover:bg-white/10" style={{ color: '#93c5fd' }}>
-                          <ExternalLink size={14} />
+                          className="flex items-center gap-1 px-1.5 py-1 rounded flex-shrink-0" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
+                          <ExternalLink size={13} /><span className="text-[9px] font-semibold hidden sm:inline">Abrir</span>
                         </button>
                       </div>
                     </div>

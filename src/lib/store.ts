@@ -4,6 +4,7 @@
 
 import type { ResultadoAmostra, PerfilLabConfig } from './lab';
 import type { Legenda } from './legendas';
+import { classesFertilidade5 } from './legendas';
 import type { AmbienteProdutivo } from './meap/tipos';
 import { cloudPushLista } from './cloud';
 import { lerListaLocal, gravarListaLocal, removerLocal } from './localComprimido';
@@ -1691,41 +1692,59 @@ export function migrarLegendaCtceV1() {
   localStorage.setItem('inv_migrado_leg_ctce_v1', '1');
 }
 
-// Cria as legendas das SATURAÇÕES calculadas (K%/Ca%/Mg% — atributos satk/
-// satca/satmg) CLONANDO a estrutura da legenda de V% (mesma escala 0–100%),
-// para elas poderem ser vinculadas nos Perfis e interpoladas. As cópias são
-// 'empresa' (editáveis) — as FAIXAS vêm da V% e devem ser AJUSTADAS pelo
-// agrônomo (os nomes avisam). Idempotente por atributo; sem legenda de V%
-// ainda (base não hidratada), tenta no próximo boot sem queimar a flag.
+// Faixas AGRONÔMICAS padrão de cada saturação na CTC (bordas de 5 classes +
+// domínio das pontas). K% é ~1–5%, Ca% ~40–70%, Mg% ~8–25% — MUITO diferentes
+// da V% (30–80%); por isso clonar a V% deixava tudo na 1ª classe (mapa uniforme).
+// Editáveis pelo agrônomo em Legendas.
+const SAT_CFG: Record<string, { sigla: string; nome: string; bordas: [number, number, number, number]; dmin: number; dmax: number }> = {
+  satk:  { sigla: 'K%',  nome: 'Saturação por Potássio (K%)',  bordas: [1.5, 3, 5, 8],   dmin: 0,  dmax: 10 },
+  satca: { sigla: 'Ca%', nome: 'Saturação por Cálcio (Ca%)',   bordas: [40, 50, 60, 70], dmin: 20, dmax: 90 },
+  satmg: { sigla: 'Mg%', nome: 'Saturação por Magnésio (Mg%)', bordas: [8, 12, 18, 25],  dmin: 0,  dmax: 40 },
+};
+
+// Cria as legendas das SATURAÇÕES calculadas (K%/Ca%/Mg%) com FAIXAS PRÓPRIAS
+// (SAT_CFG), clonando só a ESTRUTURA (estilo/categoria) da legenda de V%.
+// 'empresa' (editáveis). Idempotente por atributo; sem V% ainda, tenta depois.
 export function migrarLegendasSaturacoesV1() {
   if (typeof window === 'undefined') return;
   if (localStorage.getItem('inv_migrado_leg_sat_v1') === '1') return;
   const todas = load<Legenda>('inv_legendas');
-  const alvos: { atributoId: string; sigla: string; nome: string }[] = [
-    { atributoId: 'satk',  sigla: 'K%',  nome: 'Saturação por Potássio (K%) — ajustar faixas' },
-    { atributoId: 'satca', sigla: 'Ca%', nome: 'Saturação por Cálcio (Ca%) — ajustar faixas' },
-    { atributoId: 'satmg', sigla: 'Mg%', nome: 'Saturação por Magnésio (Mg%) — ajustar faixas' },
-  ];
-  const faltantes = alvos.filter(a => !todas.some(l => l.atributoId === a.atributoId));
+  const faltantes = Object.keys(SAT_CFG).filter(id => !todas.some(l => l.atributoId === id));
   if (faltantes.length === 0) { localStorage.setItem('inv_migrado_leg_sat_v1', '1'); return; }
   const base = todas.find(l => l.atributoId === 'v');
   if (!base) return;   // sem legenda de V% ainda — tenta de novo depois
   const agora = new Date().toISOString();
-  const novas = faltantes.map(a => comEmpresa<Legenda>({
-    ...base,
-    id: uid(),
-    nome: a.nome,
-    atributo: a.nome.replace(' — ajustar faixas', ''),
-    atributoId: a.atributoId,
-    simbolo: a.sigla,
-    escopo: 'empresa',
-    classes: base.classes.map(c => ({ ...c })),
-    criadoEm: agora,
-    atualizadoEm: agora,
-  }));
+  const novas = faltantes.map(id => {
+    const c = SAT_CFG[id];
+    return comEmpresa<Legenda>({
+      ...base, id: uid(), nome: c.nome, atributo: c.nome, atributoId: id, simbolo: c.sigla,
+      escopo: 'empresa', classes: classesFertilidade5(c.bordas), dominioMin: c.dmin, dominioMax: c.dmax,
+      criadoEm: agora, atualizadoEm: agora,
+    });
+  });
   save('inv_legendas', [...todas, ...novas]);
   notificarLegendas();
   localStorage.setItem('inv_migrado_leg_sat_v1', '1');
+}
+
+// CORREÇÃO das legendas de saturação que a v1 antiga criou clonando a V%
+// (faixas 30–80% → mapa todo na 1ª cor). Flagless e idempotente pelo marcador
+// "ajustar faixas" no nome: aplica as faixas do SAT_CFG e RENOMEIA (removendo o
+// marcador) — depois disso não toca mais, preservando ajustes do usuário.
+export function migrarLegendasSaturacoesV2() {
+  if (typeof window === 'undefined') return;
+  const todas = load<Legenda>('inv_legendas');
+  let mudou = false;
+  for (const l of todas) {
+    const c = SAT_CFG[l.atributoId];
+    if (!c || !/ajustar faixas/i.test(l.nome)) continue;   // só as auto-criadas ainda não corrigidas
+    l.nome = c.nome; l.atributo = c.nome; l.simbolo = c.sigla;
+    l.classes = classesFertilidade5(c.bordas);
+    l.dominioMin = c.dmin; l.dominioMax = c.dmax;
+    l.atualizadoEm = new Date().toISOString();
+    mudou = true;
+  }
+  if (mudou) { save('inv_legendas', todas); notificarLegendas(); }
 }
 
 // Auditoria do cadastro (owner, via console: invAuditoria()). NÃO altera nada —
