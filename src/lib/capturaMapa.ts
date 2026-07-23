@@ -17,6 +17,7 @@ export interface CapturaMapa {
   corLimite: string;
   larguraPx: number;
   alturaPx: number;
+  clipTalhao?: boolean;   // recorta os pixels do raster no limite do talhão (default: true)
 }
 
 const SAT_URL = (z: number, x: number, y: number) =>
@@ -73,14 +74,30 @@ export async function capturarMapaFertilidade(c: CapturaMapa): Promise<string> {
     try { await desenharSatelite(ctx, c.bounds, ox, oy, drawW, drawH, W, H); } catch { /* segue sem satélite */ }
   }
 
+  // Traça o polígono do talhão (todos os anéis) como UM path — p/ clip do raster.
+  const tracarPoligono = () => {
+    const aneis0: GeoJSON.Position[][] = c.poligono.type === 'Polygon'
+      ? c.poligono.coordinates : c.poligono.coordinates.flat();
+    ctx.beginPath();
+    for (const anel of aneis0) {
+      anel.forEach((pt, i) => { const x = px(pt[0]), y = py(pt[1]); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+      ctx.closePath();
+    }
+  };
+
   // 2) Raster interpolado (cobre exatamente o bbox). SEM suavização (nearest):
   // a grade é de baixa resolução (~20 m) e ampliada; com smoothing os pixels
   // saíam borrados/"não sólidos" no PDF. Restaura depois (satélite/rótulos suaves).
+  // clipTalhao (default true): RECORTA os pixels de borda no limite do talhão —
+  // com nearest os blocos de ~20 m ultrapassavam a divisa; o clip corta na linha.
   try {
     const img = await carregarImg(c.rasterPng);
     const smooth = ctx.imageSmoothingEnabled;
     ctx.imageSmoothingEnabled = false;
+    const clipar = c.clipTalhao !== false;
+    if (clipar) { ctx.save(); tracarPoligono(); ctx.clip(); }
     ctx.drawImage(img, ox, oy, drawW, drawH);
+    if (clipar) ctx.restore();
     ctx.imageSmoothingEnabled = smooth;
   } catch { /* segue sem raster */ }
 

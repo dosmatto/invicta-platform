@@ -1,5 +1,9 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.7.10': [
+    'RELATÓRIO — PIXELS RECORTADOS NO LIMITE DO TALHÃO: o mapa que vai no PDF (recomendação e fertilidade) agora RECORTA os pixels de borda exatamente no contorno do talhão — os blocos de ~20 m não ultrapassam mais a divisa. O satélite ao redor continua visível; só a camada colorida é cortada. (A exportação vetorial para máquina segue seu próprio caminho.)',
+    'K%/Ca%/Mg% — VALOR COM 1 CASA NO MAPA: os números dos pontos de amostra no mapa de fertilidade passam a respeitar as casas decimais da variável (Preferências de Análise). K%, Ca% e Mg% já saem com 1 casa decimal (antes apareciam inteiros).',
+  ],
   '2.7.9': [
     'NDVI — "PROCESSAR OUTRO ÍNDICE" NÃO MARCA NADA AUTOMÁTICO: ao reabrir a conferência de uma imagem já processada, os índices agora vêm TODOS DESMARCADOS — você escolhe qual processar (antes vinha pré-marcado tudo o que faltava).',
   ],

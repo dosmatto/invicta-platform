@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import {
   getSafras, getGrades, getImportacoesLab, getTalhoes, getFazendas, getPlantio,
-  getLegendas, getLegendasPorAtributo,
+  getLegendas, getLegendasPorAtributo, casasDecimaisVariavel,
   type ImportacaoLab, type GradeAmostragem,
 } from '@/lib/store';
 import { gerarRelatorioFertilidade, type ProfundidadeRel } from '@/lib/relatorioFertilidade';
@@ -27,7 +27,10 @@ import { listar as bibListar, criar as bibCriar, type ConteudoPerfil, type ItemB
 import { inputStyle } from '@/constants/ui';
 const fmt = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits: 1 });
 // Rótulo do valor no ponto do mapa: pH e K com 1 casa decimal; os demais inteiros.
-const casasPonto = (nut: string) => (nut === 'ph' || nut === 'k') ? 1 : 0;
+// Casas decimais do rótulo do ponto no mapa: config da variável (Preferências de
+// Análise) tem prioridade; senão pH/K = 1, demais = 0. Faz K%/Ca%/Mg% (satk…=1)
+// saírem com 1 casa, como pedido.
+const casasPonto = (nut: string) => casasDecimaisVariavel(nut) ?? ((nut === 'ph' || nut === 'k') ? 1 : 0);
 const fmtPonto = (v: number, nut: string) => v.toLocaleString('pt-BR', { minimumFractionDigits: casasPonto(nut), maximumFractionDigits: casasPonto(nut) });
 const OPACIDADE = 1; // fixo 100%
 
