@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   getLegendas, saveLegenda, upsertLegenda, updateLegenda, deleteLegenda,
-  getPaletas, savePaleta, deletePaleta, destravarLegendasSistema, type Paleta,
+  getPaletas, savePaleta, deletePaleta, destravarLegendasSistema, getVariaveisAnalise, type Paleta,
 } from '@/lib/store';
 import { listar as listarBib, type ConteudoPerfil } from '@/lib/biblioteca';
 import {
@@ -11,7 +11,6 @@ import {
   gradienteCssDaLegenda, PARES_OFICIAIS_5, LARGURAS_VISUAIS_5, classesFertilidade5, paresDaClasse,
   CATEGORIAS_LEGENDA,
 } from '@/lib/legendas';
-import { ELEMENTOS_LAB } from '@/lib/lab';
 import { RAMPAS, coresDaRampa, corNaRampa, gradienteCssRampa } from '@/lib/estiloPresets';
 import {
   Plus, Edit3, Copy, Trash2, Download, Upload, ChevronLeft, BookOpen,
@@ -380,7 +379,10 @@ function LegendaEditor({ legenda, onClose }: { legenda: Legenda | null; onClose:
           <input list="atributos-legenda" value={form.atributoId} onChange={e => patch('atributoId', e.target.value.trim())}
             placeholder="digite ou escolha" className="w-full rounded px-2 py-1 text-[11px] outline-none" style={inputStyle} />
           <datalist id="atributos-legenda">
-            {ELEMENTOS_LAB.map(el => <option key={el.id} value={el.id}>{el.simbolo}</option>)}
+            {/* TODAS as variáveis do catálogo (inclui K%/Ca%/Mg%/CTCe e a lista
+                complementar), não só os elementos básicos — senão não dá para
+                criar legenda dos atributos novos sem adivinhar o id. */}
+            {getVariaveisAnalise().map(v => <option key={v.id} value={v.id}>{v.sigla} — {v.nome}</option>)}
             {ATRIBUTOS_EXTRA.map(a => <option key={a.id} value={a.id}>{a.nome}</option>)}
           </datalist>
           <p className="text-[9px] mt-0.5" style={{ color: '#475569' }}>É a CHAVE que liga a legenda ao módulo (Fertilidade usa os de laboratório; Condutividade usa &quot;condutividade&quot; etc.). Pode criar um novo.</p>

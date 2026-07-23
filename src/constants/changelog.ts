@@ -1,5 +1,9 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.7.3': [
+    'LEGENDAS DE K%/Ca%/Mg% CRIADAS E VINCULÁVEIS NO PERFIL: as saturações calculadas ganham legendas automáticas (clonadas da estrutura da V%, mesma escala 0–100%) — com isso K%, Ca% e Mg% deixam de aparecer como "sem legendas cadastradas" nos Perfis e já podem ser vinculadas e interpoladas. IMPORTANTE: as FAIXAS vêm da V% e devem ser ajustadas em Legendas (o nome de cada uma avisa: "— ajustar faixas").',
+    'LEGENDAS — LISTA DE ATRIBUTOS COMPLETA: ao criar/editar uma legenda, o campo "ID do atributo" agora sugere TODAS as variáveis do catálogo (K%, Ca%, Mg%, CTCe, H+Al, relações, solúveis…), com sigla e nome — antes só listava os elementos básicos e não dava para descobrir o id dos atributos novos.',
+  ],
   '2.7.2': [
     'RELATÓRIO DE RECOMENDAÇÃO — PÁGINAS NA ORDEM DO Nº DA EQUAÇÃO: além de usar o número do cadastro no título (v2.5.9), as páginas do relatório agora saem em ORDEM CRESCENTE desse número (01, 02, … 10, 23…), independentemente da ordem em que as doses foram processadas. Números até 9 continuam com zero à frente (01–09). Vale no Book das Recomendações e no relatório combinado. Equação sem nº definido vai para o fim.',
     'EXCLUIR RELATÓRIO GERADO — CONFIRMAÇÃO VISÍVEL + ERRO NA TELA: o lixinho do histórico (aba Relatórios) sempre exigiu 2 cliques, mas o 1º só mudava a cor do ícone — parecia que não apagava. Agora o 1º clique mostra "Confirmar?" ao lado do ícone (por 3,5s) e o 2º exclui. E se a nuvem não excluir de verdade (sem conexão ou sem permissão), aparece uma mensagem de erro em vez de falhar em silêncio — a lista sempre recarrega mostrando o estado real.',

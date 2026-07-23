@@ -1691,6 +1691,43 @@ export function migrarLegendaCtceV1() {
   localStorage.setItem('inv_migrado_leg_ctce_v1', '1');
 }
 
+// Cria as legendas das SATURAÇÕES calculadas (K%/Ca%/Mg% — atributos satk/
+// satca/satmg) CLONANDO a estrutura da legenda de V% (mesma escala 0–100%),
+// para elas poderem ser vinculadas nos Perfis e interpoladas. As cópias são
+// 'empresa' (editáveis) — as FAIXAS vêm da V% e devem ser AJUSTADAS pelo
+// agrônomo (os nomes avisam). Idempotente por atributo; sem legenda de V%
+// ainda (base não hidratada), tenta no próximo boot sem queimar a flag.
+export function migrarLegendasSaturacoesV1() {
+  if (typeof window === 'undefined') return;
+  if (localStorage.getItem('inv_migrado_leg_sat_v1') === '1') return;
+  const todas = load<Legenda>('inv_legendas');
+  const alvos: { atributoId: string; sigla: string; nome: string }[] = [
+    { atributoId: 'satk',  sigla: 'K%',  nome: 'Saturação por Potássio (K%) — ajustar faixas' },
+    { atributoId: 'satca', sigla: 'Ca%', nome: 'Saturação por Cálcio (Ca%) — ajustar faixas' },
+    { atributoId: 'satmg', sigla: 'Mg%', nome: 'Saturação por Magnésio (Mg%) — ajustar faixas' },
+  ];
+  const faltantes = alvos.filter(a => !todas.some(l => l.atributoId === a.atributoId));
+  if (faltantes.length === 0) { localStorage.setItem('inv_migrado_leg_sat_v1', '1'); return; }
+  const base = todas.find(l => l.atributoId === 'v');
+  if (!base) return;   // sem legenda de V% ainda — tenta de novo depois
+  const agora = new Date().toISOString();
+  const novas = faltantes.map(a => comEmpresa<Legenda>({
+    ...base,
+    id: uid(),
+    nome: a.nome,
+    atributo: a.nome.replace(' — ajustar faixas', ''),
+    atributoId: a.atributoId,
+    simbolo: a.sigla,
+    escopo: 'empresa',
+    classes: base.classes.map(c => ({ ...c })),
+    criadoEm: agora,
+    atualizadoEm: agora,
+  }));
+  save('inv_legendas', [...todas, ...novas]);
+  notificarLegendas();
+  localStorage.setItem('inv_migrado_leg_sat_v1', '1');
+}
+
 // Auditoria do cadastro (owner, via console: invAuditoria()). NÃO altera nada —
 // só CONTA e aponta inconsistências que inflam/desencontram os KPIs do Início:
 // ids repetidos, órfãos (fazenda sem produtor / talhão sem fazenda), possíveis
