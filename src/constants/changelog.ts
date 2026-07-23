@@ -1,5 +1,9 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.7.7': [
+    'PIXEL SÓLIDO TAMBÉM NO PDF DA RECOMENDAÇÃO: os mapas dentro do PDF (recomendação/fertilidade) desenhavam o raster ampliado COM suavização, deixando os pixels borrados. Agora o raster é desenhado sem suavização (nearest) — blocos de cor sólidos no PDF, como no mapa da tela. (O satélite e os números dos pontos seguem suaves.)',
+    'CASAS DECIMAIS POR VARIÁVEL: em Biblioteca → Preferências de Análise → editar a variável há um novo campo "Casas decimais (exibição)": Padrão (automático), 0, 1 ou 2. Tudo continua como estava por padrão; K%, Ca% e Mg% já vêm com 1 casa decimal. Por ora vale nas estatísticas do relatório de Fertilidade; vamos estender aos demais pontos aos poucos.',
+  ],
   '2.7.6': [
     'RELATÓRIO DE RECOMENDAÇÃO — ORDEM GLOBAL PELO Nº DA EQUAÇÃO: as páginas de dose agora são ordenadas ENTRE TODAS as recomendações juntas (01 Calcário … 10 Gesso …), não só dentro de cada recomendação — some o caso de começar no "Gesso 10". Doses de aplicação parcelada usam o nº da equação-base.',
     'RELATÓRIO DE FERTILIDADE — CABEÇALHO SEM SOBREPOSIÇÃO E SEM UNIDADE DOBRADA: o título central (ex.: "SATURAÇÃO POR MAGNÉSIO (Mg%)") deixou de repetir o símbolo ("(MG%) (Mg%)") e de invadir o nome do produtor — o título ficou mais estreito/deslocado, reduz a fonte quando necessário, e o bloco fazenda/produtor é truncado com "…" se for muito longo.',

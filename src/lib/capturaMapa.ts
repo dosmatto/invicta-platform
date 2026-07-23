@@ -73,8 +73,16 @@ export async function capturarMapaFertilidade(c: CapturaMapa): Promise<string> {
     try { await desenharSatelite(ctx, c.bounds, ox, oy, drawW, drawH, W, H); } catch { /* segue sem satélite */ }
   }
 
-  // 2) Raster interpolado (cobre exatamente o bbox)
-  try { const img = await carregarImg(c.rasterPng); ctx.drawImage(img, ox, oy, drawW, drawH); } catch { /* segue sem raster */ }
+  // 2) Raster interpolado (cobre exatamente o bbox). SEM suavização (nearest):
+  // a grade é de baixa resolução (~20 m) e ampliada; com smoothing os pixels
+  // saíam borrados/"não sólidos" no PDF. Restaura depois (satélite/rótulos suaves).
+  try {
+    const img = await carregarImg(c.rasterPng);
+    const smooth = ctx.imageSmoothingEnabled;
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(img, ox, oy, drawW, drawH);
+    ctx.imageSmoothingEnabled = smooth;
+  } catch { /* segue sem raster */ }
 
   // 3) Valores (só o número, halo branco)
   ctx.font = `bold ${Math.round(W / 90)}px sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';

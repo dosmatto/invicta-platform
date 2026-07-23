@@ -958,6 +958,7 @@ function VariavelEditor({ variavel, onClose }: { variavel: VariavelAnalise | nul
   const [nome, setNome] = useState(variavel?.nome ?? '');
   const [unidade, setUnidade] = useState(variavel?.unidade ?? '');
   const [sinonimos, setSinonimos] = useState((variavel?.sinonimos ?? []).join(', '));
+  const [casas, setCasas] = useState(variavel?.casasDecimais != null ? String(variavel.casasDecimais) : '');
   const [erro, setErro] = useState('');
 
   function salvar() {
@@ -966,7 +967,7 @@ function VariavelEditor({ variavel, onClose }: { variavel: VariavelAnalise | nul
     if (!s) { setErro('Dê uma sigla (ex.: K, pH SMP).'); return; }
     const sins = sinonimos.split(',').map(x => normSinonimo(x)).filter(Boolean);
     if (sins.length === 0) sins.push(normSinonimo(s));
-    const dados = { sigla: s, nome: nome.trim() || s, unidade: unidade.trim(), sinonimos: sins, usar: variavel?.usar ?? true };
+    const dados = { sigla: s, nome: nome.trim() || s, unidade: unidade.trim(), sinonimos: sins, usar: variavel?.usar ?? true, casasDecimais: casas === '' ? undefined : Number(casas) };
     if (variavel) saveVariavelAnalise({ ...variavel, ...dados });
     else novaVariavelAnalise(dados);
     onClose();
@@ -994,10 +995,21 @@ function VariavelEditor({ variavel, onClose }: { variavel: VariavelAnalise | nul
             </datalist>
           </div>
         </div>
-        <div>
-          <label className="text-[10px] font-semibold block mb-1" style={{ color: '#cbd5e1' }}>Nome</label>
-          <input value={nome} onChange={e => setNome(e.target.value)} placeholder="ex: pH SMP (índice de calagem)"
-            className="w-full rounded px-2 py-1.5 text-[11px] outline-none" style={inputStyle} />
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="text-[10px] font-semibold block mb-1" style={{ color: '#cbd5e1' }}>Nome</label>
+            <input value={nome} onChange={e => setNome(e.target.value)} placeholder="ex: pH SMP (índice de calagem)"
+              className="w-full rounded px-2 py-1.5 text-[11px] outline-none" style={inputStyle} />
+          </div>
+          <div>
+            <label className="text-[10px] font-semibold block mb-1" style={{ color: '#cbd5e1' }}>Casas decimais (exibição)</label>
+            <select value={casas} onChange={e => setCasas(e.target.value)} className="w-full rounded px-2 py-1.5 text-[11px] outline-none" style={inputStyle}>
+              <option value="">Padrão (automático)</option>
+              <option value="0">0 (inteiro)</option>
+              <option value="1">1 casa</option>
+              <option value="2">2 casas</option>
+            </select>
+          </div>
         </div>
         <div>
           <label className="text-[10px] font-semibold block mb-1" style={{ color: '#cbd5e1' }}>Sinônimos (para achar a coluna na planilha — separados por vírgula)</label>

@@ -22,14 +22,16 @@ export interface VariavelComplementar {
   usar: boolean;
   /** posiciona junto de outra variável do seed básico (ordem = base + 0.5) */
   aposId?: string;
+  /** casas decimais na exibição (undefined = padrão automático) */
+  casasDecimais?: number;
 }
 
 export const VARIAVEIS_COMPLEMENTARES: VariavelComplementar[] = [
   // ── Derivadas (a plataforma calcula na importação) — entram ATIVAS ─────────
   { id: 't',     sigla: 'CTCe', nome: 'CTC efetiva',            unidade: 'cmolc/dm³', sinonimos: [], usar: true, aposId: 'ctc' },
-  { id: 'satk',  sigla: 'K%',   nome: 'Saturação por Potássio', unidade: '%',         sinonimos: [], usar: true, aposId: 'k' },
-  { id: 'satca', sigla: 'Ca%',  nome: 'Saturação por Cálcio',   unidade: '%',         sinonimos: [], usar: true, aposId: 'ca' },
-  { id: 'satmg', sigla: 'Mg%',  nome: 'Saturação por Magnésio', unidade: '%',         sinonimos: [], usar: true, aposId: 'mg' },
+  { id: 'satk',  sigla: 'K%',   nome: 'Saturação por Potássio', unidade: '%',         sinonimos: [], usar: true, aposId: 'k',  casasDecimais: 1 },
+  { id: 'satca', sigla: 'Ca%',  nome: 'Saturação por Cálcio',   unidade: '%',         sinonimos: [], usar: true, aposId: 'ca', casasDecimais: 1 },
+  { id: 'satmg', sigla: 'Mg%',  nome: 'Saturação por Magnésio', unidade: '%',         sinonimos: [], usar: true, aposId: 'mg', casasDecimais: 1 },
 
   // ── pH por método ──────────────────────────────────────────────────────────
   { id: 'ph_cacl2', sigla: 'pH CaCl2', nome: 'pH por CaCl2', unidade: '', sinonimos: ['phcacl2', 'phcacl'], usar: false },

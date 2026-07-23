@@ -330,6 +330,7 @@ export interface ConteudoVariavel {
   sinonimos: string[];  // p/ auto-mapear colunas da planilha
   usar: boolean;        // desativada = fora do mapeamento e dos editores
   ordem: number;        // ordem de exibição
+  casasDecimais?: number;   // nº de casas na exibição (undefined = padrão automático)
 }
 
 // Fase R1 — Equações de Recomendação (categoria 'equacoes'). Uma equação calcula

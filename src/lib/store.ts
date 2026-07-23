@@ -1189,6 +1189,20 @@ export interface VariavelAnalise {
   sinonimos: string[];
   usar: boolean;
   ordem: number;
+  casasDecimais?: number;   // nº de casas na EXIBIÇÃO (undefined = padrão automático)
+}
+
+// Casas decimais configuradas para uma variável (undefined = padrão automático).
+export function casasDecimaisVariavel(id: string): number | undefined {
+  return getVariaveisAnalise().find(v => v.id === id)?.casasDecimais;
+}
+
+// Formata o valor de uma variável respeitando as casas decimais configuradas.
+// Sem configuração, usa `padrao(v)` (comportamento atual) — "manter como está".
+export function formatarValorVariavel(id: string, v: number, padrao: (v: number) => string): string {
+  const cd = casasDecimaisVariavel(id);
+  if (cd == null || !isFinite(v)) return padrao(v);
+  return v.toLocaleString('pt-BR', { minimumFractionDigits: cd, maximumFractionDigits: cd });
 }
 
 const VAR_SEED_INFO: Record<string, { nome: string; unidade: string }> = {
@@ -1221,7 +1235,7 @@ function _itensVariaveis(): ItemBiblioteca<ConteudoVariavel>[] {
   return bibListar<ConteudoVariavel>('preferencias-analise').filter(i => i.conteudo?.tipo === 'variavel');
 }
 function _deConteudo(c: ConteudoVariavel): VariavelAnalise {
-  return { id: c.varId, sigla: c.sigla, nome: c.nome, unidade: c.unidade, sinonimos: c.sinonimos ?? [], usar: c.usar !== false, ordem: c.ordem ?? 999 };
+  return { id: c.varId, sigla: c.sigla, nome: c.nome, unidade: c.unidade, sinonimos: c.sinonimos ?? [], usar: c.usar !== false, ordem: c.ordem ?? 999, casasDecimais: c.casasDecimais };
 }
 
 // Semeia o catálogo na 1ª abertura (idempotente; só quando não há nenhuma variável).
@@ -1256,7 +1270,7 @@ export function garantirVariaveisComplementares() {
     const ordem = base != null ? base + 0.5 : prox++;
     bibCriar<ConteudoVariavel>('preferencias-analise', {
       nome: `Variável: ${v.sigla}`,
-      conteudo: { tipo: 'variavel', varId: v.id, sigla: v.sigla, nome: v.nome, unidade: v.unidade, sinonimos: v.sinonimos, usar: v.usar, ordem },
+      conteudo: { tipo: 'variavel', varId: v.id, sigla: v.sigla, nome: v.nome, unidade: v.unidade, sinonimos: v.sinonimos, usar: v.usar, ordem, casasDecimais: v.casasDecimais },
       escopo: empresaAtivaId() ? 'empresa' : 'meu',
     });
   }
@@ -1290,7 +1304,7 @@ export function getVariaveisAtivas(): VariavelAnalise[] {
 export function saveVariavelAnalise(v: VariavelAnalise) {
   garantirVariaveisAnalise();  // edição implica materializar o seed
   const it = _itensVariaveis().find(i => i.conteudo.varId === v.id);
-  const conteudo: ConteudoVariavel = { tipo: 'variavel', varId: v.id, sigla: v.sigla, nome: v.nome, unidade: v.unidade, sinonimos: v.sinonimos, usar: v.usar, ordem: v.ordem };
+  const conteudo: ConteudoVariavel = { tipo: 'variavel', varId: v.id, sigla: v.sigla, nome: v.nome, unidade: v.unidade, sinonimos: v.sinonimos, usar: v.usar, ordem: v.ordem, casasDecimais: v.casasDecimais };
   if (it) bibAtualizar<ConteudoVariavel>('preferencias-analise', it.id, { nome: `Variável: ${v.sigla}`, conteudo });
   else bibCriar<ConteudoVariavel>('preferencias-analise', { nome: `Variável: ${v.sigla}`, conteudo, escopo: empresaAtivaId() ? 'empresa' : 'meu' });
 }

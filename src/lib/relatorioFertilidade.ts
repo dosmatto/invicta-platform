@@ -11,6 +11,7 @@ import type { Legenda } from './legendas';
 import { rampaVisualStops, valorParaPosicaoVisual, dominioDaLegenda } from './legendas';
 import { capturarMapaFertilidade } from './capturaMapa';
 import { imagemParaPdf, reduzirLogo } from './pdfImagem';
+import { formatarValorVariavel } from './store';
 
 export interface ProfundidadeRel {
   profundidade: string;
@@ -195,7 +196,7 @@ async function desenharPaginaMapa(doc: JsPDF, d: DadosRelatorioFert, logos: Logo
     tri.forEach(([lab, val], j) => {
       const tx = x + frameW * (j + 0.5) / 3;
       doc.setFont('helvetica', 'bold'); doc.setFontSize(6); doc.setTextColor(...GRAY); doc.text(lab, tx, stBandY + 8.5, { align: 'center' });
-      doc.setFontSize(11); doc.setTextColor(...NAVY); doc.text(`${fmt(val)} ${san(d.unidade)}`, tx, stBandY + 12.6, { align: 'center' });
+      doc.setFontSize(11); doc.setTextColor(...NAVY); doc.text(`${formatarValorVariavel(d.legenda.atributoId, val, fmt)} ${san(d.unidade)}`, tx, stBandY + 12.6, { align: 'center' });
     });
   });
 
