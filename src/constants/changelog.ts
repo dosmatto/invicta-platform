@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.5.8': [
+    'SERVIDOR DE PROCESSAMENTO — MENOS "INDISPONÍVEL" NO 1º USO: o servidor de interpolação (nuvem) hiberna quando fica sem uso e leva ~1 min para acordar; nesse intervalo o processamento falhava. Agora o app espera o servidor acordar por até 150s (era 90s), já dá o toque para acordá-lo assim que você entra na aba Fertilidade e mostra o aviso "Aquecendo o servidor de processamento…" enquanto ele sobe, em vez de dar erro. Se ainda assim demorar, é só tentar de novo em ~1 min.',
+  ],
   '2.5.7': [
     'CTC EFETIVA APARECE NA INTERPOLAÇÃO (inclusive em laudos antigos): as colunas calculadas (CTCe/K%/Ca%/Mg%) passam a ser geradas também na LEITURA das importações já salvas — antes só valiam para laudos importados depois da atualização. Agora a CTCe aparece na lista de atributos para interpolar na Fertilidade mesmo em importações antigas, sem reimportar. Ela herda a legenda de CTC enquanto você não criar/ajustar a legenda própria de CTCe.',
     'CTC EFETIVA NO CATÁLOGO/PERFIS: a CTCe entrou na lista de Variáveis de Análise, então aparece em Biblioteca → Perfis (Legendas por elemento) e demais listas de variáveis. Ela nunca é lida de coluna de arquivo (é sempre calculada de Ca+Mg+K+Al).',

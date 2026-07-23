@@ -33,9 +33,19 @@ export function tocarBackend(): void {
   try { void fetch(`${INTERP_URL}/health`, { cache: 'no-store', headers: headersBackend() }).catch(() => {}); } catch { /* offline */ }
 }
 
-// Espera o /health responder (até ~90 s), cobrindo a janela em que o serviço
-// da nuvem ainda está subindo.
-async function esperarBackend(budgetMs = 90_000): Promise<boolean> {
+// Aviso de "aquecendo o servidor" (cold start): a UI pode se inscrever para
+// mostrar um estado enquanto o backend da nuvem acorda, em vez de só falhar.
+type AquecendoCb = (aquecendo: boolean) => void;
+const aquecendoListeners = new Set<AquecendoCb>();
+export function onBackendAquecendo(cb: AquecendoCb): () => void {
+  aquecendoListeners.add(cb);
+  return () => { aquecendoListeners.delete(cb); };
+}
+function emitirAquecendo(v: boolean) { for (const cb of aquecendoListeners) { try { cb(v); } catch { /* ignora */ } } }
+
+// Espera o /health responder (até ~150 s), cobrindo a janela em que o serviço
+// da nuvem ainda está subindo (cold start do Render free pode passar de 1 min).
+async function esperarBackend(budgetMs = 150_000): Promise<boolean> {
   const fim = Date.now() + budgetMs;
   while (Date.now() < fim) {
     const ctrl = new AbortController();
@@ -62,8 +72,16 @@ export async function postBackend(rota: string, body: unknown): Promise<Response
   let r: Response | null = null;
   try { r = await tentar(); } catch { /* conexão recusada/abortada */ }
   if (!r || r.status === 502 || r.status === 503 || r.status === 504) {
-    if (BACKEND_LOCAL || !(await esperarBackend())) throw new Error(MSG_BACKEND_FORA);
-    try { r = await tentar(); } catch { throw new Error(MSG_BACKEND_FORA); }
+    if (BACKEND_LOCAL) throw new Error(MSG_BACKEND_FORA);
+    emitirAquecendo(true);   // sinaliza p/ a UI: servidor da nuvem acordando
+    try {
+      if (!(await esperarBackend())) throw new Error(MSG_BACKEND_FORA);
+      r = await tentar();
+    } catch (e) {
+      throw e instanceof Error ? e : new Error(MSG_BACKEND_FORA);
+    } finally {
+      emitirAquecendo(false);
+    }
   }
   return r;
 }

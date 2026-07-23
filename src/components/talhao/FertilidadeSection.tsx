@@ -20,7 +20,7 @@ import { stopsParaBackend, dominioDaLegenda, paresDaClasse } from '@/lib/legenda
 import type { Legenda } from '@/lib/legendas';
 import { Play, Layers, Loader2, Eraser, AlertTriangle, Activity, Settings, BookOpen, Save, FileDown } from 'lucide-react';
 import { cloudSalvarMapa, cloudCarregarMapasPorPrefixo, cloudExcluirMapasPorPrefixo, cloudPodeGravar } from '@/lib/cloud';
-import { MSG_BACKEND_FORA } from '@/lib/interpUrl';
+import { MSG_BACKEND_FORA, onBackendAquecendo, tocarBackend } from '@/lib/interpUrl';
 import { pode } from '@/lib/empresa';
 import { listar as bibListar, criar as bibCriar, type ConteudoPerfil, type ItemBiblioteca } from '@/lib/biblioteca';
 
@@ -62,6 +62,13 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
   const [cfgAberto, setCfgAberto] = useState(false);
   const [estado, setEstado] = useState<'idle' | 'processando' | 'pronto' | 'erro'>('idle');
   const [erro, setErro] = useState('');
+  const [aquecendo, setAquecendo] = useState(false);
+  // Acorda o servidor de processamento (Render dorme sem uso) ao entrar na aba,
+  // e mostra "aquecendo…" enquanto ele sobe (em vez de só falhar no cold start).
+  useEffect(() => {
+    tocarBackend();
+    return onBackendAquecendo(setAquecendo);
+  }, []);
   const [progresso, setProgresso] = useState<{ atual: number; total: number; nome: string } | null>(null);
   const [debugAberto, setDebugAberto] = useState(false);
 
@@ -696,6 +703,11 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
             </button>
           </>)}
 
+          {aquecendo && (
+            <p className="text-[10px] flex items-center gap-1" style={{ color: '#fbbf24' }}>
+              <Loader2 size={11} className="animate-spin" /> Aquecendo o servidor de processamento… (pode levar até ~1 min na 1ª vez)
+            </p>
+          )}
           {estado === 'erro' && <p className="text-[10px]" style={{ color: '#f87171' }}>{erro}</p>}
           {erro && estado !== 'erro' && <p className="text-[10px]" style={{ color: '#fbbf24' }}>{erro}</p>}
 
