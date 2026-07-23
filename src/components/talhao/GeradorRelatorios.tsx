@@ -299,7 +299,12 @@ export function GeradorRelatorios({ safraNome }: { safraNome?: string } = {}) {
           <p className="text-[10px]" style={{ color: '#475569' }}>Nenhum relatório arquivado ainda para este talhão.</p>
         ) : (
           <div className="space-y-1">
-            {historico.map(r => <LinhaHistorico key={r.id} reg={r} onAbrir={() => abrirRelatorio(r)} onExcluir={async () => { await excluirRelatorio(r); await recarregarHistorico(); }} />)}
+            {historico.map(r => <LinhaHistorico key={r.id} reg={r} onAbrir={() => abrirRelatorio(r)}
+              onExcluir={async () => {
+                try { await excluirRelatorio(r); }
+                catch (e) { alert(e instanceof Error ? e.message : 'Falha ao excluir o relatório.'); }
+                await recarregarHistorico();   // recarrega sempre — mostra o estado REAL da nuvem
+              }} />)}
           </div>
         )}
       </div>
@@ -332,9 +337,12 @@ function LinhaHistorico({ reg, onAbrir, onExcluir }: { reg: RegistroRelatorio; o
         title="Abrir (regenera o PDF)" className="p-1 rounded disabled:opacity-50" style={{ color: '#93c5fd' }}>
         {abrindo ? <Loader2 size={15} className="animate-spin" /> : <ExternalLink size={15} />}
       </button>
-      <button onClick={async () => { if (apagando) { await onExcluir(); } else { setApagando(true); setTimeout(() => setApagando(false), 2500); } }}
-        title={apagando ? 'Clique de novo para confirmar' : 'Excluir'} className="p-1 rounded" style={{ color: apagando ? '#f87171' : '#64748b' }}>
-        <Trash2 size={15} />
+      {/* Excluir em 2 cliques: o 1º arma e MOSTRA "Confirmar?" (antes só mudava a
+          cor do ícone — parecia que o lixo não funcionava); o 2º exclui de fato. */}
+      <button onClick={async () => { if (apagando) { await onExcluir(); } else { setApagando(true); setTimeout(() => setApagando(false), 3500); } }}
+        title={apagando ? 'Clique de novo para confirmar a exclusão' : 'Excluir'}
+        className="p-1 rounded flex items-center gap-1" style={{ color: apagando ? '#f87171' : '#64748b', background: apagando ? '#2a0d0d' : 'transparent' }}>
+        <Trash2 size={15} />{apagando && <span className="text-[9px] font-bold">Confirmar?</span>}
       </button>
     </div>
   );

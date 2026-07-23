@@ -1,5 +1,10 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.7.2': [
+    'RELATÓRIO DE RECOMENDAÇÃO — PÁGINAS NA ORDEM DO Nº DA EQUAÇÃO: além de usar o número do cadastro no título (v2.5.9), as páginas do relatório agora saem em ORDEM CRESCENTE desse número (01, 02, … 10, 23…), independentemente da ordem em que as doses foram processadas. Números até 9 continuam com zero à frente (01–09). Vale no Book das Recomendações e no relatório combinado. Equação sem nº definido vai para o fim.',
+    'EXCLUIR RELATÓRIO GERADO — CONFIRMAÇÃO VISÍVEL + ERRO NA TELA: o lixinho do histórico (aba Relatórios) sempre exigiu 2 cliques, mas o 1º só mudava a cor do ícone — parecia que não apagava. Agora o 1º clique mostra "Confirmar?" ao lado do ícone (por 3,5s) e o 2º exclui. E se a nuvem não excluir de verdade (sem conexão ou sem permissão), aparece uma mensagem de erro em vez de falhar em silêncio — a lista sempre recarrega mostrando o estado real.',
+    'RECOMENDAÇÃO SEMPRE EM 20 m: os mapas de DOSE (recomendações, PDF e arquivos de máquina) voltam a sair na resolução de 20 m mesmo quando a fertilidade foi interpolada mais fina (2/2,5/3/5/10 m) — os mapas finos são reamostrados para 20 m na entrada da recomendação (média dos blocos). O detalhe fino continua valendo na aba Fertilidade; a dose final mantém o padrão de 20 m das máquinas.',
+  ],
   '2.7.1': [
     'CONFERÊNCIA DO CADASTRO EM EXCEL: o Início ganhou o botão "Conferência do cadastro (Excel)" (logo abaixo dos números da Visão Geral). Ele baixa uma planilha com 4 abas: Talhões (produtor, fazenda, talhão, área, status, cultura da safra atual e coluna de ALERTA — nome repetido na fazenda, órfão, área zerada), Por Fazenda (nº de talhões + soma de área), Por Produtor (fazendas, talhões e soma de área) e Problemas (resumo da auditoria: ids repetidos, órfãos, cadastros duplicados). Todas as abas fecham com o TOTAL GERAL — feito para conferir duplicidades e áreas erradas.',
   ],

@@ -35,8 +35,45 @@ export async function carregarGridsTalhao(talhaoId: string, importacaoId: string
     escolhido[chave] = { resp: c.dados.resp, em, tem };
   }
   const out: Record<string, RespInterp> = {};
-  for (const k in escolhido) out[k] = escolhido[k].resp;
+  for (const k in escolhido) out[k] = reamostrarPara20m(escolhido[k].resp);
   return out;
+}
+
+// A RECOMENDAÇÃO trabalha SEMPRE em ~20 m: mapas de fertilidade interpolados
+// mais finos (2/2,5/3/5/10 m) são reamostrados aqui na ENTRADA (média dos
+// blocos f×f, ignorando NaN) — decisão do usuário (23/07/2026): o detalhe fino
+// é da aba Fertilidade; a dose final (PDF + arquivos de máquina) mantém a
+// resolução de 20 m. Mapas já a 20 m passam intactos (fator 1).
+const PIXEL_RECOMENDACAO_M = 20;
+
+function reamostrarPara20m(resp: RespInterp): RespInterp {
+  const shape = resp.grid?.shape;
+  if (!resp.grid?.b64 || !shape) return resp;
+  const [rows, cols] = shape;
+  const [minx, miny, maxx, maxy] = resp.bounds;
+  const lat0 = (miny + maxy) / 2;
+  const dxM = ((maxx - minx) / Math.max(cols, 1)) * 111320 * Math.cos((lat0 * Math.PI) / 180);
+  const dyM = ((maxy - miny) / Math.max(rows, 1)) * 110540;
+  const pixelM = Math.min(Math.abs(dxM), Math.abs(dyM)) || PIXEL_RECOMENDACAO_M;
+  const f = Math.round(PIXEL_RECOMENDACAO_M / pixelM);
+  if (f < 2) return resp;   // já é ~20 m (ou mais grosso)
+  const { valores } = decodeGrid(resp.grid);
+  const nr = Math.ceil(rows / f), nc = Math.ceil(cols / f);
+  const grosso = new Float32Array(nr * nc);
+  for (let r = 0; r < nr; r++) {
+    for (let c = 0; c < nc; c++) {
+      let soma = 0, n = 0;
+      const iMax = Math.min((r + 1) * f, rows), jMax = Math.min((c + 1) * f, cols);
+      for (let i = r * f; i < iMax; i++) {
+        for (let j = c * f; j < jMax; j++) {
+          const v = valores[i * cols + j];
+          if (isFinite(v)) { soma += v; n++; }
+        }
+      }
+      grosso[r * nc + c] = n ? soma / n : NaN;
+    }
+  }
+  return { ...resp, grid: { b64: float32ParaB64(grosso), shape: [nr, nc] } };
 }
 
 export interface ResultadoAplicacao {

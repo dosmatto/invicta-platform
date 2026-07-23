@@ -726,11 +726,18 @@ export async function carregarColecaoSupabase<T>(colecao: string): Promise<T[]> 
   return (r.data ?? []).map(row => row.dados as T);
 }
 
-export async function excluirDocSupabase(colecao: string, id: string): Promise<void> {
+// Devolve o nº de linhas excluídas: 0 sem erro = nada apagado (id inexistente
+// OU RLS sem política de DELETE — que falha em silêncio). O chamador decide se
+// isso é erro; antes a falha era invisível ("cliquei no lixo e não apagou").
+export async function excluirDocSupabase(colecao: string, id: string): Promise<number> {
   const sb = getSupabase();
-  if (!sb) return;
-  const r = await sb.from('app_kv').delete().eq('colecao', colecao).eq('item_id', id);
-  if (r.error) console.warn(`[supabase] excluir ${colecao}:`, r.error.message);
+  if (!sb) return 0;
+  const r = await sb.from('app_kv').delete({ count: 'exact' }).eq('colecao', colecao).eq('item_id', id);
+  if (r.error) {
+    console.warn(`[supabase] excluir ${colecao}:`, r.error.message);
+    throw new Error(`Falha ao excluir na nuvem: ${r.error.message}`);
+  }
+  return r.count ?? 0;
 }
 
 // Apaga por prefixo de item_id em QUALQUER coleção (ex.: inv_cenarios id `cen_<talhao>_…`).

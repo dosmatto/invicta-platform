@@ -45,6 +45,8 @@ export async function listarRelatorios(talhaoId: string): Promise<RegistroRelato
 }
 
 export async function excluirRelatorio(reg: RegistroRelatorio): Promise<void> {
-  if (!usarDadosSupabase()) return;
-  await excluirDocSupabase(COL, reg.id);
+  if (!usarDadosSupabase()) throw new Error('Sem conexão com a nuvem para excluir o relatório.');
+  const n = await excluirDocSupabase(COL, reg.id);
+  // 0 linhas sem erro = RLS sem política de DELETE (falha silenciosa) ou id inexistente.
+  if (n === 0) throw new Error('A nuvem não excluiu o relatório (0 linhas) — provável falta de permissão de exclusão (RLS) na tabela. Avise o suporte.');
 }

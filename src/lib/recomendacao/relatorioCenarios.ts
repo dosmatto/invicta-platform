@@ -349,8 +349,15 @@ export async function renderBookOficialNoDoc(
   let precisaPagina = opts?.novaPaginaAntes ?? false;
   let algum = false;
   for (const cen of cenarios) {
+    // Páginas na ORDEM CRESCENTE do nº da equação (01, 02, … 10, 23…), não na
+    // ordem em que as doses foram geradas. Equação sem nº vai para o fim, na
+    // ordem original (chave 1e9+i preserva a posição relativa).
+    const doses = cen.doses
+      .map((d, i) => ({ d, k: ordemPorEquacao.get(d.equacaoId) ?? 1e9 + i }))
+      .sort((a, b) => a.k - b.k)
+      .map(x => x.d);
     let seq = 0;
-    for (const dose of cen.doses) {
+    for (const dose of doses) {
       seq++;
       const numero = ordemPorEquacao.get(dose.equacaoId) ?? seq;   // nº das Equações; fallback = sequência
       if (precisaPagina) doc.addPage();
