@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.7.9': [
+    'NDVI — "PROCESSAR OUTRO ÍNDICE" NÃO MARCA NADA AUTOMÁTICO: ao reabrir a conferência de uma imagem já processada, os índices agora vêm TODOS DESMARCADOS — você escolhe qual processar (antes vinha pré-marcado tudo o que faltava).',
+  ],
   '2.7.8': [
     'NDVI/SATÉLITE — PROCESSAR OUTRO ÍNDICE DA MESMA IMAGEM: depois de processar um índice (ex.: NDVI), o painel do resultado ganhou o botão "Processar outro índice desta imagem". Ele reabre a conferência já com os índices AINDA NÃO feitos pré-marcados (NDRE, etc.) — antes, uma imagem já processada não reabria essa tela e não dava para gerar um índice novo sem refazer tudo.',
   ],

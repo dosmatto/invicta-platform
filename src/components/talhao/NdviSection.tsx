@@ -800,10 +800,7 @@ export function NdviSection({ safraNome }: { safraNome?: string } = {}) {
           <button onClick={() => {
             const cand = candidatos.find(c => c.fonte === fonteSel && c.data === dataSel);
             if (!cand) { setErro('Esta imagem não está mais na lista — refaça a busca para processar outro índice.'); return; }
-            const feitos = new Set(indicesDaCena(cand.fonte, cand.data).map(k => k.split(':')[2]));
-            const pre: Record<string, boolean> = {};
-            for (const i of indicesDisponiveis(cand.fonte).ok) pre[i.id] = !feitos.has(i.id);
-            setSelIdx(pre); setSelKey(''); setPreviaDe(cand);
+            setSelIdx({}); setSelKey(''); setPreviaDe(cand);   // nada pré-marcado — o usuário escolhe
           }}
             className="w-full py-1.5 rounded text-[10px] font-semibold flex items-center justify-center gap-1"
             style={{ background: '#1a3a6b', color: '#93c5fd' }}>
