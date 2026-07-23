@@ -1309,6 +1309,30 @@ export function saveVariavelAnalise(v: VariavelAnalise) {
   else bibCriar<ConteudoVariavel>('preferencias-analise', { nome: `Variável: ${v.sigla}`, conteudo, escopo: empresaAtivaId() ? 'empresa' : 'meu' });
 }
 
+// Ordem PADRÃO dos elementos de fertilidade (pedido do usuário 23/07/2026) — vira
+// a ordem do catálogo, que comanda o Perfil e o relatório. As demais variáveis
+// (micros extras, variantes, relações…) entram depois, preservando a ordem relativa.
+const ORDEM_PADRAO_FERT: string[] = [
+  'mo', 'ph', 'm', 'v', 'ctc', 'p', 'k', 'satk', 'ca', 'mg', 'satca', 'satmg', 't',
+  's', 'b', 'zn', 'cu', 'mn', 'fe', 'al', 'textura',
+];
+
+// Aplica a ORDEM_PADRAO_FERT ao catálogo UMA VEZ (flag). Depois disso o usuário
+// reordena com as setas (Perfil) e essas mudanças NÃO são sobrescritas.
+export function migrarOrdemPadraoFertV1() {
+  if (typeof window === 'undefined') return;
+  if (localStorage.getItem('inv_migrado_ordem_fert_v1') === '1') return;
+  const vars = getVariaveisAnalise();
+  if (vars.length === 0) return;   // catálogo ainda não hidratado — tenta no próximo boot
+  const idx = new Map(ORDEM_PADRAO_FERT.map((id, i) => [id, i]));
+  const rest = vars.filter(v => !idx.has(v.id)).sort((a, b) => a.ordem - b.ordem);
+  for (const v of vars) {
+    const nova = idx.has(v.id) ? idx.get(v.id)! : ORDEM_PADRAO_FERT.length + rest.findIndex(r => r.id === v.id);
+    if (v.ordem !== nova) saveVariavelAnalise({ ...v, ordem: nova });
+  }
+  localStorage.setItem('inv_migrado_ordem_fert_v1', '1');
+}
+
 // Move uma variável ATIVA uma posição para cima (-1) ou baixo (+1) na ordem do
 // catálogo, trocando a `ordem` com a vizinha ativa. Essa ordem é o padrão da
 // ordem dos elementos no relatório (ver relatorioDados). Idempotente nas pontas.

@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.7.13': [
+    'ORDEM PADRÃO DOS ELEMENTOS DE FERTILIDADE: adotada a ordem MO, pH, m%, V%, CTC, P, K, K%, Ca, Mg, Ca%, Mg%, CTCe, S, B, Zn, Cu, Mn, Fe, Al, Textura como PADRÃO do catálogo — a mesma em todas as telas (Perfil e relatório). É aplicada uma vez; se você reordenar com as setas do Perfil depois disso, valem as suas mudanças (não são sobrescritas).',
+  ],
   '2.7.12': [
     'RELATÓRIO — CASAS DECIMAIS DOS PONTOS IGUAL À TELA: os números das amostras no mapa DO RELATÓRIO passam a respeitar as casas decimais da variável (Preferências de Análise), como já acontecia no mapa da tela. K%/Ca%/Mg% agora saem com 1 casa também no PDF (antes vinham inteiros).',
   ],
