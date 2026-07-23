@@ -25,6 +25,7 @@ import {
   type PresetEstiloRec,
 } from './biblioteca';
 import { ELEMENTOS_LAB, simboloElemento, norm as normLab, calcularDerivados, DERIVADOS_IDS } from './lab';
+import { VARIAVEIS_COMPLEMENTARES } from '../constants/variaveisSeedComplementar';
 
 export interface Cliente {
   id: string;
@@ -1234,12 +1235,42 @@ export function garantirVariaveisAnalise() {
   }
 }
 
+// Semeia as variáveis COMPLEMENTARES (lista InCeres — src/constants/
+// variaveisSeedComplementar.ts) que ainda não existem no catálogo. Idempotente
+// POR ID (não pela flag): roda em qualquer navegador sem duplicar — inclusive
+// contra o que veio da nuvem. Só adiciona com o catálogo já materializado; se
+// vazio, materializa o seed básico antes. Novas entram como CADASTRADAS; o
+// "usar" de cada uma (ativa/inativa) vem do próprio seed complementar.
+export function garantirVariaveisComplementares() {
+  if (typeof window === 'undefined') return;
+  garantirVariaveisAnalise();
+  const itens = _itensVariaveis();
+  if (itens.length === 0) return;   // catálogo ainda não hidratado — tenta no próximo boot
+  const existentes = new Set(itens.map(i => i.conteudo.varId));
+  const ordemDe = (id: string) => itens.find(i => i.conteudo.varId === id)?.conteudo.ordem;
+  let prox = Math.max(99, ...itens.map(i => i.conteudo.ordem ?? 0)) + 1;
+  for (const v of VARIAVEIS_COMPLEMENTARES) {
+    if (existentes.has(v.id)) continue;
+    const base = v.aposId != null ? ordemDe(v.aposId) : undefined;
+    const ordem = base != null ? base + 0.5 : prox++;
+    bibCriar<ConteudoVariavel>('preferencias-analise', {
+      nome: `Variável: ${v.sigla}`,
+      conteudo: { tipo: 'variavel', varId: v.id, sigla: v.sigla, nome: v.nome, unidade: v.unidade, sinonimos: v.sinonimos, usar: v.usar, ordem },
+      escopo: empresaAtivaId() ? 'empresa' : 'meu',
+    });
+  }
+}
+
 // Catálogo completo (fallback = seed em memória, p/ quem nunca abriu o painel).
 export function getVariaveisAnalise(): VariavelAnalise[] {
   const itens = _itensVariaveis();
-  const base = itens.length === 0
+  let base = itens.length === 0
     ? [...VARIAVEIS_SEED]
     : itens.map(i => _deConteudo(i.conteudo)).sort((a, b) => a.ordem - b.ordem || a.sigla.localeCompare(b.sigla));
+  // Endurecimento: se alguma corrida de seed/sync tiver criado a MESMA variável
+  // 2×, deduplica por id na leitura (fica a primeira = menor ordem).
+  const vistos = new Set<string>();
+  base = base.filter(v => (vistos.has(v.id) ? false : (vistos.add(v.id), true)));
   // Garante a CTC EFETIVA (derivada, sigla CTCe) no catálogo — sem depender de
   // seed/migração — para ela aparecer nos Perfis (Legendas por elemento) e demais
   // listas de variáveis. sinônimos vazios: NUNCA é auto-mapeada de coluna de arquivo

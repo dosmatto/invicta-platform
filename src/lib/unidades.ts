@@ -11,12 +11,14 @@
 // valor_canonico = valor × fator(elId, unidadeDeOrigem). Se a origem já é a
 // canônica (ou desconhecida), fator = 1 (nada muda — retrocompatível).
 
-// Elementos com CARGA (canônico mmolc/dm³).
-const CARGA = new Set(['k', 'ca', 'mg', 'al', 'ctc', 't', 'sb', 'hal', 'h_al']);
+// Elementos com CARGA (canônico mmolc/dm³). h/na/ca_mg: variáveis do catálogo
+// complementar (lista InCeres) — grandezas de carga; sem isto o dropdown de
+// unidade e a conversão cmolc→mmolc não valeriam para elas.
+const CARGA = new Set(['k', 'ca', 'mg', 'al', 'ctc', 't', 'sb', 'hal', 'h_al', 'h', 'na', 'ca_mg']);
 
 // mg/dm³ equivalentes a 1 mmolc/dm³ (peso do elemento ÷ valência). Só onde faz
-// sentido reportar em massa: K(39,10/1), Ca(40,08/2), Mg(24,31/2), Al(26,98/3).
-const MG_POR_MMOLC: Record<string, number> = { k: 39.10, ca: 20.04, mg: 12.15, al: 8.99 };
+// sentido reportar em massa: K(39,10/1), Ca(40,08/2), Mg(24,31/2), Al(26,98/3), Na(22,99/1).
+const MG_POR_MMOLC: Record<string, number> = { k: 39.10, ca: 20.04, mg: 12.15, al: 8.99, na: 22.99 };
 
 export const UNIDADE_CANONICA: Record<string, string> = {
   ph: '', p: 'mg/dm³', mo: 'g/dm³', v: '%', m: '%',

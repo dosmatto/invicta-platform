@@ -1,5 +1,9 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.7.0': [
+    'CATÁLOGO COMPLETO DE VARIÁVEIS DE SOLO (lista InCeres): as Variáveis de Análise ganharam ~45 novas variáveis cadastradas — K%, Ca%, Mg% (saturações calculadas), pH CaCl2/Água/KCl/SMP, P Resina/Mehlich/Bray/Olsen/Remanescente/Total, H, Na, SB, Ca+Mg, H+Al, H%, Fe, Mo, Si, C, N, Cl, relações (Ca/K, Ca/Mg, Ca+Mg/K, Mg/K, S/P, K/Na, Fe/Mn, P/Zn), solúveis (K, Al, Ca, Mg, Na), SO4, HCO3, CO3, NH4, NO3, RAS, Densidade do Solo e CE de laudo. Novas entram como CADASTRADAS mas DESLIGADAS — ligue o "Usar" em Biblioteca → Preferências de Análise → Variáveis de Análise (onde também dá para criar variável manualmente). K%, Ca%, Mg% e CTCe já entram LIGADAS e aparecem nos Perfis (Legendas por elemento).',
+    'Notas: MOS ≡ Matéria Orgânica (MO) e Al% ≡ m% já existentes (não duplicadas); "K mg", "P Remanescente" e RAS não são mapeadas automaticamente de coluna de arquivo (mapeamento manual, por segurança); a CE de laudo usa sigla CE para não confundir com o CEa do módulo de Condutividade; H, Na e Ca+Mg ganharam conversão de unidade de carga (cmolc↔mmolc).',
+  ],
   '2.6.0': [
     'INTERPOLAÇÃO — PIXEL 2,5 m e 3 m + FIM DA QUEDA NO 2 m: novas opções de pixel 2,5×2,5 m e 3×3 m (além de 2/5/10/20). E o servidor de processamento não cai mais no 2 m: a 2 m em talhões grandes a grade ficava grande demais e estourava a memória do servidor (aquele erro de "servidor indisponível"/CORS). O teto da grade foi ajustado para caber com folga — em talhão muito grande o pixel fino vira automaticamente um pouco mais grosso, em vez de travar. Recomendado: 3 m dá bom detalhe e roda tranquilo; 5 m segue como padrão.',
   ],

@@ -22,7 +22,7 @@ import {
   getPadroesAmostragem, savePadraoAmostragem, updatePadraoAmostragem, deletePadraoAmostragem,
   getPadroesElementos, savePadraoElementos, updatePadraoElementos, deletePadraoElementos,
   getConfigEtiqueta, saveConfigEtiqueta, getLegendasPorAtributo,
-  getVariaveisAnalise, getVariaveisAtivas, garantirVariaveisAnalise,
+  getVariaveisAnalise, getVariaveisAtivas, garantirVariaveisComplementares,
   saveVariavelAnalise, novaVariavelAnalise, deleteVariavelAnalise, siglaVariavel,
   type PadraoElementos, type PadraoAmostragem, type ProfundidadeConfig, type ConfigEtiqueta, type VariavelAnalise,
 } from '@/lib/store';
@@ -901,7 +901,7 @@ function PrefEtiqueta() {
 function PrefVariaveis() {
   const [refresh, setRefresh] = useState(0);
   const [edit, setEdit] = useState<{ v: VariavelAnalise | null } | null>(null); // v=null → nova
-  useEffect(() => { garantirVariaveisAnalise(); setRefresh(x => x + 1); }, []);
+  useEffect(() => { garantirVariaveisComplementares(); setRefresh(x => x + 1); }, []);   // já materializa o seed básico por dentro
   const vars = useMemo(() => getVariaveisAnalise(), [refresh]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   function toggleUsar(v: VariavelAnalise) {
