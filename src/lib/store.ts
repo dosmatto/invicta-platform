@@ -1696,10 +1696,12 @@ export function migrarLegendaCtceV1() {
 // domínio das pontas). K% é ~1–5%, Ca% ~40–70%, Mg% ~8–25% — MUITO diferentes
 // da V% (30–80%); por isso clonar a V% deixava tudo na 1ª classe (mapa uniforme).
 // Editáveis pelo agrônomo em Legendas.
+// nome SEM o símbolo entre parênteses — o relatório já acrescenta "(K%)", senão
+// saía dobrado ("SATURAÇÃO POR POTÁSSIO (K%) (K%)").
 const SAT_CFG: Record<string, { sigla: string; nome: string; bordas: [number, number, number, number]; dmin: number; dmax: number }> = {
-  satk:  { sigla: 'K%',  nome: 'Saturação por Potássio (K%)',  bordas: [1.5, 3, 5, 8],   dmin: 0,  dmax: 10 },
-  satca: { sigla: 'Ca%', nome: 'Saturação por Cálcio (Ca%)',   bordas: [40, 50, 60, 70], dmin: 20, dmax: 90 },
-  satmg: { sigla: 'Mg%', nome: 'Saturação por Magnésio (Mg%)', bordas: [8, 12, 18, 25],  dmin: 0,  dmax: 40 },
+  satk:  { sigla: 'K%',  nome: 'Saturação por Potássio',  bordas: [1.5, 3, 5, 8],   dmin: 0,  dmax: 10 },
+  satca: { sigla: 'Ca%', nome: 'Saturação por Cálcio',    bordas: [40, 50, 60, 70], dmin: 20, dmax: 90 },
+  satmg: { sigla: 'Mg%', nome: 'Saturação por Magnésio',  bordas: [8, 12, 18, 25],  dmin: 0,  dmax: 40 },
 };
 
 // Cria as legendas das SATURAÇÕES calculadas (K%/Ca%/Mg%) com FAIXAS PRÓPRIAS
@@ -1745,6 +1747,30 @@ export function migrarLegendasSaturacoesV2() {
     mudou = true;
   }
   if (mudou) { save('inv_legendas', todas); notificarLegendas(); }
+}
+
+// v3: normaliza as legendas de saturação AUTO-geradas (qualquer variante de nome
+// que a gente já criou — "… (K%)", "… — ajustar faixas" ou o nome-base) para o
+// nome LIMPO + faixas/domínio corretos. Uma vez só (flag): não re-toca (preserva
+// ajustes do usuário). Sem legendas ainda, tenta no próximo boot sem queimar a flag.
+export function migrarLegendasSaturacoesV3() {
+  if (typeof window === 'undefined') return;
+  if (localStorage.getItem('inv_migrado_leg_sat_v3') === '1') return;
+  const todas = load<Legenda>('inv_legendas');
+  const sats = todas.filter(l => SAT_CFG[l.atributoId]);
+  if (sats.length === 0) return;
+  let mudou = false;
+  for (const l of sats) {
+    const c = SAT_CFG[l.atributoId];
+    if (!l.nome.startsWith(c.nome)) continue;   // renomeada pelo usuário → não mexe
+    l.nome = c.nome; l.atributo = c.nome; l.simbolo = c.sigla;
+    l.classes = classesFertilidade5(c.bordas);
+    l.dominioMin = c.dmin; l.dominioMax = c.dmax;
+    l.atualizadoEm = new Date().toISOString();
+    mudou = true;
+  }
+  if (mudou) { save('inv_legendas', todas); notificarLegendas(); }
+  localStorage.setItem('inv_migrado_leg_sat_v3', '1');
 }
 
 // Auditoria do cadastro (owner, via console: invAuditoria()). NÃO altera nada —

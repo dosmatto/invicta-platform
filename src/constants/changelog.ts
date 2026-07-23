@@ -1,5 +1,10 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.7.6': [
+    'RELATÓRIO DE RECOMENDAÇÃO — ORDEM GLOBAL PELO Nº DA EQUAÇÃO: as páginas de dose agora são ordenadas ENTRE TODAS as recomendações juntas (01 Calcário … 10 Gesso …), não só dentro de cada recomendação — some o caso de começar no "Gesso 10". Doses de aplicação parcelada usam o nº da equação-base.',
+    'RELATÓRIO DE FERTILIDADE — CABEÇALHO SEM SOBREPOSIÇÃO E SEM UNIDADE DOBRADA: o título central (ex.: "SATURAÇÃO POR MAGNÉSIO (Mg%)") deixou de repetir o símbolo ("(MG%) (Mg%)") e de invadir o nome do produtor — o título ficou mais estreito/deslocado, reduz a fonte quando necessário, e o bloco fazenda/produtor é truncado com "…" se for muito longo.',
+    'K%/Ca%/Mg% — NOME E FAIXAS NORMALIZADOS: as legendas de saturação tiveram o nome limpo (sem o "(K%)" duplicado) e as faixas agronômicas reaplicadas (K% 1,5/3/5/8 · Ca% 40/50/60/70 · Mg% 8/12/18/25), corrigindo de vez o mapa que saía de uma cor só. Editáveis em Legendas; o atributoId de cada uma é satk / satca / satmg.',
+  ],
   '2.7.5': [
     'K%/Ca%/Mg% — LEGENDAS COM FAIXAS PRÓPRIAS (fim do mapa "todo de uma cor só"): as legendas das saturações eram clonadas da V% (faixas 30–80%), mas K% real é ~1–5%, Ca% ~40–70% e Mg% ~8–25% — tudo caía na 1ª classe e o mapa saía uniforme. Agora cada uma nasce com faixas agronômicas próprias (K%: 1,5/3/5/8 · Ca%: 40/50/60/70 · Mg%: 8/12/18/25) e as legendas antigas já criadas são corrigidas automaticamente. Continuam editáveis em Legendas.',
     'PIXEL SÓLIDO NO MAPA (cor "mais pura"): os mapas coloridos (recomendação, fertilidade, produtividade, zonas) passam a usar reamostragem "nearest" — cada pixel vira um bloco de cor sólido ao dar zoom, em vez de borrar/misturar as cores das classes nas bordas (era essa mistura que dava a impressão de cor "não pura"). A recomendação já era 100% opaca; isso deixa as bordas nítidas.',

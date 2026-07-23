@@ -122,19 +122,27 @@ async function desenharPaginaMapa(doc: JsPDF, d: DadosRelatorioFert, logos: Logo
   if (logos.inv) { const h = 15, w = h * (logos.inv.naturalWidth / logos.inv.naturalHeight); doc.addImage(logos.inv, 'PNG', M, 5, w, h); }
   doc.setDrawColor(...LINE); doc.setLineWidth(0.3); doc.line(M + 52, 5, M + 52, 24);
 
+  // Trunca com "…" p/ o bloco esquerdo (fazenda/produtor) NÃO invadir o título central.
+  const clip = (txt: string, maxW: number) => {
+    if (doc.getTextWidth(txt) <= maxW) return txt;
+    let t = txt;
+    while (t.length > 1 && doc.getTextWidth(t + '…') > maxW) t = t.slice(0, -1);
+    return t + '…';
+  };
   doc.setTextColor(...NAVY);
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.text(d.fazenda.toUpperCase(), M + 56, 9);
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.text(clip(d.fazenda.toUpperCase(), 60), M + 56, 9);
   doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(...GRAY);
-  doc.text(`Produtor: ${d.produtor || '—'}`, M + 56, 14);
-  doc.text(`Safra: ${d.safra || '—'}   |   Data: ${d.dataInterpolacao}`, M + 56, 18.5);
+  doc.text(clip(`Produtor: ${d.produtor || '—'}`, 62), M + 56, 14);
+  doc.text(clip(`Safra: ${d.safra || '—'}   |   Data: ${d.dataInterpolacao}`, 62), M + 56, 18.5);
 
-  // Título central (elemento) — auto-redução p/ não sobrepor.
-  const tituloCx = 158, tituloMaxW = 94;
+  // Título central (elemento) — deslocado à direita e mais estreito p/ não colidir
+  // com o bloco esquerdo; auto-redução até 7pt.
+  const tituloCx = 165, tituloMaxW = 82;
   const titulo = `${san(d.atributo).toUpperCase()} (${san(d.simbolo)})`;
   doc.setTextColor(...NAVY); doc.setFont('helvetica', 'bold');
   let tf = 22; doc.setFontSize(tf);
-  while (doc.getTextWidth(titulo) > tituloMaxW && tf > 10) { tf -= 1; doc.setFontSize(tf); }
-  doc.text(titulo, tituloCx, 13.5, { align: 'center' });
+  while (doc.getTextWidth(titulo) > tituloMaxW && tf > 7) { tf -= 1; doc.setFontSize(tf); }
+  doc.text(titulo, tituloCx, 13.5, { align: 'center', maxWidth: tituloMaxW });
   doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(...GRAY);
   doc.text(`${d.metodo ? san(d.metodo) + '  |  ' : ''}${san(d.fonte)}`, tituloCx, 20, { align: 'center', maxWidth: tituloMaxW });
 

@@ -346,25 +346,26 @@ export async function renderBookOficialNoDoc(
   for (const it of bibListar<ConteudoEquacao>('equacoes')) {
     if (typeof it.conteudo?.ordem === 'number') ordemPorEquacao.set(it.id, it.conteudo.ordem);
   }
+  // nº do cadastro da equação p/ uma dose. Doses de aplicação-parcelada têm
+  // equacaoId "<id>__apN" — usa o id BASE para achar o número.
+  const numDe = (equacaoId: string): number | undefined =>
+    ordemPorEquacao.get(equacaoId) ?? ordemPorEquacao.get(equacaoId.split('__ap')[0]);
+
+  // ACHATA todas as doses de TODOS os cenários e ordena GLOBALMENTE pelo nº do
+  // cadastro (01, 02, … 10, 23…). Antes a ordem só valia DENTRO de cada cenário,
+  // então um cenário de Gesso (10) antes do de Calcário (01) saía primeiro.
+  const itens = cenarios.flatMap((cen, ci) =>
+    cen.doses.map((d, di) => ({ cen, d, k: numDe(d.equacaoId) ?? 1e9 + ci * 1000 + di })));
+  itens.sort((a, b) => a.k - b.k);
+
   let precisaPagina = opts?.novaPaginaAntes ?? false;
   let algum = false;
-  for (const cen of cenarios) {
-    // Páginas na ORDEM CRESCENTE do nº da equação (01, 02, … 10, 23…), não na
-    // ordem em que as doses foram geradas. Equação sem nº vai para o fim, na
-    // ordem original (chave 1e9+i preserva a posição relativa).
-    const doses = cen.doses
-      .map((d, i) => ({ d, k: ordemPorEquacao.get(d.equacaoId) ?? 1e9 + i }))
-      .sort((a, b) => a.k - b.k)
-      .map(x => x.d);
-    let seq = 0;
-    for (const dose of doses) {
-      seq++;
-      const numero = ordemPorEquacao.get(dose.equacaoId) ?? seq;   // nº das Equações; fallback = sequência
-      if (precisaPagina) doc.addPage();
-      precisaPagina = true;
-      algum = true;
-      await desenharPaginaOficial(doc, dose, cen.nome, ctx, logo, numero);
-    }
+  for (const { cen, d, k } of itens) {
+    const numero = k < 1e9 ? k : 0;   // sem nº definido → título sem número (0 → "00")
+    if (precisaPagina) doc.addPage();
+    precisaPagina = true;
+    algum = true;
+    await desenharPaginaOficial(doc, d, cen.nome, ctx, logo, numero);
   }
   if (!algum) throw new Error('As recomendações não geraram nenhuma dose.');
 }
