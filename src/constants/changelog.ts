@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.7.27': [
+    'LIMPEZA DO CADASTRO POR BOTÃO (Início): no painel Início, quem tem permissão vê a seção "Limpeza do cadastro" com botões (2 cliques) para REMOVER TALHÕES DUPLICADOS (cópia exata: mesmo produtor+fazenda+nome+área) e REMOVER FAZENDAS ÓRFÃS (sem produtor). Os de mesmo nome com ÁREA diferente NÃO são apagados (ficam listados para revisão). Substitui o comando de console.',
+  ],
   '2.7.26': [
     'INTERPOLAÇÃO MAIS RÁPIDA (BACKEND): o servidor de interpolação subiu de plano (starter → standard, mais CPU/RAM) — a krigagem é pesada em CPU e o "Processar tudo" roda vários mapas em fila. Muda no deploy do backend (Render).',
     'LIMPEZA DE TALHÕES DUPLICADOS (owner): rotina para remover cópias EXATAS de talhão (mesmo produtor+fazenda+nome+área). Roda no Console: "await invDedupTalhoes()" mostra o PREVIEW (o que seria removido) e "await invDedupTalhoes(true)" aplica. NUNCA apaga cópias com dados vinculados nem talhões de mesmo nome com ÁREA diferente (esses ficam listados para revisão manual).',

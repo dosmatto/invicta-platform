@@ -8,7 +8,7 @@ import { empresaIfEmpty, adotarEmpresasLocais, garantirEmpresaInvicta, uidUsuari
 import { limparBaseOperacional } from '@/lib/admin/manutencao';
 import { TrocaSenhaObrigatoria } from '@/components/auth/TrocaSenhaObrigatoria';
 import { migrarLaboratoriosV1, migrarSafrasV1, migrarGradesV1, migrarPreferenciasV1, reKeyDonoBiblioteca } from '@/lib/biblioteca';
-import { seedLegendasSistema, migrarLegendaCtceV1, migrarLegendasSaturacoesV1, migrarLegendasSaturacoesV2, migrarLegendasSaturacoesV3, garantirVariaveisComplementares, migrarOrdemPadraoFertV1, auditoriaCadastro, migrarAreasGeodesicasV1, migrarNomesMaiusculosV1, migrarGradesDuplicadasV1, migrarBboxTalhoesV1, migrarImportacoesLabPeriodoV1, migrarGradesPeriodoV1, analisarTalhoesDuplicados, aplicarDedupTalhoesExatos } from '@/lib/store';
+import { seedLegendasSistema, migrarLegendaCtceV1, migrarLegendasSaturacoesV1, migrarLegendasSaturacoesV2, migrarLegendasSaturacoesV3, garantirVariaveisComplementares, migrarOrdemPadraoFertV1, auditoriaCadastro, migrarAreasGeodesicasV1, migrarNomesMaiusculosV1, migrarGradesDuplicadasV1, migrarBboxTalhoesV1, migrarImportacoesLabPeriodoV1, migrarGradesPeriodoV1, analisarTalhoesDuplicados, aplicarDedupTalhoesExatos, analisarFazendasOrfas, aplicarRemocaoFazendasOrfas } from '@/lib/store';
 import { LEGENDAS_OFICIAIS } from '@/constants/legendasSeedOficial';
 import { authConfigurado, observarAuth, logout, type User } from '@/lib/auth';
 import { hidratarCachePesado } from '@/lib/localComprimido';
@@ -259,6 +259,20 @@ export function AppProvider({ children, redirectProdutorParaPortal, modoCampo }:
       return { removidos: ids.length };
     };
     console.info('[invicta] Owner: talhões duplicados — PREVIEW:  await invDedupTalhoes()  · APLICAR:  await invDedupTalhoes(true)');
+
+    // Remover FAZENDAS ÓRFÃS (clienteId sem produtor) e seus talhões. Preview por
+    // padrão; só apaga com invRemoverFazendasOrfas(true).
+    (window as unknown as { invRemoverFazendasOrfas?: (aplicar?: boolean) => Promise<unknown> }).invRemoverFazendasOrfas = async (aplicar = false) => {
+      const orfas = analisarFazendasOrfas();
+      console.log(`%c[fazendas órfãs] ${orfas.length} fazenda(s) sem produtor → ${orfas.reduce((s, o) => s + o.talhoes, 0)} talhão(ões) junto`, 'font-weight:bold;color:#93c5fd');
+      console.table(orfas.map(o => ({ fazenda: o.fazenda.nome, 'clienteId (inexistente)': o.fazenda.clienteId?.slice(-6), talhões: o.talhoes })));
+      if (!aplicar) { console.warn('[fazendas órfãs] PREVIEW — nada removido. Para APLICAR: await invRemoverFazendasOrfas(true)'); return { fazendas: orfas.length, talhoes: orfas.reduce((s, o) => s + o.talhoes, 0) }; }
+      const { fazendas, talhaoIds } = aplicarRemocaoFazendasOrfas();
+      for (const tid of talhaoIds) { await cloudExcluirMapasPorPrefixo(`${tid}__`).catch(() => {}); await cloudExcluirPorPrefixo('inv_cenarios', `cen_${tid}_`).catch(() => {}); }
+      console.log(`%c[fazendas órfãs] REMOVIDAS ${fazendas} fazenda(s) + ${talhaoIds.length} talhão(ões). Recarregue (F5).`, 'font-weight:bold;color:#4ade80');
+      return { fazendas, talhoes: talhaoIds.length };
+    };
+    console.info('[invicta] Owner: fazendas órfãs — PREVIEW:  await invRemoverFazendasOrfas()  · APLICAR:  await invRemoverFazendasOrfas(true)');
   }, [dadosProntos]);
 
   // Produtor não usa o app do mapa — vai direto pro portal (read-only).

@@ -2055,6 +2055,25 @@ export function aplicarDedupTalhoesExatos(): string[] {
   return ids;
 }
 
+// Fazendas ÓRFÃS: clienteId aponta p/ um produtor que não existe mais.
+export function analisarFazendasOrfas(): Array<{ fazenda: Fazenda; talhoes: number }> {
+  const cliIds = new Set(load<Cliente>('inv_clientes').map(c => c.id));
+  const talhoes = load<Talhao>('inv_talhoes');
+  return load<Fazenda>('inv_fazendas')
+    .filter(f => !cliIds.has(f.clienteId))
+    .map(f => ({ fazenda: f, talhoes: talhoes.filter(t => t.fazendaId === f.id).length }));
+}
+
+// Remove as fazendas órfãs e seus talhões (cascata local). Devolve os ids de
+// talhão removidos p/ o caller limpar mapas/cenários na nuvem.
+export function aplicarRemocaoFazendasOrfas(): { fazendas: number; talhaoIds: string[] } {
+  const fazIds = new Set(analisarFazendasOrfas().map(o => o.fazenda.id));
+  const talhaoIds = load<Talhao>('inv_talhoes').filter(t => fazIds.has(t.fazendaId)).map(t => t.id);
+  removerTalhoesCascata(talhaoIds);
+  save('inv_fazendas', load<Fazenda>('inv_fazendas').filter(f => !fazIds.has(f.id)));
+  return { fazendas: fazIds.size, talhaoIds };
+}
+
 // "Destrava" as legendas oficiais (escopo 'sistema', read-only) tornando-as do
 // usuário (escopo 'empresa') — passam a ser editáveis/excluíveis. Como o seed só
 // roda em banco vazio, a conversão é permanente.
