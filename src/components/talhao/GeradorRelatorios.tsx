@@ -66,7 +66,9 @@ export function GeradorRelatorios({ safraNome }: { safraNome?: string } = {}) {
         if (cancel) return;
         setCtx(c);
         setOrdem(c.elementos.map(e => e.nut));
-        setSel(new Set(c.elementos.map(e => e.nut)));
+        // Índices vegetativos DESMARCADOS por padrão (o usuário marca quando quiser);
+        // os demais elementos vêm marcados como sempre.
+        setSel(new Set(c.elementos.filter(e => !e.ehIndice).map(e => e.nut)));
         setCenarios(cens);
         setSelCen(new Set(cens.map(x => x.id)));
         setCarregando(false);

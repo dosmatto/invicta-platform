@@ -1,5 +1,10 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.7.15': [
+    'DOSE MÍNIMA "APLICA A MÍNIMA" AGORA VALE PARA O ZERO TAMBÉM: quando a equação usa "Abaixo disso: aplica a mínima", QUALQUER valor abaixo da dose mínima — inclusive zero — passa a receber a própria mínima (piso operacional no talhão inteiro). Antes o zero escapava e ficava sem dose. Reprocesse o cenário para o mapa refletir. (O modo "Abaixo disso: zera" segue como era.)',
+    'RELATÓRIO — CAPA COM OS PONTOS DE AMOSTRAGEM: o 1º mapa do relatório de Fertilidade (capa, com o polígono do talhão) agora mostra os pontos de amostragem com o NÚMERO de cada ponto.',
+    'RELATÓRIO — ÍNDICES DE VEGETAÇÃO DESMARCADOS E LOGO APÓS O 1º MAPA: os índices (NDVI/NDRE…) agora vêm DESMARCADOS por padrão na aba Relatórios (você marca quando quiser) e, quando incluídos, entram logo após o primeiro mapa (capa), antes dos elementos de fertilidade.',
+  ],
   '2.7.14': [
     'RECOMENDAÇÃO — LEGENDA COM "0" SEPARADO E 1ª FAIXA NA DOSE MÍNIMA: no mapa/PDF de recomendação, o ZERO (o que de fato não recebe dose) vira uma faixa própria com quadrado TRANSPARENTE, e a 1ª faixa colorida SEMPRE começa na dose mínima da equação (Biblioteca de Equações). Ex.: legenda cadastrada 0–1.000 com mínimo 500 → aparece "0" (transparente) e "500 – 1.000"; legenda 0–100 com mínimo 50 → "50 – 100". Vale no mapa (pixels abaixo da mínima ficam transparentes) e no "Plano de aplicação". Doses parceladas mantêm só o zero transparente.',
   ],

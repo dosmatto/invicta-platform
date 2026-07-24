@@ -324,14 +324,19 @@ export function validar(script: string, constantes: ConstanteEquacao[] = []): Va
 }
 
 // ─── Pós-processamento da dose (mínimo operacional) ───────────────────────
-// Ordem: clamp negativo → mínimo viável. Só doses POSITIVAS menores que o mínimo
-// são ajustadas (0 = "não precisa" continua 0). abaixoMinimo: 'zero' = não aplica;
-// 'minimo' = aplica a própria dose mínima.
+// Ordem: clamp negativo → mínimo viável → teto.
+// abaixoMinimo 'minimo' = piso operacional: QUALQUER valor abaixo da mínima —
+// INCLUSIVE ZERO — vira a própria mínima (decisão do usuário 24/07/2026: o
+// talhão inteiro recebe ao menos a dose mínima). 'zero' = só positivos abaixo
+// da mínima zeram (0 = "não precisa" continua 0).
 export interface OpcoesDose { naoNegativo: boolean; doseMinima: number; abaixoMinimo: 'zero' | 'minimo'; doseMaxima: number; }
 export function ajustarDose(d: number, opts: OpcoesDose): number {
   if (!Number.isFinite(d)) return d;
   if (opts.naoNegativo && d < 0) d = 0;
-  if (opts.doseMinima > 0 && d > 0 && d < opts.doseMinima) d = opts.abaixoMinimo === 'minimo' ? opts.doseMinima : 0;
+  if (opts.doseMinima > 0 && d < opts.doseMinima) {
+    if (opts.abaixoMinimo === 'minimo') d = opts.doseMinima;
+    else if (d > 0) d = 0;
+  }
   if (opts.doseMaxima > 0 && d > opts.doseMaxima) d = opts.doseMaxima; // teto: limita a dose no mapa
   return d;
 }

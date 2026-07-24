@@ -18,7 +18,7 @@ import type { DadosRelatorioFert, ProfundidadeRel } from './relatorioFertilidade
 
 type MapaCarregado = { resp: RespInterp; labels: GeoJSON.FeatureCollection; interpoladoEm?: string };
 
-export interface ElementoDisponivel { nut: string; atributo: string; simbolo: string; profundidades: string[]; }
+export interface ElementoDisponivel { nut: string; atributo: string; simbolo: string; profundidades: string[]; ehIndice?: boolean }
 
 export interface ContextoRelatorio {
   fazenda: string; produtor: string; talhao: string; safra: string; cultura: string;
@@ -29,6 +29,7 @@ export interface ContextoRelatorio {
   mapas: Record<string, MapaCarregado>;     // chave `${nut}__${prof}`
   legendaPorNut: Record<string, Legenda>;
   valoresDe: (nut: string, prof: string) => GeoJSON.FeatureCollection;
+  pontosGrade: GeoJSON.FeatureCollection;   // pontos de amostragem com o Nº do ponto (p/ a capa)
 }
 
 // Ordem padrão de capítulos de fertilidade (spec).
@@ -65,6 +66,15 @@ export async function carregarContextoRelatorio(
   const grade = importacao ? getGrades(talhaoId, safra).find(g => g.id === importacao.gradeId) ?? null : null;
   const pontoPorNumero = new Map<number, { lng: number; lat: number }>();
   (grade?.pontos ?? []).forEach(p => pontoPorNumero.set(p.numero ?? p.ordem + 1, { lng: p.lng, lat: p.lat }));
+  // Pontos de amostragem com o Nº DO PONTO — para o 1º mapa do relatório (capa).
+  const pontosGrade: GeoJSON.FeatureCollection = {
+    type: 'FeatureCollection',
+    features: (grade?.pontos ?? []).map(p => ({
+      type: 'Feature' as const,
+      geometry: { type: 'Point' as const, coordinates: [p.lng, p.lat] },
+      properties: { txt: String(p.numero ?? p.ordem + 1) },
+    })),
+  };
 
   const legendas = getLegendas();
   const legendaPorNut: Record<string, Legenda> = {};
@@ -152,10 +162,14 @@ export async function carregarContextoRelatorio(
         if (!e.datas.includes(rot)) e.datas.push(rot);
         porNut.set(n.nut, e);
       }
+      // Índices vegetativos entram LOGO APÓS o 1º mapa (capa) — no INÍCIO da lista
+      // de capítulos — e DESMARCADOS por padrão (ehIndice; o usuário marca se quiser).
+      const ivs: ElementoDisponivel[] = [];
       for (const [nut, e] of porNut) {
         legendaPorNut[nut] = legNdvi;
-        elementos.push({ nut, atributo: `Índice vegetativo — ${e.simbolo}`, simbolo: e.simbolo, profundidades: e.datas });
+        ivs.push({ nut, atributo: `Índice vegetativo — ${e.simbolo}`, simbolo: e.simbolo, profundidades: e.datas, ehIndice: true });
       }
+      elementos.unshift(...ivs);
     } catch { /* índices são opcionais no relatório */ }
   }
 
@@ -166,7 +180,7 @@ export async function carregarContextoRelatorio(
     fazenda: fazenda?.nome ?? '', produtor: cliente?.nome ?? '', talhao: talhao?.nome ?? '', safra,
     cultura: getPlantio(talhaoId, safra), areaHa: talhao?.areaHa ?? 0,
     municipio: fazenda?.municipio ?? '', estado: fazenda?.estado ?? '',
-    poligono, dataInterpolacao, elementos, mapas, legendaPorNut, valoresDe,
+    poligono, dataInterpolacao, elementos, mapas, legendaPorNut, valoresDe, pontosGrade,
   };
 }
 
@@ -210,6 +224,7 @@ export function montarPaginas(ctx: ContextoRelatorio, nutsSelecionados: string[]
       atributo: leg.atributo, simbolo: leg.simbolo, metodo: leg.metodo ?? null, fonte: leg.fonte, unidade: leg.unidade,
       legenda: leg, dataInterpolacao: ctx.dataInterpolacao, poligono: ctx.poligono,
       profundidades, satelite: config.satelite, corLimite: '#ffffff', logoClienteUrl: config.logoClienteUrl ?? null,
+      pontosGrade: ctx.pontosGrade,
     });
   }
   if (paginas.length === 0) {

@@ -31,6 +31,7 @@ export interface DadosRelatorioFert {
   satelite: boolean;
   corLimite: string;
   logoClienteUrl?: string | null;
+  pontosGrade?: GeoJSON.FeatureCollection;   // pontos de amostragem numerados (capa)
 }
 
 const NAVY: [number, number, number] = [13, 33, 64];
@@ -262,10 +263,11 @@ async function desenharCapa(doc: JsPDF, paginas: DadosRelatorioFert[], logos: Lo
   const W = 297, H = 210, M = 6;
   const d = paginas[0];
   const heroW = 168, heroH = 116, heroX = M, heroY = 56;
-  // Satélite do talhão (sem raster/valores) — reusa o capturador, com raster vazio.
+  // Satélite do talhão (sem raster) — com os PONTOS DE AMOSTRAGEM numerados
+  // (pedido do usuário: o 1º mapa mostra o polígono + nº de cada ponto).
   const hero = await capturarMapaFertilidade({
     rasterPng: '', bounds: d.profundidades[0].bounds, poligono: d.poligono,
-    valores: EMPTY_FC, satelite: d.satelite, corLimite: d.corLimite,
+    valores: d.pontosGrade ?? EMPTY_FC, satelite: d.satelite, corLimite: d.corLimite,
     larguraPx: Math.round(heroW * 8), alturaPx: Math.round(heroH * 8),
   });
 
