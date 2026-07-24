@@ -21,12 +21,12 @@ function fcDePontos(pontos: PontoAmostragem[]): GeoJSON.FeatureCollection {
   };
 }
 
-export function ImportarGradeSection() {
+export function ImportarGradeSection({ safraNome: safraProp }: { safraNome?: string } = {}) {
   const { nav, setPontosSimulados } = useApp();
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const safraAtiva = useMemo(() => getSafras().find(s => s.ativa) ?? null, []);
-  const safraNome = safraAtiva?.nome ?? '';
+  // Ano do seletor do topo (consistente com as demais abas); fallback no ativo global.
+  const safraNome = safraProp ?? getSafras().find(s => s.ativa)?.nome ?? '';
 
   const [fc, setFc] = useState<GeoJSON.FeatureCollection | null>(null);
   const [campoId, setCampoId] = useState('');
@@ -74,7 +74,7 @@ export function ImportarGradeSection() {
     setFc(null); setCampoId(''); setEstado('idle');
   }
 
-  if (!safraAtiva) return <div className="px-6 py-4"><Aviso texto="Defina um Ano ativo (no topo do talhão) para importar uma grade." /></div>;
+  if (!safraNome) return <div className="px-6 py-4"><Aviso texto="Defina um Ano (no topo do talhão) para importar uma grade." /></div>;
 
   return (
     <div className="px-4 py-3 space-y-3">

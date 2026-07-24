@@ -18,12 +18,14 @@ import { Upload, Save, Trash2, CheckCircle2, AlertTriangle, FlaskConical } from 
 import { inputStyle } from '@/constants/ui';
 const matchN = (a: string, b: string) => { if (!a || !b) return false; const x = norm(a), y = norm(b); return x.includes(y) || y.includes(x); };
 
-export function LabImportSection() {
+export function LabImportSection({ safraNome: safraProp }: { safraNome?: string } = {}) {
   const { nav } = useApp();
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const safraAtiva = useMemo(() => getSafras().find(s => s.ativa) ?? null, []);
-  const safraNome = safraAtiva?.nome ?? '';
+  // O ANO vem do seletor do topo do talhão (mesmo que as demais abas). Sem isto,
+  // esta seção usava o "ano ativo" GLOBAL e, se ele divergisse do ano selecionado,
+  // a grade "sumia" aqui (ex.: grade em 2025 e ativo global em 2026).
+  const safraNome = safraProp ?? getSafras().find(s => s.ativa)?.nome ?? '';
 
   const [grades, setGrades] = useState<GradeAmostragem[]>([]);
   const [gradeId, setGradeId] = useState('');
@@ -180,7 +182,7 @@ export function LabImportSection() {
   }
 
   if (!pode('importarLaudo')) return <div className="px-6 py-4"><Aviso texto="Seu papel não importa laudos de laboratório (somente visualização)." /></div>;
-  if (!safraAtiva) return <div className="px-6 py-4"><Aviso texto="Defina um Ano ativo (no topo do talhão) para importar resultados." /></div>;
+  if (!safraNome) return <div className="px-6 py-4"><Aviso texto="Defina um Ano (no topo do talhão) para importar resultados." /></div>;
   if (grades.length === 0) return <div className="px-6 py-4"><Aviso texto="Salve uma grade de amostragem (Amostragem) antes de importar — os resultados são ligados aos pontos." /></div>;
 
   return (

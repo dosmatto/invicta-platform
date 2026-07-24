@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.7.30': [
+    'FERTILIDADE DIZIA "SALVE UMA GRADE" MESMO COM A GRADE SALVA: a importação de laudo (Fertilidade) e a importação de grade externa usavam o "Ano ATIVO global", não o Ano escolhido no seletor do topo do talhão. Quando os dois divergiam (ex.: grade no Ano 2025, mas ativo global em outro ano), a grade "sumia" nessas telas. Agora ambas usam o mesmo Ano do topo, como as outras abas — a grade aparece.',
+  ],
   '2.7.29': [
     'INTERPOLAÇÃO "DE 1 MINUTO" — CAUSA REAL ENCONTRADA E CORRIGIDA: o cálculo em si leva ~2s por mapa (medido no servidor); a lentidão era o BACKEND REINICIANDO a cada deploy. Como o interpolador é Blueprint do MESMO repositório com autoDeploy, cada publicação do app (o front) reiniciava o servidor — quem processava naquele instante caía em "servidor acordando" e esperava ~1 min. Adicionado buildFilter no render.yaml: o backend só reinicia quando muda código do backend, não a cada deploy do front. Dica: modelo de variograma FIXO (Configurações da interpolação) deixa cada mapa em ~0,9s (vs ~2s no auto).',
   ],

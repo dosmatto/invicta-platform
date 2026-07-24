@@ -211,7 +211,7 @@ export function TalhaoPage({ id }: { id: string }) {
                 {!ehProdutor && (
                   <>
                     <div className="px-4 pt-3 pb-1 text-[10px] font-bold uppercase tracking-wider" style={{ color: '#a78bfa' }}>Importação de Laboratório</div>
-                    <LabImportSection />
+                    <LabImportSection safraNome={safraSel} />
                     <div className="px-4 pt-3 pb-1 text-[10px] font-bold uppercase tracking-wider" style={{ color: '#4ade80', borderTop: '1px solid #1a3a6b' }}>Mapa de Fertilidade</div>
                   </>
                 )}
@@ -221,7 +221,7 @@ export function TalhaoPage({ id }: { id: string }) {
             {tabAtivo === 'amostragem' && (
               <>
                 <div className="px-4 pt-3 pb-1 text-[10px] font-bold uppercase tracking-wider" style={{ color: '#22d3ee' }}>Importar Grade externa</div>
-                <ImportarGradeSection />
+                <ImportarGradeSection safraNome={safraSel} />
                 <div className="px-4 pt-3 pb-1 text-[10px] font-bold uppercase tracking-wider" style={{ color: '#60a5fa', borderTop: '1px solid #1a3a6b' }}>Amostragem</div>
                 <AmostragemModulo safraNome={safraSel} />
               </>
