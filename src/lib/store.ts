@@ -1459,16 +1459,24 @@ export function getImportacoesLab(talhaoId?: string, safra?: string): Importacao
   return all.map(importacaoComDerivados).sort((a, b) => b.criadoEm.localeCompare(a.criadoEm));
 }
 
+// Avisa as telas (Fertilidade etc.) que a lista de importações de laudo mudou —
+// senão a aba Fertilidade só via a nova importação ao sair e voltar.
+function notificarLab() {
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('inv:lab'));
+}
+
 export function saveImportacaoLab(i: Omit<ImportacaoLab, 'id' | 'criadoEm'>): ImportacaoLab {
   const lista = load<ImportacaoLab>('inv_lab');
   const nova: ImportacaoLab = comEmpresa({ ...i, id: uid(), criadoEm: new Date().toISOString() });
   lista.push(nova);
   save('inv_lab', lista);
+  notificarLab();
   return nova;
 }
 
 export function deleteImportacaoLab(id: string) {
   save('inv_lab', load<ImportacaoLab>('inv_lab').filter(i => i.id !== id));
+  notificarLab();
 }
 
 // ── MEAP: Ambientes Produtivos / Zonas de Manejo ────────────────────────────

@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.7.16': [
+    'FERTILIDADE — IMPORTAÇÃO APARECE NA HORA: ao importar uma tabela de laudo, a nova importação passa a aparecer imediatamente na aba Fertilidade (no seletor de importações). Antes era preciso sair da aba e voltar para ela surgir. Excluir uma importação também atualiza a lista na hora.',
+  ],
   '2.7.15': [
     'DOSE MÍNIMA "APLICA A MÍNIMA" AGORA VALE PARA O ZERO TAMBÉM: quando a equação usa "Abaixo disso: aplica a mínima", QUALQUER valor abaixo da dose mínima — inclusive zero — passa a receber a própria mínima (piso operacional no talhão inteiro). Antes o zero escapava e ficava sem dose. Reprocesse o cenário para o mapa refletir. (O modo "Abaixo disso: zera" segue como era.)',
     'RELATÓRIO — CAPA COM OS PONTOS DE AMOSTRAGEM: o 1º mapa do relatório de Fertilidade (capa, com o polígono do talhão) agora mostra os pontos de amostragem com o NÚMERO de cada ponto.',

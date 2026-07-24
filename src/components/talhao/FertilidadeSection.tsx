@@ -110,7 +110,13 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
   }, []);
 
   useEffect(() => {
-    if (nav.talhaoId && safraNome) setImportacoes(getImportacoesLab(nav.talhaoId, safraNome));
+    const recarregar = () => {
+      if (nav.talhaoId && safraNome) setImportacoes(getImportacoesLab(nav.talhaoId, safraNome));
+    };
+    recarregar();
+    // Sem isto, uma importação recém-salva só aparecia ao sair e voltar na aba.
+    if (typeof window !== 'undefined') window.addEventListener('inv:lab', recarregar);
+    return () => { if (typeof window !== 'undefined') window.removeEventListener('inv:lab', recarregar); };
   }, [nav.talhaoId, safraNome]);
 
   // Carregamento inteligente (Etapa 2): ao abrir o talhão, auto-seleciona a
