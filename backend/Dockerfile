@@ -14,4 +14,16 @@ COPY . .
 # Render/Railway injetam a porta via $PORT; local cai em 8800.
 ENV PORT=8800
 EXPOSE 8800
-CMD ["sh", "-c", "uvicorn app:app --host 0.0.0.0 --port ${PORT}"]
+# gunicorn + worker uvicorn com RECICLAGEM (--max-requests): o worker é
+# reiniciado a cada ~100 requisições (±25 de jitter). Isto impede a DEGRADAÇÃO
+# do processo de vida longa — GDAL/rasterio e o processamento repetido de
+# rasters incham/fragmentam a memória do worker; sem reciclar, ao longo do dia o
+# container passa a fazer swap e a krigagem (CPU-bound) fica ~50x mais lenta
+# (medido: 1,6s -> 67s). Reciclar restaura o estado sem derrubar o serviço.
+# WEB_CONCURRENCY controla o nº de workers (default 1 = conservador com a RAM;
+# suba para 2 se o plano tiver folga de memória). --timeout 600: a krigagem
+# grande pode demorar; não matar a requisição. --graceful-timeout 30 p/ a troca.
+# Worker uvicorn via o pacote oficial `uvicorn-worker` (o `uvicorn.workers`
+# embutido foi deprecado/removido nas versões novas — não depender dele).
+ENV WEB_CONCURRENCY=1
+CMD ["sh", "-c", "gunicorn app:app -k uvicorn_worker.UvicornWorker -w ${WEB_CONCURRENCY} --max-requests 100 --max-requests-jitter 25 --timeout 600 --graceful-timeout 30 --bind 0.0.0.0:${PORT}"]

@@ -1,5 +1,7 @@
 fastapi
 uvicorn[standard]
+gunicorn
+uvicorn-worker
 numpy
 scipy
 pykrige
