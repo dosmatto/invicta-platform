@@ -3,12 +3,12 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { seedIfEmpty } from '@/lib/seed';
-import { bootCloud, bootCloudCampo } from '@/lib/cloud';
+import { bootCloud, bootCloudCampo, cloudExcluirMapasPorPrefixo, cloudExcluirPorPrefixo } from '@/lib/cloud';
 import { empresaIfEmpty, adotarEmpresasLocais, garantirEmpresaInvicta, uidUsuario, ehOwner, seedPapeis, seedPermissoes, seedPlanos, papelDoEmail, papelDoUsuario, emailUsuario, precisaTrocarSenha, meuRegistro, loginExpirado } from '@/lib/empresa';
 import { limparBaseOperacional } from '@/lib/admin/manutencao';
 import { TrocaSenhaObrigatoria } from '@/components/auth/TrocaSenhaObrigatoria';
 import { migrarLaboratoriosV1, migrarSafrasV1, migrarGradesV1, migrarPreferenciasV1, reKeyDonoBiblioteca } from '@/lib/biblioteca';
-import { seedLegendasSistema, migrarLegendaCtceV1, migrarLegendasSaturacoesV1, migrarLegendasSaturacoesV2, migrarLegendasSaturacoesV3, garantirVariaveisComplementares, migrarOrdemPadraoFertV1, auditoriaCadastro, migrarAreasGeodesicasV1, migrarNomesMaiusculosV1, migrarGradesDuplicadasV1, migrarBboxTalhoesV1, migrarImportacoesLabPeriodoV1, migrarGradesPeriodoV1 } from '@/lib/store';
+import { seedLegendasSistema, migrarLegendaCtceV1, migrarLegendasSaturacoesV1, migrarLegendasSaturacoesV2, migrarLegendasSaturacoesV3, garantirVariaveisComplementares, migrarOrdemPadraoFertV1, auditoriaCadastro, migrarAreasGeodesicasV1, migrarNomesMaiusculosV1, migrarGradesDuplicadasV1, migrarBboxTalhoesV1, migrarImportacoesLabPeriodoV1, migrarGradesPeriodoV1, analisarTalhoesDuplicados, aplicarDedupTalhoesExatos } from '@/lib/store';
 import { LEGENDAS_OFICIAIS } from '@/constants/legendasSeedOficial';
 import { authConfigurado, observarAuth, logout, type User } from '@/lib/auth';
 import { hidratarCachePesado } from '@/lib/localComprimido';
@@ -242,6 +242,23 @@ export function AppProvider({ children, redirectProdutorParaPortal, modoCampo }:
     if (!ehOwner()) return;
     (window as unknown as { invLimparBase?: typeof limparBaseOperacional }).invLimparBase = limparBaseOperacional;
     console.info('[invicta] Owner: para zerar a base (mantendo a Biblioteca), rode no Console:  await invLimparBase("APAGAR TUDO")');
+
+    // Remover talhões DUPLICADOS (cópia exata: mesmo nome+fazenda+área). Preview
+    // por padrão; só apaga com invDedupTalhoes(true). Nunca toca nos de área
+    // diferente nem em cópias com dados vinculados (ver analisarTalhoesDuplicados).
+    (window as unknown as { invDedupTalhoes?: (aplicar?: boolean) => Promise<unknown> }).invDedupTalhoes = async (aplicar = false) => {
+      const { exatos, revisar } = analisarTalhoesDuplicados();
+      const totalRem = exatos.reduce((s, g) => s + g.remover.length, 0);
+      console.log(`%c[dedup talhões] ${exatos.length} grupos de cópia EXATA → ${totalRem} a remover · ${revisar.length} grupos de ÁREA DIFERENTE (revisar, NÃO removo)`, 'font-weight:bold;color:#93c5fd');
+      console.table(exatos.flatMap(g => g.remover.map(t => ({ produtor: g.produtor, fazenda: g.fazenda, 'talhão': t.nome, 'área': t.areaHa, mantendo: g.manter.id.slice(-6), removendo: t.id.slice(-6) }))));
+      if (revisar.length) { console.log('%c— Revisar à mão (nome igual, ÁREA diferente):', 'color:#fbbf24'); console.table(revisar.map(g => ({ produtor: g.produtor, fazenda: g.fazenda, 'talhão': g.nome, 'áreas': g.areas.join(' / ') }))); }
+      if (!aplicar) { console.warn('[dedup] PREVIEW — nada removido. Para APLICAR: await invDedupTalhoes(true)'); return { grupos: exatos.length, aRemover: totalRem, revisar: revisar.length }; }
+      const ids = aplicarDedupTalhoesExatos();
+      for (const tid of ids) { await cloudExcluirMapasPorPrefixo(`${tid}__`).catch(() => {}); await cloudExcluirPorPrefixo('inv_cenarios', `cen_${tid}_`).catch(() => {}); }
+      console.log(`%c[dedup] REMOVIDOS ${ids.length} talhões duplicados. Recarregue a página (F5).`, 'font-weight:bold;color:#4ade80');
+      return { removidos: ids.length };
+    };
+    console.info('[invicta] Owner: talhões duplicados — PREVIEW:  await invDedupTalhoes()  · APLICAR:  await invDedupTalhoes(true)');
   }, [dadosProntos]);
 
   // Produtor não usa o app do mapa — vai direto pro portal (read-only).

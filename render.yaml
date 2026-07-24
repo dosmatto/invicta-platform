@@ -6,8 +6,8 @@ services:
     runtime: docker
     dockerfilePath: ./backend/Dockerfile
     dockerContext: ./backend
-    # Starter = sempre ligado (sem hibernar/cold-start), p/ robustez ("parruda").
-    # Se a krigagem estourar memória em talhões grandes, subir p/ standard (2 GB).
-    plan: starter
+    # Standard = mais CPU/RAM (sempre ligado) — a krigagem é pesada em CPU e o
+    # "Processar tudo" roda 26 mapas em fila; o starter (~0,5 vCPU) era o gargalo.
+    plan: standard
     healthCheckPath: /health
     autoDeploy: true

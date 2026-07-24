@@ -2002,6 +2002,59 @@ export function auditoriaCadastro(): AuditoriaCadastro {
   return r;
 }
 
+// ── Dedup de talhões duplicados (owner) ──────────────────────────────────────
+// Duplicado = MESMO nome no MESMO produtor+fazenda. Só trata CÓPIA EXATA (mesma
+// área, 2 casas); nome igual com ÁREA DIFERENTE vai p/ "revisar" (pode ser talhão
+// distinto/redesenho — nunca apaga). Escolha de qual manter é SEGURA: se só uma
+// cópia tem dados vinculados, mantém ela e remove as vazias; se nenhuma tem
+// dados, mantém a mais antiga; se DUAS+ têm dados, não mexe (vai p/ revisar).
+export interface GrupoDupTalhao { fazendaId: string; fazenda: string; produtor: string; nome: string; areas: number[]; manter: Talhao; remover: Talhao[]; }
+
+function talhoesComDados(): Set<string> {
+  const s = new Set<string>();
+  const add = (arr: { talhaoId?: string }[]) => { for (const r of arr) if (r.talhaoId) s.add(r.talhaoId); };
+  add(load<GradeAmostragem>('inv_grades')); add(load<ImportacaoLab>('inv_lab'));
+  add(load<ImportacaoCompactacao>('inv_compactacao')); add(load<GradeCompactacao>('inv_grades_compact'));
+  add(load<MdeTalhao>('inv_mde')); add(load<ComposicaoTemporal>('inv_composicoes'));
+  add(load<LevantamentoCondutividade>('inv_condutividade')); add(load<Plantio>('inv_plantios'));
+  add(load<AmbienteProdutivo>('inv_meap_ambientes'));
+  return s;
+}
+
+export function analisarTalhoesDuplicados(): { exatos: GrupoDupTalhao[]; revisar: GrupoDupTalhao[] } {
+  const talhoes = load<Talhao>('inv_talhoes');
+  const fazById = new Map(load<Fazenda>('inv_fazendas').map(f => [f.id, f]));
+  const cliById = new Map(load<Cliente>('inv_clientes').map(c => [c.id, c]));
+  const comDados = talhoesComDados();
+  const norm = (s: string) => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toUpperCase().replace(/\s+/g, ' ');
+  const r2 = (n: number) => Math.round((n || 0) * 100) / 100;
+  const grp = new Map<string, Talhao[]>();
+  for (const t of talhoes) { const k = `${t.fazendaId}|${norm(t.nome)}`; (grp.get(k) ?? grp.set(k, []).get(k)!).push(t); }
+
+  const exatos: GrupoDupTalhao[] = [], revisar: GrupoDupTalhao[] = [];
+  for (const arr of grp.values()) {
+    if (arr.length < 2) continue;
+    const faz = fazById.get(arr[0].fazendaId);
+    const info = { fazendaId: arr[0].fazendaId, fazenda: faz?.nome ?? '', produtor: faz ? cliById.get(faz.clienteId)?.nome ?? '' : '', nome: arr[0].nome, areas: arr.map(t => r2(t.areaHa)) };
+    if (new Set(info.areas).size > 1) { revisar.push({ ...info, manter: arr[0], remover: [] }); continue; }  // área diferente
+    const comD = arr.filter(t => comDados.has(t.id)), semD = arr.filter(t => !comDados.has(t.id));
+    if (comD.length >= 2) { revisar.push({ ...info, manter: comD[0], remover: [] }); continue; }              // 2+ com dados: não mexe
+    if (comD.length === 1) { exatos.push({ ...info, manter: comD[0], remover: semD }); continue; }            // mantém a com dados
+    const s = [...arr].sort((a, b) => (a.criadoEm || '').localeCompare(b.criadoEm || ''));                    // nenhuma com dados: mantém a + antiga
+    exatos.push({ ...info, manter: s[0], remover: s.slice(1) });
+  }
+  return { exatos, revisar };
+}
+
+// Remove as cópias exatas (mantendo uma por grupo, conforme analisarTalhoesDuplicados).
+// LOCAL only — o caller limpa mapas/cenários na nuvem pelos ids devolvidos.
+export function aplicarDedupTalhoesExatos(): string[] {
+  const { exatos } = analisarTalhoesDuplicados();
+  const ids = exatos.flatMap(g => g.remover.map(t => t.id));
+  if (ids.length) removerTalhoesCascata(ids);
+  return ids;
+}
+
 // "Destrava" as legendas oficiais (escopo 'sistema', read-only) tornando-as do
 // usuário (escopo 'empresa') — passam a ser editáveis/excluíveis. Como o seed só
 // roda em banco vazio, a conversão é permanente.

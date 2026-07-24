@@ -1,5 +1,9 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.7.26': [
+    'INTERPOLAÇÃO MAIS RÁPIDA (BACKEND): o servidor de interpolação subiu de plano (starter → standard, mais CPU/RAM) — a krigagem é pesada em CPU e o "Processar tudo" roda vários mapas em fila. Muda no deploy do backend (Render).',
+    'LIMPEZA DE TALHÕES DUPLICADOS (owner): rotina para remover cópias EXATAS de talhão (mesmo produtor+fazenda+nome+área). Roda no Console: "await invDedupTalhoes()" mostra o PREVIEW (o que seria removido) e "await invDedupTalhoes(true)" aplica. NUNCA apaga cópias com dados vinculados nem talhões de mesmo nome com ÁREA diferente (esses ficam listados para revisão manual).',
+  ],
   '2.7.25': [
     'INTERPOLAÇÃO NÃO PARA MAIS AO ABRIR OUTRA ABA: o app usava o lock de sessão do Supabase entre abas (navigator.locks). Abrir uma 2ª aba fazia a 1ª travar ao salvar cada mapa (a nova aba segurava o lock no boot/refresh). Agora cada aba cuida da própria sessão e a interpolação continua normalmente.',
   ],
