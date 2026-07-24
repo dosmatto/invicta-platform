@@ -9,6 +9,7 @@ import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { meuRegistro, papelDoUsuario, planoPorId, ROTULO_PAPEL } from '@/lib/empresa';
 import { getClientes, getFazendas, getTalhoes, getSafras } from '@/lib/store';
+import { rotuloAno } from '@/lib/periodo';
 import { logout, emailUsuario } from '@/lib/auth';
 import { MapPin, LogOut, ChevronRight, Leaf, AlertTriangle } from 'lucide-react';
 
@@ -63,10 +64,10 @@ export default function PortalPage() {
           </div>
           {safras.length > 0 && (
             <div>
-              <label className="text-[10px] font-semibold block mb-0.5" style={{ color: '#64748b' }}>Safra</label>
+              <label className="text-[10px] font-semibold block mb-0.5" style={{ color: '#64748b' }}>Ano</label>
               <select value={safra} onChange={e => setSafra(e.target.value)}
                 className="rounded px-2 py-1.5 text-xs outline-none" style={{ background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' }}>
-                {safras.map(s => <option key={s.id} value={s.nome}>{s.nome}</option>)}
+                {safras.map(s => <option key={s.id} value={s.nome}>{rotuloAno(s.nome)}</option>)}
               </select>
             </div>
           )}

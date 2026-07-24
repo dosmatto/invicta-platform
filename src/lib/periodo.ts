@@ -66,6 +66,13 @@ export function hojeSaoPauloISO(dataBase?: Date): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
 }
 
+// Rótulo do "Ano" a partir de uma safra legada para EXIBIÇÃO na UI/relatórios
+// ("26/27" → "2026"). Fallback: a própria string se não parsear; '—' se vazio.
+export function rotuloAno(safraNome: string | null | undefined): string {
+  const a = anoDaSafra(String(safraNome ?? ''));
+  return a != null ? String(a) : (safraNome ? String(safraNome) : '—');
+}
+
 export function rotuloEpoca(e: Epoca | null | undefined): string {
   return e === '1' ? '1ª época' : e === '2' ? '2ª época' : '—';
 }

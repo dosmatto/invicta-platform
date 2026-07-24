@@ -13,6 +13,7 @@
 // Tudo dos dados LOCAIS já hidratados (mesma fonte dos KPIs do Início).
 
 import { getClientes, getFazendas, getTalhoes, getSafras, getPlantio, auditoriaCadastro } from './store';
+import { rotuloAno } from './periodo';
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 const norm = (s: string) => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase();
@@ -35,7 +36,7 @@ export async function gerarConferenciaExcel(): Promise<{ talhoes: number; arquiv
 
   type LinhaT = {
     Produtor: string; Fazenda: string; 'Talhão': string; 'Área (ha)': number;
-    Status: string; 'Cultura (safra)': string; Alerta: string;
+    Status: string; 'Cultura (ano)': string; Alerta: string;
   };
   const linhas: LinhaT[] = talhoes.map(t => {
     const f = fazPorId.get(t.fazendaId);
@@ -51,7 +52,7 @@ export async function gerarConferenciaExcel(): Promise<{ talhoes: number; arquiv
       'Talhão': t.nome,
       'Área (ha)': r2(t.areaHa || 0),
       Status: t.status === 'incompleto' ? 'Sem limite' : 'Ativo',
-      'Cultura (safra)': getPlantio(t.id, safra) || '',
+      'Cultura (ano)': getPlantio(t.id, safra) || '',
       Alerta: alertas.join(' · '),
     };
   }).sort((a, b) =>
@@ -81,7 +82,7 @@ export async function gerarConferenciaExcel(): Promise<{ talhoes: number; arquiv
   // ── aba Problemas (auditoria) ──
   const aud = auditoriaCadastro();
   const problemas: { Item: string; Valor: number | string }[] = [
-    { Item: 'Safra verificada', Valor: safra },
+    { Item: 'Ano verificado', Valor: rotuloAno(safra) },
     { Item: 'Produtores', Valor: aud.clientes },
     { Item: 'Fazendas', Valor: aud.fazendas },
     { Item: 'Talhões (total)', Valor: aud.talhoes },
@@ -103,7 +104,7 @@ export async function gerarConferenciaExcel(): Promise<{ talhoes: number; arquiv
   const wb = XLSX.utils.book_new();
   const wsT = XLSX.utils.json_to_sheet<object>([
     ...linhas,
-    { Produtor: 'TOTAL GERAL', Fazenda: '', 'Talhão': `${linhas.length} talhões`, 'Área (ha)': areaTotal, Status: '', 'Cultura (safra)': '', Alerta: '' },
+    { Produtor: 'TOTAL GERAL', Fazenda: '', 'Talhão': `${linhas.length} talhões`, 'Área (ha)': areaTotal, Status: '', 'Cultura (ano)': '', Alerta: '' },
   ]);
   wsT['!cols'] = [{ wch: 32 }, { wch: 26 }, { wch: 20 }, { wch: 10 }, { wch: 10 }, { wch: 16 }, { wch: 34 }];
   XLSX.utils.book_append_sheet(wb, wsT, 'Talhões');
@@ -128,7 +129,7 @@ export async function gerarConferenciaExcel(): Promise<{ talhoes: number; arquiv
   wsA['!cols'] = [{ wch: 38 }, { wch: 14 }];
   XLSX.utils.book_append_sheet(wb, wsA, 'Problemas');
 
-  const arquivo = `Conferencia_Cadastro_Safra_${safra.replace(/[^\w-]+/g, '-')}.xlsx`;
+  const arquivo = `Conferencia_Cadastro_Ano_${safra.replace(/[^\w-]+/g, '-')}.xlsx`;
   XLSX.writeFile(wb, arquivo);
   return { talhoes: linhas.length, arquivo };
 }

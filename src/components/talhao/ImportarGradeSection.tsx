@@ -62,7 +62,7 @@ export function ImportarGradeSection() {
   }
 
   function salvar() {
-    if (!nav.talhaoId || !safraNome) { setErro('Defina uma safra ativa e abra o talhão.'); setEstado('erro'); return; }
+    if (!nav.talhaoId || !safraNome) { setErro('Defina um Ano ativo e abra o talhão.'); setEstado('erro'); return; }
     if (!prev || prev.total === 0) { setErro('Nada para salvar.'); setEstado('erro'); return; }
     if (prev.comNumero === 0) { setErro('Não identifiquei o número dos pontos — escolha o campo correto abaixo.'); setEstado('erro'); return; }
     const grade = saveGrade(montarGradeImportada({ talhaoId: nav.talhaoId, safra: safraNome, nome: nome || 'Grade importada', pontos: prev.pontos }));
@@ -71,7 +71,7 @@ export function ImportarGradeSection() {
     setFc(null); setCampoId(''); setEstado('idle');
   }
 
-  if (!safraAtiva) return <div className="px-6 py-4"><Aviso texto="Defina uma safra ativa (no topo do talhão) para importar uma grade." /></div>;
+  if (!safraAtiva) return <div className="px-6 py-4"><Aviso texto="Defina um Ano ativo (no topo do talhão) para importar uma grade." /></div>;
 
   return (
     <div className="px-4 py-3 space-y-3">

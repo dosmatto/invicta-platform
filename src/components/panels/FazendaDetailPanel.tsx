@@ -159,7 +159,7 @@ export function FazendaDetailPanel() {
   async function gerarRelatorioRecomendacao() {
     if (!fazenda || gerandoRel) return;
     const safra = getSafras().find(s => s.ativa)?.nome ?? '';
-    if (!safra) { setErroRel('Defina uma safra ativa (no topo do talhão) para gerar o relatório.'); return; }
+    if (!safra) { setErroRel('Defina um Ano ativo (no topo do talhão) para gerar o relatório.'); return; }
     setErroRel(''); setGerandoRel(true);
     try { await gerarRelatorioRecomendacaoFazenda(fazenda.id, safra); }
     catch (e) { setErroRel(e instanceof Error ? e.message : 'Falha ao gerar o relatório.'); }
@@ -170,7 +170,7 @@ export function FazendaDetailPanel() {
   async function gerarRelatorioRecomendacaoXls() {
     if (!fazenda || gerandoXls) return;
     const safra = getSafras().find(s => s.ativa)?.nome ?? '';
-    if (!safra) { setErroRel('Defina uma safra ativa (no topo do talhão) para gerar o Excel.'); return; }
+    if (!safra) { setErroRel('Defina um Ano ativo (no topo do talhão) para gerar o Excel.'); return; }
     setErroRel(''); setGerandoXls(true);
     try { await gerarRecomendacaoFazendaExcel(fazenda.id, safra); }
     catch (e) { setErroRel(e instanceof Error ? e.message : 'Falha ao gerar o Excel.'); }

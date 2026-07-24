@@ -206,7 +206,7 @@ export function CompactacaoSection({ safraNome }: { safraNome?: string } = {}) {
     recarregar();
   }
 
-  if (!safra) return <div className="px-6 py-4"><Aviso texto="Defina uma safra (no topo do talhão) para a compactação." /></div>;
+  if (!safra) return <div className="px-6 py-4"><Aviso texto="Defina um Ano (no topo do talhão) para a compactação." /></div>;
   if (!legenda) return <div className="px-6 py-4"><Aviso texto="Legenda de Compactação não encontrada na Biblioteca (Sistema)." /></div>;
 
   const mostrarUpload = modoUpload || importacoes.length === 0;

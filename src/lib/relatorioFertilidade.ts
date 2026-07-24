@@ -12,6 +12,7 @@ import { rampaVisualStops, valorParaPosicaoVisual, dominioDaLegenda } from './le
 import { capturarMapaFertilidade } from './capturaMapa';
 import { imagemParaPdf, reduzirLogo } from './pdfImagem';
 import { formatarValorVariavel } from './store';
+import { rotuloAno } from './periodo';
 
 export interface ProfundidadeRel {
   profundidade: string;
@@ -135,7 +136,7 @@ async function desenharPaginaMapa(doc: JsPDF, d: DadosRelatorioFert, logos: Logo
   doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.text(clip(d.fazenda.toUpperCase(), 60), M + 56, 9);
   doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(...GRAY);
   doc.text(clip(`Produtor: ${d.produtor || '—'}`, 62), M + 56, 14);
-  doc.text(clip(`Safra: ${d.safra || '—'}   |   Data: ${d.dataInterpolacao}`, 62), M + 56, 18.5);
+  doc.text(clip(`Ano: ${rotuloAno(d.safra)}   |   Data: ${d.dataInterpolacao}`, 62), M + 56, 18.5);
 
   // Título central (elemento) — deslocado à direita e mais estreito p/ não colidir
   // com o bloco esquerdo; auto-redução até 7pt.
@@ -302,7 +303,7 @@ async function desenharCapa(doc: JsPDF, paginas: DadosRelatorioFert[], logos: Lo
   };
   linha('Fazenda', san(d.fazenda));
   linha('Talhão', san(d.talhao));
-  linha('Safra', d.safra);
+  linha('Ano', rotuloAno(d.safra));
   linha('Cultura', san(d.cultura));
   linha('Área total', `${fmt(d.areaHa, 2)} ha`);
   linha('Município', `${san(d.municipio)}${d.estado ? ' - ' + d.estado : ''}`);

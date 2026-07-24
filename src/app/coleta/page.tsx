@@ -12,6 +12,7 @@ import {
   Talhao, GradeAmostragem, PontoAmostragem,
 } from '@/lib/store';
 import { emailUsuario, logout, modoOffline } from '@/lib/auth';
+import { rotuloAno } from '@/lib/periodo';
 import { bootCloudCampo } from '@/lib/cloud';
 import {
   RegistroColeta, StatusPonto, COR_STATUS, ROTULO_STATUS,
@@ -290,7 +291,7 @@ function TelaSelecao({ sel, setSel, online, pend, sincronizar, sincronizando, ms
     { rotulo: 'Produtor', valor: sel.produtor },
     { rotulo: 'Fazenda', valor: sel.fazenda },
     { rotulo: 'Talhão', valor: sel.talhao },
-    { rotulo: 'Ciclo', valor: sel.safra ?? '' },
+    { rotulo: 'Ano', valor: sel.safra ? rotuloAno(sel.safra) : '' },
   ].filter(p => p.valor);
 
   function voltar() {
@@ -392,11 +393,11 @@ function TelaSelecao({ sel, setSel, online, pend, sincronizar, sincronizando, ms
                   setSel({ ...sel, talhaoId: t.id, talhao: t.nome });
                 }} />
             ) : !sel.safra ? (
-              <Lista titulo="Ciclo (safra)" vazio="Nenhuma safra cadastrada."
-                itens={safras.map(s => ({ id: s.nome, nome: s.nome, sub: s.ativa ? 'safra ativa' : undefined }))}
+              <Lista titulo="Ano" vazio="Nenhum ano cadastrado."
+                itens={safras.map(s => ({ id: s.nome, nome: rotuloAno(s.nome), sub: s.ativa ? 'ano ativo' : undefined }))}
                 onEscolher={it => setSel({ ...sel, safra: it.id })} />
             ) : (
-              <Lista titulo="Área de coleta (grade)" vazio="Nenhuma grade de amostragem deste talhão nesta safra — gere a grade na plataforma e sincronize."
+              <Lista titulo="Área de coleta (grade)" vazio="Nenhuma grade de amostragem deste talhão neste ano — gere a grade na plataforma e sincronize."
                 itens={grades.map(g => ({
                   id: g.id, nome: g.nome,
                   sub: `${g.pontos.length} pontos · ${g.profundidades.map(p => p.rotulo).join(' / ')} · ${g.metodo === 'zonas' ? 'por zonas' : 'grade'}`,
@@ -541,7 +542,7 @@ function AbaGrades({ sel, setSel }: { sel: Selecao; setSel: (s: Selecao) => void
       <main className="flex-1 overflow-y-auto px-4 py-2 space-y-2">
         {filtradas.length === 0 ? (
           <p className="text-xs py-8 text-center" style={{ color: SUB }}>
-            Nenhuma grade nesta safra com esses filtros. Gere a grade na plataforma e sincronize.
+            Nenhuma grade neste ano com esses filtros. Gere a grade na plataforma e sincronize.
           </p>
         ) : filtradas.map(({ g, t, st, feitos, pend }) => (
           <div key={g.id} className="flex items-center gap-3 px-3.5 py-3 rounded-xl"

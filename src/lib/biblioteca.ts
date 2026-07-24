@@ -63,8 +63,8 @@ export interface DefCategoria {
 export const CATEGORIAS: DefCategoria[] = [
   { slug: 'preferencias-analise', nome: 'Preferências de Análise', icone: SlidersHorizontal, status: 'disponivel',
     descricao: 'Configurações cross-módulo. Hoje: modelo de etiqueta (folha Pimaco + ajuste fino).' },
-  { slug: 'safras', nome: 'Safras', icone: CalendarDays, status: 'disponivel',
-    descricao: 'Safras reutilizáveis. Criar, ativar e excluir (antes ficava no menu lateral).' },
+  { slug: 'safras', nome: 'Anos', icone: CalendarDays, status: 'disponivel',
+    descricao: 'Anos agrícolas reutilizáveis. Criar, ativar e excluir (antes ficava no menu lateral).' },
   { slug: 'grades', nome: 'Grades', icone: Grid3x3, status: 'disponivel',
     descricao: 'Padrões de Amostragem (densidade + profundidades) e Padrões de Elementos (quais análises rodar).' },
   { slug: 'fertilidade', nome: 'Fertilidade', icone: Leaf, status: 'em-breve',

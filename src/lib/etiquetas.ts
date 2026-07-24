@@ -4,6 +4,7 @@
 // Pimaco) — número da amostra em destaque + profundidade. Sem QR.
 
 import type { GradeAmostragem, PontoAmostragem } from './store';
+import { rotuloAno } from './periodo';
 import type { jsPDF as JsPDF } from 'jspdf';
 
 // ── Layouts de folha (presets) ───────────────────────────────────────────────
@@ -50,7 +51,7 @@ function profundidadesDoPonto(p: PontoAmostragem, grade: GradeAmostragem): strin
 // Itens a partir de uma grade do Grid (ponto × profundidade).
 export function itensDeGrade(talhaoNome: string, grade: GradeAmostragem): EtiquetaItem[] {
   const out: EtiquetaItem[] = [];
-  const rodape = `Safra ${grade.safra} · ${grade.epoca}a época`;
+  const rodape = `Ano ${rotuloAno(grade.safra)} · ${grade.epoca}ª época`;
   for (const pt of grade.pontos) {
     const numero = String(pt.ordem + 1).padStart(3, '0');
     for (const prof of profundidadesDoPonto(pt, grade)) out.push({ titulo: talhaoNome, numero, sub: `${prof} cm`, rodape });

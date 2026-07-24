@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.7.21': [
+    'ANO/ÉPOCA — FASE 2 (RELABEL DA PLATAFORMA): "Safra" agora aparece como "ANO" em toda a interface — seletor do topo do talhão, painéis, avisos, dropdowns, coleta (era "Ciclo"), portal e cabeçalhos dos relatórios (PDF/Excel). O valor é mostrado como o ANO (ex.: "26/27" vira "2026", primeiro número). Internamente a chave não muda (nada é apagado; dados antigos seguem acessíveis).',
+  ],
   '2.7.20': [
     'ANO/ÉPOCA — FASE 1 (FERTILIDADE): começou a migração do conceito de "Safra" para "Ano + Época". Agora a importação de laudo (Talhão → Fertilidade → Importar laudo) tem um campo "DATA DE REFERÊNCIA" (a data real da amostragem), que já vem preenchido com HOJE (fuso America/Sao_Paulo) e pode ser alterado — inclusive retroativo (ex.: lançar hoje um laudo de 2024). Dela saem automaticamente o ANO (= ano da data) e a ÉPOCA (1ª = jan–jun, 2ª = jul–dez), calculados no servidor de dados (não dependem da tela). A lista de importações passa a mostrar "Ano · época". Datas de criação/atualização seguem guardadas para auditoria.',
     'ANO/ÉPOCA — MIGRAÇÃO E COMPATIBILIDADE: laudos antigos ganham a data de referência automaticamente (o Ano vem da safra antiga — "26/27" → 2026, primeiro número; a época vem do mês do registro). Nada é apagado: a "safra" continua guardada como chave interna e a sincronização não muda. As próximas fases levam Ano/Época para as demais telas (amostragem, produtividade, condutividade), filtros e relatórios.',

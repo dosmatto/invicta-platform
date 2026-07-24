@@ -7,6 +7,7 @@ import { useMemo, useState } from 'react';
 import { FileSpreadsheet, Loader2 } from 'lucide-react';
 import { PanelSection, PanelKpi } from './_shared';
 import { getClientes, getFazendas, getTalhoes, getSafras } from '@/lib/store';
+import { rotuloAno } from '@/lib/periodo';
 import { gerarConferenciaExcel } from '@/lib/relatorioConferencia';
 
 export function DashboardPanel() {
@@ -52,7 +53,7 @@ export function DashboardPanel() {
         <div className="flex border-b" style={{ borderColor: '#1a3a6b' }}>
           <PanelKpi label="Área Total (ha)" value={kpis.areaTotal.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} color="#fde68a" />
           <div className="w-px" style={{ background: '#1a3a6b' }} />
-          <PanelKpi label="Safra Atual" value={kpis.safraAtual} color="#fff" />
+          <PanelKpi label="Ano Atual" value={rotuloAno(kpis.safraAtual)} color="#fff" />
           <div className="w-px" style={{ background: '#1a3a6b' }} />
           <PanelKpi label="Incompletos" value={kpis.incompletos} color="#fca5a5" />
         </div>
@@ -70,7 +71,7 @@ export function DashboardPanel() {
               : <><FileSpreadsheet size={13} /> Conferência do cadastro (Excel)</>}
           </button>
           <p className="text-[9px] mt-1" style={{ color: '#475569' }}>
-            Talhões e áreas da safra atual, somas por fazenda/produtor/geral e aba de possíveis duplicidades.
+            Talhões e áreas do ano atual, somas por fazenda/produtor/geral e aba de possíveis duplicidades.
           </p>
           {msgExcel && <p className="text-[10px] mt-1" style={{ color: msgExcel.startsWith('✓') ? '#86efac' : '#f87171' }}>{msgExcel}</p>}
         </div>

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { getSafras, saveSafra, updateSafra, deleteSafra, Safra } from '@/lib/store';
+import { rotuloAno } from '@/lib/periodo';
 import { Plus, CalendarDays, CheckCircle2, Trash2, Save, X } from 'lucide-react';
 
 export function SafrasPanel() {
@@ -52,13 +53,13 @@ export function SafrasPanel() {
           className="w-full flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-semibold text-white"
           style={{ background: mostraForm ? '#374151' : 'var(--invicta-green-dark)' }}>
           {mostraForm ? <X size={12} /> : <Plus size={12} />}
-          {mostraForm ? 'Cancelar' : 'Nova Safra'}
+          {mostraForm ? 'Cancelar' : 'Novo Ano'}
         </button>
       </div>
 
       {mostraForm && (
         <div className="flex-shrink-0 p-4 space-y-3" style={{ borderBottom: '1px solid #1a3a6b', background: '#061525' }}>
-          <p className="text-xs font-bold uppercase tracking-wide" style={{ color: '#93c5fd' }}>Nova Safra</p>
+          <p className="text-xs font-bold uppercase tracking-wide" style={{ color: '#93c5fd' }}>Novo Ano</p>
 
           <div className="grid grid-cols-2 gap-2">
             <div>
@@ -82,20 +83,20 @@ export function SafrasPanel() {
               onChange={e => setForm(p => ({ ...p, ativa: e.target.checked }))}
               className="accent-green-500" />
             <label htmlFor="safra-ativa-cb" className="text-xs" style={{ color: '#94a3b8' }}>
-              Definir como safra ativa
+              Definir como ano ativo
             </label>
           </div>
 
           <div className="flex items-center gap-2 p-2 rounded text-[10px]" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
             <CalendarDays size={11} />
-            Nome gerado: <strong>{nomeSafra(form.anoInicio, form.anoFim)}</strong>
+            Ano: <strong>{form.anoInicio}</strong> <span style={{ opacity: 0.7 }}>(ciclo {nomeSafra(form.anoInicio, form.anoFim)})</span>
           </div>
 
           <button onClick={handleSave} disabled={salvando}
             className="w-full py-2.5 rounded text-xs font-bold text-white flex items-center justify-center gap-2 disabled:opacity-40"
             style={{ background: 'var(--invicta-green-dark)' }}>
             <Save size={13} />
-            {salvando ? 'Salvando...' : 'Salvar Safra'}
+            {salvando ? 'Salvando...' : 'Salvar Ano'}
           </button>
         </div>
       )}
@@ -106,8 +107,8 @@ export function SafrasPanel() {
             <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ background: '#1a3a6b' }}>
               <CalendarDays size={28} style={{ color: '#2e5fa3' }} />
             </div>
-            <p className="text-sm font-semibold" style={{ color: '#94a3b8' }}>Nenhuma safra cadastrada</p>
-            <p className="text-xs" style={{ color: '#475569' }}>Clique em "+ Nova Safra" para começar</p>
+            <p className="text-sm font-semibold" style={{ color: '#94a3b8' }}>Nenhum ano cadastrado</p>
+            <p className="text-xs" style={{ color: '#475569' }}>Clique em "+ Novo Ano" para começar</p>
           </div>
         ) : (
           safras.map(s => (
@@ -119,10 +120,10 @@ export function SafrasPanel() {
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <p className="text-sm font-bold" style={{ color: '#e2e8f0' }}>{s.nome}</p>
+                  <p className="text-sm font-bold" style={{ color: '#e2e8f0' }}>{rotuloAno(s.nome)}</p>
                   {s.ativa && (
                     <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold"
-                      style={{ background: '#166534', color: '#86efac' }}>ATIVA</span>
+                      style={{ background: '#166534', color: '#86efac' }}>ATIVO</span>
                   )}
                 </div>
                 <p className="text-[10px]" style={{ color: '#64748b' }}>{s.anoInicio} / {s.anoFim}</p>
@@ -153,9 +154,9 @@ export function SafrasPanel() {
       {safras.length > 0 && (
         <div className="flex-shrink-0 px-4 py-2 text-center text-[10px]"
           style={{ color: '#475569', borderTop: '1px solid #1a3a6b' }}>
-          {safras.length} safra{safras.length !== 1 ? 's' : ''} cadastrada{safras.length !== 1 ? 's' : ''}
+          {safras.length} ano{safras.length !== 1 ? 's' : ''} cadastrado{safras.length !== 1 ? 's' : ''}
           {safras.find(s => s.ativa) && (
-            <> · Ativa: <strong style={{ color: '#86efac' }}>{safras.find(s => s.ativa)!.nome}</strong></>
+            <> · Ativo: <strong style={{ color: '#86efac' }}>{rotuloAno(safras.find(s => s.ativa)!.nome)}</strong></>
           )}
         </div>
       )}

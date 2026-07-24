@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import { getTalhoes, getPadroesAmostragem, getPadroesElementos, getConfigEtiqueta, getSafras, getGrades, saveGrade, updateGrade, deleteGrade, marcarParaProcessar, ProfundidadeConfig, GradeAmostragem, PontoAmostragem } from '@/lib/store';
+import { rotuloAno } from '@/lib/periodo';
 import { classeZona, ORDEM_CLASSES } from '@/lib/zonas';
 import { pode } from '@/lib/empresa';
 import { gerarGrid, pontoInterno, ModoDistribuicao } from '@/lib/grid';
@@ -424,7 +425,7 @@ export function SimuladorZonas({ safraNome: safraProp }: { safraNome?: string } 
 
       {/* Salvar grade de zonas */}
       {!pode('amostragem') ? null : !safraNome ? (
-        <p className="text-[10px] text-center" style={{ color: '#fbbf24' }}>Defina uma safra (no topo do talhão) para salvar a grade.</p>
+        <p className="text-[10px] text-center" style={{ color: '#fbbf24' }}>Defina um Ano (no topo do talhão) para salvar a grade.</p>
       ) : (
         <button onClick={salvarGradeZonas} disabled={!padrao || pontos.length === 0}
           className="w-full py-2.5 rounded text-sm font-bold text-white flex items-center justify-center gap-2"
@@ -437,7 +438,7 @@ export function SimuladorZonas({ safraNome: safraProp }: { safraNome?: string } 
       {grades.length > 0 && (
         <div className="pt-1">
           <p className="text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: '#475569' }}>
-            Grades de zonas — Safra {safraNome}
+            Grades de zonas — Ano {rotuloAno(safraNome)}
           </p>
           <div className="space-y-1.5">
             {grades.map(g => (

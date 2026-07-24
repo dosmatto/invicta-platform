@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useApp } from '@/context/AppContext';
 import { getPadroesAmostragem, getPadroesElementos, getSafras, getGrades, saveGrade, updateGrade, deleteGrade, marcarParaProcessar, getConfigEtiqueta, PadraoElementos, ProfundidadeConfig, GradeAmostragem, PontoAmostragem } from '@/lib/store';
+import { rotuloAno } from '@/lib/periodo';
 import { gerarGrid, anguloMaiorDimensao, criarValidador, ModoDistribuicao } from '@/lib/grid';
 import { exportarKML, exportarSHP } from '@/lib/exportGrade';
 import { gerarEtiquetasPDF, itensDeGrade, LAYOUTS_ETIQUETA } from '@/lib/etiquetas';
@@ -278,7 +279,7 @@ export function SimuladorAmostragem({ safraNome: safraProp }: { safraNome?: stri
   if (!safraNome) {
     return (
       <div className="p-4">
-        <Aviso titulo="Nenhuma safra" texto="Defina uma safra (no topo do talhão) antes de simular a amostragem." />
+        <Aviso titulo="Nenhum Ano" texto="Defina um Ano (no topo do talhão) antes de simular a amostragem." />
       </div>
     );
   }
@@ -294,7 +295,7 @@ export function SimuladorAmostragem({ safraNome: safraProp }: { safraNome?: stri
     <div className="p-3 space-y-3">
       {/* Safra + Época */}
       <div className="flex items-center gap-2 text-[10px]" style={{ color: '#64748b' }}>
-        <span>Safra <strong style={{ color: '#86efac' }}>{safraNome}</strong></span>
+        <span>Ano <strong style={{ color: '#86efac' }}>{rotuloAno(safraNome)}</strong></span>
         <span>·</span>
         <div className="flex gap-1">
           {(['1', '2'] as const).map(e => (
@@ -534,7 +535,7 @@ export function SimuladorAmostragem({ safraNome: safraProp }: { safraNome?: stri
       {grades.length > 0 && (
         <div className="pt-1">
           <p className="text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: '#475569' }}>
-            Grades salvas — Safra {safraNome}
+            Grades salvas — Ano {rotuloAno(safraNome)}
           </p>
           <div className="space-y-1.5">
             {grades.map(g => (

@@ -11,6 +11,7 @@ import { capturarMapaFertilidade } from '../capturaMapa';
 import { imagemParaPdf } from '../pdfImagem';
 import { colorirDose } from '../raster';
 import { hexToRgb } from '../legendas';
+import { rotuloAno } from '../periodo';
 import { extrairPoligono, decodeGrid } from '../fertilidade';
 import { getTalhoes, getFazendas, getClientes, getPlantio } from '../store';
 import { listar as bibListar, type ConteudoEquacao } from '../biblioteca';
@@ -105,7 +106,7 @@ async function desenharPagina(doc: JsPDF, produto: string, cenarios: Cenario[], 
   doc.setFillColor(...NAVY); doc.rect(0, 0, W, 22, 'F');
   if (logo) { const h = 11, w = h * (logo.naturalWidth / logo.naturalHeight); doc.addImage(logo, 'PNG', M, 5.5, w, h); }
   const campos: [string, string][] = [
-    ['FAZENDA', ctx.fazenda], ['TALHÃO', ctx.talhao], ['SAFRA', ctx.safra], ['CULTURA', ctx.cultura], ['PRODUTO', produto],
+    ['FAZENDA', ctx.fazenda], ['TALHÃO', ctx.talhao], ['ANO', rotuloAno(ctx.safra)], ['CULTURA', ctx.cultura], ['PRODUTO', produto],
   ];
   let cx = 46;
   for (const [lb, val] of campos) {
@@ -278,7 +279,7 @@ async function desenharPaginaOficial(doc: JsPDF, dose: DoseCalculada, cenNome: s
   doc.setFillColor(...NAVY); doc.rect(0, 0, W, 16, 'F');
   if (logo) { const h = 9.5, w = h * (logo.naturalWidth / logo.naturalHeight); doc.addImage(logo, 'PNG', M, 3.2, w, h); }
   const campos: [string, string][] = [
-    ['FAZENDA', ctx.fazenda], ['TALHÃO', ctx.talhao], ['SAFRA', ctx.safra], ['PRODUTO', dose.produto || dose.nomeEquacao],
+    ['FAZENDA', ctx.fazenda], ['TALHÃO', ctx.talhao], ['ANO', rotuloAno(ctx.safra)], ['PRODUTO', dose.produto || dose.nomeEquacao],
     ['CENÁRIO', cenNome], ['ÁREA', `${fmt(ctx.areaHa, 1)} ha`], ['DATA', new Date().toLocaleDateString('pt-BR')],
   ];
   let cx = 44;
@@ -426,7 +427,7 @@ function linhaTabela(doc: JsPDF, x0: number, y: number, cols: Col[], cels: strin
 function desenharResumoRecomendacao(doc: JsPDF, ctx: Ctx, itens: ItemDose[], logo: HTMLImageElement | null, titulo = 'Resumo de recomendações') {
   const M = 6, H = 210;
   const campos: [string, string][] = [
-    ['FAZENDA', ctx.fazenda], ['TALHÃO', ctx.talhao], ['SAFRA', ctx.safra], ['CULTURA', ctx.cultura],
+    ['FAZENDA', ctx.fazenda], ['TALHÃO', ctx.talhao], ['ANO', rotuloAno(ctx.safra)], ['CULTURA', ctx.cultura],
     ['PRODUTOR', ctx.produtor], ['ÁREA', `${fmt(ctx.areaHa, 1)} ha`], ['DATA', dataHoje()],
   ];
   let y = cabecalhoNavy(doc, logo, campos) + 3;
@@ -514,7 +515,7 @@ function desenharCapaFazenda(doc: JsPDF, fazenda: string, produtor: string, safr
   const M = 6, H = 210;
   const areaTotal = grupos.reduce((s, g) => s + (g.talhao.areaHa || 0), 0);
   const campos: [string, string][] = [
-    ['FAZENDA', fazenda], ['PRODUTOR', produtor], ['SAFRA', safra],
+    ['FAZENDA', fazenda], ['PRODUTOR', produtor], ['ANO', rotuloAno(safra)],
     ['TALHÕES', String(grupos.length)], ['ÁREA', `${fmt(areaTotal, 1)} ha`], ['DATA', dataHoje()],
   ];
   const cab = () => cabecalhoNavy(doc, logo, campos) + 3;

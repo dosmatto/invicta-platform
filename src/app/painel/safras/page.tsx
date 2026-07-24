@@ -23,7 +23,7 @@ const TIPO_COLOR: Record<string, string> = {
 export default function SafrasPage() {
   return (
     <>
-      <Header title="Safras e Culturas" breadcrumb={['Painel Invicta', 'Safras e Culturas']} />
+      <Header title="Anos e Culturas" breadcrumb={['Painel Invicta', 'Anos e Culturas']} />
       <div className="flex-1 p-6 space-y-6">
 
         {/* Safras */}
@@ -38,7 +38,7 @@ export default function SafrasPage() {
             </div>
             <button className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium text-white"
               style={{ background: 'var(--invicta-blue)' }}>
-              <Plus size={14} /> Nova Safra
+              <Plus size={14} /> Novo Ano
             </button>
           </div>
           <div className="flex gap-4 p-4">
@@ -65,7 +65,7 @@ export default function SafrasPage() {
           <div className="flex items-center gap-2 p-4 border-b"
             style={{ borderColor: 'var(--border-color)' }}>
             <Leaf size={16} style={{ color: 'var(--invicta-green)' }} />
-            <h2 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Cultivos — Safra 24/25</h2>
+            <h2 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Cultivos — Ano 2024</h2>
             <MockIndicator />
           </div>
           <table className="w-full text-sm">

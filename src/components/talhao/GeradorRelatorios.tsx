@@ -14,6 +14,7 @@ import { useApp } from '@/context/AppContext';
 import { carregarContextoRelatorio, montarPaginas, type ContextoRelatorio } from '@/lib/relatorioDados';
 import { extrairPoligono } from '@/lib/fertilidade';
 import { gerarRelatorioCombinado } from '@/lib/relatorioCombinado';
+import { rotuloAno } from '@/lib/periodo';
 import { listarCenarios, descomprimirCenario, type Cenario } from '@/lib/recomendacao/cenarios';
 import { salvarRelatorio, listarRelatorios, excluirRelatorio, type RegistroRelatorio } from '@/lib/relatoriosArquivo';
 import { emailUsuario } from '@/lib/auth';
@@ -194,7 +195,7 @@ export function GeradorRelatorios({ safraNome }: { safraNome?: string } = {}) {
   }
 
   if (!pode('relatorios')) return <div className="px-4 py-4"><Aviso texto="Seu papel não gera relatórios (somente visualização)." /></div>;
-  if (!safra) return <div className="px-4 py-4"><Aviso texto="Defina uma safra (no topo) para montar o relatório." /></div>;
+  if (!safra) return <div className="px-4 py-4"><Aviso texto="Defina um Ano (no topo) para montar o relatório." /></div>;
   if (carregando) return <div className="px-4 py-4 flex items-center gap-2 text-xs" style={{ color: '#64748b' }}><Loader2 size={13} className="animate-spin" /> Carregando mapas salvos na nuvem…</div>;
 
   const elPorNut = ctx ? Object.fromEntries(ctx.elementos.map(e => [e.nut, e])) : {};
@@ -218,7 +219,7 @@ export function GeradorRelatorios({ safraNome }: { safraNome?: string } = {}) {
   return (
     <div className="px-4 py-3 space-y-4">
       {!temFert && !temRec ? (
-        <Aviso texto="Nada salvo na nuvem para este talhão/safra ainda. Gere recomendações na aba Recomendações e/ou processe os mapas na aba Fertilidade (logado) e volte aqui." />
+        <Aviso texto="Nada salvo na nuvem para este talhão/ano ainda. Gere recomendações na aba Recomendações e/ou processe os mapas na aba Fertilidade (logado) e volte aqui." />
       ) : (
         <div className="space-y-3">
           <p className="text-[11px]" style={{ color: '#94a3b8' }}>
@@ -351,7 +352,7 @@ function LinhaHistorico({ reg, onAbrir, onExcluir }: { reg: RegistroRelatorio; o
           <span className="text-xs font-semibold truncate" style={{ color: '#e2e8f0' }}>{reg.titulo}</span>
         </div>
         <div className="text-[10px] mt-0.5 truncate" style={{ color: '#64748b' }}>
-          {data} · Safra {reg.safra} · {reg.paginas} {reg.paginas === 1 ? 'pág' : 'págs'}
+          {data} · Ano {rotuloAno(reg.safra)} · {reg.paginas} {reg.paginas === 1 ? 'pág' : 'págs'}
         </div>
         {reg.cenarioNomes && reg.cenarioNomes.length > 0 && (
           <div className="text-[9px] mt-0.5 truncate" style={{ color: '#8b7fd6' }}>Rec: {reg.cenarioNomes.join(' · ')}</div>

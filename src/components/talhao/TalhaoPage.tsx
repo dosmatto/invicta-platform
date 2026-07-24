@@ -15,6 +15,7 @@ import {
   getImportacoesLab, getGrades, getPlantio, setPlantio, CULTURAS,
   type Talhao, type Fazenda, type Cliente, type Safra,
 } from '@/lib/store';
+import { rotuloAno } from '@/lib/periodo';
 import { FertilidadeSection } from '@/components/talhao/FertilidadeSection';
 import { AmostragemModulo } from '@/components/talhao/AmostragemModulo';
 import { CompactacaoSection } from '@/components/talhao/CompactacaoSection';
@@ -166,7 +167,7 @@ export function TalhaoPage({ id }: { id: string }) {
           <span className="flex items-center gap-1 flex-shrink-0">
             <span style={{ color: '#64748b' }}>Cultura:</span>
             <select value={cultura} onChange={e => mudarCultura(e.target.value)} disabled={!safraSel}
-              title="Cultura desta safra neste talhão"
+              title="Cultura deste ano neste talhão"
               className="rounded px-1.5 py-0.5 text-xs outline-none disabled:opacity-50" style={inputStyle}>
               <option value="">—</option>
               {CULTURAS.map(c => <option key={c} value={c}>{c}</option>)}
@@ -174,13 +175,13 @@ export function TalhaoPage({ id }: { id: string }) {
           </span>
         </div>
 
-        {/* Seletor de safra (filtra os trabalhos da página) */}
+        {/* Seletor de Ano (filtra os trabalhos da página; o valor interno segue a safra) */}
         <div className="ml-auto flex items-center gap-1.5 flex-shrink-0">
-          <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#64748b' }}>Safra</span>
+          <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#64748b' }}>Ano</span>
           <select value={safraSel} onChange={e => setSafraSel(e.target.value)}
             className="rounded px-2 py-1 text-xs outline-none" style={inputStyle}>
-            {safras.length === 0 && <option value="">— sem safra —</option>}
-            {safras.map(s => <option key={s.id} value={s.nome}>{s.nome}</option>)}
+            {safras.length === 0 && <option value="">— sem ano —</option>}
+            {safras.map(s => <option key={s.id} value={s.nome}>{rotuloAno(s.nome)}</option>)}
           </select>
         </div>
       </header>
@@ -271,7 +272,7 @@ function ResumoTab({ talhao, fazenda, safraNome, cultura }: { talhao: Talhao; fa
   const cards = [
     { label: 'Área', value: talhao.areaHa > 0 ? `${talhao.areaHa.toLocaleString('pt-BR')} ha` : '—' },
     { label: 'Cultura', value: cultura || '—' },
-    { label: 'Safra', value: safraNome || '—' },
+    { label: 'Ano', value: rotuloAno(safraNome) },
     { label: 'Importações de laboratório', value: String(importacoes.length) },
     { label: 'Grades de amostragem', value: String(grades.length) },
     { label: 'Status do limite', value: talhao.status === 'ativo' ? 'Definido' : 'Pendente' },

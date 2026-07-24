@@ -180,7 +180,7 @@ export function LabImportSection() {
   }
 
   if (!pode('importarLaudo')) return <div className="px-6 py-4"><Aviso texto="Seu papel não importa laudos de laboratório (somente visualização)." /></div>;
-  if (!safraAtiva) return <div className="px-6 py-4"><Aviso texto="Defina uma safra ativa (no topo do talhão) para importar resultados." /></div>;
+  if (!safraAtiva) return <div className="px-6 py-4"><Aviso texto="Defina um Ano ativo (no topo do talhão) para importar resultados." /></div>;
   if (grades.length === 0) return <div className="px-6 py-4"><Aviso texto="Salve uma grade de amostragem (Amostragem) antes de importar — os resultados são ligados aos pontos." /></div>;
 
   return (

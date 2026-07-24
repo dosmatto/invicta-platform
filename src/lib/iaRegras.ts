@@ -82,7 +82,7 @@ export function avaliarRegras(ctx: CtxRegras): AvaliacaoRegras {
 
   const prods = (ctx.produtividade_historica ?? []).map(p => p.media_kg_ha).filter((x): x is number => typeof x === 'number');
   const cvProd = cv(prods);
-  if (cvProd != null && cvProd > 20) sinais.push({ codigo: 'prod_instavel', tipo: 'risco', texto: `Produtividade oscila ${cvProd.toFixed(0)}% entre safras — instabilidade produtiva.` });
+  if (cvProd != null && cvProd > 20) sinais.push({ codigo: 'prod_instavel', tipo: 'risco', texto: `Produtividade oscila ${cvProd.toFixed(0)}% entre anos — instabilidade produtiva.` });
 
   const fertBoa = (v != null && v >= 60) && (kCtc != null && kCtc >= 3);
   if (fertBoa && prods.length > 0 && (cvProd == null || cvProd <= 15)) {

@@ -6,6 +6,7 @@ import { jsPDF as JsPDF } from 'jspdf';
 import { capturarMapaFertilidade } from './capturaMapa';
 import { imagemParaPdf, reduzirLogo } from './pdfImagem';
 import { rampaVisualStops, type Legenda } from './legendas';
+import { rotuloAno } from './periodo';
 
 export interface MapaRelNdvi {
   titulo: string;                                      // "NDVI · Sentinel-2 · 12/07/2026"
@@ -103,7 +104,7 @@ export async function gerarRelatorioNdvi(d: DadosRelatorioNdvi): Promise<void> {
     doc.setTextColor(...NAVY).setFont('helvetica', 'bold').setFontSize(13);
     doc.text('MAPAS DE SATÉLITE', M, y);
     doc.setFont('helvetica', 'normal').setFontSize(9).setTextColor(...GRAY);
-    doc.text(`${d.produtor}  ·  ${d.fazenda}  ·  Talhão ${d.talhao}  ·  Safra ${d.safra}  ·  ${fmtHa(d.areaHa)} ha`, M, y + 5);
+    doc.text(`${d.produtor}  ·  ${d.fazenda}  ·  Talhão ${d.talhao}  ·  Ano ${rotuloAno(d.safra)}  ·  ${fmtHa(d.areaHa)} ha`, M, y + 5);
     doc.setDrawColor(...LINE).setLineWidth(0.4).line(M, y + 8, W - M, y + 8);
     return y + 14;
   }

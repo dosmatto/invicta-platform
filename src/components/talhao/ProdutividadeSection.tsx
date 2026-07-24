@@ -226,7 +226,7 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
     recarregar();
   }
 
-  if (!safra) return <div className="px-4 py-3"><Aviso texto="Defina uma safra para o mapa de produtividade." /></div>;
+  if (!safra) return <div className="px-4 py-3"><Aviso texto="Defina um Ano para o mapa de produtividade." /></div>;
   const proc = estado === 'processando';
   const u = (kgha: number) => fmt(emUnidade(kgha, unidade), unidade === 't/ha' ? 2 : unidade === 'sc/ha' ? 1 : 0);
   const varias = maqs.length > 1;

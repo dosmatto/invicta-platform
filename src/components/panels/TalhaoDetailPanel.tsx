@@ -16,6 +16,7 @@ import {
   getTalhoes, getSafras, saveSafra, updateTalhao, deleteTalhao,
   getGrades, getImportacoesLab, getImportacoesCompactacao, getCondutividade, getLegendas, Talhao, Safra,
 } from '@/lib/store';
+import { rotuloAno } from '@/lib/periodo';
 import type { Legenda } from '@/lib/legendas';
 import { parseGeoFile, parseLimiteTalhao, normalizarZonas } from '@/lib/geo';
 import { paraFC, compartilharLinkCampo } from '@/lib/campoLink';
@@ -234,7 +235,7 @@ function ResumoSafra({ talhaoId, safra }: { talhaoId: string; safra: string }) {
   return (
     <div style={{ borderBottom: '1px solid #1a3a6b' }}>
       <div className="px-4 py-2 flex items-center gap-2" style={{ background: '#0a1929', borderBottom: '1px solid #0f2240' }}>
-        <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: '#cbd5e1' }}>Nesta safra {safra && `· ${safra}`}</span>
+        <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: '#cbd5e1' }}>Neste ano {safra && `· ${rotuloAno(safra)}`}</span>
       </div>
       <div className="py-1">
         {linhas.map(l => (
@@ -538,18 +539,18 @@ export function TalhaoDetailPanel() {
           </button>
         </div>
 
-        {/* Seletor de Safra */}
+        {/* Seletor de Ano (interno segue a safra) */}
         <div className="px-4 py-2" style={{ borderTop: '1px solid #0f2240' }}>
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-[10px] font-semibold uppercase tracking-wider flex-shrink-0" style={{ color: '#64748b' }}>Safra</span>
-            {safras.length === 0 && !mostraFormSafra && <span className="text-[10px]" style={{ color: '#475569' }}>Nenhuma safra cadastrada</span>}
+            <span className="text-[10px] font-semibold uppercase tracking-wider flex-shrink-0" style={{ color: '#64748b' }}>Ano</span>
+            {safras.length === 0 && !mostraFormSafra && <span className="text-[10px]" style={{ color: '#475569' }}>Nenhum ano cadastrado</span>}
             {safras.map(s => (
               <button key={s.id} onClick={() => setSafra(s.nome)} className="px-2.5 py-1 rounded text-xs font-bold transition-colors"
                 style={{ background: safra === s.nome ? 'var(--invicta-blue-mid)' : '#1a3a6b', color: safra === s.nome ? '#fff' : '#64748b' }}>
-                {s.nome}
+                {rotuloAno(s.nome)}
               </button>
             ))}
-            <button onClick={() => setMostraFormSafra(v => !v)} title="Cadastrar safra"
+            <button onClick={() => setMostraFormSafra(v => !v)} title="Cadastrar ano"
               className="px-1.5 py-1 rounded text-xs font-bold flex items-center gap-0.5 transition-colors"
               style={{ background: mostraFormSafra ? '#374151' : 'var(--invicta-green-dark)', color: '#fff' }}>
               {mostraFormSafra ? <X size={12} /> : <Plus size={12} />}
@@ -571,7 +572,7 @@ export function TalhaoDetailPanel() {
                 </div>
               </div>
               <button onClick={handleCriarSafra} className="w-full py-1.5 rounded text-xs font-bold text-white flex items-center justify-center gap-1" style={{ background: 'var(--invicta-green-dark)' }}>
-                <Save size={11} /> Cadastrar {String(novaSafra.anoInicio).slice(-2)}/{String(novaSafra.anoFim).slice(-2)}
+                <Save size={11} /> Cadastrar Ano {novaSafra.anoInicio}
               </button>
             </div>
           )}

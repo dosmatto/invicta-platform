@@ -275,7 +275,7 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
       <div>
         <label className="text-[10px] font-semibold block mb-1" style={{ color: '#cbd5e1' }}>Importação de laboratório</label>
         <select value={importacaoId} onChange={e => setImportacaoId(e.target.value)} className="w-full rounded px-2 py-1.5 text-[11px] outline-none" style={inputStyle}>
-          {importacoes.length === 0 && <option value="">Nenhuma importação nesta safra</option>}
+          {importacoes.length === 0 && <option value="">Nenhuma importação neste ano</option>}
           {importacoes.map(i => <option key={i.id} value={i.id}>{i.laboratorio || 'Importação'} · {(i.criadoEm ?? '').slice(0, 10)}</option>)}
         </select>
       </div>

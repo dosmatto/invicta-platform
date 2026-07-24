@@ -557,7 +557,7 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
     }
   }
 
-  if (!safraNome) return <div className="px-6 py-4"><Aviso texto="Defina uma safra para gerar o mapa de fertilidade." /></div>;
+  if (!safraNome) return <div className="px-6 py-4"><Aviso texto="Defina um Ano para gerar o mapa de fertilidade." /></div>;
   if (importacoes.length === 0) return <div className="px-6 py-4"><Aviso texto="Importe resultados de laboratório (seção acima) — o mapa de fertilidade é gerado a partir deles." /></div>;
 
   const processando = estado === 'processando';
@@ -794,7 +794,7 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
               )}
               {diagCasamento?.modo === 'nenhum' && diagCasamento.amostras > 0 && (
                 <p className="text-[10px] mt-0.5" style={{ color: '#f87171' }}>
-                  ⚠ As {diagCasamento.amostras} amostras não casaram com a grade ({diagCasamento.nPontos} pontos). Salve/associe a grade certa na aba Amostragem (mesma safra) e reimporte.
+                  ⚠ As {diagCasamento.amostras} amostras não casaram com a grade ({diagCasamento.nPontos} pontos). Salve/associe a grade certa na aba Amostragem (mesmo Ano) e reimporte.
                 </p>
               )}
             </div>

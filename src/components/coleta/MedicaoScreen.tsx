@@ -16,6 +16,7 @@ import {
   getMedicoes, salvarMedicao, excluirMedicao,
 } from '@/lib/coleta';
 import { getTalhoes, getSafras, getFazendas, getClientes, Talhao } from '@/lib/store';
+import { rotuloAno } from '@/lib/periodo';
 import { parseGeoFile } from '@/lib/geo';
 import { emailUsuario } from '@/lib/auth';
 import { fcDeMedicao, compartilharLinkCampo } from '@/lib/campoLink';
@@ -813,11 +814,11 @@ function SalvarDialog({ tipo, medidas, nSugerido, onFechar, onSalvar }: {
               </select>
             </div>
             <div>
-              <label className="text-[10px] font-semibold block mb-1" style={{ color: SUB }}>Ciclo</label>
+              <label className="text-[10px] font-semibold block mb-1" style={{ color: SUB }}>Ano</label>
               <select value={safra} onChange={e => setSafra(e.target.value)}
                 className="w-full rounded-lg px-2 py-2 text-xs outline-none" style={{ background: BORDA, color: TXT, border: '1px solid #2e5fa3' }}>
                 <option value="">—</option>
-                {safras.map(s => <option key={s.id} value={s.nome}>{s.nome}</option>)}
+                {safras.map(s => <option key={s.id} value={s.nome}>{rotuloAno(s.nome)}</option>)}
               </select>
             </div>
           </div>

@@ -10,7 +10,7 @@ import { MessagesSquare, Loader2, Send, AlertTriangle, ChevronDown, ChevronUp } 
 
 const SUGESTOES = [
   'Qual o principal limitante deste talhão?',
-  'O que mudou nas últimas safras?',
+  'O que mudou nos últimos anos?',
   'Onde devo investigar compactação?',
   'Esse talhão tem estabilidade produtiva?',
 ];

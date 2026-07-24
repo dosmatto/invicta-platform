@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { ChevronRight, Wifi, User, LogOut } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { getSafras } from '@/lib/store';
+import { rotuloAno } from '@/lib/periodo';
 import { EmpresaSwitcher } from './EmpresaSwitcher';
 import { logout, emailUsuario, authConfigurado } from '@/lib/auth';
 
@@ -39,7 +40,7 @@ export function TopBar() {
           { label: 'Cliente', value: context.produtor },
           { label: 'Fazenda', value: context.fazenda },
           { label: 'Talhão', value: context.talhao },
-          { label: 'Safra', value: safraAtiva || context.safra || '—' },
+          { label: 'Ano', value: rotuloAno(safraAtiva || context.safra) },
         ].map((item, i) => (
           <span key={item.label} className="flex items-center gap-1.5">
             {i > 0 && <ChevronRight size={12} className="opacity-40 flex-shrink-0" style={{ color: '#fff' }} />}

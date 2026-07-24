@@ -8,6 +8,7 @@ import type { Legenda } from './legendas';
 import { rampaVisualStops } from './legendas';
 import { capturarMapaFertilidade } from './capturaMapa';
 import { imagemParaPdf } from './pdfImagem';
+import { rotuloAno } from './periodo';
 
 type RGB = [number, number, number];
 type Stop = [number, RGB];
@@ -70,7 +71,7 @@ export async function gerarRelatorioComparacao(d: DadosComparacao): Promise<void
   doc.setFont('helvetica', 'bold'); doc.setFontSize(15);
   doc.text('Comparação: Produtividade × NDVI', M, 15);
   doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(70);
-  doc.text(`${d.cliente}  ·  ${d.fazenda}  ·  Talhão ${d.talhao}  ·  Safra ${d.safra}  ·  ${d.areaHa.toLocaleString('pt-BR')} ha`, M, 21);
+  doc.text(`${d.cliente}  ·  ${d.fazenda}  ·  Talhão ${d.talhao}  ·  Ano ${rotuloAno(d.safra)}  ·  ${d.areaHa.toLocaleString('pt-BR')} ha`, M, 21);
   doc.setTextColor(0);
 
   const colW = (W - 2 * M - gap) / 2;
