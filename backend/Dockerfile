@@ -25,5 +25,9 @@ EXPOSE 8800
 # grande pode demorar; não matar a requisição. --graceful-timeout 30 p/ a troca.
 # Worker uvicorn via o pacote oficial `uvicorn-worker` (o `uvicorn.workers`
 # embutido foi deprecado/removido nas versões novas — não depender dele).
-ENV WEB_CONCURRENCY=1
+# 2 workers: quando um usuário roda um lote pesado ("Processar tudo"), o outro
+# worker atende os demais — sem serializar todo mundo no mesmo processo. Memória
+# medida ~300 MB/worker sob carga (cabe nos 2 GB do Standard). Ajuste por env se
+# precisar. Reciclagem por worker (--max-requests) continua evitando o inchaço.
+ENV WEB_CONCURRENCY=2
 CMD ["sh", "-c", "gunicorn app:app -k uvicorn_worker.UvicornWorker -w ${WEB_CONCURRENCY} --max-requests 100 --max-requests-jitter 25 --timeout 600 --graceful-timeout 30 --bind 0.0.0.0:${PORT}"]

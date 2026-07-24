@@ -5,7 +5,7 @@
 // interpolado, recortado e colorido) + bounds para sobrepor no mapa.
 
 import { stopsParaBackend, gradienteCssDaLegenda, type Legenda } from './legendas';
-import { postBackend, BACKEND_LOCAL } from './interpUrl';
+import { postBackend, isLocal } from './interpUrl';
 
 export type Stop = [number, [number, number, number]];
 
@@ -154,7 +154,7 @@ async function postZonear(rota: string, body: unknown): Promise<Response> {
   if (r.status === 404) {
     // A rota não existe → o backend é mais antigo que o app (nuvem: deploy do
     // servidor ainda propagando; local: janela aberta com código velho).
-    throw new Error(BACKEND_LOCAL
+    throw new Error(isLocal()
       ? 'Backend local DESATUALIZADO: feche a janela do backend e reabra pelo atalho "INVICTA Backend" (ele atualiza as rotas de zonas). Se persistir, atualize o código do backend nesta máquina.'
       : 'O servidor de processamento ainda não tem esta função — ele deve estar sendo atualizado. Tente de novo em alguns minutos.');
   }

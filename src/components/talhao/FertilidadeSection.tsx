@@ -20,7 +20,7 @@ import { stopsParaBackend, dominioDaLegenda, paresDaClasse } from '@/lib/legenda
 import type { Legenda } from '@/lib/legendas';
 import { Play, Layers, Loader2, Eraser, AlertTriangle, Activity, Settings, BookOpen, Save, FileDown } from 'lucide-react';
 import { cloudSalvarMapa, cloudCarregarMapasPorPrefixo, cloudExcluirMapasPorPrefixo, cloudPodeGravar } from '@/lib/cloud';
-import { MSG_BACKEND_FORA, onBackendAquecendo, tocarBackend } from '@/lib/interpUrl';
+import { MSG_BACKEND_FORA, msgBackendFora, onBackendAquecendo, tocarBackend } from '@/lib/interpUrl';
 import { pode } from '@/lib/empresa';
 import { listar as bibListar, criar as bibCriar, type ConteudoPerfil, type ItemBiblioteca } from '@/lib/biblioteca';
 
@@ -500,7 +500,7 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
     if (cancelado) return;
     if (backendOff) {
       setEstado('erro');
-      setErro(MSG_BACKEND_FORA);
+      setErro(msgBackendFora());
     } else {
       setEstado(falhas.length === total ? 'erro' : 'pronto');
       setErro(falhas.length ? `Não processou: ${falhas.join(', ')}.` : '');

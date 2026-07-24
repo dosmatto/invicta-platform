@@ -6,31 +6,58 @@ import { APP_VERSION } from '@/constants/version';
 import { CHANGELOG } from '@/constants/changelog';
 import { EtiquetaLayoutPicker } from '../talhao/EtiquetaLayoutPicker';
 import { getConfigEtiqueta, saveConfigEtiqueta, getTalhoes, getFazendas, getClientes, saveFazenda, importarTalhoesLote, type Fazenda, type Cliente } from '@/lib/store';
-import { INTERP_URL, BACKEND_LOCAL, headersBackend } from '@/lib/interpUrl';
+import { INTERP_URL_LOCAL, usarLocal, setUsarLocal, backendVivo, headersBackend, INTERP_URL } from '@/lib/interpUrl';
 import { ehOwner } from '@/lib/empresa';
 import { exportarBackup, restaurarBackup } from '@/lib/backup';
 import { ChevronDown, ChevronRight, CheckCircle2, XCircle, Loader2, Download, AlertTriangle } from 'lucide-react';
 
-// Status do servidor de processamento (nuvem) — só informação, sem instalação.
-function ServidorNuvem() {
+// Servidor de processamento (interpolação): status + escolha nuvem × esta máquina.
+// O interpolador local (opt-in) é útil p/ lotes pesados ("Processar tudo") e p/ NÃO
+// disputar a CPU da nuvem com outros usuários. Requer ligar backend/start.command.
+function ServidorProcessamento() {
+  const [local, setLocal] = useState(false);
   const [status, setStatus] = useState<'checando' | 'ok' | 'off'>('checando');
   const [motor, setMotor] = useState('');
+  const [nonce, setNonce] = useState(0);
+
+  useEffect(() => { setLocal(usarLocal()); }, []);
   useEffect(() => {
+    let vivo = true;
+    setStatus('checando'); setMotor('');
+    const alvo = local ? INTERP_URL_LOCAL : INTERP_URL;
     const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 12_000);
-    fetch(`${INTERP_URL}/health`, { signal: ctrl.signal, cache: 'no-store', headers: headersBackend() })
+    const t = setTimeout(() => ctrl.abort(), local ? 4000 : 12000);
+    fetch(`${alvo}/health`, { signal: ctrl.signal, cache: 'no-store', headers: headersBackend() })
       .then(r => r.ok ? r.json() : Promise.reject())
-      .then(j => { setMotor(String(j?.v ?? '')); setStatus('ok'); })
-      .catch(() => setStatus('off'))
+      .then(j => { if (vivo) { setMotor(String(j?.v ?? '')); setStatus('ok'); } })
+      .catch(() => { if (vivo) setStatus('off'); })
       .finally(() => clearTimeout(t));
-    return () => { clearTimeout(t); ctrl.abort(); };
-  }, []);
+    return () => { vivo = false; clearTimeout(t); ctrl.abort(); };
+  }, [local, nonce]);
+
+  function alternar(v: boolean) { setUsarLocal(v); setLocal(v); }
+
   return (
-    <div className="px-4 py-2 flex items-center gap-2 text-xs" style={{ color: 'var(--sidebar-section)' }}>
-      <span className="flex-1">Processamento de mapas {BACKEND_LOCAL ? '(local — dev)' : '(nuvem)'}</span>
-      {status === 'checando' && <><Loader2 size={13} className="animate-spin" style={{ color: '#60a5fa' }} /><span style={{ color: '#60a5fa' }}>verificando…</span></>}
-      {status === 'ok' && <><CheckCircle2 size={13} style={{ color: '#4ade80' }} /><span style={{ color: '#4ade80' }}>Online{motor ? ` · ${motor}` : ''}</span></>}
-      {status === 'off' && <><XCircle size={13} style={{ color: '#f87171' }} /><span style={{ color: '#f87171' }}>Sem resposta (acordando? tente já já)</span></>}
+    <div className="px-4 py-2 space-y-1.5 text-xs" style={{ color: 'var(--sidebar-section)' }}>
+      <div className="flex items-center gap-2">
+        <span className="flex-1">Processamento de mapas {local ? '(esta máquina)' : '(nuvem)'}</span>
+        {status === 'checando' && <><Loader2 size={13} className="animate-spin" style={{ color: '#60a5fa' }} /><span style={{ color: '#60a5fa' }}>verificando…</span></>}
+        {status === 'ok' && <><CheckCircle2 size={13} style={{ color: '#4ade80' }} /><span style={{ color: '#4ade80' }}>Online{motor ? ` · ${motor}` : ''}</span></>}
+        {status === 'off' && <><XCircle size={13} style={{ color: '#f87171' }} /><button onClick={() => setNonce(n => n + 1)} className="underline" style={{ color: '#f87171' }}>sem resposta · testar</button></>}
+      </div>
+      <label className="flex items-center gap-2 cursor-pointer select-none">
+        <input type="checkbox" checked={local} onChange={e => alternar(e.target.checked)} />
+        <span>Usar interpolador <b>desta máquina</b> (rápido p/ lotes; não disputa a nuvem)</span>
+      </label>
+      {local && status === 'off' && (
+        <p className="text-[10px] leading-relaxed" style={{ color: '#fbbf24' }}>
+          Ligue o backend local: dê 2 cliques em <b>backend/start.command</b> (Mac) ou <b>backend\start.bat</b> (Windows),
+          espere a janela abrir e clique em “testar”. Melhor no Chrome. Para voltar à nuvem, desmarque acima.
+        </p>
+      )}
+      {local && status === 'ok' && (
+        <p className="text-[10px]" style={{ color: '#4ade80' }}>Interpolador local no ar — as interpolações rodam nesta máquina.</p>
+      )}
     </div>
   );
 }
@@ -288,7 +315,7 @@ export function ConfiguracoesPanel() {
     <div className="h-full overflow-y-auto">
       <PanelSection title="Plataforma">
         <PanelRow label="Versão do sistema" value={`v${APP_VERSION}`} />
-        <ServidorNuvem />
+        <ServidorProcessamento />
       </PanelSection>
 
       <PanelSection title="Etiquetas">
