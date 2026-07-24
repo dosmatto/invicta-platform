@@ -21,7 +21,15 @@ export function getSupabase(): SupabaseClient | null {
   if (!supabaseConfigurado || typeof window === 'undefined') return null;
   if (!client) {
     client = createClient(url!, anonKey!, {
-      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
+      auth: {
+        persistSession: true, autoRefreshToken: true, detectSessionInUrl: false,
+        // O supabase-js, por padrão, usa navigator.locks p/ serializar a auth
+        // ENTRE ABAS (Web Locks). Isso fazia a interpolação PARAR ao abrir uma 2ª
+        // aba: a nova aba segurava o lock no boot/refresh do token e a 1ª aba
+        // travava em getSession() ao salvar cada mapa. Lock pass-through (sem
+        // travar entre abas) — app de 1 usuário; cada aba cuida da própria sessão.
+        lock: <R,>(_name: string, _acquireTimeout: number, fn: () => Promise<R>) => fn(),
+      },
     });
   }
   return client;

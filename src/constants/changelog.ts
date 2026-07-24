@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.7.25': [
+    'INTERPOLAÇÃO NÃO PARA MAIS AO ABRIR OUTRA ABA: o app usava o lock de sessão do Supabase entre abas (navigator.locks). Abrir uma 2ª aba fazia a 1ª travar ao salvar cada mapa (a nova aba segurava o lock no boot/refresh). Agora cada aba cuida da própria sessão e a interpolação continua normalmente.',
+  ],
   '2.7.24': [
     'GRADE CAI NO ANO CERTO: a lista de grades de amostragem passa a filtrar por ANO (vindo da Data de referência da grade), não pela safra ativa na hora. Assim uma grade lançada com data de outro ano aparece ao selecionar aquele Ano no topo — antes ficava sempre no ano ativo (ex.: 2026). Grades antigas seguem no ano de sempre (compatível).',
   ],
