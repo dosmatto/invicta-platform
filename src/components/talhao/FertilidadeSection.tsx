@@ -137,7 +137,14 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
 
   const grade = useMemo<GradeAmostragem | null>(() => {
     if (!importacao || !nav.talhaoId) return null;
-    return getGrades(nav.talhaoId, safraNome).find(g => g.id === importacao.gradeId) ?? null;
+    const todas = getGrades(nav.talhaoId, safraNome);
+    const exata = todas.find(g => g.id === importacao.gradeId) ?? null;
+    if (exata && (exata.pontos?.length ?? 0) > 0) return exata;
+    // Fallback: a importação aponta p/ uma grade sem pontos (ou que não existe
+    // nesta safra) → usa a grade com MAIS pontos do talhão/safra. Sem isto a
+    // Fertilidade fica "0 pontos" mesmo com o laudo importado corretamente.
+    const comPontos = todas.filter(g => (g.pontos?.length ?? 0) > 0).sort((a, b) => (b.pontos?.length ?? 0) - (a.pontos?.length ?? 0));
+    return comPontos[0] ?? exata;
   }, [importacao, nav.talhaoId, safraNome]);
 
   const pontoPorNumero = useMemo(() => {
@@ -250,15 +257,21 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
 
   function pontosDe(nut: string, prof: string): Ponto[] {
     if (!importacao || !nut) return [];
-    const out: Ponto[] = [];
-    for (const r of importacao.resultados) {
-      if (r.profundidade !== prof) continue;
-      const v = r.valores[nut];
-      if (v == null || !isFinite(v)) continue;
-      const pt = pontoPorNumero.get(r.numero);
-      if (pt) out.push({ lng: pt.lng, lat: pt.lat, valor: v });
+    const amostras = importacao.resultados.filter(r => r.profundidade === prof && r.valores[nut] != null && isFinite(r.valores[nut]));
+    // 1) Casa pelo NÚMERO da amostra ↔ nº do ponto (numero ?? ordem+1).
+    const porNumero: Ponto[] = [];
+    for (const r of amostras) { const pt = pontoPorNumero.get(r.numero); if (pt) porNumero.push({ lng: pt.lng, lat: pt.lat, valor: r.valores[nut] }); }
+    if (porNumero.length >= 3) return porNumero;
+    // 2) FALLBACK por ORDEM: quando os números do laudo NÃO batem com os da grade
+    //    (lab renumerou as amostras), assume que o laudo veio na ordem dos pontos
+    //    e casa a i-ésima amostra (por nº) com o i-ésimo ponto (por nº/ordem).
+    //    Só quando a grade tem pontos suficientes — senão devolve o que casou.
+    const ptsGrade = [...(grade?.pontos ?? [])].sort((a, b) => (a.numero ?? a.ordem + 1) - (b.numero ?? b.ordem + 1));
+    if (amostras.length >= 3 && ptsGrade.length >= amostras.length) {
+      const ord = [...amostras].sort((a, b) => a.numero - b.numero);
+      return ord.map((r, i) => ({ lng: ptsGrade[i].lng, lat: ptsGrade[i].lat, valor: r.valores[nut] }));
     }
-    return out;
+    return porNumero;
   }
   function fcLabels(pts: Ponto[], nut: string): GeoJSON.FeatureCollection {
     return {
@@ -369,7 +382,19 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
 
   useEffect(() => () => { setFertilidadeOverlay(null); setFertilidadeLabels(null); }, [setFertilidadeOverlay, setFertilidadeLabels]);
 
-  const pontosInterp = useMemo(() => pontosDe(nutriente, profundidade), [nutriente, profundidade, importacao, pontoPorNumero]); // eslint-disable-line react-hooks/exhaustive-deps
+  const pontosInterp = useMemo(() => pontosDe(nutriente, profundidade), [nutriente, profundidade, importacao, pontoPorNumero, grade]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Diagnóstico do casamento amostra↔grade — explica na tela um "0 pontos".
+  const diagCasamento = useMemo(() => {
+    if (!importacao || !nutriente || ehZona) return null;
+    const amostras = importacao.resultados.filter(r => r.profundidade === profundidade && r.valores[nutriente] != null && isFinite(r.valores[nutriente]));
+    let porNum = 0;
+    for (const r of amostras) if (pontoPorNumero.get(r.numero)) porNum++;
+    const nPontos = grade?.pontos?.length ?? 0;
+    const modo: 'numero' | 'ordem' | 'nenhum' = porNum >= 3 ? 'numero' : (amostras.length >= 3 && nPontos >= amostras.length ? 'ordem' : 'nenhum');
+    return { amostras: amostras.length, nPontos, porNum, modo };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [importacao, nutriente, profundidade, pontoPorNumero, grade, ehZona]);
 
   // Modo zona (Z1): pinta cada zona com o valor da sua amostra e salva no MESMO
   // formato/chave da interpolação (metodo='zona') → a Recomendação lê transparente.
@@ -762,6 +787,16 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
                   : <><strong style={{ color: pontosInterp.length >= 3 ? '#86efac' : '#fbbf24' }}>{pontosInterp.length}</strong> pontos</>}
                 {legAtual ? ` · ${legAtual.atributo} (${legAtual.unidade})` : ''}
               </p>
+              {diagCasamento?.modo === 'ordem' && (
+                <p className="text-[10px] mt-0.5" style={{ color: '#fbbf24' }}>
+                  ⚠ Casando por ORDEM: os números do laudo ({diagCasamento.amostras} amostras) não batem com os da grade ({diagCasamento.nPontos} pontos). Confira a numeração na aba Amostragem.
+                </p>
+              )}
+              {diagCasamento?.modo === 'nenhum' && diagCasamento.amostras > 0 && (
+                <p className="text-[10px] mt-0.5" style={{ color: '#f87171' }}>
+                  ⚠ As {diagCasamento.amostras} amostras não casaram com a grade ({diagCasamento.nPontos} pontos). Salve/associe a grade certa na aba Amostragem (mesma safra) e reimporte.
+                </p>
+              )}
             </div>
           )}
 

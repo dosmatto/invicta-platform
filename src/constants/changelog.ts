@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.7.18': [
+    'FERTILIDADE — LAUDO IMPORTADO QUE FICAVA "0 PONTOS / SEM LEGENDA": corrigido o elo amostra→ponto da grade. (1) Se a importação apontava para uma grade sem pontos (ou de outra safra), a Fertilidade agora usa automaticamente a grade do talhão/safra com MAIS pontos. (2) Quando os NÚMEROS do laudo não batem com os da grade (lab renumerou as amostras), passa a casar por ORDEM (i-ésima amostra → i-ésimo ponto), com aviso na tela. (3) Novo diagnóstico na aba Fertilidade mostrando quantas amostras casaram com a grade — some o "0 pontos" sem explicação.',
+  ],
   '2.7.17': [
     'RELATÓRIO DE RECOMENDAÇÃO — RESUMO NO INÍCIO (TALHÃO): na aba Relatórios do talhão, a seção Recomendação agora começa por uma PÁGINA-RESUMO com a tabela das recomendações (Nº, fórmula/equação, produto, dose média, QUANTIDADE TOTAL em t e investimento) e só depois os mapas. Entram SOMENTE as doses marcadas com ★ (estrela) na aba Recomendações — marque as que serão utilizadas. Onde: Talhão → aba Relatórios → seção Recomendação.',
     'RELATÓRIO DE RECOMENDAÇÃO DA FAZENDA (NOVO): botão "Relatório de recomendação (fazenda)" na aba da fazenda (lista de Talhões). Gera 1 PDF com: 1ª página = resumo por talhão de tudo; depois, para CADA talhão em ordem alfanumérica, o resumo + os mapas das doses ★; e no fim o TOTAL GERAL por insumo (t e R$) somando toda a fazenda. Usa a safra ativa. Onde: Fazenda → aba Talhões → botão roxo "Relatório de recomendação (fazenda)".',
