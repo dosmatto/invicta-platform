@@ -9,6 +9,7 @@ import {
 } from '@/lib/store';
 import { lerArquivo, aplicarPerfil, autoConfig, PERFIS_BUILTIN, norm, numerosDaGrade, valorLab, calcularDerivados, DERIVADOS_IDS, ELEMENTOS_LAB, PerfilLabConfig, type ResultadoAmostra } from '@/lib/lab';
 import { unidadesDe, unidadeCanonica, precisaConverter } from '@/lib/unidades';
+import { hojeSaoPauloISO, periodoDeData, rotuloEpoca, anoDaSafra } from '@/lib/periodo';
 import { detectarOutliers, chaveAmostra, contarOutliers } from '@/lib/labOutliers';
 import { LabPreviewTable } from './LabPreviewTable';
 import { pode } from '@/lib/empresa';
@@ -36,6 +37,11 @@ export function LabImportSection() {
   const [erro, setErro] = useState('');
   const [resumo, setResumo] = useState('');
   const [importacoes, setImportacoes] = useState<ImportacaoLab[]>([]);
+  // Data de referência do lançamento (data OPERACIONAL da amostragem/laudo).
+  // Default = hoje em São Paulo; o usuário pode alterar antes de importar. O
+  // Ano/Época saem dela (não da data de criação). Recalculados no store ao salvar.
+  const [dataRef, setDataRef] = useState<string>(() => hojeSaoPauloISO());
+  const periodo = useMemo(() => periodoDeData(dataRef), [dataRef]);
   const [unidadeOverride, setUnidadeOverride] = useState<Record<string, string>>({});
   // Camada editável da prévia: correções por célula (texto cru) e amostras excluídas.
   // Só se aplicam ao confirmar; trocar de lab/arquivo zera tudo.
@@ -156,8 +162,10 @@ export function LabImportSection() {
       talhaoId: nav.talhaoId, safra: safraNome, gradeId: grade?.id ?? '',
       laboratorio: perfilNome, campanha: campanhaEscolhida,
       resultados: resultadosEditados, elementos: elementosImport,
+      dataReferencia: dataRef,   // Ano/Época são recalculados no store a partir daqui
     });
-    setResumo(`${resultadosEditados.length} amostras importadas · ${elementosImport.length} elementos${foraDaGrade > 0 ? ` · ${foraDaGrade} fora da grade` : ''}`);
+    const per = periodoDeData(dataRef);
+    setResumo(`${resultadosEditados.length} amostras · ${elementosImport.length} elementos${per ? ` · ${per.ano} · ${rotuloEpoca(per.epoca)}` : ''}${foraDaGrade > 0 ? ` · ${foraDaGrade} fora da grade` : ''}`);
     setAoa(null); setEstado('idle');
     recarregar();
   }
@@ -287,6 +295,19 @@ export function LabImportSection() {
             />
           )}
 
+          {/* Data de referência → Ano/Época (classifica o lançamento). Default hoje-SP. */}
+          <div className="p-2 rounded-lg" style={{ background: '#071c33', border: '1px solid #1a3a6b' }}>
+            <label className="text-[9px] font-semibold block mb-1" style={{ color: '#64748b' }}>Data de referência (define Ano e Época)</label>
+            <div className="flex items-center gap-2">
+              <input type="date" value={dataRef} onChange={e => setDataRef(e.target.value)}
+                className="rounded px-2 py-1 text-[11px] outline-none" style={inputStyle} />
+              <span className="text-[10px]" style={{ color: periodo ? '#86efac' : '#fbbf24' }}>
+                {periodo ? `Ano ${periodo.ano} · ${rotuloEpoca(periodo.epoca)}` : 'data inválida'}
+              </span>
+            </div>
+            <p className="text-[9px] mt-1" style={{ color: '#475569' }}>Use a data real da amostragem — pode ser retroativa (ex.: lançar hoje um laudo de 2024).</p>
+          </div>
+
           <div className="flex gap-2">
             {ehAuto && (
               <button onClick={salvarPerfil} className="flex-1 py-1.5 rounded text-[10px] font-semibold flex items-center justify-center gap-1" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
@@ -305,20 +326,24 @@ export function LabImportSection() {
       {/* Importações salvas */}
       {importacoes.length > 0 && (
         <div className="pt-1">
-          <p className="text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: '#475569' }}>Importações — Safra {safraNome}</p>
+          <p className="text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: '#475569' }}>Importações — Ano {anoDaSafra(safraNome) ?? safraNome}</p>
           <div className="space-y-1.5">
-            {importacoes.map(imp => (
+            {importacoes.map(imp => {
+              const per = imp.dataReferencia ? periodoDeData(imp.dataReferencia) : null;
+              return (
               <div key={imp.id} className="p-2 rounded-lg" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
                 <div className="flex items-center gap-2">
                   <FlaskConical size={12} style={{ color: '#a78bfa' }} />
                   <span className="text-xs font-bold flex-1" style={{ color: '#e2e8f0' }}>{imp.laboratorio}{imp.campanha ? ` · ${imp.campanha}` : ''}</span>
+                  {per && <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded" style={{ background: '#0b2a4a', color: '#93c5fd' }}>{per.ano} · {rotuloEpoca(per.epoca)}</span>}
                   <button onClick={() => { deleteImportacaoLab(imp.id); recarregar(); }} title="Excluir" className="p-1 rounded" style={{ color: '#f87171' }}><Trash2 size={11} /></button>
                 </div>
                 <p className="text-[9px] mt-0.5 pl-5" style={{ color: '#64748b' }}>
-                  {imp.resultados.length} amostras · {imp.elementos.map(siglaVariavel).join(', ')} · {new Date(imp.criadoEm).toLocaleDateString('pt-BR')}
+                  {imp.resultados.length} amostras · {imp.elementos.map(siglaVariavel).join(', ')}{imp.dataReferencia ? ` · ref. ${new Date(imp.dataReferencia + 'T12:00:00').toLocaleDateString('pt-BR')}` : ` · ${new Date(imp.criadoEm).toLocaleDateString('pt-BR')}`}
                 </p>
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

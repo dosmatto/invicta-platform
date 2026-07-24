@@ -1,5 +1,9 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.7.20': [
+    'ANO/ÉPOCA — FASE 1 (FERTILIDADE): começou a migração do conceito de "Safra" para "Ano + Época". Agora a importação de laudo (Talhão → Fertilidade → Importar laudo) tem um campo "DATA DE REFERÊNCIA" (a data real da amostragem), que já vem preenchido com HOJE (fuso America/Sao_Paulo) e pode ser alterado — inclusive retroativo (ex.: lançar hoje um laudo de 2024). Dela saem automaticamente o ANO (= ano da data) e a ÉPOCA (1ª = jan–jun, 2ª = jul–dez), calculados no servidor de dados (não dependem da tela). A lista de importações passa a mostrar "Ano · época". Datas de criação/atualização seguem guardadas para auditoria.',
+    'ANO/ÉPOCA — MIGRAÇÃO E COMPATIBILIDADE: laudos antigos ganham a data de referência automaticamente (o Ano vem da safra antiga — "26/27" → 2026, primeiro número; a época vem do mês do registro). Nada é apagado: a "safra" continua guardada como chave interna e a sincronização não muda. As próximas fases levam Ano/Época para as demais telas (amostragem, produtividade, condutividade), filtros e relatórios.',
+  ],
   '2.7.19': [
     'RECOMENDAÇÕES — Nº NA FRENTE DE CADA DOSE: na lista de recomendações (aba Recomendações, onde se marca a ★), cada dose agora mostra o Nº do cadastro da equação na frente (ex.: "05 · Calcário…") — o mesmo número que sai no relatório, para cruzar fácil.',
     'RELATÓRIO DO TALHÃO — VOLTOU A SER COMO ERA + OPÇÃO "SÓ AS MARCADAS ★": a seção Recomendação (aba Relatórios) voltou ao padrão antigo (todas as doses dos cenários selecionados). Ganhou um botão "Só as marcadas ★ (com resumo)" que, quando ligado, imprime apenas as doses com estrela e começa por uma página-resumo (fórmula + quantidade total). Combina com a Fertilidade normalmente (fertilidade + só as marcadas).',

@@ -26,6 +26,7 @@ import {
   type PresetEstiloRec,
 } from './biblioteca';
 import { ELEMENTOS_LAB, simboloElemento, norm as normLab, calcularDerivados, DERIVADOS_IDS } from './lab';
+import { anoDeData, epocaDeData, periodoDeData, anoDaSafra, hojeSaoPauloISO, partesData, dataValida, type Epoca } from './periodo';
 import { VARIAVEIS_COMPLEMENTARES } from '../constants/variaveisSeedComplementar';
 
 export interface Cliente {
@@ -1391,6 +1392,12 @@ export interface ImportacaoLab {
   resultados: ResultadoAmostra[];
   elementos: string[];
   criadoEm: string;
+  // Período (Ano/Época) — DERIVADOS da Data de referência (não da criação). O
+  // store é a autoridade: recalcula ano/epoca a partir de dataReferencia.
+  dataReferencia?: string;   // 'YYYY-MM-DD' — data operacional da amostragem/laudo
+  ano?: number;              // = ano(dataReferencia)
+  epoca?: Epoca;             // '1' (jan–jun) | '2' (jul–dez)
+  atualizadoEm?: string;     // auditoria (distinto de criadoEm)
 }
 
 // Wrappers de retrocompat (Fase 3): perfis de laboratório agora vivem dentro
@@ -1465,18 +1472,59 @@ function notificarLab() {
   if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('inv:lab'));
 }
 
+// Ano/Época SEMPRE recalculados da Data de referência (autoridade no store —
+// ignora ano/epoca que a UI porventura mande). Data ausente/ inválida → hoje-SP.
+function comPeriodo<T extends { dataReferencia?: string; ano?: number; epoca?: Epoca }>(reg: T): T {
+  const dataRef = reg.dataReferencia && dataValida(reg.dataReferencia) ? reg.dataReferencia : hojeSaoPauloISO();
+  return { ...reg, dataReferencia: dataRef, ano: anoDeData(dataRef) ?? undefined, epoca: epocaDeData(dataRef) ?? undefined };
+}
+
 export function saveImportacaoLab(i: Omit<ImportacaoLab, 'id' | 'criadoEm'>): ImportacaoLab {
   const lista = load<ImportacaoLab>('inv_lab');
-  const nova: ImportacaoLab = comEmpresa({ ...i, id: uid(), criadoEm: new Date().toISOString() });
+  const agora = new Date().toISOString();
+  const nova: ImportacaoLab = comEmpresa(comPeriodo({ ...i, id: uid(), criadoEm: agora, atualizadoEm: agora }));
   lista.push(nova);
   save('inv_lab', lista);
   notificarLab();
   return nova;
 }
 
+// Altera a Data de referência de um laudo já salvo e RECALCULA Ano/Época.
+export function atualizarDataReferenciaLab(id: string, dataReferencia: string): ImportacaoLab | null {
+  const lista = load<ImportacaoLab>('inv_lab');
+  const i = lista.find(x => x.id === id);
+  if (!i) return null;
+  Object.assign(i, comPeriodo({ ...i, dataReferencia }), { atualizadoEm: new Date().toISOString() });
+  save('inv_lab', lista);
+  notificarLab();
+  return i;
+}
+
 export function deleteImportacaoLab(id: string) {
   save('inv_lab', load<ImportacaoLab>('inv_lab').filter(i => i.id !== id));
   notificarLab();
+}
+
+// Migração idempotente: preenche dataReferencia/ano/epoca nos laudos antigos.
+// Fallback documentado (não há data de amostragem própria em ImportacaoLab): usa
+// a data de CRIAÇÃO (criadoEm) — mas força o ANO para o da SAFRA legada ("26/27"
+// → 2026, primeiro número) preservando o mês/dia, para não re-anoar registros e
+// manter Ano coerente com a Data de referência. A época sai do mês da criação.
+export function migrarImportacoesLabPeriodoV1(): void {
+  const lista = load<ImportacaoLab>('inv_lab');
+  let mudou = false;
+  for (const i of lista) {
+    if (i.dataReferencia && i.ano != null && i.epoca) continue;
+    const criado = (i.criadoEm || hojeSaoPauloISO()).slice(0, 10);
+    const anoSafra = anoDaSafra(i.safra);
+    const base = anoSafra != null && partesData(criado) ? `${anoSafra}${criado.slice(4)}` : criado;
+    i.dataReferencia = dataValida(base) ? base : hojeSaoPauloISO();
+    const p = periodoDeData(i.dataReferencia);
+    if (p) { i.ano = p.ano; i.epoca = p.epoca; }
+    if (!i.atualizadoEm) i.atualizadoEm = i.criadoEm;
+    mudou = true;
+  }
+  if (mudou) save('inv_lab', lista);
 }
 
 // ── MEAP: Ambientes Produtivos / Zonas de Manejo ────────────────────────────
