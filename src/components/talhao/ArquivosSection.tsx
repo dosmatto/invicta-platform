@@ -73,7 +73,7 @@ export function ArquivosSection({ safraNome }: { safraNome?: string }) {
     try {
       const full = await descomprimirCenario(c);
       const d = full.doses.find(x => x.equacaoId === eqId); if (!d) return;
-      const png = colorirDose(d.grid, d.estilo).dataUrl;
+      const png = colorirDose(d.grid, d.estilo, d.doseMinima).dataUrl;
       const comp = await capturarMapaFertilidade({ rasterPng: png, bounds: d.bounds, poligono, valores: VAZIO, satelite: true, corLimite: '#ffffff', larguraPx: 1600, alturaPx: 1120 });
       baixar(await pngParaJpeg(comp), `mapa-${c.nome}-${(d.produto || d.nomeEquacao)}.jpg`);
     } catch (e) { alert('Falha ao gerar a imagem: ' + (e instanceof Error ? e.message : String(e))); }

@@ -30,7 +30,7 @@ export function ComparadorCenarios({ cenarios, onClose }: { cenarios: Cenario[];
   const colunas = useMemo(() => cenarios.map(c => {
     const dose = c.doses.find(x => (x.produto || x.nomeEquacao) === produto) ?? null;
     let url = '';
-    if (dose && ref) { try { url = colorirDose(dose.grid, ref.estilo).dataUrl; } catch { /* ignora */ } }
+    if (dose && ref) { try { url = colorirDose(dose.grid, ref.estilo, dose.doseMinima).dataUrl; } catch { /* ignora */ } }
     return { cen: c, dose, url };
   }), [cenarios, produto, ref]);
 

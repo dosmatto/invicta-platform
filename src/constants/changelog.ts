@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.7.14': [
+    'RECOMENDAÇÃO — LEGENDA COM "0" SEPARADO E 1ª FAIXA NA DOSE MÍNIMA: no mapa/PDF de recomendação, o ZERO (o que de fato não recebe dose) vira uma faixa própria com quadrado TRANSPARENTE, e a 1ª faixa colorida SEMPRE começa na dose mínima da equação (Biblioteca de Equações). Ex.: legenda cadastrada 0–1.000 com mínimo 500 → aparece "0" (transparente) e "500 – 1.000"; legenda 0–100 com mínimo 50 → "50 – 100". Vale no mapa (pixels abaixo da mínima ficam transparentes) e no "Plano de aplicação". Doses parceladas mantêm só o zero transparente.',
+  ],
   '2.7.13': [
     'ORDEM PADRÃO DOS ELEMENTOS DE FERTILIDADE: adotada a ordem MO, pH, m%, V%, CTC, P, K, K%, Ca, Mg, Ca%, Mg%, CTCe, S, B, Zn, Cu, Mn, Fe, Al, Textura como PADRÃO do catálogo — a mesma em todas as telas (Perfil e relatório). É aplicada uma vez; se você reordenar com as setas do Perfil depois disso, valem as suas mudanças (não são sobrescritas).',
   ],

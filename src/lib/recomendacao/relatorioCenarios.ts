@@ -121,7 +121,7 @@ async function desenharPagina(doc: JsPDF, produto: string, cenarios: Cenario[], 
   const HEAD_H = 8, SUB_H = 4.2;   // título (cenário) + subtítulo (equação) de cada quadro
   const capturas = await Promise.all(doses.map(async d => {
     if (!d || !estilo) return null;
-    try { const png = colorirDose(d.grid, estilo).dataUrl;
+    try { const png = colorirDose(d.grid, estilo, d.doseMinima).dataUrl;
       return await capturarMapaFertilidade({ rasterPng: png, bounds: d.bounds, poligono: ctx.poligono, valores: VAZIO, satelite: true, corLimite: '#ffffff', larguraPx: 760, alturaPx: 520 });
     } catch { return null; }
   }));
@@ -219,25 +219,36 @@ function desenharTabela(doc: JsPDF, x: number, y: number, w: number, titulo: str
 }
 
 // ─── C2 — Recomendação Oficial (book em lote) ─────────────────────────────
-interface FaixaPlano { inf: number; sup: number; cor: string; area: number; pct: number; transparente: boolean; }
+interface FaixaPlano { inf: number; sup: number; cor: string; area: number; pct: number; transparente: boolean; zero?: boolean }
 function planoDeAplicacao(dose: DoseCalculada, areaHa: number): FaixaPlano[] {
+  const min = dose.doseMinima ?? 0;
   const classes = [...dose.estilo.classes].filter(c => Number.isFinite(c.limiteSuperior)).sort((a, b) => a.limiteSuperior - b.limiteSuperior);
   if (!classes.length) return [];
-  const lims = classes.map(c => c.limiteSuperior);
-  const cont = new Array(classes.length).fill(0);
-  let n = 0;
+  // Classes coloridas = as ACIMA da dose mínima da equação (as abaixo não ocorrem).
+  const coloridas = classes.filter(c => c.limiteSuperior > min);
+  const lims = coloridas.map(c => c.limiteSuperior);
+  const cont = new Array(coloridas.length).fill(0);
+  let nZero = 0, n = 0;
   try {
     const { valores } = decodeGrid(dose.grid);
-    for (let i = 0; i < valores.length; i++) { const v = valores[i]; if (!isFinite(v)) continue; n++; let k = lims.findIndex(L => v <= L); if (k < 0) k = classes.length - 1; cont[k]++; }
+    for (let i = 0; i < valores.length; i++) {
+      const v = valores[i]; if (!isFinite(v)) continue; n++;
+      if (v <= 0) { nZero++; continue; }                 // ZERO = não aplica (faixa própria)
+      let k = lims.findIndex(L => v <= L); if (k < 0) k = coloridas.length - 1;
+      if (k >= 0) cont[k]++;
+    }
   } catch { /* sem grid */ }
   const areaPx = n > 0 ? areaHa / n : 0;
-  // 1ª faixa sempre começa em 0 (ex.: "0 – 500"); faixa ≤ valor mínimo (com zero
-  // transparente) é a banda transparente (não aplica) — evita "500 – 500".
-  return classes.map((c, i) => ({
-    inf: i === 0 ? 0 : classes[i - 1].limiteSuperior, sup: c.limiteSuperior, cor: c.cor,
-    area: cont[i] * areaPx, pct: n > 0 ? cont[i] / n * 100 : 0,
-    transparente: dose.estilo.zeroTransparente && c.limiteSuperior <= dose.estilo.valorMinimo,
+  const faixas: FaixaPlano[] = [
+    // "0" — o que é DE FATO zero: quadrado transparente (não aplica).
+    { inf: 0, sup: 0, cor: '', area: nZero * areaPx, pct: n > 0 ? nZero / n * 100 : 0, transparente: true, zero: true },
+  ];
+  // 1ª faixa colorida SEMPRE começa na dose mínima da equação (ex.: 500 – 1.000).
+  coloridas.forEach((c, i) => faixas.push({
+    inf: i === 0 ? min : coloridas[i - 1].limiteSuperior, sup: c.limiteSuperior, cor: c.cor,
+    area: cont[i] * areaPx, pct: n > 0 ? cont[i] / n * 100 : 0, transparente: false,
   }));
+  return faixas;
 }
 
 function secaoH(doc: JsPDF, x: number, y: number, t: string): number {
@@ -254,7 +265,7 @@ function kv(doc: JsPDF, x: number, w: number, y: number, k: string, v: string, c
 async function desenharPaginaOficial(doc: JsPDF, dose: DoseCalculada, cenNome: string, ctx: Ctx, logo: HTMLImageElement | null, numero: number) {
   const W = 297, H = 210, M = 6;
   let mapImg: string | null = null;
-  try { mapImg = await capturarMapaFertilidade({ rasterPng: colorirDose(dose.grid, dose.estilo).dataUrl, bounds: dose.bounds, poligono: ctx.poligono, valores: VAZIO, satelite: true, corLimite: '#ffffff', larguraPx: 900, alturaPx: 805 }); } catch { /* segue */ }
+  try { mapImg = await capturarMapaFertilidade({ rasterPng: colorirDose(dose.grid, dose.estilo, dose.doseMinima).dataUrl, bounds: dose.bounds, poligono: ctx.poligono, valores: VAZIO, satelite: true, corLimite: '#ffffff', larguraPx: 900, alturaPx: 805 }); } catch { /* segue */ }
 
   doc.setFillColor(...NAVY); doc.rect(0, 0, W, 16, 'F');
   if (logo) { const h = 9.5, w = h * (logo.naturalWidth / logo.naturalHeight); doc.addImage(logo, 'PNG', M, 3.2, w, h); }
@@ -302,7 +313,7 @@ async function desenharPaginaOficial(doc: JsPDF, dose: DoseCalculada, cenNome: s
   for (const f of planoDeAplicacao(dose, ctx.areaHa)) {
     if (f.transparente) { doc.setDrawColor(...GRAY); doc.setLineWidth(0.3); doc.rect(SX, y - 2.6, 4, 3); doc.setLineWidth(0.2); }
     else { const [r, g, b] = hexToRgb(f.cor); doc.setFillColor(r, g, b); doc.rect(SX, y - 2.6, 4, 3, 'F'); }
-    doc.text(`${fmt(f.inf)} – ${fmt(f.sup)}`, SX + 6, y);
+    doc.text(f.zero ? '0' : `${fmt(f.inf)} – ${fmt(f.sup)}`, SX + 6, y);
     doc.text(fmt(f.area, 1), SX + SW - 16, y, { align: 'right' });
     doc.text(fmt(f.pct, 1) + '%', SX + SW, y, { align: 'right' });
     y += 4; doc.setDrawColor(...LINE); doc.line(SX, y - 2.8, SX + SW, y - 2.8);

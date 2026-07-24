@@ -105,7 +105,7 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
   useEffect(() => {
     if (!doseAtiva) { setFertilidadeOverlay(null); setFertilidadeLabels(null); return; }
     try {
-      const png = colorirDose(doseAtiva.grid, doseAtiva.estilo);
+      const png = colorirDose(doseAtiva.grid, doseAtiva.estilo, doseAtiva.doseMinima);
       setFertilidadeOverlay({ url: png.dataUrl, coordinates: coordsFromBounds(doseAtiva.bounds), opacity: 1 });
       setFertilidadeLabels(null);
     } catch (e) { console.warn('[recomendacao] colorir falhou', e); }

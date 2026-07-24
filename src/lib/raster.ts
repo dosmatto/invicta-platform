@@ -116,12 +116,14 @@ export function colorirGrid(
 export function colorirDose(
   grid: { b64: string; shape: [number, number] },
   estilo: EstiloRecomendacao,
+  doseMinima = 0,
 ): PngColorido {
   const { valores, rows, cols } = decodeGrid(grid);
   const classes = [...estilo.classes].filter(c => Number.isFinite(c.limiteSuperior)).sort((a, b) => a.limiteSuperior - b.limiteSuperior);
   const cores = classes.map(c => hexToRgb(c.cor));
   const lims = classes.map(c => c.limiteSuperior);
   const ult = cores.length - 1;
+  const limiar = Math.max(0, doseMinima);   // abaixo da dose mínima da equação = não aplica
 
   const { canvas, ctx } = novoCanvas(cols, rows);
   const img = ctx.createImageData(cols, rows);
@@ -130,7 +132,8 @@ export function colorirDose(
     const v = valores[i];
     const p4 = i * 4;
     if (!isFinite(v) || cores.length === 0) { buf[p4 + 3] = 0; continue; }
-    if (estilo.zeroTransparente && v <= estilo.valorMinimo) { buf[p4 + 3] = 0; continue; }
+    // ZERO / abaixo da dose mínima = TRANSPARENTE (a faixa colorida começa na mínima).
+    if (v <= 0 || v < limiar || (estilo.zeroTransparente && v <= estilo.valorMinimo)) { buf[p4 + 3] = 0; continue; }
     let k = lims.findIndex(L => v <= L);
     if (k < 0) k = ult;
     const [r, g, b] = cores[k];

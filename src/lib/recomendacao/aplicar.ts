@@ -153,6 +153,7 @@ export interface DoseCalculada {
   custoProdutoHa: number;         // R$/ha só do produto
   custoHa: number;                // R$/ha total (produto + frete + aplicação)
   custo: number;                  // investimento total = custoHa × área
+  doseMinima?: number;            // dose mínima viável da equação — a 1ª faixa colorida começa aqui; abaixo (e zero) = transparente
 }
 
 export function calcularDose(
@@ -173,6 +174,7 @@ export function calcularDose(
     equacaoId: eq.id, nomeEquacao: eq.nome, produto: c.produto, unidade: c.unidadeTratamento,
     estilo: c.estilo, grid: res.grid, bounds: res.bounds, stats: res.stats, toneladas,
     custoTonelada: c.custoTonelada, freteHa, aplicacaoHa, custoProdutoHa, custoHa, custo: custoHa * areaHa,
+    doseMinima: c.doseMinimaViavel ?? 0,
   };
 }
 
@@ -210,6 +212,7 @@ export function dividirDoseEmPassadas(dose: DoseCalculada, limiteMax: number, ar
       grid: { b64: float32ParaB64(arr), shape: dose.grid.shape },
       stats: { min: cnt ? mn : 0, media, max: cnt ? mx : 0, n: cnt },
       toneladas: tonHa * areaHa, custoProdutoHa, custoHa, custo: custoHa * areaHa, usar: true,
+      doseMinima: 0,   // cada passada é fração — não cortar pela mínima (só zero fica transparente)
     });
   }
   return passes;
