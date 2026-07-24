@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import { getTalhoes, getPadroesAmostragem, getPadroesElementos, getConfigEtiqueta, getSafras, getGrades, saveGrade, updateGrade, deleteGrade, marcarParaProcessar, ProfundidadeConfig, GradeAmostragem, PontoAmostragem } from '@/lib/store';
-import { rotuloAno } from '@/lib/periodo';
+import { rotuloAno, hojeSaoPauloISO, periodoDeData, rotuloEpoca } from '@/lib/periodo';
 import { classeZona, ORDEM_CLASSES } from '@/lib/zonas';
 import { pode } from '@/lib/empresa';
 import { gerarGrid, pontoInterno, ModoDistribuicao } from '@/lib/grid';
@@ -26,6 +26,8 @@ export function SimuladorZonas({ safraNome: safraProp }: { safraNome?: string } 
   const { nav, setZonasManejo, setPontosSimulados, zonaEvent, setZonaEvent } = useApp();
 
   const [modelo, setModelo] = useState<'A' | 'B'>('A');
+  const [dataRef, setDataRef] = useState<string>(() => hojeSaoPauloISO());
+  const periodoZonas = periodoDeData(dataRef);
   const [padraoId, setPadraoId] = useState('');
   const [profs, setProfs] = useState<ProfundidadeConfig[]>([]);
   const [densidade, setDensidade] = useState(2);     // ha por ponto (padrão geral) — ex: 1 ponto a cada 2 ha
@@ -196,7 +198,7 @@ export function SimuladorZonas({ safraNome: safraProp }: { safraNome?: string } 
     if (!padrao || !safraNome || pontos.length === 0 || !nav.talhaoId) return;
     const lista = getGrades(nav.talhaoId, safraNome, 'zonas');
     saveGrade({
-      talhaoId: nav.talhaoId, safra: safraNome, epoca: '1', nome: `Zonas ${lista.length + 1}`, metodo: 'zonas',
+      talhaoId: nav.talhaoId, safra: safraNome, epoca: '1', dataReferencia: dataRef, nome: `Zonas ${lista.length + 1}`, metodo: 'zonas',
       modelo, modoDist, densidadePorZona,
       padraoAmostragemId: padrao.id, padraoNome: padrao.nome,
       customizado: nZonasCustom > 0 || densidade !== padrao.densidadeHaPonto,
@@ -223,6 +225,14 @@ export function SimuladorZonas({ safraNome: safraProp }: { safraNome?: string } 
 
   return (
     <div className="p-3 space-y-3">
+      {/* Data de referência (define Ano e Época da grade de zonas) */}
+      <div className="flex items-center gap-2 flex-wrap text-[10px]" style={{ color: '#64748b' }}>
+        <span>Ano <strong style={{ color: '#86efac' }}>{rotuloAno(safraNome)}</strong></span>
+        <span>· Data de referência</span>
+        <input type="date" value={dataRef} onChange={e => setDataRef(e.target.value)}
+          className="rounded px-1.5 py-0.5 text-[10px] outline-none" style={{ background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' }} />
+        <span className="font-semibold" style={{ color: periodoZonas ? '#93c5fd' : '#fbbf24' }}>{periodoZonas ? rotuloEpoca(periodoZonas.epoca) : 'data inválida'}</span>
+      </div>
       {/* Resumo */}
       <div className="flex items-center gap-2 text-xs" style={{ color: '#94a3b8' }}>
         <Layers size={14} style={{ color: '#86efac' }} />

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import { getSafras, saveGrade, marcarParaProcessar, type PontoAmostragem } from '@/lib/store';
+import { hojeSaoPauloISO, periodoDeData, rotuloEpoca } from '@/lib/periodo';
 import { parseGeoFile } from '@/lib/geo';
 import { chavesDePropriedades, detectarCampoId, pontosDaFC, montarGradeImportada } from '@/lib/importarGrade';
 import { Upload, Save, AlertTriangle, CheckCircle2, MapPin } from 'lucide-react';
@@ -30,6 +31,8 @@ export function ImportarGradeSection() {
   const [fc, setFc] = useState<GeoJSON.FeatureCollection | null>(null);
   const [campoId, setCampoId] = useState('');
   const [nome, setNome] = useState('');
+  const [dataRef, setDataRef] = useState<string>(() => hojeSaoPauloISO());
+  const periodoGrade = periodoDeData(dataRef);
   const [estado, setEstado] = useState<'idle' | 'loading' | 'pronto' | 'erro'>('idle');
   const [erro, setErro] = useState('');
   const [ok, setOk] = useState('');
@@ -65,7 +68,7 @@ export function ImportarGradeSection() {
     if (!nav.talhaoId || !safraNome) { setErro('Defina um Ano ativo e abra o talhão.'); setEstado('erro'); return; }
     if (!prev || prev.total === 0) { setErro('Nada para salvar.'); setEstado('erro'); return; }
     if (prev.comNumero === 0) { setErro('Não identifiquei o número dos pontos — escolha o campo correto abaixo.'); setEstado('erro'); return; }
-    const grade = saveGrade(montarGradeImportada({ talhaoId: nav.talhaoId, safra: safraNome, nome: nome || 'Grade importada', pontos: prev.pontos }));
+    const grade = saveGrade({ ...montarGradeImportada({ talhaoId: nav.talhaoId, safra: safraNome, nome: nome || 'Grade importada', pontos: prev.pontos }), dataReferencia: dataRef });
     marcarParaProcessar(grade.id);
     setOk(`Grade salva: ${prev.total} pontos · números ${prev.min}–${prev.max}.`);
     setFc(null); setCampoId(''); setEstado('idle');
@@ -110,6 +113,11 @@ export function ImportarGradeSection() {
           <div>
             <label className="text-[9px] font-semibold block" style={{ color: '#64748b' }}>Nome da grade</label>
             <input value={nome} onChange={e => setNome(e.target.value)} className="w-full rounded px-2 py-1 text-[11px] outline-none" style={inputStyle} />
+            <label className="text-[9px] font-semibold block mt-1.5" style={{ color: '#64748b' }}>Data de referência (define Ano e Época)</label>
+            <div className="flex items-center gap-2">
+              <input type="date" value={dataRef} onChange={e => setDataRef(e.target.value)} className="rounded px-2 py-1 text-[11px] outline-none" style={inputStyle} />
+              <span className="text-[10px]" style={{ color: periodoGrade ? '#86efac' : '#fbbf24' }}>{periodoGrade ? `Ano ${periodoGrade.ano} · ${rotuloEpoca(periodoGrade.epoca)}` : 'data inválida'}</span>
+            </div>
           </div>
 
           <p className="text-[10px] flex items-center gap-1" style={{ color: '#cbd5e1' }}>

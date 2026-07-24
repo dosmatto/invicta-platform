@@ -500,7 +500,9 @@ export interface GradeAmostragem {
   id: string;
   talhaoId: string;
   safra: string;                      // nome da safra (ex "25/26")
-  epoca: '1' | '2';
+  epoca: '1' | '2';                   // DERIVADA da dataReferencia (jan–jun=1 / jul–dez=2)
+  dataReferencia?: string;            // 'YYYY-MM-DD' — data operacional da amostragem
+  ano?: number;                       // = ano(dataReferencia)
   nome: string;                       // "Grade 1"
   padraoAmostragemId: string;
   padraoNome: string;                 // snapshot
@@ -1045,16 +1047,38 @@ function assinaturaGrade(g: Pick<GradeAmostragem, 'talhaoId' | 'safra' | 'epoca'
 
 export function saveGrade(g: Omit<GradeAmostragem, 'id' | 'criadoEm'>): GradeAmostragem {
   const lista = load<GradeAmostragem>('inv_grades');
+  // Ano/Época DERIVADOS da Data de referência (default hoje-SP) — store é a
+  // autoridade (ignora epoca que a UI porventura mande).
+  const dataRef = g.dataReferencia && dataValida(g.dataReferencia) ? g.dataReferencia : hojeSaoPauloISO();
+  const per = periodoDeData(dataRef);
+  const gp: Omit<GradeAmostragem, 'id' | 'criadoEm'> = { ...g, dataReferencia: dataRef, ano: per?.ano, epoca: per?.epoca ?? g.epoca };
   // Trava de idempotência: salvar de novo uma grade EXATAMENTE igual (mesmo
   // talhão/safra/época/método/pontos) devolve a existente em vez de duplicar
   // (protege contra duplo clique/re-execução — caso real: 5x "JCASA 01").
-  const k = assinaturaGrade(g);
+  const k = assinaturaGrade(gp);
   const igual = lista.find(x => assinaturaGrade(x) === k);
   if (igual) return igual;
-  const nova: GradeAmostragem = comEmpresa({ ...g, id: uid(), criadoEm: new Date().toISOString() });
+  const nova: GradeAmostragem = comEmpresa({ ...gp, id: uid(), criadoEm: new Date().toISOString() });
   lista.push(nova);
   save('inv_grades', lista);
   return nova;
+}
+
+// Migração idempotente: preenche dataReferencia/ano nas grades antigas. Preserva
+// a ÉPOCA já escolhida (1ª/2ª) sintetizando uma data coerente no ano da safra
+// (1ª→15/03, 2ª→15/09); sem safra parseável, usa a data de criação.
+export function migrarGradesPeriodoV1(): void {
+  const lista = load<GradeAmostragem>('inv_grades');
+  let mudou = false;
+  for (const g of lista) {
+    if (g.dataReferencia && g.ano != null) continue;
+    const anoSafra = anoDaSafra(g.safra);
+    const base = anoSafra != null ? `${anoSafra}-${g.epoca === '2' ? '09' : '03'}-15` : (g.criadoEm || hojeSaoPauloISO()).slice(0, 10);
+    g.dataReferencia = dataValida(base) ? base : hojeSaoPauloISO();
+    g.ano = anoDeData(g.dataReferencia) ?? undefined;
+    mudou = true;
+  }
+  if (mudou) save('inv_grades', lista);
 }
 
 // Remove grades DUPLICADAS exatas (mesma assinatura), mantendo por grupo: todas

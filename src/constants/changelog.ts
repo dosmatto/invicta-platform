@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.7.23': [
+    'AMOSTRAGEM — DATA DE REFERÊNCIA NAS GRADES: gerar grade (Amostragem), grade por Zonas e IMPORTAR grade (KML/SHP) agora têm o campo "DATA DE REFERÊNCIA" (default hoje, editável, retroativo). A ÉPOCA (1ª jan–jun / 2ª jul–dez) deixa de ser escolhida à mão e passa a sair da data; o ANO também. Grades antigas foram migradas mantendo a época que já tinham. Assim a amostragem fica classificada por Ano + Época igual à fertilidade.',
+  ],
   '2.7.22': [
     'FERTILIDADE — LAUDO HISTÓRICO CAI NO ANO CERTO: a lista de importações de laudo passa a filtrar por ANO (o Ano vem da Data de referência), não pela safra exata. Assim um laudo lançado hoje com data de 2024 aparece ao selecionar o Ano 2024 (crie o Ano 2024 no seletor do topo para vê-lo). Laudos antigos seguem no mesmo Ano de sempre (compatível).',
   ],

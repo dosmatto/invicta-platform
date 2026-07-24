@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useApp } from '@/context/AppContext';
 import { getPadroesAmostragem, getPadroesElementos, getSafras, getGrades, saveGrade, updateGrade, deleteGrade, marcarParaProcessar, getConfigEtiqueta, PadraoElementos, ProfundidadeConfig, GradeAmostragem, PontoAmostragem } from '@/lib/store';
-import { rotuloAno } from '@/lib/periodo';
+import { rotuloAno, hojeSaoPauloISO, periodoDeData, rotuloEpoca } from '@/lib/periodo';
 import { gerarGrid, anguloMaiorDimensao, criarValidador, ModoDistribuicao } from '@/lib/grid';
 import { exportarKML, exportarSHP } from '@/lib/exportGrade';
 import { gerarEtiquetasPDF, itensDeGrade, LAYOUTS_ETIQUETA } from '@/lib/etiquetas';
@@ -59,7 +59,11 @@ export function SimuladorAmostragem({ safraNome: safraProp }: { safraNome?: stri
   const safraAtiva = useMemo(() => getSafras().find(s => s.ativa) ?? null, []);
 
   const [padraoId, setPadraoId] = useState('');
-  const [epoca, setEpoca] = useState<'1' | '2'>('1');
+  // Data de referência da amostragem (default hoje-SP, editável); a Época (1ª/2ª)
+  // é DERIVADA dela — o usuário não escolhe mais à mão.
+  const [dataRef, setDataRef] = useState<string>(() => hojeSaoPauloISO());
+  const periodoAmostra = useMemo(() => periodoDeData(dataRef), [dataRef]);
+  const epoca: '1' | '2' = periodoAmostra?.epoca ?? '1';
   const [densidade, setDensidade] = useState(2);
   const [profs, setProfs] = useState<ProfundidadeConfig[]>([]);
   const [rotacaoAuto, setRotacaoAuto] = useState(true);
@@ -220,7 +224,7 @@ export function SimuladorAmostragem({ safraNome: safraProp }: { safraNome?: stri
     const n = getGrades(nav.talhaoId, safraNome, 'grid').length + 1;
     const primeira = getGrades(nav.talhaoId, safraNome, 'grid').length === 0;
     const salva = saveGrade({
-      talhaoId: nav.talhaoId, safra: safraNome, epoca, nome: `Grade ${n}`, metodo: 'grid',
+      talhaoId: nav.talhaoId, safra: safraNome, epoca, dataReferencia: dataRef, nome: `Grade ${n}`, metodo: 'grid',
       padraoAmostragemId: padrao.id, padraoNome: padrao.nome, customizado,
       densidade, distanciaBorda, rotacao: rotacaoEfetiva, aleatoriedade, modoSel,
       profundidades: profs, pontos: pontosEfetivos,
@@ -293,22 +297,19 @@ export function SimuladorAmostragem({ safraNome: safraProp }: { safraNome?: stri
 
   return (
     <div className="p-3 space-y-3">
-      {/* Safra + Época */}
-      <div className="flex items-center gap-2 text-[10px]" style={{ color: '#64748b' }}>
+      {/* Ano + Data de referência (deriva a Época) */}
+      <div className="flex items-center gap-2 flex-wrap text-[10px]" style={{ color: '#64748b' }}>
         <span>Ano <strong style={{ color: '#86efac' }}>{rotuloAno(safraNome)}</strong></span>
         <span>·</span>
-        <div className="flex gap-1">
-          {(['1', '2'] as const).map(e => (
-            <button key={e} onClick={() => setEpoca(e)}
-              className="px-2 py-0.5 rounded font-semibold"
-              style={{ background: epoca === e ? 'var(--invicta-blue-mid)' : '#1a3a6b', color: epoca === e ? '#fff' : '#64748b' }}>
-              {e}ª época
-            </button>
-          ))}
-        </div>
+        <span>Data de referência</span>
+        <input type="date" value={dataRef} onChange={e => setDataRef(e.target.value)}
+          className="rounded px-1.5 py-0.5 text-[10px] outline-none" style={{ background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' }} />
+        <span className="font-semibold" style={{ color: periodoAmostra ? '#93c5fd' : '#fbbf24' }}>
+          {periodoAmostra ? rotuloEpoca(periodoAmostra.epoca) : 'data inválida'}
+        </span>
       </div>
       <p className="text-[9px]" style={{ color: '#475569' }}>
-        {epoca === '1' ? '1ª época: coletas até junho' : '2ª época: julho a dezembro'}
+        A época sai da data: 1ª = janeiro a junho · 2ª = julho a dezembro. Use a data real da coleta (pode ser retroativa).
       </p>
 
       {/* Padrão de amostragem */}
