@@ -12,8 +12,14 @@ tenha distancias em metros.
 from __future__ import annotations
 
 import base64
+import hashlib
 import io
+import json
+import logging
 import math
+import os
+import time
+from collections import OrderedDict
 from typing import Any
 
 import numpy as np
@@ -23,6 +29,8 @@ from scipy.spatial import cKDTree
 from scipy.cluster.vq import kmeans2
 from scipy import ndimage
 from PIL import Image
+
+log = logging.getLogger("interp")
 
 try:
     from pykrige.ok import OrdinaryKriging
@@ -53,7 +61,112 @@ AMPLITUDE_MIN = 0.30
 NUGGET_MAX = 0.10
 # Versao do motor de interpolacao (conferir em GET /health para saber se o
 # backend foi reiniciado com o codigo novo).
-VERSION = "interp-20-contorno-oficial"
+VERSION = "interp-21-instrumentado"
+
+
+# ============================================================ instrumentacao
+# Objetivo: NUNCA mais diagnosticar lentidao "no escuro". Cada interpolacao
+# mede o tempo por etapa e loga uma linha estruturada; as metricas tambem vao
+# no `stats.timings` da resposta (o front pode exibir/telemetrar). Ha um
+# auto-diagnostico de CPU (roda um trabalho FIXO dentro do container) para
+# separar "CPU do servidor" de "codigo/entrada" sem depender do painel do host.
+
+class _Etapas:
+    """Acumulador de tempos por etapa (ms). Uso: t=_Etapas(); t.marca('krige')."""
+    __slots__ = ("_t0", "_ini", "tempos")
+    def __init__(self) -> None:
+        self._t0 = time.perf_counter()
+        self._ini = self._t0
+        self.tempos: "OrderedDict[str, float]" = OrderedDict()
+    def marca(self, nome: str) -> None:
+        agora = time.perf_counter()
+        self.tempos[nome] = round((agora - self._ini) * 1000.0, 1)
+        self._ini = agora
+    def total_ms(self) -> float:
+        return round((time.perf_counter() - self._t0) * 1000.0, 1)
+
+
+def _versoes() -> dict[str, str]:
+    """Versoes das libs geograficas (para flagrar regressao por atualizacao)."""
+    v: dict[str, str] = {}
+    try:
+        import numpy as _np; v["numpy"] = _np.__version__
+    except Exception: pass
+    try:
+        import scipy as _sp; v["scipy"] = _sp.__version__
+    except Exception: pass
+    try:
+        import pykrige as _pk; v["pykrige"] = getattr(_pk, "__version__", "?")
+    except Exception: pass
+    try:
+        import shapely as _sh; v["shapely"] = _sh.__version__
+    except Exception: pass
+    return v
+
+
+def _mem_rss_mb() -> float | None:
+    """RSS do processo (MB) sem depender de psutil (le /proc no Linux do Render)."""
+    try:
+        with open("/proc/self/statm") as f:
+            pages = int(f.read().split()[1])
+        return round(pages * (os.sysconf("SC_PAGE_SIZE") / (1024 * 1024)), 1)
+    except Exception:
+        return None
+
+
+def autodiagnostico() -> dict[str, Any]:
+    """Roda um trabalho de krigagem FIXO e conhecido dentro do container e mede
+    quanto a CPU DESTE servidor leva. Referencia (Mac, libs latest): ~0,5 s.
+    Se aqui der dezenas de segundos, a CPU do host e o gargalo (nao o codigo).
+    Endpoint /diag. NAO e chamado no /health (seria carga a cada ping)."""
+    n = 30
+    rng = np.random.default_rng(1)
+    xm = rng.random(n) * 1000.0
+    ym = rng.random(n) * 1000.0
+    z = 40 + 30 * np.sin(xm / 1000 * math.pi) + 20 * np.cos(ym / 1000 * math.pi) + rng.random(n) * 5
+    gx = np.linspace(float(xm.min()), float(xm.max()), 230)
+    gy = np.linspace(float(ym.min()), float(ym.max()), 224)
+    out: dict[str, Any] = {
+        "cpu_count": os.cpu_count(),
+        "cpu_affinity": len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else None,
+        "rss_mb": _mem_rss_mb(),
+        "versoes": _versoes(),
+    }
+    if not _HAS_PYKRIGE:
+        out["erro"] = "pykrige indisponivel"
+        return out
+    # 1 krigagem (o atomo do LOO)
+    t = time.perf_counter()
+    ok = OrdinaryKriging(xm[:-1], ym[:-1], z[:-1], variogram_model="spherical",
+                         nlags=_nlags(n - 1), weight=True, pseudo_inv=True,
+                         enable_plotting=False, verbose=False)
+    ok.execute("points", np.array([xm[-1]]), np.array([ym[-1]]))
+    out["ms_1_krigagem"] = round((time.perf_counter() - t) * 1000.0, 1)
+    # auto completo (3 modelos LOO + grid) — o custo real de 1 mapa de fertilidade
+    t = time.perf_counter()
+    _krige(xm, ym, z, gx, gy, None)
+    out["ms_auto_30pts"] = round((time.perf_counter() - t) * 1000.0, 1)
+    out["ref_mac_ms"] = 480  # baseline medido no Mac (libs latest)
+    out["veredito"] = ("CPU do servidor e o gargalo" if out["ms_auto_30pts"] > 5000
+                       else "CPU ok")
+    return out
+
+
+# Cache de resultado por hash(entrada+versao): reprocesso identico = instantaneo,
+# sem recalcular. LRU pequeno (o payload traz PNG+grid, ~1 MB cada) p/ nao pesar
+# na RAM do container. Chave cobre TUDO que altera a saida.
+_CACHE_MAX = 16
+_cache: "OrderedDict[str, dict]" = OrderedDict()
+_cache_stats = {"hit": 0, "miss": 0}
+
+def _chave_cache(points, polygon_geojson, dominio, stops, pixel_m, metodo,
+                 modelo_fixo, variograma_manual) -> str:
+    payload = json.dumps({
+        "p": points, "poly": polygon_geojson, "d": dominio, "s": stops,
+        "px": pixel_m, "m": metodo, "mf": modelo_fixo, "vm": variograma_manual,
+        "v": VERSION,
+    }, sort_keys=True, separators=(",", ":"), default=float)
+    return hashlib.sha1(payload.encode()).hexdigest()
 
 
 def _nlags(n: int) -> int:
@@ -133,7 +246,11 @@ def _loo_rmse(xm, ym, z, model, cv_max: int = 120, seed: int = 0) -> float:
 
 def _krige(xm, ym, z, gxm, gym, modelo_fixo=None):
     if modelo_fixo:
-        melhor, melhor_rmse = modelo_fixo, _loo_rmse(xm, ym, z, modelo_fixo)
+        # Modelo FIXO: o usuario ja escolheu o variograma -> nao ha o que
+        # SELECIONAR, logo o LOO (N krigagens) so serviria p/ reportar um RMSE
+        # diagnostico. Pular economiza N krigagens sem alterar o MAPA (mesmo
+        # modelo, mesmos pontos). RMSE fica None (nao ha selecao para validar).
+        melhor, melhor_rmse = modelo_fixo, math.inf
     else:
         melhor, melhor_rmse = None, math.inf
         for modelo in KRIGE_MODELS:
@@ -205,9 +322,9 @@ def _krige_constrangido(xm, ym, z, gxm, gym, modelo, spacing):
     return _krige_fixo(xm, ym, z, gxm, gym, modelo, var, max(3.0 * spacing, 1.0), 0.10 * var)
 
 
-def _amplitude_no_poligono(grid: np.ndarray, gx, gy, poly) -> float:
+def _amplitude_no_poligono(grid: np.ndarray, gx, gy, poly, mask=None) -> float:
     """Amplitude (max-min) do raster considerando apenas o interior do talhao."""
-    gc = _clip(grid, gx, gy, poly)
+    gc = _clip(grid, gx, gy, poly, mask)
     fin = gc[np.isfinite(gc)]
     return float(fin.max() - fin.min()) if fin.size else 0.0
 
@@ -231,10 +348,18 @@ def _idw(xm, ym, z, gxm, gym, power=2.0, k=12):
 
 
 # ---------------------------------------------------------------- recorte
-def _clip(grid: np.ndarray, gx, gy, poly) -> np.ndarray:
+def _inside_mask(gx, gy, poly) -> np.ndarray:
+    """Mascara booleana (ny, nx) das celulas DENTRO do poligono. Depende so de
+    (gx, gy, poly) — nao do grid — logo pode ser calculada UMA vez e reusada em
+    todos os recortes do mesmo mapa (o point-in-polygon em ~51k celulas era
+    refeito ate 3x: recorte final + 2 checagens de amplitude)."""
     XX, YY = np.meshgrid(gx, gy)
     pts = shapely.points(XX.ravel(), YY.ravel())
-    dentro = shapely.contains(poly, pts).reshape(XX.shape)
+    return shapely.contains(poly, pts).reshape(XX.shape)
+
+
+def _clip(grid: np.ndarray, gx, gy, poly, mask=None) -> np.ndarray:
+    dentro = _inside_mask(gx, gy, poly) if mask is None else mask
     return np.where(dentro, grid, np.nan)
 
 
@@ -269,7 +394,8 @@ def _png_data_url(rgba: np.ndarray) -> str:
 # ---------------------------------------------------------------- grid bruto
 def gerar_grid(points: list[dict], polygon_geojson: dict, pixel_m: float = 20.0,
                metodo: str = "krige", modelo_fixo: str | None = None,
-               variograma_manual: dict | None = None) -> dict[str, Any]:
+               variograma_manual: dict | None = None,
+               etapas: "_Etapas | None" = None) -> dict[str, Any]:
     """Interpola UM atributo e devolve o grid bruto recortado + eixos geograficos.
     Reusado por interpolar() (que colore) e por zonar() (que classifica e vetoriza).
     O grid devolvido NAO esta invertido (grid[j, i] <-> gx[i], gy[j], gy ascendente).
@@ -292,6 +418,11 @@ def gerar_grid(points: list[dict], polygon_geojson: dict, pixel_m: float = 20.0,
     xm, ym = _to_local(x, y, lon0, lat0)
     gxm, _gy0 = _to_local(gx, np.full_like(gx, lat0), lon0, lat0)
     _gx0, gym = _to_local(np.full_like(gy, lon0), gy, lon0, lat0)
+
+    # Mascara de recorte calculada UMA vez e reusada (recorte final + checagens
+    # de amplitude da anti-degeneracao) — antes o point-in-polygon rodava ate 3x.
+    mask = _inside_mask(gx, gy, poly)
+    if etapas: etapas.marca("preparo_grade")
 
     # Metodo escolhido pelo usuario (sem troca automatica). IDW so quando pedido.
     variograma = None
@@ -334,14 +465,14 @@ def gerar_grid(points: list[dict], polygon_geojson: dict, pixel_m: float = 20.0,
                 espacamento = _espacamento_mediano(xm, ym)
                 estrutura = (psill / patamar) if patamar > 0 else 0.0
                 amp_dados = float(np.max(z) - np.min(z)) or 1.0
-                amp_krige = _amplitude_no_poligono(grid, gx, gy, poly)
+                amp_krige = _amplitude_no_poligono(grid, gx, gy, poly, mask)
                 degenerada = (estrutura < ESTRUTURA_MIN) or (alcance < espacamento) or (amp_krige < AMPLITUDE_MIN * amp_dados)
                 if degenerada and not modelo_fixo:
                     # Auto-ajuste degenerou (krige -> media -> mapa uniforme). Refaz a
                     # KRIGAGEM com um variograma plausivel (honra os pontos e varia),
                     # em vez de cair para IDW (que o usuario nao quer em fertilidade).
                     grid2, params2 = _krige_constrangido(xm, ym, z, gxm, gym, modelo, espacamento)
-                    amp2 = _amplitude_no_poligono(grid2, gx, gy, poly)
+                    amp2 = _amplitude_no_poligono(grid2, gx, gy, poly, mask)
                     if amp2 >= AMPLITUDE_MIN * amp_dados:
                         grid, params, rmse = grid2, params2, None
                         variograma = {
@@ -375,7 +506,9 @@ def gerar_grid(points: list[dict], polygon_geojson: dict, pixel_m: float = 20.0,
                 f"Krigagem nao convergiu com {len(z)} pontos (colineares/insuficientes?). [{e}]"
             )
 
-    grid = _clip(grid, gx, gy, poly)
+    if etapas: etapas.marca("interpolacao")
+    grid = _clip(grid, gx, gy, poly, mask)
+    if etapas: etapas.marca("recorte")
     return {
         "grid": grid, "gx": gx, "gy": gy, "bounds": [minx, miny, maxx, maxy],
         "modelo": modelo, "rmse": rmse, "variograma": variograma,
@@ -388,17 +521,43 @@ def interpolar(points: list[dict], polygon_geojson: dict, dominio, stops,
                pixel_m: float = 20.0, metodo: str = "krige",
                modelo_fixo: str | None = None,
                variograma_manual: dict | None = None) -> dict[str, Any]:
-    g = gerar_grid(points, polygon_geojson, pixel_m, metodo, modelo_fixo, variograma_manual)
+    chave = _chave_cache(points, polygon_geojson, dominio, stops, pixel_m,
+                         metodo, modelo_fixo, variograma_manual)
+    job = chave[:8]
+    # Cache: reprocesso IDENTICO (mesmos dados+params+versao) e instantaneo.
+    cached = _cache.get(chave)
+    if cached is not None:
+        _cache.move_to_end(chave)
+        _cache_stats["hit"] += 1
+        r = dict(cached)
+        r["stats"] = {**cached["stats"], "cache": True, "job": job}
+        log.info("interp job=%s CACHE HIT n=%s modelo=%s", job, r["stats"].get("n"), r["stats"].get("modelo"))
+        return r
+    _cache_stats["miss"] += 1
+
+    etapas = _Etapas()
+    g = gerar_grid(points, polygon_geojson, pixel_m, metodo, modelo_fixo,
+                   variograma_manual, etapas=etapas)
     grid, gx, gy = g["grid"], g["gx"], g["gy"]
 
     rgba = _colorize(grid, dominio, stops)
     rgba = rgba[::-1, :, :]  # norte no topo da imagem
+    etapas.marca("colorir")
 
     finitos = grid[np.isfinite(grid)]
     gxm, _ = _to_local(gx, np.full_like(gx, g["lat0"]), g["lon0"], g["lat0"])
     _, gym = _to_local(np.full_like(gy, g["lon0"]), gy, g["lon0"], g["lat0"])
     pix_x = abs(float(gxm[1] - gxm[0])) if len(gxm) > 1 else float(pixel_m)
     pix_y = abs(float(gym[1] - gym[0])) if len(gym) > 1 else float(pixel_m)
+    # Grid bruto (Float32, norte no topo p/ casar com a imagem) p/ futuras
+    # derivacoes (mapa de aplicacao, exportar GeoTIFF, etc.). NaN preservado.
+    grid_oriented = grid[::-1, :].astype("float32")
+    grid_b64 = base64.b64encode(grid_oriented.tobytes()).decode()
+    grid_meta = {"b64": grid_b64, "shape": [int(grid_oriented.shape[0]), int(grid_oriented.shape[1])]}
+    png = _png_data_url(rgba)
+    etapas.marca("png_encode")
+
+    total = etapas.total_ms()
     stats = {
         "n": g["n"],
         "modelo": g["modelo"],
@@ -406,16 +565,27 @@ def interpolar(points: list[dict], polygon_geojson: dict, dominio, stops,
         "max": float(np.max(finitos)) if finitos.size else None,
         "nx": int(len(gx)),
         "ny": int(len(gy)),
+        "celulas": int(len(gx) * len(gy)),
         "pixel_m": round((pix_x + pix_y) / 2.0, 1),
         "rmse": round(g["rmse"], 3) if g["rmse"] is not None else None,
         "variograma": g["variograma"],
+        # Instrumentacao permanente (ver tb. GET /diag para a CPU do host):
+        "job": job,
+        "cache": False,
+        "total_ms": total,
+        "timings": dict(etapas.tempos),
+        "rss_mb": _mem_rss_mb(),
     }
-    # Grid bruto (Float32, norte no topo p/ casar com a imagem) p/ futuras
-    # derivacoes (mapa de aplicacao, exportar GeoTIFF, etc.). NaN preservado.
-    grid_oriented = grid[::-1, :].astype("float32")
-    grid_b64 = base64.b64encode(grid_oriented.tobytes()).decode()
-    grid_meta = {"b64": grid_b64, "shape": [int(grid_oriented.shape[0]), int(grid_oriented.shape[1])]}
-    return {"bounds": g["bounds"], "png": _png_data_url(rgba), "stats": stats, "grid": grid_meta}
+    log.info("interp job=%s n=%s modelo=%s celulas=%s total=%sms timings=%s rss=%sMB",
+             job, stats["n"], stats["modelo"], stats["celulas"], total,
+             json.dumps(stats["timings"], separators=(",", ":")), stats["rss_mb"])
+
+    resp = {"bounds": g["bounds"], "png": png, "stats": stats, "grid": grid_meta}
+    _cache[chave] = resp
+    _cache.move_to_end(chave)
+    while len(_cache) > _CACHE_MAX:
+        _cache.popitem(last=False)
+    return resp
 
 
 def grid_para_geotiff(grid_b64: str, shape: list[int], bounds: list[float]) -> bytes:

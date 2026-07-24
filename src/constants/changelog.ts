@@ -1,5 +1,10 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.7.31': [
+    'INTERPOLAÇÃO — DIAGNÓSTICO DEFINITIVO E INSTRUMENTAÇÃO PERMANENTE: medimos o fluxo (não presumimos). O código do backend está idêntico à v2.6.0; a lentidão é a CPU do servidor de interpolação — o MESMO cálculo leva ~0,5s no PC de teste e ~67s no servidor (30 pontos), ~140× mais lento. Não é biblioteca (as libs mais novas são rápidas no teste) nem o front. Agora cada interpolação mede o tempo POR ETAPA (preparo/krigagem/recorte/cor/PNG), com job id, nº de células, RAM e cache, tudo no log e no "stats" da resposta. Nova rota GET /diag roda um teste de CPU FIXO dentro do próprio servidor e diz na hora se a CPU dele é o gargalo (referência ~0,5s).',
+    'INTERPOLAÇÃO MAIS RÁPIDA SEM MUDAR O MAPA: (1) cache por conteúdo — reprocessar o MESMO mapa (mesmos dados/parâmetros) volta instantâneo; (2) recorte pelo talhão calculado 1 vez em vez de até 3; (3) no modelo de variograma FIXO, pulamos a validação cruzada redundante (só servia para um número diagnóstico) — o mapa é idêntico e fica bem mais rápido. A seleção AUTOMÁTICA de modelo continua igual (nada de perder precisão).',
+    'INTERFACE NÃO TRAVA MAIS: a interpolação em voo é cancelada ao iniciar outra, trocar de importação/talhão ou sair da tela — sem esperar um cálculo já abandonado.',
+  ],
   '2.7.30': [
     'FERTILIDADE DIZIA "SALVE UMA GRADE" MESMO COM A GRADE SALVA: a importação de laudo (Fertilidade) e a importação de grade externa usavam o "Ano ATIVO global", não o Ano escolhido no seletor do topo do talhão. Quando os dois divergiam (ex.: grade no Ano 2025, mas ativo global em outro ano), a grade "sumia" nessas telas. Agora ambas usam o mesmo Ano do topo, como as outras abas — a grade aparece.',
   ],

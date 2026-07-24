@@ -63,21 +63,32 @@ async function esperarBackend(budgetMs = 150_000): Promise<boolean> {
 // (falha de rede ou 502/503/504 do proxy), espera acordar e repete a MESMA
 // chamada uma vez — as rotas são de cálculo puro, repetir é seguro. No modo
 // local não há o que acordar: falha direto com a instrução do start.bat.
-export async function postBackend(rota: string, body: unknown): Promise<Response> {
+export async function postBackend(rota: string, body: unknown, opts?: { signal?: AbortSignal }): Promise<Response> {
+  const signal = opts?.signal;
   const tentar = () => fetch(`${INTERP_URL}${rota}`, {
     method: 'POST',
     headers: headersBackend({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(body),
+    signal,
   });
   let r: Response | null = null;
-  try { r = await tentar(); } catch { /* conexão recusada/abortada */ }
+  try { r = await tentar(); }
+  catch (e) {
+    // Cancelamento explícito (usuário trocou de mapa/saiu): propaga o AbortError
+    // SEM tentar acordar o backend (não é o servidor fora, é escolha do usuário).
+    if (signal?.aborted) throw e;
+    /* conexão recusada — cai no fluxo de "acordar servidor" abaixo */
+  }
   if (!r || r.status === 502 || r.status === 503 || r.status === 504) {
+    if (signal?.aborted) throw new DOMException('Interpolação cancelada', 'AbortError');
     if (BACKEND_LOCAL) throw new Error(MSG_BACKEND_FORA);
     emitirAquecendo(true);   // sinaliza p/ a UI: servidor da nuvem acordando
     try {
       if (!(await esperarBackend())) throw new Error(MSG_BACKEND_FORA);
+      if (signal?.aborted) throw new DOMException('Interpolação cancelada', 'AbortError');
       r = await tentar();
     } catch (e) {
+      if (signal?.aborted) throw e;
       throw e instanceof Error ? e : new Error(MSG_BACKEND_FORA);
     } finally {
       emitirAquecendo(false);

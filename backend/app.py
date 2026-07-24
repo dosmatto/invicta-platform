@@ -131,7 +131,20 @@ def health():
         "mde_v": getattr(mde, "VERSION", "?"),
         "ia_v": getattr(ia, "VERSION", "?"),
         "ia_configurada": ia.configurada(),
+        # Instrumentacao leve (sem rodar benchmark — /health e chamado a cada tela):
+        "cpu_count": os.cpu_count(),
+        "libs": interp._versoes(),
+        "cache": dict(interp._cache_stats),
     }
+
+
+@app.get("/diag")
+def diag():
+    """Auto-diagnostico de CPU: roda um trabalho de krigagem FIXO dentro do
+    container e reporta quanto ESTE servidor leva (ref. Mac ~480ms). Serve para
+    provar/refutar 'a CPU do host e o gargalo' sem acesso ao painel. Rota manual
+    (nao roda no /health) — nao ha efeito colateral e nao persiste nada."""
+    return interp.autodiagnostico()
 
 
 @app.post("/interpolar")

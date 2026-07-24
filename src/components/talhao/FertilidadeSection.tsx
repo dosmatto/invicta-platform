@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import {
   getSafras, getGrades, getImportacoesLab, getTalhoes, getFazendas, getPlantio,
@@ -99,6 +99,13 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
   // cache de mapas: chave = legenda+nutriente+profundidade
   const [cache, setCache] = useState<Record<string, MapaPronto>>({});
   const [gerandoPdf, setGerandoPdf] = useState(false);
+
+  // Cancelamento: aborta a interpolação em voo ao iniciar outra, ao trocar de
+  // contexto ou ao sair da tela — a UI não fica presa esperando um cálculo que
+  // o usuário já abandonou (o backend na nuvem é lento sob carga).
+  const abortRef = useRef<AbortController | null>(null);
+  useEffect(() => () => { abortRef.current?.abort(); }, []);
+  const ehAbort = (e: unknown) => e instanceof DOMException && e.name === 'AbortError';
 
   // Seed automático do repositório Fundação ABC + carrega legendas do store.
   // Reage a mudanças no editor de Legendas via evento custom.
@@ -321,6 +328,7 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
   // "sumia" da aba enquanto o relatório a encontrava. A chave do cache é
   // sempre `nut__prof` (os 2 últimos campos do id, p/ ids novos e legados).
   useEffect(() => {
+    abortRef.current?.abort();   // troca de contexto: cancela interpolação em voo (resultado obsoleto)
     setCache({}); setEstado('idle'); setErro('');
     if (!nav.talhaoId || !importacaoId) return;
     const prefixo = `${nav.talhaoId}__${importacaoId}__`;
@@ -423,7 +431,7 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
     // o backend devolve grid + bounds + stats + png; só usamos grid/bounds/stats.
     // O domínio e os stops vão só pra colorir o PNG do backend (ignorado aqui).
     const { dominio, stops } = rampaDaLegenda(leg);
-    const resp = await interpolar({ pontos: pts, poligono: poligono!, dominio, stops, metodo, pixelM, modeloFixo: modeloFixo || null });
+    const resp = await interpolar({ pontos: pts, poligono: poligono!, dominio, stops, metodo, pixelM, modeloFixo: modeloFixo || null, signal: abortRef.current?.signal });
     const labels = fcLabels(pts, nut);
     const interpoladoEm = new Date().toISOString();
     // Sessão guarda o PNG do backend como fallback (~10-30 KB). Quem economiza é a nuvem.
@@ -452,18 +460,26 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
   async function processar() {
     if (!poligono) { setErro('Limite do talhão não encontrado — abra o talhão no mapa.'); setEstado('erro'); return; }
     if (!nutriente) { setErro('Selecione uma variável.'); setEstado('erro'); return; }
+    abortRef.current?.abort();               // cancela um processamento anterior em voo
+    abortRef.current = new AbortController();
     setEstado('processando'); setErro('');
     try { await processarUm(nutriente, profundidade); setEstado('pronto'); }
-    catch (e) { setEstado('erro'); setErro(e instanceof Error ? e.message : 'Falha ao processar.'); }
+    catch (e) {
+      if (ehAbort(e)) return;                 // cancelado pelo usuário: não é erro
+      setEstado('erro'); setErro(e instanceof Error ? e.message : 'Falha ao processar.');
+    }
   }
 
   async function processarTodos() {
     if (!poligono) { setErro('Limite do talhão não encontrado — abra o talhão no mapa.'); setEstado('erro'); return; }
     if (nutrientes.length === 0) return;
+    abortRef.current?.abort();               // cancela um processamento anterior em voo
+    abortRef.current = new AbortController();
     setEstado('processando'); setErro('');
     const total = nutrientes.length * profsAll.length;
     const falhas: string[] = [];
     let backendOff = false;
+    let cancelado = false;
     let i = 0;
     for (const prof of profsAll) {
       for (const nut of nutrientes) {
@@ -472,14 +488,16 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
         setProgresso({ atual: i, total, nome: `${sim} ${prof}` });
         try { await processarUm(nut, prof); }
         catch (e) {
+          if (ehAbort(e)) { cancelado = true; break; }   // usuário abandonou: para tudo, sem erro
           const msg = e instanceof Error ? e.message : '';
           if (msg === MSG_BACKEND_FORA) { backendOff = true; break; }
           falhas.push(`${sim} ${prof}`);
         }
       }
-      if (backendOff) break;
+      if (backendOff || cancelado) break;
     }
     setProgresso(null);
+    if (cancelado) return;
     if (backendOff) {
       setEstado('erro');
       setErro(MSG_BACKEND_FORA);

@@ -124,6 +124,7 @@ export async function interpolar(params: {
   metodo?: 'krige' | 'idw';
   modeloFixo?: string | null;
   variogramaManual?: VariogramaManual | null;
+  signal?: AbortSignal;   // cancela a chamada (troca de mapa / saída da tela)
 }): Promise<RespInterp> {
   const r = await postBackend('/interpolar', {
     pontos: params.pontos,
@@ -134,7 +135,7 @@ export async function interpolar(params: {
     metodo: params.metodo ?? 'krige',
     modelo_fixo: params.modeloFixo ?? null,
     variograma_manual: params.variogramaManual ?? null,
-  });
+  }, { signal: params.signal });
   if (!r.ok) {
     let msg = `Backend respondeu ${r.status}`;
     try { const j = await r.json(); if (j?.detail) msg = String(j.detail); } catch {}
