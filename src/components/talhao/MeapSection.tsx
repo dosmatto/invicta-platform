@@ -30,6 +30,7 @@ import { simboloElemento } from '@/lib/lab';
 import type { AmbienteProdutivo, Homogeneidade, MetricasZonaMeap } from '@/lib/meap/tipos';
 import { Layers, AlertTriangle, Wand2, Loader2, X, Check, ChevronUp, ChevronDown, Save, Star, Trash2, Eye, BarChart3, Sparkles, Combine, CheckSquare, Square, Pencil, Undo2, Redo2, FlaskConical, Spline } from 'lucide-react';
 import { LaboratorioZonas } from './LaboratorioZonas';
+import { ExportarZonas } from './ExportarZonas';
 
 const EditorGeometria = dynamic(
   () => import('@/components/geo/EditorGeometria').then(m => ({ default: m.EditorGeometria })),
@@ -155,7 +156,7 @@ function corDaCamadaPreview(c: { nut: string; b64: string; shape: [number, numbe
   return null;
 }
 
-export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) {
+export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?: string }) {
   const { setZonasManejo, setFertilidadeOverlay, setFertilidadeLabels, setZonasFundo, zonasOpacidade, setZonasOpacidade } = useApp();
   const [amb, setAmb] = useState<AmbienteProdutivo | null>(null);
 
@@ -1075,9 +1076,12 @@ export function MeapSection({ talhao }: { talhao: Talhao; safraNome?: string }) 
           <div className="flex items-center gap-2">
             <Star size={12} style={{ color: '#fbbf24' }} />
             <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color: '#cbd5e1' }}>Zoneamentos salvos ({zoneamentos.length})</span>
-            <button onClick={() => setLabAberto(true)} title="Comparar os cenários de zona (métricas + concordância)" className="ml-auto flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded" style={{ background: '#1e3a5f', color: '#93c5fd' }}>
-              <FlaskConical size={11} /> Laboratório
-            </button>
+            <div className="ml-auto flex items-center gap-2">
+              <ExportarZonas talhao={talhao} zoneamentos={zoneamentos} safraNome={safraNome} />
+              <button onClick={() => setLabAberto(true)} title="Comparar os cenários de zona (métricas + concordância)" className="flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded" style={{ background: '#1e3a5f', color: '#93c5fd' }}>
+                <FlaskConical size={11} /> Laboratório
+              </button>
+            </div>
           </div>
           {zoneamentos.map(z => (
             <div key={z.id} onClick={() => setVendoId(vendoId === z.id ? null : z.id)} title="Clique para ver no mapa"

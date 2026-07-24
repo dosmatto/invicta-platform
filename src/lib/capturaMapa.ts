@@ -127,6 +127,107 @@ export async function capturarMapaFertilidade(c: CapturaMapa): Promise<string> {
   return cv.toDataURL('image/png');
 }
 
+// ── Captura para o relatório de ZONAS DE MANEJO ─────────────────────────────
+// Diferente da fertilidade (raster PNG): aqui desenha VETORES — polígonos das
+// zonas preenchidos com a cor de cada zona, as linhas internas (divisas) e o
+// limite externo do talhão. Mesma projeção/satélite da captura de fertilidade.
+export interface CapturaZonas {
+  bounds: [number, number, number, number];
+  externo: GeoJSON.Polygon | GeoJSON.MultiPolygon | null;
+  zonas: Array<{ geometry: GeoJSON.Polygon | GeoJSON.MultiPolygon; cor: string; rotulo?: string }>;
+  linhas: Array<{ geometry: GeoJSON.LineString | GeoJSON.MultiLineString }>;
+  satelite: boolean;
+  larguraPx: number;
+  alturaPx: number;
+  preencherAlpha?: number;   // 0..1 (default 0.6)
+}
+
+function hexRgba(hex: string, a: number): string {
+  const m = /^#?([0-9a-fA-F]{6})$/.exec(hex || '');
+  if (!m) return `rgba(148,163,184,${a})`;
+  const r = parseInt(m[1].slice(0, 2), 16), g = parseInt(m[1].slice(2, 4), 16), b = parseInt(m[1].slice(4, 6), 16);
+  return `rgba(${r},${g},${b},${a})`;
+}
+
+export async function capturarMapaZonas(c: CapturaZonas): Promise<string> {
+  const W = c.larguraPx, H = c.alturaPx;
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const ctx = cv.getContext('2d')!;
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, H);
+
+  const [w, s, e, n] = c.bounds;
+  const latC = (s + n) / 2;
+  const aspect = ((e - w) * Math.cos((latC * Math.PI) / 180)) / (n - s || 1);
+  const pad = 0.06;
+  const availW = W * (1 - 2 * pad), availH = H * (1 - 2 * pad);
+  let drawW: number, drawH: number;
+  if (availW / availH > aspect) { drawH = availH; drawW = availH * aspect; }
+  else { drawW = availW; drawH = availW / aspect; }
+  const ox = (W - drawW) / 2, oy = (H - drawH) / 2;
+  const px = (lng: number) => ox + ((lng - w) / (e - w || 1)) * drawW;
+  const py = (lat: number) => oy + ((n - lat) / (n - s || 1)) * drawH;
+
+  if (c.satelite) {
+    try { await desenharSatelite(ctx, c.bounds, ox, oy, drawW, drawH, W, H); } catch { /* segue sem satélite */ }
+  }
+
+  const aneisDe = (g: GeoJSON.Polygon | GeoJSON.MultiPolygon): GeoJSON.Position[][] =>
+    g.type === 'Polygon' ? g.coordinates : g.coordinates.flat();
+  const tracar = (aneis: GeoJSON.Position[][]) => {
+    ctx.beginPath();
+    for (const anel of aneis) {
+      anel.forEach((pt, i) => { const x = px(pt[0]), y = py(pt[1]); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+      ctx.closePath();
+    }
+  };
+
+  // 1) Zonas preenchidas com a cor de cada uma
+  const alpha = c.preencherAlpha ?? 0.6;
+  ctx.lineJoin = 'round';
+  for (const z of c.zonas) {
+    tracar(aneisDe(z.geometry));
+    ctx.fillStyle = hexRgba(z.cor, alpha); ctx.fill('evenodd');
+    ctx.lineWidth = Math.max(1, W / 700); ctx.strokeStyle = 'rgba(30,30,30,0.65)'; ctx.stroke();
+  }
+
+  // 2) Linhas internas (divisas) — realçadas
+  ctx.lineWidth = Math.max(1.6, W / 450); ctx.strokeStyle = '#111827'; ctx.lineCap = 'round';
+  for (const l of c.linhas) {
+    const partes = l.geometry.type === 'LineString' ? [l.geometry.coordinates] : l.geometry.coordinates;
+    for (const linha of partes) {
+      ctx.beginPath();
+      linha.forEach((pt, i) => { const x = px(pt[0]), y = py(pt[1]); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+      ctx.stroke();
+    }
+  }
+
+  // 3) Limite externo (branco, por cima)
+  if (c.externo) {
+    ctx.lineWidth = Math.max(2, W / 380); ctx.strokeStyle = '#ffffff';
+    for (const anel of aneisDe(c.externo)) {
+      ctx.beginPath();
+      anel.forEach((pt, i) => { const x = px(pt[0]), y = py(pt[1]); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+      ctx.closePath(); ctx.stroke();
+    }
+  }
+
+  // 4) Rótulo (nº da zona) no centroide aproximado
+  ctx.font = `bold ${Math.round(W / 45)}px sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.lineWidth = Math.max(2, W / 300);
+  for (const z of c.zonas) {
+    if (!z.rotulo) continue;
+    const aneis = aneisDe(z.geometry);
+    let sx = 0, sy = 0, np = 0;
+    for (const pt of aneis[0] ?? []) { sx += px(pt[0]); sy += py(pt[1]); np++; }
+    if (!np) continue;
+    const x = sx / np, y = sy / np;
+    ctx.strokeStyle = '#1f2937'; ctx.fillStyle = '#ffffff';
+    ctx.strokeText(z.rotulo, x, y); ctx.fillText(z.rotulo, x, y);
+  }
+
+  return cv.toDataURL('image/png');
+}
+
 // Baixa e desenha os tiles de satélite que cobrem TODO o canvas (frame).
 async function desenharSatelite(
   ctx: CanvasRenderingContext2D, bounds: [number, number, number, number],

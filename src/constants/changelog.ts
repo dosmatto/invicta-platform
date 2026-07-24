@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.7.34': [
+    'ZONAS DE MANEJO — EXPORTAR (SHP / KML / PDF): na aba Zonas de Manejo do talhão, a seção "Zoneamentos salvos" ganhou o botão EXPORTAR. Escolha um mapa pronto e baixe: (1) SHAPEFILE — um .zip com DUAS camadas, zona_manejo_poligonos (1 registro por zona, com id_zona/nome_zona/produtor/fazenda/talhao/area_ha/classe/data) e zona_manejo_linhas_internas (as divisas entre zonas); .prj WGS84 e .cpg. (2) KML — pastas "Zonas" e "Linhas internas", cores da plataforma, áreas e classes, em WGS 84. (3) RELATÓRIO PDF — no padrão dos demais relatórios (cabeçalho, mapa com zonas/divisas/legenda, norte, escala, tabela de zonas com área e %, resumo). Os 3 formatos saem da MESMA fonte (áreas idênticas). As LINHAS INTERNAS são derivadas automaticamente das divisas compartilhadas entre zonas vizinhas (não eram armazenadas). Usa os dados vetoriais originais (não imagem). Onde fica: Talhão → aba "Zonas de Manejo" → "Zoneamentos salvos" → botão "Exportar".',
+  ],
   '2.7.33': [
     'INTERPOLAÇÃO (diagnóstico): a rota /health do backend agora informa qual servidor está rodando (gunicorn reciclado ou uvicorn) e o nº de workers — para confirmar que o fix de degradação está no ar. Sem efeito visível no app.',
   ],
