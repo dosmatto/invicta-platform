@@ -15,7 +15,13 @@ import { extrairPoligono, decodeGrid } from '../fertilidade';
 import { getTalhoes, getFazendas, getClientes, getPlantio } from '../store';
 import { listar as bibListar, type ConteudoEquacao } from '../biblioteca';
 import type { Cenario } from './cenarios';
+import { listarCenarios, descomprimirCenario } from './cenarios';
 import type { DoseCalculada } from './aplicar';
+
+// Ordena talhões pelo nome de forma ALFANUMÉRICA (DNHDV 01 < 02 < 10) — ordem
+// padrão de TODOS os relatórios que listam vários talhões.
+export const ordenarTalhoesAlfa = <T extends { nome?: string }>(arr: T[]): T[] =>
+  [...arr].sort((a, b) => (a.nome ?? '').localeCompare(b.nome ?? '', 'pt-BR', { numeric: true }));
 
 type RGB = [number, number, number];
 const NAVY: RGB = [13, 33, 64];
@@ -84,7 +90,7 @@ export function abrirOuBaixar(blob: Blob, aba: Window | null, nome: string) {
   setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 
-interface Ctx { fazenda: string; talhao: string; safra: string; cultura: string; produtor: string; areaHa: number; poligono: GeoJSON.Polygon | GeoJSON.MultiPolygon; }
+interface Ctx { fazenda: string; talhao: string; safra: string; cultura: string; produtor: string; areaHa: number; poligono: GeoJSON.Polygon | GeoJSON.MultiPolygon | null; }
 const VAZIO: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
 
 async function desenharPagina(doc: JsPDF, produto: string, cenarios: Cenario[], recIdx: number, ctx: Ctx, logo: HTMLImageElement | null) {
@@ -120,7 +126,7 @@ async function desenharPagina(doc: JsPDF, produto: string, cenarios: Cenario[], 
   const frameW = (W - 2 * M - (n - 1) * gap) / n;
   const HEAD_H = 8, SUB_H = 4.2;   // título (cenário) + subtítulo (equação) de cada quadro
   const capturas = await Promise.all(doses.map(async d => {
-    if (!d || !estilo) return null;
+    if (!d || !estilo || !ctx.poligono) return null;
     try { const png = colorirDose(d.grid, estilo, d.doseMinima).dataUrl;
       return await capturarMapaFertilidade({ rasterPng: png, bounds: d.bounds, poligono: ctx.poligono, valores: VAZIO, satelite: true, corLimite: '#ffffff', larguraPx: 760, alturaPx: 520 });
     } catch { return null; }
@@ -265,7 +271,9 @@ function kv(doc: JsPDF, x: number, w: number, y: number, k: string, v: string, c
 async function desenharPaginaOficial(doc: JsPDF, dose: DoseCalculada, cenNome: string, ctx: Ctx, logo: HTMLImageElement | null, numero: number) {
   const W = 297, H = 210, M = 6;
   let mapImg: string | null = null;
-  try { mapImg = await capturarMapaFertilidade({ rasterPng: colorirDose(dose.grid, dose.estilo, dose.doseMinima).dataUrl, bounds: dose.bounds, poligono: ctx.poligono, valores: VAZIO, satelite: true, corLimite: '#ffffff', larguraPx: 900, alturaPx: 805 }); } catch { /* segue */ }
+  if (ctx.poligono) {
+    try { mapImg = await capturarMapaFertilidade({ rasterPng: colorirDose(dose.grid, dose.estilo, dose.doseMinima).dataUrl, bounds: dose.bounds, poligono: ctx.poligono, valores: VAZIO, satelite: true, corLimite: '#ffffff', larguraPx: 900, alturaPx: 805 }); } catch { /* segue */ }
+  }
 
   doc.setFillColor(...NAVY); doc.rect(0, 0, W, 16, 'F');
   if (logo) { const h = 9.5, w = h * (logo.naturalWidth / logo.naturalHeight); doc.addImage(logo, 'PNG', M, 3.2, w, h); }
@@ -333,52 +341,145 @@ async function desenharPaginaOficial(doc: JsPDF, dose: DoseCalculada, cenNome: s
   doc.setFontSize(7); doc.setTextColor(127, 163, 207); doc.setFont('helvetica', 'normal'); doc.text('Recomendação oficial — taxa variável', W - M, H - 3.5, { align: 'right' });
 }
 
-// Book: 1 página oficial por dose (produto) de cada cenário/recomendação. 1 PDF.
-// Renderiza a seção de Recomendações (1 página por dose) num doc jsPDF JÁ
-// EXISTENTE (A4 paisagem). Reutilizado pelo book só-de-recomendações
-// (montarBookOficial) e pelo relatório COMBINADO (relatorioCombinado.ts).
-// `novaPaginaAntes` = o doc já tem conteúdo antes desta seção.
+// ─── Helpers compartilhados (resumo + book + fazenda) ────────────────────────
+const dataHoje = () => new Date().toLocaleDateString('pt-BR');
+
+function ctxDoTalhao(tId: string, safra: string): Ctx | null {
+  const tal = getTalhoes().find(t => t.id === tId) ?? null;
+  if (!tal) return null;
+  const faz = getFazendas().find(f => f.id === tal.fazendaId) ?? null;
+  const cli = faz ? getClientes().find(c => c.id === faz.clienteId) ?? null : null;
+  const poligono = tal.geojson ? (() => { try { return extrairPoligono(JSON.parse(tal.geojson!)); } catch { return null; } })() : null;
+  return { fazenda: faz?.nome ?? '', talhao: tal.nome ?? '', safra, cultura: getPlantio(tId, safra), produtor: cli?.nome ?? '', areaHa: tal.areaHa ?? 0, poligono };
+}
+
+// nº do cadastro (janela de Equações, ConteudoEquacao.ordem) p/ ordenar/rotular
+// as doses. Doses de aplicação-parcelada têm equacaoId "<id>__apN" → usa o id BASE.
+function construirNumDe(): (equacaoId: string) => number | undefined {
+  const ordem = new Map<string, number>();
+  for (const it of bibListar<ConteudoEquacao>('equacoes')) {
+    if (typeof it.conteudo?.ordem === 'number') ordem.set(it.id, it.conteudo.ordem);
+  }
+  return (equacaoId: string) => ordem.get(equacaoId) ?? ordem.get(equacaoId.split('__ap')[0]);
+}
+
+interface ItemDose { cen: Cenario; d: DoseCalculada; numero: number; }
+// Achata as doses de TODOS os cenários, opcionalmente só as marcadas com ★
+// (usar), e ordena GLOBALMENTE pelo nº do cadastro (01, 02, … 10, 23…).
+function achatarDoses(cenarios: Cenario[], numDe: (id: string) => number | undefined, somenteUsar: boolean): ItemDose[] {
+  const itens = cenarios.flatMap((cen, ci) =>
+    cen.doses.filter(d => !somenteUsar || d.usar)
+      .map((d, di) => ({ cen, d, numero: numDe(d.equacaoId) ?? 1e9 + ci * 1000 + di })));
+  itens.sort((a, b) => a.numero - b.numero);
+  return itens;
+}
+
+// ── Cabeçalho navy compacto + rodapé + mini-tabela (reuso nos resumos) ──
+function cabecalhoNavy(doc: JsPDF, logo: HTMLImageElement | null, campos: [string, string][]): number {
+  const W = 297, M = 6;
+  doc.setFillColor(...NAVY); doc.rect(0, 0, W, 16, 'F');
+  if (logo) { const h = 9.5, w = h * (logo.naturalWidth / logo.naturalHeight); doc.addImage(logo, 'PNG', M, 3.2, w, h); }
+  let cx = 44;
+  for (const [lb, val] of campos) {
+    doc.setFontSize(6); doc.setTextColor(127, 163, 207); doc.setFont('helvetica', 'normal'); doc.text(san(lb), cx, 6.5);
+    doc.setFontSize(8); doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.text(san(val) || '—', cx, 11.5, { maxWidth: 42 });
+    cx += Math.max(24, Math.min(50, san(val).length * 1.7 + 14));
+  }
+  return 22;
+}
+function rodapeNavy(doc: JsPDF, logo: HTMLImageElement | null, txt: string) {
+  const W = 297, H = 210, M = 6;
+  doc.setFillColor(...NAVY); doc.rect(0, H - 9, W, 9, 'F');
+  if (logo) { const h = 4.5, w = h * (logo.naturalWidth / logo.naturalHeight); doc.addImage(logo, 'PNG', M, H - 7, w, h); }
+  doc.setFontSize(7); doc.setTextColor(127, 163, 207); doc.setFont('helvetica', 'normal'); doc.text(txt, W - M, H - 3.5, { align: 'right' });
+}
+interface Col { titulo: string; w: number; align?: 'l' | 'r' | 'c'; }
+const alinhamento = (a?: 'l' | 'r' | 'c'): 'left' | 'right' | 'center' => a === 'r' ? 'right' : a === 'c' ? 'center' : 'left';
+const larguraCols = (cols: Col[]) => cols.reduce((s, c) => s + c.w, 0);
+function cabTabela(doc: JsPDF, x0: number, y: number, cols: Col[]): number {
+  doc.setFontSize(7); doc.setTextColor(...GRAY); doc.setFont('helvetica', 'bold');
+  let cx = x0;
+  for (const c of cols) {
+    const tx = c.align === 'r' ? cx + c.w : c.align === 'c' ? cx + c.w / 2 : cx;
+    doc.text(san(c.titulo), tx, y, { align: alinhamento(c.align), maxWidth: c.w });
+    cx += c.w;
+  }
+  y += 1.5; doc.setDrawColor(...LINE); doc.setLineWidth(0.2); doc.line(x0, y, x0 + larguraCols(cols), y);
+  return y + 3.6;
+}
+function linhaTabela(doc: JsPDF, x0: number, y: number, cols: Col[], cels: string[], opts?: { bold?: boolean; fill?: boolean; cor?: RGB; fontSize?: number }): number {
+  const w = larguraCols(cols);
+  if (opts?.fill) { doc.setFillColor(238, 246, 233); doc.rect(x0, y - 3.1, w, 4.6, 'F'); }
+  doc.setFontSize(opts?.fontSize ?? 8); doc.setFont('helvetica', opts?.bold ? 'bold' : 'normal'); doc.setTextColor(...(opts?.cor ?? [40, 48, 58] as RGB));
+  let cx = x0;
+  cols.forEach((c, i) => {
+    const tx = c.align === 'r' ? cx + c.w : c.align === 'c' ? cx + c.w / 2 : cx;
+    doc.text(san(cels[i] ?? ''), tx, y, { align: alinhamento(c.align), maxWidth: c.w - 2 });
+    cx += c.w;
+  });
+  y += 4.6; doc.setDrawColor(...LINE); doc.setLineWidth(0.2); doc.line(x0, y - 3.1, x0 + w, y - 3.1);
+  return y;
+}
+
+// Página-RESUMO de um talhão: cabeçalho + tabela (nº, fórmula, produto, dose
+// média, quantidade total em t, investimento) + linha de total. Sem mapas.
+function desenharResumoRecomendacao(doc: JsPDF, ctx: Ctx, itens: ItemDose[], logo: HTMLImageElement | null, titulo = 'Resumo de recomendações') {
+  const M = 6, H = 210;
+  const campos: [string, string][] = [
+    ['FAZENDA', ctx.fazenda], ['TALHÃO', ctx.talhao], ['SAFRA', ctx.safra], ['CULTURA', ctx.cultura],
+    ['PRODUTOR', ctx.produtor], ['ÁREA', `${fmt(ctx.areaHa, 1)} ha`], ['DATA', dataHoje()],
+  ];
+  let y = cabecalhoNavy(doc, logo, campos) + 3;
+  doc.setFontSize(12); doc.setTextColor(...GREEN); doc.setFont('helvetica', 'bold'); doc.text(san(titulo), M, y); y += 6;
+  const cols: Col[] = [
+    { titulo: 'Nº', w: 12, align: 'c' }, { titulo: 'Recomendação (fórmula)', w: 95 }, { titulo: 'Produto', w: 58 },
+    { titulo: 'Dose média', w: 34, align: 'r' }, { titulo: 'Qtd total (t)', w: 32, align: 'r' }, { titulo: 'Investimento (R$)', w: 44, align: 'r' },
+  ];
+  y = cabTabela(doc, M, y, cols);
+  let totInvest = 0;
+  for (const it of itens) {
+    const d = it.d; totInvest += d.custo ?? 0;
+    if (y > H - 20) { doc.addPage(); y = cabecalhoNavy(doc, logo, campos) + 3; y = cabTabela(doc, M, y, cols); }
+    y = linhaTabela(doc, M, y, cols, [
+      it.numero < 1e9 ? String(it.numero).padStart(2, '0') : '—',
+      d.nomeEquacao, d.produto || '—', `${fmt(d.stats.media)} ${d.unidade || 'kg/ha'}`, fmt(d.toneladas, 1), fmt(d.custo ?? 0, 2),
+    ]);
+  }
+  y += 1;
+  linhaTabela(doc, M, y, cols, ['', 'TOTAL', '', '', '', 'R$ ' + fmt(totInvest, 2)], { bold: true, cor: GREEN, fill: true });
+  rodapeNavy(doc, logo, 'Resumo de recomendações — taxa variável');
+}
+
+// Renderiza a seção de Recomendações num doc jsPDF JÁ EXISTENTE (A4 paisagem).
+// `somenteUsar` = só as doses marcadas com ★. `resumo` = 1ª página com a tabela-
+// resumo (fórmula + quantidade total) antes dos mapas. Reutilizado pelo book
+// (montarBookOficial), pelo relatório COMBINADO e pelo relatório da FAZENDA.
 export async function renderBookOficialNoDoc(
-  doc: JsPDF, cenarios: Cenario[], opts?: { novaPaginaAntes?: boolean },
+  doc: JsPDF, cenarios: Cenario[], opts?: { novaPaginaAntes?: boolean; somenteUsar?: boolean; resumo?: boolean },
 ): Promise<void> {
   if (cenarios.length === 0) return;
   const tId = cenarios[0].talhaoId, safra = cenarios[0].safra;
-  const tal = getTalhoes().find(t => t.id === tId) ?? null;
-  const faz = tal ? getFazendas().find(f => f.id === tal.fazendaId) ?? null : null;
-  const cli = faz ? getClientes().find(c => c.id === faz.clienteId) ?? null : null;
-  const poligono = tal?.geojson ? (() => { try { return extrairPoligono(JSON.parse(tal.geojson!)); } catch { return null; } })() : null;
-  if (!poligono) throw new Error('Talhão sem polígono salvo — não dá para desenhar os mapas.');
-  const ctx: Ctx = { fazenda: faz?.nome ?? '', talhao: tal?.nome ?? '', safra, cultura: getPlantio(tId, safra), produtor: cli?.nome ?? '', areaHa: tal?.areaHa ?? 0, poligono };
+  const ctx = ctxDoTalhao(tId, safra);
+  if (!ctx) throw new Error('Talhão não encontrado para gerar a recomendação.');
   const logo = await carregarImg('/images/logo-branca.png').catch(() => null);
-  // Número de cada mapa = o "nº" DEFINIDO NA JANELA DE EQUAÇÕES (ConteudoEquacao.ordem),
-  // p.ex. Calcário 1–6, Gesso 10–14 — NÃO renumera do 1 a cada bloco. Fallback = sequência
-  // só para equações sem número definido (para nunca ficar sem rótulo).
-  const ordemPorEquacao = new Map<string, number>();
-  for (const it of bibListar<ConteudoEquacao>('equacoes')) {
-    if (typeof it.conteudo?.ordem === 'number') ordemPorEquacao.set(it.id, it.conteudo.ordem);
-  }
-  // nº do cadastro da equação p/ uma dose. Doses de aplicação-parcelada têm
-  // equacaoId "<id>__apN" — usa o id BASE para achar o número.
-  const numDe = (equacaoId: string): number | undefined =>
-    ordemPorEquacao.get(equacaoId) ?? ordemPorEquacao.get(equacaoId.split('__ap')[0]);
-
-  // ACHATA todas as doses de TODOS os cenários e ordena GLOBALMENTE pelo nº do
-  // cadastro (01, 02, … 10, 23…). Antes a ordem só valia DENTRO de cada cenário,
-  // então um cenário de Gesso (10) antes do de Calcário (01) saía primeiro.
-  const itens = cenarios.flatMap((cen, ci) =>
-    cen.doses.map((d, di) => ({ cen, d, k: numDe(d.equacaoId) ?? 1e9 + ci * 1000 + di })));
-  itens.sort((a, b) => a.k - b.k);
+  const numDe = construirNumDe();
+  const itens = achatarDoses(cenarios, numDe, !!opts?.somenteUsar);
+  if (itens.length === 0) throw new Error(opts?.somenteUsar
+    ? 'Nenhuma recomendação marcada com ★ (estrela). Na aba Recomendações, clique na ★ das doses que serão utilizadas.'
+    : 'As recomendações não geraram nenhuma dose.');
 
   let precisaPagina = opts?.novaPaginaAntes ?? false;
-  let algum = false;
-  for (const { cen, d, k } of itens) {
-    const numero = k < 1e9 ? k : 0;   // sem nº definido → título sem número (0 → "00")
+  if (opts?.resumo) {
+    if (precisaPagina) doc.addPage();
+    desenharResumoRecomendacao(doc, ctx, itens, logo);
+    precisaPagina = true;
+  }
+  for (const it of itens) {
+    const numero = it.numero < 1e9 ? it.numero : 0;   // sem nº definido → título "00"
     if (precisaPagina) doc.addPage();
     precisaPagina = true;
-    algum = true;
-    await desenharPaginaOficial(doc, d, cen.nome, ctx, logo, numero);
+    await desenharPaginaOficial(doc, it.d, it.cen.nome, ctx, logo, numero);
   }
-  if (!algum) throw new Error('As recomendações não geraram nenhuma dose.');
 }
 
 export async function montarBookOficial(cenarios: Cenario[]): Promise<Blob> {
@@ -387,4 +488,119 @@ export async function montarBookOficial(cenarios: Cenario[]): Promise<Blob> {
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4', compress: true });
   await renderBookOficialNoDoc(doc, cenarios, { novaPaginaAntes: false });
   return doc.output('blob');
+}
+
+// ─── Relatório de recomendação da FAZENDA ─────────────────────────────────────
+// 1 PDF: (1) página-resumo por talhão · (2) para cada talhão em ordem
+// ALFANUMÉRICA: resumo + mapas das doses marcadas com ★ · (3) total geral por
+// insumo somando todos os talhões. Reaproveita renderBookOficialNoDoc por talhão.
+interface GrupoTalhao { talhao: { id: string; nome: string; areaHa: number }; cenarios: Cenario[]; itens: ItemDose[]; }
+
+function desenharCapaFazenda(doc: JsPDF, fazenda: string, produtor: string, safra: string, grupos: GrupoTalhao[], logo: HTMLImageElement | null) {
+  const M = 6, H = 210;
+  const areaTotal = grupos.reduce((s, g) => s + (g.talhao.areaHa || 0), 0);
+  const campos: [string, string][] = [
+    ['FAZENDA', fazenda], ['PRODUTOR', produtor], ['SAFRA', safra],
+    ['TALHÕES', String(grupos.length)], ['ÁREA', `${fmt(areaTotal, 1)} ha`], ['DATA', dataHoje()],
+  ];
+  const cab = () => cabecalhoNavy(doc, logo, campos) + 3;
+  let y = cab();
+  doc.setFontSize(12); doc.setTextColor(...GREEN); doc.setFont('helvetica', 'bold'); doc.text('Resumo de recomendações por talhão', M, y); y += 6;
+  const cols: Col[] = [
+    { titulo: 'Talhão', w: 44 }, { titulo: 'Recomendação (fórmula)', w: 78 }, { titulo: 'Produto', w: 52 },
+    { titulo: 'Dose média', w: 32, align: 'r' }, { titulo: 'Qtd total (t)', w: 30, align: 'r' }, { titulo: 'Invest. (R$)', w: 39, align: 'r' },
+  ];
+  y = cabTabela(doc, M, y, cols);
+  let totGeral = 0;
+  for (const g of grupos) {
+    let primeiro = true;
+    for (const it of g.itens) {
+      const d = it.d; totGeral += d.custo ?? 0;
+      if (y > H - 18) { doc.addPage(); y = cab(); y = cabTabela(doc, M, y, cols); }
+      y = linhaTabela(doc, M, y, cols, [
+        primeiro ? g.talhao.nome : '', d.nomeEquacao, d.produto || '—',
+        `${fmt(d.stats.media)} ${d.unidade || 'kg/ha'}`, fmt(d.toneladas, 1), fmt(d.custo ?? 0, 2),
+      ]);
+      primeiro = false;
+    }
+  }
+  y += 1;
+  if (y > H - 18) { doc.addPage(); y = cab(); }
+  linhaTabela(doc, M, y, cols, ['TOTAL FAZENDA', '', '', '', '', 'R$ ' + fmt(totGeral, 2)], { bold: true, cor: GREEN, fill: true });
+  rodapeNavy(doc, logo, 'Recomendação — resumo da fazenda');
+}
+
+function desenharTotalGeralInsumo(doc: JsPDF, fazenda: string, safra: string, grupos: GrupoTalhao[], logo: HTMLImageElement | null) {
+  const M = 6, H = 210;
+  // Agrega por PRODUTO (chaveProduto = produto || fórmula): quantidade total (t)
+  // e investimento (R$). Não soma toneladas entre produtos distintos (calcário +
+  // KCl não faz sentido) — só o investimento total é somado no rodapé.
+  const mapa = new Map<string, { ton: number; custo: number }>();
+  for (const g of grupos) for (const it of g.itens) {
+    const k = chaveProduto(it.d);
+    const cur = mapa.get(k) ?? { ton: 0, custo: 0 };
+    cur.ton += it.d.toneladas ?? 0; cur.custo += it.d.custo ?? 0;
+    mapa.set(k, cur);
+  }
+  const linhas = [...mapa.entries()].sort((a, b) => b[1].custo - a[1].custo);
+  const campos: [string, string][] = [['FAZENDA', fazenda], ['SAFRA', safra], ['INSUMOS', String(linhas.length)], ['DATA', dataHoje()]];
+  const cab = () => cabecalhoNavy(doc, logo, campos) + 3;
+  let y = cab();
+  doc.setFontSize(12); doc.setTextColor(...GREEN); doc.setFont('helvetica', 'bold'); doc.text('Total geral por insumo (fazenda)', M, y); y += 6;
+  const cols: Col[] = [{ titulo: 'Insumo / produto', w: 120 }, { titulo: 'Qtd total (t)', w: 45, align: 'r' }, { titulo: 'Investimento (R$)', w: 55, align: 'r' }];
+  y = cabTabela(doc, M, y, cols);
+  let totCusto = 0;
+  for (const [k, v] of linhas) {
+    totCusto += v.custo;
+    if (y > H - 20) { doc.addPage(); y = cab(); y = cabTabela(doc, M, y, cols); }
+    y = linhaTabela(doc, M, y, cols, [k, fmt(v.ton, 1), fmt(v.custo, 2)]);
+  }
+  y += 1;
+  linhaTabela(doc, M, y, cols, ['TOTAL', '', 'R$ ' + fmt(totCusto, 2)], { bold: true, cor: GREEN, fill: true });
+  rodapeNavy(doc, logo, 'Recomendação — total por insumo da fazenda');
+}
+
+export async function montarRelatorioRecomendacaoFazenda(fazendaId: string, safra: string): Promise<Blob> {
+  const faz = getFazendas().find(f => f.id === fazendaId) ?? null;
+  if (!faz) throw new Error('Fazenda não encontrada.');
+  const cli = getClientes().find(c => c.id === faz.clienteId) ?? null;
+  const talhoes = ordenarTalhoesAlfa(getTalhoes().filter(t => t.fazendaId === fazendaId));
+  const numDe = construirNumDe();
+  const grupos: GrupoTalhao[] = [];
+  for (const t of talhoes) {
+    const cens = await listarCenarios(t.id, safra).catch(() => [] as Cenario[]);
+    if (!cens.length) continue;
+    const desc = await Promise.all(cens.map(descomprimirCenario));
+    const itens = achatarDoses(desc, numDe, true);
+    if (itens.length) grupos.push({ talhao: { id: t.id, nome: t.nome, areaHa: t.areaHa ?? 0 }, cenarios: desc, itens });
+  }
+  if (grupos.length === 0) throw new Error('Nenhuma recomendação marcada com ★ nesta fazenda/safra. Marque as doses (★) na aba Recomendações dos talhões.');
+
+  const logo = await carregarImg('/images/logo-branca.png').catch(() => null);
+  const { jsPDF } = await import('jspdf');
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4', compress: true });
+  desenharCapaFazenda(doc, faz.nome, cli?.nome ?? '', safra, grupos, logo);
+  for (const g of grupos) {
+    doc.addPage();
+    try { await renderBookOficialNoDoc(doc, g.cenarios, { novaPaginaAntes: false, somenteUsar: true, resumo: true }); }
+    catch (e) { console.warn('[relatorio-fazenda] talhão', g.talhao.nome, 'falhou:', e); }
+  }
+  doc.addPage();
+  desenharTotalGeralInsumo(doc, faz.nome, safra, grupos, logo);
+  return doc.output('blob');
+}
+
+export async function gerarRelatorioRecomendacaoFazenda(fazendaId: string, safra: string): Promise<void> {
+  const aba = typeof window !== 'undefined' ? window.open('', '_blank') : null;
+  if (aba) try { aba.document.write('<!doctype html><meta charset="utf-8"><title>Relatório</title><body style="font-family:system-ui,sans-serif;padding:28px;color:#334155"><p>⏳ Gerando o relatório de recomendação da fazenda… aguarde (capturando os mapas de todos os talhões).</p></body>'); } catch {}
+  try {
+    const blob = await montarRelatorioRecomendacaoFazenda(fazendaId, safra);
+    const faz = getFazendas().find(f => f.id === fazendaId);
+    abrirOuBaixar(blob, aba, `Recomendacao_${(faz?.nome ?? 'fazenda')}_${safra}`.replace(/[^\w.\-]+/g, '_') + '.pdf');
+  } catch (e) {
+    const msg = e instanceof Error ? (e.stack ?? e.message) : String(e);
+    console.error('[relatorio-fazenda] falha:', e);
+    if (aba) { try { aba.document.body.innerHTML = `<h3 style="color:#b91c1c;font-family:system-ui">Falha ao gerar o relatório</h3><pre style="white-space:pre-wrap;font-size:12px;color:#334155">${msg.replace(/[<>&]/g, s => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[s]!))}</pre>`; } catch {} }
+    throw e;
+  }
 }

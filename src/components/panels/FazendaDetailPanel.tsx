@@ -3,14 +3,15 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { useApp } from '@/context/AppContext';
-import { getFazendas, getTalhoes, saveTalhao, importarTalhoesLote, updateFazenda, excluirFazendaCascata, Fazenda, Talhao } from '@/lib/store';
+import { getFazendas, getTalhoes, getSafras, saveTalhao, importarTalhoesLote, updateFazenda, excluirFazendaCascata, Fazenda, Talhao } from '@/lib/store';
+import { gerarRelatorioRecomendacaoFazenda } from '@/lib/recomendacao/relatorioCenarios';
 import { cloudExcluirMapasPorPrefixo, cloudExcluirPorPrefixo } from '@/lib/cloud';
 import { pode } from '@/lib/empresa';
 import { detectarMunicipiosFazenda } from '@/lib/geocode';
 import { prepararTalhoesEmMassa, CandidatoTalhao } from '@/lib/geo';
 import { conflitosDe, talhaoParaAlvo, areaHaFC, bboxDeFeatures, type AlvoOverlap, type Conflito } from '@/lib/overlap';
 import { verificarTrocaPoligono } from '@/lib/trocaPoligono';
-import { ChevronLeft, Plus, Map, AlertTriangle, Save, X, ExternalLink, MapPin, Loader2, Upload, CheckCircle2, Pencil, Trash2 } from 'lucide-react';
+import { ChevronLeft, Plus, Map, AlertTriangle, Save, X, ExternalLink, MapPin, Loader2, Upload, CheckCircle2, Pencil, Trash2, FileDown } from 'lucide-react';
 import { PanelSection, PanelButton, StatusBadge } from './_shared';
 
 const EditorGeometria = dynamic(
@@ -34,6 +35,8 @@ export function FazendaDetailPanel() {
   const [mostraExcluir, setMostraExcluir] = useState(false);
   const [txtConfirma, setTxtConfirma] = useState('');
   const [excluindo, setExcluindo] = useState(false);
+  const [gerandoRel, setGerandoRel] = useState(false);
+  const [erroRel, setErroRel] = useState('');
   const podeExcluir = pode('excluirProdutor');   // mesma capacidade da exclusão de produtor
 
   async function detectarMunicipio() {
@@ -148,6 +151,18 @@ export function FazendaDetailPanel() {
     setFazenda(f => (f ? { ...f, nome: novo } : f));
     setNav({ fazenda: novo });
     setRenomeando(false);
+  }
+
+  // Relatório de recomendação da FAZENDA (safra ativa): resumo por talhão +
+  // resumo/mapas de cada talhão (ordem alfanumérica) + total geral por insumo.
+  async function gerarRelatorioRecomendacao() {
+    if (!fazenda || gerandoRel) return;
+    const safra = getSafras().find(s => s.ativa)?.nome ?? '';
+    if (!safra) { setErroRel('Defina uma safra ativa (no topo do talhão) para gerar o relatório.'); return; }
+    setErroRel(''); setGerandoRel(true);
+    try { await gerarRelatorioRecomendacaoFazenda(fazenda.id, safra); }
+    catch (e) { setErroRel(e instanceof Error ? e.message : 'Falha ao gerar o relatório.'); }
+    finally { setGerandoRel(false); }
   }
 
   const incompletos = talhoes.filter(t => t.status === 'incompleto').length;
@@ -272,6 +287,15 @@ export function FazendaDetailPanel() {
                     style={{ background: '#1a3a6b', color: '#93c5fd' }}>
                     <Upload size={12} /> Importar em massa (KML / SHP)
                   </button>
+                  {talhoes.length > 0 && pode('relatorios') && (
+                    <button onClick={gerarRelatorioRecomendacao} disabled={gerandoRel}
+                      className="w-full flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-semibold disabled:opacity-60"
+                      style={{ background: '#2a1e4d', color: '#c4b5fd' }}>
+                      {gerandoRel ? <Loader2 size={12} className="animate-spin" /> : <FileDown size={12} />}
+                      {gerandoRel ? 'Gerando relatório…' : 'Relatório de recomendação (fazenda)'}
+                    </button>
+                  )}
+                  {erroRel && <p className="text-[10px]" style={{ color: '#f87171' }}>{erroRel}</p>}
                 </div>
 
                 {talhoes.length === 0 ? (
@@ -281,7 +305,7 @@ export function FazendaDetailPanel() {
                     <p className="text-xs mt-1" style={{ color: '#2e3f5c' }}>Clique em "Novo Talhão" acima.</p>
                   </div>
                 ) : (
-                  talhoes.map(t => (
+                  [...talhoes].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR', { numeric: true })).map(t => (
                     <div key={t.id} role="button" tabIndex={0} onClick={() => abrirTalhao(t)}
                       className="group w-full flex items-center gap-2.5 px-3 py-2.5 text-left transition-colors cursor-pointer"
                       style={{ borderBottom: '1px solid #0f2240' }}

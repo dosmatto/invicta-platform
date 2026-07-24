@@ -35,7 +35,9 @@ export async function gerarRelatorioCombinado(args: ArgsRelatorioCombinado): Pro
       temConteudo = true;
     }
     if (temRec) {
-      await renderBookOficialNoDoc(doc, args.recomendacao!, { novaPaginaAntes: temConteudo });
+      // Só as doses marcadas com ★ (usar) + página-resumo (fórmula + quantidade
+      // total) antes dos mapas — conforme pedido do relatório de recomendação.
+      await renderBookOficialNoDoc(doc, args.recomendacao!, { novaPaginaAntes: temConteudo, somenteUsar: true, resumo: true });
       temConteudo = true;
     }
     const paginas = doc.getNumberOfPages();

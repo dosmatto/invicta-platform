@@ -57,7 +57,7 @@ export async function gerarConferenciaExcel(): Promise<{ talhoes: number; arquiv
   }).sort((a, b) =>
     a.Produtor.localeCompare(b.Produtor, 'pt-BR') ||
     a.Fazenda.localeCompare(b.Fazenda, 'pt-BR') ||
-    a['Talhão'].localeCompare(b['Talhão'], 'pt-BR'));
+    a['Talhão'].localeCompare(b['Talhão'], 'pt-BR', { numeric: true }));
 
   const areaTotal = r2(linhas.reduce((s, l) => s + l['Área (ha)'], 0));
 

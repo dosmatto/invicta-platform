@@ -108,9 +108,12 @@ export function GeradorRelatorios({ safraNome }: { safraNome?: string } = {}) {
     const nomeTalhao = ctx?.talhao ?? nav.talhao;
     const nutsSel = ordem.filter(n => sel.has(n));
     const cenSel = cenarios.filter(c => selCen.has(c.id));
-    const usaRec = incluirRec && cenSel.length > 0;
+    // Só entram no PDF as doses marcadas com ★ — um cenário selecionado sem ★
+    // não gera recomendação (evita abortar um PDF que teria só a fertilidade).
+    const nStar = cenSel.reduce((s, c) => s + c.doses.filter(d => d.usar).length, 0);
+    const usaRec = incluirRec && nStar > 0;
     const usaFert = incluirFert && nutsSel.length > 0;
-    if (!usaRec && !usaFert) { setErro('Marque ao menos uma seção com itens selecionados (Recomendação ou Fertilidade).'); return; }
+    if (!usaRec && !usaFert) { setErro(incluirRec && cenSel.length > 0 && nStar === 0 ? 'Marque ao menos uma dose com ★ na aba Recomendações (ou selecione a Fertilidade).' : 'Marque ao menos uma seção com itens selecionados (Recomendação ou Fertilidade).'); return; }
 
     setGerando(true);
     try {
@@ -192,13 +195,16 @@ export function GeradorRelatorios({ safraNome }: { safraNome?: string } = {}) {
   const elPorNut = ctx ? Object.fromEntries(ctx.elementos.map(e => [e.nut, e])) : {};
   const nSelFert = ordem.filter(n => sel.has(n)).length;
   const nSelCen = cenarios.filter(c => selCen.has(c.id)).length;
+  // Doses marcadas com ★ (usar) entre os cenários selecionados — é o que entra
+  // de fato no relatório de recomendação.
+  const nStarSel = cenarios.filter(c => selCen.has(c.id)).reduce((s, c) => s + c.doses.filter(d => d.usar).length, 0);
   const temFert = !!ctx && ctx.elementos.length > 0;
   const temRec = cenarios.length > 0;
 
-  // Nº de páginas previstas (recomendação = soma das doses; fertilidade = capa + elementos)
-  const pagsRec = incluirRec ? cenarios.filter(c => selCen.has(c.id)).reduce((s, c) => s + c.doses.length, 0) : 0;
+  // Nº de páginas previstas (recomendação = 1 resumo + 1 por dose ★; fertilidade = capa + elementos)
+  const pagsRec = incluirRec && nStarSel > 0 ? nStarSel + 1 : 0;
   const pagsFert = incluirFert && nSelFert > 0 ? nSelFert + 1 : 0;
-  const usaRec = incluirRec && nSelCen > 0;
+  const usaRec = incluirRec && nStarSel > 0;
   const usaFert = incluirFert && nSelFert > 0;
   const totalPags = pagsRec + pagsFert;
 
@@ -249,12 +255,19 @@ export function GeradorRelatorios({ safraNome }: { safraNome?: string } = {}) {
 
           {/* ── Seção RECOMENDAÇÃO (vem depois no PDF) ── */}
           <SecaoHeader on={incluirRec} disabled={!temRec} onToggle={() => setIncluirRec(v => !v)}
-            icon={Wand2} cor="#a78bfa" titulo="Recomendação" sub={temRec ? `${nSelCen}/${cenarios.length} selecionada${cenarios.length === 1 ? '' : 's'}` : 'nenhuma salva'} />
+            icon={Wand2} cor="#a78bfa" titulo="Recomendação" sub={temRec ? `${nStarSel} marcada${nStarSel === 1 ? '' : 's'} ★` : 'nenhuma salva'} />
           {temRec ? (
             incluirRec && (
               <div className="space-y-1 pl-1">
+                <p className="text-[10px] pb-0.5" style={{ color: '#8b7fd6' }}>
+                  Entram só as doses marcadas com <strong>★</strong> (na aba Recomendações). Começa por uma página-<strong>resumo</strong> (fórmula + quantidade total) e depois um mapa por dose.
+                </p>
+                {nStarSel === 0 && (
+                  <p className="text-[10px]" style={{ color: '#fbbf24' }}>Nenhuma dose marcada com ★ nos cenários selecionados — marque na aba Recomendações para incluir a recomendação.</p>
+                )}
                 {cenarios.map(c => {
                   const on = selCen.has(c.id);
+                  const nStar = c.doses.filter(d => d.usar).length;
                   return (
                     <div key={c.id} className="flex items-center gap-2 p-2 rounded-lg" style={{ background: '#061525', border: `1px solid ${on ? '#2a2350' : '#0f2240'}` }}>
                       <button onClick={() => toggleCen(c.id)} title={on ? 'Remover' : 'Incluir'}>
@@ -262,7 +275,7 @@ export function GeradorRelatorios({ safraNome }: { safraNome?: string } = {}) {
                       </button>
                       <div className="flex-1 min-w-0">
                         <span className="text-xs font-bold" style={{ color: on ? '#e2e8f0' : '#64748b' }}>{c.nome}</span>
-                        <span className="text-[10px] ml-1.5" style={{ color: '#64748b' }}>· {c.doses.length} {c.doses.length === 1 ? 'mapa' : 'mapas'}{c.origem === 'equacao' ? ' · equação avulsa' : ''}</span>
+                        <span className="text-[10px] ml-1.5" style={{ color: nStar > 0 ? '#fbbf24' : '#64748b' }}>· {nStar} ★ de {c.doses.length}{c.origem === 'equacao' ? ' · equação avulsa' : ''}</span>
                       </div>
                     </div>
                   );

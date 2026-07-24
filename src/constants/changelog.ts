@@ -1,5 +1,10 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.7.17': [
+    'RELATÓRIO DE RECOMENDAÇÃO — RESUMO NO INÍCIO (TALHÃO): na aba Relatórios do talhão, a seção Recomendação agora começa por uma PÁGINA-RESUMO com a tabela das recomendações (Nº, fórmula/equação, produto, dose média, QUANTIDADE TOTAL em t e investimento) e só depois os mapas. Entram SOMENTE as doses marcadas com ★ (estrela) na aba Recomendações — marque as que serão utilizadas. Onde: Talhão → aba Relatórios → seção Recomendação.',
+    'RELATÓRIO DE RECOMENDAÇÃO DA FAZENDA (NOVO): botão "Relatório de recomendação (fazenda)" na aba da fazenda (lista de Talhões). Gera 1 PDF com: 1ª página = resumo por talhão de tudo; depois, para CADA talhão em ordem alfanumérica, o resumo + os mapas das doses ★; e no fim o TOTAL GERAL por insumo (t e R$) somando toda a fazenda. Usa a safra ativa. Onde: Fazenda → aba Talhões → botão roxo "Relatório de recomendação (fazenda)".',
+    'ORDEM ALFANUMÉRICA DE TALHÃO EM TODOS OS RELATÓRIOS: os talhões passam a sair sempre em ordem alfanumérica (ex.: 01, 02 … 10, 11) — no relatório da fazenda, no relatório de conferência (Excel) e na lista de talhões da fazenda.',
+  ],
   '2.7.16': [
     'FERTILIDADE — IMPORTAÇÃO APARECE NA HORA: ao importar uma tabela de laudo, a nova importação passa a aparecer imediatamente na aba Fertilidade (no seletor de importações). Antes era preciso sair da aba e voltar para ela surgir. Excluir uma importação também atualiza a lista na hora.',
   ],
