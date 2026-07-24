@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { useApp } from '@/context/AppContext';
 import { getFazendas, getTalhoes, getSafras, saveTalhao, importarTalhoesLote, updateFazenda, excluirFazendaCascata, Fazenda, Talhao } from '@/lib/store';
-import { gerarRelatorioRecomendacaoFazenda } from '@/lib/recomendacao/relatorioCenarios';
+import { gerarRelatorioRecomendacaoFazenda, gerarRecomendacaoFazendaExcel } from '@/lib/recomendacao/relatorioCenarios';
 import { cloudExcluirMapasPorPrefixo, cloudExcluirPorPrefixo } from '@/lib/cloud';
 import { pode } from '@/lib/empresa';
 import { detectarMunicipiosFazenda } from '@/lib/geocode';
@@ -36,6 +36,7 @@ export function FazendaDetailPanel() {
   const [txtConfirma, setTxtConfirma] = useState('');
   const [excluindo, setExcluindo] = useState(false);
   const [gerandoRel, setGerandoRel] = useState(false);
+  const [gerandoXls, setGerandoXls] = useState(false);
   const [erroRel, setErroRel] = useState('');
   const podeExcluir = pode('excluirProdutor');   // mesma capacidade da exclusão de produtor
 
@@ -165,6 +166,17 @@ export function FazendaDetailPanel() {
     finally { setGerandoRel(false); }
   }
 
+  // Versão Excel (editável) do mesmo relatório — só na fazenda.
+  async function gerarRelatorioRecomendacaoXls() {
+    if (!fazenda || gerandoXls) return;
+    const safra = getSafras().find(s => s.ativa)?.nome ?? '';
+    if (!safra) { setErroRel('Defina uma safra ativa (no topo do talhão) para gerar o Excel.'); return; }
+    setErroRel(''); setGerandoXls(true);
+    try { await gerarRecomendacaoFazendaExcel(fazenda.id, safra); }
+    catch (e) { setErroRel(e instanceof Error ? e.message : 'Falha ao gerar o Excel.'); }
+    finally { setGerandoXls(false); }
+  }
+
   const incompletos = talhoes.filter(t => t.status === 'incompleto').length;
   const areaTotal = talhoes.reduce((s, t) => s + (t.areaHa || 0), 0);
   const areaFmt = (n: number) => n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -288,12 +300,21 @@ export function FazendaDetailPanel() {
                     <Upload size={12} /> Importar em massa (KML / SHP)
                   </button>
                   {talhoes.length > 0 && pode('relatorios') && (
-                    <button onClick={gerarRelatorioRecomendacao} disabled={gerandoRel}
-                      className="w-full flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-semibold disabled:opacity-60"
-                      style={{ background: '#2a1e4d', color: '#c4b5fd' }}>
-                      {gerandoRel ? <Loader2 size={12} className="animate-spin" /> : <FileDown size={12} />}
-                      {gerandoRel ? 'Gerando relatório…' : 'Relatório de recomendação (fazenda)'}
-                    </button>
+                    <div className="flex gap-2">
+                      <button onClick={gerarRelatorioRecomendacao} disabled={gerandoRel || gerandoXls}
+                        className="flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-semibold disabled:opacity-60"
+                        style={{ background: '#2a1e4d', color: '#c4b5fd' }}>
+                        {gerandoRel ? <Loader2 size={12} className="animate-spin" /> : <FileDown size={12} />}
+                        {gerandoRel ? 'Gerando…' : 'Recomendação (PDF)'}
+                      </button>
+                      <button onClick={gerarRelatorioRecomendacaoXls} disabled={gerandoRel || gerandoXls}
+                        title="Versão Excel editável (resumo por talhão + volume total por produto)"
+                        className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold disabled:opacity-60"
+                        style={{ background: '#0f3d2e', color: '#6ee7b7' }}>
+                        {gerandoXls ? <Loader2 size={12} className="animate-spin" /> : <FileDown size={12} />}
+                        Excel
+                      </button>
+                    </div>
                   )}
                   {erroRel && <p className="text-[10px]" style={{ color: '#f87171' }}>{erroRel}</p>}
                 </div>

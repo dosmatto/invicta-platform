@@ -45,6 +45,9 @@ export function GeradorRelatorios({ safraNome }: { safraNome?: string } = {}) {
   const [selCen, setSelCen] = useState<Set<string>>(new Set());
   const [incluirRec, setIncluirRec] = useState(true);
   const [incluirFert, setIncluirFert] = useState(true);
+  // Recomendação: só as doses marcadas com ★ + página-resumo (fórmula + qtd total).
+  // Desligado por padrão = comportamento antigo (todas as doses, sem resumo).
+  const [soMarcadas, setSoMarcadas] = useState(false);
 
   const [historico, setHistorico] = useState<RegistroRelatorio[]>([]);
 
@@ -66,9 +69,9 @@ export function GeradorRelatorios({ safraNome }: { safraNome?: string } = {}) {
         if (cancel) return;
         setCtx(c);
         setOrdem(c.elementos.map(e => e.nut));
-        // Índices vegetativos DESMARCADOS por padrão (o usuário marca quando quiser);
-        // os demais elementos vêm marcados como sempre.
-        setSel(new Set(c.elementos.filter(e => !e.ehIndice).map(e => e.nut)));
+        // Índices vegetativos e Al DESMARCADOS por padrão (o usuário marca quando
+        // quiser); os demais elementos vêm marcados como sempre.
+        setSel(new Set(c.elementos.filter(e => !e.ehIndice && e.nut !== 'al').map(e => e.nut)));
         setCenarios(cens);
         setSelCen(new Set(cens.map(x => x.id)));
         setCarregando(false);
@@ -108,12 +111,12 @@ export function GeradorRelatorios({ safraNome }: { safraNome?: string } = {}) {
     const nomeTalhao = ctx?.talhao ?? nav.talhao;
     const nutsSel = ordem.filter(n => sel.has(n));
     const cenSel = cenarios.filter(c => selCen.has(c.id));
-    // Só entram no PDF as doses marcadas com ★ — um cenário selecionado sem ★
-    // não gera recomendação (evita abortar um PDF que teria só a fertilidade).
+    // Recomendação sai como antes (todas as doses selecionadas), a menos que o
+    // usuário ligue "Só as marcadas ★" — aí só as doses com estrela + resumo.
     const nStar = cenSel.reduce((s, c) => s + c.doses.filter(d => d.usar).length, 0);
-    const usaRec = incluirRec && nStar > 0;
+    const usaRec = incluirRec && (soMarcadas ? nStar > 0 : cenSel.length > 0);
     const usaFert = incluirFert && nutsSel.length > 0;
-    if (!usaRec && !usaFert) { setErro(incluirRec && cenSel.length > 0 && nStar === 0 ? 'Marque ao menos uma dose com ★ na aba Recomendações (ou selecione a Fertilidade).' : 'Marque ao menos uma seção com itens selecionados (Recomendação ou Fertilidade).'); return; }
+    if (!usaRec && !usaFert) { setErro(incluirRec && soMarcadas && cenSel.length > 0 && nStar === 0 ? 'Marque ao menos uma dose com ★ na aba Recomendações (ou desligue "Só as marcadas").' : 'Marque ao menos uma seção com itens selecionados (Recomendação ou Fertilidade).'); return; }
 
     setGerando(true);
     try {
@@ -130,6 +133,8 @@ export function GeradorRelatorios({ safraNome }: { safraNome?: string } = {}) {
         recomendacao: usaRec ? recDescompr : undefined,
         fertilidade: usaFert ? paginasFert : undefined,
         nomeArquivo: `Relatorio_${nomeTalhao}_${safra}`,
+        somenteUsarRec: soMarcadas,
+        resumoRec: soMarcadas,
       });
 
       const elPorNut = ctx ? Object.fromEntries(ctx.elementos.map(e => [e.nut, e])) : {};
@@ -201,10 +206,12 @@ export function GeradorRelatorios({ safraNome }: { safraNome?: string } = {}) {
   const temFert = !!ctx && ctx.elementos.length > 0;
   const temRec = cenarios.length > 0;
 
-  // Nº de páginas previstas (recomendação = 1 resumo + 1 por dose ★; fertilidade = capa + elementos)
-  const pagsRec = incluirRec && nStarSel > 0 ? nStarSel + 1 : 0;
+  // Nº de páginas previstas. Recomendação: se "só marcadas" → 1 resumo + 1 por
+  // dose ★; senão → 1 por dose de cada cenário selecionado (como antes).
+  const dosesSelTodas = cenarios.filter(c => selCen.has(c.id)).reduce((s, c) => s + c.doses.length, 0);
+  const pagsRec = !incluirRec ? 0 : soMarcadas ? (nStarSel > 0 ? nStarSel + 1 : 0) : dosesSelTodas;
   const pagsFert = incluirFert && nSelFert > 0 ? nSelFert + 1 : 0;
-  const usaRec = incluirRec && nStarSel > 0;
+  const usaRec = incluirRec && (soMarcadas ? nStarSel > 0 : nSelCen > 0);
   const usaFert = incluirFert && nSelFert > 0;
   const totalPags = pagsRec + pagsFert;
 
@@ -255,16 +262,21 @@ export function GeradorRelatorios({ safraNome }: { safraNome?: string } = {}) {
 
           {/* ── Seção RECOMENDAÇÃO (vem depois no PDF) ── */}
           <SecaoHeader on={incluirRec} disabled={!temRec} onToggle={() => setIncluirRec(v => !v)}
-            icon={Wand2} cor="#a78bfa" titulo="Recomendação" sub={temRec ? `${nStarSel} marcada${nStarSel === 1 ? '' : 's'} ★` : 'nenhuma salva'} />
+            icon={Wand2} cor="#a78bfa" titulo="Recomendação" sub={temRec ? `${nSelCen}/${cenarios.length} selecionada${cenarios.length === 1 ? '' : 's'}` : 'nenhuma salva'} />
           {temRec ? (
             incluirRec && (
               <div className="space-y-1 pl-1">
-                <p className="text-[10px] pb-0.5" style={{ color: '#8b7fd6' }}>
-                  Entram só as doses marcadas com <strong>★</strong> (na aba Recomendações). Começa por uma página-<strong>resumo</strong> (fórmula + quantidade total) e depois um mapa por dose.
-                </p>
-                {nStarSel === 0 && (
-                  <p className="text-[10px]" style={{ color: '#fbbf24' }}>Nenhuma dose marcada com ★ nos cenários selecionados — marque na aba Recomendações para incluir a recomendação.</p>
-                )}
+                {/* Toggle: só as doses ★ + resumo. Desligado = como antes (todas). */}
+                <button onClick={() => setSoMarcadas(v => !v)}
+                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left"
+                  style={{ background: soMarcadas ? '#221b3a' : '#081627', border: `1px solid ${soMarcadas ? '#a78bfa66' : '#0f2240'}` }}>
+                  {soMarcadas ? <CheckSquare size={15} style={{ color: '#c4b5fd' }} /> : <Square size={15} style={{ color: '#475569' }} />}
+                  <span className="flex-1 text-[11px] font-semibold" style={{ color: soMarcadas ? '#e2e8f0' : '#94a3b8' }}>Só as marcadas ★ (com resumo)</span>
+                  {soMarcadas && <span className="text-[10px]" style={{ color: '#fbbf24' }}>{nStarSel} ★</span>}
+                </button>
+                {soMarcadas
+                  ? <p className="text-[9px] pl-1" style={{ color: '#8b7fd6' }}>Sai uma página-resumo (fórmula + quantidade total) + 1 mapa por dose marcada. {nStarSel === 0 && <span style={{ color: '#fbbf24' }}>Nenhuma ★ nos cenários selecionados — marque na aba Recomendações.</span>}</p>
+                  : <p className="text-[9px] pl-1" style={{ color: '#64748b' }}>Saem todas as doses dos cenários selecionados (como antes).</p>}
                 {cenarios.map(c => {
                   const on = selCen.has(c.id);
                   const nStar = c.doses.filter(d => d.usar).length;
@@ -275,7 +287,7 @@ export function GeradorRelatorios({ safraNome }: { safraNome?: string } = {}) {
                       </button>
                       <div className="flex-1 min-w-0">
                         <span className="text-xs font-bold" style={{ color: on ? '#e2e8f0' : '#64748b' }}>{c.nome}</span>
-                        <span className="text-[10px] ml-1.5" style={{ color: nStar > 0 ? '#fbbf24' : '#64748b' }}>· {nStar} ★ de {c.doses.length}{c.origem === 'equacao' ? ' · equação avulsa' : ''}</span>
+                        <span className="text-[10px] ml-1.5" style={{ color: '#64748b' }}>· {soMarcadas ? `${nStar} ★ de ${c.doses.length}` : `${c.doses.length} ${c.doses.length === 1 ? 'mapa' : 'mapas'}`}{c.origem === 'equacao' ? ' · equação avulsa' : ''}</span>
                       </div>
                     </div>
                   );

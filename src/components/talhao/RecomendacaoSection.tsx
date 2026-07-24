@@ -89,6 +89,14 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
   }, [importacoes, importacaoId]);
 
   const talhao = useMemo(() => getTalhoes().find(t => t.id === nav.talhaoId) ?? null, [nav.talhaoId]);
+  // Nº do cadastro da equação (janela de Equações) — o MESMO que sai no relatório,
+  // p/ mostrar na frente de cada dose e facilitar o cruzamento. Doses parceladas
+  // têm equacaoId "<id>__apN" → usa o id base.
+  const numeroEquacao = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const e of equacoes) if (typeof e.conteudo?.ordem === 'number') m.set(e.id, e.conteudo.ordem);
+    return (equacaoId: string): number | undefined => m.get(equacaoId) ?? m.get(equacaoId.split('__ap')[0]);
+  }, [equacoes]);
   const eqSel = equacoes.find(e => e.id === equacaoId) ?? null;
   const recSel = recomendacoes.find(r => r.id === recomendacaoId) ?? null;
 
@@ -366,7 +374,9 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
                 <button onClick={() => setVisivel(i)} className="flex items-center gap-2 flex-1 min-w-0 text-left">
                   <Eye size={11} style={{ color: i === visivel ? '#4ade80' : '#475569', flexShrink: 0 }} />
                   <div className="flex-1 min-w-0">
-                    <div className="text-[10px] font-bold truncate" style={{ color: '#e2e8f0' }}>{d.nomeEquacao}</div>
+                    <div className="text-[10px] font-bold truncate" style={{ color: '#e2e8f0' }}>
+                      {(() => { const n = numeroEquacao(d.equacaoId); return n != null ? <span style={{ color: '#93c5fd' }}>{String(n).padStart(2, '0')} · </span> : null; })()}{d.nomeEquacao}
+                    </div>
                     <div className="text-[9px] truncate" style={{ color: '#64748b' }}>
                       {d.produto ? `${d.produto} · ` : ''}méd {fmt(d.stats.media)} {d.unidade} · {fmt(d.toneladas, 1)} t{d.custo != null ? ` · R$ ${fmt(d.custo, 2)}` : ''}
                     </div>

@@ -491,10 +491,24 @@ export async function montarBookOficial(cenarios: Cenario[]): Promise<Blob> {
 }
 
 // ─── Relatório de recomendação da FAZENDA ─────────────────────────────────────
-// 1 PDF: (1) página-resumo por talhão · (2) para cada talhão em ordem
-// ALFANUMÉRICA: resumo + mapas das doses marcadas com ★ · (3) total geral por
-// insumo somando todos os talhões. Reaproveita renderBookOficialNoDoc por talhão.
+// 1 PDF: (1) PÁGINA-1 estilo planilha — à esquerda a lista por talhão (talhão ·
+// área · Nº-fórmula · qtd total · investimento) e à direita o VOLUME TOTAL por
+// produto (soma da fazenda) · (2) para cada talhão em ordem ALFANUMÉRICA, só os
+// MAPAS das doses ★ (sem repetir o resumo). Reaproveita renderBookOficialNoDoc.
 interface GrupoTalhao { talhao: { id: string; nome: string; areaHa: number }; cenarios: Cenario[]; itens: ItemDose[]; }
+
+// Agrega por PRODUTO (chaveProduto = produto || fórmula) o total em toneladas e
+// investimento, somando todos os talhões da fazenda.
+function volumePorProduto(grupos: GrupoTalhao[]): [string, { ton: number; custo: number }][] {
+  const mapa = new Map<string, { ton: number; custo: number }>();
+  for (const g of grupos) for (const it of g.itens) {
+    const k = chaveProduto(it.d);
+    const cur = mapa.get(k) ?? { ton: 0, custo: 0 };
+    cur.ton += it.d.toneladas ?? 0; cur.custo += it.d.custo ?? 0;
+    mapa.set(k, cur);
+  }
+  return [...mapa.entries()].sort((a, b) => b[1].ton - a[1].ton);
+}
 
 function desenharCapaFazenda(doc: JsPDF, fazenda: string, produtor: string, safra: string, grupos: GrupoTalhao[], logo: HTMLImageElement | null) {
   const M = 6, H = 210;
@@ -504,67 +518,51 @@ function desenharCapaFazenda(doc: JsPDF, fazenda: string, produtor: string, safr
     ['TALHÕES', String(grupos.length)], ['ÁREA', `${fmt(areaTotal, 1)} ha`], ['DATA', dataHoje()],
   ];
   const cab = () => cabecalhoNavy(doc, logo, campos) + 3;
+  const numTxt = (it: ItemDose) => it.numero < 1e9 ? String(it.numero).padStart(2, '0') + ' - ' : '';
+  const xL = M, xR = 205;
+
   let y = cab();
-  doc.setFontSize(12); doc.setTextColor(...GREEN); doc.setFont('helvetica', 'bold'); doc.text('Resumo de recomendações por talhão', M, y); y += 6;
-  const cols: Col[] = [
-    { titulo: 'Talhão', w: 44 }, { titulo: 'Recomendação (fórmula)', w: 78 }, { titulo: 'Produto', w: 52 },
-    { titulo: 'Dose média', w: 32, align: 'r' }, { titulo: 'Qtd total (t)', w: 30, align: 'r' }, { titulo: 'Invest. (R$)', w: 39, align: 'r' },
+  doc.setFontSize(12); doc.setTextColor(...GREEN); doc.setFont('helvetica', 'bold'); doc.text('Resumo de recomendações por talhão', xL, y);
+
+  // Tabela DIREITA — volume total por produto (só na 1ª página).
+  const colsR: Col[] = [{ titulo: 'Produto', w: 52 }, { titulo: 'Volume total (t)', w: 30, align: 'r' }];
+  let yr = y + 6;
+  doc.setFontSize(9); doc.setTextColor(...NAVY); doc.setFont('helvetica', 'bold'); doc.text('Volume total por produto', xR, yr); yr += 4;
+  yr = cabTabela(doc, xR, yr, colsR);
+  for (const [k, v] of volumePorProduto(grupos)) yr = linhaTabela(doc, xR, yr, colsR, [k, fmt(v.ton, 1)]);
+
+  // Tabela ESQUERDA — por talhão (paginável).
+  const colsL: Col[] = [
+    { titulo: 'Talhão', w: 32 }, { titulo: 'Área (ha)', w: 18, align: 'r' }, { titulo: 'Recomendação (Nº - fórmula)', w: 82 },
+    { titulo: 'Qtd (t)', w: 18, align: 'r' }, { titulo: 'Invest. (R$)', w: 34, align: 'r' },
   ];
-  y = cabTabela(doc, M, y, cols);
-  let totGeral = 0;
+  y += 6;
+  y = cabTabela(doc, xL, y, colsL);
+  let totInvest = 0;
   for (const g of grupos) {
     let primeiro = true;
     for (const it of g.itens) {
-      const d = it.d; totGeral += d.custo ?? 0;
-      if (y > H - 18) { doc.addPage(); y = cab(); y = cabTabela(doc, M, y, cols); }
-      y = linhaTabela(doc, M, y, cols, [
-        primeiro ? g.talhao.nome : '', d.nomeEquacao, d.produto || '—',
-        `${fmt(d.stats.media)} ${d.unidade || 'kg/ha'}`, fmt(d.toneladas, 1), fmt(d.custo ?? 0, 2),
+      const d = it.d; totInvest += d.custo ?? 0;
+      if (y > H - 16) { doc.addPage(); y = cab() + 4; y = cabTabela(doc, xL, y, colsL); }
+      y = linhaTabela(doc, xL, y, colsL, [
+        primeiro ? g.talhao.nome : '', primeiro ? fmt(g.talhao.areaHa, 1) : '',
+        `${numTxt(it)}${d.nomeEquacao}`, fmt(d.toneladas, 1), fmt(d.custo ?? 0, 2),
       ]);
       primeiro = false;
     }
   }
   y += 1;
-  if (y > H - 18) { doc.addPage(); y = cab(); }
-  linhaTabela(doc, M, y, cols, ['TOTAL FAZENDA', '', '', '', '', 'R$ ' + fmt(totGeral, 2)], { bold: true, cor: GREEN, fill: true });
+  if (y > H - 16) { doc.addPage(); y = cab() + 4; }
+  linhaTabela(doc, xL, y, colsL, ['TOTAL FAZENDA', '', '', '', 'R$ ' + fmt(totInvest, 2)], { bold: true, cor: GREEN, fill: true });
   rodapeNavy(doc, logo, 'Recomendação — resumo da fazenda');
 }
 
-function desenharTotalGeralInsumo(doc: JsPDF, fazenda: string, safra: string, grupos: GrupoTalhao[], logo: HTMLImageElement | null) {
-  const M = 6, H = 210;
-  // Agrega por PRODUTO (chaveProduto = produto || fórmula): quantidade total (t)
-  // e investimento (R$). Não soma toneladas entre produtos distintos (calcário +
-  // KCl não faz sentido) — só o investimento total é somado no rodapé.
-  const mapa = new Map<string, { ton: number; custo: number }>();
-  for (const g of grupos) for (const it of g.itens) {
-    const k = chaveProduto(it.d);
-    const cur = mapa.get(k) ?? { ton: 0, custo: 0 };
-    cur.ton += it.d.toneladas ?? 0; cur.custo += it.d.custo ?? 0;
-    mapa.set(k, cur);
-  }
-  const linhas = [...mapa.entries()].sort((a, b) => b[1].custo - a[1].custo);
-  const campos: [string, string][] = [['FAZENDA', fazenda], ['SAFRA', safra], ['INSUMOS', String(linhas.length)], ['DATA', dataHoje()]];
-  const cab = () => cabecalhoNavy(doc, logo, campos) + 3;
-  let y = cab();
-  doc.setFontSize(12); doc.setTextColor(...GREEN); doc.setFont('helvetica', 'bold'); doc.text('Total geral por insumo (fazenda)', M, y); y += 6;
-  const cols: Col[] = [{ titulo: 'Insumo / produto', w: 120 }, { titulo: 'Qtd total (t)', w: 45, align: 'r' }, { titulo: 'Investimento (R$)', w: 55, align: 'r' }];
-  y = cabTabela(doc, M, y, cols);
-  let totCusto = 0;
-  for (const [k, v] of linhas) {
-    totCusto += v.custo;
-    if (y > H - 20) { doc.addPage(); y = cab(); y = cabTabela(doc, M, y, cols); }
-    y = linhaTabela(doc, M, y, cols, [k, fmt(v.ton, 1), fmt(v.custo, 2)]);
-  }
-  y += 1;
-  linhaTabela(doc, M, y, cols, ['TOTAL', '', 'R$ ' + fmt(totCusto, 2)], { bold: true, cor: GREEN, fill: true });
-  rodapeNavy(doc, logo, 'Recomendação — total por insumo da fazenda');
-}
-
-export async function montarRelatorioRecomendacaoFazenda(fazendaId: string, safra: string): Promise<Blob> {
+// Coleta, por talhão (ordem alfanumérica), as doses marcadas com ★ da safra —
+// base tanto do PDF quanto do Excel da fazenda.
+async function coletarGruposFazenda(fazendaId: string, safra: string) {
   const faz = getFazendas().find(f => f.id === fazendaId) ?? null;
-  if (!faz) throw new Error('Fazenda não encontrada.');
-  const cli = getClientes().find(c => c.id === faz.clienteId) ?? null;
-  const talhoes = ordenarTalhoesAlfa(getTalhoes().filter(t => t.fazendaId === fazendaId));
+  const cli = faz ? getClientes().find(c => c.id === faz.clienteId) ?? null : null;
+  const talhoes = faz ? ordenarTalhoesAlfa(getTalhoes().filter(t => t.fazendaId === fazendaId)) : [];
   const numDe = construirNumDe();
   const grupos: GrupoTalhao[] = [];
   for (const t of talhoes) {
@@ -574,19 +572,24 @@ export async function montarRelatorioRecomendacaoFazenda(fazendaId: string, safr
     const itens = achatarDoses(desc, numDe, true);
     if (itens.length) grupos.push({ talhao: { id: t.id, nome: t.nome, areaHa: t.areaHa ?? 0 }, cenarios: desc, itens });
   }
+  return { faz, cli, grupos };
+}
+
+export async function montarRelatorioRecomendacaoFazenda(fazendaId: string, safra: string): Promise<Blob> {
+  const { faz, cli, grupos } = await coletarGruposFazenda(fazendaId, safra);
+  if (!faz) throw new Error('Fazenda não encontrada.');
   if (grupos.length === 0) throw new Error('Nenhuma recomendação marcada com ★ nesta fazenda/safra. Marque as doses (★) na aba Recomendações dos talhões.');
 
   const logo = await carregarImg('/images/logo-branca.png').catch(() => null);
   const { jsPDF } = await import('jspdf');
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4', compress: true });
   desenharCapaFazenda(doc, faz.nome, cli?.nome ?? '', safra, grupos, logo);
+  // Cada talhão: só os MAPAS das doses ★ (o resumo já está consolidado na pág. 1).
   for (const g of grupos) {
     doc.addPage();
-    try { await renderBookOficialNoDoc(doc, g.cenarios, { novaPaginaAntes: false, somenteUsar: true, resumo: true }); }
+    try { await renderBookOficialNoDoc(doc, g.cenarios, { novaPaginaAntes: false, somenteUsar: true, resumo: false }); }
     catch (e) { console.warn('[relatorio-fazenda] talhão', g.talhao.nome, 'falhou:', e); }
   }
-  doc.addPage();
-  desenharTotalGeralInsumo(doc, faz.nome, safra, grupos, logo);
   return doc.output('blob');
 }
 
@@ -603,4 +606,45 @@ export async function gerarRelatorioRecomendacaoFazenda(fazendaId: string, safra
     if (aba) { try { aba.document.body.innerHTML = `<h3 style="color:#b91c1c;font-family:system-ui">Falha ao gerar o relatório</h3><pre style="white-space:pre-wrap;font-size:12px;color:#334155">${msg.replace(/[<>&]/g, s => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[s]!))}</pre>`; } catch {} }
     throw e;
   }
+}
+
+// Versão EXCEL (editável) do relatório da FAZENDA — só na fazenda. Uma planilha:
+// à esquerda a lista por talhão (talhão · área · Nº-fórmula · qtd t · invest.) e à
+// direita o VOLUME TOTAL por produto (soma da fazenda). Números como número (não
+// texto) p/ o usuário editar/somar.
+export async function gerarRecomendacaoFazendaExcel(fazendaId: string, safra: string): Promise<void> {
+  const { faz, grupos } = await coletarGruposFazenda(fazendaId, safra);
+  if (!faz) throw new Error('Fazenda não encontrada.');
+  if (grupos.length === 0) throw new Error('Nenhuma recomendação marcada com ★ nesta fazenda/safra. Marque as doses (★) na aba Recomendações dos talhões.');
+  const r1 = (x: number) => Math.round((x ?? 0) * 10) / 10;
+  const r2 = (x: number) => Math.round((x ?? 0) * 100) / 100;
+  const rot = (it: ItemDose) => (it.numero < 1e9 ? String(it.numero).padStart(2, '0') + ' - ' : '') + it.d.nomeEquacao;
+
+  const left: (string | number)[][] = [];
+  let totInvest = 0;
+  for (const g of grupos) {
+    let primeiro = true;
+    for (const it of g.itens) {
+      totInvest += it.d.custo ?? 0;
+      left.push([primeiro ? g.talhao.nome : '', primeiro ? r1(g.talhao.areaHa) : '', rot(it), r1(it.d.toneladas), r2(it.d.custo ?? 0)]);
+      primeiro = false;
+    }
+    left.push(['', '', '', '', '']);   // separador entre talhões
+  }
+  left.push(['TOTAL FAZENDA', '', '', '', r2(totInvest)]);
+
+  const right: (string | number)[][] = volumePorProduto(grupos).map(([k, v]) => [k, r1(v.ton), r2(v.custo)]);
+
+  const XLSX = await import('xlsx');
+  const aoa: (string | number)[][] = [
+    ['TALHÃO', 'ÁREA (ha)', 'PRODUTO (Nº - fórmula)', 'TOTAL PRODUTO (t)', 'INVEST. (R$)', '', 'PRODUTO', 'VOLUME TOTAL (t)', 'INVEST. (R$)'],
+  ];
+  const n = Math.max(left.length, right.length);
+  for (let i = 0; i < n; i++) aoa.push([...(left[i] ?? ['', '', '', '', '']), '', ...(right[i] ?? ['', '', ''])]);
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = [{ wch: 16 }, { wch: 10 }, { wch: 42 }, { wch: 16 }, { wch: 14 }, { wch: 2 }, { wch: 18 }, { wch: 16 }, { wch: 14 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Recomendação');
+  XLSX.writeFile(wb, `Recomendacao_${faz.nome}_${safra}`.replace(/[^\w.\-]+/g, '_') + '.xlsx');
 }

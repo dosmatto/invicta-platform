@@ -1,5 +1,12 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.7.19': [
+    'RECOMENDAÇÕES — Nº NA FRENTE DE CADA DOSE: na lista de recomendações (aba Recomendações, onde se marca a ★), cada dose agora mostra o Nº do cadastro da equação na frente (ex.: "05 · Calcário…") — o mesmo número que sai no relatório, para cruzar fácil.',
+    'RELATÓRIO DO TALHÃO — VOLTOU A SER COMO ERA + OPÇÃO "SÓ AS MARCADAS ★": a seção Recomendação (aba Relatórios) voltou ao padrão antigo (todas as doses dos cenários selecionados). Ganhou um botão "Só as marcadas ★ (com resumo)" que, quando ligado, imprime apenas as doses com estrela e começa por uma página-resumo (fórmula + quantidade total). Combina com a Fertilidade normalmente (fertilidade + só as marcadas).',
+    'RELATÓRIO DA FAZENDA — PÁGINA 1 ESTILO PLANILHA E SEM DUPLICAR: a 1ª página agora traz, à esquerda, a lista por talhão (talhão · área · Nº-fórmula · quantidade total · investimento) e, à direita, o VOLUME TOTAL por produto somando a fazenda. As páginas de cada talhão passam a trazer só os mapas (antes o resumo saía duplicado). Talhões sempre em ordem alfanumérica.',
+    'RELATÓRIO DA FAZENDA — VERSÃO EXCEL: novo botão "Excel" (Fazenda → aba Talhões, ao lado do PDF) que baixa a mesma consolidação em .xlsx editável (por talhão + volume total por produto), com os números como número para você somar/editar.',
+    'RELATÓRIO DE FERTILIDADE — Al DESMARCADO POR PADRÃO: o Alumínio (Al) passa a vir DESMARCADO por padrão na aba Relatórios (igual aos índices de vegetação); marque quando quiser incluí-lo.',
+  ],
   '2.7.18': [
     'FERTILIDADE — LAUDO IMPORTADO QUE FICAVA "0 PONTOS / SEM LEGENDA": corrigido o elo amostra→ponto da grade. (1) Se a importação apontava para uma grade sem pontos (ou de outra safra), a Fertilidade agora usa automaticamente a grade do talhão/safra com MAIS pontos. (2) Quando os NÚMEROS do laudo não batem com os da grade (lab renumerou as amostras), passa a casar por ORDEM (i-ésima amostra → i-ésimo ponto), com aviso na tela. (3) Novo diagnóstico na aba Fertilidade mostrando quantas amostras casaram com a grade — some o "0 pontos" sem explicação.',
   ],

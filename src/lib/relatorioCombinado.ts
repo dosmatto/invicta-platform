@@ -14,6 +14,11 @@ export interface ArgsRelatorioCombinado {
   recomendacao?: Cenario[];          // cenários com grids JÁ descomprimidos (doses[].grid)
   fertilidade?: DadosRelatorioFert[];
   nomeArquivo: string;
+  // Seção Recomendação: por padrão sai como antes (todas as doses, sem resumo).
+  // Com `somenteUsarRec`, só as doses marcadas com ★; `resumoRec` adiciona a
+  // página-resumo (fórmula + quantidade total) antes dos mapas.
+  somenteUsarRec?: boolean;
+  resumoRec?: boolean;
 }
 
 // Gera o PDF combinado, abre em nova aba e devolve o total de páginas (p/ o
@@ -35,9 +40,7 @@ export async function gerarRelatorioCombinado(args: ArgsRelatorioCombinado): Pro
       temConteudo = true;
     }
     if (temRec) {
-      // Só as doses marcadas com ★ (usar) + página-resumo (fórmula + quantidade
-      // total) antes dos mapas — conforme pedido do relatório de recomendação.
-      await renderBookOficialNoDoc(doc, args.recomendacao!, { novaPaginaAntes: temConteudo, somenteUsar: true, resumo: true });
+      await renderBookOficialNoDoc(doc, args.recomendacao!, { novaPaginaAntes: temConteudo, somenteUsar: args.somenteUsarRec, resumo: args.resumoRec });
       temConteudo = true;
     }
     const paginas = doc.getNumberOfPages();
