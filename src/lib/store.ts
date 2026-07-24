@@ -1032,7 +1032,15 @@ export function deletePadraoAmostragem(id: string) {
 export function getGrades(talhaoId?: string, safra?: string, metodo?: 'grid' | 'zonas'): GradeAmostragem[] {
   let all = loadFiltrado<GradeAmostragem>('inv_grades');
   if (talhaoId) all = all.filter(g => g.talhaoId === talhaoId);
-  if (safra) all = all.filter(g => g.safra === safra);
+  if (safra) {
+    // Filtra por ANO (do campo `ano`, derivado da Data de referência), não pela
+    // string da safra — assim uma grade com data de 2024 cai no Ano 2024 mesmo
+    // que a safra ativa na hora fosse outra. Fallback: deriva da safra gravada.
+    const anoSel = anoDaSafra(safra);
+    all = anoSel == null
+      ? all.filter(g => g.safra === safra)
+      : all.filter(g => (g.ano ?? anoDaSafra(g.safra)) === anoSel);
+  }
   if (metodo) all = all.filter(g => (g.metodo ?? 'grid') === metodo);
   return all.sort((a, b) => a.criadoEm.localeCompare(b.criadoEm));
 }

@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.7.24': [
+    'GRADE CAI NO ANO CERTO: a lista de grades de amostragem passa a filtrar por ANO (vindo da Data de referência da grade), não pela safra ativa na hora. Assim uma grade lançada com data de outro ano aparece ao selecionar aquele Ano no topo — antes ficava sempre no ano ativo (ex.: 2026). Grades antigas seguem no ano de sempre (compatível).',
+  ],
   '2.7.23': [
     'AMOSTRAGEM — DATA DE REFERÊNCIA NAS GRADES: gerar grade (Amostragem), grade por Zonas e IMPORTAR grade (KML/SHP) agora têm o campo "DATA DE REFERÊNCIA" (default hoje, editável, retroativo). A ÉPOCA (1ª jan–jun / 2ª jul–dez) deixa de ser escolhida à mão e passa a sair da data; o ANO também. Grades antigas foram migradas mantendo a época que já tinham. Assim a amostragem fica classificada por Ano + Época igual à fertilidade.',
   ],
