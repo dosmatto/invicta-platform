@@ -11,3 +11,11 @@ services:
     plan: standard
     healthCheckPath: /health
     autoDeploy: true
+    # Só rebuilda quando muda o BACKEND. Sem isto, CADA push no repositório (inclui
+    # todo deploy do FRONT) reiniciava o interpolador; quem clicava "Processar"
+    # durante o restart caía no "servidor acordando" e esperava ~1 min antes do 1º
+    # mapa — parecia interpolação lentíssima, mas o cálculo em si leva ~2s.
+    buildFilter:
+      paths:
+        - backend/**
+        - render.yaml

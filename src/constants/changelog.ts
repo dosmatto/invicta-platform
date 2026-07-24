@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.7.29': [
+    'INTERPOLAÇÃO "DE 1 MINUTO" — CAUSA REAL ENCONTRADA E CORRIGIDA: o cálculo em si leva ~2s por mapa (medido no servidor); a lentidão era o BACKEND REINICIANDO a cada deploy. Como o interpolador é Blueprint do MESMO repositório com autoDeploy, cada publicação do app (o front) reiniciava o servidor — quem processava naquele instante caía em "servidor acordando" e esperava ~1 min. Adicionado buildFilter no render.yaml: o backend só reinicia quando muda código do backend, não a cada deploy do front. Dica: modelo de variograma FIXO (Configurações da interpolação) deixa cada mapa em ~0,9s (vs ~2s no auto).',
+  ],
   '2.7.28': [
     'ANO/ÉPOCA — FASE 3 (PRODUTIVIDADE, CONDUTIVIDADE, COMPACTAÇÃO): esses fluxos passam a classificar por ANO (com Época derivada da data), igual à fertilidade. PRODUTIVIDADE: novo campo "Data de referência (colheita)" e o antigo "Época" foi renomeado para "Época de cultivo" (Verão/Safrinha/Inverno) para não confundir com a 1ª/2ª época do período. COMPACTAÇÃO: novo campo "Data de referência" na importação. CONDUTIVIDADE: passa a derivar o Ano da "data" do levantamento que já existia. Tudo cai no ano certo (filtro por Ano); registros antigos foram migrados pelo ano da safra.',
   ],
