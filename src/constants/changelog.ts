@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.7.28': [
+    'ANO/ÉPOCA — FASE 3 (PRODUTIVIDADE, CONDUTIVIDADE, COMPACTAÇÃO): esses fluxos passam a classificar por ANO (com Época derivada da data), igual à fertilidade. PRODUTIVIDADE: novo campo "Data de referência (colheita)" e o antigo "Época" foi renomeado para "Época de cultivo" (Verão/Safrinha/Inverno) para não confundir com a 1ª/2ª época do período. COMPACTAÇÃO: novo campo "Data de referência" na importação. CONDUTIVIDADE: passa a derivar o Ano da "data" do levantamento que já existia. Tudo cai no ano certo (filtro por Ano); registros antigos foram migrados pelo ano da safra.',
+  ],
   '2.7.27': [
     'LIMPEZA DO CADASTRO POR BOTÃO (Início): no painel Início, quem tem permissão vê a seção "Limpeza do cadastro" com botões (2 cliques) para REMOVER TALHÕES DUPLICADOS (cópia exata: mesmo produtor+fazenda+nome+área) e REMOVER FAZENDAS ÓRFÃS (sem produtor). Os de mesmo nome com ÁREA diferente NÃO são apagados (ficam listados para revisão). Substitui o comando de console.',
   ],

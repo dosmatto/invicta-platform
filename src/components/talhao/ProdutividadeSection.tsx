@@ -7,6 +7,7 @@
 // portado). Salva como versão; 1 = oficial. + Comparador Produtividade × NDVI.
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { hojeSaoPauloISO, periodoDeData, rotuloEpoca } from '@/lib/periodo';
 import { useApp } from '@/context/AppContext';
 import {
   getSafras, getPlantio, getTalhoes, getMapasProdutividade, saveMapaProdutividade,
@@ -58,6 +59,9 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
   const [cultura, setCultura] = useState('soja');
   const [epoca, setEpoca] = useState('');
   const [unidade, setUnidade] = useState<Unidade>('kg/ha');
+  // Data de referência (colheita) → Ano/Época do período (default hoje-SP).
+  const [dataRef, setDataRef] = useState<string>(() => hojeSaoPauloISO());
+  const periodoProd = periodoDeData(dataRef);
   useEffect(() => { if (culturaPlantio && CULTURAS.includes(culturaPlantio.toLowerCase())) setCultura(culturaPlantio.toLowerCase()); }, [culturaPlantio]);
 
   // 1) Máquinas + mapeamento de colunas (do 1º arquivo)
@@ -193,7 +197,7 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
     const primeiro = versoes.filter(v => v.cultura === cultura && v.epoca === epoca).length === 0;
     const mr = parseFloat(mediaReal);
     const rec = saveMapaProdutividade({
-      talhaoId: nav.talhaoId, safra, epoca, cultura, oficial: primeiro, unidade,
+      talhaoId: nav.talhaoId, safra, epoca, dataReferencia: dataRef, cultura, oficial: primeiro, unidade,
       nMaquinas: maqs.length, normalizado: clean.corrigir_colhedora,
       mediaRealKgha: isFinite(mr) && mr > 0 ? paraKgha(mr, unidade) : null,
       cleaning: clean as unknown as Record<string, number | boolean>,
@@ -244,8 +248,12 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
       {/* Contexto */}
       <div className="grid grid-cols-3 gap-2">
         <Campo label="Cultura"><select value={cultura} onChange={e => setCultura(e.target.value)} className="w-full rounded px-2 py-1 text-[11px] outline-none" style={inputStyle}>{CULTURAS.map(c => <option key={c} value={c}>{c[0].toUpperCase() + c.slice(1)}</option>)}</select></Campo>
-        <Campo label="Época"><select value={epoca} onChange={e => setEpoca(e.target.value)} className="w-full rounded px-2 py-1 text-[11px] outline-none" style={inputStyle}>{EPOCAS.map(e2 => <option key={e2.v} value={e2.v}>{e2.l}</option>)}</select></Campo>
+        <Campo label="Época de cultivo"><select value={epoca} onChange={e => setEpoca(e.target.value)} className="w-full rounded px-2 py-1 text-[11px] outline-none" style={inputStyle}>{EPOCAS.map(e2 => <option key={e2.v} value={e2.v}>{e2.l}</option>)}</select></Campo>
         <Campo label="Unidade"><select value={unidade} onChange={e => setUnidade(e.target.value as Unidade)} className="w-full rounded px-2 py-1 text-[11px] outline-none" style={inputStyle}>{(['kg/ha', 'sc/ha', 't/ha'] as Unidade[]).map(uu => <option key={uu} value={uu}>{uu}</option>)}</select></Campo>
+      </div>
+      <div className="grid grid-cols-3 gap-2">
+        <Campo label="Data de referência (colheita)"><input type="date" value={dataRef} onChange={e => setDataRef(e.target.value)} className="w-full rounded px-2 py-1 text-[11px] outline-none" style={inputStyle} /></Campo>
+        <div className="col-span-2 flex items-end pb-1 text-[10px]" style={{ color: periodoProd ? '#86efac' : '#fbbf24' }}>{periodoProd ? `Ano ${periodoProd.ano} · ${rotuloEpoca(periodoProd.epoca)}` : 'data inválida'}</div>
       </div>
 
       {/* 1) Máquinas */}

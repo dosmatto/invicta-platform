@@ -27,6 +27,7 @@ import type { Legenda } from '@/lib/legendas';
 import { Upload, Loader2, Activity, Eraser, AlertTriangle, Save, Trash2, Play, Plus, Layers, Grid3x3, RefreshCw, MapPin, ChevronDown, ChevronUp } from 'lucide-react';
 
 import { inputStyle } from '@/constants/ui';
+import { hojeSaoPauloISO, periodoDeData, rotuloEpoca } from '@/lib/periodo';
 import { fmtMax2 as fmt } from '@/lib/formato';
 
 type Ponto = { lng: number; lat: number; valor: number };
@@ -62,6 +63,7 @@ export function CompactacaoSection({ safraNome }: { safraNome?: string } = {}) {
   const [arq, setArq] = useState<ArquivoPontos | null>(null);
   const [colsSel, setColsSel] = useState<string[]>([]);
   const [nome, setNome] = useState('');
+  const [dataRef, setDataRef] = useState<string>(() => hojeSaoPauloISO());
   const [parseErro, setParseErro] = useState('');
 
   // interpolação
@@ -142,10 +144,10 @@ export function CompactacaoSection({ safraNome }: { safraNome?: string } = {}) {
     if (!arq || !nav.talhaoId || !safra || colsSel.length === 0) return;
     const nova = saveImportacaoCompactacao({
       talhaoId: nav.talhaoId, safra, nome: nome.trim() || 'Penetrometria',
-      profundidades: colsSel,
+      profundidades: colsSel, dataReferencia: dataRef,
       pontos: pontosCompactacao(arq.pontos, colsSel),
     });
-    setArq(null); setColsSel([]); setNome(''); setModoUpload(false);
+    setArq(null); setColsSel([]); setNome(''); setDataRef(hojeSaoPauloISO()); setModoUpload(false);
     setImportacoes(getImportacoesCompactacao(nav.talhaoId, safra));
     setImportacaoId(nova.id);
   }
@@ -285,6 +287,11 @@ export function CompactacaoSection({ safraNome }: { safraNome?: string } = {}) {
               <div>
                 <label className="text-[10px] font-semibold block mb-0.5" style={{ color: '#64748b' }}>Nome da importação</label>
                 <input value={nome} onChange={e => setNome(e.target.value)} className="w-full rounded px-2 py-1.5 text-xs outline-none" style={inputStyle} />
+                <label className="text-[10px] font-semibold block mt-1.5" style={{ color: '#64748b' }}>Data de referência (define Ano/Época)</label>
+                <div className="flex items-center gap-2">
+                  <input type="date" value={dataRef} onChange={e => setDataRef(e.target.value)} className="rounded px-2 py-1.5 text-xs outline-none" style={inputStyle} />
+                  <span className="text-[10px]" style={{ color: periodoDeData(dataRef) ? '#86efac' : '#fbbf24' }}>{(() => { const p = periodoDeData(dataRef); return p ? `Ano ${p.ano} · ${rotuloEpoca(p.epoca)}` : 'data inválida'; })()}</span>
+                </div>
               </div>
               <button onClick={salvarImportacao} disabled={colsSel.length === 0}
                 className="w-full py-2 rounded text-xs font-bold text-white flex items-center justify-center gap-1.5 disabled:opacity-40"

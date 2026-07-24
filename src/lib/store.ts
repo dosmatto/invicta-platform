@@ -121,6 +121,21 @@ export function setPlantio(talhaoId: string, safra: string, cultura: string) {
 // Cada ponto do penetrômetro já vem georreferenciado com a resistência (MPa)
 // por profundidade — não precisa juntar com grade como na fertilidade.
 export interface PontoCompactacao { lng: number; lat: number; valores: Record<string, number>; }
+// ── Helpers de PERÍODO p/ registros classificados por Ano (compactação,
+// produtividade, condutividade). Store é a autoridade do Ano; a Época sai da
+// data quando preciso (não é persistida). Ver src/lib/periodo.ts.
+function comAnoRef<T extends { dataReferencia?: string; ano?: number }>(reg: T): T {
+  const dataRef = reg.dataReferencia && dataValida(reg.dataReferencia) ? reg.dataReferencia : hojeSaoPauloISO();
+  return { ...reg, dataReferencia: dataRef, ano: anoDeData(dataRef) ?? undefined };
+}
+// Filtra por ANO (campo `ano`; fallback anoDaSafra da safra gravada). Safra que
+// não parseia p/ ano cai na igualdade de string (retrocompat).
+function filtraPorAno<T extends { ano?: number; safra?: string }>(lista: T[], safra: string): T[] {
+  const anoSel = anoDaSafra(safra);
+  if (anoSel == null) return lista.filter(x => x.safra === safra);
+  return lista.filter(x => (x.ano ?? (x.safra ? anoDaSafra(x.safra) : null)) === anoSel);
+}
+
 export interface ImportacaoCompactacao {
   id: string;
   talhaoId: string;
@@ -128,19 +143,21 @@ export interface ImportacaoCompactacao {
   nome: string;
   profundidades: string[];   // rótulos derivados das colunas escolhidas
   pontos: PontoCompactacao[];
+  dataReferencia?: string;   // 'YYYY-MM-DD' — data operacional; deriva Ano/Época
+  ano?: number;
   criadoEm: string;
 }
 
 export function getImportacoesCompactacao(talhaoId?: string, safra?: string): ImportacaoCompactacao[] {
   let lista = loadFiltrado<ImportacaoCompactacao>('inv_compactacao');
   if (talhaoId) lista = lista.filter(i => i.talhaoId === talhaoId);
-  if (safra) lista = lista.filter(i => i.safra === safra);
+  if (safra) lista = filtraPorAno(lista, safra);
   return lista.sort((a, b) => (b.criadoEm ?? '').localeCompare(a.criadoEm ?? ''));
 }
 
 export function saveImportacaoCompactacao(data: Omit<ImportacaoCompactacao, 'id' | 'criadoEm'>): ImportacaoCompactacao {
   const lista = load<ImportacaoCompactacao>('inv_compactacao');
-  const nova: ImportacaoCompactacao = comEmpresa({ ...data, id: uid(), criadoEm: new Date().toISOString() });
+  const nova: ImportacaoCompactacao = comEmpresa(comAnoRef({ ...data, id: uid(), criadoEm: new Date().toISOString() }));
   lista.push(nova);
   save('inv_compactacao', lista);
   return nova;
@@ -166,19 +183,21 @@ export interface GradeCompactacao {
   densidade: number;              // ha por ponto
   distanciaBorda: number;         // m
   pontos: PontoGradeCompact[];
+  dataReferencia?: string;
+  ano?: number;
   criadoEm: string;
 }
 
 export function getGradesCompactacao(talhaoId?: string, safra?: string): GradeCompactacao[] {
   let lista = loadFiltrado<GradeCompactacao>('inv_grades_compact');
   if (talhaoId) lista = lista.filter(g => g.talhaoId === talhaoId);
-  if (safra) lista = lista.filter(g => g.safra === safra);
+  if (safra) lista = filtraPorAno(lista, safra);
   return lista.sort((a, b) => (b.criadoEm ?? '').localeCompare(a.criadoEm ?? ''));
 }
 
 export function saveGradeCompactacao(data: Omit<GradeCompactacao, 'id' | 'criadoEm'>): GradeCompactacao {
   const lista = load<GradeCompactacao>('inv_grades_compact');
-  const nova: GradeCompactacao = comEmpresa({ ...data, id: uid(), criadoEm: new Date().toISOString() });
+  const nova: GradeCompactacao = comEmpresa(comAnoRef({ ...data, id: uid(), criadoEm: new Date().toISOString() }));
   lista.push(nova);
   save('inv_grades_compact', lista);
   return nova;
@@ -340,6 +359,7 @@ export interface LevantamentoCondutividade {
   profundidadeOficial?: string;   // qual profundidade é a camada oficial
   extras?: ExtraCondutividade[];  // outras variáveis importadas junto (altitude…)
   oficial: boolean;               // versão oficial (1 por talhão)
+  ano?: number;                   // = ano(data) — classificação por período (EC é estrutural, sem safra)
   pontos: PontoCondutividade[];   // valores incluem profundidades + extras
   rodadas?: Record<string, RodadaCondutividade[]>;  // histórico de processamento por profundidade (C4.1)
   criadoEm: string;
@@ -353,7 +373,9 @@ export function getCondutividade(talhaoId?: string): LevantamentoCondutividade[]
 
 export function saveCondutividade(data: Omit<LevantamentoCondutividade, 'id' | 'criadoEm'>): LevantamentoCondutividade {
   const lista = load<LevantamentoCondutividade>('inv_condutividade');
-  const nova: LevantamentoCondutividade = comEmpresa({ ...data, id: uid(), criadoEm: new Date().toISOString() });
+  // Ano vem da `data` do levantamento (default hoje-SP); EC é estrutural, sem safra.
+  const dref = data.data && dataValida(data.data) ? data.data : hojeSaoPauloISO();
+  const nova: LevantamentoCondutividade = comEmpresa({ ...data, data: dref, ano: anoDeData(dref) ?? undefined, id: uid(), criadoEm: new Date().toISOString() });
   // A 1ª versão do talhão (ou uma marcada explicitamente) vira a oficial.
   if (nova.oficial || !lista.some(l => l.talhaoId === nova.talhaoId && l.oficial)) {
     nova.oficial = true;
@@ -362,6 +384,34 @@ export function saveCondutividade(data: Omit<LevantamentoCondutividade, 'id' | '
   lista.push(nova);
   save('inv_condutividade', lista);
   return nova;
+}
+
+// Migração idempotente: dataReferencia/ano nos registros de compactação,
+// produtividade e condutividade antigos. Ano vem da SAFRA legada (1º número)
+// preservando mês/dia da data operacional; condutividade usa a `data` do
+// levantamento (ou criadoEm), pois é estrutural (sem safra).
+export function migrarPeriodoDemaisV1(): void {
+  const backfill = <T extends { safra?: string; ano?: number; dataReferencia?: string; data?: string; criadoEm?: string }>(arr: T[], usaData = false): boolean => {
+    let m = false;
+    for (const x of arr) {
+      if (x.ano != null && (usaData ? !!x.data : !!x.dataReferencia)) continue;
+      const anoSafra = x.safra ? anoDaSafra(x.safra) : null;
+      const baseRaw = (usaData && x.data && dataValida(x.data)) ? x.data
+        : (x.dataReferencia && dataValida(x.dataReferencia)) ? x.dataReferencia
+        : (x.criadoEm || hojeSaoPauloISO()).slice(0, 10);
+      const p = partesData(baseRaw);
+      const dref = (anoSafra != null && p) ? `${anoSafra}${baseRaw.slice(4)}` : baseRaw;
+      const dfinal = dataValida(dref) ? dref : hojeSaoPauloISO();
+      if (usaData) x.data = dfinal; else x.dataReferencia = dfinal;
+      x.ano = anoDeData(dfinal) ?? undefined;
+      m = true;
+    }
+    return m;
+  };
+  const lc = load<ImportacaoCompactacao>('inv_compactacao'); if (backfill(lc)) save('inv_compactacao', lc);
+  const gc = load<GradeCompactacao>('inv_grades_compact'); if (backfill(gc)) save('inv_grades_compact', gc);
+  const mp = load<MapaProdutividade>('inv_produtividade'); if (backfill(mp)) save('inv_produtividade', mp);
+  const cond = load<LevantamentoCondutividade>('inv_condutividade'); if (backfill(cond, true)) save('inv_condutividade', cond);
 }
 
 export function deleteCondutividade(id: string) {
@@ -408,7 +458,9 @@ export interface MapaProdutividade {
   empresaId?: string;
   talhaoId: string;
   safra: string;
-  epoca: string;          // 'verao' | 'safrinha' | 'inverno' | ''
+  epoca: string;          // ÉPOCA DE CULTIVO: 'verao' | 'safrinha' | 'inverno' | '' (≠ 1ª/2ª época do período)
+  dataReferencia?: string; // 'YYYY-MM-DD' — data operacional; deriva Ano/Época (1ª/2ª) do período
+  ano?: number;
   cultura: string;
   versao: number;
   oficial: boolean;
@@ -427,7 +479,7 @@ export interface MapaProdutividade {
 export function getMapasProdutividade(talhaoId?: string, safra?: string): MapaProdutividade[] {
   let lista = loadFiltrado<MapaProdutividade>('inv_produtividade');
   if (talhaoId) lista = lista.filter(m => m.talhaoId === talhaoId);
-  if (safra) lista = lista.filter(m => m.safra === safra);
+  if (safra) lista = filtraPorAno(lista, safra);
   return lista.sort((a, b) => (b.criadoEm ?? '').localeCompare(a.criadoEm ?? ''));
 }
 
@@ -436,7 +488,7 @@ export function saveMapaProdutividade(data: Omit<MapaProdutividade, 'id' | 'vers
   const irmaos = lista.filter(m => m.talhaoId === data.talhaoId && m.safra === data.safra && m.epoca === data.epoca && m.cultura === data.cultura);
   const versao = irmaos.reduce((mx, m) => Math.max(mx, m.versao), 0) + 1;
   if (data.oficial) irmaos.forEach(m => { m.oficial = false; });
-  const nova: MapaProdutividade = comEmpresa({ ...data, id: uid(), versao, criadoEm: new Date().toISOString() });
+  const nova: MapaProdutividade = comEmpresa(comAnoRef({ ...data, id: uid(), versao, criadoEm: new Date().toISOString() }));
   lista.push(nova);
   save('inv_produtividade', lista);
   return nova;
