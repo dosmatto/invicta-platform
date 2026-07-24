@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.7.33': [
+    'INTERPOLAÇÃO (diagnóstico): a rota /health do backend agora informa qual servidor está rodando (gunicorn reciclado ou uvicorn) e o nº de workers — para confirmar que o fix de degradação está no ar. Sem efeito visível no app.',
+  ],
   '2.7.32': [
     'INTERPOLAÇÃO — FIX DEFINITIVO DA LENTIDÃO QUE VOLTAVA: a medição de dentro do servidor (nova rota /diag) provou que a CPU fresca é rápida (~1,2s p/ auto), mas o processo de vida longa DEGRADAVA ao longo do tempo (GDAL/rasterio + rasters repetidos incham a memória → swap → krigagem ~50× mais lenta: 1,6s → 67s). Restart resolvia, mas voltava. Agora o backend roda com gunicorn + worker uvicorn RECICLADO a cada ~100 requisições — a memória é restaurada sozinha, sem derrubar o serviço. É o fim do "de vez em quando fica lento de novo". (Muda no deploy do backend/Render.)',
   ],

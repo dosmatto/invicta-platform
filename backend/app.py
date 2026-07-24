@@ -135,6 +135,10 @@ def health():
         "cpu_count": os.cpu_count(),
         "libs": interp._versoes(),
         "cache": dict(interp._cache_stats),
+        # "server" = gunicorn/x.y quando roda reciclado (fix v2.7.32); vazio se
+        # ainda em uvicorn puro (deploy do backend nao propagou).
+        "server": os.environ.get("SERVER_SOFTWARE", ""),
+        "workers": os.environ.get("WEB_CONCURRENCY", ""),
     }
 
 

@@ -61,7 +61,7 @@ AMPLITUDE_MIN = 0.30
 NUGGET_MAX = 0.10
 # Versao do motor de interpolacao (conferir em GET /health para saber se o
 # backend foi reiniciado com o codigo novo).
-VERSION = "interp-21-instrumentado"
+VERSION = "interp-22-gunicorn-reciclado"
 
 
 # ============================================================ instrumentacao
