@@ -11,6 +11,12 @@ services:
     plan: standard
     healthCheckPath: /health
     autoDeploy: true
+    # 2 workers: o lote pesado de um usuário não trava a interpolação dos outros
+    # (deixam de esperar na fila do mesmo processo). Declarado AQUI porque o env do
+    # serviço tem prioridade sobre o ENV do Dockerfile — garante que valha.
+    envVars:
+      - key: WEB_CONCURRENCY
+        value: "2"
     # Só rebuilda quando muda o BACKEND. Sem isto, CADA push no repositório (inclui
     # todo deploy do FRONT) reiniciava o interpolador; quem clicava "Processar"
     # durante o restart caía no "servidor acordando" e esperava ~1 min antes do 1º
