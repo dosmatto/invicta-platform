@@ -1462,7 +1462,16 @@ function importacaoComDerivados(imp: ImportacaoLab): ImportacaoLab {
 export function getImportacoesLab(talhaoId?: string, safra?: string): ImportacaoLab[] {
   let all = loadFiltrado<ImportacaoLab>('inv_lab');
   if (talhaoId) all = all.filter(i => i.talhaoId === talhaoId);
-  if (safra) all = all.filter(i => i.safra === safra);
+  if (safra) {
+    // Filtra por ANO (não pela string exata da safra): um laudo lançado com Data
+    // de referência de 2024 aparece sob o Ano 2024, mesmo que a "safra" ativa na
+    // hora fosse outra. Fallback p/ registros sem `ano`: deriva da safra gravada.
+    // Se a safra não parseia p/ ano, cai na igualdade de string (retrocompat).
+    const anoSel = anoDaSafra(safra);
+    all = anoSel == null
+      ? all.filter(i => i.safra === safra)
+      : all.filter(i => (i.ano ?? anoDaSafra(i.safra)) === anoSel);
+  }
   return all.map(importacaoComDerivados).sort((a, b) => b.criadoEm.localeCompare(a.criadoEm));
 }
 

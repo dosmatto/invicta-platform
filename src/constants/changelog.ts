@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.7.22': [
+    'FERTILIDADE — LAUDO HISTÓRICO CAI NO ANO CERTO: a lista de importações de laudo passa a filtrar por ANO (o Ano vem da Data de referência), não pela safra exata. Assim um laudo lançado hoje com data de 2024 aparece ao selecionar o Ano 2024 (crie o Ano 2024 no seletor do topo para vê-lo). Laudos antigos seguem no mesmo Ano de sempre (compatível).',
+  ],
   '2.7.21': [
     'ANO/ÉPOCA — FASE 2 (RELABEL DA PLATAFORMA): "Safra" agora aparece como "ANO" em toda a interface — seletor do topo do talhão, painéis, avisos, dropdowns, coleta (era "Ciclo"), portal e cabeçalhos dos relatórios (PDF/Excel). O valor é mostrado como o ANO (ex.: "26/27" vira "2026", primeiro número). Internamente a chave não muda (nada é apagado; dados antigos seguem acessíveis).',
   ],
