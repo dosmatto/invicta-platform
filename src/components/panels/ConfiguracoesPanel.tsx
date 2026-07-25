@@ -58,6 +58,18 @@ function ServidorProcessamento() {
       {local && status === 'ok' && (
         <p className="text-[10px]" style={{ color: '#4ade80' }}>Interpolador local no ar — as interpolações rodam nesta máquina.</p>
       )}
+      <div className="pt-1">
+        <a href="/interpolador-local-mac.zip" download
+          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded text-[11px] font-semibold text-white transition-opacity hover:opacity-90"
+          style={{ background: 'var(--invicta-blue-mid)' }}>
+          <Download size={12} /> Baixar interpolador local (Mac)
+        </a>
+        <p className="text-[10px] leading-relaxed mt-1" style={{ color: '#94a3b8' }}>
+          Para rodar em ESTA máquina (ou na do John): 1) baixe e descompacte; 2) dê 2 cliques em <b>start.command</b>
+          {' '}(se o Mac bloquear, clique com o botão direito → <b>Abrir</b>); 3) espere aparecer “no ar em 127.0.0.1:8800” e deixe a janela aberta;
+          {' '}4) marque a opção acima. Precisa ter o <b>Python 3</b> instalado — o resto o script instala sozinho (~2-4 min na 1ª vez). Melhor no Chrome.
+        </p>
+      </div>
     </div>
   );
 }

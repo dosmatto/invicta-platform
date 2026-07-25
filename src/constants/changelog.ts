@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.7.36': [
+    'BAIXAR O INTERPOLADOR LOCAL (Configurações): em Configurações → "Processamento de mapas", novo botão "Baixar interpolador local (Mac)". Baixe o .zip, descompacte e dê 2 cliques em start.command para rodar a krigagem NA SUA MÁQUINA — assim o lote pesado ("Processar tudo") não disputa a CPU da nuvem com outros usuários (ex.: quando o John também está processando). Precisa de Python 3 instalado; o script instala o resto sozinho (~2-4 min na 1ª vez). Depois marque "Usar interpolador desta máquina". O pacote é gerado a cada publicação (sempre atualizado).',
+  ],
   '2.7.35': [
     'INTERPOLADOR DESTA MÁQUINA (opção, não padrão): em Configurações → "Processamento de mapas", marque "Usar interpolador desta máquina" para rodar a krigagem no SEU computador. Vale para lotes pesados ("Processar tudo") e evita disputar a CPU da nuvem com outros usuários — quem faz o lote grande roda local e libera a nuvem para o resto. Requer ligar o backend local (2 cliques em backend/start.command no Mac ou backend\\start.bat no Windows); o painel mostra na hora se está no ar (melhor no Chrome). Desmarque para voltar à nuvem. O gerenciamento de usuários (admin) continua sempre na nuvem.',
     'BACKEND — 2 WORKERS: o servidor da nuvem passou a rodar com 2 workers, então o lote pesado de um usuário não trava a interpolação dos outros (deixam de esperar na fila do mesmo processo). Muda no deploy do backend (Render).',
