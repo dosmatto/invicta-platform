@@ -27,16 +27,23 @@ const LEIAME = `INTERPOLADOR LOCAL — INVICTA (macOS / Windows)
 Este é o motor de interpolação (krigagem) que roda NA SUA MÁQUINA, para lotes
 pesados ("Processar tudo") sem disputar a nuvem com outros usuários.
 
-COMO USAR (Mac):
+COMO USAR (Mac) — MÉTODO QUE SEMPRE FUNCIONA (Terminal):
   1) Descompacte esta pasta.
-  2) Dê 2 cliques em "start.command".
-     - Se o macOS bloquear ("desenvolvedor não verificado"), clique com o botão
-       DIREITO no arquivo -> Abrir -> Abrir.
-  3) Espere aparecer:  INVICTA — Interpolador local no ar em http://127.0.0.1:8800
+  2) Abra o app "Terminal" (Spotlight: Cmd+Espaço, digite "Terminal").
+  3) No Terminal, digite  bash  e um ESPAÇO, depois ARRASTE o arquivo "start.sh"
+     desta pasta para dentro da janela do Terminal e tecle ENTER.
+     (fica algo como:  bash /Users/voce/Downloads/interpolador-invicta/start.sh )
+  4) Espere aparecer:  INVICTA — Interpolador local no ar em http://127.0.0.1:8800
      DEIXE ESSA JANELA ABERTA enquanto usa o app.
-  4) No app (de preferência no Chrome): Configurações -> marque
+  5) No app (de preferência no Chrome): Configurações -> marque
      "Usar interpolador desta máquina".
-  5) Pronto — as interpolações passam a rodar aqui. Para voltar à nuvem, desmarque.
+  6) Pronto — as interpolações passam a rodar aqui. Para voltar à nuvem, desmarque.
+
+  (O duplo-clique em "start.command" também funciona, MAS no macOS novo a Apple
+   bloqueia arquivos baixados da internet. Se aparecer "não foi possível verificar",
+   clique OK e vá em: Ajustes do Sistema -> Privacidade e Segurança -> role até o
+   fim -> "start.command foi bloqueado" -> "Abrir Mesmo Assim". O método do Terminal
+   acima evita isso.)
 
 COMO USAR (Windows): dê 2 cliques em "start.bat".
 

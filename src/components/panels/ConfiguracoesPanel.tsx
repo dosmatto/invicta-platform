@@ -65,9 +65,10 @@ function ServidorProcessamento() {
           <Download size={12} /> Baixar interpolador local (Mac)
         </a>
         <p className="text-[10px] leading-relaxed mt-1" style={{ color: '#94a3b8' }}>
-          Para rodar em ESTA máquina (ou na do John): 1) baixe e descompacte; 2) dê 2 cliques em <b>start.command</b>
-          {' '}(se o Mac bloquear, clique com o botão direito → <b>Abrir</b>); 3) espere aparecer “no ar em 127.0.0.1:8800” e deixe a janela aberta;
-          {' '}4) marque a opção acima. Precisa ter o <b>Python 3</b> instalado — o resto o script instala sozinho (~2-4 min na 1ª vez). Melhor no Chrome.
+          Para rodar em ESTA máquina (ou na do John): 1) baixe e descompacte; 2) abra o <b>Terminal</b>, digite <b>bash</b> + espaço,
+          {' '}arraste o arquivo <b>start.sh</b> para dentro e tecle Enter (evita o bloqueio do macOS); 3) espere “no ar em 127.0.0.1:8800” e deixe a janela aberta;
+          {' '}4) marque a opção acima. Precisa ter <b>Python 3</b> — o resto o script instala sozinho (~2-4 min na 1ª vez). Melhor no Chrome.
+          {' '}<span style={{ color: '#64748b' }}>(O duplo-clique em start.command também funciona; se o Mac bloquear, clique OK e vá em Ajustes → Privacidade e Segurança → “Abrir Mesmo Assim”.)</span>
         </p>
       </div>
     </div>

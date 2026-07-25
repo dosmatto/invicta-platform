@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.7.37': [
+    'INTERPOLADOR LOCAL — INSTRUÇÕES PARA O macOS NOVO (Sequoia): a Apple passou a bloquear o duplo-clique em arquivos baixados da internet (mensagem "não foi possível verificar se está livre de malware"). Atualizamos a dica em Configurações e o LEIA-ME do pacote para o método que sempre funciona: abrir o Terminal, digitar "bash " e arrastar o start.sh para dentro (Enter). Alternativa: clicar OK no aviso e ir em Ajustes do Sistema → Privacidade e Segurança → "Abrir Mesmo Assim".',
+  ],
   '2.7.36': [
     'BAIXAR O INTERPOLADOR LOCAL (Configurações): em Configurações → "Processamento de mapas", novo botão "Baixar interpolador local (Mac)". Baixe o .zip, descompacte e dê 2 cliques em start.command para rodar a krigagem NA SUA MÁQUINA — assim o lote pesado ("Processar tudo") não disputa a CPU da nuvem com outros usuários (ex.: quando o John também está processando). Precisa de Python 3 instalado; o script instala o resto sozinho (~2-4 min na 1ª vez). Depois marque "Usar interpolador desta máquina". O pacote é gerado a cada publicação (sempre atualizado).',
   ],
