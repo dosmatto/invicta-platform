@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.7.38': [
+    'BACKEND — BIBLIOTECAS PINADAS: as versões de numpy, scipy, pykrige, shapely, rasterio, fastapi, uvicorn, gunicorn etc. foram FIXADAS nas versões confirmadas funcionando (jul/2026). Antes estavam soltas, e um rebuild futuro podia puxar uma versão mais lenta sem aviso (a lentidão da interpolação já foi suspeita de atualização de biblioteca). Agora o servidor sempre sobe com o mesmo conjunto testado. Muda no deploy do backend (Render).',
+  ],
   '2.7.37': [
     'INTERPOLADOR LOCAL — INSTRUÇÕES PARA O macOS NOVO (Sequoia): a Apple passou a bloquear o duplo-clique em arquivos baixados da internet (mensagem "não foi possível verificar se está livre de malware"). Atualizamos a dica em Configurações e o LEIA-ME do pacote para o método que sempre funciona: abrir o Terminal, digitar "bash " e arrastar o start.sh para dentro (Enter). Alternativa: clicar OK no aviso e ir em Ajustes do Sistema → Privacidade e Segurança → "Abrir Mesmo Assim".',
   ],
