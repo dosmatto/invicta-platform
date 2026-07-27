@@ -18,6 +18,7 @@ import { listar as bibListar, type ConteudoEquacao } from '../biblioteca';
 import type { Cenario } from './cenarios';
 import { listarCenarios, descomprimirCenario } from './cenarios';
 import type { DoseCalculada } from './aplicar';
+import { classesVisiveis, indiceClasse } from './faixas';
 
 // Ordena talhões pelo nome de forma ALFANUMÉRICA (DNHDV 01 < 02 < 10) — ordem
 // padrão de TODOS os relatórios que listam vários talhões.
@@ -229,10 +230,11 @@ function desenharTabela(doc: JsPDF, x: number, y: number, w: number, titulo: str
 interface FaixaPlano { inf: number; sup: number; cor: string; area: number; pct: number; transparente: boolean; zero?: boolean }
 function planoDeAplicacao(dose: DoseCalculada, areaHa: number): FaixaPlano[] {
   const min = dose.doseMinima ?? 0;
-  const classes = [...dose.estilo.classes].filter(c => Number.isFinite(c.limiteSuperior)).sort((a, b) => a.limiteSuperior - b.limiteSuperior);
-  if (!classes.length) return [];
-  // Classes coloridas = as ACIMA da dose mínima da equação (as abaixo não ocorrem).
-  const coloridas = classes.filter(c => c.limiteSuperior > min);
+  if (!dose.estilo.classes.some(c => Number.isFinite(c.limiteSuperior))) return [];
+  // Classes coloridas = as ACIMA da dose mínima (as abaixo não ocorrem). MESMA
+  // lista/índice que o MAPA usa (classesVisiveis/indiceClasse) — sem isto, mapa
+  // e tabela discordavam nos pixels no piso da dose mínima.
+  const coloridas = classesVisiveis(dose.estilo.classes, min);
   const lims = coloridas.map(c => c.limiteSuperior);
   const cont = new Array(coloridas.length).fill(0);
   let nZero = 0, n = 0;
@@ -241,8 +243,7 @@ function planoDeAplicacao(dose: DoseCalculada, areaHa: number): FaixaPlano[] {
     for (let i = 0; i < valores.length; i++) {
       const v = valores[i]; if (!isFinite(v)) continue; n++;
       if (v <= 0) { nZero++; continue; }                 // ZERO = não aplica (faixa própria)
-      let k = lims.findIndex(L => v <= L); if (k < 0) k = coloridas.length - 1;
-      if (k >= 0) cont[k]++;
+      cont[indiceClasse(v, lims)]++;
     }
   } catch { /* sem grid */ }
   const areaPx = n > 0 ? areaHa / n : 0;

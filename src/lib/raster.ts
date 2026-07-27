@@ -5,6 +5,7 @@
 import { decodeGrid, type RespInterp } from './fertilidade';
 import { rampaVisualStops, valorParaPosicaoVisual, hexToRgb, type Legenda } from './legendas';
 import type { EstiloRecomendacao } from './biblioteca';
+import { classesVisiveis, indiceClasse } from './recomendacao/faixas';
 
 export interface PngColorido {
   dataUrl: string;
@@ -119,10 +120,13 @@ export function colorirDose(
   doseMinima = 0,
 ): PngColorido {
   const { valores, rows, cols } = decodeGrid(grid);
-  const classes = [...estilo.classes].filter(c => Number.isFinite(c.limiteSuperior)).sort((a, b) => a.limiteSuperior - b.limiteSuperior);
+  // MESMA lista de classes da tabela "Plano de aplicação" (classesVisiveis):
+  // as faixas abaixo da dose mínima não ocorrem. Sem isto, um pixel no piso
+  // (v === doseMinima) caía na faixa anterior e o mapa mostrava uma cor que não
+  // estava na legenda (ex.: roxo "50–1.000" com mínima 1.000).
+  const classes = classesVisiveis(estilo.classes, doseMinima);
   const cores = classes.map(c => hexToRgb(c.cor));
   const lims = classes.map(c => c.limiteSuperior);
-  const ult = cores.length - 1;
   const limiar = Math.max(0, doseMinima);   // abaixo da dose mínima da equação = não aplica
 
   const { canvas, ctx } = novoCanvas(cols, rows);
@@ -134,9 +138,7 @@ export function colorirDose(
     if (!isFinite(v) || cores.length === 0) { buf[p4 + 3] = 0; continue; }
     // ZERO / abaixo da dose mínima = TRANSPARENTE (a faixa colorida começa na mínima).
     if (v <= 0 || v < limiar || (estilo.zeroTransparente && v <= estilo.valorMinimo)) { buf[p4 + 3] = 0; continue; }
-    let k = lims.findIndex(L => v <= L);
-    if (k < 0) k = ult;
-    const [r, g, b] = cores[k];
+    const [r, g, b] = cores[indiceClasse(v, lims)];
     buf[p4] = r; buf[p4 + 1] = g; buf[p4 + 2] = b; buf[p4 + 3] = 255;
   }
   ctx.putImageData(img, 0, 0);

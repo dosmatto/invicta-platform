@@ -8,6 +8,7 @@
 
 import { decodeGrid } from '../fertilidade';
 import type { DoseCalculada } from './aplicar';
+import { classesVisiveis, indiceClasse } from './faixas';
 
 const PRJ_WGS84 =
   'GEOGCS["GCS_WGS_1984",DATUM["D_WGS_1984",SPHEROID["WGS_1984",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["Degree",0.017453292519943295]]';
@@ -83,10 +84,15 @@ const METRO_GRAU = 111320;
 function dosePolygons(dose: DoseCalculada, poligono: GeoJSON.Polygon | GeoJSON.MultiPolygon | null, clip: boolean): GeoJSON.FeatureCollection {
   const { valores, rows, cols } = decodeGrid(dose.grid);
   const [w, s, e, n] = dose.bounds;
-  const classes = [...dose.estilo.classes].filter(c => Number.isFinite(c.limiteSuperior)).sort((a, b) => a.limiteSuperior - b.limiteSuperior);
+  // MESMA classificação do mapa e da tabela (ver recomendacao/faixas.ts): as
+  // faixas abaixo da dose mínima não ocorrem. A TAXA exportada é o valor real
+  // do pixel — o que muda aqui é só o RÓTULO da classe, que antes discordava
+  // do mapa nos pixels no piso da dose mínima.
+  const minDose = dose.doseMinima ?? 0;
+  const classes = classesVisiveis(dose.estilo.classes, minDose);
   if (!classes.length || !poligono) return { type: 'FeatureCollection', features: [] };
   const lims = classes.map(c => c.limiteSuperior);
-  const classeDe = (v: number) => { const k = lims.findIndex(L => v <= L); return k < 0 ? classes.length - 1 : k; };
+  const classeDe = (v: number) => indiceClasse(v, lims);
   const ehTransp = (k: number) => dose.estilo.zeroTransparente && classes[k].limiteSuperior <= dose.estilo.valorMinimo;
 
   // amostra a dose no grid (vizinho mais próximo com valor — cobre a borda)
@@ -122,7 +128,8 @@ function dosePolygons(dose: DoseCalculada, poligono: GeoJSON.Polygon | GeoJSON.M
       if (!(dentro(cx, cy) || dentro(lonL, latT) || dentro(lonR, latT) || dentro(lonR, latB) || dentro(lonL, latB))) continue;
       const v = doseAt(cx, cy); if (!isFinite(v)) continue;
       const k = classeDe(v); if (ehTransp(k)) continue;
-      const props = { TAXA: Math.round(v), CLASSE: `${k === 0 ? 0 : lims[k - 1]}-${lims[k]}`, PRODUTO: dose.produto || dose.nomeEquacao, UNID: dose.unidade || 'kg/ha' };
+      // 1ª faixa começa na dose mínima (não em 0) — igual ao mapa/tabela.
+      const props = { TAXA: Math.round(v), CLASSE: `${k === 0 ? minDose : lims[k - 1]}-${lims[k]}`, PRODUTO: dose.produto || dose.nomeEquacao, UNID: dose.unidade || 'kg/ha' };
       if (clip) {
         const celula: Pt[] = [[lonL, latB], [lonR, latB], [lonR, latT], [lonL, latT]]; // CCW
         for (const anel of aneis) { const cl = clipPorCelula(anel, celula); if (cl.length >= 3) feats.push({ type: 'Feature', properties: props, geometry: { type: 'Polygon', coordinates: [fechar(cl)] } }); }

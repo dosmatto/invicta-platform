@@ -11,7 +11,8 @@
     "lint": "eslint",
     "teste:convite": "node scripts/teste-convite.mjs",
     "teste:periodo": "node scripts/teste-periodo.mjs",
-    "teste:zonas": "node scripts/teste-export-zonas.mjs"
+    "teste:zonas": "node scripts/teste-export-zonas.mjs",
+    "teste:faixas": "node scripts/teste-faixas.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",
