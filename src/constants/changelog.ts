@@ -1,5 +1,9 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.7.39': [
+    'RELATÓRIOS DA FAZENDA — AGORA VOCÊ ESCOLHE O ANO: na tela da fazenda (aba Talhões), os botões de relatório usavam o "Ano ativo" global — se ele não fosse o desejado, o relatório saía vazio e não havia onde indicar o ano. Agora há um seletor "Ano" acima dos botões, e o sistema DETECTA sozinho quais anos têm dado (mostra, em cada ano, se há "recomendação" e/ou "satélite"). Recomendação (PDF) e Excel passam a usar o ano escolhido; se o ano não tiver recomendação, o botão fica desabilitado (em vez de gerar um PDF vazio).',
+    'NOVO — RELATÓRIO DE SATÉLITE DA FAZENDA INTEIRA: novo botão "Relatório de satélite" na mesma tela. Você escolhe o ÍNDICE (todos, ou somente NDVI / NDRE / SAVI / o que houver) e marca QUAIS DATAS entram (uma, várias ou todas as imagens daquele ano), e sai um PDF único com todos os talhões — capa com a tabela de talhão × índices × datas, uma página por mapa (com satélite de fundo, contorno do talhão e barra de cores) e a lista dos talhões sem imagem no período. Usa o mesmo padrão visual do relatório de satélite do talhão. Onde fica: Clientes → Fazenda → aba Talhões → abaixo de "Importar em massa".',
+  ],
   '2.7.38': [
     'BACKEND — BIBLIOTECAS PINADAS: as versões de numpy, scipy, pykrige, shapely, rasterio, fastapi, uvicorn, gunicorn etc. foram FIXADAS nas versões confirmadas funcionando (jul/2026). Antes estavam soltas, e um rebuild futuro podia puxar uma versão mais lenta sem aviso (a lentidão da interpolação já foi suspeita de atualização de biblioteca). Agora o servidor sempre sobe com o mesmo conjunto testado. Muda no deploy do backend (Render).',
   ],

@@ -7,7 +7,7 @@
 // registro.
 
 import { emailUsuario } from '../auth';
-import { usarDadosSupabase, salvarDocSupabase, carregarDocsPorCampoSupabase, excluirDocSupabase } from '../supabaseData';
+import { usarDadosSupabase, salvarDocSupabase, carregarDocsPorCampoSupabase, excluirDocSupabase, projetarDocsPorCampoSupabase } from '../supabaseData';
 import { comprimirGrid, descomprimirGrid, type Grid } from '../fertilidade';
 import type { DoseCalculada } from './aplicar';
 
@@ -38,6 +38,18 @@ export async function salvarCenario(meta: Omit<Cenario, 'id' | 'geradoEm' | 'ger
   if (!usarDadosSupabase()) throw new Error('Nuvem indisponível para salvar o cenário.');
   await salvarDocSupabase(COL, id, cen);
   return cen;
+}
+
+// Só as SAFRAS que têm cenário, para uma lista de talhões — projeção leve
+// (não baixa os grids das doses). Usado para montar o seletor de Ano dos
+// relatórios da fazenda ("quais anos têm dado"). null = falha na consulta.
+export async function safrasComCenario(talhaoIds: string[]): Promise<string[] | null> {
+  if (!usarDadosSupabase() || talhaoIds.length === 0) return [];
+  const linhas = await projetarDocsPorCampoSupabase(COL, 'talhaoId', talhaoIds, ['safra']);
+  if (linhas === null) return null;
+  const set = new Set<string>();
+  for (const l of linhas) { const s = l.safra; if (s) set.add(s); }
+  return [...set];
 }
 
 export async function listarCenarios(talhaoId: string, safra?: string): Promise<Cenario[]> {

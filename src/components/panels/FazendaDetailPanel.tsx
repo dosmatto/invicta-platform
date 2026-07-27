@@ -3,16 +3,16 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { useApp } from '@/context/AppContext';
-import { getFazendas, getTalhoes, getSafras, saveTalhao, importarTalhoesLote, updateFazenda, excluirFazendaCascata, Fazenda, Talhao } from '@/lib/store';
-import { gerarRelatorioRecomendacaoFazenda, gerarRecomendacaoFazendaExcel } from '@/lib/recomendacao/relatorioCenarios';
+import { getFazendas, getTalhoes, saveTalhao, importarTalhoesLote, updateFazenda, excluirFazendaCascata, Fazenda, Talhao } from '@/lib/store';
 import { cloudExcluirMapasPorPrefixo, cloudExcluirPorPrefixo } from '@/lib/cloud';
 import { pode } from '@/lib/empresa';
 import { detectarMunicipiosFazenda } from '@/lib/geocode';
 import { prepararTalhoesEmMassa, CandidatoTalhao } from '@/lib/geo';
 import { conflitosDe, talhaoParaAlvo, areaHaFC, bboxDeFeatures, type AlvoOverlap, type Conflito } from '@/lib/overlap';
 import { verificarTrocaPoligono } from '@/lib/trocaPoligono';
-import { ChevronLeft, Plus, Map, AlertTriangle, Save, X, ExternalLink, MapPin, Loader2, Upload, CheckCircle2, Pencil, Trash2, FileDown } from 'lucide-react';
+import { ChevronLeft, Plus, Map, AlertTriangle, Save, X, ExternalLink, MapPin, Loader2, Upload, CheckCircle2, Pencil, Trash2 } from 'lucide-react';
 import { PanelSection, PanelButton, StatusBadge } from './_shared';
+import { RelatoriosFazenda } from './RelatoriosFazenda';
 
 const EditorGeometria = dynamic(
   () => import('@/components/geo/EditorGeometria').then(m => ({ default: m.EditorGeometria })),
@@ -35,9 +35,6 @@ export function FazendaDetailPanel() {
   const [mostraExcluir, setMostraExcluir] = useState(false);
   const [txtConfirma, setTxtConfirma] = useState('');
   const [excluindo, setExcluindo] = useState(false);
-  const [gerandoRel, setGerandoRel] = useState(false);
-  const [gerandoXls, setGerandoXls] = useState(false);
-  const [erroRel, setErroRel] = useState('');
   const podeExcluir = pode('excluirProdutor');   // mesma capacidade da exclusão de produtor
 
   async function detectarMunicipio() {
@@ -152,29 +149,6 @@ export function FazendaDetailPanel() {
     setFazenda(f => (f ? { ...f, nome: novo } : f));
     setNav({ fazenda: novo });
     setRenomeando(false);
-  }
-
-  // Relatório de recomendação da FAZENDA (safra ativa): resumo por talhão +
-  // resumo/mapas de cada talhão (ordem alfanumérica) + total geral por insumo.
-  async function gerarRelatorioRecomendacao() {
-    if (!fazenda || gerandoRel) return;
-    const safra = getSafras().find(s => s.ativa)?.nome ?? '';
-    if (!safra) { setErroRel('Defina um Ano ativo (no topo do talhão) para gerar o relatório.'); return; }
-    setErroRel(''); setGerandoRel(true);
-    try { await gerarRelatorioRecomendacaoFazenda(fazenda.id, safra); }
-    catch (e) { setErroRel(e instanceof Error ? e.message : 'Falha ao gerar o relatório.'); }
-    finally { setGerandoRel(false); }
-  }
-
-  // Versão Excel (editável) do mesmo relatório — só na fazenda.
-  async function gerarRelatorioRecomendacaoXls() {
-    if (!fazenda || gerandoXls) return;
-    const safra = getSafras().find(s => s.ativa)?.nome ?? '';
-    if (!safra) { setErroRel('Defina um Ano ativo (no topo do talhão) para gerar o Excel.'); return; }
-    setErroRel(''); setGerandoXls(true);
-    try { await gerarRecomendacaoFazendaExcel(fazenda.id, safra); }
-    catch (e) { setErroRel(e instanceof Error ? e.message : 'Falha ao gerar o Excel.'); }
-    finally { setGerandoXls(false); }
   }
 
   const incompletos = talhoes.filter(t => t.status === 'incompleto').length;
@@ -299,24 +273,9 @@ export function FazendaDetailPanel() {
                     style={{ background: '#1a3a6b', color: '#93c5fd' }}>
                     <Upload size={12} /> Importar em massa (KML / SHP)
                   </button>
-                  {talhoes.length > 0 && pode('relatorios') && (
-                    <div className="flex gap-2">
-                      <button onClick={gerarRelatorioRecomendacao} disabled={gerandoRel || gerandoXls}
-                        className="flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-semibold disabled:opacity-60"
-                        style={{ background: '#2a1e4d', color: '#c4b5fd' }}>
-                        {gerandoRel ? <Loader2 size={12} className="animate-spin" /> : <FileDown size={12} />}
-                        {gerandoRel ? 'Gerando…' : 'Recomendação (PDF)'}
-                      </button>
-                      <button onClick={gerarRelatorioRecomendacaoXls} disabled={gerandoRel || gerandoXls}
-                        title="Versão Excel editável (resumo por talhão + volume total por produto)"
-                        className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold disabled:opacity-60"
-                        style={{ background: '#0f3d2e', color: '#6ee7b7' }}>
-                        {gerandoXls ? <Loader2 size={12} className="animate-spin" /> : <FileDown size={12} />}
-                        Excel
-                      </button>
-                    </div>
+                  {talhoes.length > 0 && pode('relatorios') && nav.fazendaId && (
+                    <RelatoriosFazenda key={nav.fazendaId} fazendaId={nav.fazendaId} />
                   )}
-                  {erroRel && <p className="text-[10px]" style={{ color: '#f87171' }}>{erroRel}</p>}
                 </div>
 
                 {talhoes.length === 0 ? (

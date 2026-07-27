@@ -717,6 +717,23 @@ export async function carregarDocsPorCampoSupabase<T>(colecao: string, campo: st
   return (r.data ?? []).map(row => row.dados as T);
 }
 
+// Projeção LEVE de campos de uma coleção, filtrando por um campo do JSON.
+// Existe para descobrir "quais anos têm dado" sem baixar o doc inteiro: os
+// cenários de recomendação carregam os grids das doses (MBs, gzipados) e
+// trazê-los só para ler a safra seria desperdício. Ex.:
+//   projetarDocsPorCampoSupabase('inv_cenarios', 'talhaoId', ids, ['safra'])
+// Devolve um objeto por linha com os campos pedidos + o campo do filtro.
+export async function projetarDocsPorCampoSupabase(
+  colecao: string, campo: string, valores: string[], campos: string[],
+): Promise<Array<Record<string, string | null>> | null> {
+  const sb = getSupabase();
+  if (!sb || valores.length === 0) return [];
+  const sel = [campo, ...campos].map(c => `${c}:dados->>${c}`).join(', ');
+  const r = await sb.from('app_kv').select(sel).eq('colecao', colecao).in(`dados->>${campo}`, valores);
+  if (r.error) { console.warn(`[supabase] projetar ${colecao}:`, r.error.message); return null; }
+  return (r.data ?? []) as unknown as Array<Record<string, string | null>>;
+}
+
 // Toda a coleção (ex.: repositório de medições no painel web).
 export async function carregarColecaoSupabase<T>(colecao: string): Promise<T[]> {
   const sb = getSupabase();

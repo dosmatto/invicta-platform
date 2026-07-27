@@ -52,6 +52,99 @@ function carregarImg(src: string): Promise<HTMLImageElement> {
   });
 }
 
+// ── Peças reutilizáveis (usadas aqui e pelo relatório da FAZENDA inteira) ────
+// O relatório da fazenda desenha as MESMAS páginas de mapa num único PDF, um
+// bloco por talhão — por isso cabeçalho/página são funções de módulo, sem
+// closure sobre um talhão específico.
+
+export interface CtxNdvi {
+  produtor: string; fazenda: string; talhao: string; safra: string; areaHa: number;
+  poligono: GeoJSON.Polygon | GeoJSON.MultiPolygon;
+}
+export interface LogosNdvi { inv: HTMLImageElement | null; cli: HTMLImageElement | null; }
+
+export async function carregarLogosNdvi(logoClienteUrl?: string | null): Promise<LogosNdvi> {
+  const inv = await carregarImg('/images/logo-colorida.png').then(reduzirLogo).catch(() => null);
+  const cli = logoClienteUrl ? await carregarImg(logoClienteUrl).then(reduzirLogo).catch(() => null) : null;
+  return { inv, cli };
+}
+
+const W_PAG = 210, M_PAG = 14, CW_PAG = W_PAG - 2 * M_PAG;
+
+// Cabeçalho com logos + identificação. `titulo` permite reaproveitar no
+// relatório da fazenda ("MAPAS DE SATÉLITE — <talhão>"). Devolve o y do conteúdo.
+async function desenharCabecalhoNdvi(doc: JsPDF, ctx: CtxNdvi, logos: LogosNdvi, titulo = 'MAPAS DE SATÉLITE'): Promise<number> {
+  let y = 12;
+  if (logos.inv) {
+    const h = 11, w = (logos.inv.width / logos.inv.height) * h;
+    const img = await imagemParaPdf(logos.inv, w, { forcarPng: true });
+    doc.addImage(img.data, img.formato, M_PAG, y, w, h);
+  }
+  if (logos.cli) {
+    const h = 11, w = Math.min(40, (logos.cli.width / logos.cli.height) * h);
+    const img = await imagemParaPdf(logos.cli, w, { forcarPng: true });
+    doc.addImage(img.data, img.formato, W_PAG - M_PAG - w, y, w, h);
+  }
+  y += 16;
+  doc.setTextColor(...NAVY).setFont('helvetica', 'bold').setFontSize(13);
+  doc.text(titulo, M_PAG, y);
+  doc.setFont('helvetica', 'normal').setFontSize(9).setTextColor(...GRAY);
+  doc.text(`${ctx.produtor}  ·  ${ctx.fazenda}  ·  Talhão ${ctx.talhao}  ·  Ano ${rotuloAno(ctx.safra)}  ·  ${fmtHa(ctx.areaHa)} ha`, M_PAG, y + 5);
+  doc.setDrawColor(...LINE).setLineWidth(0.4).line(M_PAG, y + 8, W_PAG - M_PAG, y + 8);
+  return y + 14;
+}
+
+export function desenharRodapeNdvi(doc: JsPDF, direita: string): void {
+  doc.setFont('helvetica', 'normal').setFontSize(7.5).setTextColor(...GRAY);
+  doc.text(`INVICTA · gerado em ${new Date().toLocaleString('pt-BR')}`, M_PAG, 290);
+  doc.text(direita, W_PAG - M_PAG, 290, { align: 'right' });
+}
+
+// Desenha UMA página de mapa na página ATUAL do doc (quem chama controla o
+// addPage). Reaproveitada pelo relatório da fazenda.
+export async function desenharPaginaMapaNdvi(
+  doc: JsPDF, m: MapaRelNdvi, ctx: CtxNdvi, logos: LogosNdvi,
+  opts: { titulo?: string; rodape?: string } = {},
+): Promise<void> {
+  let y = await desenharCabecalhoNdvi(doc, ctx, logos, opts.titulo);
+
+  doc.setTextColor(...NAVY).setFont('helvetica', 'bold').setFontSize(11);
+  doc.text(m.titulo, M_PAG, y);
+  y += 4;
+
+  // Mapa (captura com contorno; satélite sob o raster quando índice).
+  // 8 px/mm ≈ 200 dpi — mesmo padrão do relatório de fertilidade.
+  const maxH = 205;
+  const composto = await capturarMapaFertilidade({
+    rasterPng: m.png, bounds: m.bounds, poligono: ctx.poligono,
+    valores: { type: 'FeatureCollection', features: [] },
+    satelite: m.satelite ?? false, corLimite: '#ffffff',
+    larguraPx: Math.round(CW_PAG * 8), alturaPx: Math.round(maxH * 8),
+  });
+  const propria = await carregarImg(composto);
+  let mw = CW_PAG, mh = (propria.height / propria.width) * mw;
+  if (mh > maxH) { mh = maxH; mw = (propria.width / propria.height) * mh; }
+  const mx = M_PAG + (CW_PAG - mw) / 2;
+  const img = await imagemParaPdf(composto, mw);
+  doc.addImage(img.data, img.formato, mx, y, mw, mh);
+  doc.setDrawColor(...LINE).setLineWidth(0.3).rect(mx, y, mw, mh);
+  y += mh + 6;
+
+  if (m.legenda) {
+    const bw = Math.min(120, CW_PAG), bh = 5, bx = M_PAG + (CW_PAG - bw) / 2;
+    const barra = await imagemParaPdf(barraLegenda(m.legenda), bw, { forcarPng: true });
+    doc.addImage(barra.data, barra.formato, bx, y, bw, bh);
+    doc.setDrawColor(...LINE).setLineWidth(0.3).rect(bx, y, bw, bh);
+    const [lo, hi] = m.dominio ?? [0, 1];
+    doc.setFont('helvetica', 'normal').setFontSize(7.5).setTextColor(...GRAY);
+    doc.text(fmt2(lo), bx, y + bh + 3.5);
+    doc.text(fmt2(hi), bx + bw, y + bh + 3.5, { align: 'right' });
+    doc.setFontSize(8).setTextColor(...NAVY);
+    doc.text(m.legenda.nome, W_PAG / 2, y + bh + 3.5, { align: 'center' });
+  }
+  if (opts.rodape) desenharRodapeNdvi(doc, opts.rodape);
+}
+
 // Barra de cores da legenda (gradiente contínuo) como PNG.
 function barraLegenda(leg: Legenda, wPx = 600, hPx = 26): string {
   const canvas = document.createElement('canvas');
@@ -70,9 +163,11 @@ export async function gerarRelatorioNdvi(d: DadosRelatorioNdvi): Promise<void> {
   const doc = new JsPDF({ unit: 'mm', format: 'a4', compress: true });
   const W = 210, M = 14, cw = W - 2 * M;
 
-  const logoInv = await carregarImg('/images/logo-colorida.png').then(reduzirLogo).catch(() => null);
-  const logoCli = d.logoClienteUrl
-    ? await carregarImg(d.logoClienteUrl).then(reduzirLogo).catch(() => null) : null;
+  const logos = await carregarLogosNdvi(d.logoClienteUrl);
+  const ctx: CtxNdvi = {
+    produtor: d.produtor, fazenda: d.fazenda, talhao: d.talhao,
+    safra: d.safra, areaHa: d.areaHa, poligono: d.poligono,
+  };
 
   // Pontos da linha do tempo: 1 por série+data (normal e contrastado do mesmo
   // NDVI compartilham a média — contam uma vez só).
@@ -87,82 +182,15 @@ export async function gerarRelatorioNdvi(d: DadosRelatorioNdvi): Promise<void> {
   const temTimeline = d.mapas.length > 1 && pontos.length >= 2 && datas.length >= 2;
   const totalPag = d.mapas.length + (temTimeline ? 1 : 0);
 
-  // Cabeçalho (logos + identificação) — devolve o y do conteúdo.
-  async function cabecalho(): Promise<number> {
-    let y = 12;
-    if (logoInv) {
-      const h = 11, w = (logoInv.width / logoInv.height) * h;
-      const img = await imagemParaPdf(logoInv, w, { forcarPng: true });
-      doc.addImage(img.data, img.formato, M, y, w, h);
-    }
-    if (logoCli) {
-      const h = 11, w = Math.min(40, (logoCli.width / logoCli.height) * h);
-      const img = await imagemParaPdf(logoCli, w, { forcarPng: true });
-      doc.addImage(img.data, img.formato, W - M - w, y, w, h);
-    }
-    y += 16;
-    doc.setTextColor(...NAVY).setFont('helvetica', 'bold').setFontSize(13);
-    doc.text('MAPAS DE SATÉLITE', M, y);
-    doc.setFont('helvetica', 'normal').setFontSize(9).setTextColor(...GRAY);
-    doc.text(`${d.produtor}  ·  ${d.fazenda}  ·  Talhão ${d.talhao}  ·  Ano ${rotuloAno(d.safra)}  ·  ${fmtHa(d.areaHa)} ha`, M, y + 5);
-    doc.setDrawColor(...LINE).setLineWidth(0.4).line(M, y + 8, W - M, y + 8);
-    return y + 14;
-  }
-  function rodape(pag: number): void {
-    doc.setFont('helvetica', 'normal').setFontSize(7.5).setTextColor(...GRAY);
-    doc.text(`INVICTA · gerado em ${new Date().toLocaleString('pt-BR')}`, M, 290);
-    doc.text(`${pag}/${totalPag}`, W - M, 290, { align: 'right' });
-  }
-
   for (let i = 0; i < d.mapas.length; i++) {
-    const m = d.mapas[i];
     if (i > 0) doc.addPage();
-    let y = await cabecalho();
-
-    // Título do mapa
-    doc.setTextColor(...NAVY).setFont('helvetica', 'bold').setFontSize(11);
-    doc.text(m.titulo, M, y);
-    y += 4;
-
-    // Mapa (captura com contorno; satélite sob o raster quando índice).
-    // 8 px/mm ≈ 200 dpi — mesmo padrão do relatório de fertilidade.
-    const maxH = 205;
-    const composto = await capturarMapaFertilidade({
-      rasterPng: m.png, bounds: m.bounds, poligono: d.poligono,
-      valores: { type: 'FeatureCollection', features: [] },
-      satelite: m.satelite ?? false, corLimite: '#ffffff',
-      larguraPx: Math.round(cw * 8), alturaPx: Math.round(maxH * 8),
-    });
-    const propria = await carregarImg(composto);
-    let mw = cw, mh = (propria.height / propria.width) * mw;
-    if (mh > maxH) { mh = maxH; mw = (propria.width / propria.height) * mh; }
-    const mx = M + (cw - mw) / 2;
-    const img = await imagemParaPdf(composto, mw);
-    doc.addImage(img.data, img.formato, mx, y, mw, mh);
-    doc.setDrawColor(...LINE).setLineWidth(0.3).rect(mx, y, mw, mh);
-    y += mh + 6;
-
-    // Barra de legenda (índices) com rótulos do domínio
-    if (m.legenda) {
-      const bw = Math.min(120, cw), bh = 5, bx = M + (cw - bw) / 2;
-      const barra = await imagemParaPdf(barraLegenda(m.legenda), bw, { forcarPng: true });
-      doc.addImage(barra.data, barra.formato, bx, y, bw, bh);
-      doc.setDrawColor(...LINE).setLineWidth(0.3).rect(bx, y, bw, bh);
-      const [lo, hi] = m.dominio ?? [0, 1];
-      doc.setFont('helvetica', 'normal').setFontSize(7.5).setTextColor(...GRAY);
-      doc.text(fmt2(lo), bx, y + bh + 3.5);
-      doc.text(fmt2(hi), bx + bw, y + bh + 3.5, { align: 'right' });
-      doc.setFontSize(8).setTextColor(...NAVY);
-      doc.text(m.legenda.nome, W / 2, y + bh + 3.5, { align: 'center' });
-    }
-
-    rodape(i + 1);
+    await desenharPaginaMapaNdvi(doc, d.mapas[i], ctx, logos, { rodape: `${i + 1}/${totalPag}` });
   }
 
   // ── Última página: linha do tempo — média dos índices (como na aba NDVI) ──
   if (temTimeline) {
     doc.addPage();
-    let y = await cabecalho();
+    let y = await desenharCabecalhoNdvi(doc, ctx, logos);
     doc.setTextColor(...NAVY).setFont('helvetica', 'bold').setFontSize(11);
     doc.text('Linha do tempo — média dos índices', M, y);
     y += 6;
@@ -229,7 +257,7 @@ export async function gerarRelatorioNdvi(d: DadosRelatorioNdvi): Promise<void> {
     doc.setFont('helvetica', 'normal').setFontSize(7.5).setTextColor(...GRAY);
     doc.text('Média do índice no talhão em cada data dos mapas deste relatório.', M, ly + 6);
 
-    rodape(totalPag);
+    desenharRodapeNdvi(doc, `${totalPag}/${totalPag}`);
   }
 
   const nome = `Satelite_${d.talhao.replace(/\s+/g, '')}_${new Date().toISOString().slice(0, 10)}.pdf`;
