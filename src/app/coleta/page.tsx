@@ -17,6 +17,7 @@ import { bootCloudCampo } from '@/lib/cloud';
 import {
   RegistroColeta, StatusPonto, COR_STATUS, ROTULO_STATUS,
   getColetas, upsertColeta, idColeta, pushColetasPendentes, pullColetas, pushMedicoesPendentes,
+  recuperarColetasDoIdb,
   pushLeiturasCompactPendentes, contarLeiturasPendentesSync,
   contarPendentesSync, contarFotosPendentes, salvarFoto, fotosDaColeta,
   comprimirFoto, subirFotosPendentes, distanciaM, formatarDist, avisoDentroRaio,
@@ -104,6 +105,11 @@ export default function ColetaPage() {
   useEffect(() => {
     registrarSWColeta();
     setOnline(navigator.onLine);
+    // Recupera do espelho (IndexedDB) o que o localStorage tiver perdido —
+    // ex.: aparelho ficou sem espaço no meio do trabalho, ou o navegador
+    // limpou o storage. Sem isto, uma coleta salva só no espelho ficaria
+    // invisível na tela e nunca subiria.
+    void recuperarColetasDoIdb().then(n => { if (n > 0) setReload(x => x + 1); }).catch(() => {});
     const on = () => { setOnline(true); void sincronizarRef.current?.(); };
     const off = () => setOnline(false);
     window.addEventListener('online', on);
@@ -726,7 +732,7 @@ function TelaMapa({ sel, setSel, online, pend, reload, setReload, sincronizar, s
     if (!grade) return;
     const p = grade.pontos.find(x => x.ordem === ordem);
     if (!p) return;
-    upsertColeta({
+    const r = upsertColeta({
       id: idColeta(grade.id, ordem), gradeId: grade.id, talhaoId: grade.talhaoId,
       safra: grade.safra, ordem, codigo: codigoPonto(p), status,
       operador: emailUsuario() || undefined,
@@ -735,6 +741,12 @@ function TelaMapa({ sel, setSel, online, pend, reload, setReload, sincronizar, s
       distanciaAlvoM: dist ?? undefined,
       ...extra,
     });
+    // O armazenamento do aparelho recusou (cheio). O ponto está salvo na cópia
+    // de segurança, mas o operador PRECISA saber — antes isso falhava calado e
+    // o ponto simplesmente não ficava marcado como coletado.
+    if (!r.gravouLocal) {
+      alert('ATENÇÃO: o armazenamento do aparelho está cheio.\n\nO ponto foi salvo numa cópia de segurança e será enviado na sincronização, mas libere espaço (ou sincronize agora) o quanto antes.');
+    }
     setReload(x => x + 1);
   }
 

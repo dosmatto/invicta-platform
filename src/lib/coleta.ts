@@ -88,8 +88,77 @@ function loadColetas(): RegistroColeta[] {
   try { return JSON.parse(localStorage.getItem(KEY) ?? '[]'); } catch { return []; }
 }
 
-function saveColetas(lista: RegistroColeta[]) {
-  localStorage.setItem(KEY, JSON.stringify(lista));
+// Gravação BLINDADA das coletas (o dado mais crítico do app de campo).
+//
+// Antes era `localStorage.setItem` cru: com o armazenamento cheio — cenário
+// real no campo, onde o aparelho acumula a base + coletas + fotos e fica horas
+// sem sincronizar — o setItem lança QuotaExceededError, a exceção subia por
+// upsertColeta → marcarStatus e o ponto NÃO era marcado como coletado, sem
+// nenhum aviso: o operador achava que tinha registrado e o dado se perdia.
+//
+// Agora: (1) nunca lança; (2) espelha em IndexedDB (limite muito maior), então
+// o registro sobrevive mesmo se o localStorage recusar; (3) devolve se gravou,
+// para a tela poder avisar em vez de fingir que deu certo.
+function saveColetas(lista: RegistroColeta[]): boolean {
+  let ok = false;
+  try {
+    localStorage.setItem(KEY, JSON.stringify(lista));
+    ok = true;
+  } catch (e) {
+    console.error('[coleta] localStorage recusou a gravação (cheio?):', e);
+  }
+  void espelharColetasIdb(lista);   // sempre — é a rede de segurança
+  return ok;
+}
+
+// ── Espelho das coletas em IndexedDB (rede de segurança) ────────────────────
+const STORE_COLETAS = 'coletas';
+
+async function espelharColetasIdb(lista: RegistroColeta[]): Promise<void> {
+  try {
+    const db = await abrirDB();
+    await new Promise<void>((res, rej) => {
+      const tx = db.transaction(STORE_COLETAS, 'readwrite');
+      const st = tx.objectStore(STORE_COLETAS);
+      for (const c of lista) st.put(c);
+      tx.oncomplete = () => res();
+      tx.onerror = () => rej(tx.error);
+    });
+  } catch (e) {
+    console.warn('[coleta] espelho em IndexedDB falhou:', e);
+  }
+}
+
+// Recupera do espelho o que não estiver no localStorage (ex.: storage foi
+// limpo, ou a gravação falhou por falta de espaço). Chamado no boot do app de
+// campo — sem isto, uma coleta salva só no IndexedDB ficaria invisível.
+export async function recuperarColetasDoIdb(): Promise<number> {
+  try {
+    const db = await abrirDB();
+    const doIdb = await new Promise<RegistroColeta[]>((res, rej) => {
+      const tx = db.transaction(STORE_COLETAS, 'readonly');
+      const req = tx.objectStore(STORE_COLETAS).getAll();
+      req.onsuccess = () => res((req.result ?? []) as RegistroColeta[]);
+      req.onerror = () => rej(req.error);
+    });
+    if (doIdb.length === 0) return 0;
+    const local = loadColetas();
+    const porId = new Map(local.map(c => [c.id, c]));
+    let recuperadas = 0;
+    for (const c of doIdb) {
+      const atual = porId.get(c.id);
+      // fica com o mais recente (o espelho pode ter o que o localStorage perdeu)
+      if (!atual || (c.atualizadoEm ?? '') > (atual.atualizadoEm ?? '')) {
+        porId.set(c.id, c);
+        if (!atual) recuperadas++;
+      }
+    }
+    if (recuperadas > 0) {
+      try { localStorage.setItem(KEY, JSON.stringify([...porId.values()])); } catch { /* segue no idb */ }
+      console.info('[coleta] recuperadas do espelho:', recuperadas);
+    }
+    return recuperadas;
+  } catch { return 0; }
 }
 
 export function idColeta(gradeId: string, ordem: number) {
@@ -106,14 +175,19 @@ export function getColeta(gradeId: string, ordem: number): RegistroColeta | null
 }
 
 // Grava (upsert) e tenta empurrar pra nuvem em seguida (fire-and-forget).
-export function upsertColeta(reg: Omit<RegistroColeta, 'syncPendente' | 'atualizadoEm'>): RegistroColeta {
+// `gravouLocal` = false significa que o localStorage recusou (cheio): o registro
+// ainda existe no espelho IndexedDB, mas a tela deve AVISAR o operador em vez
+// de deixá-lo achar que está tudo certo.
+export function upsertColeta(
+  reg: Omit<RegistroColeta, 'syncPendente' | 'atualizadoEm'>,
+): RegistroColeta & { gravouLocal: boolean } {
   const lista = loadColetas();
   const novo: RegistroColeta = { ...reg, syncPendente: true, atualizadoEm: new Date().toISOString() };
   const idx = lista.findIndex(c => c.id === novo.id);
   if (idx >= 0) lista[idx] = novo; else lista.push(novo);
-  saveColetas(lista);
+  const gravouLocal = saveColetas(lista);
   void pushColetasPendentes().catch(() => {});
-  return novo;
+  return { ...novo, gravouLocal };
 }
 
 export function contarPendentesSync(): number {
@@ -268,10 +342,15 @@ const STORE_FOTOS = 'fotos';
 
 function abrirDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NOME, 2);
+    const req = indexedDB.open(DB_NOME, 3);
     req.onupgradeneeded = () => {
       const db = req.result;
       const txUp = req.transaction!;   // transação de versionchange
+      // v3: espelho das COLETAS (rede de segurança contra localStorage cheio —
+      // ver saveColetas). keyPath = id (gradeId__ordem), então put() é upsert.
+      if (!db.objectStoreNames.contains(STORE_COLETAS)) {
+        db.createObjectStore(STORE_COLETAS, { keyPath: 'id' });
+      }
       let st: IDBObjectStore;
       if (!db.objectStoreNames.contains(STORE_FOTOS)) {
         st = db.createObjectStore(STORE_FOTOS, { keyPath: 'id' });
