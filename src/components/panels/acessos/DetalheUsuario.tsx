@@ -17,12 +17,13 @@ import {
   type UsuarioIam,
 } from '@/lib/iam/usuarios';
 import { permissoesEfetivas, MATRIZ_PADRAO } from '@/lib/iam/permissoes';
+import { getPerfis, getPerfil, salvarPerfil } from '@/lib/iam/perfis';
 import {
   ACOES, CATEGORIAS, MODULOS, PAPEIS, ROTULO_ACAO, chavePerm,
   type CategoriaIam, type PapelIam,
 } from '@/lib/iam/tipos';
 import { COR, Botao, Chip, Modal, Rotulo, SeloStatus, campoSt, fmtDataHora, fmtRelativo } from './ui';
-import { Ban, Copy, KeyRound, Loader2, Trash2, Unlock } from 'lucide-react';
+import { Ban, Copy, KeyRound, Loader2, Save, Trash2, Unlock } from 'lucide-react';
 
 type Secao = 'dados' | 'vinculos' | 'permissoes' | 'auditoria';
 
@@ -343,28 +344,84 @@ function SecaoPermissoes({ u, papel, efetivas, souOwner, onMudou }: {
   souOwner: boolean; onMudou: () => void;
 }) {
   const [clonarDe, setClonarDe] = useState('');
+  const [perfilSel, setPerfilSel] = useState('');
+  const [salvandoPerfil, setSalvandoPerfil] = useState(false);
+  const [nomePerfil, setNomePerfil] = useState('');
   const outros = useMemo(() => getUsuarios().filter(x => x.email !== u.email), [u.email]);
+  const perfis = useMemo(() => getPerfis(), [u.email, u.permissoes]); // eslint-disable-line react-hooks/exhaustive-deps
   const padraoPapel = MATRIZ_PADRAO[papel] ?? {};
+  const nExcecoes = Object.keys(u.permissoes ?? {}).length;
+
+  // Marca/desmarca uma LINHA inteira (todas as ações do módulo) de uma vez.
+  function linhaToda(modulo: string, valor: boolean) {
+    for (const a of ACOES) definirPermissaoUsuario(u.email, `${modulo}.${a.id}`, valor);
+    onMudou();
+  }
 
   return (
     <div className="space-y-2">
-      <p className="text-[10px]" style={{ color: COR.fraco }}>
-        O papel <b style={{ color: COR.azul }}>{PAPEIS.find(p => p.id === papel)?.nome}</b> já define um padrão.
-        Marcar/desmarcar aqui cria uma <b>exceção</b> só para este usuário.
-      </p>
+      {/* Explicação sem rodeio: marcado = pode */}
+      <div className="rounded p-2 text-[10px] space-y-1" style={{ background: '#0f2240', color: COR.sub }}>
+        <p><b style={{ color: COR.ok }}>✔ Marcado = PODE fazer.</b> Em branco = não pode.</p>
+        <p>
+          Papel atual: <b style={{ color: COR.azul }}>{PAPEIS.find(p => p.id === papel)?.nome}</b> — ele já vem
+          com um conjunto pronto. O que você mudar aqui vale <b>só para esta pessoa</b>
+          {nExcecoes > 0 && <> (<b style={{ color: COR.alerta }}>{nExcecoes} ajuste(s) próprio(s)</b>)</>}.
+        </p>
+      </div>
 
       {souOwner && (
-        <div className="flex gap-1.5 items-center">
-          <select className="flex-1 rounded px-2 py-1 text-[10px]" style={campoSt}
-            value={clonarDe} onChange={e => setClonarDe(e.target.value)}>
-            <option value="">clonar permissões de…</option>
-            {outros.map(o => <option key={o.email} value={o.email}>{o.nome || o.email}</option>)}
-          </select>
-          <Botao pequeno disabled={!clonarDe}
-            onClick={() => { if (clonarDe && clonarPermissoes(clonarDe, u.email)) { setClonarDe(''); onMudou(); } }}>
-            <Copy size={10} className="inline" /> Clonar
-          </Botao>
-          <Botao pequeno onClick={() => { limparExcecoes(u.email); onMudou(); }} titulo="Voltar ao padrão do papel">Padrão</Botao>
+        <div className="rounded p-2 space-y-1.5" style={{ background: '#0a1929', border: `1px solid ${COR.borda}` }}>
+          <Rotulo>Perfil de permissões</Rotulo>
+          <div className="flex gap-1.5">
+            <select className="flex-1 rounded px-2 py-1 text-[10px]" style={campoSt}
+              value={perfilSel} onChange={e => setPerfilSel(e.target.value)}>
+              <option value="">escolher um perfil salvo…</option>
+              {perfis.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
+            </select>
+            <Botao pequeno disabled={!perfilSel} titulo="Aplica o perfil; você ainda pode ajustar item a item depois"
+              onClick={() => {
+                const p = getPerfil(perfilSel);
+                if (!p) return;
+                salvarUsuario(u.email, { permissoes: { ...p.permissoes } });
+                registrar('permissao_alterada', { alvo: u.email, detalhe: `perfil "${p.nome}" aplicado` });
+                setPerfilSel(''); onMudou();
+              }}>
+              Aplicar
+            </Botao>
+            <Botao pequeno tom="ok" onClick={() => { setSalvandoPerfil(true); setNomePerfil(''); }}
+              titulo="Salvar as permissões atuais desta pessoa como um perfil reutilizável">
+              <Save size={10} className="inline" /> Salvar como…
+            </Botao>
+          </div>
+
+          {salvandoPerfil && (
+            <div className="flex gap-1.5">
+              <input autoFocus className="flex-1 rounded px-2 py-1 text-[10px]" style={campoSt}
+                placeholder="nome do perfil (ex.: Agrônomo de campo)"
+                value={nomePerfil} onChange={e => setNomePerfil(e.target.value)} />
+              <Botao pequeno tom="ok" disabled={!nomePerfil.trim()}
+                onClick={() => {
+                  salvarPerfil({ nome: nomePerfil, permissoes: efetivas as Record<string, boolean>, papelBase: papel });
+                  setSalvandoPerfil(false); setNomePerfil(''); onMudou();
+                }}>Salvar</Botao>
+              <Botao pequeno onClick={() => setSalvandoPerfil(false)}>Cancelar</Botao>
+            </div>
+          )}
+
+          <div className="flex gap-1.5">
+            <select className="flex-1 rounded px-2 py-1 text-[10px]" style={campoSt}
+              value={clonarDe} onChange={e => setClonarDe(e.target.value)}>
+              <option value="">…ou copiar de outra pessoa</option>
+              {outros.map(o => <option key={o.email} value={o.email}>{o.nome || o.email}</option>)}
+            </select>
+            <Botao pequeno disabled={!clonarDe}
+              onClick={() => { if (clonarDe && clonarPermissoes(clonarDe, u.email)) { setClonarDe(''); onMudou(); } }}>
+              <Copy size={10} className="inline" /> Copiar
+            </Botao>
+            <Botao pequeno onClick={() => { limparExcecoes(u.email); onMudou(); }}
+              titulo="Descarta os ajustes e volta ao conjunto do papel">Voltar ao papel</Botao>
+          </div>
         </div>
       )}
 
@@ -374,33 +431,47 @@ function SecaoPermissoes({ u, papel, efetivas, souOwner, onMudou }: {
             <tr style={{ background: '#0f2240' }}>
               <th className="text-left px-1.5 py-1" style={{ color: COR.sub }}>Módulo</th>
               {ACOES.map(a => <th key={a.id} className="px-1 py-1" style={{ color: COR.sub }} title={a.nome}>{a.curto}</th>)}
+              {souOwner && <th className="px-1 py-1" style={{ color: COR.sub }} title="marcar/desmarcar a linha toda">tudo</th>}
             </tr>
           </thead>
           <tbody>
-            {MODULOS.map(m => (
-              <tr key={m.id} style={{ borderTop: `1px solid ${COR.borda}` }}>
-                <td className="px-1.5 py-1 truncate" style={{ color: COR.txt, maxWidth: 120 }} title={m.nome}>{m.nome}</td>
-                {ACOES.map(a => {
-                  const ch = chavePerm(m.id, a.id);
-                  const on = efetivas[ch] === true;
-                  const excecao = u.permissoes?.[ch] !== undefined;
-                  const dif = on !== (padraoPapel[ch] === true);
-                  return (
-                    <td key={a.id} className="text-center px-1 py-1">
-                      <input type="checkbox" checked={on} disabled={!souOwner}
-                        title={excecao ? 'Exceção deste usuário' : 'Padrão do papel'}
-                        style={dif ? { outline: `2px solid ${COR.alerta}`, outlineOffset: 1 } : undefined}
-                        onChange={e => { definirPermissaoUsuario(u.email, ch, e.target.checked); onMudou(); }} />
+            {MODULOS.map(m => {
+              const nOn = ACOES.filter(a => efetivas[chavePerm(m.id, a.id)] === true).length;
+              return (
+                <tr key={m.id} style={{ borderTop: `1px solid ${COR.borda}` }}>
+                  <td className="px-1.5 py-1 truncate" style={{ color: nOn ? COR.txt : COR.fraco, maxWidth: 120 }} title={m.nome}>
+                    {m.nome}
+                  </td>
+                  {ACOES.map(a => {
+                    const ch = chavePerm(m.id, a.id);
+                    const on = efetivas[ch] === true;
+                    const excecao = u.permissoes?.[ch] !== undefined && on !== (padraoPapel[ch] === true);
+                    return (
+                      <td key={a.id} className="text-center px-1 py-1"
+                        style={excecao ? { background: 'rgba(251,191,36,0.16)' } : undefined}
+                        title={excecao ? `Ajuste próprio desta pessoa (o papel ${on ? 'não daria' : 'daria'} esta permissão)` : 'Igual ao padrão do papel'}>
+                        <input type="checkbox" checked={on} disabled={!souOwner}
+                          onChange={e => { definirPermissaoUsuario(u.email, ch, e.target.checked); onMudou(); }} />
+                      </td>
+                    );
+                  })}
+                  {souOwner && (
+                    <td className="text-center px-1 py-1">
+                      <button onClick={() => linhaToda(m.id, nOn < ACOES.length)}
+                        className="px-1 rounded text-[9px]" style={{ background: COR.borda, color: COR.azul }}
+                        title={nOn < ACOES.length ? 'marcar tudo desta linha' : 'desmarcar tudo desta linha'}>
+                        {nOn < ACOES.length ? '✔' : '✕'}
+                      </button>
                     </td>
-                  );
-                })}
-              </tr>
-            ))}
+                  )}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
       <p className="text-[9px]" style={{ color: COR.fraco }}>
-        Contorno amarelo = diferente do padrão do papel (exceção).
+        Fundo amarelo = ajuste próprio desta pessoa (diferente do papel).
       </p>
     </div>
   );

@@ -21,6 +21,7 @@ import {
   cancelarConvite, criarConvite, getConvites, linkDoConvite, reenviarConvite,
 } from '@/lib/iam/convites';
 import { MATRIZ_PADRAO } from '@/lib/iam/permissoes';
+import { getPerfis, salvarPerfil, excluirPerfil, renomearPerfil, permissoesDoPapel } from '@/lib/iam/perfis';
 import {
   ACOES, CATEGORIAS, MODULOS, PAPEIS, ROTULO_ACAO, chavePerm,
   type CategoriaIam, type PapelIam,
@@ -34,7 +35,7 @@ import { Check, Copy, Link2, Loader2, Send, ShieldCheck, UserPlus, X } from 'luc
 
 type AbaId =
   | 'pendentes' | 'internos' | 'produtores' | 'consultores' | 'gerentes' | 'operadores'
-  | 'todos' | 'convites' | 'papeis' | 'permissoes' | 'empresas' | 'auditoria';
+  | 'todos' | 'convites' | 'papeis' | 'perfis' | 'permissoes' | 'empresas' | 'auditoria';
 
 export function CentralAcessos() {
   const [aba, setAba] = useState<AbaId>('pendentes');
@@ -86,6 +87,7 @@ export function CentralAcessos() {
     { id: 'todos',       label: 'Todos',      contagem: usuarios.length },
     { id: 'convites',    label: 'Convites',   contagem: convitesAbertos.length },
     { id: 'papeis',      label: 'Papéis' },
+    { id: 'perfis',      label: 'Perfis' },
     { id: 'permissoes',  label: 'Permissões' },
     { id: 'empresas',    label: 'Empresas' },
     { id: 'auditoria',   label: 'Auditoria' },
@@ -122,6 +124,7 @@ export function CentralAcessos() {
           )}
           {aba === 'convites'   && <AbaConvites convites={convites} souOwner={souOwner} onMudou={recarregar} />}
           {aba === 'papeis'     && <AbaPapeis />}
+          {aba === 'perfis'     && <AbaPerfis souOwner={souOwner} onMudou={recarregar} tick={tick} />}
           {aba === 'permissoes' && <AbaPermissoes souOwner={souOwner} onMudou={recarregar} tick={tick} />}
           {aba === 'empresas'   && <AbaEmpresas souOwner={souOwner} onMudou={recarregar} />}
           {aba === 'auditoria'  && <AbaAuditoria tick={tick} />}
@@ -473,6 +476,118 @@ function AbaAuditoria({ tick }: { tick: number }) {
             </div>
           ))}
         </div>
+      )}
+    </div>
+  );
+}
+
+// ── Aba Perfis de permissão (conjuntos salvos com nome) ─────────────────────
+// Monta um conjunto uma vez e aplica em quantas pessoas quiser (no painel
+// lateral da pessoa → Permissões → "escolher um perfil salvo"). Depois de
+// aplicado, cada pessoa continua ajustável individualmente.
+function AbaPerfis({ souOwner, onMudou, tick }: { souOwner: boolean; onMudou: () => void; tick: number }) {
+  const perfis = useMemo(() => getPerfis(), [tick]);
+  const [editando, setEditando] = useState<string | null>(null);
+  const [novoNome, setNovoNome] = useState('');
+  const [basePapel, setBasePapel] = useState<PapelIam>('agronomo');
+
+  const emEdicao = perfis.find(p => p.id === editando) ?? null;
+
+  return (
+    <div className="space-y-2">
+      <p className="text-[10px]" style={{ color: COR.fraco }}>
+        Um perfil é um conjunto de permissões com nome. Crie aqui e aplique em quem quiser —
+        depois de aplicado, dá para ajustar item a item na pessoa, sem afetar o perfil.
+      </p>
+
+      {souOwner && (
+        <Cartao>
+          <Rotulo>Novo perfil</Rotulo>
+          <div className="flex gap-1.5">
+            <input className="flex-1 rounded px-2 py-1 text-[10px]" style={campoSt}
+              placeholder="nome (ex.: Consultor externo)" value={novoNome} onChange={e => setNovoNome(e.target.value)} />
+            <select className="rounded px-1.5 py-1 text-[10px]" style={campoSt} value={basePapel}
+              onChange={e => setBasePapel(e.target.value as PapelIam)} title="começar a partir do padrão de um papel">
+              {PAPEIS.map(p => <option key={p.id} value={p.id}>a partir de {p.nome}</option>)}
+            </select>
+            <Botao pequeno tom="ok" disabled={!novoNome.trim()}
+              onClick={() => {
+                const p = salvarPerfil({ nome: novoNome, permissoes: permissoesDoPapel(basePapel), papelBase: basePapel });
+                setNovoNome(''); setEditando(p.id); onMudou();
+              }}>Criar</Botao>
+          </div>
+        </Cartao>
+      )}
+
+      {perfis.length === 0 ? <Vazio texto="Nenhum perfil salvo ainda." /> : perfis.map(p => {
+        const n = Object.values(p.permissoes).filter(Boolean).length;
+        return (
+          <Cartao key={p.id} ativo={editando === p.id}>
+            <div className="flex items-center gap-2">
+              <p className="text-[11px] font-bold flex-1 truncate" style={{ color: COR.txt }}>{p.nome}</p>
+              <Chip cor={COR.azul}>{n} permissão(ões)</Chip>
+            </div>
+            <p className="text-[9px]" style={{ color: COR.fraco }}>
+              criado por {p.criadoPor} · {fmtData(p.criadoEm)}
+              {p.papelBase && ` · base: ${PAPEIS.find(x => x.id === p.papelBase)?.nome}`}
+            </p>
+            {souOwner && (
+              <div className="flex gap-1.5 flex-wrap">
+                <Botao pequeno onClick={() => setEditando(editando === p.id ? null : p.id)}>
+                  {editando === p.id ? 'Fechar' : 'Editar permissões'}
+                </Botao>
+                <Botao pequeno onClick={() => {
+                  const nome = prompt('Novo nome do perfil:', p.nome);
+                  if (nome?.trim()) { renomearPerfil(p.id, nome); onMudou(); }
+                }}>Renomear</Botao>
+                <Botao pequeno tom="perigo" onClick={() => {
+                  if (confirm(`Excluir o perfil "${p.nome}"?\n\nQuem já recebeu essas permissões NÃO é afetado.`)) { excluirPerfil(p.id); onMudou(); }
+                }}>Excluir</Botao>
+              </div>
+            )}
+          </Cartao>
+        );
+      })}
+
+      {emEdicao && souOwner && (
+        <Cartao>
+          <Rotulo>Permissões de “{emEdicao.nome}” — ✔ marcado = pode</Rotulo>
+          <div className="rounded overflow-x-auto" style={{ border: `1px solid ${COR.borda}` }}>
+            <table className="w-full text-[9px]" style={{ borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ background: '#0f2240' }}>
+                  <th className="text-left px-1.5 py-1" style={{ color: COR.sub }}>Módulo</th>
+                  {ACOES.map(a => <th key={a.id} className="px-1 py-1" style={{ color: COR.sub }} title={a.nome}>{a.curto}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {MODULOS.map(m => (
+                  <tr key={m.id} style={{ borderTop: `1px solid ${COR.borda}` }}>
+                    <td className="px-1.5 py-1 truncate" style={{ color: COR.txt, maxWidth: 130 }}>{m.nome}</td>
+                    {ACOES.map(a => {
+                      const ch = chavePerm(m.id, a.id);
+                      return (
+                        <td key={a.id} className="text-center px-1 py-1">
+                          <input type="checkbox" checked={emEdicao.permissoes[ch] === true}
+                            onChange={e => {
+                              salvarPerfil({
+                                nome: emEdicao.nome, papelBase: emEdicao.papelBase,
+                                permissoes: { ...emEdicao.permissoes, [ch]: e.target.checked },
+                              });
+                              onMudou();
+                            }} />
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-[9px]" style={{ color: COR.fraco }}>
+            Alterar o perfil NÃO muda quem já recebeu — aplique de novo na pessoa para atualizar.
+          </p>
+        </Cartao>
       )}
     </div>
   );

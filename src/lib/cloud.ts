@@ -54,6 +54,7 @@ const KEYS_LISTA = [
   'inv_planos',                        // planos de assinatura do produtor (U3.B)
   'inv_convites',                      // IAM — convites por link (token/validade/status)
   'inv_auditoria',                     // IAM — trilha de auditoria (quem fez o quê)
+  'inv_perfis_permissao',              // IAM — perfis de permissão salvos com nome
 ];
 // Configurações (objeto único por chave) — coleção 'inv_config', doc = chave
 const KEYS_OBJ = ['inv_etiqueta_cfg'];
