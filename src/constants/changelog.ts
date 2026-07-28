@@ -1,5 +1,9 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.8.4': [
+    'POLÍTICA DE PRIVACIDADE (nova página pública): em /privacidade, escrita conforme a LGPD e as exigências da Google Play — descreve exatamente o que o app coleta (localização durante o uso, fotos do ponto, nome/e-mail/telefone do cadastro), para quê, onde fica, com quem é compartilhado, por quanto tempo e como pedir exclusão. É o endereço exigido no cadastro do app na loja.',
+    'APP ANDROID PRONTO PARA A LOJA: ícone próprio do app (a mira de navegação, em todos os tamanhos, com o recorte adaptativo do Android), assinatura de release configurada com as senhas fora do repositório, e o comando "npm run android:release" que gera o arquivo .aab para envio. Passo a passo completo da publicação em docs/publicar-android.md.',
+  ],
   '2.8.3': [
     'APP DE CAMPO (Android) — CABEÇALHO NÃO FICA MAIS EMBAIXO DO RELÓGIO: no app nativo, o topo da tela se misturava com a barra do celular (relógio, sinal, bateria). Do Android 15 em diante o sistema obriga o app a desenhar sob as barras, e nem a configuração da barra de status nem a "saída de compatibilidade" resolvem. Agora o app lê a medida real da barra do próprio aparelho e reserva esse espaço — vale para qualquer modelo, inclusive com recorte de câmera. Os cabeçalhos das telas de Início, Seleção, NDVI/Mancha e Compactação passaram a respeitar essa área.',
   ],

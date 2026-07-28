@@ -53,3 +53,9 @@ out/
 android/app/src/main/assets/public/
 android/app/src/main/assets/capacitor.config.json
 ios/App/App/public/
+
+# Assinatura do app Android — NUNCA versionar (perder = não dá para atualizar o app)
+android/keystore.properties
+android/*.jks
+android/app/*.jks
+*.keystore

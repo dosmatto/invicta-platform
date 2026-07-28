@@ -18,7 +18,8 @@
     "android:sync": "npm run build:mobile && npx cap sync android",
     "android:open": "npx cap open android",
     "ios:sync": "npm run build:mobile && npx cap sync ios",
-    "ios:open": "npx cap open ios"
+    "ios:open": "npx cap open ios",
+    "android:release": "npm run build:mobile && npx cap sync android && cd android && ./gradlew bundleRelease"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",
