@@ -47,3 +47,9 @@ next-env.d.ts
 
 # ZIP do interpolador local — gerado no prebuild (não versionar)
 public/interpolador-local-mac.zip
+out/
+
+# Capacitor: assets web copiados no sync (gerados por npm run android:sync)
+android/app/src/main/assets/public/
+android/app/src/main/assets/capacitor.config.json
+ios/App/App/public/

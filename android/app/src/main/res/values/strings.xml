@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">INVICTA Coleta</string>
+    <string name="title_activity_main">INVICTA Coleta</string>
+    <string name="package_name">br.com.invictaap.coleta</string>
+    <string name="custom_url_scheme">br.com.invictaap.coleta</string>
+</resources>

@@ -1,7 +1,12 @@
 import type { NextConfig } from "next";
 
-const nextConfig: NextConfig = {
-  /* config options here */
+// BUILD_MOBILE=1 → exportação ESTÁTICA (out/) para empacotar no app nativo
+// iOS/Android (Capacitor). Nesse modo: output 'export', next/image sem
+// otimização de servidor, e SEM headers() (não se aplicam a arquivos locais
+// dentro do app). Sem a flag, o build é o da PLATAFORMA (Vercel) — inalterado.
+const mobile = process.env.BUILD_MOBILE === '1';
+
+const plataforma: NextConfig = {
   async headers() {
     return [
       {
@@ -24,4 +29,10 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+const app: NextConfig = {
+  output: 'export',
+  images: { unoptimized: true },   // sem servidor de otimização no app empacotado
+  trailingSlash: true,             // rotas viram pastas (/coleta/index.html) — casa com file://
+};
+
+export default (mobile ? app : plataforma);
