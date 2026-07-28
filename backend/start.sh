@@ -16,6 +16,19 @@ HASHFILE="$VENV/.req.hash"
 # Mantem a janela aberta se algo falhar (quem deu duplo-clique ve o erro).
 pausar_e_sair() { echo ""; echo "Pressione ENTER para fechar."; read -r _ || true; exit 1; }
 
+# Ja tem um interpolador atendendo nesta porta? Subir outro so daria
+# "address already in use" numa janela que fecha sozinha. Avisa e sai.
+if curl -s -m 2 -o /dev/null http://127.0.0.1:8800/health 2>/dev/null; then
+  echo ""
+  echo "O interpolador JA esta no ar em http://127.0.0.1:8800."
+  echo "Nao precisa abrir de novo — e so usar o app normalmente."
+  echo "(Para reiniciar: feche a outra janela do Terminal e abra este de novo.)"
+  echo ""
+  echo "Pressione ENTER para fechar."
+  read -r _ || true
+  exit 0
+fi
+
 achar_python() {
   if command -v python3 >/dev/null 2>&1; then echo python3
   elif command -v python  >/dev/null 2>&1; then echo python

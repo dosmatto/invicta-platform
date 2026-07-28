@@ -5,6 +5,7 @@ ou use o start.ps1 / start.bat desta pasta.
 """
 from __future__ import annotations
 
+import inspect
 import os
 from typing import Any
 
@@ -31,12 +32,21 @@ _origins_env = os.environ.get("INVICTA_ALLOWED_ORIGINS", "")
 ALLOWED_ORIGINS = [o.strip() for o in _origins_env.split(",") if o.strip()] if _origins_env else ["*"]
 
 # Local: front em localhost:3100 chama este servico em 127.0.0.1:8800.
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
-    allow_methods=["*"],
-    allow_headers=["*", "X-Api-Key"],
-)
+#
+# PRIVATE NETWORK ACCESS: quando o app PUBLICADO (https) chama este backend em
+# 127.0.0.1, o Chrome manda um preflight com Access-Control-Request-Private-Network.
+# A partir do Starlette 1.x o proprio CORSMiddleware valida isso e RESPONDE 400
+# ("Disallowed CORS private-network") se nao autorizarmos aqui — era o que fazia
+# o interpolador local aparecer como "sem resposta" mesmo com o servidor no ar.
+# O parametro nao existe em Starlette antigo, entao so passamos se ele existir.
+_cors = {
+    "allow_origins": ALLOWED_ORIGINS,
+    "allow_methods": ["*"],
+    "allow_headers": ["*", "X-Api-Key"],
+}
+if "allow_private_network" in inspect.signature(CORSMiddleware.__init__).parameters:
+    _cors["allow_private_network"] = True
+app.add_middleware(CORSMiddleware, **_cors)
 
 
 # Exige X-Api-Key em todos os endpoints (exceto /health e preflight OPTIONS)

@@ -1,5 +1,9 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.8.7': [
+    'CORRIGIDO — O INTERPOLADOR DA SUA MÁQUINA NÃO CONECTAVA COM A PLATAFORMA: mesmo com o programa no ar (a janela do Terminal mostrando "no ar em 127.0.0.1:8800"), Configurações insistia em "sem resposta" e as interpolações não iam para a máquina. Causa: antes de deixar um site da internet falar com um programa da sua própria máquina, o navegador faz uma pergunta de autorização; uma biblioteca do interpolador foi atualizada e passou a RESPONDER "não" a essa pergunta — o navegador então cortava a conexão sem nem chegar no programa. Agora a resposta é a autorização correta. Continua valendo usar o Chrome (o Safari bloqueia esse tipo de ligação por conta própria).',
+    'ATALHO NA ÁREA DE TRABALHO (Mac): novo comando "npm run interp:atalho" cria um app "Interpolador INVICTA" na Área de Trabalho — dois cliques e o Terminal já abre rodando o interpolador, sem digitar nada e sem o bloqueio do macOS que aparecia no arquivo baixado. Dá para arrastar para o Dock. Se você abrir por engano com ele já ligado, agora aparece um aviso claro em vez de um erro de porta ocupada.',
+  ],
   '2.8.6': [
     'CORRIGIDO — MAPA PISCANDO NA TELA NDVI/MANCHA (app de campo, nas três plataformas): a imagem do índice ficava aparecendo e sumindo sem parar. Causa: o mapa recebia a imagem como um objeto novo a cada atualização de tela e, como o GPS atualiza a posição o tempo todo, ele entendia que a imagem havia mudado e a REFAZIA dezenas de vezes por minuto. Agora o mapa compara a imagem de fato (endereço + limites) e só a recria quando ela realmente muda — o fundo fica estável. Também reduzimos o retrabalho da tela a cada leitura do GPS.',
   ],

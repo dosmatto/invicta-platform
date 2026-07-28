@@ -19,7 +19,8 @@
     "android:open": "npx cap open android",
     "ios:sync": "npm run build:mobile && npx cap sync ios",
     "ios:open": "npx cap open ios",
-    "android:release": "npm run build:mobile && npx cap sync android && cd android && ./gradlew bundleRelease"
+    "android:release": "npm run build:mobile && npx cap sync android && cd android && ./gradlew bundleRelease",
+    "interp:atalho": "node scripts/criar-atalho-interp.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",

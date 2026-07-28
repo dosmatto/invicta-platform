@@ -51,8 +51,10 @@ function ServidorProcessamento() {
       </label>
       {local && status === 'off' && (
         <p className="text-[10px] leading-relaxed" style={{ color: '#fbbf24' }}>
-          Ligue o backend local: dê 2 cliques em <b>backend/start.command</b> (Mac) ou <b>backend\start.bat</b> (Windows),
-          espere a janela abrir e clique em “testar”. Melhor no Chrome. Para voltar à nuvem, desmarque acima.
+          Ligue o interpolador desta máquina, espere a janela do Terminal dizer “no ar” e clique em “testar”.
+          {' '}Use o <b>Chrome</b> — o Safari bloqueia a conversa entre um site https e um programa da própria máquina.
+          {' '}O interpolador precisa ser a versão <b>interp-24</b> ou mais nova (baixe de novo abaixo se for antiga).
+          {' '}Para voltar à nuvem, desmarque acima.
         </p>
       )}
       {local && status === 'ok' && (

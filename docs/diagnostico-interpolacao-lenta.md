@@ -93,3 +93,44 @@ Comparativo:
   modelo é escolhido, não a precisão do mapa dado o modelo).
 - Pin defensivo das libs (numpy/scipy/pykrige/shapely) — hoje `latest` é rápido, mas
   pinar evita surpresa futura (o usuário citou "atualização de libs" como suspeita).
+
+---
+
+## Interpolador LOCAL aparecendo como "sem resposta" (v2.8.7)
+
+**Sintoma:** o `start.sh` sobe normalmente (`no ar em http://127.0.0.1:8800`),
+`curl http://127.0.0.1:8800/health` responde 200 — mas Configurações mostra
+"sem resposta" e o lote não vai para a máquina.
+
+**Causa:** *Private Network Access*. Quando uma página **https pública** chama um
+endereço da rede local, o Chrome manda antes um preflight `OPTIONS` com
+`Access-Control-Request-Private-Network: true`. Do **Starlette 1.x** em diante o
+próprio `CORSMiddleware` valida esse cabeçalho e responde **400 "Disallowed CORS
+private-network"** quando `allow_private_network` não está ligado. O middleware
+`_allow_private_network` do `app.py` só acrescentava o cabeçalho na resposta —
+não adiantava, porque o CORSMiddleware já encerrava o preflight com 400 antes.
+
+Foi um efeito colateral do pin de libs (`fastapi==0.140.0` → starlette 1.3.1).
+
+**Correção:** `allow_private_network=True` no `CORSMiddleware` (passado só se o
+parâmetro existir na versão instalada, para não quebrar Starlette antigo).
+`interp.VERSION` = `interp-24-pna-liberado` — dá para conferir qual versão está
+rodando pelo status em Configurações ("Online · interp-24-…").
+
+**Como reproduzir/validar sem navegador:**
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" -X OPTIONS \
+  -H "Origin: https://invicta-platform.vercel.app" \
+  -H "Access-Control-Request-Method: GET" \
+  -H "Access-Control-Request-Private-Network: true" \
+  http://127.0.0.1:8800/health
+```
+`400` = quebrado · `200` = corrigido. (Sem o cabeçalho PNA o preflight dá 200 nos
+dois casos — por isso o `curl` simples enganava.)
+
+**Safari continua bloqueando** https → http://127.0.0.1 por conta própria; o modo
+local exige **Chrome**.
+
+**Atalho (macOS):** `npm run interp:atalho` cria `Interpolador INVICTA.app` na Área
+de Trabalho apontando para o `backend/` do repositório — sem quarentena do
+Gatekeeper (o problema do `start.command` baixado) e sempre na versão do repo.
