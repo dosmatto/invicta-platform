@@ -1,9 +1,0 @@
-{
-	"appId": "br.com.invictaap.coleta",
-	"appName": "INVICTA Coleta",
-	"webDir": "out",
-	"ios": {
-		"contentInset": "always"
-	},
-	"packageClassList": []
-}

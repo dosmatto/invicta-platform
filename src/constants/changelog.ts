@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.8.5': [
+    'APP iOS (iPhone) NO MESMO PATAMAR DO ANDROID: o projeto do iPhone estava numa versão antiga e separada, sem as melhorias recentes. Foi refeito a partir da versão atual — então o app do iPhone já nasce com tudo o que foi corrigido nos últimos dias, inclusive a proteção que impede o ponto coletado de se perder quando o aparelho está sem espaço, e o cabeçalho respeitando a área do relógio/bateria. Ícone próprio e permissões de localização, câmera e fotos explicadas em português (é o texto que o iPhone mostra ao pedir cada permissão). Compilado e testado no simulador do iPhone.',
+  ],
   '2.8.4': [
     'POLÍTICA DE PRIVACIDADE (nova página pública): em /privacidade, escrita conforme a LGPD e as exigências da Google Play — descreve exatamente o que o app coleta (localização durante o uso, fotos do ponto, nome/e-mail/telefone do cadastro), para quê, onde fica, com quem é compartilhado, por quanto tempo e como pedir exclusão. É o endereço exigido no cadastro do app na loja.',
     'APP ANDROID PRONTO PARA A LOJA: ícone próprio do app (a mira de navegação, em todos os tamanhos, com o recorte adaptativo do Android), assinatura de release configurada com as senhas fora do repositório, e o comando "npm run android:release" que gera o arquivo .aab para envio. Passo a passo completo da publicação em docs/publicar-android.md.',
