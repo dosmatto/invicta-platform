@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.8.6': [
+    'CORRIGIDO — MAPA PISCANDO NA TELA NDVI/MANCHA (app de campo, nas três plataformas): a imagem do índice ficava aparecendo e sumindo sem parar. Causa: o mapa recebia a imagem como um objeto novo a cada atualização de tela e, como o GPS atualiza a posição o tempo todo, ele entendia que a imagem havia mudado e a REFAZIA dezenas de vezes por minuto. Agora o mapa compara a imagem de fato (endereço + limites) e só a recria quando ela realmente muda — o fundo fica estável. Também reduzimos o retrabalho da tela a cada leitura do GPS.',
+  ],
   '2.8.5': [
     'APP iOS (iPhone) NO MESMO PATAMAR DO ANDROID: o projeto do iPhone estava numa versão antiga e separada, sem as melhorias recentes. Foi refeito a partir da versão atual — então o app do iPhone já nasce com tudo o que foi corrigido nos últimos dias, inclusive a proteção que impede o ponto coletado de se perder quando o aparelho está sem espaço, e o cabeçalho respeitando a área do relógio/bateria. Ícone próprio e permissões de localização, câmera e fotos explicadas em português (é o texto que o iPhone mostra ao pedir cada permissão). Compilado e testado no simulador do iPhone.',
   ],

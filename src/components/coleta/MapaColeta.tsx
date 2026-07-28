@@ -227,16 +227,32 @@ export function MapaColeta({ talhaoGeo, bbox, pontos, userPos, alvo, raioM, modo
     });
   }, [desenho]);
 
-  // overlay do NDVI (#37) — recria a fonte/camada image a cada mudança
+  // overlay do NDVI (#37) — recria a fonte/camada image SÓ quando a imagem muda
+  // de verdade.
+  //
+  // Antes o efeito dependia da REFERÊNCIA do objeto `ndviOverlay`. Como os
+  // chamadores montam esse objeto inline (`ndviOverlay={{ url, bounds }}`), ele
+  // nasce novo a cada render — e a tela de campo re-renderiza sem parar, porque
+  // o GPS atualiza a posição a todo instante. Resultado: a camada era removida
+  // e readicionada dezenas de vezes por minuto e o mapa PISCAVA.
+  // Agora comparamos por VALOR (url + bounds) e só mexemos no mapa se mudou.
+  const ndviAnteriorRef = useRef<{ url: string; bounds: [number, number, number, number] } | null>(null);
   useEffect(() => {
+    const ant = ndviAnteriorRef.current;
+    const ov = ndviOverlay ?? null;
+    const igual = (!ov && !ant)
+      || (!!ov && !!ant && ov.url === ant.url && ov.bounds.every((v, i) => v === ant.bounds[i]));
+    if (igual) return;                       // nada mudou → não recria (fim do piscar)
+    ndviAnteriorRef.current = ov ? { url: ov.url, bounds: [...ov.bounds] as [number, number, number, number] } : null;
+
     quandoPronto(map => {
       const SRC = 'ndvi-img', LYR = 'ndvi-img-layer';
       if (map.getLayer(LYR)) { try { map.removeLayer(LYR); } catch {} }
       if (map.getSource(SRC)) { try { map.removeSource(SRC); } catch {} }
-      if (!ndviOverlay) return;
-      const [w, s, e, n] = ndviOverlay.bounds;
+      if (!ov) return;
+      const [w, s, e, n] = ov.bounds;
       try {
-        map.addSource(SRC, { type: 'image', url: ndviOverlay.url, coordinates: [[w, n], [e, n], [e, s], [w, s]] });
+        map.addSource(SRC, { type: 'image', url: ov.url, coordinates: [[w, n], [e, n], [e, s], [w, s]] });
         // abaixo do contorno do talhão (talhao-line) p/ a borda e os pontos ficarem por cima
         map.addLayer({ id: LYR, type: 'raster', source: SRC, paint: { 'raster-opacity': 0.85, 'raster-fade-duration': 0 } }, 'talhao-line');
       } catch (err) { console.warn('[mapa-coleta] ndvi overlay:', err); }

@@ -194,15 +194,25 @@ function CampoMancha({ mancha, talhao, onVoltar }: { mancha: ManchaOffline; talh
   const talhaoFC = useMemo(() => talhaoComoFC(talhao), [talhao]);
   const dist = userPos && alvo ? distanciaM(userPos.lng, userPos.lat, alvo.lng, alvo.lat) : null;
 
+  // Props do mapa memoizadas: montadas inline, elas nasciam NOVAS a cada render
+  // (e o GPS re-renderiza esta tela o tempo todo), o que fazia a camada da
+  // imagem ser recriada sem parar — o mapa piscava.
+  const overlayMapa = useMemo(
+    () => ({ url: mancha.dataUrl, bounds: mancha.bounds }),
+    [mancha.dataUrl, mancha.bounds],
+  );
+  const semPontos = useMemo<GeoJSON.FeatureCollection>(
+    () => ({ type: 'FeatureCollection', features: [] }), []);
+
   return (
     <div className="fixed inset-0" style={{ background: AZUL }}>
       <MapaColeta
-        talhaoGeo={talhaoFC} bbox={mancha.bounds} pontos={{ type: 'FeatureCollection', features: [] }}
+        talhaoGeo={talhaoFC} bbox={mancha.bounds} pontos={semPontos}
         userPos={userPos} alvo={alvo} raioM={12} modo="sat" seguirGps={seguir}
         pedidoGps={pedidoGps} pedidoEnquadrar={pedidoEnq}
         onSelecionarPonto={() => {}}
         onGestoUsuario={() => setSeguir(false)}
-        ndviOverlay={{ url: mancha.dataUrl, bounds: mancha.bounds }}
+        ndviOverlay={overlayMapa}
         onClickMapa={(lng, lat) => setAlvo({ lng, lat })}
       />
 
