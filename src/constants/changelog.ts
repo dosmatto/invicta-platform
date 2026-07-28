@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.7.42': [
+    'CORRIGIDO — USUÁRIO NOVO VIA "ACESSO AINDA NÃO LIBERADO" MESMO COM O PAPEL ATRIBUÍDO: quem entrava pela 1ª vez (navegador limpo) podia ser barrado por engano. O app confere o papel numa lista que só existe depois que o boot baixa os dados da nuvem; nesse 1º acesso o boot é o COMPLETO (~10s) e havia um tempo-limite de 12s — se a internet do usuário fosse mais lenta, entrava com a lista vazia e ele aparecia "sem papel". Agora, antes de bloquear, o app confirma o papel DIRETO na nuvem (consulta de um registro só). A tela de bloqueio também ganhou o botão "Tentar de novo", para quando o administrador acabou de liberar.',
+  ],
   '2.7.41': [
     'GRADE DE AMOSTRAGEM — DISTÂNCIA DA BORDA PADRÃO 25 m (era 50 m): ao gerar a grade, o campo "Distância da borda (m)" já vem com 25 m. Continua editável a cada grade, e as grades já salvas não mudam. (Zonas de manejo e compactação seguem com os padrões próprios: 15 m e 10 m.)',
   ],

@@ -4,7 +4,7 @@ import { createContext, useContext, useState, useEffect, useCallback, ReactNode 
 import { useRouter } from 'next/navigation';
 import { seedIfEmpty } from '@/lib/seed';
 import { bootCloud, bootCloudCampo, cloudExcluirMapasPorPrefixo, cloudExcluirPorPrefixo } from '@/lib/cloud';
-import { empresaIfEmpty, adotarEmpresasLocais, garantirEmpresaInvicta, uidUsuario, ehOwner, seedPapeis, seedPermissoes, seedPlanos, papelDoEmail, papelDoUsuario, emailUsuario, precisaTrocarSenha, meuRegistro, loginExpirado } from '@/lib/empresa';
+import { empresaIfEmpty, adotarEmpresasLocais, garantirEmpresaInvicta, uidUsuario, ehOwner, seedPapeis, seedPermissoes, seedPlanos, papelDoEmail, papelDoUsuario, emailUsuario, precisaTrocarSenha, meuRegistro, loginExpirado, confirmarPapelNaNuvem } from '@/lib/empresa';
 import { limparBaseOperacional } from '@/lib/admin/manutencao';
 import { TrocaSenhaObrigatoria } from '@/components/auth/TrocaSenhaObrigatoria';
 import { migrarLaboratoriosV1, migrarSafrasV1, migrarGradesV1, migrarPreferenciasV1, reKeyDonoBiblioteca } from '@/lib/biblioteca';
@@ -217,7 +217,13 @@ export function AppProvider({ children, redirectProdutorParaPortal, modoCampo }:
       garantirEmpresaInvicta(uidUsuario());    // empresa padrão "Invicta"
       reKeyDonoBiblioteca();                   // A3.4: dono da Biblioteca pessoal uid→e-mail (idempotente)
       migracoesLocais();
-      const autorizado = !!papelDoEmail(emailUsuario());
+      // Papel = fonte da verdade do acesso, lido da lista LOCAL. Se ela ainda não
+      // tem o e-mail (usuário NOVO em navegador limpo + boot que estourou o
+      // tempo-limite acima), NÃO bloqueia de cara: confirma o papel direto na
+      // nuvem (1 linha) antes de decidir. Sem isto, quem TEM acesso liberado via
+      // "Acesso ainda não liberado" e só entrava depois de várias tentativas.
+      let autorizado = !!papelDoEmail(emailUsuario());
+      if (!autorizado) autorizado = !!(await confirmarPapelNaNuvem(emailUsuario()));
       // Validade de login (prestador): papel existe mas venceu → bloqueio próprio.
       const reg = meuRegistro();
       const expirado = autorizado && loginExpirado(reg);
@@ -364,10 +370,18 @@ export function AppProvider({ children, redirectProdutorParaPortal, modoCampo }:
               O e-mail <strong style={{ color: '#cbd5e1' }}>{usuario?.email}</strong> não tem papel atribuído.
               Peça a um administrador para liberar seu acesso.
             </p>
+            <p className="text-[10px]" style={{ color: '#64748b' }}>
+              Se o administrador acabou de liberar, clique em “Tentar de novo”.
+            </p>
           </div>
-          <button onClick={() => logout()} className="px-4 py-2 rounded text-xs font-bold text-white" style={{ background: 'var(--invicta-blue-mid)' }}>
-            Sair
-          </button>
+          <div className="flex gap-2">
+            <button onClick={() => window.location.reload()} className="px-4 py-2 rounded text-xs font-bold text-white" style={{ background: 'var(--invicta-green-dark)' }}>
+              Tentar de novo
+            </button>
+            <button onClick={() => logout()} className="px-4 py-2 rounded text-xs font-bold text-white" style={{ background: 'var(--invicta-blue-mid)' }}>
+              Sair
+            </button>
+          </div>
         </div>
       ) : children}
     </AppContext.Provider>

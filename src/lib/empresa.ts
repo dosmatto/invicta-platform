@@ -110,6 +110,37 @@ export function papelDoEmail(email: string | null): PapelMembro | null {
   const e = normEmail(email);
   return getPapeis().find(p => p.email === e)?.papel ?? null;
 }
+// Confirma o papel do e-mail DIRETO na nuvem (consulta pontual de 1 linha).
+//
+// Por que existe: `papelDoEmail` lê a lista LOCAL, que só existe depois que o
+// boot da nuvem baixa e grava. Num usuário NOVO (navegador limpo) o boot é o
+// COMPLETO (~10s) e o AppContext tem tempo-limite de 12s — se estourar, a lista
+// local fica vazia e alguém que TEM papel via "Acesso ainda não liberado".
+// Aqui buscamos só o registro dele; se existir, gravamos local e liberamos.
+// Devolve null quando realmente não há papel (ou a nuvem não respondeu).
+export async function confirmarPapelNaNuvem(email: string | null): Promise<PapelMembro | null> {
+  const e = normEmail(email ?? '');
+  if (!e) return null;
+  try {
+    const { usarDadosSupabase, carregarDocsPorCampoSupabase } = await import('./supabaseData');
+    if (!usarDadosSupabase()) return null;
+    const achados = await carregarDocsPorCampoSupabase<RegistroPapel>(K_PAPEIS, 'email', e);
+    const reg = achados.find(r => normEmail(r.email) === e);
+    if (!reg?.papel) return null;
+    // Grava local para o resto do app (pode/papelDoUsuario/meuRegistro) enxergar.
+    const lista = load<RegistroPapel>(K_PAPEIS);
+    if (!lista.some(p => normEmail(p.email) === e)) {
+      lista.push(reg);
+      save(K_PAPEIS, lista);
+    }
+    console.info('[acesso] papel confirmado na nuvem (boot local estava incompleto):', e, reg.papel);
+    return reg.papel;
+  } catch (err) {
+    console.warn('[acesso] falha ao confirmar o papel na nuvem:', err);
+    return null;
+  }
+}
+
 export function definirPapelEmail(
   email: string, papel: PapelMembro,
   extra?: { senhaProvisoria?: boolean; clienteId?: string; planoId?: string; clientesVinculados?: string[]; talhoesVinculados?: string[]; validadeAte?: string },
