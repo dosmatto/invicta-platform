@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.7.41': [
+    'GRADE DE AMOSTRAGEM — DISTÂNCIA DA BORDA PADRÃO 25 m (era 50 m): ao gerar a grade, o campo "Distância da borda (m)" já vem com 25 m. Continua editável a cada grade, e as grades já salvas não mudam. (Zonas de manejo e compactação seguem com os padrões próprios: 15 m e 10 m.)',
+  ],
   '2.7.40': [
     'CORRIGIDO — MAPA DE RECOMENDAÇÃO MOSTRAVA COR QUE NÃO EXISTIA NA LEGENDA: nos mapas de dose (Calcário, Gesso…), apareciam manchas ROXAS que não constavam no "Plano de aplicação". Causa: quando a equação tem DOSE MÍNIMA (ex.: 1.000 kg/ha) com piso operacional, todo pixel abaixo dela vira exatamente a mínima — e o MAPA classificava esse valor na faixa anterior ("50 – 1.000", roxa), enquanto a TABELA já o contava na faixa certa ("1.000 – 2.000", azul). Mapa e tabela usavam listas de faixas diferentes. Agora os dois (e também o SHP de aplicação) usam a MESMA regra: as faixas abaixo da dose mínima não existem. O mapa passa a bater exatamente com a legenda. As DOSES não mudaram — era só a cor/faixa exibida. Quando a dose mínima é baixa (ex.: 150), a faixa roxa continua aparecendo normalmente, como antes.',
   ],

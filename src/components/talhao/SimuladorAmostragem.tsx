@@ -69,7 +69,7 @@ export function SimuladorAmostragem({ safraNome: safraProp }: { safraNome?: stri
   const [rotacaoAuto, setRotacaoAuto] = useState(true);
   const [rotacaoGraus, setRotacaoGraus] = useState(0);
   const [aleatoriedade, setAleatoriedade] = useState(0);
-  const [distanciaBorda, setDistanciaBorda] = useState(50);
+  const [distanciaBorda, setDistanciaBorda] = useState(25);   // padrão 25 m (era 50 m)
   const [modoDist, setModoDist] = useState<ModoDistribuicao>('inteligente');
   const [modoSel, setModoSel] = useState<'regular' | 'aleatorio'>('regular');
   const [seedPos, setSeedPos] = useState(1);
