@@ -211,7 +211,7 @@ function TelaInicio({ online, pend, sincronizar, sincronizando, msgSync, instala
   return (
     <div className="min-h-screen flex flex-col" style={{ background: AZUL_ESC }}>
       <header className="flex items-center justify-between px-4 py-3 flex-shrink-0"
-        style={{ background: AZUL, borderBottom: `1px solid ${BORDA}` }}>
+        style={{ background: AZUL, borderBottom: `1px solid ${BORDA}`, paddingTop: 'max(12px, calc(var(--inset-top, env(safe-area-inset-top)) + 8px))' }}>
         <Image src="/images/logo-branca.png" alt="Invicta" width={88} height={26} priority
           style={{ objectFit: 'contain', height: 26, width: 'auto' }} />
         <div className="flex items-center gap-2">
@@ -312,7 +312,7 @@ function TelaSelecao({ sel, setSel, online, pend, sincronizar, sincronizando, ms
     <div className="min-h-screen flex flex-col" style={{ background: AZUL_ESC }}>
       {/* topo */}
       <header className="flex items-center justify-between px-4 py-3 flex-shrink-0"
-        style={{ background: AZUL, borderBottom: `1px solid ${BORDA}` }}>
+        style={{ background: AZUL, borderBottom: `1px solid ${BORDA}`, paddingTop: 'max(12px, calc(var(--inset-top, env(safe-area-inset-top)) + 8px))' }}>
         <Image src="/images/logo-branca.png" alt="Invicta" width={88} height={26} priority
           style={{ objectFit: 'contain', height: 26, width: 'auto' }} />
         <div className="flex items-center gap-2">
@@ -779,7 +779,7 @@ function TelaMapa({ sel, setSel, online, pend, reload, setReload, sincronizar, s
 
       {/* topo: voltar + contexto + sync */}
       <div className="absolute top-0 left-0 right-0 flex items-center gap-2 px-3 py-2"
-        style={{ background: 'rgba(6,21,37,0.92)', borderBottom: `1px solid ${BORDA}`, paddingTop: 'max(8px, env(safe-area-inset-top))' }}>
+        style={{ background: 'rgba(6,21,37,0.92)', borderBottom: `1px solid ${BORDA}`, paddingTop: 'max(8px, var(--inset-top, env(safe-area-inset-top)))' }}>
         <button onClick={() => setSel({ ...sel, gradeId: null })}
           className="p-1.5 rounded-lg flex-shrink-0" style={{ background: BORDA, color: '#93c5fd' }}>
           <ChevronLeft size={16} />
@@ -804,7 +804,7 @@ function TelaMapa({ sel, setSel, online, pend, reload, setReload, sincronizar, s
       </div>
 
       {/* leitura de GPS */}
-      <div className="absolute left-3 flex flex-col gap-1" style={{ top: 'calc(56px + env(safe-area-inset-top))' }}>
+      <div className="absolute left-3 flex flex-col gap-1" style={{ top: 'calc(56px + var(--inset-top, env(safe-area-inset-top)))' }}>
         {alvoPonto && dist != null && (
           <div className="px-3 py-2 rounded-xl" style={{ background: 'rgba(6,21,37,0.92)', border: `1px solid ${dentroRaio ? '#4ade80' : BORDA}` }}>
             <p className="text-[9px] font-bold uppercase" style={{ color: dentroRaio ? '#4ade80' : '#93c5fd' }}>
@@ -830,7 +830,7 @@ function TelaMapa({ sel, setSel, online, pend, reload, setReload, sincronizar, s
       </div>
 
       {/* botões laterais */}
-      <div className="absolute right-3 flex flex-col gap-2" style={{ top: 'calc(56px + env(safe-area-inset-top))' }}>
+      <div className="absolute right-3 flex flex-col gap-2" style={{ top: 'calc(56px + var(--inset-top, env(safe-area-inset-top)))' }}>
         <BotaoMapa ativo={seguir}
           onClick={() => { setSeguir(true); setPedidoGps(x => x + 1); }}
           titulo="Ir para onde estou (GPS)"><Crosshair size={18} /></BotaoMapa>
@@ -845,13 +845,13 @@ function TelaMapa({ sel, setSel, online, pend, reload, setReload, sincronizar, s
       </div>
       {baixando && (
         <div className="absolute right-3 px-2 py-1 rounded text-[9px] font-bold"
-          style={{ top: 'calc(56px + env(safe-area-inset-top) + 220px)', background: 'rgba(6,21,37,0.9)', color: '#93c5fd' }}>
+          style={{ top: 'calc(56px + var(--inset-top, env(safe-area-inset-top)) + 220px)', background: 'rgba(6,21,37,0.9)', color: '#93c5fd' }}>
           {baixando.feitos}/{baixando.total}
         </div>
       )}
 
       {/* filtros + painel do ponto */}
-      <div className="absolute bottom-0 left-0 right-0" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+      <div className="absolute bottom-0 left-0 right-0" style={{ paddingBottom: 'var(--inset-bottom, env(safe-area-inset-bottom))' }}>
         {msgSync && (
           <p className="mx-3 mb-1.5 px-3 py-1.5 rounded-lg text-[10px]"
             style={{ background: 'rgba(6,21,37,0.92)', color: '#94a3b8' }}>{msgSync}</p>
@@ -1007,7 +1007,7 @@ function ListaPontos({ grade, statusDe, userPos, onEscolher, onFechar }: {
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col" style={{ background: AZUL_ESC }}>
-      <div className="flex items-center gap-2 px-4 py-3" style={{ borderBottom: `1px solid ${BORDA}`, paddingTop: 'max(12px, env(safe-area-inset-top))' }}>
+      <div className="flex items-center gap-2 px-4 py-3" style={{ borderBottom: `1px solid ${BORDA}`, paddingTop: 'max(12px, var(--inset-top, env(safe-area-inset-top)))' }}>
         <p className="text-sm font-bold flex-1" style={{ color: TXT }}>Pontos — {grade.nome}</p>
         <button onClick={() => setPorDist(d => !d)} disabled={!userPos}
           className="px-2.5 py-1 rounded-full text-[10px] font-bold disabled:opacity-40"
@@ -1047,7 +1047,7 @@ function ConfigDialog({ cfg, onSalvar, onFechar }: {
   const [raio, setRaio] = useState(cfg.raioM);
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center" style={{ background: 'rgba(0,0,0,0.6)' }} onClick={onFechar}>
-      <div className="w-full max-w-md rounded-t-2xl p-5 space-y-4" style={{ background: AZUL, paddingBottom: 'max(20px, env(safe-area-inset-bottom))' }}
+      <div className="w-full max-w-md rounded-t-2xl p-5 space-y-4" style={{ background: AZUL, paddingBottom: 'max(20px, var(--inset-bottom, env(safe-area-inset-bottom)))' }}
         onClick={e => e.stopPropagation()}>
         <p className="text-sm font-bold" style={{ color: TXT }}>Configurações</p>
         <div>
@@ -1197,7 +1197,7 @@ function ColetaDialog({ grade, ponto, onConfirmar, onFechar }: {
           </div>
         </div>
 
-        <div className="px-5 py-3.5" style={{ borderTop: `1px solid ${BORDA}`, paddingBottom: 'max(14px, env(safe-area-inset-bottom))' }}>
+        <div className="px-5 py-3.5" style={{ borderTop: `1px solid ${BORDA}`, paddingBottom: 'max(14px, var(--inset-bottom, env(safe-area-inset-bottom)))' }}>
           <button
             onClick={() => onConfirmar({ profundidades: profs, umidade: umidade || undefined, compactacao: compactacao || undefined, problemas: problemas || undefined, obs: obs || undefined, fotos: fotos.length })}
             disabled={profs.length === 0}

@@ -393,7 +393,7 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
 
       {/* topo */}
       <div className="absolute top-0 left-0 right-0 flex items-center gap-2 px-3 py-2"
-        style={{ background: 'rgba(6,21,37,0.92)', borderBottom: `1px solid ${BORDA}`, paddingTop: 'max(8px, env(safe-area-inset-top))' }}>
+        style={{ background: 'rgba(6,21,37,0.92)', borderBottom: `1px solid ${BORDA}`, paddingTop: 'max(8px, var(--inset-top, env(safe-area-inset-top)))' }}>
         <button onClick={onVoltar} className="p-1.5 rounded-lg flex-shrink-0" style={{ background: BORDA, color: '#93c5fd' }}>
           <ChevronLeft size={16} />
         </button>
@@ -409,7 +409,7 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
       </div>
 
       {/* painel ao vivo (spec seção 7) */}
-      <div className="absolute left-3 flex flex-col gap-1" style={{ top: 'calc(56px + env(safe-area-inset-top))' }}>
+      <div className="absolute left-3 flex flex-col gap-1" style={{ top: 'calc(56px + var(--inset-top, env(safe-area-inset-top)))' }}>
         {(gravando || nCoords > 0) && (
           <div className="px-3 py-2 rounded-xl text-[10px] leading-relaxed" style={{ background: 'rgba(6,21,37,0.9)', border: `1px solid ${BORDA}`, color: '#cbd5e1' }}>
             <div className="flex items-center gap-3">
@@ -438,7 +438,7 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
       </div>
 
       {/* botões laterais */}
-      <div className="absolute right-3 flex flex-col gap-2" style={{ top: 'calc(56px + env(safe-area-inset-top))' }}>
+      <div className="absolute right-3 flex flex-col gap-2" style={{ top: 'calc(56px + var(--inset-top, env(safe-area-inset-top)))' }}>
         <BotaoMapa ativo={seguir} onClick={() => { setSeguir(true); setPedidoGps(x => x + 1); }} titulo="Ir para onde estou (GPS)"><Crosshair size={18} /></BotaoMapa>
         <BotaoMapa onClick={() => { setSeguir(false); setPedidoEnquadrar(x => x + 1); }} titulo="Enquadrar o desenho"><Maximize2 size={18} /></BotaoMapa>
         <BotaoMapa onClick={() => setModo(m => (m === 'sat' ? 'ruas' : 'sat'))} titulo="Satélite / Ruas"><Layers size={18} /></BotaoMapa>
@@ -450,7 +450,7 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
       </div>
 
       {/* rodapé */}
-      <div className="absolute bottom-0 left-0 right-0" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+      <div className="absolute bottom-0 left-0 right-0" style={{ paddingBottom: 'var(--inset-bottom, env(safe-area-inset-bottom))' }}>
         {msg && (
           <p className="mx-3 mb-1.5 px-3 py-1.5 rounded-lg text-[10px]"
             style={{ background: 'rgba(6,21,37,0.92)', color: '#94a3b8' }}>{msg}</p>
@@ -569,7 +569,7 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
       {/* ajustes: frequência de gravação + offset lateral */}
       {mostraAjustes && (
         <div className="fixed inset-0 z-50 flex items-end justify-center" style={{ background: 'rgba(0,0,0,0.6)' }} onClick={() => setMostraAjustes(false)}>
-          <div className="w-full max-w-md rounded-t-2xl p-5 space-y-4" style={{ background: AZUL, paddingBottom: 'max(20px, env(safe-area-inset-bottom))' }}
+          <div className="w-full max-w-md rounded-t-2xl p-5 space-y-4" style={{ background: AZUL, paddingBottom: 'max(20px, var(--inset-bottom, env(safe-area-inset-bottom)))' }}
             onClick={e => e.stopPropagation()}>
             <p className="text-sm font-bold" style={{ color: TXT }}>Ajustes da medição</p>
 
@@ -641,7 +641,7 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
       {/* #2 — escolher camada de referência */}
       {mostraRef && (
         <div className="fixed inset-0 z-50 flex flex-col" style={{ background: AZUL_ESC }}>
-          <div className="flex items-center gap-2 px-4 py-3" style={{ borderBottom: `1px solid ${BORDA}`, paddingTop: 'max(12px, env(safe-area-inset-top))' }}>
+          <div className="flex items-center gap-2 px-4 py-3" style={{ borderBottom: `1px solid ${BORDA}`, paddingTop: 'max(12px, var(--inset-top, env(safe-area-inset-top)))' }}>
             <button onClick={() => setMostraRef(false)} className="p-1.5 rounded-lg" style={{ background: BORDA, color: '#93c5fd' }}><X size={16} /></button>
             <p className="text-sm font-bold" style={{ color: TXT }}>Camada de referência</p>
           </div>
@@ -705,7 +705,7 @@ export function MedicaoScreen({ onVoltar }: { onVoltar: () => void }) {
       {/* medições salvas */}
       {mostraSalvas && (
         <div className="fixed inset-0 z-50 flex flex-col" style={{ background: AZUL_ESC }}>
-          <div className="flex items-center gap-2 px-4 py-3" style={{ borderBottom: `1px solid ${BORDA}`, paddingTop: 'max(12px, env(safe-area-inset-top))' }}>
+          <div className="flex items-center gap-2 px-4 py-3" style={{ borderBottom: `1px solid ${BORDA}`, paddingTop: 'max(12px, var(--inset-top, env(safe-area-inset-top)))' }}>
             <p className="text-sm font-bold flex-1" style={{ color: TXT }}>Medições salvas</p>
             <button onClick={() => setMostraSalvas(false)} className="p-1.5" style={{ color: SUB }}><X size={18} /></button>
           </div>
@@ -830,7 +830,7 @@ function SalvarDialog({ tipo, medidas, nSugerido, onFechar, onSalvar }: {
           </div>
         </div>
 
-        <div className="px-5 py-3.5" style={{ borderTop: `1px solid ${BORDA}`, paddingBottom: 'max(14px, env(safe-area-inset-bottom))' }}>
+        <div className="px-5 py-3.5" style={{ borderTop: `1px solid ${BORDA}`, paddingBottom: 'max(14px, var(--inset-bottom, env(safe-area-inset-bottom)))' }}>
           <button onClick={() => nome.trim() && onSalvar({
             nome: nome.trim(), categoria, obs,
             talhaoId, talhaoNome: talhoes.find(t => t.id === talhaoId)?.nome ?? '', safra,

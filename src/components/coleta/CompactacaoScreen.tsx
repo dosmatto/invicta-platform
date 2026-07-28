@@ -61,7 +61,7 @@ export function CompactacaoScreen({ onVoltar }: { onVoltar: () => void }) {
 
   return (
     <div className="min-h-screen flex flex-col" style={{ background: AZUL_ESC }}>
-      <header className="flex items-center gap-2 px-4 py-3 flex-shrink-0" style={{ background: AZUL, borderBottom: `1px solid ${BORDA}` }}>
+      <header className="flex items-center gap-2 px-4 py-3 flex-shrink-0" style={{ background: AZUL, borderBottom: `1px solid ${BORDA}`, paddingTop: 'max(12px, calc(var(--inset-top, env(safe-area-inset-top)) + 8px))' }}>
         <button onClick={voltar} className="p-1.5 rounded-lg" style={{ background: BORDA, color: '#93c5fd' }}><ChevronLeft size={16} /></button>
         <Gauge size={16} style={{ color: '#fbbf24' }} />
         <span className="text-sm font-bold" style={{ color: TXT }}>Compactação</span>
@@ -167,7 +167,7 @@ function CampoCompactacao({ grade, talhao, onVoltar }: { grade: GradeCompactacao
       />
 
       {/* topo */}
-      <div className="absolute top-0 left-0 right-0 flex items-center gap-2 px-3 py-2" style={{ background: 'rgba(6,21,37,0.92)', borderBottom: `1px solid ${BORDA}`, paddingTop: 'max(8px, env(safe-area-inset-top))' }}>
+      <div className="absolute top-0 left-0 right-0 flex items-center gap-2 px-3 py-2" style={{ background: 'rgba(6,21,37,0.92)', borderBottom: `1px solid ${BORDA}`, paddingTop: 'max(8px, var(--inset-top, env(safe-area-inset-top)))' }}>
         <button onClick={onVoltar} className="p-1.5 rounded-lg flex-shrink-0" style={{ background: BORDA, color: '#93c5fd' }}><ChevronLeft size={16} /></button>
         <div className="flex-1 min-w-0">
           <p className="text-xs font-bold truncate" style={{ color: TXT }}>{talhao.nome} · {grade.nome}</p>
@@ -176,7 +176,7 @@ function CampoCompactacao({ grade, talhao, onVoltar }: { grade: GradeCompactacao
       </div>
 
       {/* leitura de navegação */}
-      <div className="absolute left-3 flex flex-col gap-1" style={{ top: 'calc(56px + env(safe-area-inset-top))' }}>
+      <div className="absolute left-3 flex flex-col gap-1" style={{ top: 'calc(56px + var(--inset-top, env(safe-area-inset-top)))' }}>
         {sel && dist != null && (
           <div className="px-3 py-2 rounded-xl" style={{ background: 'rgba(6,21,37,0.92)', border: `1px solid ${dentroRaio ? '#4ade80' : '#fbbf24'}` }}>
             <p className="text-[9px] font-bold uppercase" style={{ color: dentroRaio ? '#4ade80' : '#fbbf24' }}>→ C-{sel.ordem + 1}{dentroRaio ? ' · no ponto' : ''}</p>
@@ -192,14 +192,14 @@ function CampoCompactacao({ grade, talhao, onVoltar }: { grade: GradeCompactacao
       </div>
 
       {/* botões do mapa */}
-      <div className="absolute right-3 flex flex-col gap-2" style={{ top: 'calc(56px + env(safe-area-inset-top))' }}>
+      <div className="absolute right-3 flex flex-col gap-2" style={{ top: 'calc(56px + var(--inset-top, env(safe-area-inset-top)))' }}>
         <BotaoMapa ativo={seguir} onClick={() => { setSeguir(true); setPedidoGps(x => x + 1); }}><Crosshair size={18} /></BotaoMapa>
         <BotaoMapa onClick={() => { setSeguir(false); setPedidoEnq(x => x + 1); }}><Maximize2 size={18} /></BotaoMapa>
       </div>
 
       {/* rodapé: ação do ponto selecionado */}
       {sel && !formAberto && (
-        <div className="absolute left-0 right-0 bottom-0 px-3 pb-3" style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}>
+        <div className="absolute left-0 right-0 bottom-0 px-3 pb-3" style={{ paddingBottom: 'max(12px, var(--inset-bottom, env(safe-area-inset-bottom)))' }}>
           <div className="rounded-2xl p-3 space-y-2" style={{ background: 'rgba(6,21,37,0.96)', border: `1px solid ${BORDA}` }}>
             <div className="flex items-center gap-2">
               <span className="text-sm font-bold" style={{ color: TXT }}>C-{sel.ordem + 1}</span>
@@ -250,7 +250,7 @@ function FormLeituras({ grade, codigo, onSalvar, onPular, onCancelar }: {
 
   return (
     <div className="absolute inset-0 flex flex-col justify-end" style={{ background: 'rgba(0,0,0,0.45)' }}>
-      <div className="rounded-t-2xl p-4 space-y-3 max-h-[80vh] overflow-y-auto" style={{ background: AZUL_ESC, borderTop: `1px solid ${BORDA}`, paddingBottom: 'max(16px, env(safe-area-inset-bottom))' }}>
+      <div className="rounded-t-2xl p-4 space-y-3 max-h-[80vh] overflow-y-auto" style={{ background: AZUL_ESC, borderTop: `1px solid ${BORDA}`, paddingBottom: 'max(16px, var(--inset-bottom, env(safe-area-inset-bottom)))' }}>
         <div className="flex items-center gap-2">
           <Gauge size={16} style={{ color: '#fbbf24' }} />
           <p className="text-sm font-bold flex-1" style={{ color: TXT }}>{codigo} — leituras do penetrômetro</p>

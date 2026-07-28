@@ -13,10 +13,22 @@
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
         <item name="android:background">@null</item>
+        <!-- Do Android 15 (API 35) em diante o sistema FORÇA o modo edge-to-edge:
+             a WebView passa a ocupar a tela inteira e o cabeçalho do app fica por
+             baixo do relógio/bateria. Como o targetSdk aqui é 36, o
+             `overlaysWebView: false` do plugin StatusBar é ignorado.
+             Esta flag pede ao sistema para NÃO forçar o edge-to-edge, então a
+             faixa da barra de status volta a ser reservada.
+             Atenção: é uma saída de compatibilidade que o Google mantém por
+             tempo limitado — a solução definitiva é a WebView repassar os
+             insets para o CSS (env(safe-area-inset-top)), que o app já usa. -->
+        <item name="android:windowOptOutEdgeToEdgeEnforcement">true</item>
     </style>
 
 
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
         <item name="android:background">@drawable/splash</item>
+        <item name="android:windowOptOutEdgeToEdgeEnforcement">true</item>
+        <item name="postSplashScreenTheme">@style/AppTheme.NoActionBar</item>
     </style>
 </resources>

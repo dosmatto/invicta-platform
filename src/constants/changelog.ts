@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.8.3': [
+    'APP DE CAMPO (Android) — CABEÇALHO NÃO FICA MAIS EMBAIXO DO RELÓGIO: no app nativo, o topo da tela se misturava com a barra do celular (relógio, sinal, bateria). Do Android 15 em diante o sistema obriga o app a desenhar sob as barras, e nem a configuração da barra de status nem a "saída de compatibilidade" resolvem. Agora o app lê a medida real da barra do próprio aparelho e reserva esse espaço — vale para qualquer modelo, inclusive com recorte de câmera. Os cabeçalhos das telas de Início, Seleção, NDVI/Mancha e Compactação passaram a respeitar essa área.',
+  ],
   '2.8.2': [
     'COLETA EM CAMPO — PONTO NÃO SE PERDE MAIS: se o armazenamento do aparelho estivesse cheio (cenário comum offline, com a base + coletas + fotos acumuladas), a gravação da coleta falhava EM SILÊNCIO — o ponto não ficava marcado como coletado e o dado se perdia sem nenhum aviso. Agora: (1) toda coleta é espelhada numa cópia de segurança no próprio aparelho (IndexedDB, limite muito maior), então o registro sobrevive mesmo se o armazenamento principal recusar; (2) se isso acontecer, aparece um AVISO na hora pedindo para liberar espaço/sincronizar, em vez de fingir que deu certo; (3) ao abrir o app, o que estiver só na cópia de segurança é recuperado automaticamente e volta a aparecer na tela.',
   ],

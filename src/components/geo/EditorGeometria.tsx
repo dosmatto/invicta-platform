@@ -407,7 +407,7 @@ export function EditorGeometria({ titulo, fc, onSalvar, onFechar }: {
     <div className="fixed inset-0 z-[9999] flex flex-col" style={{ background: '#061525' }}>
       {/* HEADER: título + medidas + Cancelar/Salvar (sempre visíveis) */}
       <div className="flex items-center gap-2 px-3 py-2 flex-shrink-0"
-        style={{ background: '#0a1929', borderBottom: '1px solid #1a3a6b', paddingTop: 'max(8px, env(safe-area-inset-top))' }}>
+        style={{ background: '#0a1929', borderBottom: '1px solid #1a3a6b', paddingTop: 'max(8px, var(--inset-top, env(safe-area-inset-top)))' }}>
         <div className="flex-1 min-w-0">
           <p className="text-xs font-bold truncate" style={{ color: '#e2e8f0' }}>✏ {titulo}</p>
           <p className="text-[10px] truncate" style={{ color: '#93c5fd' }}>
@@ -458,7 +458,7 @@ export function EditorGeometria({ titulo, fc, onSalvar, onFechar }: {
       </div>
 
       {/* dica / mensagem */}
-      <p className="px-4 py-2 text-[11px] flex-shrink-0" style={{ background: '#0a1929', borderTop: '1px solid #1a3a6b', color: msg.startsWith('⚠') ? '#fbbf24' : '#94a3b8', paddingBottom: 'max(8px, env(safe-area-inset-bottom))' }}>
+      <p className="px-4 py-2 text-[11px] flex-shrink-0" style={{ background: '#0a1929', borderTop: '1px solid #1a3a6b', color: msg.startsWith('⚠') ? '#fbbf24' : '#94a3b8', paddingBottom: 'max(8px, var(--inset-bottom, env(safe-area-inset-bottom)))' }}>
         {msg || DICAS[modo]}
       </p>
     </div>,

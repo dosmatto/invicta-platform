@@ -56,7 +56,7 @@ export function ManchaScreen({ onVoltar }: { onVoltar: () => void }) {
 
   return (
     <div className="min-h-screen flex flex-col" style={{ background: AZUL_ESC }}>
-      <header className="flex items-center gap-2 px-4 py-3 flex-shrink-0" style={{ background: AZUL, borderBottom: `1px solid ${BORDA}` }}>
+      <header className="flex items-center gap-2 px-4 py-3 flex-shrink-0" style={{ background: AZUL, borderBottom: `1px solid ${BORDA}`, paddingTop: 'max(12px, calc(var(--inset-top, env(safe-area-inset-top)) + 8px))' }}>
         <button onClick={voltar} className="p-1.5 rounded-lg" style={{ background: BORDA, color: '#93c5fd' }}><ChevronLeft size={16} /></button>
         <Satellite size={16} style={{ color: '#93c5fd' }} />
         <span className="text-sm font-bold" style={{ color: TXT }}>NDVI / Mancha</span>
@@ -207,7 +207,7 @@ function CampoMancha({ mancha, talhao, onVoltar }: { mancha: ManchaOffline; talh
       />
 
       {/* topo */}
-      <div className="absolute top-0 left-0 right-0 flex items-center gap-2 px-3 py-2" style={{ background: 'rgba(6,21,37,0.92)', borderBottom: `1px solid ${BORDA}`, paddingTop: 'max(8px, env(safe-area-inset-top))' }}>
+      <div className="absolute top-0 left-0 right-0 flex items-center gap-2 px-3 py-2" style={{ background: 'rgba(6,21,37,0.92)', borderBottom: `1px solid ${BORDA}`, paddingTop: 'max(8px, var(--inset-top, env(safe-area-inset-top)))' }}>
         <button onClick={onVoltar} className="p-1.5 rounded-lg flex-shrink-0" style={{ background: BORDA, color: '#93c5fd' }}><ChevronLeft size={16} /></button>
         <div className="flex-1 min-w-0">
           <p className="text-xs font-bold truncate" style={{ color: TXT }}>{talhao.nome} · {mancha.indice} {dm(mancha.data)}</p>
@@ -216,7 +216,7 @@ function CampoMancha({ mancha, talhao, onVoltar }: { mancha: ManchaOffline; talh
       </div>
 
       {/* leitura */}
-      <div className="absolute left-3 flex flex-col gap-1" style={{ top: 'calc(56px + env(safe-area-inset-top))' }}>
+      <div className="absolute left-3 flex flex-col gap-1" style={{ top: 'calc(56px + var(--inset-top, env(safe-area-inset-top)))' }}>
         {alvo && dist != null && (
           <div className="px-3 py-2 rounded-xl" style={{ background: 'rgba(6,21,37,0.92)', border: `1px solid #4ade80` }}>
             <p className="text-[9px] font-bold uppercase" style={{ color: '#4ade80' }}>→ Mancha</p>
@@ -233,7 +233,7 @@ function CampoMancha({ mancha, talhao, onVoltar }: { mancha: ManchaOffline; talh
       </div>
 
       {/* botões */}
-      <div className="absolute right-3 flex flex-col gap-2" style={{ top: 'calc(56px + env(safe-area-inset-top))' }}>
+      <div className="absolute right-3 flex flex-col gap-2" style={{ top: 'calc(56px + var(--inset-top, env(safe-area-inset-top)))' }}>
         <BotaoMapa ativo={seguir} onClick={() => { setSeguir(true); setPedidoGps(x => x + 1); }}><Crosshair size={18} /></BotaoMapa>
         <BotaoMapa onClick={() => { setSeguir(false); setPedidoEnq(x => x + 1); }}><Maximize2 size={18} /></BotaoMapa>
       </div>

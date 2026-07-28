@@ -72,7 +72,7 @@ export default function CampoPage() {
 
       {/* cabeçalho: nome da área + INVICTA */}
       <div className="absolute top-0 left-0 right-0 flex items-center gap-2 px-3 py-2"
-        style={{ background: 'rgba(6,21,37,0.92)', borderBottom: `1px solid ${BORDA}`, paddingTop: 'max(8px, env(safe-area-inset-top))' }}>
+        style={{ background: 'rgba(6,21,37,0.92)', borderBottom: `1px solid ${BORDA}`, paddingTop: 'max(8px, var(--inset-top, env(safe-area-inset-top)))' }}>
         <MapPin size={16} style={{ color: '#f59e0b' }} className="flex-shrink-0" />
         <div className="flex-1 min-w-0">
           <p className="text-xs font-bold truncate" style={{ color: TXT }}>{payload.n || 'Área'}</p>
@@ -81,7 +81,7 @@ export default function CampoPage() {
       </div>
 
       {/* leitura de GPS */}
-      <div className="absolute left-3 flex flex-col gap-1" style={{ top: 'calc(56px + env(safe-area-inset-top))' }}>
+      <div className="absolute left-3 flex flex-col gap-1" style={{ top: 'calc(56px + var(--inset-top, env(safe-area-inset-top)))' }}>
         {userPos && (
           <div className="px-2.5 py-1.5 rounded-lg text-[10px] font-semibold"
             style={{ background: 'rgba(6,21,37,0.85)', color: userPos.acc <= 8 ? '#4ade80' : userPos.acc <= 20 ? '#fbbf24' : '#f87171' }}>
@@ -96,7 +96,7 @@ export default function CampoPage() {
       </div>
 
       {/* controles (view-only): ir p/ mim, enquadrar a área, satélite/ruas */}
-      <div className="absolute right-3 flex flex-col gap-2" style={{ top: 'calc(56px + env(safe-area-inset-top))' }}>
+      <div className="absolute right-3 flex flex-col gap-2" style={{ top: 'calc(56px + var(--inset-top, env(safe-area-inset-top)))' }}>
         <Botao ativo={seguir} onClick={() => { setSeguir(true); setPedidoGps(x => x + 1); }} titulo="Ir para onde estou (GPS)"><Crosshair size={18} /></Botao>
         <Botao onClick={() => { setSeguir(false); setPedidoEnquadrar(x => x + 1); }} titulo="Ver a área"><Maximize2 size={18} /></Botao>
         <Botao onClick={() => setModo(m => (m === 'sat' ? 'ruas' : 'sat'))} titulo="Satélite / Ruas"><Layers size={18} /></Botao>
