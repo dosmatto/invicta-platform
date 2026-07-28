@@ -9,6 +9,9 @@
     "esModuleInterop": true,
     "module": "esnext",
     "moduleResolution": "bundler",
+    // Permite `import './x.ts'` — os módulos puros de src/lib são importados
+    // direto pelos testes em Node (type-stripping), que exige a extensão.
+    "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
     "jsx": "react-jsx",

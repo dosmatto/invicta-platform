@@ -9,7 +9,7 @@ import type { AmbienteProdutivo } from './meap/tipos';
 import { cloudPushLista } from './cloud';
 import { lerListaLocal, gravarListaLocal, removerLocal } from './localComprimido';
 import { areaHaGeo, areaHaGeoBruta } from './areaGeo';
-import { empresaAtivaId, uidUsuario, escopoClienteIds, escopoTalhaoIds } from './empresa';
+import { empresaAtivaId, uidUsuario, escopoClienteIds, escopoTalhaoIds, escopoFazendaIds } from './empresa';
 import {
   listar as bibListar,
   obter as bibObter,
@@ -627,9 +627,14 @@ function comEmpresa<T extends object>(item: T): T {
 
 // ── Clientes ──────────────────────────────────────────────────────────────
 
-// Escopo de fazendas derivado do vínculo de clientes (consultoria).
+// Escopo de fazendas derivado do vínculo de clientes (consultoria) E do vínculo
+// DIRETO por fazenda (IAM): quando o usuário tem fazendas vinculadas, só elas
+// entram — mesmo que o produtor inteiro esteja liberado.
 function fazendasNoEscopo(esc: Set<string>): Set<string> {
-  return new Set(loadFiltrado<Fazenda>('inv_fazendas').filter(f => esc.has(f.clienteId)).map(f => f.id));
+  const escF = escopoFazendaIds();
+  return new Set(loadFiltrado<Fazenda>('inv_fazendas')
+    .filter(f => esc.has(f.clienteId) && (!escF || escF.has(f.id)))
+    .map(f => f.id));
 }
 
 export function getClientes(): Cliente[] {
@@ -699,8 +704,10 @@ export function excluirProdutorCascata(clienteId: string): { talhaoIds: string[]
 
 export function getFazendas(clienteId?: string): Fazenda[] {
   const esc = escopoClienteIds();
+  const escF = escopoFazendaIds();          // IAM: vínculo direto por fazenda
   let all = loadFiltrado<Fazenda>('inv_fazendas');
   if (esc) all = all.filter(f => esc.has(f.clienteId));
+  if (escF) all = all.filter(f => escF.has(f.id));
   all.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));   // sempre em ordem alfabética
   return clienteId ? all.filter(f => f.clienteId === clienteId) : all;
 }

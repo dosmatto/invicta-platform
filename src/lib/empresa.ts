@@ -10,8 +10,11 @@
 import { usuarioAtual, authConfigurado } from './auth';
 import { cloudPushLista } from './cloud';
 import { lerListaLocal } from './localComprimido';
+import { CAP_PARA_PERM, MATRIZ_PADRAO } from './iam/permissoes';
 
-export type PapelMembro = 'owner' | 'admin' | 'agronomo' | 'operador' | 'produtor' | 'prestador' | 'editor' | 'viewer';
+// 'leitor' (somente leitura) e 'custom' (permissões definidas uma a uma) vieram
+// com o IAM; 'editor'/'viewer' são legado mantido para registros antigos.
+export type PapelMembro = 'owner' | 'admin' | 'agronomo' | 'operador' | 'produtor' | 'prestador' | 'leitor' | 'custom' | 'editor' | 'viewer';
 
 export interface Empresa {
   id: string;
@@ -320,8 +323,35 @@ export function definirPermissao(papel: PapelMembro, cap: Capacidade, valor: boo
 export function pode(cap: Capacidade, papel: PapelMembro | null = papelDoUsuario()): boolean {
   if (!authConfigurado) return true;
   if (!papel) return false;
+  // IAM: usuário BLOQUEADO/inativo não faz nada, qualquer que seja o papel.
+  const reg = meuRegistro() as (RegistroPapel & { status?: string; permissoes?: Record<string, boolean> }) | null;
+  const st = reg?.status;
+  if (st && st !== 'ativo') return false;
   if (papel === 'owner') return true;
+  // IAM: exceção granular no próprio usuário vence o padrão do papel.
+  // (permissoes usa 'modulo.acao'; CAP_PARA_PERM traduz a capacidade legada.)
+  const chave = CAP_PARA_PERM[cap];
+  const excecao = chave ? reg?.permissoes?.[chave] : undefined;
+  if (typeof excecao === 'boolean') return excecao;
+  // Papel 'custom' não tem padrão: vale só o que estiver marcado no usuário.
+  if ((papel as string) === 'custom') return false;
+  if ((papel as string) === 'leitor') return chave ? MATRIZ_PADRAO.leitor[chave as keyof typeof MATRIZ_PADRAO.leitor] === true : false;
   return getPermissoes()[papel]?.[cap] ?? DEFAULTS_PERMISSOES[papel]?.[cap] ?? false;
+}
+
+// Checagem granular (módulo × ação) — a forma nova, para telas novas.
+export function podeEm(modulo: string, acao: string): boolean {
+  if (!authConfigurado) return true;
+  const papel = papelDoUsuario();
+  if (!papel) return false;
+  const reg = meuRegistro() as (RegistroPapel & { status?: string; permissoes?: Record<string, boolean> }) | null;
+  if (reg?.status && reg.status !== 'ativo') return false;
+  if (papel === 'owner') return true;
+  const chave = `${modulo}.${acao}`;
+  const excecao = reg?.permissoes?.[chave];
+  if (typeof excecao === 'boolean') return excecao;
+  const base = MATRIZ_PADRAO[papel as keyof typeof MATRIZ_PADRAO] as Record<string, boolean> | undefined;
+  return base?.[chave] === true;
 }
 
 // ── Planos de assinatura do Produtor (U3.B — editáveis pelo Owner) ───────────
@@ -480,6 +510,17 @@ export function escopoTalhaoIds(): Set<string> | null {
   if (!papel || papel === 'owner' || papel === 'admin' || papel === 'editor') return null;
   const reg = meuRegistro();
   const vinc = reg?.talhoesVinculados;
+  return vinc && vinc.length ? new Set(vinc) : null;
+}
+
+// Quais FAZENDAS o usuário pode enxergar (IAM: nível que faltava entre produtor
+// e talhão). `null` = sem restrição por fazenda. Vazio/ausente = todas as
+// fazendas dos produtores permitidos (retrocompatível).
+export function escopoFazendaIds(): Set<string> | null {
+  const papel = papelDoUsuario();
+  if (!papel || papel === 'owner' || papel === 'admin' || papel === 'editor') return null;
+  const reg = meuRegistro() as (RegistroPapel & { fazendasVinculadas?: string[] }) | null;
+  const vinc = reg?.fazendasVinculadas;
   return vinc && vinc.length ? new Set(vinc) : null;
 }
 

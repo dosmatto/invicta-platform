@@ -11,7 +11,7 @@ import { LegendasPanel } from './LegendasPanel';
 import { EquacoesPanel } from './EquacoesPanel';
 import { RecomendacoesPanel } from './RecomendacoesPanel';
 import { SafrasPanel } from './SafrasPanel';
-import { UsuariosPanel } from './UsuariosPanel';
+import { CentralAcessos } from './acessos/CentralAcessos';
 import { ehAdmin } from '@/lib/empresa';
 
 // Slug interno: as categorias da Biblioteca + a aba especial "Usuários".
@@ -65,7 +65,7 @@ function CategoriasNav({ slug, setSlug }: { slug: SlugBiblioteca; setSlug: (s: S
       {ehAdmin() && (
         <>
           <div className="my-1 mx-2" style={{ height: 1, background: '#1a3a6b' }} />
-          {item('usuarios', 'Usuários', Shield)}
+          {item('usuarios', 'Acessos', Shield)}
         </>
       )}
     </nav>
@@ -75,7 +75,7 @@ function CategoriasNav({ slug, setSlug }: { slug: SlugBiblioteca; setSlug: (s: S
 // ─── Conteúdo da categoria selecionada ───────────────────────────────────
 
 function CategoriaConteudo({ slug }: { slug: SlugBiblioteca }) {
-  if (slug === 'usuarios') return <section className="flex-1 overflow-y-auto"><UsuariosPanel /></section>;
+  if (slug === 'usuarios') return <section className="flex-1 min-h-0"><CentralAcessos /></section>;
   // Categorias com adaptador próprio têm UI customizada (já implementadas).
   if (slug === 'legendas') return <ConteudoLegendas />;
   if (slug === 'equacoes') return <EquacoesPanel />;

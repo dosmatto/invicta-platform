@@ -191,6 +191,36 @@ export async function criarUsuarioConvite(email: string, senha: string): Promise
   return { ok: true };
 }
 
+// AUTO-CADASTRO por convite (IAM): a própria pessoa cria a conta com a SENHA
+// QUE ELA ESCOLHE — nenhuma senha provisória é gerada nem exibida. Usa o cliente
+// NORMAL (não o efêmero): ao fim ela fica autenticada, o que permite gravar o
+// pedido de acesso. Sem papel atribuído ela ainda não entra no app — cai na
+// fila de aprovação.
+export async function cadastrarComConvite(
+  email: string, senha: string,
+): Promise<{ ok: boolean; jaExiste?: boolean; precisaConfirmar?: boolean; erro?: string }> {
+  const e = normEmail(email);
+  const sb = getSupabase();
+  if (!sb) return { ok: false, erro: 'Supabase não configurado.' };
+  const emailRedirectTo = typeof window !== 'undefined' ? window.location.origin : undefined;
+  const { data, error } = await sb.auth.signUp({
+    email: e, password: senha,
+    options: emailRedirectTo ? { emailRedirectTo } : undefined,
+  });
+  if (error) {
+    const m = (error.message || '').toLowerCase();
+    if (m.includes('already registered') || m.includes('already exists') || m.includes('already been registered'))
+      return { ok: false, jaExiste: true };
+    return { ok: false, erro: error.message };
+  }
+  // Usuário já existente volta sem identities (o Supabase "obfusca").
+  if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0)
+    return { ok: false, jaExiste: true };
+  // "Confirm email" ligado: conta criada, mas sem sessão até confirmar.
+  if (data.user && !data.session) return { ok: true, precisaConfirmar: true };
+  return { ok: true };
+}
+
 export function emailUsuario(): string | null {
   const em = usuarioAtual()?.email;
   return em ? normEmail(em) : null;

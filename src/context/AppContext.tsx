@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { seedIfEmpty } from '@/lib/seed';
 import { bootCloud, bootCloudCampo, cloudExcluirMapasPorPrefixo, cloudExcluirPorPrefixo } from '@/lib/cloud';
 import { empresaIfEmpty, adotarEmpresasLocais, garantirEmpresaInvicta, uidUsuario, ehOwner, seedPapeis, seedPermissoes, seedPlanos, papelDoEmail, papelDoUsuario, emailUsuario, precisaTrocarSenha, meuRegistro, loginExpirado, confirmarPapelNaNuvem } from '@/lib/empresa';
+import { migrarIamV1, marcarUltimoAcesso } from '@/lib/iam/usuarios';
+import { registrarLogin } from '@/lib/iam/auditoria';
 import { limparBaseOperacional } from '@/lib/admin/manutencao';
 import { TrocaSenhaObrigatoria } from '@/components/auth/TrocaSenhaObrigatoria';
 import { migrarLaboratoriosV1, migrarSafrasV1, migrarGradesV1, migrarPreferenciasV1, reKeyDonoBiblioteca } from '@/lib/biblioteca';
@@ -132,6 +134,7 @@ export function AppProvider({ children, redirectProdutorParaPortal, modoCampo }:
   const [dadosProntos, setDadosProntos] = useState(false);
   // Fase U1: e-mail sem papel atribuído (inv_papeis) = acesso bloqueado.
   const [acessoBloqueado, setAcessoBloqueado] = useState(false);
+  const [motivoBloqueio, setMotivoBloqueio] = useState<string>('');   // IAM: por que está bloqueado
   // Fase U3: 1º acesso com senha provisória → troca obrigatória.
   const [trocaSenha, setTrocaSenha] = useState(false);
   // Prestador com validade de login vencida → bloqueado com mensagem própria.
@@ -186,7 +189,7 @@ export function AppProvider({ children, redirectProdutorParaPortal, modoCampo }:
 
     const unsub = observarAuth(async (user) => {
       setUsuario(user);
-      if (!user) { setDadosProntos(false); setAcessoBloqueado(false); setTrocaSenha(false); setValidadeExpirada(false); setDataExpiracao(null); return; }
+      if (!user) { setDadosProntos(false); setAcessoBloqueado(false); setMotivoBloqueio(''); setTrocaSenha(false); setValidadeExpirada(false); setDataExpiracao(null); return; }
       setDadosProntos(false);
       await hidrata;   // pesadas em memória antes do boot da nuvem (ver acima)
       const tLogin = performance.now();   // [entrada] cronômetro total até a tela liberar
@@ -224,10 +227,20 @@ export function AppProvider({ children, redirectProdutorParaPortal, modoCampo }:
       // "Acesso ainda não liberado" e só entrava depois de várias tentativas.
       let autorizado = !!papelDoEmail(emailUsuario());
       if (!autorizado) autorizado = !!(await confirmarPapelNaNuvem(emailUsuario()));
+      migrarIamV1();                                   // IAM: categoria/status nos registros antigos
+      // IAM: status do usuário (bloqueado / aguardando aprovação / inativo) vale
+      // mesmo com papel atribuído — quem não está ATIVO não entra.
+      const st = (meuRegistro() as { status?: string } | null)?.status;
+      if (st && st !== 'ativo') autorizado = false;
       // Validade de login (prestador): papel existe mas venceu → bloqueio próprio.
       const reg = meuRegistro();
       const expirado = autorizado && loginExpirado(reg);
-      setAcessoBloqueado(!autorizado);                 // e-mail sem papel = bloqueado
+      if (autorizado) {                                // trilha + "último acesso"
+        registrarLogin(emailUsuario());
+        marcarUltimoAcesso(emailUsuario());
+      }
+      setMotivoBloqueio(!autorizado ? (st ?? 'sem_papel') : '');
+      setAcessoBloqueado(!autorizado);                 // e-mail sem papel/status = bloqueado
       setValidadeExpirada(expirado);                   // login com validade vencida
       setDataExpiracao(expirado ? (reg?.validadeAte ?? null) : null);
       setTrocaSenha(autorizado && !expirado && precisaTrocarSenha()); // convidado no 1º acesso
@@ -365,10 +378,19 @@ export function AppProvider({ children, redirectProdutorParaPortal, modoCampo }:
       ) : acessoBloqueado ? (
         <div className="fixed inset-0 flex flex-col items-center justify-center gap-4 px-6 text-center" style={{ background: '#061525' }}>
           <div className="max-w-sm space-y-2">
-            <p className="text-base font-bold" style={{ color: '#e2e8f0' }}>Acesso ainda não liberado</p>
+            <p className="text-base font-bold" style={{ color: '#e2e8f0' }}>
+              {motivoBloqueio === 'aguardando_aprovacao' ? 'Cadastro aguardando aprovação'
+                : motivoBloqueio === 'bloqueado' ? 'Acesso bloqueado'
+                : motivoBloqueio === 'rejeitado' ? 'Cadastro não aprovado'
+                : motivoBloqueio === 'inativo' ? 'Acesso inativo'
+                : 'Acesso ainda não liberado'}
+            </p>
             <p className="text-xs" style={{ color: '#94a3b8' }}>
-              O e-mail <strong style={{ color: '#cbd5e1' }}>{usuario?.email}</strong> não tem papel atribuído.
-              Peça a um administrador para liberar seu acesso.
+              {motivoBloqueio === 'aguardando_aprovacao'
+                ? <>Seu cadastro (<strong style={{ color: '#cbd5e1' }}>{usuario?.email}</strong>) foi recebido e está na fila de aprovação do administrador. Você será avisado quando for liberado.</>
+                : motivoBloqueio === 'bloqueado'
+                ? <>O acesso de <strong style={{ color: '#cbd5e1' }}>{usuario?.email}</strong> está bloqueado. Fale com o administrador.</>
+                : <>O e-mail <strong style={{ color: '#cbd5e1' }}>{usuario?.email}</strong> não tem papel atribuído. Peça a um administrador para liberar seu acesso.</>}
             </p>
             <p className="text-[10px]" style={{ color: '#64748b' }}>
               Se o administrador acabou de liberar, clique em “Tentar de novo”.

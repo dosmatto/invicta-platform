@@ -52,6 +52,8 @@ const KEYS_LISTA = [
   'inv_papeis',                        // papéis por e-mail (owner/admin/…) — fonte da verdade de acesso
   'inv_permissoes',                    // capacidades por papel (U2, editável pelo Owner)
   'inv_planos',                        // planos de assinatura do produtor (U3.B)
+  'inv_convites',                      // IAM — convites por link (token/validade/status)
+  'inv_auditoria',                     // IAM — trilha de auditoria (quem fez o quê)
 ];
 // Configurações (objeto único por chave) — coleção 'inv_config', doc = chave
 const KEYS_OBJ = ['inv_etiqueta_cfg'];
