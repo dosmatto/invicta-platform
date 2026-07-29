@@ -30,6 +30,14 @@ t('convite individual é CONSUMIDO no uso', () => {
   assert.equal(podeUsar(depois, AGORA), false);
 });
 
+t('convite ABERTO (sem e-mail, não multiuso) é consumido em UM cadastro', () => {
+  // O link individual sem e-mail: a pessoa informa o dela e o link se esgota.
+  const depois = aplicarUso(individual({ email: '' }), 'produtor@x.com', emDias(0));
+  assert.equal(depois.status, 'usado');
+  assert.equal(depois.usadoPor, 'produtor@x.com');
+  assert.equal(podeUsar(depois, AGORA), false);
+});
+
 t('LINK POR TIPO não se esgota — segue valendo para os próximos', () => {
   let c = tipo();
   c = aplicarUso(c, 'um@x.com', emDias(0));

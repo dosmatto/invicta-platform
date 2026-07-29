@@ -1,5 +1,9 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.10.3': [
+    'CONVITE PARA UMA PESSOA — E-MAIL AGORA É OPCIONAL: era o formulário que ainda te obrigava a digitar um e-mail para gerar o link (as versões anteriores só tinham soltado essa trava no bloco "Links por tipo"). Agora, se você deixar o e-mail em branco, é gerado um link ABERTO que vale para UM cadastro: você manda o link e a própria pessoa preenche nome, e-mail, telefone e cria a senha. Se preferir travar o convite num e-mail específico, é só preenchê-lo — aí só quem tem aquele endereço consegue usar.',
+    'Correção no motor: dois links abertos (sem e-mail) não se cancelam mais entre si. Antes, como ambos tinham "e-mail vazio", gerar o segundo derrubava o primeiro.',
+  ],
   '2.10.2': [
     'GERAR O LINK POR TIPO NÃO PEDE MAIS NADA OBRIGATÓRIO: o campo "nome do link" virou opcional. Você abre "Novo link", escolhe a categoria, o papel e o perfil de permissões (todos já vêm preenchidos) e clica em Gerar — pronto. Se deixar o nome em branco, o sistema batiza o link automaticamente com a categoria e o papel escolhidos (ex.: "Produtor · Somente leitura"). Nenhum e-mail é pedido aqui: quem informa nome, e-mail, telefone e senha é a própria pessoa, ao abrir o link. O campo de e-mail existe apenas no outro bloco, "Convite para uma pessoa".',
   ],

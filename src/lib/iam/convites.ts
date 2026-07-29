@@ -77,9 +77,11 @@ export function criarConvite(dados: {
   };
   const lista = ler();
   // Cancela convites pendentes anteriores do mesmo e-mail (evita 2 links vivos).
-  // Os MULTIUSO ficam de fora: e-mail vazio casaria com todos eles.
+  // Só quando HÁ e-mail: um convite SEM e-mail (link aberto que a pessoa preenche)
+  // tem email '' — sem esta guarda, gerar o 2º link aberto cancelaria o 1º, pois
+  // '' === '' casaria. Multiuso também fica de fora pelo mesmo motivo.
   for (const x of lista) {
-    if (!x.multiuso && norm(x.email) === c.email && x.status === 'pendente') {
+    if (c.email && !x.multiuso && norm(x.email) === c.email && x.status === 'pendente') {
       x.status = 'cancelado';
       x.canceladoEm = agora.toISOString();
     }

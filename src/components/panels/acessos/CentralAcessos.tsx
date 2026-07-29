@@ -260,8 +260,14 @@ function AbaConvites({ convites, souOwner, onMudou }: {
   // clicava em "Gerar link" e NADA acontecia, sem dizer o porquê. Agora o botão
   // fica desabilitado e o motivo aparece escrito.
   function criar() {
-    if (!emailOk) { setAvisoPessoa('Informe um e-mail válido para gerar o convite.'); return; }
-    const c = criarConvite({ email, nome: nome || undefined, categoria: cat, papel, dias });
+    // E-mail é OPCIONAL. Com e-mail: o link fica travado nele. Sem e-mail: link
+    // ABERTO — vale para UM cadastro e a própria pessoa informa o e-mail dela.
+    // Só barra se o que foi digitado for um e-mail inválido (não se estiver vazio).
+    if (email.trim() && !emailOk) {
+      setAvisoPessoa('E-mail inválido. Apague o campo para gerar um link que a própria pessoa preenche, ou corrija o e-mail.');
+      return;
+    }
+    const c = criarConvite({ email: email.trim(), nome: nome || undefined, categoria: cat, papel, dias });
     setCriadoPessoa(linkDoConvite(c.id)); setAvisoPessoa('');
     setEmail(''); setNome(''); setNovo(false); onMudou();
   }
@@ -375,7 +381,8 @@ function AbaConvites({ convites, souOwner, onMudou }: {
       {novo && (
         <Cartao>
           <Rotulo>Novo convite</Rotulo>
-          <input className="w-full rounded px-2 py-1.5 text-xs" style={campoSt} placeholder="e-mail *"
+          <input className="w-full rounded px-2 py-1.5 text-xs" style={campoSt}
+            placeholder="e-mail (opcional — deixe em branco p/ a pessoa preencher)"
             value={email} onChange={e => setEmail(e.target.value)} />
           <input className="w-full rounded px-2 py-1.5 text-xs" style={campoSt} placeholder="nome (opcional)"
             value={nome} onChange={e => setNome(e.target.value)} />
@@ -392,14 +399,16 @@ function AbaConvites({ convites, souOwner, onMudou }: {
               className="w-14 rounded px-1.5 py-1 text-[10px]" style={campoSt} title="validade em dias" />
           </div>
           <div className="flex gap-1.5">
-            <Botao tom="ok" disabled={!emailOk} onClick={criar}><Send size={10} className="inline" /> Gerar link</Botao>
+            <Botao tom="ok" onClick={criar}><Send size={10} className="inline" /> Gerar link</Botao>
             <Botao onClick={() => { setNovo(false); setAvisoPessoa(''); }}>Cancelar</Botao>
           </div>
-          {!emailOk && <p className="text-[9px]" style={{ color: COR.alerta }}>Informe um e-mail válido para poder gerar.</p>}
           {avisoPessoa && <p className="text-[9px]" style={{ color: COR.alerta }}>{avisoPessoa}</p>}
           <p className="text-[9px]" style={{ color: COR.fraco }}>
-            O link é gerado para você copiar e mandar (WhatsApp, e-mail…). A pessoa cria a própria senha —
-            nenhuma senha provisória é exibida. Para mandar UM link a várias pessoas, use “Links por tipo” acima.
+            {email.trim()
+              ? 'O link ficará travado neste e-mail — só quem tiver esse endereço consegue se cadastrar.'
+              : 'Sem e-mail: o link vale para UM cadastro e a própria pessoa informa o e-mail dela.'}
+            {' '}A pessoa cria a própria senha; nenhuma senha provisória é exibida. Para mandar UM link a
+            {' '}VÁRIAS pessoas, use “Links por tipo” acima.
           </p>
         </Cartao>
       )}
@@ -418,8 +427,12 @@ function AbaConvites({ convites, souOwner, onMudou }: {
         <Cartao key={c.id}>
           <div className="flex items-start gap-2">
             <div className="min-w-0 flex-1">
-              <p className="text-[11px] font-bold truncate" style={{ color: COR.txt }}>{c.nome || c.email}</p>
-              <p className="text-[10px] truncate" style={{ color: COR.sub }}>{c.email}</p>
+              <p className="text-[11px] font-bold truncate" style={{ color: COR.txt }}>
+                {c.nome || c.email || 'Link aberto (sem e-mail)'}
+              </p>
+              <p className="text-[10px] truncate" style={{ color: COR.sub }}>
+                {c.email || `${CATEGORIAS.find(x => x.id === c.categoria)?.nome ?? ''} · ${PAPEIS.find(p => p.id === c.papel)?.nome ?? ''} · a pessoa preenche o e-mail`}
+              </p>
             </div>
             <Chip cor={c.status === 'pendente' ? COR.ok : c.status === 'expirado' ? COR.alerta : COR.fraco}>{c.status}</Chip>
           </div>
