@@ -221,6 +221,21 @@ export async function cadastrarComConvite(
   return { ok: true };
 }
 
+// Reenvia o e-mail de confirmação de cadastro (projeto com "Confirm email"
+// ligado). Existe porque o link é de USO ÚNICO e WhatsApp/antivírus às vezes o
+// "visitam" antes do clique real — o produtor então vê "expirado" sem ter
+// errado nada. A tela de login oferece este reenvio nesses casos.
+export async function reenviarConfirmacao(email: string): Promise<{ ok: boolean; erro?: string }> {
+  const sb = getSupabase();
+  if (!sb) return { ok: false, erro: 'Supabase não configurado.' };
+  const emailRedirectTo = typeof window !== 'undefined' ? window.location.origin : undefined;
+  const { error } = await sb.auth.resend({
+    type: 'signup', email: normEmail(email),
+    options: emailRedirectTo ? { emailRedirectTo } : undefined,
+  });
+  return error ? { ok: false, erro: error.message } : { ok: true };
+}
+
 export function emailUsuario(): string | null {
   const em = usuarioAtual()?.email;
   return em ? normEmail(em) : null;
@@ -233,7 +248,7 @@ export function mensagemErroLogin(err: unknown): string {
   if (msg.includes('invalid login credentials') || msg.includes('invalid email or password'))
     return 'E-mail ou senha incorretos.';
   if (msg.includes('email not confirmed'))
-    return 'Seu e-mail exige confirmação no Supabase. Peça ao administrador para desligar: painel do Supabase → Authentication → Sign in / Providers → Email → desmarque "Confirm email" e salve. Depois entre de novo.';
+    return 'Seu e-mail ainda não foi confirmado. Use “Reenviar e-mail de confirmação” abaixo, abra o link MAIS RECENTE da sua caixa de entrada (no navegador, não na prévia do WhatsApp) e tente entrar de novo.';
   if (code.includes('too-many-requests') || msg.includes('rate limit')) return 'Muitas tentativas. Aguarde alguns instantes e tente de novo.';
   if (code.includes('network') || msg.includes('network') || msg.includes('fetch')) return 'Sem conexão com o servidor de login. Verifique a internet.';
   return 'Falha ao entrar' + (code ? ` (${code})` : '') + '.';

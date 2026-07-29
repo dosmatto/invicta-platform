@@ -1,5 +1,9 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.10.4': [
+    'CORRIGIDO — "A CONFIRMAÇÃO DO E-MAIL DEU ERRO" (cadastro pelo convite): quando a pessoa clicava no link de confirmação do e-mail e voltava para a plataforma, NINGUÉM lia o resultado — quem confirmava com sucesso caía numa tela de login muda (parecia erro), e quem falhava não tinha mensagem nem saída. Agora a tela de login mostra o resultado: "E-mail confirmado!" no sucesso, e no erro explica o motivo mais comum — o link vale UMA vez só, e a prévia do WhatsApp/antivírus às vezes "visita" o link antes do clique, gastando-o.',
+    'REENVIAR CONFIRMAÇÃO (novo): quando o link expira ou já foi usado, aparece o botão "Reenviar e-mail de confirmação" na própria tela de login — a pessoa digita o e-mail e recebe um link novo, sem precisar chamar o administrador. O botão também aparece quando o login falha por e-mail não confirmado.',
+  ],
   '2.10.3': [
     'CONVITE PARA UMA PESSOA — E-MAIL AGORA É OPCIONAL: era o formulário que ainda te obrigava a digitar um e-mail para gerar o link (as versões anteriores só tinham soltado essa trava no bloco "Links por tipo"). Agora, se você deixar o e-mail em branco, é gerado um link ABERTO que vale para UM cadastro: você manda o link e a própria pessoa preenche nome, e-mail, telefone e cria a senha. Se preferir travar o convite num e-mail específico, é só preenchê-lo — aí só quem tem aquele endereço consegue usar.',
     'Correção no motor: dois links abertos (sem e-mail) não se cancelam mais entre si. Antes, como ambos tinham "e-mail vazio", gerar o segundo derrubava o primeiro.',
