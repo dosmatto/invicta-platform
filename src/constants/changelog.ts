@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.10.2': [
+    'GERAR O LINK POR TIPO NÃO PEDE MAIS NADA OBRIGATÓRIO: o campo "nome do link" virou opcional. Você abre "Novo link", escolhe a categoria, o papel e o perfil de permissões (todos já vêm preenchidos) e clica em Gerar — pronto. Se deixar o nome em branco, o sistema batiza o link automaticamente com a categoria e o papel escolhidos (ex.: "Produtor · Somente leitura"). Nenhum e-mail é pedido aqui: quem informa nome, e-mail, telefone e senha é a própria pessoa, ao abrir o link. O campo de e-mail existe apenas no outro bloco, "Convite para uma pessoa".',
+  ],
   '2.10.1': [
     'CORRIGIDO — "GERAR LINK" NÃO FAZIA NADA: se o campo obrigatório estivesse vazio, o botão era clicado e simplesmente não acontecia nada, sem nenhum aviso — parecia que a função estava quebrada. Agora o botão fica desabilitado enquanto falta o dado e a tela diz o que falta ("Dê um nome ao link", "Informe um e-mail válido").',
     'O LINK GERADO APARECE ONDE VOCÊ CLICOU: antes ele era mostrado lá embaixo, depois do formulário de convite individual — fácil de não ver, e dava a impressão de que nada tinha sido criado. Agora cada bloco mostra o seu próprio link, logo abaixo do botão.',

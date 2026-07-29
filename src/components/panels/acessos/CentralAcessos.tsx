@@ -246,8 +246,12 @@ function AbaConvites({ convites, souOwner, onMudou }: {
   const [avisoTipo, setAvisoTipo] = useState('');
   const perfis = useMemo(() => getPerfis(), []);
 
-  const rotuloOk = rotulo.trim().length > 0;
   const emailOk = /\S+@\S+\.\S+/.test(email);
+  // Nome do link é OPCIONAL: se em branco, viramos o rótulo a partir do que foi
+  // escolhido (categoria/papel). Gerar o link não deve exigir digitar NADA — só
+  // escolher o tipo. (O e-mail nunca é pedido aqui; quem informa é a pessoa.)
+  const rotuloEfetivo = () => rotulo.trim()
+    || `${CATEGORIAS.find(c => c.id === catT)?.nome ?? 'Convite'} · ${PAPEIS.find(p => p.id === papelT)?.nome ?? ''}`.trim();
 
   const porTipo = convites.filter(c => c.multiuso);
   const porPessoa = convites.filter(c => !c.multiuso);
@@ -262,8 +266,7 @@ function AbaConvites({ convites, souOwner, onMudou }: {
     setEmail(''); setNome(''); setNovo(false); onMudou();
   }
   function criarTipo() {
-    if (!rotuloOk) { setAvisoTipo('Dê um nome ao link (ex.: Produtores) antes de gerar.'); return; }
-    const c = criarConviteTipo({ rotulo, categoria: catT, papel: papelT, perfilId: perfilT || undefined, dias: diasT });
+    const c = criarConviteTipo({ rotulo: rotuloEfetivo(), categoria: catT, papel: papelT, perfilId: perfilT || undefined, dias: diasT });
     setCriadoTipo(linkDoConvite(c.id)); setAvisoTipo('');
     setRotulo(''); setPerfilT(''); setNovoTipo(false); onMudou();
   }
@@ -289,7 +292,7 @@ function AbaConvites({ convites, souOwner, onMudou }: {
         {novoTipo && (
           <Cartao>
             <input className="w-full rounded px-2 py-1.5 text-xs" style={campoSt}
-              placeholder="nome do link (ex.: Produtores) *" value={rotulo} onChange={e => setRotulo(e.target.value)} />
+              placeholder="nome do link (opcional — ex.: Produtores)" value={rotulo} onChange={e => setRotulo(e.target.value)} />
             <div className="flex gap-1.5">
               <select className="flex-1 rounded px-1.5 py-1 text-[10px]" style={campoSt} value={catT}
                 onChange={e => setCatT(e.target.value as CategoriaIam)}>
@@ -308,10 +311,9 @@ function AbaConvites({ convites, souOwner, onMudou }: {
               {perfis.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
             </select>
             <div className="flex gap-1.5">
-              <Botao tom="ok" disabled={!rotuloOk} onClick={criarTipo}><Send size={10} className="inline" /> Gerar link</Botao>
+              <Botao tom="ok" onClick={criarTipo}><Send size={10} className="inline" /> Gerar link</Botao>
               <Botao onClick={() => { setNovoTipo(false); setAvisoTipo(''); }}>Cancelar</Botao>
             </div>
-            {!rotuloOk && <p className="text-[9px]" style={{ color: COR.alerta }}>Dê um nome ao link para poder gerar (ex.: Produtores).</p>}
             {avisoTipo && <p className="text-[9px]" style={{ color: COR.alerta }}>{avisoTipo}</p>}
             <p className="text-[9px]" style={{ color: COR.fraco }}>
               Não se pede e-mail aqui: quem preenche os próprios dados é a pessoa, ao abrir o link.
