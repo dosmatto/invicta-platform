@@ -13,7 +13,10 @@ import { lerListaLocal, gravarListaLocal } from '../localComprimido';
 import { cloudPushLista } from '../cloud';
 import { emailUsuario } from '../empresa';
 import { registrar } from './auditoria';
-import type { CategoriaIam, Convite, PapelIam, StatusConvite } from './tipos';
+import type { CategoriaIam, Convite, PapelIam } from './tipos';
+import { aplicarUso, statusAoVivo } from './conviteRegras';
+
+export { statusAoVivo };
 
 export const K_CONVITES = 'inv_convites';
 export const VALIDADE_PADRAO_DIAS = 7;
@@ -34,12 +37,6 @@ function gravar(lista: Convite[]): void {
   gravarListaLocal(K_CONVITES, lista);
   cloudPushLista(K_CONVITES, lista as unknown as { id: unknown }[]);
   if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('inv:empresa'));
-}
-
-// Status "ao vivo": pendente que passou da validade vira expirado na leitura.
-export function statusAoVivo(c: Convite): StatusConvite {
-  if (c.status === 'pendente' && Date.parse(c.expiraEm) < Date.now()) return 'expirado';
-  return c.status;
 }
 
 export function getConvites(): Convite[] {
@@ -80,8 +77,9 @@ export function criarConvite(dados: {
   };
   const lista = ler();
   // Cancela convites pendentes anteriores do mesmo e-mail (evita 2 links vivos).
+  // Os MULTIUSO ficam de fora: e-mail vazio casaria com todos eles.
   for (const x of lista) {
-    if (norm(x.email) === c.email && x.status === 'pendente') {
+    if (!x.multiuso && norm(x.email) === c.email && x.status === 'pendente') {
       x.status = 'cancelado';
       x.canceladoEm = agora.toISOString();
     }
@@ -89,6 +87,44 @@ export function criarConvite(dados: {
   lista.push(c);
   gravar(lista);
   registrar('convite_criado', { alvo: c.email, detalhe: `validade ${dias} dia(s)` });
+  return c;
+}
+
+// CONVITE DE TIPO (multiuso): um link por perfil de usuário, para mandar no
+// grupo do WhatsApp dos produtores em vez de gerar um convite por pessoa.
+// Cada um que abrir informa o próprio e-mail e cria a própria senha; todos caem
+// em "Aguardando aprovação" já com a categoria/papel/perfil deste link — a
+// aprovação continua sendo manual, o link não dá acesso a ninguém sozinho.
+//
+// Validade: 365 dias por padrão (renovável). Link de acesso sem prazo nenhum é
+// convite para vazar num grupo e continuar valendo anos depois.
+export const VALIDADE_TIPO_DIAS = 365;
+
+export function criarConviteTipo(dados: {
+  rotulo: string; categoria?: CategoriaIam; papel?: PapelIam;
+  perfilId?: string; dias?: number; observacao?: string;
+}): Convite {
+  const dias = Math.max(1, Math.min(730, Math.round(dados.dias ?? VALIDADE_TIPO_DIAS)));
+  const agora = new Date();
+  const c: Convite = {
+    id: gerarToken(),
+    email: '',
+    multiuso: true,
+    rotulo: dados.rotulo.trim() || 'Convite',
+    categoria: dados.categoria,
+    papel: dados.papel,
+    perfilId: dados.perfilId || undefined,
+    usos: 0,
+    criadoEm: agora.toISOString(),
+    criadoPor: emailUsuario() ?? 'sistema',
+    expiraEm: new Date(agora.getTime() + dias * 86400_000).toISOString(),
+    status: 'pendente',
+    observacao: dados.observacao,
+  };
+  const lista = ler();
+  lista.push(c);
+  gravar(lista);
+  registrar('convite_criado', { alvo: `[tipo] ${c.rotulo}`, detalhe: `link reutilizável · validade ${dias} dia(s)` });
   return c;
 }
 
@@ -118,11 +154,12 @@ export function marcarConviteUsado(id: string, emailUsado: string): void {
   const lista = ler();
   const c = lista.find(x => x.id === id);
   if (!c) return;
-  c.status = 'usado';
-  c.usadoEm = new Date().toISOString();
-  c.usadoPor = norm(emailUsado);
+  const email = norm(emailUsado);
+  // Regra pura (conviteRegras.aplicarUso): link de TIPO conta o uso e segue
+  // valendo; convite individual é consumido.
+  Object.assign(c, aplicarUso(c, email, new Date().toISOString()));
   gravar(lista);
-  registrar('convite_usado', { alvo: c.usadoPor });
+  registrar('convite_usado', { alvo: email, detalhe: c.multiuso ? `link "${c.rotulo}"` : undefined });
 }
 
 // Validação usada pela página pública /convite.

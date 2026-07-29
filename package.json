@@ -21,7 +21,8 @@
     "ios:open": "npx cap open ios",
     "android:release": "npm run build:mobile && npx cap sync android && node scripts/preflight-android.mjs && cd android && ./gradlew bundleRelease",
     "interp:atalho": "node scripts/criar-atalho-interp.mjs",
-    "teste:legendas": "node scripts/teste-legendas-ordem.mjs"
+    "teste:legendas": "node scripts/teste-legendas-ordem.mjs",
+    "teste:convite-regras": "node scripts/teste-convite-regras.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",

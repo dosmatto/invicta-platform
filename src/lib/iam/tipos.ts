@@ -126,6 +126,10 @@ export interface CamposIam {
   aceiteLgpdEm?: string;
   aceiteTermosEm?: string;
   conviteId?: string;               // convite que originou o cadastro
+  /** Papel/perfil que o LINK do convite propunha. Só sugestão: a tela de
+   *  aprovação já abre com eles preenchidos, mas quem aprova decide. */
+  papelSugerido?: PapelIam;
+  perfilSugeridoId?: string;
 }
 
 // ── Convite ─────────────────────────────────────────────────────────────────
@@ -133,10 +137,17 @@ export type StatusConvite = 'pendente' | 'usado' | 'expirado' | 'cancelado';
 
 export interface Convite {
   id: string;              // = token (usado na URL /convite?t=…)
-  email: string;           // e-mail previsto (o cadastro exige bater)
+  email: string;           // e-mail previsto ('' nos convites MULTIUSO)
   nome?: string;
   categoria?: CategoriaIam;
   papel?: PapelIam;        // sugestão; a aprovação confirma
+  /** Convite de TIPO: um link só, reutilizável por várias pessoas (ex.: mandar
+   *  no grupo dos produtores). Não é consumido no 1º cadastro — conta usos.
+   *  Sem e-mail previsto: cada pessoa informa o dela. */
+  multiuso?: boolean;
+  rotulo?: string;         // nome do link ("Produtores", "Consultor externo")
+  perfilId?: string;       // perfil de permissão sugerido na aprovação
+  usos?: number;           // quantos se cadastraram por este link (multiuso)
   criadoEm: string;
   criadoPor: string;
   expiraEm: string;        // ISO

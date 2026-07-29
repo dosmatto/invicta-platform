@@ -1,5 +1,10 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.10.0': [
+    'LINK DE CONVITE POR TIPO DE USUÁRIO (novo): em Acessos → Convites, além do convite para uma pessoa, agora dá para criar um LINK REUTILIZÁVEL por tipo — "Produtores", "Consultor externo", "Operador de campo". Um link só, que você manda no grupo do WhatsApp: cada pessoa abre, informa o próprio e-mail, cria a própria senha e entra como "Aguardando aprovação" JÁ com a categoria, o papel e o PERFIL DE PERMISSÕES daquele link. Antes era um convite por pessoa, um a um.',
+    'O link NÃO libera ninguém sozinho: continua caindo na sua aprovação. A diferença é que a tela de aprovação já abre com o papel e o perfil que o link definiu — é só conferir e aprovar, sem redigitar (e sem errar) a configuração de cada um.',
+    'Cada link mostra quantos cadastros já vieram por ele, tem validade própria (1 ano por padrão, renovável) e pode ser cancelado — cancelou, ninguém mais se cadastra por aquele link, mesmo quem já o recebeu. Link de acesso sem prazo nenhum é convite para vazar num grupo e continuar valendo anos depois.',
+  ],
   '2.9.2': [
     'O INTERPOLADOR DESTA MÁQUINA DEIXOU DE SER OBRIGATÓRIO: com a opção ligada e o programa local desligado, o processamento simplesmente falhava — NDVI, satélite e mapas ficavam travados até alguém abrir a janela do Terminal. Agora, se o interpolador da máquina não responder, a mesma tarefa é enviada AUTOMATICAMENTE para a nuvem e o trabalho continua. A opção continua marcada (a preferência é sua) e volta a valer sozinha assim que o programa local estiver no ar de novo — ele é uma otimização para lotes pesados, não um requisito para usar o sistema.',
     'Quando isso acontece, a tela de NDVI/Satélite avisa que rodou na nuvem, para não parecer que "às vezes demora mais" sem motivo. Erro de cálculo do backend (500) NÃO é reenviado para a nuvem: repetir daria o mesmo erro e ainda esconderia o defeito de verdade.',

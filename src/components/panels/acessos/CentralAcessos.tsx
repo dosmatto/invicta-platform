@@ -18,10 +18,11 @@ import {
   statusDe, PAPEIS_ATRIBUIVEIS, type UsuarioIam,
 } from '@/lib/iam/usuarios';
 import {
-  cancelarConvite, criarConvite, getConvites, linkDoConvite, reenviarConvite,
+  cancelarConvite, criarConvite, criarConviteTipo, getConvites, linkDoConvite, reenviarConvite,
+  VALIDADE_TIPO_DIAS,
 } from '@/lib/iam/convites';
 import { MATRIZ_PADRAO } from '@/lib/iam/permissoes';
-import { getPerfis, salvarPerfil, excluirPerfil, renomearPerfil, permissoesDoPapel } from '@/lib/iam/perfis';
+import { getPerfil, getPerfis, salvarPerfil, excluirPerfil, renomearPerfil, permissoesDoPapel } from '@/lib/iam/perfis';
 import {
   ACOES, CATEGORIAS, MODULOS, PAPEIS, ROTULO_ACAO, chavePerm,
   type CategoriaIam, type PapelIam,
@@ -148,7 +149,10 @@ function CartaoUsuario({ u, onAbrir, selecionado, pendente, souOwner, onMudou }:
   souOwner: boolean; onMudou: () => void;
 }) {
   const [aprovando, setAprovando] = useState(false);
-  const [papel, setPapel] = useState<PapelIam>((u.papel as PapelIam) ?? 'leitor');
+  // Cadastro vindo de um LINK POR TIPO já chega com o papel proposto — abrir a
+  // aprovação em 'leitor' obrigaria a redigitar (e a errar) o que o link definiu.
+  const [papel, setPapel] = useState<PapelIam>(u.papelSugerido ?? (u.papel as PapelIam) ?? 'leitor');
+  const perfilDoLink = u.perfilSugeridoId ? getPerfil(u.perfilSugeridoId) : null;
   const [cat, setCat] = useState<CategoriaIam>(categoriaDe(u));
   const nCli = u.clientesVinculados?.length ?? 0;
   const nFaz = u.fazendasVinculadas?.length ?? 0;
@@ -190,7 +194,14 @@ function CartaoUsuario({ u, onAbrir, selecionado, pendente, souOwner, onMudou }:
           </div>
           <div className="flex gap-1.5">
             <Botao tom="ok" pequeno disabled={aprovando}
-              onClick={() => { setAprovando(true); aprovarUsuario(u.email, papel, cat); onMudou(); }}>
+              onClick={() => {
+                setAprovando(true);
+                // O perfil do link entra como permissões PRÓPRIAS da pessoa — a
+                // partir daí ela é ajustável individualmente, como qualquer outra.
+                aprovarUsuario(u.email, papel, cat,
+                  perfilDoLink ? { permissoes: perfilDoLink.permissoes } : undefined);
+                onMudou();
+              }}>
               <Check size={10} className="inline" /> Aprovar
             </Botao>
             <Botao tom="perigo" pequeno
@@ -198,6 +209,11 @@ function CartaoUsuario({ u, onAbrir, selecionado, pendente, souOwner, onMudou }:
               <X size={10} className="inline" /> Rejeitar
             </Botao>
           </div>
+          {perfilDoLink && (
+            <p className="text-[9px]" style={{ color: '#93c5fd' }}>
+              Veio do link de convite com o perfil <b>{perfilDoLink.nome}</b> — será aplicado na aprovação.
+            </p>
+          )}
           {u.telefone && <p className="text-[9px]" style={{ color: COR.fraco }}>Telefone informado: {u.telefone}</p>}
         </div>
       )}
@@ -216,7 +232,19 @@ function AbaConvites({ convites, souOwner, onMudou }: {
   const [papel, setPapel] = useState<PapelIam>('leitor');
   const [dias, setDias] = useState(7);
   const [criado, setCriado] = useState<string | null>(null);
-  const [copiado, setCopiado] = useState(false);
+  const [copiado, setCopiado] = useState('');
+
+  // Link por TIPO (reutilizável)
+  const [novoTipo, setNovoTipo] = useState(false);
+  const [rotulo, setRotulo] = useState('');
+  const [catT, setCatT] = useState<CategoriaIam>('produtor');
+  const [papelT, setPapelT] = useState<PapelIam>('leitor');
+  const [perfilT, setPerfilT] = useState('');
+  const [diasT, setDiasT] = useState(VALIDADE_TIPO_DIAS);
+  const perfis = useMemo(() => getPerfis(), []);
+
+  const porTipo = convites.filter(c => c.multiuso);
+  const porPessoa = convites.filter(c => !c.multiuso);
 
   function criar() {
     if (!/\S+@\S+\.\S+/.test(email)) return;
@@ -224,13 +252,99 @@ function AbaConvites({ convites, souOwner, onMudou }: {
     setCriado(linkDoConvite(c.id));
     setEmail(''); setNome(''); setNovo(false); onMudou();
   }
-  function copiar(txt: string) {
-    navigator.clipboard?.writeText(txt).then(() => { setCopiado(true); setTimeout(() => setCopiado(false), 2000); }).catch(() => {});
+  function criarTipo() {
+    if (!rotulo.trim()) return;
+    const c = criarConviteTipo({ rotulo, categoria: catT, papel: papelT, perfilId: perfilT || undefined, dias: diasT });
+    setCriado(linkDoConvite(c.id));
+    setRotulo(''); setPerfilT(''); setNovoTipo(false); onMudou();
+  }
+  function copiar(txt: string, marca = 'x') {
+    navigator.clipboard?.writeText(txt).then(() => { setCopiado(marca); setTimeout(() => setCopiado(''), 2000); }).catch(() => {});
   }
 
   return (
     <div className="space-y-2">
-      {souOwner && !novo && <Botao tom="ok" onClick={() => setNovo(true)}><UserPlus size={11} className="inline" /> Novo convite</Botao>}
+      {/* ── LINKS POR TIPO ─────────────────────────────────────────────── */}
+      <div className="rounded p-2 space-y-2" style={{ background: '#0b1d3a', border: `1px solid ${COR.borda}` }}>
+        <div className="flex items-center justify-between gap-2">
+          <Rotulo>Links por tipo de usuário</Rotulo>
+          {souOwner && !novoTipo && <Botao pequeno tom="ok" onClick={() => setNovoTipo(true)}><Link2 size={10} className="inline" /> Novo link</Botao>}
+        </div>
+        <p className="text-[9px] leading-relaxed" style={{ color: COR.fraco }}>
+          Um link só, que <b>várias pessoas</b> podem usar — dá para mandar no grupo dos produtores.
+          Cada uma informa o próprio e-mail, cria a própria senha e entra como <b>aguardando aprovação</b>,
+          já com a categoria, o papel e o perfil de permissões deste link. O link <b>não libera ninguém sozinho</b>:
+          a aprovação continua sendo sua.
+        </p>
+
+        {novoTipo && (
+          <Cartao>
+            <input className="w-full rounded px-2 py-1.5 text-xs" style={campoSt}
+              placeholder="nome do link (ex.: Produtores) *" value={rotulo} onChange={e => setRotulo(e.target.value)} />
+            <div className="flex gap-1.5">
+              <select className="flex-1 rounded px-1.5 py-1 text-[10px]" style={campoSt} value={catT}
+                onChange={e => setCatT(e.target.value as CategoriaIam)}>
+                {CATEGORIAS.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+              </select>
+              <select className="flex-1 rounded px-1.5 py-1 text-[10px]" style={campoSt} value={papelT}
+                onChange={e => setPapelT(e.target.value as PapelIam)}>
+                {PAPEIS_ATRIBUIVEIS.map(p => <option key={p} value={p}>{PAPEIS.find(x => x.id === p)?.nome}</option>)}
+              </select>
+              <input type="number" min={1} max={730} value={diasT} onChange={e => setDiasT(Number(e.target.value))}
+                className="w-16 rounded px-1.5 py-1 text-[10px]" style={campoSt} title="validade em dias" />
+            </div>
+            <select className="w-full rounded px-1.5 py-1 text-[10px]" style={campoSt} value={perfilT}
+              onChange={e => setPerfilT(e.target.value)}>
+              <option value="">Perfil de permissões: usar o padrão do papel</option>
+              {perfis.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
+            </select>
+            <div className="flex gap-1.5">
+              <Botao tom="ok" onClick={criarTipo}><Send size={10} className="inline" /> Gerar link</Botao>
+              <Botao onClick={() => setNovoTipo(false)}>Cancelar</Botao>
+            </div>
+          </Cartao>
+        )}
+
+        {porTipo.length === 0
+          ? <p className="text-[10px]" style={{ color: COR.fraco }}>Nenhum link de tipo criado ainda.</p>
+          : porTipo.map(c => (
+            <Cartao key={c.id}>
+              <div className="flex items-start gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[11px] font-bold truncate" style={{ color: COR.txt }}>{c.rotulo}</p>
+                  <p className="text-[10px] truncate" style={{ color: COR.sub }}>
+                    {CATEGORIAS.find(x => x.id === c.categoria)?.nome ?? '—'}
+                    {' · '}{PAPEIS.find(x => x.id === c.papel)?.nome ?? '—'}
+                    {c.perfilId && ` · perfil ${perfis.find(p => p.id === c.perfilId)?.nome ?? '(removido)'}`}
+                  </p>
+                </div>
+                <Chip cor={c.status === 'pendente' ? COR.ok : c.status === 'expirado' ? COR.alerta : COR.fraco}>{c.status}</Chip>
+              </div>
+              <div className="flex items-center gap-1.5 flex-wrap text-[9px]" style={{ color: COR.fraco }}>
+                <span>{c.usos ?? 0} cadastro(s) por este link</span>
+                <span>· expira {fmtData(c.expiraEm)}</span>
+              </div>
+              {souOwner && (
+                <div className="flex gap-1.5 flex-wrap">
+                  {c.status === 'pendente' && (
+                    <Botao pequeno tom="ok" onClick={() => copiar(linkDoConvite(c.id), c.id)}>
+                      {copiado === c.id ? 'Copiado!' : <><Copy size={10} className="inline" /> Copiar link</>}
+                    </Botao>
+                  )}
+                  {(c.status === 'pendente' || c.status === 'expirado') && (
+                    <Botao pequeno onClick={() => { reenviarConvite(c.id, VALIDADE_TIPO_DIAS); onMudou(); }}>Renovar</Botao>
+                  )}
+                  {c.status === 'pendente' && (
+                    <Botao pequeno tom="perigo" onClick={() => { if (confirm(`Cancelar o link "${c.rotulo}"? Quem já recebeu não conseguirá mais se cadastrar por ele.`)) { cancelarConvite(c.id); onMudou(); } }}>Cancelar</Botao>
+                  )}
+                </div>
+              )}
+            </Cartao>
+          ))}
+      </div>
+
+      {/* ── CONVITE INDIVIDUAL ─────────────────────────────────────────── */}
+      {souOwner && !novo && <Botao tom="ok" onClick={() => setNovo(true)}><UserPlus size={11} className="inline" /> Convite para uma pessoa</Botao>}
 
       {novo && (
         <Cartao>
@@ -267,12 +381,12 @@ function AbaConvites({ convites, souOwner, onMudou }: {
           <p className="text-[10px] font-bold" style={{ color: '#6ee7b7' }}>Convite criado — copie e mande para a pessoa:</p>
           <div className="flex gap-1.5">
             <input readOnly value={criado} className="flex-1 rounded px-2 py-1 text-[10px]" style={campoSt} onFocus={e => e.currentTarget.select()} />
-            <Botao tom="ok" pequeno onClick={() => copiar(criado)}>{copiado ? 'Copiado!' : <><Copy size={10} className="inline" /> Copiar</>}</Botao>
+            <Botao tom="ok" pequeno onClick={() => copiar(criado, 'novo')}>{copiado === 'novo' ? 'Copiado!' : <><Copy size={10} className="inline" /> Copiar</>}</Botao>
           </div>
         </div>
       )}
 
-      {convites.length === 0 ? <Vazio texto="Nenhum convite ainda." /> : convites.map(c => (
+      {porPessoa.length === 0 ? <Vazio texto="Nenhum convite individual ainda." /> : porPessoa.map(c => (
         <Cartao key={c.id}>
           <div className="flex items-start gap-2">
             <div className="min-w-0 flex-1">
@@ -289,7 +403,7 @@ function AbaConvites({ convites, souOwner, onMudou }: {
           {souOwner && (
             <div className="flex gap-1.5 flex-wrap">
               {c.status === 'pendente' && (
-                <Botao pequeno onClick={() => copiar(linkDoConvite(c.id))}><Link2 size={10} className="inline" /> Copiar link</Botao>
+                <Botao pequeno onClick={() => copiar(linkDoConvite(c.id), c.id)}>{copiado === c.id ? 'Copiado!' : <><Link2 size={10} className="inline" /> Copiar link</>}</Botao>
               )}
               {(c.status === 'pendente' || c.status === 'expirado') && (
                 <Botao pequeno onClick={() => { reenviarConvite(c.id); onMudou(); }}>Renovar</Botao>

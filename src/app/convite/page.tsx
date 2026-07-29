@@ -98,6 +98,10 @@ function ConviteConteudo() {
         criadoEm: agora, criadoPor: em,
         aceiteLgpdEm: agora, aceiteTermosEm: agora,
         conviteId: token || undefined,
+        // Guardadas para a tela de aprovação já abrir preenchida com o que o
+        // link propunha — quem aprova continua podendo mudar.
+        papelSugerido: conv?.papel,
+        perfilSugeridoId: conv?.perfilId,
       });
       if (token) marcarConviteUsado(token, em);
       registrar('cadastro_solicitado', { alvo: em, detalhe: nome.trim() });
@@ -141,6 +145,11 @@ function ConviteConteudo() {
   return (
     <Moldura>
       <form onSubmit={enviar} className="space-y-3">
+        {conv?.multiuso && conv.rotulo && (
+          <p className="rounded px-2.5 py-1.5 text-[11px]" style={{ background: '#0f2240', color: '#93c5fd', border: `1px solid ${BORDA}` }}>
+            Convite para <b>{conv.rotulo}</b>
+          </p>
+        )}
         <div className="space-y-1">
           <label className="text-[11px] font-semibold" style={{ color: SUB }}>Nome completo *</label>
           <input className={inputCls} style={inputSt} value={nome} onChange={e => setNome(e.target.value)} autoComplete="name" />
