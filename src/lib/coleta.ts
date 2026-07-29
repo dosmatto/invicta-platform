@@ -464,6 +464,23 @@ export async function subirFotosPendentes(): Promise<{ enviadas: number; erro?: 
   return { enviadas };
 }
 
+// Fotos de uma coleta que JÁ estão na nuvem. A PLATAFORMA não tem o IndexedDB do
+// celular que coletou, então ela lê do Storage (uma pasta por coleta). URLs
+// assinadas: o bucket é privado, e a validade curta basta para exibir na tela e
+// embutir no PDF. Sem nuvem/bucket, devolve vazio (a tela mostra "sem fotos").
+export async function urlsFotosColetaNuvem(coletaId: string, validadeS = 3600): Promise<string[]> {
+  if (!usarDadosSupabase()) return [];
+  const sb = getSupabase();
+  if (!sb) return [];
+  const lista = await sb.storage.from(BUCKET_FOTOS).list(coletaId);
+  if (lista.error || !lista.data?.length) return [];
+  const paths = lista.data.filter(f => /\.jpe?g$/i.test(f.name)).map(f => `${coletaId}/${f.name}`);
+  if (!paths.length) return [];
+  const assinadas = await sb.storage.from(BUCKET_FOTOS).createSignedUrls(paths, validadeS);
+  if (assinadas.error) { console.warn('[coleta] assinar fotos:', assinadas.error.message); return []; }
+  return (assinadas.data ?? []).map(x => x.signedUrl).filter((u): u is string => !!u);
+}
+
 // Conta as pendentes pelo ÍNDICE (count) — NÃO carrega os blobs. Roda a cada
 // coleta (atualizarPendentes); antes fazia getAll() de todas as fotos → travava.
 export function contarFotosPendentes(): Promise<number> {
