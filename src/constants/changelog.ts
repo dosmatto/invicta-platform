@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.8.9': [
+    'AVISO CLARO QUANDO O NAVEGADOR É O CULPADO: ao usar o interpolador desta máquina pelo Safari, o status ficava em "sem resposta" mesmo com o interpolador ligado e funcionando perfeitamente — porque o Safari não deixa um site https falar com um programa da própria máquina, e nem chega a enviar o pedido. Era impossível descobrir isso pela tela: a mensagem mandava conferir o interpolador, que não tinha nada de errado. Agora, quando a página está no Safari, Configurações diz exatamente isso e manda abrir a mesma página no Chrome.',
+  ],
   '2.8.8': [
     'CORRIGIDO — MAPAS VOLTANDO SOZINHOS DE "CONTÍNUO" PARA "SEGMENTADO": o estilo que você tinha definido não se perdia — o que acontecia é que o MAPA passava a usar OUTRA legenda do mesmo elemento. Quando existe mais de uma legenda para o mesmo elemento (a oficial e a sua, por exemplo), o mapa escolhia "a primeira da lista"; e a ordem dessa lista vinha da nuvem sem critério nenhum, mudando de uma abertura para outra. Resultado: de repente o mapa aparecia com o estilo (e as cores e faixas) da outra legenda. Agora a ordem é fixa e previsível, e não depende mais de como os dados chegam.',
     'LEGENDA PADRÃO DO ELEMENTO (novo): em Biblioteca → Legendas, cada legenda tem uma ESTRELA. Marque a estrela na que deve valer nos mapas daquele elemento — é ela que passa a ser usada quando ninguém escolhe uma explicitamente. Clique de novo para desmarcar. Quando o mesmo elemento tem mais de uma legenda, cada cartão agora mostra "✓ usada no mapa" ou "não usada no mapa", então dá para ver na hora qual está valendo.',

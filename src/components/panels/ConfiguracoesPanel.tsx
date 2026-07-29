@@ -14,8 +14,21 @@ import { ChevronDown, ChevronRight, CheckCircle2, XCircle, Loader2, Download, Al
 // Servidor de processamento (interpolação): status + escolha nuvem × esta máquina.
 // O interpolador local (opt-in) é útil p/ lotes pesados ("Processar tudo") e p/ NÃO
 // disputar a CPU da nuvem com outros usuários. Requer ligar backend/start.command.
+// Safari (inclusive no iPhone/iPad) RECUSA um site https falar com http://127.0.0.1
+// — nem chega a mandar o pedido, então o interpolador local nunca responde por mais
+// certo que esteja. Detectar deixa a mensagem específica ("abra no Chrome") em vez
+// de um "sem resposta" que faz a pessoa procurar defeito no lugar errado.
+// Chrome/Edge/Firefox no Mac também trazem "Safari" no user agent — daí a exclusão.
+function ehSafari(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent;
+  return /safari/i.test(ua) && !/chrome|chromium|crios|edg|fxios|android/i.test(ua);
+}
+
 function ServidorProcessamento() {
   const [local, setLocal] = useState(false);
+  const [safari, setSafari] = useState(false);
+  useEffect(() => { setSafari(ehSafari()); }, []);   // só no cliente (o servidor não tem navigator)
   const [status, setStatus] = useState<'checando' | 'ok' | 'off'>('checando');
   const [motor, setMotor] = useState('');
   const [nonce, setNonce] = useState(0);
@@ -49,10 +62,17 @@ function ServidorProcessamento() {
         <input type="checkbox" checked={local} onChange={e => alternar(e.target.checked)} />
         <span>Usar interpolador <b>desta máquina</b> (rápido p/ lotes; não disputa a nuvem)</span>
       </label>
-      {local && status === 'off' && (
+      {local && status === 'off' && safari && (
+        <p className="text-[10px] leading-relaxed p-2 rounded" style={{ color: '#fecaca', background: '#3f1d1d', border: '1px solid #b91c1c' }}>
+          <b>Você está no Safari — e o Safari não permite isto.</b> Ele bloqueia um site https (esta página)
+          {' '}de falar com um programa da sua própria máquina, e nem chega a mandar o pedido: por isso aparece
+          {' '}“sem resposta” mesmo com o interpolador ligado e funcionando.
+          {' '}<b>Abra esta mesma página no Chrome</b> — lá funciona. Ou desmarque acima para voltar à nuvem.
+        </p>
+      )}
+      {local && status === 'off' && !safari && (
         <p className="text-[10px] leading-relaxed" style={{ color: '#fbbf24' }}>
           Ligue o interpolador desta máquina, espere a janela do Terminal dizer “no ar” e clique em “testar”.
-          {' '}Use o <b>Chrome</b> — o Safari bloqueia a conversa entre um site https e um programa da própria máquina.
           {' '}O interpolador precisa ser a versão <b>interp-24</b> ou mais nova (baixe de novo abaixo se for antiga).
           {' '}Para voltar à nuvem, desmarque acima.
         </p>
@@ -69,7 +89,8 @@ function ServidorProcessamento() {
         <p className="text-[10px] leading-relaxed mt-1" style={{ color: '#94a3b8' }}>
           Para rodar em ESTA máquina (ou na do John): 1) baixe e descompacte; 2) abra o <b>Terminal</b>, digite <b>bash</b> + espaço,
           {' '}arraste o arquivo <b>start.sh</b> para dentro e tecle Enter (evita o bloqueio do macOS); 3) espere “no ar em 127.0.0.1:8800” e deixe a janela aberta;
-          {' '}4) marque a opção acima. Precisa ter <b>Python 3</b> — o resto o script instala sozinho (~2-4 min na 1ª vez). Melhor no Chrome.
+          {' '}4) marque a opção acima. Precisa ter <b>Python 3</b> — o resto o script instala sozinho (~2-4 min na 1ª vez).
+          {' '}<b>Use o Chrome</b>: no Safari não funciona (ele bloqueia o site https de falar com um programa da própria máquina).
           {' '}<span style={{ color: '#64748b' }}>(O duplo-clique em start.command também funciona; se o Mac bloquear, clique OK e vá em Ajustes → Privacidade e Segurança → “Abrir Mesmo Assim”.)</span>
         </p>
       </div>
