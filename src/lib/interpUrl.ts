@@ -53,7 +53,9 @@ export const MSG_BACKEND_FORA = 'Servidor de processamento indisponível no mome
 // Texto amigável conforme o destino atual (local x nuvem).
 export function msgBackendFora(): string {
   return isLocal()
-    ? 'O interpolador DESTA MÁQUINA está desligado — e o app está configurado para usar ele, não a nuvem. Ligue-o (atalho "Interpolador INVICTA" na Área de Trabalho, ou backend/start.command no Mac / backend\\start.bat no Windows), espere a janela do Terminal dizer "no ar", e tente de novo. Para voltar a processar na nuvem, desmarque "Usar interpolador desta máquina" em Configurações.'
+    // No modo local a falha só chega aqui depois de a nuvem TAMBÉM ter falhado
+    // (postBackend cai para ela sozinho) — então o texto fala dos dois.
+    ? 'Não deu para processar: o interpolador desta máquina está desligado e o servidor da nuvem não respondeu. Verifique sua internet e tente de novo em ~1 minuto. (Para processar nesta máquina, abra o atalho "Interpolador INVICTA" na Área de Trabalho.)'
     : 'Servidor de processamento indisponível no momento. Verifique sua internet e tente de novo em ~1 minuto; se persistir, avise o suporte.';
 }
 
@@ -102,15 +104,25 @@ export function onBackendAquecendo(cb: AquecendoCb): () => void {
 }
 function emitirAquecendo(v: boolean) { for (const cb of aquecendoListeners) { try { cb(v); } catch { /* ignora */ } } }
 
+// Avisa que a chamada CAIU PARA A NUVEM porque o interpolador local não estava
+// no ar — a UI mostra isso em vez de deixar a impressão de que nada aconteceu.
+type NuvemCb = (usou: boolean) => void;
+const nuvemListeners = new Set<NuvemCb>();
+export function onCaiuParaNuvem(cb: NuvemCb): () => void {
+  nuvemListeners.add(cb);
+  return () => { nuvemListeners.delete(cb); };
+}
+function emitirCaiuParaNuvem(v: boolean) { for (const cb of nuvemListeners) { try { cb(v); } catch { /* ignora */ } } }
+
 // Espera o /health responder (até ~150 s), cobrindo a janela em que o serviço
 // da nuvem ainda está subindo (cold start do Render free pode passar de 1 min).
-async function esperarBackend(budgetMs = 150_000): Promise<boolean> {
+async function esperarBackend(base: string, budgetMs = 150_000): Promise<boolean> {
   const fim = Date.now() + budgetMs;
   while (Date.now() < fim) {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), 20_000);
     try {
-      const r = await fetch(`${interpUrl()}/health`, { signal: ctrl.signal, cache: 'no-store', headers: headersBackend() });
+      const r = await fetch(`${base}/health`, { signal: ctrl.signal, cache: 'no-store', headers: headersBackend() });
       if (r.ok) return true;
     } catch { /* ainda fora */ } finally { clearTimeout(t); }
     await new Promise(res => setTimeout(res, 2_000));
@@ -120,39 +132,59 @@ async function esperarBackend(budgetMs = 150_000): Promise<boolean> {
 
 // POST único ao backend. Se a conexão falhar ou o serviço estiver subindo
 // (falha de rede ou 502/503/504 do proxy), espera acordar e repete a MESMA
-// chamada uma vez — as rotas são de cálculo puro, repetir é seguro. No modo
-// local não há o que acordar: falha direto com a instrução do start.bat.
+// chamada uma vez — as rotas são de cálculo puro, repetir é seguro.
+//
+// MODO LOCAL: se o interpolador desta máquina não atende, a chamada CAI PARA A
+// NUVEM em vez de falhar. O interpolador local é uma otimização (lote pesado sem
+// disputar CPU com os outros), não um requisito — nenhuma tela pode ficar refém
+// de uma janela de Terminal que o usuário fechou, reiniciou o Mac ou nem abriu.
+// O toggle continua marcado: a preferência é dele, e volta a valer sozinha assim
+// que o local estiver no ar de novo.
 export async function postBackend(rota: string, body: unknown, opts?: { signal?: AbortSignal }): Promise<Response> {
   const signal = opts?.signal;
   const local = isLocal();
-  const tentar = () => fetch(`${interpUrl()}${rota}`, {
+  const tentarEm = (base: string) => fetch(`${base}${rota}`, {
     method: 'POST',
     headers: headersBackend({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(body),
     signal,
   });
+  // Só "fora do ar" mesmo: conexão recusada ou o proxy dizendo que o serviço não
+  // está de pé. Um 500 é ERRO DE CÁLCULO do backend — repetir na nuvem daria o
+  // mesmo 500 e ainda esconderia o defeito real.
+  const foraDoAr = (r: Response | null) => !r || r.status === 502 || r.status === 503 || r.status === 504;
+
   let r: Response | null = null;
-  try { r = await tentar(); }
+  try { r = await tentarEm(interpUrl()); }
   catch (e) {
     // Cancelamento explícito (usuário trocou de mapa/saiu): propaga o AbortError
     // SEM tentar acordar o backend (não é o servidor fora, é escolha do usuário).
     if (signal?.aborted) throw e;
-    /* conexão recusada — cai no fluxo de "acordar servidor" abaixo */
+    /* conexão recusada — cai no fluxo abaixo */
   }
-  if (!r || r.status === 502 || r.status === 503 || r.status === 504) {
-    if (signal?.aborted) throw new DOMException('Interpolação cancelada', 'AbortError');
-    if (local) throw new BackendForaError();   // local não "acorda" — falha direto
-    emitirAquecendo(true);   // sinaliza p/ a UI: servidor da nuvem acordando
-    try {
-      if (!(await esperarBackend())) throw new BackendForaError();
+  if (!foraDoAr(r)) return r!;
+  if (signal?.aborted) throw new DOMException('Interpolação cancelada', 'AbortError');
+
+  // Daqui pra baixo o destino é SEMPRE a nuvem: ou já era (modo nuvem e ela está
+  // acordando), ou é o resgate do modo local.
+  if (local) emitirCaiuParaNuvem(true);
+  emitirAquecendo(true);   // a nuvem pode estar dormindo (cold start do Render)
+  try {
+    let n: Response | null = null;
+    try { n = await tentarEm(INTERP_URL); }
+    catch (e) { if (signal?.aborted) throw e; }
+    if (foraDoAr(n)) {
+      if (!(await esperarBackend(INTERP_URL))) throw new BackendForaError();
       if (signal?.aborted) throw new DOMException('Interpolação cancelada', 'AbortError');
-      r = await tentar();
-    } catch (e) {
-      if (signal?.aborted) throw e;
-      throw e instanceof Error ? e : new BackendForaError();
-    } finally {
-      emitirAquecendo(false);
+      n = await tentarEm(INTERP_URL);
     }
+    if (!n) throw new BackendForaError();
+    return n;
+  } catch (e) {
+    if (signal?.aborted) throw e;
+    if (local) emitirCaiuParaNuvem(false);   // nem o resgate funcionou
+    throw e instanceof Error ? e : new BackendForaError();
+  } finally {
+    emitirAquecendo(false);
   }
-  return r;
 }

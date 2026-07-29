@@ -1,5 +1,9 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.9.2': [
+    'O INTERPOLADOR DESTA MÁQUINA DEIXOU DE SER OBRIGATÓRIO: com a opção ligada e o programa local desligado, o processamento simplesmente falhava — NDVI, satélite e mapas ficavam travados até alguém abrir a janela do Terminal. Agora, se o interpolador da máquina não responder, a mesma tarefa é enviada AUTOMATICAMENTE para a nuvem e o trabalho continua. A opção continua marcada (a preferência é sua) e volta a valer sozinha assim que o programa local estiver no ar de novo — ele é uma otimização para lotes pesados, não um requisito para usar o sistema.',
+    'Quando isso acontece, a tela de NDVI/Satélite avisa que rodou na nuvem, para não parecer que "às vezes demora mais" sem motivo. Erro de cálculo do backend (500) NÃO é reenviado para a nuvem: repetir daria o mesmo erro e ainda esconderia o defeito de verdade.',
+  ],
   '2.9.1': [
     'MENSAGEM DE ERRO QUE APONTA O LUGAR CERTO: com a opção "Usar interpolador desta máquina" ligada e o interpolador desligado, telas como NDVI/Satélite diziam apenas "Servidor de processamento indisponível no momento" — mandando você procurar defeito no servidor da nuvem, que estava perfeito. O problema era outro: o app estava configurado para processar NA SUA MÁQUINA e o programa local não estava no ar. Agora a mensagem diz exatamente isso, explica como ligar (inclusive pelo atalho na Área de Trabalho) e lembra que dá para voltar à nuvem desmarcando a opção em Configurações. Vale para todas as telas que processam, não só a Fertilidade (que já tinha o texto correto).',
   ],

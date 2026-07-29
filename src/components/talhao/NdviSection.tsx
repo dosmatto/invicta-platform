@@ -23,6 +23,7 @@ import {
 } from '@/lib/msr';
 import { cloudSalvarMapa, cloudListarMapasMeta, cloudCarregarMapa, cloudExcluirMapasPorPrefixo, cloudPodeGravar } from '@/lib/cloud';
 import { getRejeitadasLocal, carregarRejeitadas, marcarRejeitada } from '@/lib/cenaEstados';
+import { onCaiuParaNuvem } from '@/lib/interpUrl';
 import { pode, emailUsuario } from '@/lib/empresa';
 import type { Legenda } from '@/lib/legendas';
 import { ComposicaoTemporalPanel, ListaComposicoes } from './ComposicaoTemporalPanel';
@@ -98,6 +99,10 @@ export function NdviSection({ safraNome }: { safraNome?: string } = {}) {
 
   const [estado, setEstado] = useState<'idle' | 'listando' | 'erro'>('idle');
   const [erro, setErro] = useState('');
+  // O interpolador desta máquina estava desligado e a chamada foi resgatada pela
+  // nuvem: informa, senão o usuário não entende por que "às vezes demora mais".
+  const [caiuParaNuvem, setCaiuParaNuvem] = useState(false);
+  useEffect(() => onCaiuParaNuvem(setCaiuParaNuvem), []);
   const [sugerirNuvem, setSugerirNuvem] = useState(0);        // sugestão de ampliar a nuvem (0 = sem)
   const [candidatos, setCandidatos] = useState<Cand[]>([]);
   const [thumbs, setThumbs] = useState<Record<string, string>>({});     // chave → dataURL | 'loading' | 'err'
@@ -535,6 +540,12 @@ export function NdviSection({ safraNome }: { safraNome?: string } = {}) {
 
       {estado === 'erro' && <p className="text-[10px]" style={{ color: '#f87171' }}>{erro}</p>}
       {erro && estado !== 'erro' && <p className="text-[10px]" style={{ color: '#fbbf24' }}>{erro}</p>}
+      {caiuParaNuvem && (
+        <p className="text-[10px] leading-relaxed p-2 rounded" style={{ background: '#0b1e38', color: '#93c5fd', border: '1px solid #1a3a6b' }}>
+          Processado <b>na nuvem</b>: o interpolador desta máquina está desligado. Não precisa fazer nada —
+          {' '}se quiser voltar a usar esta máquina, abra o atalho <b>Interpolador INVICTA</b> na Área de Trabalho.
+        </p>
+      )}
       {sugerirNuvem > 0 && (
         <button onClick={() => void listar(sugerirNuvem)}
           className="w-full py-1.5 rounded text-[10px] font-bold" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
