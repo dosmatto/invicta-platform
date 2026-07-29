@@ -231,7 +231,8 @@ function AbaConvites({ convites, souOwner, onMudou }: {
   const [cat, setCat] = useState<CategoriaIam>('interno');
   const [papel, setPapel] = useState<PapelIam>('leitor');
   const [dias, setDias] = useState(7);
-  const [criado, setCriado] = useState<string | null>(null);
+  const [criadoPessoa, setCriadoPessoa] = useState<string | null>(null);
+  const [avisoPessoa, setAvisoPessoa] = useState('');
   const [copiado, setCopiado] = useState('');
 
   // Link por TIPO (reutilizável)
@@ -241,21 +242,29 @@ function AbaConvites({ convites, souOwner, onMudou }: {
   const [papelT, setPapelT] = useState<PapelIam>('leitor');
   const [perfilT, setPerfilT] = useState('');
   const [diasT, setDiasT] = useState(VALIDADE_TIPO_DIAS);
+  const [criadoTipo, setCriadoTipo] = useState<string | null>(null);
+  const [avisoTipo, setAvisoTipo] = useState('');
   const perfis = useMemo(() => getPerfis(), []);
+
+  const rotuloOk = rotulo.trim().length > 0;
+  const emailOk = /\S+@\S+\.\S+/.test(email);
 
   const porTipo = convites.filter(c => c.multiuso);
   const porPessoa = convites.filter(c => !c.multiuso);
 
+  // Antes estes dois davam `return` calado quando o campo estava vazio/inválido:
+  // clicava em "Gerar link" e NADA acontecia, sem dizer o porquê. Agora o botão
+  // fica desabilitado e o motivo aparece escrito.
   function criar() {
-    if (!/\S+@\S+\.\S+/.test(email)) return;
+    if (!emailOk) { setAvisoPessoa('Informe um e-mail válido para gerar o convite.'); return; }
     const c = criarConvite({ email, nome: nome || undefined, categoria: cat, papel, dias });
-    setCriado(linkDoConvite(c.id));
+    setCriadoPessoa(linkDoConvite(c.id)); setAvisoPessoa('');
     setEmail(''); setNome(''); setNovo(false); onMudou();
   }
   function criarTipo() {
-    if (!rotulo.trim()) return;
+    if (!rotuloOk) { setAvisoTipo('Dê um nome ao link (ex.: Produtores) antes de gerar.'); return; }
     const c = criarConviteTipo({ rotulo, categoria: catT, papel: papelT, perfilId: perfilT || undefined, dias: diasT });
-    setCriado(linkDoConvite(c.id));
+    setCriadoTipo(linkDoConvite(c.id)); setAvisoTipo('');
     setRotulo(''); setPerfilT(''); setNovoTipo(false); onMudou();
   }
   function copiar(txt: string, marca = 'x') {
@@ -299,10 +308,25 @@ function AbaConvites({ convites, souOwner, onMudou }: {
               {perfis.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
             </select>
             <div className="flex gap-1.5">
-              <Botao tom="ok" onClick={criarTipo}><Send size={10} className="inline" /> Gerar link</Botao>
-              <Botao onClick={() => setNovoTipo(false)}>Cancelar</Botao>
+              <Botao tom="ok" disabled={!rotuloOk} onClick={criarTipo}><Send size={10} className="inline" /> Gerar link</Botao>
+              <Botao onClick={() => { setNovoTipo(false); setAvisoTipo(''); }}>Cancelar</Botao>
             </div>
+            {!rotuloOk && <p className="text-[9px]" style={{ color: COR.alerta }}>Dê um nome ao link para poder gerar (ex.: Produtores).</p>}
+            {avisoTipo && <p className="text-[9px]" style={{ color: COR.alerta }}>{avisoTipo}</p>}
+            <p className="text-[9px]" style={{ color: COR.fraco }}>
+              Não se pede e-mail aqui: quem preenche os próprios dados é a pessoa, ao abrir o link.
+            </p>
           </Cartao>
+        )}
+
+        {criadoTipo && (
+          <div className="rounded p-2 space-y-1.5" style={{ background: '#0f3d2e', border: '1px solid #166534' }}>
+            <p className="text-[10px] font-bold" style={{ color: '#6ee7b7' }}>Link criado — copie e mande para o grupo:</p>
+            <div className="flex gap-1.5">
+              <input readOnly value={criadoTipo} className="flex-1 rounded px-2 py-1 text-[10px]" style={campoSt} onFocus={e => e.currentTarget.select()} />
+              <Botao tom="ok" pequeno onClick={() => copiar(criadoTipo, 'tipo')}>{copiado === 'tipo' ? 'Copiado!' : <><Copy size={10} className="inline" /> Copiar</>}</Botao>
+            </div>
+          </div>
         )}
 
         {porTipo.length === 0
@@ -366,22 +390,24 @@ function AbaConvites({ convites, souOwner, onMudou }: {
               className="w-14 rounded px-1.5 py-1 text-[10px]" style={campoSt} title="validade em dias" />
           </div>
           <div className="flex gap-1.5">
-            <Botao tom="ok" onClick={criar}><Send size={10} className="inline" /> Gerar link</Botao>
-            <Botao onClick={() => setNovo(false)}>Cancelar</Botao>
+            <Botao tom="ok" disabled={!emailOk} onClick={criar}><Send size={10} className="inline" /> Gerar link</Botao>
+            <Botao onClick={() => { setNovo(false); setAvisoPessoa(''); }}>Cancelar</Botao>
           </div>
+          {!emailOk && <p className="text-[9px]" style={{ color: COR.alerta }}>Informe um e-mail válido para poder gerar.</p>}
+          {avisoPessoa && <p className="text-[9px]" style={{ color: COR.alerta }}>{avisoPessoa}</p>}
           <p className="text-[9px]" style={{ color: COR.fraco }}>
             O link é gerado para você copiar e mandar (WhatsApp, e-mail…). A pessoa cria a própria senha —
-            nenhuma senha provisória é exibida.
+            nenhuma senha provisória é exibida. Para mandar UM link a várias pessoas, use “Links por tipo” acima.
           </p>
         </Cartao>
       )}
 
-      {criado && (
+      {criadoPessoa && (
         <div className="rounded p-2 space-y-1.5" style={{ background: '#0f3d2e', border: '1px solid #166534' }}>
           <p className="text-[10px] font-bold" style={{ color: '#6ee7b7' }}>Convite criado — copie e mande para a pessoa:</p>
           <div className="flex gap-1.5">
-            <input readOnly value={criado} className="flex-1 rounded px-2 py-1 text-[10px]" style={campoSt} onFocus={e => e.currentTarget.select()} />
-            <Botao tom="ok" pequeno onClick={() => copiar(criado, 'novo')}>{copiado === 'novo' ? 'Copiado!' : <><Copy size={10} className="inline" /> Copiar</>}</Botao>
+            <input readOnly value={criadoPessoa} className="flex-1 rounded px-2 py-1 text-[10px]" style={campoSt} onFocus={e => e.currentTarget.select()} />
+            <Botao tom="ok" pequeno onClick={() => copiar(criadoPessoa, 'novo')}>{copiado === 'novo' ? 'Copiado!' : <><Copy size={10} className="inline" /> Copiar</>}</Botao>
           </div>
         </div>
       )}

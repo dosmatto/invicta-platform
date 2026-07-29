@@ -1,5 +1,10 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.10.1': [
+    'CORRIGIDO — "GERAR LINK" NÃO FAZIA NADA: se o campo obrigatório estivesse vazio, o botão era clicado e simplesmente não acontecia nada, sem nenhum aviso — parecia que a função estava quebrada. Agora o botão fica desabilitado enquanto falta o dado e a tela diz o que falta ("Dê um nome ao link", "Informe um e-mail válido").',
+    'O LINK GERADO APARECE ONDE VOCÊ CLICOU: antes ele era mostrado lá embaixo, depois do formulário de convite individual — fácil de não ver, e dava a impressão de que nada tinha sido criado. Agora cada bloco mostra o seu próprio link, logo abaixo do botão.',
+    'Reforçado na tela: o link POR TIPO não pede e-mail nenhum. Quem preenche nome, e-mail, telefone e senha é a própria pessoa, ao abrir o link.',
+  ],
   '2.10.0': [
     'LINK DE CONVITE POR TIPO DE USUÁRIO (novo): em Acessos → Convites, além do convite para uma pessoa, agora dá para criar um LINK REUTILIZÁVEL por tipo — "Produtores", "Consultor externo", "Operador de campo". Um link só, que você manda no grupo do WhatsApp: cada pessoa abre, informa o próprio e-mail, cria a própria senha e entra como "Aguardando aprovação" JÁ com a categoria, o papel e o PERFIL DE PERMISSÕES daquele link. Antes era um convite por pessoa, um a um.',
     'O link NÃO libera ninguém sozinho: continua caindo na sua aprovação. A diferença é que a tela de aprovação já abre com o papel e o perfil que o link definiu — é só conferir e aprovar, sem redigitar (e sem errar) a configuração de cada um.',
