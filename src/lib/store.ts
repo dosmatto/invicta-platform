@@ -4,7 +4,8 @@
 
 import type { ResultadoAmostra, PerfilLabConfig } from './lab';
 import type { Legenda } from './legendas';
-import { classesFertilidade5 } from './legendas';
+import { classesFertilidade5, ordenarLegendasDoAtributo } from './legendas';
+export { ordenarLegendasDoAtributo } from './legendas';
 import type { AmbienteProdutivo } from './meap/tipos';
 import { cloudPushLista } from './cloud';
 import { lerListaLocal, gravarListaLocal, removerLocal } from './localComprimido';
@@ -1771,7 +1772,26 @@ export function getLegendas(): Legenda[] {
 }
 
 export function getLegendasPorAtributo(atributoId: string): Legenda[] {
-  return getLegendas().filter(l => l.atributoId === atributoId);
+  return ordenarLegendasDoAtributo(getLegendas().filter(l => l.atributoId === atributoId));
+}
+
+// Marca UMA legenda como padrão do atributo dela (e desmarca as irmãs). Passar
+// uma já marcada apenas desmarca (volta ao critério automático).
+export function definirLegendaPadrao(id: string): void {
+  const lista = load<Legenda>('inv_legendas');
+  const alvo = lista.find(l => l.id === id);
+  if (!alvo) return;
+  const virar = !alvo.padrao;
+  const agora = new Date().toISOString();
+  for (const l of lista) {
+    if (l.atributoId !== alvo.atributoId) continue;
+    const novo = virar && l.id === id;
+    if (!!l.padrao === novo) continue;
+    l.padrao = novo || undefined;
+    l.atualizadoEm = agora;
+  }
+  save('inv_legendas', lista);
+  notificarLegendas();
 }
 
 // ── Presets de estilo (divisão de classes) da recomendação ────────────────

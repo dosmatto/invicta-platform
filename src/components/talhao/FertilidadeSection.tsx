@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import {
   getSafras, getGrades, getImportacoesLab, getTalhoes, getFazendas, getPlantio,
-  getLegendas, getLegendasPorAtributo, casasDecimaisVariavel,
+  getLegendas, getLegendasPorAtributo, ordenarLegendasDoAtributo, casasDecimaisVariavel,
   type ImportacaoLab, type GradeAmostragem,
 } from '@/lib/store';
 import { gerarRelatorioFertilidade, type ProfundidadeRel } from '@/lib/relatorioFertilidade';
@@ -221,9 +221,11 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
 
   // helper: legenda escolhida para um atributo (default = primeira do atributo)
   function legendaDe(atributoId: string): Legenda | undefined {
-    let lst = legendas.filter(l => l.atributoId === atributoId);
+    // ordenarLegendasDoAtributo: sem escolha explícita vale a marcada como PADRÃO
+    // — e nunca a "primeira que o array trouxe" (que variava a cada boot).
+    let lst = ordenarLegendasDoAtributo(legendas.filter(l => l.atributoId === atributoId));
     // CTCe usa a legenda de CTC enquanto não houver uma própria.
-    if (lst.length === 0 && atributoId === 't') lst = legendas.filter(l => l.atributoId === 'ctc');
+    if (lst.length === 0 && atributoId === 't') lst = ordenarLegendasDoAtributo(legendas.filter(l => l.atributoId === 'ctc'));
     if (lst.length === 0) return undefined;
     const escolhida = legendaIdPorAtributo[atributoId];
     return lst.find(l => l.id === escolhida) ?? lst[0];

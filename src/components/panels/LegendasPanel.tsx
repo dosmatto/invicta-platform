@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   getLegendas, saveLegenda, upsertLegenda, updateLegenda, deleteLegenda,
-  getPaletas, savePaleta, deletePaleta, destravarLegendasSistema, getVariaveisAnalise, type Paleta,
+  getPaletas, savePaleta, deletePaleta, destravarLegendasSistema, getVariaveisAnalise,
+  ordenarLegendasDoAtributo, definirLegendaPadrao, type Paleta,
 } from '@/lib/store';
 import { listar as listarBib, type ConteudoPerfil } from '@/lib/biblioteca';
 import {
@@ -14,7 +15,7 @@ import {
 import { RAMPAS, coresDaRampa, corNaRampa, gradienteCssRampa } from '@/lib/estiloPresets';
 import {
   Plus, Edit3, Copy, Trash2, Download, Upload, ChevronLeft, BookOpen,
-  Save, X, ArrowUp, ArrowDown, AlertTriangle, Check, Unlock,
+  Save, X, ArrowUp, ArrowDown, AlertTriangle, Check, Unlock, Star,
 } from 'lucide-react';
 
 import { inputStyle } from '@/constants/ui';
@@ -93,6 +94,23 @@ function LegendasLista({
     }
     return [...mapa.entries()].sort((a, b) => a[0].localeCompare(b[0], 'pt-BR'));
   }, [legendas, filtro]);
+
+  // Quando o MESMO atributo tem mais de uma legenda, o mapa usa uma só — a
+  // primeira de ordenarLegendasDoAtributo. Deixar isso à vista evita o susto de
+  // "o mapa mudou de estilo sozinho": basta marcar a estrela na que deve valer.
+  const { usadaNoMapa, disputados } = useMemo(() => {
+    const porAtributo = new Map<string, Legenda[]>();
+    for (const l of legendas) {
+      if (!porAtributo.has(l.atributoId)) porAtributo.set(l.atributoId, []);
+      porAtributo.get(l.atributoId)!.push(l);
+    }
+    const usada = new Set<string>(), disp = new Set<string>();
+    for (const [attr, lst] of porAtributo) {
+      usada.add(ordenarLegendasDoAtributo(lst)[0].id);
+      if (lst.length > 1) disp.add(attr);
+    }
+    return { usadaNoMapa: usada, disputados: disp };
+  }, [legendas]);
 
   function duplicar(l: Legenda): Legenda {
     const copia: Omit<Legenda, 'id' | 'criadoEm' | 'atualizadoEm'> = {
@@ -205,6 +223,9 @@ function LegendasLista({
                       <span className="text-xs font-bold truncate" style={{ color: '#e2e8f0' }} title={l.nome}>{l.nome}</span>
                     </div>
                     <div className="flex flex-wrap gap-1 mt-1 text-[9px]">
+                      {disputados.has(l.atributoId) && (usadaNoMapa.has(l.id)
+                        ? <Badge tone="cat">✓ usada no mapa</Badge>
+                        : <Badge tone="muted">não usada no mapa</Badge>)}
                       {l.escopo === 'sistema' && <Badge tone="sys">Sistema</Badge>}
                       <Badge>{l.atributo}{l.metodo ? ` · ${l.metodo}` : ''}</Badge>
                       <Badge>{l.unidade}</Badge>
@@ -214,6 +235,14 @@ function LegendasLista({
                     </div>
                   </div>
                   <div className="flex flex-col gap-1">
+                    <button onClick={() => { definirLegendaPadrao(l.id); onMudou(); }}
+                      title={l.padrao
+                        ? 'É a legenda PADRÃO deste atributo (clique para desmarcar)'
+                        : 'Usar esta como PADRÃO do atributo nos mapas'}
+                      className="p-1 rounded"
+                      style={{ color: l.padrao ? '#fbbf24' : '#475569', background: '#1a3a6b' }}>
+                      <Star size={10} fill={l.padrao ? '#fbbf24' : 'none'} />
+                    </button>
                     {l.escopo === 'sistema' ? (
                       <>
                         <button onClick={() => editarComoCopia(l)} title="Editar: cria uma cópia sua e abre o editor (a oficial é read-only)" className="p-1 rounded" style={{ color: '#93c5fd', background: '#1a3a6b' }}><Edit3 size={10} /></button>

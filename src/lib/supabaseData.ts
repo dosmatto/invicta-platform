@@ -102,17 +102,27 @@ async function seedSeVazio(keysLista: string[], keysObj: string[]): Promise<void
 // Lê TODAS as linhas de uma tabela paginando (PostgREST limita a 1000/consulta).
 // Sem isso, bases grandes carregavam só as 1000 primeiras — hidratação parcial,
 // e um push seguinte podava do Postgres tudo que "faltava" (perda de dados).
+//
+// ORDEM EXPLÍCITA (obrigatória): sem ORDER BY o Postgres devolve as linhas na
+// ordem que quiser — e ela MUDA com o tempo (um UPDATE move a linha de lugar).
+// Duas consequências, ambas já observadas:
+//   1. paginar com .range() sem ordem pode repetir/pular registros entre páginas;
+//   2. a ordem do array no localStorage virava sorteio a cada boot — e quem
+//      escolhe "a primeira legenda do atributo" passava a pegar outra legenda,
+//      trocando sozinho o estilo/cores do mapa (v2.8.8).
 async function lerTudoPaginado<T>(
   sb: NonNullable<ReturnType<typeof getSupabase>>,
   tabela: string, colunas: string,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   filtro?: (q: any) => any,
+  ordem: string[] = ['id'],
 ): Promise<T[]> {
   const PAGINA = 1000;
   const out: T[] = [];
   for (let de = 0; ; de += PAGINA) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let q: any = sb.from(tabela).select(colunas).range(de, de + PAGINA - 1);
+    for (const col of ordem) q = q.order(col, { ascending: true });
     if (filtro) q = filtro(q);
     const r = await q;
     if (r.error) throw r.error;
@@ -171,7 +181,8 @@ async function bootIncremental(
     lerTudoPaginado<{ dados: unknown; atualizado_em: string | null }>(
       sb, 'talhoes', 'dados, atualizado_em', q => q.gt('atualizado_em', marca)),
     lerTudoPaginado<{ colecao: string; item_id: string; dados: unknown; atualizado_em: string | null }>(
-      sb, 'app_kv', 'colecao, item_id, dados, atualizado_em', q => q.in('colecao', todasCols).gt('atualizado_em', marca)),
+      sb, 'app_kv', 'colecao, item_id, dados, atualizado_em',
+      q => q.in('colecao', todasCols).gt('atualizado_em', marca), ['colecao', 'item_id']),
   ]);
   if (cT.error || cK.error) throw (cT.error ?? cK.error);
 
@@ -296,7 +307,8 @@ export async function bootSupabaseData(keysLista: string[], keysObj: string[]): 
   const [talhoes, kv] = await Promise.all([
     lerTudoPaginado<{ dados: unknown; atualizado_em: string | null }>(sb, 'talhoes', 'dados, atualizado_em'),
     lerTudoPaginado<{ colecao: string; item_id: string; dados: unknown; atualizado_em: string | null }>(
-      sb, 'app_kv', 'colecao, item_id, dados, atualizado_em', q => q.in('colecao', [...keysLista, ...keysObj])),
+      sb, 'app_kv', 'colecao, item_id, dados, atualizado_em',
+      q => q.in('colecao', [...keysLista, ...keysObj]), ['colecao', 'item_id']),
   ]);
   const tRede1 = performance.now();
   {

@@ -51,6 +51,10 @@ export interface Legenda {
   tipoEscala: TipoEscala;
   /** Estilo da barra: segmentado (faixas separadas) | continuo (gradiente único). Default: segmentado. */
   estilo?: EstiloLegenda;
+  /** Marcada como PADRÃO do atributo: é a que os mapas usam quando ninguém
+   *  escolheu explicitamente. Sem nenhuma marcada, vale a ordem de
+   *  ordenarLegendasDoAtributo (store.ts). Só uma por atributoId. */
+  padrao?: boolean;
   /** Escala RELATIVA aos dados (ignora os limites fixos das classes; usa só as cores):
    *  'minmax' = estica a rampa entre o mín e o máx do mapa; 'quantil' = por quartil/
    *  percentil (cada cor = fração igual da área). Ausente = escala fixa por valor. */
@@ -66,6 +70,22 @@ export interface Legenda {
   observacao?: string;
   criadoEm: string;
   atualizadoEm: string;
+}
+
+// ORDEM das legendas de um MESMO atributo. Importa de verdade: quase todo mapa
+// usa a PRIMEIRA da lista quando ninguém escolheu explicitamente. Antes valia a
+// ordem de chegada do array — e o boot da nuvem devolvia as linhas em ordem
+// arbitrária, então o mapa trocava de legenda sozinho e o estilo/cores mudavam
+// sem ninguém mexer (v2.8.8). Agora o critério é fixo e declarado:
+//   1) a marcada como PADRÃO pelo usuário;
+//   2) as oficiais (Sistema) antes das próprias — comportamento histórico;
+//   3) nome; 4) id (desempate final, sempre estável).
+export function ordenarLegendasDoAtributo<T extends Pick<Legenda, 'id' | 'nome' | 'escopo' | 'padrao'>>(lista: T[]): T[] {
+  return [...lista].sort((a, b) =>
+    Number(!!b.padrao) - Number(!!a.padrao)
+    || Number(b.escopo === 'sistema') - Number(a.escopo === 'sistema')
+    || a.nome.localeCompare(b.nome, 'pt-BR')
+    || a.id.localeCompare(b.id));
 }
 
 // Paleta oficial (referência visual da especificação): cada classe tem PAR
