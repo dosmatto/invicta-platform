@@ -53,8 +53,23 @@ export const MSG_BACKEND_FORA = 'Servidor de processamento indisponível no mome
 // Texto amigável conforme o destino atual (local x nuvem).
 export function msgBackendFora(): string {
   return isLocal()
-    ? 'Interpolador desta máquina está desligado. Dê dois cliques em backend/start.command (Mac) ou backend\\start.bat (Windows), espere a janela abrir, e tente de novo — ou desligue "Usar interpolador desta máquina" para voltar à nuvem.'
+    ? 'O interpolador DESTA MÁQUINA está desligado — e o app está configurado para usar ele, não a nuvem. Ligue-o (atalho "Interpolador INVICTA" na Área de Trabalho, ou backend/start.command no Mac / backend\\start.bat no Windows), espere a janela do Terminal dizer "no ar", e tente de novo. Para voltar a processar na nuvem, desmarque "Usar interpolador desta máquina" em Configurações.'
     : 'Servidor de processamento indisponível no momento. Verifique sua internet e tente de novo em ~1 minuto; se persistir, avise o suporte.';
+}
+
+// Erro de "backend fora" com a mensagem JÁ amigável (msgBackendFora) e uma marca
+// estável para quem precisa DETECTAR o caso (parar um lote, por exemplo).
+// Antes o throw levava o sentinela cru: telas que só exibem `e.message` — NDVI/
+// satélite entre elas — mostravam "Servidor de processamento indisponível" mesmo
+// quando o servidor estava perfeito e o problema era o interpolador local
+// desligado. Mensagem que aponta o lugar errado custa mais tempo que erro nenhum.
+export class BackendForaError extends Error {
+  readonly backendFora = true;
+  constructor() { super(msgBackendFora()); this.name = 'BackendForaError'; }
+}
+export function ehBackendFora(e: unknown): boolean {
+  return e instanceof Error
+    && ((e as { backendFora?: boolean }).backendFora === true || e.message === MSG_BACKEND_FORA);
 }
 
 // Checa se o backend ATUAL (local ou nuvem) responde ao /health. Usado pelo
@@ -126,15 +141,15 @@ export async function postBackend(rota: string, body: unknown, opts?: { signal?:
   }
   if (!r || r.status === 502 || r.status === 503 || r.status === 504) {
     if (signal?.aborted) throw new DOMException('Interpolação cancelada', 'AbortError');
-    if (local) throw new Error(MSG_BACKEND_FORA);   // local não "acorda" — falha direto
+    if (local) throw new BackendForaError();   // local não "acorda" — falha direto
     emitirAquecendo(true);   // sinaliza p/ a UI: servidor da nuvem acordando
     try {
-      if (!(await esperarBackend())) throw new Error(MSG_BACKEND_FORA);
+      if (!(await esperarBackend())) throw new BackendForaError();
       if (signal?.aborted) throw new DOMException('Interpolação cancelada', 'AbortError');
       r = await tentar();
     } catch (e) {
       if (signal?.aborted) throw e;
-      throw e instanceof Error ? e : new Error(MSG_BACKEND_FORA);
+      throw e instanceof Error ? e : new BackendForaError();
     } finally {
       emitirAquecendo(false);
     }

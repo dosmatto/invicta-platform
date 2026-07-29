@@ -20,7 +20,7 @@ import { stopsParaBackend, dominioDaLegenda, paresDaClasse } from '@/lib/legenda
 import type { Legenda } from '@/lib/legendas';
 import { Play, Layers, Loader2, Eraser, AlertTriangle, Activity, Settings, BookOpen, Save, FileDown } from 'lucide-react';
 import { cloudSalvarMapa, cloudCarregarMapasPorPrefixo, cloudExcluirMapasPorPrefixo, cloudPodeGravar } from '@/lib/cloud';
-import { MSG_BACKEND_FORA, msgBackendFora, onBackendAquecendo, tocarBackend } from '@/lib/interpUrl';
+import { ehBackendFora, msgBackendFora, onBackendAquecendo, tocarBackend } from '@/lib/interpUrl';
 import { pode } from '@/lib/empresa';
 import { listar as bibListar, criar as bibCriar, type ConteudoPerfil, type ItemBiblioteca } from '@/lib/biblioteca';
 
@@ -491,8 +491,7 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
         try { await processarUm(nut, prof); }
         catch (e) {
           if (ehAbort(e)) { cancelado = true; break; }   // usuário abandonou: para tudo, sem erro
-          const msg = e instanceof Error ? e.message : '';
-          if (msg === MSG_BACKEND_FORA) { backendOff = true; break; }
+          if (ehBackendFora(e)) { backendOff = true; break; }
           falhas.push(`${sim} ${prof}`);
         }
       }
