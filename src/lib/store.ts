@@ -1775,13 +1775,15 @@ export function getLegendasPorAtributo(atributoId: string): Legenda[] {
   return ordenarLegendasDoAtributo(getLegendas().filter(l => l.atributoId === atributoId));
 }
 
-// Marca UMA legenda como padrão do atributo dela (e desmarca as irmãs). Passar
-// uma já marcada apenas desmarca (volta ao critério automático).
-export function definirLegendaPadrao(id: string): void {
+// Marca UMA legenda como padrão do atributo dela (e desmarca as irmãs). Sem o
+// segundo argumento ALTERNA — passar uma já marcada desmarca (volta ao critério
+// automático). Com `valor` explícito, não alterna: usado ao salvar uma legenda
+// oficial editada, que precisa PASSAR a valer, nunca deixar de valer.
+export function definirLegendaPadrao(id: string, valor?: boolean): void {
   const lista = load<Legenda>('inv_legendas');
   const alvo = lista.find(l => l.id === id);
   if (!alvo) return;
-  const virar = !alvo.padrao;
+  const virar = valor ?? !alvo.padrao;
   const agora = new Date().toISOString();
   for (const l of lista) {
     if (l.atributoId !== alvo.atributoId) continue;
