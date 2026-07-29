@@ -1,5 +1,9 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.8.10': [
+    'CORRIGIDO — EDITAR UMA LEGENDA OFICIAL NÃO SURTIA EFEITO: ao clicar no lápis de uma legenda do Sistema (que é oficial e não pode ser alterada), o app criava uma CÓPIA sua e abria o editor nela — sem dizer nada. Você mudava para contínuo e salvava, mas o mapa continuava usando a OFICIAL, que é segmentada. Parecia que o ajuste "voltava sozinho"; na verdade ele nunca chegou a valer. Agora a sua versão já nasce marcada com a estrela (padrão do atributo), então é ela que os mapas usam — e o editor abre explicando isso em cima.',
+    'PROTEÇÃO CONTRA PERDA DAS LEGENDAS EDITADAS: as legendas oficiais têm código fixo, e o app as recriava sempre que achava o cadastro vazio. Só que "vazio" também acontece quando a nuvem ainda não terminou de carregar (conexão lenta, primeira abertura num navegador novo) — e aí a recriação SOBRESCREVIA na nuvem, em todas as máquinas, as legendas que você tinha editado, devolvendo-as ao padrão de fábrica. Agora o app só recria quando tem certeza de que o cadastro está realmente vazio; se a nuvem não confirmou, ele espera.',
+  ],
   '2.8.9': [
     'AVISO CLARO QUANDO O NAVEGADOR É O CULPADO: ao usar o interpolador desta máquina pelo Safari, o status ficava em "sem resposta" mesmo com o interpolador ligado e funcionando perfeitamente — porque o Safari não deixa um site https falar com um programa da própria máquina, e nem chega a enviar o pedido. Era impossível descobrir isso pela tela: a mensagem mandava conferir o interpolador, que não tinha nada de errado. Agora, quando a página está no Safari, Configurações diz exatamente isso e manda abrir a mesma página no Chrome.',
   ],

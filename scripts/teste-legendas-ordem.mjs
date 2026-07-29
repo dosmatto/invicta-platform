@@ -6,7 +6,7 @@
 // ORDER BY → ordem arbitrária, que muda com o tempo).
 // Roda: `npm run teste:legendas`.
 import assert from 'node:assert/strict';
-import { ordenarLegendasDoAtributo } from '../src/lib/legendas.ts';
+import { ordenarLegendasDoAtributo, deveSemearLegendas } from '../src/lib/legendas.ts';
 
 let ok = 0, fail = 0;
 function t(nome, fn) {
@@ -66,6 +66,25 @@ t('não muta a lista original', () => {
   const lst = [L('b', 'B', { escopo: 'empresa' }), L('a', 'A', { escopo: 'sistema' })];
   ordenarLegendasDoAtributo(lst);
   assert.deepEqual(lst.map(l => l.id), ['b', 'a']);
+});
+
+console.log('\nQuando o seed das legendas oficiais pode rodar\n');
+
+t('conta nova, nuvem já hidratada → semeia', () => {
+  assert.equal(deveSemearLegendas(0, false), true);
+});
+
+t('NUVEM AINDA NÃO HIDRATOU → NÃO semeia (o bug: sobrescrevia as editadas)', () => {
+  // Este é o caso destrutivo: local vazio só porque o boot da nuvem falhou/
+  // estourou o tempo. Os ids do seed são fixos, então gravar aqui apaga na nuvem
+  // (e em todas as máquinas) a versão que o usuário havia editado.
+  assert.equal(deveSemearLegendas(0, true), false);
+});
+
+t('já existe legenda → nunca semeia, hidratada ou não', () => {
+  assert.equal(deveSemearLegendas(45, false), false);
+  assert.equal(deveSemearLegendas(45, true), false);
+  assert.equal(deveSemearLegendas(1, false), false);
 });
 
 console.log(`\n${ok} passaram, ${fail} falharam\n`);

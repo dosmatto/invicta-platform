@@ -4,10 +4,10 @@
 
 import type { ResultadoAmostra, PerfilLabConfig } from './lab';
 import type { Legenda } from './legendas';
-import { classesFertilidade5, ordenarLegendasDoAtributo } from './legendas';
+import { classesFertilidade5, ordenarLegendasDoAtributo, deveSemearLegendas } from './legendas';
 export { ordenarLegendasDoAtributo } from './legendas';
 import type { AmbienteProdutivo } from './meap/tipos';
-import { cloudPushLista } from './cloud';
+import { cloudPushLista, cloudAindaNaoHidratou } from './cloud';
 import { lerListaLocal, gravarListaLocal, removerLocal } from './localComprimido';
 import { areaHaGeo, areaHaGeoBruta } from './areaGeo';
 import { empresaAtivaId, uidUsuario, escopoClienteIds, escopoTalhaoIds, escopoFazendaIds } from './empresa';
@@ -1877,9 +1877,17 @@ export function deletePaleta(id: string) {
 // legendas vivem no BANCO e são gerenciadas pelo usuário — o código não sobrescreve
 // nem readiciona, para que editar/excluir uma legenda passe a valer (antes o seed
 // rodava todo boot e revertia as alterações).
+//
+// ⚠ As legendas do seed têm id FIXO (sys_…, fabc_…). Semear grava por esses ids
+// e o save() espelha na nuvem — ou seja, um seed indevido SOBRESCREVE a versão
+// editada pelo usuário, em todas as máquinas. Por isso a lista vazia só autoriza
+// semear quando dá para afirmar que ela está vazia DE VERDADE: sem nuvem
+// configurada, ou com o boot da nuvem já concluído. Enquanto o boot não confirma
+// (falhou, estourou os 12s do AppContext, ou ainda roda em 2º plano), "vazio"
+// quer dizer "ainda não sei" — e semear aí é destrutivo.
 export function seedLegendasSistema(seed: Legenda[]) {
   const lista = load<Legenda>('inv_legendas');
-  if (lista.length > 0) return;   // já existem legendas no banco → não mexe
+  if (!deveSemearLegendas(lista.length, cloudAindaNaoHidratou())) return;
   const novas = seed.map(oficial => {
     const item: Legenda = { ...oficial, escopo: 'sistema' };
     delete (item as Legenda & { empresaId?: string }).empresaId;

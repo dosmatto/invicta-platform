@@ -72,6 +72,15 @@ export interface Legenda {
   atualizadoEm: string;
 }
 
+// Pode semear as legendas oficiais? As duas condições andam JUNTAS e nenhuma
+// sozinha basta — daí estarem numa função só, travada por teste:
+//   - já existe legenda no banco → não semeia (o usuário manda nelas);
+//   - a nuvem ainda não hidratou → "vazio" quer dizer "ainda não sei", e semear
+//     aí sobrescreve na nuvem (ids fixos) o que o usuário havia editado.
+export function deveSemearLegendas(qtdLocal: number, nuvemAindaNaoHidratou: boolean): boolean {
+  return qtdLocal === 0 && !nuvemAindaNaoHidratou;
+}
+
 // ORDEM das legendas de um MESMO atributo. Importa de verdade: quase todo mapa
 // usa a PRIMEIRA da lista quando ninguém escolheu explicitamente. Antes valia a
 // ordem de chegada do array — e o boot da nuvem devolvia as linhas em ordem

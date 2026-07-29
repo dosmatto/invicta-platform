@@ -44,6 +44,7 @@ function legendaEmUso(id: string): string[] {
 export function LegendasPanel() {
   const [modo, setModo] = useState<'lista' | 'editor'>('lista');
   const [editandoId, setEditandoId] = useState<string | null>(null);
+  const [copiaDe, setCopiaDe] = useState<string | null>(null);   // nome da oficial que originou esta cópia
   const [legendas, setLegendas] = useState<Legenda[]>([]);
 
   function recarregar() { setLegendas(getLegendas()); }
@@ -54,7 +55,8 @@ export function LegendasPanel() {
     return (
       <LegendaEditor
         legenda={leg ?? null}
-        onClose={() => { setModo('lista'); setEditandoId(null); recarregar(); }}
+        copiaDe={copiaDe}
+        onClose={() => { setModo('lista'); setEditandoId(null); setCopiaDe(null); recarregar(); }}
       />
     );
   }
@@ -62,8 +64,8 @@ export function LegendasPanel() {
   return (
     <LegendasLista
       legendas={legendas}
-      onNova={() => { setEditandoId(null); setModo('editor'); }}
-      onEditar={id => { setEditandoId(id); setModo('editor'); }}
+      onNova={() => { setEditandoId(null); setCopiaDe(null); setModo('editor'); }}
+      onEditar={(id, de) => { setEditandoId(id); setCopiaDe(de ?? null); setModo('editor'); }}
       onMudou={recarregar}
     />
   );
@@ -75,7 +77,7 @@ export function LegendasPanel() {
 
 function LegendasLista({
   legendas, onNova, onEditar, onMudou,
-}: { legendas: Legenda[]; onNova: () => void; onEditar: (id: string) => void; onMudou: () => void }) {
+}: { legendas: Legenda[]; onNova: () => void; onEditar: (id: string, copiaDe?: string) => void; onMudou: () => void }) {
   const fileInput = useRef<HTMLInputElement>(null);
   const [filtro, setFiltro] = useState('');
 
@@ -112,17 +114,27 @@ function LegendasLista({
     return { usadaNoMapa: usada, disputados: disp };
   }, [legendas]);
 
-  function duplicar(l: Legenda): Legenda {
+  function duplicar(l: Legenda, sufixo = 'cópia'): Legenda {
     const copia: Omit<Legenda, 'id' | 'criadoEm' | 'atualizadoEm'> = {
-      ...l, nome: `${l.nome} (cópia)`, escopo: 'empresa',   // cópia vira SUA (editável), nunca Sistema
+      ...l, nome: `${l.nome} (${sufixo})`, escopo: 'empresa',   // cópia vira SUA (editável), nunca Sistema
+      padrao: undefined,                                        // duplicar não rouba o padrão da original
       classes: l.classes.map(c => ({ ...c })),
     };
     const nova = saveLegenda(copia);
     onMudou();
     return nova;
   }
-  // Para legendas do Sistema (read-only): duplica e já abre o editor na cópia.
-  function editarComoCopia(l: Legenda) { onEditar(duplicar(l).id); }
+  // Legenda do Sistema é read-only: "editar" cria a SUA versão e abre o editor
+  // nela. Antes parava aí — e a oficial (segmentada) continuava sendo a usada no
+  // mapa, então a edição não aparecia em lugar nenhum e dava a impressão de que
+  // o ajuste "voltava sozinho". Agora a sua versão já nasce como PADRÃO do
+  // atributo: é ela que os mapas passam a usar.
+  function editarComoCopia(l: Legenda) {
+    const nova = duplicar(l, 'minha versão');
+    definirLegendaPadrao(nova.id);
+    onMudou();
+    onEditar(nova.id, l.nome);
+  }
 
   const temSistema = legendas.some(l => l.escopo === 'sistema');
   function destravar() {
@@ -295,7 +307,7 @@ function novaLegendaVazia(): Omit<Legenda, 'id' | 'criadoEm' | 'atualizadoEm'> {
   };
 }
 
-function LegendaEditor({ legenda, onClose }: { legenda: Legenda | null; onClose: () => void }) {
+function LegendaEditor({ legenda, copiaDe, onClose }: { legenda: Legenda | null; copiaDe?: string | null; onClose: () => void }) {
   // edição ou criação
   const [form, setForm] = useState(() => legenda ? { ...legenda, classes: legenda.classes.map(c => ({ ...c })) } : novaLegendaVazia());
   const [aviso, setAviso] = useState('');
@@ -390,6 +402,14 @@ function LegendaEditor({ legenda, onClose }: { legenda: Legenda | null; onClose:
       </div>
 
       {aviso && <div className="p-2 rounded text-[10px] flex items-start gap-1.5" style={{ background: '#3a2300', color: '#fbbf24', border: '1px solid #92400e' }}><AlertTriangle size={11} /> {aviso}</div>}
+
+      {copiaDe && (
+        <div className="p-2 rounded text-[10px] leading-relaxed" style={{ background: '#052e2b', color: '#99f6e4', border: '1px solid #0f766e' }}>
+          Esta é a <b>sua versão</b> de <b>{copiaDe}</b>, que é oficial e não pode ser alterada.
+          {' '}Ela já ficou marcada com a <b>estrela</b> (padrão do atributo), então é <b>esta</b> que os mapas vão usar
+          {' '}— o que você mudar aqui aparece neles. A oficial continua na lista, intacta.
+        </div>
+      )}
 
       {/* Metadados */}
       <div className="space-y-2 p-2.5 rounded-lg" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>

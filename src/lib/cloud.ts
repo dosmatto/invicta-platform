@@ -63,6 +63,15 @@ let ativo = false;
 
 export const cloudAtivo = () => ativo;
 
+// A nuvem manda nos dados, mas o boot dela ainda NÃO confirmou (falhou, estourou
+// os 12s do AppContext, ou segue rodando em 2º plano). Neste estado uma coleção
+// vazia no local significa "ainda não sei", NÃO "não existe" — quem semeia
+// registros com id FIXO tem que esperar, senão o push por id sobrescreve na nuvem
+// (e em todas as máquinas) o que o usuário havia editado.
+export function cloudAindaNaoHidratou(): boolean {
+  return usarDadosSupabase() && !ativo;
+}
+
 // Pode gravar/ler docs independentes (mapas) basta a nuvem estar configurada e
 // haver um usuário logado. Mapas são docs autônomos (upsert por id).
 export function cloudPodeGravar(): boolean {
