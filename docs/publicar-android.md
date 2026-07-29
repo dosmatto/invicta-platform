@@ -154,13 +154,22 @@ Marque também:
 
 Toda vez que quiser mandar uma versão nova:
 
-1. Suba o número da versão em `android/app/build.gradle`:
-   ```
-   versionCode 2      // sempre +1, nunca repete
-   versionName "1.1"  // o que aparece para o usuário
-   ```
-2. `npm run android:release`
-3. No Console: **Teste interno → Criar nova versão** → upload do novo `.aab`
+1. `npm run android:release`
+2. No Console: **Teste interno → Criar nova versão** → upload do novo `.aab`
+
+A numeração é automática (`scripts/preflight-android.mjs`): sai de `APP_VERSION`
+em `src/constants/version.ts`. `versionName` = a versão como ela é
+(`2.8.11`); `versionCode` = `maior*10000 + menor*100 + correção` (`20811`) —
+sempre crescente, sem estado e sem edição manual no `build.gradle`.
+
+> Se a loja recusar dizendo que o **versionCode já existe**, é porque o
+> `APP_VERSION` não subiu desde o último envio. Suba a versão do sistema e gere
+> de novo — é o comportamento correto: duas builds diferentes não podem sair com
+> o mesmo número.
+
+O mesmo script recusa gerar o pacote se a **assinatura** não estiver
+configurada, em vez de deixar sair um `.aab` sem assinatura que só seria
+recusado lá na loja.
 
 ---
 
