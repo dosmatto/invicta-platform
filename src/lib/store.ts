@@ -2011,6 +2011,71 @@ export function migrarLegendasSaturacoesV3() {
   localStorage.setItem('inv_migrado_leg_sat_v3', '1');
 }
 
+// ── Prescrições Agronômicas (doses por zona → arquivo de aplicação) ─────────
+// Documento operacional: guarda fonte+modo+parâmetros (reproduzível), versão e
+// histórico. CRUD fino aqui; o motor de cálculo vive em lib/prescricao (puro).
+import type { Prescricao } from './prescricao/tipos';
+
+const K_PRESC = 'inv_prescricoes';
+
+function notificarPrescricoes() {
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('inv:prescricoes'));
+}
+
+export function getPrescricoes(talhaoId?: string): Prescricao[] {
+  let lista = loadFiltrado<Prescricao>(K_PRESC);
+  if (talhaoId) lista = lista.filter(p => p.talhaoId === talhaoId);
+  return lista.sort((a, b) => b.atualizadoEm.localeCompare(a.atualizadoEm));
+}
+
+export function savePrescricao(
+  p: Omit<Prescricao, 'id' | 'versao' | 'criadoEm' | 'atualizadoEm' | 'historico' | 'exportes'>,
+): Prescricao {
+  const agora = new Date().toISOString();
+  const nova: Prescricao = comEmpresa({
+    ...p, id: uid(), versao: 1, criadoEm: agora, atualizadoEm: agora,
+    historico: [{ em: agora, por: p.criadoPor, resumo: 'criada' }],
+    exportes: [],
+  });
+  const lista = load<Prescricao>(K_PRESC);
+  lista.push(nova);
+  save(K_PRESC, lista);
+  notificarPrescricoes();
+  return nova;
+}
+
+// Toda alteração vira VERSÃO nova + linha no histórico — prescrição que foi
+// para a máquina precisa dizer o que mudou, quando e por quem.
+export function updatePrescricao(id: string, patch: Partial<Prescricao>, resumo: string, por: string): Prescricao | null {
+  const lista = load<Prescricao>(K_PRESC);
+  const i = lista.findIndex(p => p.id === id);
+  if (i < 0) return null;
+  const agora = new Date().toISOString();
+  lista[i] = {
+    ...lista[i], ...patch, id, versao: lista[i].versao + 1, atualizadoEm: agora,
+    historico: [...lista[i].historico, { em: agora, por, resumo }],
+  };
+  save(K_PRESC, lista);
+  notificarPrescricoes();
+  return lista[i];
+}
+
+// Registra uma exportação (alimenta "Arquivos de Aplicação") SEM subir versão —
+// exportar não muda o conteúdo da prescrição.
+export function registrarExportePrescricao(id: string, formato: Prescricao['exportes'][number]['formato'], arquivo: string, por: string): void {
+  const lista = load<Prescricao>(K_PRESC);
+  const p = lista.find(x => x.id === id);
+  if (!p) return;
+  p.exportes = [...p.exportes, { em: new Date().toISOString(), por, formato, arquivo }];
+  save(K_PRESC, lista);
+  notificarPrescricoes();
+}
+
+export function deletePrescricao(id: string): void {
+  save(K_PRESC, load<Prescricao>(K_PRESC).filter(p => p.id !== id));
+  notificarPrescricoes();
+}
+
 // Auditoria do cadastro (owner, via console: invAuditoria()). NÃO altera nada —
 // só CONTA e aponta inconsistências que inflam/desencontram os KPIs do Início:
 // ids repetidos, órfãos (fazenda sem produtor / talhão sem fazenda), possíveis

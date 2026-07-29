@@ -366,7 +366,8 @@ ${linhasKml}
 }
 
 // ── SHP (ZIP com 2 camadas + .cpg UTF-8) ────────────────────────────────────
-async function shpFiles(fc: GeoJSON.FeatureCollection, tipo: 'polygon' | 'polyline'): Promise<Record<string, Uint8Array>> {
+// Exportada: as Prescrições reusam este empacotador (mesmo DBF latin1 + .cpg).
+export async function shpFiles(fc: GeoJSON.FeatureCollection, tipo: 'polygon' | 'polyline'): Promise<Record<string, Uint8Array>> {
   const shpwrite = await import('@mapbox/shp-write');
   const types = tipo === 'polygon' ? { polygon: 'camada' } : { polyline: 'camada', line: 'camada' };
   // arraybuffer (não 'blob'): consumível pelo JSZip em qualquer ambiente.

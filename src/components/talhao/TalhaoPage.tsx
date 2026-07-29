@@ -24,6 +24,7 @@ import { AltimetriaSection } from '@/components/talhao/AltimetriaSection';
 import { DiagnosticoIaCard } from '@/components/talhao/DiagnosticoIaCard';
 import { ChatTalhaoCard } from '@/components/talhao/ChatTalhaoCard';
 import { RecomendacaoSection } from '@/components/talhao/RecomendacaoSection';
+import { PrescricoesSection } from '@/components/talhao/PrescricoesSection';
 import { ArquivosSection } from '@/components/talhao/ArquivosSection';
 import { LabImportSection } from '@/components/talhao/LabImportSection';
 import { ImportarGradeSection } from '@/components/talhao/ImportarGradeSection';
@@ -36,7 +37,7 @@ import { tocarBackend } from '@/lib/interpUrl';
 import { APP_VERSION } from '@/constants/version';
 import {
   ChevronLeft, Home, Leaf, Grid3x3, Layers, BarChart3, FileSpreadsheet,
-  Activity, Satellite, FolderOpen, FileText, Clock, Zap, Mountain,
+  Activity, Satellite, FolderOpen, FileText, Clock, Zap, Mountain, SlidersHorizontal,
 } from 'lucide-react';
 
 const MapView = dynamic(
@@ -46,7 +47,7 @@ const MapView = dynamic(
 
 type TabId =
   | 'resumo' | 'altimetria' | 'fertilidade' | 'amostragem' | 'zonas' | 'produtividade'
-  | 'recomendacoes' | 'compactacao' | 'condutividade' | 'ndvi' | 'arquivos' | 'relatorios';
+  | 'recomendacoes' | 'prescricoes' | 'compactacao' | 'condutividade' | 'ndvi' | 'arquivos' | 'relatorios';
 
 // Ordem de TRABALHO do talhão (não-`pronto` = "em breve", cai no placeholder EmBreve).
 const TABS: Array<{ id: TabId; label: string; icon: React.ElementType; pronto: boolean }> = [
@@ -57,6 +58,7 @@ const TABS: Array<{ id: TabId; label: string; icon: React.ElementType; pronto: b
   { id: 'amostragem',    label: 'Amostragem',      icon: Grid3x3,         pronto: true },
   { id: 'fertilidade',   label: 'Fertilidade',     icon: Leaf,            pronto: true },
   { id: 'recomendacoes', label: 'Recomendações',   icon: FileSpreadsheet, pronto: true },
+  { id: 'prescricoes',   label: 'Prescrições',     icon: SlidersHorizontal, pronto: true },
   { id: 'arquivos',      label: 'Arquivos',        icon: FolderOpen,      pronto: true },
   { id: 'ndvi',          label: 'NDVI / Satélite', icon: Satellite,       pronto: true },
   { id: 'produtividade', label: 'Produtividade',   icon: BarChart3,       pronto: true },
@@ -233,9 +235,10 @@ export function TalhaoPage({ id }: { id: string }) {
             {tabAtivo === 'produtividade' && <ProdutividadeSection safraNome={safraSel} />}
             {tabAtivo === 'ndvi' && <NdviSection safraNome={safraSel} />}
             {tabAtivo === 'recomendacoes' && <RecomendacaoSection safraNome={safraSel} />}
+            {tabAtivo === 'prescricoes' && <PrescricoesSection safraNome={safraSel} />}
             {tabAtivo === 'arquivos' && <ArquivosSection safraNome={safraSel} />}
             {tabAtivo === 'relatorios' && <GeradorRelatorios safraNome={safraSel} />}
-            {!['resumo', 'fertilidade', 'amostragem', 'zonas', 'compactacao', 'condutividade', 'altimetria', 'produtividade', 'ndvi', 'recomendacoes', 'arquivos', 'relatorios'].includes(tabAtivo) && (
+            {!['resumo', 'fertilidade', 'amostragem', 'zonas', 'compactacao', 'condutividade', 'altimetria', 'produtividade', 'ndvi', 'recomendacoes', 'prescricoes', 'arquivos', 'relatorios'].includes(tabAtivo) && (
               <EmBreve label={TABS.find(t => t.id === tabAtivo)?.label ?? ''} />
             )}
           </div>

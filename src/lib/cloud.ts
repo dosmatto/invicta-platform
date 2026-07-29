@@ -55,6 +55,7 @@ const KEYS_LISTA = [
   'inv_convites',                      // IAM — convites por link (token/validade/status)
   'inv_auditoria',                     // IAM — trilha de auditoria (quem fez o quê)
   'inv_perfis_permissao',              // IAM — perfis de permissão salvos com nome
+  'inv_prescricoes',                   // Prescrições Agronômicas (doses por zona → arquivo de aplicação)
 ];
 // Configurações (objeto único por chave) — coleção 'inv_config', doc = chave
 const KEYS_OBJ = ['inv_etiqueta_cfg'];
@@ -105,6 +106,7 @@ const KEYS_PULAR_CAMPO = new Set<string>([
   'inv_bib_laboratorios', 'inv_bib_perfis', 'inv_bib_preferencias-analise',
   'inv_bib_equacoes', 'inv_bib_recomendacoes',
   'inv_padroes_elem', 'inv_padroes_amos',
+  'inv_prescricoes',                   // plataforma-only: o app de campo não lê prescrições
 ]);
 const KEYS_LISTA_CAMPO = KEYS_LISTA.filter(k => !KEYS_PULAR_CAMPO.has(k));
 
