@@ -102,7 +102,11 @@ const normOp = (op: string) => (op === '==' ? '=' : op === '!=' ? '<>' : op);
 
 class Parser {
   private pos = 0;
-  constructor(private toks: Token[]) {}
+  private toks: Token[];
+  // Campo explícito (não "parameter property"): o type-stripping do Node — usado
+  // pelos testes que importam este motor via prescricao/equacao — não suporta a
+  // forma abreviada `constructor(private toks…)`.
+  constructor(toks: Token[]) { this.toks = toks; }
   private peek() { return this.toks[this.pos]; }
   private next() { return this.toks[this.pos++]; }
   fim() { return this.pos >= this.toks.length; }

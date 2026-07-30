@@ -16,9 +16,11 @@ import {
   type ZoneamentoMeap,
 } from '@/lib/store';
 import { emailUsuario } from '@/lib/empresa';
+import { listar as bibListar, type ItemBiblioteca, type ConteudoEquacao } from '@/lib/biblioteca';
 import {
   redistribuirPorEstoque, distribuirProporcional, resumoDoses, nutrientesPorZona, pesoDoRank,
 } from '@/lib/prescricao/calculo';
+import { dosesPorEquacao, variaveisDaEquacao } from '@/lib/prescricao/equacao';
 import {
   distribuirSementes, estoqueTotalSementes, metricasSementes,
   type EstoqueSementes,
@@ -28,7 +30,7 @@ import {
   corDaDose, areaHaDe,
 } from '@/lib/prescricao/exportar';
 import {
-  ROTULO_TIPO, ROTULO_MODO, UNIDADE_TOTAL,
+  ROTULO_TIPO, ROTULO_MODO, UNIDADE_TOTAL, ehUnidadeSemente,
   type Prescricao, type TipoPrescricao, type ModoCalculo, type UnidadeDose,
   type ZonaDose, type ParamsCalculo,
 } from '@/lib/prescricao/tipos';
@@ -58,12 +60,15 @@ interface Rascunho {
   params: ParamsCalculo;
   zonas: ZonaDose[];
   fc: GeoJSON.FeatureCollection | null;
+  // modo 'equacao'
+  equacaoId: string;
+  valoresEquacao: Record<string, Record<string, number>>;   // idZona → varLower → nº
 }
 
 const RASCUNHO_VAZIO: Rascunho = {
   editandoId: null, nome: '', tipo: 'fertilizante', produto: '', unidade: 'kg/ha',
   custoUnit: '', zoneamentoId: '', zoneamentoNome: '', modo: 'manual',
-  params: {}, zonas: [], fc: null,
+  params: {}, zonas: [], fc: null, equacaoId: '', valoresEquacao: {},
 };
 
 // Zonas a partir de um zoneamento salvo (1 feature = 1 zona no MEAP).
@@ -119,10 +124,28 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
       custoUnit: p.custoUnit != null ? String(p.custoUnit) : '',
       zoneamentoId: p.zoneamentoId, zoneamentoNome: p.zoneamentoNome,
       modo: p.modo, params: p.params, zonas: p.zonas.map(z => ({ ...z })), fc: p.fc,
+      equacaoId: p.equacaoId ?? '', valoresEquacao: p.valoresEquacao ?? {},
     });
     setAvisosCalc([]); setErro(''); setOkMsg('');
     setAba('nova');
   }
+
+  // Equações salvas na Biblioteca (mesmas da Recomendação) — fonte do modo 'equacao'.
+  const equacoes = useMemo(() => bibListar<ConteudoEquacao>('equacoes').filter(e => e.ativo), [tick]);
+  const eqSel = useMemo(() => equacoes.find(e => e.id === r.equacaoId) ?? null, [equacoes, r.equacaoId]);
+  const varsEq = useMemo(
+    () => (eqSel ? variaveisDaEquacao(eqSel.conteudo.script, eqSel.conteudo.constantes) : []),
+    [eqSel]);
+
+  // Fator de conversão da unidade-dose → unidade-base (1 exceto sementes/m).
+  // sementes/m sem espaçamento → null (bloqueia cálculo/salvamento). Sem
+  // try/catch no useMemo: a única fonte de erro é o espaçamento ausente, testado
+  // aqui direto (fatorBaseDose só lança nesse caso).
+  const espac = r.params.sementes?.espacamentoM;
+  const fatorBase = useMemo<number | null>(() => {
+    if (r.unidade !== 'sementes/m') return 1;
+    return espac && espac > 0 ? 10_000 / espac : null;
+  }, [r.unidade, espac]);
 
   // ── Cálculo (por modo) ────────────────────────────────────────────────────
   const nRanks = useMemo(() => Math.max(1, ...r.zonas.map(z => z.potencialRank ?? 1)), [r.zonas]);
@@ -155,6 +178,46 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
     } catch (e) { setErro(e instanceof Error ? e.message : String(e)); }
   }
 
+  // Valor de entrada de UMA variável numa zona (modo equação).
+  function setValorEq(idZona: string, varLower: string, valor: number | undefined) {
+    setR(x => {
+      const zona = { ...(x.valoresEquacao[idZona] ?? {}) };
+      if (valor == null) delete zona[varLower]; else zona[varLower] = valor;
+      return { ...x, valoresEquacao: { ...x.valoresEquacao, [idZona]: zona } };
+    });
+  }
+  // Pré-preenche uma variável em TODAS as zonas com o "número da zona" escolhido.
+  function preencherVarComFonte(varLower: string, fonte: 'rank' | 'nome' | 'area') {
+    setR(x => {
+      const vals = { ...x.valoresEquacao };
+      for (const z of x.zonas) {
+        const n = fonte === 'rank' ? (z.potencialRank ?? NaN)
+          : fonte === 'area' ? z.areaHa
+          : Number(z.nomeZona);
+        if (Number.isFinite(n)) vals[z.idZona] = { ...(vals[z.idZona] ?? {}), [varLower]: n };
+      }
+      return { ...x, valoresEquacao: vals };
+    });
+  }
+
+  function calcularEquacao() {
+    setErro(''); setOkMsg('');
+    if (!eqSel) { setErro('Escolha uma equação salva.'); return; }
+    const c = eqSel.conteudo;
+    const { doses, erroCompilacao } = dosesPorEquacao(
+      r.zonas.map(z => ({ id: z.idZona })), r.valoresEquacao,
+      { script: c.script, constantes: c.constantes, naoNegativo: c.naoNegativo,
+        doseMinimaViavel: c.doseMinimaViavel, abaixoMinimo: c.abaixoMinimo, doseMaxima: c.doseMaxima },
+    );
+    if (erroCompilacao) { setErro(`Equação com erro: ${erroCompilacao}`); return; }
+    const porId = new Map(doses.map(d => [d.id, d]));
+    patch({ zonas: r.zonas.map(z => ({ ...z, dose: porId.get(z.idZona)?.dose ?? NaN })) });
+    const comErro = doses.filter(d => d.erro);
+    setAvisosCalc(comErro.length
+      ? comErro.map(d => `Zona ${r.zonas.find(z => z.idZona === d.id)?.nomeZona}: ${d.erro}`)
+      : [`Doses calculadas pela equação "${eqSel.nome}".`]);
+  }
+
   // sementes: estado próprio do estoque (como o usuário informa)
   const [estSem, setEstSem] = useState<{ modo: keyof EstoqueSementes; valor: string }>({ modo: 'populacaoMediaHa', valor: '' });
 
@@ -171,7 +234,11 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
         r.zonas.map(z => ({ id: z.idZona, areaHa: z.areaHa, potencialRank: z.potencialRank })),
         total, ps, rel,
       );
-      patch({ zonas: r.zonas.map(z => ({ ...z, dose: res.doses[z.idZona] ?? 0 })), params: { ...r.params, totalDisponivel: total } });
+      // distribuirSementes devolve sementes/HA. Se a unidade da prescrição é
+      // sementes/m, converte a dose (÷ fator = × espaçamento/10.000) para gravar
+      // na unidade escolhida; o total (sementes) e a validação seguem coerentes.
+      const f = r.unidade === 'sementes/m' ? (fatorBase ?? 1) : 1;
+      patch({ zonas: r.zonas.map(z => ({ ...z, dose: (res.doses[z.idZona] ?? 0) / f })), params: { ...r.params, totalDisponivel: total } });
       const dif = total - res.usado;
       const pctDif = total > 0 ? (dif / total) * 100 : 0;
       const extra: string[] = [];
@@ -183,7 +250,7 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
 
   // ── Resumo ao vivo (editor) ───────────────────────────────────────────────
   const custoNum = Number(r.custoUnit.replace(',', '.')) || undefined;
-  const resumo = useMemo(() => resumoDoses(r.zonas, custoNum), [r.zonas, custoNum]);
+  const resumo = useMemo(() => resumoDoses(r.zonas, custoNum, fatorBase ?? 1), [r.zonas, custoNum, fatorBase]);
   const nutri = useMemo(() => (
     r.tipo === 'organico' && r.params.organico
       ? nutrientesPorZona(r.zonas.map(z => ({ id: z.idZona, areaHa: z.areaHa, dose: z.dose })), r.params.organico)
@@ -191,21 +258,30 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
   ), [r.tipo, r.params.organico, r.zonas]);
 
   const metricasSem = useMemo(() => {
-    if (r.tipo !== 'sementes' || !r.params.sementes || resumo.doseMedia <= 0) return null;
-    try { return metricasSementes(resumo.doseMedia, resumo.areaHa, r.params.sementes); } catch { return null; }
-  }, [r.tipo, r.params.sementes, resumo]);
+    // metricasSementes espera sementes/HA; se a dose está em sementes/m, sobe
+    // pela conversão (× fator). doseMedia já está na unidade-dose.
+    if (!ehUnidadeSemente(r.unidade) || !r.params.sementes || resumo.doseMedia <= 0) return null;
+    const doseHa = resumo.doseMedia * (r.unidade === 'sementes/m' ? (fatorBase ?? 1) : 1);
+    try { return metricasSementes(doseHa, resumo.areaHa, r.params.sementes); } catch { return null; }
+  }, [r.unidade, r.params.sementes, resumo, fatorBase]);
 
   // ── Salvar / exportar ─────────────────────────────────────────────────────
   function montarPrescricao(): Omit<Prescricao, 'id' | 'versao' | 'criadoEm' | 'atualizadoEm' | 'historico' | 'exportes'> | null {
     if (!r.fc || !r.zonas.length) { setErro('Escolha um zoneamento (Zonas de Manejo) primeiro.'); return null; }
     if (!r.nome.trim()) { setErro('Dê um nome à prescrição (ex.: "Calcário 2026").'); return null; }
     if (!r.produto.trim()) { setErro('Informe o produto.'); return null; }
+    if (r.unidade === 'sementes/m' && fatorBase == null) {
+      setErro('Para dose em sementes por metro, informe o espaçamento entre linhas (nos parâmetros da semente).'); return null;
+    }
     return {
       talhaoId, ano: safraNome || undefined, nome: r.nome.trim(), tipo: r.tipo,
       produto: r.produto.trim(), unidade: r.unidade, custoUnit: custoNum,
       zoneamentoId: r.zoneamentoId, zoneamentoNome: r.zoneamentoNome,
       modo: r.modo, params: r.params, zonas: r.zonas, fc: r.fc,
       criadoPor: emailUsuario() ?? 'sistema',
+      ...(r.modo === 'equacao' && eqSel
+        ? { equacaoId: eqSel.id, equacaoNome: eqSel.nome, valoresEquacao: r.valoresEquacao }
+        : {}),
     };
   }
 
@@ -308,7 +384,8 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
                 <Campo rotulo="Unidade">
                   <select value={r.unidade} onChange={e => patch({ unidade: e.target.value as UnidadeDose })}
                     className="w-full rounded px-2 py-1.5 text-xs outline-none" style={inputStyle}>
-                    {(['kg/ha', 't/ha', 'sementes/ha', 'L/ha'] as UnidadeDose[]).map(u => <option key={u} value={u}>{u}</option>)}
+                    {(['kg/ha', 't/ha', 'sementes/ha', 'sementes/m', 'L/ha'] as UnidadeDose[]).map(u =>
+                      <option key={u} value={u}>{u === 'sementes/m' ? 'sementes/m (metro linear)' : u}</option>)}
                   </select>
                 </Campo>
                 <Campo rotulo={`Custo (R$/${UNIDADE_TOTAL[r.unidade]})`}>
@@ -331,6 +408,22 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
                 </p>
               )}
             </Campo>
+
+            {/* Espaçamento é obrigatório p/ converter sementes/m em total. */}
+            {r.unidade === 'sementes/m' && (
+              <div className="p-2 rounded-lg flex items-end gap-2" style={{ background: '#061525', border: `1px solid ${fatorBase == null ? '#92400e' : '#1a3a6b'}` }}>
+                <div className="flex-1">
+                  <label className="text-[10px] font-semibold block mb-0.5" style={{ color: '#64748b' }}>Espaçamento entre linhas (m) *</label>
+                  <InputNum valor={r.params.sementes?.espacamentoM}
+                    onMudou={v => patchParams({ sementes: { ...(r.params.sementes ?? { germinacaoPct: 90 }), espacamentoM: v } })} />
+                </div>
+                <p className="flex-[2] text-[9px] leading-relaxed" style={{ color: fatorBase == null ? '#fbbf24' : '#94a3b8' }}>
+                  {fatorBase == null
+                    ? 'Informe o espaçamento para a dose em sementes/metro virar total (10.000/espaçamento = metros de linha por hectare).'
+                    : `${fmt0(fatorBase)} m de linha por hectare — cada semente/metro equivale a ${fmt0(fatorBase)} sementes/ha.`}
+                </p>
+              </div>
+            )}
 
             {r.zonas.length > 0 && (
               <>
@@ -402,8 +495,59 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
                   </div>
                 )}
 
-                {r.tipo === 'sementes' && r.modo !== 'manual' && (
+                {r.tipo === 'sementes' && (r.modo === 'estoque' || r.modo === 'proporcional') && (
                   <SementesCampos r={r} patchParams={patchParams} estSem={estSem} setEstSem={setEstSem} calcular={calcularSementes} />
+                )}
+
+                {/* ── Modo EQUAÇÃO: usa uma equação salva, calcula por zona ── */}
+                {r.modo === 'equacao' && (
+                  <div className="p-2.5 rounded-lg space-y-2" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
+                    <Campo rotulo="Equação salva (Biblioteca → Equações)">
+                      <select value={r.equacaoId} onChange={e => patch({ equacaoId: e.target.value })}
+                        className="w-full rounded px-2 py-1.5 text-xs outline-none" style={inputStyle}>
+                        <option value="">Selecione a equação…</option>
+                        {equacoes.map(e => <option key={e.id} value={e.id}>{e.nome}{e.conteudo.grupo ? ` · ${e.conteudo.grupo}` : ''}</option>)}
+                      </select>
+                      {equacoes.length === 0 && (
+                        <p className="text-[10px] mt-1" style={{ color: '#fbbf24' }}>
+                          Nenhuma equação salva. Crie em <b>Biblioteca → Equações</b> — a mesma usada na Recomendação.
+                        </p>
+                      )}
+                    </Campo>
+
+                    {eqSel && (
+                      <>
+                        <p className="text-[10px] px-2 py-1.5 rounded font-mono" style={{ background: '#0b1e38', color: '#cbd5e1' }}>
+                          {eqSel.conteudo.script.split('\n').filter(Boolean).join(' · ')}
+                        </p>
+                        {varsEq.length === 0 ? (
+                          <p className="text-[10px]" style={{ color: '#94a3b8' }}>Esta equação não pede variável externa — o resultado é fixo.</p>
+                        ) : (
+                          <div className="space-y-1.5">
+                            <p className="text-[10px]" style={{ color: '#94a3b8' }}>
+                              Informe o valor de cada variável por zona (o &quot;número da zona&quot;). Preencher rápido a partir de:
+                            </p>
+                            {varsEq.map(v => (
+                              <div key={v} className="flex items-center gap-1.5 text-[9px]" style={{ color: '#93c5fd' }}>
+                                <span className="font-bold uppercase w-12">{v}</span>
+                                <span style={{ color: '#64748b' }}>preencher com:</span>
+                                <button onClick={() => preencherVarComFonte(v, 'rank')} className="px-1.5 py-0.5 rounded" style={{ background: '#1a3a6b' }}>ranking</button>
+                                <button onClick={() => preencherVarComFonte(v, 'nome')} className="px-1.5 py-0.5 rounded" style={{ background: '#1a3a6b' }}>nº da zona</button>
+                                <button onClick={() => preencherVarComFonte(v, 'area')} className="px-1.5 py-0.5 rounded" style={{ background: '#1a3a6b' }}>área</button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <button onClick={calcularEquacao} className="px-3 py-1.5 rounded text-[10px] font-bold text-white flex items-center gap-1.5" style={{ background: 'var(--invicta-green-dark)' }}>
+                          <RefreshCw size={11} /> Calcular doses pela equação
+                        </button>
+                        <p className="text-[9px]" style={{ color: '#64748b' }}>
+                          A equação roda por zona com os valores da tabela abaixo (colunas por variável). Mínimo, máximo e
+                          &quot;não-negativo&quot; da própria equação são respeitados.
+                        </p>
+                      </>
+                    )}
+                  </div>
                 )}
 
                 {avisosCalc.length > 0 && (
@@ -418,37 +562,55 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
                         <th className="text-left px-2 py-1.5">Zona</th>
                         <th className="text-left px-2 py-1.5">Classe</th>
                         <th className="text-right px-2 py-1.5">Área (ha)</th>
+                        {r.modo === 'equacao' && varsEq.map(v => <th key={v} className="text-right px-2 py-1.5 uppercase">{v}</th>)}
                         <th className="text-right px-2 py-1.5">Dose ({r.unidade})</th>
                         <th className="text-right px-2 py-1.5">Total ({UNIDADE_TOTAL[r.unidade]})</th>
                         {nutri && <th className="text-right px-2 py-1.5">N·P·K (kg/ha)</th>}
                       </tr>
                     </thead>
                     <tbody>
-                      {r.zonas.map(z => (
+                      {r.zonas.map(z => {
+                        const totalZona = z.dose * z.areaHa * (fatorBase ?? 1);
+                        return (
                         <tr key={z.idZona} style={{ borderTop: '1px solid #0f2240', background: '#061525' }}>
                           <td className="px-2 py-1">
-                            <span className="inline-block w-2 h-2 rounded-full mr-1.5" style={{ background: resumo.doseMax > resumo.doseMin ? corDaDose(z.dose, resumo.doseMin, resumo.doseMax) : z.cor }} />
+                            <span className="inline-block w-2 h-2 rounded-full mr-1.5" style={{ background: resumo.doseMax > resumo.doseMin && Number.isFinite(z.dose) ? corDaDose(z.dose, resumo.doseMin, resumo.doseMax) : z.cor }} />
                             {z.nomeZona}
                           </td>
                           <td className="px-2 py-1">{z.classe}</td>
                           <td className="px-2 py-1 text-right">{fmt(z.areaHa, 2)}</td>
+                          {r.modo === 'equacao' && varsEq.map(v => (
+                            <td key={v} className="px-2 py-1 text-right">
+                              <input
+                                value={r.valoresEquacao[z.idZona]?.[v] != null ? String(r.valoresEquacao[z.idZona][v]) : ''}
+                                onChange={e => {
+                                  const txt = e.target.value.trim();
+                                  const n = Number(txt.replace(',', '.'));
+                                  setValorEq(z.idZona, v, txt === '' || !Number.isFinite(n) ? undefined : n);
+                                }}
+                                placeholder="—"
+                                className="w-16 rounded px-1.5 py-0.5 text-right text-[10px] outline-none" style={inputStyle} />
+                            </td>
+                          ))}
                           <td className="px-2 py-1 text-right">
                             <input
-                              value={String(z.dose)}
+                              value={Number.isFinite(z.dose) ? String(z.dose) : ''}
                               onChange={e => {
                                 const v = Number(e.target.value.replace(',', '.'));
                                 patch({ zonas: r.zonas.map(x => x.idZona === z.idZona ? { ...x, dose: Number.isFinite(v) ? v : 0 } : x) });
                               }}
+                              placeholder={Number.isFinite(z.dose) ? undefined : 'erro'}
                               className="w-20 rounded px-1.5 py-0.5 text-right text-[10px] outline-none" style={inputStyle} />
                           </td>
-                          <td className="px-2 py-1 text-right">{r.unidade === 'sementes/ha' ? fmt0(z.dose * z.areaHa) : fmt(z.dose * z.areaHa, 1)}</td>
+                          <td className="px-2 py-1 text-right">{!Number.isFinite(totalZona) ? '—' : ehUnidadeSemente(r.unidade) ? fmt0(totalZona) : fmt(totalZona, 1)}</td>
                           {nutri && (
                             <td className="px-2 py-1 text-right" style={{ color: '#94a3b8' }}>
                               {fmt(nutri[z.idZona].n, 0)}·{fmt(nutri[z.idZona].p2o5, 0)}·{fmt(nutri[z.idZona].k2o, 0)}
                             </td>
                           )}
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -456,9 +618,9 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
                 {/* ── Resumo ao vivo ── */}
                 <div className="grid grid-cols-4 gap-1.5">
                   <Kpi rot="Área" val={`${fmt(resumo.areaHa, 1)} ha`} />
-                  <Kpi rot={`Usado (${UNIDADE_TOTAL[r.unidade]})`} val={r.unidade === 'sementes/ha' ? fmt0(resumo.usado) : fmt(resumo.usado, 1)} />
+                  <Kpi rot={`Usado (${UNIDADE_TOTAL[r.unidade]})`} val={ehUnidadeSemente(r.unidade) ? fmt0(resumo.usado) : fmt(resumo.usado, 1)} />
                   {r.params.totalDisponivel != null
-                    ? <Kpi rot="Restante" val={r.unidade === 'sementes/ha' ? fmt0(r.params.totalDisponivel - resumo.usado) : fmt(r.params.totalDisponivel - resumo.usado, 1)}
+                    ? <Kpi rot="Restante" val={ehUnidadeSemente(r.unidade) ? fmt0(r.params.totalDisponivel - resumo.usado) : fmt(r.params.totalDisponivel - resumo.usado, 1)}
                         cor={r.params.totalDisponivel - resumo.usado < -1e-6 ? '#f87171' : '#4ade80'} />
                     : <Kpi rot="Dose média" val={fmt(resumo.doseMedia, 1)} />}
                   <Kpi rot="Custo" val={resumo.custo != null ? `R$ ${fmt(resumo.custo, 0)}` : '—'} />

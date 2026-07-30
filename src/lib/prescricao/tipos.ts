@@ -16,17 +16,20 @@ export const ROTULO_TIPO: Record<TipoPrescricao, string> = {
   personalizado: 'Produto personalizado',
 };
 
-export type ModoCalculo = 'manual' | 'estoque' | 'proporcional';
+export type ModoCalculo = 'manual' | 'estoque' | 'proporcional' | 'equacao';
 
 export const ROTULO_MODO: Record<ModoCalculo, string> = {
   manual: 'Dose manual por zona',
   estoque: 'Quantidade total disponível',
   proporcional: 'Distribuição proporcional',
+  equacao: 'Por equação salva',
 };
 
 // Unidade da DOSE (por hectare). O total usa a unidade-base correspondente
 // (kg/ha→kg, t/ha→t, sementes/ha→sementes, L/ha→L).
-export type UnidadeDose = 'kg/ha' | 't/ha' | 'sementes/ha' | 'L/ha';
+// sementes/m = sementes por METRO LINEAR de fileira (como o operador regula a
+// plantadeira). Converte para total via espaçamento — ver fatorBaseDose().
+export type UnidadeDose = 'kg/ha' | 't/ha' | 'sementes/ha' | 'sementes/m' | 'L/ha';
 
 export interface ZonaDose {
   idZona: string;
@@ -102,6 +105,11 @@ export interface Prescricao {
   // cálculo (reproduzível)
   modo: ModoCalculo;
   params: ParamsCalculo;
+  /** modo 'equacao': id da equação salva usada + os valores de entrada por zona
+   *  (idZona → { varLower → número }) para reproduzir o cálculo. */
+  equacaoId?: string;
+  equacaoNome?: string;
+  valoresEquacao?: Record<string, Record<string, number>>;
   // resultado
   zonas: ZonaDose[];
   /** SNAPSHOT das geometrias das zonas (FeatureCollection com properties.id
@@ -121,5 +129,8 @@ export interface Prescricao {
 
 // Fator unidade-base → rótulo do TOTAL (para resumos e validações).
 export const UNIDADE_TOTAL: Record<UnidadeDose, string> = {
-  'kg/ha': 'kg', 't/ha': 't', 'sementes/ha': 'sementes', 'L/ha': 'L',
+  'kg/ha': 'kg', 't/ha': 't', 'sementes/ha': 'sementes', 'sementes/m': 'sementes', 'L/ha': 'L',
 };
+
+// A unidade da dose é contada em SEMENTES (por ha ou por metro)?
+export const ehUnidadeSemente = (u: UnidadeDose): boolean => u === 'sementes/ha' || u === 'sementes/m';

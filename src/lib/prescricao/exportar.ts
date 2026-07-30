@@ -14,8 +14,15 @@ import area from '@turf/area';
 import { shpFiles, baixarBlob, validarParaExport } from '../exportZonas';
 import { capturarMapaZonas } from '../capturaMapa';
 import { imagemParaPdf, reduzirLogo } from '../pdfImagem';
-import { resumoDoses, nutrientesPorZona } from './calculo.ts';
-import { UNIDADE_TOTAL, type Prescricao } from './tipos.ts';
+import { resumoDoses, nutrientesPorZona, fatorBaseDose } from './calculo.ts';
+import { UNIDADE_TOTAL, ehUnidadeSemente, type Prescricao } from './tipos.ts';
+
+// Fator unidade-dose → unidade-base da prescrição (1 exceto sementes/m, que usa
+// o espaçamento salvo nos parâmetros da semente). Nunca lança na exportação —
+// a validação já barrou sementes/m sem espaçamento; aqui cai em 1 defensivo.
+function fatorDe(p: Prescricao): number {
+  try { return fatorBaseDose(p.unidade, p.params.sementes?.espacamentoM); } catch { return 1; }
+}
 
 const NAVY: [number, number, number] = [13, 33, 64];
 const GRAY: [number, number, number] = [100, 116, 139];
@@ -35,10 +42,13 @@ export function validarPrescricao(p: Prescricao): ValidacaoPrescricao {
   if (p.zonas.length === 0) erros.push('A prescrição não tem zonas.');
   const semDose = p.zonas.filter(z => !Number.isFinite(z.dose) || z.dose < 0);
   if (semDose.length) erros.push(`Zona(s) sem dose válida: ${semDose.map(z => z.nomeZona).join(', ')}.`);
+  if (p.unidade === 'sementes/m' && !(p.params.sementes?.espacamentoM)) {
+    erros.push('Dose em sementes/m sem o espaçamento entre linhas — sem ele o total não fecha.');
+  }
   const min = p.params.doseMin, max = p.params.doseMax;
   const fora = p.zonas.filter(z => (min != null && z.dose < min - 1e-9) || (max != null && z.dose > max + 1e-9));
   if (fora.length) avisos.push(`Dose fora dos limites definidos em: ${fora.map(z => `${z.nomeZona} (${fmt(z.dose, 2)})`).join(', ')}.`);
-  const r = resumoDoses(p.zonas);
+  const r = resumoDoses(p.zonas, undefined, fatorDe(p));
   if (p.params.totalDisponivel != null && r.usado > p.params.totalDisponivel + 1e-6) {
     erros.push(`Estoque insuficiente: a prescrição usa ${fmt(r.usado, 1)} ${UNIDADE_TOTAL[p.unidade]} e há ${fmt(p.params.totalDisponivel, 1)} disponível.`);
   }
@@ -93,7 +103,8 @@ export async function exportarSHPPrescricao(p: Prescricao): Promise<string> {
 // ── Excel ───────────────────────────────────────────────────────────────────
 export async function exportarXlsxPrescricao(p: Prescricao): Promise<string> {
   const XLSX = await import('xlsx');
-  const r = resumoDoses(p.zonas, p.custoUnit);
+  const fator = fatorDe(p);
+  const r = resumoDoses(p.zonas, p.custoUnit, fator);
   const un = UNIDADE_TOTAL[p.unidade];
   const teores = p.tipo === 'organico' ? p.params.organico : undefined;
   const nutri = teores ? nutrientesPorZona(p.zonas.map(z => ({ id: z.idZona, areaHa: z.areaHa, dose: z.dose })), teores) : null;
@@ -102,7 +113,7 @@ export async function exportarXlsxPrescricao(p: Prescricao): Promise<string> {
     Classe: z.classe,
     'Área (ha)': Number(z.areaHa.toFixed(2)),
     [`Dose (${p.unidade})`]: Number(z.dose.toFixed(3)),
-    [`Total (${un})`]: Number((z.dose * z.areaHa).toFixed(2)),
+    [`Total (${un})`]: Number((z.dose * z.areaHa * fator).toFixed(2)),
     ...(nutri ? {
       'N (kg/ha)': Number(nutri[z.idZona].n.toFixed(1)),
       'P2O5 (kg/ha)': Number(nutri[z.idZona].p2o5.toFixed(1)),
@@ -181,7 +192,8 @@ export async function exportarPDFPrescricao(p: Prescricao, ident: IdentPdfPrescr
   const cliRaw = ident.logoClienteUrl ? await carregarImg(ident.logoClienteUrl).catch(() => null) : null;
   const cli = cliRaw ? await reduzirLogo(cliRaw) : null;
 
-  const r = resumoDoses(p.zonas, p.custoUnit);
+  const fator = fatorDe(p);
+  const r = resumoDoses(p.zonas, p.custoUnit, fator);
   const un = UNIDADE_TOTAL[p.unidade];
   const fc = fcPrescricao(p);
   const porId = new Map(p.zonas.map(z => [z.idZona, z]));
@@ -194,7 +206,7 @@ export async function exportarPDFPrescricao(p: Prescricao, ident: IdentPdfPrescr
     return [{
       geometry: f.geometry as GeoJSON.Polygon | GeoJSON.MultiPolygon,
       cor: corDaDose(z.dose, r.doseMin, r.doseMax),
-      rotulo: fmt(z.dose, p.unidade === 'sementes/ha' ? 0 : 1),
+      rotulo: fmt(z.dose, ehUnidadeSemente(p.unidade) ? (p.unidade === 'sementes/m' ? 1 : 0) : 1),
     }];
   });
   let mapaPng = '';
@@ -265,7 +277,7 @@ export async function exportarPDFPrescricao(p: Prescricao, ident: IdentPdfPrescr
     doc.text(san(z.nomeZona).slice(0, 14), cols[0] + 4, ty);
     doc.text(fmt(z.areaHa, 2), cols[1] + 14, ty, { align: 'right' });
     doc.text(p.unidade === 'sementes/ha' ? fmt0(z.dose) : fmt(z.dose, 2), cols[2] + 16, ty, { align: 'right' });
-    doc.text(p.unidade === 'sementes/ha' ? fmt0(z.dose * z.areaHa) : fmt(z.dose * z.areaHa, 1), cols[3] + 18, ty, { align: 'right' });
+    doc.text(ehUnidadeSemente(p.unidade) ? fmt0(z.dose * z.areaHa * fator) : fmt(z.dose * z.areaHa * fator, 1), cols[3] + 18, ty, { align: 'right' });
     ty += 4.2;
   }
   if (p.zonas.length > 18) { doc.setTextColor(...GRAY); doc.text(`… +${p.zonas.length - 18} zonas (planilha completa no Excel)`, tabX, ty); ty += 4.2; }
@@ -277,9 +289,9 @@ export async function exportarPDFPrescricao(p: Prescricao, ident: IdentPdfPrescr
   doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(...GRAY);
   const linhasResumo = [
     `Área: ${fmt(r.areaHa, 2)} ha em ${r.nZonas} zona(s) · ${fc.features.length} polígono(s)`,
-    `Quantidade usada: ${p.unidade === 'sementes/ha' ? fmt0(r.usado) : fmt(r.usado, 1)} ${un}`,
+    `Quantidade usada: ${ehUnidadeSemente(p.unidade) ? fmt0(r.usado) : fmt(r.usado, 1)} ${un}`,
     ...(p.params.totalDisponivel != null
-      ? [`Disponível: ${p.unidade === 'sementes/ha' ? fmt0(p.params.totalDisponivel) : fmt(p.params.totalDisponivel, 1)} ${un} · restante: ${p.unidade === 'sementes/ha' ? fmt0(p.params.totalDisponivel - r.usado) : fmt(p.params.totalDisponivel - r.usado, 1)} ${un}`]
+      ? [`Disponível: ${ehUnidadeSemente(p.unidade) ? fmt0(p.params.totalDisponivel) : fmt(p.params.totalDisponivel, 1)} ${un} · restante: ${ehUnidadeSemente(p.unidade) ? fmt0(p.params.totalDisponivel - r.usado) : fmt(p.params.totalDisponivel - r.usado, 1)} ${un}`]
       : []),
     `Dose: mín ${fmt(r.doseMin, 1)} · máx ${fmt(r.doseMax, 1)} · média ${fmt(r.doseMedia, 1)} ${p.unidade}`,
     ...(r.custo != null ? [`Custo estimado: R$ ${fmt(r.custo, 2)}`] : []),

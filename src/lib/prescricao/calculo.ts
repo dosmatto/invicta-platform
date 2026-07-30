@@ -191,19 +191,34 @@ export interface ResumoPrescricao {
   custo: number | null;        // usado × custoUnit
 }
 
+// Quantidade-base (kg, t, sementes, L) por (dose × ha). É 1 para toda unidade
+// "/ha". Exceção: SEMENTES POR METRO LINEAR — a dose é por metro de FILEIRA;
+// com espaçamento E (m entre linhas) há 10.000/E metros de linha por hectare,
+// logo total_sementes = dose[sem/m] × (10.000/E) × areaHa. Sem espaçamento a
+// conta não fecha, então exige.
+export function fatorBaseDose(unidade: string, espacamentoM?: number): number {
+  if (unidade === 'sementes/m') {
+    if (!espacamentoM || espacamentoM <= 0) throw new Error('Para dose em sementes por metro, informe o espaçamento entre linhas.');
+    return 10_000 / espacamentoM;
+  }
+  return 1;
+}
+
 export function resumoDoses(
-  zonas: Array<{ areaHa: number; dose: number }>, custoUnit?: number,
+  zonas: Array<{ areaHa: number; dose: number }>, custoUnit?: number, fatorBase = 1,
 ): ResumoPrescricao {
   const v = zonas.filter(z => z.areaHa > EPS);
   const areaHa = v.reduce((s, z) => s + z.areaHa, 0);
-  const usado = v.reduce((s, z) => s + z.dose * z.areaHa, 0);
+  // somaDoseArea está em (unidade-dose × ha); usado converte para a unidade-base.
+  const somaDoseArea = v.reduce((s, z) => s + z.dose * z.areaHa, 0);
+  const usado = somaDoseArea * fatorBase;
   const dosesV = v.map(z => z.dose);
   return {
     areaHa, nZonas: v.length, usado,
-    doseMin: v.length ? Math.min(...dosesV) : 0,
+    doseMin: v.length ? Math.min(...dosesV) : 0,   // na unidade-dose (ex.: sem/m)
     doseMax: v.length ? Math.max(...dosesV) : 0,
-    doseMedia: areaHa > EPS ? usado / areaHa : 0,
-    custo: custoUnit != null && custoUnit >= 0 ? usado * custoUnit : null,
+    doseMedia: areaHa > EPS ? somaDoseArea / areaHa : 0,   // média ponderada, unidade-dose
+    custo: custoUnit != null && custoUnit >= 0 ? usado * custoUnit : null,   // custo por unidade-base
   };
 }
 
