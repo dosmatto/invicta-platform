@@ -24,6 +24,11 @@ alter table public.app_kv enable row level security;
 alter table public.talhoes enable row level security;
 
 -- 2) Remove políticas antigas com estes nomes (idempotente)
+-- ⚠ kv_auth_all/talhoes_auth_all: políticas do setup INICIAL que liberavam
+-- TUDO a qualquer autenticado. Políticas permissivas se somam por OU — se elas
+-- ficarem, o resto deste arquivo não protege nada. Removê-las é o ponto.
+drop policy if exists kv_auth_all on public.app_kv;
+drop policy if exists talhoes_auth_all on public.talhoes;
 drop policy if exists app_kv_select_autenticado on public.app_kv;
 drop policy if exists app_kv_insert_autenticado on public.app_kv;
 drop policy if exists app_kv_update_autenticado on public.app_kv;
@@ -116,6 +121,41 @@ create policy app_kv_update_autocadastro on public.app_kv
     and coalesce(dados->>'papel', '') not in ('owner', 'admin')
     and coalesce(dados->>'status', '') = 'aguardando_aprovacao'
   );
+
+-- =====================================================================
+-- EXCEÇÃO 2 — CONSUMO DO CONVITE PELO PRÓPRIO CONVIDADO (v2.10.x)
+-- =====================================================================
+-- Ao se cadastrar pelo link, o convidado (não-admin) marca o convite como
+-- usado / incrementa o contador do link multiuso. Sem isto, o link individual
+-- nunca se consumiria (ficaria reutilizável). A escrita exige que o registro
+-- novo carregue o PRÓPRIO e-mail em usadoPor e um status não-privilegiante —
+-- o pior que um autenticado malicioso consegue é DESATIVAR um convite (marcar
+-- usado com o e-mail dele carimbado), nunca criar/renovar/reabrir um.
+drop policy if exists app_kv_update_convite_uso on public.app_kv;
+create policy app_kv_update_convite_uso on public.app_kv
+  for update to authenticated
+  using (colecao = 'inv_convites')
+  with check (
+    colecao = 'inv_convites'
+    and lower(dados->>'usadoPor') = lower(coalesce(auth.jwt()->>'email', ''))
+    and coalesce(dados->>'status', '') in ('pendente', 'usado')
+  );
+
+-- =====================================================================
+-- EXCEÇÃO 3 — AUDITORIA É APPEND-ONLY PARA TODOS
+-- =====================================================================
+-- Qualquer autenticado pode ACRESCENTAR entrada de auditoria (login,
+-- cadastro_solicitado, convite_usado…) — é o propósito de uma trilha.
+-- Alterar/apagar continua exclusivo de admin (políticas da seção 4).
+drop policy if exists app_kv_insert_auditoria on public.app_kv;
+create policy app_kv_insert_auditoria on public.app_kv
+  for insert to authenticated
+  with check (colecao = 'inv_auditoria');
+
+-- LIMITE ACEITO: o "último acesso" de usuários NÃO-admin deixa de sincronizar
+-- (a atualização do próprio registro em inv_papeis exige status
+-- 'aguardando_aprovacao'; afrouxar isso deixaria o usuário editar as próprias
+-- permissões/vínculos). Cosmético — preferível ao risco.
 
 -- =====================================================================
 -- CONFERÊNCIA (rode depois de aplicar)
