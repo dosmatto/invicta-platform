@@ -53,6 +53,9 @@ export interface Fazenda {
   estado: string;
   car?: string;
   nirf?: string;
+  /** E-mail do agrônomo responsável (usuário da categoria "Interno" no IAM).
+   *  Guarda o e-mail (chave estável) — o nome é resolvido na exibição. */
+  agronomoResponsavel?: string;
   criadoEm: string;
 }
 

@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useApp } from '@/context/AppContext';
 import { getClientes, getFazendas, getTalhoes, saveFazenda, updateCliente, deleteCliente, Cliente, Fazenda } from '@/lib/store';
-import { ChevronLeft, Plus, Building2, Phone, Mail, Edit2, Save, X, Trash2, Pencil } from 'lucide-react';
+import { getUsuarios, statusDe, categoriaDe } from '@/lib/iam/usuarios';
+import { ChevronLeft, Plus, Building2, Phone, Mail, Edit2, Save, X, Trash2, Pencil, UserCog } from 'lucide-react';
 import { PanelSection, PanelButton, MockIndicator } from './_shared';
 
 const ESTADOS_BR = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'];
@@ -25,7 +26,13 @@ export function ProdutorDetailPanel() {
   const [cliente, setCliente] = useState<Cliente | null>(null);
   const [fazendas, setFazendas] = useState<Fazenda[]>([]);
   const [mostraForm, setMostraForm] = useState(false);
-  const [form, setForm] = useState({ nome: '', sigla: '', municipio: '', estado: 'PR', car: '', nirf: '' });
+  const [form, setForm] = useState({ nome: '', sigla: '', municipio: '', estado: 'PR', car: '', nirf: '', agronomoResponsavel: '' });
+  // Equipe (usuários "Internos" ativos) — origem do agrônomo responsável.
+  const internos = useMemo(
+    () => getUsuarios()
+      .filter(u => statusDe(u) === 'ativo' && categoriaDe(u) === 'interno')
+      .map(u => ({ email: u.email, nome: u.nome || u.email })),
+    [mostraForm]);
   const [salvando, setSalvando] = useState(false);
   const [editando, setEditando] = useState(false);
   const [editForm, setEditForm] = useState<Partial<Cliente>>({});
@@ -76,9 +83,9 @@ export function ProdutorDetailPanel() {
     if (!form.nome.trim() || !nav.produtorId) return;
     setSalvando(true);
     setTimeout(() => {
-      saveFazenda({ clienteId: nav.produtorId!, ...form });
+      saveFazenda({ clienteId: nav.produtorId!, ...form, agronomoResponsavel: form.agronomoResponsavel || undefined });
       setFazendas(getFazendas(nav.produtorId!));
-      setForm({ nome: '', sigla: '', municipio: '', estado: 'PR', car: '', nirf: '' });
+      setForm({ nome: '', sigla: '', municipio: '', estado: 'PR', car: '', nirf: '', agronomoResponsavel: '' });
       setMostraForm(false);
       setSalvando(false);
     }, 300);
@@ -190,6 +197,20 @@ export function ProdutorDetailPanel() {
                     {ESTADOS_BR.map(uf => <option key={uf} value={uf}>{uf}</option>)}
                   </select>
                 </div>
+                <div>
+                  <label className="text-[10px] font-semibold block mb-0.5" style={{ color: '#64748b' }}>Agrônomo responsável</label>
+                  <select value={form.agronomoResponsavel} onChange={e => setForm(p => ({ ...p, agronomoResponsavel: e.target.value }))}
+                    className="w-full rounded px-3 py-2 text-xs outline-none"
+                    style={{ background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' }}>
+                    <option value="">— definir depois —</option>
+                    {internos.map(i => <option key={i.email} value={i.email}>{i.nome}</option>)}
+                  </select>
+                  {internos.length === 0 && (
+                    <p className="text-[9px] mt-1" style={{ color: '#64748b' }}>
+                      Cadastre a equipe em Biblioteca → Acessos → Internos para poder escolher aqui.
+                    </p>
+                  )}
+                </div>
                 <div className="flex gap-2">
                   <button onClick={() => setMostraForm(false)}
                     className="flex-1 py-2 rounded text-xs font-semibold flex items-center justify-center gap-1"
@@ -235,6 +256,11 @@ export function ProdutorDetailPanel() {
                         <p className="text-[10px]" style={{ color: '#64748b' }}>
                           {f.sigla ? `${f.sigla} · ` : ''}{f.municipio} · {f.estado}{f.car ? ` · CAR: ${f.car}` : ''}
                         </p>
+                        {f.agronomoResponsavel && (
+                          <p className="text-[10px] flex items-center gap-1" style={{ color: '#93c5fd' }}>
+                            <UserCog size={10} /> {internos.find(i => i.email === f.agronomoResponsavel)?.nome ?? f.agronomoResponsavel}
+                          </p>
+                        )}
                         {areasFaz[f.id] > 0 && (
                           <p className="text-[10px] font-semibold" style={{ color: '#86efac' }}>
                             {areasFaz[f.id].toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ha

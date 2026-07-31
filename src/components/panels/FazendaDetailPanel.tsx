@@ -6,6 +6,7 @@ import { useApp } from '@/context/AppContext';
 import { getFazendas, getTalhoes, saveTalhao, importarTalhoesLote, updateFazenda, excluirFazendaCascata, Fazenda, Talhao } from '@/lib/store';
 import { cloudExcluirMapasPorPrefixo, cloudExcluirPorPrefixo } from '@/lib/cloud';
 import { pode } from '@/lib/empresa';
+import { getUsuarios, statusDe, categoriaDe } from '@/lib/iam/usuarios';
 import { detectarMunicipiosFazenda } from '@/lib/geocode';
 import { prepararTalhoesEmMassa, CandidatoTalhao } from '@/lib/geo';
 import { conflitosDe, talhaoParaAlvo, areaHaFC, bboxDeFeatures, type AlvoOverlap, type Conflito } from '@/lib/overlap';
@@ -154,6 +155,22 @@ export function FazendaDetailPanel() {
   const incompletos = talhoes.filter(t => t.status === 'incompleto').length;
   const areaTotal = talhoes.reduce((s, t) => s + (t.areaHa || 0), 0);
   const areaFmt = (n: number) => n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  // Agrônomos = usuários da EQUIPE (categoria "Interno") e ATIVOS. É a lista da
+  // qual o responsável pela fazenda é escolhido. tick recarrega ao mudar dados.
+  const internos = useMemo(
+    () => getUsuarios()
+      .filter(u => statusDe(u) === 'ativo' && categoriaDe(u) === 'interno')
+      .map(u => ({ email: u.email, nome: u.nome || u.email })),
+    [tab]);
+  const nomeAgronomo = (email?: string) =>
+    email ? (internos.find(i => i.email === email)?.nome ?? email) : '';
+
+  function definirAgronomo(email: string) {
+    if (!nav.fazendaId) return;
+    updateFazenda(nav.fazendaId, { agronomoResponsavel: email || undefined });
+    setFazenda(getFazendas().find(f => f.id === nav.fazendaId) ?? null);
+  }
 
   if (!fazenda) return (
     <div className="flex items-center justify-center p-8">
@@ -339,6 +356,39 @@ export function FazendaDetailPanel() {
                 <p className="text-xs font-semibold" style={{ color: '#e2e8f0' }}>{d.value}</p>
               </div>
             ))}
+
+            {/* Agrônomo responsável — escolhido entre os usuários "Internos" (equipe). */}
+            <div className="px-4 py-2.5" style={{ borderBottom: '1px solid #0f2240' }}>
+              <div className="flex items-center justify-between">
+                <p className="text-xs" style={{ color: '#64748b' }}>Agrônomo responsável</p>
+                {!pode('cadastro') && (
+                  <p className="text-xs font-semibold" style={{ color: fazenda.agronomoResponsavel ? '#e2e8f0' : '#64748b' }}>
+                    {nomeAgronomo(fazenda.agronomoResponsavel) || '—'}
+                  </p>
+                )}
+              </div>
+              {pode('cadastro') && (
+                <>
+                  <select
+                    value={fazenda.agronomoResponsavel ?? ''}
+                    onChange={e => definirAgronomo(e.target.value)}
+                    className="w-full mt-1.5 rounded px-2 py-1.5 text-xs outline-none"
+                    style={{ background: '#0b1e38', color: '#e2e8f0', border: '1px solid #1a3a6b' }}>
+                    <option value="">— sem responsável definido —</option>
+                    {internos.map(i => <option key={i.email} value={i.email}>{i.nome}</option>)}
+                    {/* Responsável antigo que saiu da lista de internos: mantém visível. */}
+                    {fazenda.agronomoResponsavel && !internos.some(i => i.email === fazenda.agronomoResponsavel) && (
+                      <option value={fazenda.agronomoResponsavel}>{fazenda.agronomoResponsavel} (fora da equipe)</option>
+                    )}
+                  </select>
+                  {internos.length === 0 && (
+                    <p className="text-[10px] mt-1" style={{ color: '#fbbf24' }}>
+                      Nenhum usuário <b>Interno</b> ativo. Cadastre a equipe em <b>Biblioteca → Acessos → Internos</b>.
+                    </p>
+                  )}
+                </>
+              )}
+            </div>
             {pode('cadastro') && (
               <div className="px-4 py-3">
                 <button onClick={detectarMunicipio} disabled={detectando}
