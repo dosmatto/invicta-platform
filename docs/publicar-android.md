@@ -65,6 +65,10 @@ O arquivo sai em:
 > `.aab` (Android App Bundle) é o formato que a loja exige hoje — o Google gera
 > a partir dele o APK otimizado para cada aparelho.
 
+> **Java:** o Gradle precisa de um JDK, e o macOS não vem com um. O script usa o
+> `JAVA_HOME` do sistema se existir e, se não existir, cai no JDK que já vem
+> dentro do Android Studio — então não é preciso instalar Java à parte.
+
 ---
 
 ## PASSO 3 — Criar a conta no Google Play Console
