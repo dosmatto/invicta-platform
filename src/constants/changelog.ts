@@ -1,5 +1,9 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.12.2': [
+    'IDENTIFICADOR DO APP NA LOJA: o app de Coleta passou a se chamar br.agr.invicta.coleta (antes br.com.invictaap.coleta, derivado de um domínio que não existe mais). Esse identificador é PERMANENTE depois da primeira publicação na Play Store, então foi corrigido agora, antes de publicar — a partir daqui ele acompanha o domínio real da empresa.',
+    'ENDEREÇO DO SITE ATUALIZADO: o rodapé da tela de login e os rodapés dos PDFs (Fertilidade, Zonas, Campo e Prescrições) apontavam para invictaap.com.br, que saiu do ar. Agora mostram invicta.agr.br, o site novo.',
+  ],
   '2.12.1': [
     'AGRÔNOMO RESPONSÁVEL POR FAZENDA (novo): ao cadastrar ou editar uma fazenda do produtor, agora dá para indicar o agrônomo responsável — escolhido entre os usuários da equipe (categoria "Interno" da Central de Acessos, ativos). Aparece no formulário de nova fazenda (no produtor) e na aba Dados da fazenda, e o nome do responsável fica visível no cartão de cada fazenda na lista do produtor. Se ainda não houver ninguém cadastrado como Interno, o campo orienta a cadastrar a equipe em Biblioteca → Acessos → Internos.',
   ],

@@ -10,10 +10,10 @@ if (keystorePropsFile.exists()) {
 }
 
 android {
-    namespace = "br.com.invictaap.coleta"
+    namespace = "br.agr.invicta.coleta"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "br.com.invictaap.coleta"
+        applicationId "br.agr.invicta.coleta"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 20811

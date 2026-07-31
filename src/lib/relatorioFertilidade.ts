@@ -253,7 +253,7 @@ async function desenharPaginaMapa(doc: JsPDF, d: DadosRelatorioFert, logos: Logo
   if (logos.branca) { const h = 5, w = h * (logos.branca.naturalWidth / logos.branca.naturalHeight); doc.addImage(logos.branca, 'PNG', M, H - 7.5, w, h); }
   doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5);
   doc.text('INVICTA AP   |   Tecnologia que transforma dados em produtividade.', M + 26, H - 3.8);
-  doc.setFont('helvetica', 'bold'); doc.text('www.invictaap.com.br', W - M, H - 3.8, { align: 'right' });
+  doc.setFont('helvetica', 'bold'); doc.text('www.invicta.agr.br', W - M, H - 3.8, { align: 'right' });
 }
 
 const EMPTY_FC: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
@@ -322,7 +322,7 @@ async function desenharCapa(doc: JsPDF, paginas: DadosRelatorioFert[], logos: Lo
   if (logos.branca) { const h = 5, w = h * (logos.branca.naturalWidth / logos.branca.naturalHeight); doc.addImage(logos.branca, 'PNG', M, H - 7.5, w, h); }
   doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5);
   doc.text('INVICTA AP   |   Tecnologia que transforma dados em produtividade.', M + 26, H - 3.8);
-  doc.setFont('helvetica', 'bold'); doc.text('www.invictaap.com.br', W - M, H - 3.8, { align: 'right' });
+  doc.setFont('helvetica', 'bold'); doc.text('www.invicta.agr.br', W - M, H - 3.8, { align: 'right' });
 }
 
 // Renderiza a seção de Fertilidade (capa opcional + 1 página por elemento) num

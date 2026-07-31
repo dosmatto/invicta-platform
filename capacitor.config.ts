@@ -4,7 +4,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 // por `npm run build:mobile`. O app abre na tela de Coleta (out/index.html é um
 // redirect para /coleta — ver scripts/mobile-postbuild.mjs).
 const config: CapacitorConfig = {
-  appId: 'br.com.invictaap.coleta',
+  appId: 'br.agr.invicta.coleta',
   appName: 'INVICTA Coleta',
   webDir: 'out',
   ios: {

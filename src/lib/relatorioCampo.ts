@@ -119,7 +119,7 @@ export async function gerarCadernoCampo(d: DadosRelatorioCampo): Promise<void> {
     if (logos.branca) { const h = 5, w = h * (logos.branca.naturalWidth / logos.branca.naturalHeight); doc.addImage(logos.branca, 'PNG', M, H - 7.5, w, h); }
     doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'normal'); doc.setFontSize(7);
     doc.text('INVICTA AP   |   Tecnologia que transforma dados em produtividade.', M + 24, H - 3.8);
-    doc.setFont('helvetica', 'bold'); doc.text('www.invictaap.com.br', W - M, H - 3.8, { align: 'right' });
+    doc.setFont('helvetica', 'bold'); doc.text('www.invicta.agr.br', W - M, H - 3.8, { align: 'right' });
   }
 
   novaPagina();

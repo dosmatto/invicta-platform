@@ -145,7 +145,7 @@ export function LoginScreen() {
         <p className="text-center text-[10px]" style={{ color: '#475569' }}>
           Sem internet? Se você já entrou neste aparelho, o mesmo e-mail e senha funcionam offline.
         </p>
-        <p className="text-center text-[10px]" style={{ color: '#475569' }}>INVICTA AP · invictaap.com.br</p>
+        <p className="text-center text-[10px]" style={{ color: '#475569' }}>INVICTA AP · invicta.agr.br</p>
       </form>
     </div>
   );
