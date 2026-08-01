@@ -17,7 +17,7 @@
     "build:mobile": "node scripts/mobile-build.mjs",
     "android:sync": "npm run build:mobile && npx cap sync android",
     "android:open": "npx cap open android",
-    "ios:sync": "npm run build:mobile && npx cap sync ios",
+    "ios:sync": "npm run build:mobile && npx cap sync ios && node scripts/preflight-ios.mjs",
     "ios:open": "npx cap open ios",
     "android:release": "npm run build:mobile && npx cap sync android && node scripts/preflight-android.mjs && cd android && JAVA_HOME=\"${JAVA_HOME:-/Applications/Android Studio.app/Contents/jbr/Contents/Home}\" ./gradlew bundleRelease",
     "interp:atalho": "node scripts/criar-atalho-interp.mjs",

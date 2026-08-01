@@ -1,16 +1,30 @@
 # App iOS (INVICTA Coleta) — testar e publicar
 
-## ⚠️ Atenção ao Bundle Identifier
+## Bundle Identifier — resolvido
 
-| Onde | Valor | Para quê |
-|---|---|---|
-| `capacitor.config.ts` e Android | `br.com.invictaap.coleta` | **oficial** |
-| Xcode (hoje) | `br.com.invictaap.coleta.wn` | **só teste** com conta Apple grátis |
+O identificador é **`br.agr.invicta.coleta`** em todos os lugares:
+`capacitor.config.ts`, Android e Xcode.
 
-O sufixo `.wn` foi necessário porque a conta grátis (Personal Team) recusa um
-identificador já usado por outra conta. **Na hora de publicar na App Store, o
-identificador precisa voltar para `br.com.invictaap.coleta`**, para casar com o
-Android e com a configuração do Capacitor.
+> Histórico: até 31/07/2026 o oficial era `br.com.invictaap.coleta` e o Xcode
+> usava `br.com.invictaap.coleta.wn` — o sufixo `.wn` existia porque a conta
+> Apple grátis (Personal Team) recusa um identificador já registrado por outra
+> conta. Ao migrar para `br.agr.invicta.coleta` (domínio novo, nunca usado),
+> o conflito deixou de existir e a gambiarra do `.wn` saiu junto.
+
+O `npm run ios:sync` **falha** se o Xcode e o Capacitor divergirem — a App
+Store recusaria o envio, e o erro dela é obscuro.
+
+## Versão — automática
+
+O mesmo comando sincroniza a versão a partir de `APP_VERSION`:
+
+- `MARKETING_VERSION` = a versão (ex.: `2.12.3`) — é a que o usuário vê
+- `CURRENT_PROJECT_VERSION` = `maior*10000 + menor*100 + correção` (ex.: `21203`)
+
+O build usa **o mesmo número do `versionCode` do Android** de propósito: os dois
+apps saem do mesmo código, e o número igual dos dois lados deixa óbvio qual
+build corresponde a qual. Não edite esses campos no Xcode — rode
+`npm run ios:sync` e eles se ajustam.
 
 ---
 
@@ -38,32 +52,43 @@ Dispositivo** → seu Apple ID → **Confiar**.
 Diferente do Android, **não existe** caminho gratuito para instalar em vários
 aparelhos. É preciso:
 
-### 1. Assinar o Apple Developer Program — US$ 99/ano
-- **developer.apple.com/programs** → Enroll
-- Pessoa jurídica exige **D-U-N-S Number** (gratuito, mas leva de dias a semanas
-  para sair). Pessoa física é mais rápido, porém o app aparece no seu nome.
-- A aprovação costuma levar de 1 a 3 dias.
+### 1. D-U-N-S Number (decidido: conta da EMPRESA)
+Conta de organização exige D-U-N-S — **é o item de maior prazo, comece por ele**.
 
-### 2. Voltar o Bundle Identifier ao oficial
-No Xcode → **Signing & Capabilities** → Bundle Identifier:
-`br.com.invictaap.coleta`
+Busque antes de solicitar: **developer.apple.com/enroll/duns-lookup/**
+(muitas empresas já têm um, criado por banco ou fornecedor, sem saber).
 
-### 3. Criar o app no App Store Connect
+Dados: **WR CONSULTORIA AGRICOLA SS** · CNPJ 10.508.846/0001-90 ·
+Avenida dos Pioneiros, 398 — Carambeí/PR — 84145-000
+
+Gratuito; no Brasil leva de dias a semanas.
+
+### 2. Assinar o Apple Developer Program — US$ 99/ano
+- **developer.apple.com/programs** → Enroll → conta de organização
+- Aprovação costuma levar de 1 a 3 dias **depois** do D-U-N-S sair
+- A Apple liga para confirmar a existência da empresa: o telefone precisa
+  bater com o cadastro público do CNPJ
+
+### 3. Bundle Identifier
+Nada a fazer — já é `br.agr.invicta.coleta` e o `ios:sync` protege contra
+divergência.
+
+### 4. Criar o app no App Store Connect
 - **appstoreconnect.apple.com** → Meus Apps → **+**
 - Plataforma iOS, nome **INVICTA Coleta**, idioma Português (Brasil)
-- Bundle ID: o oficial · SKU: `invicta-coleta`
+- Bundle ID: `br.agr.invicta.coleta` · SKU: `invicta-coleta`
 
-### 4. Enviar a build
+### 5. Enviar a build
 No Xcode: **Product → Archive** → **Distribute App** → **App Store Connect** →
 **Upload**.
 
-### 5. TestFlight (equivalente ao teste interno do Android)
+### 6. TestFlight (equivalente ao teste interno do Android)
 - No App Store Connect, aba **TestFlight**
 - **Testadores internos** (até 100, mesma conta): liberação imediata
 - **Testadores externos** (até 10.000): passa por uma revisão simplificada (~1 dia)
 - Cada operador instala o app **TestFlight** e entra pelo convite
 
-### 6. Informações obrigatórias
+### 7. Informações obrigatórias
 - **Política de privacidade:** `https://invicta-platform.vercel.app/privacidade`
 - **Privacy Nutrition Labels** — declare, igual ao Android:
   | Dado | Vinculado ao usuário | Uso |
