@@ -166,6 +166,21 @@ export function TalhaoPage({ id }: { id: string }) {
           <Sep /> <Ctx label="Talhão" value={talhao?.nome ?? '—'} forte />
           <Sep /> <Ctx label="Área" value={talhao ? `${talhao.areaHa.toLocaleString('pt-BR')} ha` : '—'} />
           <Sep />
+          {/* Ano ANTES da Cultura: é ele que manda: trocar o ano recarrega a
+              cultura daquele ano (ver o efeito acima). Lado a lado e nesta
+              ordem, o cabeçalho se lê como a pergunta que o usuário faz —
+              "que ano? que cultura?" — em vez de deixar o Ano longe, na ponta
+              direita, onde ninguém achava. */}
+          <span className="flex items-center gap-1 flex-shrink-0">
+            <span style={{ color: '#64748b' }}>Ano:</span>
+            <select value={safraSel} onChange={e => setSafraSel(e.target.value)}
+              title="Ano dos trabalhos exibidos neste talhão"
+              className="rounded px-1.5 py-0.5 text-xs outline-none" style={inputStyle}>
+              {safras.length === 0 && <option value="">— sem ano —</option>}
+              {safras.map(s => <option key={s.id} value={s.nome}>{rotuloAno(s.nome)}</option>)}
+            </select>
+          </span>
+          <Sep />
           <span className="flex items-center gap-1 flex-shrink-0">
             <span style={{ color: '#64748b' }}>Cultura:</span>
             <select value={cultura} onChange={e => mudarCultura(e.target.value)} disabled={!safraSel}
@@ -175,16 +190,6 @@ export function TalhaoPage({ id }: { id: string }) {
               {CULTURAS.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
           </span>
-        </div>
-
-        {/* Seletor de Ano (filtra os trabalhos da página; o valor interno segue a safra) */}
-        <div className="ml-auto flex items-center gap-1.5 flex-shrink-0">
-          <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#64748b' }}>Ano</span>
-          <select value={safraSel} onChange={e => setSafraSel(e.target.value)}
-            className="rounded px-2 py-1 text-xs outline-none" style={inputStyle}>
-            {safras.length === 0 && <option value="">— sem ano —</option>}
-            {safras.map(s => <option key={s.id} value={s.nome}>{rotuloAno(s.nome)}</option>)}
-          </select>
         </div>
       </header>
 

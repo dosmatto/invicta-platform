@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.12.3': [
+    'SELETOR DE ANO AO LADO DA CULTURA (talhão): o seletor de Ano estava sozinho na ponta DIREITA do cabeçalho, longe do resto do contexto — quem abria o talhão não achava, e é ele que filtra tudo o que a página mostra. Agora fica na mesma linha de Cliente · Fazenda · Talhão · Área, logo ANTES da Cultura — que é a ordem certa, porque trocar o ano recarrega a cultura daquele ano. Nada mudou no funcionamento: só saiu de onde ninguém via para onde a informação é lida.',
+  ],
   '2.12.2': [
     'IDENTIFICADOR DO APP NA LOJA: o app de Coleta passou a se chamar br.agr.invicta.coleta (antes br.com.invictaap.coleta, derivado de um domínio que não existe mais). Esse identificador é PERMANENTE depois da primeira publicação na Play Store, então foi corrigido agora, antes de publicar — a partir daqui ele acompanha o domínio real da empresa.',
     'ENDEREÇO DO SITE ATUALIZADO: o rodapé da tela de login e os rodapés dos PDFs (Fertilidade, Zonas, Campo e Prescrições) apontavam para invictaap.com.br, que saiu do ar. Agora mostram invicta.agr.br, o site novo.',
