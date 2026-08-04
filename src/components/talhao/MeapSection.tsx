@@ -166,7 +166,7 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
   const [chaves, setChaves] = useState<string[]>([]);
 
   // Configuração (rev. 13.00A: Configurar → Analisar → Decidir → Gerar → Avaliar)
-  const [algoritmo, setAlgoritmo] = useState<'fcm' | 'kmeans'>('fcm');
+  const [algoritmo, setAlgoritmo] = useState<'fcm' | 'kmeans' | 'quantis'>('fcm');
   const [pesos, setPesos] = useState<Record<string, number>>({});  // peso por camada (chave→peso)
   const [areaMin, setAreaMin] = useState(0);     // ha; 0 = sem fusão
 
@@ -374,14 +374,24 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
     setPesos(prev => ({ ...prev, [ch]: Math.max(0, v) }));
     invalidarAnalise();
   }
-  function mudarAlgoritmo(m: 'fcm' | 'kmeans') { setAlgoritmo(m); invalidarAnalise(); }
+  function mudarAlgoritmo(m: 'fcm' | 'kmeans' | 'quantis') {
+    setAlgoritmo(m);
+    invalidarAnalise();
+    // Quantis não passa pela análise (que é quem preenchia o nº de zonas), então
+    // entra com 5 — o quintil, que é o padrão de quem já trabalha assim.
+    if (m === 'quantis') setNClasses(n => (n >= 2 ? n : 5));
+  }
 
   // Etapa 2 — Analisar: FPI/NCE 2..12 + sugestão (não gera).
   async function analisar() {
     if (!carregadas || chaves.length === 0) return;
     setErro(null); setAnalisando(true); setRes(null); setPreviewCh(null);
     try {
-      const a = await analisarMulti({ carregadas, chaves, poligono, algoritmo, pesos, cMax: 12 });
+      // A análise é sobre CLUSTERS; no modo quantis o botão nem aparece, mas se
+      // aparecesse não haveria curva a calcular — cai no fuzzy para não mentir
+      // um resultado de separação que o quantil não produz.
+      const algAnalise = algoritmo === 'quantis' ? 'fcm' : algoritmo;
+      const a = await analisarMulti({ carregadas, chaves, poligono, algoritmo: algAnalise, pesos, cMax: 12 });
       setAnalise(a);
       setNClasses(a.sugestao_c ?? 0);   // pré-seleciona a sugestão (o usuário pode trocar)
     } catch (e) {
@@ -808,8 +818,8 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
 
             <div>
               <span className="text-[9px] font-semibold block mb-1" style={{ color: '#64748b' }}>Algoritmo</span>
-              <div className="grid grid-cols-2 gap-1">
-                {([['fcm', 'Fuzzy'], ['kmeans', 'K-means']] as const).map(([m, t]) => (
+              <div className="grid grid-cols-3 gap-1">
+                {([['fcm', 'Fuzzy'], ['kmeans', 'K-means'], ['quantis', 'Quantis']] as const).map(([m, t]) => (
                   <button key={m} onClick={() => mudarAlgoritmo(m)} className="py-1.5 rounded text-[10px] font-semibold"
                     style={{ background: algoritmo === m ? 'var(--invicta-blue-mid)' : '#1a3a6b', color: algoritmo === m ? '#fff' : '#93c5fd', border: `1px solid ${algoritmo === m ? '#60a5fa' : '#1a3a6b'}` }}>{t}</button>
                 ))}
@@ -822,11 +832,14 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
               {analisando ? <><Loader2 size={13} className="animate-spin" /> Analisando…</> : <><BarChart3 size={13} /> Analisar (FPI × NCE)</>}
             </button>
 
-            {/* ───── ETAPA 2 — Analisar (quantas zonas?) ───── */}
-            {analise && (
+            {/* ───── ETAPA 2 — Analisar (quantas zonas?) ─────
+                No modo QUANTIS o bloco abre direto: a curva FPI/NCE mede
+                separação de clusters, e o quantil não agrupa — fatia por área.
+                Exigir "Analisar" ali seria pedir uma resposta que não existe. */}
+            {(analise || algoritmo === 'quantis') && (
               <div className="p-2 rounded space-y-2" style={{ background: '#0a1f33', border: '1px solid #1d4ed8' }}>
                 <EtapaHdr n={2} t="Analisar — quantas zonas?" />
-                {analise.sugestao_c != null && (() => {
+                {analise && analise.sugestao_c != null && (() => {
                   const conf = analise.confianca;
                   const cc = conf >= 66 ? { bg: '#0f2a1a', cor: '#86efac' } : conf >= 33 ? { bg: '#2d1a00', cor: '#fbbf24' } : { bg: '#2a0f12', cor: '#f87171' };
                   return (
@@ -843,7 +856,7 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
                   );
                 })()}
 
-                <IndicesChart indices={analise.indices} sugestao={analise.sugestao_c} />
+                {analise && <IndicesChart indices={analise.indices} sugestao={analise.sugestao_c} />}
                 <p className="text-[9px] leading-relaxed" style={{ color: '#6d8bbe' }}>
                   <strong style={{ color: '#22d3ee' }}>FPI</strong> e <strong style={{ color: '#fbbf24' }}>NCE</strong> menores = zonas mais organizadas. O ponto onde a curva «empena» (estilo cotovelo) costuma ser o melhor nº.
                 </p>
@@ -853,7 +866,7 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
                   <div className="flex flex-wrap gap-1">
                     {Array.from({ length: 11 }, (_, i) => i + 2).map(n => {
                       const sel = nClasses === n;
-                      const sug = analise.sugestao_c === n;
+                      const sug = analise?.sugestao_c === n;
                       return (
                         <button key={n} onClick={() => { setNClasses(n); setRes(null); }}
                           className="relative px-2.5 py-1 rounded text-[11px] font-bold"
@@ -863,13 +876,13 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
                       );
                     })}
                   </div>
-                  {analise.sugestao_c != null && <span className="text-[9px] mt-0.5 inline-flex items-center gap-1" style={{ color: '#475569' }}><Star size={7} fill="#fbbf24" style={{ color: '#fbbf24' }} /> = sugerido</span>}
+                  {analise?.sugestao_c != null && <span className="text-[9px] mt-0.5 inline-flex items-center gap-1" style={{ color: '#475569' }}><Star size={7} fill="#fbbf24" style={{ color: '#fbbf24' }} /> = sugerido</span>}
                 </div>
               </div>
             )}
 
             {/* ───── ETAPA 3 — Decidir e gerar (regras + resumo + confirmar) ───── */}
-            {analise && nClasses >= 2 && (
+            {(analise || algoritmo === 'quantis') && nClasses >= 2 && (
               <div className="p-2 rounded space-y-2" style={{ background: '#0b1f3a', border: '1px solid #2e5fa3' }}>
                 <EtapaHdr n={3} t="Decidir e gerar" />
                 <label className="block">
@@ -884,7 +897,7 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
                 <div className="p-2 rounded text-[10px] leading-relaxed" style={{ background: '#061525', border: '1px solid #1a3a6b', color: '#94a3b8' }}>
                   <p style={{ color: '#cbd5e1' }} className="font-semibold mb-0.5">Resumo</p>
                   <p>Camadas: {carregadas.camadas.filter(c => chaves.includes(c.chave)).map(c => `${c.simbolo}${(pesos[c.chave] ?? 1) !== 1 ? ` (${pesos[c.chave] ?? 1}×)` : ''}`).join(', ')}</p>
-                  <p>Método: {algoritmo === 'fcm' ? 'fuzzy c-means' : 'k-means'} · Zonas: <strong style={{ color: '#e2e8f0' }}>{nClasses}</strong> · Área mín.: {areaMin > 0 ? `${areaMin} ha` : '—'}</p>
+                  <p>Método: {algoritmo === 'fcm' ? 'fuzzy c-means' : algoritmo === 'kmeans' ? 'k-means' : `quantis (${nClasses} classes de ~${Math.round(100 / Math.max(2, nClasses))}% da área cada)`} · Zonas: <strong style={{ color: '#e2e8f0' }}>{nClasses}</strong> · Área mín.: {areaMin > 0 ? `${areaMin} ha` : '—'}</p>
                 </div>
 
                 <button onClick={gerar} disabled={gerando}

@@ -61,7 +61,7 @@ AMPLITUDE_MIN = 0.30
 NUGGET_MAX = 0.10
 # Versao do motor de interpolacao (conferir em GET /health para saber se o
 # backend foi reiniciado com o codigo novo).
-VERSION = "interp-24-pna-liberado"
+VERSION = "interp-25-zonas-quantis"
 
 
 # ============================================================ instrumentacao
@@ -706,6 +706,32 @@ def _fpi_nce(U: np.ndarray):
     return fpi, nce
 
 
+def _labels_quantis(X: np.ndarray, c: int) -> np.ndarray:
+    """Classes por QUANTIS do valor composto — o metodo do script de taxa
+    variavel que a equipe usa no QGIS (quintis 20/40/60/80 quando c=5).
+
+    Existe ao lado do FCM/k-means porque responde a outra pergunta. O FCM acha
+    grupos naturais: o numero de pixels por zona varia e a divisa cai onde os
+    dados de fato mudam. O quantil impoe area: cada classe fica com ~1/c do
+    talhao, sempre. Quem ja trabalha com quintis conta com essa previsibilidade
+    (e com o fato de dois talhoes serem comparaveis entre si), e o resultado do
+    FCM parece "errado" para essa pessoa mesmo estando certo.
+
+    Com varias camadas usa a media das colunas normalizadas (mesmo composto que
+    a ordenacao Alta->Baixa ja utiliza), para o comportamento nao mudar quando
+    se acrescenta uma camada.
+    """
+    v = X.mean(axis=1) if X.ndim > 1 and X.shape[1] > 1 else X.reshape(-1)
+    c = max(2, int(c))
+    # Cortes interiores: c classes -> c-1 cortes (c=5 -> P20/P40/P60/P80).
+    cortes = np.quantile(v, [i / c for i in range(1, c)])
+    # Empates (raster com platos) achatam cortes vizinhos e criariam classes
+    # vazias; np.unique evita isso — o resultado sai com MENOS classes, o que e
+    # honesto: o dado nao tinha variacao para separar todas.
+    cortes = np.unique(cortes)
+    return np.searchsorted(cortes, v, side="right").astype(int)
+
+
 def _kmeans_labels(X: np.ndarray, c: int, seed: int = 0) -> np.ndarray:
     try:
         _, labels = kmeans2(X, c, minit="++", seed=seed, missing="warn")
@@ -833,7 +859,9 @@ def gerar_multi(camadas: list[dict], bounds, dims, n_classes: int,
     c_sel = int(n_classes) if int(n_classes) >= 2 else 3
     c_sel = min(c_sel, idx.shape[0])
 
-    if algoritmo == "kmeans":
+    if algoritmo == "quantis":
+        labels = _labels_quantis(Xn, c_sel)
+    elif algoritmo == "kmeans":
         labels = _kmeans_labels(Xn, c_sel, seed=seed)
     else:
         U, _ = _fcm(Xn, c_sel, seed=seed)

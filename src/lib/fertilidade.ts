@@ -211,7 +211,10 @@ export async function gerarZonas(params: {
   shape: [number, number];
   nClasses: number;
   poligono?: GeoJSON.Polygon | GeoJSON.MultiPolygon | null;
-  algoritmo?: 'fcm' | 'kmeans';
+  /** 'quantis' não aparece em analisarZonas de propósito: a curva FPI/NCE
+   *  mede separação de CLUSTERS, e o quantil não agrupa — ele fatia por área.
+   *  Perguntar "qual o melhor nº de zonas" não faz sentido ali. */
+  algoritmo?: 'fcm' | 'kmeans' | 'quantis';
   areaMinHa?: number;
   pesos?: number[] | null;
 }): Promise<RespGerarZonas> {

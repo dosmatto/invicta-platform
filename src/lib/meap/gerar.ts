@@ -356,7 +356,7 @@ export async function gerarMulti(opts: {
   chaves: string[];
   nClasses: number;
   poligono?: GeoJSON.Polygon | GeoJSON.MultiPolygon | null;
-  algoritmo?: 'fcm' | 'kmeans';
+  algoritmo?: 'fcm' | 'kmeans' | 'quantis';
   areaMinHa?: number;
   pesos?: Record<string, number>;
 }): Promise<RespGerarZonas> {
