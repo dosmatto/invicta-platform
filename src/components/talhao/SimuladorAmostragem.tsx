@@ -7,8 +7,10 @@ import { rotuloAno, hojeSaoPauloISO, periodoDeData, rotuloEpoca } from '@/lib/pe
 import { gerarGrid, anguloMaiorDimensao, criarValidador, ModoDistribuicao } from '@/lib/grid';
 import { exportarKML, exportarSHP } from '@/lib/exportGrade';
 import { gerarEtiquetasPDF, itensDeGrade, LAYOUTS_ETIQUETA } from '@/lib/etiquetas';
+import { exportarRelatorioGradeXlsx } from '@/lib/relatorioGrade';
+import { getFazendas } from '@/lib/store';
 import { pode } from '@/lib/empresa';
-import { AlertTriangle, RotateCcw, Shuffle, Layers, MapPin, Save, Trash2, CheckCircle2, Circle, Pencil, Move, Plus, Eraser, X, Check, Download, Printer, Eye } from 'lucide-react';
+import { AlertTriangle, RotateCcw, Shuffle, Layers, MapPin, Save, Trash2, CheckCircle2, Circle, Pencil, Move, Plus, Eraser, X, Check, Download, Printer, Eye, FileSpreadsheet } from 'lucide-react';
 
 // PRNG simples para shuffle determinístico
 function shuffleSeed<T>(arr: T[], seed: number): T[] {
@@ -263,6 +265,24 @@ export function SimuladorAmostragem({ safraNome: safraProp }: { safraNome?: stri
     const input = { talhaoNome: nav.talhao || 'Talhao', poligono: uploadedGeo, pontos: g.pontos };
     if (formato === 'kml') exportarKML(input, g.nome);
     else exportarSHP(input, g.nome).catch(err => console.error('Erro ao exportar SHP:', err));
+  }
+
+  // Conferência da grade em Excel: mesmo formato da planilha que já vai ao
+  // laboratório (uma linha por ponto × profundidade). O mapa
+  // profundidade → análise sai da config da grade, não do padrão atual: a
+  // planilha precisa refletir o que foi PROGRAMADO naquela grade, mesmo que o
+  // padrão tenha sido editado depois.
+  function exportarConferencia(g: GradeAmostragem) {
+    const faz = getFazendas().find(f => f.id === nav.fazendaId);
+    const analisePorProfundidade: Record<string, string> = {};
+    for (const p of g.profundidades) analisePorProfundidade[p.rotulo] = nomeElem(p.padraoElementosId);
+    exportarRelatorioGradeXlsx({
+      produtor: nav.produtor || '—',
+      municipio: faz?.municipio || '—',
+      fazenda: nav.fazenda || '—',
+      talhao: nav.talhao || '—',
+      analisePorProfundidade,
+    }, g).catch(err => console.error('Erro ao gerar conferência da grade:', err));
   }
 
   function gerarEtiquetas(g: GradeAmostragem) {
@@ -581,6 +601,11 @@ export function SimuladorAmostragem({ safraNome: safraProp }: { safraNome?: stri
                   <button onClick={() => gerarEtiquetas(g)} title="Etiquetas (PDF)"
                     className="flex items-center gap-1 text-[9px] px-2 py-0.5 rounded font-semibold" style={{ background: '#065f46', color: '#a7f3d0' }}>
                     <Printer size={9} /> Etiquetas
+                  </button>
+                  <button onClick={() => exportarConferencia(g)}
+                    title="Conferência (Excel) — uma linha por ponto × profundidade, com as análises de cada uma"
+                    className="flex items-center gap-1 text-[9px] px-2 py-0.5 rounded font-semibold" style={{ background: '#1e3a2f', color: '#86efac' }}>
+                    <FileSpreadsheet size={9} /> Conferência
                   </button>
                 </div>
               </div>

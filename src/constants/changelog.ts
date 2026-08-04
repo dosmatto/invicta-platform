@@ -1,5 +1,9 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.13.0': [
+    'CONFERÊNCIA DA GRADE EM EXCEL (novo): nas grades salvas do talhão (aba Amostragem → Grid), ao lado de KML · SHP · Etiquetas, entrou o botão "Conferência". Ele baixa uma planilha no mesmo formato que já circula com o laboratório — Produtor · Município · Fazenda · Talhão · ID · Profundidade · Análises — com UMA LINHA POR PONTO × PROFUNDIDADE. Serve para conferir, depois da amostragem, exatamente o que foi programado: o ponto que vai a 0-20 e 20-40 aparece em duas linhas, então o total de linhas bate com o número de sacos que sai do campo e com as etiquetas impressas (que usam a mesma expansão).',
+    'A coluna Análises vem do padrão de elementos de CADA profundidade daquela grade (ex.: "Rotina + S" na superfície e "Rotina + Textura + Micro" na profunda) — e sai da configuração salva na grade, não do padrão atual, para a planilha refletir o que foi realmente programado mesmo que o padrão tenha sido editado depois. Profundidade sem padrão casado aparece como "—" em vez de sumir da lista, para o erro de cadastro ficar visível na conferência.',
+  ],
   '2.12.3': [
     'SELETOR DE ANO AO LADO DA CULTURA (talhão): o seletor de Ano estava sozinho na ponta DIREITA do cabeçalho, longe do resto do contexto — quem abria o talhão não achava, e é ele que filtra tudo o que a página mostra. Agora fica na mesma linha de Cliente · Fazenda · Talhão · Área, logo ANTES da Cultura — que é a ordem certa, porque trocar o ano recarrega a cultura daquele ano. Nada mudou no funcionamento: só saiu de onde ninguém via para onde a informação é lida.',
   ],
