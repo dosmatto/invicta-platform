@@ -16,13 +16,14 @@ export const ROTULO_TIPO: Record<TipoPrescricao, string> = {
   personalizado: 'Produto personalizado',
 };
 
-export type ModoCalculo = 'manual' | 'estoque' | 'proporcional' | 'equacao';
+export type ModoCalculo = 'manual' | 'estoque' | 'proporcional' | 'equacao' | 'ajuste';
 
 export const ROTULO_MODO: Record<ModoCalculo, string> = {
   manual: 'Dose manual por zona',
   estoque: 'Quantidade total disponível',
   proporcional: 'Distribuição proporcional',
   equacao: 'Por equação salva',
+  ajuste: 'Dose base + ajuste % por zona',
 };
 
 // Unidade da DOSE (por hectare). O total usa a unidade-base correspondente
@@ -78,6 +79,13 @@ export interface ParamsCalculo {
   // proporcional
   doseMedia?: number;
   variacaoPct?: number;
+  // ajuste % por zona
+  doseBase?: number;
+  /** idZona → ajuste em % sobre a dose base (ex.: −20). */
+  ajustePct?: Record<string, number>;
+  /** 'livre': o total é consequência (quanto comprar). 'total': crava o
+   *  totalDisponivel, preservando as proporções entre as zonas. */
+  cenarioAjuste?: 'livre' | 'total';
   // fluxos específicos
   sementes?: ParamsSementes;
   organico?: AnaliseOrganico;

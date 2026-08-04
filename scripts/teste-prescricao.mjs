@@ -5,7 +5,7 @@
 // por incremento de máquina, nem com estoque insuficiente. Prescrição vai para
 // a máquina no campo; estourar estoque aqui vira caminhão faltando lá.
 import assert from 'node:assert/strict';
-import { redistribuirPorEstoque, distribuirProporcional, resumoDoses, nutrientesPorZona, pesoDoRank, fatorBaseDose } from '../src/lib/prescricao/calculo.ts';
+import { redistribuirPorEstoque, distribuirProporcional, distribuirPorAjuste, resumoDoses, nutrientesPorZona, pesoDoRank, fatorBaseDose } from '../src/lib/prescricao/calculo.ts';
 import { fatorCampo, sementesPorHa, metricasSementes, estoqueTotalSementes, distribuirSementes } from '../src/lib/prescricao/sementes.ts';
 import { dosesPorEquacao, variaveisDaEquacao } from '../src/lib/prescricao/equacao.ts';
 
@@ -214,6 +214,102 @@ t('respeita naoNegativo e doseMaxima da equação', () => {
 t('equação inválida não lança — reporta erro de compilação', () => {
   const { erroCompilacao, doses } = dosesPorEquacao([{ id: 'a' }], { a: {} }, { ...EQ, script: 'dose = (70 - ' });
   assert.ok(erroCompilacao && doses.every(d => Number.isNaN(d.dose)));
+});
+
+console.log('\nAjuste percentual por zona\n');
+
+// Mapa-molde: 3 zonas de 10 ha. Ajustes −20% / 0% / +20% sobre uma base de 100.
+const ZA = [{ id: 'baixa', areaHa: 10 }, { id: 'media', areaHa: 10 }, { id: 'alta', areaHa: 10 }];
+const AJ3 = { baixa: -20, media: 0, alta: 20 };
+
+t('cenário livre: dose = base × fator, total é consequência', () => {
+  const r = distribuirPorAjuste(ZA, { doseBase: 100, ajustePct: AJ3, cenario: 'livre' });
+  assert.equal(r.doses.baixa, 80);
+  assert.equal(r.doses.media, 100);
+  assert.equal(r.doses.alta, 120);
+  assert.ok(Math.abs(r.usado - 3000) < 1e-9, '80·10 + 100·10 + 120·10');
+});
+
+t('cenário total: consome EXATAMENTE o disponível', () => {
+  const r = distribuirPorAjuste(ZA, { doseBase: 999, ajustePct: AJ3, cenario: 'total', totalDisponivel: 3000 });
+  assert.ok(Math.abs(r.usado - 3000) < 1e-6, 'o total dado manda; a doseBase é só partida');
+  assert.ok(Math.abs(r.sobra) < 1e-6);
+});
+
+t('cenário total: preserva as PROPORÇÕES entre zonas', () => {
+  const r = distribuirPorAjuste(ZA, { doseBase: 1, ajustePct: AJ3, cenario: 'total', totalDisponivel: 6000 });
+  assert.ok(Math.abs(r.doses.alta / r.doses.baixa - 120 / 80) < 1e-9);
+  assert.ok(Math.abs(r.doses.media / r.doses.baixa - 100 / 80) < 1e-9);
+});
+
+t('cenário total respeita a ÁREA de cada zona (mapa desbalanceado)', () => {
+  const zonas = [{ id: 'a', areaHa: 5 }, { id: 'b', areaHa: 45 }];
+  const r = distribuirPorAjuste(zonas, { doseBase: 1, ajustePct: { a: 50, b: 0 }, cenario: 'total', totalDisponivel: 1000 });
+  assert.ok(Math.abs(r.usado - 1000) < 1e-6);
+  assert.ok(Math.abs(r.doses.a / r.doses.b - 1.5) < 1e-9);
+});
+
+t('ajuste ausente vale 0% (zona fica na dose base)', () => {
+  const r = distribuirPorAjuste(ZA, { doseBase: 50, ajustePct: { alta: 10 }, cenario: 'livre' });
+  assert.equal(r.doses.baixa, 50);
+  assert.equal(r.doses.media, 50);
+  assert.ok(Math.abs(r.doses.alta - 55) < 1e-9);   // 50×1,1 em IEEE754 não é exato
+});
+
+t('ajuste de −100% zera a zona (não aplicar ali)', () => {
+  const r = distribuirPorAjuste(ZA, { doseBase: 100, ajustePct: { ...AJ3, baixa: -100 }, cenario: 'livre' });
+  assert.equal(r.doses.baixa, 0);
+});
+
+t('ajuste abaixo de −100% NÃO gera dose negativa', () => {
+  const r = distribuirPorAjuste(ZA, { doseBase: 100, ajustePct: { baixa: -180 }, cenario: 'livre' });
+  assert.equal(r.doses.baixa, 0, 'trava em 0, não inverte o sinal');
+  assert.ok(r.usado >= 0);
+});
+
+t('sementes/m: o fatorBase entra na conta do total', () => {
+  // espaçamento 0,5 m → 20.000 m de linha por ha → fatorBase 20.000.
+  const fb = fatorBaseDose('sementes/m', 0.5);
+  assert.equal(fb, 20000);
+  const r = distribuirPorAjuste([{ id: 'a', areaHa: 10 }],
+    { doseBase: 1, ajustePct: {}, cenario: 'total', totalDisponivel: 2_000_000, fatorBase: fb });
+  assert.ok(Math.abs(r.usado - 2_000_000) < 1e-3);
+  assert.ok(Math.abs(r.doses.a - 10) < 1e-9, '2.000.000 / (20.000 · 10 ha) = 10 sementes/m');
+});
+
+t('limites e incremento aplicam — e o desvio do total é AVISADO', () => {
+  const r = distribuirPorAjuste(ZA, {
+    doseBase: 1, ajustePct: AJ3, cenario: 'total', totalDisponivel: 3000, doseMax: 90,
+  });
+  assert.ok(r.doses.alta <= 90, 'o teto vale');
+  assert.ok(r.avisos.length > 0, 'o usuário precisa saber que a conta não fechou exata');
+});
+
+t('incremento coloca as doses na grade da máquina', () => {
+  const r = distribuirPorAjuste(ZA, { doseBase: 100, ajustePct: AJ3, cenario: 'livre', incremento: 25 });
+  for (const d of Object.values(r.doses)) assert.equal(d % 25, 0);
+});
+
+t('total sem quantidade informada não inventa dose', () => {
+  const r = distribuirPorAjuste(ZA, { doseBase: 100, ajustePct: AJ3, cenario: 'total' });
+  assert.ok(Object.values(r.doses).every(d => d === 0));
+  assert.ok(r.avisos.length > 0);
+});
+
+t('todos os ajustes em −100%: avisa em vez de dividir por zero', () => {
+  const r = distribuirPorAjuste(ZA, {
+    doseBase: 100, ajustePct: { baixa: -100, media: -100, alta: -100 },
+    cenario: 'total', totalDisponivel: 1000,
+  });
+  assert.ok(r.avisos.length > 0);
+  assert.ok(Number.isFinite(r.usado));
+});
+
+t('zona sem área não entra na conta', () => {
+  const r = distribuirPorAjuste([{ id: 'a', areaHa: 10 }, { id: 'vazia', areaHa: 0 }],
+    { doseBase: 100, ajustePct: {}, cenario: 'total', totalDisponivel: 1000 });
+  assert.equal(r.doses.vazia, 0);
+  assert.ok(Math.abs(r.usado - 1000) < 1e-6, 'o total inteiro vai para a zona com área');
 });
 
 console.log('\nResumo e nutrientes\n');

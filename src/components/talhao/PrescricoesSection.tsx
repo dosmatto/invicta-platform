@@ -18,7 +18,7 @@ import {
 import { emailUsuario } from '@/lib/empresa';
 import { listar as bibListar, type ItemBiblioteca, type ConteudoEquacao } from '@/lib/biblioteca';
 import {
-  redistribuirPorEstoque, distribuirProporcional, resumoDoses, nutrientesPorZona, pesoDoRank,
+  redistribuirPorEstoque, distribuirProporcional, distribuirPorAjuste, resumoDoses, nutrientesPorZona, pesoDoRank,
 } from '@/lib/prescricao/calculo';
 import { dosesPorEquacao, variaveisDaEquacao } from '@/lib/prescricao/equacao';
 import {
@@ -171,6 +171,21 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
           // valorBase = potencial da zona (rank 1 = maior) → valor MAIOR
           r.zonas.map(z => ({ id: z.idZona, areaHa: z.areaHa, valorBase: nRanks - (z.potencialRank ?? Math.ceil(nRanks / 2)) + 1 })),
           { doseMedia: pr.doseMedia, variacaoPct: pr.variacaoPct ?? 20, relacao: rel, doseMin: pr.doseMin, doseMax: pr.doseMax },
+        );
+        patch({ zonas: r.zonas.map(z => ({ ...z, dose: res.doses[z.idZona] ?? 0 })) });
+        setAvisosCalc(res.avisos);
+      } else if (r.modo === 'ajuste') {
+        const cen = pr.cenarioAjuste ?? 'livre';
+        if (cen === 'livre' && !(pr.doseBase && pr.doseBase > 0)) { setErro('Informe a dose base.'); return; }
+        if (cen === 'total' && !(pr.totalDisponivel && pr.totalDisponivel > 0)) { setErro('Informe a quantidade total disponível.'); return; }
+        if (fatorBase == null) { setErro('Para dose em sementes por metro, informe o espaçamento entre linhas.'); return; }
+        const res = distribuirPorAjuste(
+          r.zonas.map(z => ({ id: z.idZona, areaHa: z.areaHa })),
+          {
+            doseBase: pr.doseBase ?? 0, ajustePct: pr.ajustePct ?? {}, cenario: cen,
+            totalDisponivel: pr.totalDisponivel, fatorBase,
+            doseMin: pr.doseMin, doseMax: pr.doseMax, incremento: pr.incremento,
+          },
         );
         patch({ zonas: r.zonas.map(z => ({ ...z, dose: res.doses[z.idZona] ?? 0 })) });
         setAvisosCalc(res.avisos);
@@ -491,6 +506,65 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
                     <SeletorRelacao relacao={r.params.relacao ?? 'direta'} onMudou={rel => patchParams({ relacao: rel })} />
                     <button onClick={calcular} className="px-3 py-1.5 rounded text-[10px] font-bold text-white flex items-center gap-1.5" style={{ background: 'var(--invicta-green-dark)' }}>
                       <RefreshCw size={11} /> Calcular doses proporcionais
+                    </button>
+                  </div>
+                )}
+
+                {/* ── Modo AJUSTE: dose base + % digitado por zona ──
+                    O agrônomo dita o percentual de cada zona (é como a decisão
+                    já vem pronta do campo). Dois cenários com a MESMA tabela:
+                    "livre" diz quanto comprar; "total" crava o que existe. */}
+                {r.modo === 'ajuste' && (
+                  <div className="p-2.5 rounded-lg space-y-2" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
+                    <div className="flex items-center gap-1.5">
+                      {([['livre', 'Livre — total é consequência'], ['total', 'Total fixo — consome o disponível']] as const).map(([id, rot]) => (
+                        <button key={id} onClick={() => patchParams({ cenarioAjuste: id })}
+                          className="px-2 py-1 rounded text-[10px] font-semibold"
+                          style={{ background: (r.params.cenarioAjuste ?? 'livre') === id ? 'var(--invicta-blue-mid)' : '#0f2240', color: (r.params.cenarioAjuste ?? 'livre') === id ? '#fff' : '#93c5fd' }}>
+                          {rot}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="grid grid-cols-4 gap-2">
+                      {(r.params.cenarioAjuste ?? 'livre') === 'livre' ? (
+                        <Campo rotulo={`Dose base (${r.unidade}) *`}>
+                          <InputNum valor={r.params.doseBase} onMudou={v => patchParams({ doseBase: v })} />
+                        </Campo>
+                      ) : (
+                        <Campo rotulo={`Total disponível (${UNIDADE_TOTAL[r.unidade]}) *`}>
+                          <InputNum valor={r.params.totalDisponivel} onMudou={v => patchParams({ totalDisponivel: v })} />
+                        </Campo>
+                      )}
+                      <Campo rotulo={`Dose mín (${r.unidade})`}>
+                        <InputNum valor={r.params.doseMin} onMudou={v => patchParams({ doseMin: v })} />
+                      </Campo>
+                      <Campo rotulo={`Dose máx (${r.unidade})`}>
+                        <InputNum valor={r.params.doseMax} onMudou={v => patchParams({ doseMax: v })} />
+                      </Campo>
+                      <Campo rotulo={`Incremento (${r.unidade})`}>
+                        <InputNum valor={r.params.incremento} onMudou={v => patchParams({ incremento: v })} />
+                      </Campo>
+                    </div>
+                    <div>
+                      <p className="text-[9px] mb-1" style={{ color: '#64748b' }}>
+                        Ajuste por zona (%) — negativo aplica menos, positivo aplica mais. −100% não aplica na zona.
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {r.zonas.map(z => (
+                          <div key={z.idZona} className="flex items-center gap-1 px-1.5 py-1 rounded" style={{ background: '#0f2240' }}>
+                            <span className="inline-block w-2 h-2 rounded-full" style={{ background: z.cor }} />
+                            <span className="text-[9px]" style={{ color: '#cbd5e1' }}>{z.nomeZona}</span>
+                            <input type="number" step="1"
+                              value={r.params.ajustePct?.[z.idZona] ?? 0}
+                              onChange={e => patchParams({ ajustePct: { ...(r.params.ajustePct ?? {}), [z.idZona]: Number(e.target.value) } })}
+                              className="w-14 rounded px-1 py-0.5 text-[10px] text-right outline-none" style={inputStyle} />
+                            <span className="text-[9px]" style={{ color: '#64748b' }}>%</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <button onClick={calcular} className="px-3 py-1.5 rounded text-[10px] font-bold text-white flex items-center gap-1.5" style={{ background: 'var(--invicta-green-dark)' }}>
+                      <RefreshCw size={11} /> Calcular doses por ajuste
                     </button>
                   </div>
                 )}

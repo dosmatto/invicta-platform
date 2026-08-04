@@ -180,6 +180,85 @@ export function distribuirProporcional(
   return { doses, usado, sobra: 0, falta: 0, avisos };
 }
 
+// Distribuição por AJUSTE PERCENTUAL EXPLÍCITO por zona — o jeito como o
+// agrônomo de fato pensa ("na zona fraca, 20% menos semente"), e o modelo do
+// script de taxa variável que a equipe usa no QGIS.
+//
+// Difere de distribuirProporcional: lá a dose é DERIVADA de um valor-base
+// (potencial, teor) por uma curva; aqui o agrônomo DITA o percentual de cada
+// zona. Um não substitui o outro — quem tem a decisão pronta não quer que o
+// sistema a recalcule.
+//
+// Dois cenários, a mesma tabela de ajustes:
+//   'livre'  → dose = base × fator. O total é CONSEQUÊNCIA (quanto comprar).
+//   'total'  → o total é DADO; a base é recalculada para consumi-lo por inteiro,
+//              preservando as proporções entre zonas:
+//                  base_ef = total / (fatorBase · Σ área·fator)
+// O 'total' é o mesmo problema do modo estoque, com uma diferença que importa:
+// lá os pesos saem do rank do zoneamento, aqui saem do percentual digitado.
+export interface OpcoesAjuste extends OpcoesEstoque {
+  /** Dose da zona neutra (ajuste 0%). No cenário 'total' serve só de partida. */
+  doseBase: number;
+  /** idZona → ajuste em % (ex.: −20 = 20% a menos). Ausente = 0%. */
+  ajustePct: Record<string, number>;
+  cenario: 'livre' | 'total';
+  /** Exigido no cenário 'total' (na unidade-base: kg, sementes, L…). */
+  totalDisponivel?: number;
+  /** Conversão dose×ha → unidade-base (ver fatorBaseDose). Default 1. */
+  fatorBase?: number;
+}
+
+export function distribuirPorAjuste(
+  zonas: Array<{ id: string; areaHa: number }>, op: OpcoesAjuste,
+): ResultadoDistribuicao {
+  const avisos: string[] = [];
+  const doses: Record<string, number> = Object.fromEntries(zonas.map(z => [z.id, 0]));
+  const validas = zonas.filter(z => z.areaHa > EPS);
+  if (!validas.length) return { doses, usado: 0, sobra: 0, falta: 0, avisos };
+
+  const fatorBase = op.fatorBase && op.fatorBase > 0 ? op.fatorBase : 1;
+  // Fator negativo não tem significado agronômico (dose negativa); trava em 0,
+  // que é "não aplicar nesta zona" — intenção legítima e que o resto respeita.
+  const fator = (id: string) => Math.max(0, 1 + (op.ajustePct[id] ?? 0) / 100);
+
+  let base = op.doseBase;
+  if (op.cenario === 'total') {
+    const total = op.totalDisponivel ?? 0;
+    const soma = validas.reduce((s, z) => s + z.areaHa * fator(z.id), 0);
+    if (!(total > 0)) return { doses, usado: 0, sobra: 0, falta: 0, avisos: ['Informe a quantidade total disponível.'] };
+    if (soma <= EPS) return { doses, usado: 0, sobra: total, falta: 0, avisos: ['Todos os ajustes zeraram as doses — nada a distribuir.'] };
+    base = total / (soma * fatorBase);
+  }
+
+  for (const z of validas) doses[z.id] = base * fator(z.id);
+
+  // Limites e passo da máquina. Aplicá-los DEPOIS quebra o total exato do
+  // cenário 'total' — por isso o aviso: melhor o usuário saber que a conta
+  // fechou "quase" do que descobrir na hora de carregar a máquina.
+  const temLimite = op.doseMin != null || op.doseMax != null || (op.incremento ?? 0) > 0;
+  if (temLimite) {
+    for (const z of validas) {
+      let d = Math.min(op.doseMax ?? Infinity, Math.max(op.doseMin ?? 0, doses[z.id]));
+      if ((op.incremento ?? 0) > 0) d = Math.round(d / op.incremento!) * op.incremento!;
+      doses[z.id] = d;
+    }
+  }
+
+  const usado = validas.reduce((s, z) => s + doses[z.id] * z.areaHa, 0) * fatorBase;
+
+  if (op.cenario === 'total') {
+    const total = op.totalDisponivel ?? 0;
+    const desvio = usado - total;
+    if (Math.abs(desvio) / total > 0.001) {
+      avisos.push(desvio > 0
+        ? `Os limites/incremento levaram o total a ultrapassar o disponível em ${arred(desvio)}.`
+        : `Os limites/incremento deixaram sobrar ${arred(-desvio)} do total disponível.`);
+    }
+    return { doses, usado, sobra: Math.max(0, total - usado), falta: Math.max(0, usado - total), avisos };
+  }
+  return { doses, usado, sobra: 0, falta: 0, avisos };
+}
+
 // Resumo operacional (cartão final e validação pré-exportação).
 export interface ResumoPrescricao {
   areaHa: number;
