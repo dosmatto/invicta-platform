@@ -826,11 +826,16 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
               </div>
             </div>
 
-            <button onClick={analisar} disabled={analisando || chaves.length === 0}
-              className="w-full py-2 rounded text-xs font-bold text-white flex items-center justify-center gap-2"
-              style={{ background: analisando ? '#1a3a6b' : '#1d4ed8', opacity: analisando || chaves.length === 0 ? 0.7 : 1 }}>
-              {analisando ? <><Loader2 size={13} className="animate-spin" /> Analisando…</> : <><BarChart3 size={13} /> Analisar (FPI × NCE)</>}
-            </button>
+            {/* FPI/NCE mede separação de AGRUPAMENTOS: no modo quantis não há o
+                que medir (o quantil fatia por área, não agrupa), e um botão que
+                devolve uma curva sem sentido ali só induz ao erro. */}
+            {algoritmo !== 'quantis' && (
+              <button onClick={analisar} disabled={analisando || chaves.length === 0}
+                className="w-full py-2 rounded text-xs font-bold text-white flex items-center justify-center gap-2"
+                style={{ background: analisando ? '#1a3a6b' : '#1d4ed8', opacity: analisando || chaves.length === 0 ? 0.7 : 1 }}>
+                {analisando ? <><Loader2 size={13} className="animate-spin" /> Analisando…</> : <><BarChart3 size={13} /> Analisar (FPI × NCE)</>}
+              </button>
+            )}
 
             {/* ───── ETAPA 2 — Analisar (quantas zonas?) ─────
                 No modo QUANTIS o bloco abre direto: a curva FPI/NCE mede
