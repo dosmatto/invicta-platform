@@ -7,7 +7,7 @@ import {
   getImportacoesLab, saveImportacaoLab, deleteImportacaoLab, getVariaveisAtivas, siglaVariavel,
   GradeAmostragem, ImportacaoLab,
 } from '@/lib/store';
-import { lerArquivo, aplicarPerfil, autoConfig, PERFIS_BUILTIN, norm, numerosDaGrade, valorLab, calcularDerivados, DERIVADOS_IDS, ELEMENTOS_LAB, PerfilLabConfig, type ResultadoAmostra } from '@/lib/lab';
+import { lerArquivo, aplicarPerfil, autoConfig, PERFIS_BUILTIN, PERFIL_PADRAO, escolherPerfil, pontuarPerfil, CONFIANCA_MINIMA, norm, numerosDaGrade, valorLab, calcularDerivados, DERIVADOS_IDS, ELEMENTOS_LAB, PerfilLabConfig, type ResultadoAmostra } from '@/lib/lab';
 import { unidadesDe, unidadeCanonica, precisaConverter } from '@/lib/unidades';
 import { hojeSaoPauloISO, periodoDeData, rotuloEpoca, anoDaSafra } from '@/lib/periodo';
 import { detectarOutliers, chaveAmostra, contarOutliers } from '@/lib/labOutliers';
@@ -30,7 +30,7 @@ export function LabImportSection({ safraNome: safraProp }: { safraNome?: string 
   const [grades, setGrades] = useState<GradeAmostragem[]>([]);
   const [gradeId, setGradeId] = useState('');
   const [perfis, setPerfis] = useState(() => getPerfisLab());
-  const [perfilId, setPerfilId] = useState(PERFIS_BUILTIN[0].id);
+  const [perfilId, setPerfilId] = useState(PERFIL_PADRAO);
   const [nomeNovoLab, setNomeNovoLab] = useState('');
   const [aoa, setAoa] = useState<string[][] | null>(null);
   const [talhaoFiltro, setTalhaoFiltro] = useState('');
@@ -61,13 +61,19 @@ export function LabImportSection({ safraNome: safraProp }: { safraNome?: string 
   const grade = grades.find(g => g.id === gradeId) ?? null;
 
   // perfil/config selecionado
-  const { cfg, perfilNome, ehAuto } = useMemo<{ cfg: PerfilLabConfig | null; perfilNome: string; ehAuto: boolean }>(() => {
-    if (perfilId === 'auto') return { cfg: aoa ? autoConfig(aoa, getVariaveisAtivas()).config : null, perfilNome: nomeNovoLab.trim() || 'Novo laboratório', ehAuto: true };
+  // `posicional` = a config tem colunas FIXAS (não sai do cabeçalho do arquivo).
+  // É o único caso em que o perfil pode casar por acaso e importar tudo trocado.
+  const { cfg, perfilNome, ehAuto, posicional } = useMemo<{ cfg: PerfilLabConfig | null; perfilNome: string; ehAuto: boolean; posicional: boolean }>(() => {
+    const doArquivo = () => (aoa ? autoConfig(aoa, getVariaveisAtivas()).config : null);
+    if (perfilId === 'auto') return { cfg: doArquivo(), perfilNome: nomeNovoLab.trim() || 'Novo laboratório', ehAuto: true, posicional: false };
     const b = PERFIS_BUILTIN.find(p => p.id === perfilId);
-    if (b) return { cfg: b.config, perfilNome: b.nome, ehAuto: false };
+    // Perfil de layout em COLUNAS (nº de colunas varia por laudo): as colunas
+    // saem do cabeçalho do próprio arquivo, não de índices fixos.
+    if (b?.auto) return { cfg: doArquivo(), perfilNome: b.nome, ehAuto: false, posicional: false };
+    if (b) return { cfg: b.config, perfilNome: b.nome, ehAuto: false, posicional: true };
     const c = perfis.find(p => p.id === perfilId);
-    if (c) return { cfg: c.config, perfilNome: c.nome, ehAuto: false };
-    return { cfg: null, perfilNome: '', ehAuto: false };
+    if (c) return { cfg: c.config, perfilNome: c.nome, ehAuto: false, posicional: true };
+    return { cfg: null, perfilNome: '', ehAuto: false, posicional: false };
   }, [perfilId, aoa, perfis, nomeNovoLab]);
 
   // Aplica os overrides de unidade escolhidos na tela sobre o perfil.
@@ -80,6 +86,12 @@ export function LabImportSection({ safraNome: safraProp }: { safraNome?: string 
   }, [cfg, unidadeOverride]);
 
   const aplic = useMemo(() => (aoa && cfgEfetivo) ? aplicarPerfil(aoa, cfgEfetivo) : null, [aoa, cfgEfetivo]);
+
+  // Perfil posicional que "funciona" no arquivo errado é pior do que perfil que
+  // não funciona: entram todas as amostras, com os valores de outras colunas, e
+  // nada avisa. Só a conferência do cabeçalho denuncia.
+  const pont = useMemo(() => (aoa && cfg && posicional) ? pontuarPerfil(aoa, cfg, getVariaveisAtivas()) : null, [aoa, cfg, posicional]);
+  const perfilSuspeito = !!pont && pont.esperados > 0 && pont.confianca < CONFIANCA_MINIMA;
 
   const talhaoAuto = aplic ? (aplic.talhoes.find(t => matchN(t, nav.talhao)) ?? aplic.talhoes[0] ?? '') : '';
   const talhaoEscolhido = talhaoFiltro || talhaoAuto;
@@ -151,6 +163,10 @@ export function LabImportSection({ safraNome: safraProp }: { safraNome?: string 
     try {
       const m = await lerArquivo(file);
       if (m.length < 2) throw new Error('Não consegui ler linhas do arquivo.');
+      // Pré-seleciona o perfil que casa com ESTE arquivo. Sem isto a tela ficava
+      // no primeiro perfil da lista e um laudo de outro layout dava "Nenhuma
+      // amostra" — que se lê como "o app não reconheceu a planilha".
+      setPerfilId(escolherPerfil(m, getPerfisLab(), getVariaveisAtivas()));
       setAoa(m); setEstado('pronto');
     } catch (e: unknown) {
       setEstado('erro'); setErro(e instanceof Error ? e.message : 'Erro ao ler o arquivo.');
@@ -229,6 +245,18 @@ export function LabImportSection({ safraNome: safraProp }: { safraNome?: string 
       {/* Pré-visualização / filtros */}
       {aplic && estado === 'pronto' && (
         <div className="space-y-2 p-2.5 rounded-lg" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
+          {/* Perfil de colunas fixas aplicado no arquivo errado: importa TUDO
+              trocado (o pH do laudo entrando como P…) sem erro nenhum. */}
+          {perfilSuspeito && pont && (
+            <div className="flex items-start gap-1.5 p-2 rounded" style={{ background: '#2d1a00', border: '1px solid #92400e' }}>
+              <AlertTriangle size={12} style={{ color: '#fbbf24' }} className="flex-shrink-0 mt-0.5" />
+              <p className="text-[9px]" style={{ color: '#fbbf24' }}>
+                <strong>Este perfil não parece ser deste arquivo:</strong> {pont.esperados - pont.acertos} de {pont.esperados} colunas não batem com o cabeçalho
+                {pont.exemplo && <> (espera <strong>{siglaVariavel(pont.exemplo.elId)}</strong> na coluna {pont.exemplo.coluna + 1}, e o arquivo tem &quot;{pont.exemplo.cabecalho || '—'}&quot; ali)</>}.
+                Escolha o perfil certo ou &quot;Detectar automaticamente&quot; — importar assim grava os valores nas variáveis erradas.
+              </p>
+            </div>
+          )}
           {aplic.talhoes.length > 0 && (
             <div>
               <label className="text-[9px] font-semibold block" style={{ color: '#64748b' }}>Talhão no arquivo</label>

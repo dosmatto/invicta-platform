@@ -28,7 +28,8 @@
     "teste:relatorio-grade": "node scripts/teste-relatorio-grade.mjs",
     "teste:zonas-import": "node scripts/teste-zonas-import.mjs",
     "teste:nativo": "node scripts/teste-zoneamento-nativo.mjs",
-    "teste:versoes": "node scripts/teste-versoes-zonas.mjs"
+    "teste:versoes": "node scripts/teste-versoes-zonas.mjs",
+    "teste:lab": "node scripts/teste-lab-import.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",

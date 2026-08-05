@@ -1372,6 +1372,32 @@ export function garantirVariaveisComplementares() {
   }
 }
 
+// Sinônimos do SEED entram no catálogo JÁ MATERIALIZADO (união; nunca remove os
+// que o usuário criou). Sem isto, sinônimo novo só valia para instalação nova:
+// garantirVariaveisAnalise/Complementares são idempotentes POR ID e nunca tocam
+// no que já existe. Caso real (05/08/2026): 'mos' e 'pres' — os nomes que o laudo
+// InCeres usa para MO e P — continuariam sem mapear em todo mundo que já usa o app.
+export function migrarSinonimosSeedV1() {
+  if (typeof window === 'undefined') return;
+  if (localStorage.getItem('inv_migrado_sinonimos_seed_v1') === '1') return;
+  const itens = _itensVariaveis();
+  if (itens.length === 0) return;   // catálogo ainda não hidratado — tenta no próximo boot
+  const doSeed = new Map<string, string[]>();
+  for (const v of VARIAVEIS_SEED) doSeed.set(v.id, v.sinonimos);
+  for (const v of VARIAVEIS_COMPLEMENTARES) doSeed.set(v.id, v.sinonimos);
+  for (const it of itens) {
+    const base = doSeed.get(it.conteudo.varId);
+    if (!base?.length) continue;
+    const atuais = it.conteudo.sinonimos ?? [];
+    const faltando = base.filter(s => !atuais.includes(s));
+    if (faltando.length === 0) continue;
+    bibAtualizar<ConteudoVariavel>('preferencias-analise', it.id, {
+      conteudo: { ...it.conteudo, sinonimos: [...atuais, ...faltando] },
+    });
+  }
+  localStorage.setItem('inv_migrado_sinonimos_seed_v1', '1');
+}
+
 // Catálogo completo (fallback = seed em memória, p/ quem nunca abriu o painel).
 export function getVariaveisAnalise(): VariavelAnalise[] {
   const itens = _itensVariaveis();

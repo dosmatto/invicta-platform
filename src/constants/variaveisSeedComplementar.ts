@@ -53,13 +53,19 @@ export const VARIAVEIS_COMPLEMENTARES: VariavelComplementar[] = [
   // k_ppm SEM sinônimos (mapeamento só manual): se automapasse "K mg/K ppm", a
   // coluna deixaria de cair no 'k' canônico (que converte mg→mmolc ÷39,10) e o
   // K oficial ficaria vazio — sem K%, sem CTCe, sem mapa/equação de K.
-  { id: 'k_ppm', sigla: 'K mg', nome: 'Potássio em Miligramas',   unidade: 'ppm',       sinonimos: [],                                    usar: false },
+  // 'kmg'/'kppm' são seguros porque o 'k' canônico corre ANTES na ordem do
+  // catálogo (ORDEM_PADRAO_FERT) e já tomou a coluna "K"; num laudo que só tenha
+  // "K mg", esta fica com ela e a unidade ppm converte ÷39,10 — melhor do que o
+  // K ficar vazio. O que segue proibido é qualquer sinônimo que a faça vencer o
+  // 'k' na MESMA coluna.
+  { id: 'k_ppm', sigla: 'K mg', nome: 'Potássio em Miligramas',   unidade: 'ppm',       sinonimos: ['kmg', 'kppm'],                       usar: false },
   { id: 'h',     sigla: 'H',    nome: 'Hidrogênio',               unidade: 'cmolc/dm³', sinonimos: ['hidrogenio'],                        usar: false },
   { id: 'na',    sigla: 'Na',   nome: 'Sódio',                    unidade: 'cmolc/dm³', sinonimos: ['sodio'],                             usar: false },
-  { id: 'sb',    sigla: 'SB',   nome: 'Soma de Bases',            unidade: 'cmolc/dm³', sinonimos: ['somadebases', 'somabases'],          usar: false },
-  { id: 'ca_mg', sigla: 'Ca+Mg', nome: 'Soma Cálcio + Magnésio',  unidade: 'cmolc/dm³', sinonimos: ['somacalciomagnesio'],                usar: false },
-  { id: 'h_al',  sigla: 'H+Al', nome: 'Hidrogênio + Alumínio',    unidade: 'cmolc/dm³', sinonimos: ['hal', 'acidezpotencial'],            usar: false },
-  { id: 'h_pct', sigla: 'H%',   nome: 'Saturação de Hidrogênio',  unidade: '%',         sinonimos: ['saturacaohidrogenio'],               usar: false },
+  { id: 'sb',    sigla: 'SB',   nome: 'Soma de Bases',            unidade: 'cmolc/dm³', sinonimos: ['sb', 'somadebases', 'somabases'],    usar: false },
+  { id: 'ca_mg', sigla: 'Ca+Mg', nome: 'Soma Cálcio + Magnésio',  unidade: 'cmolc/dm³', sinonimos: ['ca+mg', 'somacalciomagnesio'],       usar: false },
+  { id: 'h_al',  sigla: 'H+Al', nome: 'Hidrogênio + Alumínio',    unidade: 'cmolc/dm³', sinonimos: ['h+al', 'h/al', 'hal', 'acidezpotencial'], usar: false },
+  { id: 'h_pct', sigla: 'H%',   nome: 'Saturação de Hidrogênio',  unidade: '%',         sinonimos: ['h%', 'saturacaohidrogenio'],         usar: false },
+  { id: 'h_al_pct', sigla: 'H/Al%', nome: 'Saturação de H+Al',    unidade: '%',         sinonimos: ['h/al%', 'h+al%'],                    usar: false },
   { id: 'so4',   sigla: 'SO4',  nome: 'Sulfato (SO4)',            unidade: 'meq/L',     sinonimos: ['so4', 'sulfato'],                    usar: false },
 
   // ── Micronutrientes e outros elementos ────────────────────────────────────
@@ -68,19 +74,23 @@ export const VARIAVEIS_COMPLEMENTARES: VariavelComplementar[] = [
   // por extenso. Se um dia virar token de equação, usar 'Molib' (nunca 'Mo' ≍ MO).
   { id: 'molib', sigla: 'Mo', nome: 'Molibdênio', unidade: 'mg/dm³',    sinonimos: ['molibdenio'], usar: false },
   { id: 'si',    sigla: 'Si', nome: 'Silício',    unidade: '%',         sinonimos: ['silicio'],    usar: false },
-  { id: 'c',     sigla: 'C',  nome: 'Carbono',    unidade: 'mmolc/dm³', sinonimos: ['carbono'],    usar: false },
+  { id: 'c',     sigla: 'C',  nome: 'Carbono',    unidade: 'mmolc/dm³', sinonimos: ['c', 'carbono'], usar: false },
   { id: 'n',     sigla: 'N',  nome: 'Nitrogênio', unidade: 'mmolc/dm³', sinonimos: ['nitrogenio'], usar: false },
   { id: 'cl',    sigla: 'Cl', nome: 'Cloro',      unidade: 'mg/dm³',    sinonimos: ['cloro'],      usar: false },
 
   // ── Relações entre elementos ───────────────────────────────────────────────
-  { id: 'rel_ca_k',   sigla: 'Ca/K',    nome: 'Relação Cálcio/Potássio',        unidade: '', sinonimos: ['relacaocalciopotassio'],         usar: false },
-  { id: 'rel_ca_mg',  sigla: 'Ca/Mg',   nome: 'Relação Cálcio/Magnésio',        unidade: '', sinonimos: ['relacaocalciomagnesio'],         usar: false },
-  { id: 'rel_camg_k', sigla: 'Ca+Mg/K', nome: 'Relação (Ca+Mg)/Potássio',       unidade: '', sinonimos: ['relacaocalciomagnesiopotassio'], usar: false },
-  { id: 'rel_mg_k',   sigla: 'Mg/K',    nome: 'Relação Magnésio/Potássio',      unidade: '', sinonimos: ['relacaomagnesiopotassio'],       usar: false },
-  { id: 'rel_s_p',    sigla: 'S/P',     nome: 'Relação Enxofre/Fósforo',        unidade: '', sinonimos: ['relacaoenxofrefosforo'],         usar: false },
-  { id: 'rel_k_na',   sigla: 'K/Na',    nome: 'Relação Potássio/Sódio',         unidade: '', sinonimos: ['relacaopotassiosodio'],          usar: false },
-  { id: 'rel_fe_mn',  sigla: 'Fe/Mn',   nome: 'Relação Ferro/Manganês',         unidade: '', sinonimos: ['relacaoferromanganes'],          usar: false },
-  { id: 'rel_p_zn',   sigla: 'P/Zn',    nome: 'Relação Fósforo/Zinco',          unidade: '', sinonimos: ['relacaofosforozinco'],           usar: false },
+  // A forma com barra ("Ca/Mg") é a que os laudos usam. Ela só é distinguível de
+  // "Ca+Mg" (a SOMA) porque o auto-mapeamento normaliza cabeçalho com `normCab`,
+  // que preserva `/` e `+` — com a `norm` comum as duas viravam 'camg'.
+  // Ca+Mg/K vem antes de Ca/K e Mg/K: 'ca+mg/k' contém 'mg/k'.
+  { id: 'rel_camg_k', sigla: 'Ca+Mg/K', nome: 'Relação (Ca+Mg)/Potássio',       unidade: '', sinonimos: ['ca+mg/k', 'relacaocalciomagnesiopotassio'], usar: false },
+  { id: 'rel_ca_k',   sigla: 'Ca/K',    nome: 'Relação Cálcio/Potássio',        unidade: '', sinonimos: ['ca/k', 'relacaocalciopotassio'],  usar: false },
+  { id: 'rel_ca_mg',  sigla: 'Ca/Mg',   nome: 'Relação Cálcio/Magnésio',        unidade: '', sinonimos: ['ca/mg', 'relacaocalciomagnesio'], usar: false },
+  { id: 'rel_mg_k',   sigla: 'Mg/K',    nome: 'Relação Magnésio/Potássio',      unidade: '', sinonimos: ['mg/k', 'relacaomagnesiopotassio'], usar: false },
+  { id: 'rel_s_p',    sigla: 'S/P',     nome: 'Relação Enxofre/Fósforo',        unidade: '', sinonimos: ['s/p', 'relacaoenxofrefosforo'],   usar: false },
+  { id: 'rel_k_na',   sigla: 'K/Na',    nome: 'Relação Potássio/Sódio',         unidade: '', sinonimos: ['k/na', 'relacaopotassiosodio'],   usar: false },
+  { id: 'rel_fe_mn',  sigla: 'Fe/Mn',   nome: 'Relação Ferro/Manganês',         unidade: '', sinonimos: ['fe/mn', 'relacaoferromanganes'],  usar: false },
+  { id: 'rel_p_zn',   sigla: 'P/Zn',    nome: 'Relação Fósforo/Zinco',          unidade: '', sinonimos: ['p/zn', 'relacaofosforozinco'],    usar: false },
 
   // ── Solução do solo / solúveis / água ─────────────────────────────────────
   { id: 'hco3', sigla: 'HCO3', nome: 'Bicarbonato (HCO3)', unidade: 'meq/L', sinonimos: ['hco3', 'bicarbonato'],  usar: false },
@@ -94,6 +104,15 @@ export const VARIAVEIS_COMPLEMENTARES: VariavelComplementar[] = [
   { id: 'no3',  sigla: 'NO3',  nome: 'Nitrato (NO3)',      unidade: 'meq/L', sinonimos: ['no3', 'nitrato'],       usar: false },
   // 'ras' como sinônimo curto casaria por substring "Leituras"/"Horas"/"Amostras" — só o nome por extenso.
   { id: 'ras',  sigla: 'RAS',  nome: 'Relação de Adsorção de Sódio (RAS)', unidade: '', sinonimos: ['relacaoadsorcaodesodio'], usar: false },
+
+  // ── Granulometria ─────────────────────────────────────────────────────────
+  // Entram LIGADAS: são medidas diretas do laudo, da mesma natureza da Argila
+  // (que já é ativa no seed básico como 'textura'). Sem elas a granulometria
+  // entrava pela metade — só a argila — e o resto do laudo era descartado.
+  { id: 'silte',        sigla: 'Silte',  nome: 'Silte',        unidade: '%', sinonimos: ['silte'],       usar: true, aposId: 'textura' },
+  { id: 'areia_total',  sigla: 'Areia',  nome: 'Areia total',  unidade: '%', sinonimos: ['areiatotal'],  usar: true, aposId: 'textura' },
+  { id: 'areia_grossa', sigla: 'AG',     nome: 'Areia grossa', unidade: '%', sinonimos: ['areiagrossa'], usar: true, aposId: 'textura' },
+  { id: 'areia_fina',   sigla: 'AF',     nome: 'Areia fina',   unidade: '%', sinonimos: ['areiafina'],   usar: true, aposId: 'textura' },
 
   // ── Físicos / sensores ────────────────────────────────────────────────────
   { id: 'ds',  sigla: 'Ds',  nome: 'Densidade do Solo',                unidade: 'g/cm³', sinonimos: ['densidadedosolo'],                  usar: false },

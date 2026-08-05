@@ -6,11 +6,17 @@
 // Agronômica. Validado contra arquivos reais (Fundação ABC, Interpartner).
 
 import type { GradeAmostragem } from './store';
-import { converterParaCanonico } from './unidades';
+// Extensão .ts explícita: o teste roda em node puro (type-stripping), que não
+// resolve import sem extensão — mesmo padrão de periodo/faixas/prescricao.
+import { converterParaCanonico, casarUnidade, ehRotuloSemUnidade } from './unidades.ts';
 
+// 'pres'/'mos': nomes de coluna do export InCeres ("P res", "MOS" = Matéria
+// Orgânica Seca). Sem eles o auto-mapeamento perdia JUSTO P e MO: o casamento é
+// `cabeçalho.includes(sinônimo)`, então 'p' (1 letra) e 'mo' (2) só casam exato,
+// e 'presina' não está contido em 'pres' (o teste é no sentido inverso).
 export const ELEMENTOS_LAB: { id: string; simbolo: string; sinonimos: string[] }[] = [
   { id: 'ph',  simbolo: 'pH',  sinonimos: ['ph', 'phcacl2', 'phcacl', 'phh2o', 'phagua', 'phsmp'] },
-  { id: 'p',   simbolo: 'P',   sinonimos: ['p', 'pmehlich', 'pmeh', 'fosforo', 'presina', 'pmel'] },
+  { id: 'p',   simbolo: 'P',   sinonimos: ['p', 'pres', 'pmehlich', 'pmehl', 'pmeh', 'fosforo', 'presina', 'pmel'] },
   { id: 'k',   simbolo: 'K',   sinonimos: ['k', 'potassio'] },
   { id: 'ca',  simbolo: 'Ca',  sinonimos: ['ca', 'calcio'] },
   { id: 'mg',  simbolo: 'Mg',  sinonimos: ['mg', 'magnesio'] },
@@ -18,7 +24,7 @@ export const ELEMENTOS_LAB: { id: string; simbolo: string; sinonimos: string[] }
   { id: 'ctc', simbolo: 'CTC', sinonimos: ['ctc', 'ctcph7', 'captrocacations', 'capacidadetrocacationica'] },
   { id: 'v',   simbolo: 'V%',  sinonimos: ['v', 'v%', 'vperc', 'saturacaobases', 'satbases'] },
   { id: 'm',   simbolo: 'm%',  sinonimos: ['m%', 'mperc', 'saturacaoaluminio', 'satal', 'aluminioctcefetiva'] },
-  { id: 'mo',  simbolo: 'MO',  sinonimos: ['mo', 'materiaorganica', 'morg'] },
+  { id: 'mo',  simbolo: 'MO',  sinonimos: ['mo', 'mos', 'moseca', 'materiaorganica', 'morg'] },
   { id: 's',   simbolo: 'S',   sinonimos: ['s', 'enxofre', 'sso4'] },
   { id: 'b',   simbolo: 'B',   sinonimos: ['b', 'boro'] },
   { id: 'zn',  simbolo: 'Zn',  sinonimos: ['zn', 'zinco'] },
@@ -61,6 +67,12 @@ export function calcularDerivados(v: Record<string, number>): void {
 }
 
 export const norm = (s: string) => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9%]/g, '');
+
+// Normalização de CABEÇALHO (só p/ o auto-mapeamento). Igual à `norm`, mas
+// PRESERVA `/` e `+`: sem eles "Ca/Mg" (relação) e "Ca+Mg" (soma) viram o mesmo
+// 'camg' e uma rouba a coluna da outra. `norm` não pode mudar — ela monta as
+// chaves de talhão/profundidade em aplicarPerfil.
+export const normCab = (s: string) => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9%/+]/g, '');
 
 // Número PT/US, rejeitando datas e tokens não-numéricos (N.D, <x, -, 4/30/00…).
 export function parseNum(s: string | number | null | undefined): number | null {
@@ -128,6 +140,7 @@ export async function lerArquivo(file: File): Promise<string[][]> {
 // ── Perfil (config por lab) ──────────────────────────────────────────────────
 export interface PerfilLabConfig {
   linhaCabecalho?: number;          // 0-based; undefined = auto
+  linhaUnidades?: number;           // 2ª linha de cabeçalho só com a unidade de cada coluna
   colProtocolo?: number;            // coluna do id único da amostra (merge de linhas)
   colId: number;                    // coluna do identificador do ponto
   regexNumero?: string;             // extrai nº (grupo 1) da colId; vazio = colId já é o número
@@ -160,7 +173,9 @@ export interface AplicacaoResult {
 
 // Aplica o perfil sobre a matriz, opcionalmente filtrando por talhão (contém).
 export function aplicarPerfil(aoa: string[][], cfg: PerfilLabConfig, filtroTalhao?: string): AplicacaoResult {
-  const dados = aoa.slice((cfg.linhaCabecalho ?? 0) + 1);
+  // Os dados começam depois da linha de unidades quando ela existe (senão ela
+  // entra como linha de amostra e só não estraga porque o id não é numérico).
+  const dados = aoa.slice((cfg.linhaUnidades ?? cfg.linhaCabecalho ?? 0) + 1);
   const reNum = cfg.regexNumero ? new RegExp(cfg.regexNumero, 'i') : null;
   const reTal = cfg.regexTalhao ? new RegExp(cfg.regexTalhao, 'i') : null;
   const reProf = cfg.regexProfundidade ? new RegExp(cfg.regexProfundidade, 'i') : null;
@@ -235,7 +250,7 @@ export function autoConfig(
   }
   const headers = (aoa[hi] ?? []).map((h, i) => String(h ?? '').trim() || `col${i + 1}`);
   const usados = new Set<number>();
-  const achar = (ps: string[]) => headers.findIndex((h, i) => !usados.has(i) && ps.some(p => norm(h).includes(p)));
+  const achar = (ps: string[]) => headers.findIndex((h, i) => !usados.has(i) && ps.some(p => normCab(h).includes(p)));
 
   const colId = achar(['amostra', 'ponto', 'numero', 'idamostra']);
   if (colId >= 0) usados.add(colId);
@@ -244,23 +259,74 @@ export function autoConfig(
 
   const elementos: Record<string, number> = {};
   for (const el of vars) {
-    const idx = headers.findIndex((h, i) => {
-      if (usados.has(i)) return false;
-      const n = norm(h);
-      return el.sinonimos.includes(n) || el.sinonimos.some(s => s.length >= 3 && n.includes(s));
-    });
+    const idx = headers.findIndex((h, i) => !usados.has(i) && casaCabecalho(h, el.sinonimos));
     if (idx >= 0) { elementos[el.id] = idx; usados.add(idx); }
   }
-  return {
-    config: { linhaCabecalho: hi, colId: colId >= 0 ? colId : 0, colProfundidade: colProf >= 0 ? colProf : undefined, elementos },
-    headers,
+
+  const config: PerfilLabConfig = {
+    linhaCabecalho: hi, colId: colId >= 0 ? colId : 0,
+    colProfundidade: colProf >= 0 ? colProf : undefined, elementos,
   };
+  const detalhes = lerLinhaUnidades(aoa[hi + 1], elementos);
+  if (detalhes) { config.linhaUnidades = hi + 1; if (Object.keys(detalhes).length) config.detalhes = detalhes; }
+  return { config, headers };
+}
+
+// Um cabeçalho casa com a variável? Sinônimo com < 3 letras exige igualdade
+// (senão "P" pegaria qualquer coluna com "p" no nome); a partir de 3, basta estar
+// contido ("Argila (%)" casa 'argila').
+function casaCabecalho(header: string, sinonimos: string[]): boolean {
+  const n = normCab(header);
+  return sinonimos.includes(n) || sinonimos.some(s => s.length >= 3 && n.includes(s));
+}
+
+// A linha logo abaixo do cabeçalho é a linha de UNIDADES? (export InCeres e afins
+// trazem "mmolc/dm³", "g/dm³", "Sem Unidade"…). Só aceita se NENHUMA coluna
+// mapeada tiver número — uma linha de amostra jamais passa por aqui — e se a
+// maioria das células for unidade reconhecida. Devolve as unidades por elemento
+// (p/ cfg.detalhes → conversão correta) ou null se não é linha de unidades.
+function lerLinhaUnidades(linha: string[] | undefined, elementos: Record<string, number>): Record<string, { unidade?: string }> | null {
+  const cols = Object.entries(elementos);
+  if (!linha || cols.length === 0) return null;
+  const detalhes: Record<string, { unidade?: string }> = {};
+  let reconhecidas = 0;
+  for (const [elId, idx] of cols) {
+    const cel = String(linha[idx] ?? '');
+    if (parseNum(cel) != null) return null;                 // tem número → é linha de dado
+    const u = casarUnidade(elId, cel);
+    if (u) { detalhes[elId] = { unidade: u }; reconhecidas++; }
+    else if (ehRotuloSemUnidade(cel)) reconhecidas++;
+  }
+  return reconhecidas >= Math.max(2, Math.ceil(cols.length * 0.6)) ? detalhes : null;
 }
 
 // ── Perfis embutidos (validados contra arquivos reais) ───────────────────────
-export interface PerfilLabBuiltin { id: string; nome: string; config: PerfilLabConfig; }
+export interface PerfilLabBuiltin {
+  id: string; nome: string; config: PerfilLabConfig;
+  /** Layout em COLUNAS com nº de colunas variável: em vez da config estática,
+   *  roda `autoConfig` sobre o arquivo (mesmo caminho do "Detectar
+   *  automaticamente", só que com nome fixo e reconhecível na lista). */
+  auto?: boolean;
+  /** Assinatura do layout: valores `normCab` esperados no INÍCIO da linha de
+   *  cabeçalho. Batendo, o perfil é pré-selecionado ao carregar o arquivo. */
+  assinatura?: string[];
+}
+
+/** Perfil marcado na tela antes de qualquer arquivo (o de layout mais antigo e
+ *  específico; assim que um arquivo entra, `escolherPerfil` decide). */
+export const PERFIL_PADRAO = 'fundacao-abc';
 
 export const PERFIS_BUILTIN: PerfilLabBuiltin[] = [
+  {
+    // Export "em colunas" da InCeres, usado também por laudos da Interpartner:
+    // linha 1 = nomes, linha 2 = UNIDADES, `id` e `prof` nas duas primeiras
+    // colunas. Mesma assinatura que scripts/migracao-acervo/importar.mjs já usa.
+    id: 'inceres',
+    nome: 'InCeres / Interpartner (colunas id · prof)',
+    auto: true,
+    assinatura: ['id', 'prof'],
+    config: { colId: 0, elementos: {} },
+  },
   {
     id: 'fundacao-abc',
     nome: 'Fundação ABC',
@@ -292,6 +358,69 @@ export const PERFIS_BUILTIN: PerfilLabBuiltin[] = [
     },
   },
 ];
+
+// ── O perfil é DESTE arquivo? ────────────────────────────────────────────────
+// Perfis posicionais (colunas fixas) casam por ACASO quando o arquivo tem o
+// mesmo nº de colunas — e aí a importação entra inteira com os valores TROCADOS,
+// sem erro nenhum (o pH do laudo virando P, o P virando pH…). A pontuação
+// compara o que o perfil espera em cada coluna com o cabeçalho que está lá.
+export interface PontuacaoPerfil {
+  acertos: number;
+  esperados: number;
+  /** confiança 0..1 (1 quando não há como julgar) */
+  confianca: number;
+  /** 1º desencontro, p/ o aviso ficar concreto */
+  exemplo?: { elId: string; coluna: number; cabecalho: string };
+}
+
+export function pontuarPerfil(
+  aoa: string[][], cfg: PerfilLabConfig,
+  vars: { id: string; sinonimos: string[] }[] = ELEMENTOS_LAB,
+): PontuacaoPerfil {
+  const headers = aoa[cfg.linhaCabecalho ?? 0] ?? [];
+  let acertos = 0, esperados = 0;
+  let exemplo: PontuacaoPerfil['exemplo'];
+  for (const [elId, idx] of Object.entries(cfg.elementos)) {
+    const sin = vars.find(v => v.id === elId)?.sinonimos ?? [];
+    if (sin.length === 0) continue;                 // variável derivada/sem sinônimo: não dá p/ julgar
+    esperados++;
+    const cab = String(headers[idx] ?? '');
+    if (casaCabecalho(cab, sin)) acertos++;
+    else exemplo ??= { elId, coluna: idx, cabecalho: cab };
+  }
+  return { acertos, esperados, confianca: esperados === 0 ? 1 : acertos / esperados, exemplo };
+}
+
+/** Abaixo disto o perfil é tratado como "não é deste arquivo". */
+export const CONFIANCA_MINIMA = 0.6;
+
+// Perfil a pré-selecionar quando um arquivo é carregado. Sem isto a tela abria
+// SEMPRE no primeiro perfil da lista — que, para um laudo de outro layout, dá
+// "Nenhuma amostra" e parece que o app não reconheceu a planilha.
+export function escolherPerfil(
+  aoa: string[][],
+  salvos: { id: string; config: PerfilLabConfig }[] = [],
+  vars: { id: string; sinonimos: string[] }[] = ELEMENTOS_LAB,
+): string {
+  const { config: autoCfg, headers } = autoConfig(aoa, vars);
+
+  // 1) assinatura do layout (o cabeçalho diz de que export é o arquivo)
+  const porAssinatura = PERFIS_BUILTIN.find(b =>
+    b.assinatura?.length && b.assinatura.every((s, i) => normCab(headers[i] ?? '') === s));
+  if (porAssinatura) return porAssinatura.id;
+
+  // 2) perfil posicional cujas colunas realmente batem com o cabeçalho
+  let melhor = { id: '', confianca: 0 };
+  for (const p of [...PERFIS_BUILTIN.filter(b => !b.auto), ...salvos]) {
+    const { esperados, confianca } = pontuarPerfil(aoa, p.config, vars);
+    if (esperados === 0 || confianca <= melhor.confianca) continue;
+    if (aplicarPerfil(aoa, p.config).resultados.length > 0) melhor = { id: p.id, confianca };
+  }
+  if (melhor.confianca >= CONFIANCA_MINIMA) return melhor.id;
+
+  // 3) auto, se conseguiu mapear alguma coisa; senão deixa como estava
+  return Object.keys(autoCfg.elementos).length >= 3 ? 'auto' : PERFIL_PADRAO;
+}
 
 // nº de pontos da grade (para informar casamento na UI)
 export function numerosDaGrade(grade: GradeAmostragem | null): Set<number> {
