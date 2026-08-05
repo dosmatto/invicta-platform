@@ -15,6 +15,7 @@ import { shpFiles, baixarBlob, validarParaExport } from '../exportZonas';
 import { capturarMapaZonas } from '../capturaMapa';
 import { imagemParaPdf, reduzirLogo } from '../pdfImagem';
 import { resumoDoses, nutrientesPorZona, fatorBaseDose } from './calculo.ts';
+import { doseCompensada } from './sementes.ts';
 import { UNIDADE_TOTAL, ehUnidadeSemente, type Prescricao } from './tipos.ts';
 
 // Fator unidade-dose → unidade-base da prescrição (1 exceto sementes/m, que usa
@@ -22,6 +23,24 @@ import { UNIDADE_TOTAL, ehUnidadeSemente, type Prescricao } from './tipos.ts';
 // a validação já barrou sementes/m sem espaçamento; aqui cai em 1 defensivo.
 function fatorDe(p: Prescricao): number {
   try { return fatorBaseDose(p.unidade, p.params.sementes?.espacamentoM); } catch { return 1; }
+}
+
+// Dose do ARQUIVO: quando a prescrição foi feita em população desejada, o que
+// a máquina precisa é a taxa de semeadura — a dose compensada pela germinação.
+// Sem isso o arquivo sai com a população e a lavoura nasce abaixo do alvo.
+const doseArquivo = (p: Prescricao, dose: number): number =>
+  doseCompensada(dose, p.params.sementes, p.params.doseEhPopulacao);
+
+/** true quando o arquivo leva um número diferente do digitado (há compensação). */
+export function temCompensacao(p: Prescricao): boolean {
+  return !!p.params.doseEhPopulacao && Math.abs(doseArquivo(p, 1) - 1) > 1e-9;
+}
+
+// Quanto de produto o arquivo consome de fato. Com compensação, o resumo conta
+// em POPULAÇÃO (a base do total disponível) e o depósito entrega SEMENTES — o
+// número que o comprador precisa é este.
+export function totalDoArquivo(p: Prescricao, fator: number): number {
+  return p.zonas.reduce((s, z) => s + doseArquivo(p, z.dose) * z.areaHa * fator, 0);
 }
 
 const NAVY: [number, number, number] = [13, 33, 64];
@@ -50,7 +69,15 @@ export function validarPrescricao(p: Prescricao): ValidacaoPrescricao {
   if (fora.length) avisos.push(`Dose fora dos limites definidos em: ${fora.map(z => `${z.nomeZona} (${fmt(z.dose, 2)})`).join(', ')}.`);
   const r = resumoDoses(p.zonas, undefined, fatorDe(p));
   if (p.params.totalDisponivel != null && r.usado > p.params.totalDisponivel + 1e-6) {
-    erros.push(`Estoque insuficiente: a prescrição usa ${fmt(r.usado, 1)} ${UNIDADE_TOTAL[p.unidade]} e há ${fmt(p.params.totalDisponivel, 1)} disponível.`);
+    const falta = r.usado - p.params.totalDisponivel;
+    const un0 = UNIDADE_TOTAL[p.unidade];
+    // Total informado POR HECTARE é uma META agronômica (80.000/ha), não um
+    // estoque comprado: os limites de dose mín/máx quase sempre a fazem sobrar
+    // ou faltar um pouco, e travar a exportação por isso impede o trabalho.
+    // Estoque FÍSICO continua bloqueando — dali não se tira o que não existe.
+    const msg = `a prescrição usa ${fmt(r.usado, 1)} ${un0} e o disponível é ${fmt(p.params.totalDisponivel, 1)} (${fmt(falta, 1)} a mais).`;
+    if (p.params.totalPorHa) avisos.push(`Acima da meta: ${msg} Os limites de dose mín/máx não deixaram fechar exato.`);
+    else erros.push(`Estoque insuficiente: ${msg}`);
   }
   const pequenos = p.zonas.filter(z => z.areaHa > 0 && z.areaHa < 0.05);
   if (pequenos.length) avisos.push(`Polígono(s) muito pequeno(s) (<0,05 ha) — a máquina pode ignorar: ${pequenos.map(z => z.nomeZona).join(', ')}.`);
@@ -74,8 +101,11 @@ export function fcPrescricao(p: Prescricao): GeoJSON.FeatureCollection {
       properties: {
         zona: san(z.nomeZona),
         classe: san(z.classe),
-        dose: Math.round(z.dose * 1000) / 1000,
+        dose: Math.round(doseArquivo(p, z.dose) * 1000) / 1000,
         unidade: p.unidade,
+        // população-alvo fica no arquivo quando a dose foi compensada: é o que
+        // o agrônomo pediu, e sem ela ninguém confere a taxa lá na frente.
+        ...(p.params.doseEhPopulacao ? { pop_alvo: Math.round(z.dose) } : {}),
         produto: san(p.produto).slice(0, 60),
         area_ha: Math.round(z.areaHa * 100) / 100,
       },
@@ -112,8 +142,13 @@ export async function exportarXlsxPrescricao(p: Prescricao): Promise<string> {
     Zona: z.nomeZona,
     Classe: z.classe,
     'Área (ha)': Number(z.areaHa.toFixed(2)),
-    [`Dose (${p.unidade})`]: Number(z.dose.toFixed(3)),
-    [`Total (${un})`]: Number((z.dose * z.areaHa * fator).toFixed(2)),
+    ...(p.params.doseEhPopulacao
+      ? {
+          'População alvo (plantas/ha)': Number(z.dose.toFixed(0)),
+          [`Dose do arquivo (${p.unidade})`]: Number(doseArquivo(p, z.dose).toFixed(3)),
+        }
+      : { [`Dose (${p.unidade})`]: Number(z.dose.toFixed(3)) }),
+    [`Total (${un})`]: Number((doseArquivo(p, z.dose) * z.areaHa * fator).toFixed(2)),
     ...(nutri ? {
       'N (kg/ha)': Number(nutri[z.idZona].n.toFixed(1)),
       'P2O5 (kg/ha)': Number(nutri[z.idZona].p2o5.toFixed(1)),
@@ -134,6 +169,10 @@ export async function exportarXlsxPrescricao(p: Prescricao): Promise<string> {
     { Item: `Dose mínima (${p.unidade})`, Valor: Number(r.doseMin.toFixed(3)) },
     { Item: `Dose máxima (${p.unidade})`, Valor: Number(r.doseMax.toFixed(3)) },
     { Item: `Dose média (${p.unidade})`, Valor: Number(r.doseMedia.toFixed(3)) },
+    ...(temCompensacao(p) ? [
+      { Item: `No arquivo — total (${un})`, Valor: Number(totalDoArquivo(p, fator).toFixed(2)) },
+      { Item: 'Germinação (%)', Valor: p.params.sementes?.germinacaoPct ?? 100 },
+    ] : []),
     ...(r.custo != null ? [{ Item: 'Custo (R$)', Valor: Number(r.custo.toFixed(2)) }] : []),
     { Item: 'Zonas', Valor: r.nZonas },
     { Item: 'Polígonos', Valor: p.fc.features.length },
@@ -206,7 +245,7 @@ export async function exportarPDFPrescricao(p: Prescricao, ident: IdentPdfPrescr
     return [{
       geometry: f.geometry as GeoJSON.Polygon | GeoJSON.MultiPolygon,
       cor: corDaDose(z.dose, r.doseMin, r.doseMax),
-      rotulo: fmt(z.dose, ehUnidadeSemente(p.unidade) ? (p.unidade === 'sementes/m' ? 1 : 0) : 1),
+      rotulo: fmt(doseArquivo(p, z.dose), ehUnidadeSemente(p.unidade) ? (p.unidade === 'sementes/m' ? 1 : 0) : 1),
     }];
   });
   let mapaPng = '';
@@ -264,9 +303,11 @@ export async function exportarPDFPrescricao(p: Prescricao, ident: IdentPdfPrescr
   doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(...NAVY);
   doc.text('DOSES POR ZONA', tabX, ty); ty += 4;
   doc.setFontSize(7);
+  const comp = temCompensacao(p);
   const cols = [tabX, tabX + 26, tabX + 52, tabX + 74, tabX + tabW];
   doc.text('Zona', cols[0], ty); doc.text('Área (ha)', cols[1], ty);
-  doc.text(`Dose (${p.unidade})`, cols[2], ty); doc.text(`Total (${un})`, cols[3], ty);
+  doc.text(comp ? `Pop. → dose (${p.unidade})` : `Dose (${p.unidade})`, cols[2], ty);
+  doc.text(`Total (${un})`, cols[3], ty);
   ty += 1.5; doc.setDrawColor(...LINE); doc.line(tabX, ty, tabX + tabW, ty); ty += 3.5;
   doc.setFont('helvetica', 'normal'); doc.setTextColor(40, 50, 70);
   const zonasOrd = [...p.zonas].sort((a, b) => b.dose - a.dose);
@@ -276,15 +317,17 @@ export async function exportarPDFPrescricao(p: Prescricao, ident: IdentPdfPrescr
     doc.rect(cols[0], ty - 2.4, 2.6, 2.6, 'F');
     doc.text(san(z.nomeZona).slice(0, 14), cols[0] + 4, ty);
     doc.text(fmt(z.areaHa, 2), cols[1] + 14, ty, { align: 'right' });
-    doc.text(p.unidade === 'sementes/ha' ? fmt0(z.dose) : fmt(z.dose, 2), cols[2] + 16, ty, { align: 'right' });
-    doc.text(ehUnidadeSemente(p.unidade) ? fmt0(z.dose * z.areaHa * fator) : fmt(z.dose * z.areaHa * fator, 1), cols[3] + 18, ty, { align: 'right' });
+    const dArq = doseArquivo(p, z.dose);
+    const txtDose = p.unidade === 'sementes/ha' ? fmt0(dArq) : fmt(dArq, 2);
+    doc.text(comp ? `${fmt0(z.dose)} → ${txtDose}` : txtDose, cols[2] + 16, ty, { align: 'right' });
+    doc.text(ehUnidadeSemente(p.unidade) ? fmt0(dArq * z.areaHa * fator) : fmt(dArq * z.areaHa * fator, 1), cols[3] + 18, ty, { align: 'right' });
     ty += 4.2;
   }
   if (p.zonas.length > 18) { doc.setTextColor(...GRAY); doc.text(`… +${p.zonas.length - 18} zonas (planilha completa no Excel)`, tabX, ty); ty += 4.2; }
 
   // ── resumo ──
   ty += 2;
-  doc.setDrawColor(...LINE); doc.roundedRect(tabX, ty, tabW, 42, 2, 2, 'S');
+  doc.setDrawColor(...LINE); doc.roundedRect(tabX, ty, tabW, temCompensacao(p) ? 47 : 42, 2, 2, 'S');
   doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(...NAVY); doc.text('RESUMO', tabX + 4, ty + 5);
   doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(...GRAY);
   const linhasResumo = [
@@ -294,6 +337,11 @@ export async function exportarPDFPrescricao(p: Prescricao, ident: IdentPdfPrescr
       ? [`Disponível: ${ehUnidadeSemente(p.unidade) ? fmt0(p.params.totalDisponivel) : fmt(p.params.totalDisponivel, 1)} ${un} · restante: ${ehUnidadeSemente(p.unidade) ? fmt0(p.params.totalDisponivel - r.usado) : fmt(p.params.totalDisponivel - r.usado, 1)} ${un}`]
       : []),
     `Dose: mín ${fmt(r.doseMin, 1)} · máx ${fmt(r.doseMax, 1)} · média ${fmt(r.doseMedia, 1)} ${p.unidade}`,
+    // Com compensação, o resumo acima é a POPULAÇÃO pedida; quem carrega a
+    // máquina precisa saber quanta semente sai de fato.
+    ...(temCompensacao(p)
+      ? [`No arquivo (germinação ${fmt(p.params.sementes?.germinacaoPct ?? 100, 0)}%): ${fmt0(totalDoArquivo(p, fator))} ${un} · ${fmt0(totalDoArquivo(p, fator) / (r.areaHa || 1))} ${un}/ha`]
+      : []),
     ...(r.custo != null ? [`Custo estimado: R$ ${fmt(r.custo, 2)}`] : []),
   ];
   linhasResumo.forEach((tl, i) => doc.text(san(tl), tabX + 4, ty + 10 + i * 4.4, { maxWidth: tabW - 8 }));

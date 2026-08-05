@@ -52,9 +52,7 @@ export interface HistoricoPrescricao {
 export interface ParamsSementes {
   cultivar?: string;
   pmsG?: number;               // peso de mil sementes (g)
-  germinacaoPct: number;
-  purezaPct?: number;
-  sobrevivenciaPct?: number;   // emergência/estande a campo
+  germinacaoPct: number;       // único desconto da semente → planta
   espacamentoM?: number;       // entre linhas
   sementesPorSaco?: number;
   populacaoMin?: number;       // plantas/ha
@@ -91,6 +89,10 @@ export interface ParamsCalculo {
   /** 'livre': o total é consequência (quanto comprar). 'total': crava o
    *  totalDisponivel, preservando as proporções entre as zonas. */
   cenarioAjuste?: 'livre' | 'total';
+  /** A dose digitada é POPULAÇÃO desejada (plantas/ha), não a taxa de
+   *  semeadura: o arquivo de aplicação sai compensado pela germinação
+   *  (ver doseCompensada). */
+  doseEhPopulacao?: boolean;
   // fluxos específicos
   sementes?: ParamsSementes;
   organico?: AnaliseOrganico;

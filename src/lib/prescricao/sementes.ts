@@ -2,8 +2,8 @@
 //
 // Duas contas vivem aqui:
 //  1. Agronomia da semeadura: população desejada (plantas/ha) → sementes/ha,
-//     sementes/metro, kg/ha, total e sacos — descontando germinação, pureza e
-//     sobrevivência a campo (a semente que não vira planta também é semeada).
+//     sementes/metro, kg/ha, total e sacos — descontando a GERMINAÇÃO (a semente
+//     que não vira planta também é semeada).
 //  2. Estoque: "tenho X sementes (ou kg, sacos, milhões, ou uma média/ha)" →
 //     redistribuir entre as zonas mantendo EXATAMENTE o total, com min/max e
 //     margem de segurança. Reusa o water-fill do calculo.ts — a invariante de
@@ -16,16 +16,19 @@ import type { ParamsSementes } from './tipos.ts';
 
 const EPS = 1e-9;
 
-// Fração de sementes que vira PLANTA (0..1). Campos ausentes = 100%.
-export function fatorCampo(p: Pick<ParamsSementes, 'germinacaoPct' | 'purezaPct' | 'sobrevivenciaPct'>): number {
+// Fração de sementes que vira PLANTA (0..1). Campo ausente = 100%.
+// Só a GERMINAÇÃO desconta: pureza e sobrevivência saíram da tela (05/08/2026) —
+// prescrição salva antes disso passa a ignorá-las, em vez de aplicar um fator que
+// ninguém mais consegue ver nem editar.
+export function fatorCampo(p: Pick<ParamsSementes, 'germinacaoPct'>): number {
   const f = (x?: number) => (x == null ? 1 : Math.min(100, Math.max(0, x)) / 100);
-  return f(p.germinacaoPct) * f(p.purezaPct) * f(p.sobrevivenciaPct);
+  return f(p.germinacaoPct);
 }
 
 // População-alvo (plantas/ha) → taxa de semeadura (sementes/ha).
 export function sementesPorHa(populacaoAlvo: number, p: ParamsSementes): number {
   const fator = fatorCampo(p);
-  if (fator <= EPS) throw new Error('Germinação/pureza/sobrevivência zeradas — impossível calcular a taxa.');
+  if (fator <= EPS) throw new Error('Germinação zerada — impossível calcular a taxa.');
   return populacaoAlvo / fator;
 }
 
@@ -81,6 +84,22 @@ export function estoqueTotalSementes(e: EstoqueSementes, p: ParamsSementes, area
   throw new Error('Informe o estoque de sementes (sementes, kg, sacos, milhões ou população média).');
 }
 
+/**
+ * Dose que vai para a MÁQUINA.
+ *
+ * O agrônomo decide em POPULAÇÃO ("quero 80.000 plantas/ha"), mas a plantadeira
+ * é regulada em SEMENTES/ha — e parte da semente não vira planta. Sem compensar,
+ * 80.000 no arquivo viram ~72.000 plantas no campo com 90% de germinação: a
+ * lavoura nasce ralinha e ninguém entende por quê. Com `ehPopulacao`, a taxa
+ * sobe pela germinação informada.
+ *
+ * Sem o marcador, a dose já É a taxa de semeadura e passa intacta.
+ */
+export function doseCompensada(dose: number, p?: ParamsSementes, ehPopulacao?: boolean): number {
+  if (!ehPopulacao || !p || !Number.isFinite(dose)) return dose;
+  return sementesPorHa(dose, p);
+}
+
 // Distribui o ESTOQUE entre as zonas — doses em SEMENTES/HA, com min/max dados
 // em POPULAÇÃO (plantas/ha, como o agrônomo pensa) e convertidos aqui.
 // margemPct segura uma fração do estoque (quebra, regulagem da plantadeira).
@@ -96,7 +115,7 @@ export function distribuirSementes(
   relacao: 'direta' | 'inversa' = 'direta',
 ): ResultadoSementes {
   const fator = fatorCampo(p);
-  if (fator <= EPS) throw new Error('Germinação/pureza/sobrevivência zeradas.');
+  if (fator <= EPS) throw new Error('Germinação zerada.');
   const margem = Math.min(50, Math.max(0, p.margemPct ?? 0)) / 100;
   const util = estoqueSementes * (1 - margem);
   const nRanks = Math.max(1, ...zonas.map(z => z.potencialRank ?? 1));

@@ -18,11 +18,11 @@ import {
 import { emailUsuario } from '@/lib/empresa';
 import { listar as bibListar, type ItemBiblioteca, type ConteudoEquacao } from '@/lib/biblioteca';
 import {
-  redistribuirPorEstoque, distribuirProporcional, distribuirPorAjuste, resumoDoses, nutrientesPorZona, pesoDoRank,
+  redistribuirPorEstoque, distribuirProporcional, distribuirPorAjuste, resumoDoses, nutrientesPorZona, pesoDoRank, arredondarDose,
 } from '@/lib/prescricao/calculo';
 import { dosesPorEquacao, variaveisDaEquacao } from '@/lib/prescricao/equacao';
 import {
-  distribuirSementes, estoqueTotalSementes, metricasSementes,
+  estoqueTotalSementes, metricasSementes, doseCompensada, fatorCampo,
   type EstoqueSementes,
 } from '@/lib/prescricao/sementes';
 import {
@@ -64,6 +64,13 @@ interface Rascunho {
   equacaoId: string;
   valoresEquacao: Record<string, Record<string, number>>;   // idZona → varLower → nº
 }
+
+// Modos oferecidos ao criar. 'estoque' e 'proporcional' saíram da tela: os dois
+// faziam, com outro nome, o que "Dose base + ajuste % por zona" faz — e o que
+// só o de estoque acrescentava (informar o disponível em sacos/kg/milhões)
+// virou um botão dentro do ajuste. Prescrições salvas nesses modos continuam
+// abrindo e exportando: o botão do modo legado reaparece para elas.
+const MODOS_VISIVEIS: ModoCalculo[] = ['manual', 'ajuste', 'equacao'];
 
 const RASCUNHO_VAZIO: Rascunho = {
   editandoId: null, nome: '', tipo: 'fertilizante', produto: '', unidade: 'kg/ha',
@@ -162,7 +169,7 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
           pr.totalDisponivel,
           { doseMin: pr.doseMin, doseMax: pr.doseMax, incremento: pr.incremento },
         );
-        patch({ zonas: r.zonas.map(z => ({ ...z, dose: res.doses[z.idZona] ?? 0 })) });
+        patch({ zonas: r.zonas.map(z => ({ ...z, dose: arredondarDose(res.doses[z.idZona] ?? 0) })) });
         setAvisosCalc(res.avisos);
       } else if (r.modo === 'proporcional') {
         if (!pr.doseMedia || pr.doseMedia <= 0) { setErro('Informe a dose média.'); return; }
@@ -172,7 +179,7 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
           r.zonas.map(z => ({ id: z.idZona, areaHa: z.areaHa, valorBase: nRanks - (z.potencialRank ?? Math.ceil(nRanks / 2)) + 1 })),
           { doseMedia: pr.doseMedia, variacaoPct: pr.variacaoPct ?? 20, relacao: rel, doseMin: pr.doseMin, doseMax: pr.doseMax },
         );
-        patch({ zonas: r.zonas.map(z => ({ ...z, dose: res.doses[z.idZona] ?? 0 })) });
+        patch({ zonas: r.zonas.map(z => ({ ...z, dose: arredondarDose(res.doses[z.idZona] ?? 0) })) });
         setAvisosCalc(res.avisos);
       } else if (r.modo === 'ajuste') {
         const cen = pr.cenarioAjuste ?? 'livre';
@@ -187,7 +194,7 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
             doseMin: pr.doseMin, doseMax: pr.doseMax, incremento: pr.incremento,
           },
         );
-        patch({ zonas: r.zonas.map(z => ({ ...z, dose: res.doses[z.idZona] ?? 0 })) });
+        patch({ zonas: r.zonas.map(z => ({ ...z, dose: arredondarDose(res.doses[z.idZona] ?? 0) })) });
         setAvisosCalc(res.avisos);
       }
     } catch (e) { setErro(e instanceof Error ? e.message : String(e)); }
@@ -226,7 +233,7 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
     );
     if (erroCompilacao) { setErro(`Equação com erro: ${erroCompilacao}`); return; }
     const porId = new Map(doses.map(d => [d.id, d]));
-    patch({ zonas: r.zonas.map(z => ({ ...z, dose: porId.get(z.idZona)?.dose ?? NaN })) });
+    patch({ zonas: r.zonas.map(z => { const d = porId.get(z.idZona)?.dose; return { ...z, dose: d == null ? NaN : arredondarDose(d) }; }) });
     const comErro = doses.filter(d => d.erro);
     setAvisosCalc(comErro.length
       ? comErro.map(d => `Zona ${r.zonas.find(z => z.idZona === d.id)?.nomeZona}: ${d.erro}`)
@@ -236,7 +243,12 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
   // sementes: estado próprio do estoque (como o usuário informa)
   const [estSem, setEstSem] = useState<{ modo: keyof EstoqueSementes; valor: string }>({ modo: 'populacaoMediaHa', valor: '' });
 
-  function calcularSementes() {
+  // Estoque de sementes (sacos, kg, milhões ou média/ha) → Total disponível.
+  // O painel era um MODO à parte ("Quantidade total disponível"), que fazia o
+  // mesmo papel do ajuste % por zona com outro nome. Aqui ele volta ao que
+  // realmente acrescenta: converter o que o produtor tem no depósito para o
+  // número de sementes que alimenta o cálculo por ajuste.
+  function usarEstoqueComoTotal() {
     setErro(''); setOkMsg('');
     try {
       const ps = r.params.sementes ?? { germinacaoPct: 90 };
@@ -244,28 +256,31 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
       const v = Number(estSem.valor.replace(',', '.'));
       if (!v || v <= 0) { setErro('Informe o estoque de sementes.'); return; }
       const total = estoqueTotalSementes({ [estSem.modo]: v } as EstoqueSementes, ps, areaTot);
-      const rel = r.params.relacao ?? 'direta';
-      const res = distribuirSementes(
-        r.zonas.map(z => ({ id: z.idZona, areaHa: z.areaHa, potencialRank: z.potencialRank })),
-        total, ps, rel,
-      );
-      // distribuirSementes devolve sementes/HA. Se a unidade da prescrição é
-      // sementes/m, converte a dose (÷ fator = × espaçamento/10.000) para gravar
-      // na unidade escolhida; o total (sementes) e a validação seguem coerentes.
-      const f = r.unidade === 'sementes/m' ? (fatorBase ?? 1) : 1;
-      patch({ zonas: r.zonas.map(z => ({ ...z, dose: (res.doses[z.idZona] ?? 0) / f })), params: { ...r.params, totalDisponivel: total } });
-      const dif = total - res.usado;
-      const pctDif = total > 0 ? (dif / total) * 100 : 0;
-      const extra: string[] = [];
-      if (res.falta > 0) extra.push(`FALTAM sementes para a população mínima: ${fmt0(res.falta)}.`);
-      else if (pctDif > 5) extra.push(`Sobrarão ${fmt0(dif)} sementes (${fmt(pctDif, 1)}%) — considere subir a população máxima ou reduzir o estoque reservado.`);
-      setAvisosCalc([...res.avisos, ...extra, `População média resultante: ${fmt0(res.populacaoMedia)} plantas/ha.`]);
+      const margem = Math.min(50, Math.max(0, ps.margemPct ?? 0)) / 100;
+      const disponivel = total * (1 - margem);
+      patchParams({ totalDisponivel: disponivel, totalPorHa: false, cenarioAjuste: 'total' });
+      setAvisosCalc([
+        `Total disponível: ${fmt0(disponivel)} sementes` +
+        (margem > 0 ? ` (margem de ${fmt(margem * 100, 0)}% já descontada de ${fmt0(total)}).` : '.') +
+        ' Ajuste os % por zona e clique em "Calcular doses por ajuste".',
+      ]);
     } catch (e) { setErro(e instanceof Error ? e.message : String(e)); }
   }
 
   // ── Resumo ao vivo (editor) ───────────────────────────────────────────────
+  // A dose digitada é população e há fator de campo para compensar? Então a
+  // tabela mostra as duas colunas: o que foi pedido e o que vai no arquivo.
+  const compensa = !!r.params.doseEhPopulacao && Math.abs(fatorCampo(r.params.sementes ?? { germinacaoPct: 100 }) - 1) > 1e-9;
   const custoNum = Number(r.custoUnit.replace(',', '.')) || undefined;
+  // O resumo (usado/restante/dose média) conta pela dose DIGITADA — é a mesma
+  // base do "Total disponível", senão o restante acusa um estouro que não
+  // existe: com compensação, a meta é dada em população e o arquivo sai em
+  // sementes. O consumo real de sementes vai separado, logo abaixo.
   const resumo = useMemo(() => resumoDoses(r.zonas, custoNum, fatorBase ?? 1), [r.zonas, custoNum, fatorBase]);
+  const totalArquivo = useMemo(
+    () => (compensa ? r.zonas.reduce((s, z) => s + doseCompensada(z.dose, r.params.sementes, true) * z.areaHa * (fatorBase ?? 1), 0) : null),
+    [compensa, r.zonas, r.params.sementes, fatorBase],
+  );
   const nutri = useMemo(() => (
     r.tipo === 'organico' && r.params.organico
       ? nutrientesPorZona(r.zonas.map(z => ({ id: z.idZona, areaHa: z.areaHa, dose: z.dose })), r.params.organico)
@@ -276,9 +291,12 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
     // metricasSementes espera sementes/HA; se a dose está em sementes/m, sobe
     // pela conversão (× fator). doseMedia já está na unidade-dose.
     if (!ehUnidadeSemente(r.unidade) || !r.params.sementes || resumo.doseMedia <= 0) return null;
-    const doseHa = resumo.doseMedia * (r.unidade === 'sementes/m' ? (fatorBase ?? 1) : 1);
+    // Com compensação, a taxa é a dose compensada — senão a "população final"
+    // sai descontada duas vezes e aparece 72.000 onde o alvo é 80.000.
+    const base = doseCompensada(resumo.doseMedia, r.params.sementes, compensa);
+    const doseHa = base * (r.unidade === 'sementes/m' ? (fatorBase ?? 1) : 1);
     try { return metricasSementes(doseHa, resumo.areaHa, r.params.sementes); } catch { return null; }
-  }, [r.unidade, r.params.sementes, resumo, fatorBase]);
+  }, [r.unidade, r.params.sementes, resumo, fatorBase, compensa]);
 
   // ── Mapa: zonas da prescrição + a DOSE em cada uma ───────────────────────
   // A aba não publicava nada no mapa: escolher o zoneamento montava a tabela e
@@ -485,7 +503,9 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
               <>
                 {/* ── Modo de cálculo ── */}
                 <div className="flex gap-1 flex-wrap">
-                  {(Object.entries(ROTULO_MODO) as Array<[ModoCalculo, string]>).map(([id, rot]) => (
+                  {(Object.entries(ROTULO_MODO) as Array<[ModoCalculo, string]>)
+                    .filter(([id]) => MODOS_VISIVEIS.includes(id) || r.modo === id)
+                    .map(([id, rot]) => (
                     <button key={id} onClick={() => { patch({ modo: id }); setAvisosCalc([]); }}
                       className="px-2 py-1.5 rounded text-[10px] font-semibold"
                       style={{ background: r.modo === id ? 'var(--invicta-green-dark)' : '#0f2240', color: r.modo === id ? '#fff' : '#93c5fd' }}>
@@ -612,8 +632,13 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
                   </div>
                 )}
 
-                {r.tipo === 'sementes' && (r.modo === 'estoque' || r.modo === 'proporcional') && (
-                  <SementesCampos r={r} patchParams={patchParams} estSem={estSem} setEstSem={setEstSem} calcular={calcularSementes} />
+                {/* Semente sempre mostra os parâmetros: a compensação de germinação
+                    vale para qualquer modo, inclusive dose manual — era ali que ela
+                    mais faltava. O estoque só aparece onde existe Total disponível. */}
+                {r.tipo === 'sementes' && (
+                  <SementesCampos r={r} patchParams={patchParams} estSem={estSem} setEstSem={setEstSem}
+                    usarComoTotal={usarEstoqueComoTotal}
+                    mostrarEstoque={r.modo === 'ajuste' && (r.params.cenarioAjuste ?? 'livre') === 'total'} />
                 )}
 
                 {/* ── Modo EQUAÇÃO: usa uma equação salva, calcula por zona ── */}
@@ -680,7 +705,8 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
                         <th className="text-left px-2 py-1.5">Classe</th>
                         <th className="text-right px-2 py-1.5">Área (ha)</th>
                         {r.modo === 'equacao' && varsEq.map(v => <th key={v} className="text-right px-2 py-1.5 uppercase">{v}</th>)}
-                        <th className="text-right px-2 py-1.5">Dose ({r.unidade})</th>
+                        <th className="text-right px-2 py-1.5">{compensa ? `População (${r.unidade})` : `Dose (${r.unidade})`}</th>
+                        {compensa && <th className="text-right px-2 py-1.5" style={{ color: '#86efac' }}>No arquivo ({r.unidade})</th>}
                         <th className="text-right px-2 py-1.5">Total ({UNIDADE_TOTAL[r.unidade]})</th>
                         {nutri && <th className="text-right px-2 py-1.5">N·P·K (kg/ha)</th>}
                       </tr>
@@ -719,6 +745,11 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
                               placeholder={Number.isFinite(z.dose) ? undefined : 'erro'}
                               className="w-20 rounded px-1.5 py-0.5 text-right text-[10px] outline-none" style={inputStyle} />
                           </td>
+                          {compensa && (
+                            <td className="px-2 py-1 text-right font-semibold" style={{ color: '#86efac' }}>
+                              {Number.isFinite(z.dose) ? fmt0(doseCompensada(z.dose, r.params.sementes, true)) : '—'}
+                            </td>
+                          )}
                           <td className="px-2 py-1 text-right">{!Number.isFinite(totalZona) ? '—' : ehUnidadeSemente(r.unidade) ? fmt0(totalZona) : fmt(totalZona, 1)}</td>
                           {nutri && (
                             <td className="px-2 py-1 text-right" style={{ color: '#94a3b8' }}>
@@ -748,6 +779,14 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
                     : <Kpi rot="Dose média" val={fmt(resumo.doseMedia, 1)} />}
                   <Kpi rot="Custo" val={resumo.custo != null ? `R$ ${fmt(resumo.custo, 0)}` : '—'} />
                 </div>
+                {totalArquivo != null && (
+                  <p className="text-[10px] flex items-center gap-1" style={{ color: '#86efac' }}>
+                    <Sprout size={10} />
+                    No arquivo de aplicação: <strong>{fmt0(totalArquivo)} {UNIDADE_TOTAL[r.unidade]}</strong>
+                    {resumo.areaHa > 0 && <> · {fmt0(totalArquivo / resumo.areaHa)} {UNIDADE_TOTAL[r.unidade]}/ha</>}
+                    <span style={{ color: '#64748b' }}> — é o que sai do depósito depois de compensar a germinação.</span>
+                  </p>
+                )}
                 {metricasSem && (
                   <p className="text-[10px]" style={{ color: '#94a3b8' }}>
                     <Sprout size={10} className="inline mr-1" />
@@ -969,28 +1008,60 @@ function AnaliseOrganicoCampos({ r, patchParams }: {
   );
 }
 
-function SementesCampos({ r, patchParams, estSem, setEstSem, calcular }: {
-  r: { params: ParamsCalculo }; patchParams: (p: Partial<ParamsCalculo>) => void;
+function SementesCampos({ r, patchParams, estSem, setEstSem, usarComoTotal, mostrarEstoque }: {
+  r: { params: ParamsCalculo; unidade: UnidadeDose };
+  patchParams: (p: Partial<ParamsCalculo>) => void;
   estSem: { modo: keyof EstoqueSementes; valor: string };
   setEstSem: (v: { modo: keyof EstoqueSementes; valor: string }) => void;
-  calcular: () => void;
+  usarComoTotal: () => void;
+  mostrarEstoque: boolean;
 }) {
   const s = r.params.sementes ?? { germinacaoPct: 90 };
   const set = (k: string, v: number | string | undefined) => patchParams({ sementes: { ...s, [k]: v } });
+  const pop = !!r.params.doseEhPopulacao;
+  const fator = fatorCampo(s);            // fração da semente que vira planta
+  const exemplo = pop && fator > 0 ? doseCompensada(80_000, s, true) : null;
   return (
     <div className="p-2.5 rounded-lg space-y-2" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
       <p className="text-[10px] font-semibold flex items-center gap-1" style={{ color: '#93c5fd' }}><Sprout size={11} /> Parâmetros da semente</p>
       <div className="grid grid-cols-4 gap-1.5">
         <Campo rotulo="PMS (g)"><InputNum valor={s.pmsG} onMudou={v => set('pmsG', v)} /></Campo>
         <Campo rotulo="Germinação (%)"><InputNum valor={s.germinacaoPct} onMudou={v => set('germinacaoPct', v ?? 90)} /></Campo>
-        <Campo rotulo="Pureza (%)"><InputNum valor={s.purezaPct} onMudou={v => set('purezaPct', v)} /></Campo>
-        <Campo rotulo="Sobrevivência (%)"><InputNum valor={s.sobrevivenciaPct} onMudou={v => set('sobrevivenciaPct', v)} /></Campo>
         <Campo rotulo="Espaçamento (m)"><InputNum valor={s.espacamentoM} onMudou={v => set('espacamentoM', v)} /></Campo>
         <Campo rotulo="Sementes/saco"><InputNum valor={s.sementesPorSaco} onMudou={v => set('sementesPorSaco', v)} /></Campo>
         <Campo rotulo="Pop. mínima (/ha)"><InputNum valor={s.populacaoMin} onMudou={v => set('populacaoMin', v)} /></Campo>
         <Campo rotulo="Pop. máxima (/ha)"><InputNum valor={s.populacaoMax} onMudou={v => set('populacaoMax', v)} /></Campo>
       </div>
-      <p className="text-[10px] font-semibold" style={{ color: '#93c5fd' }}>Estoque disponível</p>
+
+      {/* ── Compensação: a dose digitada é POPULAÇÃO, o arquivo leva a TAXA ──
+          Sem isso, 80.000 no arquivo com 90% de germinação viram ~72.000
+          plantas no campo — a lavoura nasce abaixo do alvo e o erro só aparece
+          depois de emergida. */}
+      <div className="p-2 rounded" style={{ background: pop ? '#0f2a1a' : '#0f2240', border: `1px solid ${pop ? '#166534' : '#1a3a6b'}` }}>
+        <label className="flex items-start gap-1.5 cursor-pointer">
+          {/* Grava a germinação JUNTO: o 90% era só o valor mostrado no campo —
+              sem o usuário encostar nele, params.sementes ficava vazio, a
+              compensação não acontecia e o aviso verde aqui embaixo prometia
+              uma taxa que o arquivo não levava. */}
+          <input type="checkbox" checked={pop}
+            onChange={e => patchParams({ doseEhPopulacao: e.target.checked, sementes: r.params.sementes ?? { germinacaoPct: 90 } })}
+            className="mt-0.5 accent-green-500" />
+          <span className="text-[10px] leading-relaxed" style={{ color: '#cbd5e1' }}>
+            A dose que eu digito é a <strong style={{ color: '#86efac' }}>população desejada</strong> (plantas/ha) —
+            compensar a <strong style={{ color: '#86efac' }}>germinação</strong> no arquivo de aplicação.
+          </span>
+        </label>
+        {pop && (
+          <p className="text-[9px] mt-1 leading-relaxed" style={{ color: '#86efac' }}>
+            Germinação {fmt(fator * 100, 1)}% — pedir <strong>80.000 plantas/ha</strong> grava{' '}
+            <strong>{exemplo != null ? fmt0(exemplo) : '—'} sementes/ha</strong> no SHP, no Excel e no PDF.
+            A tabela e o mapa seguem mostrando a população que você pediu.
+          </p>
+        )}
+      </div>
+
+      {mostrarEstoque && <>
+      <p className="text-[10px] font-semibold" style={{ color: '#93c5fd' }}>Estoque disponível (converte para o Total disponível)</p>
       <div className="grid grid-cols-3 gap-1.5">
         <select value={estSem.modo} onChange={e => setEstSem({ ...estSem, modo: e.target.value as keyof EstoqueSementes })}
           className="rounded px-2 py-1.5 text-xs outline-none" style={inputStyle}>
@@ -1004,14 +1075,14 @@ function SementesCampos({ r, patchParams, estSem, setEstSem, calcular }: {
           placeholder="ex.: 285000" className="rounded px-2 py-1.5 text-xs outline-none" style={inputStyle} />
         <Campo rotulo="Margem de segurança (%)"><InputNum valor={s.margemPct} onMudou={v => set('margemPct', v)} /></Campo>
       </div>
-      <SeletorRelacao relacao={r.params.relacao ?? 'direta'} onMudou={rel => patchParams({ relacao: rel })} />
-      <button onClick={calcular} className="px-3 py-1.5 rounded text-[10px] font-bold text-white flex items-center gap-1.5" style={{ background: 'var(--invicta-green-dark)' }}>
-        <Sprout size={11} /> Otimizar uso das sementes
+      <button onClick={usarComoTotal} className="px-3 py-1.5 rounded text-[10px] font-bold text-white flex items-center gap-1.5" style={{ background: 'var(--invicta-green-dark)' }}>
+        <Sprout size={11} /> Usar como Total disponível
       </button>
       <p className="text-[9px]" style={{ color: '#64748b' }}>
-        Distribui o estoque entre as zonas mantendo a média geral, respeitando população mínima/máxima e a margem —
-        se faltar ou sobrar demais, o aviso aparece ANTES de você salvar.
+        Converte sacos, quilos, milhões ou a média por hectare em sementes e joga no <b>Total disponível</b> do
+        cálculo por ajuste — a margem de segurança já sai descontada.
       </p>
+      </>}
     </div>
   );
 }

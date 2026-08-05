@@ -5,8 +5,8 @@
 // por incremento de máquina, nem com estoque insuficiente. Prescrição vai para
 // a máquina no campo; estourar estoque aqui vira caminhão faltando lá.
 import assert from 'node:assert/strict';
-import { redistribuirPorEstoque, distribuirProporcional, distribuirPorAjuste, resumoDoses, nutrientesPorZona, pesoDoRank, fatorBaseDose } from '../src/lib/prescricao/calculo.ts';
-import { fatorCampo, sementesPorHa, metricasSementes, estoqueTotalSementes, distribuirSementes } from '../src/lib/prescricao/sementes.ts';
+import { redistribuirPorEstoque, distribuirProporcional, distribuirPorAjuste, resumoDoses, nutrientesPorZona, pesoDoRank, fatorBaseDose, arredondarDose } from '../src/lib/prescricao/calculo.ts';
+import { fatorCampo, sementesPorHa, metricasSementes, estoqueTotalSementes, distribuirSementes, doseCompensada } from '../src/lib/prescricao/sementes.ts';
 import { dosesPorEquacao, variaveisDaEquacao } from '../src/lib/prescricao/equacao.ts';
 
 let ok = 0, fail = 0;
@@ -98,11 +98,11 @@ t('valores-base iguais → dose uniforme = média', () => {
 
 console.log('\nSementes\n');
 
-const PS = { germinacaoPct: 90, purezaPct: 98, sobrevivenciaPct: 95, pmsG: 180, espacamentoM: 0.5, sementesPorSaco: 60_000 };
+const PS = { germinacaoPct: 90, pmsG: 180, espacamentoM: 0.5, sementesPorSaco: 60_000 };
 
-t('taxa de semeadura desconta germinação/pureza/sobrevivência', () => {
+t('taxa de semeadura desconta a germinação', () => {
   const fator = fatorCampo(PS);
-  assert.ok(Math.abs(fator - 0.9 * 0.98 * 0.95) < 1e-12);
+  assert.ok(Math.abs(fator - 0.9) < 1e-12);
   const taxa = sementesPorHa(300_000, PS);
   assert.ok(Math.abs(taxa - 300_000 / fator) < 1e-6);
   assert.ok(taxa > 300_000, 'semeia-se mais do que a população desejada');
@@ -334,6 +334,38 @@ t('nutrientes do orgânico por zona (kg/ha)', () => {
 t('pesoDoRank: direta favorece rank 1; inversa favorece o pior', () => {
   assert.ok(pesoDoRank(1, 3, 'direta') > pesoDoRank(3, 3, 'direta'));
   assert.ok(pesoDoRank(3, 3, 'inversa') > pesoDoRank(1, 3, 'inversa'));
+});
+
+console.log('\nDose legível e compensação da germinação\n');
+
+t('arredondarDose: grande fica inteiro, pequeno com no máx. 2 casas', () => {
+  // A distribuição fecha o total exato e devolve dízima: "84352,78766265
+  // sementes/ha" não se regula em máquina nenhuma e esconde a ordem de grandeza.
+  assert.equal(arredondarDose(84352.78766265), 84353);
+  assert.equal(arredondarDose(80518.57004164), 80519);
+  assert.equal(arredondarDose(2.4567), 2.46);
+  assert.equal(arredondarDose(0.756), 0.76);
+  assert.equal(arredondarDose(999.999), 1000);   // vira grande e some a casa
+  assert.equal(arredondarDose(-1500.4), -1500);
+  assert.ok(Number.isNaN(arredondarDose(NaN)));
+});
+
+t('compensação: 80.000 plantas/ha com 90% de germinação → 88.889 sementes/ha', () => {
+  const p = { germinacaoPct: 90 };
+  const taxa = doseCompensada(80_000, p, true);
+  assert.ok(Math.abs(taxa - 80_000 / 0.9) < 1e-6, `veio ${taxa}`);
+  // e a taxa devolve a população pedida no campo
+  assert.ok(Math.abs(taxa * fatorCampo(p) - 80_000) < 1e-6);
+});
+
+t('sem o marcador, a dose vai INTACTA para o arquivo', () => {
+  // Prescrição de fertilizante não pode ser "compensada" por germinação.
+  assert.equal(doseCompensada(300, { germinacaoPct: 90 }, false), 300);
+  assert.equal(doseCompensada(300, undefined, true), 300);
+});
+
+t('germinação 100% não muda a dose', () => {
+  assert.equal(doseCompensada(80_000, { germinacaoPct: 100 }, true), 80_000);
 });
 
 console.log(`\n${ok} passaram, ${fail} falharam\n`);

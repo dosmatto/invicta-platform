@@ -320,3 +320,21 @@ export function nutrientesPorZona(
 }
 
 const arred = (v: number) => Math.round(v * 100) / 100;
+
+/**
+ * Dose com casas decimais QUE SERVEM PARA O CAMPO.
+ *
+ * A distribuição fecha o total exato e devolve dízimas — "84352,78766265
+ * sementes/ha" na tela e no arquivo. Ninguém regula máquina em milésimo de
+ * semente, e o número comprido esconde a ordem de grandeza, que é o que se
+ * confere. Números grandes (≥1.000) saem inteiros; abaixo disso, no máximo 2
+ * casas — que é o que 2,5 t/ha ou 0,75 L/ha precisam.
+ *
+ * O desvio que isso introduz no total é de arredondamento (frações de semente
+ * ou gramas por hectare); quando o passo da máquina importa, quem manda é o
+ * campo "Incremento", que é aplicado ANTES, dentro da distribuição.
+ */
+export function arredondarDose(v: number): number {
+  if (!Number.isFinite(v)) return v;
+  return Math.abs(v) >= 1000 ? Math.round(v) : arred(v);
+}
