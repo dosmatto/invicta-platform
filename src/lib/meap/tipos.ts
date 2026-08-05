@@ -24,8 +24,9 @@ export interface MetricasZonaMeap {
 export interface ZonaMeap {
   id: string;            // = id da feição em talhao.zonasGeojson
   rotulo: string;        // "Zona 01"
-  classeLabel: string;   // rótulo do semáforo (lib/zonas.ts)
+  classeLabel: string;   // rótulo do semáforo (lib/zonas.ts) ou o nome dado à zona
   cor: string;
+  rank?: number;         // potencialRank da feição (0 = maior potencial), quando houver
   areaHa: number;
   percTalhao: number;    // 0..1
   metricas: MetricasZonaMeap;

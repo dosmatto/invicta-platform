@@ -10,7 +10,7 @@ import { classeZona } from '@/lib/zonas';
 import { calcularCVZonas } from './cv';
 import type { AmbienteProdutivo, VersaoMeap, ZonaMeap, MetricasZonaMeap } from './tipos';
 
-interface ZonaGeo { id: string; classe: string; areaHa: number; geometry: GeoJSON.Geometry; }
+interface ZonaGeo { id: string; classe: string; cor?: string; rank?: number; areaHa: number; geometry: GeoJSON.Geometry; }
 
 function lerZonas(zonasGeojson: string): ZonaGeo[] {
   try {
@@ -18,8 +18,15 @@ function lerZonas(zonasGeojson: string): ZonaGeo[] {
     return fc.features
       .filter(f => f.geometry && (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon'))
       .map(f => {
-        const p = (f.properties ?? {}) as { id?: string; classe?: string; areaHa?: number };
-        return { id: String(p.id ?? '?'), classe: String(p.classe ?? ''), areaHa: Number(p.areaHa ?? 0), geometry: f.geometry! };
+        const p = (f.properties ?? {}) as { id?: string; classe?: string; cor?: string; potencialRank?: number; areaHa?: number };
+        // cor/potencialRank existem quando as zonas vieram de um ZONEAMENTO
+        // (gerado ou nativo): são decisões já tomadas, não se re-adivinha.
+        return {
+          id: String(p.id ?? '?'), classe: String(p.classe ?? ''),
+          cor: p.cor ? String(p.cor) : undefined,
+          rank: p.potencialRank != null ? Number(p.potencialRank) : undefined,
+          areaHa: Number(p.areaHa ?? 0), geometry: f.geometry!,
+        };
       })
       .sort((a, b) => a.id.localeCompare(b.id));
   } catch { return []; }
@@ -62,7 +69,13 @@ export function obterOuAdotarAmbiente(talhaoId: string): AmbienteProdutivo | nul
     const m: MetricasZonaMeap = cv.porZona[z.id] ?? {
       cvValidacao: null, variavelValidacao: cv.variavelValidacao, cvPorAtributo: {}, homogeneidade: null, nPontos: 0,
     };
-    return { id: z.id, rotulo: `Zona ${z.id}`, classeLabel: cz.label, cor: cz.cor, areaHa: z.areaHa, percTalhao: z.areaHa / areaTotal, metricas: m };
+    // Zona vinda de um ZONEAMENTO (tem rank) já teve a classe decidida lá —
+    // inclusive quando o usuário batizou a zona. Repassá-la pelo semáforo
+    // devolveria "Baixada úmida" como "Baixa" (casa com /BAIX/), apagando o
+    // nome dado e fundindo duas zonas distintas. Só arquivo cru (sem rank)
+    // precisa da normalização.
+    const classeLabel = z.rank != null ? (z.classe || cz.label) : cz.label;
+    return { id: z.id, rotulo: `Zona ${z.id}`, classeLabel, cor: z.cor ?? cz.cor, rank: z.rank, areaHa: z.areaHa, percTalhao: z.areaHa / areaTotal, metricas: m };
   });
 
   // CV médio intra-zona ponderado por área (só zonas com CV calculado).

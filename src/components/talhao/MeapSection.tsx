@@ -17,6 +17,8 @@ import type { RespSuavizarZonas } from '@/lib/fertilidade';
 import { SuavizarLimites } from './SuavizarLimites';
 import { EditorZonasManual } from './EditorZonasManual';
 import { obterOuAdotarAmbiente } from '@/lib/meap/adocao';
+import { paraZoneamentoNativo } from '@/lib/meap/nativo';
+import { ImportarZoneamento } from './ImportarZoneamento';
 import { carregarCamadas, analisarMulti, gerarMulti, dadosLabCV, type CamadasCarregadas } from '@/lib/meap/gerar';
 import { calcularCVZonas } from '@/lib/meap/cv';
 import { unirFeatures, limparZona } from '@/lib/meap/fundir';
@@ -57,6 +59,9 @@ const ZLAB: Record<number, string[]> = {
   5: ['Alta', 'Média-alta', 'Média', 'Média-baixa', 'Baixa'],
 };
 // Escala qualitativa p/ 6–12 classes (em vez de "Nível N", que não diz nada).
+// Como o zoneamento foi feito (o nome cru do algoritmo não diz nada na tela).
+const ROTULO_ALG: Record<string, string> = { fcm: 'fuzzy', kmeans: 'k-means', quantis: 'quantis', importado: 'importado' };
+
 const ESCALA_POT = ['Muito alto', 'Alto', 'Médio-alto', 'Médio', 'Médio-baixo', 'Baixo', 'Muito baixo'];
 function rotulosPotencial(nn: number): string[] {
   if (ZLAB[nn]) return ZLAB[nn];
@@ -198,6 +203,7 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
   const [labAberto, setLabAberto] = useState(false);            // Laboratório de Zonas (C4.2)
   const [previewCh, setPreviewCh] = useState<string | null>(null);  // camada em pré-visualização no mapa
   const [refreshAmb, setRefreshAmb] = useState(0);  // força re-derivar o ambiente adotado (após remover)
+  const [importFc, setImportFc] = useState<GeoJSON.FeatureCollection | null>(null);  // prévia do assistente de importação
   const [fundoCh, setFundoCh] = useState<string | null>(null);  // camada de FUNDO sob as zonas (Avaliar)
 
   const poligono = useMemo(() => {
@@ -312,11 +318,14 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
     return m;
   }, [potenciais]);
 
-  // Mapa: prioridade = EDITOR MANUAL > prévia da SUAVIZAÇÃO > zoneamento salvo em
-  // visualização > preview gerado > (prévia de camada) > zonas adotadas.
+  // Mapa: prioridade = IMPORTAÇÃO em conferência > EDITOR MANUAL > prévia da
+  // SUAVIZAÇÃO > zoneamento salvo em visualização > preview gerado > (prévia de
+  // camada) > zonas adotadas.
   useEffect(() => {
     let fc: GeoJSON.FeatureCollection | null = null;
-    if (editorMapFc) {
+    if (importFc) {
+      fc = importFc;      // já vem pronto (cor + rotulo = nº da zona)
+    } else if (editorMapFc) {
       fc = editorMapFc;   // já vem pronto (cor + rotulo=id + selecionada)
     } else if (suavMapFc) {
       fc = featuresParaMapa(suavMapFc);
@@ -335,7 +344,7 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
     if (!fc) { setZonasManejo(null); return; }
     setZonasManejo(fc);
     return () => setZonasManejo(null);
-  }, [editorMapFc, suavMapFc, vendoFc, res, zonas, previewCh, numDeRank, talhao.id, talhao.zonasGeojson, refreshAmb, setZonasManejo]);
+  }, [importFc, editorMapFc, suavMapFc, vendoFc, res, zonas, previewCh, numDeRank, talhao.id, talhao.zonasGeojson, refreshAmb, setZonasManejo]);
 
   // Fecha os painéis de edição ao trocar de talhão ou limpar o preview gerado.
   useEffect(() => { setSuav(null); setSuavMapFc(null); setEditorZona(null); setEditorMapFc(null); }, [talhao.id]);
@@ -667,6 +676,40 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
     setEditorZona(null); setEditorMapFc(null);
   }
 
+  // ── Zonas adotadas SOLTAS → Zoneamento Nativo ──────────────────────────
+  // Talhão que recebeu um arquivo antes deste fluxo tem as zonas em
+  // `talhao.zonasGeojson` e nenhum zoneamento salvo: o mapa aparece, mas
+  // ferramenta nenhuma o enxerga (todas operam sobre um zoneamento). Converter
+  // aqui é o mesmo caminho da importação nova — sem precisar do arquivo.
+  function adotadasParaNativo() {
+    const zg = getTalhoes().find(x => x.id === talhao.id)?.zonasGeojson;
+    const imp = parseImportadas(zg);
+    if (!imp) return;
+    const nat = paraZoneamentoNativo(imp);
+    if (!nat.fc.features.length) { alert('As zonas adotadas não têm polígonos válidos para converter.'); return; }
+    const usados = new Set(getZoneamentosMeap(talhao.id).map(z => z.nome));
+    let nome = 'Zonas adotadas — V1 Importada';
+    if (usados.has(nome)) { let n = 2; while (usados.has(`${nome} (${n})`)) n++; nome = `${nome} (${n})`; }
+    const mapa: Record<string, string> = {};
+    nat.classes.forEach(c => { mapa[c.valor] = c.classe; });
+    const novo = saveZoneamentoMeap({
+      talhaoId: talhao.id, nome, padrao: false, fc: nat.fc,
+      meta: {
+        camadas: [], algoritmo: 'importado', nPotenciais: nat.classes.length, areaMinHa: 0,
+        nZonas: nat.classes.length, nPoligonos: nat.nPoligonos, cvMedio: null,
+        importacao: {
+          campoClasse: '', menorEhPior: true, mapa,
+          nDescartados: nat.descartados.semGeometria + nat.descartados.semArea,
+          data: new Date().toISOString(), usuario: usuarioAtual()?.email ?? undefined,
+        },
+      },
+    });
+    setZoneamentoPadraoMeap(talhao.id, novo.id);   // segue sendo o oficial da Amostragem
+    recarregarZon();
+    setRefreshAmb(n => n + 1);
+    setAmb(obterOuAdotarAmbiente(talhao.id));
+  }
+
   function tornarPadrao(id: string) {
     setZoneamentoPadraoMeap(talhao.id, id);
     recarregarZon();
@@ -687,9 +730,14 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
   // avaliação): ordena por potencial, recolore em gradiente e relabela legível.
   const zonasAdotOficiais = useMemo(() => {
     if (!versao) return [];
+    // Agrupa por RANK quando as zonas vêm de um zoneamento (a decisão já foi
+    // tomada lá); só cai no nome quando não há rank — zonas antigas, coladas
+    // como arquivo. Sem isso, duas zonas com nomes parecidos ("Baixa" e
+    // "Baixada úmida") viravam uma só aqui, e o talhão perdia uma zona na tela.
+    const temRank = versao.zonas.every(z => z.rank != null);
     const grupos = new Map<string, typeof versao.zonas>();
     for (const z of versao.zonas) {
-      const k = z.classeLabel || z.rotulo;
+      const k = temRank ? String(z.rank) : (z.classeLabel || z.rotulo);
       const arr = grupos.get(k); if (arr) arr.push(z); else grupos.set(k, [z]);
     }
     const ordem = (classe: string): number => {
@@ -698,16 +746,24 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
       const m = classe.match(/(\d+)/);
       return m ? 100 + parseInt(m[1], 10) : 999;      // Nível N
     };
-    const arr = [...grupos.entries()].map(([classe, polis]) => {
+    const arr = [...grupos.values()].map(polis => {
+      const classe = polis[0].classeLabel || polis[0].rotulo;
       const areas = polis.map(p => p.areaHa);
       const comCv = polis.filter(p => p.metricas.cvValidacao != null);
       const areaCv = comCv.reduce((s, p) => s + p.areaHa, 0);
       const cv = areaCv > 0 ? Math.round((comCv.reduce((s, p) => s + p.metricas.cvValidacao! * p.areaHa, 0) / areaCv) * 10) / 10 : null;
-      return { classe, nPolig: polis.length, areaTotal: areas.reduce((s, a) => s + a, 0), perc: polis.reduce((s, p) => s + p.percTalhao, 0), menor: Math.min(...areas), maior: Math.max(...areas), cv };
-    }).sort((a, b) => ordem(a.classe) - ordem(b.classe));
+      return { classe, rank: polis[0].rank, cor: polis[0].cor, nPolig: polis.length, areaTotal: areas.reduce((s, a) => s + a, 0), perc: polis.reduce((s, p) => s + p.percTalhao, 0), menor: Math.min(...areas), maior: Math.max(...areas), cv };
+    }).sort((a, b) => (temRank ? (a.rank ?? 0) - (b.rank ?? 0) : ordem(a.classe) - ordem(b.classe)));
     const total = arr.length;
     const labels = rotulosPotencial(total);
-    return arr.map((g, i) => ({ ...g, num: String(i + 1).padStart(2, '0'), label: labels[i] ?? g.classe, cor: corZonaPorPosicao(i, total) }));
+    // Nome e cor vêm do ZONEAMENTO quando existe um (temRank): é lá que a
+    // classe foi decidida, inclusive o nome que o usuário deu à zona. A escala
+    // genérica só rotula zonas coladas como arquivo, que não têm nome nenhum.
+    return arr.map((g, i) => ({
+      ...g, num: String(i + 1).padStart(2, '0'),
+      label: temRank ? g.classe : (labels[i] ?? g.classe),
+      cor: g.cor ?? corZonaPorPosicao(i, total),
+    }));
   }, [versao]);
 
   // Fragmentos = manchas abaixo da área mínima (parametrizável; default 0,5 ha do spec).
@@ -735,11 +791,25 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
           <p className="text-[10px] leading-relaxed" style={{ color: '#64748b' }}>
             <strong style={{ color: '#cbd5e1' }}>{zonasAdotOficiais.length}</strong> zonas oficiais · <strong style={{ color: '#cbd5e1' }}>{versao.zonas.length}</strong> polígonos · CV {temCV ? <>por <strong style={{ color: '#93c5fd' }}>{varSimbolo}</strong></> : 'indisponível'}.
           </p>
+
+          {/* Zonas adotadas SOLTAS (arquivo colado no talhão, sem zoneamento
+              salvo): o mapa aparece mas nenhuma ferramenta o enxerga. */}
+          {!zoneamentos.some(z => z.padrao) && (
+            <div className="rounded p-2 space-y-1.5" style={{ background: '#08243a', border: '1px solid #0e7490' }}>
+              <p className="text-[10px] leading-relaxed" style={{ color: '#cbd5e1' }}>
+                Estas zonas vieram de um arquivo colado no talhão — por isso <strong style={{ color: '#7dd3fc' }}>suavizar, editar, versionar, exportar e prescrever</strong> não aparecem para elas. Converter resolve de uma vez, sem precisar do arquivo de novo.
+              </p>
+              <button onClick={adotadasParaNativo}
+                className="w-full py-2 rounded text-[11px] font-bold text-white flex items-center justify-center gap-1.5" style={{ background: '#0369a1', border: '1px solid #38bdf8' }}>
+                <Check size={12} /> Transformar em Zoneamento Nativo
+              </button>
+            </div>
+          )}
           <div className="space-y-1">
             {zonasAdotOficiais.map(z => {
               const banda = z.cv == null ? null : z.cv <= 10 ? HOMOG.alta : z.cv <= 20 ? HOMOG.media : HOMOG.baixa;
               return (
-                <div key={z.classe} className="flex items-center gap-2 px-2 py-1.5 rounded" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
+                <div key={z.num} className="flex items-center gap-2 px-2 py-1.5 rounded" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
                   <span className="inline-block w-3 h-3 rounded-sm flex-shrink-0" style={{ background: z.cor, border: '1px solid #fff' }} />
                   <div className="min-w-0 flex-1">
                     <span className="text-xs font-bold" style={{ color: '#e2e8f0' }}>Zona {z.num}</span>
@@ -757,6 +827,12 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
             })}
           </div>
         </div>
+      )}
+
+      {/* ── Importar zoneamento pronto → Zoneamento Nativo ── */}
+      {pode('zonasSalvar') && (
+        <ImportarZoneamento talhaoId={talhao.id} onPreview={setImportFc}
+          onSalvo={() => { recarregarZon(); setRefreshAmb(n => n + 1); setAmb(obterOuAdotarAmbiente(talhao.id)); }} />
       )}
 
       {/* ── Gerar zonas por similaridade (M2) ── */}
@@ -1122,7 +1198,8 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
                 <button onClick={e => { e.stopPropagation(); excluir(z.id); }} title="Excluir" className="p-1 rounded flex-shrink-0" style={{ color: '#f87171' }}><Trash2 size={12} /></button>
               </div>
               <p className="text-[9px] mt-0.5" style={{ color: '#64748b' }}>
-                {z.meta.nZonas} zonas oficiais{z.meta.nPoligonos ? ` · ${z.meta.nPoligonos} polígonos` : ''} · {z.meta.algoritmo === 'fcm' ? 'fuzzy' : 'k-means'}
+                {z.meta.nZonas} zonas oficiais{z.meta.nPoligonos ? ` · ${z.meta.nPoligonos} polígonos` : ''} · {ROTULO_ALG[z.meta.algoritmo] ?? z.meta.algoritmo}
+                {z.meta.importacao && <span style={{ color: '#7dd3fc' }}> · de {z.meta.importacao.arquivo ?? 'arquivo do talhão'}{z.meta.importacao.campoClasse ? ` (campo "${z.meta.importacao.campoClasse}")` : ''}</span>}
                 {z.meta.cvMedio != null && <> · CV médio {z.meta.cvMedio.toLocaleString('pt-BR')}%</>}
                 {z.meta.camadas.length > 0 && <> · {z.meta.camadas.join(', ')}</>}
                 {z.meta.suavizacao && <span style={{ color: '#22d3ee' }}> · suavizado ({z.meta.suavizacao.nivel}{z.meta.suavizacao.origemNome ? ` de "${z.meta.suavizacao.origemNome}"` : ''})</span>}

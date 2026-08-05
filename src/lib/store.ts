@@ -1655,8 +1655,22 @@ export interface ZoneamentoMeap {
   nome: string;
   padrao: boolean;
   fc: GeoJSON.FeatureCollection;   // polígonos {id, zona, classe, areaHa, potencialRank}
-  meta: { camadas: string[]; algoritmo: string; nPotenciais: number; areaMinHa: number; nZonas: number; nPoligonos?: number; cvMedio?: number | null; pesos?: Record<string, number>; chaves?: string[]; suavizacao?: SuavizacaoMeta; edicaoManual?: EdicaoManualMeta };
+  meta: { camadas: string[]; algoritmo: string; nPotenciais: number; areaMinHa: number; nZonas: number; nPoligonos?: number; cvMedio?: number | null; pesos?: Record<string, number>; chaves?: string[]; suavizacao?: SuavizacaoMeta; edicaoManual?: EdicaoManualMeta; importacao?: ImportacaoMeta };
   criadoEm: string;
+}
+
+// Origem de um zoneamento IMPORTADO que virou Zoneamento Nativo. Guarda a
+// LEITURA feita do arquivo (campo, direção, valor→classe) — é o que permite
+// conferir depois por que uma zona ficou "Alta" sem ter o arquivo em mãos.
+export interface ImportacaoMeta {
+  arquivo?: string;              // nome do arquivo de origem
+  formato?: string;              // kml | shp | geojson
+  campoClasse: string;           // atributo lido como classe
+  menorEhPior: boolean;          // 1 = pior zona (QGIS) ou 1 = melhor
+  mapa: Record<string, string>;  // valor do arquivo → classe final
+  nDescartados?: number;         // feições sem polígono/sem área
+  data: string;                  // ISO
+  usuario?: string;
 }
 
 // Uma operação do Editor Manual de Zonas (registro/auditoria — spec §3, §5).
