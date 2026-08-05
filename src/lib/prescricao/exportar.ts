@@ -51,10 +51,24 @@ const fmt0 = (v: number) => Math.round(v).toLocaleString('pt-BR');
 const san = (s: string | null | undefined): string => (s ?? '').replace(/[^\x00-\xFF]/g, '');
 
 // ── Validação pré-exportação ────────────────────────────────────────────────
-export interface ValidacaoPrescricao { erros: string[]; avisos: string[] }
+//
+// Três níveis, e a diferença entre eles é o que decide se o trabalho anda:
+//   erros     — o arquivo sairia QUEBRADO (geometria inválida, dose NaN). Não
+//               há decisão a tomar: bloqueia.
+//   ressalvas — o arquivo sai CERTO, mas a conta não fecha com o que você
+//               declarou ter (estoque insuficiente). É decisão agronômica —
+//               pergunta e deixa seguir.
+//   avisos    — informação; não interrompe nada.
+//
+// O estoque insuficiente já foi erro puro. Travava a exportação de prescrições
+// legítimas: com dose mín/máx apertadas, a distribuição quase nunca fecha exata
+// no total, e o agrônomo ficava sem PDF, sem Excel e sem SHP por causa de uma
+// sobra de 0,5%. Quem decide se compra mais um saco é ele — não a validação.
+export interface ValidacaoPrescricao { erros: string[]; ressalvas: string[]; avisos: string[] }
 
 export function validarPrescricao(p: Prescricao): ValidacaoPrescricao {
   const erros: string[] = [];
+  const ressalvas: string[] = [];
   const avisos: string[] = [];
   const geo = validarParaExport(p.fc);
   if (geo) erros.push(`Geometria: ${geo}`);
@@ -77,13 +91,13 @@ export function validarPrescricao(p: Prescricao): ValidacaoPrescricao {
     // Estoque FÍSICO continua bloqueando — dali não se tira o que não existe.
     const msg = `a prescrição usa ${fmt(r.usado, 1)} ${un0} e o disponível é ${fmt(p.params.totalDisponivel, 1)} (${fmt(falta, 1)} a mais).`;
     if (p.params.totalPorHa) avisos.push(`Acima da meta: ${msg} Os limites de dose mín/máx não deixaram fechar exato.`);
-    else erros.push(`Estoque insuficiente: ${msg}`);
+    else ressalvas.push(`Estoque insuficiente: ${msg} Confira antes de mandar para o campo — pode faltar produto.`);
   }
   const pequenos = p.zonas.filter(z => z.areaHa > 0 && z.areaHa < 0.05);
   if (pequenos.length) avisos.push(`Polígono(s) muito pequeno(s) (<0,05 ha) — a máquina pode ignorar: ${pequenos.map(z => z.nomeZona).join(', ')}.`);
   // dose uniforme não é erro, mas taxa variável com 1 dose só costuma ser engano
   if (p.zonas.length > 1 && r.doseMax - r.doseMin < 1e-9) avisos.push('Todas as zonas com a MESMA dose — a aplicação não será variável.');
-  return { erros, avisos };
+  return { erros, ressalvas, avisos };
 }
 
 // ── FeatureCollection da prescrição (dose por polígono) ─────────────────────

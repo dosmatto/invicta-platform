@@ -378,13 +378,29 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
     setErro(''); setOkMsg('');
     let p: Prescricao | undefined = deSalva;
     if (!p) {
-      if (!r.editandoId) { setErro('Salve a prescrição antes de exportar — o arquivo precisa ser rastreável.'); return; }
-      p = getPrescricoes(talhaoId).find(x => x.id === r.editandoId);
+      // Arquivo de aplicação precisa ser rastreável — mas exigir "salve antes"
+      // e devolver o usuário para outro botão é atrito à toa: se ainda não foi
+      // salva, salva aqui e segue direto para a exportação. O que a regra
+      // protege (existir versão registrada) continua valendo.
+      let id = r.editandoId;
+      if (!id) {
+        const base = montarPrescricao();
+        if (!base) return;               // montarPrescricao já explicou o que falta
+        const nova = savePrescricao(base);
+        id = nova.id;
+        patch({ editandoId: id });
+        setTick(t => t + 1);
+      }
+      p = getPrescricoes(talhaoId).find(x => x.id === id);
     }
     if (!p) { setErro('Prescrição não encontrada.'); return; }
     const val = validarPrescricao(p);
+    // Erro = o arquivo sairia quebrado; não há o que decidir.
     if (val.erros.length) { setErro(`Não exportado — corrija: ${val.erros.join(' · ')}`); return; }
-    if (val.avisos.length) setAvisosCalc(val.avisos);
+    // Ressalva = o arquivo sai certo, mas a conta não fecha com o que foi
+    // declarado. Quem decide se manda assim é o agrônomo, não a validação.
+    if (val.ressalvas.length && !confirm(`${val.ressalvas.join('\n\n')}\n\nGerar o arquivo assim mesmo?`)) return;
+    if (val.avisos.length || val.ressalvas.length) setAvisosCalc([...val.ressalvas, ...val.avisos]);
     setExportando(`${p.id}:${formato}`);
     try {
       const t = getTalhoes().find(x => x.id === talhaoId);
