@@ -1,7 +1,8 @@
 import { kml } from '@tmcw/togeojson';
 import turfArea from '@turf/area';
 import { areaM2Geo } from './areaGeo';
-import { classeZona, classeReconhecida } from './zonas';
+import { classeZona } from './zonas';
+import { candidatosClasse, mapearValoresParaClasses, type CandidatoClasse } from './zonasImport';
 
 export interface GeoUploadResult {
   geojson: GeoJSON.FeatureCollection;
@@ -355,6 +356,9 @@ export interface ZonasPreparadas {
   count: number;
   classes: string[];   // labels distintas detectadas
   campoClasse: string; // '' se não detectado
+  /** Outros campos que poderiam ser a classe — a UI oferece a troca quando a
+   *  aposta automática erra (é o "Mapear atributos" do fluxo de importação). */
+  candidatos: CandidatoClasse[];
 }
 
 function areaHaFeature(geom: GeoJSON.Geometry): number {
@@ -362,34 +366,52 @@ function areaHaFeature(geom: GeoJSON.Geometry): number {
   return Math.round((turfArea(fc) / 10000) * 100) / 100;
 }
 
-export function normalizarZonas(entrada: GeoJSON.FeatureCollection): ZonasPreparadas {
+// `opcoes` permite refazer a normalização com o campo/direção que o USUÁRIO
+// escolheu, sem reabrir o arquivo (etapa "Mapear atributos"). Sem opções, usa a
+// melhor aposta da heurística.
+export function normalizarZonas(
+  entrada: GeoJSON.FeatureCollection,
+  opcoes?: { campoClasse?: string; menorEhPior?: boolean },
+): ZonasPreparadas {
   const polis = entrada.features.filter(f => f.geometry && (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon'));
 
   const chaves = new Set<string>();
   polis.forEach(f => Object.keys(f.properties ?? {}).forEach(k => chaves.add(k)));
 
-  // campo de classe = o que tem mais valores reconhecidos (+ bônus p/ nome plausível)
-  let campoClasse = '', melhor = 0;
-  for (const k of chaves) {
-    let rec = 0;
-    for (const f of polis) {
-      const v = (f.properties as Record<string, unknown> | null)?.[k];
-      if (v != null && classeReconhecida(String(v))) rec++;
-    }
-    const bonus = /class|zona|manejo|categoria|ugd|nivel|fertil/i.test(k) ? 0.5 : 0;
-    if (rec + bonus > melhor) { melhor = rec + bonus; campoClasse = k; }
-  }
+  // Campo de classe: candidatosClasse aceita classe NUMÉRICA (1..5), que é o
+  // formato da maioria dos arquivos e que a versão antiga desta função ignorava
+  // — sem isso, todos os polígonos vinham sem classe e o zoneamento entrava na
+  // plataforma como uma zona só ("Único"), inútil para prescrever.
+  const candidatos = candidatosClasse(polis);
+  const escolhido = opcoes?.campoClasse
+    ? candidatos.find(c => c.campo === opcoes.campoClasse)
+    : candidatos[0];
+  const campoClasse = escolhido?.campo ?? '';
+
+  // Direção da numeração: 1 = pior (convenção do QGIS) por padrão. Errar isso
+  // inverte a prescrição, então a UI expõe o botão para virar.
+  const mapa = escolhido
+    ? mapearValoresParaClasses(escolhido.valores, { menorEhPior: opcoes?.menorEhPior ?? true })
+    : {};
+
   const campoId = [...chaves].find(k => /^(id|zona|numero|num|fid|cod|nome|name)$/i.test(k));
 
   const features: GeoJSON.Feature[] = polis.map((f, i) => {
     const props = (f.properties ?? {}) as Record<string, unknown>;
-    const classe = campoClasse ? String(props[campoClasse] ?? '') : '';
+    const bruto = campoClasse ? String(props[campoClasse] ?? '').trim() : '';
+    // Guarda o valor ORIGINAL do arquivo junto do rótulo: é o que permite
+    // remapear depois (trocar a direção) sem precisar do arquivo de novo.
+    const classe = mapa[bruto] ?? (bruto ? classeZona(bruto).label : '');
     const id = campoId && props[campoId] != null ? String(props[campoId]) : String(i + 1).padStart(2, '0');
-    return { type: 'Feature', properties: { id, classe, areaHa: areaHaFeature(f.geometry!) }, geometry: f.geometry! };
+    return {
+      type: 'Feature',
+      properties: { id, classe, classeOrigem: bruto, areaHa: areaHaFeature(f.geometry!) },
+      geometry: f.geometry!,
+    };
   });
 
-  const classes = [...new Set(features.map(f => classeZona(String((f.properties as { classe: string }).classe)).label))];
-  return { fc: { type: 'FeatureCollection', features }, count: features.length, classes, campoClasse };
+  const classes = [...new Set(features.map(f => String((f.properties as { classe: string }).classe) || '—'))];
+  return { fc: { type: 'FeatureCollection', features }, count: features.length, classes, campoClasse, candidatos };
 }
 
 function collectCoords(geojson: GeoJSON.FeatureCollection): [number, number][] {
