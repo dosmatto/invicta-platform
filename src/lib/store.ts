@@ -1655,8 +1655,19 @@ export interface ZoneamentoMeap {
   nome: string;
   padrao: boolean;
   fc: GeoJSON.FeatureCollection;   // polígonos {id, zona, classe, areaHa, potencialRank}
-  meta: { camadas: string[]; algoritmo: string; nPotenciais: number; areaMinHa: number; nZonas: number; nPoligonos?: number; cvMedio?: number | null; pesos?: Record<string, number>; chaves?: string[]; suavizacao?: SuavizacaoMeta; edicaoManual?: EdicaoManualMeta; importacao?: ImportacaoMeta };
+  meta: { camadas: string[]; algoritmo: string; nPotenciais: number; areaMinHa: number; nZonas: number; nPoligonos?: number; cvMedio?: number | null; pesos?: Record<string, number>; chaves?: string[]; suavizacao?: SuavizacaoMeta; edicaoManual?: EdicaoManualMeta; importacao?: ImportacaoMeta; restauracao?: RestauracaoMeta };
   criadoEm: string;
+}
+
+// Restauração de uma versão anterior (spec §5: a original é SEMPRE preservada).
+// Restaurar não apaga nem sobrescreve nada: copia a versão escolhida para o
+// topo da linhagem como uma versão nova, apontando de onde veio.
+export interface RestauracaoMeta {
+  origemId: string;
+  origemNome?: string;
+  origemVersao?: number;   // nº da versão restaurada, como aparecia na tela
+  data: string;            // ISO
+  usuario?: string;
 }
 
 // Origem de um zoneamento IMPORTADO que virou Zoneamento Nativo. Guarda a
@@ -1731,6 +1742,15 @@ export function saveZoneamentoMeap(z: Omit<ZoneamentoMeap, 'id' | 'criadoEm'>): 
   lista.push(novo);
   save('inv_meap_zoneamentos', lista);
   return novo;
+}
+
+// Renomear uma versão (só o rótulo — geometria, meta e histórico ficam).
+export function renameZoneamentoMeap(id: string, nome: string): void {
+  const lista = load<ZoneamentoMeap>('inv_meap_zoneamentos');
+  const z = lista.find(x => x.id === id);
+  if (!z) return;
+  z.nome = nome;
+  save('inv_meap_zoneamentos', lista);
 }
 
 export function deleteZoneamentoMeap(id: string): void {

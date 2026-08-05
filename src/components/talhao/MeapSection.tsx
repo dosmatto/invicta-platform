@@ -10,7 +10,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useApp } from '@/context/AppContext';
-import { getZoneamentosMeap, saveZoneamentoMeap, deleteZoneamentoMeap, setZoneamentoPadraoMeap, removerAdocaoMeap, getTalhoes, getLegendasPorAtributo, type Talhao, type ZoneamentoMeap, type SuavizacaoMeta, type EdicaoManualMeta, type OperacaoEdicaoZona } from '@/lib/store';
+import { getZoneamentosMeap, saveZoneamentoMeap, deleteZoneamentoMeap, renameZoneamentoMeap, setZoneamentoPadraoMeap, removerAdocaoMeap, getTalhoes, getLegendasPorAtributo, type Talhao, type ZoneamentoMeap, type SuavizacaoMeta, type EdicaoManualMeta, type OperacaoEdicaoZona } from '@/lib/store';
 import { usuarioAtual } from '@/lib/auth';
 import { pode } from '@/lib/empresa';
 import type { RespSuavizarZonas } from '@/lib/fertilidade';
@@ -19,6 +19,8 @@ import { EditorZonasManual } from './EditorZonasManual';
 import { obterOuAdotarAmbiente } from '@/lib/meap/adocao';
 import { paraZoneamentoNativo } from '@/lib/meap/nativo';
 import { ImportarZoneamento } from './ImportarZoneamento';
+import { VersoesZoneamentos } from './VersoesZoneamentos';
+import { montarLinhagens, nomeVersaoRestaurada, origemDe, type VersaoZoneamento } from '@/lib/meap/versoes';
 import { carregarCamadas, analisarMulti, gerarMulti, dadosLabCV, type CamadasCarregadas } from '@/lib/meap/gerar';
 import { calcularCVZonas } from '@/lib/meap/cv';
 import { unirFeatures, limparZona } from '@/lib/meap/fundir';
@@ -30,7 +32,7 @@ import { rampaVisualStops } from '@/lib/legendas';
 import { classeZona, classeReconhecida, corZonaPorPosicao, ORDEM_CLASSES } from '@/lib/zonas';
 import { simboloElemento } from '@/lib/lab';
 import type { AmbienteProdutivo, Homogeneidade, MetricasZonaMeap } from '@/lib/meap/tipos';
-import { Layers, AlertTriangle, Wand2, Loader2, X, Check, ChevronUp, ChevronDown, Save, Star, Trash2, Eye, BarChart3, Sparkles, Combine, CheckSquare, Square, Pencil, Undo2, Redo2, FlaskConical, Spline } from 'lucide-react';
+import { Layers, AlertTriangle, Wand2, Loader2, X, Check, ChevronUp, ChevronDown, Save, Star, Trash2, BarChart3, Sparkles, Combine, CheckSquare, Square, Pencil, Undo2, Redo2, FlaskConical, Spline } from 'lucide-react';
 import { LaboratorioZonas } from './LaboratorioZonas';
 import { ExportarZonas } from './ExportarZonas';
 
@@ -59,9 +61,6 @@ const ZLAB: Record<number, string[]> = {
   5: ['Alta', 'Média-alta', 'Média', 'Média-baixa', 'Baixa'],
 };
 // Escala qualitativa p/ 6–12 classes (em vez de "Nível N", que não diz nada).
-// Como o zoneamento foi feito (o nome cru do algoritmo não diz nada na tela).
-const ROTULO_ALG: Record<string, string> = { fcm: 'fuzzy', kmeans: 'k-means', quantis: 'quantis', importado: 'importado' };
-
 const ESCALA_POT = ['Muito alto', 'Alto', 'Médio-alto', 'Médio', 'Médio-baixo', 'Baixo', 'Muito baixo'];
 function rotulosPotencial(nn: number): string[] {
   if (ZLAB[nn]) return ZLAB[nn];
@@ -201,6 +200,7 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
   const [editorZona, setEditorZona] = useState<{ id: string; nome: string; fc: GeoJSON.FeatureCollection } | null>(null);
   const [editorMapFc, setEditorMapFc] = useState<GeoJSON.FeatureCollection | null>(null);
   const [labAberto, setLabAberto] = useState(false);            // Laboratório de Zonas (C4.2)
+  const [labPar, setLabPar] = useState<{ a: string; b: string } | null>(null);  // par vindo da tela de versões
   const [previewCh, setPreviewCh] = useState<string | null>(null);  // camada em pré-visualização no mapa
   const [refreshAmb, setRefreshAmb] = useState(0);  // força re-derivar o ambiente adotado (após remover)
   const [importFc, setImportFc] = useState<GeoJSON.FeatureCollection | null>(null);  // prévia do assistente de importação
@@ -716,10 +716,53 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
     setAmb(obterOuAdotarAmbiente(talhao.id));
   }
 
+  function renomearVersao(id: string, nome: string) {
+    renameZoneamentoMeap(id, nome);
+    recarregarZon();
+  }
+
+  // ── Restaurar uma versão anterior (spec §5) ────────────────────────────
+  // NÃO apaga o que veio depois e não sobrescreve nada: copia a versão
+  // escolhida para o TOPO da linhagem como uma versão nova. Se a linhagem era
+  // a oficial, a cópia assume o padrão — restaurar é um gesto operacional
+  // ("quero voltar a usar aquele mapa"), não só de arquivo.
+  function restaurarVersao(v: VersaoZoneamento, base: string) {
+    const orig = v.z;
+    const daLinhagem = montarLinhagens(zoneamentos).find(l => l.versoes.some(x => x.z.id === orig.id));
+    const eraOficial = !!daLinhagem?.temPadrao;
+    const nome = nomeVersaoRestaurada(base, v.numero, getZoneamentosMeap(talhao.id).map(z => z.nome));
+    const novo = saveZoneamentoMeap({
+      talhaoId: talhao.id, nome, padrao: false,
+      fc: JSON.parse(JSON.stringify(orig.fc)) as GeoJSON.FeatureCollection,
+      meta: {
+        ...orig.meta,
+        restauracao: {
+          origemId: orig.id, origemNome: orig.nome, origemVersao: v.numero,
+          data: new Date().toISOString(), usuario: usuarioAtual()?.email ?? undefined,
+        },
+      },
+    });
+    if (eraOficial) { setZoneamentoPadraoMeap(talhao.id, novo.id); setAmb(obterOuAdotarAmbiente(talhao.id)); }
+    recarregarZon();
+    setVendoId(novo.id);
+  }
+
+  // Excluir é definitivo e ainda pode deixar filhas sem origem (elas continuam
+  // salvas, mas perdem a linha do tempo). Com a tela de versões o clique errado
+  // ficou mais fácil — então a conta é dita ANTES.
   function excluir(id: string) {
+    const alvo = zoneamentos.find(z => z.id === id);
+    if (!alvo) return;
+    const filhas = zoneamentos.filter(z => origemDe(z).id === id).length;
+    const aviso = filhas > 0
+      ? `\n\n${filhas} versão(ões) derivada(s) dela continuam salvas, mas ficam sem a origem na linha do tempo.`
+      : '';
+    const oficial = alvo.padrao ? '\n\nEsta é a versão PADRÃO — a Amostragem e as Prescrições ficam sem zoneamento oficial até você marcar outra.' : '';
+    if (!confirm(`Excluir "${alvo.nome}"? Não dá para desfazer.${aviso}${oficial}`)) return;
     deleteZoneamentoMeap(id);
     if (vendoId === id) setVendoId(null);
     recarregarZon();
+    setAmb(obterOuAdotarAmbiente(talhao.id));
   }
 
   const versao = useMemo(() => amb?.versoes.find(v => v.numero === amb.versaoVigente) ?? amb?.versoes[0] ?? null, [amb]);
@@ -1169,45 +1212,25 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
         <div className="rounded-lg p-2.5 space-y-1.5" style={{ background: '#0a1929', border: '1px solid #1a3a6b' }}>
           <div className="flex items-center gap-2">
             <Star size={12} style={{ color: '#fbbf24' }} />
-            <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color: '#cbd5e1' }}>Zoneamentos salvos ({zoneamentos.length})</span>
+            <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color: '#cbd5e1' }}>Zoneamentos e versões ({zoneamentos.length})</span>
             <div className="ml-auto flex items-center gap-2">
               <ExportarZonas talhao={talhao} zoneamentos={zoneamentos} safraNome={safraNome} />
-              <button onClick={() => setLabAberto(true)} title="Comparar os cenários de zona (métricas + concordância)" className="flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded" style={{ background: '#1e3a5f', color: '#93c5fd' }}>
+              <button onClick={() => { setLabPar(null); setLabAberto(true); }} title="Comparar os cenários de zona (métricas + concordância)" className="flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded" style={{ background: '#1e3a5f', color: '#93c5fd' }}>
                 <FlaskConical size={11} /> Laboratório
               </button>
             </div>
           </div>
-          {zoneamentos.map(z => (
-            <div key={z.id} onClick={() => setVendoId(vendoId === z.id ? null : z.id)} title="Clique para ver no mapa"
-              className="px-2 py-1.5 rounded cursor-pointer transition-colors"
-              style={{ background: vendoId === z.id ? '#0f2240' : '#061525', border: `1px solid ${vendoId === z.id ? '#22d3ee' : (z.padrao ? '#a16207' : '#1a3a6b')}` }}>
-              <div className="flex items-center gap-2">
-                {vendoId === z.id && <Eye size={11} className="flex-shrink-0" style={{ color: '#22d3ee' }} />}
-                <span className="text-xs font-bold flex-1 truncate" style={{ color: '#e2e8f0' }}>{z.nome}</span>
-                {z.padrao
-                  ? <span className="text-[9px] px-1.5 py-0.5 rounded font-bold flex items-center gap-1 flex-shrink-0" style={{ background: '#3a2e0a', color: '#fbbf24' }}><Star size={8} /> Padrão</span>
-                  : <button onClick={e => { e.stopPropagation(); tornarPadrao(z.id); }} className="text-[9px] px-1.5 py-0.5 rounded font-semibold flex-shrink-0" style={{ background: '#1a3a6b', color: '#93c5fd' }}>Tornar padrão</button>}
-                {(pode('zonasUnificar') || pode('zonasReclassificar') || pode('zonasDividir')) && (
-                  <button onClick={e => { e.stopPropagation(); setEditorZona({ id: z.id, nome: z.nome, fc: z.fc }); setSuav(null); setSuavMapFc(null); }}
-                    title="Editar manualmente (unir/reclassificar/dividir — cria uma NOVA versão)"
-                    className="p-1 rounded flex-shrink-0" style={{ background: '#241748', color: '#c4b5fd' }}><Pencil size={12} /></button>
-                )}
-                <button onClick={e => { e.stopPropagation(); setSuav({ origem: { id: z.id, nome: z.nome }, fc: z.fc }); setEditorZona(null); setEditorMapFc(null); }}
-                  title="Suavizar limites (cria uma NOVA versão; esta fica intacta)"
-                  className="p-1 rounded flex-shrink-0" style={{ background: '#0b3a44', color: '#22d3ee' }}><Spline size={12} /></button>
-                <button onClick={e => { e.stopPropagation(); excluir(z.id); }} title="Excluir" className="p-1 rounded flex-shrink-0" style={{ color: '#f87171' }}><Trash2 size={12} /></button>
-              </div>
-              <p className="text-[9px] mt-0.5" style={{ color: '#64748b' }}>
-                {z.meta.nZonas} zonas oficiais{z.meta.nPoligonos ? ` · ${z.meta.nPoligonos} polígonos` : ''} · {ROTULO_ALG[z.meta.algoritmo] ?? z.meta.algoritmo}
-                {z.meta.importacao && <span style={{ color: '#7dd3fc' }}> · de {z.meta.importacao.arquivo ?? 'arquivo do talhão'}{z.meta.importacao.campoClasse ? ` (campo "${z.meta.importacao.campoClasse}")` : ''}</span>}
-                {z.meta.cvMedio != null && <> · CV médio {z.meta.cvMedio.toLocaleString('pt-BR')}%</>}
-                {z.meta.camadas.length > 0 && <> · {z.meta.camadas.join(', ')}</>}
-                {z.meta.suavizacao && <span style={{ color: '#22d3ee' }}> · suavizado ({z.meta.suavizacao.nivel}{z.meta.suavizacao.origemNome ? ` de "${z.meta.suavizacao.origemNome}"` : ''})</span>}
-                {z.meta.edicaoManual && <span style={{ color: '#c4b5fd' }}> · editado manualmente ({z.meta.edicaoManual.nUnificacoes + z.meta.edicaoManual.nReclassificacoes + z.meta.edicaoManual.nDivisoes} operações{z.meta.edicaoManual.origemNome ? ` de "${z.meta.edicaoManual.origemNome}"` : ''})</span>}
-                {z.padrao && <span style={{ color: '#fbbf24' }}> · usado na Amostragem</span>}
-              </p>
-            </div>
-          ))}
+          <VersoesZoneamentos
+            zoneamentos={zoneamentos} vendoId={vendoId}
+            podeEditar={pode('zonasUnificar') || pode('zonasReclassificar') || pode('zonasDividir')}
+            onVer={setVendoId}
+            onTornarPadrao={tornarPadrao}
+            onEditar={z => { setEditorZona({ id: z.id, nome: z.nome, fc: z.fc }); setSuav(null); setSuavMapFc(null); }}
+            onSuavizar={z => { setSuav({ origem: { id: z.id, nome: z.nome }, fc: z.fc }); setEditorZona(null); setEditorMapFc(null); }}
+            onExcluir={excluir}
+            onRenomear={renomearVersao}
+            onRestaurar={restaurarVersao}
+            onComparar={(a, b) => { setLabPar({ a, b }); setLabAberto(true); }} />
           {editorZona && (() => {
             const zEd = zoneamentos.find(z => z.id === editorZona.id);
             const chavesEd = zEd?.meta.chaves ?? [];
@@ -1242,7 +1265,7 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
       )}
 
       {labAberto && zoneamentos.length > 0 && (
-        <LaboratorioZonas zoneamentos={zoneamentos} onClose={() => setLabAberto(false)} />
+        <LaboratorioZonas zoneamentos={zoneamentos} aInicial={labPar?.a} bInicial={labPar?.b} onClose={() => { setLabAberto(false); setLabPar(null); }} />
       )}
     </div>
   );

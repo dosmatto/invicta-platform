@@ -31,12 +31,15 @@ function BarraPotencial({ areas }: { areas: ReturnType<typeof areaPorPotencial> 
   );
 }
 
-export function LaboratorioZonas({ zoneamentos, onClose }: { zoneamentos: ZoneamentoMeap[]; onClose: () => void }) {
+// aInicial/bInicial: par já escolhido na tela de versões — abre o Laboratório
+// direto na comparação pedida, em vez de fazer o usuário reencontrar as duas
+// versões numa lista onde os nomes só diferem no sufixo.
+export function LaboratorioZonas({ zoneamentos, aInicial, bInicial, onClose }: { zoneamentos: ZoneamentoMeap[]; aInicial?: string; bInicial?: string; onClose: () => void }) {
   const resumos = useMemo(() => zoneamentos.map(resumoCenario), [zoneamentos]);
   const melhorId = useMemo(() => idMelhorCenario(zoneamentos), [zoneamentos]);
 
-  const [aId, setAId] = useState(zoneamentos[0]?.id ?? '');
-  const [bId, setBId] = useState(zoneamentos[1]?.id ?? zoneamentos[0]?.id ?? '');
+  const [aId, setAId] = useState(aInicial ?? zoneamentos[0]?.id ?? '');
+  const [bId, setBId] = useState(bInicial ?? zoneamentos[1]?.id ?? zoneamentos[0]?.id ?? '');
   const cenA = zoneamentos.find(z => z.id === aId) ?? null;
   const cenB = zoneamentos.find(z => z.id === bId) ?? null;
   const [conc, setConc] = useState<Concordancia | null>(null);
