@@ -61,10 +61,15 @@ export function candidatosClasse(
     const reconhecidosTexto = preenchidos.filter(v => classeReconhecida(v)).length;
     const numerico = preenchidos.every(ehNumero);
 
-    // Classe textual reconhecida é o sinal mais forte que existe — vale por
-    // polígono. Numérico é bom sinal, mas fraco: por isso pesa bem menos e
-    // ainda pode perder para um campo textual reconhecido.
-    let nota = reconhecidosTexto * 2;
+    // A CLASSE ESCRITA MANDA. Um campo que diz "Alta/Média/Baixa" carrega a
+    // intenção de quem fez o mapa; um número é sempre interpretação nossa (e
+    // ainda depende de adivinhar se 1 é a melhor ou a pior zona). Por isso
+    // texto reconhecido entra numa FAIXA DE NOTA acima — não numa soma que o
+    // número possa alcançar. Com pontuação somada, um campo numérico chamado
+    // "zona" vencia um campo textual chamado "descricao" em arquivos com
+    // poucos polígonos, e a classificação escrita era ignorada.
+    const fracaoTexto = reconhecidosTexto / preenchidos.length;
+    let nota = fracaoTexto >= 0.5 ? 1000 + fracaoTexto * 100 : 0;
     if (numerico) nota += 3;
     if (NOME_PLAUSIVEL.test(campo)) nota += 5;
     if (NOME_DE_ID.test(campo)) nota -= 8;

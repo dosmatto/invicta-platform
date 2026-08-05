@@ -29,6 +29,34 @@ test('classe TEXTUAL continua sendo reconhecida e ganha do resto', () => {
   assert.equal(candidatosClasse(feats)[0].campo, 'MANEJO');
 });
 
+test('A CLASSE ESCRITA MANDA: texto vence número mesmo com poucos polígonos', () => {
+  // Regressão: com 3 polígonos, o campo numérico "zona" (nome plausível)
+  // vencia o campo textual "descricao" e a classificação escrita era ignorada.
+  const feats = fs([
+    { zona: 1, descricao: 'Alta' }, { zona: 2, descricao: 'Média' }, { zona: 3, descricao: 'Baixa' },
+  ]);
+  assert.equal(candidatosClasse(feats)[0].campo, 'descricao');
+});
+
+test('texto vence número mesmo quando o numérico tem nome melhor', () => {
+  const feats = fs([
+    { classe: 10, obs: 'BAIXA' }, { classe: 20, obs: 'ALTA' },
+  ]);
+  assert.equal(candidatosClasse(feats)[0].campo, 'obs');
+});
+
+test('texto parcial (metade reconhecida) ainda vence o numérico', () => {
+  const feats = fs([
+    { zona: 1, txt: 'Alta' }, { zona: 2, txt: 'Baixa' }, { zona: 3, txt: 'XYZ' }, { zona: 4, txt: 'QRS' },
+  ]);
+  assert.equal(candidatosClasse(feats)[0].campo, 'txt');
+});
+
+test('sem nenhum texto reconhecido, o numérico assume', () => {
+  const feats = fs([{ zona: 1, cod2: 'AA' }, { zona: 2, cod2: 'BB' }]);
+  assert.equal(candidatosClasse(feats)[0].campo, 'zona');
+});
+
 test('campo de ID não vence o campo de classe', () => {
   // 5 polígonos com id 1..5 e zona 1..5: sem o desconto, o id empataria.
   const feats = fs([
