@@ -16,6 +16,7 @@ import { capturarMapaZonas } from '../capturaMapa';
 import { imagemParaPdf, reduzirLogo } from '../pdfImagem';
 import { resumoDoses, nutrientesPorZona, fatorBaseDose } from './calculo.ts';
 import { doseCompensada } from './sementes.ts';
+import { doseArquivo, temCompensacao, totalDoArquivo, kgDeSementes, montarResumoPdf } from './resumo.ts';
 import { UNIDADE_TOTAL, ehUnidadeSemente, type Prescricao } from './tipos.ts';
 
 // Fator unidade-dose → unidade-base da prescrição (1 exceto sementes/m, que usa
@@ -23,24 +24,6 @@ import { UNIDADE_TOTAL, ehUnidadeSemente, type Prescricao } from './tipos.ts';
 // a validação já barrou sementes/m sem espaçamento; aqui cai em 1 defensivo.
 function fatorDe(p: Prescricao): number {
   try { return fatorBaseDose(p.unidade, p.params.sementes?.espacamentoM); } catch { return 1; }
-}
-
-// Dose do ARQUIVO: quando a prescrição foi feita em população desejada, o que
-// a máquina precisa é a taxa de semeadura — a dose compensada pela germinação.
-// Sem isso o arquivo sai com a população e a lavoura nasce abaixo do alvo.
-const doseArquivo = (p: Prescricao, dose: number): number =>
-  doseCompensada(dose, p.params.sementes, p.params.doseEhPopulacao);
-
-/** true quando o arquivo leva um número diferente do digitado (há compensação). */
-export function temCompensacao(p: Prescricao): boolean {
-  return !!p.params.doseEhPopulacao && Math.abs(doseArquivo(p, 1) - 1) > 1e-9;
-}
-
-// Quanto de produto o arquivo consome de fato. Com compensação, o resumo conta
-// em POPULAÇÃO (a base do total disponível) e o depósito entrega SEMENTES — o
-// número que o comprador precisa é este.
-export function totalDoArquivo(p: Prescricao, fator: number): number {
-  return p.zonas.reduce((s, z) => s + doseArquivo(p, z.dose) * z.areaHa * fator, 0);
 }
 
 const NAVY: [number, number, number] = [13, 33, 64];
@@ -158,8 +141,8 @@ export async function exportarXlsxPrescricao(p: Prescricao): Promise<string> {
     'Área (ha)': Number(z.areaHa.toFixed(2)),
     ...(p.params.doseEhPopulacao
       ? {
-          'População alvo (plantas/ha)': Number(z.dose.toFixed(0)),
-          [`Dose do arquivo (${p.unidade})`]: Number(doseArquivo(p, z.dose).toFixed(3)),
+          [`População (${p.unidade})`]: Number(z.dose.toFixed(0)),
+          [`População ajustada (${p.unidade})`]: Number(doseArquivo(p, z.dose).toFixed(0)),
         }
       : { [`Dose (${p.unidade})`]: Number(z.dose.toFixed(3)) }),
     [`Total (${un})`]: Number((doseArquivo(p, z.dose) * z.areaHa * fator).toFixed(2)),
@@ -183,10 +166,25 @@ export async function exportarXlsxPrescricao(p: Prescricao): Promise<string> {
     { Item: `Dose mínima (${p.unidade})`, Valor: Number(r.doseMin.toFixed(3)) },
     { Item: `Dose máxima (${p.unidade})`, Valor: Number(r.doseMax.toFixed(3)) },
     { Item: `Dose média (${p.unidade})`, Valor: Number(r.doseMedia.toFixed(3)) },
-    ...(temCompensacao(p) ? [
-      { Item: `No arquivo — total (${un})`, Valor: Number(totalDoArquivo(p, fator).toFixed(2)) },
-      { Item: 'Germinação (%)', Valor: p.params.sementes?.germinacaoPct ?? 100 },
-    ] : []),
+    // Os dois totais NOMEADOS + o peso, que é como se compra semente.
+    ...(temCompensacao(p) ? (() => {
+      const semAjuste = r.usado, comAjuste = totalDoArquivo(p, fator);
+      const pms = p.params.sementes?.pmsG;
+      const kg = (v: number) => { const k = kgDeSementes(v, pms); return k == null ? [] : [{ Item: `  em quilos (PMS ${pms} g)`, Valor: Number(k.toFixed(1)) }]; };
+      return [
+        { Item: 'Germinação (%)', Valor: p.params.sementes?.germinacaoPct ?? 100 },
+        { Item: `Total SEM ajuste — população desejada (${un})`, Valor: Number(semAjuste.toFixed(0)) },
+        ...kg(semAjuste),
+        { Item: `Total COM ajuste de germinação (${un})`, Valor: Number(comAjuste.toFixed(0)) },
+        ...kg(comAjuste),
+        { Item: `Diferença a mais para comprar (${un})`, Valor: Number((comAjuste - semAjuste).toFixed(0)) },
+        { Item: 'Observação', Valor: 'O arquivo de aplicação já sai com o ajuste de população (taxa de semeadura corrigida pela germinação).' },
+      ];
+    })() : (() => {
+      const pms = p.params.sementes?.pmsG;
+      const k = ehUnidadeSemente(p.unidade) ? kgDeSementes(r.usado, pms) : null;
+      return k == null ? [] : [{ Item: `Quantidade usada em quilos (PMS ${pms} g)`, Valor: Number(k.toFixed(1)) }];
+    })()),
     ...(r.custo != null ? [{ Item: 'Custo (R$)', Valor: Number(r.custo.toFixed(2)) }] : []),
     { Item: 'Zonas', Valor: r.nZonas },
     { Item: 'Polígonos', Valor: p.fc.features.length },
@@ -316,49 +314,74 @@ export async function exportarPDFPrescricao(p: Prescricao, ident: IdentPdfPrescr
   let ty = 30;
   doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(...NAVY);
   doc.text('DOSES POR ZONA', tabX, ty); ty += 4;
-  doc.setFontSize(7);
+  // Colunas por posição de FIM (números alinhados à direita). O layout antigo
+  // punha "Pop. -> dose (sementes/ha)" num vão de 22 mm com fonte 7: o título
+  // invadia o da coluna seguinte e as duas frases saíam embaralhadas no PDF.
+  // Com compensação são duas colunas de verdade — População e População
+  // ajustada —, cabeçalho em duas linhas e fonte menor.
   const comp = temCompensacao(p);
-  const cols = [tabX, tabX + 26, tabX + 52, tabX + 74, tabX + tabW];
-  doc.text('Zona', cols[0], ty); doc.text('Área (ha)', cols[1], ty);
-  doc.text(comp ? `Pop. → dose (${p.unidade})` : `Dose (${p.unidade})`, cols[2], ty);
-  doc.text(`Total (${un})`, cols[3], ty);
-  ty += 1.5; doc.setDrawColor(...LINE); doc.line(tabX, ty, tabX + tabW, ty); ty += 3.5;
-  doc.setFont('helvetica', 'normal'); doc.setTextColor(40, 50, 70);
+  doc.setFontSize(6.2);
+  const fimArea = tabX + (comp ? 40 : 52);
+  const fimDose = tabX + (comp ? 64 : 82);
+  const fimAjuste = tabX + 87;
+  const fimTotal = tabX + tabW;
+  const cab = (txt1: string, txt2: string, x: number) => {
+    doc.text(txt1, x, ty, { align: 'right' });
+    if (txt2) doc.text(txt2, x, ty + 2.7, { align: 'right' });
+  };
+  doc.text('Zona', tabX, ty);
+  cab('Área', '(ha)', fimArea);
+  if (comp) {
+    cab('População', `(${p.unidade})`, fimDose);
+    cab('População ajustada', `(${p.unidade})`, fimAjuste);
+  } else {
+    cab('Dose', `(${p.unidade})`, fimDose);
+  }
+  cab('Total', `(${un})`, fimTotal);
+  ty += 4.2; doc.setDrawColor(...LINE); doc.line(tabX, ty, tabX + tabW, ty); ty += 3.5;
+  doc.setFont('helvetica', 'normal'); doc.setTextColor(40, 50, 70); doc.setFontSize(7);
   const zonasOrd = [...p.zonas].sort((a, b) => b.dose - a.dose);
   for (const z of zonasOrd.slice(0, 18)) {
     const m = /^#(..)(..)(..)$/.exec(corDaDose(z.dose, r.doseMin, r.doseMax))!;
     doc.setFillColor(parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16));
-    doc.rect(cols[0], ty - 2.4, 2.6, 2.6, 'F');
-    doc.text(san(z.nomeZona).slice(0, 14), cols[0] + 4, ty);
-    doc.text(fmt(z.areaHa, 2), cols[1] + 14, ty, { align: 'right' });
+    doc.rect(tabX, ty - 2.4, 2.6, 2.6, 'F');
+    doc.text(san(z.nomeZona).slice(0, 12), tabX + 4, ty);
+    doc.text(fmt(z.areaHa, 2), fimArea, ty, { align: 'right' });
     const dArq = doseArquivo(p, z.dose);
-    const txtDose = p.unidade === 'sementes/ha' ? fmt0(dArq) : fmt(dArq, 2);
-    doc.text(comp ? `${fmt0(z.dose)} → ${txtDose}` : txtDose, cols[2] + 16, ty, { align: 'right' });
-    doc.text(ehUnidadeSemente(p.unidade) ? fmt0(dArq * z.areaHa * fator) : fmt(dArq * z.areaHa * fator, 1), cols[3] + 18, ty, { align: 'right' });
+    const txt = (v: number) => (p.unidade === 'sementes/ha' ? fmt0(v) : fmt(v, 2));
+    doc.text(txt(z.dose), fimDose, ty, { align: 'right' });
+    if (comp) doc.text(txt(dArq), fimAjuste, ty, { align: 'right' });
+    doc.text(ehUnidadeSemente(p.unidade) ? fmt0(dArq * z.areaHa * fator) : fmt(dArq * z.areaHa * fator, 1), fimTotal, ty, { align: 'right' });
     ty += 4.2;
   }
   if (p.zonas.length > 18) { doc.setTextColor(...GRAY); doc.text(`… +${p.zonas.length - 18} zonas (planilha completa no Excel)`, tabX, ty); ty += 4.2; }
 
   // ── resumo ──
+  // Antes era uma pilha de números sem dizer qual é qual: "quantidade usada",
+  // "disponível" e "no arquivo" apareciam lado a lado, uns em população e
+  // outros em semente, e ninguém sabia o que comprar. Agora as duas contas
+  // aparecem NOMEADAS — o que você pediu e o que a máquina vai plantar —, em
+  // sementes e (com PMS) em quilos, e a última linha diz que o arquivo já sai
+  // ajustado, que é a dúvida que sobra na hora de mandar para o campo.
+  const linhasResumo = montarResumoPdf(p, r, fator, fc.features.length);
   ty += 2;
-  doc.setDrawColor(...LINE); doc.roundedRect(tabX, ty, tabW, temCompensacao(p) ? 47 : 42, 2, 2, 'S');
+  // Mede as quebras ANTES de desenhar a moldura: a observação final é uma
+  // frase longa e, sem contar as sub-linhas, o texto vazava para fora da caixa.
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5);
+  const quebradas = linhasResumo.map(l => ({
+    destaque: l.destaque,
+    partes: doc.splitTextToSize(san(l.txt), tabW - 8) as string[],
+  }));
+  const nLinhas = quebradas.reduce((n, l) => n + l.partes.length, 0);
+  doc.setDrawColor(...LINE); doc.roundedRect(tabX, ty, tabW, 8 + nLinhas * 4, 2, 2, 'S');
   doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(...NAVY); doc.text('RESUMO', tabX + 4, ty + 5);
   doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(...GRAY);
-  const linhasResumo = [
-    `Área: ${fmt(r.areaHa, 2)} ha em ${r.nZonas} zona(s) · ${fc.features.length} polígono(s)`,
-    `Quantidade usada: ${ehUnidadeSemente(p.unidade) ? fmt0(r.usado) : fmt(r.usado, 1)} ${un}`,
-    ...(p.params.totalDisponivel != null
-      ? [`Disponível: ${ehUnidadeSemente(p.unidade) ? fmt0(p.params.totalDisponivel) : fmt(p.params.totalDisponivel, 1)} ${un} · restante: ${ehUnidadeSemente(p.unidade) ? fmt0(p.params.totalDisponivel - r.usado) : fmt(p.params.totalDisponivel - r.usado, 1)} ${un}`]
-      : []),
-    `Dose: mín ${fmt(r.doseMin, 1)} · máx ${fmt(r.doseMax, 1)} · média ${fmt(r.doseMedia, 1)} ${p.unidade}`,
-    // Com compensação, o resumo acima é a POPULAÇÃO pedida; quem carrega a
-    // máquina precisa saber quanta semente sai de fato.
-    ...(temCompensacao(p)
-      ? [`No arquivo (germinação ${fmt(p.params.sementes?.germinacaoPct ?? 100, 0)}%): ${fmt0(totalDoArquivo(p, fator))} ${un} · ${fmt0(totalDoArquivo(p, fator) / (r.areaHa || 1))} ${un}/ha`]
-      : []),
-    ...(r.custo != null ? [`Custo estimado: R$ ${fmt(r.custo, 2)}`] : []),
-  ];
-  linhasResumo.forEach((tl, i) => doc.text(san(tl), tabX + 4, ty + 10 + i * 4.4, { maxWidth: tabW - 8 }));
+  let ry = ty + 9.5;
+  for (const l of quebradas) {
+    if (l.destaque) { doc.setTextColor(...NAVY); doc.setFont('helvetica', 'bold'); }
+    for (const parte of l.partes) { doc.text(parte, tabX + 4, ry); ry += 4; }
+    if (l.destaque) { doc.setTextColor(...GRAY); doc.setFont('helvetica', 'normal'); }
+  }
 
   // ── rodapé ──
   doc.setFillColor(...NAVY); doc.rect(0, H - 10, W, 10, 'F');

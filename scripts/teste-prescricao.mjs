@@ -8,6 +8,7 @@ import assert from 'node:assert/strict';
 import { redistribuirPorEstoque, distribuirProporcional, distribuirPorAjuste, resumoDoses, nutrientesPorZona, pesoDoRank, fatorBaseDose, arredondarDose } from '../src/lib/prescricao/calculo.ts';
 import { fatorCampo, sementesPorHa, metricasSementes, estoqueTotalSementes, distribuirSementes, doseCompensada } from '../src/lib/prescricao/sementes.ts';
 import { dosesPorEquacao, variaveisDaEquacao } from '../src/lib/prescricao/equacao.ts';
+import { montarResumoPdf, temCompensacao, totalDoArquivo, kgDeSementes } from '../src/lib/prescricao/resumo.ts';
 
 let ok = 0, fail = 0;
 function t(nome, fn) {
@@ -366,6 +367,37 @@ t('sem o marcador, a dose vai INTACTA para o arquivo', () => {
 
 t('germinação 100% não muda a dose', () => {
   assert.equal(doseCompensada(80_000, { germinacaoPct: 100 }, true), 80_000);
+});
+
+t('resumo do PDF: os dois totais nomeados, em sementes e em quilos', () => {
+  // O resumo antigo empilhava "usada", "disponível" e "no arquivo" sem dizer
+  // qual era população e qual era semente — ninguém sabia o que comprar.
+  const zonas = [{ idZona: 'a', nomeZona: '01', classe: 'Alta', cor: '#000', areaHa: 10, dose: 80_000 }];
+  const p = {
+    unidade: 'sementes/ha', tipo: 'sementes', produto: 'x', nome: 'x',
+    params: { doseEhPopulacao: true, sementes: { germinacaoPct: 90, pmsG: 180 } },
+    zonas, fc: { type: 'FeatureCollection', features: [] },
+  };
+  const r = { areaHa: 10, nZonas: 1, usado: 800_000, doseMin: 80_000, doseMax: 80_000, doseMedia: 80_000, custo: null };
+  const linhas = montarResumoPdf(p, r, 1, 1).map(l => l.txt);
+  const texto = linhas.join(' | ');
+  assert.match(texto, /Total SEM ajuste.*800\.000/, `sem ajuste ausente: ${texto}`);
+  assert.match(texto, /Total COM ajuste de germinação \(90%\).*888\.889/, `com ajuste ausente: ${texto}`);
+  assert.match(texto, /Diferença a mais para comprar.*88\.889/);
+  // PMS 180 g → 800.000 sementes = 144 kg; 888.889 = 160 kg
+  assert.match(texto, /144,0 kg/, `kg sem ajuste ausente: ${texto}`);
+  assert.match(texto, /160,0 kg/, `kg com ajuste ausente: ${texto}`);
+  assert.match(texto, /arquivo de aplicação JÁ SAI com o ajuste/);
+});
+
+t('resumo sem compensação não inventa duas contas', () => {
+  const zonas = [{ idZona: 'a', nomeZona: '01', classe: 'Alta', cor: '#000', areaHa: 10, dose: 2.5 }];
+  const p = { unidade: 't/ha', tipo: 'corretivo', produto: 'x', nome: 'x', params: {}, zonas, fc: { type: 'FeatureCollection', features: [] } };
+  const r = { areaHa: 10, nZonas: 1, usado: 25, doseMin: 2.5, doseMax: 2.5, doseMedia: 2.5, custo: null };
+  const texto = montarResumoPdf(p, r, 1, 1).map(l => l.txt).join(' | ');
+  assert.ok(!/ajuste de germinação/.test(texto), texto);
+  assert.match(texto, /Quantidade usada: 25,0 t/);
+  assert.match(texto, /sai com a dose exatamente como está na tabela/);
 });
 
 console.log(`\n${ok} passaram, ${fail} falharam\n`);

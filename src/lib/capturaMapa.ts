@@ -254,7 +254,14 @@ async function desenharSatelite(
         if (!img) return;
         const x0 = px(tile2lon(x, z)), x1 = px(tile2lon(x + 1, z));
         const y0 = py(tile2lat(y, z)), y1 = py(tile2lat(y + 1, z));
-        ctx.drawImage(img, x0, y0, x1 - x0, y1 - y0);
+        // Bordas ARREDONDADAS PARA FORA. Em coordenadas fracionárias, dois
+        // tiles vizinhos não encostam: sobra uma fresta de sub-pixel e, como o
+        // canvas tem fundo branco, ela aparece no PDF como uma GRADE de linhas
+        // brancas riscando o mapa inteiro. Com floor/ceil os tiles se
+        // sobrepõem em menos de 1 px — invisível — e a grade some.
+        const dx0 = Math.floor(x0), dy0 = Math.floor(y0);
+        const dx1 = Math.ceil(x1), dy1 = Math.ceil(y1);
+        ctx.drawImage(img, dx0, dy0, Math.max(1, dx1 - dx0), Math.max(1, dy1 - dy0));
       }));
     }
   }
