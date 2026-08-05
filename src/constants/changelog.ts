@@ -1,5 +1,9 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.22.0': [
+    'PRESCRIÇÕES — SALVAR ALTERAÇÕES NÃO APAGA MAIS A VERSÃO ANTERIOR: até agora, "Salvar alterações" sobrescrevia o registro e apenas subia o contador — a v1 virava v2 no mesmo lugar e o que tinha sido mandado para a máquina antes deixava de existir, sobrando só uma linha de texto no histórico. Prescrição é documento operacional: agora CADA VERSÃO é um registro próprio, com as suas doses, o seu mapa congelado e os arquivos que ela gerou. Salvar cria a versão nova e a anterior continua salva, inteira.',
+    'A lista mostra a versão mais recente aberta e as anteriores atrás de "ver versão(ões) anterior(es)" — recuadas e discretas, cada uma com os próprios botões de Abrir no editor, SHP, Excel e PDF. Assim dá para reexportar exatamente o arquivo de uma versão antiga sem refazer conta nenhuma. O contador passou a contar PRESCRIÇÕES, não versões: três versões da mesma prescrição contam como uma.',
+  ],
   '2.21.0': [
     'MAPA DOS RELATÓRIOS SEM AS LINHAS BRANCAS: todo PDF com foto de satélite saía riscado por uma grade de linhas claras — Fertilidade, NDVI, Zonas, MDE, Comparação, Cenários e Prescrições. Não era desenho nenhum: o mosaico de satélite colocava cada quadradinho (tile) em coordenadas quebradas e, entre um e outro, sobrava uma fresta de menos de um pixel por onde aparecia o fundo branco da folha. Agora cada tile é encaixado em pixels inteiros e encosta no vizinho: a grade some de todos os relatórios de uma vez.',
     'PRESCRIÇÕES, TABELA DO PDF — DUAS COLUNAS DE VERDADE: "Pop. → dose" era uma coluna só, espremida num vão de 22 mm, e o título invadia o da coluna vizinha (a seta ainda saía como lixo, "!\u2019", porque não existe na fonte do PDF). Agora são POPULAÇÃO e POPULAÇÃO AJUSTADA, com cabeçalho em duas linhas e números alinhados pela direita.',

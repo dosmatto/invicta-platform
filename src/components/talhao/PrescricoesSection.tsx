@@ -11,7 +11,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import {
-  getZoneamentosMeap, getPrescricoes, savePrescricao, updatePrescricao,
+  getZoneamentosMeap, getPrescricoes, savePrescricao, salvarVersaoPrescricao,
   deletePrescricao, registrarExportePrescricao, getTalhoes, getFazendas, getClientes,
   type ZoneamentoMeap,
 } from '@/lib/store';
@@ -108,6 +108,19 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
 
   const zoneamentos = useMemo(() => (talhaoId ? getZoneamentosMeap(talhaoId) : []), [talhaoId]);
   const prescricoes = useMemo(() => (talhaoId ? getPrescricoes(talhaoId) : []), [talhaoId, tick]);
+  // Agrupa as VERSÕES da mesma prescrição (ligadas por origemId): a mais nova
+  // primeiro, as anteriores logo abaixo — nenhuma some ao salvar alterações.
+  const linhagens = useMemo(() => {
+    const grupos = new Map<string, Prescricao[]>();
+    for (const p of prescricoes) {
+      const chave = p.origemId ?? p.id;
+      const arr = grupos.get(chave);
+      if (arr) arr.push(p); else grupos.set(chave, [p]);
+    }
+    return [...grupos.values()]
+      .map(vs => [...vs].sort((a, b) => b.versao - a.versao))
+      .sort((a, b) => b[0].atualizadoEm.localeCompare(a[0].atualizadoEm));
+  }, [prescricoes]);
 
   const [r, setR] = useState<Rascunho>(RASCUNHO_VAZIO);
   const patch = (p: Partial<Rascunho>) => setR(x => ({ ...x, ...p }));
@@ -364,8 +377,12 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
     const base = montarPrescricao();
     if (!base) return;
     if (r.editandoId) {
-      updatePrescricao(r.editandoId, base, 'doses/parâmetros editados', emailUsuario() ?? 'sistema');
-      setOkMsg('Prescrição atualizada (nova versão registrada no histórico).');
+      // Versão NOVA, registro novo: a anterior fica salva com os arquivos que
+      // gerou. O editor passa a trabalhar sobre a versão recém-criada.
+      const nova = salvarVersaoPrescricao(r.editandoId, base, 'doses/parâmetros editados', emailUsuario() ?? 'sistema');
+      if (!nova) { setErro('Versão anterior não encontrada.'); return; }
+      patch({ editandoId: nova.id });
+      setOkMsg(`Versão ${nova.versao} salva — a v${nova.versao - 1} continua na lista, com os arquivos dela.`);
     } else {
       const nova = savePrescricao(base);
       patch({ editandoId: nova.id });
@@ -425,7 +442,7 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
 
   const ABAS: Array<[AbaId, string, React.ElementType]> = [
     ['nova', r.editandoId ? 'Editar' : 'Nova', Plus],
-    ['salvas', `Salvas (${prescricoes.length})`, FolderOpen],
+    ['salvas', `Salvas (${linhagens.length})`, FolderOpen],
     ['arquivos', 'Arquivos de Aplicação', FileDown],
     ['historico', 'Histórico', History],
     ['comparacao', 'Planejado × Realizado', Scale],
@@ -844,11 +861,11 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
                 <div className="flex items-center gap-2">
                   <FolderOpen size={12} style={{ color: '#93c5fd' }} />
                   <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color: '#cbd5e1' }}>
-                    Prescrições salvas ({prescricoes.length})
+                    Prescrições salvas ({linhagens.length})
                   </span>
                 </div>
-                {prescricoes.map(p => (
-                  <CartaoSalva key={p.id} p={p} exportando={exportando}
+                {linhagens.map(vs => (
+                  <ListaVersoes key={vs[0].origemId ?? vs[0].id} versoes={vs} exportando={exportando}
                     onAbrir={abrirSalva} onExportar={exportar}
                     onExcluir={id => { deletePrescricao(id); setTick(t => t + 1); }} />
                 ))}
@@ -860,8 +877,8 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
         {aba === 'salvas' && (
           prescricoes.length === 0
             ? <Vazia texto="Nenhuma prescrição salva neste talhão ainda." />
-            : prescricoes.map(p => (
-              <CartaoSalva key={p.id} p={p} exportando={exportando}
+            : linhagens.map(vs => (
+              <ListaVersoes key={vs[0].origemId ?? vs[0].id} versoes={vs} exportando={exportando}
                 onAbrir={abrirSalva} onExportar={exportar}
                 onExcluir={id => { deletePrescricao(id); setTick(t => t + 1); }} />
             ))
@@ -970,8 +987,44 @@ function CampoTotalDisponivel({ rotulo, unidadeTotal, porHa, totalAbs, areaHa, s
 // funcionava: a confirmação aparecia no topo do formulário, longe do botão, que
 // fica no fim de uma tela longa. Agora o resultado do trabalho aparece embaixo,
 // como nas Zonas de Manejo e no NDVI.
-function CartaoSalva({ p, exportando, onAbrir, onExportar, onExcluir }: {
+// Uma prescrição e TODAS as suas versões. A mais nova aberta; as anteriores
+// recolhidas atrás de "ver versões anteriores" — presentes, sem poluir a lista.
+function ListaVersoes({ versoes, exportando, onAbrir, onExportar, onExcluir }: {
+  versoes: Prescricao[];
+  exportando: string;
+  onAbrir: (p: Prescricao) => void;
+  onExportar: (formato: 'shp' | 'xlsx' | 'pdf', p: Prescricao) => void;
+  onExcluir: (id: string) => void;
+}) {
+  const [aberto, setAberto] = useState(false);
+  const [atual, ...antigas] = versoes;
+  return (
+    <div className="space-y-1">
+      <CartaoSalva p={atual} exportando={exportando} onAbrir={onAbrir} onExportar={onExportar} onExcluir={onExcluir} />
+      {antigas.length > 0 && (
+        <>
+          <button onClick={() => setAberto(a => !a)}
+            className="flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded" style={{ background: '#0f2240', color: '#93c5fd' }}>
+            <History size={10} />
+            {aberto ? 'ocultar' : `ver ${antigas.length} versão(ões) anterior(es)`}
+          </button>
+          {aberto && (
+            <div className="pl-3 space-y-1" style={{ borderLeft: '2px solid #1a3a6b' }}>
+              {antigas.map(v => (
+                <CartaoSalva key={v.id} p={v} anterior exportando={exportando}
+                  onAbrir={onAbrir} onExportar={onExportar} onExcluir={onExcluir} />
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function CartaoSalva({ p, anterior, exportando, onAbrir, onExportar, onExcluir }: {
   p: Prescricao;
+  anterior?: boolean;          // versão antiga (fica discreta na lista)
   exportando: string;
   onAbrir: (p: Prescricao) => void;
   onExportar: (formato: 'shp' | 'xlsx' | 'pdf', p: Prescricao) => void;
@@ -979,10 +1032,13 @@ function CartaoSalva({ p, exportando, onAbrir, onExportar, onExcluir }: {
 }) {
   const rs = resumoDoses(p.zonas, p.custoUnit);
   return (
-    <div className="p-2.5 rounded-lg space-y-1.5" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
+    <div className="p-2.5 rounded-lg space-y-1.5" style={{ background: anterior ? '#050f1c' : '#061525', border: `1px solid ${anterior ? '#132f52' : '#1a3a6b'}`, opacity: anterior ? 0.85 : 1 }}>
       <div className="flex items-start gap-2">
         <div className="flex-1 min-w-0">
-          <p className="text-xs font-bold truncate" style={{ color: '#e2e8f0' }}>{p.nome}</p>
+          <p className="text-xs font-bold truncate" style={{ color: anterior ? '#94a3b8' : '#e2e8f0' }}>
+            <span className="text-[9px] px-1 py-0.5 rounded mr-1.5" style={{ background: anterior ? '#0f2240' : '#1e3a5f', color: '#93c5fd' }}>v{p.versao}</span>
+            {p.nome}
+          </p>
           <p className="text-[10px]" style={{ color: '#94a3b8' }}>
             {p.produto} · {ROTULO_TIPO[p.tipo]} · v{p.versao} · {dataBR(p.atualizadoEm)} · {p.criadoPor}
           </p>

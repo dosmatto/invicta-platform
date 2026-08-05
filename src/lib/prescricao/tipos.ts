@@ -134,6 +134,10 @@ export interface Prescricao {
   fc: GeoJSON.FeatureCollection;
   // documento
   versao: number;
+  /** id da PRIMEIRA versão desta prescrição (a V1). Ausente na própria V1.
+   *  Salvar alterações cria um REGISTRO NOVO apontando para cá — as versões
+   *  anteriores continuam salvas, cada uma com os arquivos que gerou. */
+  origemId?: string;
   criadoEm: string;
   criadoPor: string;
   atualizadoEm: string;

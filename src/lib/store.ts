@@ -2109,6 +2109,35 @@ export function savePrescricao(
 
 // Toda alteração vira VERSÃO nova + linha no histórico — prescrição que foi
 // para a máquina precisa dizer o que mudou, quando e por quem.
+// Salvar alterações cria uma VERSÃO NOVA, preservando a anterior.
+//
+// updatePrescricao sobrescrevia o registro e só subia o contador: a v1 sumia e
+// sobrava uma linha de texto no histórico. Prescrição é documento operacional —
+// o que foi para a máquina na semana passada precisa continuar existindo,
+// inclusive com os arquivos que gerou. Agora cada versão é um registro próprio,
+// ligado à primeira por `origemId`, como acontece com os zoneamentos.
+export function salvarVersaoPrescricao(
+  idAnterior: string, patch: Partial<Prescricao>, resumo: string, por: string,
+): Prescricao | null {
+  const lista = load<Prescricao>(K_PRESC);
+  const anterior = lista.find(p => p.id === idAnterior);
+  if (!anterior) return null;
+  const agora = new Date().toISOString();
+  const nova: Prescricao = comEmpresa({
+    ...anterior, ...patch,
+    id: uid(),
+    origemId: anterior.origemId ?? anterior.id,
+    versao: anterior.versao + 1,
+    criadoEm: agora, atualizadoEm: agora,
+    historico: [...anterior.historico, { em: agora, por, resumo }],
+    exportes: [],                     // cada versão responde pelos SEUS arquivos
+  });
+  lista.push(nova);
+  save(K_PRESC, lista);
+  notificarPrescricoes();
+  return nova;
+}
+
 export function updatePrescricao(id: string, patch: Partial<Prescricao>, resumo: string, por: string): Prescricao | null {
   const lista = load<Prescricao>(K_PRESC);
   const i = lista.findIndex(p => p.id === id);
