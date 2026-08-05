@@ -18,7 +18,7 @@ import {
 } from '@/lib/store';
 import { rotuloAno } from '@/lib/periodo';
 import type { Legenda } from '@/lib/legendas';
-import { parseGeoFile, parseLimiteTalhao, normalizarZonas } from '@/lib/geo';
+import { parseLimiteTalhao } from '@/lib/geo';
 import { paraFC, compartilharLinkCampo } from '@/lib/campoLink';
 import { extrairEditavel, paraFeature, areaHaDe, areaHaSemFuros } from '@/lib/geoEditor';
 import { conflitosDe, talhaoParaAlvo, bboxDeFeatures, type AlvoOverlap, type Conflito } from '@/lib/overlap';
@@ -256,11 +256,8 @@ function ResumoSafra({ talhaoId, safra }: { talhaoId: string; safra: string }) {
 }
 
 // ── mapas definitivos do talhão ──────────────────────────────────────────────
-function MapasDefinitivos({ talhao, safra, onZonas }: { talhao: Talhao | null; safra: string; onZonas: () => void }) {
+function MapasDefinitivos({ talhao, safra }: { talhao: Talhao | null; safra: string }) {
   const { setZonasManejo, setMapMode, setFertilidadeOverlay, setFertilidadeLabels } = useApp();
-  const zonasRef = useRef<HTMLInputElement>(null);
-  const [zonaEstado, setZonaEstado] = useState<'idle' | 'loading' | 'ok' | 'erro'>('idle');
-  const [zonaMsg, setZonaMsg] = useState('');
   const [argila, setArgila] = useState<{ resp: RespInterp; legenda: Legenda } | null>(null);
   const [argilaLoad, setArgilaLoad] = useState(false);
   const [ec, setEc] = useState<EcCamada | null>(null);
@@ -319,20 +316,6 @@ function MapasDefinitivos({ talhao, safra, onZonas }: { talhao: Talhao | null; s
     });
     setZonasManejo({ type: 'FeatureCollection', features }); setMapMode('satellite');
   }
-  async function processarZonas(file: File) {
-    setZonaEstado('loading'); setZonaMsg('');
-    try {
-      const result = await parseGeoFile(file);
-      const [a, b, c, d] = result.bbox;
-      if (!(a >= -180 && c <= 180 && b >= -90 && d <= 90)) throw new Error('Arquivo em coordenadas projetadas. Exporte com .prj (ou em WGS84).');
-      const prep = normalizarZonas(result.geojson);
-      if (prep.count === 0) throw new Error('Nenhum polígono de zona encontrado.');
-      updateTalhao(talhao!.id, { zonasGeojson: JSON.stringify(prep.fc) });
-      publicarZonas(prep.fc);
-      setZonaMsg(`${prep.count} zonas · ${prep.classes.join(', ')}`); setZonaEstado('ok'); onZonas();
-    } catch (e: unknown) { setZonaEstado('erro'); setZonaMsg(e instanceof Error ? e.message : 'Erro ao processar.'); }
-  }
-  function onZonaFile(e: React.ChangeEvent<HTMLInputElement>) { const f = e.target.files?.[0]; if (f) processarZonas(f); e.target.value = ''; }
 
   function verArgila() {
     if (!argila) return;
@@ -363,14 +346,15 @@ function MapasDefinitivos({ talhao, safra, onZonas }: { talhao: Talhao | null; s
         <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: '#cbd5e1' }}>Mapas definitivos</span>
       </div>
 
-      {/* Zonas de manejo */}
+      {/* Zonas de manejo — SÓ VISUALIZAÇÃO aqui.
+          A importação saiu deste painel: entrar por aqui deixava o arquivo num
+          limbo (virava o mapa do talhão sem passar pelo mapeamento de atributos
+          nem virar um zoneamento com versão). O lugar de carregar é a aba
+          "Zonas de Manejo" da página do talhão, onde o zoneamento é de fato
+          construído — e onde dá para conferir/corrigir as classes lidas. */}
       <DefRow icon={Layers} cor="#86efac" label="Zonas de manejo"
-        estado={temZonas ? 'ver' : 'upload'} carregando={zonaEstado === 'loading'}
-        onVer={temZonas ? () => { try { publicarZonas(JSON.parse(talhao!.zonasGeojson!) as GeoJSON.FeatureCollection); } catch {} } : undefined}
-        onUpload={() => zonasRef.current?.click()} />
-      {zonaEstado === 'ok' && zonaMsg && <p className="px-4 pb-1 text-[10px]" style={{ color: '#86efac' }}>{zonaMsg}</p>}
-      {zonaEstado === 'erro' && zonaMsg && <p className="px-4 pb-1 text-[10px]" style={{ color: '#f87171' }}>{zonaMsg}</p>}
-      <input ref={zonasRef} type="file" accept=".kml,.zip,.geojson,.json" className="hidden" onChange={onZonaFile} />
+        estado={temZonas ? 'ver' : 'vazio'}
+        onVer={temZonas ? () => { try { publicarZonas(JSON.parse(talhao!.zonasGeojson!) as GeoJSON.FeatureCollection); } catch {} } : undefined} />
 
       {/* Textura (Argila) */}
       <DefRow icon={BarChart3} cor="#f59e0b" label="Textura (Argila)"
@@ -471,7 +455,6 @@ export function TalhaoDetailPanel() {
     const t = getTalhoes().find(x => x.id === nav.talhaoId) ?? null;
     setTalhao(t); setNav({ area: areaHa });
   }
-  function handleZonas() { const t = getTalhoes().find(x => x.id === nav.talhaoId) ?? null; setTalhao(t); }
 
   function handleCriarSafra() {
     const { anoInicio, anoFim } = novaSafra;
@@ -583,7 +566,7 @@ export function TalhaoDetailPanel() {
       <div className="flex-1 overflow-y-auto">
         <GeoSection talhao={talhao} onUploaded={handleUploaded} />
         <ResumoSafra talhaoId={nav.talhaoId ?? ''} safra={safra} />
-        <MapasDefinitivos talhao={talhao} safra={safra} onZonas={handleZonas} />
+        <MapasDefinitivos talhao={talhao} safra={safra} />
       </div>
     </div>
   );
