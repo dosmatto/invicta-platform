@@ -456,20 +456,26 @@ export function MapView({ mostrarVisaoGeral = false }: { mostrarVisaoGeral?: boo
     const temZonas = !!(zonasManejo && zonasManejo.features.length);
     ['upload-fill', 'upload-line'].forEach(id => { try { map.setLayoutProperty(id, 'visibility', temZonas ? 'none' : 'visible'); } catch {} });
 
-    // Refit só quando o conjunto de zonas muda (selecionar/realçar uma zona
-    // re-publica os dados, mas não deve re-enquadrar o mapa).
-    const sig = (zonasManejo?.features ?? []).map(f => String(f.properties?.rotulo ?? '')).join('|');
+    // Refit só quando o conjunto GEOGRÁFICO muda. A assinatura era o texto dos
+    // rótulos — e desde que o rótulo passou a carregar a dose (Prescrições),
+    // qualquer recálculo re-enquadrava o mapa no meio da edição. Selecionar ou
+    // realçar uma zona também re-publica os dados e igualmente não deve mexer
+    // no enquadramento; o que muda o enquadramento é a geometria.
+    let minLng = Infinity, minLat = Infinity, maxLng = -Infinity, maxLat = -Infinity;
+    const walk = (g: GeoJSON.Geometry) => {
+      if (g.type === 'Polygon') g.coordinates.forEach(r => r.forEach(([a, b]) => { if (a < minLng) minLng = a; if (b < minLat) minLat = b; if (a > maxLng) maxLng = a; if (b > maxLat) maxLat = b; }));
+      else if (g.type === 'MultiPolygon') g.coordinates.forEach(p => p.forEach(r => r.forEach(([a, b]) => { if (a < minLng) minLng = a; if (b < minLat) minLat = b; if (a > maxLng) maxLng = a; if (b > maxLat) maxLat = b; })));
+    };
+    (zonasManejo?.features ?? []).forEach(f => f.geometry && walk(f.geometry));
+
+    const n = zonasManejo?.features.length ?? 0;
+    const sig = isFinite(minLng) ? `${n}|${minLng.toFixed(5)},${minLat.toFixed(5)},${maxLng.toFixed(5)},${maxLat.toFixed(5)}` : `${n}`;
     const mudouConjunto = sig !== zonasSigRef.current;
     zonasSigRef.current = sig;
 
-    if (mudouConjunto && zonasManejo && zonasManejo.features.length) {
-      let minLng = Infinity, minLat = Infinity, maxLng = -Infinity, maxLat = -Infinity;
-      const walk = (g: GeoJSON.Geometry) => {
-        if (g.type === 'Polygon') g.coordinates.forEach(r => r.forEach(([a, b]) => { if (a < minLng) minLng = a; if (b < minLat) minLat = b; if (a > maxLng) maxLng = a; if (b > maxLat) maxLat = b; }));
-        else if (g.type === 'MultiPolygon') g.coordinates.forEach(p => p.forEach(r => r.forEach(([a, b]) => { if (a < minLng) minLng = a; if (b < minLat) minLat = b; if (a > maxLng) maxLng = a; if (b > maxLat) maxLat = b; })));
-      };
-      zonasManejo.features.forEach(f => f.geometry && walk(f.geometry));
-      if (isFinite(minLng)) { map.resize(); map.fitBounds([[minLng, minLat], [maxLng, maxLat]], { padding: 50, duration: 0, maxZoom: 16 }); }
+    if (mudouConjunto && n && isFinite(minLng)) {
+      map.resize();
+      map.fitBounds([[minLng, minLat], [maxLng, maxLat]], { padding: 50, duration: 0, maxZoom: 16 });
     }
   }, [zonasManejo, mapReady]);
 

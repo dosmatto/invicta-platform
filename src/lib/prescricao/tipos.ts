@@ -71,7 +71,12 @@ export interface AnaliseOrganico {
 
 export interface ParamsCalculo {
   // estoque
-  totalDisponivel?: number;    // na unidade-base (kg, t, sementes, L)
+  totalDisponivel?: number;    // SEMPRE absoluto, na unidade-base (kg, t, sementes, L)
+  /** O total foi DIGITADO por hectare (ex.: 80.000 sementes/ha), não como
+   *  estoque fechado. `totalDisponivel` segue absoluto — o cálculo, a
+   *  validação e as exportações não mudam; isto só diz como reexibir o campo
+   *  e evita a leitura errada de "80.000" como o total do talhão inteiro. */
+  totalPorHa?: boolean;
   doseMin?: number;
   doseMax?: number;
   incremento?: number;         // passo mínimo da máquina (na UnidadeDose)

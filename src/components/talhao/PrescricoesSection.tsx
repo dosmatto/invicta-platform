@@ -88,7 +88,7 @@ function zonasDoZoneamento(z: ZoneamentoMeap): ZonaDose[] {
 }
 
 export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
-  const { nav } = useApp();
+  const { nav, setZonasManejo } = useApp();
   const talhaoId = nav.talhaoId ?? '';
   const [aba, setAba] = useState<AbaId>('nova');
   const [tick, setTick] = useState(0);
@@ -280,6 +280,47 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
     try { return metricasSementes(doseHa, resumo.areaHa, r.params.sementes); } catch { return null; }
   }, [r.unidade, r.params.sementes, resumo, fatorBase]);
 
+  // ── Mapa: zonas da prescrição + a DOSE em cada uma ───────────────────────
+  // A aba não publicava nada no mapa: escolher o zoneamento montava a tabela e
+  // o mapa continuava só com o limite do talhão — a prescrição era decidida no
+  // escuro. Aqui as zonas do mapa-base entram com a cor delas e o rótulo passa
+  // a carregar a dose, que é o número que vai para a máquina.
+  const zonasMapa = useMemo<GeoJSON.FeatureCollection | null>(() => {
+    const feats = r.fc?.features?.filter(f => f.geometry) ?? [];
+    if (!feats.length) return null;
+    const porId = new Map(r.zonas.map(z => [z.idZona, z]));
+    // Antes de calcular, toda dose é 0 — mostrar "0 kg/ha" em tudo seria ruído.
+    // Depois de calcular, o 0 de uma zona é decisão ("não aplica aqui") e tem
+    // que aparecer.
+    const temDose = r.zonas.some(z => Number.isFinite(z.dose) && z.dose > 0);
+    const casas = ehUnidadeSemente(r.unidade) ? 0 : 1;
+    return {
+      type: 'FeatureCollection',
+      features: feats.map((f, i) => {
+        const p = (f.properties ?? {}) as { id?: string; zona?: string | number; classe?: string; cor?: string };
+        const z = porId.get(String(p.id ?? `z${i}`));
+        const nome = z?.nomeZona ?? String(p.zona ?? i + 1);
+        const dose = z?.dose;
+        const linhaDose = temDose && dose != null && Number.isFinite(dose)
+          ? `\n${casas ? fmt(dose, 1) : fmt0(dose)} ${r.unidade}`
+          : '';
+        return {
+          type: 'Feature' as const,
+          properties: {
+            cor: z?.cor ?? p.cor ?? '#94a3b8',
+            rotulo: `Zona ${nome}${linhaDose}`,
+            classeLabel: z?.classe ?? p.classe ?? '',
+            selecionada: false,
+          },
+          geometry: f.geometry!,
+        };
+      }),
+    };
+  }, [r.fc, r.zonas, r.unidade]);
+
+  // Sincroniza o mapa (sistema externo) com o rascunho; some ao sair da aba.
+  useEffect(() => { setZonasManejo(zonasMapa); return () => setZonasManejo(null); }, [zonasMapa, setZonasManejo]);
+
   // ── Salvar / exportar ─────────────────────────────────────────────────────
   function montarPrescricao(): Omit<Prescricao, 'id' | 'versao' | 'criadoEm' | 'atualizadoEm' | 'historico' | 'exportes'> | null {
     if (!r.fc || !r.zonas.length) { setErro('Escolha um zoneamento (Zonas de Manejo) primeiro.'); return null; }
@@ -463,9 +504,10 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
                 {r.modo === 'estoque' && r.tipo !== 'sementes' && (
                   <div className="p-2.5 rounded-lg space-y-2" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
                     <div className="grid grid-cols-4 gap-2">
-                      <Campo rotulo={`Disponível (${UNIDADE_TOTAL[r.unidade]}) *`}>
-                        <InputNum valor={r.params.totalDisponivel} onMudou={v => patchParams({ totalDisponivel: v })} />
-                      </Campo>
+                      <CampoTotalDisponivel rotulo="Disponível" unidadeTotal={UNIDADE_TOTAL[r.unidade]}
+                        porHa={!!r.params.totalPorHa} totalAbs={r.params.totalDisponivel}
+                        areaHa={resumo.areaHa} semente={ehUnidadeSemente(r.unidade)}
+                        onMudou={patchParams} />
                       <Campo rotulo={`Dose mín (${r.unidade})`}>
                         <InputNum valor={r.params.doseMin} onMudou={v => patchParams({ doseMin: v })} />
                       </Campo>
@@ -531,9 +573,10 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
                           <InputNum valor={r.params.doseBase} onMudou={v => patchParams({ doseBase: v })} />
                         </Campo>
                       ) : (
-                        <Campo rotulo={`Total disponível (${UNIDADE_TOTAL[r.unidade]}) *`}>
-                          <InputNum valor={r.params.totalDisponivel} onMudou={v => patchParams({ totalDisponivel: v })} />
-                        </Campo>
+                        <CampoTotalDisponivel rotulo="Total disponível" unidadeTotal={UNIDADE_TOTAL[r.unidade]}
+                          porHa={!!r.params.totalPorHa} totalAbs={r.params.totalDisponivel}
+                          areaHa={resumo.areaHa} semente={ehUnidadeSemente(r.unidade)}
+                          onMudou={patchParams} />
                       )}
                       <Campo rotulo={`Dose mín (${r.unidade})`}>
                         <InputNum valor={r.params.doseMin} onMudou={v => patchParams({ doseMin: v })} />
@@ -692,7 +735,13 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
                 {/* ── Resumo ao vivo ── */}
                 <div className="grid grid-cols-4 gap-1.5">
                   <Kpi rot="Área" val={`${fmt(resumo.areaHa, 1)} ha`} />
-                  <Kpi rot={`Usado (${UNIDADE_TOTAL[r.unidade]})`} val={ehUnidadeSemente(r.unidade) ? fmt0(resumo.usado) : fmt(resumo.usado, 1)} />
+                  {/* O total absoluto não é o número que se confere no campo: a
+                      dose média por hectare é. Fica ao lado do usado sempre que
+                      há área, para "fechar em 80.000/ha" ser verificável. */}
+                  <Kpi rot={`Usado (${UNIDADE_TOTAL[r.unidade]})`} val={ehUnidadeSemente(r.unidade) ? fmt0(resumo.usado) : fmt(resumo.usado, 1)}
+                    sub={resumo.areaHa > 0 && resumo.usado > 0
+                      ? `${ehUnidadeSemente(r.unidade) ? fmt0(resumo.usado / resumo.areaHa) : fmt(resumo.usado / resumo.areaHa, 1)} ${UNIDADE_TOTAL[r.unidade]}/ha`
+                      : undefined} />
                   {r.params.totalDisponivel != null
                     ? <Kpi rot="Restante" val={ehUnidadeSemente(r.unidade) ? fmt0(r.params.totalDisponivel - resumo.usado) : fmt(r.params.totalDisponivel - resumo.usado, 1)}
                         cor={r.params.totalDisponivel - resumo.usado < -1e-6 ? '#f87171' : '#4ade80'} />
@@ -817,6 +866,53 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
 
 // ── Blocos auxiliares ────────────────────────────────────────────────────────
 
+/**
+ * "Total disponível" — com a escolha de informar o número POR HECTARE.
+ *
+ * O campo pedia um estoque fechado ("80.000 sementes") e é comum o número que
+ * o agrônomo tem na mão ser POR HECTARE ("80.000 sementes/ha"): digitado como
+ * total, 80.000 viravam ~1.500/ha num talhão de 52 ha — a prescrição saía
+ * cinquenta vezes menor sem nada avisar. Aqui o número digitado continua o
+ * mesmo ao trocar a unidade; o que muda é o significado, e o absoluto usado no
+ * cálculo aparece escrito embaixo.
+ */
+function CampoTotalDisponivel({ rotulo, unidadeTotal, porHa, totalAbs, areaHa, semente, onMudou }: {
+  rotulo: string; unidadeTotal: string; porHa: boolean;
+  totalAbs?: number; areaHa: number; semente: boolean;
+  onMudou: (p: { totalDisponivel?: number; totalPorHa: boolean }) => void;
+}) {
+  const area = areaHa > 0 ? areaHa : 1;
+  const exibido = porHa ? (totalAbs != null ? Math.round((totalAbs / area) * 100) / 100 : undefined) : totalAbs;
+  const trocarModo = (novoPorHa: boolean) => {
+    if (novoPorHa === porHa) return;
+    // Preserva o NÚMERO na tela e reinterpreta: 80.000 "total" vira 80.000/ha.
+    const n = exibido;
+    onMudou({ totalDisponivel: n == null ? undefined : (novoPorHa ? n * area : n), totalPorHa: novoPorHa });
+  };
+  return (
+    <div>
+      <label className="text-[10px] font-semibold block mb-0.5" style={{ color: '#64748b' }}>
+        {rotulo} ({porHa ? `${unidadeTotal}/ha` : unidadeTotal}) *
+      </label>
+      <InputNum valor={exibido} onMudou={v => onMudou({ totalDisponivel: v == null ? undefined : (porHa ? v * area : v), totalPorHa: porHa })} />
+      <div className="flex items-center gap-1 mt-1">
+        {([[false, `total (${unidadeTotal})`], [true, `por hectare (${unidadeTotal}/ha)`]] as const).map(([v, rot]) => (
+          <button key={String(v)} onClick={() => trocarModo(v)}
+            className="px-1.5 py-0.5 rounded text-[9px] font-semibold"
+            style={{ background: porHa === v ? 'var(--invicta-blue-mid)' : '#0f2240', color: porHa === v ? '#fff' : '#93c5fd' }}>
+            {rot}
+          </button>
+        ))}
+      </div>
+      {porHa && totalAbs != null && totalAbs > 0 && (
+        <p className="text-[9px] mt-0.5" style={{ color: '#4ade80' }}>
+          = {semente ? fmt0(totalAbs) : fmt(totalAbs, 1)} {unidadeTotal} em {fmt(areaHa, 1)} ha
+        </p>
+      )}
+    </div>
+  );
+}
+
 function Campo({ rotulo, children }: { rotulo: string; children: React.ReactNode }) {
   return (
     <div>
@@ -920,11 +1016,12 @@ function SementesCampos({ r, patchParams, estSem, setEstSem, calcular }: {
   );
 }
 
-function Kpi({ rot, val, cor }: { rot: string; val: string; cor?: string }) {
+function Kpi({ rot, val, cor, sub }: { rot: string; val: string; cor?: string; sub?: string }) {
   return (
     <div className="p-2 rounded-lg text-center" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
       <div className="text-sm font-bold" style={{ color: cor ?? '#93c5fd' }}>{val}</div>
       <div className="text-[9px]" style={{ color: '#64748b' }}>{rot}</div>
+      {sub && <div className="text-[9px] font-semibold" style={{ color: '#4ade80' }}>{sub}</div>}
     </div>
   );
 }
