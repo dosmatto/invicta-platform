@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { redistribuirPorEstoque, distribuirProporcional, distribuirPorAjuste, resumoDoses, nutrientesPorZona, pesoDoRank, fatorBaseDose, arredondarDose } from '../src/lib/prescricao/calculo.ts';
 import { fatorCampo, sementesPorHa, metricasSementes, estoqueTotalSementes, distribuirSementes, doseCompensada } from '../src/lib/prescricao/sementes.ts';
 import { dosesPorEquacao, variaveisDaEquacao } from '../src/lib/prescricao/equacao.ts';
-import { montarResumoPdf, temCompensacao, totalDoArquivo, kgDeSementes } from '../src/lib/prescricao/resumo.ts';
+import { montarResumoPdf, temCompensacao, totalDoArquivo, kgDeSementes, doseArquivo as doseArquivoDe } from '../src/lib/prescricao/resumo.ts';
 
 let ok = 0, fail = 0;
 function t(nome, fn) {
@@ -398,6 +398,38 @@ t('resumo sem compensação não inventa duas contas', () => {
   assert.ok(!/ajuste de germinação/.test(texto), texto);
   assert.match(texto, /Quantidade usada: 25,0 t/);
   assert.match(texto, /sai com a dose exatamente como está na tabela/);
+});
+
+t('ADUBO não fala em população nem em germinação', () => {
+  // Achado no uso real: o marcador de "a dose é população" ficava ligado de uma
+  // prescrição de semente e o relatório de um MAP passava a dizer "população
+  // desejada" e "ajuste de germinação (97%)" — números certos, texto sem
+  // sentido agronômico. Adubo não germina: quem decide é a UNIDADE.
+  const zonas = [{ idZona: 'a', nomeZona: '01', classe: 'Alta', cor: '#000', areaHa: 10, dose: 200 }];
+  const p = {
+    unidade: 'kg/ha', tipo: 'fertilizante', produto: 'MAP', nome: 'x',
+    params: { doseEhPopulacao: true, sementes: { germinacaoPct: 97 } },   // marcador ligado de propósito
+    zonas, fc: { type: 'FeatureCollection', features: [] },
+  };
+  assert.equal(temCompensacao(p), false, 'adubo não pode ter compensação');
+  assert.equal(doseArquivoDe(p, 200), 200, 'a dose do arquivo não pode subir');
+  const texto = montarResumoPdf(p, { areaHa: 10, nZonas: 1, usado: 2000, doseMin: 200, doseMax: 200, doseMedia: 200, custo: null }, 1, 1)
+    .map(l => l.txt).join(' | ');
+  assert.ok(!/[Pp]opulação/.test(texto), `falou em população: ${texto}`);
+  assert.ok(!/germinação/.test(texto), `falou em germinação: ${texto}`);
+  assert.match(texto, /Dose: mín 200,0/);
+  assert.match(texto, /Quantidade usada: 2\.000,0 kg/);
+});
+
+t('semente com o mesmo marcador CONTINUA compensando', () => {
+  const zonas = [{ idZona: 'a', nomeZona: '01', classe: 'Alta', cor: '#000', areaHa: 10, dose: 80_000 }];
+  const p = {
+    unidade: 'sementes/ha', tipo: 'sementes', produto: 'x', nome: 'x',
+    params: { doseEhPopulacao: true, sementes: { germinacaoPct: 97 } },
+    zonas, fc: { type: 'FeatureCollection', features: [] },
+  };
+  assert.equal(temCompensacao(p), true);
+  assert.ok(Math.abs(doseArquivoDe(p, 80_000) - 80_000 / 0.97) < 1e-6);
 });
 
 console.log(`\n${ok} passaram, ${fail} falharam\n`);

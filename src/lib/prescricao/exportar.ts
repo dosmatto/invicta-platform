@@ -102,7 +102,7 @@ export function fcPrescricao(p: Prescricao): GeoJSON.FeatureCollection {
         unidade: p.unidade,
         // população-alvo fica no arquivo quando a dose foi compensada: é o que
         // o agrônomo pediu, e sem ela ninguém confere a taxa lá na frente.
-        ...(p.params.doseEhPopulacao ? { pop_alvo: Math.round(z.dose) } : {}),
+        ...(temCompensacao(p) ? { pop_alvo: Math.round(z.dose) } : {}),
         produto: san(p.produto).slice(0, 60),
         area_ha: Math.round(z.areaHa * 100) / 100,
       },
@@ -139,7 +139,7 @@ export async function exportarXlsxPrescricao(p: Prescricao): Promise<string> {
     Zona: z.nomeZona,
     Classe: z.classe,
     'Área (ha)': Number(z.areaHa.toFixed(2)),
-    ...(p.params.doseEhPopulacao
+    ...(temCompensacao(p)
       ? {
           [`População (${p.unidade})`]: Number(z.dose.toFixed(0)),
           [`População ajustada (${p.unidade})`]: Number(doseArquivo(p, z.dose).toFixed(0)),
@@ -367,19 +367,25 @@ export async function exportarPDFPrescricao(p: Prescricao, ident: IdentPdfPrescr
   ty += 2;
   // Mede as quebras ANTES de desenhar a moldura: a observação final é uma
   // frase longa e, sem contar as sub-linhas, o texto vazava para fora da caixa.
-  doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5);
-  const quebradas = linhasResumo.map(l => ({
-    destaque: l.destaque,
-    partes: doc.splitTextToSize(san(l.txt), tabW - 8) as string[],
-  }));
+  // Respiro interno de 5 mm dos dois lados e 3,5 mm embaixo: com 4 mm e
+  // maxWidth = tabW-8 o texto encostava na borda direita da moldura e a última
+  // linha ficava colada no traço de baixo. A largura útil é medida na MESMA
+  // fonte em que o texto é desenhado — negrito ocupa mais, então as linhas de
+  // destaque são medidas em negrito, senão elas é que vazavam.
+  const PAD = 5;
+  const util = tabW - PAD * 2;
+  const quebradas = linhasResumo.map(l => {
+    doc.setFont('helvetica', l.destaque ? 'bold' : 'normal'); doc.setFontSize(7.5);
+    return { destaque: l.destaque, partes: doc.splitTextToSize(san(l.txt), util) as string[] };
+  });
   const nLinhas = quebradas.reduce((n, l) => n + l.partes.length, 0);
-  doc.setDrawColor(...LINE); doc.roundedRect(tabX, ty, tabW, 8 + nLinhas * 4, 2, 2, 'S');
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(...NAVY); doc.text('RESUMO', tabX + 4, ty + 5);
+  doc.setDrawColor(...LINE); doc.roundedRect(tabX, ty, tabW, 9.5 + nLinhas * 4, 2, 2, 'S');
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(...NAVY); doc.text('RESUMO', tabX + PAD, ty + 5);
   doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(...GRAY);
-  let ry = ty + 9.5;
+  let ry = ty + 10;
   for (const l of quebradas) {
     if (l.destaque) { doc.setTextColor(...NAVY); doc.setFont('helvetica', 'bold'); }
-    for (const parte of l.partes) { doc.text(parte, tabX + 4, ry); ry += 4; }
+    for (const parte of l.partes) { doc.text(parte, tabX + PAD, ry); ry += 4; }
     if (l.destaque) { doc.setTextColor(...GRAY); doc.setFont('helvetica', 'normal'); }
   }
 

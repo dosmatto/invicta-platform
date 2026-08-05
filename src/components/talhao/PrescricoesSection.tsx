@@ -283,7 +283,7 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
   // ── Resumo ao vivo (editor) ───────────────────────────────────────────────
   // A dose digitada é população e há fator de campo para compensar? Então a
   // tabela mostra as duas colunas: o que foi pedido e o que vai no arquivo.
-  const compensa = !!r.params.doseEhPopulacao && Math.abs(fatorCampo(r.params.sementes ?? { germinacaoPct: 100 }) - 1) > 1e-9;
+  const compensa = ehUnidadeSemente(r.unidade) && !!r.params.doseEhPopulacao && Math.abs(fatorCampo(r.params.sementes ?? { germinacaoPct: 100 }) - 1) > 1e-9;
   const custoNum = Number(r.custoUnit.replace(',', '.')) || undefined;
   // O resumo (usado/restante/dose média) conta pela dose DIGITADA — é a mesma
   // base do "Total disponível", senão o restante acusa um estouro que não
@@ -476,7 +476,11 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
                 <select value={r.tipo}
                   onChange={e => {
                     const tipo = e.target.value as TipoPrescricao;
+                    // Sair de sementes DESLIGA a compensação: senão o marcador
+                    // fica ligado e o relatório de um adubo passa a falar em
+                    // "população" e "germinação", que ali não existem.
                     patch({ tipo, unidade: tipo === 'sementes' ? 'sementes/ha' : tipo === 'organico' || tipo === 'corretivo' ? 't/ha' : 'kg/ha' });
+                    if (tipo !== 'sementes') patchParams({ doseEhPopulacao: false });
                   }}
                   className="w-full rounded px-2 py-1.5 text-xs outline-none" style={inputStyle}>
                   {Object.entries(ROTULO_TIPO).map(([id, rot]) => <option key={id} value={id}>{rot}</option>)}

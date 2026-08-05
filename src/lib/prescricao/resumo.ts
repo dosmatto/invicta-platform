@@ -16,10 +16,19 @@ const fmt0 = (v: number) => Math.round(v).toLocaleString('pt-BR');
 // a máquina precisa é a taxa de semeadura — a dose compensada pela germinação.
 // Sem isso o arquivo sai com a população e a lavoura nasce abaixo do alvo.
 export const doseArquivo = (p: Prescricao, dose: number): number =>
-  doseCompensada(dose, p.params.sementes, p.params.doseEhPopulacao);
+  doseCompensada(dose, p.params.sementes, p.params.doseEhPopulacao && ehUnidadeSemente(p.unidade));
 
-/** true quando o arquivo leva um número diferente do digitado (há compensação). */
+/**
+ * true quando o arquivo leva um número diferente do digitado (há compensação).
+ *
+ * Germinação é assunto de SEMENTE. Fertilizante, corretivo e orgânico não
+ * germinam: o relatório de um adubo saía falando em "população desejada" e
+ * "ajuste de germinação (97%)" porque o marcador ficava ligado de uma
+ * prescrição anterior — números certos, texto sem sentido agronômico. A
+ * unidade decide, não só o marcador.
+ */
 export function temCompensacao(p: Prescricao): boolean {
+  if (!ehUnidadeSemente(p.unidade)) return false;
   return !!p.params.doseEhPopulacao && Math.abs(doseArquivo(p, 1) - 1) > 1e-9;
 }
 
