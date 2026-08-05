@@ -111,7 +111,16 @@ export interface ParamsComplemento {
   baseInsumoId?: string;
   baseNome?: string;
   baseGarantiaPct?: number;
+  /** dose única do base, quando informada à mão */
   baseDoseKgHa?: number;
+  /** id da PRESCRIÇÃO já salva usada como base. Ela tem dose POR ZONA, então o
+   *  nutriente fornecido varia de zona para zona — e o complemento também.
+   *  Digitar uma dose única jogaria fora a taxa variável que já foi decidida. */
+  basePrescricaoId?: string;
+  basePrescricaoNome?: string;
+  /** SNAPSHOT idZona → dose do base. A prescrição base pode ganhar versão nova
+   *  depois; o que foi calculado aqui não pode mudar sozinho. */
+  baseDosePorZona?: Record<string, number>;
   // produto COMPLEMENTAR (o que a prescrição vai calcular)
   compInsumoId?: string;
   compNome?: string;

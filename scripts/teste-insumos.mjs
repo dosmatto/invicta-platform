@@ -10,7 +10,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  complementarNutriente, nutrienteFornecido, garantiaDe, podeComplementar,
+  complementarNutriente, complementarPorZona, nutrienteFornecido, garantiaDe, podeComplementar,
   NUTRIENTES, ROTULO_NUTRIENTE,
 } from '../src/lib/insumos.ts';
 
@@ -58,6 +58,37 @@ test('a conta fecha: dose calculada × garantia + fornecido = meta', () => {
     assert.ok(Math.abs(total - meta) < 1e-6, `meta ${meta}: fechou em ${total}`);
   }
 });
+
+test('POR ZONA: a prescrição base tem dose diferente em cada zona', () => {
+  // O caso real: o MAP já foi prescrito em taxa variável (250 na zona boa, 200
+  // na média, 150 na fraca). Cada zona já recebeu uma quantidade diferente de
+  // N, então o complemento também tem de variar — uma dose única jogaria fora
+  // a taxa variável que já tinha sido decidida.
+  const zonas = [
+    { idZona: 'a', baseDoseKgHa: 250 },
+    { idZona: 'b', baseDoseKgHa: 200 },
+    { idZona: 'c', baseDoseKgHa: 150 },
+  ];
+  const r = complementarPorZona(zonas, { metaKgHa: 200, baseGarantiaPct: 12, compGarantiaPct: 45 });
+  assert.deepEqual(r.map(x => x.idZona), ['a', 'b', 'c']);
+  assert.deepEqual(r.map(x => Math.round(x.fornecidoKgHa)), [30, 24, 18]);
+  // faltante = 170 / 176 / 182 → dose = /0,45
+  assert.deepEqual(r.map(x => Math.round(x.doseCompKgHa)), [378, 391, 404]);
+  // a zona mais fraca no base recebe MAIS complemento — é o esperado
+  assert.ok(r[2].doseCompKgHa > r[0].doseCompKgHa);
+});
+
+test('POR ZONA: zona onde o base já passou da meta não recebe complemento', () => {
+  const r = complementarPorZona(
+    [{ idZona: 'a', baseDoseKgHa: 2000 }, { idZona: 'b', baseDoseKgHa: 100 }],
+    { metaKgHa: 200, baseGarantiaPct: 12, compGarantiaPct: 45 },
+  );
+  assert.equal(r[0].doseCompKgHa, 0, 'zona saturada não leva mais nada');
+  assert.ok(r[0].avisos.length > 0);
+  assert.ok(r[1].doseCompKgHa > 0);
+});
+
+
 
 test('garantiaDe devolve 0 quando o nutriente não foi declarado', () => {
   const map = { categoria: 'fertilizante', garantias: { n: 11, p2o5: 52 } };

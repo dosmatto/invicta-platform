@@ -18,7 +18,7 @@ import {
 import { emailUsuario } from '@/lib/empresa';
 import { listar as bibListar, type ItemBiblioteca, type ConteudoEquacao } from '@/lib/biblioteca';
 import {
-  complementarNutriente, podeComplementar, NUTRIENTES, ROTULO_NUTRIENTE, SIMBOLO_NUTRIENTE, garantiaDe,
+  complementarNutriente, complementarPorZona, podeComplementar, NUTRIENTES, ROTULO_NUTRIENTE, SIMBOLO_NUTRIENTE, garantiaDe,
   type CategoriaInsumo, type ConteudoInsumo, type Nutriente,
 } from '@/lib/insumos';
 import {
@@ -198,6 +198,12 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
       } });
     }
     patch({ insumoId: it.id, produto: it.nome, ...extras });
+    // No modo complementação, o produto DESTA prescrição é o complementar —
+    // não faz sentido escolher de novo lá embaixo; a garantia vem junto.
+    if (r.modo === 'complemento') {
+      const nut = r.params.complemento?.nutriente ?? 'n';
+      patchComp({ compInsumoId: it.id, compNome: it.nome, compGarantiaPct: garantiaDe(c, nut) });
+    }
   }
 
   // ── Complementação por nutriente (Parte XIV §7) ──────────────────────────
@@ -209,13 +215,66 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
     compGarantiaPct: comp.compGarantiaPct ?? 0,
   }) : null), [comp]);
 
+  // Prescrições JÁ SALVAS que podem servir de base: fertilizante, versão mais
+  // recente de cada linhagem, e nunca a que está sendo editada.
+  const prescricoesBase = useMemo(
+    () => linhagens.map(vs => vs[0]).filter(p => p.tipo === 'fertilizante' && p.id !== r.editandoId),
+    [linhagens, r.editandoId],
+  );
+
+  /** Usa uma prescrição salva como produto base: puxa o produto, a garantia do
+   *  nutriente e — o que importa — a dose de CADA zona. */
+  function escolherPrescricaoBase(id: string, nut: Nutriente) {
+    if (!id) { patchComp({ basePrescricaoId: undefined, basePrescricaoNome: undefined, baseDosePorZona: undefined }); return; }
+    const base = prescricoesBase.find(p => p.id === id);
+    if (!base) return;
+    const ins = insumos.find(i => i.id === base.insumoId);
+    const dosePorZona: Record<string, number> = {};
+    base.zonas.forEach(z => { dosePorZona[z.idZona] = z.dose; });
+    patchComp({
+      basePrescricaoId: base.id,
+      basePrescricaoNome: `${base.nome} (v${base.versao})`,
+      baseInsumoId: base.insumoId,
+      baseNome: base.produto,
+      baseGarantiaPct: ins ? garantiaDe(ins.conteudo, nut) : undefined,
+      baseDosePorZona: dosePorZona,
+      baseDoseKgHa: undefined,
+    });
+    // Zoneamento diferente = as zonas não casam; melhor dizer agora do que
+    // deixar metade das zonas sem base na hora de aplicar.
+    if (r.zoneamentoId && base.zoneamentoId && base.zoneamentoId !== r.zoneamentoId) {
+      setAvisosCalc([`A prescrição base usa outro zoneamento ("${base.zoneamentoNome}"). As zonas que não casarem ficam sem desconto do produto base.`]);
+    }
+  }
+
   function patchComp(pc: Partial<NonNullable<ParamsCalculo['complemento']>>) {
     patchParams({ complemento: { nutriente: 'n', ...(r.params.complemento ?? {}), ...pc } });
   }
 
-  /** Aplica a dose calculada em TODAS as zonas (o usuário afina depois). */
+  /** Aplica a dose calculada nas zonas. Com prescrição base, cada zona tem a
+   *  sua — a taxa variável do base se propaga para o complemento. */
   function aplicarComplemento() {
     setErro(''); setOkMsg('');
+    const c = r.params.complemento;
+    if (!c) { setErro('Configure a complementação primeiro.'); return; }
+
+    if (c.baseDosePorZona) {
+      const porZona = complementarPorZona(
+        r.zonas.map(z => ({ idZona: z.idZona, baseDoseKgHa: c.baseDosePorZona![z.idZona] ?? 0 })),
+        { metaKgHa: c.metaKgHa ?? 0, baseGarantiaPct: c.baseGarantiaPct ?? 0, compGarantiaPct: c.compGarantiaPct ?? 0 },
+      );
+      const doses = new Map(porZona.map(x => [x.idZona, arredondarDose(x.doseCompKgHa)]));
+      patch({ zonas: r.zonas.map(z => ({ ...z, dose: doses.get(z.idZona) ?? 0 })) });
+      const semBase = r.zonas.filter(z => c.baseDosePorZona![z.idZona] == null).map(z => z.nomeZona);
+      const vals = [...doses.values()];
+      setAvisosCalc([
+        ...[...new Set(porZona.flatMap(x => x.avisos))],
+        ...(semBase.length ? [`Sem dose do produto base nas zonas ${semBase.join(', ')} — nelas o complemento cobre a meta inteira.`] : []),
+        `Dose calculada por zona: ${fmt(Math.min(...vals), 1)} a ${fmt(Math.max(...vals), 1)} ${r.unidade} — a taxa variável do produto base foi mantida.`,
+      ]);
+      return;
+    }
+
     if (!resultadoComp) { setErro('Configure a complementação primeiro.'); return; }
     if (resultadoComp.doseCompKgHa <= 0) {
       setAvisosCalc(resultadoComp.avisos.length ? resultadoComp.avisos : ['Nada a complementar: a meta já foi atingida pelo produto base.']);
@@ -636,7 +695,15 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
                   {(Object.entries(ROTULO_MODO) as Array<[ModoCalculo, string]>)
                     .filter(([id]) => MODOS_VISIVEIS.includes(id) || r.modo === id)
                     .map(([id, rot]) => (
-                    <button key={id} onClick={() => { patch({ modo: id }); setAvisosCalc([]); }}
+                    <button key={id} onClick={() => {
+                        patch({ modo: id }); setAvisosCalc([]);
+                        if (id === 'complemento') {
+                          const it = insumos.find(x => x.id === r.insumoId);
+                          const nut = r.params.complemento?.nutriente ?? 'n';
+                          if (it) patchComp({ compInsumoId: it.id, compNome: it.nome, compGarantiaPct: garantiaDe(it.conteudo, nut) });
+                          else patchComp({ nutriente: nut });
+                        }
+                      }}
                       className="px-2 py-1.5 rounded text-[10px] font-semibold"
                       style={{ background: r.modo === id ? 'var(--invicta-green-dark)' : '#0f2240', color: r.modo === id ? '#fff' : '#93c5fd' }}>
                       {rot}
@@ -772,6 +839,23 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
                   const sim = SIMBOLO_NUTRIENTE[nut];
                   const res = resultadoComp;
                   const soFertilizante = r.tipo === 'fertilizante';
+                  // Faixas para o resumo quando a base é uma prescrição salva:
+                  // cada zona tem a sua dose, então o que se mostra é o intervalo.
+                  const porZona = (() => {
+                    if (!c.baseDosePorZona || !r.zonas.length) return null;
+                    const rz = complementarPorZona(
+                      r.zonas.map(z => ({ idZona: z.idZona, baseDoseKgHa: c.baseDosePorZona![z.idZona] ?? 0 })),
+                      { metaKgHa: c.metaKgHa ?? 0, baseGarantiaPct: c.baseGarantiaPct ?? 0, compGarantiaPct: c.compGarantiaPct ?? 0 },
+                    );
+                    const doses = r.zonas.map(z => c.baseDosePorZona![z.idZona] ?? 0);
+                    return {
+                      doseMin: Math.min(...doses), doseMax: Math.max(...doses),
+                      fornMin: Math.min(...rz.map(x => x.fornecidoKgHa)), fornMax: Math.max(...rz.map(x => x.fornecidoKgHa)),
+                      faltMin: Math.min(...rz.map(x => x.faltanteKgHa)), faltMax: Math.max(...rz.map(x => x.faltanteKgHa)),
+                      compMin: Math.min(...rz.map(x => x.doseCompKgHa)), compMax: Math.max(...rz.map(x => x.doseCompKgHa)),
+                      avisos: [...new Set(rz.flatMap(x => x.avisos))],
+                    };
+                  })();
                   return (
                     <div className="p-2.5 rounded-lg space-y-2" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
                       {!soFertilizante ? (
@@ -783,7 +867,18 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
                         <>
                           <div className="grid grid-cols-2 gap-2">
                             <Campo rotulo="Nutriente de referência">
-                              <select value={nut} onChange={e => patchComp({ nutriente: e.target.value as Nutriente })}
+                              <select value={nut} onChange={e => {
+                                  const novo = e.target.value as Nutriente;
+                                  // A garantia é POR nutriente: trocar de nutriente sem
+                                  // reler o cadastro deixaria o % do anterior na tela.
+                                  const base = insumos.find(i => i.id === c.baseInsumoId);
+                                  const comp = insumos.find(i => i.id === (c.compInsumoId ?? r.insumoId));
+                                  patchComp({
+                                    nutriente: novo,
+                                    ...(base ? { baseGarantiaPct: garantiaDe(base.conteudo, novo) } : {}),
+                                    ...(comp ? { compGarantiaPct: garantiaDe(comp.conteudo, novo) } : {}),
+                                  });
+                                }}
                                 className="w-full rounded px-2 py-1.5 text-xs outline-none" style={inputStyle}>
                                 {NUTRIENTES.map(n => <option key={n} value={n}>{ROTULO_NUTRIENTE[n]}</option>)}
                               </select>
@@ -794,6 +889,31 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
                           </div>
 
                           <p className="text-[10px] font-semibold" style={{ color: '#93c5fd' }}>Produto base — o que já vai ser aplicado</p>
+                          {/* De onde vem a dose do base: de uma prescrição JÁ SALVA
+                              (que tem dose por zona, e aí o complemento também sai
+                              variável) ou digitada à mão, dose única. */}
+                          <Campo rotulo="Prescrição já salva como base (opcional — traz a dose de cada zona)">
+                            <select value={c.basePrescricaoId ?? ''}
+                              onChange={e => escolherPrescricaoBase(e.target.value, nut)}
+                              className="w-full rounded px-2 py-1.5 text-xs outline-none" style={inputStyle}>
+                              <option value="">informar a dose à mão (uma dose para todas as zonas)</option>
+                              {prescricoesBase.map(p => (
+                                <option key={p.id} value={p.id}>{p.nome} (v{p.versao}) · {p.produto} · {p.zonas.length} zonas</option>
+                              ))}
+                            </select>
+                            {prescricoesBase.length === 0 && (
+                              <p className="text-[9px] mt-0.5" style={{ color: '#64748b' }}>
+                                Nenhuma prescrição de fertilizante salva neste talhão ainda — informe a dose do base à mão abaixo.
+                              </p>
+                            )}
+                            {c.basePrescricaoId && c.baseDosePorZona && (
+                              <p className="text-[9px] mt-0.5" style={{ color: '#86efac' }}>
+                                Doses de <strong>{c.baseNome}</strong> por zona:{' '}
+                                {fmt(Math.min(...Object.values(c.baseDosePorZona)), 1)}–{fmt(Math.max(...Object.values(c.baseDosePorZona)), 1)} kg/ha
+                                {' '}· o complemento sai variável, zona a zona.
+                              </p>
+                            )}
+                          </Campo>
                           <div className="grid grid-cols-3 gap-2">
                             <Campo rotulo="Produto base">
                               <select value={c.baseInsumoId ?? ''}
@@ -809,46 +929,68 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
                             <Campo rotulo={`Garantia de ${sim} (%)`}>
                               <InputNum valor={c.baseGarantiaPct} onMudou={v => patchComp({ baseGarantiaPct: v })} />
                             </Campo>
-                            <Campo rotulo="Dose aplicada (kg/ha)">
-                              <InputNum valor={c.baseDoseKgHa} onMudou={v => patchComp({ baseDoseKgHa: v })} />
+                            <Campo rotulo={c.baseDosePorZona ? 'Dose aplicada (vem da prescrição)' : 'Dose aplicada (kg/ha)'}>
+                              {c.baseDosePorZona
+                                ? <p className="text-[11px] px-2 py-1.5 rounded" style={{ background: '#0b1f3a', color: '#86efac' }}>por zona</p>
+                                : <InputNum valor={c.baseDoseKgHa} onMudou={v => patchComp({ baseDoseKgHa: v })} />}
                             </Campo>
                           </div>
 
                           <p className="text-[10px] font-semibold" style={{ color: '#93c5fd' }}>Produto complementar — o que esta prescrição vai aplicar</p>
                           <div className="grid grid-cols-2 gap-2">
-                            <Campo rotulo="Produto complementar">
-                              <select value={c.compInsumoId ?? r.insumoId ?? ''}
-                                onChange={e => {
-                                  const it = fertilizantes.find(x => x.id === e.target.value);
-                                  if (it) { escolherInsumo(it.id); patchComp({ compInsumoId: it.id, compNome: it.nome, compGarantiaPct: garantiaDe(it.conteudo, nut) }); }
-                                }}
-                                className="w-full rounded px-2 py-1.5 text-xs outline-none" style={inputStyle}>
-                                <option value="">Selecione…</option>
-                                {fertilizantes.map(i => <option key={i.id} value={i.id}>{i.nome}</option>)}
-                              </select>
+                            {/* É o produto escolhido lá em cima: um segundo seletor para o
+                                mesmo produto só criaria divergência entre os dois. */}
+                            <Campo rotulo="Produto (o desta prescrição)">
+                              <p className="text-[11px] px-2 py-1.5 rounded truncate" style={{ background: '#0b1f3a', color: r.produto ? '#e2e8f0' : '#f87171' }}>
+                                {r.produto || 'escolha o Produto no topo da tela'}
+                              </p>
                             </Campo>
                             <Campo rotulo={`Garantia de ${sim} (%)`}>
                               <InputNum valor={c.compGarantiaPct} onMudou={v => patchComp({ compGarantiaPct: v })} />
                             </Campo>
                           </div>
+                          {r.insumoId && (c.compGarantiaPct ?? 0) <= 0 && (
+                            <p className="text-[9px] leading-relaxed" style={{ color: '#fbbf24' }}>
+                              <AlertTriangle size={10} className="inline mr-1" />
+                              <strong>{r.produto}</strong> não tem {sim} declarado em Biblioteca → Insumos. Cadastre a garantia lá, ou digite o % aqui para este cálculo.
+                            </p>
+                          )}
 
                           {/* Resumo do cálculo (§10) — a conta inteira, à vista */}
                           {res && (
                             <div className="p-2 rounded space-y-0.5" style={{ background: '#0b1f3a', border: '1px solid #1e3a8a' }}>
                               <p className="text-[10px] font-bold" style={{ color: '#93c5fd' }}>Resumo do cálculo</p>
-                              <p className="text-[10px]" style={{ color: '#cbd5e1' }}>
-                                Base <strong>{c.baseNome ?? '—'}</strong>: {fmt(c.baseDoseKgHa ?? 0, 1)} kg/ha × {fmt(c.baseGarantiaPct ?? 0, 1)}% ={' '}
-                                <strong>{fmt(res.fornecidoKgHa, 1)} kg/ha de {sim}</strong>
-                              </p>
-                              <p className="text-[10px]" style={{ color: '#cbd5e1' }}>
-                                Meta {fmt(c.metaKgHa ?? 0, 1)} − fornecido {fmt(res.fornecidoKgHa, 1)} ={' '}
-                                <strong>{fmt(res.faltanteKgHa, 1)} kg/ha de {sim} faltando</strong>
-                              </p>
-                              <p className="text-[11px]" style={{ color: '#86efac' }}>
-                                {c.compNome ?? 'Complementar'}: {fmt(res.faltanteKgHa, 1)} ÷ {fmt(c.compGarantiaPct ?? 0, 1)}% ={' '}
-                                <strong>{fmt(res.doseCompKgHa, 1)} kg/ha</strong>
-                              </p>
-                              {res.avisos.map((a, i) => (
+                              {porZona ? (
+                                <>
+                                  <p className="text-[10px]" style={{ color: '#cbd5e1' }}>
+                                    Base <strong>{c.baseNome ?? '—'}</strong> ({c.basePrescricaoNome}): {fmt(porZona.doseMin, 1)}–{fmt(porZona.doseMax, 1)} kg/ha × {fmt(c.baseGarantiaPct ?? 0, 1)}% ={' '}
+                                    <strong>{fmt(porZona.fornMin, 1)}–{fmt(porZona.fornMax, 1)} kg/ha de {sim}</strong>
+                                  </p>
+                                  <p className="text-[10px]" style={{ color: '#cbd5e1' }}>
+                                    Meta {fmt(c.metaKgHa ?? 0, 1)} − fornecido = <strong>{fmt(porZona.faltMin, 1)}–{fmt(porZona.faltMax, 1)} kg/ha de {sim} faltando</strong>
+                                  </p>
+                                  <p className="text-[11px]" style={{ color: '#86efac' }}>
+                                    {c.compNome ?? 'Complementar'} a {fmt(c.compGarantiaPct ?? 0, 1)}%:{' '}
+                                    <strong>{fmt(porZona.compMin, 1)}–{fmt(porZona.compMax, 1)} kg/ha</strong> (varia por zona)
+                                  </p>
+                                </>
+                              ) : (
+                                <>
+                                  <p className="text-[10px]" style={{ color: '#cbd5e1' }}>
+                                    Base <strong>{c.baseNome ?? '—'}</strong>: {fmt(c.baseDoseKgHa ?? 0, 1)} kg/ha × {fmt(c.baseGarantiaPct ?? 0, 1)}% ={' '}
+                                    <strong>{fmt(res.fornecidoKgHa, 1)} kg/ha de {sim}</strong>
+                                  </p>
+                                  <p className="text-[10px]" style={{ color: '#cbd5e1' }}>
+                                    Meta {fmt(c.metaKgHa ?? 0, 1)} − fornecido {fmt(res.fornecidoKgHa, 1)} ={' '}
+                                    <strong>{fmt(res.faltanteKgHa, 1)} kg/ha de {sim} faltando</strong>
+                                  </p>
+                                  <p className="text-[11px]" style={{ color: '#86efac' }}>
+                                    {c.compNome ?? 'Complementar'}: {fmt(res.faltanteKgHa, 1)} ÷ {fmt(c.compGarantiaPct ?? 0, 1)}% ={' '}
+                                    <strong>{fmt(res.doseCompKgHa, 1)} kg/ha</strong>
+                                  </p>
+                                </>
+                              )}
+                              {(porZona?.avisos ?? res.avisos).map((a, i) => (
                                 <p key={i} className="text-[9px] leading-relaxed" style={{ color: '#fbbf24' }}>{a}</p>
                               ))}
                             </div>
@@ -859,7 +1001,9 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
                             <RefreshCw size={11} /> Aplicar a dose calculada nas zonas
                           </button>
                           <p className="text-[9px]" style={{ color: '#64748b' }}>
-                            A dose entra igual em todas as zonas; para taxa variável, ajuste zona a zona na tabela abaixo.
+                            {porZona
+                              ? 'Cada zona recebe a sua dose, descontando o que o produto base já entregou ali — a taxa variável do base se propaga para o complemento.'
+                              : 'A dose entra igual em todas as zonas; para taxa variável, escolha uma prescrição base acima ou ajuste zona a zona na tabela.'}
                           </p>
                         </>
                       )}

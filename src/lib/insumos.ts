@@ -149,6 +149,32 @@ export function complementarNutriente(e: EntradaComplemento): ResultadoComplemen
   };
 }
 
+/**
+ * Complementação POR ZONA — quando o produto base vem de uma prescrição já
+ * salva, cada zona recebeu uma dose diferente, logo cada zona já tem uma
+ * quantidade diferente do nutriente. Uma dose única de complemento jogaria
+ * fora a taxa variável que já tinha sido decidida na prescrição base.
+ */
+export interface ZonaComplemento {
+  idZona: string;
+  /** dose do produto BASE naquela zona (kg/ha) */
+  baseDoseKgHa: number;
+}
+
+export interface ResultadoZonaComplemento extends ResultadoComplemento {
+  idZona: string;
+}
+
+export function complementarPorZona(
+  zonas: ZonaComplemento[],
+  e: Omit<EntradaComplemento, 'baseDoseKgHa'>,
+): ResultadoZonaComplemento[] {
+  return zonas.map(z => ({
+    idZona: z.idZona,
+    ...complementarNutriente({ ...e, baseDoseKgHa: z.baseDoseKgHa }),
+  }));
+}
+
 /** Quanto de nutriente uma dose entrega (kg/ha), pela garantia em %. */
 export function nutrienteFornecido(doseKgHa: number, garantiaPct: number): number {
   return (doseKgHa || 0) * (garantiaPct || 0) / 100;
