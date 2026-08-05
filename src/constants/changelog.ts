@@ -1,5 +1,9 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.20.2': [
+    'PRESCRIÇÕES — "SALVAR" DEIXOU DE PARECER MORTO: o botão salvava, mas a confirmação (e o aviso de campo faltando) aparecia no TOPO da aba, a mais de 700 pixels do botão, que fica no fim de uma tela longa — quem clicava não via nada acontecer e concluía que o botão não funcionava. Agora o retorno sai logo abaixo do botão, onde o olho está.',
+    'A PRESCRIÇÃO SALVA APARECE EMBAIXO, na própria aba Nova — "Prescrições salvas (N)", como já acontece nas Zonas de Manejo e no NDVI: nome, produto, versão, data, responsável, o resumo das doses e os botões de Abrir no editor · SHP · Excel · PDF · Excluir. Antes era preciso trocar para a aba "Salvas" para ter certeza de que o trabalho tinha sido gravado. A aba "Salvas" continua existindo e mostra os mesmos cartões.',
+  ],
   '2.20.1': [
     'EXPORTAR DEIXOU DE SER UM PORTÃO FECHADO: gerar SHP, Excel ou PDF esbarrava em duas travas que não protegiam nada de verdade. A primeira era "Salve a prescrição antes de exportar" — agora, se ela ainda não foi salva, o app SALVA e exporta na sequência (o arquivo continua rastreável, com versão registrada; só sumiu a ida e volta até o outro botão). A segunda era o "estoque insuficiente": quando a conta não fechava com o disponível informado, os três botões travavam. Isso agora é uma PERGUNTA — o app mostra quanto passou e você decide se manda assim mesmo ("a prescrição usa 314,7 kg e o disponível é 50,0"). Continuam bloqueando de verdade só os casos em que o arquivo sairia quebrado: geometria inválida, zona sem dose e dose em sementes/m sem o espaçamento.',
   ],

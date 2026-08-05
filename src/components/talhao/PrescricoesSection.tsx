@@ -828,7 +828,31 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
                     </button>
                   )}
                 </div>
+
+                {/* O retorno do clique aparece AQUI, ao lado do botão. Ele
+                    também sai no topo da aba, que fica fora da vista quando se
+                    salva no fim de uma tela longa — era isso que fazia o
+                    "Salvar prescrição" parecer morto. */}
+                {erro && <Aviso tom="erro" texto={erro} />}
+                {okMsg && <Aviso tom="ok" texto={okMsg} />}
               </>
+            )}
+
+            {/* ── Salvas neste talhão — logo abaixo, como nas Zonas de Manejo ── */}
+            {prescricoes.length > 0 && (
+              <div className="pt-1 space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <FolderOpen size={12} style={{ color: '#93c5fd' }} />
+                  <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color: '#cbd5e1' }}>
+                    Prescrições salvas ({prescricoes.length})
+                  </span>
+                </div>
+                {prescricoes.map(p => (
+                  <CartaoSalva key={p.id} p={p} exportando={exportando}
+                    onAbrir={abrirSalva} onExportar={exportar}
+                    onExcluir={id => { deletePrescricao(id); setTick(t => t + 1); }} />
+                ))}
+              </div>
             )}
           </>
         )}
@@ -836,38 +860,11 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
         {aba === 'salvas' && (
           prescricoes.length === 0
             ? <Vazia texto="Nenhuma prescrição salva neste talhão ainda." />
-            : prescricoes.map(p => {
-              const rs = resumoDoses(p.zonas, p.custoUnit);
-              return (
-                <div key={p.id} className="p-2.5 rounded-lg space-y-1.5" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
-                  <div className="flex items-start gap-2">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-bold truncate" style={{ color: '#e2e8f0' }}>{p.nome}</p>
-                      <p className="text-[10px]" style={{ color: '#94a3b8' }}>
-                        {p.produto} · {ROTULO_TIPO[p.tipo]} · v{p.versao} · {dataBR(p.atualizadoEm)} · {p.criadoPor}
-                      </p>
-                    </div>
-                  </div>
-                  <p className="text-[10px]" style={{ color: '#cbd5e1' }}>
-                    {rs.nZonas} zonas · {fmt(rs.areaHa, 1)} ha · dose {fmt(rs.doseMin, 1)}–{fmt(rs.doseMax, 1)} (média {fmt(rs.doseMedia, 1)}) {p.unidade}
-                    {' '}· usa {p.unidade === 'sementes/ha' ? fmt0(rs.usado) : fmt(rs.usado, 1)} {UNIDADE_TOTAL[p.unidade]}
-                    {rs.custo != null ? ` · R$ ${fmt(rs.custo, 0)}` : ''}
-                  </p>
-                  <div className="flex gap-1.5 flex-wrap">
-                    <button onClick={() => abrirSalva(p)} className="px-2 py-1 rounded text-[10px] font-semibold flex items-center gap-1" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
-                      <Pencil size={10} /> Abrir no editor
-                    </button>
-                    <BotaoExport rot="SHP" icone={FileDown} pequeno ocupado={exportando === `${p.id}:shp`} onClick={() => exportar('shp', p)} />
-                    <BotaoExport rot="Excel" icone={FileSpreadsheet} pequeno ocupado={exportando === `${p.id}:xlsx`} onClick={() => exportar('xlsx', p)} />
-                    <BotaoExport rot="PDF" icone={FileText} pequeno ocupado={exportando === `${p.id}:pdf`} onClick={() => exportar('pdf', p)} />
-                    <button onClick={() => { if (confirm(`Excluir a prescrição "${p.nome}"?`)) { deletePrescricao(p.id); setTick(t => t + 1); } }}
-                      className="px-2 py-1 rounded text-[10px] font-semibold flex items-center gap-1" style={{ background: '#3a1a1a', color: '#fca5a5' }}>
-                      <Trash2 size={10} /> Excluir
-                    </button>
-                  </div>
-                </div>
-              );
-            })
+            : prescricoes.map(p => (
+              <CartaoSalva key={p.id} p={p} exportando={exportando}
+                onAbrir={abrirSalva} onExportar={exportar}
+                onExcluir={id => { deletePrescricao(id); setTick(t => t + 1); }} />
+            ))
         )}
 
         {aba === 'arquivos' && (() => {
@@ -964,6 +961,50 @@ function CampoTotalDisponivel({ rotulo, unidadeTotal, porHa, totalAbs, areaHa, s
           = {semente ? fmt0(totalAbs) : fmt(totalAbs, 1)} {unidadeTotal} em {fmt(areaHa, 1)} ha
         </p>
       )}
+    </div>
+  );
+}
+
+// Cartão de uma prescrição salva — o MESMO na aba "Salvas" e no rodapé da aba
+// "Nova". Salvar e não ver nada acontecer é o que fazia parecer que o botão não
+// funcionava: a confirmação aparecia no topo do formulário, longe do botão, que
+// fica no fim de uma tela longa. Agora o resultado do trabalho aparece embaixo,
+// como nas Zonas de Manejo e no NDVI.
+function CartaoSalva({ p, exportando, onAbrir, onExportar, onExcluir }: {
+  p: Prescricao;
+  exportando: string;
+  onAbrir: (p: Prescricao) => void;
+  onExportar: (formato: 'shp' | 'xlsx' | 'pdf', p: Prescricao) => void;
+  onExcluir: (id: string) => void;
+}) {
+  const rs = resumoDoses(p.zonas, p.custoUnit);
+  return (
+    <div className="p-2.5 rounded-lg space-y-1.5" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
+      <div className="flex items-start gap-2">
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-bold truncate" style={{ color: '#e2e8f0' }}>{p.nome}</p>
+          <p className="text-[10px]" style={{ color: '#94a3b8' }}>
+            {p.produto} · {ROTULO_TIPO[p.tipo]} · v{p.versao} · {dataBR(p.atualizadoEm)} · {p.criadoPor}
+          </p>
+        </div>
+      </div>
+      <p className="text-[10px]" style={{ color: '#cbd5e1' }}>
+        {rs.nZonas} zonas · {fmt(rs.areaHa, 1)} ha · dose {fmt(rs.doseMin, 1)}–{fmt(rs.doseMax, 1)} (média {fmt(rs.doseMedia, 1)}) {p.unidade}
+        {' '}· usa {p.unidade === 'sementes/ha' ? fmt0(rs.usado) : fmt(rs.usado, 1)} {UNIDADE_TOTAL[p.unidade]}
+        {rs.custo != null ? ` · R$ ${fmt(rs.custo, 0)}` : ''}
+      </p>
+      <div className="flex gap-1.5 flex-wrap">
+        <button onClick={() => onAbrir(p)} className="px-2 py-1 rounded text-[10px] font-semibold flex items-center gap-1" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
+          <Pencil size={10} /> Abrir no editor
+        </button>
+        <BotaoExport rot="SHP" icone={FileDown} pequeno ocupado={exportando === `${p.id}:shp`} onClick={() => onExportar('shp', p)} />
+        <BotaoExport rot="Excel" icone={FileSpreadsheet} pequeno ocupado={exportando === `${p.id}:xlsx`} onClick={() => onExportar('xlsx', p)} />
+        <BotaoExport rot="PDF" icone={FileText} pequeno ocupado={exportando === `${p.id}:pdf`} onClick={() => onExportar('pdf', p)} />
+        <button onClick={() => { if (confirm(`Excluir a prescrição "${p.nome}"?`)) onExcluir(p.id); }}
+          className="px-2 py-1 rounded text-[10px] font-semibold flex items-center gap-1" style={{ background: '#3a1a1a', color: '#fca5a5' }}>
+          <Trash2 size={10} /> Excluir
+        </button>
+      </div>
     </div>
   );
 }
