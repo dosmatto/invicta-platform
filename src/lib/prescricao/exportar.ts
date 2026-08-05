@@ -17,6 +17,7 @@ import { imagemParaPdf, reduzirLogo } from '../pdfImagem';
 import { resumoDoses, nutrientesPorZona, fatorBaseDose } from './calculo.ts';
 import { doseCompensada } from './sementes.ts';
 import { doseArquivo, temCompensacao, totalDoArquivo, kgDeSementes, montarResumoPdf } from './resumo.ts';
+import { complementarNutriente, SIMBOLO_NUTRIENTE } from '../insumos';
 import { UNIDADE_TOTAL, ehUnidadeSemente, type Prescricao } from './tipos.ts';
 
 // Fator unidade-dose → unidade-base da prescrição (1 exceto sementes/m, que usa
@@ -186,6 +187,27 @@ export async function exportarXlsxPrescricao(p: Prescricao): Promise<string> {
       return k == null ? [] : [{ Item: `Quantidade usada em quilos (PMS ${pms} g)`, Valor: Number(k.toFixed(1)) }];
     })()),
     ...(r.custo != null ? [{ Item: 'Custo (R$)', Valor: Number(r.custo.toFixed(2)) }] : []),
+    // Complementação por nutriente: a conta que justifica a dose.
+    ...(p.modo === 'complemento' && p.params.complemento ? (() => {
+      const c = p.params.complemento!;
+      const sim = SIMBOLO_NUTRIENTE[c.nutriente] ?? c.nutriente;
+      const res = complementarNutriente({
+        metaKgHa: c.metaKgHa ?? 0, baseGarantiaPct: c.baseGarantiaPct ?? 0,
+        baseDoseKgHa: c.baseDoseKgHa ?? 0, compGarantiaPct: c.compGarantiaPct ?? 0,
+      });
+      return [
+        { Item: 'Nutriente de referência', Valor: sim },
+        { Item: `Meta de ${sim} (kg/ha)`, Valor: Number((c.metaKgHa ?? 0).toFixed(2)) },
+        { Item: 'Produto base', Valor: c.baseNome ?? '(nenhum)' },
+        { Item: `Garantia do base (% ${sim})`, Valor: Number((c.baseGarantiaPct ?? 0).toFixed(2)) },
+        { Item: 'Dose do base (kg/ha)', Valor: Number((c.baseDoseKgHa ?? 0).toFixed(2)) },
+        { Item: `${sim} fornecido pelo base (kg/ha)`, Valor: Number(res.fornecidoKgHa.toFixed(2)) },
+        { Item: `${sim} faltante (kg/ha)`, Valor: Number(res.faltanteKgHa.toFixed(2)) },
+        { Item: 'Produto complementar', Valor: c.compNome ?? p.produto },
+        { Item: `Garantia do complementar (% ${sim})`, Valor: Number((c.compGarantiaPct ?? 0).toFixed(2)) },
+        { Item: 'Dose calculada do complementar (kg/ha)', Valor: Number(res.doseCompKgHa.toFixed(2)) },
+      ];
+    })() : []),
     { Item: 'Zonas', Valor: r.nZonas },
     { Item: 'Polígonos', Valor: p.fc.features.length },
     { Item: 'Versão', Valor: p.versao },

@@ -16,7 +16,7 @@ export const ROTULO_TIPO: Record<TipoPrescricao, string> = {
   personalizado: 'Produto personalizado',
 };
 
-export type ModoCalculo = 'manual' | 'estoque' | 'proporcional' | 'equacao' | 'ajuste';
+export type ModoCalculo = 'manual' | 'estoque' | 'proporcional' | 'equacao' | 'ajuste' | 'complemento';
 
 export const ROTULO_MODO: Record<ModoCalculo, string> = {
   manual: 'Dose manual por zona',
@@ -24,6 +24,7 @@ export const ROTULO_MODO: Record<ModoCalculo, string> = {
   proporcional: 'Distribuição proporcional',
   equacao: 'Por equação salva',
   ajuste: 'Dose base + ajuste % por zona',
+  complemento: 'Complementação por nutriente',
 };
 
 // Unidade da DOSE (por hectare). O total usa a unidade-base correspondente
@@ -93,9 +94,28 @@ export interface ParamsCalculo {
    *  semeadura: o arquivo de aplicação sai compensado pela germinação
    *  (ver doseCompensada). */
   doseEhPopulacao?: boolean;
+  /** modo 'complemento' (Parte XIV): fechar a meta de UM nutriente com um
+   *  fertilizante complementar, descontando o que o produto base já entrega.
+   *  Guarda as garantias USADAS no cálculo — o cadastro do insumo pode mudar
+   *  depois, e o que foi para a máquina tem de continuar reproduzível. */
+  complemento?: ParamsComplemento;
   // fluxos específicos
   sementes?: ParamsSementes;
   organico?: AnaliseOrganico;
+}
+
+export interface ParamsComplemento {
+  nutriente: 'n' | 'p2o5' | 'k2o' | 's' | 'ca' | 'mg';
+  metaKgHa?: number;
+  // produto BASE (o que já vai ser aplicado)
+  baseInsumoId?: string;
+  baseNome?: string;
+  baseGarantiaPct?: number;
+  baseDoseKgHa?: number;
+  // produto COMPLEMENTAR (o que a prescrição vai calcular)
+  compInsumoId?: string;
+  compNome?: string;
+  compGarantiaPct?: number;
 }
 
 export interface RegistroExporte {
@@ -111,7 +131,10 @@ export interface Prescricao {
   ano?: string;                // rótulo do Ano/ciclo
   nome: string;                // "Calcário 2026", "Soja B1 — população"…
   tipo: TipoPrescricao;
-  produto: string;             // nome comercial/insumo
+  produto: string;             // nome do insumo (snapshot: o cadastro pode mudar)
+  /** id do insumo na Biblioteca. Ausente em prescrições anteriores à Parte XIV,
+   *  quando o produto era texto livre — elas continuam abrindo e exportando. */
+  insumoId?: string;
   unidade: UnidadeDose;
   custoUnit?: number;          // R$ por unidade-base (kg/t/…)
   // origem

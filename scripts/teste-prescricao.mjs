@@ -432,5 +432,24 @@ t('semente com o mesmo marcador CONTINUA compensando', () => {
   assert.ok(Math.abs(doseArquivoDe(p, 80_000) - 80_000 / 0.97) < 1e-6);
 });
 
+t('resumo do PDF traz a conta da complementação (Parte XIV §11)', () => {
+  const p = {
+    unidade: 'kg/ha', tipo: 'fertilizante', produto: 'Ureia', nome: 'x', modo: 'complemento',
+    params: { complemento: {
+      nutriente: 'n', metaKgHa: 200,
+      baseNome: 'MAP', baseGarantiaPct: 12, baseDoseKgHa: 200,
+      compNome: 'Ureia', compGarantiaPct: 45,
+    } },
+    zonas: [{ idZona: 'a', nomeZona: '01', classe: 'Alta', cor: '#000', areaHa: 10, dose: 391.1 }],
+    fc: { type: 'FeatureCollection', features: [] },
+  };
+  const texto = montarResumoPdf(p, { areaHa: 10, nZonas: 1, usado: 3911, doseMin: 391.1, doseMax: 391.1, doseMedia: 391.1, custo: null }, 1, 1)
+    .map(l => l.txt).join(' | ');
+  assert.match(texto, /referência: N, meta 200,0 kg\/ha/);
+  assert.match(texto, /MAP.*garantia 12,0%.*fornece 24,0 kg\/ha de N/);
+  assert.match(texto, /Faltante: 200,0 . 24,0 = 176,0/);
+  assert.match(texto, /Ureia.*45,0%.*391,1 kg\/ha/);
+});
+
 console.log(`\n${ok} passaram, ${fail} falharam\n`);
 process.exit(fail ? 1 : 0);

@@ -18,6 +18,10 @@ import {
 import { emailUsuario } from '@/lib/empresa';
 import { listar as bibListar, type ItemBiblioteca, type ConteudoEquacao } from '@/lib/biblioteca';
 import {
+  complementarNutriente, podeComplementar, NUTRIENTES, ROTULO_NUTRIENTE, SIMBOLO_NUTRIENTE, garantiaDe,
+  type CategoriaInsumo, type ConteudoInsumo, type Nutriente,
+} from '@/lib/insumos';
+import {
   redistribuirPorEstoque, distribuirProporcional, distribuirPorAjuste, resumoDoses, nutrientesPorZona, pesoDoRank, arredondarDose,
 } from '@/lib/prescricao/calculo';
 import { dosesPorEquacao, variaveisDaEquacao } from '@/lib/prescricao/equacao';
@@ -39,6 +43,7 @@ import {
   CheckCircle2, History, FolderOpen, Scale, Sprout, Pencil, RefreshCw,
 } from 'lucide-react';
 import { inputStyle } from '@/constants/ui';
+import { resumoInsumo } from '@/components/panels/InsumosPanel';
 
 const fmt = (v: number, d = 1) => v.toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d });
 const fmt0 = (v: number) => Math.round(v).toLocaleString('pt-BR');
@@ -52,6 +57,7 @@ interface Rascunho {
   nome: string;
   tipo: TipoPrescricao;
   produto: string;
+  insumoId: string;
   unidade: UnidadeDose;
   custoUnit: string;             // texto do input; número no salvar
   zoneamentoId: string;
@@ -70,10 +76,19 @@ interface Rascunho {
 // só o de estoque acrescentava (informar o disponível em sacos/kg/milhões)
 // virou um botão dentro do ajuste. Prescrições salvas nesses modos continuam
 // abrindo e exportando: o botão do modo legado reaparece para elas.
-const MODOS_VISIVEIS: ModoCalculo[] = ['manual', 'ajuste', 'equacao'];
+const MODOS_VISIVEIS: ModoCalculo[] = ['manual', 'ajuste', 'equacao', 'complemento'];
+
+// Que categorias da Biblioteca de Insumos servem a cada tipo de prescrição.
+const CATEGORIA_DO_TIPO: Record<TipoPrescricao, CategoriaInsumo[]> = {
+  sementes: ['semente'],
+  fertilizante: ['fertilizante'],
+  corretivo: ['corretivo', 'gesso'],
+  organico: ['esterco', 'composto'],
+  personalizado: ['personalizado', 'fertilizante', 'corretivo', 'gesso', 'esterco', 'composto', 'semente'],
+};
 
 const RASCUNHO_VAZIO: Rascunho = {
-  editandoId: null, nome: '', tipo: 'fertilizante', produto: '', unidade: 'kg/ha',
+  editandoId: null, nome: '', tipo: 'fertilizante', produto: '', insumoId: '', unidade: 'kg/ha',
   custoUnit: '', zoneamentoId: '', zoneamentoNome: '', modo: 'manual',
   params: {}, zonas: [], fc: null, equacaoId: '', valoresEquacao: {},
 };
@@ -140,7 +155,7 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
 
   function abrirSalva(p: Prescricao) {
     setR({
-      editandoId: p.id, nome: p.nome, tipo: p.tipo, produto: p.produto, unidade: p.unidade,
+      editandoId: p.id, nome: p.nome, tipo: p.tipo, produto: p.produto, insumoId: p.insumoId ?? '', unidade: p.unidade,
       custoUnit: p.custoUnit != null ? String(p.custoUnit) : '',
       zoneamentoId: p.zoneamentoId, zoneamentoNome: p.zoneamentoNome,
       modo: p.modo, params: p.params, zonas: p.zonas.map(z => ({ ...z })), fc: p.fc,
@@ -152,6 +167,67 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
 
   // Equações salvas na Biblioteca (mesmas da Recomendação) — fonte do modo 'equacao'.
   const equacoes = useMemo(() => bibListar<ConteudoEquacao>('equacoes').filter(e => e.ativo), [tick]);
+
+  // ── Insumos da Biblioteca (Parte XIV) ────────────────────────────────────
+  // O produto deixou de ser texto livre: sem garantia cadastrada não há como
+  // saber quanto o adubo entrega de cada nutriente, e é disso que a
+  // complementação vive. Cada tipo de prescrição enxerga a sua categoria.
+  const insumos = useMemo(() => bibListar<ConteudoInsumo>('insumos').filter(i => i.ativo), [tick]);
+  const insumosDoTipo = useMemo(
+    () => insumos.filter(i => CATEGORIA_DO_TIPO[r.tipo].includes(i.conteudo?.categoria)),
+    [insumos, r.tipo],
+  );
+  const fertilizantes = useMemo(() => insumos.filter(i => podeComplementar(i.conteudo?.categoria)), [insumos]);
+  const insumoSel = useMemo(() => insumos.find(i => i.id === r.insumoId) ?? null, [insumos, r.insumoId]);
+
+  function escolherInsumo(id: string) {
+    const it = insumos.find(x => x.id === id);
+    if (!it) { patch({ insumoId: '', produto: '' }); return; }
+    const c = it.conteudo;
+    // Puxa junto o que o cadastro sabe: preço, garantias do orgânico e os
+    // parâmetros da semente — digitar de novo é pedir divergência.
+    const extras: Partial<Rascunho> = {};
+    if (c.precoMedio != null && !r.custoUnit) extras.custoUnit = String(c.precoMedio);
+    if (c.organico?.garantiasKgT) patchParams({ organico: { ...r.params.organico, ...c.organico.garantiasKgT } });
+    if (c.semente) {
+      patchParams({ sementes: {
+        ...(r.params.sementes ?? { germinacaoPct: 90 }),
+        ...(c.semente.pmsG != null ? { pmsG: c.semente.pmsG } : {}),
+        ...(c.semente.germinacaoPct != null ? { germinacaoPct: c.semente.germinacaoPct } : {}),
+        ...(c.semente.cultivar ? { cultivar: c.semente.cultivar } : {}),
+      } });
+    }
+    patch({ insumoId: it.id, produto: it.nome, ...extras });
+  }
+
+  // ── Complementação por nutriente (Parte XIV §7) ──────────────────────────
+  const comp = r.params.complemento;
+  const resultadoComp = useMemo(() => (comp ? complementarNutriente({
+    metaKgHa: comp.metaKgHa ?? 0,
+    baseGarantiaPct: comp.baseGarantiaPct ?? 0,
+    baseDoseKgHa: comp.baseDoseKgHa ?? 0,
+    compGarantiaPct: comp.compGarantiaPct ?? 0,
+  }) : null), [comp]);
+
+  function patchComp(pc: Partial<NonNullable<ParamsCalculo['complemento']>>) {
+    patchParams({ complemento: { nutriente: 'n', ...(r.params.complemento ?? {}), ...pc } });
+  }
+
+  /** Aplica a dose calculada em TODAS as zonas (o usuário afina depois). */
+  function aplicarComplemento() {
+    setErro(''); setOkMsg('');
+    if (!resultadoComp) { setErro('Configure a complementação primeiro.'); return; }
+    if (resultadoComp.doseCompKgHa <= 0) {
+      setAvisosCalc(resultadoComp.avisos.length ? resultadoComp.avisos : ['Nada a complementar: a meta já foi atingida pelo produto base.']);
+      return;
+    }
+    const dose = arredondarDose(resultadoComp.doseCompKgHa);
+    patch({ zonas: r.zonas.map(z => ({ ...z, dose })) });
+    setAvisosCalc([
+      ...resultadoComp.avisos,
+      `Dose de ${r.produto || 'complementar'} aplicada em todas as zonas: ${fmt(dose, 1)} ${r.unidade}. Ajuste zona a zona na tabela se quiser taxa variável.`,
+    ]);
+  }
   const eqSel = useMemo(() => equacoes.find(e => e.id === r.equacaoId) ?? null, [equacoes, r.equacaoId]);
   const varsEq = useMemo(
     () => (eqSel ? variaveisDaEquacao(eqSel.conteudo.script, eqSel.conteudo.constantes) : []),
@@ -362,7 +438,7 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
     }
     return {
       talhaoId, ano: safraNome || undefined, nome: r.nome.trim(), tipo: r.tipo,
-      produto: r.produto.trim(), unidade: r.unidade, custoUnit: custoNum,
+      produto: r.produto.trim(), insumoId: r.insumoId || undefined, unidade: r.unidade, custoUnit: custoNum,
       zoneamentoId: r.zoneamentoId, zoneamentoNome: r.zoneamentoNome,
       modo: r.modo, params: r.params, zonas: r.zonas, fc: r.fc,
       criadoPor: emailUsuario() ?? 'sistema',
@@ -486,10 +562,27 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
                   {Object.entries(ROTULO_TIPO).map(([id, rot]) => <option key={id} value={id}>{rot}</option>)}
                 </select>
               </Campo>
-              <Campo rotulo="Produto *">
-                <input value={r.produto} onChange={e => patch({ produto: e.target.value })}
-                  placeholder={r.tipo === 'sementes' ? 'cultivar/híbrido' : 'ex.: Calcário dolomítico'}
-                  className="w-full rounded px-2 py-1.5 text-xs outline-none" style={inputStyle} />
+              {/* Produto vem da BIBLIOTECA DE INSUMOS (Parte XIV §5): texto livre
+                  não carrega garantia, e sem garantia não há complementação nem
+                  conta de nutriente. Prescrição antiga, salva com produto
+                  digitado, continua abrindo — o nome aparece como opção legada. */}
+              <Campo rotulo="Produto * (Biblioteca → Insumos)">
+                <select value={r.insumoId || (r.produto ? '__legado' : '')}
+                  onChange={e => { if (e.target.value !== '__legado') escolherInsumo(e.target.value); }}
+                  className="w-full rounded px-2 py-1.5 text-xs outline-none" style={inputStyle}>
+                  <option value="">Selecione o produto…</option>
+                  {r.produto && !r.insumoId && <option value="__legado">{r.produto} (cadastro antigo)</option>}
+                  {insumosDoTipo.map(i => <option key={i.id} value={i.id}>{i.nome}</option>)}
+                </select>
+                {insumosDoTipo.length === 0 && (
+                  <p className="text-[9px] mt-0.5 leading-relaxed" style={{ color: '#fbbf24' }}>
+                    Nenhum insumo cadastrado para <strong>{ROTULO_TIPO[r.tipo]}</strong>. Cadastre em{' '}
+                    <strong style={{ color: '#93c5fd' }}>Biblioteca → Insumos</strong> — é lá que ficam as garantias que os cálculos usam.
+                  </p>
+                )}
+                {insumoSel && (
+                  <p className="text-[9px] mt-0.5" style={{ color: '#64748b' }}>{resumoInsumo(insumoSel.conteudo)}</p>
+                )}
               </Campo>
               <div className="grid grid-cols-2 gap-2">
                 <Campo rotulo="Unidade">
@@ -672,6 +765,108 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
                 {/* Semente sempre mostra os parâmetros: a compensação de germinação
                     vale para qualquer modo, inclusive dose manual — era ali que ela
                     mais faltava. O estoque só aparece onde existe Total disponível. */}
+                {/* ── Modo COMPLEMENTAÇÃO POR NUTRIENTE (Parte XIV §9/§10) ── */}
+                {r.modo === 'complemento' && (() => {
+                  const c = r.params.complemento ?? { nutriente: 'n' as Nutriente };
+                  const nut = c.nutriente ?? 'n';
+                  const sim = SIMBOLO_NUTRIENTE[nut];
+                  const res = resultadoComp;
+                  const soFertilizante = r.tipo === 'fertilizante';
+                  return (
+                    <div className="p-2.5 rounded-lg space-y-2" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
+                      {!soFertilizante ? (
+                        <p className="text-[10px] leading-relaxed" style={{ color: '#fbbf24' }}>
+                          <AlertTriangle size={11} className="inline mr-1" />
+                          A complementação por nutriente é <strong>só para fertilizante mineral</strong>. Troque o Tipo para “Fertilizante”.
+                        </p>
+                      ) : (
+                        <>
+                          <div className="grid grid-cols-2 gap-2">
+                            <Campo rotulo="Nutriente de referência">
+                              <select value={nut} onChange={e => patchComp({ nutriente: e.target.value as Nutriente })}
+                                className="w-full rounded px-2 py-1.5 text-xs outline-none" style={inputStyle}>
+                                {NUTRIENTES.map(n => <option key={n} value={n}>{ROTULO_NUTRIENTE[n]}</option>)}
+                              </select>
+                            </Campo>
+                            <Campo rotulo={`Meta de ${sim} (kg/ha) *`}>
+                              <InputNum valor={c.metaKgHa} onMudou={v => patchComp({ metaKgHa: v })} />
+                            </Campo>
+                          </div>
+
+                          <p className="text-[10px] font-semibold" style={{ color: '#93c5fd' }}>Produto base — o que já vai ser aplicado</p>
+                          <div className="grid grid-cols-3 gap-2">
+                            <Campo rotulo="Produto base">
+                              <select value={c.baseInsumoId ?? ''}
+                                onChange={e => {
+                                  const it = fertilizantes.find(x => x.id === e.target.value);
+                                  patchComp({ baseInsumoId: it?.id, baseNome: it?.nome, baseGarantiaPct: it ? garantiaDe(it.conteudo, nut) : undefined });
+                                }}
+                                className="w-full rounded px-2 py-1.5 text-xs outline-none" style={inputStyle}>
+                                <option value="">nenhum (a meta é toda do complementar)</option>
+                                {fertilizantes.map(i => <option key={i.id} value={i.id}>{i.nome}</option>)}
+                              </select>
+                            </Campo>
+                            <Campo rotulo={`Garantia de ${sim} (%)`}>
+                              <InputNum valor={c.baseGarantiaPct} onMudou={v => patchComp({ baseGarantiaPct: v })} />
+                            </Campo>
+                            <Campo rotulo="Dose aplicada (kg/ha)">
+                              <InputNum valor={c.baseDoseKgHa} onMudou={v => patchComp({ baseDoseKgHa: v })} />
+                            </Campo>
+                          </div>
+
+                          <p className="text-[10px] font-semibold" style={{ color: '#93c5fd' }}>Produto complementar — o que esta prescrição vai aplicar</p>
+                          <div className="grid grid-cols-2 gap-2">
+                            <Campo rotulo="Produto complementar">
+                              <select value={c.compInsumoId ?? r.insumoId ?? ''}
+                                onChange={e => {
+                                  const it = fertilizantes.find(x => x.id === e.target.value);
+                                  if (it) { escolherInsumo(it.id); patchComp({ compInsumoId: it.id, compNome: it.nome, compGarantiaPct: garantiaDe(it.conteudo, nut) }); }
+                                }}
+                                className="w-full rounded px-2 py-1.5 text-xs outline-none" style={inputStyle}>
+                                <option value="">Selecione…</option>
+                                {fertilizantes.map(i => <option key={i.id} value={i.id}>{i.nome}</option>)}
+                              </select>
+                            </Campo>
+                            <Campo rotulo={`Garantia de ${sim} (%)`}>
+                              <InputNum valor={c.compGarantiaPct} onMudou={v => patchComp({ compGarantiaPct: v })} />
+                            </Campo>
+                          </div>
+
+                          {/* Resumo do cálculo (§10) — a conta inteira, à vista */}
+                          {res && (
+                            <div className="p-2 rounded space-y-0.5" style={{ background: '#0b1f3a', border: '1px solid #1e3a8a' }}>
+                              <p className="text-[10px] font-bold" style={{ color: '#93c5fd' }}>Resumo do cálculo</p>
+                              <p className="text-[10px]" style={{ color: '#cbd5e1' }}>
+                                Base <strong>{c.baseNome ?? '—'}</strong>: {fmt(c.baseDoseKgHa ?? 0, 1)} kg/ha × {fmt(c.baseGarantiaPct ?? 0, 1)}% ={' '}
+                                <strong>{fmt(res.fornecidoKgHa, 1)} kg/ha de {sim}</strong>
+                              </p>
+                              <p className="text-[10px]" style={{ color: '#cbd5e1' }}>
+                                Meta {fmt(c.metaKgHa ?? 0, 1)} − fornecido {fmt(res.fornecidoKgHa, 1)} ={' '}
+                                <strong>{fmt(res.faltanteKgHa, 1)} kg/ha de {sim} faltando</strong>
+                              </p>
+                              <p className="text-[11px]" style={{ color: '#86efac' }}>
+                                {c.compNome ?? 'Complementar'}: {fmt(res.faltanteKgHa, 1)} ÷ {fmt(c.compGarantiaPct ?? 0, 1)}% ={' '}
+                                <strong>{fmt(res.doseCompKgHa, 1)} kg/ha</strong>
+                              </p>
+                              {res.avisos.map((a, i) => (
+                                <p key={i} className="text-[9px] leading-relaxed" style={{ color: '#fbbf24' }}>{a}</p>
+                              ))}
+                            </div>
+                          )}
+
+                          <button onClick={aplicarComplemento}
+                            className="px-3 py-1.5 rounded text-[10px] font-bold text-white flex items-center gap-1.5" style={{ background: 'var(--invicta-green-dark)' }}>
+                            <RefreshCw size={11} /> Aplicar a dose calculada nas zonas
+                          </button>
+                          <p className="text-[9px]" style={{ color: '#64748b' }}>
+                            A dose entra igual em todas as zonas; para taxa variável, ajuste zona a zona na tabela abaixo.
+                          </p>
+                        </>
+                      )}
+                    </div>
+                  );
+                })()}
+
                 {r.tipo === 'sementes' && (
                   <SementesCampos r={r} patchParams={patchParams} estSem={estSem} setEstSem={setEstSem}
                     usarComoTotal={usarEstoqueComoTotal}

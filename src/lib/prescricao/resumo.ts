@@ -8,6 +8,7 @@
 
 import { doseCompensada } from './sementes.ts';
 import { UNIDADE_TOTAL, ehUnidadeSemente, type Prescricao } from './tipos.ts';
+import { complementarNutriente, SIMBOLO_NUTRIENTE } from '../insumos.ts';
 
 const fmt = (v: number, d = 1) => v.toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d });
 const fmt0 = (v: number) => Math.round(v).toLocaleString('pt-BR');
@@ -81,6 +82,25 @@ export function montarResumoPdf(
     linhas.push(
       { txt: `Dose: mín ${fmt(r.doseMin, 1)} · máx ${fmt(r.doseMax, 1)} · média ${fmt(r.doseMedia, 1)} ${p.unidade}` },
       { txt: `Quantidade usada: ${nTot(r.usado)} ${un}${comKg(r.usado)}` },
+    );
+  }
+
+  // Complementação por nutriente (Parte XIV §11): a conta inteira no relatório,
+  // porque é ela que justifica a dose — sem os números do produto base, a dose
+  // do complementar é um valor que ninguém consegue conferir.
+  const c = p.params.complemento;
+  if (p.modo === 'complemento' && c) {
+    const sim = SIMBOLO_NUTRIENTE[c.nutriente] ?? c.nutriente;
+    const res = complementarNutriente({
+      metaKgHa: c.metaKgHa ?? 0, baseGarantiaPct: c.baseGarantiaPct ?? 0,
+      baseDoseKgHa: c.baseDoseKgHa ?? 0, compGarantiaPct: c.compGarantiaPct ?? 0,
+    });
+    linhas.push(
+      { txt: `Complementação por nutriente — referência: ${sim}, meta ${fmt(c.metaKgHa ?? 0, 1)} kg/ha`, destaque: true },
+      { txt: `Produto base: ${c.baseNome ?? '(nenhum)'} · ${fmt(c.baseDoseKgHa ?? 0, 1)} kg/ha · garantia ${fmt(c.baseGarantiaPct ?? 0, 1)}% → fornece ${fmt(res.fornecidoKgHa, 1)} kg/ha de ${sim}` },
+      { txt: `Faltante: ${fmt(c.metaKgHa ?? 0, 1)} − ${fmt(res.fornecidoKgHa, 1)} = ${fmt(res.faltanteKgHa, 1)} kg/ha de ${sim}` },
+      { txt: `Produto complementar: ${c.compNome ?? p.produto} · garantia ${fmt(c.compGarantiaPct ?? 0, 1)}% → ${fmt(res.faltanteKgHa, 1)} ÷ ${fmt((c.compGarantiaPct ?? 0) / 100, 3)} = ${fmt(res.doseCompKgHa, 1)} kg/ha`, destaque: true },
+      ...res.avisos.map(a => ({ txt: a })),
     );
   }
 

@@ -13,7 +13,7 @@ import type {
   LucideIcon,
 } from 'lucide-react';
 import {
-  SlidersHorizontal, CalendarDays, Grid3x3, Leaf, Salad, Mountain,
+  SlidersHorizontal, CalendarDays, Grid3x3, Leaf, Salad, Mountain, Package,
   Satellite, Layers, Calculator, Bug, Hash, Wand2, BarChart3,
   UserCog, FlaskConical, BookOpen,
 } from 'lucide-react';
@@ -30,7 +30,7 @@ export type CategoriaBiblioteca =
   | 'preferencias-analise' | 'safras' | 'grades' | 'fertilidade'
   | 'analises-foliares' | 'altimetria' | 'imagem-satelite' | 'compactacao'
   | 'algebra-mapas' | 'pragas' | 'equacoes' | 'recomendacoes'
-  | 'produtividade' | 'perfis' | 'laboratorios' | 'legendas';
+  | 'produtividade' | 'perfis' | 'laboratorios' | 'legendas' | 'insumos';
 
 export interface ItemBiblioteca<TConteudo = unknown> {
   id: string;
@@ -61,6 +61,8 @@ export interface DefCategoria {
 }
 
 export const CATEGORIAS: DefCategoria[] = [
+  { slug: 'insumos', nome: 'Insumos', icone: Package, status: 'disponivel',
+    descricao: 'Produtos usados nas prescrições: fertilizantes (com as garantias), corretivos, gesso, estercos, compostos, sementes e personalizados.' },
   { slug: 'preferencias-analise', nome: 'Preferências de Análise', icone: SlidersHorizontal, status: 'disponivel',
     descricao: 'Configurações cross-módulo. Hoje: modelo de etiqueta (folha Pimaco + ajuste fino).' },
   { slug: 'safras', nome: 'Anos', icone: CalendarDays, status: 'disponivel',

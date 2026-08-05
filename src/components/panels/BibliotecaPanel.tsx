@@ -9,6 +9,7 @@ import {
 import { Search, Plus, Download, Upload, ChevronRight, ChevronUp, ChevronDown, Edit3, Trash2, Save, X, Power, Shield } from 'lucide-react';
 import { LegendasPanel } from './LegendasPanel';
 import { EquacoesPanel } from './EquacoesPanel';
+import { InsumosPanel } from './InsumosPanel';
 import { RecomendacoesPanel } from './RecomendacoesPanel';
 import { SafrasPanel } from './SafrasPanel';
 import { CentralAcessos } from './acessos/CentralAcessos';
@@ -78,6 +79,7 @@ function CategoriaConteudo({ slug }: { slug: SlugBiblioteca }) {
   if (slug === 'usuarios') return <section className="flex-1 min-h-0"><CentralAcessos /></section>;
   // Categorias com adaptador próprio têm UI customizada (já implementadas).
   if (slug === 'legendas') return <ConteudoLegendas />;
+  if (slug === 'insumos') return <ConteudoInsumos />;
   if (slug === 'equacoes') return <EquacoesPanel />;
   if (slug === 'recomendacoes') return <RecomendacoesPanel />;
   if (slug === 'laboratorios') return <ConteudoLaboratorios />;
@@ -86,6 +88,25 @@ function CategoriaConteudo({ slug }: { slug: SlugBiblioteca }) {
   if (slug === 'grades') return <ConteudoGrades />;
   if (slug === 'preferencias-analise') return <ConteudoPreferencias />;
   return <ConteudoGenerico slug={slug} />;
+}
+
+function ConteudoInsumos() {
+  const def = CATEGORIAS.find(c => c.slug === 'insumos')!;
+  const Icon = def.icone;
+  return (
+    <section className="flex-1 flex flex-col overflow-hidden">
+      <div className="px-4 py-3 flex-shrink-0" style={{ borderBottom: '1px solid #1a3a6b' }}>
+        <div className="flex items-center gap-2 mb-1">
+          <Icon size={14} style={{ color: '#93c5fd' }} />
+          <h3 className="text-sm font-bold uppercase tracking-wide" style={{ color: '#e2e8f0' }}>{def.nome}</h3>
+        </div>
+        <p className="text-[10px]" style={{ color: '#64748b' }}>{def.descricao}</p>
+      </div>
+      <div className="flex-1 overflow-y-auto">
+        <InsumosPanel />
+      </div>
+    </section>
+  );
 }
 
 function ConteudoLegendas() {
