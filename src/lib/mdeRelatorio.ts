@@ -153,7 +153,7 @@ function cabecalho(doc: JsPDF, ctx: Ctx, oficial: MdeTalhao, titulo: string, log
   }
   doc.setFillColor(20, 50, 87); doc.roundedRect(W - M - 64, 4, 64, 14, 2, 2, 'F');
   doc.setFontSize(9); doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.text(san(titulo), W - M - 32, 9.5, { align: 'center' });
-  doc.setFontSize(7.5); doc.setTextColor(127, 163, 207); doc.setFont('helvetica', 'normal'); doc.text(`${fmt(ctx.area, 1)} ha · ${oficial.resolucaoM} m`, W - M - 32, 14.5, { align: 'center' });
+  doc.setFontSize(7.5); doc.setTextColor(127, 163, 207); doc.setFont('helvetica', 'normal'); doc.text(`${fmt(ctx.area, 2)} ha · ${oficial.resolucaoM} m`, W - M - 32, 14.5, { align: 'center' });
 }
 
 function paginaResumo(doc: JsPDF, ctx: Ctx, oficial: MdeTalhao, analise: RespMdeAnalise, decls: { nome: string; ha: number; pct: number }[], obs: string[], logo: HTMLImageElement | null) {
@@ -178,8 +178,8 @@ function paginaResumo(doc: JsPDF, ctx: Ctx, oficial: MdeTalhao, analise: RespMde
 
   // Duas tabelas: classe topográfica | classe de declividade
   const tw = (W - 2 * M - 8) / 2;
-  tabela(doc, M, 56, tw, 'Área por classe de relevo', analise.meta.classes.map(c => [c.nome, `${fmt(c.ha, 1)} ha`, `${fmt(c.pct)}%`]), c => c);
-  tabela(doc, M + tw + 8, 56, tw, 'Área por classe de declividade', decls.map(d => [d.nome, `${fmt(d.ha, 1)} ha`, `${fmt(d.pct)}%`]));
+  tabela(doc, M, 56, tw, 'Área por classe de relevo', analise.meta.classes.map(c => [c.nome, `${fmt(c.ha, 2)} ha`, `${fmt(c.pct)}%`]), c => c);
+  tabela(doc, M + tw + 8, 56, tw, 'Área por classe de declividade', decls.map(d => [d.nome, `${fmt(d.ha, 2)} ha`, `${fmt(d.pct)}%`]));
 
   // Observações automáticas
   let y = Math.max(56 + 12 + analise.meta.classes.length * 6.5, 56 + 12 + decls.length * 6.5) + 8;

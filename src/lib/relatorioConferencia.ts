@@ -14,6 +14,7 @@
 
 import { getClientes, getFazendas, getTalhoes, getSafras, getPlantio, auditoriaCadastro } from './store';
 import { rotuloAno } from './periodo';
+import { formatarColunaXlsx } from './formato';
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 const norm = (s: string) => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase();
@@ -106,6 +107,7 @@ export async function gerarConferenciaExcel(): Promise<{ talhoes: number; arquiv
     ...linhas,
     { Produtor: 'TOTAL GERAL', Fazenda: '', 'Talhão': `${linhas.length} talhões`, 'Área (ha)': areaTotal, Status: '', 'Cultura (ano)': '', Alerta: '' },
   ]);
+  formatarColunaXlsx(XLSX, wsT, 'Área (ha)');
   wsT['!cols'] = [{ wch: 32 }, { wch: 26 }, { wch: 20 }, { wch: 10 }, { wch: 10 }, { wch: 16 }, { wch: 34 }];
   XLSX.utils.book_append_sheet(wb, wsT, 'Talhões');
 
@@ -114,6 +116,7 @@ export async function gerarConferenciaExcel(): Promise<{ talhoes: number; arquiv
     ...fazRows,
     { Produtor: 'TOTAL GERAL', Fazenda: `${fazRows.length} fazendas`, 'Talhões': linhas.length, 'Área (ha)': areaTotal },
   ]);
+  formatarColunaXlsx(XLSX, wsF, 'Área (ha)');
   wsF['!cols'] = [{ wch: 32 }, { wch: 26 }, { wch: 9 }, { wch: 11 }];
   XLSX.utils.book_append_sheet(wb, wsF, 'Por Fazenda');
 
@@ -122,6 +125,7 @@ export async function gerarConferenciaExcel(): Promise<{ talhoes: number; arquiv
     ...prodRows,
     { Produtor: 'TOTAL GERAL', Fazendas: fazRows.length, 'Talhões': linhas.length, 'Área (ha)': areaTotal },
   ]);
+  formatarColunaXlsx(XLSX, wsP, 'Área (ha)');
   wsP['!cols'] = [{ wch: 32 }, { wch: 10 }, { wch: 9 }, { wch: 11 }];
   XLSX.utils.book_append_sheet(wb, wsP, 'Por Produtor');
 

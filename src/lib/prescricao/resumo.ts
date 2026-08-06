@@ -9,6 +9,7 @@
 import { doseCompensada } from './sementes.ts';
 import { UNIDADE_TOTAL, ehUnidadeSemente, type Prescricao } from './tipos.ts';
 import { complementarNutriente, SIMBOLO_NUTRIENTE } from '../insumos.ts';
+import { fmtHa } from '../formato.ts';
 
 // Símbolo do nutriente em ASCII para o PDF: os subscritos de P₂O₅ e K₂O estão
 // fora do WinAnsi da helvetica e são descartados na hora de desenhar — sairia
@@ -92,7 +93,7 @@ export function montarResumoPdf(
   };
 
   const linhas: Array<{ txt: string; destaque?: boolean }> = [
-    { txt: `Área: ${fmtRel(r.areaHa)} ha em ${r.nZonas} zona(s) · ${nPoligonos} polígono(s)` },
+    { txt: `Área: ${fmtHa(r.areaHa)} ha em ${r.nZonas} zona(s) · ${nPoligonos} polígono(s)` },
   ];
 
   if (temCompensacao(p)) {

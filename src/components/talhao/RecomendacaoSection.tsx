@@ -20,7 +20,7 @@ import { montarBookOficial, abrirOuBaixar } from '@/lib/recomendacao/relatorioCe
 import { Play, Loader2, AlertTriangle, Wand2, Save, FolderOpen, Trash2, Eye, GitCompare, FileText, Star } from 'lucide-react';
 
 import { inputStyle } from '@/constants/ui';
-import { fmtDec as fmt } from '@/lib/formato';
+import { fmtDec as fmt, fmtHa } from '@/lib/formato';
 
 // Converte o limite (t/ha ou kg/ha) p/ a unidade da dose e divide em passadas.
 function limiteNaUnidadeDaDose(limite: number, unidLimite: 't/ha' | 'kg/ha', unidDose: string): number {
@@ -358,7 +358,7 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
           {/* financeiro consolidado */}
           {fin && (
             <div className="text-[10px] space-y-0.5 pb-1" style={{ color: '#cbd5e1', borderBottom: '1px solid #1a3a6b' }}>
-              <div className="flex justify-between"><span>Área</span><span>{fmt(fin.area, 1)} ha</span></div>
+              <div className="flex justify-between"><span>Área</span><span>{fmtHa(fin.area)} ha</span></div>
               <div className="flex justify-between font-bold" style={{ color: '#4ade80' }}><span>Custo total{fin.temSemCusto ? '*' : ''}</span><span>R$ {fmt(fin.custoTotal, 2)}</span></div>
               <div className="flex justify-between"><span>Custo / ha</span><span>R$ {fmt(fin.custoHa, 2)}</span></div>
               {fin.temSemCusto && <div className="text-[8px]" style={{ color: '#64748b' }}>* alguns produtos sem custo/tonelada definido</div>}

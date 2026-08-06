@@ -38,7 +38,8 @@ const CORES_SERIE: [number, number, number][] = [
   [22, 163, 74], [37, 99, 235], [219, 39, 119], [217, 119, 6],
   [124, 58, 237], [220, 38, 38], [5, 150, 105], [234, 88, 12],
 ];
-const fmtHa = (v: number) => v.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+// Área: SEMPRE duas casas, inclusive o zero final (ver fmtHa em lib/formato).
+const fmtHa = (v: number) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmt2 = (v: number) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmtData = (s: string) => new Date(s + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' });
 

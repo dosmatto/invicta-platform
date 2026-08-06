@@ -32,7 +32,7 @@ import type { Legenda } from '@/lib/legendas';
 import { Upload, Loader2, AlertTriangle, Save, Star, Trash2, Eye, Wand2, FileSpreadsheet, Plus, Layers, ChevronDown, ChevronUp } from 'lucide-react';
 
 import { inputStyle } from '@/constants/ui';
-import { fmtMinMax0 as fmt } from '@/lib/formato';
+import { fmtMinMax0 as fmt, fmtHa } from '@/lib/formato';
 const CULTURAS = ['soja', 'milho', 'trigo', 'feijao', 'outro'];
 const EPOCAS: Array<{ v: string; l: string }> = [{ v: '', l: '—' }, { v: 'verao', l: 'Verão' }, { v: 'safrinha', l: 'Safrinha' }, { v: 'inverno', l: 'Inverno' }];
 const prefixoProd = (talhaoId: string) => `${talhaoId}__prod__`;
@@ -373,7 +373,7 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
         <div className="space-y-2 p-2.5 rounded-lg" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
           <div className="grid grid-cols-3 gap-2 text-center">
             <Metrica rotulo={`média (${rotuloUnidade(unidade)})`} valor={u(stats.mediaKgha)} destaque />
-            <Metrica rotulo="área (ha)" valor={fmt(stats.areaHa, 1)} />
+            <Metrica rotulo="área (ha)" valor={fmtHa(stats.areaHa)} />
             <Metrica rotulo="produção (t)" valor={fmt(stats.producaoTotalKg / 1000, 1)} />
           </div>
           <div className="grid grid-cols-3 gap-2 text-center">
@@ -414,7 +414,7 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
                     {v.oficial && <span className="ml-1 px-1 rounded text-[8px] font-bold" style={{ background: '#78350f', color: '#fbbf24' }}>OFICIAL</span>}
                   </p>
                   <p className="text-[9px]" style={{ color: '#64748b' }}>
-                    {fmt(emUnidade(v.stats.mediaKgha, v.unidade), v.unidade === 'kg/ha' ? 0 : 1)} {v.unidade} méd · {fmt(v.stats.areaHa, 1)} ha · {fmt(v.stats.producaoTotalKg / 1000, 1)} t · CV {fmt(v.stats.cv, 1)}%
+                    {fmt(emUnidade(v.stats.mediaKgha, v.unidade), v.unidade === 'kg/ha' ? 0 : 1)} {v.unidade} méd · {fmtHa(v.stats.areaHa)} ha · {fmt(v.stats.producaoTotalKg / 1000, 1)} t · CV {fmt(v.stats.cv, 1)}%
                   </p>
                 </div>
                 <button onClick={() => verVersao(v)} title="Ver no mapa" style={{ color: '#93c5fd' }}><Eye size={14} /></button>

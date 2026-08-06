@@ -17,7 +17,7 @@ import {
 } from '@/lib/comparador';
 import { gerarRelatorioComparacao, type LadoComparacao } from '@/lib/relatorioComparacao';
 import type { Legenda } from '@/lib/legendas';
-import { rotulosLegenda } from '@/lib/formato';
+import { rotulosLegenda, fmtHa } from '@/lib/formato';
 import { X, Loader2, FileDown, GitCompare } from 'lucide-react';
 
 const fmt = (v: number | null | undefined, d = 0) => (v == null ? '—' : v.toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d }));
@@ -108,7 +108,7 @@ export function ComparacaoCompleta({ safraNome, onClose }: { safraNome: string; 
     try {
       const lado = (cam: CamadaComparavel, st: NonNullable<typeof stA>, area: number): LadoComparacao => ({
         titulo: `${cam.grupo} — ${cam.nome}`,
-        subtitulo: `Média ${fmt(st.media, cam.grupo === 'NDVI' ? 2 : 0)} ${cam.unidade} · ${fmt(area, 1)} ha · CV ${fmt(st.cv, 1)}%`,
+        subtitulo: `Média ${fmt(st.media, cam.grupo === 'NDVI' ? 2 : 0)} ${cam.unidade} · ${fmtHa(area)} ha · CV ${fmt(st.cv, 1)}%`,
         rasterPng: colorirGridComLegenda(cam.grid, cam.legenda).dataUrl,
         bounds: cam.bounds, legenda: cam.legenda, rotulos: rotulosLegenda(cam.legenda),
       });

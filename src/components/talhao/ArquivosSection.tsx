@@ -16,6 +16,7 @@ import { montarBookOficial, abrirOuBaixar } from '@/lib/recomendacao/relatorioCe
 import { MONITORES, monitorPorId, gerarShapefileZip } from '@/lib/recomendacao/shapefile';
 import { pode } from '@/lib/empresa';
 import { FileText, FileImage, Loader2, FolderArchive, Star, FileCode } from 'lucide-react';
+import { fmtHa } from '@/lib/formato';
 
 const VAZIO: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
 const fmt = (v: number, d = 0) => v.toLocaleString('pt-BR', { maximumFractionDigits: d, minimumFractionDigits: d });
@@ -122,7 +123,7 @@ export function ArquivosSection({ safraNome }: { safraNome?: string }) {
                 <Star size={11} fill="#fbbf24" style={{ color: '#fbbf24' }} />
                 <div className="flex-1 min-w-0">
                   <div className="text-[11px] font-bold truncate" style={{ color: '#e2e8f0' }}>{c.nome}</div>
-                  <div className="text-[9px]" style={{ color: '#64748b' }}>{c.doses.filter(d => d.usar).length} mapa(s) p/ uso · {fmt(c.financeiro.areaHa, 1)} ha</div>
+                  <div className="text-[9px]" style={{ color: '#64748b' }}>{c.doses.filter(d => d.usar).length} mapa(s) p/ uso · {fmtHa(c.financeiro.areaHa)} ha</div>
                 </div>
                 <button onClick={() => pdfOficial(c)} disabled={!!busy}
                   className="px-2 py-1 rounded text-[10px] font-bold text-white flex items-center gap-1" style={{ background: 'var(--invicta-green-dark)', opacity: busy ? 0.6 : 1 }}>

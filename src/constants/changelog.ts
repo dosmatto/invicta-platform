@@ -1,5 +1,10 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.25.1': [
+    'ÁREA SEMPRE COM DUAS CASAS DECIMAIS, INCLUSIVE O ZERO FINAL: a regra de casas por grandeza (2.25.0) fazia sentido para doses e totais, mas engolia a casa da área — um talhão de 159,38 ha aparecia como "159 ha" no relatório. Área é o número pelo qual se fecha contrato, se paga serviço e se confere talhão contra a matrícula: agora sai 159,38 ha, 159,40 ha, 159,00 ha — o zero final também informa, porque "159,4" parece truncado.',
+    'A regra vale em todo lugar onde a área aparece: PDF, Excel e SHP das Prescrições, relatórios de NDVI (talhão e fazenda), Comparação Produtividade × NDVI, MDE (inclusive a área por classe de relevo e de declividade), a planilha de Conferência de Cadastro e as telas de Prescrições, Produtividade, Recomendação, Arquivos e Cruzamento com relevo.',
+    'No Excel a área continua NÚMERO (some, filtre e cruze normalmente) — o zero final vem do formato da célula (0,00), não de virar texto.',
+  ],
   '2.25.0': [
     'RELATÓRIOS — CASAS DECIMAIS PELA GRANDEZA DO NÚMERO: acima de 100 a casa decimal não informa nada e só polui ("391 kg/ha" é a dose; "391,1" finge uma precisão que a distribuidora não entrega). Abaixo de 100 ela É o dado — sementes por metro linear é 12,52, e arredondar para 13 erra a população em quase 4%. A regra vale na tabela de doses, no resumo, no Excel e no arquivo SHP: número grande sai inteiro, número pequeno com até duas casas (e sem zero à toa: 2,5 em vez de 2,50).',
     'CORRIGIDO — SINAIS QUE SUMIAM DO PDF: a linha do cálculo saía "Faltante: 180,0 0,0 = 180,0", sem o menos, porque o "−" e o "÷" que usávamos não existem na fonte do PDF e eram descartados na hora de desenhar. Pelo mesmo motivo, P₂O₅ e K₂O apareciam como "PO" e "KO". Agora o relatório usa sinais simples (- e /) e escreve P2O5 e K2O; na tela e no Excel os símbolos bonitos continuam.',

@@ -14,6 +14,7 @@ import { mediaPorClasse, type RespMdeAnalise, type LinhaCruzamento } from '@/lib
 import { GitCompare, Loader2, ArrowUp, ArrowDown } from 'lucide-react';
 
 import { inputStyle } from '@/constants/ui';
+import { fmtHa } from '@/lib/formato';
 const fmt = (v: number | null, d = 1) => (v == null ? '—' : v.toLocaleString('pt-BR', { maximumFractionDigits: d }));
 
 interface OpcaoVar { id: string; rotulo: string; unidade: string; grid: Grid; bounds: [number, number, number, number]; }
@@ -80,7 +81,7 @@ export function CruzamentoRelevo({ analise, talhaoId }: { analise: RespMdeAnalis
               {ordenadas.map(l => (
                 <div key={l.codigo} className="grid grid-cols-[1fr_auto_auto_auto] gap-2 text-[10px] items-center" style={{ color: '#cbd5e1' }}>
                   <span className="flex items-center gap-1 truncate"><span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: l.cor }} />{l.nome}</span>
-                  <span className="text-right" style={{ color: '#94a3b8' }}>{fmt(l.areaHa, 1)} ha</span>
+                  <span className="text-right" style={{ color: '#94a3b8' }}>{fmtHa(l.areaHa)} ha</span>
                   <span className="text-right font-bold">{fmt(l.media, 0)}</span>
                   <span className="text-right flex items-center justify-end gap-0.5" style={{ color: l.diffPct == null ? '#64748b' : l.diffPct >= 0 ? '#86efac' : '#f87171' }}>
                     {l.diffPct != null && (l.diffPct >= 0 ? <ArrowUp size={9} /> : <ArrowDown size={9} />)}{l.diffPct == null ? '—' : `${l.diffPct >= 0 ? '+' : ''}${fmt(l.diffPct, 0)}%`}

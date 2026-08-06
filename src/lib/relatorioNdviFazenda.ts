@@ -24,7 +24,8 @@ import type { CamadaTalhao } from './fazendaRelatorios';
 const NAVY: [number, number, number] = [13, 33, 64];
 const GRAY: [number, number, number] = [100, 116, 139];
 const LINE: [number, number, number] = [210, 219, 232];
-const fmtHa = (v: number) => v.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+// Área: SEMPRE duas casas, inclusive o zero final (ver fmtHa em lib/formato).
+const fmtHa = (v: number) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmt2 = (v: number) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmtData = (s: string) => new Date(s + 'T00:00:00').toLocaleDateString('pt-BR');
 

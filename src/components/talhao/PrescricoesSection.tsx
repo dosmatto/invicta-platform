@@ -44,6 +44,7 @@ import {
 } from 'lucide-react';
 import { inputStyle } from '@/constants/ui';
 import { resumoInsumo } from '@/components/panels/InsumosPanel';
+import { fmtHa } from '@/lib/formato';
 
 const fmt = (v: number, d = 1) => v.toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d });
 const fmt0 = (v: number) => Math.round(v).toLocaleString('pt-BR');
@@ -1155,7 +1156,7 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
                             {z.nomeZona}
                           </td>
                           <td className="px-2 py-1">{z.classe}</td>
-                          <td className="px-2 py-1 text-right">{fmt(z.areaHa, 2)}</td>
+                          <td className="px-2 py-1 text-right">{fmtHa(z.areaHa)}</td>
                           {r.modo === 'equacao' && varsEq.map(v => (
                             <td key={v} className="px-2 py-1 text-right">
                               <input
@@ -1199,7 +1200,7 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
 
                 {/* ── Resumo ao vivo ── */}
                 <div className="grid grid-cols-4 gap-1.5">
-                  <Kpi rot="Área" val={`${fmt(resumo.areaHa, 1)} ha`} />
+                  <Kpi rot="Área" val={`${fmtHa(resumo.areaHa)} ha`} />
                   {/* O total absoluto não é o número que se confere no campo: a
                       dose média por hectare é. Fica ao lado do usado sempre que
                       há área, para "fechar em 80.000/ha" ser verificável. */}
@@ -1376,7 +1377,7 @@ function CampoTotalDisponivel({ rotulo, unidadeTotal, porHa, totalAbs, areaHa, s
       </div>
       {porHa && totalAbs != null && totalAbs > 0 && (
         <p className="text-[9px] mt-0.5" style={{ color: '#4ade80' }}>
-          = {semente ? fmt0(totalAbs) : fmt(totalAbs, 1)} {unidadeTotal} em {fmt(areaHa, 1)} ha
+          = {semente ? fmt0(totalAbs) : fmt(totalAbs, 1)} {unidadeTotal} em {fmtHa(areaHa)} ha
         </p>
       )}
     </div>
@@ -1446,7 +1447,7 @@ function CartaoSalva({ p, anterior, exportando, onAbrir, onExportar, onExcluir }
         </div>
       </div>
       <p className="text-[10px]" style={{ color: '#cbd5e1' }}>
-        {rs.nZonas} zonas · {fmt(rs.areaHa, 1)} ha · dose {fmt(rs.doseMin, 1)}–{fmt(rs.doseMax, 1)} (média {fmt(rs.doseMedia, 1)}) {p.unidade}
+        {rs.nZonas} zonas · {fmtHa(rs.areaHa)} ha · dose {fmt(rs.doseMin, 1)}–{fmt(rs.doseMax, 1)} (média {fmt(rs.doseMedia, 1)}) {p.unidade}
         {' '}· usa {p.unidade === 'sementes/ha' ? fmt0(rs.usado) : fmt(rs.usado, 1)} {UNIDADE_TOTAL[p.unidade]}
         {rs.custo != null ? ` · R$ ${fmt(rs.custo, 0)}` : ''}
       </p>

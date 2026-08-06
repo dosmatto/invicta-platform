@@ -9,6 +9,7 @@ import { redistribuirPorEstoque, distribuirProporcional, distribuirPorAjuste, re
 import { fatorCampo, sementesPorHa, metricasSementes, estoqueTotalSementes, distribuirSementes, doseCompensada } from '../src/lib/prescricao/sementes.ts';
 import { dosesPorEquacao, variaveisDaEquacao } from '../src/lib/prescricao/equacao.ts';
 import { montarResumoPdf, temCompensacao, totalDoArquivo, kgDeSementes, doseArquivo as doseArquivoDe, fmtRel, arredRel } from '../src/lib/prescricao/resumo.ts';
+import { fmtHa, arredHa } from '../src/lib/formato.ts';
 
 let ok = 0, fail = 0;
 function t(nome, fn) {
@@ -470,6 +471,33 @@ t('arredRel devolve NÚMERO com a mesma regra (Excel/SHP)', () => {
   assert.equal(arredRel(12.526), 12.53);
   assert.equal(arredRel(99.999), 100);
   assert.equal(arredRel(2.5), 2.5);
+});
+
+t('ÁREA é EXCEÇÃO: sempre 2 casas, inclusive o zero final', () => {
+  // Área não segue a regra por magnitude: é o número do contrato e da
+  // matrícula. "159 ha" num relatório e "159,38 ha" no vizinho vira dúvida, e
+  // "159,4" parece truncado — o zero final também informa.
+  assert.equal(fmtHa(159.38), '159,38');
+  assert.equal(fmtHa(159.4), '159,40');
+  assert.equal(fmtHa(159), '159,00');
+  assert.equal(fmtHa(1234.5), '1.234,50');
+  assert.equal(fmtHa(0.05), '0,05');
+  assert.equal(fmtHa(NaN), '—');
+  assert.notEqual(fmtHa(159.4), fmtRel(159.4), 'a regra da área não é a dos demais números');
+  assert.equal(arredHa(159.384), 159.38);
+  assert.equal(arredHa(159.4), 159.4, 'no Excel o zero final é FORMATO da célula, não valor');
+});
+
+t('resumo do PDF: a linha da Área sai com 2 casas', () => {
+  const zonas = [
+    { idZona: 'a', nomeZona: '01', classe: 'Alta', cor: '#000', areaHa: 100, dose: 200 },
+    { idZona: 'b', nomeZona: '02', classe: 'Baixa', cor: '#111', areaHa: 59.4, dose: 100 },
+  ];
+  const p = { unidade: 'kg/ha', tipo: 'fertilizante', produto: 'MAP', nome: 'x', params: {}, zonas, fc: { type: 'FeatureCollection', features: [] } };
+  const linhas = montarResumoPdf(p, { areaHa: 159.4, nZonas: 2, usado: 15940, doseMin: 100, doseMax: 200, doseMedia: 150, custo: null }, 1, 2);
+  const area = linhas.find(l => l.txt.startsWith('Área:'));
+  assert.ok(area, 'sem linha de área');
+  assert.match(area.txt, /^Área: 159,40 ha/, `veio "${area.txt}"`);
 });
 
 t('resumo: base em TAXA VARIÁVEL não escreve "0 kg/ha"', () => {

@@ -18,6 +18,7 @@ import { resumoDoses, nutrientesPorZona, fatorBaseDose } from './calculo.ts';
 import { doseCompensada } from './sementes.ts';
 import { doseArquivo, temCompensacao, totalDoArquivo, kgDeSementes, montarResumoPdf, fmtRel, arredRel } from './resumo.ts';
 import { complementarNutriente, SIMBOLO_NUTRIENTE } from '../insumos';
+import { fmtHa, arredHa, formatarColunaXlsx, formatarLinhaXlsx } from '../formato';
 import { UNIDADE_TOTAL, ehUnidadeSemente, type Prescricao } from './tipos.ts';
 
 // Fator unidade-dose → unidade-base da prescrição (1 exceto sementes/m, que usa
@@ -105,7 +106,7 @@ export function fcPrescricao(p: Prescricao): GeoJSON.FeatureCollection {
         // o agrônomo pediu, e sem ela ninguém confere a taxa lá na frente.
         ...(temCompensacao(p) ? { pop_alvo: Math.round(z.dose) } : {}),
         produto: san(p.produto).slice(0, 60),
-        area_ha: arredRel(z.areaHa),
+        area_ha: arredHa(z.areaHa),
       },
     });
   }
@@ -139,7 +140,7 @@ export async function exportarXlsxPrescricao(p: Prescricao): Promise<string> {
   const linhas = p.zonas.map(z => ({
     Zona: z.nomeZona,
     Classe: z.classe,
-    'Área (ha)': arredRel(z.areaHa),
+    'Área (ha)': arredHa(z.areaHa),
     ...(temCompensacao(p)
       ? {
           [`População (${p.unidade})`]: arredRel(z.dose),
@@ -158,7 +159,7 @@ export async function exportarXlsxPrescricao(p: Prescricao): Promise<string> {
   const resumo = [
     { Item: 'Produto', Valor: p.produto },
     { Item: 'Tipo', Valor: p.tipo },
-    { Item: 'Área total (ha)', Valor: arredRel(r.areaHa) },
+    { Item: 'Área total (ha)', Valor: arredHa(r.areaHa) },
     { Item: `Quantidade usada (${un})`, Valor: arredRel(r.usado) },
     ...(p.params.totalDisponivel != null ? [
       { Item: `Disponível (${un})`, Valor: arredRel(p.params.totalDisponivel) },
@@ -214,8 +215,12 @@ export async function exportarXlsxPrescricao(p: Prescricao): Promise<string> {
     { Item: 'Responsável', Valor: p.criadoPor },
   ];
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(linhas), 'Doses por zona');
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(resumo), 'Resumo');
+  const wsDoses = XLSX.utils.json_to_sheet(linhas);
+  const wsResumo = XLSX.utils.json_to_sheet(resumo);
+  formatarColunaXlsx(XLSX, wsDoses, 'Área (ha)');
+  formatarLinhaXlsx(XLSX, wsResumo, 'Área total (ha)');
+  XLSX.utils.book_append_sheet(wb, wsDoses, 'Doses por zona');
+  XLSX.utils.book_append_sheet(wb, wsResumo, 'Resumo');
   const nome = `${nomeBase(p)}.xlsx`;
   XLSX.writeFile(wb, nome);
   return nome;
@@ -368,7 +373,7 @@ export async function exportarPDFPrescricao(p: Prescricao, ident: IdentPdfPrescr
     doc.setFillColor(parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16));
     doc.rect(tabX, ty - 2.4, 2.6, 2.6, 'F');
     doc.text(san(z.nomeZona).slice(0, 12), tabX + 4, ty);
-    doc.text(fmtRel(z.areaHa), fimArea, ty, { align: 'right' });
+    doc.text(fmtHa(z.areaHa), fimArea, ty, { align: 'right' });
     const dArq = doseArquivo(p, z.dose);
     doc.text(fmtRel(z.dose), fimDose, ty, { align: 'right' });
     if (comp) doc.text(fmtRel(dArq), fimAjuste, ty, { align: 'right' });

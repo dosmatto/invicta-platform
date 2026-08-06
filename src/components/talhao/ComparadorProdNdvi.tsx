@@ -13,7 +13,7 @@ import { cloudCarregarMapasPorPrefixo } from '@/lib/cloud';
 import { colorirGrid, colorirGridComLegenda } from '@/lib/raster';
 import { rampaVisualStops, type Legenda } from '@/lib/legendas';
 import { legendaDaCultura, emUnidade, type Unidade } from '@/lib/produtividade';
-import { rotulosLegenda, fmtMinMax0 as fmt } from '@/lib/formato';
+import { rotulosLegenda, fmtMinMax0 as fmt, fmtHa } from '@/lib/formato';
 import { gerarRelatorioComparacao, type LadoComparacao } from '@/lib/relatorioComparacao';
 import { ComparacaoCompleta } from '@/components/talhao/ComparacaoCompleta';
 import { MatrizFatores } from '@/components/talhao/MatrizFatores';
@@ -145,7 +145,7 @@ export function ComparadorProdNdvi({ safraNome }: { safraNome: string }) {
     try {
       const esquerda: LadoComparacao = {
         titulo: `Produtividade — ${prod.rec.cultura[0].toUpperCase() + prod.rec.cultura.slice(1)}`,
-        subtitulo: `Média ${prodMedia} ${u} · ${fmt(prod.rec.stats.areaHa, 1)} ha · v${prod.rec.versao}`,
+        subtitulo: `Média ${prodMedia} ${u} · ${fmtHa(prod.rec.stats.areaHa)} ha · v${prod.rec.versao}`,
         rasterPng: view.prodUrl, bounds: prod.bounds, legenda: prod.legenda, rotulos: rotulosLegenda(prod.legenda),
       };
       const fonte = ndvi.nut === 'ndvi_cbers' ? 'CBERS-4A' : 'Sentinel-2';
