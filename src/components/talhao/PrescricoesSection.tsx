@@ -228,14 +228,17 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
     if (!id) { patchComp({ basePrescricaoId: undefined, basePrescricaoNome: undefined, baseDosePorZona: undefined }); return; }
     const base = prescricoesBase.find(p => p.id === id);
     if (!base) return;
-    const ins = insumos.find(i => i.id === base.insumoId);
+    // Prescrição salva antes da Biblioteca de Insumos não tem insumoId; casar
+    // pelo NOME do produto recupera a garantia em vez de deixar o campo vazio.
+    const ins = insumos.find(i => i.id === base.insumoId)
+      ?? insumos.find(i => i.nome.trim().toLowerCase() === (base.produto ?? '').trim().toLowerCase());
     const dosePorZona: Record<string, number> = {};
     base.zonas.forEach(z => { dosePorZona[z.idZona] = z.dose; });
     patchComp({
       basePrescricaoId: base.id,
       basePrescricaoNome: `${base.nome} (v${base.versao})`,
-      baseInsumoId: base.insumoId,
-      baseNome: base.produto,
+      baseInsumoId: ins?.id ?? base.insumoId,
+      baseNome: base.produto || ins?.nome,
       baseGarantiaPct: ins ? garantiaDe(ins.conteudo, nut) : undefined,
       baseDosePorZona: dosePorZona,
       baseDoseKgHa: undefined,
@@ -625,7 +628,7 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
                   não carrega garantia, e sem garantia não há complementação nem
                   conta de nutriente. Prescrição antiga, salva com produto
                   digitado, continua abrindo — o nome aparece como opção legada. */}
-              <Campo rotulo="Produto * (Biblioteca → Insumos)">
+              <Campo rotulo={r.modo === 'complemento' ? 'Produto * — o que ESTA prescrição aplica (o complemento)' : 'Produto * (Biblioteca → Insumos)'}>
                 <select value={r.insumoId || (r.produto ? '__legado' : '')}
                   onChange={e => { if (e.target.value !== '__legado') escolherInsumo(e.target.value); }}
                   className="w-full rounded px-2 py-1.5 text-xs outline-none" style={inputStyle}>
@@ -941,16 +944,25 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
                             )}
                           </Campo>
                           <div className="grid grid-cols-3 gap-2">
-                            <Campo rotulo="Produto base">
-                              <select value={c.baseInsumoId ?? ''}
-                                onChange={e => {
-                                  const it = fertilizantes.find(x => x.id === e.target.value);
-                                  patchComp({ baseInsumoId: it?.id, baseNome: it?.nome, baseGarantiaPct: it ? garantiaDe(it.conteudo, nut) : undefined });
-                                }}
-                                className="w-full rounded px-2 py-1.5 text-xs outline-none" style={inputStyle}>
-                                <option value="">nenhum (a meta é toda do complementar)</option>
-                                {fertilizantes.map(i => <option key={i.id} value={i.id}>{i.nome}</option>)}
-                              </select>
+                            {/* Com prescrição base escolhida, o produto é o DELA —
+                                um select aqui só permitiria divergir do que foi de
+                                fato aplicado no campo. */}
+                            <Campo rotulo={c.basePrescricaoId ? 'Produto base (da prescrição)' : 'Produto base'}>
+                              {c.basePrescricaoId ? (
+                                <p className="text-[11px] px-2 py-1.5 rounded truncate" style={{ background: '#0b1f3a', color: '#e2e8f0' }}>
+                                  {c.baseNome ?? '—'}
+                                </p>
+                              ) : (
+                                <select value={c.baseInsumoId ?? ''}
+                                  onChange={e => {
+                                    const it = fertilizantes.find(x => x.id === e.target.value);
+                                    patchComp({ baseInsumoId: it?.id, baseNome: it?.nome, baseGarantiaPct: it ? garantiaDe(it.conteudo, nut) : undefined });
+                                  }}
+                                  className="w-full rounded px-2 py-1.5 text-xs outline-none" style={inputStyle}>
+                                  <option value="">nenhum (a meta é toda do complementar)</option>
+                                  {fertilizantes.map(i => <option key={i.id} value={i.id}>{i.nome}</option>)}
+                                </select>
+                              )}
                             </Campo>
                             <Campo rotulo={`Garantia de ${sim} (%)`}>
                               <InputNum valor={c.baseGarantiaPct} onMudou={v => patchComp({ baseGarantiaPct: v })} />
@@ -966,12 +978,22 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
 
                           <p className="text-[10px] font-semibold" style={{ color: '#93c5fd' }}>Produto complementar — o que esta prescrição vai aplicar</p>
                           <div className="grid grid-cols-2 gap-2">
-                            {/* É o produto escolhido lá em cima: um segundo seletor para o
-                                mesmo produto só criaria divergência entre os dois. */}
-                            <Campo rotulo="Produto (o desta prescrição)">
-                              <p className="text-[11px] px-2 py-1.5 rounded truncate" style={{ background: '#0b1f3a', color: r.produto ? '#e2e8f0' : '#f87171' }}>
-                                {r.produto || 'escolha o Produto no topo da tela'}
-                              </p>
+                            {/* A FÓRMULA DA COMPLEMENTAÇÃO é a decisão do usuário — o
+                                base é consequência da prescrição escolhida. Escolher
+                                aqui também troca o "Produto" da prescrição no topo:
+                                é este produto que ela vai aplicar. */}
+                            <Campo rotulo="Fórmula do complemento *">
+                              <select value={c.compInsumoId ?? r.insumoId ?? ''}
+                                onChange={e => {
+                                  const it = fertilizantes.find(x => x.id === e.target.value);
+                                  if (!it) return;
+                                  escolherInsumo(it.id);
+                                  patchComp({ compInsumoId: it.id, compNome: it.nome, compGarantiaPct: garantiaDe(it.conteudo, nut) });
+                                }}
+                                className="w-full rounded px-2 py-1.5 text-xs outline-none" style={inputStyle}>
+                                <option value="">Selecione o adubo que vai complementar…</option>
+                                {fertilizantes.map(i => <option key={i.id} value={i.id}>{i.nome}</option>)}
+                              </select>
                             </Campo>
                             <Campo rotulo={`Garantia de ${sim} (%)`}>
                               <InputNum valor={c.compGarantiaPct} onMudou={v => patchComp({ compGarantiaPct: v })} />
@@ -979,6 +1001,12 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
                                 onVoltar={() => patchComp({ compGarantiaPct: gCadComp ?? undefined })} />
                             </Campo>
                           </div>
+                          {c.baseInsumoId && (c.compInsumoId ?? r.insumoId) === c.baseInsumoId && (
+                            <p className="text-[9px] leading-relaxed" style={{ color: '#fbbf24' }}>
+                              <AlertTriangle size={10} className="inline mr-1" />
+                              O complemento está com o MESMO produto do base (<strong>{c.baseNome}</strong>). Escolha em “Fórmula do complemento” o adubo que vai fechar a meta.
+                            </p>
+                          )}
                           {insComp && (gCadComp ?? 0) <= 0 && (
                             <p className="text-[9px] leading-relaxed" style={{ color: '#fbbf24' }}>
                               <AlertTriangle size={10} className="inline mr-1" />
