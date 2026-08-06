@@ -1712,7 +1712,7 @@ export interface ImportacaoMeta {
 
 // Uma operação do Editor Manual de Zonas (registro/auditoria — spec §3, §5).
 export interface OperacaoEdicaoZona {
-  tipo: 'unificar' | 'reclassificar' | 'dividir';
+  tipo: 'unificar' | 'reclassificar' | 'dividir' | 'renumerar';
   data: string;                  // ISO (data + hora)
   usuario?: string;
   motivo?: string;               // opcional
@@ -1730,6 +1730,9 @@ export interface EdicaoManualMeta {
   nUnificacoes: number;
   nReclassificacoes: number;
   nDivisoes: number;
+  /** Renumerações de zona. Opcional: versões gravadas antes deste campo
+   *  existirem não o têm, e a tela de versões trata ausente como 0. */
+  nRenumeracoes?: number;
   origemId?: string;             // zoneamento de origem (versão restaurável)
   origemNome?: string;
   data: string;                  // ISO

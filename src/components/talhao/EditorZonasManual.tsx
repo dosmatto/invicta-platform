@@ -76,6 +76,10 @@ export function EditorZonasManual({ nomeZoneamento, fcOriginal, areaMinHa = 0, c
   const [log, setLog] = useState<OperacaoEdicaoZona[]>([]);
   const [motivo, setMotivo] = useState('');
   const [erro, setErro] = useState<string | null>(null);
+  /** Corte aplicado com parte abaixo da área mínima da geração — informa sem impedir. */
+  const [avisoDiv, setAvisoDiv] = useState<string | null>(null);
+  const [renomeando, setRenomeando] = useState<string | null>(null);
+  const [nomeTemp, setNomeTemp] = useState('');
   const [cortando, setCortando] = useState<{ id: string; fc: GeoJSON.FeatureCollection } | null>(null);
   const [reclassAberto, setReclassAberto] = useState(false);
   const [unifAberto, setUnifAberto] = useState(false);
@@ -155,6 +159,28 @@ export function EditorZonasManual({ nomeZoneamento, fcOriginal, areaMinHa = 0, c
   const selFeats = useMemo(() => feats.filter(f => sel.has(idDe(f))), [feats, sel]);
   function toggleSel(id: string) { setSel(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; }); }
 
+  // Renumerar a zona. O id É a identidade dela aqui dentro (seleção, log,
+  // divisão), então trocar exige carregar a mudança para esses três lugares —
+  // deixar a seleção com o id velho faria a zona "sumir" do que está marcado.
+  function confirmarRenome(idAntigo: string) {
+    const novo = nomeTemp.trim();
+    setRenomeando(null); setNomeTemp('');
+    if (!novo || novo === idAntigo) return;
+    if (feats.some(f => idDe(f) === novo)) {
+      setErro(`Já existe uma zona #${novo} neste mapa. Escolha outro número.`);
+      return;
+    }
+    empurrar();
+    setFeats(fs => fs.map(f => (idDe(f) === idAntigo
+      ? { ...f, properties: { ...(f.properties ?? {}), id: novo } }
+      : f)).sort((a, b) => idDe(a).localeCompare(idDe(b), 'pt-BR', { numeric: true })));
+    setSel(prev => {
+      if (!prev.has(idAntigo)) return prev;
+      const n = new Set(prev); n.delete(idAntigo); n.add(novo); return n;
+    });
+    registrar({ tipo: 'renumerar', data: '', zonas: [idAntigo, novo] });
+  }
+
   function registrar(op: OperacaoEdicaoZona) { setLog(l => [...l, { ...op, data: new Date().toISOString(), usuario: usuarioAtual()?.email ?? undefined, motivo: motivo.trim() || undefined }]); }
 
   // Subconjunto de features conexo por fronteira compartilhada? (spec §2)
@@ -233,12 +259,17 @@ export function EditorZonasManual({ nomeZoneamento, fcOriginal, areaMinHa = 0, c
     if (!orig) { setCortando(null); return; }
     const eds = fcs.map(extrairEditavel).filter((e): e is NonNullable<ReturnType<typeof extrairEditavel>> => !!e && e.tipo === 'poligono');
     if (eds.length < 2) { setErro('A divisão precisa gerar pelo menos 2 partes (a linha deve atravessar a zona por inteiro).'); setCortando(null); return; }
-    // Validação de área mínima (spec §4): nenhuma parte abaixo do piso.
+    // Área mínima NÃO bloqueia o corte manual. Ela é um parâmetro da GERAÇÃO
+    // automática — serve para o algoritmo não picotar o mapa em manchas. Aqui
+    // quem desenha a linha é o agrônomo, que está separando um pedaço porque
+    // conhece o talhão (uma mancha de pedra, um encharcado, a beira de um
+    // carreador): recusar o corte por ele ter 1,2 ha seria o sistema discordar
+    // de quem viu a área. Vira AVISO — informa e deixa seguir.
     const areas = eds.map(e => areaHaDe(e) ?? 0);
-    if (areaMinHa > 0 && areas.some(a => a > 0 && a < areaMinHa)) {
-      setErro(`A divisão criaria zona menor que a área mínima (${areaMinHa.toLocaleString('pt-BR')} ha). Ajuste a linha de corte.`);
-      setCortando(null); return;
-    }
+    const menores = areas.filter(a => a > 0 && a < areaMinHa);
+    setAvisoDiv(areaMinHa > 0 && menores.length
+      ? `${menores.length === 1 ? 'Uma parte ficou' : `${menores.length} partes ficaram`} abaixo da área mínima da geração (${areaMinHa.toLocaleString('pt-BR')} ha): ${menores.map(a => a.toLocaleString('pt-BR', { maximumFractionDigits: 2 })).join(', ')} ha. O corte foi aplicado.`
+      : null);
     empurrar();
     const props = (orig.properties ?? {}) as Record<string, unknown>;
     const novas: Feat[] = eds.map((ed, i) => ({
@@ -370,19 +401,49 @@ export function EditorZonasManual({ nomeZoneamento, fcOriginal, areaMinHa = 0, c
         </div>
       )}
 
+      {avisoDiv && (
+        <div className="flex items-start gap-1.5 p-2 rounded" style={{ background: '#2d1a00', border: '1px solid #92400e' }}>
+          <AlertTriangle size={12} style={{ color: '#fbbf24' }} className="flex-shrink-0 mt-0.5" />
+          <p className="text-[10px] leading-relaxed flex-1" style={{ color: '#fde68a' }}>{avisoDiv}</p>
+          <button onClick={() => setAvisoDiv(null)} className="flex-shrink-0" style={{ color: '#92400e' }}><X size={11} /></button>
+        </div>
+      )}
+
       {/* Lista de zonas (seleção alternativa ao mapa) */}
       <div className="space-y-1 max-h-52 overflow-y-auto">
         {feats.map(f => {
           const id = idDe(f); const on = sel.has(id); const c = classes.get(rankDe(f));
+          const editando = renomeando === id;
           return (
-            <button key={id} onClick={() => toggleSel(id)} className="w-full flex items-center gap-2 px-2 py-1 rounded text-left"
+            <div key={id} onClick={() => { if (!editando) toggleSel(id); }} role="button" tabIndex={0}
+              onKeyDown={e => { if (!editando && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); toggleSel(id); } }}
+              className="w-full flex items-center gap-2 px-2 py-1 rounded text-left cursor-pointer"
               style={{ background: on ? '#241748' : '#0b1f3a', border: `1px solid ${on ? '#a78bfa' : '#2e2050'}` }}>
               {on ? <CheckSquare size={12} className="flex-shrink-0" style={{ color: '#a78bfa' }} /> : <Square size={12} className="flex-shrink-0" style={{ color: '#475569' }} />}
               <span className="inline-block w-3 h-3 rounded-sm flex-shrink-0" style={{ background: c?.cor ?? '#94a3b8', border: '1px solid #fff' }} />
-              <span className="text-[10px] font-bold flex-shrink-0" style={{ color: '#e2e8f0' }}>#{id}</span>
+              {/* Número da zona EDITÁVEL: o que veio da importação é o número do
+                  arquivo de origem, que raramente é o que a equipe usa em campo
+                  (e ganha sufixo "_2" quando a zona é dividida). Clicar edita. */}
+              {editando ? (
+                <input autoFocus value={nomeTemp}
+                  onChange={e => setNomeTemp(e.target.value)}
+                  onClick={e => e.stopPropagation()}
+                  onBlur={() => confirmarRenome(id)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') confirmarRenome(id);
+                    if (e.key === 'Escape') { setRenomeando(null); setNomeTemp(''); }
+                  }}
+                  className="w-16 rounded px-1 py-0.5 text-[10px] font-bold outline-none flex-shrink-0"
+                  style={{ background: '#061525', color: '#e2e8f0', border: '1px solid #a78bfa' }} />
+              ) : (
+                <span onClick={e => { e.stopPropagation(); setRenomeando(id); setNomeTemp(id); setErro(null); }}
+                  title="Clique para renumerar esta zona"
+                  className="text-[10px] font-bold flex-shrink-0 px-1 rounded hover:underline"
+                  style={{ color: '#e2e8f0' }}>#{id}</span>
+              )}
               <span className="text-[10px] truncate" style={{ color: '#cbd5e1' }}>{c?.label ?? classeDe(f)}</span>
               <span className="text-[10px] ml-auto flex-shrink-0 tabular-nums" style={{ color: '#64748b' }}>{fmt(areaDe(f))} ha</span>
-            </button>
+            </div>
           );
         })}
       </div>

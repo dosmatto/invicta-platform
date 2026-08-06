@@ -664,6 +664,7 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
       nUnificacoes: ops.filter(o => o.tipo === 'unificar').length,
       nReclassificacoes: ops.filter(o => o.tipo === 'reclassificar').length,
       nDivisoes: ops.filter(o => o.tipo === 'dividir').length,
+      nRenumeracoes: ops.filter(o => o.tipo === 'renumerar').length,
       origemId: orig?.id, origemNome: orig?.nome,
       data: new Date().toISOString(), usuario: usuarioAtual()?.email ?? undefined,
     };

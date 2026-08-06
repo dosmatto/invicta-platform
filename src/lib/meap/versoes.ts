@@ -81,6 +81,7 @@ export function resumoDaVersao(z: ZoneamentoMeap): string {
       e.nUnificacoes ? `${e.nUnificacoes} unificação(ões)` : '',
       e.nReclassificacoes ? `${e.nReclassificacoes} reclassificação(ões)` : '',
       e.nDivisoes ? `${e.nDivisoes} divisão(ões)` : '',
+      e.nRenumeracoes ? `${e.nRenumeracoes} renumeração(ões)` : '',
     ].filter(Boolean);
     return partes.length ? partes.join(' · ') : 'edição manual sem operações registradas';
   }
