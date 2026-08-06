@@ -531,6 +531,24 @@ def zonear_suavizar(req: ReqSuavizarZonas):
         raise HTTPException(status_code=500, detail=f"falha ao suavizar zonas: {e}")
 
 
+class ReqDividirZona(BaseModel):
+    zona: dict[str, Any]               # geometria (ou Feature) da zona a dividir
+    linha: dict[str, Any]              # LineString do traço desenhado no mapa
+
+
+@app.post("/zonear-dividir")
+def zonear_dividir(req: ReqDividirZona):
+    """CORTE POR LINHA (editor manual): divide UMA zona pelo traço desenhado no
+    mapa. shapely.ops.split é exato — as partes reconstituem a zona sem vão nem
+    sobreposição, inclusive em zona côncava ou com ilha."""
+    try:
+        return interp.dividir_zona(req.zona, req.linha)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:  # pragma: no cover
+        raise HTTPException(status_code=500, detail=f"falha ao dividir a zona: {e}")
+
+
 @app.post("/zonear-analisar")
 def zonear_analisar(req: ReqAnalisarZonas):
     """ETAPA 1 (Analisar): só FPI/NCE p/ 2..c_max + sugestão do nº de zonas

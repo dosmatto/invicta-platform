@@ -32,7 +32,8 @@
     "teste:lab": "node scripts/teste-lab-import.mjs",
     "teste:insumos": "node scripts/teste-insumos.mjs",
     "teste:escala": "node scripts/teste-escala-classes.mjs",
-    "teste:validacao": "node scripts/teste-validacao.mjs"
+    "teste:validacao": "node scripts/teste-validacao.mjs",
+    "teste:corte": "PY=\"$HOME/.invicta-fert-backend/venv/bin/python\"; [ -x \"$PY\" ] || PY=python3; \"$PY\" scripts/teste-corte-zona.py"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",

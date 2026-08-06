@@ -25,6 +25,7 @@ from typing import Any
 import numpy as np
 import shapely
 from shapely.geometry import shape, mapping
+from shapely.ops import split as _split
 from scipy.spatial import cKDTree
 from scipy.cluster.vq import kmeans2
 from scipy import ndimage
@@ -1512,4 +1513,124 @@ def suavizar_zonas(fc: dict, polygon_geojson: dict | None = None, nivel: str = "
             "zonasPerdidas": zonas_perdidas,
             "porZona": por_zona_resumo,
         },
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CORTE POR LINHA (editor manual de zonas): dividir UMA zona por um traço.
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _linha_local(linha: dict, lon0: float, lat0: float):
+    """LineString do traço desenhado → plano métrico local, sem pontos repetidos
+    (toque duplo no mesmo lugar vira segmento de comprimento zero e derruba o
+    split)."""
+    g = shape(linha)
+    if g.geom_type != "LineString":
+        raise ValueError("o traço de corte precisa ser uma linha (LineString)")
+    pts = [p for p in np.asarray(g.coords, dtype=float)]
+    limpos = [pts[0]]
+    for p in pts[1:]:
+        if abs(p[0] - limpos[-1][0]) > 1e-12 or abs(p[1] - limpos[-1][1]) > 1e-12:
+            limpos.append(p)
+    if len(limpos) < 2:
+        raise ValueError("trace pelo menos 2 pontos diferentes para formar a linha de corte")
+    return _tf_local(shapely.LineString(limpos), lon0, lat0)
+
+
+def _prolongar(linha, d: float):
+    """Estende a linha `d` metros ALÉM de cada ponta, na direção do primeiro e
+    do último segmento. É o que perdoa o traço que parou dentro da zona — quem
+    desenha no celular raramente acerta terminar fora do polígono."""
+    if d <= 0:
+        return linha
+    c = np.asarray(linha.coords, dtype=float)
+
+    def fora(a, b):
+        v = b - a
+        n = float(np.hypot(v[0], v[1]))
+        return b + v / n * d if n > 0 else b
+
+    return shapely.LineString(np.vstack([fora(c[1], c[0]), c, fora(c[-2], c[-1])]))
+
+
+def _partir(polys: list, linha) -> tuple[list, list]:
+    """Aplica split em cada polígono. Devolve (partes_dos_cortados, intactos)."""
+    cortadas, intactas = [], []
+    for p in polys:
+        if not p.intersects(linha):
+            intactas.append(p)
+            continue
+        try:
+            pedacos = [g for g in _so_poligonos(_split(p, linha)) if g.area > 1e-6]
+        except Exception:
+            pedacos = []
+        if len(pedacos) >= 2:
+            cortadas.extend(pedacos)
+        else:
+            intactas.append(p)
+    return cortadas, intactas
+
+
+def dividir_zona(zona: dict, linha: dict) -> dict[str, Any]:
+    """CORTE POR LINHA: divide UMA zona pelo traço desenhado no mapa.
+
+    Usa `shapely.ops.split`, que é EXATO — as partes reconstituem a zona sem vão
+    nem sobreposição, e a divisa é a mesma linha para as duas. Cortar o anel no
+    navegador não dá essa garantia em zona côncava (a linha entra e sai várias
+    vezes) nem em zona com ilha/furo.
+
+    O traço é prolongado progressivamente até atravessar: primeiro tenta como
+    foi desenhado (quem terminou fora do polígono corta exatamente ali), depois
+    com 5%, 25% e 100% da diagonal da zona a mais em cada ponta.
+
+    Ilhas da zona que a linha não tocou não somem: grudam na parte mais próxima.
+    """
+    geom = zona.get("geometry") if zona.get("type") == "Feature" else zona
+    try:
+        g0 = shapely.make_valid(shape(geom))
+    except Exception as ex:
+        raise ValueError(f"geometria da zona inválida: {ex}")
+    polys_geo = _so_poligonos(g0)
+    if not polys_geo:
+        raise ValueError("a zona não tem polígono para dividir")
+
+    minx, miny, maxx, maxy = g0.bounds
+    lon0, lat0 = (minx + maxx) / 2.0, (miny + maxy) / 2.0
+    polys = [p for p in _so_poligonos(_tf_local(g0, lon0, lat0)) if p.area > 0]
+    linha0 = _linha_local(linha, lon0, lat0)
+
+    lx0, ly0, lx1, ly1 = shapely.union_all(polys).bounds
+    diag = float(math.hypot(lx1 - lx0, ly1 - ly0)) or 100.0
+
+    cortadas, intactas, usado = [], polys, 0.0
+    for f in (0.0, 0.05, 0.25, 1.0):
+        c, i = _partir(polys, _prolongar(linha0, diag * f))
+        if c:
+            cortadas, intactas, usado = c, i, diag * f
+            break
+
+    if not cortadas:
+        if not shapely.union_all(polys).intersects(linha0):
+            raise ValueError("a linha não passa por dentro da zona — trace o corte SOBRE a zona selecionada")
+        raise ValueError("a linha não atravessou a zona por inteiro — continue o traço até sair do outro lado")
+
+    # Ilha que a linha não tocou não vira zona órfã: entra na parte mais próxima.
+    partes = list(cortadas)
+    for ilha in intactas:
+        j = min(range(len(partes)), key=lambda k: partes[k].distance(ilha))
+        partes[j] = _multi(_so_poligonos(partes[j]) + _so_poligonos(ilha))
+
+    # Maior primeiro: quem chama mantém a identidade da zona na maior parte e
+    # trata as demais como novas (o recorte é que ganha classe própria).
+    partes.sort(key=lambda p: p.area, reverse=True)
+    saida = []
+    for p in partes:
+        geo = _tf_geo(p, lon0, lat0)
+        saida.append({"geometry": mapping(geo), "areaHa": round(_area_ha(geo, lon0, lat0), 4)})
+
+    return {
+        "partes": saida,
+        "n": len(saida),
+        "prolongamentoM": round(usado, 1),
+        "areaTotalHa": round(sum(p["areaHa"] for p in saida), 4),
     }

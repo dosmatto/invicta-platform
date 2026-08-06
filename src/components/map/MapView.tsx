@@ -64,7 +64,8 @@ export function MapView({ mostrarVisaoGeral = false }: { mostrarVisaoGeral?: boo
           uploadedBbox, setUploadedBbox,
           pontosSimulados, talhoesFazenda, zonasManejo, zonasFundo, zonasOpacidade,
           fertilidadeOverlay, fertilidadeLabels,
-          edicaoAtiva, edicaoModo, setPontoEvent, setZonaEvent } = useApp();
+          edicaoAtiva, edicaoModo, setPontoEvent, setZonaEvent,
+          corteAtivo, corteLinha, setCorteLinha } = useApp();
 
   const [kmlLoading, setKmlLoading] = useState(false);
 
@@ -91,8 +92,10 @@ export function MapView({ mostrarVisaoGeral = false }: { mostrarVisaoGeral?: boo
   const pontosRef = useRef<GeoJSON.FeatureCollection | null>(null);
   const edicaoModoRef = useRef(edicaoModo);
   const zonasSigRef = useRef<string>(''); // assinatura do conjunto de zonas (refit só quando muda)
+  const corteAtivoRef = useRef(corteAtivo);
   useEffect(() => { pontosRef.current = pontosSimulados; }, [pontosSimulados]);
   useEffect(() => { edicaoModoRef.current = edicaoModo; }, [edicaoModo]);
+  useEffect(() => { corteAtivoRef.current = corteAtivo; }, [corteAtivo]);
 
   // ── 1. Inicializa o mapa UMA VEZ ──────────────────────────────────────────
   useEffect(() => {
@@ -187,6 +190,17 @@ export function MapView({ mostrarVisaoGeral = false }: { mostrarVisaoGeral?: boo
       map.addLayer({ id: 'fert-labels-text', type: 'symbol', source: 'fert-labels',
         layout: { 'text-field': ['get','txt'], 'text-size': 11, 'text-font': ['Open Sans Regular'], 'text-allow-overlap': true },
         paint:  { 'text-color': '#fff', 'text-halo-color': '#1e293b', 'text-halo-width': 2 } });
+
+      // Traço do CORTE POR LINHA (editor manual de zonas). Adicionado por
+      // ÚLTIMO de propósito: a linha que o agrônomo está desenhando tem que
+      // ficar por cima de tudo — zonas, pontos, rótulos.
+      map.addSource('corte', { type: 'geojson', data: EMPTY_FC });
+      map.addLayer({ id: 'corte-line', type: 'line', source: 'corte',
+        filter: ['==', ['geometry-type'], 'LineString'],
+        paint: { 'line-color': '#f59e0b', 'line-width': 3, 'line-dasharray': [1.6, 1.2] } });
+      map.addLayer({ id: 'corte-pt', type: 'circle', source: 'corte',
+        filter: ['==', ['geometry-type'], 'Point'],
+        paint: { 'circle-radius': 5.5, 'circle-color': '#f59e0b', 'circle-stroke-width': 1.5, 'circle-stroke-color': '#fff' } });
 
       map.resize(); // garante dimensões corretas após hidratação
       // Centro inicial = escritório (definido no construtor). Sem fitBounds aqui
@@ -352,6 +366,9 @@ export function MapView({ mostrarVisaoGeral = false }: { mostrarVisaoGeral?: boo
     const map = mapRef.current;
     if (!map || !mapReady) return;
     const abrir = (e: maplibregl.MapLayerMouseEvent) => {
+      // Traçando um corte, o toque é o traço — trocar de talhão aqui jogaria
+      // fora a edição de zonas em andamento.
+      if (corteAtivoRef.current) return;
       const p = e.features?.[0]?.properties;
       if (!p?.talhaoId) return;
       setNav({ talhaoId: String(p.talhaoId), talhao: String(p.nome ?? ''), area: Number(p.area ?? 0) });
@@ -375,11 +392,14 @@ export function MapView({ mostrarVisaoGeral = false }: { mostrarVisaoGeral?: boo
     const map = mapRef.current;
     if (!map || !mapReady) return;
     const onZona = (e: maplibregl.MapLayerMouseEvent) => {
+      // Desenhando o traço de corte, o toque É o traço: selecionar/desselecionar
+      // a zona por baixo trocaria a zona no meio do corte.
+      if (corteAtivoRef.current) return;
       const r = e.features?.[0]?.properties?.rotulo;
       if (r != null) setZonaEvent({ rotulo: String(r) });
     };
-    const enter = () => { map.getCanvas().style.cursor = 'pointer'; };
-    const leave = () => { map.getCanvas().style.cursor = ''; };
+    const enter = () => { if (!corteAtivoRef.current) map.getCanvas().style.cursor = 'pointer'; };
+    const leave = () => { if (!corteAtivoRef.current) map.getCanvas().style.cursor = ''; };
     map.on('click', 'zona-fill', onZona);
     map.on('mouseenter', 'zona-fill', enter);
     map.on('mouseleave', 'zona-fill', leave);
@@ -389,6 +409,36 @@ export function MapView({ mostrarVisaoGeral = false }: { mostrarVisaoGeral?: boo
       map.off('mouseleave', 'zona-fill', leave);
     };
   }, [mapReady, setZonaEvent]);
+
+  // ── 3d. CORTE POR LINHA: desenha o traço + coleta os toques ───────────────
+  // Só a linha vem para cá; quem aplica o corte é o painel (Editor manual).
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    const src = map.getSource('corte') as maplibregl.GeoJSONSource | undefined;
+    if (!src) return;
+    const feats: GeoJSON.Feature[] = [];
+    if (corteLinha.length >= 2) {
+      feats.push({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: corteLinha } });
+    }
+    corteLinha.forEach(c => feats.push({ type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: c } }));
+    src.setData({ type: 'FeatureCollection', features: feats });
+  }, [corteLinha, mapReady]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady || !corteAtivo) return;
+    const canvas = map.getCanvas();
+    const onClick = (e: maplibregl.MapMouseEvent) => {
+      setCorteLinha(pts => [...pts, [e.lngLat.lng, e.lngLat.lat]]);
+    };
+    canvas.style.cursor = 'crosshair';
+    map.on('click', onClick);
+    return () => {
+      canvas.style.cursor = '';
+      map.off('click', onClick);
+    };
+  }, [corteAtivo, mapReady, setCorteLinha]);
 
   // ── 4. Auto-carrega KML de talhões com URL pré-definida ───────────────────
   useEffect(() => {

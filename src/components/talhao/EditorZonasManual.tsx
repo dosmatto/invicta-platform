@@ -28,9 +28,10 @@ import type { CamadaValidacao } from '@/lib/validacao/validar';
 import { usuarioAtual } from '@/lib/auth';
 import { pode } from '@/lib/empresa';
 import { estatisticasRasterZona } from '@/lib/meap/rasterStats';
+import { dividirZonaPorLinha } from '@/lib/fertilidade';
 import { useApp } from '@/context/AppContext';
 import type { OperacaoEdicaoZona } from '@/lib/store';
-import { Pencil, Combine, Scissors, Tag, Undo2, Redo2, RotateCcw, Save, X, CheckSquare, Square, AlertTriangle, MousePointerClick, Ruler, Lock, BarChart3, Wand2, Loader2, ArrowRight, Check } from 'lucide-react';
+import { Pencil, Combine, Scissors, Tag, Undo2, Redo2, RotateCcw, Save, X, CheckSquare, Square, AlertTriangle, MousePointerClick, Ruler, Lock, BarChart3, Wand2, Loader2, ArrowRight, Check, Spline, Eraser } from 'lucide-react';
 
 const EditorGeometria = dynamic(
   () => import('@/components/geo/EditorGeometria').then(m => ({ default: m.EditorGeometria })),
@@ -66,7 +67,7 @@ export interface EditorZonasManualProps {
 }
 
 export function EditorZonasManual({ talhaoId, nomeZoneamento, fcOriginal, areaMinHa = 0, camadasStats, boundsStats, onMapFc, onSalvarVersao, onClose }: EditorZonasManualProps) {
-  const { zonaEvent, setZonaEvent } = useApp();
+  const { zonaEvent, setZonaEvent, setCorteAtivo, corteLinha, setCorteLinha } = useApp();
   // Permissões granulares do editor (spec §9). Modo local (bancada) libera tudo.
   const podeUnif = pode('zonasUnificar'), podeRecl = pode('zonasReclassificar'), podeDiv = pode('zonasDividir'), podeSalvar = pode('zonasSalvar');
 
@@ -88,6 +89,13 @@ export function EditorZonasManual({ talhaoId, nomeZoneamento, fcOriginal, areaMi
   const [renomeando, setRenomeando] = useState<string | null>(null);
   const [nomeTemp, setNomeTemp] = useState('');
   const [cortando, setCortando] = useState<{ id: string; fc: GeoJSON.FeatureCollection } | null>(null);
+  // CORTE POR LINHA (caminho padrão da divisão): o traço é desenhado NO MAPA e
+  // o corte roda no backend. `corteZona` = id da zona em corte; o traço em si
+  // mora no AppContext porque quem coleta os toques é o MapView.
+  const [corteZona, setCorteZona] = useState<string | null>(null);
+  const [corteOcupado, setCorteOcupado] = useState(false);
+  /** Partes recém-separadas esperando classe — abrem o Reclassificar já marcadas. */
+  const [partesNovas, setPartesNovas] = useState<string[] | null>(null);
   const [reclassAberto, setReclassAberto] = useState(false);
   const [unifAberto, setUnifAberto] = useState(false);
   // Sugestão de classificação vinda da VALIDAÇÃO (mesma conta do Laboratório):
@@ -159,20 +167,26 @@ export function EditorZonasManual({ talhaoId, nomeZoneamento, fcOriginal, areaMi
   function desfazer() {
     if (!hist.length) return;
     setRedo(r => [...r, feats]); setFeats(hist[hist.length - 1]); setHist(h => h.slice(0, -1));
-    setSel(new Set()); setErro(null);
+    setSel(new Set()); setErro(null); setPartesNovas(null);
   }
   function refazer() {
     if (!redo.length) return;
     setHist(h => [...h, feats]); setFeats(redo[redo.length - 1]); setRedo(r => r.slice(0, -1));
-    setSel(new Set()); setErro(null);
+    setSel(new Set()); setErro(null); setPartesNovas(null);
   }
   function restaurarOriginal() {
     if (!confirm('Restaurar as zonas originais? As alterações manuais desta sessão de edição serão descartadas (o zoneamento salvo continua intacto).')) return;
     empurrar(); setFeats(inicial); setSel(new Set()); setLog([]); setErro(null); setReclassAberto(false); setUnifAberto(false);
+    setPartesNovas(null); encerrarCorte();
   }
 
   const selFeats = useMemo(() => feats.filter(f => sel.has(idDe(f))), [feats, sel]);
-  function toggleSel(id: string) { setSel(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; }); }
+  // Trocar a seleção no meio do corte por linha cortaria a zona errada — o
+  // traço já está sendo desenhado sobre a que está marcada.
+  function toggleSel(id: string) {
+    if (corteZona) return;
+    setSel(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  }
 
   // Renumerar a zona. O id É a identidade dela aqui dentro (seleção, log,
   // divisão), então trocar exige carregar a mudança para esses três lugares —
@@ -258,7 +272,7 @@ export function EditorZonasManual({ talhaoId, nomeZoneamento, fcOriginal, areaMi
       const novo = dePara.get(rankDe(f));
       return novo == null ? f : { ...f, properties: { ...(f.properties ?? {}), potencialRank: novo } };
     }));
-    setReclassAberto(false);
+    setReclassAberto(false); setPartesNovas(null);
   }
 
   // ── SUGERIR CLASSIFICAÇÃO (validação) ───────────────────────────────────
@@ -318,40 +332,104 @@ export function EditorZonasManual({ talhaoId, nomeZoneamento, fcOriginal, areaMi
     setSugAberto(false); setSel(new Set());
   }
 
-  // ── DIVIDIR (spec §4): abre o editor de corte na zona selecionada ──
+  // ── DIVIDIR (spec §4) — CORTE POR LINHA no próprio mapa ──────────────────
+  //
+  // O agrônomo traça a linha sobre a zona e ela se divide ali mesmo: não abre
+  // mais o editor de tela cheia para o caso comum (separar uma mancha de pedra,
+  // um encharcado, a beira do carreador). O editor continua a um clique de
+  // distância, para quem precisa mexer em vértice ou recortar uma ilha.
+  //
+  // O corte roda no BACKEND (shapely.ops.split) porque cortar o anel aqui não
+  // dá partição exata em zona côncava nem em zona com ilha/furo — e vão ou
+  // sobreposição na divisa quebram a suavização e a exportação depois.
   function abrirDivisao() {
-    setErro(null);
+    setErro(null); setAvisoDiv(null);
     if (!podeDiv) { setErro('Você não tem permissão para dividir zonas.'); return; }
+    if (corteZona) { encerrarCorte(); return; }
     if (selFeats.length !== 1) { setErro('Selecione exatamente UMA zona para dividir.'); return; }
-    const f = selFeats[0];
-    setCortando({ id: idDe(f), fc: { type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry: f.geometry! }] } });
+    setCorteZona(idDe(selFeats[0]));
+    setCorteLinha([]); setCorteAtivo(true);
+    setUnifAberto(false); setReclassAberto(false); setSugAberto(false);
   }
+  function encerrarCorte() {
+    setCorteAtivo(false); setCorteLinha([]); setCorteZona(null); setCorteOcupado(false);
+  }
+  // Sair do editor (ou trocar de versão) com o modo ligado deixaria o mapa
+  // engolindo cliques para sempre — o traço é global.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => () => { setCorteAtivo(false); setCorteLinha([]); }, []);
+
+  function abrirEditorAvancado(id: string) {
+    const f = feats.find(x => idDe(x) === id);
+    if (!f) return;
+    encerrarCorte();
+    setCortando({ id, fc: { type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry: f.geometry! }] } });
+  }
+
+  async function aplicarCorteLinha() {
+    const id = corteZona;
+    const orig = id ? feats.find(f => idDe(f) === id) : null;
+    if (!id || !orig) { encerrarCorte(); return; }
+    if (corteLinha.length < 2) { setErro('Toque em pelo menos 2 pontos no mapa para formar a linha de corte.'); return; }
+    setErro(null); setCorteOcupado(true);
+    try {
+      const r = await dividirZonaPorLinha({
+        zona: { type: 'Feature', properties: {}, geometry: orig.geometry! },
+        linha: corteLinha,
+      });
+      aplicarPartes(id, r.partes);
+      encerrarCorte();
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Falha ao dividir a zona.');
+    } finally { setCorteOcupado(false); }
+  }
+
   function aplicarDivisao(id: string, fcs: GeoJSON.FeatureCollection[]) {
-    const orig = feats.find(f => idDe(f) === id);
-    if (!orig) { setCortando(null); return; }
+    if (!feats.some(f => idDe(f) === id)) { setCortando(null); return; }
     const eds = fcs.map(extrairEditavel).filter((e): e is NonNullable<ReturnType<typeof extrairEditavel>> => !!e && e.tipo === 'poligono');
     if (eds.length < 2) { setErro('A divisão precisa gerar pelo menos 2 partes (a linha deve atravessar a zona por inteiro).'); setCortando(null); return; }
+    aplicarPartes(id, eds.map(ed => ({ geometry: paraFeature(ed).geometry, areaHa: areaHaDe(ed) ?? 0 })));
+    setCortando(null);
+  }
+
+  // Troca a zona `id` pelas partes do corte. A MAIOR (partes[0]) mantém a
+  // identidade — as demais são o recorte, e é nelas que a classe muda.
+  function aplicarPartes(id: string, partes: { geometry: GeoJSON.Geometry; areaHa: number }[]) {
+    const orig = feats.find(f => idDe(f) === id);
+    if (!orig || partes.length < 2) return;
     // Área mínima NÃO bloqueia o corte manual. Ela é um parâmetro da GERAÇÃO
     // automática — serve para o algoritmo não picotar o mapa em manchas. Aqui
     // quem desenha a linha é o agrônomo, que está separando um pedaço porque
     // conhece o talhão (uma mancha de pedra, um encharcado, a beira de um
     // carreador): recusar o corte por ele ter 1,2 ha seria o sistema discordar
     // de quem viu a área. Vira AVISO — informa e deixa seguir.
-    const areas = eds.map(e => areaHaDe(e) ?? 0);
-    const menores = areas.filter(a => a > 0 && a < areaMinHa);
+    const menores = partes.map(p => p.areaHa).filter(a => a > 0 && a < areaMinHa);
     setAvisoDiv(areaMinHa > 0 && menores.length
       ? `${menores.length === 1 ? 'Uma parte ficou' : `${menores.length} partes ficaram`} abaixo da área mínima da geração (${areaMinHa.toLocaleString('pt-BR')} ha): ${menores.map(a => a.toLocaleString('pt-BR', { maximumFractionDigits: 2 })).join(', ')} ha. O corte foi aplicado.`
       : null);
     empurrar();
     const props = (orig.properties ?? {}) as Record<string, unknown>;
-    const novas: Feat[] = eds.map((ed, i) => ({
-      type: 'Feature', geometry: paraFeature(ed).geometry,
-      properties: { ...props, id: i === 0 ? id : `${id}_${i + 1}`, areaHa: areaHaDe(ed) ?? 0 },
-    }));
+    const usados = new Set(feats.map(idDe));
+    usados.delete(id);
+    const novas: Feat[] = partes.map((p, i) => {
+      let novoId = id;
+      if (i > 0) {                       // "3_2", "3_3"… sem colidir com o que já existe
+        novoId = `${id}_${i + 1}`;
+        for (let k = i + 1; usados.has(novoId); k++) novoId = `${id}_${k + 1}`;
+      }
+      usados.add(novoId);
+      return { type: 'Feature', geometry: p.geometry, properties: { ...props, id: novoId, areaHa: p.areaHa } } as Feat;
+    });
     const resto = feats.filter(f => idDe(f) !== id);
-    setFeats([...resto, ...novas].sort((a, b) => idDe(a).localeCompare(idDe(b))));
+    setFeats([...resto, ...novas].sort((a, b) => idDe(a).localeCompare(idDe(b), 'pt-BR', { numeric: true })));
     registrar({ tipo: 'dividir', data: '', zonas: [id], partes: novas.length });
-    setSel(new Set()); setCortando(null);
+    // O recorte já entra selecionado e com o seletor de classe aberto: quem
+    // separou um pedaço fez isso PORQUE ele é outra coisa — a classe é o
+    // próximo passo, não uma segunda operação a lembrar.
+    const recortes = novas.slice(1).map(idDe);
+    setSel(new Set(recortes));
+    setPartesNovas(recortes);
+    setReclassAberto(podeRecl);
   }
 
   // ── Estatísticas (spec §8): área, perímetro, % — do conjunto selecionado ou total ──
@@ -393,8 +471,11 @@ export function EditorZonasManual({ talhaoId, nomeZoneamento, fcOriginal, areaMi
         <span className="text-[9px] truncate" style={{ color: '#64748b' }}>— {nomeZoneamento}</span>
         <button onClick={onClose} title="Fechar (nada é alterado)" className="ml-auto p-1 rounded" style={{ color: '#93c5fd' }}><X size={12} /></button>
       </div>
-      <p className="text-[9px] leading-relaxed flex items-center gap-1" style={{ color: '#a78bfa' }}>
-        <MousePointerClick size={10} /> Clique nas zonas <strong style={{ color: '#ddd6fe' }}>no mapa</strong> (ou na lista) para selecionar. O original é preservado — as mudanças viram uma <strong style={{ color: '#ddd6fe' }}>nova versão</strong>.
+      <p className="text-[9px] leading-relaxed flex items-center gap-1" style={{ color: corteZona ? '#fbbf24' : '#a78bfa' }}>
+        <MousePointerClick size={10} />
+        {corteZona
+          ? <>Os toques no mapa agora formam a <strong style={{ color: '#fde68a' }}>linha de corte</strong> — a seleção fica travada na zona #{corteZona} até aplicar ou cancelar.</>
+          : <>Clique nas zonas <strong style={{ color: '#ddd6fe' }}>no mapa</strong> (ou na lista) para selecionar. O original é preservado — as mudanças viram uma <strong style={{ color: '#ddd6fe' }}>nova versão</strong>.</>}
       </p>
 
       {/* Barra de ferramentas (cada operação respeita a permissão — spec §9) */}
@@ -406,7 +487,7 @@ export function EditorZonasManual({ talhaoId, nomeZoneamento, fcOriginal, areaMi
           </button>
         )}
         {podeRecl && (
-          <button onClick={() => { setReclassAberto(v => !v); setUnifAberto(false); }} disabled={sel.size < 1}
+          <button onClick={() => { setReclassAberto(v => !v); setUnifAberto(false); setPartesNovas(null); }} disabled={sel.size < 1}
             className="flex items-center gap-1 text-[10px] px-2 py-1 rounded font-semibold disabled:opacity-40" style={chip(reclassAberto)} title="Trocar a classe da(s) zona(s) selecionada(s)">
             <Tag size={11} /> Reclassificar
           </button>
@@ -419,8 +500,9 @@ export function EditorZonasManual({ talhaoId, nomeZoneamento, fcOriginal, areaMi
           </button>
         )}
         {podeDiv && (
-          <button onClick={abrirDivisao} disabled={sel.size !== 1}
-            className="flex items-center gap-1 text-[10px] px-2 py-1 rounded font-semibold disabled:opacity-40" style={chip(false)} title="Dividir a zona selecionada por uma linha de corte">
+          <button onClick={abrirDivisao} disabled={sel.size !== 1 && !corteZona}
+            className="flex items-center gap-1 text-[10px] px-2 py-1 rounded font-semibold disabled:opacity-40" style={chip(!!corteZona)}
+            title="Dividir a zona selecionada traçando uma linha no mapa">
             <Scissors size={11} /> Dividir
           </button>
         )}
@@ -433,6 +515,36 @@ export function EditorZonasManual({ talhaoId, nomeZoneamento, fcOriginal, areaMi
           <button onClick={restaurarOriginal} title="Restaurar zonas originais" className="p-1 rounded" style={{ color: '#93c5fd' }}><RotateCcw size={13} /></button>
         </div>
       </div>
+
+      {/* CORTE POR LINHA — o traço é desenhado no mapa, não num editor à parte */}
+      {corteZona && (
+        <div className="p-1.5 rounded space-y-1.5" style={{ background: '#0b1f3a', border: '1px solid #d97706' }}>
+          <p className="text-[9px] font-bold flex items-center gap-1" style={{ color: '#fbbf24' }}>
+            <Spline size={11} /> Corte por linha — zona #{corteZona}
+          </p>
+          <p className="text-[9px] leading-relaxed" style={{ color: '#94a3b8' }}>
+            Toque no <strong style={{ color: '#e2e8f0' }}>mapa</strong> marcando a linha que atravessa a zona: 2 toques fazem uma reta, mais toques acompanham o contorno da mancha.
+            Não precisa começar nem terminar fora — a linha é prolongada até cortar. A parte separada já abre para você escolher a classe dela.
+          </p>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[9px] tabular-nums" style={{ color: corteLinha.length >= 2 ? '#fbbf24' : '#64748b' }}>
+              {corteLinha.length} ponto{corteLinha.length === 1 ? '' : 's'}
+            </span>
+            <button onClick={() => setCorteLinha([])} disabled={!corteLinha.length}
+              className="flex items-center gap-1 text-[10px] px-2 py-1 rounded font-semibold disabled:opacity-30"
+              style={{ background: '#1a3a6b', color: '#93c5fd' }}><Eraser size={10} /> Limpar traço</button>
+            <button onClick={encerrarCorte} className="text-[10px] px-2 py-1 rounded font-semibold" style={{ background: '#1a3a6b', color: '#93c5fd' }}>Cancelar</button>
+            <button onClick={aplicarCorteLinha} disabled={corteLinha.length < 2 || corteOcupado}
+              className="ml-auto flex items-center gap-1 text-[10px] px-3 py-1 rounded font-bold text-white disabled:opacity-40"
+              style={{ background: '#d97706', border: '1px solid #fbbf24' }}>
+              {corteOcupado ? <Loader2 size={11} className="animate-spin" /> : <Scissors size={11} />} Aplicar corte
+            </button>
+          </div>
+          <button onClick={() => abrirEditorAvancado(corteZona)} className="text-[9px] underline" style={{ color: '#93c5fd' }}>
+            Preciso mexer em vértice ou recortar uma ilha — abrir o editor avançado
+          </button>
+        </div>
+      )}
 
       {/* Motivo (opcional) — carimbado na próxima operação (spec §3, §5) */}
       <input value={motivo} onChange={e => setMotivo(e.target.value)} placeholder="Motivo da alteração (opcional) — fica no histórico"
@@ -505,8 +617,14 @@ export function EditorZonasManual({ talhaoId, nomeZoneamento, fcOriginal, areaMi
 
       {/* Seletor de classe — Reclassificar */}
       {reclassAberto && (
-        <div className="p-1.5 rounded space-y-1" style={{ background: '#0b1f3a', border: '1px solid #5b21b6' }}>
-          <p className="text-[9px] font-semibold" style={{ color: '#c4b5fd' }}>Nova classe de {sel.size} zona(s) — só a classe muda (geometria intacta):</p>
+        <div className="p-1.5 rounded space-y-1" style={{ background: '#0b1f3a', border: `1px solid ${partesNovas?.length ? '#d97706' : '#5b21b6'}` }}>
+          {partesNovas?.length ? (
+            <p className="text-[9px] font-semibold" style={{ color: '#fbbf24' }}>
+              Recém-separada{partesNovas.length > 1 ? 's' : ''} do corte: {partesNovas.map(i => `#${i}`).join(', ')} — escolha a classe. As tracejadas ainda não existem neste mapa.
+            </p>
+          ) : (
+            <p className="text-[9px] font-semibold" style={{ color: '#c4b5fd' }}>Nova classe de {sel.size} zona(s) — só a classe muda (geometria intacta):</p>
+          )}
           <div className="flex flex-wrap gap-1">
             {escala.map(c => (
               <button key={`${c.label}-${c.rank}`} onClick={() => reclassificar(c)}

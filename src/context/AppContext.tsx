@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode, Dispatch, SetStateAction } from 'react';
 import { useRouter } from 'next/navigation';
 import { seedIfEmpty } from '@/lib/seed';
 import { bootCloud, bootCloudCampo, cloudExcluirMapasPorPrefixo, cloudExcluirPorPrefixo } from '@/lib/cloud';
@@ -79,6 +79,14 @@ interface AppContextType {
   // Clique numa zona de manejo (ajuste de densidade por zona)
   zonaEvent: ZonaEvent | null;
   setZonaEvent: (e: ZonaEvent | null) => void;
+  // CORTE POR LINHA (editor manual de zonas): o painel liga o modo, o mapa
+  // coleta os toques no traço e desenha. Canal de MÃO DUPLA de propósito — o
+  // traço é do painel (que aplica o corte) mas quem sabe onde o dedo tocou é o
+  // mapa; um evento one-shot como o zonaEvent perderia toque em sequência rápida.
+  corteAtivo: boolean;
+  setCorteAtivo: (v: boolean) => void;
+  corteLinha: [number, number][];
+  setCorteLinha: Dispatch<SetStateAction<[number, number][]>>;
   // Mapa de fertilidade — raster interpolado + rótulos de valor por ponto
   fertilidadeOverlay: FertilidadeOverlay | null;
   setFertilidadeOverlay: (o: FertilidadeOverlay | null) => void;
@@ -117,6 +125,10 @@ const AppContext = createContext<AppContextType>({
   setPontoEvent: () => {},
   zonaEvent: null,
   setZonaEvent: () => {},
+  corteAtivo: false,
+  setCorteAtivo: () => {},
+  corteLinha: [],
+  setCorteLinha: () => {},
   fertilidadeOverlay: null,
   setFertilidadeOverlay: () => {},
   fertilidadeLabels: null,
@@ -314,6 +326,8 @@ export function AppProvider({ children, redirectProdutorParaPortal, modoCampo }:
   const [edicaoModo, setEdicaoModo] = useState<EdicaoModo>('mover');
   const [pontoEvent, setPontoEvent] = useState<PontoEvent | null>(null);
   const [zonaEvent, setZonaEvent] = useState<ZonaEvent | null>(null);
+  const [corteAtivo, setCorteAtivo] = useState(false);
+  const [corteLinha, setCorteLinha] = useState<[number, number][]>([]);
   const [fertilidadeOverlay, setFertilidadeOverlay] = useState<FertilidadeOverlay | null>(null);
   const [fertilidadeLabels, setFertilidadeLabels] = useState<GeoJSON.FeatureCollection | null>(null);
   const [nav, setNavState] = useState<NavContext>({
@@ -347,6 +361,8 @@ export function AppProvider({ children, redirectProdutorParaPortal, modoCampo }:
       edicaoModo, setEdicaoModo,
       pontoEvent, setPontoEvent,
       zonaEvent, setZonaEvent,
+      corteAtivo, setCorteAtivo,
+      corteLinha, setCorteLinha,
       fertilidadeOverlay, setFertilidadeOverlay,
       fertilidadeLabels, setFertilidadeLabels,
     }}>

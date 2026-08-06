@@ -297,6 +297,34 @@ export async function suavizarZonas(params: {
   return r.json();
 }
 
+// ── CORTE POR LINHA (editor manual): dividir uma zona pelo traço do mapa ──
+//
+// O corte roda no backend (shapely.ops.split) e não no navegador de propósito:
+// cortar o anel aqui não garante partição exata em zona côncava (a linha entra
+// e sai várias vezes) nem em zona com ilha/furo — e vão/sobreposição na divisa
+// quebram a suavização e a exportação depois.
+export interface ParteDividida {
+  geometry: GeoJSON.Polygon | GeoJSON.MultiPolygon;
+  areaHa: number;
+}
+export interface RespDividirZona {
+  partes: ParteDividida[];   // da MAIOR para a menor
+  n: number;
+  prolongamentoM: number;    // 0 = a linha já atravessava como foi desenhada
+  areaTotalHa: number;
+}
+
+export async function dividirZonaPorLinha(params: {
+  zona: GeoJSON.Feature | GeoJSON.Polygon | GeoJSON.MultiPolygon;
+  linha: [number, number][];    // vértices do traço, em lng/lat
+}): Promise<RespDividirZona> {
+  const r = await postZonear('/zonear-dividir', {
+    zona: params.zona,
+    linha: { type: 'LineString', coordinates: params.linha },
+  });
+  return r.json();
+}
+
 // bounds [w,s,e,n] -> coordinates do image source (TL, TR, BR, BL)
 export function coordsFromBounds(
   b: [number, number, number, number],
