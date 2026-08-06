@@ -6,7 +6,8 @@
 //
 // Reaproveita a arquitetura existente:
 //   • união (dissolve a divisa interna) → lib/meap/fundir (unirFeatures/limparZona)
-//   • corte/divisão → components/geo/EditorGeometria (mesmo editor das zonas)
+//   • corte por LINHA (padrão) → traço no próprio mapa + /zonear-dividir (shapely)
+//   • corte por editor (avançado) → components/geo/EditorGeometria
 //   • adjacência (fronteira compartilhada) → @turf/boolean-intersects
 //   • área/perímetro → lib/geoEditor
 //   • seleção no mapa → AppContext.zonaEvent (clique em zona-fill)
@@ -19,12 +20,17 @@ import { unirFeatures, limparZona } from '@/lib/meap/fundir';
 import { extrairEditavel, paraFeature, areaHaDe, perimetroMDe } from '@/lib/geoEditor';
 import { classeZona, classeReconhecida, corZonaPorPosicao } from '@/lib/zonas';
 import { escalaClasses, remapeamentoDeRanks, type ClasseEscala } from '@/lib/meap/escalaClasses';
+import { carregarCamadasValidacao } from '@/lib/validacao/carregar';
+import { amostrarPorZona } from '@/lib/validacao/amostragem';
+import { resumoValores, separacaoEntreZonas } from '@/lib/validacao/estatistica';
+import { sugerirClassificacao, type Sugestao } from '@/lib/validacao/sugestao';
+import type { CamadaValidacao } from '@/lib/validacao/validar';
 import { usuarioAtual } from '@/lib/auth';
 import { pode } from '@/lib/empresa';
 import { estatisticasRasterZona } from '@/lib/meap/rasterStats';
 import { useApp } from '@/context/AppContext';
 import type { OperacaoEdicaoZona } from '@/lib/store';
-import { Pencil, Combine, Scissors, Tag, Undo2, Redo2, RotateCcw, Save, X, CheckSquare, Square, AlertTriangle, MousePointerClick, Ruler, Lock, BarChart3 } from 'lucide-react';
+import { Pencil, Combine, Scissors, Tag, Undo2, Redo2, RotateCcw, Save, X, CheckSquare, Square, AlertTriangle, MousePointerClick, Ruler, Lock, BarChart3, Wand2, Loader2, ArrowRight, Check } from 'lucide-react';
 
 const EditorGeometria = dynamic(
   () => import('@/components/geo/EditorGeometria').then(m => ({ default: m.EditorGeometria })),
@@ -48,6 +54,7 @@ function perimetroM(f: Feat): number {
 export interface CamadaStats { simbolo: string; prof: string; b64: string; shape: [number, number]; }
 
 export interface EditorZonasManualProps {
+  talhaoId: string;
   nomeZoneamento: string;
   fcOriginal: GeoJSON.FeatureCollection;   // zoneamento salvo (não é alterado)
   areaMinHa?: number;                       // piso p/ divisão (spec §4)
@@ -58,7 +65,7 @@ export interface EditorZonasManualProps {
   onClose: () => void;
 }
 
-export function EditorZonasManual({ nomeZoneamento, fcOriginal, areaMinHa = 0, camadasStats, boundsStats, onMapFc, onSalvarVersao, onClose }: EditorZonasManualProps) {
+export function EditorZonasManual({ talhaoId, nomeZoneamento, fcOriginal, areaMinHa = 0, camadasStats, boundsStats, onMapFc, onSalvarVersao, onClose }: EditorZonasManualProps) {
   const { zonaEvent, setZonaEvent } = useApp();
   // Permissões granulares do editor (spec §9). Modo local (bancada) libera tudo.
   const podeUnif = pode('zonasUnificar'), podeRecl = pode('zonasReclassificar'), podeDiv = pode('zonasDividir'), podeSalvar = pode('zonasSalvar');
@@ -83,6 +90,14 @@ export function EditorZonasManual({ nomeZoneamento, fcOriginal, areaMinHa = 0, c
   const [cortando, setCortando] = useState<{ id: string; fc: GeoJSON.FeatureCollection } | null>(null);
   const [reclassAberto, setReclassAberto] = useState(false);
   const [unifAberto, setUnifAberto] = useState(false);
+  // Sugestão de classificação vinda da VALIDAÇÃO (mesma conta do Laboratório):
+  // média medida por zona + quais zonas não se distinguem estatisticamente.
+  const [sugAberto, setSugAberto] = useState(false);
+  const [sugCarregando, setSugCarregando] = useState(false);
+  const [sugCamadas, setSugCamadas] = useState<CamadaValidacao[] | null>(null);
+  const [sugCamadaId, setSugCamadaId] = useState('');
+  const [sugestao, setSugestao] = useState<Sugestao | null>(null);
+  const [sugErro, setSugErro] = useState<string | null>(null);
   const minM2 = Math.max((areaMinHa || 0) * 10000, 1000);
 
   // Classes distintas presentes (rank → label/cor) — alvos de reclassificar/unificar.
@@ -246,6 +261,63 @@ export function EditorZonasManual({ nomeZoneamento, fcOriginal, areaMinHa = 0, c
     setReclassAberto(false);
   }
 
+  // ── SUGERIR CLASSIFICAÇÃO (validação) ───────────────────────────────────
+  //
+  // Mede a média de cada zona na camada escolhida — sobre a CÓPIA DE TRABALHO,
+  // não sobre o zoneamento salvo: se você acabou de unir ou dividir, a
+  // sugestão tem de enxergar o mapa como ele está agora. Aplicar é uma edição
+  // como qualquer outra: entra no histórico, dá para desfazer e só vira versão
+  // quando você clicar em salvar.
+  async function abrirSugestao() {
+    setSugAberto(v => !v);
+    setUnifAberto(false); setReclassAberto(false);
+    if (sugestao || sugCarregando) return;
+    setSugCarregando(true); setSugErro(null);
+    try {
+      const cams = sugCamadas ?? (await carregarCamadasValidacao(talhaoId)).camadas;
+      setSugCamadas(cams);
+      if (!cams.length) { setSugErro('Nenhuma camada disponível para basear a sugestão (produtividade, NDVI, condutividade ou fertilidade interpolada).'); return; }
+      const alvo = sugCamadaId || cams[0].id;
+      setSugCamadaId(alvo);
+      calcularSugestao(cams, alvo);
+    } catch (e) {
+      setSugErro(e instanceof Error ? e.message : 'falha ao carregar as camadas');
+    } finally { setSugCarregando(false); }
+  }
+
+  function calcularSugestao(cams: CamadaValidacao[], camadaId: string) {
+    const cam = cams.find(c => c.id === camadaId) ?? cams[0];
+    if (!cam) return;
+    const zonasGeom = feats.map(f => ({ idZona: idDe(f), geometry: f.geometry }));
+    const valores = amostrarPorZona(zonasGeom, cam.grid, cam.bounds);
+    const ids = [...new Set(feats.map(idDe))];
+    const sep = separacaoEntreZonas(ids.map(id => ({ id, valores: valores.get(id) ?? [] })));
+    const sug = sugerirClassificacao(
+      ids.map(id => {
+        const f = feats.find(x => idDe(x) === id)!;
+        const r = resumoValores(valores.get(id) ?? []);
+        return { idZona: id, nome: id, classeAtual: classeDe(f), areaHa: areaDe(f), media: r?.media ?? null };
+      }),
+      sep, cam.unidade,
+    );
+    setSugestao(sug);
+    setSugErro(sug.zonas.length ? null : sug.justificativa);
+  }
+
+  function aplicarSugestao() {
+    if (!sugestao || !podeRecl) { if (!podeRecl) setErro('Você não tem permissão para reclassificar zonas.'); return; }
+    const mudam = sugestao.zonas.filter(z => z.mudou);
+    if (!mudam.length) return;
+    empurrar();
+    const porId = new Map(sugestao.zonas.map(z => [z.idZona, z]));
+    for (const z of mudam) registrar({ tipo: 'reclassificar', data: '', zonas: [z.idZona], classeOriginal: z.classeAtual, classeFinal: z.classeSugerida });
+    setFeats(fs => fs.map(f => {
+      const z = porId.get(idDe(f));
+      return z ? { ...f, properties: { ...(f.properties ?? {}), classe: z.classeSugerida, cor: z.cor, potencialRank: z.rankSugerido } } : f;
+    }));
+    setSugAberto(false); setSel(new Set());
+  }
+
   // ── DIVIDIR (spec §4): abre o editor de corte na zona selecionada ──
   function abrirDivisao() {
     setErro(null);
@@ -339,6 +411,13 @@ export function EditorZonasManual({ nomeZoneamento, fcOriginal, areaMinHa = 0, c
             <Tag size={11} /> Reclassificar
           </button>
         )}
+        {podeRecl && (
+          <button onClick={abrirSugestao} disabled={sugCarregando}
+            className="flex items-center gap-1 text-[10px] px-2 py-1 rounded font-semibold disabled:opacity-40" style={chip(sugAberto)}
+            title="Sugerir a classe de cada zona pela validação (média medida + separação estatística)">
+            {sugCarregando ? <Loader2 size={11} className="animate-spin" /> : <Wand2 size={11} />} Sugerir classificação
+          </button>
+        )}
         {podeDiv && (
           <button onClick={abrirDivisao} disabled={sel.size !== 1}
             className="flex items-center gap-1 text-[10px] px-2 py-1 rounded font-semibold disabled:opacity-40" style={chip(false)} title="Dividir a zona selecionada por uma linha de corte">
@@ -358,6 +437,56 @@ export function EditorZonasManual({ nomeZoneamento, fcOriginal, areaMinHa = 0, c
       {/* Motivo (opcional) — carimbado na próxima operação (spec §3, §5) */}
       <input value={motivo} onChange={e => setMotivo(e.target.value)} placeholder="Motivo da alteração (opcional) — fica no histórico"
         className="w-full rounded px-2 py-1 text-[10px] outline-none" style={{ background: '#0b1f3a', color: '#e2e8f0', border: '1px solid #2e2050' }} />
+
+      {/* Sugestão de classificação pela validação */}
+      {sugAberto && (
+        <div className="p-1.5 rounded space-y-1.5" style={{ background: '#0b1f3a', border: '1px solid #5b21b6' }}>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[9px] font-semibold" style={{ color: '#c4b5fd' }}>Classificação sugerida pela validação:</span>
+            {sugCamadas && sugCamadas.length > 0 && (
+              <select value={sugCamadaId} onChange={e => { setSugCamadaId(e.target.value); calcularSugestao(sugCamadas, e.target.value); }}
+                className="rounded px-1.5 py-0.5 text-[10px] outline-none" style={{ background: '#1a3a6b', border: '1px solid #2e5fa3', color: '#e2e8f0' }}>
+                {sugCamadas.map(c => <option key={c.id} value={c.id}>{c.grupo ? `${c.grupo} · ` : ''}{c.nome}</option>)}
+              </select>
+            )}
+            {sugCarregando && <span className="text-[9px]" style={{ color: '#64748b' }}>carregando camadas…</span>}
+          </div>
+
+          {sugErro && <p className="text-[9px]" style={{ color: '#fbbf24' }}>{sugErro}</p>}
+
+          {sugestao && sugestao.zonas.length > 0 && (
+            <>
+              <p className="text-[9px] leading-relaxed" style={{ color: '#94a3b8' }}>{sugestao.justificativa}</p>
+              <div className="space-y-0.5">
+                {sugestao.zonas.map(z => (
+                  <div key={z.idZona} className="flex items-center gap-2 px-2 py-1 rounded text-[10px]"
+                    style={{ background: z.mudou ? '#241748' : '#0b1f3a', border: '1px solid #2e2050', opacity: z.mudou ? 1 : 0.55 }}>
+                    <span className="font-bold" style={{ color: '#e2e8f0', minWidth: 34 }}>#{z.nome}</span>
+                    <span style={{ color: '#64748b', minWidth: 92 }}>{z.media == null ? 'sem dado' : fmt(z.media, 0)}</span>
+                    <span style={{ color: '#94a3b8' }}>{z.classeAtual || '—'}</span>
+                    {z.mudou ? <ArrowRight size={11} style={{ color: '#a78bfa' }} /> : <span style={{ color: '#475569' }}>=</span>}
+                    <span className="inline-flex items-center gap-1 font-semibold" style={{ color: z.cor }}>
+                      <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: z.cor, border: '1px solid #fff3' }} />
+                      {z.classeSugerida}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button onClick={aplicarSugestao} disabled={!sugestao.nMudancas}
+                  className="flex items-center gap-1 text-[10px] px-2 py-1 rounded font-semibold disabled:opacity-40" style={{ background: '#5b21b6', color: '#fff' }}>
+                  <Check size={11} /> Aceitar sugestão ({sugestao.nMudancas} zona{sugestao.nMudancas === 1 ? '' : 's'})
+                </button>
+                <span className="text-[9px]" style={{ color: '#64748b' }}>
+                  {sugestao.nMudancas === 0
+                    ? 'A classificação atual já é a que os dados indicam.'
+                    : 'Aceitar aplica aqui no editor — dá para desfazer, e só vira versão ao salvar.'}
+                </span>
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {/* Seletor de classe — Unificar */}
       {unifAberto && (

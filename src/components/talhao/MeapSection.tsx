@@ -1270,7 +1270,7 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
               // de trabalho), e sem a key o React reaproveitava a instância —
               // o título mudava para a versão nova e as zonas continuavam as da
               // anterior, prontas para serem salvas no lugar errado.
-              <EditorZonasManual key={editorZona.id} nomeZoneamento={editorZona.nome} fcOriginal={editorZona.fc}
+              <EditorZonasManual key={editorZona.id} talhaoId={talhao.id} nomeZoneamento={editorZona.nome} fcOriginal={editorZona.fc}
                 areaMinHa={zEd?.meta.areaMinHa ?? 0}
                 camadasStats={camadasStatsEd} boundsStats={carregadas?.bounds}
                 onMapFc={setEditorMapFc}

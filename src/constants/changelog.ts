@@ -1,5 +1,11 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.29.0': [
+    'A CLASSIFICAÇÃO SUGERIDA CHEGOU AO EDITOR MANUAL (botão "Sugerir classificação", ao lado de Unificar/Reclassificar/Dividir). Era o lugar certo: é ali que se corrige o mapa à mão, e o editor já tem desfazer, histórico e "salvar como nova versão". Antes ela só existia no Laboratório.',
+    'A conta é a mesma da validação — média medida de cada zona na camada escolhida (produtividade, NDVI, condutividade ou fertilidade, você escolhe no seletor) e a separação estatística entre elas. Zonas que não se distinguem recebem a MESMA classe, e a lista mostra "atual → sugerida" zona a zona, com a média que justificou cada uma.',
+    'IMPORTANTE: a sugestão lê a CÓPIA DE TRABALHO, não o zoneamento salvo. Se você acabou de unir duas zonas ou dividir uma, ela enxerga o mapa como está agora na tela — e não o que está gravado.',
+    'Aceitar aplica no editor como qualquer outra edição: entra no histórico (dá para desfazer), conta como reclassificação no rodapé e só vira versão quando você clicar em "Salvar como nova versão".',
+  ],
   '2.28.0': [
     'ICA SAIU DE DENTRO DO IQZM — os dois agora se leem lado a lado, em destaque: "IQZM 91 (Excelente)" e "ICA 48 (Baixa confiabilidade — apenas uma safra disponível)". Na versão anterior a confiança entrava na média do IQZM com peso 5%, o que era o pior dos dois mundos: uma nota alta apoiada em uma safra só caía para 87 e continuava parecendo excelente — o alerta sumia dentro do número que deveria qualificar. Qualidade do MAPA e confiança da BASE são perguntas diferentes.',
     'O ICA ganhou os dois fatores que faltavam: QUALIDADE DOS DADOS (ruído da camada — % de valores fora da cerca de Tukey) e CONSISTÊNCIA DOS MAPAS (quanto do talhão cada camada realmente cobre, medido na mesma malha; um NDVI com metade do talhão sob nuvem ou um mapa de colheita que parou no meio da lavoura derrubam a confiança e aparecem pelo nome).',
