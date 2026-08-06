@@ -18,6 +18,7 @@ import booleanIntersects from '@turf/boolean-intersects';
 import { unirFeatures, limparZona } from '@/lib/meap/fundir';
 import { extrairEditavel, paraFeature, areaHaDe, perimetroMDe } from '@/lib/geoEditor';
 import { classeZona, classeReconhecida, corZonaPorPosicao } from '@/lib/zonas';
+import { escalaClasses, remapeamentoDeRanks, type ClasseEscala } from '@/lib/meap/escalaClasses';
 import { usuarioAtual } from '@/lib/auth';
 import { pode } from '@/lib/empresa';
 import { estatisticasRasterZona } from '@/lib/meap/rasterStats';
@@ -94,6 +95,15 @@ export function EditorZonasManual({ nomeZoneamento, fcOriginal, areaMinHa = 0, c
     return m;
   }, [feats]);
   const classesArr = useMemo(() => [...classes.values()], [classes]);
+
+  // Alvos do RECLASSIFICAR: as classes do mapa MAIS as 5 do semáforo que ainda
+  // não existem nele. Um zoneamento que saiu só com "Muito alto / Alto /
+  // Médio-alto" não deixava marcar uma zona como Média ou Baixa — que é
+  // justamente o que se corrige à mão. Ver lib/meap/escalaClasses.ts.
+  const escala = useMemo(
+    () => escalaClasses(classesArr.map(c => ({ label: c.label, cor: c.cor, rank: c.rank }))),
+    [classesArr],
+  );
 
   // ── Publica no mapa: cor por classe + destaque das selecionadas (rotulo = id
   //    do polígono, p/ o clique no mapa casar com a seleção). ──
@@ -184,21 +194,29 @@ export function EditorZonasManual({ nomeZoneamento, fcOriginal, areaMinHa = 0, c
   }
 
   // ── RECLASSIFICAR (spec §3): só troca a classe, geometria intacta ──
-  function reclassificar(rankFinal: number) {
+  //
+  // O alvo pode ser uma classe que ainda NÃO existe no mapa (as 5 do semáforo
+  // aparecem sempre). Nesse caso a escala ganha um degrau e os ranks são
+  // renumerados para continuarem contíguos — a ORDEM das classes que já
+  // estavam nunca muda, só o número: é o rank que ordena a dose na prescrição.
+  function reclassificar(alvo: ClasseEscala) {
     setErro(null);
     if (!podeRecl) { setErro('Você não tem permissão para reclassificar zonas.'); return; }
     if (!selFeats.length) { setErro('Selecione ao menos uma zona para reclassificar.'); return; }
-    const alvo = classes.get(rankFinal);
-    if (!alvo) return;
     empurrar();
     const ids = new Set(selFeats.map(idDe));
     for (const f of selFeats) {
-      if (rankDe(f) === rankFinal) continue;
+      if (classeDe(f) === alvo.label) continue;
       registrar({ tipo: 'reclassificar', data: '', zonas: [idDe(f)], classeOriginal: classeDe(f), classeFinal: alvo.label });
     }
-    setFeats(fs => fs.map(f => ids.has(idDe(f))
-      ? { ...f, properties: { ...(f.properties ?? {}), potencialRank: rankFinal, classe: alvo.label, cor: alvo.cor } }
-      : f));
+    const dePara = remapeamentoDeRanks(escala);
+    setFeats(fs => fs.map(f => {
+      if (ids.has(idDe(f))) {
+        return { ...f, properties: { ...(f.properties ?? {}), potencialRank: alvo.rank, classe: alvo.label, cor: alvo.cor } };
+      }
+      const novo = dePara.get(rankDe(f));
+      return novo == null ? f : { ...f, properties: { ...(f.properties ?? {}), potencialRank: novo } };
+    }));
     setReclassAberto(false);
   }
 
@@ -330,12 +348,18 @@ export function EditorZonasManual({ nomeZoneamento, fcOriginal, areaMinHa = 0, c
         <div className="p-1.5 rounded space-y-1" style={{ background: '#0b1f3a', border: '1px solid #5b21b6' }}>
           <p className="text-[9px] font-semibold" style={{ color: '#c4b5fd' }}>Nova classe de {sel.size} zona(s) — só a classe muda (geometria intacta):</p>
           <div className="flex flex-wrap gap-1">
-            {classesArr.map(c => (
-              <button key={c.rank} onClick={() => reclassificar(c.rank)} className="flex items-center gap-1 text-[10px] px-2 py-1 rounded font-semibold" style={chip(false)}>
+            {escala.map(c => (
+              <button key={`${c.label}-${c.rank}`} onClick={() => reclassificar(c)}
+                title={c.presente ? `${c.label} — já existe neste mapa` : `${c.label} — classe padrão, ainda não usada neste mapa`}
+                className="flex items-center gap-1 text-[10px] px-2 py-1 rounded font-semibold"
+                style={{ ...chip(false), ...(c.presente ? {} : { borderStyle: 'dashed', opacity: 0.9 }) }}>
                 <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: c.cor, border: '1px solid #fff' }} /> {c.label}
               </button>
             ))}
           </div>
+          <p className="text-[9px]" style={{ color: '#64748b' }}>
+            As 5 classes padrão aparecem sempre; as tracejadas ainda não existem neste mapa. Usar uma delas cria o degrau na escala — a ordem das classes que já estão não muda.
+          </p>
         </div>
       )}
 

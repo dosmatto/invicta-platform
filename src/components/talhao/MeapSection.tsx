@@ -1241,7 +1241,12 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
                   .map(c => ({ simbolo: c.simbolo, prof: c.prof, b64: c.b64, shape: c.shape }))
               : undefined;
             return (
-              <EditorZonasManual nomeZoneamento={editorZona.nome} fcOriginal={editorZona.fc}
+              // key = id da versão: trocar de versão com o editor ABERTO precisa
+              // remontar. O editor guarda os polígonos em estado próprio (cópia
+              // de trabalho), e sem a key o React reaproveitava a instância —
+              // o título mudava para a versão nova e as zonas continuavam as da
+              // anterior, prontas para serem salvas no lugar errado.
+              <EditorZonasManual key={editorZona.id} nomeZoneamento={editorZona.nome} fcOriginal={editorZona.fc}
                 areaMinHa={zEd?.meta.areaMinHa ?? 0}
                 camadasStats={camadasStatsEd} boundsStats={carregadas?.bounds}
                 onMapFc={setEditorMapFc}
