@@ -1,5 +1,10 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.25.2': [
+    'PDF DA PRESCRIÇÃO — CORES VERDE → AMARELO → VERMELHO: o mapa era uma rampa de verde-claro a verde-escuro e, quando as doses são próximas (344 e 354 kg/ha), a folha inteira saía do mesmo verde pálido — ninguém via onde entrava mais produto. Agora VERDE é a menor dose e VERMELHO a maior, com amarelo no meio, e o quadradinho de cada zona na tabela usa exatamente a mesma cor da mancha do mapa. A legenda ganhou "menor dose / maior dose" nas pontas.',
+    'A FOLHA DEIXOU DE TERMINAR EM BRANCO: o mapa ocupava pouco mais da metade da altura e o quadro RESUMO parava no meio da página, com um palmo de papel vazio embaixo dos dois lados. O mapa cresceu (capturado na proporção do quadro, sem achatar o satélite), a tabela de doses mostra mais zonas quando há espaço, e o RESUMO desce até o rodapé — a fonte é a maior que couber (até 9,5) e a folga vira respiro ENTRE os itens, não entrelinha esticada.',
+    'Com muitas zonas nada disso invade o rodapé: a tabela corta no que cabe (com a linha "… +N zona(s) — planilha completa no Excel") e o RESUMO usa a fonte menor. Verificado gerando o PDF de verdade com 5 e com 22 zonas.',
+  ],
   '2.25.1': [
     'ÁREA SEMPRE COM DUAS CASAS DECIMAIS, INCLUSIVE O ZERO FINAL: a regra de casas por grandeza (2.25.0) fazia sentido para doses e totais, mas engolia a casa da área — um talhão de 159,38 ha aparecia como "159 ha" no relatório. Área é o número pelo qual se fecha contrato, se paga serviço e se confere talhão contra a matrícula: agora sai 159,38 ha, 159,40 ha, 159,00 ha — o zero final também informa, porque "159,4" parece truncado.',
     'A regra vale em todo lugar onde a área aparece: PDF, Excel e SHP das Prescrições, relatórios de NDVI (talhão e fazenda), Comparação Produtividade × NDVI, MDE (inclusive a área por classe de relevo e de declividade), a planilha de Conferência de Cadastro e as telas de Prescrições, Produtividade, Recomendação, Arquivos e Cruzamento com relevo.',

@@ -16,7 +16,10 @@ import { capturarMapaZonas } from '../capturaMapa';
 import { imagemParaPdf, reduzirLogo } from '../pdfImagem';
 import { resumoDoses, nutrientesPorZona, fatorBaseDose } from './calculo.ts';
 import { doseCompensada } from './sementes.ts';
-import { doseArquivo, temCompensacao, totalDoArquivo, kgDeSementes, montarResumoPdf, fmtRel, arredRel } from './resumo.ts';
+import { doseArquivo, temCompensacao, totalDoArquivo, kgDeSementes, montarResumoPdf, fmtRel, arredRel, corDaDose } from './resumo.ts';
+// A rampa de cor mora no módulo puro (testável em node); segue exportada daqui
+// porque a tela de Prescrições já a importa deste arquivo.
+export { corDaDose };
 import { complementarNutriente, SIMBOLO_NUTRIENTE } from '../insumos';
 import { fmtHa, arredHa, formatarColunaXlsx, formatarLinhaXlsx } from '../formato';
 import { UNIDADE_TOTAL, ehUnidadeSemente, type Prescricao } from './tipos.ts';
@@ -227,15 +230,6 @@ export async function exportarXlsxPrescricao(p: Prescricao): Promise<string> {
 }
 
 // ── PDF ─────────────────────────────────────────────────────────────────────
-// Cor por DOSE (rampa verde clara→escura): mapa de prescrição se lê pela dose,
-// não pela classe da zona de origem.
-export function corDaDose(dose: number, doseMin: number, doseMax: number): string {
-  const t = doseMax - doseMin < 1e-9 ? 0.5 : (dose - doseMin) / (doseMax - doseMin);
-  const de = [199, 233, 192], ate = [0, 90, 50];   // verdes (ColorBrewer)
-  const c = de.map((v, i) => Math.round(v + (ate[i] - v) * t));
-  return `#${c.map(v => v.toString(16).padStart(2, '0')).join('')}`;
-}
-
 function boundsDe(fc: GeoJSON.FeatureCollection): [number, number, number, number] {
   let w = Infinity, s = Infinity, e = -Infinity, n = -Infinity;
   const varrer = (coords: GeoJSON.Position[]) => { for (const [x, y] of coords) { if (x < w) w = x; if (x > e) e = x; if (y < s) s = y; if (y > n) n = y; } };
@@ -287,11 +281,18 @@ export async function exportarPDFPrescricao(p: Prescricao, ident: IdentPdfPrescr
       rotulo: fmtRel(doseArquivo(p, z.dose)),
     }];
   });
+  // Geometria da folha, num lugar só — o mapa é capturado NA PROPORÇÃO do
+  // retângulo em que vai ser desenhado. jsPDF estica a imagem para o retângulo
+  // dado: capturar 1200×860 e desenhar num quadro mais alto achataria o
+  // satélite e as zonas junto.
+  const mapX = M, mapY = 28, mapW = 168, mapH = 146;
+  const FIM = H - 14;                       // fundo útil (rodapé começa em H-10)
+
   let mapaPng = '';
   try {
     mapaPng = await capturarMapaZonas({
       bounds: boundsDe(fc), externo: null, zonas: zonasMapa, linhas: [],
-      satelite: true, larguraPx: 1200, alturaPx: 860, preencherAlpha: 0.75,
+      satelite: true, larguraPx: 1200, alturaPx: Math.round((1200 * mapH) / mapW), preencherAlpha: 0.75,
     });
   } catch { /* sem mapa (offline p.ex.) → PDF sai só com a tabela */ }
 
@@ -311,7 +312,6 @@ export async function exportarPDFPrescricao(p: Prescricao, ident: IdentPdfPrescr
   doc.setDrawColor(...LINE); doc.setLineWidth(0.4); doc.line(M, 24, W - M, 24);
 
   // ── mapa (esquerda) ──
-  const mapX = M, mapY = 28, mapW = 168, mapH = 118;
   if (mapaPng) {
     const img = await imagemParaPdf(mapaPng, mapW);
     doc.addImage(img.data, img.formato, mapX, mapY, mapW, mapH);
@@ -325,7 +325,7 @@ export async function exportarPDFPrescricao(p: Prescricao, ident: IdentPdfPrescr
   const lgY = mapY + mapH + 5;
   doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor(...NAVY);
   doc.text(`Dose (${p.unidade})`, mapX, lgY);
-  const lgW = 60, lgH = 4, passos = 24;
+  const lgW = 84, lgH = 4.5, passos = 48;
   for (let i = 0; i < passos; i++) {
     const cor = corDaDose(r.doseMin + (i / (passos - 1)) * (r.doseMax - r.doseMin), r.doseMin, r.doseMax);
     const m = /^#(..)(..)(..)$/.exec(cor)!;
@@ -333,11 +333,34 @@ export async function exportarPDFPrescricao(p: Prescricao, ident: IdentPdfPrescr
     doc.rect(mapX + (i * lgW) / passos, lgY + 2, lgW / passos + 0.1, lgH, 'F');
   }
   doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(...GRAY);
-  doc.text(fmt(r.doseMin, 1), mapX, lgY + 10);
-  doc.text(fmt(r.doseMax, 1), mapX + lgW, lgY + 10, { align: 'right' });
+  doc.text(fmtRel(r.doseMin), mapX, lgY + 10);
+  doc.text(fmtRel(r.doseMax), mapX + lgW, lgY + 10, { align: 'right' });
+  doc.setFontSize(6.5); doc.text('menor dose', mapX, lgY + 13.5);
+  doc.text('maior dose', mapX + lgW, lgY + 13.5, { align: 'right' });
 
   // ── tabela de doses (direita) ──
   const tabX = mapX + mapW + 6, tabW = W - M - tabX;
+  const PAD = 5;                              // respiro interno do quadro RESUMO
+  const utilResumo = tabW - PAD * 2;
+  // O RESUMO é medido ANTES da tabela: ele fecha a coluna e não pode invadir o
+  // rodapé, então é a altura dele que decide quantas zonas cabem na tabela.
+  // Medido na MENOR fonte possível — é a reserva mínima; se sobrar espaço, o
+  // quadro cresce e o texto respira (mais abaixo).
+  const linhasResumo = montarResumoPdf(p, r, fator, fc.features.length);
+  const quebrarResumo = (fs: number) => linhasResumo.map(l => {
+    doc.setFont('helvetica', l.destaque ? 'bold' : 'normal'); doc.setFontSize(fs);
+    return { destaque: l.destaque, partes: doc.splitTextToSize(san(l.txt), utilResumo) as string[] };
+  });
+  const FS_MIN = 7, FS_CAND = [9.5, 9, 8.5, 8, 7.5, FS_MIN];
+  type Quebrada = { destaque?: boolean; partes: string[] };
+  // Altura do quadro na fonte dada, com o espaçamento MÍNIMO entre itens: é
+  // esta a conta que decide se a fonte cabe e quanto reservar para o quadro.
+  const alturaResumo = (q: Quebrada[], fs: number) => {
+    const n = q.reduce((a, l) => a + l.partes.length, 0);
+    return 12 + n * fs * 0.52 + 0.8 * Math.max(0, q.length - 1) + 3;
+  };
+  const reservaResumo = alturaResumo(quebrarResumo(FS_MIN), FS_MIN);
+
   let ty = 30;
   doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(...NAVY);
   doc.text('DOSES POR ZONA', tabX, ty); ty += 4;
@@ -365,22 +388,28 @@ export async function exportarPDFPrescricao(p: Prescricao, ident: IdentPdfPrescr
     cab('Dose', `(${p.unidade})`, fimDose);
   }
   cab('Total', `(${un})`, fimTotal);
-  ty += 4.2; doc.setDrawColor(...LINE); doc.line(tabX, ty, tabX + tabW, ty); ty += 3.5;
-  doc.setFont('helvetica', 'normal'); doc.setTextColor(40, 50, 70); doc.setFontSize(7);
+  ty += 4.2; doc.setDrawColor(...LINE); doc.line(tabX, ty, tabX + tabW, ty); ty += 4;
+  doc.setFont('helvetica', 'normal'); doc.setTextColor(40, 50, 70); doc.setFontSize(7.4);
   const zonasOrd = [...p.zonas].sort((a, b) => b.dose - a.dose);
-  for (const z of zonasOrd.slice(0, 18)) {
+  // Quantas linhas cabem sem empurrar o RESUMO para cima do rodapé. Antes eram
+  // 18 fixas com a folha vazia embaixo; agora a tabela usa o espaço que existe.
+  const passoLin = 5;
+  const cabem = Math.max(4, Math.floor((FIM - reservaResumo - 3 - ty) / passoLin));
+  const mostradas = zonasOrd.slice(0, cabem);
+  for (const z of mostradas) {
     const m = /^#(..)(..)(..)$/.exec(corDaDose(z.dose, r.doseMin, r.doseMax))!;
     doc.setFillColor(parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16));
-    doc.rect(tabX, ty - 2.4, 2.6, 2.6, 'F');
-    doc.text(san(z.nomeZona).slice(0, 12), tabX + 4, ty);
+    doc.rect(tabX, ty - 2.5, 2.8, 2.8, 'F');
+    doc.text(san(z.nomeZona).slice(0, 12), tabX + 4.4, ty);
     doc.text(fmtHa(z.areaHa), fimArea, ty, { align: 'right' });
     const dArq = doseArquivo(p, z.dose);
     doc.text(fmtRel(z.dose), fimDose, ty, { align: 'right' });
     if (comp) doc.text(fmtRel(dArq), fimAjuste, ty, { align: 'right' });
     doc.text(fmtRel(dArq * z.areaHa * fator), fimTotal, ty, { align: 'right' });
-    ty += 4.2;
+    ty += passoLin;
   }
-  if (p.zonas.length > 18) { doc.setTextColor(...GRAY); doc.text(`… +${p.zonas.length - 18} zonas (planilha completa no Excel)`, tabX, ty); ty += 4.2; }
+  const ocultas = p.zonas.length - mostradas.length;
+  if (ocultas > 0) { doc.setTextColor(...GRAY); doc.setFontSize(6.8); doc.text(`… +${ocultas} zona(s) — planilha completa no Excel`, tabX, ty); ty += passoLin; }
 
   // ── resumo ──
   // Antes era uma pilha de números sem dizer qual é qual: "quantidade usada",
@@ -389,30 +418,42 @@ export async function exportarPDFPrescricao(p: Prescricao, ident: IdentPdfPrescr
   // aparecem NOMEADAS — o que você pediu e o que a máquina vai plantar —, em
   // sementes e (com PMS) em quilos, e a última linha diz que o arquivo já sai
   // ajustado, que é a dúvida que sobra na hora de mandar para o campo.
-  const linhasResumo = montarResumoPdf(p, r, fator, fc.features.length);
-  ty += 2;
-  // Mede as quebras ANTES de desenhar a moldura: a observação final é uma
-  // frase longa e, sem contar as sub-linhas, o texto vazava para fora da caixa.
-  // Respiro interno de 5 mm dos dois lados e 3,5 mm embaixo: com 4 mm e
-  // maxWidth = tabW-8 o texto encostava na borda direita da moldura e a última
-  // linha ficava colada no traço de baixo. A largura útil é medida na MESMA
-  // fonte em que o texto é desenhado — negrito ocupa mais, então as linhas de
-  // destaque são medidas em negrito, senão elas é que vazavam.
-  const PAD = 5;
-  const util = tabW - PAD * 2;
-  const quebradas = linhasResumo.map(l => {
-    doc.setFont('helvetica', l.destaque ? 'bold' : 'normal'); doc.setFontSize(7.5);
-    return { destaque: l.destaque, partes: doc.splitTextToSize(san(l.txt), util) as string[] };
-  });
-  const nLinhas = quebradas.reduce((n, l) => n + l.partes.length, 0);
-  doc.setDrawColor(...LINE); doc.roundedRect(tabX, ty, tabW, 9.5 + nLinhas * 4, 2, 2, 'S');
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(...NAVY); doc.text('RESUMO', tabX + PAD, ty + 5);
-  doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(...GRAY);
-  let ry = ty + 10;
+  ty += 3;
+  // O quadro DESCE ATÉ O RODAPÉ: a folha terminava com um palmo de branco
+  // embaixo dos dois lados, e o resumo — que é o texto que o agrônomo lê —
+  // ficava espremido em fonte 7,5 no alto da coluna. Agora o espaço disponível
+  // escolhe a fonte (a maior que couber) e distribui as entrelinhas dentro da
+  // moldura, em vez de sobrar folha.
+  //
+  // A largura útil é medida na MESMA fonte em que o texto é desenhado — negrito
+  // ocupa mais, então as linhas de destaque são medidas em negrito, senão eram
+  // justamente elas que vazavam da moldura.
+  const alturaBox = Math.max(reservaResumo, FIM - ty);
+  let fsResumo = FS_MIN;
+  let quebradas = quebrarResumo(FS_MIN);
+  for (const cand of FS_CAND) {
+    const q = quebrarResumo(cand);
+    if (alturaResumo(q, cand) <= alturaBox) { fsResumo = cand; quebradas = q; break; }
+  }
+  const nLinhas = quebradas.reduce((a, l) => a + l.partes.length, 0);
+  // A folga que sobra vira ESPAÇO ENTRE OS ITENS, não entrelinha: uma frase que
+  // quebrou em duas linhas continua sendo um parágrafo só (linhas juntas), e o
+  // que separa "Área", "Dose" e "Produto base" é o respiro entre eles. Esticar a
+  // entrelinha por igual espalharia a frase quebrada e ela deixaria de se ler
+  // como uma coisa só.
+  const lh = fsResumo * 0.52;
+  const sobra = alturaBox - (12 + nLinhas * lh + 3);
+  const gap = Math.max(0.8, Math.min(6, sobra / Math.max(1, quebradas.length - 1)));
+  doc.setDrawColor(...LINE); doc.roundedRect(tabX, ty, tabW, alturaBox, 2, 2, 'S');
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(fsResumo + 0.5); doc.setTextColor(...NAVY);
+  doc.text('RESUMO', tabX + PAD, ty + 6);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(fsResumo); doc.setTextColor(...GRAY);
+  let ry = ty + 11;
   for (const l of quebradas) {
     if (l.destaque) { doc.setTextColor(...NAVY); doc.setFont('helvetica', 'bold'); }
-    for (const parte of l.partes) { doc.text(parte, tabX + PAD, ry); ry += 4; }
+    for (const parte of l.partes) { doc.text(parte, tabX + PAD, ry); ry += lh; }
     if (l.destaque) { doc.setTextColor(...GRAY); doc.setFont('helvetica', 'normal'); }
+    ry += gap;
   }
 
   // ── rodapé ──

@@ -11,6 +11,7 @@ import { cloudExcluirMapasPorPrefixo, cloudExcluirPorPrefixo } from '@/lib/cloud
 import { pode } from '@/lib/empresa';
 import { rotuloAno } from '@/lib/periodo';
 import { gerarConferenciaExcel } from '@/lib/relatorioConferencia';
+import { fmtHa } from '@/lib/formato';
 
 export function DashboardPanel() {
   const [gerando, setGerando] = useState(false);
@@ -91,7 +92,7 @@ export function DashboardPanel() {
           <PanelKpi label="Talhões" value={kpis.talhoesAtivos} color="#86efac" />
         </div>
         <div className="flex border-b" style={{ borderColor: '#1a3a6b' }}>
-          <PanelKpi label="Área Total (ha)" value={kpis.areaTotal.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} color="#fde68a" />
+          <PanelKpi label="Área Total (ha)" value={fmtHa(kpis.areaTotal)} color="#fde68a" />
           <div className="w-px" style={{ background: '#1a3a6b' }} />
           <PanelKpi label="Ano Atual" value={rotuloAno(kpis.safraAtual)} color="#fff" />
           <div className="w-px" style={{ background: '#1a3a6b' }} />

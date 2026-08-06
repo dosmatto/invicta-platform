@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { redistribuirPorEstoque, distribuirProporcional, distribuirPorAjuste, resumoDoses, nutrientesPorZona, pesoDoRank, fatorBaseDose, arredondarDose } from '../src/lib/prescricao/calculo.ts';
 import { fatorCampo, sementesPorHa, metricasSementes, estoqueTotalSementes, distribuirSementes, doseCompensada } from '../src/lib/prescricao/sementes.ts';
 import { dosesPorEquacao, variaveisDaEquacao } from '../src/lib/prescricao/equacao.ts';
-import { montarResumoPdf, temCompensacao, totalDoArquivo, kgDeSementes, doseArquivo as doseArquivoDe, fmtRel, arredRel } from '../src/lib/prescricao/resumo.ts';
+import { montarResumoPdf, temCompensacao, totalDoArquivo, kgDeSementes, doseArquivo as doseArquivoDe, fmtRel, arredRel, corDaDose } from '../src/lib/prescricao/resumo.ts';
 import { fmtHa, arredHa } from '../src/lib/formato.ts';
 
 let ok = 0, fail = 0;
@@ -471,6 +471,35 @@ t('arredRel devolve NÚMERO com a mesma regra (Excel/SHP)', () => {
   assert.equal(arredRel(12.526), 12.53);
   assert.equal(arredRel(99.999), 100);
   assert.equal(arredRel(2.5), 2.5);
+});
+
+t('cor da dose: rampa VERDE (menor) → AMARELO → VERMELHO (maior)', () => {
+  // O mapa e o quadradinho da tabela leem a mesma função: se ela inverter, o
+  // relatório inteiro passa a dizer o contrário do que a dose diz.
+  const rgb = (hex) => [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16));
+  const min = rgb(corDaDose(100, 100, 200));
+  const meio = rgb(corDaDose(150, 100, 200));
+  const max = rgb(corDaDose(200, 100, 200));
+  assert.ok(min[1] > min[0], `dose mínima tem de puxar para o verde: ${min}`);
+  assert.ok(max[0] > max[1] * 2, `dose máxima tem de puxar para o vermelho: ${max}`);
+  assert.ok(meio[0] > 200 && meio[1] > 200 && meio[2] < 180, `meio da rampa é amarelo: ${meio}`);
+  // O "quanto de vermelho" (R - G) cresce SEM voltar atrás ao longo da rampa.
+  // Os canais isolados não servem de invariante: passando pelo amarelo, tanto R
+  // quanto G sobem — é a diferença entre eles que ordena as cores.
+  let antes = -1e9;
+  for (let i = 0; i <= 20; i++) {
+    const [r, g] = rgb(corDaDose(100 + i * 5, 100, 200));
+    assert.ok(r - g > antes, `rampa voltou atrás em t=${i / 20}: ${r - g} <= ${antes}`);
+    antes = r - g;
+  }
+});
+
+t('cor da dose: dose única (min == max) não vira NaN nem cor inválida', () => {
+  const cor = corDaDose(300, 300, 300);
+  assert.match(cor, /^#[0-9a-f]{6}$/, cor);
+  // fora da faixa não estoura a rampa
+  assert.match(corDaDose(1000, 100, 200), /^#[0-9a-f]{6}$/);
+  assert.match(corDaDose(-50, 100, 200), /^#[0-9a-f]{6}$/);
 });
 
 t('ÁREA é EXCEÇÃO: sempre 2 casas, inclusive o zero final', () => {

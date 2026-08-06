@@ -178,3 +178,28 @@ export function montarResumoPdf(
 export function totalDoArquivo(p: Prescricao, fator: number): number {
   return p.zonas.reduce((s, z) => s + doseArquivo(p, z.dose) * z.areaHa * fator, 0);
 }
+
+// ── Cor da dose ─────────────────────────────────────────────────────────────
+// Cor por DOSE — rampa VERDE → AMARELO → VERMELHO (RdYlGn invertida, a mesma
+// família da declividade no relatório do MDE). Mapa de prescrição se lê pela
+// dose, não pela classe da zona de origem.
+//
+// Era verde-claro → verde-escuro, e duas doses próximas ficavam indistinguíveis
+// no papel: com 344 e 354 kg/ha o mapa inteiro saía do mesmo verde pálido. Com
+// três cores o olho separa na hora — verde onde se aplica menos, vermelho onde
+// se aplica mais — e a tabela usa o mesmo código, então o quadradinho da zona
+// combina com a mancha do mapa.
+const RAMPA_DOSE: [number, number, number][] = [
+  [26, 152, 80],     // verde  — dose mínima
+  [254, 224, 139],   // amarelo — meio
+  [215, 48, 39],     // vermelho — dose máxima
+];
+
+export function corDaDose(dose: number, doseMin: number, doseMax: number): string {
+  const t = doseMax - doseMin < 1e-9 ? 0.5 : (dose - doseMin) / (doseMax - doseMin);
+  const u = Math.min(1, Math.max(0, t)) * (RAMPA_DOSE.length - 1);
+  const i = Math.min(RAMPA_DOSE.length - 2, Math.floor(u));
+  const f = u - i;
+  const c = RAMPA_DOSE[i].map((v, k) => Math.round(v + (RAMPA_DOSE[i + 1][k] - v) * f));
+  return `#${c.map(v => v.toString(16).padStart(2, '0')).join('')}`;
+}
