@@ -11,7 +11,7 @@
 // roda depois de um tick para o spinner pintar, como já faz a concordância.
 
 import { useMemo, useState } from 'react';
-import { Loader2, ShieldCheck, AlertTriangle, Info, ChevronDown, ChevronRight, Wand2, Check, ArrowRight } from 'lucide-react';
+import { Loader2, ShieldCheck, AlertTriangle, Info, ChevronDown, ChevronRight, Wand2, Check, ArrowRight, FileText } from 'lucide-react';
 import type { ZoneamentoMeap } from '@/lib/store';
 import { carregarCamadasValidacao } from '@/lib/validacao/carregar';
 import { validarZoneamento, compararCenarios, type CamadaValidacao, type RelatorioCompleto } from '@/lib/validacao/validar';
@@ -19,6 +19,9 @@ import { COR_FAIXA, ROTULO_FAIXA, type Indicador } from '@/lib/validacao/tipos';
 import { rotuloIQZM } from '@/lib/validacao/iqzm';
 import { rotuloICA } from '@/lib/validacao/ica';
 import { sugerirClassificacao, aplicarSugestao, type Sugestao } from '@/lib/validacao/sugestao';
+import { gerarRelatorioValidacao } from '@/lib/validacao/relatorioPdf';
+import { getTalhoes, getFazendas, getClientes } from '@/lib/store';
+import { usuarioAtual } from '@/lib/auth';
 import { fmtHa } from '@/lib/formato';
 
 const num = (v: number | null, d = 1) => {
@@ -74,6 +77,7 @@ export function ValidacaoZonas({ talhaoId, zoneamentos, onAceitarSugestao }: {
   const [detalheId, setDetalheId] = useState<string>('');
   const [verZonas, setVerZonas] = useState(false);
   const [aceito, setAceito] = useState<string | null>(null);
+  const [pdfando, setPdfando] = useState(false);
 
   const periodos = useMemo(() => [...new Set((camadas ?? []).map(c => c.periodo).filter(Boolean))] as string[], [camadas]);
 
@@ -136,6 +140,28 @@ export function ValidacaoZonas({ talhaoId, zoneamentos, onAceitarSugestao }: {
       detalhe.camadaValidacao.unidade,
     );
   }, [detalhe]);
+
+  async function baixarPdf() {
+    if (!detalhe) return;
+    const z = zoneamentos.find(x => x.id === detalhe.cenarioId);
+    if (!z) return;
+    setPdfando(true); setErro(null);
+    try {
+      const tal = getTalhoes().find(t => t.id === talhaoId) ?? null;
+      const faz = tal ? getFazendas().find(f => f.id === tal.fazendaId) ?? null : null;
+      const cli = faz ? getClientes().find(c => c.id === faz.clienteId) ?? null : null;
+      await gerarRelatorioValidacao({
+        rel: detalhe, sugestao, fc: z.fc,
+        ident: {
+          produtor: cli?.nome ?? '', fazenda: faz?.nome ?? '', talhao: tal?.nome ?? '',
+          municipio: faz?.municipio, estado: faz?.estado,
+          responsavel: usuarioAtual()?.email ?? undefined,
+        },
+      });
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'falha ao gerar o PDF');
+    } finally { setPdfando(false); }
+  }
 
   function aceitar() {
     if (!detalhe || !sugestao || !onAceitarSugestao) return;
@@ -231,10 +257,17 @@ export function ValidacaoZonas({ talhaoId, zoneamentos, onAceitarSugestao }: {
 
           {detalhe && (
             <>
-              <h4 className="text-[12px] font-bold mb-2" style={{ color: '#cbd5e1' }}>
-                {detalhe.cenarioNome}
-                {detalhe.camadaValidacao && <span className="font-normal text-[10px]" style={{ color: '#64748b' }}> · medido em {detalhe.camadaValidacao.nome} ({detalhe.camadaValidacao.unidade})</span>}
-              </h4>
+              <div className="flex flex-wrap items-center gap-2 mb-2">
+                <h4 className="text-[12px] font-bold" style={{ color: '#cbd5e1' }}>
+                  {detalhe.cenarioNome}
+                  {detalhe.camadaValidacao && <span className="font-normal text-[10px]" style={{ color: '#64748b' }}> · medido em {detalhe.camadaValidacao.nome} ({detalhe.camadaValidacao.unidade})</span>}
+                </h4>
+                <button onClick={baixarPdf} disabled={pdfando}
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded text-[10px] font-semibold disabled:opacity-50" style={{ background: '#1e40af', color: '#fff' }}
+                  title="Relatório PDF: mapa das zonas, IQZM × ICA, mín/média/máx por zona, indicadores, classificação sugerida e recomendações">
+                  {pdfando ? <><Loader2 size={12} className="animate-spin" /> Gerando…</> : <><FileText size={12} /> Relatório PDF</>}
+                </button>
+              </div>
 
               {/* Os dois números que se leem JUNTOS: qualidade do mapa × confiança
                   da base. Separados de propósito — o ICA não entra no IQZM, senão

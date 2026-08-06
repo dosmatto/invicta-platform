@@ -19,6 +19,7 @@ import { validarZoneamento, compararCenarios } from '../src/lib/validacao/valida
 import { INDICADORES_DASHBOARD } from '../src/lib/validacao/tipos.ts';
 import { amostrarPorZona, malhaNasZonas } from '../src/lib/validacao/amostragem.ts';
 import { sugerirClassificacao, aplicarSugestao } from '../src/lib/validacao/sugestao.ts';
+import { paraPdf, linhaZonaPdf, producaoTotalT, textosDoRelatorio, ehProdutividade, METODOLOGIA } from '../src/lib/validacao/textoPdf.ts';
 
 let ok = 0, fail = 0;
 function t(nome, fn) {
@@ -517,6 +518,66 @@ t('sugestão sobre o relatório real: usa a média de cada zona', () => {
   assert.equal(sug.zonas.length, 2);
   const alta = sug.zonas.find(z => z.classeSugerida === 'Alta');
   assert.equal(alta.nome, '01', 'a zona norte (4000) é a de maior potencial');
+});
+
+console.log('\nRelatório PDF\n');
+
+t('PDF: nenhum caractere que a fonte descarta chega ao papel', () => {
+  // O relatório é cheio de "eta2 = 98,4%" e "d de Cohen >= 0,5". A helvetica do
+  // jsPDF escreve WinAnsi e DESCARTA o resto sem avisar — foi assim que a
+  // prescrição saiu com "Faltante: 180,0 0,0 = 180,0", sem o menos.
+  const r = validarZoneamento(ENTRADA);
+  const sug = sugerirClassificacao(
+    r.porZona.map(z => ({ idZona: z.idZona, nome: z.nome, classeAtual: z.classe, areaHa: z.areaHa, media: z.resumo?.media ?? null })),
+    r.separacao, 'kg/ha',
+  );
+  const textos = textosDoRelatorio(r.indicadores, r.recomendacoes, [sug.justificativa, r.cenarioNome]);
+  assert.ok(textos.length > 20, `só ${textos.length} textos varridos`);
+  for (const txt of textos) {
+    const saida = paraPdf(txt);
+    const fora = saida.match(/[^\x00-\xFF]/g);
+    assert.equal(fora, null, `sobrou ${JSON.stringify(fora)} em: ${saida.slice(0, 80)}`);
+    // e o sentido tem de sobreviver: nada de perder o operador da conta
+    if (/η²/.test(txt)) assert.match(saida, /eta2/);
+    if (/≥/.test(txt)) assert.match(saida, />=/);
+  }
+});
+
+t('PDF: as trocas preservam o sentido em vez de sumir com ele', () => {
+  assert.equal(paraPdf('η² = 98,4% · d ≥ 0,5 · 200 ÷ 45% × 2'), 'eta2 = 98,4% · d >= 0,5 · 200 / 45% x 2');
+  assert.equal(paraPdf('P₂O₅ → K₂O'), 'P2O5 -> K2O');
+  assert.equal(paraPdf(null), '');
+});
+
+t('PDF: resumo por zona traz MÍNIMO, MÉDIA e MÁXIMO', () => {
+  const r = validarZoneamento(ENTRADA);
+  const linhas = r.porZona.map(z => linhaZonaPdf(z, 'kg/ha'));
+  assert.equal(linhas.length, 2);
+  for (const l of linhas) {
+    assert.notEqual(l.min, '—'); assert.notEqual(l.media, '—'); assert.notEqual(l.max, '—');
+    assert.notEqual(l.producao, '—', 'produtividade tem produção estimada');
+  }
+  const total = producaoTotalT(linhas);
+  assert.ok(total > 0, `produção total ${total}`);
+  // a soma bate com média × área de cada zona
+  const esperado = r.porZona.reduce((s, z) => s + (z.resumo.media * z.areaHa), 0) / 1000;
+  assert.ok(Math.abs(total - esperado) < 0.01, `${total} × ${esperado}`);
+});
+
+t('PDF: camada que NÃO é produtividade não inventa produção estimada', () => {
+  const r = validarZoneamento(ENTRADA);
+  const l = linhaZonaPdf(r.porZona[0], 'índice');
+  assert.equal(l.producao, '—');
+  assert.equal(l.producaoNum, null);
+  assert.equal(producaoTotalT([l]), null);
+  assert.equal(ehProdutividade('índice'), false);
+  assert.equal(ehProdutividade('kg/ha'), true);
+  assert.equal(ehProdutividade('sc/ha'), true);
+});
+
+t('PDF: a metodologia vai junto e já está em ASCII', () => {
+  assert.ok(METODOLOGIA.length >= 5);
+  for (const m of METODOLOGIA) assert.equal(paraPdf(m), m, `metodologia com caractere que some: ${m}`);
 });
 
 console.log(`\n${ok} passaram, ${fail} falharam\n`);
