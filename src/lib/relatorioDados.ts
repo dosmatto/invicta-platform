@@ -12,7 +12,7 @@ import type { Legenda } from './legendas';
 import { cloudCarregarMapasPorPrefixo } from './cloud';
 import { descomprimirGrid, decodeGrid, extrairPoligono, type RespInterp } from './fertilidade';
 import { colorirGridComLegenda, colorirGrid, temGrid } from './raster';
-import { rampaVisualStops } from './legendas';
+import { rampaVisualStops, ordenarLegendasDoAtributo } from './legendas';
 import { carregarNdviSalvos } from './meap/gerar';
 import type { DadosRelatorioFert, ProfundidadeRel } from './relatorioFertilidade';
 
@@ -130,7 +130,9 @@ export async function carregarContextoRelatorio(
   const nutsComMapa = [...new Set(Object.keys(mapas).map(k => k.split('__')[0]))];
   const elementos: ElementoDisponivel[] = [];
   for (const nut of nutsComMapa) {
-    const leg = legendas.find(l => l.atributoId === nut);
+    // Ordem canônica (padrão → sistema → nome): a MESMA legenda do mapa da tela —
+    // não a "primeira do array" (ordem arbitrária do boot da nuvem).
+    const leg = ordenarLegendasDoAtributo(legendas.filter(l => l.atributoId === nut))[0];
     if (!leg) continue;
     legendaPorNut[nut] = leg;
     const profs = [...new Set(Object.keys(mapas).filter(k => k.startsWith(`${nut}__`)).map(k => k.slice(nut.length + 2)))].sort();
@@ -145,7 +147,7 @@ export async function carregarContextoRelatorio(
 
   // Índices vegetativos MANTIDOS (IV3): entram como capítulos extras no fim —
   // cada data vira um painel (no lugar da "profundidade"). Legenda = NDVI oficial.
-  const legNdvi = legendas.find(l => l.atributoId === 'ndvi');
+  const legNdvi = ordenarLegendasDoAtributo(legendas.filter(l => l.atributoId === 'ndvi'))[0];
   if (legNdvi) {
     try {
       const ddmmaa = (s: string) => new Date(s + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' });

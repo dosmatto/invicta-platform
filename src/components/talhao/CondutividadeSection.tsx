@@ -21,6 +21,7 @@ import {
 import { colorirGridComLegenda, temGrid } from '@/lib/raster';
 import { cloudSalvarMapa, cloudCarregarMapasPorPrefixo, cloudExcluirMapasPorPrefixo } from '@/lib/cloud';
 import { parseArquivoPontos, pontosCondutividade, avaliarQualidade, CORES_QUALIDADE, sugerirProfundidadesCEa, ehColunaAltitude, prepararPontosKrigagem, limparPontosEC, rasterizarPontos5, type ArquivoPontos, type RelatorioLimpeza, type Classe5 } from '@/lib/condutividade';
+import { ordenarLegendasDoAtributo, respeitarPadraoHomonima } from '@/lib/legendas';
 import type { Legenda } from '@/lib/legendas';
 import { Upload, Loader2, Zap, Eraser, AlertTriangle, Save, Trash2, Play, Plus, Layers, Star, Gauge, Mountain, SlidersHorizontal, ChevronDown, ChevronUp, RotateCcw, Download, History } from 'lucide-react';
 
@@ -35,9 +36,11 @@ type ParamsLimpeza = { [K in keyof typeof PARAMS_LIMPEZA_PADRAO]: number };
 // natureza da coluna; null se não houver legenda compatível.
 function legendaParaExtra(coluna: string): Legenda | null {
   const todas = getLegendas();
-  if (ehColunaAltitude(coluna)) return todas.find(l => l.atributoId === 'altimetria' || l.categoria === 'altimetria-elevacao') ?? null;
+  // Ordem canônica (padrão → sistema → nome): a mesma legenda que os demais mapas
+  // usariam — nunca "a primeira do array" (ordem arbitrária do boot da nuvem).
+  if (ehColunaAltitude(coluna)) return ordenarLegendasDoAtributo(todas.filter(l => l.atributoId === 'altimetria' || l.categoria === 'altimetria-elevacao'))[0] ?? null;
   const norm = coluna.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
-  return todas.find(l => l.atributoId === norm) ?? null;
+  return ordenarLegendasDoAtributo(todas.filter(l => l.atributoId === norm))[0] ?? null;
 }
 
 type Ponto = { lng: number; lat: number; valor: number };
@@ -52,9 +55,13 @@ export function CondutividadeSection() {
 
   // Legendas disponíveis p/ condutividade (por atributoId OU categoria) — o usuário
   // escolhe qual aplicar (ex.: a fixa ou a de quartil). A escolha fica lembrada.
-  const legendasDisp = useMemo<Legenda[]>(() => getLegendas().filter(l => l.atributoId === 'condutividade' || l.categoria === 'condutividade'), []);
+  const legendasDisp = useMemo<Legenda[]>(() => ordenarLegendasDoAtributo(getLegendas().filter(l => l.atributoId === 'condutividade' || l.categoria === 'condutividade')), []);
   const [legId, setLegId] = useState<string>(() => (typeof window !== 'undefined' ? localStorage.getItem('inv_leg_pref_condutividade') : null) ?? '');
-  const legendaCea = useMemo<Legenda | null>(() => legendasDisp.find(l => l.id === legId) ?? legendasDisp[0] ?? null, [legendasDisp, legId]);
+  const legendaCea = useMemo<Legenda | null>(() => {
+    const alvo = legendasDisp.find(l => l.id === legId);
+    // Preferência apontando para a gêmea não-padrão (mesmo nome) → vale a padrão.
+    return (alvo ? respeitarPadraoHomonima(legendasDisp, alvo) : legendasDisp[0]) ?? null;
+  }, [legendasDisp, legId]);
   function escolherLegenda(id: string) { setLegId(id); try { localStorage.setItem('inv_leg_pref_condutividade', id); } catch {} }
 
   const poligono = useMemo(() => {

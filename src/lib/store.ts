@@ -4,7 +4,7 @@
 
 import type { ResultadoAmostra, PerfilLabConfig } from './lab';
 import type { Legenda } from './legendas';
-import { classesFertilidade5, ordenarLegendasDoAtributo, deveSemearLegendas } from './legendas';
+import { classesFertilidade5, ordenarLegendasDoAtributo, deveSemearLegendas, promocoesDeHomonimas } from './legendas';
 export { ordenarLegendasDoAtributo } from './legendas';
 import type { AmbienteProdutivo } from './meap/tipos';
 import { cloudPushLista, cloudAindaNaoHidratou } from './cloud';
@@ -1974,6 +1974,10 @@ export function seedLegendasSistema(seed: Legenda[]) {
 export function migrarLegendaCtceV1() {
   if (typeof window === 'undefined') return;
   if (localStorage.getItem('inv_migrado_leg_ctce_v1') === '1') return;
+  // A flag é POR NAVEGADOR. Numa máquina nova, rodar antes da nuvem hidratar
+  // enxerga a lista parcial, não acha a CTCe que já existe lá e cria uma SEGUNDA
+  // (id novo) — o merge da nuvem une as duas e nasce a legenda gêmea. Espera.
+  if (cloudAindaNaoHidratou()) return;
   const todas = load<Legenda>('inv_legendas');
   if (todas.some(l => l.atributoId === 't')) { localStorage.setItem('inv_migrado_leg_ctce_v1', '1'); return; }
   const base = todas.find(l => l.atributoId === 'ctc');
@@ -2014,6 +2018,10 @@ const SAT_CFG: Record<string, { sigla: string; nome: string; bordas: [number, nu
 export function migrarLegendasSaturacoesV1() {
   if (typeof window === 'undefined') return;
   if (localStorage.getItem('inv_migrado_leg_sat_v1') === '1') return;
+  // Mesma trava da CTCe acima: flag por navegador + lista parcial (nuvem ainda
+  // não hidratou, ex.: boot estourou os 12s) = recriar K%/Ca%/Mg% com ids novos
+  // → legendas gêmeas em todas as máquinas. Espera a hidratação confirmar.
+  if (cloudAindaNaoHidratou()) return;
   const todas = load<Legenda>('inv_legendas');
   const faltantes = Object.keys(SAT_CFG).filter(id => !todas.some(l => l.atributoId === id));
   if (faltantes.length === 0) { localStorage.setItem('inv_migrado_leg_sat_v1', '1'); return; }
@@ -2053,6 +2061,20 @@ export function migrarLegendasSaturacoesV2() {
   if (mudou) { save('inv_legendas', todas); notificarLegendas(); }
 }
 
+// Legendas HOMÔNIMAS (mesmo atributo + mesmo nome, típicas de migração que rodou
+// em duas máquinas antes da nuvem hidratar): quando NENHUMA do grupo é padrão, o
+// mapa escolhe por desempate de id — e o usuário edita uma cópia na Biblioteca
+// enquanto o mapa segue usando a outra, sem ter como distinguir as duas nos
+// dropdowns. Promove a editada por último a PADRÃO do atributo. Flagless e
+// idempotente: depois da promoção o grupo tem padrão e o laço não acha mais nada.
+export function migrarLegendasHomonimasPadraoV1() {
+  if (typeof window === 'undefined') return;
+  if (cloudAindaNaoHidratou()) return;   // com lista parcial a homônima pode nem estar aqui
+  for (const id of promocoesDeHomonimas(load<Legenda>('inv_legendas'))) {
+    definirLegendaPadrao(id, true);
+  }
+}
+
 // v3: normaliza as legendas de saturação AUTO-geradas (qualquer variante de nome
 // que a gente já criou — "… (K%)", "… — ajustar faixas" ou o nome-base) para o
 // nome LIMPO + faixas/domínio corretos. Uma vez só (flag): não re-toca (preserva
@@ -2060,6 +2082,7 @@ export function migrarLegendasSaturacoesV2() {
 export function migrarLegendasSaturacoesV3() {
   if (typeof window === 'undefined') return;
   if (localStorage.getItem('inv_migrado_leg_sat_v3') === '1') return;
+  if (cloudAindaNaoHidratou()) return;   // lista parcial → normalizaria só metade e queimaria a flag
   const todas = load<Legenda>('inv_legendas');
   const sats = todas.filter(l => SAT_CFG[l.atributoId]);
   if (sats.length === 0) return;

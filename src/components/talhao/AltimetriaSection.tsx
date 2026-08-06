@@ -21,6 +21,7 @@ import {
   type FonteMde, type RespMde, type MdeCarregado, type RespMdeAnalise, type SensibilidadeDrenagem,
 } from '@/lib/mde';
 import { parseArquivoPontos, type ArquivoPontos } from '@/lib/compactacao';
+import { ordenarLegendasDoAtributo } from '@/lib/legendas';
 import type { Legenda } from '@/lib/legendas';
 import { CruzamentoRelevo } from '@/components/talhao/CruzamentoRelevo';
 import { Mountain, Loader2, Search, CheckCircle2, AlertTriangle, Trash2, Download, Star, Layers, Play, Waves, FileText, Upload } from 'lucide-react';
@@ -90,8 +91,9 @@ const STOPS_ASPECTO: Array<[number, [number, number, number]]> = [
 export function AltimetriaSection() {
   const { nav, uploadedGeo, setFertilidadeOverlay, setFertilidadeLabels } = useApp();
 
+  // Ordem canônica (padrão → sistema → nome) — a mesma dos demais mapas.
   const legendaAlt = useMemo<Legenda | null>(
-    () => getLegendas().find(l => l.atributoId === 'altimetria' || l.categoria === 'altimetria-elevacao') ?? null, []);
+    () => ordenarLegendasDoAtributo(getLegendas().filter(l => l.atributoId === 'altimetria' || l.categoria === 'altimetria-elevacao'))[0] ?? null, []);
 
   const poligono = useMemo(() => {
     const p = extrairPoligono(uploadedGeo);

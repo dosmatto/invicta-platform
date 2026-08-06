@@ -5,6 +5,7 @@
 // grids no mesmo formato, e oferece correlação espacial + distribuição por classe.
 
 import { getMapasProdutividade, getImportacoesLab, getLegendasPorAtributo, getLegendas } from '@/lib/store';
+import { ordenarLegendasDoAtributo } from '@/lib/legendas';
 import { carregarGridsTalhao } from '@/lib/recomendacao/aplicar';
 import { carregarNdviSalvos, carregarEcOficial, rotuloEc } from '@/lib/meap/gerar';
 import { cloudCarregarMapasPorPrefixo } from '@/lib/cloud';
@@ -53,7 +54,8 @@ export async function listarCamadas(talhaoId: string, safra: string): Promise<Ca
   // Condutividade elétrica OFICIAL (C3) — variável fixa do talhão
   const ec = await carregarEcOficial(talhaoId);
   if (ec.length) {
-    const ecLeg = getLegendas().find(l => l.atributoId === 'condutividade' || l.categoria === 'condutividade');
+    // Ordem canônica (padrão → sistema → nome) — a mesma legenda da tela de Condutividade.
+    const ecLeg = ordenarLegendasDoAtributo(getLegendas().filter(l => l.atributoId === 'condutividade' || l.categoria === 'condutividade'))[0];
     if (ecLeg) for (const e of ec) out.push({ id: `ec_${e.prof}`, grupo: 'Condutividade', nome: rotuloEc(e.prof), sub: 'oficial', bounds: e.bounds, grid: { b64: e.b64, shape: e.shape }, legenda: ecLeg, unidade: ecLeg.unidade });
   }
 

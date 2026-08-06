@@ -17,6 +17,7 @@ import {
   getGrades, getImportacoesLab, getImportacoesCompactacao, getCondutividade, getLegendas, Talhao, Safra,
 } from '@/lib/store';
 import { rotuloAno } from '@/lib/periodo';
+import { ordenarLegendasDoAtributo } from '@/lib/legendas';
 import type { Legenda } from '@/lib/legendas';
 import { parseLimiteTalhao } from '@/lib/geo';
 import { paraFC, compartilharLinkCampo } from '@/lib/campoLink';
@@ -270,7 +271,7 @@ function MapasDefinitivos({ talhao, safra }: { talhao: Talhao | null; safra: str
     let cancel = false; setArgila(null);
     if (!talhao?.id || !safra) return;
     const imp = getImportacoesLab(talhao.id, safra).sort((a, b) => (b.criadoEm ?? '').localeCompare(a.criadoEm ?? ''))[0];
-    const leg = getLegendas().find(l => l.atributoId === 'argila');
+    const leg = ordenarLegendasDoAtributo(getLegendas().filter(l => l.atributoId === 'argila'))[0];
     if (!imp || !leg) return;
     setArgilaLoad(true);
     (async () => {
@@ -330,7 +331,7 @@ function MapasDefinitivos({ talhao, safra }: { talhao: Talhao | null; safra: str
 
   function verEc() {
     if (!ec) return;
-    const leg = getLegendas().find(l => l.atributoId === 'condutividade' || l.categoria === 'condutividade');
+    const leg = ordenarLegendasDoAtributo(getLegendas().filter(l => l.atributoId === 'condutividade' || l.categoria === 'condutividade'))[0];
     if (!leg) return;
     let url: string | undefined;
     try { url = colorirGridComLegenda({ b64: ec.b64, shape: ec.shape }, leg).dataUrl; } catch {}

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  getLegendas, saveLegenda, upsertLegenda, updateLegenda, deleteLegenda,
+  getLegendas, getLegendasPorAtributo, saveLegenda, upsertLegenda, updateLegenda, deleteLegenda,
   getPaletas, savePaleta, deletePaleta, destravarLegendasSistema, getVariaveisAnalise,
   ordenarLegendasDoAtributo, definirLegendaPadrao, type Paleta,
 } from '@/lib/store';
@@ -383,6 +383,15 @@ function LegendaEditor({ legenda, onClose }: { legenda: Legenda | null; onClose:
       // atributo (produtividade tem 3, por exemplo) — o mapa passaria a usar outra
       // e o ajuste sumiria de novo. Marcar como padrão fecha essa porta.
       if (eraOficial) definirLegendaPadrao(legenda.id, true);
+      else {
+        // HOMÔNIMA: se a vencedora automática do atributo é OUTRA legenda com o
+        // MESMO nome (gêmea de migração/sync — indistinguíveis nos dropdowns), a
+        // edição tem que passar a valer, pela mesma razão da oficial acima.
+        const vencedora = getLegendasPorAtributo(form.atributoId)[0];
+        if (vencedora && vencedora.id !== legenda.id && vencedora.nome.trim() === form.nome.trim()) {
+          definirLegendaPadrao(legenda.id, true);
+        }
+      }
     } else {
       saveLegenda(form);
     }

@@ -16,7 +16,7 @@ import {
 import { colorirGridComLegenda, temGrid } from '@/lib/raster';
 import { decodeGrid } from '@/lib/fertilidade';
 import { rasterizarZonas, centroideGeom, type ZonaValor } from '@/lib/recomendacao/zonasGrid';
-import { stopsParaBackend, dominioDaLegenda, paresDaClasse } from '@/lib/legendas';
+import { stopsParaBackend, dominioDaLegenda, paresDaClasse, respeitarPadraoHomonima } from '@/lib/legendas';
 import type { Legenda } from '@/lib/legendas';
 import { Play, Layers, Loader2, Eraser, AlertTriangle, Activity, Settings, BookOpen, Save, FileDown } from 'lucide-react';
 import { cloudSalvarMapa, cloudCarregarMapasPorPrefixo, cloudExcluirMapasPorPrefixo, cloudPodeGravar } from '@/lib/cloud';
@@ -228,7 +228,11 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
     if (lst.length === 0 && atributoId === 't') lst = ordenarLegendasDoAtributo(legendas.filter(l => l.atributoId === 'ctc'));
     if (lst.length === 0) return undefined;
     const escolhida = legendaIdPorAtributo[atributoId];
-    return lst.find(l => l.id === escolhida) ?? lst[0];
+    const alvo = lst.find(l => l.id === escolhida);
+    // Perfil/escolha apontando para a gêmea não-padrão (mesmo nome) → vale a
+    // padrão: é a que o usuário edita na Biblioteca e não dá pra distinguir as
+    // duas no dropdown.
+    return alvo ? respeitarPadraoHomonima(lst, alvo) : lst[0];
   }
 
   // Aplica um perfil da Biblioteca: pré-preenche legendaIdPorAtributo com o

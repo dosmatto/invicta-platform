@@ -10,7 +10,7 @@ import { registrarLogin } from '@/lib/iam/auditoria';
 import { limparBaseOperacional } from '@/lib/admin/manutencao';
 import { TrocaSenhaObrigatoria } from '@/components/auth/TrocaSenhaObrigatoria';
 import { migrarLaboratoriosV1, migrarSafrasV1, migrarGradesV1, migrarPreferenciasV1, reKeyDonoBiblioteca } from '@/lib/biblioteca';
-import { seedLegendasSistema, migrarLegendaCtceV1, migrarLegendasSaturacoesV1, migrarLegendasSaturacoesV2, migrarLegendasSaturacoesV3, garantirVariaveisComplementares, migrarSinonimosSeedV1, migrarOrdemPadraoFertV1, auditoriaCadastro, migrarAreasGeodesicasV1, migrarNomesMaiusculosV1, migrarGradesDuplicadasV1, migrarBboxTalhoesV1, migrarImportacoesLabPeriodoV1, migrarGradesPeriodoV1, migrarPeriodoDemaisV1, analisarTalhoesDuplicados, aplicarDedupTalhoesExatos, analisarFazendasOrfas, aplicarRemocaoFazendasOrfas } from '@/lib/store';
+import { seedLegendasSistema, migrarLegendaCtceV1, migrarLegendasSaturacoesV1, migrarLegendasSaturacoesV2, migrarLegendasSaturacoesV3, migrarLegendasHomonimasPadraoV1, garantirVariaveisComplementares, migrarSinonimosSeedV1, migrarOrdemPadraoFertV1, auditoriaCadastro, migrarAreasGeodesicasV1, migrarNomesMaiusculosV1, migrarGradesDuplicadasV1, migrarBboxTalhoesV1, migrarImportacoesLabPeriodoV1, migrarGradesPeriodoV1, migrarPeriodoDemaisV1, analisarTalhoesDuplicados, aplicarDedupTalhoesExatos, analisarFazendasOrfas, aplicarRemocaoFazendasOrfas } from '@/lib/store';
 import { LEGENDAS_OFICIAIS } from '@/constants/legendasSeedOficial';
 import { authConfigurado, observarAuth, logout, type User } from '@/lib/auth';
 import { hidratarCachePesado } from '@/lib/localComprimido';
@@ -178,6 +178,7 @@ export function AppProvider({ children, redirectProdutorParaPortal, modoCampo }:
       passo('migrarLegendasSaturacoesV1', migrarLegendasSaturacoesV1);   // legendas K%/Ca%/Mg% com faixas próprias
       passo('migrarLegendasSaturacoesV2', migrarLegendasSaturacoesV2);   // corrige as antigas (clonadas da V%)
       passo('migrarLegendasSaturacoesV3', migrarLegendasSaturacoesV3);   // normaliza nome (sem "(K%)" dobrado) + faixas
+      passo('migrarLegendasHomonimasPadraoV1', migrarLegendasHomonimasPadraoV1);   // gêmeas sem padrão → promove a editada por último
       passo('migrarImportacoesLabPeriodoV1', migrarImportacoesLabPeriodoV1);   // Data de referência + Ano/Época nos laudos antigos
       passo('migrarGradesPeriodoV1', migrarGradesPeriodoV1);   // Data de referência + Ano nas grades antigas (preserva a época)
       passo('migrarPeriodoDemaisV1', migrarPeriodoDemaisV1);   // Ano em compactação/produtividade/condutividade antigos

@@ -28,6 +28,7 @@ import {
 import { cloudSalvarMapa, cloudCarregarMapasPorPrefixo, cloudPodeGravar } from '@/lib/cloud';
 import { ComparadorProdNdvi } from '@/components/talhao/ComparadorProdNdvi';
 import { SeletorLegenda, legendasDoModulo, usePrefLegenda } from './SeletorLegenda';
+import { respeitarPadraoHomonima } from '@/lib/legendas';
 import type { Legenda } from '@/lib/legendas';
 import { Upload, Loader2, AlertTriangle, Save, Star, Trash2, Eye, Wand2, FileSpreadsheet, Plus, Layers, ChevronDown, ChevronUp } from 'lucide-react';
 
@@ -85,7 +86,11 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
   // Seletor de legenda (por padrão a da cultura; o usuário pode trocar). A escolha lembra.
   const legendasProd = useMemo(() => legendasDoModulo('produtividade'), []);
   const [legProdId, escolherLegProd] = usePrefLegenda('inv_leg_pref_produtividade');
-  const legendaInicial = (c: string) => legendasProd.find(l => l.id === legProdId) ?? legendaDaCultura(c);
+  const legendaInicial = (c: string) => {
+    const alvo = legendasProd.find(l => l.id === legProdId);
+    // Preferência apontando para a gêmea não-padrão (mesmo nome) → vale a padrão.
+    return alvo ? respeitarPadraoHomonima(legendasProd, alvo) : legendaDaCultura(c);
+  };
   const [relatorio, setRelatorio] = useState<RelatorioColheita | null>(null);
   const [fresco, setFresco] = useState(false);
   const [verBrutos, setVerBrutos] = useState(false);   // preview dos pontos crus em 5 classes

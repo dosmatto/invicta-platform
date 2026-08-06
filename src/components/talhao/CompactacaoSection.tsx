@@ -9,7 +9,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import {
-  getTalhoes, getLegendas, getImportacoesCompactacao, saveImportacaoCompactacao,
+  getTalhoes, getLegendasPorAtributo, getImportacoesCompactacao, saveImportacaoCompactacao,
   deleteImportacaoCompactacao, getGradesCompactacao, saveGradeCompactacao, deleteGradeCompactacao,
   type ImportacaoCompactacao, type GradeCompactacao,
 } from '@/lib/store';
@@ -42,7 +42,8 @@ export function CompactacaoSection({ safraNome }: { safraNome?: string } = {}) {
   const { nav, uploadedGeo, setFertilidadeOverlay, setFertilidadeLabels } = useApp();
   const safra = safraNome ?? '';
 
-  const legenda = useMemo<Legenda | null>(() => getLegendas().find(l => l.atributoId === 'compactacao') ?? null, []);
+  // Ordem canônica (padrão → sistema → nome) — a mesma dos demais mapas.
+  const legenda = useMemo<Legenda | null>(() => getLegendasPorAtributo('compactacao')[0] ?? null, []);
 
   const poligono = useMemo(() => {
     const p = extrairPoligono(uploadedGeo);

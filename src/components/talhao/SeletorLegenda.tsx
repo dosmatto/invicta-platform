@@ -6,14 +6,17 @@
 
 import { useCallback, useState } from 'react';
 import { getLegendas } from '@/lib/store';
+import { ordenarLegendasDoAtributo } from '@/lib/legendas';
 import type { Legenda } from '@/lib/legendas';
 
 import { inputStyle } from '@/constants/ui';
 
 // Legendas de um módulo: por atributoId OU categoria (ex.: 'produtividade' / 'ndvi').
+// Na ORDEM CANÔNICA (padrão → sistema → nome): quem usa a [0] como default pega a
+// mesma legenda que o mapa de fertilidade usaria — não a "primeira do array" do boot.
 export function legendasDoModulo(atributoId: string, categoria?: string): Legenda[] {
   const cat = categoria ?? atributoId;
-  return getLegendas().filter(l => l.atributoId === atributoId || l.categoria === cat);
+  return ordenarLegendasDoAtributo(getLegendas().filter(l => l.atributoId === atributoId || l.categoria === cat));
 }
 
 // Preferência de legenda do módulo (localStorage) + setter que persiste.

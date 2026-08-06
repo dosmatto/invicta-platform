@@ -11,6 +11,7 @@ import { gerarRelatorioRecomendacaoFazenda, gerarRecomendacaoFazendaExcel } from
 import { anosDaFazenda, sateliteDaFazenda, type AnoFazenda, type SateliteFazenda } from '@/lib/fazendaRelatorios';
 import { gerarRelatorioNdviFazenda } from '@/lib/relatorioNdviFazenda';
 import { legendasDoModulo } from '@/components/talhao/SeletorLegenda';
+import { respeitarPadraoHomonima } from '@/lib/legendas';
 import type { Legenda } from '@/lib/legendas';
 import { FileDown, Loader2, Satellite, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react';
 
@@ -97,7 +98,9 @@ export function RelatoriosFazenda({ fazendaId }: { fazendaId: string }) {
     if (camadas.length === 0) { setErro('Escolha ao menos uma data (e um índice com imagem).'); return; }
     const legendas: Legenda[] = legendasDoModulo('ndvi');
     const prefId = typeof localStorage !== 'undefined' ? localStorage.getItem('inv_leg_pref_ndvi') : null;
-    const legenda = legendas.find(l => l.id === prefId) ?? legendas[0];
+    const alvo = legendas.find(l => l.id === prefId);
+    // Preferência apontando para a gêmea não-padrão (mesmo nome) → vale a padrão.
+    const legenda = alvo ? respeitarPadraoHomonima(legendas, alvo) : legendas[0];
     if (!legenda) { setErro('Cadastre uma legenda de NDVI (Biblioteca → Legendas) para gerar o relatório.'); return; }
 
     setErro(''); setGerandoSat(true); setProgresso({ feito: 0, total: camadas.length, nome: '' });

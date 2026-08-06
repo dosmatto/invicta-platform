@@ -16,7 +16,7 @@ import {
   decodeGrid, type Grid,
 } from '@/lib/fertilidade';
 import { colorirGrid } from '@/lib/raster';
-import { rampaVisualStops } from '@/lib/legendas';
+import { rampaVisualStops, respeitarPadraoHomonima } from '@/lib/legendas';
 import {
   listarCenasNdvi, buscarImagemSatelite, buscarIndices, indicesDisponiveis,
   type RespNdvi, type CenaDisponivel, type FonteNdvi,
@@ -126,8 +126,11 @@ export function NdviSection({ safraNome }: { safraNome?: string } = {}) {
   // Legenda NDVI (seletor) → versão contínua.
   const legendasNdvi = useMemo(() => legendasDoModulo('ndvi'), []);
   const [legNdviId, escolherLegNdvi] = usePrefLegenda('inv_leg_pref_ndvi');
-  const legNdvi: Legenda | undefined = useMemo(
-    () => legendasNdvi.find(l => l.id === legNdviId) ?? legendasNdvi[0], [legendasNdvi, legNdviId]);
+  const legNdvi: Legenda | undefined = useMemo(() => {
+    const alvo = legendasNdvi.find(l => l.id === legNdviId);
+    // Preferência apontando para a gêmea não-padrão (mesmo nome) → vale a padrão.
+    return alvo ? respeitarPadraoHomonima(legendasNdvi, alvo) : legendasNdvi[0];
+  }, [legendasNdvi, legNdviId]);
   const corStops = useMemo(() => legNdvi ? rampaVisualStops({ ...legNdvi, estilo: 'continuo' }) : [], [legNdvi]);
   const gradCss = useMemo(
     () => corStops.length ? `linear-gradient(to right, ${corStops.map(([p, [r, g, b]]) => `rgb(${r},${g},${b}) ${(p * 100).toFixed(1)}%`).join(', ')})` : 'transparent',
