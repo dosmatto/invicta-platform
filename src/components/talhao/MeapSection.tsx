@@ -677,6 +677,29 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
     setEditorZona(null); setEditorMapFc(null);
   }
 
+  // ── Aceite da classificação sugerida pela VALIDAÇÃO ────────────────────
+  // Mesmo contrato do editor manual: nunca sobrescreve — cria uma versão nova
+  // com as classes propostas, registrada como reclassificação no histórico.
+  function aceitarSugestaoValidacao(cenarioId: string, fcNovo: GeoJSON.FeatureCollection, resumo: string) {
+    const orig = zoneamentos.find(z => z.id === cenarioId);
+    if (!orig) return;
+    const ops: OperacaoEdicaoZona[] = [{
+      tipo: 'reclassificar', data: new Date().toISOString(), zonas: [],
+      usuario: usuarioAtual()?.email ?? undefined, motivo: resumo,
+    }];
+    const meta: ZoneamentoMeap['meta'] = {
+      ...orig.meta,
+      nPoligonos: fcNovo.features.length,
+      edicaoManual: {
+        operacoes: ops, nUnificacoes: 0, nReclassificacoes: 1, nDivisoes: 0, nRenumeracoes: 0,
+        origemId: orig.id, origemNome: orig.nome,
+        data: new Date().toISOString(), usuario: usuarioAtual()?.email ?? undefined,
+      },
+    };
+    saveZoneamentoMeap({ talhaoId: talhao.id, nome: `${orig.nome} — Classificação validada`, padrao: false, fc: fcNovo, meta });
+    recarregarZon();
+  }
+
   // ── Zonas adotadas SOLTAS → Zoneamento Nativo ──────────────────────────
   // Talhão que recebeu um arquivo antes deste fluxo tem as zonas em
   // `talhao.zonasGeojson` e nenhum zoneamento salvo: o mapa aparece, mas
@@ -1271,7 +1294,7 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
       )}
 
       {labAberto && zoneamentos.length > 0 && (
-        <LaboratorioZonas talhaoId={talhao.id} zoneamentos={zoneamentos} aInicial={labPar?.a} bInicial={labPar?.b} onClose={() => { setLabAberto(false); setLabPar(null); }} />
+        <LaboratorioZonas talhaoId={talhao.id} zoneamentos={zoneamentos} onAceitarSugestao={aceitarSugestaoValidacao} aInicial={labPar?.a} bInicial={labPar?.b} onClose={() => { setLabAberto(false); setLabPar(null); }} />
       )}
     </div>
   );

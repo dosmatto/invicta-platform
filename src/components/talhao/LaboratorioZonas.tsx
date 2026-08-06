@@ -35,7 +35,15 @@ function BarraPotencial({ areas }: { areas: ReturnType<typeof areaPorPotencial> 
 // aInicial/bInicial: par já escolhido na tela de versões — abre o Laboratório
 // direto na comparação pedida, em vez de fazer o usuário reencontrar as duas
 // versões numa lista onde os nomes só diferem no sufixo.
-export function LaboratorioZonas({ talhaoId, zoneamentos, aInicial, bInicial, onClose }: { talhaoId: string; zoneamentos: ZoneamentoMeap[]; aInicial?: string; bInicial?: string; onClose: () => void }) {
+export function LaboratorioZonas({ talhaoId, zoneamentos, aInicial, bInicial, onAceitarSugestao, onClose }: {
+  talhaoId: string;
+  zoneamentos: ZoneamentoMeap[];
+  aInicial?: string;
+  bInicial?: string;
+  /** Aceite da classificação sugerida — grava versão nova (MeapSection). */
+  onAceitarSugestao?: (cenarioId: string, fcNovo: GeoJSON.FeatureCollection, resumo: string) => void;
+  onClose: () => void;
+}) {
   const resumos = useMemo(() => zoneamentos.map(resumoCenario), [zoneamentos]);
 
   const [aId, setAId] = useState(aInicial ?? zoneamentos[0]?.id ?? '');
@@ -124,7 +132,7 @@ export function LaboratorioZonas({ talhaoId, zoneamentos, aInicial, bInicial, on
         </section>
 
         {/* Validação — IQZM e os indicadores individuais */}
-        <ValidacaoZonas talhaoId={talhaoId} zoneamentos={zoneamentos} />
+        <ValidacaoZonas talhaoId={talhaoId} zoneamentos={zoneamentos} onAceitarSugestao={onAceitarSugestao} />
 
         {/* Concordância A×B */}
         {zoneamentos.length >= 2 && (

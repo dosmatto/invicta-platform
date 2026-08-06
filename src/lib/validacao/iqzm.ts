@@ -9,18 +9,40 @@
 // redistribuído entre os presentes e o índice sai marcado como PARCIAL, com a
 // lista do que ficou de fora.
 //
+// O ICA (confiança da base) NÃO É COMPONENTE daqui, de propósito. Ele já foi
+// peso 0,05 nesta média e era o pior dos dois mundos: um IQZM 91 apoiado em uma
+// safra só caía para ~87 — continuava parecendo excelente, e o alerta sumia
+// dentro do número que deveria qualificar. Qualidade do MAPA e confiança da
+// BASE são perguntas diferentes e andam lado a lado na tela.
+//
 // npm run teste:validacao
 
-import { faixaMaiorMelhor, NOME_INDICADOR, pendente, type Indicador } from './tipos.ts';
+import { faixaMaiorMelhor, NOME_INDICADOR, pendente, type FaixaQualidade, type Indicador } from './tipos.ts';
 
 export const PESOS_IQZM = {
-  homogeneidade: 0.30,   // 100 − IVR (variabilidade interna das zonas)
-  separacao: 0.25,       // η² — as zonas são coisas diferentes entre si?
-  continuidade: 0.15,    // manchas inteiriças, forma operável
+  homogeneidade: 0.32,   // 100 − IVR (variabilidade interna das zonas)
+  separacao: 0.26,       // η² × distinção entre vizinhas
+  continuidade: 0.16,    // manchas inteiriças, forma operável
   fragmentacao: 0.10,    // penaliza respingo (invertido: menor fragmentação = melhor)
-  ipe: 0.15,             // persistência entre safras
-  ica: 0.05,             // confiança da base de dados
+  ipe: 0.16,             // persistência entre safras
 } as const;
+
+/** Como o agrônomo lê o número (a spec pede o rótulo junto do valor). */
+export function rotuloIQZM(v: number | null): string {
+  if (v == null) return 'sem avaliação';
+  if (v >= 85) return 'Excelente';
+  if (v >= 70) return 'Bom';
+  if (v >= 55) return 'Regular';
+  if (v >= 40) return 'Fraco';
+  return 'Inadequado';
+}
+
+export function faixaIQZM(v: number): FaixaQualidade {
+  if (v >= 85) return 'otimo';
+  if (v >= 70) return 'bom';
+  if (v >= 55) return 'regular';
+  return 'ruim';
+}
 
 export type ComponenteIQZM = keyof typeof PESOS_IQZM;
 
@@ -30,7 +52,6 @@ export const NOME_COMPONENTE: Record<ComponenteIQZM, string> = {
   continuidade: 'continuidade espacial',
   fragmentacao: 'fragmentação',
   ipe: 'persistência entre safras',
-  ica: 'confiança da base',
 };
 
 export interface EntradaIQZM {
@@ -70,7 +91,7 @@ export function calcularIQZM(e: EntradaIQZM): ResultadoIQZM {
     return { componente: k, valor, peso, contribuicao: valor * peso };
   });
   const iqzm = contribuicoes.reduce((s, c) => s + c.contribuicao, 0);
-  const faixa = faixaMaiorMelhor(iqzm);
+  const faixa = faixaIQZM(iqzm);
 
   const ordenados = [...contribuicoes].sort((a, b) => a.valor - b.valor);
   const pior = ordenados[0], melhor = ordenados[ordenados.length - 1];
@@ -87,7 +108,7 @@ export function calcularIQZM(e: EntradaIQZM): ResultadoIQZM {
     indicador: {
       id: 'iqzm', nome: NOME_INDICADOR.iqzm, valor: Math.round(iqzm * 10) / 10, unidade: '',
       faixa,
-      justificativa: `${leitura} Puxa para baixo: ${NOME_COMPONENTE[pior.componente]} (${fmt(pior.valor)}/100). Sustenta: ${NOME_COMPONENTE[melhor.componente]} (${fmt(melhor.valor)}/100).${nota} Resumo executivo — os indicadores individuais continuam válidos por si.`,
+      justificativa: `${rotuloIQZM(iqzm)}. ${leitura} Puxa para baixo: ${NOME_COMPONENTE[pior.componente]} (${fmt(pior.valor)}/100). Sustenta: ${NOME_COMPONENTE[melhor.componente]} (${fmt(melhor.valor)}/100).${nota} Resumo executivo — os indicadores individuais continuam válidos por si, e a confiança desta nota está no ICA, ao lado.`,
       entradas: Object.fromEntries(contribuicoes.map(c => [c.componente, Math.round(c.valor * 10) / 10])),
     },
     parcial: ausentes.length > 0,

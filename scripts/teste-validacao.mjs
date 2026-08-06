@@ -13,11 +13,12 @@ import { resumoValores, separacaoEntreZonas, quantil, spearman, escoreBom, escor
 import { metricasEspaciais, metricasPoligono } from '../src/lib/validacao/espacial.ts';
 import { calcularIVR, ivrDoZoneamento } from '../src/lib/validacao/ivr.ts';
 import { calcularIPE } from '../src/lib/validacao/ipe.ts';
-import { calcularICA } from '../src/lib/validacao/ica.ts';
-import { calcularIQZM, PESOS_IQZM } from '../src/lib/validacao/iqzm.ts';
+import { calcularICA, rotuloICA } from '../src/lib/validacao/ica.ts';
+import { calcularIQZM, PESOS_IQZM, rotuloIQZM } from '../src/lib/validacao/iqzm.ts';
 import { validarZoneamento, compararCenarios } from '../src/lib/validacao/validar.ts';
 import { INDICADORES_DASHBOARD } from '../src/lib/validacao/tipos.ts';
 import { amostrarPorZona, malhaNasZonas } from '../src/lib/validacao/amostragem.ts';
+import { sugerirClassificacao, aplicarSugestao } from '../src/lib/validacao/sugestao.ts';
 
 let ok = 0, fail = 0;
 function t(nome, fn) {
@@ -225,12 +226,49 @@ t('duas versões da MESMA safra não contam como duas observações', () => {
   assert.equal(r.indicador.valor, null, 'continua pendente: é uma safra só');
 });
 
-t('ICA: base pobre pontua baixo; base rica, alto — e aponta o gargalo', () => {
-  const pobre = calcularICA({ nSafras: 1, nCamadas: 1, resolucaoM: 30, coberturaPct: 60, nObservacoes: 100 });
+t('ICA: base pobre pontua baixo; base rica, alto — e diz o RÓTULO e o motivo', () => {
+  const pobre = calcularICA({ nSafras: 1, nCamadas: 1, resolucaoM: 30, coberturaPct: 60, nObservacoes: 100, outliersPct: 9, consistenciaPct: 62 });
   assert.ok(pobre.indicador.valor < 20, `ICA ${pobre.indicador.valor}`);
-  const rica = calcularICA({ nSafras: 5, nCamadas: 4, resolucaoM: 5, coberturaPct: 98, nObservacoes: 5000 });
+  assert.equal(pobre.rotulo, 'Confiabilidade muito baixa');
+  assert.match(pobre.indicador.justificativa, /apenas uma safra disponível/);
+
+  const rica = calcularICA({ nSafras: 5, nCamadas: 4, resolucaoM: 5, coberturaPct: 98, nObservacoes: 5000, outliersPct: 0.5, consistenciaPct: 99 });
   assert.ok(rica.indicador.valor > 95, `ICA ${rica.indicador.valor}`);
-  assert.match(pobre.indicador.justificativa, /Ponto mais fraco/);
+  assert.equal(rica.rotulo, 'Muito alta confiabilidade');
+  assert.equal(rica.gargalo.escore >= 90, true, 'sem gargalo relevante numa base rica');
+});
+
+t('ICA: mapa sujo e mapa que cobre meio talhão derrubam a confiança', () => {
+  const base = { nSafras: 4, nCamadas: 4, resolucaoM: 5, coberturaPct: 98, nObservacoes: 5000 };
+  const limpo = calcularICA({ ...base, outliersPct: 0, consistenciaPct: 98 });
+  const sujo = calcularICA({ ...base, outliersPct: 12, consistenciaPct: 98 });
+  const furado = calcularICA({ ...base, outliersPct: 0, consistenciaPct: 55, piorCamada: { nome: 'NDVI 12/03', coberturaPct: 41 } });
+  assert.ok(sujo.indicador.valor < limpo.indicador.valor - 10, `limpo ${limpo.indicador.valor} × sujo ${sujo.indicador.valor}`);
+  assert.equal(sujo.gargalo.id, 'qualidade');
+  assert.ok(furado.indicador.valor < limpo.indicador.valor - 5, `furado ${furado.indicador.valor}`);
+  assert.match(furado.indicador.justificativa, /pior: NDVI 12\/03/);
+});
+
+t('ICA: o TETO por safras — nenhuma qualidade de mapa substitui repetição', () => {
+  // Mapa único e perfeito: cobertura 100%, sem ruído, alta resolução.
+  const perfeito = { nCamadas: 1, resolucaoM: 5, coberturaPct: 100, nObservacoes: 8000, outliersPct: 0, consistenciaPct: 100 };
+  const uma = calcularICA({ ...perfeito, nSafras: 1 });
+  assert.ok(uma.indicador.valor <= 48, `1 safra não pode passar de 48 (veio ${uma.indicador.valor})`);
+  assert.equal(rotuloICA(uma.indicador.valor), 'Baixa confiabilidade');
+  assert.match(uma.indicador.justificativa, /limitado a 48/);
+
+  const escada = [0, 1, 2, 3, 4, 6].map(n => calcularICA({ ...perfeito, nSafras: n, nCamadas: Math.max(1, n) }).indicador.valor);
+  for (let i = 1; i < escada.length; i++) assert.ok(escada[i] >= escada[i - 1], `confiança caiu de ${escada[i-1]} para ${escada[i]}`);
+  assert.ok(escada[4] > 90, `4 safras já libera o teto (veio ${escada[4]})`);
+});
+
+t('ICA NÃO entra no IQZM: base fraca não pode mexer na nota do mapa', () => {
+  // Era peso 0,05 aqui dentro — um IQZM 91 com uma safra caía para ~87 e
+  // continuava parecendo excelente, escondendo o alerta dentro do número.
+  assert.equal('ica' in PESOS_IQZM, false, 'ICA voltou a ser componente do IQZM');
+  const r = calcularIQZM({ componentes: { homogeneidade: 90, separacao: 90, continuidade: 90, fragmentacao: 90, ipe: 90, ica: 10 } });
+  assert.ok(Math.abs(r.indicador.valor - 90) < 0.01, `IQZM ${r.indicador.valor} — o ICA vazou para dentro do índice`);
+  assert.match(r.indicador.justificativa, /confiança desta nota está no ICA/);
 });
 
 t('ICA: resolução desconhecida sai da conta em vez de virar nota zero', () => {
@@ -312,6 +350,25 @@ t('uma safra só: IQZM sai PARCIAL e a recomendação explica a pendência', () 
   assert.ok(iqzm.valor != null, 'o IQZM continua existindo, só que parcial');
 });
 
+t('O CASO DO ICA: nota alta sobre uma safra só vira ALERTA, não elogio', () => {
+  const umaSafra = validarZoneamento({ ...ENTRADA, camadas: [camada('prod2324', GRID_SEPARADO, '23/24')] });
+  const tresSafras = validarZoneamento(ENTRADA);
+  const iqzm1 = umaSafra.indicadores.find(i => i.id === 'iqzm').valor;
+  const ica1 = umaSafra.indicadores.find(i => i.id === 'ica').valor;
+  const ica3 = tresSafras.indicadores.find(i => i.id === 'ica').valor;
+
+  assert.ok(iqzm1 >= 70, `o mapa continua bom (IQZM ${iqzm1}) — a base é que é fraca`);
+  assert.equal(rotuloIQZM(iqzm1), 'Excelente');
+  assert.ok(ica1 < 55, `com 1 safra a confiança tem de cair (ICA ${ica1})`);
+  assert.equal(rotuloICA(ica1), 'Baixa confiabilidade');
+  assert.ok(ica3 > ica1, `mais safras ⇒ mais confiança: ${ica1} → ${ica3}`);
+  const alerta = umaSafra.recomendacoes.find(r => r.severidade === 'critica' && r.base.includes('ica'));
+  assert.ok(alerta, 'nota alta + base fraca tem de gerar alerta crítico');
+  assert.match(alerta.texto, /hipótese/);
+  assert.ok(!umaSafra.recomendacoes.some(r => /aprovado para prescrição/.test(r.texto)), 'não pode aprovar e alertar ao mesmo tempo');
+  assert.ok(tresSafras.recomendacoes.some(r => /aprovado para prescrição/.test(r.texto)), 'com base boa, aprova');
+});
+
 t('zoneamento RUIM (zonas que não se separam) é reprovado e o motivo aparece', () => {
   const r = validarZoneamento({
     ...ENTRADA,
@@ -380,6 +437,86 @@ t('comparação de cenários ranqueia pelo IQZM e reconhece empate técnico', ()
   const empate = compararCenarios([bom, { ...bom, cenarioId: 'c3', cenarioNome: 'Clone' }]);
   assert.ok(!empate.linhas.some(l => l.melhor), 'clone idêntico não pode ter vencedor');
   assert.match(empate.veredito, /Empate técnico/);
+});
+
+console.log('\nSugestão de classificação de potencial\n');
+
+t('sugere a escala pela MÉDIA medida: mais produtiva = Alta', () => {
+  const sep = separacaoEntreZonas([
+    { id: 'a', valores: [4200, 4180, 4220, 4190] },
+    { id: 'b', valores: [3400, 3380, 3420, 3390] },
+    { id: 'c', valores: [2600, 2580, 2620, 2590] },
+  ]);
+  const sug = sugerirClassificacao([
+    { idZona: 'b', nome: '02', classeAtual: 'Zona 2', areaHa: 10, media: 3397 },
+    { idZona: 'a', nome: '01', classeAtual: 'Zona 1', areaHa: 10, media: 4197 },
+    { idZona: 'c', nome: '03', classeAtual: 'Zona 3', areaHa: 10, media: 2597 },
+  ], sep, 'kg/ha');
+  assert.equal(sug.nGrupos, 3);
+  assert.deepEqual(sug.zonas.map(z => `${z.nome}:${z.classeSugerida}`), ['01:Alta', '02:Média', '03:Baixa']);
+  assert.equal(sug.nMudancas, 3);
+  assert.match(sug.justificativa, /Alta: 01/);
+});
+
+t('zonas que NÃO se distinguem recebem a MESMA classe', () => {
+  // 02 e 03 têm médias próximas dentro do próprio ruído — chamar uma de Média e
+  // a outra de Média-baixa inventaria diferença que o dado não sustenta.
+  const sep = separacaoEntreZonas([
+    { id: 'a', valores: [4200, 4100, 4300, 4150] },
+    { id: 'b', valores: [3000, 2900, 3100, 3050] },
+    { id: 'c', valores: [3020, 2950, 3080, 3010] },
+  ]);
+  const sug = sugerirClassificacao([
+    { idZona: 'a', nome: '01', classeAtual: '', areaHa: 10, media: 4187 },
+    { idZona: 'b', nome: '02', classeAtual: '', areaHa: 10, media: 3012 },
+    { idZona: 'c', nome: '03', classeAtual: '', areaHa: 10, media: 3015 },
+  ], sep, 'kg/ha');
+  assert.equal(sug.nGrupos, 2, `grupos: ${sug.nGrupos}`);
+  const c2 = sug.zonas.find(z => z.nome === '02'), c3 = sug.zonas.find(z => z.nome === '03');
+  assert.equal(c2.classeSugerida, c3.classeSugerida, 'zonas iguais, classe igual');
+  assert.equal(c2.rankSugerido, c3.rankSugerido);
+  assert.ok(sug.fundidos.length >= 1);
+  assert.match(sug.justificativa, /MESMA classe/);
+});
+
+t('zona sem dado da camada mantém a classe atual e é declarada', () => {
+  const sug = sugerirClassificacao([
+    { idZona: 'a', nome: '01', classeAtual: 'Alta', areaHa: 10, media: 4000 },
+    { idZona: 'b', nome: '02', classeAtual: 'Baixa', areaHa: 10, media: null },
+  ], null, 'kg/ha');
+  assert.equal(sug.zonas.length, 1, 'só a zona com dado é reclassificada');
+  assert.deepEqual(sug.semDado, ['02']);
+  assert.match(sug.justificativa, /mantêm a classe atual/);
+});
+
+t('aplicar a sugestão NÃO altera a original e reescreve classe, cor e rank', () => {
+  const fc = { type: 'FeatureCollection', features: [
+    { type: 'Feature', properties: { id: 'a', classe: 'Zona 1', cor: '#111', potencialRank: 3 }, geometry: retangulo(meio, N) },
+    { type: 'Feature', properties: { id: 'b', classe: 'Zona 2', cor: '#222', potencialRank: 1 }, geometry: retangulo(S, meio) },
+  ] };
+  const sug = sugerirClassificacao([
+    { idZona: 'a', nome: '01', classeAtual: 'Zona 1', areaHa: 10, media: 4000 },
+    { idZona: 'b', nome: '02', classeAtual: 'Zona 2', areaHa: 10, media: 2000 },
+  ], null, 'kg/ha');
+  const novo = aplicarSugestao(fc, sug);
+  assert.equal(fc.features[0].properties.classe, 'Zona 1', 'a original não pode ser tocada');
+  assert.equal(novo.features[0].properties.classe, 'Alta');
+  assert.equal(novo.features[0].properties.potencialRank, 1);
+  assert.equal(novo.features[1].properties.classe, 'Baixa');
+  assert.equal(novo.features[1].properties.potencialRank, 2);
+  assert.notEqual(novo.features[0].properties.cor, '#111', 'a cor acompanha a classe');
+  assert.equal(novo.features.length, fc.features.length);
+});
+
+t('sugestão sobre o relatório real: usa a média de cada zona', () => {
+  const r = validarZoneamento(ENTRADA);
+  const sug = sugerirClassificacao(
+    r.porZona.map(z => ({ idZona: z.idZona, nome: z.nome, classeAtual: z.classe, areaHa: z.areaHa, media: z.resumo?.media ?? null })),
+    r.separacao, 'kg/ha',
+  );
+  assert.equal(sug.zonas.length, 2);
+  const alta = sug.zonas.find(z => z.classeSugerida === 'Alta');
+  assert.equal(alta.nome, '01', 'a zona norte (4000) é a de maior potencial');
 });
 
 console.log(`\n${ok} passaram, ${fail} falharam\n`);

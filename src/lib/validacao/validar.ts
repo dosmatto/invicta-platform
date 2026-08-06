@@ -10,11 +10,11 @@
 
 import { resumoValores, separacaoEntreZonas, escoreRuim, type Separacao } from './estatistica.ts';
 import { metricasEspaciais, type MetricasEspaciais } from './espacial.ts';
-import { amostrarPorZona, type Bounds, type Grid, type ZonaGeom } from './amostragem.ts';
+import { amostrarPorZona, malhaNasZonas, valorNoPonto, decodificarF32, type Bounds, type Grid, type ZonaGeom } from './amostragem.ts';
 import { calcularIVR, ivrDoZoneamento } from './ivr.ts';
 import { calcularIPE, type CamadaTemporal, type DetalheIPE } from './ipe.ts';
 import { calcularICA } from './ica.ts';
-import { calcularIQZM, type ComponenteIQZM } from './iqzm.ts';
+import { calcularIQZM, rotuloIQZM, type ComponenteIQZM } from './iqzm.ts';
 import {
   INDICADORES_DASHBOARD, NOME_INDICADOR, descritivo, faixaMenorMelhor, faixaMaiorMelhor, pendente,
   type IdIndicador, type Indicador, type Recomendacao, type RelatorioValidacao, type ValidacaoZona,
@@ -133,12 +133,35 @@ export function validarZoneamento(e: EntradaValidacao): RelatorioCompleto {
   const nSafras = new Set(temporais.map(c => c.periodo)).size;
 
   // ── 6. Confiança da base (ICA) ────────────────────────────────────────────
+  //
+  // CONSISTÊNCIA ENTRE OS MAPAS: quanto do talhão cada camada realmente cobre.
+  // Um NDVI com metade do talhão sob nuvem ou um mapa de colheita que parou no
+  // meio da lavoura entram na análise como se fossem inteiros — e é exatamente
+  // aí que a nota fica otimista sem ninguém perceber. Medido na MESMA malha
+  // para todas as camadas, então a comparação é justa.
+  const malha = malhaNasZonas(zonasGeom, 900);
+  const coberturaCamadas = e.camadas.map(c => {
+    let vals: Float32Array | undefined;
+    try { vals = decodificarF32(c.grid.b64); } catch { vals = undefined; }
+    const validos = malha.reduce((n, p) => n + (Number.isFinite(valorNoPonto(c.grid, c.bounds, p.lng, p.lat, vals)) ? 1 : 0), 0);
+    return { id: c.id, nome: c.nome, coberturaPct: malha.length ? (validos / malha.length) * 100 : 0 };
+  });
+  const consistenciaPct = coberturaCamadas.length
+    ? coberturaCamadas.reduce((s, c) => s + c.coberturaPct, 0) / coberturaCamadas.length
+    : null;
+  const piorCamada = coberturaCamadas.length
+    ? [...coberturaCamadas].sort((a, b) => a.coberturaPct - b.coberturaPct)[0]
+    : null;
+
   const icaRes = calcularICA({
     nSafras,
     nCamadas: e.camadas.length,
     resolucaoM: camada ? resolucaoM(camada.grid, camada.bounds) : null,
     coberturaPct,
     nObservacoes: todos.length + (e.nPontosLab ?? 0),
+    outliersPct: resumoTalhao ? resumoTalhao.pctOutliers : null,
+    consistenciaPct,
+    piorCamada: piorCamada && piorCamada.coberturaPct < 95 ? { nome: piorCamada.nome, coberturaPct: piorCamada.coberturaPct } : null,
   });
 
   // ── 7. Escores espaciais ──────────────────────────────────────────────────
@@ -160,7 +183,6 @@ export function validarZoneamento(e: EntradaValidacao): RelatorioCompleto {
     continuidade: escoreCont,
     fragmentacao: escoreFrag != null ? 100 - escoreFrag : null,
     ipe: ipeRes.indicador.valor,
-    ica: icaRes.indicador.valor,
   };
   const iqzmRes = calcularIQZM({ componentes });
 
@@ -250,7 +272,8 @@ export function validarZoneamento(e: EntradaValidacao): RelatorioCompleto {
   // ── 10. Recomendações (sempre com base declarada) ─────────────────────────
   const recomendacoes = montarRecomendacoes({
     porZona, separacao, espacial, ipe: ipeRes.indicador, ica: icaRes.indicador,
-    iqzm: iqzmRes.indicador, escoreFrag, nSafras, ausentesIqzm: iqzmRes.ausentes,
+    iqzm: iqzmRes.indicador, rotuloIqzm: rotuloIQZM(iqzmRes.indicador.valor), rotuloIca: icaRes.rotulo,
+    escoreFrag, nSafras, ausentesIqzm: iqzmRes.ausentes,
   });
 
   return {
@@ -274,6 +297,8 @@ function montarRecomendacoes(c: {
   ipe: Indicador;
   ica: Indicador;
   iqzm: Indicador;
+  rotuloIqzm: string;
+  rotuloIca: string;
   escoreFrag: number | null;
   nSafras: number;
   ausentesIqzm: ComponenteIQZM[];
@@ -326,21 +351,27 @@ function montarRecomendacoes(c: {
     });
   }
 
-  // Confiança da base
-  if ((c.ica.valor ?? 0) < 45) {
+  // Nota alta sobre base fraca — o caso que o ICA existe para não deixar passar.
+  if (c.iqzm.valor != null && c.iqzm.valor >= 70 && (c.ica.valor ?? 100) < 55) {
+    out.push({
+      severidade: 'critica',
+      texto: `Cuidado com a leitura otimista: o mapa tirou IQZM ${fmt(c.iqzm.valor)} (${c.rotuloIqzm}), mas a base é fraca — ICA ${fmt(c.ica.valor ?? 0)} (${c.rotuloIca}). A nota alta descreve o que os dados MOSTRAM, não o que o talhão É; com mais safras ou camadas ela pode mudar. Trate como hipótese de trabalho e confirme antes de investir.`,
+      base: ['iqzm', 'ica', 'safras'],
+    });
+  } else if ((c.ica.valor ?? 0) < 45) {
     out.push({
       severidade: 'atencao',
-      texto: `Base de dados fraca (ICA ${fmt(c.ica.valor ?? 0)}). ${c.ica.justificativa}`,
+      texto: `Base de dados fraca — ${c.rotuloIca} (ICA ${fmt(c.ica.valor ?? 0)}). ${c.ica.justificativa}`,
       base: ['ica', 'safras'],
     });
   }
 
   // Aprovação
-  if (c.iqzm.valor != null && c.iqzm.valor >= 65 && !ruins.length && !c.separacao?.vizinhosConfundidos.length) {
+  if (c.iqzm.valor != null && c.iqzm.valor >= 65 && (c.ica.valor ?? 0) >= 55 && !ruins.length && !c.separacao?.vizinhosConfundidos.length) {
     out.push({
       severidade: 'informativa',
-      texto: `Zoneamento aprovado para prescrição (IQZM ${fmt(c.iqzm.valor)}): zonas homogêneas por dentro, distintas entre si e operáveis${c.ausentesIqzm.length ? ' — lembrando que o índice está parcial' : ''}.`,
-      base: ['iqzm', 'ivr', 'separacao'],
+      texto: `Zoneamento aprovado para prescrição — IQZM ${fmt(c.iqzm.valor)} (${c.rotuloIqzm}) com ${c.rotuloIca.toLowerCase()} (ICA ${fmt(c.ica.valor ?? 0)}): zonas homogêneas por dentro, distintas entre si e operáveis${c.ausentesIqzm.length ? ' — lembrando que o índice está parcial' : ''}.`,
+      base: ['iqzm', 'ica', 'ivr', 'separacao'],
     });
   }
 
