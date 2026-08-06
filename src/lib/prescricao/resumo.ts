@@ -10,8 +10,38 @@ import { doseCompensada } from './sementes.ts';
 import { UNIDADE_TOTAL, ehUnidadeSemente, type Prescricao } from './tipos.ts';
 import { complementarNutriente, SIMBOLO_NUTRIENTE } from '../insumos.ts';
 
+// Símbolo do nutriente em ASCII para o PDF: os subscritos de P₂O₅ e K₂O estão
+// fora do WinAnsi da helvetica e são descartados na hora de desenhar — sairia
+// "PO" e "KO" no relatório. Na tela e no Excel o símbolo bonito continua.
+const SIMBOLO_PDF: Record<string, string> = {
+  n: 'N', p2o5: 'P2O5', k2o: 'K2O', s: 'S', ca: 'Ca', mg: 'Mg',
+};
+
 const fmt = (v: number, d = 1) => v.toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d });
 const fmt0 = (v: number) => Math.round(v).toLocaleString('pt-BR');
+
+/**
+ * Casas decimais pela MAGNITUDE do número — regra dos relatórios.
+ *
+ * Acima de 100 a casa decimal não informa nada e só polui: "391 kg/ha" é a
+ * dose, "391,1" finge uma precisão que a distribuidora não entrega. Abaixo de
+ * 100 ela é o dado: sementes por metro linear é 12,52, e arredondar para 13
+ * erra a população em quase 4%.
+ */
+export const CASAS_LIMIAR = 100;
+
+export function fmtRel(v: number): string {
+  if (!Number.isFinite(v)) return '—';
+  return Math.abs(v) >= CASAS_LIMIAR
+    ? Math.round(v).toLocaleString('pt-BR')
+    : v.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+}
+
+/** Mesma regra, devolvendo NÚMERO — para as células do Excel e o DBF do SHP. */
+export function arredRel(v: number): number {
+  if (!Number.isFinite(v)) return v;
+  return Math.abs(v) >= CASAS_LIMIAR ? Math.round(v) : Math.round(v * 100) / 100;
+}
 
 // Dose do ARQUIVO: quando a prescrição foi feita em população desejada, o que
 // a máquina precisa é a taxa de semeadura — a dose compensada pela germinação.
@@ -54,15 +84,15 @@ export function montarResumoPdf(
 ): Array<{ txt: string; destaque?: boolean }> {
   const un = UNIDADE_TOTAL[p.unidade];
   const semente = ehUnidadeSemente(p.unidade);
-  const nTot = (v: number) => (semente ? fmt0(v) : fmt(v, 1));
+  const nTot = (v: number) => fmtRel(v);
   const pms = p.params.sementes?.pmsG;
   const comKg = (sementes: number): string => {
     const kg = semente ? kgDeSementes(sementes, pms) : null;
-    return kg == null ? '' : ` = ${fmt(kg, 1)} kg`;
+    return kg == null ? '' : ` = ${fmtRel(kg)} kg`;
   };
 
   const linhas: Array<{ txt: string; destaque?: boolean }> = [
-    { txt: `Área: ${fmt(r.areaHa, 2)} ha em ${r.nZonas} zona(s) · ${nPoligonos} polígono(s)` },
+    { txt: `Área: ${fmtRel(r.areaHa)} ha em ${r.nZonas} zona(s) · ${nPoligonos} polígono(s)` },
   ];
 
   if (temCompensacao(p)) {
@@ -72,15 +102,15 @@ export function montarResumoPdf(
     const dif = comAjuste - semAjuste;
     const pct = semAjuste > 0 ? (dif / semAjuste) * 100 : 0;
     linhas.push(
-      { txt: `População desejada: média ${fmt0(r.doseMedia)} ${p.unidade} (mín ${fmt0(r.doseMin)} · máx ${fmt0(r.doseMax)})` },
+      { txt: `População desejada: média ${fmtRel(r.doseMedia)} ${p.unidade} (mín ${fmtRel(r.doseMin)} · máx ${fmtRel(r.doseMax)})` },
       { txt: `Total SEM ajuste (população desejada): ${nTot(semAjuste)} ${un}${comKg(semAjuste)}` },
       { txt: `Total COM ajuste de germinação (${fmt(germ, 0)}%): ${nTot(comAjuste)} ${un}${comKg(comAjuste)}`, destaque: true },
       { txt: `Diferença a mais para comprar: ${nTot(dif)} ${un}${comKg(dif)} (+${fmt(pct, 1)}%)` },
-      { txt: `Taxa de semeadura: ${fmt0(comAjuste / (r.areaHa || 1))} ${un}/ha` },
+      { txt: `Taxa de semeadura: ${fmtRel(comAjuste / (r.areaHa || 1))} ${un}/ha` },
     );
   } else {
     linhas.push(
-      { txt: `Dose: mín ${fmt(r.doseMin, 1)} · máx ${fmt(r.doseMax, 1)} · média ${fmt(r.doseMedia, 1)} ${p.unidade}` },
+      { txt: `Dose: mín ${fmtRel(r.doseMin)} · máx ${fmtRel(r.doseMax)} · média ${fmtRel(r.doseMedia)} ${p.unidade}` },
       { txt: `Quantidade usada: ${nTot(r.usado)} ${un}${comKg(r.usado)}` },
     );
   }
@@ -90,25 +120,50 @@ export function montarResumoPdf(
   // do complementar é um valor que ninguém consegue conferir.
   const c = p.params.complemento;
   if (p.modo === 'complemento' && c) {
-    const sim = SIMBOLO_NUTRIENTE[c.nutriente] ?? c.nutriente;
+    const sim = SIMBOLO_PDF[c.nutriente] ?? SIMBOLO_NUTRIENTE[c.nutriente] ?? c.nutriente;
     const res = complementarNutriente({
       metaKgHa: c.metaKgHa ?? 0, baseGarantiaPct: c.baseGarantiaPct ?? 0,
       baseDoseKgHa: c.baseDoseKgHa ?? 0, compGarantiaPct: c.compGarantiaPct ?? 0,
     });
-    linhas.push(
-      { txt: `Complementação por nutriente — referência: ${sim}, meta ${fmt(c.metaKgHa ?? 0, 1)} kg/ha`, destaque: true },
-      { txt: `Produto base: ${c.baseNome ?? '(nenhum)'} · ${fmt(c.baseDoseKgHa ?? 0, 1)} kg/ha · garantia ${fmt(c.baseGarantiaPct ?? 0, 1)}% → fornece ${fmt(res.fornecidoKgHa, 1)} kg/ha de ${sim}` },
-      { txt: `Faltante: ${fmt(c.metaKgHa ?? 0, 1)} − ${fmt(res.fornecidoKgHa, 1)} = ${fmt(res.faltanteKgHa, 1)} kg/ha de ${sim}` },
-      { txt: `Produto complementar: ${c.compNome ?? p.produto} · garantia ${fmt(c.compGarantiaPct ?? 0, 1)}% → ${fmt(res.faltanteKgHa, 1)} ÷ ${fmt((c.compGarantiaPct ?? 0) / 100, 3)} = ${fmt(res.doseCompKgHa, 1)} kg/ha`, destaque: true },
-      ...res.avisos.map(a => ({ txt: a })),
-    );
+    // Sinais em ASCII: "−" (U+2212) e "÷" não existem na fonte do PDF e somem
+    // na hora de desenhar — a linha saía "180,0 0,0 = 180,0", sem operador.
+    const gComp = c.compGarantiaPct ?? 0;
+
+    // Base vinda de uma prescrição salva: a dose VARIA por zona. Dizer
+    // "0,0 kg/ha" ali é falso; o que informa é a faixa aplicada e o fato de a
+    // correção ter sido feita zona a zona.
+    const dz = c.baseDosePorZona;
+    const doses = dz ? p.zonas.map(z => dz[z.idZona]).filter((v): v is number => v != null) : [];
+    if (doses.length) {
+      const rz = p.zonas.map(z => complementarNutriente({
+        metaKgHa: c.metaKgHa ?? 0, baseGarantiaPct: c.baseGarantiaPct ?? 0,
+        baseDoseKgHa: dz![z.idZona] ?? 0, compGarantiaPct: gComp,
+      }));
+      const faixa = (v: number[]) => (Math.abs(Math.max(...v) - Math.min(...v)) < 0.05
+        ? fmtRel(v[0]) : `${fmtRel(Math.min(...v))} a ${fmtRel(Math.max(...v))}`);
+      linhas.push(
+        { txt: `Complementação por nutriente - referência: ${sim}, meta ${fmtRel(c.metaKgHa ?? 0)} kg/ha`, destaque: true },
+        { txt: `Produto base: ${c.baseNome ?? '(nenhum)'} aplicado em TAXA VARIÁVEL (${c.basePrescricaoNome ?? 'prescrição anterior'}), ${faixa(doses)} kg/ha · garantia ${fmtRel(c.baseGarantiaPct ?? 0)}% de ${sim}` },
+        { txt: `Já fornecido pelo base: ${faixa(rz.map(x => x.fornecidoKgHa))} kg/ha de ${sim} · faltando para a meta: ${faixa(rz.map(x => x.faltanteKgHa))} kg/ha` },
+        { txt: `Produto complementar: ${c.compNome ?? p.produto} · garantia ${fmtRel(gComp)}% de ${sim} · dose calculada ZONA A ZONA para fechar a meta: ${faixa(rz.map(x => x.doseCompKgHa))} kg/ha`, destaque: true },
+        ...[...new Set(rz.flatMap(x => x.avisos))].map(a => ({ txt: a })),
+      );
+    } else {
+      linhas.push(
+        { txt: `Complementação por nutriente - referência: ${sim}, meta ${fmtRel(c.metaKgHa ?? 0)} kg/ha`, destaque: true },
+        { txt: `Produto base: ${c.baseNome ?? '(nenhum)'} · ${fmtRel(c.baseDoseKgHa ?? 0)} kg/ha · garantia ${fmtRel(c.baseGarantiaPct ?? 0)}% -> fornece ${fmtRel(res.fornecidoKgHa)} kg/ha de ${sim}` },
+        { txt: `Faltante: ${fmtRel(c.metaKgHa ?? 0)} - ${fmtRel(res.fornecidoKgHa)} = ${fmtRel(res.faltanteKgHa)} kg/ha de ${sim}` },
+        { txt: `Produto complementar: ${c.compNome ?? p.produto} · garantia ${fmtRel(gComp)}% -> ${fmtRel(res.faltanteKgHa)} / ${fmtRel(gComp)}% = ${fmtRel(res.doseCompKgHa)} kg/ha`, destaque: true },
+        ...res.avisos.map(a => ({ txt: a })),
+      );
+    }
   }
 
   if (p.params.totalDisponivel != null) {
     const sobra = p.params.totalDisponivel - r.usado;
     linhas.push({ txt: `Disponível informado: ${nTot(p.params.totalDisponivel)} ${un} · ${sobra >= 0 ? 'restante' : 'falta'}: ${nTot(Math.abs(sobra))} ${un}` });
   }
-  if (r.custo != null) linhas.push({ txt: `Custo estimado: R$ ${fmt(r.custo, 2)}` });
+  if (r.custo != null) linhas.push({ txt: `Custo estimado: R$ ${fmtRel(r.custo)}` });
 
   linhas.push(temCompensacao(p)
     ? { txt: 'O arquivo de aplicação JÁ SAI com o ajuste de população: a máquina recebe a taxa de semeadura corrigida pela germinação, não a população desejada.', destaque: true }

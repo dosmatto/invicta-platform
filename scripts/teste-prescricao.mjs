@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { redistribuirPorEstoque, distribuirProporcional, distribuirPorAjuste, resumoDoses, nutrientesPorZona, pesoDoRank, fatorBaseDose, arredondarDose } from '../src/lib/prescricao/calculo.ts';
 import { fatorCampo, sementesPorHa, metricasSementes, estoqueTotalSementes, distribuirSementes, doseCompensada } from '../src/lib/prescricao/sementes.ts';
 import { dosesPorEquacao, variaveisDaEquacao } from '../src/lib/prescricao/equacao.ts';
-import { montarResumoPdf, temCompensacao, totalDoArquivo, kgDeSementes, doseArquivo as doseArquivoDe } from '../src/lib/prescricao/resumo.ts';
+import { montarResumoPdf, temCompensacao, totalDoArquivo, kgDeSementes, doseArquivo as doseArquivoDe, fmtRel, arredRel } from '../src/lib/prescricao/resumo.ts';
 
 let ok = 0, fail = 0;
 function t(nome, fn) {
@@ -385,8 +385,8 @@ t('resumo do PDF: os dois totais nomeados, em sementes e em quilos', () => {
   assert.match(texto, /Total COM ajuste de germinação \(90%\).*888\.889/, `com ajuste ausente: ${texto}`);
   assert.match(texto, /Diferença a mais para comprar.*88\.889/);
   // PMS 180 g → 800.000 sementes = 144 kg; 888.889 = 160 kg
-  assert.match(texto, /144,0 kg/, `kg sem ajuste ausente: ${texto}`);
-  assert.match(texto, /160,0 kg/, `kg com ajuste ausente: ${texto}`);
+  assert.match(texto, /144 kg/, `kg sem ajuste ausente: ${texto}`);
+  assert.match(texto, /160 kg/, `kg com ajuste ausente: ${texto}`);
   assert.match(texto, /arquivo de aplicação JÁ SAI com o ajuste/);
 });
 
@@ -396,7 +396,7 @@ t('resumo sem compensação não inventa duas contas', () => {
   const r = { areaHa: 10, nZonas: 1, usado: 25, doseMin: 2.5, doseMax: 2.5, doseMedia: 2.5, custo: null };
   const texto = montarResumoPdf(p, r, 1, 1).map(l => l.txt).join(' | ');
   assert.ok(!/ajuste de germinação/.test(texto), texto);
-  assert.match(texto, /Quantidade usada: 25,0 t/);
+  assert.match(texto, /Quantidade usada: 25 t/);
   assert.match(texto, /sai com a dose exatamente como está na tabela/);
 });
 
@@ -417,8 +417,8 @@ t('ADUBO não fala em população nem em germinação', () => {
     .map(l => l.txt).join(' | ');
   assert.ok(!/[Pp]opulação/.test(texto), `falou em população: ${texto}`);
   assert.ok(!/germinação/.test(texto), `falou em germinação: ${texto}`);
-  assert.match(texto, /Dose: mín 200,0/);
-  assert.match(texto, /Quantidade usada: 2\.000,0 kg/);
+  assert.match(texto, /Dose: mín 200 /);
+  assert.match(texto, /Quantidade usada: 2\.000 kg/);
 });
 
 t('semente com o mesmo marcador CONTINUA compensando', () => {
@@ -445,10 +445,71 @@ t('resumo do PDF traz a conta da complementação (Parte XIV §11)', () => {
   };
   const texto = montarResumoPdf(p, { areaHa: 10, nZonas: 1, usado: 3911, doseMin: 391.1, doseMax: 391.1, doseMedia: 391.1, custo: null }, 1, 1)
     .map(l => l.txt).join(' | ');
-  assert.match(texto, /referência: N, meta 200,0 kg\/ha/);
-  assert.match(texto, /MAP.*garantia 12,0%.*fornece 24,0 kg\/ha de N/);
-  assert.match(texto, /Faltante: 200,0 . 24,0 = 176,0/);
-  assert.match(texto, /Ureia.*45,0%.*391,1 kg\/ha/);
+  assert.match(texto, /referência: N, meta 200 kg\/ha/);
+  assert.match(texto, /MAP.*garantia 12%.*fornece 24 kg\/ha de N/);
+  assert.match(texto, /Faltante: 200 - 24 = 176/);
+  assert.match(texto, /Ureia.*45%.*391 kg\/ha/);
+});
+
+t('relatório: número grande sem decimal, número pequeno com', () => {
+  // Acima de 100 a casa decimal não informa nada; abaixo dela é o dado —
+  // sementes por metro é 12,52, e arredondar para 13 erra a população em ~4%.
+  assert.equal(fmtRel(391.111), '391');
+  assert.equal(fmtRel(4102.7), '4.103');
+  assert.equal(fmtRel(100), '100');
+  assert.equal(fmtRel(99.99), '99,99');
+  assert.equal(fmtRel(12.52), '12,52');
+  assert.equal(fmtRel(2.5), '2,5', 'sem zero à toa');
+  assert.equal(fmtRel(0.756), '0,76');
+  assert.equal(fmtRel(-150.4), '-150');
+  assert.equal(fmtRel(NaN), '—');
+});
+
+t('arredRel devolve NÚMERO com a mesma regra (Excel/SHP)', () => {
+  assert.equal(arredRel(391.111), 391);
+  assert.equal(arredRel(12.526), 12.53);
+  assert.equal(arredRel(99.999), 100);
+  assert.equal(arredRel(2.5), 2.5);
+});
+
+t('resumo: base em TAXA VARIÁVEL não escreve "0 kg/ha"', () => {
+  // A base vinda de uma prescrição salva tem dose por zona; imprimir a dose
+  // única (que não existe) dava "MAP · 0,0 kg/ha · fornece 0,0" no relatório.
+  const zonas = [
+    { idZona: 'a', nomeZona: '01', classe: 'Alta', cor: '#000', areaHa: 10, dose: 400 },
+    { idZona: 'b', nomeZona: '02', classe: 'Baixa', cor: '#000', areaHa: 10, dose: 420 },
+  ];
+  const p = {
+    unidade: 'kg/ha', tipo: 'fertilizante', produto: 'Ureia', nome: 'x', modo: 'complemento',
+    params: { complemento: {
+      nutriente: 'n', metaKgHa: 180,
+      baseNome: 'MAP', basePrescricaoNome: 'Dose de fertilizante (v3)',
+      baseGarantiaPct: 12, baseDosePorZona: { a: 208.7, b: 172.3 },
+      compNome: 'Ureia', compGarantiaPct: 45,
+    } },
+    zonas, fc: { type: 'FeatureCollection', features: [] },
+  };
+  const texto = montarResumoPdf(p, { areaHa: 20, nZonas: 2, usado: 8200, doseMin: 400, doseMax: 420, doseMedia: 410, custo: null })
+    .map(l => l.txt).join(' | ');
+  assert.ok(!/0 kg\/ha de N/.test(texto), `ainda diz 0: ${texto}`);
+  assert.match(texto, /TAXA VARIÁVEL/);
+  assert.match(texto, /Dose de fertilizante \(v3\)/);
+  assert.match(texto, /172 a 209 kg\/ha/, texto);          // faixa do base
+  assert.match(texto, /ZONA A ZONA/);
+  // sem caracteres que a fonte do PDF não desenha (sumiriam do relatório)
+  assert.ok(!/[−÷→₀₁₂₃₄₅₆₇₈₉]/.test(texto), `caractere fora do WinAnsi: ${texto}`);
+});
+
+t('símbolo do nutriente vai em ASCII para o PDF (P2O5, não P₂O₅)', () => {
+  const p = {
+    unidade: 'kg/ha', tipo: 'fertilizante', produto: 'Super', nome: 'x', modo: 'complemento',
+    params: { complemento: { nutriente: 'p2o5', metaKgHa: 90, baseGarantiaPct: 0, baseDoseKgHa: 0, compNome: 'Super', compGarantiaPct: 18 } },
+    zonas: [{ idZona: 'a', nomeZona: '01', classe: 'A', cor: '#000', areaHa: 10, dose: 500 }],
+    fc: { type: 'FeatureCollection', features: [] },
+  };
+  const texto = montarResumoPdf(p, { areaHa: 10, nZonas: 1, usado: 5000, doseMin: 500, doseMax: 500, doseMedia: 500, custo: null }).map(l => l.txt).join(' | ');
+  assert.match(texto, /P2O5/);
+  assert.ok(!/₂|₅/.test(texto), `subscrito sobreviveu: ${texto}`);
 });
 
 console.log(`\n${ok} passaram, ${fail} falharam\n`);

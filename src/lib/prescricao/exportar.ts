@@ -16,7 +16,7 @@ import { capturarMapaZonas } from '../capturaMapa';
 import { imagemParaPdf, reduzirLogo } from '../pdfImagem';
 import { resumoDoses, nutrientesPorZona, fatorBaseDose } from './calculo.ts';
 import { doseCompensada } from './sementes.ts';
-import { doseArquivo, temCompensacao, totalDoArquivo, kgDeSementes, montarResumoPdf } from './resumo.ts';
+import { doseArquivo, temCompensacao, totalDoArquivo, kgDeSementes, montarResumoPdf, fmtRel, arredRel } from './resumo.ts';
 import { complementarNutriente, SIMBOLO_NUTRIENTE } from '../insumos';
 import { UNIDADE_TOTAL, ehUnidadeSemente, type Prescricao } from './tipos.ts';
 
@@ -99,13 +99,13 @@ export function fcPrescricao(p: Prescricao): GeoJSON.FeatureCollection {
       properties: {
         zona: san(z.nomeZona),
         classe: san(z.classe),
-        dose: Math.round(doseArquivo(p, z.dose) * 1000) / 1000,
+        dose: arredRel(doseArquivo(p, z.dose)),
         unidade: p.unidade,
         // população-alvo fica no arquivo quando a dose foi compensada: é o que
         // o agrônomo pediu, e sem ela ninguém confere a taxa lá na frente.
         ...(temCompensacao(p) ? { pop_alvo: Math.round(z.dose) } : {}),
         produto: san(p.produto).slice(0, 60),
-        area_ha: Math.round(z.areaHa * 100) / 100,
+        area_ha: arredRel(z.areaHa),
       },
     });
   }
@@ -139,14 +139,14 @@ export async function exportarXlsxPrescricao(p: Prescricao): Promise<string> {
   const linhas = p.zonas.map(z => ({
     Zona: z.nomeZona,
     Classe: z.classe,
-    'Área (ha)': Number(z.areaHa.toFixed(2)),
+    'Área (ha)': arredRel(z.areaHa),
     ...(temCompensacao(p)
       ? {
-          [`População (${p.unidade})`]: Number(z.dose.toFixed(0)),
-          [`População ajustada (${p.unidade})`]: Number(doseArquivo(p, z.dose).toFixed(0)),
+          [`População (${p.unidade})`]: arredRel(z.dose),
+          [`População ajustada (${p.unidade})`]: arredRel(doseArquivo(p, z.dose)),
         }
-      : { [`Dose (${p.unidade})`]: Number(z.dose.toFixed(3)) }),
-    [`Total (${un})`]: Number((doseArquivo(p, z.dose) * z.areaHa * fator).toFixed(2)),
+      : { [`Dose (${p.unidade})`]: arredRel(z.dose) }),
+    [`Total (${un})`]: arredRel(doseArquivo(p, z.dose) * z.areaHa * fator),
     ...(nutri ? {
       'N (kg/ha)': Number(nutri[z.idZona].n.toFixed(1)),
       'P2O5 (kg/ha)': Number(nutri[z.idZona].p2o5.toFixed(1)),
@@ -158,15 +158,15 @@ export async function exportarXlsxPrescricao(p: Prescricao): Promise<string> {
   const resumo = [
     { Item: 'Produto', Valor: p.produto },
     { Item: 'Tipo', Valor: p.tipo },
-    { Item: 'Área total (ha)', Valor: Number(r.areaHa.toFixed(2)) },
-    { Item: `Quantidade usada (${un})`, Valor: Number(r.usado.toFixed(2)) },
+    { Item: 'Área total (ha)', Valor: arredRel(r.areaHa) },
+    { Item: `Quantidade usada (${un})`, Valor: arredRel(r.usado) },
     ...(p.params.totalDisponivel != null ? [
-      { Item: `Disponível (${un})`, Valor: p.params.totalDisponivel },
-      { Item: `Restante (${un})`, Valor: Number((p.params.totalDisponivel - r.usado).toFixed(2)) },
+      { Item: `Disponível (${un})`, Valor: arredRel(p.params.totalDisponivel) },
+      { Item: `Restante (${un})`, Valor: arredRel(p.params.totalDisponivel - r.usado) },
     ] : []),
-    { Item: `Dose mínima (${p.unidade})`, Valor: Number(r.doseMin.toFixed(3)) },
-    { Item: `Dose máxima (${p.unidade})`, Valor: Number(r.doseMax.toFixed(3)) },
-    { Item: `Dose média (${p.unidade})`, Valor: Number(r.doseMedia.toFixed(3)) },
+    { Item: `Dose mínima (${p.unidade})`, Valor: arredRel(r.doseMin) },
+    { Item: `Dose máxima (${p.unidade})`, Valor: arredRel(r.doseMax) },
+    { Item: `Dose média (${p.unidade})`, Valor: arredRel(r.doseMedia) },
     // Os dois totais NOMEADOS + o peso, que é como se compra semente.
     ...(temCompensacao(p) ? (() => {
       const semAjuste = r.usado, comAjuste = totalDoArquivo(p, fator);
@@ -186,7 +186,7 @@ export async function exportarXlsxPrescricao(p: Prescricao): Promise<string> {
       const k = ehUnidadeSemente(p.unidade) ? kgDeSementes(r.usado, pms) : null;
       return k == null ? [] : [{ Item: `Quantidade usada em quilos (PMS ${pms} g)`, Valor: Number(k.toFixed(1)) }];
     })()),
-    ...(r.custo != null ? [{ Item: 'Custo (R$)', Valor: Number(r.custo.toFixed(2)) }] : []),
+    ...(r.custo != null ? [{ Item: 'Custo (R$)', Valor: arredRel(r.custo) }] : []),
     // Complementação por nutriente: a conta que justifica a dose.
     ...(p.modo === 'complemento' && p.params.complemento ? (() => {
       const c = p.params.complemento!;
@@ -279,7 +279,7 @@ export async function exportarPDFPrescricao(p: Prescricao, ident: IdentPdfPrescr
     return [{
       geometry: f.geometry as GeoJSON.Polygon | GeoJSON.MultiPolygon,
       cor: corDaDose(z.dose, r.doseMin, r.doseMax),
-      rotulo: fmt(doseArquivo(p, z.dose), ehUnidadeSemente(p.unidade) ? (p.unidade === 'sementes/m' ? 1 : 0) : 1),
+      rotulo: fmtRel(doseArquivo(p, z.dose)),
     }];
   });
   let mapaPng = '';
@@ -368,12 +368,11 @@ export async function exportarPDFPrescricao(p: Prescricao, ident: IdentPdfPrescr
     doc.setFillColor(parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16));
     doc.rect(tabX, ty - 2.4, 2.6, 2.6, 'F');
     doc.text(san(z.nomeZona).slice(0, 12), tabX + 4, ty);
-    doc.text(fmt(z.areaHa, 2), fimArea, ty, { align: 'right' });
+    doc.text(fmtRel(z.areaHa), fimArea, ty, { align: 'right' });
     const dArq = doseArquivo(p, z.dose);
-    const txt = (v: number) => (p.unidade === 'sementes/ha' ? fmt0(v) : fmt(v, 2));
-    doc.text(txt(z.dose), fimDose, ty, { align: 'right' });
-    if (comp) doc.text(txt(dArq), fimAjuste, ty, { align: 'right' });
-    doc.text(ehUnidadeSemente(p.unidade) ? fmt0(dArq * z.areaHa * fator) : fmt(dArq * z.areaHa * fator, 1), fimTotal, ty, { align: 'right' });
+    doc.text(fmtRel(z.dose), fimDose, ty, { align: 'right' });
+    if (comp) doc.text(fmtRel(dArq), fimAjuste, ty, { align: 'right' });
+    doc.text(fmtRel(dArq * z.areaHa * fator), fimTotal, ty, { align: 'right' });
     ty += 4.2;
   }
   if (p.zonas.length > 18) { doc.setTextColor(...GRAY); doc.text(`… +${p.zonas.length - 18} zonas (planilha completa no Excel)`, tabX, ty); ty += 4.2; }
