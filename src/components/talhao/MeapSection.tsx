@@ -1270,7 +1270,7 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
       )}
 
       {labAberto && zoneamentos.length > 0 && (
-        <LaboratorioZonas zoneamentos={zoneamentos} aInicial={labPar?.a} bInicial={labPar?.b} onClose={() => { setLabAberto(false); setLabPar(null); }} />
+        <LaboratorioZonas talhaoId={talhao.id} zoneamentos={zoneamentos} aInicial={labPar?.a} bInicial={labPar?.b} onClose={() => { setLabAberto(false); setLabPar(null); }} />
       )}
     </div>
   );

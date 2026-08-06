@@ -7,9 +7,10 @@
 
 import { useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, FlaskConical, Star, Award, Loader2 } from 'lucide-react';
+import { X, FlaskConical, Star, Loader2 } from 'lucide-react';
 import type { ZoneamentoMeap } from '@/lib/store';
-import { resumoCenario, idMelhorCenario, concordanciaEspacial, areaPorPotencial, type Concordancia } from '@/lib/meap/laboratorio';
+import { resumoCenario, concordanciaEspacial, areaPorPotencial, type Concordancia } from '@/lib/meap/laboratorio';
+import { ValidacaoZonas } from './ValidacaoZonas';
 import { fmtMax1 as fmt } from '@/lib/formato';
 const CORES_HOMOG: Record<string, string> = { alta: '#86efac', media: '#fbbf24', baixa: '#f87171' };
 const ROTULO_HOMOG: Record<string, string> = { alta: 'Alta', media: 'Média', baixa: 'Baixa' };
@@ -34,9 +35,8 @@ function BarraPotencial({ areas }: { areas: ReturnType<typeof areaPorPotencial> 
 // aInicial/bInicial: par já escolhido na tela de versões — abre o Laboratório
 // direto na comparação pedida, em vez de fazer o usuário reencontrar as duas
 // versões numa lista onde os nomes só diferem no sufixo.
-export function LaboratorioZonas({ zoneamentos, aInicial, bInicial, onClose }: { zoneamentos: ZoneamentoMeap[]; aInicial?: string; bInicial?: string; onClose: () => void }) {
+export function LaboratorioZonas({ talhaoId, zoneamentos, aInicial, bInicial, onClose }: { talhaoId: string; zoneamentos: ZoneamentoMeap[]; aInicial?: string; bInicial?: string; onClose: () => void }) {
   const resumos = useMemo(() => zoneamentos.map(resumoCenario), [zoneamentos]);
-  const melhorId = useMemo(() => idMelhorCenario(zoneamentos), [zoneamentos]);
 
   const [aId, setAId] = useState(aInicial ?? zoneamentos[0]?.id ?? '');
   const [bId, setBId] = useState(bInicial ?? zoneamentos[1]?.id ?? zoneamentos[0]?.id ?? '');
@@ -74,7 +74,9 @@ export function LaboratorioZonas({ zoneamentos, aInicial, bInicial, onClose }: {
         <section>
           <h3 className="text-[13px] font-bold mb-1" style={{ color: '#cbd5e1' }}>Cenários salvos</h3>
           <p className="text-[10px] mb-2" style={{ color: '#64748b' }}>
-            Cada linha é um zoneamento gerado. O <span style={{ color: '#fbbf24' }}>★ melhor</span> é o de menor CV médio — zonas mais homogêneas por dentro, o que costuma representar melhor a realidade do talhão.
+            Cada linha é um zoneamento gerado; o ★ marca a versão padrão. Estas colunas descrevem COMO o cenário foi feito —
+            quem diz se ele ficou bom é a <strong style={{ color: '#93c5fd' }}>validação</strong>, logo abaixo: o CV médio sozinho não
+            enxerga zonas que não se separam, mapa picotado nem padrão que não se repete entre safras.
           </p>
           <div className="overflow-x-auto rounded-lg" style={{ border: '1px solid #1a3a6b' }}>
             <table className="w-full border-collapse" style={{ minWidth: 760 }}>
@@ -93,13 +95,11 @@ export function LaboratorioZonas({ zoneamentos, aInicial, bInicial, onClose }: {
               </thead>
               <tbody>
                 {resumos.map(r => {
-                  const melhor = r.id === melhorId;
                   return (
-                    <tr key={r.id} style={{ background: melhor ? '#0f2a1a' : 'transparent', borderTop: '1px solid #12294a' }}>
+                    <tr key={r.id} style={{ borderTop: '1px solid #12294a' }}>
                       <td className={td}>
                         <div className="flex items-center gap-1.5">
                           {r.padrao && <Star size={12} style={{ color: '#fbbf24' }} fill="#fbbf24" />}
-                          {melhor && <Award size={12} style={{ color: '#fbbf24' }} />}
                           <span className="font-semibold">{r.nome}</span>
                         </div>
                       </td>
@@ -122,6 +122,9 @@ export function LaboratorioZonas({ zoneamentos, aInicial, bInicial, onClose }: {
             </table>
           </div>
         </section>
+
+        {/* Validação — IQZM e os indicadores individuais */}
+        <ValidacaoZonas talhaoId={talhaoId} zoneamentos={zoneamentos} />
 
         {/* Concordância A×B */}
         {zoneamentos.length >= 2 && (

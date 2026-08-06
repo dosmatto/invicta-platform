@@ -21,6 +21,9 @@ export interface CamadaComparavel {
   grid: Grid;
   legenda: Legenda;
   unidade: string;
+  /** Safra/ano da camada, quando ela é temporal (produtividade). O validador
+   *  usa isto como a série do IPE — sem período não há "entre safras". */
+  periodo?: string;
 }
 
 const cap = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s);
@@ -38,7 +41,7 @@ export async function listarCamadas(talhaoId: string, safra: string): Promise<Ca
       let grid = doc?.dados?.resp?.grid;
       if (grid?.comp === 'gz') { try { grid = await descomprimirGrid(grid); } catch { grid = undefined; } }
       const leg = legendaDaCultura(p.cultura);
-      if (grid && leg && doc) out.push({ id: `prod_${p.id}`, grupo: 'Produtividade', nome: `${cap(p.cultura)} v${p.versao}${p.oficial ? ' (oficial)' : ''}`, bounds: doc.dados.resp.bounds, grid, legenda: leg, unidade: p.unidade });
+      if (grid && leg && doc) out.push({ id: `prod_${p.id}`, grupo: 'Produtividade', nome: `${cap(p.cultura)} v${p.versao}${p.oficial ? ' (oficial)' : ''}`, sub: p.safra || undefined, bounds: doc.dados.resp.bounds, grid, legenda: leg, unidade: p.unidade, periodo: p.safra || (p.ano ? String(p.ano) : undefined) });
     }
   }
 

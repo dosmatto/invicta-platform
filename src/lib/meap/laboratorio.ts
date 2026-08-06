@@ -2,7 +2,7 @@
 // "Comparação de Zonas"). Funções PURAS que comparam CENÁRIOS de zoneamento já
 // salvos (ZoneamentoMeap) — não gera nada, só mede:
 //   - resumoCenario: métricas por cenário para a tabela-bancada;
-//   - idMelhorCenario: o de menor CV médio (zonas mais homogêneas);
+//   - idMelhorCenario: DEPRECIADA — o ranking agora é por IQZM (validador);
 //   - areaPorPotencial: área por classe de potencial (barras A×B);
 //   - concordanciaEspacial: % de área onde A e B classificam o potencial no
 //     mesmo TERÇO (alto/médio/baixo) — robusto a nº de zonas diferente.
@@ -136,7 +136,12 @@ export function resumoCenario(z: ZoneamentoMeap): ResumoCenario {
   };
 }
 
-// Melhor cenário = menor CV médio (zonas mais homogêneas). null se nenhum tem CV.
+// APOSENTADA (v2.27.0): eleger o melhor cenário pelo CV médio contraria a regra
+// nº 1 do validador — o CV sozinho não vê zonas que não se separam, mapa
+// picotado nem padrão que não se repete entre safras. Quem ranqueia agora é o
+// IQZM (lib/validacao/validar.ts → compararCenarios). Mantida sem uso porque
+// exportações antigas podem referenciá-la; não ligue em tela nova.
+/** @deprecated use compararCenarios() do validador. */
 export function idMelhorCenario(zs: ZoneamentoMeap[]): string | null {
   let melhor: string | null = null, menor = Infinity;
   for (const z of zs) {
