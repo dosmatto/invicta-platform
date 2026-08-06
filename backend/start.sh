@@ -66,8 +66,35 @@ echo "=================================================================="
 echo " INVICTA — Interpolador local no ar em:  http://127.0.0.1:8800"
 echo " Deixe esta janela ABERTA enquanto usa o app. Ctrl+C para parar."
 echo " No app: Configuracoes > marque 'Usar interpolador desta maquina'."
+echo ""
+echo " Pode processar NDVI, MDE e interpolacoes em sequencia sem reabrir:"
+echo " os processos se renovam sozinhos para a memoria nao acumular."
 echo "=================================================================="
 echo ""
 cd "$HERE"
-# uvicorn simples (1 processo) basta no local — a maquina inteira e sua.
-exec "$PY" -m uvicorn app:app --host 127.0.0.1 --port 8800
+
+# MESMA receita da nuvem (ver Dockerfile), e pelo MESMO motivo: rasters incham e
+# fragmentam a memoria do processo. Com 1 uvicorn de vida longa e sem reciclagem,
+# depois de alguns NDVI/MDE/interpolacoes a RAM vai para swap e o backend fica
+# tao lento que parece travado — e a unica saida virava FECHAR O TERMINAL.
+# --max-requests faz isso sozinho: o worker se aposenta e nasce limpo.
+#
+# 2 workers: enquanto um processa um lote pesado, o outro atende o proximo
+# pedido (pegar outro NDVI, um MDE) em vez de todo mundo entrar na fila do mesmo
+# processo. Ajuste com WORKERS=1 se a maquina for apertada de RAM (~300 MB/worker
+# sob carga).
+WORKERS="${WORKERS:-2}"
+
+# gunicorn nao roda no Windows; o start.ps1 segue com uvicorn. Aqui, se por
+# algum motivo ele nao estiver no venv, cai no uvicorn em vez de nao subir nada.
+if "$PY" -c "import gunicorn, uvicorn_worker" >/dev/null 2>&1; then
+  exec "$PY" -m gunicorn app:app \
+    -k uvicorn_worker.UvicornWorker \
+    -w "$WORKERS" \
+    --max-requests 100 --max-requests-jitter 25 \
+    --timeout 600 --graceful-timeout 30 \
+    --bind 127.0.0.1:8800
+else
+  echo "(gunicorn indisponivel — subindo uvicorn simples; reinicie o terminal se ficar lento)"
+  exec "$PY" -m uvicorn app:app --host 127.0.0.1 --port 8800
+fi
