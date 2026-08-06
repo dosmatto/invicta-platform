@@ -45,5 +45,24 @@ if (-not (Test-Path $py)) {
 }
 
 Write-Host "Backend de fertilidade em http://127.0.0.1:8800  (Ctrl+C para parar)" -ForegroundColor Green
+Write-Host ""
+Write-Host " Pode processar NDVI, MDE e interpolacoes em sequencia sem reabrir:" -ForegroundColor Gray
+Write-Host " os processos se renovam sozinhos para a memoria nao acumular." -ForegroundColor Gray
+Write-Host ""
 Set-Location $here
-& $py -m uvicorn app:app --host 127.0.0.1 --port 8800
+
+# Rasters incham e fragmentam a memoria do processo: um worker de vida longa vai
+# para swap e o backend fica tao lento que parece travado — era por isso que so
+# fechando a janela voltava ao normal. Na nuvem e no macOS quem resolve e o
+# gunicorn (--max-requests), mas o gunicorn NAO roda no Windows.
+#
+# Aqui a reciclagem vem do proprio app (RECICLAR_APOS, em app.py): passado o
+# limite, o worker se aposenta OCIOSO e o supervisor do uvicorn sobe outro no
+# lugar. Por isso --workers 2: enquanto um renasce, o outro segue atendendo.
+# Use $env:WORKERS = "1" antes de rodar se a maquina for apertada de RAM
+# (~300 MB por worker sob carga).
+if (-not $env:WORKERS)         { $env:WORKERS = "2" }
+if (-not $env:RECICLAR_APOS)   { $env:RECICLAR_APOS = "100" }
+if (-not $env:RECICLAR_JITTER) { $env:RECICLAR_JITTER = "25" }
+
+& $py -m uvicorn app:app --host 127.0.0.1 --port 8800 --workers $env:WORKERS

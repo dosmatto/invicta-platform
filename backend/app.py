@@ -49,6 +49,53 @@ if "allow_private_network" in inspect.signature(CORSMiddleware.__init__).paramet
 app.add_middleware(CORSMiddleware, **_cors)
 
 
+# ── Reciclagem do worker (para o WINDOWS) ────────────────────────────────────
+# Rasters incham e fragmentam a memoria do processo: um worker de vida longa vai
+# para swap e o backend fica tao lento que parece travado. Na nuvem e no macOS o
+# gunicorn resolve com --max-requests, mas o gunicorn NAO roda no Windows.
+#
+# Aqui o proprio app faz o papel: conta as requisicoes e, ao passar do limite, o
+# worker se aposenta. Quem o traz de volta e o supervisor do uvicorn, que
+# ressuscita worker morto (supervisors/multiprocess.py: keep_subprocess_alive) —
+# por isso o Windows sobe com --workers 2: enquanto um renasce, o outro atende.
+#
+# So liga com RECICLAR_APOS no ambiente (o start.ps1 define). Sem a env e um
+# no-op — no macOS/nuvem quem recicla continua sendo o gunicorn.
+_RECICLAR_APOS = int(os.getenv("RECICLAR_APOS", "0") or 0)
+if _RECICLAR_APOS > 0:
+    import random
+    import threading
+
+    # Jitter POR PROCESSO (cada worker sorteia o seu na importacao): sem isso os
+    # workers nasceriam juntos, contariam junto e se aposentariam ao mesmo tempo,
+    # deixando um vao sem ninguem atendendo.
+    _LIMITE = _RECICLAR_APOS + random.randint(0, int(os.getenv("RECICLAR_JITTER", "25") or 0))
+    _trava = threading.Lock()
+    _atendidas = 0
+    _em_voo = 0
+
+    @app.middleware("http")
+    async def _reciclar_worker(request, call_next):
+        global _atendidas, _em_voo
+        with _trava:
+            _em_voo += 1
+        try:
+            resposta = await call_next(request)
+        finally:
+            with _trava:
+                _em_voo -= 1
+                _atendidas += 1
+                # So se aposenta OCIOSO: sair com pedido em voo mataria um
+                # processamento no meio (e o usuario perderia o trabalho).
+                aposentar = _atendidas >= _LIMITE and _em_voo == 0
+        if aposentar:
+            # Espera a resposta sair pelo socket antes de encerrar. os._exit
+            # porque o objetivo e justamente NAO desmontar nada devagar: o
+            # supervisor sobe um processo novo, com a memoria zerada.
+            threading.Timer(1.5, lambda: os._exit(0)).start()
+        return resposta
+
+
 # Exige X-Api-Key em todos os endpoints (exceto /health e preflight OPTIONS)
 # quando INVICTA_API_KEY estiver definida no ambiente. Sem a env, este
 # middleware e um no-op — comportamento identico ao anterior.
