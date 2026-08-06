@@ -839,6 +839,32 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
                   const sim = SIMBOLO_NUTRIENTE[nut];
                   const res = resultadoComp;
                   const soFertilizante = r.tipo === 'fertilizante';
+                  // A garantia SEMPRE vem do cadastro do insumo; digitar por cima é
+                  // exceção (lote fora do padrão, análise própria). Saber de onde
+                  // veio o número — e poder voltar ao cadastro — é o que separa
+                  // "ajustei de propósito" de "ficou um valor velho na tela".
+                  const insBase = insumos.find(i => i.id === c.baseInsumoId) ?? null;
+                  const insComp = insumos.find(i => i.id === (c.compInsumoId ?? r.insumoId)) ?? null;
+                  const gCadBase = insBase ? garantiaDe(insBase.conteudo, nut) : null;
+                  const gCadComp = insComp ? garantiaDe(insComp.conteudo, nut) : null;
+                  const difBase = gCadBase != null && Math.abs((c.baseGarantiaPct ?? 0) - gCadBase) > 1e-9;
+                  const difComp = gCadComp != null && Math.abs((c.compGarantiaPct ?? 0) - gCadComp) > 1e-9;
+                  const NotaGarantia = ({ cadastro, alterada, nome, onVoltar }: {
+                    cadastro: number | null; alterada: boolean; nome?: string; onVoltar: () => void;
+                  }) => {
+                    if (cadastro == null) {
+                      return <p className="text-[9px] mt-0.5" style={{ color: '#fbbf24' }}>sem cadastro vinculado — informe o %</p>;
+                    }
+                    if (!alterada) {
+                      return <p className="text-[9px] mt-0.5" style={{ color: '#86efac' }}>do cadastro de {nome}</p>;
+                    }
+                    return (
+                      <p className="text-[9px] mt-0.5" style={{ color: '#fbbf24' }}>
+                        alterado à mão · cadastro: {fmt(cadastro, 1)}%{' '}
+                        <button onClick={onVoltar} className="underline font-semibold" style={{ color: '#93c5fd' }}>usar o do cadastro</button>
+                      </p>
+                    );
+                  };
                   // Faixas para o resumo quando a base é uma prescrição salva:
                   // cada zona tem a sua dose, então o que se mostra é o intervalo.
                   const porZona = (() => {
@@ -928,6 +954,8 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
                             </Campo>
                             <Campo rotulo={`Garantia de ${sim} (%)`}>
                               <InputNum valor={c.baseGarantiaPct} onMudou={v => patchComp({ baseGarantiaPct: v })} />
+                              <NotaGarantia cadastro={gCadBase} alterada={difBase} nome={insBase?.nome}
+                                onVoltar={() => patchComp({ baseGarantiaPct: gCadBase ?? undefined })} />
                             </Campo>
                             <Campo rotulo={c.baseDosePorZona ? 'Dose aplicada (vem da prescrição)' : 'Dose aplicada (kg/ha)'}>
                               {c.baseDosePorZona
@@ -947,12 +975,14 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
                             </Campo>
                             <Campo rotulo={`Garantia de ${sim} (%)`}>
                               <InputNum valor={c.compGarantiaPct} onMudou={v => patchComp({ compGarantiaPct: v })} />
+                              <NotaGarantia cadastro={gCadComp} alterada={difComp} nome={insComp?.nome}
+                                onVoltar={() => patchComp({ compGarantiaPct: gCadComp ?? undefined })} />
                             </Campo>
                           </div>
-                          {r.insumoId && (c.compGarantiaPct ?? 0) <= 0 && (
+                          {insComp && (gCadComp ?? 0) <= 0 && (
                             <p className="text-[9px] leading-relaxed" style={{ color: '#fbbf24' }}>
                               <AlertTriangle size={10} className="inline mr-1" />
-                              <strong>{r.produto}</strong> não tem {sim} declarado em Biblioteca → Insumos. Cadastre a garantia lá, ou digite o % aqui para este cálculo.
+                              <strong>{insComp.nome}</strong> não tem {sim} declarado em Biblioteca → Insumos. Cadastre a garantia lá, ou digite o % aqui só para este cálculo.
                             </p>
                           )}
 
@@ -1417,14 +1447,35 @@ function Campo({ rotulo, children }: { rotulo: string; children: React.ReactNode
   );
 }
 
+/**
+ * Campo numérico que aceita vírgula e preserva o que está sendo digitado.
+ *
+ * O texto vive em estado local para não atrapalhar a digitação ("2," não é
+ * número ainda), mas ele PRECISA acompanhar quando o valor muda por fora —
+ * restaurar a garantia do cadastro, trocar o nutriente de referência, "Usar
+ * como Total disponível", o PMS que vem junto com o insumo. Antes o estado do
+ * rascunho mudava e o campo continuava mostrando o número velho: a tela mentia
+ * sobre o que seria calculado.
+ *
+ * `visto` guarda o último valor que ESTE campo produziu; quando o pai manda
+ * algo diferente disso, a mudança veio de fora e o texto é sincronizado. É o
+ * padrão de ajustar estado durante o render, sem effect.
+ */
 function InputNum({ valor, onMudou }: { valor: number | undefined; onMudou: (v: number | undefined) => void }) {
   const [txt, setTxt] = useState(valor != null ? String(valor) : '');
+  const [visto, setVisto] = useState(valor);
+  if (valor !== visto) {
+    setVisto(valor);
+    setTxt(valor != null ? String(valor) : '');
+  }
   return (
     <input value={txt}
       onChange={e => {
         setTxt(e.target.value);
-        const v = Number(e.target.value.replace(',', '.'));
-        onMudou(e.target.value.trim() === '' ? undefined : Number.isFinite(v) ? v : undefined);
+        const n = Number(e.target.value.replace(',', '.'));
+        const v = e.target.value.trim() === '' ? undefined : Number.isFinite(n) ? n : undefined;
+        setVisto(v);          // veio da digitação: o eco do pai não reescreve o texto
+        onMudou(v);
       }}
       className="w-full rounded px-2 py-1.5 text-xs outline-none" style={inputStyle} />
   );
