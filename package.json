@@ -12,6 +12,7 @@
     "teste:convite": "node scripts/teste-convite.mjs",
     "teste:periodo": "node scripts/teste-periodo.mjs",
     "teste:zonas": "node scripts/teste-export-zonas.mjs",
+    "teste:cabecalho": "node scripts/teste-cabecalho.mjs",
     "teste:faixas": "node scripts/teste-faixas.mjs",
     "teste:iam": "node scripts/teste-iam.mjs",
     "build:mobile": "node scripts/mobile-build.mjs",
