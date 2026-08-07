@@ -200,8 +200,11 @@ export function EditorZonasManual({ talhaoId, nomeZoneamento, fcOriginal, areaMi
       return;
     }
     empurrar();
+    // Escreve os DOIS campos: `id` é a identidade aqui dentro, `zona` é o
+    // número que o mapa, os relatórios e o SHP mostram. Escrever só o id fazia
+    // a numeração nova valer enquanto o editor estava aberto e sumir ao sair.
     setFeats(fs => fs.map(f => (idDe(f) === idAntigo
-      ? { ...f, properties: { ...(f.properties ?? {}), id: novo } }
+      ? { ...f, properties: { ...(f.properties ?? {}), id: novo, zona: novo } }
       : f)).sort((a, b) => idDe(a).localeCompare(idDe(b), 'pt-BR', { numeric: true })));
     setSel(prev => {
       if (!prev.has(idAntigo)) return prev;

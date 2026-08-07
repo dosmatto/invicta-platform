@@ -13,6 +13,8 @@
 // .cpg (UTF-8). O KML é gerado à mão (como exportGrade.ts).
 
 import area from '@turf/area';
+// extensão .ts explícita: exportZonas roda no teste em node (type-stripping)
+import { rotuloZona } from './meap/rotuloZona.ts';
 
 // Cor de fallback por classe (espelho do semáforo de ./zonas.ts — inlinado para
 // o módulo de export ficar autossuficiente/testável). Só é usada quando a zona
@@ -203,7 +205,11 @@ export function montarDadosZonas(fc: GeoJSON.FeatureCollection, ident: IdentEntr
     const classe = String(p.classe ?? p.classeLabel ?? '');
     const areaHa = Number.isFinite(Number(p.areaHa)) ? Number(p.areaHa) : areaHaGeom(g);
     const cor = typeof p.cor === 'string' && p.cor ? p.cor : corDaClasse(classe);
-    const nomeZona = String(p.zona ?? p.rotulo ?? idZona);
+    // Mesma regra do mapa (lib/meap/rotuloZona): senão o SHP/KML sai com um
+    // número e a tela com outro depois de uma renumeração manual.
+    const nomeZona = p.zona != null || p.id != null
+      ? rotuloZona({ id: p.id as string | number | null, zona: p.zona as string | number | null })
+      : String(p.rotulo ?? idZona);
     return { idZona, nomeZona, classe, cor, areaHa, pctArea: 0, geometry: g };
   });
   const areaTotalHa = zonasBrutas.reduce((s, z) => s + (z.areaHa || 0), 0);

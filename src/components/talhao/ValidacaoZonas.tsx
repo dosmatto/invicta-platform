@@ -22,6 +22,7 @@ import { sugerirClassificacao, aplicarSugestao, type Sugestao } from '@/lib/vali
 import { gerarRelatorioValidacao } from '@/lib/validacao/relatorioPdf';
 import { getTalhoes, getFazendas, getClientes } from '@/lib/store';
 import { usuarioAtual } from '@/lib/auth';
+import { rotuloZona } from '@/lib/meap/rotuloZona';
 import { fmtHa } from '@/lib/formato';
 
 const num = (v: number | null, d = 1) => {
@@ -92,7 +93,7 @@ export function ValidacaoZonas({ talhaoId, zoneamentos, onAceitarSugestao }: {
             const p = (f.properties ?? {}) as { id?: string; zona?: string | number; classe?: string; cor?: string; potencialRank?: number; areaHa?: number };
             return {
               idZona: String(p.id ?? p.zona ?? '?'),
-              nome: String(p.zona ?? p.id ?? '?'),
+              nome: rotuloZona(p),
               classe: String(p.classe ?? ''),
               cor: String(p.cor ?? '#64748b'),
               rank: typeof p.potencialRank === 'number' ? p.potencialRank : undefined,

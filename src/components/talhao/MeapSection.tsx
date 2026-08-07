@@ -30,6 +30,7 @@ import booleanIntersects from '@turf/boolean-intersects';
 import { colorirGrid, colorirGridComLegenda } from '@/lib/raster';
 import { rampaVisualStops } from '@/lib/legendas';
 import { classeZona, classeReconhecida, corZonaPorPosicao, ORDEM_CLASSES } from '@/lib/zonas';
+import { rotuloZona } from '@/lib/meap/rotuloZona';
 import { simboloElemento } from '@/lib/lab';
 import type { AmbienteProdutivo, Homogeneidade, MetricasZonaMeap } from '@/lib/meap/tipos';
 import { Layers, AlertTriangle, Wand2, Loader2, X, Check, ChevronUp, ChevronDown, Save, Star, Trash2, BarChart3, Sparkles, Combine, CheckSquare, Square, Pencil, Undo2, Redo2, FlaskConical, Spline } from 'lucide-react';
@@ -86,8 +87,11 @@ function featuresParaMapa(fc: GeoJSON.FeatureCollection): GeoJSON.FeatureCollect
       // reconhecida (Nível N); 3) cor do semáforo pela classe.
       let cor = p.cor;
       if (!cor) cor = (p.zona != null && !classeReconhecida(p.classe ?? '')) ? corZonaPorPosicao(Number(p.zona) - 1, total) : cz.cor;
-      // rótulo = nº da ZONA oficial (polígonos da mesma zona mostram o mesmo nº)
-      const rotulo = String(p.zona ?? p.id ?? '?');
+      // Rótulo: regra única em lib/meap/rotuloZona — id numérico puro É o
+      // número da zona (é o que a renumeração manual escreve); id sufixado
+      // ("01_2") é identidade interna e quem rotula é o `zona`. Antes daqui o
+      // mapa lia só `zona` e desfazia a renumeração feita no editor.
+      const rotulo = rotuloZona(p);
       return { type: 'Feature' as const, properties: { cor, rotulo, classeLabel: cz.label, selecionada: false }, geometry: f.geometry! };
     }),
   };

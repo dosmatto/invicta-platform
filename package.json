@@ -35,6 +35,7 @@
     "teste:insumos": "node scripts/teste-insumos.mjs",
     "teste:escala": "node scripts/teste-escala-classes.mjs",
     "teste:validacao": "node scripts/teste-validacao.mjs",
+    "teste:rotulo": "node scripts/teste-rotulo-zona.mjs",
     "teste:corte": "PY=\"$HOME/.invicta-fert-backend/venv/bin/python\"; [ -x \"$PY\" ] || PY=python3; \"$PY\" scripts/teste-corte-zona.py"
   },
   "dependencies": {

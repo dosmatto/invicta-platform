@@ -44,6 +44,7 @@ import {
 } from 'lucide-react';
 import { inputStyle } from '@/constants/ui';
 import { resumoInsumo } from '@/components/panels/InsumosPanel';
+import { rotuloZona } from '@/lib/meap/rotuloZona';
 import { fmtHa } from '@/lib/formato';
 
 const fmt = (v: number, d = 1) => v.toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d });
@@ -100,7 +101,7 @@ function zonasDoZoneamento(z: ZoneamentoMeap): ZonaDose[] {
     const p = (f.properties ?? {}) as { id?: string; zona?: string | number; classe?: string; cor?: string; potencialRank?: number };
     return {
       idZona: String(p.id ?? `z${i}`),
-      nomeZona: String(p.zona ?? i + 1),
+      nomeZona: p.zona != null || p.id != null ? rotuloZona(p) : String(i + 1),
       classe: String(p.classe ?? '—'),
       cor: String(p.cor ?? '#94a3b8'),
       areaHa: areaHaDe(f),
