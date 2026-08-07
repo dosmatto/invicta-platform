@@ -8,6 +8,7 @@ import assert from 'node:assert/strict';
 import { redistribuirPorEstoque, distribuirProporcional, distribuirPorAjuste, resumoDoses, nutrientesPorZona, pesoDoRank, fatorBaseDose, arredondarDose } from '../src/lib/prescricao/calculo.ts';
 import { fatorCampo, sementesPorHa, metricasSementes, estoqueTotalSementes, distribuirSementes, doseCompensada } from '../src/lib/prescricao/sementes.ts';
 import { dosesPorEquacao, variaveisDaEquacao } from '../src/lib/prescricao/equacao.ts';
+import { converterDose, prescricaoEmUnidade, podeConverter } from '../src/lib/prescricao/unidade.ts';
 import { montarResumoPdf, temCompensacao, totalDoArquivo, kgDeSementes, doseArquivo as doseArquivoDe, fmtRel, arredRel, corDaDose } from '../src/lib/prescricao/resumo.ts';
 import { fmtHa, arredHa } from '../src/lib/formato.ts';
 
@@ -567,6 +568,72 @@ t('símbolo do nutriente vai em ASCII para o PDF (P2O5, não P₂O₅)', () => {
   const texto = montarResumoPdf(p, { areaHa: 10, nZonas: 1, usado: 5000, doseMin: 500, doseMax: 500, doseMedia: 500, custo: null }).map(l => l.txt).join(' | ');
   assert.match(texto, /P2O5/);
   assert.ok(!/₂|₅/.test(texto), `subscrito sobreviveu: ${texto}`);
+});
+
+console.log('\nConversão de unidade (população <-> sementes por metro)\n');
+
+t('EXEMPLO DO CAMPO: 80.000 sementes/ha com espaçamento 0,50 m = 4 sementes/m', () => {
+  assert.equal(converterDose(80_000, 'sementes/ha', 'sementes/m', 0.5), 4);
+  assert.equal(converterDose(4, 'sementes/m', 'sementes/ha', 0.5), 80_000);
+  // milho a 0,45 m: 60.000 pl/ha = 2,7 sementes por metro
+  assert.ok(Math.abs(converterDose(60_000, 'sementes/ha', 'sementes/m', 0.45) - 2.7) < 1e-9);
+});
+
+t('ida e volta não perde valor (a conversão é exata)', () => {
+  for (const esp of [0.45, 0.5, 0.76, 0.9]) {
+    for (const pop of [45_000, 80_000, 320_000]) {
+      const m = converterDose(pop, 'sementes/ha', 'sementes/m', esp);
+      const volta = converterDose(m, 'sementes/m', 'sementes/ha', esp);
+      assert.ok(Math.abs(volta - pop) < 1e-6, `esp ${esp}, pop ${pop} -> ${volta}`);
+    }
+  }
+});
+
+t('sem espaçamento, NÃO converte — chute vira população errada no campo', () => {
+  assert.equal(podeConverter('sementes/ha', 'sementes/m', undefined), false);
+  assert.equal(podeConverter('sementes/ha', 'sementes/m', 0), false);
+  assert.equal(podeConverter('sementes/ha', 'sementes/ha', undefined), true, 'mesma unidade não precisa de nada');
+  assert.throws(() => converterDose(80_000, 'sementes/ha', 'sementes/m', undefined), /espaçamento/i);
+});
+
+t('adubo não entra nessa conversão', () => {
+  assert.equal(podeConverter('kg/ha', 'sementes/m', 0.5), false);
+  assert.throws(() => converterDose(200, 'kg/ha', 'sementes/m', 0.5), /não existe/);
+});
+
+t('prescricaoEmUnidade converte doses e LIMITES, e preserva o total absoluto', () => {
+  const zonas = [
+    { idZona: 'a', nomeZona: '01', classe: 'Alta', cor: '#000', areaHa: 10, dose: 80_000 },
+    { idZona: 'b', nomeZona: '02', classe: 'Baixa', cor: '#111', areaHa: 10, dose: 60_000 },
+  ];
+  const p = {
+    unidade: 'sementes/ha', tipo: 'sementes', produto: 'Milho', nome: 'x', zonas,
+    params: { doseMin: 50_000, doseMax: 90_000, totalDisponivel: 1_400_000, sementes: { germinacaoPct: 95, espacamentoM: 0.5 } },
+    fc: { type: 'FeatureCollection', features: [] },
+  };
+  const m = prescricaoEmUnidade(p, 'sementes/m');
+  assert.equal(m.unidade, 'sementes/m');
+  assert.deepEqual(m.zonas.map(z => z.dose), [4, 3]);
+  assert.equal(m.params.doseMin, 2.5);
+  assert.equal(m.params.doseMax, 4.5);
+  assert.equal(m.params.totalDisponivel, 1_400_000, 'estoque é absoluto: não muda com a régua');
+  assert.equal(p.zonas[0].dose, 80_000, 'a prescrição original não pode ser tocada');
+
+  // o TOTAL usado tem de bater nas duas unidades
+  const totalHa = resumoDoses(p.zonas, undefined, fatorBaseDose(p.unidade, 0.5)).usado;
+  const totalM = resumoDoses(m.zonas, undefined, fatorBaseDose(m.unidade, 0.5)).usado;
+  assert.ok(Math.abs(totalHa - totalM) < 1e-6, `${totalHa} x ${totalM}`);
+  assert.equal(totalHa, 1_400_000);
+});
+
+t('mesma unidade devolve a MESMA referência (sem cópia à toa)', () => {
+  const p = { unidade: 'sementes/m', zonas: [], params: {}, fc: { type: 'FeatureCollection', features: [] } };
+  assert.equal(prescricaoEmUnidade(p, 'sementes/m'), p);
+});
+
+t('pedir conversão sem espaçamento explica o que falta', () => {
+  const p = { unidade: 'sementes/ha', zonas: [], params: { sementes: { germinacaoPct: 95 } }, fc: { type: 'FeatureCollection', features: [] } };
+  assert.throws(() => prescricaoEmUnidade(p, 'sementes/m'), /espaçamento entre linhas/i);
 });
 
 console.log(`\n${ok} passaram, ${fail} falharam\n`);

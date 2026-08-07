@@ -45,6 +45,7 @@ import {
 import { inputStyle } from '@/constants/ui';
 import { resumoInsumo } from '@/components/panels/InsumosPanel';
 import { rotuloZona } from '@/lib/meap/rotuloZona';
+import { prescricaoEmUnidade, podeConverter, converterDose, ROTULO_SAIDA } from '@/lib/prescricao/unidade';
 import { fmtHa } from '@/lib/formato';
 
 const fmt = (v: number, d = 1) => v.toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d });
@@ -147,6 +148,19 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
   const [erro, setErro] = useState('');
   const [okMsg, setOkMsg] = useState('');
   const [exportando, setExportando] = useState('');
+  // UNIDADE DE SAÍDA: população (sementes/ha) é como o agrônomo pensa;
+  // sementes por metro linear é como o operador regula a plantadeira. São o
+  // mesmo número em réguas diferentes — a escolha vale para a TABELA e para o
+  // ARQUIVO, sem refazer a prescrição. null = a unidade da própria prescrição.
+  const [unidadeSaida, setUnidadeSaida] = useState<UnidadeDose | null>(null);
+  /** A outra régua da mesma dose (população <-> sementes/m), quando dá para converter. */
+  const equivalente = useMemo(() => {
+    const esp = r.params.sementes?.espacamentoM;
+    const outra: UnidadeDose | null = r.unidade === 'sementes/ha' ? 'sementes/m'
+      : r.unidade === 'sementes/m' ? 'sementes/ha' : null;
+    if (!outra) return null;
+    return { unidade: outra, ok: podeConverter(r.unidade, outra, esp), espacamentoM: esp };
+  }, [r.unidade, r.params.sementes?.espacamentoM]);
 
   function escolherZoneamento(id: string) {
     const z = zoneamentos.find(x => x.id === id);
@@ -551,6 +565,18 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
       p = getPrescricoes(talhaoId).find(x => x.id === id);
     }
     if (!p) { setErro('Prescrição não encontrada.'); return; }
+    // Unidade de saída: o arquivo sai na régua escolhida (população ou
+    // sementes/m). A prescrição SALVA não muda — a conversão é exata e
+    // reversível, então ela acontece só na saída.
+    // Só entre unidades de SEMENTE: a escolha feita no editor não pode vazar
+    // para uma prescrição salva de adubo (kg/ha não vira sementes/m).
+    if (unidadeSaida && unidadeSaida !== p.unidade && ehUnidadeSemente(p.unidade) && ehUnidadeSemente(unidadeSaida)) {
+      if (!podeConverter(p.unidade, unidadeSaida, p.params.sementes?.espacamentoM)) {
+        setErro('Informe o espaçamento entre linhas (Parâmetros da semente) para exportar em sementes por metro.');
+        return;
+      }
+      p = prescricaoEmUnidade(p, unidadeSaida);
+    }
     const val = validarPrescricao(p);
     // Erro = o arquivo sairia quebrado; não há o que decidir.
     if (val.erros.length) { setErro(`Não exportado — corrija: ${val.erros.join(' · ')}`); return; }
@@ -1142,6 +1168,11 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
                         <th className="text-right px-2 py-1.5">Área (ha)</th>
                         {r.modo === 'equacao' && varsEq.map(v => <th key={v} className="text-right px-2 py-1.5 uppercase">{v}</th>)}
                         <th className="text-right px-2 py-1.5">{compensa ? `População (${r.unidade})` : `Dose (${r.unidade})`}</th>
+                        {equivalente?.ok && (
+                          <th className="text-right px-2 py-1.5" title={`Mesma dose na outra régua — espaçamento ${fmt(equivalente.espacamentoM!, 2)} m`} style={{ color: '#c4b5fd' }}>
+                            ≈ {equivalente.unidade}
+                          </th>
+                        )}
                         {compensa && <th className="text-right px-2 py-1.5" style={{ color: '#86efac' }}>No arquivo ({r.unidade})</th>}
                         <th className="text-right px-2 py-1.5">Total ({UNIDADE_TOTAL[r.unidade]})</th>
                         {nutri && <th className="text-right px-2 py-1.5">N·P·K (kg/ha)</th>}
@@ -1181,6 +1212,13 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
                               placeholder={Number.isFinite(z.dose) ? undefined : 'erro'}
                               className="w-20 rounded px-1.5 py-0.5 text-right text-[10px] outline-none" style={inputStyle} />
                           </td>
+                          {equivalente?.ok && (
+                            <td className="px-2 py-1 text-right" style={{ color: '#c4b5fd' }}>
+                              {Number.isFinite(z.dose)
+                                ? fmt(converterDose(z.dose, r.unidade, equivalente.unidade, equivalente.espacamentoM), equivalente.unidade === 'sementes/m' ? 2 : 0)
+                                : '—'}
+                            </td>
+                          )}
                           {compensa && (
                             <td className="px-2 py-1 text-right font-semibold" style={{ color: '#86efac' }}>
                               {Number.isFinite(z.dose) ? fmt0(doseCompensada(z.dose, r.params.sementes, true)) : '—'}
@@ -1231,6 +1269,35 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
                     população final ~{fmt0(metricasSem.populacaoFinal)} plantas/ha
                     {metricasSem.sacos != null ? ` · ${fmt(metricasSem.sacos, 1)} sacos no total` : ''}
                   </p>
+                )}
+
+                {/* ── Unidade do ARQUIVO ──
+                    A prescrição é decidida em população (pl/ha) e a plantadeira
+                    é regulada em sementes por metro linear. São a mesma dose em
+                    réguas diferentes: aqui se escolhe em qual o SHP/Excel/PDF
+                    sai, sem refazer nada — o que está salvo não muda. */}
+                {equivalente && (
+                  <div className="flex flex-wrap items-center gap-1.5 p-1.5 rounded" style={{ background: '#0f2240', border: '1px solid #1a3a6b' }}>
+                    <Sprout size={11} style={{ color: '#c4b5fd' }} />
+                    <span className="text-[10px]" style={{ color: '#93c5fd' }}>Exportar em:</span>
+                    {([r.unidade, equivalente.unidade] as UnidadeDose[]).map(u => {
+                      const ativo = (unidadeSaida ?? r.unidade) === u;
+                      const bloqueado = u !== r.unidade && !equivalente.ok;
+                      return (
+                        <button key={u} onClick={() => setUnidadeSaida(u)} disabled={bloqueado}
+                          title={bloqueado ? 'Informe o espaçamento entre linhas em Parâmetros da semente' : `Arquivo e tabela em ${u}`}
+                          className="text-[10px] px-2 py-1 rounded font-semibold disabled:opacity-40"
+                          style={{ background: ativo ? 'var(--invicta-blue-mid)' : '#1a3a6b', color: ativo ? '#fff' : '#93c5fd', border: `1px solid ${ativo ? '#60a5fa' : '#1a3a6b'}` }}>
+                          {ROTULO_SAIDA[u] ?? u}
+                        </button>
+                      );
+                    })}
+                    <span className="text-[9px]" style={{ color: '#64748b' }}>
+                      {equivalente.ok
+                        ? `conversão pelo espaçamento de ${fmt(equivalente.espacamentoM!, 2)} m — a prescrição salva continua em ${r.unidade}`
+                        : 'informe o espaçamento entre linhas para converter'}
+                    </span>
+                  </div>
                 )}
 
                 {/* ── Ações ── */}
