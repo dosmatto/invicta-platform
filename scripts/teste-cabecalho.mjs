@@ -7,7 +7,8 @@
 import assert from 'node:assert/strict';
 import { jsPDF } from 'jspdf';
 import {
-  desenharCabecalhoOficial, TITULO_PT, DATUM, larguraLogoCliente, bordaInfoArea,
+  desenharCabecalhoOficial, marcaInvicta, TITULO_PT, TITULO_MAXW, DATUM,
+  larguraLogoCliente, bordaInfoArea, MARCA_H, MARCA_Y, PE_Y,
 } from '../src/lib/pdfCabecalho.ts';
 
 let ok = 0, fail = 0;
@@ -16,7 +17,7 @@ function t(nome, fn) {
   catch (e) { fail++; console.error('  ✗', nome, '—', e.message); }
 }
 
-const W = 297, M = 6;
+const W = 297, H = 210, M = 6;
 
 // Grava tudo que o cabeçalho desenha, delegando as MEDIDAS a um jsPDF de verdade
 // (getTextWidth precisa das métricas reais da helvetica).
@@ -38,11 +39,11 @@ function desenhar(opts) {
 
 const logoFalsa = (wPx, hPx) => ({ naturalWidth: wPx, naturalHeight: hPx });
 const BASE = {
-  logoInvicta: null, logoCliente: null,
+  logoCliente: null,
   fazenda: 'Estância JM',
   esquerda: ['Produtor: JONATHAN VALLE MARIANO', 'Ano: 2026   |   Data: 08/2026'],
   titulo: 'Ca%', subtitulo: 'Saturação por Cálcio (%)',
-  info: ['Área Total: 33,70 ha', 'Município: Ponta Grossa - PR', `Datum: ${DATUM}`, 'Laboratório: Fundação ABC'],
+  info: ['Área Total: 33,70 ha', 'Município: Ponta Grossa - PR', `Datum: ${DATUM}`],
 };
 const infoDe = (textos) => textos.filter(t => t.y >= 13 && t.align === 'right');
 
@@ -111,18 +112,71 @@ t('FUSO saiu do cabeçalho e o datum é WGS 84', () => {
   assert.ok(!/SIRGAS/i.test(tudo));
 });
 
-t('LABORATÓRIO entrou no quadro (saiu de baixo do título)', () => {
+t('o subtítulo é o nome da variável com a unidade', () => {
+  const sub = desenhar(BASE).textos.find(t => t.corpo === 9);
+  assert.equal(sub.txt, 'Saturação por Cálcio (%)');
+});
+
+// ── Modelo aprovado em 07/08/2026 ─────────────────────────────────────────────
+
+t('LABORATÓRIO saiu do quadro de informações (foi assinar o pé da página)', () => {
+  const tudo = desenhar(BASE).textos.map(t => t.txt).join(' | ');
+  assert.ok(!/laborat/i.test(tudo), 'o laboratório continua no cabeçalho');
+});
+
+t('a fazenda encosta na MARGEM esquerda (a logo saiu do cabeçalho)', () => {
+  const { textos, imagens } = desenhar(BASE);
+  assert.equal(textos.find(t => t.corpo === 12).x, M);
+  assert.equal(imagens.length, 0, 'o cabeçalho ainda desenha alguma logo');
+});
+
+t('as linhas de contexto acompanham a fazenda na margem', () => {
+  const ctx = desenhar(BASE).textos.filter(t => t.corpo === 8.5);
+  assert.equal(ctx.length, 2);
+  assert.ok(ctx.every(t => t.x === M));
+});
+
+t('título e subtítulo CENTRALIZADOS na página, entre os blocos laterais', () => {
   const { textos } = desenhar(BASE);
-  assert.ok(infoDe(textos).some(l => l.txt === 'Laboratório: Fundação ABC'));
+  const titulo = textos.find(t => t.corpo === TITULO_PT);
   const sub = textos.find(t => t.corpo === 9);
-  assert.equal(sub.txt, 'Saturação por Cálcio (%)', 'o subtítulo deixou de ser o nome da variável');
+  assert.equal(titulo.align, 'center');
+  assert.equal(titulo.x, W / 2, 'o título não está no centro da página');
+  assert.equal(sub.x, W / 2, 'o subtítulo não acompanha o título');
+  // não pode encostar em nenhum dos dois blocos laterais
+  const esqFim = Math.max(...textos.filter(t => t.align === 'left').map(t => t.x + t.largura));
+  assert.ok(titulo.x - titulo.largura / 2 > esqFim, 'o título encosta no bloco da fazenda');
+  assert.ok(titulo.x + titulo.largura / 2 < Math.min(...infoDe(textos).map(l => l.x - l.largura)));
 });
 
 t('nome comprido de fazenda não invade o título (corta com "…")', () => {
-  const { textos } = desenhar({ ...BASE, fazenda: 'Fazenda Nossa Senhora Aparecida do Rio Grande do Norte' });
+  const { textos } = desenhar({ ...BASE, fazenda: 'Fazenda Nossa Senhora Aparecida do Alto Rio Grande do Norte e Arredores' });
   const faz = textos.find(t => t.corpo === 12);
   assert.ok(faz.txt.endsWith('…'));
-  assert.ok(faz.largura <= 60);
+  assert.ok(M + faz.largura < W / 2 - TITULO_MAXW / 2, 'a fazenda entra na caixa do título');
+});
+
+t('a marca INVICTA fica no pé da área branca, sem tocar a barra do rodapé', () => {
+  const logo = logoFalsa(2111, 669);            // a logo-colorida.png real
+  const imagens = [];
+  const espia = { addImage: (_i, _f, x, y, w, h) => imagens.push({ x, y, w, h }) };
+  marcaInvicta(espia, logo, 'direita');
+  marcaInvicta(espia, logo, 'esquerda');
+  const [dir, esq] = imagens;
+  assert.equal(dir.y, MARCA_Y);
+  assert.equal(dir.h, MARCA_H);
+  assert.ok(dir.y + dir.h < H - 10, 'a marca invade a barra azul do rodapé');
+  assert.equal(dir.x + dir.w, W - M, 'a marca da direita não encosta na margem');
+  assert.equal(esq.x, M, 'a marca da esquerda não encosta na margem');
+});
+
+t('a linha do laboratório fica dentro da faixa da marca, acima da barra', () => {
+  assert.ok(PE_Y > MARCA_Y && PE_Y <= MARCA_Y + MARCA_H);
+  assert.ok(PE_Y < H - 10);
+});
+
+t('sem logo do cliente o cabeçalho não desenha imagem nenhuma', () => {
+  assert.equal(desenhar(BASE).imagens.length, 0);
 });
 
 console.log(`\n${ok} passaram, ${fail} falharam\n`);

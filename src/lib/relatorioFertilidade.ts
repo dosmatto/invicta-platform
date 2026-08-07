@@ -13,7 +13,7 @@ import { capturarMapaFertilidade } from './capturaMapa';
 import { imagemParaPdf, reduzirLogo } from './pdfImagem';
 import { formatarValorVariavel, variavelDeAnalise } from './store';
 import { rotuloAno } from './periodo';
-import { DATUM, desenharCabecalhoOficial } from './pdfCabecalho';
+import { DATUM, PE_Y, desenharCabecalhoOficial, marcaInvicta } from './pdfCabecalho';
 
 export interface ProfundidadeRel {
   profundidade: string;
@@ -127,13 +127,12 @@ async function desenharPaginaMapa(doc: JsPDF, d: DadosRelatorioFert, logos: Logo
   // DE ANÁLISE (catálogo de variáveis), casados pelo atributoId da legenda; a
   // legenda só serve de reserva p/ id fora do catálogo. A sigla sai LITERAL —
   // nada de toUpperCase, senão "Ca%" viraria "CA%".
-  // Informações da área: sem fuso, e o laboratório (fonte do laudo) entra ali em
-  // vez de ficar solto embaixo do título.
+  // Informações da área: sem fuso e SEM laboratório — ele assina o pé da página.
   const varAn = variavelDeAnalise(d.legenda.atributoId);
   const uniVar = san(varAn?.unidade ?? d.unidade);
   const nomeVar = san(varAn?.nome || d.atributo);
   desenharCabecalhoOficial(doc, {
-    logoInvicta: logos.inv, logoCliente: logos.cli,
+    logoCliente: logos.cli,
     fazenda: d.fazenda,
     esquerda: [
       `Produtor: ${d.produtor || '—'}`,
@@ -145,7 +144,6 @@ async function desenharPaginaMapa(doc: JsPDF, d: DadosRelatorioFert, logos: Logo
       `Área Total: ${fmt(d.areaHa, 2)} ha`,
       `Município: ${d.municipio || '—'}${d.estado ? ' - ' + d.estado : ''}`,
       `Datum: ${DATUM}`,
-      `Laboratório: ${san(d.fonte) || '—'}`,
     ],
   });
 
@@ -229,6 +227,16 @@ async function desenharPaginaMapa(doc: JsPDF, d: DadosRelatorioFert, logos: Logo
   }
   doc.setFont('helvetica', 'normal'); doc.setFontSize(6); doc.setTextColor(...GRAY);
   for (let k = 0; k <= 4; k++) { const sx = ex + (barLen / 4) * k; doc.text(k === 4 ? `${Math.round(niceMax)} m` : String(Math.round(niceMax / 4 * k)), sx, ey + 5, { align: 'center' }); }
+
+  // ── PÉ DA ÁREA BRANCA: laboratório à esquerda, marca INVICTA à direita ──
+  // (modelo aprovado em 07/08/2026: os dois saíram do cabeçalho e vieram assinar
+  // a página aqui, acima da barra azul e sem encostar nela.)
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(...NAVY);
+  doc.text('Laboratório:', M, PE_Y);
+  const wRotulo = doc.getTextWidth('Laboratório:');
+  doc.setFont('helvetica', 'normal'); doc.setTextColor(...GRAY);
+  doc.text(san(d.fonte) || '—', M + wRotulo + 3, PE_Y);
+  marcaInvicta(doc, logos.inv, 'direita');
 
   // ── RODAPÉ ──
   doc.setFillColor(...NAVY); doc.rect(0, H - 10, W, 10, 'F');

@@ -9,7 +9,7 @@ import type { jsPDF as JsPDF } from 'jspdf';
 import { capturarMapaZonas } from './capturaMapa';
 import { imagemParaPdf, reduzirLogo } from './pdfImagem';
 import type { DadosExportZonas } from './exportZonas';
-import { DATUM, desenharCabecalhoOficial, clipTexto } from './pdfCabecalho';
+import { DATUM, desenharCabecalhoOficial, clipTexto, marcaInvicta } from './pdfCabecalho';
 
 const NAVY: [number, number, number] = [13, 33, 64];
 const GRAY: [number, number, number] = [100, 116, 139];
@@ -77,7 +77,7 @@ export async function gerarRelatorioZonas(d: DadosExportZonas, opts: OpcoesRelat
 
   // ── CABEÇALHO (desenho compartilhado com o relatório de Fertilidade) ──
   desenharCabecalhoOficial(doc, {
-    logoInvicta: logos.inv, logoCliente: logos.cli,
+    logoCliente: logos.cli,
     fazenda: san(d.fazenda),
     esquerda: [
       `Produtor: ${san(d.produtor) || '—'}`,
@@ -170,6 +170,13 @@ export async function gerarRelatorioZonas(d: DadosExportZonas, opts: OpcoesRelat
     `Divisas internas: ${d.linhas.length}`,
   ];
   resumo.forEach((t, i) => doc.text(t, tabX + 4, ry + 12 + i * 4.6));
+
+  // ── MARCA NO PÉ DA ÁREA BRANCA ──
+  // Sai do cabeçalho junto com a de Fertilidade. Aqui vai à ESQUERDA (e não à
+  // direita como lá): o canto inferior direito é do quadro RESUMO, cuja altura
+  // depende do nº de zonas e pode descer até ~193 mm. À esquerda, abaixo da faixa
+  // de identificação (que fecha em 171 mm), o espaço é livre em qualquer mapa.
+  marcaInvicta(doc, logos.inv, 'esquerda');
 
   // ── RODAPÉ ──
   doc.setFillColor(...NAVY); doc.rect(0, H - 10, W, 10, 'F');

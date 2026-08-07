@@ -1,5 +1,13 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.35.0': [
+    'O CABEÇALHO DO RELATÓRIO FICOU LIMPO, COM AS TRÊS COISAS NOS TRÊS CANTOS. A fazenda e o produtor encostaram na MARGEM ESQUERDA (antes começavam 62 mm adentro, empurrados pela logo, e o traço vertical que os separava dela sumiu junto). O quadro "Informações da Área" segue no canto superior direito. E a sigla do elemento ("MO") com o nome por extenso embaixo ("Matéria Orgânica (g/dm³)") passaram a ficar CENTRALIZADOS na página, entre os dois blocos — antes estavam deslocados 17 mm para a direita, herança de quando a logo ocupava a esquerda.',
+    'A LOGO DA INVICTA SAIU DO CABEÇALHO E FOI ASSINAR O PÉ DA PÁGINA, no canto inferior direito da área branca, logo acima da barra azul do rodapé e sem encostar nela. O topo do relatório passou a ser só informação do mapa.',
+    'O LABORATÓRIO SAIU DO QUADRO DE INFORMAÇÕES e foi para o canto inferior ESQUERDO da área branca, na mesma faixa da logo: "Laboratório: Fundação ABC". O quadro do canto superior direito ficou com Área Total, Município e Datum.',
+    'NADA MAIS MUDOU: mapas, estatísticas por profundidade, barra de interpretação, unidade, método, fonte, escala, cores e tipografia continuam exatamente como estavam.',
+    'ZONAS DE MANEJO ACOMPANHOU O CABEÇALHO (é o mesmo desenho para os dois relatórios, para não voltarem a divergir). Lá a logo foi para o canto inferior ESQUERDO: o direito é do quadro RESUMO, que desce mais ou menos conforme o nº de zonas.',
+    'Onde ver: Talhão → aba Relatórios → Gerar. 7 testes novos (npm run teste:cabecalho, 18 no total) travam o texto na margem, o título no centro da página e a logo acima da barra do rodapé.',
+  ],
   '2.34.0': [
     'A FERTILIDADE GANHOU UM TERCEIRO INTERPOLADOR: "KRIGAGEM FIXA", COM O VARIOGRAMA TRAVADO EM ALCANCE 400 m, PATAMAR 300 E PEPITA 10. Até aqui só havia Krigagem (com variograma auto-ajustado) e IDW: o auto-ajuste refaz a estrutura espacial a cada mapa, a partir dos próprios pontos, então cada nutriente e cada profundidade saíam com uma "cara" diferente e o mesmo talhão mudava de aparência de uma rodada para outra. Com o variograma fixo, todos os mapas passam a ser desenhados com a mesma régua — comparáveis entre variáveis, entre profundidades e entre talhões.',
     'OS TRÊS NÚMEROS SÃO EDITÁVEIS. Eles já nascem preenchidos (400 / 300 / 10) e valem para qualquer variável — na krigagem só a FORMA do variograma entra na conta, a escala se cancela, então o mesmo trio serve para pH, Ca% ou P em mg/dm³. Mudou e não gostou? "Restaurar padrões (400 / 300 / 10)" volta tudo num clique.',

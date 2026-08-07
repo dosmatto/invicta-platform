@@ -1,21 +1,28 @@
 'use client';
 
 // CABEÇALHO OFICIAL dos relatórios A4 paisagem, em UM lugar só:
-//   logo INVICTA | fazenda/produtor | título central | INFORMAÇÕES DA ÁREA | logo do cliente
+//   fazenda/produtor (canto sup. esquerdo) | título central | INFORMAÇÕES DA ÁREA
+//   (canto sup. direito) | logo do cliente
 // Fertilidade e Zonas de Manejo chamam a MESMA função — a regra do usuário é
 // "em todos os layouts exatamente igual", e isso só é garantia se houver um
 // desenho único. Mudar aqui muda os dois relatórios de uma vez.
+// A logo INVICTA saiu daqui (modelo aprovado em 07/08/2026): ela assina o PÉ da
+// área branca, acima da barra do rodapé — ver marcaInvicta().
 
 import type { jsPDF as JsPDF } from 'jspdf';
 
 type RGB = [number, number, number];
 const NAVY: RGB = [13, 33, 64];
 const GRAY: RGB = [100, 116, 139];
-const LINE: RGB = [210, 219, 232];
 
-const W = 297, M = 6;          // A4 paisagem, margem dos relatórios
-const BASE_Y = 26.5;           // régua navy que fecha o cabeçalho
-const TITULO_CX = 166, TITULO_MAXW = 84;
+const W = 297, H = 210, M = 6;   // A4 paisagem, margem dos relatórios
+const BASE_Y = 26.5;             // régua navy que fecha o cabeçalho
+// Título CENTRALIZADO na página, entre os dois blocos laterais. A caixa de 84 mm
+// (148,5 ± 42) deixa 100,5 mm para cada bloco lateral — folga de sobra: a maior
+// linha do bloco de informações mede ~37 mm.
+const TITULO_CX = W / 2;
+export const TITULO_MAXW = 84;
+const LATERAL_MAXW = TITULO_CX - TITULO_MAXW / 2 - M - 4;   // 96,5 mm
 
 // Corpo do título central — FIXO, NUNCA encolhe (a auto-redução antiga dava um
 // tamanho diferente para cada página). Dimensionado pelo MAIOR título existente:
@@ -45,8 +52,20 @@ export function clipTexto(doc: JsPDF, txt: string, maxW: number): string {
   return t + '…';
 }
 
+// A logo colorida da INVICTA assina o PÉ da área branca, acima da barra azul do
+// rodapé e sem encostar nela. Sai do cabeçalho por decisão de layout (07/08/2026).
+export const MARCA_H = 12;                 // altura impressa da logo, em mm
+export const MARCA_Y = H - 10 - 4 - MARCA_H;   // 184: 4 mm de respiro até a barra
+// Linha de base do texto que assina o pé (laboratório), rente ao fundo da logo.
+export const PE_Y = MARCA_Y + MARCA_H - 1;     // 195
+
+export function marcaInvicta(doc: JsPDF, logo: HTMLImageElement | null, lado: 'esquerda' | 'direita'): void {
+  if (!logo) return;
+  const w = MARCA_H * (logo.naturalWidth / logo.naturalHeight);
+  doc.addImage(logo, 'PNG', lado === 'direita' ? W - M - w : M, MARCA_Y, w, MARCA_H);
+}
+
 export interface CabecalhoOficial {
-  logoInvicta: HTMLImageElement | null;
   logoCliente: HTMLImageElement | null;
   fazenda: string;      // linha grande à esquerda (sai em maiúsculas)
   esquerda: string[];   // até 2 linhas cinza sob a fazenda (produtor, ano…)
@@ -59,17 +78,11 @@ export interface CabecalhoOficial {
 export function desenharCabecalhoOficial(doc: JsPDF, o: CabecalhoOficial): void {
   const clip = (txt: string, maxW: number) => clipTexto(doc, txt, maxW);
 
-  if (o.logoInvicta) {
-    const h = 15, w = h * (o.logoInvicta.naturalWidth / o.logoInvicta.naturalHeight);
-    doc.addImage(o.logoInvicta, 'PNG', M, 5, w, h);
-  }
-  doc.setDrawColor(...LINE); doc.setLineWidth(0.3); doc.line(M + 52, 5, M + 52, 24);
-
-  // ── Bloco esquerdo: fazenda + até 2 linhas de contexto ──
+  // ── Bloco esquerdo: encostado na MARGEM (a logo saiu daqui) ──
   doc.setTextColor(...NAVY); doc.setFont('helvetica', 'bold'); doc.setFontSize(12);
-  doc.text(clip(o.fazenda.toUpperCase(), 60), M + 56, 9);
+  doc.text(clip(o.fazenda.toUpperCase(), LATERAL_MAXW), M, 9);
   doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(...GRAY);
-  o.esquerda.slice(0, 2).forEach((t, i) => doc.text(clip(t, 62), M + 56, 14 + i * 4.5));
+  o.esquerda.slice(0, 2).forEach((t, i) => doc.text(clip(t, LATERAL_MAXW), M, 14 + i * 4.5));
 
   // ── Título central: sigla/assunto em corpo fixo + nome (unidade) embaixo ──
   doc.setTextColor(...NAVY); doc.setFont('helvetica', 'bold'); doc.setFontSize(TITULO_PT);
