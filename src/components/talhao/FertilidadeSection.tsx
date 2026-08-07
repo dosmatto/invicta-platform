@@ -30,7 +30,10 @@ import { listar as bibListar, criar as bibCriar, type ConteudoPerfil, type ItemB
 import { inputStyle } from '@/constants/ui';
 // Resolução em que a Recomendação calcula a dose — fonte única, para o mapa que
 // geramos aqui em segundo plano ser exatamente o que ela procura lá.
-import { PIXEL_RECOMENDACAO_M as PIXEL_RECOMENDACAO } from '@/lib/recomendacao/escolhaMapa';
+import {
+  PIXEL_RECOMENDACAO_M as PIXEL_RECOMENDACAO,
+  idDose20, prefixoDose20, ehAuxiliar20mPerdido,
+} from '@/lib/recomendacao/escolhaMapa';
 const fmt = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits: 1 });
 // Rótulo do valor no ponto do mapa: pH e K com 1 casa decimal; os demais inteiros.
 // Casas decimais do rótulo do ponto no mapa: config da variável (Preferências de
@@ -402,11 +405,15 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
       const carregados = await cloudCarregarMapasPorPrefixo<MapaPronto>(prefixo);
       if (carregados.length === 0) return;
       const novo: Record<string, MapaPronto> = {};
+      const perdidos: string[] = [];
       for (const c of carregados) {
         const partes = c.id.slice(prefixo.length).split('__');
         if (partes.length < 2) continue;
         const chave = `${partes[partes.length - 2]}__${partes[partes.length - 1]}`; // nut__prof
         const dados = c.dados;
+        // Auxiliar de 20 m que a v2.37.0 gravou nesta gaveta por engano: ele é o
+        // mais recente e sequestrava a aba e o relatório. Ignora e apaga.
+        if (ehAuxiliar20mPerdido(c.id, prefixo, dados)) { perdidos.push(c.id); continue; }
         // Se houver duplicado (mesmo nut/prof salvo com configs diferentes), mantém o mais recente.
         const atual = novo[chave];
         if (atual && (atual.interpoladoEm ?? '') >= (dados.interpoladoEm ?? '')) continue;
@@ -418,6 +425,10 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
         novo[chave] = dados;
       }
       setCache(novo);
+      if (perdidos.length && cloudPodeGravar()) {
+        console.warn('[fertilidade] limpando', perdidos.length, 'mapas auxiliares de 20 m gravados na gaveta errada (v2.37.0).');
+        for (const id of perdidos) cloudExcluirMapasPorPrefixo(id).catch(() => {});
+      }
       console.log('[fertilidade] autoload da nuvem:', Object.keys(novo).length, 'mapas —',
         Object.fromEntries(Object.entries(novo).map(([k, v]) => [k, { grid: !!v.resp?.grid, comp: v.resp?.grid?.comp ?? null, pngLen: v.resp?.png?.length ?? 0, bounds: !!v.resp?.bounds }])));
     })();
@@ -532,11 +543,14 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
   }
 
   // ── Mapa de 20 m para a Recomendação ──────────────────────────────────────
-  // A dose sai sempre em 20 m (PDF e arquivo de máquina). Até aqui a Recomendação
-  // pegava o mapa fino e fazia a MÉDIA de blocos 4×4 — o que comprime mín/máx antes
-  // de a fórmula rodar e derruba a dose (as manchas pequenas de deficiência somem).
-  // Agora interpolamos de verdade nos nós de 20 m: mesma superfície, amostrada mais
-  // grossa, sem o viés da média. O mapa fino continua sendo o da tela e do relatório.
+  // A dose sai sempre em 20 m (PDF e arquivo de máquina), então interpolamos de
+  // verdade nos nós de 20 m — mesma superfície, amostrada mais grossa.
+  //
+  // Ele vai para uma GAVETA PRÓPRIA da nuvem (`dose20__…`), NUNCA para o prefixo
+  // dos mapas de fertilidade. Guardá-lo lá junto custou duas regressões em dois
+  // dias (zonas em escadinha, e a estatística do relatório saindo do mapa grosso):
+  // todo leitor daquele prefixo desempata por "o mais recente vence", e o auxiliar
+  // é sempre o mais recente. Aqui ninguém o enxerga por engano.
   async function processar20m(nut: string, prof: string) {
     const leg = legendaDe(nut);
     if (!leg || !nav.talhaoId || !importacaoId) return;
@@ -552,7 +566,7 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
     const gridGz = resp.grid ? await comprimirGrid(resp.grid) : undefined;
     // Sem labels e sem PNG: este mapa nunca é desenhado, só entra na conta.
     cloudSalvarMapa(
-      idNuvem(nav.talhaoId, importacaoId, metodoChave, PIXEL_RECOMENDACAO, modeloEfetivo, nut, prof),
+      idDose20(nav.talhaoId, importacaoId, metodoChave, modeloEfetivo, nut, prof),
       { resp: { ...resp, png: '', grid: gridGz }, labels: fcVazio(), interpoladoEm: new Date().toISOString() },
     );
   }
@@ -644,8 +658,10 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
   function limpar() {
     setCache({}); setEstado('idle'); setErro('');
     if (nav.talhaoId && importacaoId) {
-      // Prefixo largo — apaga TODOS os mapas deste talhão+importação (qualquer config).
+      // Prefixo largo — apaga TODOS os mapas deste talhão+importação (qualquer config)
+      // e também os auxiliares de 20 m da Recomendação, que vivem em gaveta própria.
       cloudExcluirMapasPorPrefixo(`${nav.talhaoId}__${importacaoId}__`);
+      cloudExcluirMapasPorPrefixo(prefixoDose20(nav.talhaoId, importacaoId));
     }
   }
 

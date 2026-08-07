@@ -8,7 +8,7 @@
 import { cloudCarregarMapasPorPrefixo } from '../cloud';
 import { descomprimirGrid, decodeGrid, type RespInterp } from '../fertilidade';
 import { compilar, executarGrid, atributoPorToken, ajustarDose } from './motor';
-import { escolherMapas, PIXEL_RECOMENDACAO_M, type UsoMapa } from './escolhaMapa';
+import { escolherMapas, prefixoDose20, PIXEL_RECOMENDACAO_M, type UsoMapa } from './escolhaMapa';
 import type { ConteudoEquacao } from '../biblioteca';
 
 type MapaPronto = { resp: RespInterp; labels?: GeoJSON.FeatureCollection; interpoladoEm?: string };
@@ -18,20 +18,45 @@ type MapaPronto = { resp: RespInterp; labels?: GeoJSON.FeatureCollection; interp
 export interface OrigemGrid { pixel?: number; metodo?: string; reamostrado: boolean }
 export interface GridRecomendacao extends RespInterp { origem?: OrigemGrid }
 
-// Carrega os grids do talhão+importação, indexados por `nut__prof`.
-// A RECOMENDAÇÃO quer o mapa interpolado NATIVAMENTE a 20 m (a aba Fertilidade
-// gera um em segundo plano a cada processamento). Sem mapa de 20 m, cai no mais
-// fino e reamostra — ponte para talhões ainda não reprocessados.
-export async function carregarGridsTalhao(
-  talhaoId: string, importacaoId: string, uso: UsoMapa = 'dose',
-): Promise<Record<string, GridRecomendacao>> {
-  const prefixo = `${talhaoId}__${importacaoId}__`;
+async function carregarGaveta(prefixo: string, uso: UsoMapa) {
   const carregados = await cloudCarregarMapasPorPrefixo<MapaPronto>(prefixo);
   const escolha = escolherMapas(prefixo, carregados.map(c => ({
     id: c.id, tem: !!c.dados.resp?.grid?.b64, em: c.dados.interpoladoEm ?? '',
   })), uso);
+  return { carregados, escolha };
+}
+
+// Carrega os grids do talhão+importação, indexados por `nut__prof`.
+//
+// `uso` é OBRIGATÓRIO de propósito. Quando tinha default 'dose', o zoneamento
+// herdou a régua de 20 m sem ninguém escrever nada e as divisas das zonas saíram
+// em escadinha (6bab014). Errar agora é erro de compilação.
+//   'dose' → o mapa NATIVO de 20 m, da gaveta `dose20__`. Sem ele (talhão ainda não
+//            reprocessado), cai no mapa de fertilidade e reamostra.
+//   'zona' → o mapa de fertilidade como ele é, o mais fino.
+export async function carregarGridsTalhao(
+  talhaoId: string, importacaoId: string, uso: UsoMapa,
+): Promise<Record<string, GridRecomendacao>> {
   const out: Record<string, GridRecomendacao> = {};
+  const prefFert = `${talhaoId}__${importacaoId}__`;
+
+  // A dose procura primeiro na gaveta própria — lá só existem mapas de 20 m.
+  if (uso === 'dose') {
+    const pref20 = prefixoDose20(talhaoId, importacaoId);
+    const { carregados, escolha } = await carregarGaveta(pref20, uso);
+    for (const k in escolha) {
+      const e = escolha[k];
+      const resp = carregados[e.indice].dados.resp;
+      if (resp?.grid?.comp === 'gz') {
+        try { resp.grid = await descomprimirGrid(resp.grid); } catch { /* segue */ }
+      }
+      out[k] = { ...resp, origem: { pixel: e.pixel ?? PIXEL_RECOMENDACAO_M, metodo: e.metodo, reamostrado: false } };
+    }
+  }
+
+  const { carregados, escolha } = await carregarGaveta(prefFert, uso);
   for (const k in escolha) {
+    if (out[k]) continue;                 // a gaveta de 20 m já resolveu este atributo
     const e = escolha[k];
     const resp = carregados[e.indice].dados.resp;
     if (resp?.grid?.comp === 'gz') {

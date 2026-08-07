@@ -50,7 +50,7 @@ export function DashboardPanel() {
     setConfDup(false); setLimpando(true); setMsgLimp('');
     try {
       const ids = aplicarDedupTalhoesExatos();
-      for (const tid of ids) { await cloudExcluirMapasPorPrefixo(`${tid}__`).catch(() => {}); await cloudExcluirPorPrefixo('inv_cenarios', `cen_${tid}_`).catch(() => {}); }
+      for (const tid of ids) { await cloudExcluirMapasPorPrefixo(`${tid}__`).catch(() => {}); await cloudExcluirMapasPorPrefixo(`dose20__${tid}__`).catch(() => {}); await cloudExcluirPorPrefixo('inv_cenarios', `cen_${tid}_`).catch(() => {}); }
       setMsgLimp(`✓ ${ids.length} talhões duplicados removidos. Recarregando…`);
       setTimeout(() => window.location.reload(), 900);
     } catch (e) { setMsgLimp('Falha: ' + (e instanceof Error ? e.message : 'erro')); setLimpando(false); }
@@ -61,7 +61,7 @@ export function DashboardPanel() {
     setConfOrf(false); setLimpando(true); setMsgLimp('');
     try {
       const { fazendas, talhaoIds } = aplicarRemocaoFazendasOrfas();
-      for (const tid of talhaoIds) { await cloudExcluirMapasPorPrefixo(`${tid}__`).catch(() => {}); await cloudExcluirPorPrefixo('inv_cenarios', `cen_${tid}_`).catch(() => {}); }
+      for (const tid of talhaoIds) { await cloudExcluirMapasPorPrefixo(`${tid}__`).catch(() => {}); await cloudExcluirMapasPorPrefixo(`dose20__${tid}__`).catch(() => {}); await cloudExcluirPorPrefixo('inv_cenarios', `cen_${tid}_`).catch(() => {}); }
       setMsgLimp(`✓ ${fazendas} fazenda(s) órfã(s) + ${talhaoIds.length} talhão(ões) removidos. Recarregando…`);
       setTimeout(() => window.location.reload(), 900);
     } catch (e) { setMsgLimp('Falha: ' + (e instanceof Error ? e.message : 'erro')); setLimpando(false); }

@@ -1,19 +1,23 @@
 // Qual mapa interpolado alimenta a RECOMENDAÇÃO — regra única, sem dependências.
 //
-// A dose sai sempre em 20 m (PDF e arquivo de máquina). Até a v2.36.0 pegávamos o
-// mapa fino e fazíamos a MÉDIA de blocos 4×4. Agora a aba Fertilidade grava também
-// um mapa interpolado NATIVAMENTE a 20 m, e é ele que deve ser escolhido aqui.
+// A dose sai sempre em 20 m (PDF e arquivo de máquina), e para isso a aba
+// Fertilidade interpola um mapa NATIVO nessa resolução junto com o fino.
 //
-// MEDIDO (backend real, 40 pontos de K%, variograma fixo e auto): a diferença de
-// DOSE entre os dois caminhos é ~1%. A superfície krigada é lisa na escala de 20 m,
-// então a média de 16 pixels quase não muda o valor — não espere as doses subirem
-// por causa disto. O que o mapa nativo resolve de verdade é outra coisa:
-//   • a reamostragem mantinha os `bounds` do grid fino com um shape novo, o que
-//     desloca o mapa em ~meio pixel grosso (o centro do bloco não é o nó do grid);
-//   • o `stats` que acompanhava o grid continuava sendo o do mapa fino (pixel_m,
-//     nx/ny, min/max), inconsistente com os dados ao lado;
-//   • e, com dois mapas por atributo na nuvem, a escolha passou a ser EXPLÍCITA em
-//     vez de "o mais recente ganha" — que é o que este arquivo garante.
+// ONDE ELE MORA (v2.38.0): numa GAVETA PRÓPRIA da nuvem, `dose20__…`, e não mais
+// junto dos mapas de fertilidade. Guardá-lo no mesmo prefixo custou DUAS
+// regressões em dois dias: as zonas saíram em escadinha de 20 m (6bab014) e o
+// relatório de fertilidade passou a imprimir a estatística do mapa grosso — porque
+// os leitores daquele prefixo desempatam por "o mais recente vence", e o auxiliar
+// é sempre o mais recente (sai da fila de segundo plano). Namespace separado
+// resolve a CLASSE do problema: nenhum leitor de fertilidade o enxerga, hoje nem
+// quando alguém escrever um laço novo. É o padrão que o repo já usa em
+// `condutividade__`, `compactacao__`, `composicao__` e `mdecam__`.
+//
+// MEDIDO (backend real, 40 pontos de K%, variograma fixo e auto): entre krigar
+// nativo a 20 m e tirar a média de blocos 4×4 do mapa fino, a diferença de DOSE é
+// ~1% — a superfície krigada é lisa nessa escala. O mapa nativo vale por outra
+// coisa: a reamostragem devolvia um shape novo com os `bounds` do grid fino
+// (deslocamento de ~meio pixel) e carregava um `stats` que descrevia o mapa fino.
 //
 // Módulo separado de propósito: `aplicar.ts` arrasta cloud/biblioteca e não carrega
 // em Node, então esta regra ficaria sem teste. Coberto por `npm run teste:grids`.
@@ -21,6 +25,27 @@
 // Resolução em que a recomendação calcula. Espelhada em FertilidadeSection
 // (PIXEL_RECOMENDACAO), que é quem gera o mapa nessa resolução.
 export const PIXEL_RECOMENDACAO_M = 20;
+
+// Gaveta do raster auxiliar de 20 m. Prefixos (fonte única — a aba grava, a
+// recomendação lê, e as exclusões em cascata apagam):
+export const prefixoDose20 = (talhaoId: string, importacaoId?: string) =>
+  importacaoId ? `dose20__${talhaoId}__${importacaoId}__` : `dose20__${talhaoId}__`;
+export const idDose20 = (
+  talhaoId: string, importacaoId: string, metodo: string, modelo: string, nut: string, prof: string,
+) => `${prefixoDose20(talhaoId, importacaoId)}${metodo}__${PIXEL_RECOMENDACAO_M}__${modelo || 'auto'}__${nut}__${prof}`;
+
+// O auxiliar que a v2.37.0 gravou POR ENGANO no prefixo de fertilidade. Assinatura
+// exata do que `processar20m` escrevia: pixel 20, sem rótulos e sem PNG. Um mapa de
+// 20 m que o USUÁRIO escolheu no seletor tem rótulos — por isso não é confundido.
+export function ehAuxiliar20mPerdido(
+  id: string, prefixo: string, doc: { labels?: { features?: unknown[] }; resp?: { png?: string } },
+): boolean {
+  const info = lerChaveMapa(id.startsWith(prefixo) ? id.slice(prefixo.length) : id);
+  if (info?.pixel !== PIXEL_RECOMENDACAO_M) return false;
+  const semRotulos = !doc.labels?.features || doc.labels.features.length === 0;
+  const semPng = !doc.resp?.png;
+  return semRotulos && semPng;
+}
 
 // Lê o id do mapa salvo pela aba Fertilidade, do FIM para o começo:
 //   talhao__importacao__metodo__pixel__modelo__nut__prof
@@ -61,7 +86,7 @@ export type UsoMapa = 'dose' | 'zona';
  * reprocessado depois ganharia do de 20 m só por ser mais novo — e, do outro
  * lado, o de 20 m recém-gerado rouba a vez do fino no zoneamento.
  */
-export function escolherMapas(prefixo: string, itens: CandidatoMapa[], uso: UsoMapa = 'dose'): Record<string, EscolhaMapa> {
+export function escolherMapas(prefixo: string, itens: CandidatoMapa[], uso: UsoMapa): Record<string, EscolhaMapa> {
   const out: Record<string, EscolhaMapa> = {};
   // 'zona' quer o menor pixel; sem pixel no id (legado), fica por último.
   const melhorPixel = (a?: number, b?: number): boolean => {

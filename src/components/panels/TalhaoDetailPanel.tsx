@@ -27,6 +27,7 @@ import { verificarTrocaPoligono, mensagemBloqueioTroca, notaCicloVerificado, typ
 import { carregarEcOficial, rotuloEc, type EcCamada } from '@/lib/meap/gerar';
 import { classeZona } from '@/lib/zonas';
 import { cloudCarregarMapasPorPrefixo } from '@/lib/cloud';
+import { lerChaveMapa } from '@/lib/recomendacao/escolhaMapa';
 import { descomprimirGrid, coordsFromBounds, type RespInterp } from '@/lib/fertilidade';
 import { colorirGridComLegenda, temGrid } from '@/lib/raster';
 import {
@@ -219,8 +220,17 @@ function ResumoSafra({ talhaoId, safra }: { talhaoId: string; safra: string }) {
     const imp = getImportacoesLab(talhaoId, safra).sort((a, b) => (b.criadoEm ?? '').localeCompare(a.criadoEm ?? ''))[0];
     if (!imp) { setFert(0); return; }
     (async () => {
-      const carregados = await cloudCarregarMapasPorPrefixo(`${talhaoId}__${imp.id}__`);
-      if (!cancel) setFert(carregados.length);
+      const prefixo = `${talhaoId}__${imp.id}__`;
+      const carregados = await cloudCarregarMapasPorPrefixo(prefixo);
+      // Conta VARIÁVEIS interpoladas (nut+profundidade), não documentos: o mesmo
+      // atributo pode estar salvo mais de uma vez, com configs diferentes de
+      // interpolação, e "2 mapas" para uma variável só confunde.
+      const vistos = new Set<string>();
+      for (const c of carregados) {
+        const info = lerChaveMapa(c.id.slice(prefixo.length));
+        if (info) vistos.add(info.chave);
+      }
+      if (!cancel) setFert(vistos.size);
     })();
     return () => { cancel = true; };
   }, [talhaoId, safra]);

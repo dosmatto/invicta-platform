@@ -134,7 +134,7 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
     }
     setEstado('carregando');
     try {
-      const grids = await carregarGridsTalhao(nav.talhaoId, importacaoId);
+      const grids = await carregarGridsTalhao(nav.talhaoId, importacaoId, 'dose');
       const area = talhao?.areaHa ?? 0;
       const ok: DoseCalculada[] = [];
       const erros: { nome: string; erro: string }[] = [];
@@ -227,7 +227,7 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
     const aba = typeof window !== 'undefined' ? window.open('', '_blank') : null;  // antes de qualquer await
     setBookEstado('carregando');
     try {
-      const grids = await carregarGridsTalhao(nav.talhaoId, importacaoId);
+      const grids = await carregarGridsTalhao(nav.talhaoId, importacaoId, 'dose');
       const area = talhao?.areaHa ?? 0;
       const cens: Cenario[] = [];
       for (const r of recs) {

@@ -80,6 +80,7 @@ export function ProdutoresPanel() {
     const { talhaoIds } = excluirProdutorCascata(alvoExcluir.id);
     for (const tid of talhaoIds) {
       await cloudExcluirMapasPorPrefixo(`${tid}__`);
+      await cloudExcluirMapasPorPrefixo(`dose20__${tid}__`);
       await cloudExcluirPorPrefixo('inv_cenarios', `cen_${tid}_`);
     }
     setExcluindo(false);

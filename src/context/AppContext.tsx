@@ -288,7 +288,7 @@ export function AppProvider({ children, redirectProdutorParaPortal, modoCampo }:
       if (revisar.length) { console.log('%c— Revisar à mão (nome igual, ÁREA diferente):', 'color:#fbbf24'); console.table(revisar.map(g => ({ produtor: g.produtor, fazenda: g.fazenda, 'talhão': g.nome, 'áreas': g.areas.join(' / ') }))); }
       if (!aplicar) { console.warn('[dedup] PREVIEW — nada removido. Para APLICAR: await invDedupTalhoes(true)'); return { grupos: exatos.length, aRemover: totalRem, revisar: revisar.length }; }
       const ids = aplicarDedupTalhoesExatos();
-      for (const tid of ids) { await cloudExcluirMapasPorPrefixo(`${tid}__`).catch(() => {}); await cloudExcluirPorPrefixo('inv_cenarios', `cen_${tid}_`).catch(() => {}); }
+      for (const tid of ids) { await cloudExcluirMapasPorPrefixo(`${tid}__`).catch(() => {}); await cloudExcluirMapasPorPrefixo(`dose20__${tid}__`).catch(() => {}); await cloudExcluirPorPrefixo('inv_cenarios', `cen_${tid}_`).catch(() => {}); }
       console.log(`%c[dedup] REMOVIDOS ${ids.length} talhões duplicados. Recarregue a página (F5).`, 'font-weight:bold;color:#4ade80');
       return { removidos: ids.length };
     };
@@ -302,7 +302,7 @@ export function AppProvider({ children, redirectProdutorParaPortal, modoCampo }:
       console.table(orfas.map(o => ({ fazenda: o.fazenda.nome, 'clienteId (inexistente)': o.fazenda.clienteId?.slice(-6), talhões: o.talhoes })));
       if (!aplicar) { console.warn('[fazendas órfãs] PREVIEW — nada removido. Para APLICAR: await invRemoverFazendasOrfas(true)'); return { fazendas: orfas.length, talhoes: orfas.reduce((s, o) => s + o.talhoes, 0) }; }
       const { fazendas, talhaoIds } = aplicarRemocaoFazendasOrfas();
-      for (const tid of talhaoIds) { await cloudExcluirMapasPorPrefixo(`${tid}__`).catch(() => {}); await cloudExcluirPorPrefixo('inv_cenarios', `cen_${tid}_`).catch(() => {}); }
+      for (const tid of talhaoIds) { await cloudExcluirMapasPorPrefixo(`${tid}__`).catch(() => {}); await cloudExcluirMapasPorPrefixo(`dose20__${tid}__`).catch(() => {}); await cloudExcluirPorPrefixo('inv_cenarios', `cen_${tid}_`).catch(() => {}); }
       console.log(`%c[fazendas órfãs] REMOVIDAS ${fazendas} fazenda(s) + ${talhaoIds.length} talhão(ões). Recarregue (F5).`, 'font-weight:bold;color:#4ade80');
       return { fazendas, talhoes: talhaoIds.length };
     };
