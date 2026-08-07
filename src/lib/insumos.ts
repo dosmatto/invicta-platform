@@ -67,15 +67,48 @@ export interface DadosSemente {
   sementesPorEmbalagem?: number;
 }
 
+/** Unidade em que o PREÇO do insumo é digitado, mostrado e gravado. */
+export type UnidadePreco = 'kg' | 't';
+
 export interface ConteudoInsumo {
   categoria: CategoriaInsumo;
   /** % em massa — fertilizante, corretivo, gesso e personalizado. */
   garantias?: GarantiasInsumo;
   organico?: DadosOrganico;
   semente?: DadosSemente;
-  precoMedio?: number;           // R$/kg (semente: R$/kg também)
+  /** R$ pela unidade de `precoUnidade` — leia sempre por `precoNaUnidade`. */
+  precoMedio?: number;
+  /** Unidade de `precoMedio`. Ausente = 'kg' (cadastros anteriores à v2.41). */
+  precoUnidade?: UnidadePreco;
   fornecedor?: string;
   observacoes?: string;
+}
+
+/**
+ * Semente se compra por QUILO (é assim que vem o saco); todo o resto do que vai
+ * ao campo se compra por TONELADA. Calcário a "R$ 0,35/kg" não é como se cota,
+ * se confere nota nem se fecha pedido — e um zero a menos num número desses
+ * passa despercebido justamente por causa das casas decimais.
+ */
+export const unidadePreco = (c: CategoriaInsumo): UnidadePreco => (c === 'semente' ? 'kg' : 't');
+
+/** Quilos por unidade de preço — a régua das conversões. */
+const KG_POR: Record<UnidadePreco, number> = { kg: 1, t: 1000 };
+
+/**
+ * Preço do insumo convertido para `alvo`; `undefined` quando não há preço.
+ *
+ * Cadastro sem `precoUnidade` é anterior à v2.41, quando TODO preço era por
+ * quilo — e é assim que ele é lido. Nada de migração em massa multiplicando por
+ * 1000: se a marca de "já converti" se perdesse (outro navegador, nuvem ainda
+ * não hidratada), o preço seria multiplicado de novo e nada no dado diria que
+ * isso aconteceu. Número que se descreve não corre esse risco.
+ */
+export function precoNaUnidade(c: ConteudoInsumo, alvo: UnidadePreco): number | undefined {
+  const p = c.precoMedio;
+  if (p == null || !isFinite(p)) return undefined;
+  const v = (p * KG_POR[alvo]) / KG_POR[c.precoUnidade ?? 'kg'];
+  return Math.round(v * 1e6) / 1e6;      // 0,35 × 1000 dá 350,00000000000006
 }
 
 /** A complementação por nutriente só vale para fertilizante mineral (regra 12.5). */

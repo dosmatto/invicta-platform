@@ -19,6 +19,7 @@ import { emailUsuario } from '@/lib/empresa';
 import { listar as bibListar, type ItemBiblioteca, type ConteudoEquacao } from '@/lib/biblioteca';
 import {
   complementarNutriente, complementarPorZona, podeComplementar, NUTRIENTES, ROTULO_NUTRIENTE, SIMBOLO_NUTRIENTE, garantiaDe,
+  precoNaUnidade,
   type CategoriaInsumo, type ConteudoInsumo, type Nutriente,
 } from '@/lib/insumos';
 import {
@@ -206,7 +207,14 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
     // Puxa junto o que o cadastro sabe: preço, garantias do orgânico e os
     // parâmetros da semente — digitar de novo é pedir divergência.
     const extras: Partial<Rascunho> = {};
-    if (c.precoMedio != null && !r.custoUnit) extras.custoUnit = String(c.precoMedio);
+    // O custo daqui é por unidade-BASE da dose (kg quando a dose é kg/ha, t
+    // quando é t/ha) e o cadastro guarda por tonelada — sem converter, um
+    // calcário de R$ 350/t entrava como R$ 350/KG numa prescrição em kg/ha.
+    // Unidade-base que não é de massa (sementes, litro) não sai do peso: melhor
+    // deixar em branco do que preencher com número errado.
+    const base = UNIDADE_TOTAL[r.unidade];
+    const preco = base === 'kg' || base === 't' ? precoNaUnidade(c, base) : undefined;
+    if (preco != null && !r.custoUnit) extras.custoUnit = String(preco);
     if (c.organico?.garantiasKgT) patchParams({ organico: { ...r.params.organico, ...c.organico.garantiasKgT } });
     if (c.semente) {
       patchParams({ sementes: {

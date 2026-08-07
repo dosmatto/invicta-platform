@@ -11,8 +11,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   complementarNutriente, complementarPorZona, nutrienteFornecido, garantiaDe, podeComplementar,
-  NUTRIENTES, ROTULO_NUTRIENTE,
+  NUTRIENTES, ROTULO_NUTRIENTE, unidadePreco, precoNaUnidade,
 } from '../src/lib/insumos.ts';
+import { fmtMoeda, lerMoeda, arredMoeda } from '../src/lib/formato.ts';
 
 test('EXEMPLO DA SPEC: meta 200 de N, MAP 200 kg/ha a 12% → 391,1 kg/ha de ureia', () => {
   const r = complementarNutriente({ metaKgHa: 200, baseGarantiaPct: 12, baseDoseKgHa: 200, compGarantiaPct: 45 });
@@ -106,4 +107,106 @@ test('complementação é só para fertilizante mineral (regra 12.5)', () => {
 
 test('todo nutriente da lista tem rótulo (a UI monta o seletor a partir dela)', () => {
   for (const n of NUTRIENTES) assert.ok(ROTULO_NUTRIENTE[n], `sem rótulo: ${n}`);
+});
+
+// ── PREÇO: unidade por categoria e formato contábil (v2.41.0) ───────────────
+//
+// O preço passou a ser digitado por TONELADA em tudo que se compra a granel, e
+// segue por quilo na semente. O risco aqui é de três zeros: cadastro antigo
+// lido como se já fosse por tonelada, ou preço por tonelada entrando como
+// custo por quilo na prescrição. Os dois erram por 1000× sem nada na tela
+// denunciando.
+
+test('semente é a única categoria cotada por quilo', () => {
+  assert.equal(unidadePreco('semente'), 'kg');
+  for (const c of ['fertilizante', 'corretivo', 'gesso', 'esterco', 'composto', 'personalizado']) {
+    assert.equal(unidadePreco(c), 't', `${c} se compra por tonelada`);
+  }
+});
+
+test('CADASTRO ANTIGO (sem precoUnidade) é R$/kg: 0,35 vira 350,00/t', () => {
+  const calcario = { categoria: 'corretivo', precoMedio: 0.35 };
+  assert.equal(precoNaUnidade(calcario, 't'), 350, 'ler como se já fosse /t deixaria o calcário a R$ 0,35 a tonelada');
+  assert.equal(precoNaUnidade(calcario, 'kg'), 0.35);
+});
+
+test('0,35 × 1000 não pode chegar à tela como 350,00000000000006', () => {
+  assert.equal(precoNaUnidade({ categoria: 'corretivo', precoMedio: 0.35 }, 't'), 350);
+  assert.equal(fmtMoeda(precoNaUnidade({ categoria: 'corretivo', precoMedio: 0.35 }, 't')), '350,00');
+});
+
+test('cadastro novo já vem marcado — nada é convertido duas vezes', () => {
+  const c = { categoria: 'corretivo', precoMedio: 350, precoUnidade: 't' };
+  assert.equal(precoNaUnidade(c, 't'), 350, 'reabrir o cadastro não pode multiplicar de novo');
+  assert.equal(precoNaUnidade(c, 'kg'), 0.35, 'é este número que vira custo numa prescrição em kg/ha');
+  // idempotência: gravar o que a tela mostra e reler tem de dar o mesmo.
+  const regravado = { ...c, precoMedio: precoNaUnidade(c, 't') };
+  assert.equal(precoNaUnidade(regravado, 't'), 350);
+});
+
+test('semente ida e volta continua em quilo', () => {
+  const s = { categoria: 'semente', precoMedio: 12.5, precoUnidade: 'kg' };
+  assert.equal(precoNaUnidade(s, 'kg'), 12.5);
+  assert.equal(precoNaUnidade(s, 't'), 12500);
+});
+
+test('sem preço não inventa zero', () => {
+  assert.equal(precoNaUnidade({ categoria: 'corretivo' }, 't'), undefined);
+  assert.equal(precoNaUnidade({ categoria: 'corretivo', precoMedio: NaN }, 't'), undefined);
+  assert.equal(precoNaUnidade({ categoria: 'corretivo', precoMedio: Infinity }, 't'), undefined);
+  assert.equal(precoNaUnidade({ categoria: 'corretivo', precoMedio: 0 }, 't'), 0, 'zero é um preço, não uma ausência');
+});
+
+test('fmtMoeda: padrão contábil, sempre duas casas', () => {
+  assert.equal(fmtMoeda(350), '350,00');
+  assert.equal(fmtMoeda(1234.5), '1.234,50');
+  assert.equal(fmtMoeda(1234567.891), '1.234.567,89');
+  assert.equal(fmtMoeda(0.35), '0,35');
+  assert.equal(fmtMoeda(0), '0,00');
+  assert.equal(fmtMoeda(NaN), '');
+});
+
+test('lerMoeda: com vírgula, o ponto é milhar', () => {
+  assert.equal(lerMoeda('1.234,56'), 1234.56);
+  assert.equal(lerMoeda('1.234.567,89'), 1234567.89);
+  assert.equal(lerMoeda('R$ 1.250,00'), 1250);
+  assert.equal(lerMoeda('350,'), 350, 'meio da digitação não pode virar NaN');
+  assert.equal(lerMoeda('-1.234,50'), -1234.5);
+});
+
+test('lerMoeda: sem vírgula, ponto com 1–2 casas é decimal; o resto é milhar', () => {
+  assert.equal(lerMoeda('0.35'), 0.35, 'teclado numérico digita ponto');
+  assert.equal(lerMoeda('1.5'), 1.5);
+  assert.equal(lerMoeda('1.234'), 1234, 'preço de três decimais não existe em nota');
+  assert.equal(lerMoeda('1.234.567'), 1234567);
+  assert.equal(lerMoeda('350.'), 350);
+  assert.equal(lerMoeda('350'), 350);
+});
+
+test('lerMoeda: campo vazio é ausência de preço, não zero', () => {
+  assert.equal(lerMoeda(''), undefined);
+  assert.equal(lerMoeda('   '), undefined);
+  assert.equal(lerMoeda(','), undefined);
+  assert.equal(lerMoeda('-'), undefined);
+  assert.equal(lerMoeda('abc'), undefined);
+  assert.equal(lerMoeda('0'), 0);
+});
+
+test('o que o campo mostra é o que fica gravado (centavo)', () => {
+  assert.equal(arredMoeda(lerMoeda('1.234,567')), 1234.57);
+  assert.equal(arredMoeda(undefined), undefined);
+  // ida e volta pela tela é estável: formatar → reler → formatar não muda nada.
+  for (const v of [350, 1234.56, 0.35, 0, 1234567.89]) {
+    assert.equal(fmtMoeda(arredMoeda(lerMoeda(fmtMoeda(v)))), fmtMoeda(v), `instável em ${v}`);
+  }
+});
+
+test('PONTA A PONTA: R$ 350,00/t vira custo de R$ 0,35 por kg na prescrição', () => {
+  // O formulário grava o que foi digitado; a prescrição em kg/ha pede o custo
+  // por quilo, e a em t/ha pede por tonelada.
+  const gravado = { categoria: 'corretivo', precoMedio: arredMoeda(lerMoeda('350,00')), precoUnidade: 't' };
+  assert.equal(precoNaUnidade(gravado, 'kg'), 0.35);
+  assert.equal(precoNaUnidade(gravado, 't'), 350);
+  // 12 t/ha em 100 ha = 1.200 t → o custo tem de dar o mesmo pelos dois lados.
+  assert.equal(1200 * precoNaUnidade(gravado, 't'), 1_200_000 * precoNaUnidade(gravado, 'kg'));
 });

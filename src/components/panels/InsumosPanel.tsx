@@ -12,9 +12,10 @@
 import { useMemo, useState } from 'react';
 import { listar, criar, atualizar, excluir as excluirItem, type ItemBiblioteca } from '@/lib/biblioteca';
 import {
-  ROTULO_CATEGORIA, NUTRIENTES, SIMBOLO_NUTRIENTE,
+  ROTULO_CATEGORIA, NUTRIENTES, SIMBOLO_NUTRIENTE, unidadePreco, precoNaUnidade,
   type CategoriaInsumo, type ConteudoInsumo, type GarantiasInsumo,
 } from '@/lib/insumos';
+import { fmtMoeda, lerMoeda, arredMoeda } from '@/lib/formato';
 import { inputStyle } from '@/constants/ui';
 import { Plus, Save, Trash2, Pencil, X, Package, AlertTriangle } from 'lucide-react';
 
@@ -35,9 +36,12 @@ interface Rascunho {
   conteudo: ConteudoInsumo;
 }
 
+// O rascunho carrega o preço SEMPRE na unidade que a categoria mostra
+// (unidadePreco); a conversão para/da unidade gravada acontece em editar() e
+// salvar(), nas duas únicas fronteiras com a Biblioteca.
 const vazio = (categoria: CategoriaInsumo): Rascunho => ({
   id: null, nome: '', categoria,
-  conteudo: { categoria, garantias: {}, organico: {}, semente: {} },
+  conteudo: { categoria, garantias: {}, organico: {}, semente: {}, precoUnidade: unidadePreco(categoria) },
 });
 
 export function InsumosPanel() {
@@ -60,7 +64,7 @@ export function InsumosPanel() {
   function salvar() {
     setErro('');
     if (!r.nome.trim()) { setErro('Dê um nome ao insumo (ex.: "Ureia", "MAP", "KCl").'); return; }
-    const conteudo: ConteudoInsumo = { ...r.conteudo, categoria: r.categoria };
+    const conteudo: ConteudoInsumo = { ...r.conteudo, categoria: r.categoria, precoUnidade: unidadePreco(r.categoria) };
     if (r.id) atualizar<ConteudoInsumo>('insumos', r.id, { nome: r.nome.trim(), conteudo });
     else criar<ConteudoInsumo>('insumos', { nome: r.nome.trim(), conteudo });
     setR(vazio(r.categoria));
@@ -68,9 +72,11 @@ export function InsumosPanel() {
   }
 
   function editar(it: ItemBiblioteca<ConteudoInsumo>) {
+    const u = unidadePreco(it.conteudo.categoria);
     setR({
       id: it.id, nome: it.nome, categoria: it.conteudo.categoria,
-      conteudo: { garantias: {}, organico: {}, semente: {}, ...it.conteudo },
+      // Cadastro antigo veio em R$/kg: sobe convertido e desce gravado em R$/t.
+      conteudo: { garantias: {}, organico: {}, semente: {}, ...it.conteudo, precoMedio: precoNaUnidade(it.conteudo, u), precoUnidade: u },
     });
     setErro('');
   }
@@ -119,9 +125,8 @@ export function InsumosPanel() {
               placeholder={cat === 'fertilizante' ? 'ex.: MAP, Ureia, KCl' : 'nome do produto'}
               className="w-full rounded px-2 py-1.5 text-xs outline-none" style={inputStyle} />
           </Campo>
-          <Campo rotulo={cat === 'semente' ? 'Preço médio (R$/kg)' : 'Preço médio (R$/kg)'}>
-            <input value={fmt(r.conteudo.precoMedio)} onChange={e => setC({ precoMedio: num(e.target.value) })}
-              className="w-full rounded px-2 py-1.5 text-xs outline-none" style={inputStyle} />
+          <Campo rotulo={`Preço médio (R$/${unidadePreco(cat)})`}>
+            <InputMoeda valor={r.conteudo.precoMedio} onChange={v => setC({ precoMedio: v })} />
           </Campo>
           <Campo rotulo="Fornecedor">
             <input value={r.conteudo.fornecedor ?? ''} onChange={e => setC({ fornecedor: e.target.value })}
@@ -260,9 +265,32 @@ export function resumoInsumo(c: ConteudoInsumo): string {
     if (s.pmsG) partes.push(`PMS ${s.pmsG} g`);
     if (s.germinacaoPct) partes.push(`germinação ${s.germinacaoPct}%`);
   }
-  if (c.precoMedio != null) partes.push(`R$ ${c.precoMedio.toLocaleString('pt-BR')}/kg`);
+  const u = unidadePreco(c.categoria);
+  const preco = precoNaUnidade(c, u);
+  if (preco != null) partes.push(`R$ ${fmtMoeda(preco)}/${u}`);
   if (c.fornecedor) partes.push(c.fornecedor);
   return partes.join(' · ') || '—';
+}
+
+/**
+ * Campo de dinheiro: alinhado à direita e SEMPRE com duas casas ao sair
+ * ("1.234,50"). Enquanto está em foco vale o texto cru — reformatar a cada
+ * tecla joga o cursor para o fim e impede até digitar a vírgula, porque "350,"
+ * vira "350" no meio da digitação.
+ */
+function InputMoeda({ valor, onChange }: { valor?: number; onChange: (v: number | undefined) => void }) {
+  const [texto, setTexto] = useState<string | null>(null);
+  const emFoco = (v?: number) => (v == null ? '' : fmtMoeda(v));
+  return (
+    <input
+      value={texto ?? emFoco(valor)}
+      inputMode="decimal"
+      placeholder="0,00"
+      onFocus={() => setTexto(emFoco(valor))}
+      onChange={e => { setTexto(e.target.value); onChange(arredMoeda(lerMoeda(e.target.value))); }}
+      onBlur={() => setTexto(null)}
+      className="w-full rounded px-2 py-1.5 text-xs text-right outline-none" style={inputStyle} />
+  );
 }
 
 function Campo({ rotulo, children }: { rotulo: string; children: React.ReactNode }) {

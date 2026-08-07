@@ -26,6 +26,43 @@ export const fmtMinMax0 = (v: number, d = 0) => v.toLocaleString('pt-BR', { mini
 export const fmtMax2 = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
 
 /**
+ * DINHEIRO em padrão contábil pt-BR: milhar com ponto e SEMPRE duas casas
+ * ("1.234,50"). O zero final não é enfeite — preço é número de nota, e
+ * "1.234,5" na linha de cima de "1.234,56" vira dúvida na conferência.
+ */
+export const fmtMoeda = (v: number): string =>
+  Number.isFinite(v) ? v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
+
+/**
+ * Lê o que foi digitado num campo de dinheiro pt-BR e devolve o número (ou
+ * `undefined` se ainda não há número nenhum ali).
+ *
+ * A ambiguidade do ponto é resolvida do jeito de quem digita: havendo vírgula,
+ * ela é a decimal e todo ponto é milhar ("1.234,56"); sem vírgula, ponto com
+ * uma ou duas casas depois é decimal ("0.35", teclado numérico) e qualquer
+ * outro é milhar — "1.234" é mil duzentos e trinta e quatro, não 1,234, porque
+ * preço com três decimais não existe em nota.
+ */
+export function lerMoeda(texto: string): number | undefined {
+  const limpo = (texto ?? '').replace(/[^\d.,-]/g, '');
+  if (!limpo || limpo === '-') return undefined;
+  const iv = limpo.lastIndexOf(',');
+  let normal: string;
+  if (iv >= 0) {
+    normal = `${limpo.slice(0, iv).replace(/[.,]/g, '')}.${limpo.slice(iv + 1).replace(/[.,]/g, '')}`;
+  } else {
+    const p = limpo.split('.');
+    normal = p.length === 2 && p[1].length >= 1 && p[1].length <= 2 ? limpo : p.join('');
+  }
+  const v = Number(normal);
+  return Number.isFinite(v) ? v : undefined;
+}
+
+/** Arredonda para o centavo — o que o campo mostra é o que fica gravado. */
+export const arredMoeda = (v: number | undefined): number | undefined =>
+  v == null || !Number.isFinite(v) ? undefined : Math.round(v * 100) / 100;
+
+/**
  * ÁREA em hectares — SEMPRE duas casas, inclusive quando a última é zero.
  *
  * É a exceção da regra de casas por magnitude dos relatórios (fmtRel, em
