@@ -30,7 +30,10 @@ export interface RespInterp {
   stats: {
     n: number; modelo: string; min: number | null; max: number | null; nx: number; ny: number;
     pixel_m: number; rmse: number | null;
-    variograma: { alcance_m: number; patamar: number; pepita: number } | null;
+    variograma: {
+      alcance_m: number; patamar: number; pepita: number;
+      manual?: boolean;    // variograma DIGITADO pelo usuário (Krigagem fixa) — sem auto-ajuste
+    } | null;
   };
   // Grid bruto (Float32) — base64. Orientacao: norte no topo (linhas).
   // Use `decodeGrid(grid)` p/ obter Float32Array de tamanho rows*cols (NaN fora do polígono).

@@ -11,7 +11,7 @@ import { gerarRelatorioFertilidade, type ProfundidadeRel } from '@/lib/relatorio
 import {
   interpolar, rampaDaLegenda, gradienteCss, coordsFromBounds, extrairPoligono,
   comprimirGrid, descomprimirGrid,
-  type RespInterp,
+  type RespInterp, type VariogramaManual,
 } from '@/lib/fertilidade';
 import { colorirGridComLegenda, temGrid } from '@/lib/raster';
 import { resolverGradeDoLaudo, pontosPorNumero, casarAmostrasComPontos } from '@/lib/eloGrade';
@@ -19,7 +19,7 @@ import { decodeGrid } from '@/lib/fertilidade';
 import { rasterizarZonas, centroideGeom, type ZonaValor } from '@/lib/recomendacao/zonasGrid';
 import { stopsParaBackend, dominioDaLegenda, paresDaClasse, respeitarPadraoHomonima } from '@/lib/legendas';
 import type { Legenda } from '@/lib/legendas';
-import { Play, Layers, Loader2, Eraser, AlertTriangle, Activity, Settings, BookOpen, Save, FileDown } from 'lucide-react';
+import { Play, Layers, Loader2, Eraser, AlertTriangle, Activity, Settings, BookOpen, Save, FileDown, RotateCcw } from 'lucide-react';
 import { cloudSalvarMapa, cloudCarregarMapasPorPrefixo, cloudExcluirMapasPorPrefixo, cloudPodeGravar } from '@/lib/cloud';
 import { ehBackendFora, msgBackendFora, onBackendAquecendo, tocarBackend } from '@/lib/interpUrl';
 import { pode } from '@/lib/empresa';
@@ -49,6 +49,24 @@ const prefixoNuvem = (talhaoId: string, importacaoId: string, metodo: string, pi
 const idNuvem = (talhaoId: string, importacaoId: string, metodo: string, pixelM: number, modeloFixo: string, nut: string, prof: string) =>
   `${prefixoNuvem(talhaoId, importacaoId, metodo, pixelM, modeloFixo)}${nut}__${prof}`;
 
+// CONTRATO DA CHAVE: os DOIS ÚLTIMOS campos do id são sempre `nut__prof` — é por
+// eles que a hidratação abaixo, o relatório (lib/relatorioDados) e a Recomendação
+// (lib/recomendacao/aplicar) leem. Nunca acrescente nada DEPOIS deles. O miolo é
+// livre e serve só para dois mapas do mesmo nut/prof feitos com configs diferentes
+// não se sobrescreverem; na leitura, vence o `interpoladoEm` mais recente.
+
+// ── Krigagem fixa ───────────────────────────────────────────────────────────
+// Variograma travado nos valores de referência (editáveis na tela). Na krigagem
+// ordinária só a FORMA do variograma entra na predição — a escala some na conta —,
+// então o mesmo trio serve para qualquer variável, seja pH, Ca% ou P em mg/dm³.
+// Contra o auto-ajuste, que refaz a estrutura espacial a cada mapa, isto dá mapas
+// comparáveis entre nutrientes, profundidades e talhões.
+// Strings de propósito: o campo precisa poder ficar vazio enquanto se digita.
+const VARIOGRAMA_FIXO_PADRAO = { alcance: '400', patamar: '300', pepita: '10' };
+type VarFixo = typeof VARIOGRAMA_FIXO_PADRAO;
+type Interpolador = 'krige' | 'krige-fixo' | 'idw';
+const numVar = (s: string) => Number(String(s).replace(',', '.').trim());
+
 export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: string } = {}) {
   const { nav, uploadedGeo, setFertilidadeOverlay, setFertilidadeLabels } = useApp();
 
@@ -60,10 +78,54 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
   const [importacaoId, setImportacaoId] = useState('');
   const [nutriente, setNutriente] = useState('');
   const [profundidade, setProfundidade] = useState('');
-  const [metodo, setMetodo] = useState<'krige' | 'idw'>('krige');
+  const [interpolador, setInterpolador] = useState<Interpolador>('krige');
+  const [varFixo, setVarFixo] = useState<VarFixo>({ ...VARIOGRAMA_FIXO_PADRAO });
+  // O backend só conhece 'krige' e 'idw' — a Krigagem fixa é 'krige' + variograma manual.
+  const metodo: 'krige' | 'idw' = interpolador === 'idw' ? 'idw' : 'krige';
   const [pixelM, setPixelM] = useState(5);
-  const [modeloFixo, setModeloFixo] = useState('');
+  const [modeloFixo, setModeloFixo] = useState('');        // modo AUTO — '' = auto-ajustado
+  const [modeloFixa, setModeloFixa] = useState('spherical'); // modo FIXO — sempre concreto
   const [cfgAberto, setCfgAberto] = useState(false);
+
+  // Modelo que vai ao backend e à chave da nuvem. No modo fixo é sempre concreto:
+  // ali não há auto-ajuste nenhum, então "auto" seria mentira (e o backend cairia
+  // em esférico calado). Estado separado p/ a Krigagem auto não ficar pinada em
+  // esférico depois de uma passagem pelo modo fixo.
+  const modeloEfetivo = interpolador === 'krige-fixo' ? modeloFixa : modeloFixo;
+
+  // Variograma fixo saneado. null = modo fixo desligado OU alcance inválido. O
+  // ALCANCE é o que LIGA o modo manual no backend (`if man and man.get("alcance")`):
+  // sem ele a interpolação cairia calada no auto-ajuste e a tela estaria mentindo.
+  const varFixoNum = useMemo<VariogramaManual | null>(() => {
+    if (interpolador !== 'krige-fixo') return null;
+    const alcance = numVar(varFixo.alcance);
+    if (!isFinite(alcance) || alcance <= 0) return null;
+    const patamar = numVar(varFixo.patamar), pepita = numVar(varFixo.pepita);
+    return {
+      modelo: modeloFixa, alcance,
+      ...(isFinite(patamar) && patamar > 0 ? { patamar } : {}),
+      ...(isFinite(pepita) && pepita >= 0 ? { pepita } : {}),
+    };
+  }, [interpolador, varFixo, modeloFixa]);
+
+  // Fora do modo fixo é sempre ok; no modo fixo, exige o alcance.
+  const alcanceFixoOk = interpolador !== 'krige-fixo' || varFixoNum != null;
+
+  // Pepita ≥ patamar não é erro (o backend capa em 99% do patamar), mas achata o
+  // mapa — avisa sem bloquear.
+  const avisoPepita = useMemo(() => {
+    if (interpolador !== 'krige-fixo') return false;
+    const p = numVar(varFixo.patamar), n = numVar(varFixo.pepita);
+    return isFinite(p) && isFinite(n) && p > 0 && n >= p;
+  }, [interpolador, varFixo]);
+
+  // "Método" na chave da nuvem: o modo fixo grava sob nome próprio p/ não
+  // sobrescrever o mapa da krigagem AUTOMÁTICA do mesmo nut/prof (nem o contrário).
+  // Os NÚMEROS não entram na chave de propósito: calibrar variograma é iterativo
+  // (400, 500, 350…) e cada tentativa deixaria um documento órfão de até ~950 KB
+  // por nut/prof — e a hidratação baixa TUDO do talhão+importação. Reprocessar
+  // sobrescreve a tentativa anterior, que é o que se espera ao calibrar.
+  const metodoChave = interpolador === 'krige-fixo' ? 'krigefixa' : metodo;
   const [estado, setEstado] = useState<'idle' | 'processando' | 'pronto' | 'erro'>('idle');
   const [erro, setErro] = useState('');
   const [aquecendo, setAquecendo] = useState(false);
@@ -422,7 +484,14 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
     // o backend devolve grid + bounds + stats + png; só usamos grid/bounds/stats.
     // O domínio e os stops vão só pra colorir o PNG do backend (ignorado aqui).
     const { dominio, stops } = rampaDaLegenda(leg);
-    const resp = await interpolar({ pontos: pts, poligono: poligono!, dominio, stops, metodo, pixelM, modeloFixo: modeloFixo || null, signal: abortRef.current?.signal });
+    const resp = await interpolar({
+      pontos: pts, poligono: poligono!, dominio, stops, metodo, pixelM,
+      modeloFixo: modeloEfetivo || null,
+      // Krigagem fixa: manda o variograma pronto — o backend usa estes números
+      // direto, sem auto-ajuste e sem a guarda anti-degeneração.
+      variogramaManual: varFixoNum,
+      signal: abortRef.current?.signal,
+    });
     const labels = fcLabels(pts, nut);
     const interpoladoEm = new Date().toISOString();
     // Sessão guarda o PNG do backend como fallback (~10-30 KB). Quem economiza é a nuvem.
@@ -444,13 +513,14 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
           : { resp: { ...resp, png: '', grid: undefined }, labels, interpoladoEm };
         console.warn(`[fertilidade] mapa grande p/ a nuvem — salvando ${dados.resp.png ? 'só PNG' : 'só metadados'} de ${nut} ${prof}.`);
       }
-      cloudSalvarMapa(idNuvem(nav.talhaoId, importacaoId, metodo, pixelM, modeloFixo, nut, prof), dados);
+      cloudSalvarMapa(idNuvem(nav.talhaoId, importacaoId, metodoChave, pixelM, modeloEfetivo, nut, prof), dados);
     }
   }
 
   async function processar() {
     if (!poligono) { setErro('Limite do talhão não encontrado — abra o talhão no mapa.'); setEstado('erro'); return; }
     if (!nutriente) { setErro('Selecione uma variável.'); setEstado('erro'); return; }
+    if (!alcanceFixoOk) { setErro('Krigagem fixa: informe um Alcance maior que zero (m).'); setEstado('erro'); return; }
     abortRef.current?.abort();               // cancela um processamento anterior em voo
     abortRef.current = new AbortController();
     setEstado('processando'); setErro('');
@@ -464,6 +534,7 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
   async function processarTodos() {
     if (!poligono) { setErro('Limite do talhão não encontrado — abra o talhão no mapa.'); setEstado('erro'); return; }
     if (nutrientes.length === 0) return;
+    if (!alcanceFixoOk) { setErro('Krigagem fixa: informe um Alcance maior que zero (m).'); setEstado('erro'); return; }
     abortRef.current?.abort();               // cancela um processamento anterior em voo
     abortRef.current = new AbortController();
     setEstado('processando'); setErro('');
@@ -688,17 +759,23 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
           <div className="rounded-lg overflow-hidden" style={{ border: '1px solid #1a3a6b' }}>
             <button onClick={() => setCfgAberto(v => !v)} className="w-full flex items-center justify-between px-2.5 py-1.5 text-[10px] font-semibold" style={{ background: '#061525', color: '#93c5fd' }}>
               <span className="flex items-center gap-1"><Settings size={12} /> Configurações da interpolação</span>
-              <span style={{ color: '#64748b' }}>{metodo === 'idw' ? 'IDW' : `Krigagem · ${modeloFixo || 'auto'}`} · {pixelM} m {cfgAberto ? '▴' : '▾'}</span>
+              <span style={{ color: '#64748b' }}>
+                {interpolador === 'idw' ? 'IDW'
+                  : interpolador === 'krige-fixo' ? `Krigagem fixa · ${varFixo.alcance}/${varFixo.patamar}/${varFixo.pepita}`
+                    : `Krigagem · ${modeloFixo || 'auto'}`} · {pixelM} m {cfgAberto ? '▴' : '▾'}
+              </span>
             </button>
             {cfgAberto && (
               <div className="px-2.5 py-2 space-y-2" style={{ background: '#061525' }}>
                 <div>
                   <label className="text-[10px] font-semibold block mb-1" style={{ color: '#64748b' }}>Interpolador</label>
+                  {/* 3 botões numa fileira só: text-[9px] + nowrap p/ "Krigagem fixa"
+                      não quebrar em duas linhas quando o painel é estreitado. */}
                   <div className="flex gap-1">
-                    {(['krige', 'idw'] as const).map(mt => (
-                      <button key={mt} onClick={() => setMetodo(mt)} className="flex-1 py-1 rounded text-[10px] font-bold"
-                        style={{ background: metodo === mt ? 'var(--invicta-blue-mid)' : '#1a3a6b', color: metodo === mt ? '#fff' : '#64748b' }}>
-                        {mt === 'krige' ? 'Krigagem' : 'IDW'}
+                    {([['krige', 'Krigagem'], ['krige-fixo', 'Krigagem fixa'], ['idw', 'IDW']] as const).map(([mt, rotulo]) => (
+                      <button key={mt} onClick={() => setInterpolador(mt)} className="flex-1 py-1 rounded text-[9px] font-bold whitespace-nowrap"
+                        style={{ background: interpolador === mt ? 'var(--invicta-blue-mid)' : '#1a3a6b', color: interpolador === mt ? '#fff' : '#64748b' }}>
+                        {rotulo}
                       </button>
                     ))}
                   </div>
@@ -710,18 +787,47 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
                       {[2, 2.5, 3, 5, 10, 20].map(p => <option key={p} value={p}>{p} × {p} m{p === 5 ? ' (padrão)' : ''}</option>)}
                     </select>
                   </div>
-                  {metodo === 'krige' && (
+                  {interpolador !== 'idw' && (
                     <div className="flex-1">
                       <label className="text-[10px] font-semibold block mb-1" style={{ color: '#64748b' }}>Variograma</label>
-                      <select value={modeloFixo} onChange={e => setModeloFixo(e.target.value)} className="w-full rounded px-2 py-1 text-[11px] outline-none" style={inputStyle}>
-                        <option value="">Auto (melhor)</option>
-                        <option value="spherical">Esférico</option>
-                        <option value="exponential">Exponencial</option>
-                        <option value="gaussian">Gaussiano</option>
-                      </select>
+                      {/* No modo fixo não existe auto-ajuste: "Auto (melhor)" sairia
+                          esférico calado e o resumo do cabeçalho mentiria. */}
+                      {interpolador === 'krige-fixo' ? (
+                        <select value={modeloFixa} onChange={e => setModeloFixa(e.target.value)} className="w-full rounded px-2 py-1 text-[11px] outline-none" style={inputStyle}>
+                          <option value="spherical">Esférico</option>
+                          <option value="exponential">Exponencial</option>
+                          <option value="gaussian">Gaussiano</option>
+                        </select>
+                      ) : (
+                        <select value={modeloFixo} onChange={e => setModeloFixo(e.target.value)} className="w-full rounded px-2 py-1 text-[11px] outline-none" style={inputStyle}>
+                          <option value="">Auto (melhor)</option>
+                          <option value="spherical">Esférico</option>
+                          <option value="exponential">Exponencial</option>
+                          <option value="gaussian">Gaussiano</option>
+                        </select>
+                      )}
                     </div>
                   )}
                 </div>
+
+                {/* Krigagem fixa: o trio do variograma, já preenchido e editável. */}
+                {interpolador === 'krige-fixo' && (
+                  <div className="space-y-1.5 pt-2" style={{ borderTop: '1px solid #0f2240' }}>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      <CampoVar label="Alcance (m)" v={varFixo.alcance} on={s => setVarFixo(k => ({ ...k, alcance: s }))} ph="400" />
+                      <CampoVar label="Patamar" v={varFixo.patamar} on={s => setVarFixo(k => ({ ...k, patamar: s }))} ph="300" />
+                      <CampoVar label="Pepita" v={varFixo.pepita} on={s => setVarFixo(k => ({ ...k, pepita: s }))} ph="10" />
+                    </div>
+                    {!alcanceFixoOk && <p className="text-[9px]" style={{ color: '#f87171' }}>Informe um Alcance maior que zero — sem ele a krigagem fixa não roda.</p>}
+                    {avisoPepita && <p className="text-[9px]" style={{ color: '#fbbf24' }}>Pepita ≥ patamar: o servidor limita a pepita a 99% do patamar e o mapa sai liso.</p>}
+                    <button onClick={() => setVarFixo({ ...VARIOGRAMA_FIXO_PADRAO })} className="flex items-center gap-1 text-[9px] font-semibold" style={{ color: '#fbbf24' }}>
+                      <RotateCcw size={10} /> Restaurar padrões (400 / 300 / 10)
+                    </button>
+                    <p className="text-[9px] leading-relaxed" style={{ color: '#475569' }}>
+                      Os números vão ao servidor como estão: <strong>sem auto-ajuste</strong> e <strong>sem a proteção contra variograma degenerado</strong>. Por isso este modo também não tem RMSE de validação cruzada.
+                    </p>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -839,7 +945,7 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
                   <Activity size={12} />
                   {stats.modelo === 'zona' ? `Por zona · ${stats.n} px`
                     : stats.modelo === 'idw' ? `IDW · ${stats.n} pts`
-                      : `Krigagem · ${stats.modelo} · ${stats.n} pts`}
+                      : `Krigagem${stats.variograma?.manual ? ' fixa' : ''} · ${stats.modelo} · ${stats.n} pts`}
                 </div>
                 <button onClick={limpar} title="Limpar mapas" className="flex items-center gap-1 text-[10px]" style={{ color: '#93c5fd' }}>
                   <Eraser size={11} /> Limpar
@@ -848,7 +954,7 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
 
               <div className="text-[9px] leading-relaxed" style={{ color: '#64748b' }}>
                 pixel <strong style={{ color: '#94a3b8' }}>{stats.pixel_m} m</strong> · grade {stats.nx}×{stats.ny}
-                {stats.variograma && <> · alcance <strong style={{ color: '#94a3b8' }}>{stats.variograma.alcance_m} m</strong> · patamar {fmt(stats.variograma.patamar)} · pepita {fmt(stats.variograma.pepita)}</>}
+                {stats.variograma && <> · alcance <strong style={{ color: '#94a3b8' }}>{stats.variograma.alcance_m} m</strong> · patamar {fmt(stats.variograma.patamar)} · pepita {fmt(stats.variograma.pepita)}{stats.variograma.manual && <strong style={{ color: '#fbbf24' }}> · fixo</strong>}</>}
                 {stats.rmse != null && <> · RMSE {stats.rmse}</>}
               </div>
 
@@ -1014,6 +1120,18 @@ function Aviso({ texto }: { texto: string }) {
     <div className="flex items-start gap-2 p-3 rounded-lg" style={{ background: '#2d1a00', border: '1px solid #92400e' }}>
       <AlertTriangle size={14} style={{ color: '#fbbf24' }} className="flex-shrink-0 mt-0.5" />
       <p className="text-[10px]" style={{ color: '#fbbf24' }}>{texto}</p>
+    </div>
+  );
+}
+
+// Campo numérico do variograma fixo. Texto puro (não `type="number"`) p/ aceitar
+// vazio enquanto se digita e a vírgula decimal do pt-BR.
+function CampoVar({ label, v, on, ph }: { label: string; v: string; on: (s: string) => void; ph: string }) {
+  return (
+    <div>
+      <label className="text-[10px] font-semibold block mb-1" style={{ color: '#64748b' }}>{label}</label>
+      <input value={v} onChange={e => on(e.target.value)} placeholder={ph} inputMode="decimal"
+        className="w-full rounded px-2 py-1 text-[11px] outline-none" style={inputStyle} />
     </div>
   );
 }
