@@ -14,6 +14,7 @@ import { descomprimirGrid, decodeGrid, extrairPoligono, type RespInterp } from '
 import { colorirGridComLegenda, colorirGrid, temGrid } from './raster';
 import { rampaVisualStops, ordenarLegendasDoAtributo } from './legendas';
 import { resolverGradeDoLaudo, casarAmostrasComPontos } from './eloGrade';
+import { ehAuxiliar20mPerdido } from './recomendacao/escolhaMapa';
 import { carregarNdviSalvos } from './meap/gerar';
 import { municipioDaFazenda } from './geocodeMunicipio';
 import { centroideGeom } from './recomendacao/zonasGrid';
@@ -107,6 +108,12 @@ export async function carregarContextoRelatorio(
       const prof = partes[partes.length - 1];
       const dados = c.dados;
       const chave = `${nut}__${prof}`;
+      // Resto da v2.37: o raster auxiliar de 20 m da Recomendação chegou a ser
+      // gravado NESTA gaveta e, sendo sempre o mais recente, sequestrava a
+      // estatística do relatório (mín/máx encolhiam). A aba Fertilidade limpa
+      // esses restos ao abrir — mas quem vai DIRETO ao relatório não passou por
+      // lá, então o gerador também os ignora.
+      if (ehAuxiliar20mPerdido(c.id, prefixo, dados)) continue;
       // Pode haver MAIS DE UM doc para o mesmo nut/prof (configs/método diferentes,
       // ex.: um antigo VAZIO + um novo com grid). Desempata: mapa COM dados ganha
       // de VAZIO; entre iguais, o mais recente (interpoladoEm). Sem isso, o gerador

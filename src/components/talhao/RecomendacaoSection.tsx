@@ -38,7 +38,7 @@ function expandirDoses(doses: DoseCalculada[], div: DivCfg, areaHa: number): Dos
 }
 
 export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
-  const { nav, setFertilidadeOverlay, setFertilidadeLabels } = useApp();
+  const { nav, uploadedGeo, setFertilidadeOverlay, setFertilidadeLabels } = useApp();
   const safra = safraNome ?? '';
 
   const [modo, setModo] = useState<'equacao' | 'recomendacao'>('recomendacao');
@@ -89,11 +89,17 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
   }, [importacoes, importacaoId]);
 
   const talhao = useMemo(() => getTalhoes().find(t => t.id === nav.talhaoId) ?? null, [nav.talhaoId]);
-  // Contorno do talhão — usado para recortar o raster da dose no mapa da tela.
+  // Contorno do talhão — recorta o raster da dose no mapa da tela. O raster de
+  // 20 m transborda a divisa DE PROPÓSITO (cobre 100% do polígono), então sem o
+  // contorno o mapa sai serrilhado por cima da linha. MESMA derivação da aba
+  // Fertilidade: limite carregado no mapa primeiro, cadastro como reserva —
+  // só o cadastro falhava em talhão cujo limite veio por upload.
   const poligono = useMemo(() => {
+    const p = extrairPoligono(uploadedGeo);
+    if (p) return p;
     if (!talhao?.geojson) return null;
     try { return extrairPoligono(JSON.parse(talhao.geojson)); } catch { return null; }
-  }, [talhao]);
+  }, [uploadedGeo, talhao]);
   // Nº do cadastro da equação (janela de Equações) — o MESMO que sai no relatório,
   // p/ mostrar na frente de cada dose e facilitar o cruzamento. Doses parceladas
   // têm equacaoId "<id>__apN" → usa o id base.
@@ -124,6 +130,7 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
         // A malha de 20 m cobre 100% do talhão, então transborda um pouco na
         // divisa. O PDF já recorta ao desenhar (capturaMapa); aqui o mapa é uma
         // imagem esticada sobre os bounds, então o corte tem de ser no pixel.
+        if (!poligono) console.warn('[recomendacao] sem contorno do talhão — mapa de dose exibido SEM recorte (vai serrilhar na divisa).');
         const recortado = poligono
           ? await recortarNoPoligono(png, doseAtiva.bounds, poligono)
           : png;
