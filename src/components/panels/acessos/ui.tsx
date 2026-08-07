@@ -121,6 +121,26 @@ export function Modal({ titulo, children, onFechar, largura = 'max-w-md' }: {
   );
 }
 
+// ── Lista marcável (Vínculos do usuário e acesso definido no convite) ───────
+export function Bloco({ titulo, children }: { titulo: string; children: ReactNode }) {
+  return (
+    <div className="rounded p-2 space-y-0.5" style={{ background: '#0a1929', border: `1px solid ${COR.borda}`, maxHeight: 200, overflowY: 'auto' }}>
+      <Rotulo>{titulo}</Rotulo>
+      {children}
+    </div>
+  );
+}
+export function Marcar({ on, label, onChange, disabled }: {
+  on: boolean; label: string; onChange: () => void; disabled?: boolean;
+}) {
+  return (
+    <label className="flex items-center gap-2 text-[11px] cursor-pointer py-0.5" style={{ color: COR.txt }}>
+      <input type="checkbox" checked={on} onChange={onChange} disabled={disabled} />
+      <span className="truncate">{label}</span>
+    </label>
+  );
+}
+
 export function Vazio({ texto }: { texto: string }) {
   return <p className="text-[11px] py-6 text-center" style={{ color: COR.fraco }}>{texto}</p>;
 }

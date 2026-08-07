@@ -7,7 +7,7 @@
 // permissões e histórico.
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { getClientes } from '@/lib/store';
+import { getClientes, getFazendas } from '@/lib/store';
 import {
   ehOwner, emailUsuario, getPlanos, salvarPlano, excluirPlano, toggleSecaoPlano,
   atualizarPlano, SECOES_PORTAL, empresaAtiva, updateEmpresa,
@@ -18,8 +18,8 @@ import {
   statusDe, PAPEIS_ATRIBUIVEIS, type UsuarioIam,
 } from '@/lib/iam/usuarios';
 import {
-  cancelarConvite, criarConvite, criarConviteTipo, getConvites, linkDoConvite, reenviarConvite,
-  VALIDADE_TIPO_DIAS,
+  acessoDoConvite, cancelarConvite, conviteDoToken, criarConvite, criarConviteTipo, getConvites,
+  linkDoConvite, reenviarConvite, VALIDADE_TIPO_DIAS,
 } from '@/lib/iam/convites';
 import { MATRIZ_PADRAO } from '@/lib/iam/permissoes';
 import { getPerfil, getPerfis, salvarPerfil, excluirPerfil, renomearPerfil, permissoesDoPapel } from '@/lib/iam/perfis';
@@ -28,7 +28,7 @@ import {
   type CategoriaIam, type PapelIam,
 } from '@/lib/iam/tipos';
 import {
-  COR, Abas, Botao, Cartao, Chip, Modal, Rotulo, SeloStatus, Vazio,
+  COR, Abas, Bloco, Botao, Cartao, Chip, Marcar, Modal, Rotulo, SeloStatus, Vazio,
   campoSt, fmtData, fmtDataHora, fmtRelativo,
 } from './ui';
 import { DetalheUsuario } from './DetalheUsuario';
@@ -143,6 +143,80 @@ export function CentralAcessos() {
   );
 }
 
+// ── Acesso definido no convite (produtores/fazendas) ────────────────────────
+// Mesma regra dos Vínculos do usuário: nada marcado = sem restrição; marcar
+// produtor limita as fazendas às dele. O convite só GUARDA a escolha — quem
+// aplica é a aprovação, que continua manual.
+function SeletorAcesso({ cli, faz, setCli, setFaz, aviso }: {
+  cli: string[]; faz: string[];
+  setCli: (v: string[]) => void; setFaz: (v: string[]) => void;
+  aviso?: string;
+}) {
+  const clientes = useMemo(() => getClientes(), []);
+  const marcCli = new Set(cli);
+  const marcFaz = new Set(faz);
+  const fazendas = useMemo(() => {
+    const todas = getFazendas();
+    return cli.length ? todas.filter(f => marcCli.has(f.clienteId)) : todas;
+  }, [cli]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function alternarCli(id: string) {
+    const novo = new Set(cli);
+    if (novo.has(id)) novo.delete(id); else novo.add(id);
+    setCli([...novo]);
+    // Fazenda marcada de um produtor que saiu da lista some junto — senão
+    // sobraria um vínculo invisível na tela.
+    if (novo.size) {
+      const validas = new Set(getFazendas().filter(f => novo.has(f.clienteId)).map(f => f.id));
+      setFaz(faz.filter(id2 => validas.has(id2)));
+    }
+  }
+  function alternarFaz(id: string) {
+    const novo = new Set(faz);
+    if (novo.has(id)) novo.delete(id); else novo.add(id);
+    setFaz([...novo]);
+  }
+
+  return (
+    <div className="space-y-1.5">
+      <Rotulo>Quem ele vai poder acessar</Rotulo>
+      <p className="text-[9px] leading-relaxed" style={{ color: COR.fraco }}>
+        Nada marcado = <b>sem restrição</b> (vê tudo que o papel permitir). Marque para limitar.
+        {aviso ? ` ${aviso}` : ''}
+      </p>
+      <Bloco titulo={`Produtores (${cli.length || 'todos'})`}>
+        {clientes.length === 0
+          ? <p className="text-[10px]" style={{ color: COR.fraco }}>Nenhum produtor cadastrado ainda.</p>
+          : clientes.map(c => (
+            <Marcar key={c.id} on={marcCli.has(c.id)} label={c.nome} onChange={() => alternarCli(c.id)} />
+          ))}
+      </Bloco>
+      <Bloco titulo={`Fazendas (${faz.length || 'todas'})`}>
+        {fazendas.length === 0
+          ? <p className="text-[10px]" style={{ color: COR.fraco }}>Nenhuma fazenda nos produtores marcados.</p>
+          : fazendas.map(f => (
+            <Marcar key={f.id} on={marcFaz.has(f.id)} label={f.nome} onChange={() => alternarFaz(f.id)} />
+          ))}
+      </Bloco>
+      {(cli.length > 0 || faz.length > 0) && (
+        <Botao pequeno onClick={() => { setCli([]); setFaz([]); }}>Limpar (sem restrição)</Botao>
+      )}
+    </div>
+  );
+}
+
+// Nomes legíveis do acesso guardado no convite. Vazio = sem restrição.
+function textoAcesso(cli?: string[], faz?: string[]): string {
+  const nCli = cli?.length ?? 0, nFaz = faz?.length ?? 0;
+  if (!nCli && !nFaz) return '';
+  const nomes = (ids: string[], lista: Array<{ id: string; nome: string }>, plural: string) =>
+    lista.filter(x => ids.includes(x.id)).map(x => x.nome).join(', ') || `${ids.length} ${plural}`;
+  return [
+    nCli ? nomes(cli!, getClientes(), 'produtor(es)') : '',
+    nFaz ? nomes(faz!, getFazendas(), 'fazenda(s)') : '',
+  ].filter(Boolean).join(' · ');
+}
+
 // ── Cartão de usuário ───────────────────────────────────────────────────────
 function CartaoUsuario({ u, onAbrir, selecionado, pendente, souOwner, onMudou }: {
   u: UsuarioIam; onAbrir: () => void; selecionado: boolean; pendente: boolean;
@@ -157,6 +231,12 @@ function CartaoUsuario({ u, onAbrir, selecionado, pendente, souOwner, onMudou }:
   const nCli = u.clientesVinculados?.length ?? 0;
   const nFaz = u.fazendasVinculadas?.length ?? 0;
   const nTal = u.talhoesVinculados?.length ?? 0;
+
+  // Acesso que o CONVITE já definia (regra pura em conviteRegras.acessoDoConvite).
+  const convOrigem = useMemo(
+    () => (u.conviteId ? conviteDoToken(u.conviteId) : null), [u.conviteId]);
+  const { clientesVinculados: cliDoConvite, fazendasVinculadas: fazDoConvite } =
+    acessoDoConvite(u, convOrigem);
 
   return (
     <Cartao ativo={selecionado}>
@@ -198,8 +278,12 @@ function CartaoUsuario({ u, onAbrir, selecionado, pendente, souOwner, onMudou }:
                 setAprovando(true);
                 // O perfil do link entra como permissões PRÓPRIAS da pessoa — a
                 // partir daí ela é ajustável individualmente, como qualquer outra.
-                aprovarUsuario(u.email, papel, cat,
-                  perfilDoLink ? { permissoes: perfilDoLink.permissoes } : undefined);
+                // Idem para os vínculos definidos no convite.
+                aprovarUsuario(u.email, papel, cat, {
+                  ...(perfilDoLink ? { permissoes: perfilDoLink.permissoes } : {}),
+                  ...(cliDoConvite.length ? { clientesVinculados: cliDoConvite } : {}),
+                  ...(fazDoConvite.length ? { fazendasVinculadas: fazDoConvite } : {}),
+                });
                 onMudou();
               }}>
               <Check size={10} className="inline" /> Aprovar
@@ -213,6 +297,15 @@ function CartaoUsuario({ u, onAbrir, selecionado, pendente, souOwner, onMudou }:
             <p className="text-[9px]" style={{ color: '#93c5fd' }}>
               Veio do link de convite com o perfil <b>{perfilDoLink.nome}</b> — será aplicado na aprovação.
             </p>
+          )}
+          {(cliDoConvite.length > 0 || fazDoConvite.length > 0) && (
+            <p className="text-[9px]" style={{ color: '#93c5fd' }}>
+              Acesso definido no convite: <b>{textoAcesso(cliDoConvite, fazDoConvite)}</b> — será aplicado
+              na aprovação (dá para mudar depois em Vínculos).
+            </p>
+          )}
+          {convOrigem?.rotulo && (
+            <p className="text-[9px]" style={{ color: COR.fraco }}>Veio do convite “{convOrigem.rotulo}”.</p>
           )}
           {u.telefone && <p className="text-[9px]" style={{ color: COR.fraco }}>Telefone informado: {u.telefone}</p>}
         </div>
@@ -228,6 +321,9 @@ function AbaConvites({ convites, souOwner, onMudou }: {
   const [novo, setNovo] = useState(false);
   const [email, setEmail] = useState('');
   const [nome, setNome] = useState('');
+  const [rotuloP, setRotuloP] = useState('');   // nome INTERNO do convite
+  const [cliP, setCliP] = useState<string[]>([]);
+  const [fazP, setFazP] = useState<string[]>([]);
   const [cat, setCat] = useState<CategoriaIam>('interno');
   const [papel, setPapel] = useState<PapelIam>('leitor');
   const [dias, setDias] = useState(7);
@@ -241,6 +337,8 @@ function AbaConvites({ convites, souOwner, onMudou }: {
   const [catT, setCatT] = useState<CategoriaIam>('produtor');
   const [papelT, setPapelT] = useState<PapelIam>('leitor');
   const [perfilT, setPerfilT] = useState('');
+  const [cliT, setCliT] = useState<string[]>([]);
+  const [fazT, setFazT] = useState<string[]>([]);
   const [diasT, setDiasT] = useState(VALIDADE_TIPO_DIAS);
   const [criadoTipo, setCriadoTipo] = useState<string | null>(null);
   const [avisoTipo, setAvisoTipo] = useState('');
@@ -267,14 +365,23 @@ function AbaConvites({ convites, souOwner, onMudou }: {
       setAvisoPessoa('E-mail inválido. Apague o campo para gerar um link que a própria pessoa preenche, ou corrija o e-mail.');
       return;
     }
-    const c = criarConvite({ email: email.trim(), nome: nome || undefined, categoria: cat, papel, dias });
+    const c = criarConvite({
+      email: email.trim(), nome: nome || undefined, rotulo: rotuloP || undefined,
+      categoria: cat, papel, dias,
+      clientesVinculados: cliP, fazendasVinculadas: fazP,
+    });
     setCriadoPessoa(linkDoConvite(c.id)); setAvisoPessoa('');
-    setEmail(''); setNome(''); setNovo(false); onMudou();
+    setEmail(''); setNome(''); setRotuloP(''); setCliP([]); setFazP([]);
+    setNovo(false); onMudou();
   }
   function criarTipo() {
-    const c = criarConviteTipo({ rotulo: rotuloEfetivo(), categoria: catT, papel: papelT, perfilId: perfilT || undefined, dias: diasT });
+    const c = criarConviteTipo({
+      rotulo: rotuloEfetivo(), categoria: catT, papel: papelT,
+      perfilId: perfilT || undefined, dias: diasT,
+      clientesVinculados: cliT, fazendasVinculadas: fazT,
+    });
     setCriadoTipo(linkDoConvite(c.id)); setAvisoTipo('');
-    setRotulo(''); setPerfilT(''); setNovoTipo(false); onMudou();
+    setRotulo(''); setPerfilT(''); setCliT([]); setFazT([]); setNovoTipo(false); onMudou();
   }
   function copiar(txt: string, marca = 'x') {
     navigator.clipboard?.writeText(txt).then(() => { setCopiado(marca); setTimeout(() => setCopiado(''), 2000); }).catch(() => {});
@@ -316,6 +423,8 @@ function AbaConvites({ convites, souOwner, onMudou }: {
               <option value="">Perfil de permissões: usar o padrão do papel</option>
               {perfis.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
             </select>
+            <SeletorAcesso cli={cliT} faz={fazT} setCli={setCliT} setFaz={setFazT}
+              aviso="Vale para TODAS as pessoas que usarem este link — para acessos diferentes por pessoa, use o convite individual." />
             <div className="flex gap-1.5">
               <Botao tom="ok" onClick={criarTipo}><Send size={10} className="inline" /> Gerar link</Botao>
               <Botao onClick={() => { setNovoTipo(false); setAvisoTipo(''); }}>Cancelar</Botao>
@@ -355,6 +464,7 @@ function AbaConvites({ convites, souOwner, onMudou }: {
               <div className="flex items-center gap-1.5 flex-wrap text-[9px]" style={{ color: COR.fraco }}>
                 <span>{c.usos ?? 0} cadastro(s) por este link</span>
                 <span>· expira {fmtData(c.expiraEm)}</span>
+                <span>· acesso: {textoAcesso(c.clientesVinculados, c.fazendasVinculadas) || 'sem restrição'}</span>
               </div>
               {souOwner && (
                 <div className="flex gap-1.5 flex-wrap">
@@ -382,9 +492,16 @@ function AbaConvites({ convites, souOwner, onMudou }: {
         <Cartao>
           <Rotulo>Novo convite</Rotulo>
           <input className="w-full rounded px-2 py-1.5 text-xs" style={campoSt}
+            placeholder="nome interno do convite (só você vê — ex.: Jonas, da Santa Rita)"
+            value={rotuloP} onChange={e => setRotuloP(e.target.value)} />
+          <p className="text-[9px]" style={{ color: COR.fraco }}>
+            Serve só para você identificar na lista para quem mandou cada link. Nunca aparece para a pessoa.
+          </p>
+          <input className="w-full rounded px-2 py-1.5 text-xs" style={campoSt}
             placeholder="e-mail (opcional — deixe em branco p/ a pessoa preencher)"
             value={email} onChange={e => setEmail(e.target.value)} />
-          <input className="w-full rounded px-2 py-1.5 text-xs" style={campoSt} placeholder="nome (opcional)"
+          <input className="w-full rounded px-2 py-1.5 text-xs" style={campoSt}
+            placeholder="nome da pessoa (opcional — já entra preenchido no cadastro dela)"
             value={nome} onChange={e => setNome(e.target.value)} />
           <div className="flex gap-1.5">
             <select className="flex-1 rounded px-1.5 py-1 text-[10px]" style={campoSt} value={cat}
@@ -398,6 +515,8 @@ function AbaConvites({ convites, souOwner, onMudou }: {
             <input type="number" min={1} max={90} value={dias} onChange={e => setDias(Number(e.target.value))}
               className="w-14 rounded px-1.5 py-1 text-[10px]" style={campoSt} title="validade em dias" />
           </div>
+          <SeletorAcesso cli={cliP} faz={fazP} setCli={setCliP} setFaz={setFazP}
+            aviso="O que for marcado aqui já entra no cadastro da pessoa e é aplicado quando você aprovar." />
           <div className="flex gap-1.5">
             <Botao tom="ok" onClick={criar}><Send size={10} className="inline" /> Gerar link</Botao>
             <Botao onClick={() => { setNovo(false); setAvisoPessoa(''); }}>Cancelar</Botao>
@@ -428,14 +547,22 @@ function AbaConvites({ convites, souOwner, onMudou }: {
           <div className="flex items-start gap-2">
             <div className="min-w-0 flex-1">
               <p className="text-[11px] font-bold truncate" style={{ color: COR.txt }}>
-                {c.nome || c.email || 'Link aberto (sem e-mail)'}
+                {c.rotulo || c.nome || c.email || 'Link aberto (sem e-mail)'}
               </p>
               <p className="text-[10px] truncate" style={{ color: COR.sub }}>
-                {c.email || `${CATEGORIAS.find(x => x.id === c.categoria)?.nome ?? ''} · ${PAPEIS.find(p => p.id === c.papel)?.nome ?? ''} · a pessoa preenche o e-mail`}
+                {[
+                  c.email || 'a pessoa preenche o e-mail',
+                  c.rotulo && c.nome ? `p/ ${c.nome}` : null,
+                  CATEGORIAS.find(x => x.id === c.categoria)?.nome,
+                  PAPEIS.find(p => p.id === c.papel)?.nome,
+                ].filter(Boolean).join(' · ')}
               </p>
             </div>
             <Chip cor={c.status === 'pendente' ? COR.ok : c.status === 'expirado' ? COR.alerta : COR.fraco}>{c.status}</Chip>
           </div>
+          <p className="text-[9px]" style={{ color: COR.fraco }}>
+            Acesso: {textoAcesso(c.clientesVinculados, c.fazendasVinculadas) || 'sem restrição'}
+          </p>
           <div className="flex items-center gap-1.5 flex-wrap text-[9px]" style={{ color: COR.fraco }}>
             <span>criado {fmtData(c.criadoEm)}</span>
             <span>· expira {fmtData(c.expiraEm)}</span>

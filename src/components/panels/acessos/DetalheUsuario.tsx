@@ -22,7 +22,7 @@ import {
   ACOES, CATEGORIAS, MODULOS, PAPEIS, ROTULO_ACAO, chavePerm,
   type CategoriaIam, type PapelIam,
 } from '@/lib/iam/tipos';
-import { COR, Botao, Chip, Modal, Rotulo, SeloStatus, campoSt, fmtDataHora, fmtRelativo } from './ui';
+import { COR, Bloco, Botao, Chip, Marcar, Modal, Rotulo, SeloStatus, campoSt, fmtDataHora, fmtRelativo } from './ui';
 import { Ban, Copy, KeyRound, Loader2, Save, Trash2, Unlock } from 'lucide-react';
 
 type Secao = 'dados' | 'vinculos' | 'permissoes' | 'auditoria';
@@ -321,23 +321,6 @@ function SecaoVinculos({ u, souOwner, onMudou }: { u: UsuarioIam; souOwner: bool
     </div>
   );
 }
-function Bloco({ titulo, children }: { titulo: string; children: React.ReactNode }) {
-  return (
-    <div className="rounded p-2 space-y-0.5" style={{ background: '#0a1929', border: `1px solid ${COR.borda}`, maxHeight: 200, overflowY: 'auto' }}>
-      <Rotulo>{titulo}</Rotulo>
-      {children}
-    </div>
-  );
-}
-function Marcar({ on, label, onChange, disabled }: { on: boolean; label: string; onChange: () => void; disabled?: boolean }) {
-  return (
-    <label className="flex items-center gap-2 text-[11px] cursor-pointer py-0.5" style={{ color: COR.txt }}>
-      <input type="checkbox" checked={on} onChange={onChange} disabled={disabled} />
-      <span className="truncate">{label}</span>
-    </label>
-  );
-}
-
 // ── Permissões granulares (módulo × ação) ───────────────────────────────────
 function SecaoPermissoes({ u, papel, efetivas, souOwner, onMudou }: {
   u: UsuarioIam; papel: PapelIam; efetivas: Record<string, boolean | undefined>;

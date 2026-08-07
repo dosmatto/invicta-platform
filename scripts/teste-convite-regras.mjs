@@ -5,7 +5,7 @@
 //   · link POR TIPO que se esgota no 1º cadastro → o resto do grupo fica de fora;
 //   · convite INDIVIDUAL que sobrevive ao uso → o link vira acesso reaproveitável.
 import assert from 'node:assert/strict';
-import { statusAoVivo, podeUsar, aplicarUso } from '../src/lib/iam/conviteRegras.ts';
+import { statusAoVivo, podeUsar, aplicarUso, acessoDoConvite } from '../src/lib/iam/conviteRegras.ts';
 
 let ok = 0, fail = 0;
 function t(nome, fn) {
@@ -69,6 +69,43 @@ t('cancelar derruba o link por tipo para todo mundo', () => {
 t('status já resolvido não é reescrito pela validade', () => {
   assert.equal(statusAoVivo(individual({ status: 'usado', expiraEm: emDias(-9) }), AGORA), 'usado');
   assert.equal(statusAoVivo(individual({ status: 'cancelado', expiraEm: emDias(-9) }), AGORA), 'cancelado');
+});
+
+// ── Acesso definido no convite (produtores/fazendas) ────────────────────────
+t('acesso do convite vale quando o cadastro chegou sem vínculo', () => {
+  const c = individual({ clientesVinculados: ['p1'], fazendasVinculadas: ['f1'] });
+  const a = acessoDoConvite({}, c);
+  assert.deepEqual(a.clientesVinculados, ['p1']);
+  assert.deepEqual(a.fazendasVinculadas, ['f1']);
+});
+
+t('o que o cadastro trouxe tem preferência sobre o convite', () => {
+  // A pessoa se cadastrou quando o convite ainda apontava para outro produtor:
+  // vale o que ficou gravado no cadastro dela.
+  const a = acessoDoConvite(
+    { clientesVinculados: ['p9'] },
+    individual({ clientesVinculados: ['p1'], fazendasVinculadas: ['f1'] }));
+  assert.deepEqual(a.clientesVinculados, ['p9']);
+  assert.deepEqual(a.fazendasVinculadas, ['f1'], 'fazenda cai para o convite, que é quem tem');
+});
+
+t('convite sem restrição não devolve vínculo nenhum', () => {
+  const a = acessoDoConvite({}, individual());
+  assert.deepEqual(a.clientesVinculados, []);
+  assert.deepEqual(a.fazendasVinculadas, []);
+  // Lista vazia é o sinal de "não mexa nos vínculos" na aprovação — nunca
+  // pode virar um [] gravado por cima de quem já tinha acesso restrito.
+});
+
+t('sem cadastro e sem convite não quebra', () => {
+  const a = acessoDoConvite(null, null);
+  assert.deepEqual(a.clientesVinculados, []);
+  assert.deepEqual(a.fazendasVinculadas, []);
+});
+
+t('link por tipo carrega o acesso para todos que o usarem', () => {
+  const a = acessoDoConvite(undefined, tipo({ clientesVinculados: ['p1', 'p2'] }));
+  assert.deepEqual(a.clientesVinculados, ['p1', 'p2']);
 });
 
 console.log(`\n${ok} passaram, ${fail} falharam\n`);

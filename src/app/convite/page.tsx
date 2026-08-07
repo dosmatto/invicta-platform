@@ -102,6 +102,10 @@ function ConviteConteudo() {
         // link propunha — quem aprova continua podendo mudar.
         papelSugerido: conv?.papel,
         perfilSugeridoId: conv?.perfilId,
+        // Acesso definido no convite (produtores/fazendas). Só restringe, e o
+        // registro ainda está "aguardando aprovação" — não libera nada aqui.
+        clientesVinculados: conv?.clientesVinculados?.length ? conv.clientesVinculados : undefined,
+        fazendasVinculadas: conv?.fazendasVinculadas?.length ? conv.fazendasVinculadas : undefined,
       });
       if (token) marcarConviteUsado(token, em);
       registrar('cadastro_solicitado', { alvo: em, detalhe: nome.trim() });

@@ -145,9 +145,19 @@ export interface Convite {
    *  no grupo dos produtores). Não é consumido no 1º cadastro — conta usos.
    *  Sem e-mail previsto: cada pessoa informa o dela. */
   multiuso?: boolean;
-  rotulo?: string;         // nome do link ("Produtores", "Consultor externo")
+  /** Nome do convite. No link de TIPO ele aparece para quem abre ("Convite para
+   *  Produtores"); no convite INDIVIDUAL é só interno — serve para o
+   *  administrador saber para quem mandou cada link, e nunca é exibido à
+   *  pessoa. Não confundir com `nome`, que é o nome DELA (pré-preenche o
+   *  formulário de cadastro). */
+  rotulo?: string;
   perfilId?: string;       // perfil de permissão sugerido na aprovação
   usos?: number;           // quantos se cadastraram por este link (multiuso)
+  /** Acesso já definido no convite: produtores/fazendas que a pessoa vai poder
+   *  ver. Vazio/ausente = sem restrição. NÃO libera nada sozinho — os vínculos
+   *  entram no cadastro e são aplicados na APROVAÇÃO, que continua manual. */
+  clientesVinculados?: string[];
+  fazendasVinculadas?: string[];
   criadoEm: string;
   criadoPor: string;
   expiraEm: string;        // ISO

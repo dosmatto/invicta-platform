@@ -14,9 +14,9 @@ import { cloudPushLista } from '../cloud';
 import { emailUsuario } from '../empresa';
 import { registrar } from './auditoria';
 import type { CategoriaIam, Convite, PapelIam } from './tipos';
-import { aplicarUso, statusAoVivo } from './conviteRegras';
+import { acessoDoConvite, aplicarUso, statusAoVivo } from './conviteRegras';
 
-export { statusAoVivo };
+export { acessoDoConvite, statusAoVivo };
 
 export const K_CONVITES = 'inv_convites';
 export const VALIDADE_PADRAO_DIAS = 7;
@@ -57,8 +57,9 @@ export function linkDoConvite(token: string): string {
 }
 
 export function criarConvite(dados: {
-  email: string; nome?: string; categoria?: CategoriaIam; papel?: PapelIam;
+  email: string; nome?: string; rotulo?: string; categoria?: CategoriaIam; papel?: PapelIam;
   dias?: number; observacao?: string;
+  clientesVinculados?: string[]; fazendasVinculadas?: string[];
 }): Convite {
   const dias = Math.max(1, Math.min(90, Math.round(dados.dias ?? VALIDADE_PADRAO_DIAS)));
   const agora = new Date();
@@ -67,6 +68,9 @@ export function criarConvite(dados: {
     id: gerarToken(),
     email: norm(dados.email),
     nome: dados.nome?.trim() || undefined,
+    // Nome interno: só o administrador vê (a página do convite nunca o mostra
+    // em convite individual). É como ele identifica "para quem mandei este link".
+    rotulo: dados.rotulo?.trim() || undefined,
     categoria: dados.categoria,
     papel: dados.papel,
     criadoEm: agora.toISOString(),
@@ -74,6 +78,8 @@ export function criarConvite(dados: {
     expiraEm: expira.toISOString(),
     status: 'pendente',
     observacao: dados.observacao,
+    clientesVinculados: dados.clientesVinculados?.length ? [...dados.clientesVinculados] : undefined,
+    fazendasVinculadas: dados.fazendasVinculadas?.length ? [...dados.fazendasVinculadas] : undefined,
   };
   const lista = ler();
   // Cancela convites pendentes anteriores do mesmo e-mail (evita 2 links vivos).
@@ -88,8 +94,20 @@ export function criarConvite(dados: {
   }
   lista.push(c);
   gravar(lista);
-  registrar('convite_criado', { alvo: c.email, detalhe: `validade ${dias} dia(s)` });
+  registrar('convite_criado', {
+    alvo: c.email || c.rotulo || '(link aberto)',
+    detalhe: [`validade ${dias} dia(s)`, resumoVinculos(c)].filter(Boolean).join(' · '),
+  });
   return c;
+}
+
+// Texto curto do acesso definido no convite (para a trilha de auditoria).
+function resumoVinculos(c: Convite): string {
+  const partes = [
+    c.clientesVinculados?.length ? `${c.clientesVinculados.length} produtor(es)` : null,
+    c.fazendasVinculadas?.length ? `${c.fazendasVinculadas.length} fazenda(s)` : null,
+  ].filter(Boolean);
+  return partes.length ? `acesso a ${partes.join(' e ')}` : '';
 }
 
 // CONVITE DE TIPO (multiuso): um link por perfil de usuário, para mandar no
@@ -105,6 +123,7 @@ export const VALIDADE_TIPO_DIAS = 365;
 export function criarConviteTipo(dados: {
   rotulo: string; categoria?: CategoriaIam; papel?: PapelIam;
   perfilId?: string; dias?: number; observacao?: string;
+  clientesVinculados?: string[]; fazendasVinculadas?: string[];
 }): Convite {
   const dias = Math.max(1, Math.min(730, Math.round(dados.dias ?? VALIDADE_TIPO_DIAS)));
   const agora = new Date();
@@ -122,11 +141,17 @@ export function criarConviteTipo(dados: {
     expiraEm: new Date(agora.getTime() + dias * 86400_000).toISOString(),
     status: 'pendente',
     observacao: dados.observacao,
+    // Vale para TODO MUNDO que usar este link — a tela avisa isso.
+    clientesVinculados: dados.clientesVinculados?.length ? [...dados.clientesVinculados] : undefined,
+    fazendasVinculadas: dados.fazendasVinculadas?.length ? [...dados.fazendasVinculadas] : undefined,
   };
   const lista = ler();
   lista.push(c);
   gravar(lista);
-  registrar('convite_criado', { alvo: `[tipo] ${c.rotulo}`, detalhe: `link reutilizável · validade ${dias} dia(s)` });
+  registrar('convite_criado', {
+    alvo: `[tipo] ${c.rotulo}`,
+    detalhe: [`link reutilizável`, `validade ${dias} dia(s)`, resumoVinculos(c)].filter(Boolean).join(' · '),
+  });
   return c;
 }
 
