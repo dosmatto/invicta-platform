@@ -13,7 +13,7 @@ import { capturarMapaFertilidade } from './capturaMapa';
 import { imagemParaPdf, reduzirLogo } from './pdfImagem';
 import { formatarValorVariavel, variavelDeAnalise } from './store';
 import { rotuloAno } from './periodo';
-import { DATUM, PE_Y, desenharCabecalhoOficial, marcaInvicta } from './pdfCabecalho';
+import { DATUM, desenharCabecalhoOficial, marcaInvicta } from './pdfCabecalho';
 
 export interface ProfundidadeRel {
   profundidade: string;
@@ -47,6 +47,13 @@ const SUB = '₀₁₂₃₄₅₆₇₈₉';
 const san = (s: string | null | undefined): string => (s ?? '')
   .replace(/[₀₁₂₃₄₅₆₇₈₉]/g, c => '0123456789'[SUB.indexOf(c)])
   .replace(/[^\x00-\xFF]/g, '');
+
+// "Ponta Grossa - PR". Sem município (geocoding indisponível), mostra só a UF em
+// vez de "— - PR", que era o que saía antes.
+const municipioUf = (d: { municipio: string; estado: string }): string => {
+  const m = san(d.municipio), uf = san(d.estado);
+  return m ? (uf ? `${m} - ${uf}` : m) : (uf || '—');
+};
 
 function carregarImg(src: string): Promise<HTMLImageElement> {
   return new Promise((res, rej) => {
@@ -142,7 +149,7 @@ async function desenharPaginaMapa(doc: JsPDF, d: DadosRelatorioFert, logos: Logo
     subtitulo: uniVar ? `${nomeVar} (${uniVar})` : nomeVar,
     info: [
       `Área Total: ${fmt(d.areaHa, 2)} ha`,
-      `Município: ${d.municipio || '—'}${d.estado ? ' - ' + d.estado : ''}`,
+      `Município: ${municipioUf(d)}`,
       `Datum: ${DATUM}`,
     ],
   });
@@ -202,8 +209,16 @@ async function desenharPaginaMapa(doc: JsPDF, d: DadosRelatorioFert, logos: Logo
   doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5); doc.setTextColor(...GRAY);
   for (const t of ticks) { const tx = barX + valorParaPosicaoVisual(t, d.legenda) * barW; doc.text(fmt(t, t % 1 === 0 ? 0 : 1), tx, barY + barH + 4, { align: 'center' }); }
 
-  const cols: [string, string][] = [['UNIDADE', san(d.unidade)], ['MÉTODO', san(d.metodo) || '—'], ['FONTE', san(d.fonte)]];
-  const cx0 = barX + barW + 8, cw = (W - M - cx0) / 3;
+  // A Textura não tem FONTE: é atributo PERSISTENTE do solo, não resultado de um
+  // laudo que muda de laboratório para laboratório. As duas colunas restantes se
+  // espalham no mesmo espaço.
+  const semFonte = d.legenda.atributoId === 'textura';
+  const cols: [string, string][] = [
+    ['UNIDADE', san(d.unidade)],
+    ['MÉTODO', san(d.metodo) || '—'],
+    ...(semFonte ? [] : [['FONTE', san(d.fonte)] as [string, string]]),
+  ];
+  const cx0 = barX + barW + 8, cw = (W - M - cx0) / cols.length;
   cols.forEach(([lab, val], i) => {
     const cx = cx0 + cw * i + cw / 2;
     doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor(...NAVY); doc.text(lab, cx, lgY + 8, { align: 'center' });
@@ -228,14 +243,9 @@ async function desenharPaginaMapa(doc: JsPDF, d: DadosRelatorioFert, logos: Logo
   doc.setFont('helvetica', 'normal'); doc.setFontSize(6); doc.setTextColor(...GRAY);
   for (let k = 0; k <= 4; k++) { const sx = ex + (barLen / 4) * k; doc.text(k === 4 ? `${Math.round(niceMax)} m` : String(Math.round(niceMax / 4 * k)), sx, ey + 5, { align: 'center' }); }
 
-  // ── PÉ DA ÁREA BRANCA: laboratório à esquerda, marca INVICTA à direita ──
-  // (modelo aprovado em 07/08/2026: os dois saíram do cabeçalho e vieram assinar
-  // a página aqui, acima da barra azul e sem encostar nela.)
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(...NAVY);
-  doc.text('Laboratório:', M, PE_Y);
-  const wRotulo = doc.getTextWidth('Laboratório:');
-  doc.setFont('helvetica', 'normal'); doc.setTextColor(...GRAY);
-  doc.text(san(d.fonte) || '—', M + wRotulo + 3, PE_Y);
+  // ── PÉ DA ÁREA BRANCA: a marca INVICTA assina, sozinha ──
+  // O laboratório saiu daqui: era a MESMA informação da coluna FONTE do quadro
+  // INTERPRETAÇÃO, logo acima. Uma vez na página basta.
   marcaInvicta(doc, logos.inv, 'direita');
 
   // ── RODAPÉ ──
@@ -296,7 +306,7 @@ async function desenharCapa(doc: JsPDF, paginas: DadosRelatorioFert[], logos: Lo
   linha('Ano', rotuloAno(d.safra));
   linha('Cultura', san(d.cultura));
   linha('Área total', `${fmt(d.areaHa, 2)} ha`);
-  linha('Município', `${san(d.municipio)}${d.estado ? ' - ' + d.estado : ''}`);
+  linha('Município', municipioUf(d));
   linha('Datum', DATUM);
   linha('Data', d.dataInterpolacao);
 
@@ -305,11 +315,10 @@ async function desenharCapa(doc: JsPDF, paginas: DadosRelatorioFert[], logos: Lo
   doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(...NAVY);
   doc.text(`MAPAS NESTE RELATÓRIO (${paginas.length}):`, M, sy);
   doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(...GRAY);
-  // Sumário com o MESMO nome/sigla que o título de cada página (catálogo).
-  doc.text(paginas.map(p => {
-    const v = variavelDeAnalise(p.legenda.atributoId);
-    return `${san(v?.nome || p.atributo)} (${san(v?.sigla || p.simbolo)})`;
-  }).join('   ·   '), M, sy + 6, { maxWidth: W - 2 * M });
+  // Sumário pela SIGLA — o mesmo texto que é o título grande de cada página.
+  // Com nome+sigla saía repetitivo ("Textura (Argila) (Textura)", "Acidez (pH) (pH)").
+  doc.text(paginas.map(p => san(variavelDeAnalise(p.legenda.atributoId)?.sigla || p.simbolo))
+    .join('   ·   '), M, sy + 6, { maxWidth: W - 2 * M });
 
   // ── Rodapé ──
   doc.setFillColor(...NAVY); doc.rect(0, H - 10, W, 10, 'F');

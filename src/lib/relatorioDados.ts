@@ -15,7 +15,17 @@ import { colorirGridComLegenda, colorirGrid, temGrid } from './raster';
 import { rampaVisualStops, ordenarLegendasDoAtributo } from './legendas';
 import { resolverGradeDoLaudo, casarAmostrasComPontos } from './eloGrade';
 import { carregarNdviSalvos } from './meap/gerar';
+import { municipioDaFazenda } from './geocodeMunicipio';
+import { centroideGeom } from './recomendacao/zonasGrid';
 import type { DadosRelatorioFert, ProfundidadeRel } from './relatorioFertilidade';
+
+// Ponto representativo do talhão para o geocoding reverso do município.
+export function pontoDoPoligono(
+  p: GeoJSON.Polygon | GeoJSON.MultiPolygon | null,
+): { lng: number; lat: number } | null {
+  const c = p ? centroideGeom(p) : null;
+  return c ? { lng: c[0], lat: c[1] } : null;
+}
 
 type MapaCarregado = { resp: RespInterp; labels: GeoJSON.FeatureCollection; interpoladoEm?: string };
 
@@ -192,10 +202,13 @@ export async function carregarContextoRelatorio(
   const dataInterpolacao = new Date(dataMaisRecente || importacao?.criadoEm || Date.now())
     .toLocaleDateString('pt-BR', { month: '2-digit', year: 'numeric' });
 
+  // Município SEMPRE: cadastro → cache local → Nominatim (ver municipioDaFazenda).
+  const local = await municipioDaFazenda(fazenda?.id, pontoDoPoligono(poligono));
+
   return {
     fazenda: fazenda?.nome ?? '', produtor: cliente?.nome ?? '', talhao: talhao?.nome ?? '', safra,
     cultura: getPlantio(talhaoId, safra), areaHa: talhao?.areaHa ?? 0,
-    municipio: fazenda?.municipio ?? '', estado: fazenda?.estado ?? '',
+    municipio: local.municipio, estado: local.estado,
     poligono, dataInterpolacao, elementos, mapas, legendaPorNut, valoresDe, pontosGrade,
   };
 }

@@ -3,11 +3,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import {
-  getSafras, getGrades, getImportacoesLab, getTalhoes, getFazendas, getPlantio,
+  getSafras, getGrades, getImportacoesLab, getTalhoes, getPlantio,
   getLegendas, getLegendasPorAtributo, ordenarLegendasDoAtributo, casasDecimaisVariavel,
   type ImportacaoLab, type GradeAmostragem,
 } from '@/lib/store';
 import { gerarRelatorioFertilidade, type ProfundidadeRel } from '@/lib/relatorioFertilidade';
+import { municipioDaFazenda } from '@/lib/geocodeMunicipio';
+import { pontoDoPoligono } from '@/lib/relatorioDados';
 import {
   interpolar, rampaDaLegenda, gradienteCss, coordsFromBounds, extrairPoligono,
   comprimirGrid, descomprimirGrid,
@@ -66,6 +68,11 @@ const VARIOGRAMA_FIXO_PADRAO = { alcance: '400', patamar: '300', pepita: '10' };
 type VarFixo = typeof VARIOGRAMA_FIXO_PADRAO;
 type Interpolador = 'krige' | 'krige-fixo' | 'idw';
 const numVar = (s: string) => Number(String(s).replace(',', '.').trim());
+
+// Resolução em que a Recomendação calcula a dose (PDF e arquivo de máquina).
+// Precisa casar com PIXEL_RECOMENDACAO_M de lib/recomendacao/aplicar.ts.
+const PIXEL_RECOMENDACAO = 20;
+const fcVazio = (): GeoJSON.FeatureCollection => ({ type: 'FeatureCollection', features: [] });
 
 export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: string } = {}) {
   const { nav, uploadedGeo, setFertilidadeOverlay, setFertilidadeLabels } = useApp();
@@ -169,6 +176,11 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
   const abortRef = useRef<AbortController | null>(null);
   useEffect(() => () => { abortRef.current?.abort(); }, []);
   const ehAbort = (e: unknown) => e instanceof DOMException && e.name === 'AbortError';
+
+  // Fila do mapa de 20 m da Recomendação (roda depois do primeiro plano, um a um).
+  const fila20 = useRef<string[]>([]);
+  const rodando20 = useRef(false);
+  const [pendente20, setPendente20] = useState<string[]>([]);
 
   // Seed automático do repositório Fundação ABC + carrega legendas do store.
   // Reage a mudanças no editor de Legendas via evento custom.
@@ -383,6 +395,7 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
   useEffect(() => {
     abortRef.current?.abort();   // troca de contexto: cancela interpolação em voo (resultado obsoleto)
     setCache({}); setEstado('idle'); setErro('');
+    fila20.current = []; setPendente20([]);   // a fila de 20 m era do talhão anterior
     if (!nav.talhaoId || !importacaoId) return;
     const prefixo = `${nav.talhaoId}__${importacaoId}__`;
     (async () => {
@@ -515,6 +528,66 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
       }
       cloudSalvarMapa(idNuvem(nav.talhaoId, importacaoId, metodoChave, pixelM, modeloEfetivo, nut, prof), dados);
     }
+    enfileirar20m(nut, prof);
+  }
+
+  // ── Mapa de 20 m para a Recomendação ──────────────────────────────────────
+  // A dose sai sempre em 20 m (PDF e arquivo de máquina). Até aqui a Recomendação
+  // pegava o mapa fino e fazia a MÉDIA de blocos 4×4 — o que comprime mín/máx antes
+  // de a fórmula rodar e derruba a dose (as manchas pequenas de deficiência somem).
+  // Agora interpolamos de verdade nos nós de 20 m: mesma superfície, amostrada mais
+  // grossa, sem o viés da média. O mapa fino continua sendo o da tela e do relatório.
+  async function processar20m(nut: string, prof: string) {
+    const leg = legendaDe(nut);
+    if (!leg || !nav.talhaoId || !importacaoId) return;
+    const pts = pontosDe(nut, prof);
+    if (pts.length < 3) return;
+    const { dominio, stops } = rampaDaLegenda(leg);
+    const resp = await interpolar({
+      pontos: pts, poligono: poligono!, dominio, stops, metodo, pixelM: PIXEL_RECOMENDACAO,
+      modeloFixo: modeloEfetivo || null,
+      variogramaManual: varFixoNum,
+      signal: abortRef.current?.signal,
+    });
+    const gridGz = resp.grid ? await comprimirGrid(resp.grid) : undefined;
+    // Sem labels e sem PNG: este mapa nunca é desenhado, só entra na conta.
+    cloudSalvarMapa(
+      idNuvem(nav.talhaoId, importacaoId, metodoChave, PIXEL_RECOMENDACAO, modeloEfetivo, nut, prof),
+      { resp: { ...resp, png: '', grid: gridGz }, labels: fcVazio(), interpoladoEm: new Date().toISOString() },
+    );
+  }
+
+  // Fila SEQUENCIAL e em segundo plano: o backend é de um worker só, então disparar
+  // tudo junto faria o lote de 20 m disputar CPU com o que o usuário está esperando.
+  function enfileirar20m(nut: string, prof: string) {
+    if (pixelM === PIXEL_RECOMENDACAO) return;   // o mapa fino JÁ é o da recomendação
+    if (!cloudPodeGravar()) return;              // sem login não há onde salvar
+    const chave = ck(nut, prof);
+    if (!fila20.current.includes(chave)) fila20.current.push(chave);
+    void rodarFila20();
+  }
+
+  async function rodarFila20() {
+    if (rodando20.current) return;
+    rodando20.current = true;
+    try {
+      while (fila20.current.length > 0) {
+        if (abortRef.current?.signal.aborted) break;
+        const chave = fila20.current[0];
+        const [nut, prof] = chave.split('__');
+        try {
+          await processar20m(nut, prof);
+          setPendente20(p => p.filter(x => x !== chave));
+        } catch (e) {
+          if (ehAbort(e)) break;   // deixa na fila: a próxima chamada retoma
+          // Falhar aqui não desfaz nada: o mapa fino já está pronto e a Recomendação
+          // ainda funciona pelo caminho antigo (reamostragem), só com menos amplitude.
+          console.warn('[fertilidade] mapa de 20 m da recomendação falhou:', nut, prof, e);
+          setPendente20(p => (p.includes(chave) ? p : [...p, chave]));
+        }
+        fila20.current.shift();
+      }
+    } finally { rodando20.current = false; }
   }
 
   async function processar() {
@@ -614,7 +687,6 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
       setErro('Processe o(s) mapa(s) antes de gerar o PDF.'); setEstado('erro'); return;
     }
 
-    const fz = getFazendas().find(f => f.id === nav.fazendaId);
     const cultura = nav.talhaoId ? getPlantio(nav.talhaoId, safraNome) : '';
     const ts = profsAll.map(p => cache[ck(nutriente, p)]?.interpoladoEm).filter(Boolean).sort().pop()
       ?? importacao?.criadoEm ?? new Date().toISOString();
@@ -622,9 +694,11 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
 
     setGerandoPdf(true); setErro('');
     try {
+      // Município SEMPRE: cadastro → cache local → Nominatim (com timeout).
+      const local = await municipioDaFazenda(nav.fazendaId, pontoDoPoligono(poligono));
       await gerarRelatorioFertilidade({
         fazenda: nav.fazenda, produtor: nav.produtor, talhao: nav.talhao, safra: safraNome,
-        cultura, areaHa: nav.area, municipio: fz?.municipio ?? '', estado: fz?.estado ?? '',
+        cultura, areaHa: nav.area, municipio: local.municipio, estado: local.estado,
         atributo: legAtual.atributo, simbolo: legAtual.simbolo, metodo: legAtual.metodo ?? null,
         fonte: legAtual.fonte, unidade: legAtual.unidade, legenda: legAtual,
         dataInterpolacao: dataInterp, poligono, profundidades: profs, satelite: true, corLimite: '#ffffff',
@@ -858,6 +932,11 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
           )}
           {estado === 'erro' && <p className="text-[10px]" style={{ color: '#f87171' }}>{erro}</p>}
           {erro && estado !== 'erro' && <p className="text-[10px]" style={{ color: '#fbbf24' }}>{erro}</p>}
+          {pendente20.length > 0 && (
+            <p className="text-[10px]" style={{ color: '#fbbf24' }}>
+              Mapa de 20 m da Recomendação pendente em {pendente20.length} {pendente20.length === 1 ? 'variável' : 'variáveis'} — a dose ainda sai, mas por reamostragem (extremos mais fracos). Processe de novo quando puder.
+            </p>
+          )}
 
           {/* Profundidade */}
           {profundidades.length > 0 && (
