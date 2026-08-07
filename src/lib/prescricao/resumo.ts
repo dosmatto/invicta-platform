@@ -69,6 +69,35 @@ export function kgDeSementes(sementes: number, pmsG?: number): number | null {
   return pmsG && pmsG > 0 ? (sementes * pmsG) / 1e6 : null;
 }
 
+/** Sementes → sacos. null quando a semente não tem sementes/saco cadastrado. */
+export function sacosDeSementes(sementes: number, sementesPorSaco?: number): number | null {
+  return sementesPorSaco && sementesPorSaco > 0 ? sementes / sementesPorSaco : null;
+}
+
+/**
+ * Uma linha com os PARÂMETROS DA SEMENTE em uso — é ela que justifica os quilos
+ * e os sacos do resumo. Sem isso, "= 1.047 kg = 59,6 sacos" são dois números que
+ * ninguém consegue conferir: dependem do PMS e do sementes/saco que estavam
+ * preenchidos na hora, e esses campos não aparecem em lugar nenhum do PDF.
+ * null quando não há nenhum parâmetro (fertilizante, corretivo, orgânico).
+ */
+export function linhaParametrosSemente(p: Prescricao): string | null {
+  if (!ehUnidadeSemente(p.unidade)) return null;
+  const s = p.params.sementes;
+  if (!s) return null;
+  const partes: string[] = [];
+  if (s.cultivar) partes.push(san(s.cultivar));
+  if (s.pmsG && s.pmsG > 0) partes.push(`PMS ${fmtRel(s.pmsG)} g`);
+  if (s.germinacaoPct > 0) partes.push(`germinacao ${fmt(s.germinacaoPct, 0)}%`);
+  if (s.espacamentoM && s.espacamentoM > 0) partes.push(`espacamento ${fmt(s.espacamentoM, 2)} m`);
+  if (s.sementesPorSaco && s.sementesPorSaco > 0) partes.push(`${fmt0(s.sementesPorSaco)} sementes/saco`);
+  return partes.length ? `Semente: ${partes.join(' · ')}` : null;
+}
+
+// O PDF desenha em helvetica WinAnsi: acento fora do Latin-1 vira lixo. O
+// cultivar é texto livre do usuário, então passa por aqui.
+const san = (s: string): string => s.replace(/[^\x00-\xFF]/g, '').trim();
+
 /**
  * Linhas do RESUMO do PDF. Fora do desenho para caber teste e leitura.
  *
@@ -87,14 +116,23 @@ export function montarResumoPdf(
   const semente = ehUnidadeSemente(p.unidade);
   const nTot = (v: number) => fmtRel(v);
   const pms = p.params.sementes?.pmsG;
+  const porSaco = p.params.sementes?.sementesPorSaco;
+  // Todo total de SEMENTE sai também em quilo e em SACO — é assim que se compra
+  // e que se carrega a plantadeira. Cada conversão só aparece se o parâmetro que
+  // a sustenta existir (PMS para o quilo, sementes/saco para o saco).
   const comKg = (sementes: number): string => {
-    const kg = semente ? kgDeSementes(sementes, pms) : null;
-    return kg == null ? '' : ` = ${fmtRel(kg)} kg`;
+    if (!semente) return '';
+    const kg = kgDeSementes(sementes, pms);
+    const sacos = sacosDeSementes(sementes, porSaco);
+    return [kg == null ? null : `${fmtRel(kg)} kg`, sacos == null ? null : `${fmt(sacos, 1)} sacos`]
+      .filter(Boolean).map(t => ` = ${t}`).join('');
   };
 
   const linhas: Array<{ txt: string; destaque?: boolean }> = [
     { txt: `Área: ${fmtHa(r.areaHa)} ha em ${r.nZonas} zona(s) · ${nPoligonos} polígono(s)` },
   ];
+  const paramsSemente = linhaParametrosSemente(p);
+  if (paramsSemente) linhas.push({ txt: paramsSemente });
 
   if (temCompensacao(p)) {
     const germ = p.params.sementes?.germinacaoPct ?? 100;

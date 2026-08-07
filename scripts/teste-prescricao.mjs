@@ -11,7 +11,7 @@ import { dosesPorEquacao, variaveisDaEquacao } from '../src/lib/prescricao/equac
 import { converterDose, prescricaoEmUnidade, podeConverter, precisaEspacamento, UNIDADES_SEMENTE } from '../src/lib/prescricao/unidade.ts';
 import { casarZonas } from '../src/lib/prescricao/casar.ts';
 import { nomeArquivoPrescricao, siglaFazenda, numeroTalhao } from '../src/lib/prescricao/nomeArquivo.ts';
-import { montarResumoPdf, temCompensacao, totalDoArquivo, kgDeSementes, doseArquivo as doseArquivoDe, fmtRel, arredRel, corDaDose } from '../src/lib/prescricao/resumo.ts';
+import { montarResumoPdf, temCompensacao, totalDoArquivo, kgDeSementes, sacosDeSementes, linhaParametrosSemente, doseArquivo as doseArquivoDe, fmtRel, arredRel, corDaDose } from '../src/lib/prescricao/resumo.ts';
 import { fmtHa, arredHa } from '../src/lib/formato.ts';
 
 let ok = 0, fail = 0;
@@ -762,6 +762,79 @@ t('RÉGUA diferente, arquivo com nome diferente — senão o operador leva o err
   assert.equal(nomeArquivoPrescricao({ ...base, unidade: 'sementes/m' }), 'SA03_TX_MILHO_M');
   assert.equal(nomeArquivoPrescricao({ ...base, unidade: 'sementes/m2' }), 'SA03_TX_MILHO_M2');
   assert.equal(nomeArquivoPrescricao({ ...base, produto: 'MAP', unidade: 'kg/ha' }), 'SA03_TX_MAP', 'adubo não leva sufixo');
+});
+
+// ── Sacos e parâmetros da semente no RESUMO (pedido de 07/08/2026) ───────────
+// O quadro dizia "3.573.597 sementes = 1.047 kg" e parava aí: quem compra pensa
+// em SACO, e os dois números dependem de PMS/sementes-por-saco que não apareciam
+// em lugar nenhum do PDF — ninguém tinha como conferir de onde saíram.
+console.log('\nSacos e parâmetros da semente no resumo\n');
+
+const pSemente = (sementes, unidade = 'sementes/m2') => ({
+  unidade, tipo: 'sementes', produto: 'Milho', nome: 'x',
+  params: { sementes }, zonas: [], fc: { type: 'FeatureCollection', features: [] },
+});
+const rBase = { areaHa: 44.67, nZonas: 5, usado: 3_573_597, doseMin: 7.56, doseMax: 8.36, doseMedia: 8, custo: null };
+
+t('sacosDeSementes converte, e devolve null sem o parâmetro', () => {
+  assert.ok(Math.abs(sacosDeSementes(3_573_597, 60_000) - 59.5599) < 1e-3);
+  assert.equal(sacosDeSementes(3_573_597, undefined), null);
+  assert.equal(sacosDeSementes(3_573_597, 0), null, 'zero não pode virar divisão por zero');
+});
+
+t('o total de semente sai em quilos E em sacos', () => {
+  const p = pSemente({ germinacaoPct: 98, pmsG: 293, espacamentoM: 0.5, sementesPorSaco: 60_000 });
+  const texto = montarResumoPdf(p, rBase, 1, 5).map(l => l.txt).join(' | ');
+  assert.match(texto, /Quantidade usada: 3\.573\.597 sementes = 1\.047 kg = 59,6 sacos/, texto);
+});
+
+t('sem sementes/saco cadastrado, o resumo NÃO inventa saco', () => {
+  const p = pSemente({ germinacaoPct: 98, pmsG: 293 });
+  const texto = montarResumoPdf(p, rBase, 1, 5).map(l => l.txt).join(' | ');
+  assert.match(texto, /= 1\.047 kg/, texto);
+  assert.ok(!/saco/.test(texto), `apareceu saco sem parâmetro: ${texto}`);
+});
+
+t('sem PMS, sai o saco sozinho (uma conversão não depende da outra)', () => {
+  const p = pSemente({ germinacaoPct: 98, sementesPorSaco: 60_000 });
+  const texto = montarResumoPdf(p, rBase, 1, 5).map(l => l.txt).join(' | ');
+  assert.match(texto, /= 59,6 sacos/, texto);
+  assert.ok(!/ kg/.test(texto), `apareceu kg sem PMS: ${texto}`);
+});
+
+t('a linha de PARÂMETROS DA SEMENTE justifica os quilos e os sacos', () => {
+  const p = pSemente({ cultivar: 'P3016', germinacaoPct: 98, pmsG: 293, espacamentoM: 0.5, sementesPorSaco: 60_000 });
+  const l = linhaParametrosSemente(p);
+  assert.match(l, /^Semente: P3016 · PMS 293 g · germinacao 98% · espacamento 0,50 m · 60\.000 sementes\/saco$/, l);
+  assert.ok(montarResumoPdf(p, rBase, 1, 5).some(x => x.txt === l), 'a linha não entrou no resumo');
+});
+
+t('a linha lista só os parâmetros PREENCHIDOS', () => {
+  assert.equal(linhaParametrosSemente(pSemente({ germinacaoPct: 98 })), 'Semente: germinacao 98%');
+  assert.equal(linhaParametrosSemente(pSemente({ germinacaoPct: 0 })), null, 'sem nenhum parâmetro, sem linha');
+});
+
+t('adubo não ganha saco nem linha de semente (não germina, não vem em saco de semente)', () => {
+  const p = { unidade: 'kg/ha', tipo: 'fertilizante', produto: 'MAP', nome: 'x',
+    params: { sementes: { germinacaoPct: 98, pmsG: 293, sementesPorSaco: 60_000 } },
+    zonas: [], fc: { type: 'FeatureCollection', features: [] } };
+  assert.equal(linhaParametrosSemente(p), null);
+  const texto = montarResumoPdf(p, { areaHa: 10, nZonas: 1, usado: 3000, doseMin: 300, doseMax: 300, doseMedia: 300, custo: null }, 1, 1)
+    .map(l => l.txt).join(' | ');
+  assert.ok(!/saco|PMS/.test(texto), texto);
+});
+
+t('com compensação, TODOS os totais levam quilo e saco', () => {
+  const zonas = [{ idZona: 'a', nomeZona: '01', classe: 'Alta', cor: '#000', areaHa: 10, dose: 80_000 }];
+  const p = { unidade: 'sementes/ha', tipo: 'sementes', produto: 'Milho', nome: 'x',
+    params: { doseEhPopulacao: true, sementes: { germinacaoPct: 90, pmsG: 180, sementesPorSaco: 60_000 } },
+    zonas, fc: { type: 'FeatureCollection', features: [] } };
+  const texto = montarResumoPdf(p, { areaHa: 10, nZonas: 1, usado: 800_000, doseMin: 80_000, doseMax: 80_000, doseMedia: 80_000, custo: null }, 1, 1)
+    .map(l => l.txt).join(' | ');
+  // 800.000 → 144 kg / 13,3 sacos · 888.889 → 160 kg / 14,8 sacos · dif 88.889 → 16 kg / 1,5 saco
+  assert.match(texto, /Total SEM ajuste.*144 kg = 13,3 sacos/, texto);
+  assert.match(texto, /Total COM ajuste.*160 kg = 14,8 sacos/, texto);
+  assert.match(texto, /Diferença a mais para comprar.*1,5 sacos/, texto);
 });
 
 console.log(`\n${ok} passaram, ${fail} falharam\n`);

@@ -341,11 +341,13 @@ export async function exportarPDFPrescricao(p: Prescricao, ident: IdentPdfPrescr
     doc.setFontSize(9); doc.setTextColor(...GRAY);
     doc.text('(mapa indisponível — gere novamente com internet)', mapX + mapW / 2, mapY + mapH / 2, { align: 'center' });
   }
-  // legenda da rampa
+  // Legenda da rampa — ocupa TODA a largura do mapa, com o título centralizado
+  // sobre ela. Era metade da largura (84 mm de 168), encostada à esquerda: a
+  // rampa ficava apertada e sobrava um vão branco embaixo da metade direita.
   const lgY = mapY + mapH + 5;
+  const lgW = mapW, lgH = 4.5, passos = 48;
   doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor(...NAVY);
-  doc.text(`Dose (${p.unidade})`, mapX, lgY);
-  const lgW = 84, lgH = 4.5, passos = 48;
+  doc.text(`Dose (${p.unidade})`, mapX + lgW / 2, lgY, { align: 'center' });
   for (let i = 0; i < passos; i++) {
     const cor = corDaDose(r.doseMin + (i / (passos - 1)) * (r.doseMax - r.doseMin), r.doseMin, r.doseMax);
     const m = /^#(..)(..)(..)$/.exec(cor)!;
