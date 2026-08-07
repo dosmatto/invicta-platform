@@ -340,15 +340,33 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
     } else if (previewCh) {
       fc = null;  // previewando uma camada → não cobrir com as zonas adotadas
     } else {
-      // lê do store (reflete a remoção da adoção, que o prop `talhao` não atualiza)
-      const zg = getTalhoes().find(x => x.id === talhao.id)?.zonasGeojson;
-      const imp = parseImportadas(zg);
-      fc = imp ? featuresParaMapa(imp) : null;
+      // ZONEAMENTO SALVO manda no mapa — não a cópia guardada no talhão.
+      //
+      // `talhao.zonasGeojson` é um SNAPSHOT do zoneamento padrão, reescrito só
+      // quando alguém marca "Tornar padrão" (store.setZoneamentoPadraoMeap).
+      // Editar e salvar cria uma VERSÃO NOVA, que não vira padrão sozinha — e o
+      // mapa continuava mostrando o snapshot antigo. Era isso que fazia a
+      // numeração "voltar" ao sair do editor: dentro dele o desenho vem da
+      // versão editada; fora, vinha da cópia velha.
+      //
+      // Ordem: padrão salvo > versão mais recente > snapshot adotado (talhão que
+      // recebeu zonas por arquivo e ainda não tem zoneamento salvo).
+      const salvo = zoneamentos.find(z => z.padrao)
+        ?? [...zoneamentos].sort((a, b) => (b.criadoEm ?? '').localeCompare(a.criadoEm ?? ''))[0]
+        ?? null;
+      if (salvo) {
+        fc = featuresParaMapa(salvo.fc);
+      } else {
+        // lê do store (reflete a remoção da adoção, que o prop `talhao` não atualiza)
+        const zg = getTalhoes().find(x => x.id === talhao.id)?.zonasGeojson;
+        const imp = parseImportadas(zg);
+        fc = imp ? featuresParaMapa(imp) : null;
+      }
     }
     if (!fc) { setZonasManejo(null); return; }
     setZonasManejo(fc);
     return () => setZonasManejo(null);
-  }, [importFc, editorMapFc, suavMapFc, vendoFc, res, zonas, previewCh, numDeRank, talhao.id, talhao.zonasGeojson, refreshAmb, setZonasManejo]);
+  }, [importFc, editorMapFc, suavMapFc, vendoFc, res, zonas, previewCh, numDeRank, zoneamentos, talhao.id, talhao.zonasGeojson, refreshAmb, setZonasManejo]);
 
   // Fecha os painéis de edição ao trocar de talhão ou limpar o preview gerado.
   useEffect(() => { setSuav(null); setSuavMapFc(null); setEditorZona(null); setEditorMapFc(null); }, [talhao.id]);

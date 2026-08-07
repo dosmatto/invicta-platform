@@ -186,6 +186,14 @@ export function VersoesZoneamentos({
           </div>
         );
       })}
+      {/* Sem padrão marcado, o mapa desenha a versão mais recente e a Amostragem/
+          Prescrições ficam sem zona — dizer isso evita a leitura de que o mapa
+          "voltou sozinho" para um desenho antigo. */}
+      {zoneamentos.length > 0 && !zoneamentos.some(z => z.padrao) && (
+        <p className="text-[9px] leading-relaxed p-1.5 rounded" style={{ color: '#fde68a', background: '#2a1a05', border: '1px solid #b45309' }}>
+          Nenhuma versão está marcada como <strong>padrão</strong>: o mapa mostra a mais recente, mas a Amostragem e as Prescrições ficam sem zona até você marcar uma.
+        </p>
+      )}
       <p className="text-[9px] leading-relaxed" style={{ color: '#6d8bbe' }}>
         Cada operação cria uma versão nova — a anterior nunca é sobrescrita. <strong style={{ color: '#fbbf24' }}>Padrão</strong> é a versão que a Amostragem e as Prescrições usam. Marque duas <strong style={{ color: '#22d3ee' }}>V</strong> da mesma linhagem para comparar.
       </p>
