@@ -11,8 +11,9 @@ import type { Legenda } from './legendas';
 import { rampaVisualStops, valorParaPosicaoVisual, dominioDaLegenda } from './legendas';
 import { capturarMapaFertilidade } from './capturaMapa';
 import { imagemParaPdf, reduzirLogo } from './pdfImagem';
-import { formatarValorVariavel } from './store';
+import { formatarValorVariavel, variavelDeAnalise } from './store';
 import { rotuloAno } from './periodo';
+import { DATUM, desenharCabecalhoOficial } from './pdfCabecalho';
 
 export interface ProfundidadeRel {
   profundidade: string;
@@ -121,54 +122,35 @@ async function desenharPaginaMapa(doc: JsPDF, d: DadosRelatorioFert, logos: Logo
     }));
   }
 
-  // ── CABEÇALHO ──
-  if (logos.inv) { const h = 15, w = h * (logos.inv.naturalWidth / logos.inv.naturalHeight); doc.addImage(logos.inv, 'PNG', M, 5, w, h); }
-  doc.setDrawColor(...LINE); doc.setLineWidth(0.3); doc.line(M + 52, 5, M + 52, 24);
+  // ── CABEÇALHO (desenho compartilhado com o relatório de Zonas) ──
+  // Título: SIGLA em cima, NOME (+ unidade) embaixo, ambos vindos das PREFERÊNCIAS
+  // DE ANÁLISE (catálogo de variáveis), casados pelo atributoId da legenda; a
+  // legenda só serve de reserva p/ id fora do catálogo. A sigla sai LITERAL —
+  // nada de toUpperCase, senão "Ca%" viraria "CA%".
+  // Informações da área: sem fuso, e o laboratório (fonte do laudo) entra ali em
+  // vez de ficar solto embaixo do título.
+  const varAn = variavelDeAnalise(d.legenda.atributoId);
+  const uniVar = san(varAn?.unidade ?? d.unidade);
+  const nomeVar = san(varAn?.nome || d.atributo);
+  desenharCabecalhoOficial(doc, {
+    logoInvicta: logos.inv, logoCliente: logos.cli,
+    fazenda: d.fazenda,
+    esquerda: [
+      `Produtor: ${d.produtor || '—'}`,
+      `Ano: ${rotuloAno(d.safra)}   |   Data: ${d.dataInterpolacao}`,
+    ],
+    titulo: san(varAn?.sigla || d.simbolo),
+    subtitulo: uniVar ? `${nomeVar} (${uniVar})` : nomeVar,
+    info: [
+      `Área Total: ${fmt(d.areaHa, 2)} ha`,
+      `Município: ${d.municipio || '—'}${d.estado ? ' - ' + d.estado : ''}`,
+      `Datum: ${DATUM}`,
+      `Laboratório: ${san(d.fonte) || '—'}`,
+    ],
+  });
 
-  // Trunca com "…" p/ o bloco esquerdo (fazenda/produtor) NÃO invadir o título central.
-  const clip = (txt: string, maxW: number) => {
-    if (doc.getTextWidth(txt) <= maxW) return txt;
-    let t = txt;
-    while (t.length > 1 && doc.getTextWidth(t + '…') > maxW) t = t.slice(0, -1);
-    return t + '…';
-  };
-  doc.setTextColor(...NAVY);
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.text(clip(d.fazenda.toUpperCase(), 60), M + 56, 9);
-  doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(...GRAY);
-  doc.text(clip(`Produtor: ${d.produtor || '—'}`, 62), M + 56, 14);
-  doc.text(clip(`Ano: ${rotuloAno(d.safra)}   |   Data: ${d.dataInterpolacao}`, 62), M + 56, 18.5);
-
-  // Título central (elemento) — deslocado à direita e mais estreito p/ não colidir
-  // com o bloco esquerdo; auto-redução até 7pt.
-  const tituloCx = 165, tituloMaxW = 82;
-  const titulo = `${san(d.atributo).toUpperCase()} (${san(d.simbolo)})`;
-  doc.setTextColor(...NAVY); doc.setFont('helvetica', 'bold');
-  let tf = 22; doc.setFontSize(tf);
-  while (doc.getTextWidth(titulo) > tituloMaxW && tf > 7) { tf -= 1; doc.setFontSize(tf); }
-  doc.text(titulo, tituloCx, 13.5, { align: 'center', maxWidth: tituloMaxW });
-  doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(...GRAY);
-  doc.text(`${d.metodo ? san(d.metodo) + '  |  ' : ''}${san(d.fonte)}`, tituloCx, 20, { align: 'center', maxWidth: tituloMaxW });
-
-  // Informações da área (direita)
   const [w0, s0, e0, n0] = d.profundidades[0].bounds;
-  const lonC = (w0 + e0) / 2, latC = (s0 + n0) / 2;
-  const fuso = Math.floor((lonC + 180) / 6) + 1;
-  const ix = 214;
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(...NAVY);
-  doc.text('INFORMAÇÕES DA ÁREA', ix, 8);
-  doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(...GRAY);
-  doc.text(`Área Total: ${fmt(d.areaHa, 2)} ha`, ix, 13);
-  doc.text(`Município: ${d.municipio || '—'}${d.estado ? ' - ' + d.estado : ''}`, ix, 17);
-  doc.text(`Datum: SIRGAS 2000`, ix, 21);
-  doc.text(`Fuso: ${fuso}S`, ix, 24.5);
-
-  // Logo do cliente — só desenha se existir (sem placeholder quando não há).
-  if (logos.cli) {
-    const h = 16, w = Math.min(34, h * (logos.cli.naturalWidth / logos.cli.naturalHeight));
-    doc.addImage(logos.cli, 'PNG', W - M - w, 5, w, h);
-  }
-
-  doc.setDrawColor(...NAVY); doc.setLineWidth(0.8); doc.line(0, 26.5, W, 26.5);
+  const latC = (s0 + n0) / 2;
 
   // ── MAPAS ──
   const mapsJpg = await Promise.all(imgs.map(im => imagemParaPdf(im, frameW)));
@@ -307,7 +289,7 @@ async function desenharCapa(doc: JsPDF, paginas: DadosRelatorioFert[], logos: Lo
   linha('Cultura', san(d.cultura));
   linha('Área total', `${fmt(d.areaHa, 2)} ha`);
   linha('Município', `${san(d.municipio)}${d.estado ? ' - ' + d.estado : ''}`);
-  linha('Datum', 'SIRGAS 2000');
+  linha('Datum', DATUM);
   linha('Data', d.dataInterpolacao);
 
   // ── Sumário dos mapas ──
@@ -315,7 +297,11 @@ async function desenharCapa(doc: JsPDF, paginas: DadosRelatorioFert[], logos: Lo
   doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(...NAVY);
   doc.text(`MAPAS NESTE RELATÓRIO (${paginas.length}):`, M, sy);
   doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(...GRAY);
-  doc.text(paginas.map(p => `${san(p.atributo)} (${san(p.simbolo)})`).join('   ·   '), M, sy + 6, { maxWidth: W - 2 * M });
+  // Sumário com o MESMO nome/sigla que o título de cada página (catálogo).
+  doc.text(paginas.map(p => {
+    const v = variavelDeAnalise(p.legenda.atributoId);
+    return `${san(v?.nome || p.atributo)} (${san(v?.sigla || p.simbolo)})`;
+  }).join('   ·   '), M, sy + 6, { maxWidth: W - 2 * M });
 
   // ── Rodapé ──
   doc.setFillColor(...NAVY); doc.rect(0, H - 10, W, 10, 'F');

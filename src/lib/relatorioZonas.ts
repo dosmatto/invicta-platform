@@ -9,6 +9,7 @@ import type { jsPDF as JsPDF } from 'jspdf';
 import { capturarMapaZonas } from './capturaMapa';
 import { imagemParaPdf, reduzirLogo } from './pdfImagem';
 import type { DadosExportZonas } from './exportZonas';
+import { DATUM, desenharCabecalhoOficial, clipTexto } from './pdfCabecalho';
 
 const NAVY: [number, number, number] = [13, 33, 64];
 const GRAY: [number, number, number] = [100, 116, 139];
@@ -59,7 +60,7 @@ export async function gerarRelatorioZonas(d: DadosExportZonas, opts: OpcoesRelat
   const logos = await carregarLogos(opts.logoClienteUrl);
   const bounds = boundsDe(d);
   const [w0, s0, e0, n0] = bounds;
-  const latC = (s0 + n0) / 2, lonC = (w0 + e0) / 2;
+  const latC = (s0 + n0) / 2;
 
   // ── Captura do mapa (vetorial: zonas + linhas + limite) ──
   const mapaW = 168, mapaH = 116, mapaX = M, mapaY = 31;
@@ -72,32 +73,25 @@ export async function gerarRelatorioZonas(d: DadosExportZonas, opts: OpcoesRelat
     larguraPx: Math.round(mapaW * PXMM), alturaPx: Math.round(mapaH * PXMM),
   });
 
-  // ── CABEÇALHO ──
-  if (logos.inv) { const h = 15, w = h * (logos.inv.naturalWidth / logos.inv.naturalHeight); doc.addImage(logos.inv, 'PNG', M, 5, w, h); }
-  doc.setDrawColor(...LINE); doc.setLineWidth(0.3); doc.line(M + 52, 5, M + 52, 24);
-  const clip = (txt: string, maxW: number) => { let t = txt; if (doc.getTextWidth(t) <= maxW) return t; while (t.length > 1 && doc.getTextWidth(t + '…') > maxW) t = t.slice(0, -1); return t + '…'; };
-  doc.setTextColor(...NAVY); doc.setFont('helvetica', 'bold'); doc.setFontSize(12);
-  doc.text(clip(san(d.fazenda).toUpperCase(), 60), M + 56, 9);
-  doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(...GRAY);
-  doc.text(clip(`Produtor: ${san(d.produtor) || '—'}`, 62), M + 56, 14);
-  doc.text(clip(`Talhão: ${san(d.talhao) || '—'}${d.ano ? '   |   Ano: ' + san(d.ano) : ''}`, 62), M + 56, 18.5);
+  const clip = (txt: string, maxW: number) => clipTexto(doc, txt, maxW);
 
-  const tituloCx = 168, tituloMaxW = 84;
-  doc.setTextColor(...NAVY); doc.setFont('helvetica', 'bold'); doc.setFontSize(20);
-  doc.text('ZONAS DE MANEJO', tituloCx, 13.5, { align: 'center', maxWidth: tituloMaxW });
-  doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(...GRAY);
-  doc.text(clip(san(d.nomeMapa) || '—', tituloMaxW), tituloCx, 20, { align: 'center' });
-
-  const fuso = Math.floor((lonC + 180) / 6) + 1;
-  const ix = 214;
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(...NAVY); doc.text('INFORMAÇÕES DA ÁREA', ix, 8);
-  doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(...GRAY);
-  doc.text(`Área total: ${fmt(d.areaTotalHa, 2)} ha`, ix, 13);
-  doc.text(`Nº de zonas: ${d.zonas.length}`, ix, 17);
-  doc.text(`Datum: SIRGAS 2000  |  Fuso: ${fuso}S`, ix, 21);
-  doc.text(`Emissão: ${dataBR(d.dataEmissao)}`, ix, 24.5);
-  if (logos.cli) { const h = 16, w = Math.min(34, h * (logos.cli.naturalWidth / logos.cli.naturalHeight)); doc.addImage(logos.cli, 'PNG', W - M - w, 5, w, h); }
-  doc.setDrawColor(...NAVY); doc.setLineWidth(0.8); doc.line(0, 26.5, W, 26.5);
+  // ── CABEÇALHO (desenho compartilhado com o relatório de Fertilidade) ──
+  desenharCabecalhoOficial(doc, {
+    logoInvicta: logos.inv, logoCliente: logos.cli,
+    fazenda: san(d.fazenda),
+    esquerda: [
+      `Produtor: ${san(d.produtor) || '—'}`,
+      `Talhão: ${san(d.talhao) || '—'}${d.ano ? '   |   Ano: ' + san(d.ano) : ''}`,
+    ],
+    titulo: 'ZONAS DE MANEJO',
+    subtitulo: san(d.nomeMapa) || '—',
+    info: [
+      `Área total: ${fmt(d.areaTotalHa, 2)} ha`,
+      `Nº de zonas: ${d.zonas.length}`,
+      `Datum: ${DATUM}`,
+      `Emissão: ${dataBR(d.dataEmissao)}`,
+    ],
+  });
 
   // ── MAPA ──
   const mapaJpg = await imagemParaPdf(mapaPng, mapaW);

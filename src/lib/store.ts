@@ -1489,6 +1489,13 @@ export function deleteVariavelAnalise(id: string): boolean {
   return true;
 }
 
+// A variável do catálogo (Preferências de Análise) por id — sigla/nome/unidade
+// para exibição. É a FONTE DA VERDADE do título dos relatórios: quem edita a
+// variável na Biblioteca muda o que sai no PDF. null = id fora do catálogo.
+export function variavelDeAnalise(id: string): VariavelAnalise | null {
+  return getVariaveisAnalise().find(x => x.id === id) ?? null;
+}
+
 // Sigla p/ exibição — catálogo primeiro, fallback na lista fixa (ids antigos).
 export function siglaVariavel(id: string): string {
   const v = getVariaveisAnalise().find(x => x.id === id);
