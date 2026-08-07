@@ -278,8 +278,10 @@ export interface ResumoPrescricao {
 export function fatorBaseDose(unidade: string, espacamentoM?: number): number {
   if (unidade === 'sementes/m') {
     if (!espacamentoM || espacamentoM <= 0) throw new Error('Para dose em sementes por metro, informe o espaçamento entre linhas.');
-    return 10_000 / espacamentoM;
+    return 10_000 / espacamentoM;                 // metros lineares por hectare
   }
+  // Por metro QUADRADO não depende do espaçamento: 1 ha = 10.000 m².
+  if (unidade === 'sementes/m2') return 10_000;
   return 1;
 }
 

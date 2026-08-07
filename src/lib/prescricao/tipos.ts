@@ -29,9 +29,12 @@ export const ROTULO_MODO: Record<ModoCalculo, string> = {
 
 // Unidade da DOSE (por hectare). O total usa a unidade-base correspondente
 // (kg/ha→kg, t/ha→t, sementes/ha→sementes, L/ha→L).
-// sementes/m = sementes por METRO LINEAR de fileira (como o operador regula a
-// plantadeira). Converte para total via espaçamento — ver fatorBaseDose().
-export type UnidadeDose = 'kg/ha' | 't/ha' | 'sementes/ha' | 'sementes/m' | 'L/ha';
+// sementes/m  = por METRO LINEAR de fileira (regulagem da plantadeira; depende
+//               do espaçamento entre linhas).
+// sementes/m2 = por METRO QUADRADO de área — a régua de outros monitores, e a
+//               única das três que NÃO depende do espaçamento (1 ha = 10.000 m²).
+// Converte para total via fatorBaseDose().
+export type UnidadeDose = 'kg/ha' | 't/ha' | 'sementes/ha' | 'sementes/m' | 'sementes/m2' | 'L/ha';
 
 export interface ZonaDose {
   idZona: string;
@@ -180,8 +183,9 @@ export interface Prescricao {
 
 // Fator unidade-base → rótulo do TOTAL (para resumos e validações).
 export const UNIDADE_TOTAL: Record<UnidadeDose, string> = {
-  'kg/ha': 'kg', 't/ha': 't', 'sementes/ha': 'sementes', 'sementes/m': 'sementes', 'L/ha': 'L',
+  'kg/ha': 'kg', 't/ha': 't', 'sementes/ha': 'sementes', 'sementes/m': 'sementes', 'sementes/m2': 'sementes', 'L/ha': 'L',
 };
 
 // A unidade da dose é contada em SEMENTES (por ha ou por metro)?
-export const ehUnidadeSemente = (u: UnidadeDose): boolean => u === 'sementes/ha' || u === 'sementes/m';
+export const ehUnidadeSemente = (u: UnidadeDose): boolean =>
+  u === 'sementes/ha' || u === 'sementes/m' || u === 'sementes/m2';

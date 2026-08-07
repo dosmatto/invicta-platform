@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { redistribuirPorEstoque, distribuirProporcional, distribuirPorAjuste, resumoDoses, nutrientesPorZona, pesoDoRank, fatorBaseDose, arredondarDose } from '../src/lib/prescricao/calculo.ts';
 import { fatorCampo, sementesPorHa, metricasSementes, estoqueTotalSementes, distribuirSementes, doseCompensada } from '../src/lib/prescricao/sementes.ts';
 import { dosesPorEquacao, variaveisDaEquacao } from '../src/lib/prescricao/equacao.ts';
-import { converterDose, prescricaoEmUnidade, podeConverter } from '../src/lib/prescricao/unidade.ts';
+import { converterDose, prescricaoEmUnidade, podeConverter, precisaEspacamento, UNIDADES_SEMENTE } from '../src/lib/prescricao/unidade.ts';
 import { montarResumoPdf, temCompensacao, totalDoArquivo, kgDeSementes, doseArquivo as doseArquivoDe, fmtRel, arredRel, corDaDose } from '../src/lib/prescricao/resumo.ts';
 import { fmtHa, arredHa } from '../src/lib/formato.ts';
 
@@ -599,6 +599,37 @@ t('sem espaçamento, NÃO converte — chute vira população errada no campo', 
 t('adubo não entra nessa conversão', () => {
   assert.equal(podeConverter('kg/ha', 'sementes/m', 0.5), false);
   assert.throws(() => converterDose(200, 'kg/ha', 'sementes/m', 0.5), /não existe/);
+});
+
+t('SEMENTES POR METRO QUADRADO: 80.000 pl/ha = 8 sementes/m2, sem espaçamento', () => {
+  // 1 ha = 10.000 m². Esta régua não depende do espaçamento entre linhas — é a
+  // única das três que converte mesmo com o campo em branco.
+  assert.equal(converterDose(80_000, 'sementes/ha', 'sementes/m2', undefined), 8);
+  assert.equal(converterDose(8, 'sementes/m2', 'sementes/ha', undefined), 80_000);
+  assert.equal(podeConverter('sementes/ha', 'sementes/m2', undefined), true);
+  assert.equal(precisaEspacamento('sementes/m2'), false);
+  assert.equal(precisaEspacamento('sementes/m'), true);
+});
+
+t('metro linear <-> metro quadrado passa pelo espaçamento', () => {
+  // 4 sementes/m a 0,50 m = 80.000/ha = 8/m²
+  assert.equal(converterDose(4, 'sementes/m', 'sementes/m2', 0.5), 8);
+  assert.equal(converterDose(8, 'sementes/m2', 'sementes/m', 0.5), 4);
+  assert.equal(podeConverter('sementes/m', 'sementes/m2', undefined), false, 'sem espaçamento não dá');
+});
+
+t('as três réguas fecham no MESMO total de sementes', () => {
+  const zonas = [{ idZona: 'a', nomeZona: '01', classe: 'A', cor: '#000', areaHa: 12.5, dose: 80_000 }];
+  const p = {
+    unidade: 'sementes/ha', tipo: 'sementes', produto: 'Milho', nome: 'x', zonas,
+    params: { sementes: { germinacaoPct: 95, espacamentoM: 0.45 } },
+    fc: { type: 'FeatureCollection', features: [] },
+  };
+  const totais = UNIDADES_SEMENTE.map(u => {
+    const q = prescricaoEmUnidade(p, u);
+    return resumoDoses(q.zonas, undefined, fatorBaseDose(q.unidade, 0.45)).usado;
+  });
+  for (const t2 of totais) assert.ok(Math.abs(t2 - 1_000_000) < 1e-6, `totais: ${totais.join(' / ')}`);
 });
 
 t('prescricaoEmUnidade converte doses e LIMITES, e preserva o total absoluto', () => {
