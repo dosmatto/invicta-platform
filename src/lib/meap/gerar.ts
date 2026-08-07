@@ -230,7 +230,10 @@ export async function carregarCamadas(talhaoId: string): Promise<CamadasCarregad
 
   // 1) Fertilidade — quando existe, define a malha de referência.
   if (imp) {
-    const grids = await carregarGridsTalhao(talhaoId, imp.id);
+    // 'zona': o zoneamento desenha DIVISAS em cima da malha, então quer o mapa
+    // mais FINO. A regra de 20 m é da dose (v2.37.0) — herdá-la aqui foi o que
+    // engrossou a escadinha das zonas.
+    const grids = await carregarGridsTalhao(talhaoId, imp.id, 'zona');
     for (const [chave, resp] of Object.entries(grids)) {
       if (!resp.grid?.b64) continue;
       if (!bounds) { bounds = resp.bounds; shape = resp.grid.shape; }

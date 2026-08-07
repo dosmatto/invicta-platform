@@ -62,7 +62,9 @@ export async function listarCamadas(talhaoId: string, safra: string): Promise<Ca
   // Fertilidade (importação de laboratório mais recente)
   const imp = getImportacoesLab(talhaoId)[0];
   if (imp) {
-    const grids = await carregarGridsTalhao(talhaoId, imp.id);
+    // 'zona' = o mapa mais FINO. Comparar camadas e validar zonas lê detalhe;
+    // a régua de 20 m é da dose.
+    const grids = await carregarGridsTalhao(talhaoId, imp.id, 'zona');
     for (const [chave, resp] of Object.entries(grids)) {
       if (!resp.grid?.b64) continue;
       const [nut, prof] = chave.split('__');

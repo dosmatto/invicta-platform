@@ -41,12 +41,35 @@ export function lerChaveMapa(resto: string): { chave: string; pixel?: number; me
 export interface CandidatoMapa { id: string; tem: boolean; em: string }
 export interface EscolhaMapa { indice: number; pixel?: number; metodo?: string; eh20: boolean }
 
-// Qual mapa entra na conta, por `nut__prof`. Preferência, nesta ordem:
-//   (1) tem grid  →  (2) é o de 20 m nativo  →  (3) o mais recente.
-// O passo (2) é o que este arquivo existe para garantir: sem ele, um mapa fino
-// reprocessado depois ganharia do de 20 m só por ser mais novo.
-export function escolherMapas(prefixo: string, itens: CandidatoMapa[]): Record<string, EscolhaMapa> {
+/**
+ * Quem está pedindo o mapa — e por isso qual resolução ganha.
+ *
+ *  'dose'  (Recomendação): o de 20 m NATIVO. A dose sai em 20 m; pegar o fino e
+ *          reamostrar desloca o mapa em ~meio pixel e leva um `stats` obsoleto.
+ *  'zona'  (Zonas de Manejo): o mais FINO disponível. A divisa da zona é
+ *          desenhada em cima da malha — a 20 m ela sai em escadinha de 20 m no
+ *          mapa, e foi isso que apareceu quando o zoneamento passou a usar,
+ *          sem querer, a mesma regra da dose (v2.37.0).
+ */
+export type UsoMapa = 'dose' | 'zona';
+
+/**
+ * Qual mapa entra na conta, por `nut__prof`. Preferência, nesta ordem:
+ *   (1) tem grid  →  (2) a resolução que o USO pede  →  (3) o mais recente.
+ *
+ * O passo (2) é o que este arquivo existe para garantir: sem ele, um mapa fino
+ * reprocessado depois ganharia do de 20 m só por ser mais novo — e, do outro
+ * lado, o de 20 m recém-gerado rouba a vez do fino no zoneamento.
+ */
+export function escolherMapas(prefixo: string, itens: CandidatoMapa[], uso: UsoMapa = 'dose'): Record<string, EscolhaMapa> {
   const out: Record<string, EscolhaMapa> = {};
+  // 'zona' quer o menor pixel; sem pixel no id (legado), fica por último.
+  const melhorPixel = (a?: number, b?: number): boolean => {
+    if (uso === 'dose') return false;                       // resolvido por eh20
+    if (a == null) return false;
+    if (b == null) return true;
+    return a < b;
+  };
   itens.forEach((c, indice) => {
     const info = lerChaveMapa(c.id.startsWith(prefixo) ? c.id.slice(prefixo.length) : c.id);
     if (!info) return;
@@ -54,9 +77,16 @@ export function escolherMapas(prefixo: string, itens: CandidatoMapa[]): Record<s
     const atual = out[info.chave];
     if (atual) {
       const anterior = itens[atual.indice];
+      const mesmoTem = c.tem === anterior.tem;
+      const preferido = uso === 'dose'
+        ? (eh20 && !atual.eh20)
+        : melhorPixel(info.pixel, atual.pixel);
+      const empatePref = uso === 'dose'
+        ? (eh20 === atual.eh20)
+        : (info.pixel === atual.pixel);
       const trocar = (c.tem && !anterior.tem)
-        || (c.tem === anterior.tem && eh20 && !atual.eh20)
-        || (c.tem === anterior.tem && eh20 === atual.eh20 && c.em > anterior.em);
+        || (mesmoTem && preferido)
+        || (mesmoTem && empatePref && c.em > anterior.em);
       if (!trocar) return;
     }
     out[info.chave] = { indice, pixel: info.pixel, metodo: info.metodo, eh20 };

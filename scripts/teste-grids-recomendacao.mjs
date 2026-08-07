@@ -110,5 +110,49 @@ t('profundidades e atributos diferentes não se misturam', () => {
   assert.deepEqual(Object.keys(r).sort(), ['ctc__0-20', 'k__0-20', 'k__20-40']);
 });
 
+t('USO ZONA: entre 5 m e 20 m, o zoneamento fica com o FINO', () => {
+  // A regressão que isto trava: quando a Fertilidade passou a gerar o mapa de
+  // 20 m (v2.37.0), o zoneamento herdou a regra da dose e as divisas das zonas
+  // saíram em escadinha de 20 m no mapa.
+  const pre = 'T1__IMP1__';
+  const itens = [
+    { id: `${pre}krige__20__esferico__ctc__0-20`, tem: true, em: '2026-08-07T10:00:00Z' },
+    { id: `${pre}krige__5__esferico__ctc__0-20`, tem: true, em: '2026-08-06T10:00:00Z' },
+  ];
+  const dose = escolherMapas(pre, itens, 'dose');
+  assert.equal(dose['ctc__0-20'].pixel, 20, 'a dose continua em 20 m');
+  const zona = escolherMapas(pre, itens, 'zona');
+  assert.equal(zona['ctc__0-20'].pixel, 5, 'a zona pega o mais fino, mesmo sendo mais antigo');
+});
+
+t('USO ZONA: sem pixel no id (legado) perde para qualquer mapa com pixel', () => {
+  const pre = 'T1__IMP1__';
+  const zona = escolherMapas(pre, [
+    { id: `${pre}legenda__ctc__0-20`, tem: true, em: '2026-08-07T10:00:00Z' },
+    { id: `${pre}krige__20__esferico__ctc__0-20`, tem: true, em: '2026-01-01T10:00:00Z' },
+  ], 'zona');
+  assert.equal(zona['ctc__0-20'].pixel, 20);
+});
+
+t('USO ZONA: entre dois mapas do MESMO pixel, o mais recente ganha', () => {
+  const pre = 'T1__IMP1__';
+  const zona = escolherMapas(pre, [
+    { id: `${pre}idw__5__auto__ctc__0-20`, tem: true, em: '2026-08-01T10:00:00Z' },
+    { id: `${pre}krige__5__esferico__ctc__0-20`, tem: true, em: '2026-08-07T10:00:00Z' },
+  ], 'zona');
+  assert.equal(zona['ctc__0-20'].metodo, 'krige');
+});
+
+t('sem grid nunca ganha, em nenhum dos usos', () => {
+  const pre = 'T1__IMP1__';
+  const itens = [
+    { id: `${pre}krige__5__esferico__ctc__0-20`, tem: false, em: '2026-08-07T10:00:00Z' },
+    { id: `${pre}krige__20__esferico__ctc__0-20`, tem: true, em: '2026-01-01T10:00:00Z' },
+  ];
+  for (const uso of ['dose', 'zona']) {
+    assert.equal(escolherMapas(pre, itens, uso)['ctc__0-20'].pixel, 20, `uso ${uso}`);
+  }
+});
+
 console.log(`\n${ok} passaram, ${fail} falharam`);
 process.exit(fail ? 1 : 0);

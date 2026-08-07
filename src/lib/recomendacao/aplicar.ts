@@ -8,7 +8,7 @@
 import { cloudCarregarMapasPorPrefixo } from '../cloud';
 import { descomprimirGrid, decodeGrid, type RespInterp } from '../fertilidade';
 import { compilar, executarGrid, atributoPorToken, ajustarDose } from './motor';
-import { escolherMapas, PIXEL_RECOMENDACAO_M } from './escolhaMapa';
+import { escolherMapas, PIXEL_RECOMENDACAO_M, type UsoMapa } from './escolhaMapa';
 import type { ConteudoEquacao } from '../biblioteca';
 
 type MapaPronto = { resp: RespInterp; labels?: GeoJSON.FeatureCollection; interpoladoEm?: string };
@@ -22,18 +22,26 @@ export interface GridRecomendacao extends RespInterp { origem?: OrigemGrid }
 // A RECOMENDAÇÃO quer o mapa interpolado NATIVAMENTE a 20 m (a aba Fertilidade
 // gera um em segundo plano a cada processamento). Sem mapa de 20 m, cai no mais
 // fino e reamostra — ponte para talhões ainda não reprocessados.
-export async function carregarGridsTalhao(talhaoId: string, importacaoId: string): Promise<Record<string, GridRecomendacao>> {
+export async function carregarGridsTalhao(
+  talhaoId: string, importacaoId: string, uso: UsoMapa = 'dose',
+): Promise<Record<string, GridRecomendacao>> {
   const prefixo = `${talhaoId}__${importacaoId}__`;
   const carregados = await cloudCarregarMapasPorPrefixo<MapaPronto>(prefixo);
   const escolha = escolherMapas(prefixo, carregados.map(c => ({
     id: c.id, tem: !!c.dados.resp?.grid?.b64, em: c.dados.interpoladoEm ?? '',
-  })));
+  })), uso);
   const out: Record<string, GridRecomendacao> = {};
   for (const k in escolha) {
     const e = escolha[k];
     const resp = carregados[e.indice].dados.resp;
     if (resp?.grid?.comp === 'gz') {
       try { resp.grid = await descomprimirGrid(resp.grid); } catch { /* segue */ }
+    }
+    // ZONA fica com o mapa como ele é (o mais fino): reamostrar para 20 m
+    // engrossaria a malha e a divisa da zona sairia em escadinha de 20 m.
+    if (uso === 'zona') {
+      out[k] = { ...resp, origem: { pixel: e.pixel, metodo: e.metodo, reamostrado: false } };
+      continue;
     }
     const origem = { pixel: e.pixel, metodo: e.metodo, reamostrado: !e.eh20 };
     out[k] = e.eh20 ? { ...resp, origem } : { ...reamostrarPara20m(resp), origem };
