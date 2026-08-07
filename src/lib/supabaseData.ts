@@ -45,6 +45,20 @@ function marcarSujo(key: string) {
   if (typeof window === 'undefined') return;
   try { const s = lerSujos(); if (!s[key]) { s[key] = true; localStorage.setItem(SUJO_KEY, JSON.stringify(s)); } } catch {}
 }
+/**
+ * Marca uma chave como PENDENTE de subida sem ter havido gravação nenhuma.
+ *
+ * Caso de uso único: chave que passou a sincronizar AGORA e ainda não existe na
+ * nuvem. Sem esta marca o boot completo lê `porColecao[key] ?? []` e grava esse
+ * vazio por cima do que já estava no navegador (ver o laço de `keysLista` no
+ * fim de `bootSupabaseData`). Marcada, ela cai no ramo `mesclarPorId`, onde o
+ * local vence, e sobe no re-push do fim do boot.
+ *
+ * Exportado com nome próprio em vez de `marcarSujo` cru: "sujo" descreve o
+ * mecanismo, não o motivo, e este é o único motivo legítimo de fora daqui.
+ */
+export function marcarPendenteSupabase(key: string) { marcarSujo(key); }
+
 function limparSujo(key: string) {
   if (typeof window === 'undefined') return;
   try { const s = lerSujos(); if (s[key]) { delete s[key]; localStorage.setItem(SUJO_KEY, JSON.stringify(s)); } } catch {}

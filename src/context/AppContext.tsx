@@ -10,7 +10,7 @@ import { registrarLogin } from '@/lib/iam/auditoria';
 import { limparBaseOperacional } from '@/lib/admin/manutencao';
 import { TrocaSenhaObrigatoria } from '@/components/auth/TrocaSenhaObrigatoria';
 import { migrarLaboratoriosV1, migrarSafrasV1, migrarGradesV1, migrarPreferenciasV1, reKeyDonoBiblioteca } from '@/lib/biblioteca';
-import { seedLegendasSistema, migrarLegendaCtceV1, migrarLegendasSaturacoesV1, migrarLegendasSaturacoesV2, migrarLegendasSaturacoesV3, migrarLegendasHomonimasPadraoV1, garantirVariaveisComplementares, migrarSinonimosSeedV1, migrarOrdemPadraoFertV1, auditoriaCadastro, migrarAreasGeodesicasV1, migrarNomesMaiusculosV1, migrarGradesDuplicadasV1, migrarBboxTalhoesV1, migrarImportacoesLabPeriodoV1, migrarGradesPeriodoV1, migrarPeriodoDemaisV1, analisarTalhoesDuplicados, aplicarDedupTalhoesExatos, analisarFazendasOrfas, aplicarRemocaoFazendasOrfas } from '@/lib/store';
+import { seedLegendasSistema, migrarLegendaCtceV1, migrarLegendasSaturacoesV1, migrarLegendasSaturacoesV2, migrarLegendasSaturacoesV3, migrarLegendasHomonimasPadraoV1, garantirVariaveisComplementares, migrarSinonimosSeedV1, migrarOrdemPadraoFertV1, auditoriaCadastro, migrarAreasGeodesicasV1, migrarNomesMaiusculosV1, migrarGradesDuplicadasV1, migrarBboxTalhoesV1, migrarImportacoesLabPeriodoV1, migrarGradesPeriodoV1, migrarPeriodoDemaisV1, migrarInsumosParaSyncV1, migrarInsumosEscopoEmpresaV1, analisarTalhoesDuplicados, aplicarDedupTalhoesExatos, analisarFazendasOrfas, aplicarRemocaoFazendasOrfas } from '@/lib/store';
 import { LEGENDAS_OFICIAIS } from '@/constants/legendasSeedOficial';
 import { authConfigurado, observarAuth, logout, type User } from '@/lib/auth';
 import { hidratarCachePesado } from '@/lib/localComprimido';
@@ -182,6 +182,7 @@ export function AppProvider({ children, redirectProdutorParaPortal, modoCampo }:
       passo('migrarImportacoesLabPeriodoV1', migrarImportacoesLabPeriodoV1);   // Data de referência + Ano/Época nos laudos antigos
       passo('migrarGradesPeriodoV1', migrarGradesPeriodoV1);   // Data de referência + Ano nas grades antigas (preserva a época)
       passo('migrarPeriodoDemaisV1', migrarPeriodoDemaisV1);   // Ano em compactação/produtividade/condutividade antigos
+      passo('migrarInsumosEscopoEmpresaV1', migrarInsumosEscopoEmpresaV1);   // insumo privado × equação da empresa = FK que só o dono enxerga
       console.info(`[entrada] migrações/seeds locais: ${Math.round(performance.now() - t)}ms`);
     }
 
@@ -206,6 +207,13 @@ export function AppProvider({ children, redirectProdutorParaPortal, modoCampo }:
       if (!user) { setDadosProntos(false); setAcessoBloqueado(false); setMotivoBloqueio(''); setTrocaSenha(false); setValidadeExpirada(false); setDataExpiracao(null); return; }
       setDadosProntos(false);
       await hidrata;   // pesadas em memória antes do boot da nuvem (ver acima)
+      // v2.42: `inv_bib_insumos` passou a sincronizar. Marca a chave como
+      // pendente ANTES do boot — senão ele grava o vazio da nuvem por cima do
+      // cadastro local (ver a própria função). Fora de `migracoesLocais()` de
+      // propósito: aquela roda depois do boot, quando o estrago já aconteceu.
+      // No app de campo a chave nem é baixada (KEYS_PULAR_CAMPO), então marcar
+      // pendente lá só criaria uma pendência órfã.
+      if (!modoCampo) migrarInsumosParaSyncV1();
       const tLogin = performance.now();   // [entrada] cronômetro total até a tela liberar
       // Hidrata da nuvem com TEMPO-LIMITE: se o Supabase estiver degradado
       // (pendurado), entra com os dados locais em vez de prender o usuário no

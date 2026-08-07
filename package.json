@@ -35,6 +35,7 @@
     "teste:elo": "node scripts/teste-elo-grade.mjs",
     "teste:rotulos": "node scripts/teste-rotulos-mapa.mjs",
     "teste:insumos": "node scripts/teste-insumos.mjs",
+    "teste:custos": "node scripts/teste-custos-equacao.mjs",
     "teste:escala": "node scripts/teste-escala-classes.mjs",
     "teste:validacao": "node scripts/teste-validacao.mjs",
     "teste:rotulo": "node scripts/teste-rotulo-zona.mjs",

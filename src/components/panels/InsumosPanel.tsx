@@ -66,7 +66,11 @@ export function InsumosPanel() {
     if (!r.nome.trim()) { setErro('Dê um nome ao insumo (ex.: "Ureia", "MAP", "KCl").'); return; }
     const conteudo: ConteudoInsumo = { ...r.conteudo, categoria: r.categoria, precoUnidade: unidadePreco(r.categoria) };
     if (r.id) atualizar<ConteudoInsumo>('insumos', r.id, { nome: r.nome.trim(), conteudo });
-    else criar<ConteudoInsumo>('insumos', { nome: r.nome.trim(), conteudo });
+    // 'empresa' (e não o 'meu' padrão de `criar`): as equações e as prescrições
+    // apontam para o insumo, e as duas são compartilhadas. Insumo privado seria
+    // FK que só funciona para quem cadastrou — o segundo agrônomo abre a mesma
+    // equação e o preço não existe para ele.
+    else criar<ConteudoInsumo>('insumos', { nome: r.nome.trim(), conteudo, escopo: 'empresa' });
     setR(vazio(r.categoria));
     setTick(t => t + 1);
   }

@@ -11,6 +11,7 @@ import { getImportacoesLab, getTalhoes, getPlantio, type ImportacaoLab } from '@
 import { ExplicadorRecomendacaoIa } from '@/components/talhao/ExplicadorRecomendacaoIa';
 import { pode } from '@/lib/empresa';
 import { listar as bibListar, compararEquacoes, type ItemBiblioteca, type ConteudoEquacao, type ConteudoRecomendacao } from '@/lib/biblioteca';
+import type { ConteudoInsumo } from '@/lib/insumos';
 import { carregarGridsTalhao, calcularDose, dividirDoseEmPassadas, type DoseCalculada } from '@/lib/recomendacao/aplicar';
 import { salvarCenario, listarCenarios, descomprimirCenario, excluirCenario, type Cenario } from '@/lib/recomendacao/cenarios';
 import { colorirDose, recortarNoPoligono } from '@/lib/raster';
@@ -45,6 +46,9 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
   const [importacoes, setImportacoes] = useState<ImportacaoLab[]>([]);
   const [importacaoId, setImportacaoId] = useState('');
   const [equacoes, setEquacoes] = useState<ItemBiblioteca<ConteudoEquacao>[]>([]);
+  // Fonte única do preço (v2.42): a equação vinculada busca custo/frete/aplicação
+  // aqui. Mapa por id porque `calcularDose` recebe os insumos injetados.
+  const [insumos, setInsumos] = useState<ReadonlyMap<string, ConteudoInsumo>>(new Map());
   const [recomendacoes, setRecomendacoes] = useState<ItemBiblioteca<ConteudoRecomendacao>[]>([]);
   const [equacaoId, setEquacaoId] = useState('');
   const [recomendacaoId, setRecomendacaoId] = useState('');
@@ -74,9 +78,12 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
     const load = () => {
       setEquacoes(bibListar<ConteudoEquacao>('equacoes').filter(e => e.ativo));
       setRecomendacoes(bibListar<ConteudoRecomendacao>('recomendacoes').filter(r => r.ativo));
+      setInsumos(new Map(bibListar<ConteudoInsumo>('insumos').filter(i => i.ativo).map(i => [i.id, i.conteudo])));
     };
     load();
-    const onBib = (e: Event) => { const d = (e as CustomEvent).detail as { slug?: string } | undefined; if (!d?.slug || d.slug === 'equacoes' || d.slug === 'recomendacoes') load(); };
+    // 'insumos' entra na lista porque mudar o preço de um insumo muda o custo
+    // de toda equação vinculada a ele — sem isso a tela ficaria com o antigo.
+    const onBib = (e: Event) => { const d = (e as CustomEvent).detail as { slug?: string } | undefined; if (!d?.slug || d.slug === 'equacoes' || d.slug === 'recomendacoes' || d.slug === 'insumos') load(); };
     if (typeof window !== 'undefined') window.addEventListener('inv:biblioteca', onBib);
     return () => { if (typeof window !== 'undefined') window.removeEventListener('inv:biblioteca', onBib); };
   }, []);
@@ -162,7 +169,7 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
       const ok: DoseCalculada[] = [];
       const erros: { nome: string; erro: string }[] = [];
       for (const it of itens) {
-        try { ok.push(calcularDose(it, grids, area, poligono)); }
+        try { ok.push(calcularDose(it, grids, area, poligono, insumos)); }
         catch (e) { erros.push({ nome: it.nome, erro: e instanceof Error ? e.message : String(e) }); }
       }
       // Divisão de aplicação (escolhida na hora) → grupo de mapas (passadas).
@@ -256,7 +263,7 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
       for (const r of recs) {
         const itens = (r.conteudo.equacaoIds.map(id => equacoes.find(e => e.id === id)).filter(Boolean) as ItemBiblioteca<ConteudoEquacao>[]).sort(compararEquacoes);
         const ok: DoseCalculada[] = [];
-        for (const it of itens) { try { ok.push(calcularDose(it, grids, area, poligono)); } catch { /* sem mapa p/ essa equação */ } }
+        for (const it of itens) { try { ok.push(calcularDose(it, grids, area, poligono, insumos)); } catch { /* sem mapa p/ essa equação */ } }
         if (ok.length === 0) continue;
         const divBook: DivCfg = { ativo: divAtivo, limiteMax: parseFloat(divLimite.replace(',', '.')) || 0, unidade: divUnid };
         const finais = expandirDoses(ok, divBook, area);   // divide em passadas se marcado
@@ -384,7 +391,7 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
               <div className="flex justify-between"><span>Área</span><span>{fmtHa(fin.area)} ha</span></div>
               <div className="flex justify-between font-bold" style={{ color: '#4ade80' }}><span>Custo total{fin.temSemCusto ? '*' : ''}</span><span>R$ {fmt(fin.custoTotal, 2)}</span></div>
               <div className="flex justify-between"><span>Custo / ha</span><span>R$ {fmt(fin.custoHa, 2)}</span></div>
-              {fin.temSemCusto && <div className="text-[8px]" style={{ color: '#64748b' }}>* alguns produtos sem custo/tonelada definido</div>}
+              {fin.temSemCusto && <div className="text-[8px]" style={{ color: '#64748b' }}>* alguns produtos sem custo/tonelada — insumo sem preço, ou equação não vinculada</div>}
             </div>
           )}
 

@@ -80,6 +80,17 @@ export interface ConteudoInsumo {
   precoMedio?: number;
   /** Unidade de `precoMedio`. Ausente = 'kg' (cadastros anteriores à v2.41). */
   precoUnidade?: UnidadePreco;
+  /**
+   * Frete em R$/ha. Mora aqui, e não na equação, pelo mesmo motivo do preço:
+   * dez equações de calcário copiavam o mesmo frete dez vezes, e corrigir o
+   * valor virava dez edições — das quais uma sempre ficava para trás.
+   *
+   * Ausente ≠ 0, de propósito: `undefined` é "não cadastrei" e `0` é "não tem
+   * frete". Quem lê é `custosDaEquacao`.
+   */
+  freteHa?: number;
+  /** Aplicação em R$/ha. Mesmo motivo (e mesma distinção) do frete. */
+  aplicacaoHa?: number;
   fornecedor?: string;
   observacoes?: string;
 }
@@ -109,6 +120,78 @@ export function precoNaUnidade(c: ConteudoInsumo, alvo: UnidadePreco): number | 
   if (p == null || !isFinite(p)) return undefined;
   const v = (p * KG_POR[alvo]) / KG_POR[c.precoUnidade ?? 'kg'];
   return Math.round(v * 1e6) / 1e6;      // 0,35 × 1000 dá 350,00000000000006
+}
+
+// ── Fonte única de custo: o insumo manda, a equação sobrescreve (v2.42) ─────
+//
+// O produto da equação era texto livre com o preço embutido: dez equações de
+// calcário carregavam "R$ 115/t" copiado dez vezes, e no dia em que o calcário
+// mudou de preço só nove foram corrigidas. Agora o preço tem UM lugar — o
+// insumo — e a equação aponta para ele (ConteudoEquacao.insumoId).
+//
+// Sobrescrever continua possível, porque existe o caso real do calcário de
+// outra jazida naquele talhão. A regra é: campo VAZIO (null) na equação herda
+// do insumo; campo PREENCHIDO vence. E `0` é zero de verdade, não vazio — sem
+// essa distinção ninguém consegue mais dizer "esta equação não tem frete".
+//
+// A assinatura é ESTRUTURAL de propósito: este módulo é puro e não pode
+// importar `ConteudoEquacao` de biblioteca.ts (que é 'use client'). Quem passa
+// um ConteudoEquacao satisfaz `CustosProprios` sem conversão nenhuma.
+
+/** O que a equação pode ter de custo próprio. `ConteudoEquacao` satisfaz isto. */
+export interface CustosProprios {
+  custoTonelada?: number | null;
+  freteHa?: number | null;
+  aplicacaoHa?: number | null;
+}
+
+export type FonteCusto = 'equacao' | 'insumo' | 'nenhum';
+
+export interface CustosResolvidos {
+  /** R$/t. `null` = DESCONHECIDO — que não é o mesmo que 0 ("de graça"). */
+  custoTonelada: number | null;
+  freteHa: number;
+  aplicacaoHa: number;
+  /** De onde saiu cada número. É isto que a tela mostra ao usuário. */
+  fonte: { custo: FonteCusto; frete: FonteCusto; aplicacao: FonteCusto };
+}
+
+const finito = (v: unknown): number | null =>
+  typeof v === 'number' && isFinite(v) ? v : null;
+
+/**
+ * Custos de UMA equação, já resolvidos.
+ *
+ * `insumo` ausente — sem vínculo, ou vínculo órfão porque o insumo foi
+ * excluído — devolve os campos próprios da equação, que é exatamente o
+ * comportamento anterior à v2.42. É por isso que equação antiga não precisou
+ * de migração nenhuma.
+ */
+export function custosDaEquacao(eq: CustosProprios, insumo?: ConteudoInsumo | null): CustosResolvidos {
+  const proprioCusto = finito(eq.custoTonelada);
+  const proprioFrete = finito(eq.freteHa);
+  const proprioAplic = finito(eq.aplicacaoHa);
+
+  let custoTonelada = proprioCusto;
+  let fonteCusto: FonteCusto = proprioCusto != null ? 'equacao' : 'nenhum';
+  if (proprioCusto == null && insumo) {
+    // precoNaUnidade carrega a régua do cadastro legado (sem precoUnidade = R$/kg).
+    const doInsumo = finito(precoNaUnidade(insumo, 't'));
+    if (doInsumo != null) { custoTonelada = doInsumo; fonteCusto = 'insumo'; }
+  }
+
+  const herdar = (proprio: number | null, doInsumo: unknown): [number, FonteCusto] => {
+    if (proprio != null) return [proprio, 'equacao'];
+    const v = finito(doInsumo);
+    return v != null ? [v, 'insumo'] : [0, 'nenhum'];
+  };
+  const [freteHa, fonteFrete] = herdar(proprioFrete, insumo?.freteHa);
+  const [aplicacaoHa, fonteAplic] = herdar(proprioAplic, insumo?.aplicacaoHa);
+
+  return {
+    custoTonelada, freteHa, aplicacaoHa,
+    fonte: { custo: fonteCusto, frete: fonteFrete, aplicacao: fonteAplic },
+  };
 }
 
 /** A complementação por nutriente só vale para fertilizante mineral (regra 12.5). */

@@ -7,7 +7,7 @@ import type { Legenda } from './legendas';
 import { classesFertilidade5, ordenarLegendasDoAtributo, deveSemearLegendas, promocoesDeHomonimas } from './legendas';
 export { ordenarLegendasDoAtributo } from './legendas';
 import type { AmbienteProdutivo } from './meap/tipos';
-import { cloudPushLista, cloudAindaNaoHidratou } from './cloud';
+import { cloudPushLista, cloudAindaNaoHidratou, cloudMarcarPendente } from './cloud';
 import { lerListaLocal, gravarListaLocal, removerLocal } from './localComprimido';
 import { areaHaGeo, areaHaGeoBruta } from './areaGeo';
 import { empresaAtivaId, uidUsuario, escopoClienteIds, escopoTalhaoIds, escopoFazendaIds } from './empresa';
@@ -17,6 +17,7 @@ import {
   criar as bibCriar,
   atualizar as bibAtualizar,
   excluir as bibExcluir,
+  compartilhar as bibCompartilhar,
   type ItemBiblioteca,
   type ConteudoLaboratorio,
   type ConteudoSafra,
@@ -1194,7 +1195,20 @@ export function deleteGrade(id: string) {
   save('inv_grades', load<GradeAmostragem>('inv_grades').filter(g => g.id !== id));
 }
 
-// ── #33 Tabela de preços única (produtos/frete/aplicação) reusada nas Equações ──
+// ── #33 Tabela de preços única — DEPRECADA na v2.42 ────────────────────────
+//
+// A fonte única de preço passou a ser Biblioteca → Insumos, com a equação
+// apontando para o insumo (ConteudoEquacao.insumoId). Esta tabela era a
+// tentativa anterior do mesmo objetivo: um repositório sem tela própria,
+// alimentado por um botão dentro do editor de equações e casado por NOME em
+// minúsculas — o suficiente para o mesmo produto virar duas linhas com preços
+// diferentes assim que alguém digitasse "Calcario".
+//
+// Zero callers desde a v2.42. Nada foi apagado: 'inv_precos' segue em
+// KEYS_LISTA (cloud.ts) e o array segue no disco e na nuvem, intacto. Desligar
+// o uso é reversível; apagar não é, e o histórico de preço de quem usou está
+// aqui dentro. Não escreva código novo contra isto.
+// ────────────────────────────────────────────────────────────────────────────
 export interface PrecoProduto {
   id: string;
   produto: string;
@@ -2369,6 +2383,60 @@ export function destravarLegendasSistema(): number {
   }
   if (n) { save('inv_legendas', lista); notificarLegendas(); }
   return n;
+}
+
+// ── Insumos: as duas migrações da v2.42 ───────────────────────────────────
+// Ambas existem porque a Biblioteca de Insumos nasceu (Parte XIV) como cadastro
+// LOCAL e PESSOAL, e na v2.42 as equações passaram a apontar para ela. Uma FK
+// só vale se o alvo existir para quem abre o registro — em qualquer máquina e
+// para qualquer usuário da empresa. É isso que cada uma resolve.
+
+/**
+ * `inv_bib_insumos` entrou em KEYS_LISTA (cloud.ts) na v2.42.
+ *
+ * Na PRIMEIRA abertura depois disso a nuvem não tem uma linha sequer da
+ * coleção, e o boot completo grava esse vazio por cima do local — o cadastro
+ * de insumos deste navegador sumiria, levando junto o preço de tudo que as
+ * equações apontam. Marcar a chave como pendente ANTES do boot inverte a rota:
+ * o boot mescla por id (local vence) e o re-push do fim do boot sobe os
+ * insumos para a nuvem.
+ *
+ * Tem que rodar antes de `bootCloud()`, e por isso NÃO mora em
+ * `migracoesLocais()` do AppContext (essa roda depois do boot — tarde demais).
+ *
+ * Idempotente pela flag; e mesmo se a flag se perder (backup.ts descarta as
+ * `inv_migrado_*`), rodar de novo é inofensivo: marcar pendente só força a
+ * mescla, que preserva os dois lados.
+ */
+export function migrarInsumosParaSyncV1() {
+  if (typeof window === 'undefined') return;
+  if (localStorage.getItem('inv_migrado_insumos_sync_v1') === '1') return;
+  // Navegador sem insumos não tem o que proteger — e marcar pendente aqui
+  // criaria uma subida de lista vazia.
+  if (load<unknown>('inv_bib_insumos').length === 0) return;
+  cloudMarcarPendente('inv_bib_insumos');
+  localStorage.setItem('inv_migrado_insumos_sync_v1', '1');
+}
+
+/**
+ * Insumo nascia com escopo 'meu' (o padrão de `criar`), enquanto a equação
+ * nasce 'empresa'. Equação compartilhada apontando para insumo privado é FK
+ * que só funciona para quem cadastrou: o segundo agrônomo abre a mesma equação
+ * e o preço não existe para ele.
+ *
+ * Promove os insumos já cadastrados uma única vez. `compartilhar` já grava o
+ * `empresaId` e limpa o `donoUsuarioId`.
+ */
+export function migrarInsumosEscopoEmpresaV1() {
+  if (typeof window === 'undefined') return;
+  if (localStorage.getItem('inv_migrado_insumos_escopo_v1') === '1') return;
+  // Promover com o local ainda parcial reescreveria itens que a nuvem ainda
+  // vai trazer — e a promoção sobe por push, atingindo todas as máquinas.
+  if (cloudAindaNaoHidratou()) return;
+  if (!empresaAtivaId()) return;
+  const meus = load<ItemBiblioteca<unknown>>('inv_bib_insumos').filter(i => i.escopo === 'meu');
+  for (const i of meus) bibCompartilhar('insumos', i.id, 'empresa');
+  localStorage.setItem('inv_migrado_insumos_escopo_v1', '1');
 }
 
 export function clearAll() {

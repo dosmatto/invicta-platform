@@ -209,6 +209,32 @@ export function atualizar<T = unknown>(
   save(slug, lista);
 }
 
+/**
+ * Aplica N patches numa tacada só. Devolve quantos itens foram alterados.
+ *
+ * `atualizar` em laço reescreveria a coleção inteira uma vez por item e
+ * dispararia um push e um evento 'inv:biblioteca' por chamada — vincular um
+ * grupo de dez equações viraria dez serializações da lista e dez re-renders da
+ * tela. Aqui é uma leitura, um save, um push, um evento.
+ */
+export function atualizarVarios<T = unknown>(
+  slug: CategoriaBiblioteca,
+  mudancas: Array<{ id: string; patch: Partial<Omit<ItemBiblioteca<T>, 'id' | 'categoria' | 'criadoEm' | 'versao'>> }>,
+): number {
+  if (mudancas.length === 0) return 0;
+  const lista = load<T>(slug);
+  const agora = new Date().toISOString();
+  let n = 0;
+  for (const { id, patch } of mudancas) {
+    const idx = lista.findIndex(i => i.id === id);
+    if (idx < 0) continue;
+    lista[idx] = { ...lista[idx], ...patch, versao: lista[idx].versao + 1, atualizadoEm: agora };
+    n++;
+  }
+  if (n) save(slug, lista);
+  return n;
+}
+
 export function duplicar<T = unknown>(slug: CategoriaBiblioteca, id: string): ItemBiblioteca<T> | undefined {
   const orig = obter<T>(slug, id);
   if (!orig) return;
@@ -357,10 +383,19 @@ export interface PresetEstiloRec {
   criadoEm?: string;
 }
 export interface ConteudoEquacao {
-  produto: string;
-  custoTonelada: number | null;
-  freteHa: number;                   // R$/ha — custo de frete por hectare
-  aplicacaoHa: number;               // R$/ha — custo de aplicação por hectare
+  produto: string;                   // nome do insumo (SNAPSHOT: o cadastro pode ser
+                                     // renomeado ou excluído e o registro tem que
+                                     // continuar legível). Mesmo padrão da Prescrição.
+  insumoId?: string;                 // FK p/ Biblioteca → Insumos, a fonte única de
+                                     // preço (v2.42). Ausente = equação anterior a ela:
+                                     // os custos abaixo são dela e continuam valendo.
+  // Os três custos: `null` HERDA do insumo vinculado; sem vínculo, `null` vale
+  // 0 (frete/aplicação) ou "sem custo" (custoTonelada). `0` é zero explícito,
+  // NÃO vazio — a distinção é o que permite dizer "esta equação não tem frete"
+  // mesmo estando vinculada. Quem resolve os três é `custosDaEquacao`.
+  custoTonelada: number | null;      // R$/t
+  freteHa: number | null;            // R$/ha — custo de frete por hectare
+  aplicacaoHa: number | null;        // R$/ha — custo de aplicação por hectare
   profundidade: string;              // profundidade que a equação lê (ex.: '0-20'); aplicação é automática
   unidadeEquacao: string;            // unidade dos atributos de entrada (ex.: mmolc/dm3)
   unidadeTratamento: string;         // unidade da dose de saída (ex.: kg/ha, t/ha)
@@ -398,9 +433,12 @@ const _ORDEM_BLOCOS: { rank: number; palavras: string[] }[] = [
 ];
 const _RANK_OUTROS = 90;
 
-function _semAcento(s: string): string {
+// Min\u00fasculas e sem acento \u2014 a r\u00e9gua para comparar nomes digitados por gente
+// diferente ("Calc\u00e1rio", "calcario", "CALCARIO" s\u00e3o o mesmo produto).
+export function semAcento(s: string): string {
   return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 }
+const _semAcento = semAcento;
 
 // Rank do bloco a partir do grupo (com fallback no produto).
 export function blocoDaEquacao(c: ConteudoEquacao): number {

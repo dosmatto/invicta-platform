@@ -12,6 +12,7 @@
 
 import { usuarioAtual } from './auth';
 import { usarDadosSupabase, bootSupabaseData, pushListaSupabase, pushObjSupabase,
+  marcarPendenteSupabase,
   salvarMapaSupabase, carregarMapasPorPrefixoSupabase, excluirMapasPorPrefixoSupabase,
   excluirDocsPorPrefixoSupabase, excluirColecaoSupabase,
   listarIdsMapasPorPrefixoSupabase, carregarMapasPorIdsSupabase,
@@ -34,6 +35,12 @@ const KEYS_LISTA = [
   'inv_bib_preferencias-analise',      // Fase 5 — Etiqueta
   'inv_bib_equacoes',                  // Fase R1 — Equações de recomendação
   'inv_bib_recomendacoes',             // Fase R2 — Recomendações (conjuntos de equações)
+  'inv_bib_insumos',                   // Parte XIV — Insumos. Entrou no sync na v2.42, quando
+                                       // as equações passaram a apontar para eles: FK que não
+                                       // sincroniza vira custo sumido na outra máquina.
+                                       // Quem já tinha insumos locais entra por
+                                       // migrarInsumosParaSyncV1 (store.ts) — leia lá antes
+                                       // de mexer nesta linha.
   'inv_estilo_presets',                // Presets de divisão de classes do estilo de dose
   'inv_lab', 'inv_legendas',
   'inv_plantios',                      // Fase 8.B — cultura por talhão+safra
@@ -73,6 +80,15 @@ export function cloudAindaNaoHidratou(): boolean {
   return usarDadosSupabase() && !ativo;
 }
 
+// Marca uma chave como pendente de subida ANTES do boot. Só faz sentido para
+// chave que acabou de entrar em KEYS_LISTA e ainda não existe na nuvem — sem
+// isto o boot grava o vazio da nuvem por cima do local. Ver
+// marcarPendenteSupabase (supabaseData.ts) e migrarInsumosParaSyncV1 (store.ts).
+export function cloudMarcarPendente(key: string) {
+  if (!usarDadosSupabase()) return;
+  marcarPendenteSupabase(key);
+}
+
 // Pode gravar/ler docs independentes (mapas) basta a nuvem estar configurada e
 // haver um usuário logado. Mapas são docs autônomos (upsert por id).
 export function cloudPodeGravar(): boolean {
@@ -107,6 +123,7 @@ const KEYS_PULAR_CAMPO = new Set<string>([
   'inv_bib_equacoes', 'inv_bib_recomendacoes',
   'inv_padroes_elem', 'inv_padroes_amos',
   'inv_prescricoes',                   // plataforma-only: o app de campo não lê prescrições
+  'inv_bib_insumos',                   // idem — insumos só servem às prescrições e às equações
 ]);
 const KEYS_LISTA_CAMPO = KEYS_LISTA.filter(k => !KEYS_PULAR_CAMPO.has(k));
 

@@ -10,24 +10,52 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  CATEGORIAS, listar, criar, atualizar, excluir, ativar, blocoDaEquacao, compararEquacoes,
+  CATEGORIAS, listar, criar, atualizar, atualizarVarios, excluir, ativar, blocoDaEquacao, compararEquacoes, semAcento,
   type ItemBiblioteca, type ConteudoEquacao, type ConstanteEquacao, type EstiloRecomendacao,
 } from '@/lib/biblioteca';
 import type { CategoriaBiblioteca } from '@/lib/biblioteca';
+import { custosDaEquacao, unidadePreco, ROTULO_CATEGORIA, type ConteudoInsumo, type CategoriaInsumo, type CustosResolvidos } from '@/lib/insumos';
 import { ATRIBUTOS_EQUACAO, validar, testarEscalar, atributoPorToken } from '@/lib/recomendacao/motor';
 import { pode } from '@/lib/empresa';
-import { getPrecosProdutos, savePrecoProduto, type PrecoProduto,
-  getPresetsEstilo, savePresetEstilo, deletePresetEstilo } from '@/lib/store';
+import { getPresetsEstilo, savePresetEstilo, deletePresetEstilo } from '@/lib/store';
 import { distribuirCores, PRESETS_SISTEMA, RAMPAS, coresDaRampa, gradienteCssRampa } from '@/lib/estiloPresets';
 import type { PresetEstiloRec } from '@/lib/biblioteca';
 import { parseNum } from '@/lib/lab';
-import { Plus, Edit3, Trash2, Power, Copy, X, Save, Play, ChevronRight, Search, SaveAll, Tag } from 'lucide-react';
+import { Plus, Edit3, Trash2, Power, Copy, X, Save, Play, ChevronRight, Search, SaveAll, Link2, Link2Off, AlertTriangle, Pencil } from 'lucide-react';
 
 const SLUG: CategoriaBiblioteca = 'equacoes';
 const SEM_GRUPO = 'Sem grupo';
 import { inputStyle } from '@/constants/ui';
 
 const listaDe = (s: string) => s.split(',').map(x => x.trim()).filter(Boolean);
+
+// ── Vínculo com a Biblioteca de Insumos (v2.42) ─────────────────────────────
+// O preço saiu de dentro da equação e passou a morar no insumo. Estes helpers
+// são compartilhados pela lista, pelo diálogo do grupo e pelo editor.
+
+type MapaInsumos = ReadonlyMap<string, ItemBiblioteca<ConteudoInsumo>>;
+
+function lerInsumos(): ItemBiblioteca<ConteudoInsumo>[] {
+  return listar<ConteudoInsumo>('insumos').filter(i => i.ativo)
+    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+}
+
+const moeda = (v: number) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+/** "R$ 350,00/t · frete R$ 18,00/ha · aplicação R$ 22,00/ha" — some o que não há. */
+function resumoCustos(c: CustosResolvidos): string {
+  const p = [c.custoTonelada != null ? `R$ ${moeda(c.custoTonelada)}/t` : 'sem preço'];
+  if (c.freteHa) p.push(`frete R$ ${moeda(c.freteHa)}/ha`);
+  if (c.aplicacaoHa) p.push(`aplicação R$ ${moeda(c.aplicacaoHa)}/ha`);
+  return p.join(' · ');
+}
+
+/** Insumo cujo nome bate com o produto digitado — a pré-seleção do vínculo. */
+function acharPorNome(insumos: ItemBiblioteca<ConteudoInsumo>[], produto: string) {
+  const alvo = semAcento((produto || '').trim());
+  if (!alvo) return undefined;
+  return insumos.find(i => semAcento(i.nome.trim()) === alvo);
+}
 
 // Rampa de cores (corNaRampa/distribuirCores) e presets do sistema vêm de @/lib/estiloPresets.
 
@@ -60,7 +88,9 @@ export function EquacoesPanel() {
   useEffect(() => {
     const onCh = (e: Event) => {
       const d = (e as CustomEvent).detail as { slug?: CategoriaBiblioteca } | undefined;
-      if (!d?.slug || d.slug === SLUG) setRefresh(x => x + 1);
+      // 'insumos' também: o preço da equação vinculada vem de lá, e sem isto
+      // editar o insumo não repintaria os custos desta lista.
+      if (!d?.slug || d.slug === SLUG || d.slug === 'insumos') setRefresh(x => x + 1);
     };
     if (typeof window !== 'undefined') window.addEventListener('inv:biblioteca', onCh);
     return () => { if (typeof window !== 'undefined') window.removeEventListener('inv:biblioteca', onCh); };
@@ -71,6 +101,9 @@ export function EquacoesPanel() {
     () => listar<ConteudoEquacao>(SLUG),
     [refresh], // eslint-disable-line react-hooks/exhaustive-deps
   );
+  const insumos = useMemo(() => lerInsumos(), [refresh]);
+  const insumosPorId: MapaInsumos = useMemo(() => new Map(insumos.map(i => [i.id, i])), [insumos]);
+  const [vincular, setVincular] = useState<{ grupo: string; lista: ItemBiblioteca<ConteudoEquacao>[] } | null>(null);
   const filtrados = useMemo(() => {
     const f = filtro.trim().toLowerCase();
     if (!f) return itens;
@@ -154,11 +187,16 @@ export function EquacoesPanel() {
               const aberto = filtro.trim() ? true : !colapsados.has(g);
               return (
                 <div key={g}>
-                  <button onClick={() => toggleGrupo(g)} className="w-full flex items-center gap-1.5 px-1 py-1 text-left rounded hover:bg-white/5">
-                    <ChevronRight size={12} style={{ color: '#93c5fd', transform: aberto ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }} />
-                    <span className="text-[10px] font-bold uppercase tracking-wide" style={{ color: g === SEM_GRUPO ? '#64748b' : '#93c5fd' }}>{g}</span>
-                    <span className="text-[9px]" style={{ color: '#475569' }}>· {lista.length}</span>
-                  </button>
+                  {/* Dois botões IRMÃOS (e não o de vincular dentro do de
+                      colapsar): <button> aninhado é HTML inválido. */}
+                  <div className="w-full flex items-center gap-1.5 px-1 py-1 rounded hover:bg-white/5">
+                    <button onClick={() => toggleGrupo(g)} className="flex-1 flex items-center gap-1.5 text-left min-w-0">
+                      <ChevronRight size={12} style={{ color: '#93c5fd', transform: aberto ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }} />
+                      <span className="text-[10px] font-bold uppercase tracking-wide truncate" style={{ color: g === SEM_GRUPO ? '#64748b' : '#93c5fd' }}>{g}</span>
+                      <span className="text-[9px] flex-shrink-0" style={{ color: '#475569' }}>· {lista.length}</span>
+                    </button>
+                    {podeBib && <BotaoVincularGrupo lista={lista} insumosPorId={insumosPorId} onClick={() => setVincular({ grupo: g, lista })} />}
+                  </div>
                   {aberto && (
                     <div className="space-y-1.5 mt-1 pl-1">
                       {lista.map(it => (
@@ -173,11 +211,7 @@ export function EquacoesPanel() {
                             )}
                             <div className="flex-1 min-w-0">
                               <div className="text-[11px] font-bold truncate" style={{ color: '#e2e8f0' }}>{it.nome}</div>
-                              <div className="text-[9px] truncate" style={{ color: '#64748b' }}>
-                                {it.conteudo.produto || 'sem produto'}
-                                {it.conteudo.unidadeTratamento ? ` · ${it.conteudo.unidadeTratamento}` : ''}
-                                {it.conteudo.custoTonelada != null ? ` · R$ ${it.conteudo.custoTonelada}/t` : ''}
-                              </div>
+                              <SubtituloEquacao c={it.conteudo} insumosPorId={insumosPorId} />
                             </div>
                             {it.escopo === 'sistema' && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ background: '#1a3a6b', color: '#93c5fd' }}>sistema</span>}
                             {!it.ativo && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ background: '#1a3a6b', color: '#94a3b8' }}>inativo</span>}
@@ -200,7 +234,226 @@ export function EquacoesPanel() {
       </div>
 
       {edit && <EquacaoEditor item={edit === 'novo' ? null : edit} onClose={() => setEdit(null)} />}
+      {vincular && <DialogoVincularGrupo grupo={vincular.grupo} lista={vincular.lista} insumos={insumos} onClose={() => setVincular(null)} />}
     </section>
+  );
+}
+
+// ── Vínculo: o gesto do grupo ───────────────────────────────────────────────
+//
+// Vincular uma a uma seria dez cliques para o grupo CALCÁRIO — e é por isso que
+// o preço acabava divergindo entre equações irmãs. O botão vive no cabeçalho do
+// grupo, mas o `insumoId` é gravado em CADA equação: assim renomear o grupo não
+// derruba o vínculo, um grupo pode ter produtos diferentes (Fosfatados = MAP +
+// SSP) e a equação sem grupo também alcança um insumo.
+
+function BotaoVincularGrupo({ lista, insumosPorId, onClick }: {
+  lista: ItemBiblioteca<ConteudoEquacao>[]; insumosPorId: MapaInsumos; onClick: () => void;
+}) {
+  const ids = lista.map(e => e.conteudo.insumoId).filter(Boolean) as string[];
+  const distintos = [...new Set(ids)];
+  const todas = ids.length === lista.length && distintos.length === 1;
+  const ins = distintos.length === 1 ? insumosPorId.get(distintos[0]) : undefined;
+  const orfao = distintos.some(id => !insumosPorId.has(id));
+
+  let rotulo = 'Vincular', cor = '#64748b', titulo = 'Vincular todas as equações deste grupo a um insumo';
+  if (todas && ins && !orfao) {
+    rotulo = ins.nome; cor = '#4ade80';
+    titulo = `As ${lista.length} usam o insumo "${ins.nome}" — o preço vem de lá`;
+  } else if (ids.length) {
+    cor = '#fbbf24';
+    rotulo = orfao ? 'órfão' : distintos.length > 1 ? `${distintos.length} insumos` : `${ids.length}/${lista.length}`;
+    titulo = orfao ? 'Alguma equação aponta para um insumo que não existe mais'
+      : distintos.length > 1 ? 'As equações deste grupo apontam para insumos diferentes'
+      : `${ids.length} de ${lista.length} equações vinculadas`;
+  }
+  return (
+    <button onClick={onClick} title={titulo}
+      className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold flex-shrink-0 hover:bg-white/10 max-w-[45%]"
+      style={{ color: cor, border: `1px solid ${cor}33` }}>
+      <Link2 size={9} className="flex-shrink-0" /><span className="truncate">{rotulo}</span>
+    </button>
+  );
+}
+
+/** Linha cinza sob o nome: produto · unidade · custo RESOLVIDO · de onde veio. */
+function SubtituloEquacao({ c, insumosPorId }: { c: ConteudoEquacao; insumosPorId: MapaInsumos }) {
+  const ins = c.insumoId ? insumosPorId.get(c.insumoId) : undefined;
+  const orfao = !!c.insumoId && !ins;
+  const cst = custosDaEquacao(c, ins?.conteudo);
+  const sobrescreve = !!c.insumoId && (c.custoTonelada != null || c.freteHa != null || c.aplicacaoHa != null);
+  return (
+    <div className="text-[9px] truncate flex items-center gap-1" style={{ color: '#64748b' }}>
+      <span className="truncate">
+        {c.produto || 'sem produto'}
+        {c.unidadeTratamento ? ` · ${c.unidadeTratamento}` : ''}
+        {` · ${cst.custoTonelada != null ? `R$ ${moeda(cst.custoTonelada)}/t` : 'sem custo'}`}
+      </span>
+      {orfao && <span className="flex items-center gap-0.5 flex-shrink-0" style={{ color: '#fbbf24' }} title="A equação aponta para um insumo que não existe mais — revincule"><AlertTriangle size={9} /> vínculo órfão</span>}
+      {ins && <span className="flex items-center gap-0.5 flex-shrink-0" style={{ color: sobrescreve ? '#fbbf24' : '#4ade80' }} title={sobrescreve ? `Vinculada a "${ins.nome}", mas com custo próprio preenchido` : `O preço vem do insumo "${ins.nome}"`}><Link2 size={9} />{ins.nome}{sobrescreve && <Pencil size={8} />}</span>}
+    </div>
+  );
+}
+
+function DialogoVincularGrupo({ grupo, lista, insumos, onClose }: {
+  grupo: string; lista: ItemBiblioteca<ConteudoEquacao>[];
+  insumos: ItemBiblioteca<ConteudoInsumo>[]; onClose: () => void;
+}) {
+  const porId = useMemo(() => new Map(insumos.map(i => [i.id, i])), [insumos]);
+  // Pré-seleção: o insumo já vinculado; senão o que casa com o produto dominante.
+  const dominante = useMemo(() => {
+    const cont = new Map<string, number>();
+    for (const e of lista) { const p = e.conteudo.produto?.trim(); if (p) cont.set(p, (cont.get(p) ?? 0) + 1); }
+    return [...cont.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? '';
+  }, [lista]);
+  const jaVinculado = lista.find(e => e.conteudo.insumoId && porId.has(e.conteudo.insumoId))?.conteudo.insumoId;
+  const [sel, setSel] = useState(() => jaVinculado ?? acharPorNome(insumos, dominante)?.id ?? '');
+  const [criando, setCriando] = useState(false);
+  const temVinculo = lista.some(e => e.conteudo.insumoId);
+
+  // O que existe HOJE: produto + custo próprio, agrupados. Duas linhas aqui já
+  // dizem por que o vínculo faz falta (mesmo produto, preços diferentes).
+  const hoje = useMemo(() => {
+    const m = new Map<string, { produto: string; custo: number | null; n: number }>();
+    for (const e of lista) {
+      const c = e.conteudo;
+      const k = `${c.produto ?? ''}|${c.custoTonelada ?? ''}`;
+      const at = m.get(k) ?? { produto: c.produto || 'sem produto', custo: c.custoTonelada, n: 0 };
+      at.n++; m.set(k, at);
+    }
+    return [...m.values()].sort((a, b) => b.n - a.n);
+  }, [lista]);
+
+  const ins = sel ? porId.get(sel) : undefined;
+  const previa = ins ? custosDaEquacao({ custoTonelada: null, freteHa: null, aplicacaoHa: null }, ins.conteudo) : null;
+
+  function vincular() {
+    if (!ins) return;
+    // Vincular ZERA os custos próprios, em vez de deixá-los como sobrescrita
+    // silenciosa: é a decisão "o insumo manda" escrita no dado. Sem isso as dez
+    // equações continuariam com o preço antigo preenchido, o insumo não valeria
+    // nada e o vínculo só PARECERIA ter funcionado.
+    atualizarVarios<ConteudoEquacao>(SLUG, lista.map(e => ({
+      id: e.id,
+      patch: { conteudo: { ...e.conteudo, insumoId: ins.id, produto: ins.nome, custoTonelada: null, freteHa: null, aplicacaoHa: null } },
+    })));
+    onClose();
+  }
+  function desvincular() {
+    // Materializa os custos que estavam valendo antes de soltar a FK — assim
+    // desvincular não muda número nenhum sem o usuário ver.
+    atualizarVarios<ConteudoEquacao>(SLUG, lista.map(e => {
+      const c = custosDaEquacao(e.conteudo, e.conteudo.insumoId ? porId.get(e.conteudo.insumoId)?.conteudo : undefined);
+      return { id: e.id, patch: { conteudo: { ...e.conteudo, insumoId: undefined, custoTonelada: c.custoTonelada, freteHa: c.freteHa, aplicacaoHa: c.aplicacaoHa } } };
+    }));
+    onClose();
+  }
+
+  const nEq = lista.length;
+  return (
+    <div className="absolute inset-0 z-20 flex flex-col" style={{ background: 'var(--invicta-blue-dark)' }}>
+      <div className="flex items-center justify-between px-4 py-2 flex-shrink-0" style={{ borderBottom: '1px solid #1a3a6b' }}>
+        <span className="text-[11px] font-bold uppercase truncate" style={{ color: '#e2e8f0' }}>{grupo} · {nEq} {nEq === 1 ? 'equação' : 'equações'}</span>
+        <button onClick={onClose} className="p-1 rounded hover:bg-white/10" style={{ color: '#cbd5e1' }}><X size={12} /></button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-3 space-y-3">
+        <div>
+          <div className="text-[10px] font-bold uppercase tracking-wide mb-1 pb-1" style={{ color: '#93c5fd', borderBottom: '1px solid #1a3a6b' }}>Como está hoje</div>
+          {hoje.map((h, i) => (
+            <div key={i} className="flex items-center justify-between gap-2 text-[10px] py-0.5" style={{ color: '#cbd5e1' }}>
+              <span className="truncate">{h.produto}</span>
+              <span className="flex-shrink-0" style={{ color: '#64748b' }}>{h.n}× · {h.custo != null ? `R$ ${moeda(h.custo)}/t` : 'sem custo'}</span>
+            </div>
+          ))}
+        </div>
+
+        <div>
+          <div className="text-[10px] font-bold uppercase tracking-wide mb-1 pb-1" style={{ color: '#93c5fd', borderBottom: '1px solid #1a3a6b' }}>Insumo (fonte do preço)</div>
+          {insumos.length === 0 ? (
+            <p className="text-[10px]" style={{ color: '#fbbf24' }}>Nenhum insumo cadastrado ainda. Crie um abaixo, ou cadastre em Biblioteca → Insumos.</p>
+          ) : (
+            <select value={sel} onChange={e => setSel(e.target.value)} className="w-full rounded px-2 py-1.5 text-[11px] outline-none" style={inputStyle}>
+              <option value="">Selecione o insumo…</option>
+              {insumos.map(i => <option key={i.id} value={i.id}>{i.nome} ({ROTULO_CATEGORIA[i.conteudo.categoria]})</option>)}
+            </select>
+          )}
+          {previa && (<>
+            <p className="text-[10px] mt-1.5" style={{ color: previa.custoTonelada != null ? '#4ade80' : '#fbbf24' }}>
+              Vai valer para {nEq === 1 ? 'a equação' : `as ${nEq}`}: {resumoCustos(previa)}
+              {previa.custoTonelada == null && ' — cadastre o preço em Biblioteca → Insumos, senão a recomendação sai sem custo.'}
+            </p>
+            <p className="text-[9px] mt-1" style={{ color: '#64748b' }}>
+              {nEq === 1 ? 'A equação perde o custo próprio' : `As ${nEq} perdem os custos próprios`}
+              {hoje[0]?.custo != null ? ` (R$ ${moeda(hoje[0].custo)}/t)` : ''}. Os cenários já salvos não mudam.
+            </p>
+          </>)}
+
+          {!criando && <button onClick={() => setCriando(true)} className="mt-2 w-full py-1 rounded text-[10px] font-semibold" style={{ background: '#1a3a6b', color: '#93c5fd' }}>+ Criar insumo com estes dados</button>}
+          {criando && <CriarInsumoInline base={lista[0]?.conteudo} nomeSugerido={dominante} onPronto={id => { setCriando(false); setSel(id); }} onCancelar={() => setCriando(false)} />}
+        </div>
+      </div>
+
+      <div className="flex gap-2 px-3 py-2 flex-shrink-0" style={{ borderTop: '1px solid #1a3a6b' }}>
+        <button onClick={onClose} className="py-1.5 px-3 rounded text-[10px] font-bold" style={{ background: '#1a3a6b', color: '#cbd5e1' }}>Cancelar</button>
+        {temVinculo && (
+          <button onClick={desvincular} title="Solta o vínculo e grava nas equações os custos que estavam valendo"
+            className="py-1.5 px-3 rounded text-[10px] font-bold flex items-center gap-1" style={{ background: '#1a3a6b', color: '#fbbf24' }}>
+            <Link2Off size={11} /> Desvincular
+          </button>
+        )}
+        <button onClick={vincular} disabled={!ins}
+          className="flex-1 py-1.5 rounded text-[10px] font-bold text-white flex items-center justify-center gap-1 disabled:opacity-40" style={{ background: 'var(--invicta-green-dark)' }}>
+          <Link2 size={11} /> Vincular {nEq === 1 ? 'a equação' : `as ${nEq}`}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Cria um insumo já com o produto e os custos da equação. A categoria é escolha
+ *  do usuário: chutar pelo nome erraria o filtro por tipo das Prescrições. */
+function CriarInsumoInline({ base, nomeSugerido, onPronto, onCancelar }: {
+  base?: ConteudoEquacao; nomeSugerido: string; onPronto: (id: string) => void; onCancelar: () => void;
+}) {
+  const [nome, setNome] = useState(nomeSugerido);
+  const [cat, setCat] = useState<CategoriaInsumo | ''>('');
+  const herdado = custosDaEquacao(base ?? {}, undefined);
+
+  function criarInsumo() {
+    if (!nome.trim() || !cat) return;
+    const un = unidadePreco(cat);
+    // O custo da equação é sempre R$/t; semente se cadastra por QUILO. Sem esta
+    // divisão o preço entraria 1000× maior — o mesmo erro que a v2.41 corrigiu
+    // nas Prescrições.
+    const preco = herdado.custoTonelada != null
+      ? (un === 'kg' ? herdado.custoTonelada / 1000 : herdado.custoTonelada)
+      : undefined;
+    const novo = criar<ConteudoInsumo>('insumos', {
+      nome: nome.trim(), escopo: 'empresa',
+      conteudo: {
+        categoria: cat, garantias: {}, organico: {}, semente: {},
+        precoMedio: preco, precoUnidade: un,
+        freteHa: herdado.freteHa || undefined, aplicacaoHa: herdado.aplicacaoHa || undefined,
+      },
+    });
+    onPronto(novo.id);
+  }
+
+  return (
+    <div className="mt-2 p-2 rounded space-y-1.5" style={{ background: '#0b1f3a', border: '1px solid #1a3a6b' }}>
+      <input value={nome} onChange={e => setNome(e.target.value)} placeholder="nome do insumo" className={txt} style={inputStyle} />
+      <select value={cat} onChange={e => setCat(e.target.value as CategoriaInsumo)} className="w-full rounded px-2 py-1.5 text-[11px] outline-none" style={inputStyle}>
+        <option value="">Escolha a categoria…</option>
+        {(Object.keys(ROTULO_CATEGORIA) as CategoriaInsumo[]).map(c => <option key={c} value={c}>{ROTULO_CATEGORIA[c]}</option>)}
+      </select>
+      <p className="text-[9px]" style={{ color: '#64748b' }}>Vem da equação: {resumoCustos(herdado)}</p>
+      <div className="flex gap-1.5">
+        <button onClick={onCancelar} className="py-1 px-2 rounded text-[10px] font-semibold" style={{ background: '#1a3a6b', color: '#cbd5e1' }}>Cancelar</button>
+        <button onClick={criarInsumo} disabled={!nome.trim() || !cat}
+          className="flex-1 py-1 rounded text-[10px] font-bold text-white disabled:opacity-40" style={{ background: 'var(--invicta-green-dark)' }}>Criar insumo</button>
+      </div>
+    </div>
   );
 }
 
@@ -220,9 +473,12 @@ function EquacaoEditor({ item, onClose }: { item: ItemBiblioteca<ConteudoEquacao
   const [nome, setNome] = useState(item?.nome ?? '');
   const [descricao, setDescricao] = useState(item?.descricao ?? '');
   const [produto, setProduto] = useState(c?.produto ?? '');
+  const [insumoId, setInsumoId] = useState(c?.insumoId ?? '');
+  // Campo VAZIO herda do insumo; PREENCHIDO sobrescreve. Por isso o `!= null` no
+  // frete/aplicação: `0` é zero de propósito e tem que aparecer escrito.
   const [custo, setCusto] = useState(c?.custoTonelada != null ? String(c.custoTonelada) : '');
-  const [frete, setFrete] = useState(c?.freteHa ? String(c.freteHa) : '');
-  const [aplicacao, setAplicacao] = useState(c?.aplicacaoHa ? String(c.aplicacaoHa) : '');
+  const [frete, setFrete] = useState(c?.freteHa != null ? String(c.freteHa) : '');
+  const [aplicacao, setAplicacao] = useState(c?.aplicacaoHa != null ? String(c.aplicacaoHa) : '');
   const [profundidade, setProfundidade] = useState(c?.profundidade ?? '0-20');
   const [unEq, setUnEq] = useState(c?.unidadeEquacao ?? '');
   const [unTrat, setUnTrat] = useState(c?.unidadeTratamento ?? 'kg/ha');
@@ -252,9 +508,13 @@ function EquacaoEditor({ item, onClose }: { item: ItemBiblioteca<ConteudoEquacao
   function montarConteudo(): ConteudoEquacao {
     return {
       produto: produto.trim(),
+      insumoId: insumoId || undefined,
+      // Vazio vira `null` (herda do insumo, ou "sem custo" se não houver
+      // vínculo). Antes virava 0, e aí "sem frete" e "não preenchi" eram o
+      // mesmo dado — impossível saber qual dos dois o usuário quis dizer.
       custoTonelada: custo.trim() ? parseNum(custo) : null,
-      freteHa: frete.trim() ? (parseNum(frete) || 0) : 0,
-      aplicacaoHa: aplicacao.trim() ? (parseNum(aplicacao) || 0) : 0,
+      freteHa: frete.trim() ? (parseNum(frete) ?? 0) : null,
+      aplicacaoHa: aplicacao.trim() ? (parseNum(aplicacao) ?? 0) : null,
       profundidade: profundidade || '0-20',
       unidadeEquacao: unEq.trim(),
       unidadeTratamento: unTrat.trim(),
@@ -317,7 +577,7 @@ function EquacaoEditor({ item, onClose }: { item: ItemBiblioteca<ConteudoEquacao
 
       <div className="flex-1 overflow-y-auto p-3 space-y-4">
         <Secao titulo="Detalhes">
-          <Detalhes {...{ nome, setNome, produto, setProduto, custo, setCusto, frete, setFrete, aplicacao, setAplicacao, profundidade, setProfundidade, unEq, setUnEq, unTrat, setUnTrat, tratamento, setTratamento, grupo, setGrupo, ordem, setOrdem, gruposExistentes, culturas, setCulturas, fases, setFases, descricao, setDescricao }} />
+          <Detalhes {...{ nome, setNome, produto, setProduto, insumoId, setInsumoId, custo, setCusto, frete, setFrete, aplicacao, setAplicacao, profundidade, setProfundidade, unEq, setUnEq, unTrat, setUnTrat, tratamento, setTratamento, grupo, setGrupo, ordem, setOrdem, gruposExistentes, culturas, setCulturas, fases, setFases, descricao, setDescricao }} />
         </Secao>
         <Secao titulo="Equação">
           <Equacao {...{ constantes, setConstantes, script, setScript, scriptRef, naoNeg, setNaoNeg, doseMinima, setDoseMinima, abaixoMinimo, setAbaixoMinimo, doseMaxima, setDoseMaxima, unTrat, val, inserirToken }} />
@@ -354,10 +614,45 @@ function Campo({ label, children }: { label: string; children: React.ReactNode }
 }
 const txt = "w-full rounded px-2 py-1.5 text-[11px] outline-none";
 
+/**
+ * Campo de custo que HERDA do insumo: vazio mostra o valor herdado no
+ * placeholder (sem gravar), preenchido acusa a sobrescrita e oferece a volta.
+ *
+ * Não pré-preencher é a decisão que faz o vínculo valer alguma coisa: um campo
+ * preenchido vira sobrescrita no save, e aí mudar o preço no insumo não
+ * chegaria nesta equação. Não desabilitar também é decisão: existe o caso real
+ * do calcário de outra jazida naquele talhão, e desabilitar obrigaria a
+ * desvincular e revincular só para digitar um número.
+ *
+ * Fora do componente pai de propósito: declarada dentro dele, ela seria um tipo
+ * novo a cada render e o input perderia o foco a cada tecla.
+ */
+function CampoCusto({ label, valor, setValor, dica, herda, vinculado }: {
+  label: string; valor: string; setValor: (s: string) => void;
+  dica: string; herda: number | null; vinculado: boolean;
+}) {
+  return (
+    <Campo label={label}>
+      <input value={valor} onChange={e => setValor(e.target.value)} inputMode="decimal" className={txt} style={inputStyle}
+        placeholder={vinculado && herda != null ? `herdado: ${moeda(herda)}` : dica} />
+      {vinculado && !valor.trim() && (
+        <span className="text-[8px] flex items-center gap-0.5 mt-0.5" style={{ color: '#64748b' }}><Link2 size={8} /> do insumo</span>
+      )}
+      {vinculado && !!valor.trim() && (
+        <button onClick={() => setValor('')} title="Voltar a usar o valor do insumo"
+          className="text-[8px] flex items-center gap-0.5 mt-0.5 hover:underline" style={{ color: '#fbbf24' }}>
+          <Pencil size={8} /> sobrescreve o insumo · usar o do insumo
+        </button>
+      )}
+    </Campo>
+  );
+}
+
 const PROFUNDIDADES = ['0-20', '20-40', '0-40', '0-10', '10-20', '40-60'];
 
 function Detalhes(p: {
   nome: string; setNome: (s: string) => void; produto: string; setProduto: (s: string) => void;
+  insumoId: string; setInsumoId: (s: string) => void;
   custo: string; setCusto: (s: string) => void; frete: string; setFrete: (s: string) => void;
   aplicacao: string; setAplicacao: (s: string) => void; profundidade: string; setProfundidade: (s: string) => void;
   unEq: string; setUnEq: (s: string) => void;
@@ -366,54 +661,63 @@ function Detalhes(p: {
   culturas: string; setCulturas: (s: string) => void; fases: string; setFases: (s: string) => void;
   descricao: string; setDescricao: (s: string) => void;
 }) {
-  // #33 — Tabela de preços única: puxa/salva produto+custos de um repositório central.
-  const [precos, setPrecos] = useState<PrecoProduto[]>(() => getPrecosProdutos());
-  function puxarPreco(id: string) {
-    const t = precos.find(x => x.id === id); if (!t) return;
-    p.setProduto(t.produto);
-    p.setCusto(t.custoTonelada != null ? String(t.custoTonelada) : '');
-    p.setFrete(t.freteHa ? String(t.freteHa) : '');
-    p.setAplicacao(t.aplicacaoHa ? String(t.aplicacaoHa) : '');
-  }
-  function salvarNaTabela() {
-    if (!p.produto.trim()) return;
-    savePrecoProduto({
-      produto: p.produto.trim(),
-      custoTonelada: p.custo.trim() ? parseNum(p.custo) : null,
-      freteHa: p.frete.trim() ? (parseNum(p.frete) || 0) : 0,
-      aplicacaoHa: p.aplicacao.trim() ? (parseNum(p.aplicacao) || 0) : 0,
-    });
-    setPrecos(getPrecosProdutos());
+  // Fonte única do preço: o insumo. Escolher aqui LIMPA os custos próprios (o
+  // insumo manda); quem quiser fugir do padrão redigita o campo, e aí a
+  // sobrescrita é deliberada e fica visível.
+  const insumos = useMemo(() => lerInsumos(), []);
+  const ins = p.insumoId ? insumos.find(i => i.id === p.insumoId) : undefined;
+  const orfao = !!p.insumoId && !ins;
+  const herdado = useMemo(() => custosDaEquacao({ custoTonelada: null, freteHa: null, aplicacaoHa: null }, ins?.conteudo), [ins]);
+  const sugestao = !p.insumoId ? acharPorNome(insumos, p.produto) : undefined;
+
+  function escolherInsumo(id: string) {
+    if (id === '__legado') return;
+    p.setInsumoId(id);
+    if (!id) return;
+    const i = insumos.find(x => x.id === id);
+    if (!i) return;
+    p.setProduto(i.nome);
+    p.setCusto(''); p.setFrete(''); p.setAplicacao('');
   }
 
   return (
     <div className="space-y-2">
       <Campo label="Nome"><input value={p.nome} onChange={e => p.setNome(e.target.value)} placeholder="ex: 001 - Calagem 60% Ca" className={txt} style={inputStyle} /></Campo>
 
-      {/* Tabela de preços única (#33): puxar produto salvo ou salvar o atual */}
+      {/* Vínculo com a Biblioteca de Insumos — a fonte única do preço (v2.42) */}
       <div className="p-2 rounded" style={{ background: '#0b1f3a', border: '1px solid #1a3a6b' }}>
-        <div className="flex items-center gap-1 mb-1"><Tag size={11} style={{ color: '#93c5fd' }} /><span className="text-[10px] font-bold" style={{ color: '#93c5fd' }}>Tabela de preços</span></div>
-        {precos.length > 0 ? (
-          <div className="flex items-center gap-1">
-            <select value="" onChange={e => { puxarPreco(e.target.value); e.currentTarget.selectedIndex = 0; }} className="flex-1 rounded px-1.5 py-1 text-[10px] outline-none" style={inputStyle}>
-              <option value="">— puxar produto salvo —</option>
-              {precos.map(t => <option key={t.id} value={t.id}>{t.produto}{t.custoTonelada != null ? ` · R$ ${t.custoTonelada}/t` : ''}{t.freteHa ? ` · frete ${t.freteHa}` : ''}</option>)}
-            </select>
-          </div>
-        ) : <p className="text-[9px]" style={{ color: '#64748b' }}>Nenhum produto salvo ainda — preencha os custos abaixo e clique em “Salvar na tabela”.</p>}
-        <button onClick={salvarNaTabela} disabled={!p.produto.trim()}
-          className="mt-1 w-full flex items-center justify-center gap-1 py-1 rounded text-[10px] font-semibold disabled:opacity-40" style={{ background: '#1a3a6b', color: '#86efac' }}>
-          <Save size={10} /> Salvar “{p.produto.trim() || '…'}” na tabela
-        </button>
+        <div className="flex items-center gap-1 mb-1"><Link2 size={11} style={{ color: '#93c5fd' }} /><span className="text-[10px] font-bold" style={{ color: '#93c5fd' }}>Insumo (fonte do preço)</span></div>
+        {insumos.length === 0 ? (
+          <p className="text-[9px]" style={{ color: '#fbbf24' }}>Nenhum insumo cadastrado — cadastre em Biblioteca → Insumos para o preço vir de um lugar só.</p>
+        ) : (
+          <select value={p.insumoId || (p.produto ? '__legado' : '')} onChange={e => escolherInsumo(e.target.value)}
+            className="w-full rounded px-1.5 py-1 text-[10px] outline-none" style={inputStyle}>
+            <option value="">Selecione o insumo…</option>
+            {p.produto && !p.insumoId && <option value="__legado">{p.produto} (cadastro antigo)</option>}
+            {insumos.map(i => <option key={i.id} value={i.id}>{i.nome} ({ROTULO_CATEGORIA[i.conteudo.categoria]})</option>)}
+          </select>
+        )}
+        {ins && <p className="text-[9px] mt-1" style={{ color: herdado.custoTonelada != null ? '#64748b' : '#fbbf24' }}>
+          {herdado.custoTonelada != null ? resumoCustos(herdado) : 'sem preço cadastrado — a recomendação vai sair sem custo'}
+        </p>}
+        {orfao && <p className="text-[9px] mt-1 flex items-center gap-1" style={{ color: '#fbbf24' }}><AlertTriangle size={9} /> o insumo vinculado não existe mais — escolha outro</p>}
+        {sugestao && <button onClick={() => escolherInsumo(sugestao.id)} className="text-[9px] mt-1 hover:underline" style={{ color: '#93c5fd' }}>
+          Existe um insumo chamado “{sugestao.nome}” — vincular a ele
+        </button>}
       </div>
 
       <div className="grid grid-cols-2 gap-2">
-        <Campo label="Produto"><input value={p.produto} onChange={e => p.setProduto(e.target.value)} placeholder="ex: Calcário" className={txt} style={inputStyle} /></Campo>
-        <Campo label="Custo / tonelada (R$)"><input value={p.custo} onChange={e => p.setCusto(e.target.value)} placeholder="ex: 180" inputMode="decimal" className={txt} style={inputStyle} /></Campo>
+        <Campo label="Produto">
+          <input value={p.produto} onChange={e => p.setProduto(e.target.value)} placeholder="ex: Calcário" readOnly={!!ins}
+            title={ins ? 'O nome vem do insumo vinculado' : undefined}
+            className={txt} style={{ ...inputStyle, ...(ins ? { opacity: 0.7, cursor: 'default' } : null) }} />
+          {ins && <span className="text-[8px] mt-0.5 block" style={{ color: '#64748b' }}>vem do insumo</span>}
+        </Campo>
+        <CampoCusto label="Custo / tonelada (R$)" valor={p.custo} setValor={p.setCusto} dica="ex: 180" herda={herdado.custoTonelada} vinculado={!!ins} />
       </div>
       <div className="grid grid-cols-2 gap-2">
-        <Campo label="Frete (R$/ha)"><input value={p.frete} onChange={e => p.setFrete(e.target.value)} placeholder="ex: 18" inputMode="decimal" className={txt} style={inputStyle} /></Campo>
-        <Campo label="Aplicação (R$/ha)"><input value={p.aplicacao} onChange={e => p.setAplicacao(e.target.value)} placeholder="ex: 22" inputMode="decimal" className={txt} style={inputStyle} /></Campo>
+        <CampoCusto label="Frete (R$/ha)" valor={p.frete} setValor={p.setFrete} dica="ex: 18" herda={herdado.freteHa} vinculado={!!ins} />
+        <CampoCusto label="Aplicação (R$/ha)" valor={p.aplicacao} setValor={p.setAplicacao} dica="ex: 22" herda={herdado.aplicacaoHa} vinculado={!!ins} />
       </div>
       <div className="grid grid-cols-2 gap-2">
         <Campo label="Profundidade (a equação lê)">

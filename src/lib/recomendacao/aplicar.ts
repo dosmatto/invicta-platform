@@ -11,6 +11,7 @@ import { compilar, executarGrid, atributoPorToken, ajustarDose } from './motor';
 import { escolherMapas, prefixoDose20, PIXEL_RECOMENDACAO_M, type UsoMapa } from './escolhaMapa';
 import { coberturaDoGrid } from './cobertura';
 import type { ConteudoEquacao } from '../biblioteca';
+import { custosDaEquacao, type ConteudoInsumo } from '../insumos';
 
 type MapaPronto = { resp: RespInterp; labels?: GeoJSON.FeatureCollection; interpoladoEm?: string };
 
@@ -223,6 +224,9 @@ export interface DoseCalculada {
   custoProdutoHa: number;         // R$/ha só do produto
   custoHa: number;                // R$/ha total (produto + frete + aplicação)
   custo: number;                  // investimento total = custoHa × área
+  insumoId?: string;              // de qual insumo vieram os custos (snapshot). Ainda NÃO
+                                  // é chave de agregação: relatorioCenarios/ComparadorCenarios
+                                  // casam por NOME, e os cenários já salvos não têm o campo.
   doseMinima?: number;            // dose mínima viável da equação — a 1ª faixa colorida começa aqui; abaixo (e zero) = transparente
   fontes?: ResultadoAplicacao['fontes'];   // de onde veio o mapa de cada atributo
 }
@@ -231,6 +235,10 @@ export function calcularDose(
   eq: { id: string; nome: string; conteudo: ConteudoEquacao },
   grids: Record<string, GridRecomendacao>, areaHa: number,
   poligono?: GeoJSON.Polygon | GeoJSON.MultiPolygon | null,
+  // v2.42 — de onde sai o preço quando a equação está vinculada a um insumo.
+  // INJETADO, não lido da Biblioteca: `calcularDose` só depende dos próprios
+  // argumentos, e é isso que faz o mesmo cenário dar sempre o mesmo número.
+  insumos?: ReadonlyMap<string, ConteudoInsumo>,
 ): DoseCalculada {
   const res = aplicarEquacao(eq.conteudo, grids, poligono);
   const c = eq.conteudo;
@@ -238,14 +246,15 @@ export function calcularDose(
   const ehT = u.includes('t/ha') || u.includes('ton');
   const toneladas = ehT ? res.stats.media * areaHa : res.stats.media * areaHa / 1000;
   const tonHa = areaHa > 0 ? toneladas / areaHa : 0;
-  const custoProdutoHa = tonHa * (c.custoTonelada ?? 0);
-  const freteHa = c.freteHa ?? 0;
-  const aplicacaoHa = c.aplicacaoHa ?? 0;
+  const cst = custosDaEquacao(c, c.insumoId ? insumos?.get(c.insumoId) : undefined);
+  const { freteHa, aplicacaoHa } = cst;
+  const custoProdutoHa = tonHa * (cst.custoTonelada ?? 0);
   const custoHa = custoProdutoHa + freteHa + aplicacaoHa;
   return {
     equacaoId: eq.id, nomeEquacao: eq.nome, produto: c.produto, unidade: c.unidadeTratamento,
     estilo: c.estilo, grid: res.grid, bounds: res.bounds, stats: res.stats, toneladas,
-    custoTonelada: c.custoTonelada, freteHa, aplicacaoHa, custoProdutoHa, custoHa, custo: custoHa * areaHa,
+    custoTonelada: cst.custoTonelada, freteHa, aplicacaoHa, custoProdutoHa, custoHa, custo: custoHa * areaHa,
+    insumoId: c.insumoId,
     doseMinima: c.doseMinimaViavel ?? 0,
     fontes: res.fontes,
   };
