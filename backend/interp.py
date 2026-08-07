@@ -62,7 +62,7 @@ AMPLITUDE_MIN = 0.30
 NUGGET_MAX = 0.10
 # Versao do motor de interpolacao (conferir em GET /health para saber se o
 # backend foi reiniciado com o codigo novo).
-VERSION = "interp-25-zonas-quantis"
+VERSION = "interp-26-cobrir-poligono"
 
 
 # ============================================================ instrumentacao
@@ -161,10 +161,11 @@ _cache: "OrderedDict[str, dict]" = OrderedDict()
 _cache_stats = {"hit": 0, "miss": 0}
 
 def _chave_cache(points, polygon_geojson, dominio, stops, pixel_m, metodo,
-                 modelo_fixo, variograma_manual) -> str:
+                 modelo_fixo, variograma_manual, cobrir_poligono=False) -> str:
     payload = json.dumps({
         "p": points, "poly": polygon_geojson, "d": dominio, "s": stops,
         "px": pixel_m, "m": metodo, "mf": modelo_fixo, "vm": variograma_manual,
+        "cp": cobrir_poligono,
         "v": VERSION,
     }, sort_keys=True, separators=(",", ":"), default=float)
     return hashlib.sha1(payload.encode()).hexdigest()
@@ -207,13 +208,36 @@ def _dedup(x: np.ndarray, y: np.ndarray, z: np.ndarray):
 
 
 # ---------------------------------------------------------------- malha
-def _grid_axes(minx, miny, maxx, maxy, pixel_m, lat0):
+def _estender(eixo: np.ndarray, folga: int) -> np.ndarray:
+    """Acrescenta `folga` nos de cada lado MANTENDO o passo do eixo.
+
+    De proposito nao e um linspace mais largo: assim os nos originais continuam
+    exatamente onde estavam, e a malha estendida vira um superconjunto da estrita
+    (mesma superficie amostrada nos mesmos lugares, com uma coroa a mais).
+    """
+    if folga <= 0 or len(eixo) < 2:
+        return eixo
+    d = float(eixo[1] - eixo[0])
+    antes = eixo[0] - d * np.arange(folga, 0, -1)
+    depois = eixo[-1] + d * np.arange(1, folga + 1)
+    return np.concatenate([antes, eixo, depois])
+
+
+def _grid_axes(minx, miny, maxx, maxy, pixel_m, lat0, folga: int = 0):
+    """Eixos da malha. `folga` = quantos pixels acrescentar de cada lado.
+
+    Com folga=0 o linspace vai EXATAMENTE de minx a maxx, entao o primeiro e o
+    ultimo no caem sobre a borda do bbox. Com folga=1 (usado por cobrir_poligono)
+    sobra um no inteiro para fora de cada lado, garantindo que nenhuma parte do
+    poligono fique sem celula — inclusive quando o MAX_CELLS engrossa o pixel.
+    """
     dlat = pixel_m / 111320.0
     dlng = pixel_m / (111320.0 * max(math.cos(math.radians(lat0)), 1e-6))
-    nx = min(max(int(math.ceil((maxx - minx) / dlng)) + 1, 2), MAX_CELLS)
-    ny = min(max(int(math.ceil((maxy - miny) / dlat)) + 1, 2), MAX_CELLS)
-    gx = np.linspace(minx, maxx, nx)
-    gy = np.linspace(miny, maxy, ny)
+    teto = max(MAX_CELLS - 2 * folga, 2)   # a coroa nao pode furar o teto de memoria
+    nx = min(max(int(math.ceil((maxx - minx) / dlng)) + 1, 2), teto)
+    ny = min(max(int(math.ceil((maxy - miny) / dlat)) + 1, 2), teto)
+    gx = _estender(np.linspace(minx, maxx, nx), folga)
+    gy = _estender(np.linspace(miny, maxy, ny), folga)
     return gx, gy
 
 
@@ -359,6 +383,29 @@ def _inside_mask(gx, gy, poly) -> np.ndarray:
     return shapely.contains(poly, pts).reshape(XX.shape)
 
 
+def _touch_mask(gx, gy, poly) -> np.ndarray:
+    """Mascara (ny, nx) das celulas que TOCAM o poligono — o no e o centro de um
+    quadrado de meio pixel para cada lado, e basta esse quadrado encostar.
+
+    Existe porque a mascara estrita (point-in-polygon no NO) deixava uma faixa de
+    ate um pixel sem dose em toda a divisa: a celula da borda tem o centro fora e
+    era descartada inteira, mesmo cobrindo metade de area util. Aqui ela fica, com
+    o VALOR QUE A INTERPOLACAO JA CALCULOU para aquele no — nada e estimado nem
+    preenchido; a krigagem avalia a malha inteira e o recorte so joga fora. O corte
+    exato pelo contorno acontece depois, no desenho e na exportacao.
+
+    Mesma convencao de celula usada em gerar_multi (arestas em ±meio pixel).
+    """
+    dx = float(gx[1] - gx[0]) if len(gx) > 1 else 0.0
+    dy = float(gy[1] - gy[0]) if len(gy) > 1 else 0.0
+    XX, YY = np.meshgrid(gx, gy)
+    caixas = shapely.box(
+        XX.ravel() - dx / 2.0, YY.ravel() - dy / 2.0,
+        XX.ravel() + dx / 2.0, YY.ravel() + dy / 2.0,
+    )
+    return shapely.intersects(poly, caixas).reshape(XX.shape)
+
+
 def _clip(grid: np.ndarray, gx, gy, poly, mask=None) -> np.ndarray:
     dentro = _inside_mask(gx, gy, poly) if mask is None else mask
     return np.where(dentro, grid, np.nan)
@@ -396,6 +443,7 @@ def _png_data_url(rgba: np.ndarray) -> str:
 def gerar_grid(points: list[dict], polygon_geojson: dict, pixel_m: float = 20.0,
                metodo: str = "krige", modelo_fixo: str | None = None,
                variograma_manual: dict | None = None,
+               cobrir_poligono: bool = False,
                etapas: "_Etapas | None" = None) -> dict[str, Any]:
     """Interpola UM atributo e devolve o grid bruto recortado + eixos geograficos.
     Reusado por interpolar() (que colore) e por zonar() (que classifica e vetoriza).
@@ -414,7 +462,8 @@ def gerar_grid(points: list[dict], polygon_geojson: dict, pixel_m: float = 20.0,
 
     minx, miny, maxx, maxy = poly.bounds
     lon0, lat0 = (minx + maxx) / 2.0, (miny + maxy) / 2.0
-    gx, gy = _grid_axes(minx, miny, maxx, maxy, pixel_m, lat0)
+    gx, gy = _grid_axes(minx, miny, maxx, maxy, pixel_m, lat0,
+                        folga=1 if cobrir_poligono else 0)
 
     xm, ym = _to_local(x, y, lon0, lat0)
     gxm, _gy0 = _to_local(gx, np.full_like(gx, lat0), lon0, lat0)
@@ -422,7 +471,14 @@ def gerar_grid(points: list[dict], polygon_geojson: dict, pixel_m: float = 20.0,
 
     # Mascara de recorte calculada UMA vez e reusada (recorte final + checagens
     # de amplitude da anti-degeneracao) — antes o point-in-polygon rodava ate 3x.
-    mask = _inside_mask(gx, gy, poly)
+    #
+    # Sao DUAS: a ESTRITA (no dentro do poligono) e, quando cobrir_poligono, a de
+    # TOQUE (celula encosta no poligono). A anti-degeneracao fica sempre na estrita:
+    # os nos de borda sao extrapolacao e, entrando na conta de amplitude, mudariam
+    # a decisao de "krigagem degenerou" — o mapa de 20 m tomaria caminho diferente
+    # do fino a partir dos mesmos pontos.
+    mask_estrita = _inside_mask(gx, gy, poly)
+    mask = _touch_mask(gx, gy, poly) if cobrir_poligono else mask_estrita
     if etapas: etapas.marca("preparo_grade")
 
     # Metodo escolhido pelo usuario (sem troca automatica). IDW so quando pedido.
@@ -466,14 +522,14 @@ def gerar_grid(points: list[dict], polygon_geojson: dict, pixel_m: float = 20.0,
                 espacamento = _espacamento_mediano(xm, ym)
                 estrutura = (psill / patamar) if patamar > 0 else 0.0
                 amp_dados = float(np.max(z) - np.min(z)) or 1.0
-                amp_krige = _amplitude_no_poligono(grid, gx, gy, poly, mask)
+                amp_krige = _amplitude_no_poligono(grid, gx, gy, poly, mask_estrita)
                 degenerada = (estrutura < ESTRUTURA_MIN) or (alcance < espacamento) or (amp_krige < AMPLITUDE_MIN * amp_dados)
                 if degenerada and not modelo_fixo:
                     # Auto-ajuste degenerou (krige -> media -> mapa uniforme). Refaz a
                     # KRIGAGEM com um variograma plausivel (honra os pontos e varia),
                     # em vez de cair para IDW (que o usuario nao quer em fertilidade).
                     grid2, params2 = _krige_constrangido(xm, ym, z, gxm, gym, modelo, espacamento)
-                    amp2 = _amplitude_no_poligono(grid2, gx, gy, poly, mask)
+                    amp2 = _amplitude_no_poligono(grid2, gx, gy, poly, mask_estrita)
                     if amp2 >= AMPLITUDE_MIN * amp_dados:
                         grid, params, rmse = grid2, params2, None
                         variograma = {
@@ -510,8 +566,12 @@ def gerar_grid(points: list[dict], polygon_geojson: dict, pixel_m: float = 20.0,
     if etapas: etapas.marca("interpolacao")
     grid = _clip(grid, gx, gy, poly, mask)
     if etapas: etapas.marca("recorte")
+    # bounds = extensao REAL da malha, nao o bbox do poligono. Sem folga os dois
+    # coincidem (o linspace vai de minx a maxx); com folga, nao — e o front estica
+    # a imagem sobre os bounds, entao devolver o bbox deslocaria o raster inteiro.
     return {
-        "grid": grid, "gx": gx, "gy": gy, "bounds": [minx, miny, maxx, maxy],
+        "grid": grid, "gx": gx, "gy": gy,
+        "bounds": [float(gx[0]), float(gy[0]), float(gx[-1]), float(gy[-1])],
         "modelo": modelo, "rmse": rmse, "variograma": variograma,
         "lon0": lon0, "lat0": lat0, "n": int(len(z)),
     }
@@ -521,9 +581,10 @@ def gerar_grid(points: list[dict], polygon_geojson: dict, pixel_m: float = 20.0,
 def interpolar(points: list[dict], polygon_geojson: dict, dominio, stops,
                pixel_m: float = 20.0, metodo: str = "krige",
                modelo_fixo: str | None = None,
-               variograma_manual: dict | None = None) -> dict[str, Any]:
+               variograma_manual: dict | None = None,
+               cobrir_poligono: bool = False) -> dict[str, Any]:
     chave = _chave_cache(points, polygon_geojson, dominio, stops, pixel_m,
-                         metodo, modelo_fixo, variograma_manual)
+                         metodo, modelo_fixo, variograma_manual, cobrir_poligono)
     job = chave[:8]
     # Cache: reprocesso IDENTICO (mesmos dados+params+versao) e instantaneo.
     cached = _cache.get(chave)
@@ -538,7 +599,7 @@ def interpolar(points: list[dict], polygon_geojson: dict, dominio, stops,
 
     etapas = _Etapas()
     g = gerar_grid(points, polygon_geojson, pixel_m, metodo, modelo_fixo,
-                   variograma_manual, etapas=etapas)
+                   variograma_manual, cobrir_poligono, etapas=etapas)
     grid, gx, gy = g["grid"], g["gx"], g["gy"]
 
     rgba = _colorize(grid, dominio, stops)

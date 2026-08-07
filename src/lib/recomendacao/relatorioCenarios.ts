@@ -19,6 +19,7 @@ import type { Cenario } from './cenarios';
 import { listarCenarios, descomprimirCenario } from './cenarios';
 import type { DoseCalculada } from './aplicar';
 import { classesVisiveis, indiceClasse } from './faixas';
+import { coberturaDoGrid } from './cobertura';
 
 // Ordena talhões pelo nome de forma ALFANUMÉRICA (DNHDV 01 < 02 < 10) — ordem
 // padrão de TODOS os relatórios que listam vários talhões.
@@ -228,7 +229,10 @@ function desenharTabela(doc: JsPDF, x: number, y: number, w: number, titulo: str
 
 // ─── C2 — Recomendação Oficial (book em lote) ─────────────────────────────
 interface FaixaPlano { inf: number; sup: number; cor: string; area: number; pct: number; transparente: boolean; zero?: boolean }
-function planoDeAplicacao(dose: DoseCalculada, areaHa: number): FaixaPlano[] {
+function planoDeAplicacao(
+  dose: DoseCalculada, areaHa: number,
+  poligono?: GeoJSON.Polygon | GeoJSON.MultiPolygon | null,
+): FaixaPlano[] {
   const min = dose.doseMinima ?? 0;
   if (!dose.estilo.classes.some(c => Number.isFinite(c.limiteSuperior))) return [];
   // Classes coloridas = as ACIMA da dose mínima (as abaixo não ocorrem). MESMA
@@ -240,10 +244,20 @@ function planoDeAplicacao(dose: DoseCalculada, areaHa: number): FaixaPlano[] {
   let nZero = 0, n = 0;
   try {
     const { valores } = decodeGrid(dose.grid);
+    // Cada pixel entra pela FRAÇÃO que está dentro do talhão. O raster de 20 m
+    // cobre 100% do polígono e transborda na divisa; sem o peso, as células de
+    // borda (meia célula de área, valor extrapolado) inflariam as faixas das
+    // pontas. É o mesmo recorte do mapa, em número.
+    const peso = poligono
+      ? coberturaDoGrid(dose.grid.shape, dose.bounds, poligono)
+      : null;
     for (let i = 0; i < valores.length; i++) {
-      const v = valores[i]; if (!isFinite(v)) continue; n++;
-      if (v <= 0) { nZero++; continue; }                 // ZERO = não aplica (faixa própria)
-      cont[indiceClasse(v, lims)]++;
+      const v = valores[i]; if (!isFinite(v)) continue;
+      const p = peso ? peso[i] : 1;
+      if (p <= 0) continue;                              // só transbordo: não é talhão
+      n += p;
+      if (v <= 0) { nZero += p; continue; }              // ZERO = não aplica (faixa própria)
+      cont[indiceClasse(v, lims)] += p;
     }
   } catch { /* sem grid */ }
   const areaPx = n > 0 ? areaHa / n : 0;
@@ -320,7 +334,7 @@ async function desenharPaginaOficial(doc: JsPDF, dose: DoseCalculada, cenNome: s
   doc.text('Faixa (kg/ha)', SX, y); doc.text('ha', SX + SW - 16, y, { align: 'right' }); doc.text('%', SX + SW, y, { align: 'right' });
   y += 1; doc.setDrawColor(...LINE); doc.line(SX, y, SX + SW, y); y += 3.4;
   doc.setFontSize(7.5); doc.setTextColor(40, 48, 58); doc.setFont('helvetica', 'normal');
-  for (const f of planoDeAplicacao(dose, ctx.areaHa)) {
+  for (const f of planoDeAplicacao(dose, ctx.areaHa, ctx.poligono)) {
     if (f.transparente) { doc.setDrawColor(...GRAY); doc.setLineWidth(0.3); doc.rect(SX, y - 2.6, 4, 3); doc.setLineWidth(0.2); }
     else { const [r, g, b] = hexToRgb(f.cor); doc.setFillColor(r, g, b); doc.rect(SX, y - 2.6, 4, 3, 'F'); }
     doc.text(f.zero ? '0' : `${fmt(f.inf)} – ${fmt(f.sup)}`, SX + 6, y);

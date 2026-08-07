@@ -127,6 +127,11 @@ export async function interpolar(params: {
   metodo?: 'krige' | 'idw';
   modeloFixo?: string | null;
   variogramaManual?: VariogramaManual | null;
+  // Malha cobrindo 100% do polígono (um pixel de folga + entra toda célula que
+  // TOCA). Só o raster de 20 m da Recomendação usa: com a máscara estrita sobrava
+  // até um pixel sem dose em toda a divisa. Os mapas de fertilidade NÃO mandam
+  // isto — mudar o mapa que o usuário vê é justamente o que não pode acontecer.
+  cobrirPoligono?: boolean;
   signal?: AbortSignal;   // cancela a chamada (troca de mapa / saída da tela)
 }): Promise<RespInterp> {
   const r = await postBackend('/interpolar', {
@@ -138,6 +143,7 @@ export async function interpolar(params: {
     metodo: params.metodo ?? 'krige',
     modelo_fixo: params.modeloFixo ?? null,
     variograma_manual: params.variogramaManual ?? null,
+    cobrir_poligono: params.cobrirPoligono ?? false,
   }, { signal: params.signal });
   if (!r.ok) {
     let msg = `Backend respondeu ${r.status}`;

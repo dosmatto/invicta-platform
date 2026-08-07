@@ -170,6 +170,11 @@ class ReqInterp(BaseModel):
     metodo: str = "krige"             # 'krige' (padrao) | 'idw' (explicito)
     modelo_fixo: str | None = None    # fixa o variograma (spherical/exponential/gaussian) ou None=auto
     variograma_manual: dict[str, Any] | None = None  # C2.b: {modelo, patamar, alcance, pepita, vizinhos, aniso_ratio, aniso_angle}
+    # Malha cobrindo 100% do poligono: um pixel de folga + celula que TOCA entra
+    # (em vez de exigir o no dentro). Usado pelo raster de 20 m da Recomendacao,
+    # que sem isso deixava ate um pixel sem dose em toda a divisa. O corte exato
+    # pelo contorno acontece depois, no desenho e na exportacao.
+    cobrir_poligono: bool = False
 
 
 @app.get("/health")
@@ -212,7 +217,7 @@ def diag():
 def interpolar(req: ReqInterp):
     pts = [{"lng": p.lng, "lat": p.lat, "valor": p.valor} for p in req.pontos]
     try:
-        return interp.interpolar(pts, req.poligono, req.dominio, req.stops, req.pixel_m, req.metodo, req.modelo_fixo, req.variograma_manual)
+        return interp.interpolar(pts, req.poligono, req.dominio, req.stops, req.pixel_m, req.metodo, req.modelo_fixo, req.variograma_manual, req.cobrir_poligono)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:  # pragma: no cover

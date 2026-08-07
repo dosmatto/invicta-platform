@@ -38,7 +38,9 @@
     "teste:escala": "node scripts/teste-escala-classes.mjs",
     "teste:validacao": "node scripts/teste-validacao.mjs",
     "teste:rotulo": "node scripts/teste-rotulo-zona.mjs",
-    "teste:corte": "PY=\"$HOME/.invicta-fert-backend/venv/bin/python\"; [ -x \"$PY\" ] || PY=python3; \"$PY\" scripts/teste-corte-zona.py"
+    "teste:corte": "PY=\"$HOME/.invicta-fert-backend/venv/bin/python\"; [ -x \"$PY\" ] || PY=python3; \"$PY\" scripts/teste-corte-zona.py",
+    "teste:cobertura": "node scripts/teste-cobertura.mjs",
+    "teste:cobrir": "PY=\"$HOME/.invicta-fert-backend/venv/bin/python\"; [ -x \"$PY\" ] || PY=python3; \"$PY\" scripts/teste-cobrir-poligono.py"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",

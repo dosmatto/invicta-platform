@@ -561,6 +561,11 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
       pontos: pts, poligono: poligono!, dominio, stops, metodo, pixelM: PIXEL_RECOMENDACAO,
       modeloFixo: modeloEfetivo || null,
       variogramaManual: varFixoNum,
+      // A malha cobre 100% do talhão: sem isto sobrava até um pixel (20 m) sem
+      // dose em toda a divisa. Cada pixel de borda leva o valor que a krigagem
+      // calculou para aquele nó — nada é preenchido. O corte exato pelo contorno
+      // é feito no fim, na hora de desenhar e de exportar.
+      cobrirPoligono: true,
       signal: abortRef.current?.signal,
     });
     const gridGz = resp.grid ? await comprimirGrid(resp.grid) : undefined;

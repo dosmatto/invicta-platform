@@ -13,8 +13,8 @@ import { pode } from '@/lib/empresa';
 import { listar as bibListar, compararEquacoes, type ItemBiblioteca, type ConteudoEquacao, type ConteudoRecomendacao } from '@/lib/biblioteca';
 import { carregarGridsTalhao, calcularDose, dividirDoseEmPassadas, type DoseCalculada } from '@/lib/recomendacao/aplicar';
 import { salvarCenario, listarCenarios, descomprimirCenario, excluirCenario, type Cenario } from '@/lib/recomendacao/cenarios';
-import { colorirDose } from '@/lib/raster';
-import { coordsFromBounds } from '@/lib/fertilidade';
+import { colorirDose, recortarNoPoligono } from '@/lib/raster';
+import { coordsFromBounds, extrairPoligono } from '@/lib/fertilidade';
 import { ComparadorCenarios } from '@/components/talhao/ComparadorCenarios';
 import { montarBookOficial, abrirOuBaixar } from '@/lib/recomendacao/relatorioCenarios';
 import { Play, Loader2, AlertTriangle, Wand2, Save, FolderOpen, Trash2, Eye, GitCompare, FileText, Star } from 'lucide-react';
@@ -89,6 +89,11 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
   }, [importacoes, importacaoId]);
 
   const talhao = useMemo(() => getTalhoes().find(t => t.id === nav.talhaoId) ?? null, [nav.talhaoId]);
+  // Contorno do talhão — usado para recortar o raster da dose no mapa da tela.
+  const poligono = useMemo(() => {
+    if (!talhao?.geojson) return null;
+    try { return extrairPoligono(JSON.parse(talhao.geojson)); } catch { return null; }
+  }, [talhao]);
   // Nº do cadastro da equação (janela de Equações) — o MESMO que sai no relatório,
   // p/ mostrar na frente de cada dose e facilitar o cruzamento. Doses parceladas
   // têm equacaoId "<id>__apN" → usa o id base.
@@ -112,12 +117,23 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
   const doseAtiva = doses[visivel] ?? null;
   useEffect(() => {
     if (!doseAtiva) { setFertilidadeOverlay(null); setFertilidadeLabels(null); return; }
-    try {
-      const png = colorirDose(doseAtiva.grid, doseAtiva.estilo, doseAtiva.doseMinima);
-      setFertilidadeOverlay({ url: png.dataUrl, coordinates: coordsFromBounds(doseAtiva.bounds), opacity: 1 });
-      setFertilidadeLabels(null);
-    } catch (e) { console.warn('[recomendacao] colorir falhou', e); }
-  }, [doseAtiva, setFertilidadeOverlay, setFertilidadeLabels]);
+    let cancelado = false;
+    (async () => {
+      try {
+        const png = colorirDose(doseAtiva.grid, doseAtiva.estilo, doseAtiva.doseMinima);
+        // A malha de 20 m cobre 100% do talhão, então transborda um pouco na
+        // divisa. O PDF já recorta ao desenhar (capturaMapa); aqui o mapa é uma
+        // imagem esticada sobre os bounds, então o corte tem de ser no pixel.
+        const recortado = poligono
+          ? await recortarNoPoligono(png, doseAtiva.bounds, poligono)
+          : png;
+        if (cancelado) return;
+        setFertilidadeOverlay({ url: recortado.dataUrl, coordinates: coordsFromBounds(doseAtiva.bounds), opacity: 1 });
+        setFertilidadeLabels(null);
+      } catch (e) { console.warn('[recomendacao] colorir falhou', e); }
+    })();
+    return () => { cancelado = true; };
+  }, [doseAtiva, poligono, setFertilidadeOverlay, setFertilidadeLabels]);
   useEffect(() => () => { setFertilidadeOverlay(null); setFertilidadeLabels(null); }, [setFertilidadeOverlay, setFertilidadeLabels]);
 
   async function aplicar() {
@@ -139,7 +155,7 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
       const ok: DoseCalculada[] = [];
       const erros: { nome: string; erro: string }[] = [];
       for (const it of itens) {
-        try { ok.push(calcularDose(it, grids, area)); }
+        try { ok.push(calcularDose(it, grids, area, poligono)); }
         catch (e) { erros.push({ nome: it.nome, erro: e instanceof Error ? e.message : String(e) }); }
       }
       // Divisão de aplicação (escolhida na hora) → grupo de mapas (passadas).
@@ -233,7 +249,7 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
       for (const r of recs) {
         const itens = (r.conteudo.equacaoIds.map(id => equacoes.find(e => e.id === id)).filter(Boolean) as ItemBiblioteca<ConteudoEquacao>[]).sort(compararEquacoes);
         const ok: DoseCalculada[] = [];
-        for (const it of itens) { try { ok.push(calcularDose(it, grids, area)); } catch { /* sem mapa p/ essa equação */ } }
+        for (const it of itens) { try { ok.push(calcularDose(it, grids, area, poligono)); } catch { /* sem mapa p/ essa equação */ } }
         if (ok.length === 0) continue;
         const divBook: DivCfg = { ativo: divAtivo, limiteMax: parseFloat(divLimite.replace(',', '.')) || 0, unidade: divUnid };
         const finais = expandirDoses(ok, divBook, area);   // divide em passadas se marcado

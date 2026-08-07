@@ -194,3 +194,58 @@ function interpolarCor(
 export function temGrid(resp: RespInterp | null | undefined): resp is RespInterp & { grid: { b64: string; shape: [number, number] } } {
   return !!resp && !!resp.grid && !!resp.grid.b64 && !!resp.grid.shape;
 }
+
+// Recorta um PNG já colorido pelo contorno do talhão, devolvendo outro dataURL.
+//
+// A malha do raster de 20 m da Recomendação COBRE 100% do polígono — e por isso
+// transborda um pouco na divisa (a célula da borda entra inteira, com o valor que
+// a krigagem calculou para aquele nó). No PDF o corte já era feito na hora de
+// desenhar (capturaMapa faz ctx.clip no contorno), mas o mapa da TELA só desenha a
+// imagem sobre os bounds e conta com o NaN transparente — sem este recorte, o
+// excesso apareceria cruzando a divisa. Aqui o corte é aplicado no pixel, uma vez,
+// antes de a imagem virar overlay.
+//
+// `bounds` é [oeste, sul, leste, norte] — o mesmo retângulo sobre o qual a imagem
+// é esticada no mapa, então a conversão lon/lat → pixel é linear.
+export async function recortarNoPoligono(
+  png: PngColorido,
+  bounds: [number, number, number, number],
+  poligono: GeoJSON.Polygon | GeoJSON.MultiPolygon,
+): Promise<PngColorido> {
+  if (typeof document === 'undefined') return png;
+  const [w, s, e, n] = bounds;
+  if (!(e > w) || !(n > s)) return png;
+  const cv = document.createElement('canvas');
+  cv.width = png.largura; cv.height = png.altura;
+  const ctx = cv.getContext('2d');
+  if (!ctx) return png;
+
+  // Decodificar é assíncrono mesmo vindo de dataURL. Falhando, devolve o PNG
+  // inteiro — o pior caso é o mapa transbordar a divisa, que era como já era.
+  let img: HTMLImageElement;
+  try {
+    img = await new Promise<HTMLImageElement>((ok, falha) => {
+      const el = new Image();
+      el.onload = () => ok(el);
+      el.onerror = () => falha(new Error('png não decodificou'));
+      el.src = png.dataUrl;
+    });
+  } catch { return png; }
+
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(img, 0, 0, cv.width, cv.height);
+  const px = (lon: number) => ((lon - w) / (e - w)) * cv.width;
+  const py = (lat: number) => ((n - lat) / (n - s)) * cv.height;
+  const aneis: GeoJSON.Position[][] = poligono.type === 'Polygon'
+    ? poligono.coordinates : poligono.coordinates.flat();
+  ctx.beginPath();
+  for (const anel of aneis) {
+    anel.forEach((pt, i) => { const x = px(pt[0]), y = py(pt[1]); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+    ctx.closePath();
+  }
+  // destination-in: mantém só o que está sob o path (o resto vira transparente).
+  ctx.globalCompositeOperation = 'destination-in';
+  ctx.fill('evenodd');   // evenodd honra os buracos do talhão
+  ctx.globalCompositeOperation = 'source-over';
+  return { dataUrl: cv.toDataURL('image/png'), largura: png.largura, altura: png.altura };
+}

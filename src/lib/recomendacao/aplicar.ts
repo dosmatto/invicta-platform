@@ -9,6 +9,7 @@ import { cloudCarregarMapasPorPrefixo } from '../cloud';
 import { descomprimirGrid, decodeGrid, type RespInterp } from '../fertilidade';
 import { compilar, executarGrid, atributoPorToken, ajustarDose } from './motor';
 import { escolherMapas, prefixoDose20, PIXEL_RECOMENDACAO_M, type UsoMapa } from './escolhaMapa';
+import { coberturaDoGrid } from './cobertura';
 import type { ConteudoEquacao } from '../biblioteca';
 
 type MapaPronto = { resp: RespInterp; labels?: GeoJSON.FeatureCollection; interpoladoEm?: string };
@@ -138,7 +139,11 @@ function float32ParaB64(arr: Float32Array): string {
   return btoa(s);
 }
 
-export function aplicarEquacao(eq: ConteudoEquacao, grids: Record<string, GridRecomendacao>): ResultadoAplicacao {
+export function aplicarEquacao(
+  eq: ConteudoEquacao,
+  grids: Record<string, GridRecomendacao>,
+  poligono?: GeoJSON.Polygon | GeoJSON.MultiPolygon | null,
+): ResultadoAplicacao {
   const prof = eq.profundidade || '0-20';
   const c = compilar(eq.script, eq.constantes);
   if (!c.ok) throw new Error(c.erro);
@@ -177,13 +182,27 @@ export function aplicarEquacao(eq: ConteudoEquacao, grids: Record<string, GridRe
   const opts = { naoNegativo: eq.naoNegativo, doseMinima: eq.doseMinimaViavel ?? 0, abaixoMinimo: eq.abaixoMinimo ?? 'zero' as const, doseMaxima: eq.doseMaxima ?? 0 };
   for (let i = 0; i < n; i++) dose[i] = ajustarDose(dose[i], opts);
 
-  let mn = Infinity, mx = -Infinity, soma = 0, cnt = 0;
-  for (let i = 0; i < n; i++) { const d = dose[i]; if (!isFinite(d)) continue; cnt++; soma += d; if (d < mn) mn = d; if (d > mx) mx = d; }
+  // Média PONDERADA pela fração de cada pixel que está dentro do talhão. O raster
+  // de 20 m cobre 100% do polígono e por isso transborda na divisa: contar a célula
+  // de borda inteira — justo onde a krigagem extrapola — mexeria na dose média e,
+  // por tabela, na tonelagem e no custo. Sem polígono (cenário antigo), o peso é 1
+  // e a conta é exatamente a de antes.
+  const peso = poligono ? coberturaDoGrid([rows, cols], ref.bounds, poligono) : null;
+  let mn = Infinity, mx = -Infinity, soma = 0, pesoTotal = 0, cnt = 0;
+  for (let i = 0; i < n; i++) {
+    const d = dose[i];
+    if (!isFinite(d)) continue;
+    const p = peso ? peso[i] : 1;
+    if (p <= 0) continue;                    // pixel só de transbordo: não é talhão
+    cnt++; soma += d * p; pesoTotal += p;
+    if (d < mn) mn = d;
+    if (d > mx) mx = d;
+  }
 
   return {
     grid: { b64: float32ParaB64(dose), shape: [rows, cols] },
     bounds: ref.bounds,
-    stats: { min: cnt ? mn : 0, media: cnt ? soma / cnt : 0, max: cnt ? mx : 0, n: cnt },
+    stats: { min: cnt ? mn : 0, media: pesoTotal ? soma / pesoTotal : 0, max: cnt ? mx : 0, n: cnt },
     fontes,
   };
 }
@@ -211,8 +230,9 @@ export interface DoseCalculada {
 export function calcularDose(
   eq: { id: string; nome: string; conteudo: ConteudoEquacao },
   grids: Record<string, GridRecomendacao>, areaHa: number,
+  poligono?: GeoJSON.Polygon | GeoJSON.MultiPolygon | null,
 ): DoseCalculada {
-  const res = aplicarEquacao(eq.conteudo, grids);
+  const res = aplicarEquacao(eq.conteudo, grids, poligono);
   const c = eq.conteudo;
   const u = (c.unidadeTratamento || '').toLowerCase();
   const ehT = u.includes('t/ha') || u.includes('ton');
