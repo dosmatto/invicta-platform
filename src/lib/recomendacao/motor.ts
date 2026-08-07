@@ -27,6 +27,14 @@ export const ATRIBUTOS_EQUACAO: AtributoEq[] = [
   { token: 'MO',  nut: 'mo',      rotulo: 'Matéria orgânica',         unidade: 'g/dm³',     exemplo: 30 },
   { token: 'pH',  nut: 'ph',      rotulo: 'pH',                       unidade: '',          exemplo: 5.2 },
   { token: 'm',   nut: 'm',       rotulo: 'Saturação por Al (m%)',    unidade: '%',         exemplo: 10 },
+  // Saturações calculadas no PONTO de amostragem (lab.ts) e depois interpoladas —
+  // é o MESMO mapa que o relatório de fertilidade mostra. Diferente de escrever
+  // K/CTC*100 na fórmula, que é a razão de duas superfícies krigadas em separado
+  // (os extremos nascem onde K baixo coincide com CTC alta; krigando separado,
+  // essa coincidência se dilui). Sem '%' no token: o tokenizer só aceita letras.
+  { token: 'satK', nut: 'satk',   rotulo: 'Saturação por potássio (K%)',  unidade: '%',     exemplo: 2 },
+  { token: 'satCa',nut: 'satca',  rotulo: 'Saturação por cálcio (Ca%)',   unidade: '%',     exemplo: 55 },
+  { token: 'satMg',nut: 'satmg',  rotulo: 'Saturação por magnésio (Mg%)', unidade: '%',     exemplo: 15 },
   { token: 'Al',  nut: 'al',      rotulo: 'Alumínio',                 unidade: 'cmolc/dm³', exemplo: 0.3 },
   { token: 'S',   nut: 's',       rotulo: 'Enxofre',                  unidade: 'mg/dm³',    exemplo: 8 },
   { token: 'B',   nut: 'b',       rotulo: 'Boro',                     unidade: 'mg/dm³',    exemplo: 0.3 },

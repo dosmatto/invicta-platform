@@ -389,6 +389,24 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
             ))}
           </div>
 
+          {/* De onde vieram os mapas da dose visível. A conta pode misturar
+              resolução ou interpolador sem avisar (os grids são escolhidos só por
+              nut+profundidade) — aqui isso fica à vista. */}
+          {doseAtiva?.fontes && doseAtiva.fontes.length > 0 && (() => {
+            const f = doseAtiva.fontes;
+            const metodos = new Set(f.map(x => x.metodo ?? '?'));
+            const alerta = f.some(x => x.reamostrado) || metodos.size > 1;
+            return (
+              <p className="text-[9px] leading-relaxed" style={{ color: alerta ? '#fbbf24' : '#475569' }}>
+                Mapas usados: {f.map(x =>
+                  `${x.token} ${x.pixel ? `${x.pixel} m` : '?'}${x.metodo ? ` · ${x.metodo}` : ''}${x.reamostrado ? ' (reamostrado)' : ''}`
+                ).join(' | ')}
+                {f.some(x => x.reamostrado) && ' — sem mapa de 20 m: reprocesse na Fertilidade para a dose usar toda a amplitude.'}
+                {metodos.size > 1 && ' — interpoladores diferentes entre atributos.'}
+              </p>
+            );
+          })()}
+
           {/* legenda da dose visível */}
           {classesVis.length > 0 && doseAtiva && (
             <div className="pt-1" style={{ borderTop: '1px solid #1a3a6b' }}>

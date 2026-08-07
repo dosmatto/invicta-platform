@@ -28,6 +28,9 @@ import { pode } from '@/lib/empresa';
 import { listar as bibListar, criar as bibCriar, type ConteudoPerfil, type ItemBiblioteca } from '@/lib/biblioteca';
 
 import { inputStyle } from '@/constants/ui';
+// Resolução em que a Recomendação calcula a dose — fonte única, para o mapa que
+// geramos aqui em segundo plano ser exatamente o que ela procura lá.
+import { PIXEL_RECOMENDACAO_M as PIXEL_RECOMENDACAO } from '@/lib/recomendacao/escolhaMapa';
 const fmt = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits: 1 });
 // Rótulo do valor no ponto do mapa: pH e K com 1 casa decimal; os demais inteiros.
 // Casas decimais do rótulo do ponto no mapa: config da variável (Preferências de
@@ -69,9 +72,6 @@ type VarFixo = typeof VARIOGRAMA_FIXO_PADRAO;
 type Interpolador = 'krige' | 'krige-fixo' | 'idw';
 const numVar = (s: string) => Number(String(s).replace(',', '.').trim());
 
-// Resolução em que a Recomendação calcula a dose (PDF e arquivo de máquina).
-// Precisa casar com PIXEL_RECOMENDACAO_M de lib/recomendacao/aplicar.ts.
-const PIXEL_RECOMENDACAO = 20;
 const fcVazio = (): GeoJSON.FeatureCollection => ({ type: 'FeatureCollection', features: [] });
 
 export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: string } = {}) {

@@ -14,6 +14,7 @@
     "teste:zonas": "node scripts/teste-export-zonas.mjs",
     "teste:cabecalho": "node scripts/teste-cabecalho.mjs",
     "teste:faixas": "node scripts/teste-faixas.mjs",
+    "teste:grids": "node scripts/teste-grids-recomendacao.mjs",
     "teste:iam": "node scripts/teste-iam.mjs",
     "build:mobile": "node scripts/mobile-build.mjs",
     "android:sync": "npm run build:mobile && npx cap sync android",

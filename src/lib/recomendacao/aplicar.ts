@@ -8,43 +8,55 @@
 import { cloudCarregarMapasPorPrefixo } from '../cloud';
 import { descomprimirGrid, decodeGrid, type RespInterp } from '../fertilidade';
 import { compilar, executarGrid, atributoPorToken, ajustarDose } from './motor';
+import { escolherMapas, PIXEL_RECOMENDACAO_M } from './escolhaMapa';
 import type { ConteudoEquacao } from '../biblioteca';
 
 type MapaPronto = { resp: RespInterp; labels?: GeoJSON.FeatureCollection; interpoladoEm?: string };
 
-// Carrega os grids do talhão+importação, indexados por `nut__prof`. Desempata
-// igual à aba/relatório: prefere COM grid; entre iguais, o mais recente.
-export async function carregarGridsTalhao(talhaoId: string, importacaoId: string): Promise<Record<string, RespInterp>> {
+// De onde veio o grid que entrou na conta — a tela mostra isto para que misturar
+// resoluções ou interpoladores nunca mais passe despercebido.
+export interface OrigemGrid { pixel?: number; metodo?: string; reamostrado: boolean }
+export interface GridRecomendacao extends RespInterp { origem?: OrigemGrid }
+
+// Carrega os grids do talhão+importação, indexados por `nut__prof`.
+// A RECOMENDAÇÃO quer o mapa interpolado NATIVAMENTE a 20 m (a aba Fertilidade
+// gera um em segundo plano a cada processamento). Sem mapa de 20 m, cai no mais
+// fino e reamostra — ponte para talhões ainda não reprocessados.
+export async function carregarGridsTalhao(talhaoId: string, importacaoId: string): Promise<Record<string, GridRecomendacao>> {
   const prefixo = `${talhaoId}__${importacaoId}__`;
   const carregados = await cloudCarregarMapasPorPrefixo<MapaPronto>(prefixo);
-  const escolhido: Record<string, { resp: RespInterp; em: string; tem: boolean }> = {};
-  for (const c of carregados) {
-    const partes = c.id.slice(prefixo.length).split('__');
-    if (partes.length < 2) continue;
-    const chave = `${partes[partes.length - 2]}__${partes[partes.length - 1]}`;
-    const em = c.dados.interpoladoEm ?? '';
-    const tem = !!c.dados.resp?.grid?.b64;
-    const atual = escolhido[chave];
-    if (atual) {
-      const trocar = (tem && !atual.tem) || (tem === atual.tem && em > atual.em);
-      if (!trocar) continue;
+  const escolha = escolherMapas(prefixo, carregados.map(c => ({
+    id: c.id, tem: !!c.dados.resp?.grid?.b64, em: c.dados.interpoladoEm ?? '',
+  })));
+  const out: Record<string, GridRecomendacao> = {};
+  for (const k in escolha) {
+    const e = escolha[k];
+    const resp = carregados[e.indice].dados.resp;
+    if (resp?.grid?.comp === 'gz') {
+      try { resp.grid = await descomprimirGrid(resp.grid); } catch { /* segue */ }
     }
-    if (c.dados.resp?.grid?.comp === 'gz') {
-      try { c.dados.resp.grid = await descomprimirGrid(c.dados.resp.grid); } catch { /* segue */ }
-    }
-    escolhido[chave] = { resp: c.dados.resp, em, tem };
+    const origem = { pixel: e.pixel, metodo: e.metodo, reamostrado: !e.eh20 };
+    out[k] = e.eh20 ? { ...resp, origem } : { ...reamostrarPara20m(resp), origem };
   }
-  const out: Record<string, RespInterp> = {};
-  for (const k in escolhido) out[k] = reamostrarPara20m(escolhido[k].resp);
   return out;
 }
 
-// A RECOMENDAÇÃO trabalha SEMPRE em ~20 m: mapas de fertilidade interpolados
-// mais finos (2/2,5/3/5/10 m) são reamostrados aqui na ENTRADA (média dos
-// blocos f×f, ignorando NaN) — decisão do usuário (23/07/2026): o detalhe fino
-// é da aba Fertilidade; a dose final (PDF + arquivos de máquina) mantém a
-// resolução de 20 m. Mapas já a 20 m passam intactos (fator 1).
-const PIXEL_RECOMENDACAO_M = 20;
+// A RECOMENDAÇÃO trabalha SEMPRE em ~20 m: o detalhe fino é da aba Fertilidade;
+// a dose final (PDF + arquivos de máquina) mantém a resolução de 20 m.
+//
+// O CAMINHO BOM é a aba Fertilidade interpolar um mapa NATIVO de 20 m (krigagem
+// nos nós de 20 m) junto com o fino — é o que `carregarGridsTalhao` procura.
+// A reamostragem abaixo virou FALLBACK para talhões ainda não reprocessados.
+//
+// Duas armadilhas que ela carrega, e que o mapa nativo não tem:
+//   • devolve `{...resp}` com os `bounds` do grid FINO e um shape novo — como os
+//     consumidores mapeiam índice→lon/lat por linspace sobre os bounds, o mapa sai
+//     deslocado em ~meio pixel grosso (o centro do bloco não é o nó da grade);
+//   • preserva o `stats` do grid fino (pixel_m, nx/ny, min/max), que passa a não
+//     descrever o grid que o acompanha.
+// Sobre a DOSE em si o efeito é pequeno (~1% medido no backend real): a superfície
+// krigada é lisa na escala de 20 m, então a média de 16 pixels quase não a muda.
+// (PIXEL_RECOMENDACAO_M e a regra de escolha vivem em ./escolhaMapa — testáveis.)
 
 function reamostrarPara20m(resp: RespInterp): RespInterp {
   const shape = resp.grid?.shape;
@@ -80,6 +92,9 @@ export interface ResultadoAplicacao {
   grid: { b64: string; shape: [number, number] };
   bounds: [number, number, number, number];
   stats: { min: number; media: number; max: number; n: number };
+  // Qual mapa entrou em cada atributo da equação — a tela mostra isto para que
+  // misturar resolução ou interpolador não passe despercebido.
+  fontes?: { token: string; pixel?: number; metodo?: string; reamostrado: boolean }[];
 }
 
 function float32ParaB64(arr: Float32Array): string {
@@ -90,7 +105,7 @@ function float32ParaB64(arr: Float32Array): string {
   return btoa(s);
 }
 
-export function aplicarEquacao(eq: ConteudoEquacao, grids: Record<string, RespInterp>): ResultadoAplicacao {
+export function aplicarEquacao(eq: ConteudoEquacao, grids: Record<string, GridRecomendacao>): ResultadoAplicacao {
   const prof = eq.profundidade || '0-20';
   const c = compilar(eq.script, eq.constantes);
   if (!c.ok) throw new Error(c.erro);
@@ -99,12 +114,14 @@ export function aplicarEquacao(eq: ConteudoEquacao, grids: Record<string, RespIn
   const gridPorVar = new Map<string, Float32Array>();
   let ref: RespInterp | null = null;
   const faltando: string[] = [];
+  const fontes: NonNullable<ResultadoAplicacao['fontes']> = [];
   for (const v of prog.varsExternas) {
     const at = atributoPorToken(v);
     if (!at) { faltando.push(v); continue; }
     const resp = grids[`${at.nut}__${prof}`];
     if (!resp || !resp.grid?.b64) { faltando.push(`${at.token} ${prof}`); continue; }
     if (!ref) ref = resp;
+    fontes.push({ token: at.token, pixel: resp.origem?.pixel, metodo: resp.origem?.metodo, reamostrado: resp.origem?.reamostrado ?? false });
     gridPorVar.set(v, decodeGrid(resp.grid).valores);
   }
   if (faltando.length) {
@@ -134,6 +151,7 @@ export function aplicarEquacao(eq: ConteudoEquacao, grids: Record<string, RespIn
     grid: { b64: float32ParaB64(dose), shape: [rows, cols] },
     bounds: ref.bounds,
     stats: { min: cnt ? mn : 0, media: cnt ? soma / cnt : 0, max: cnt ? mx : 0, n: cnt },
+    fontes,
   };
 }
 
@@ -154,11 +172,12 @@ export interface DoseCalculada {
   custoHa: number;                // R$/ha total (produto + frete + aplicação)
   custo: number;                  // investimento total = custoHa × área
   doseMinima?: number;            // dose mínima viável da equação — a 1ª faixa colorida começa aqui; abaixo (e zero) = transparente
+  fontes?: ResultadoAplicacao['fontes'];   // de onde veio o mapa de cada atributo
 }
 
 export function calcularDose(
   eq: { id: string; nome: string; conteudo: ConteudoEquacao },
-  grids: Record<string, RespInterp>, areaHa: number,
+  grids: Record<string, GridRecomendacao>, areaHa: number,
 ): DoseCalculada {
   const res = aplicarEquacao(eq.conteudo, grids);
   const c = eq.conteudo;
@@ -175,6 +194,7 @@ export function calcularDose(
     estilo: c.estilo, grid: res.grid, bounds: res.bounds, stats: res.stats, toneladas,
     custoTonelada: c.custoTonelada, freteHa, aplicacaoHa, custoProdutoHa, custoHa, custo: custoHa * areaHa,
     doseMinima: c.doseMinimaViavel ?? 0,
+    fontes: res.fontes,
   };
 }
 
