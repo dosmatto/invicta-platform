@@ -212,6 +212,23 @@ export function MapView({ mostrarVisaoGeral = false }: { mostrarVisaoGeral?: boo
     return () => { map.remove(); mapRef.current = null; readyRef.current = false; setMapReady(false); };
   }, []);
 
+  // ── 1b. O mapa acompanha o tamanho do container ──────────────────────────
+  // Na tela do talhão o painel lateral abre, fecha e é arrastado pela borda.
+  // O MapLibre só se redimensiona sozinho quando a JANELA muda; sem isto o
+  // canvas fica com a largura antiga e a imagem sai esticada. Um quadro de
+  // espera junta a rajada de eventos do arrasto num resize só.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    let raf = 0;
+    const ro = new ResizeObserver(() => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => mapRef.current?.resize());
+    });
+    ro.observe(el);
+    return () => { cancelAnimationFrame(raf); ro.disconnect(); };
+  }, []);
+
   // ── 2. Toggle satélite / rua — SEM setStyle, só visibilidade ─────────────
   // Depende de mapReady para aplicar o modo inicial (satélite) após o load.
   useEffect(() => {

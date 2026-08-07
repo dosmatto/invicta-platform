@@ -2,9 +2,14 @@
 
 // Página individual do talhão (tela cheia, rota /talhao/[id]).
 // Central de trabalho organizada por SAFRA: barra de contexto fixa no topo,
-// navegação por abas e o mapa do talhão embutido à direita. Reaproveita os
-// módulos reais já existentes (Fertilidade, Amostragem); as demais abas entram
-// como placeholders estruturados e serão preenchidas incrementalmente.
+// TRILHO de módulos à esquerda (64px) e o mapa ocupando todo o resto.
+//
+// O trilho substituiu a grade de 13 botões que quebrava em 3-4 linhas dentro de
+// um painel de 440px travado: em notebook de 1024px aquilo comia 43% da largura
+// o tempo todo, mesmo quando o agrônomo só queria olhar o mapa. Agora o painel
+// do módulo ABRE ao clicar, FECHA no segundo clique (ou no X) e a borda é
+// arrastável. Ele empurra o mapa em vez de flutuar por cima porque quase todo
+// módulo daqui desenha uma camada no mapa — os dois têm que ser lidos juntos.
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -36,7 +41,7 @@ import { papelDoUsuario, meuRegistro, planoPorId } from '@/lib/empresa';
 import { tocarBackend } from '@/lib/interpUrl';
 import { APP_VERSION } from '@/constants/version';
 import {
-  ChevronLeft, Home, Leaf, Grid3x3, Layers, BarChart3, FileSpreadsheet,
+  ChevronLeft, ChevronsLeft, ChevronsRight, X, Home, Leaf, Grid3x3, Layers, BarChart3, FileSpreadsheet,
   Activity, Satellite, FolderOpen, FileText, Clock, Zap, Mountain, SlidersHorizontal,
 } from 'lucide-react';
 
@@ -50,21 +55,41 @@ type TabId =
   | 'recomendacoes' | 'prescricoes' | 'compactacao' | 'condutividade' | 'ndvi' | 'arquivos' | 'relatorios';
 
 // Ordem de TRABALHO do talhão (não-`pronto` = "em breve", cai no placeholder EmBreve).
-const TABS: Array<{ id: TabId; label: string; icon: React.ElementType; pronto: boolean }> = [
-  { id: 'resumo',        label: 'Resumo',          icon: Home,            pronto: true },
-  { id: 'altimetria',    label: 'Altimetria (MDE)', icon: Mountain,       pronto: true },
-  { id: 'condutividade', label: 'Condutividade',   icon: Zap,             pronto: true },
-  { id: 'zonas',         label: 'Zonas de Manejo', icon: Layers,          pronto: true },
-  { id: 'amostragem',    label: 'Amostragem',      icon: Grid3x3,         pronto: true },
-  { id: 'fertilidade',   label: 'Fertilidade',     icon: Leaf,            pronto: true },
-  { id: 'recomendacoes', label: 'Recomendações',   icon: FileSpreadsheet, pronto: true },
-  { id: 'prescricoes',   label: 'Prescrições',     icon: SlidersHorizontal, pronto: true },
-  { id: 'arquivos',      label: 'Arquivos',        icon: FolderOpen,      pronto: true },
-  { id: 'ndvi',          label: 'NDVI / Satélite', icon: Satellite,       pronto: true },
-  { id: 'produtividade', label: 'Produtividade',   icon: BarChart3,       pronto: true },
-  { id: 'compactacao',   label: 'Compactação',     icon: Activity,        pronto: true },
-  { id: 'relatorios',    label: 'Relatórios',      icon: FileText,        pronto: true },
+// `curto` é o rótulo do TRILHO (64px de largura): nome inteiro só no cabeçalho
+// do painel e no title do botão, senão a palavra quebra em três linhas e o
+// trilho fica mais alto que a tela de 768px.
+const TABS: Array<{ id: TabId; label: string; curto: string; icon: React.ElementType; pronto: boolean }> = [
+  { id: 'resumo',        label: 'Resumo',           curto: 'Resumo',      icon: Home,            pronto: true },
+  { id: 'altimetria',    label: 'Altimetria (MDE)', curto: 'Altimetria',  icon: Mountain,        pronto: true },
+  { id: 'condutividade', label: 'Condutividade',    curto: 'Condut.',     icon: Zap,             pronto: true },
+  { id: 'zonas',         label: 'Zonas de Manejo',  curto: 'Zonas',       icon: Layers,          pronto: true },
+  { id: 'amostragem',    label: 'Amostragem',       curto: 'Amostrag.',   icon: Grid3x3,         pronto: true },
+  { id: 'fertilidade',   label: 'Fertilidade',      curto: 'Fertilid.',   icon: Leaf,            pronto: true },
+  { id: 'recomendacoes', label: 'Recomendações',    curto: 'Recom.',      icon: FileSpreadsheet, pronto: true },
+  { id: 'prescricoes',   label: 'Prescrições',      curto: 'Prescr.',     icon: SlidersHorizontal, pronto: true },
+  { id: 'arquivos',      label: 'Arquivos',         curto: 'Arquivos',    icon: FolderOpen,      pronto: true },
+  { id: 'ndvi',          label: 'NDVI / Satélite',  curto: 'NDVI',        icon: Satellite,       pronto: true },
+  { id: 'produtividade', label: 'Produtividade',    curto: 'Produtiv.',   icon: BarChart3,       pronto: true },
+  { id: 'compactacao',   label: 'Compactação',      curto: 'Compact.',    icon: Activity,        pronto: true },
+  { id: 'relatorios',    label: 'Relatórios',       curto: 'Relatórios',  icon: FileText,        pronto: true },
 ];
+
+// ── Trilho + painel ──────────────────────────────────────────────────────────
+const TRILHO_ABERTO = 64;   // ícone + rótulo (padrão)
+const TRILHO_COMPACTO = 44; // só ícone, rótulo no title
+const PAINEL_MIN = 320;     // abaixo disso as tabelas dos módulos quebram
+const PAINEL_MAX = 760;
+const MAPA_MIN = 300;       // o mapa nunca some: em 1024px ele ainda respira
+const K_LARGURA = 'invicta.talhao.painel.largura';
+const K_COMPACTO = 'invicta.talhao.trilho.compacto';
+
+// Largura possível para o painel NESTA janela. É recalculada no arrasto e a
+// cada resize — num notebook de 1024px o teto cai sozinho em vez de deixar o
+// mapa virar uma tira.
+function limitarLargura(px: number, trilho: number) {
+  const teto = Math.max(PAINEL_MIN, Math.min(PAINEL_MAX, window.innerWidth - trilho - MAPA_MIN));
+  return Math.round(Math.min(teto, Math.max(PAINEL_MIN, px)));
+}
 
 import { inputStyle } from '@/constants/ui';
 
@@ -80,7 +105,11 @@ export function TalhaoPage({ id }: { id: string }) {
   const [safras, setSafras] = useState<Safra[]>([]);
   const [safraSel, setSafraSel] = useState('');
   const [cultura, setCultura] = useState('');
-  const [tab, setTab] = useState<TabId>('resumo');
+  // `null` = painel fechado, mapa inteiro. Clicar de novo no item aberto fecha.
+  const [tab, setTab] = useState<TabId | null>('resumo');
+  const [trilhoCompacto, setTrilhoCompacto] = useState(false);
+  const [larguraPainel, setLarguraPainel] = useState(440);
+  const larguraTrilho = trilhoCompacto ? TRILHO_COMPACTO : TRILHO_ABERTO;
 
   // Carrega o talhão e a cadeia cliente/fazenda; alimenta o nav + geometria para
   // que MapView e os módulos reaproveitados funcionem como dentro do app.
@@ -131,6 +160,62 @@ export function TalhaoPage({ id }: { id: string }) {
   // Limpa os canais do mapa ao sair da página.
   useEffect(() => () => { setUploadedGeo(null); setUploadedBbox(null); setZonasManejo(null); }, [setUploadedGeo, setUploadedBbox, setZonasManejo]);
 
+  // Preferências de layout (largura do painel e trilho compacto). Só depois da
+  // hidratação: `window` não existe no servidor. Sem preferência salva, a tela
+  // pequena já entra com um painel menor em vez de comer metade do mapa.
+  useEffect(() => {
+    let compacto = false;
+    let largura = 0;
+    try {
+      compacto = localStorage.getItem(K_COMPACTO) === '1';
+      largura = Number(localStorage.getItem(K_LARGURA)) || 0;
+    } catch { /* modo privado: segue no padrão */ }
+    setTrilhoCompacto(compacto);
+    setLarguraPainel(limitarLargura(largura || (window.innerWidth <= 1100 ? 380 : 440),
+      compacto ? TRILHO_COMPACTO : TRILHO_ABERTO));
+  }, []);
+
+  // Janela encolheu (ou girou o tablet): reaperta o painel para o mapa sobrar.
+  useEffect(() => {
+    function aoRedimensionar() { setLarguraPainel(w => limitarLargura(w, larguraTrilho)); }
+    window.addEventListener('resize', aoRedimensionar);
+    return () => window.removeEventListener('resize', aoRedimensionar);
+  }, [larguraTrilho]);
+
+  function alternarTrilho() {
+    setTrilhoCompacto(v => {
+      const novo = !v;
+      try { localStorage.setItem(K_COMPACTO, novo ? '1' : '0'); } catch { /* ignora */ }
+      setLarguraPainel(w => limitarLargura(w, novo ? TRILHO_COMPACTO : TRILHO_ABERTO));
+      return novo;
+    });
+  }
+
+  // Arrasto da borda do painel. O valor final é guardado no `soltar` a partir
+  // de uma variável local — ler o estado ali devolveria a largura de antes do
+  // arrasto (a closure é do render em que o arrasto começou).
+  function iniciarArrasto(e: React.MouseEvent) {
+    e.preventDefault();
+    const x0 = e.clientX;
+    const w0 = larguraPainel;
+    let atual = w0;
+    function mover(ev: MouseEvent) {
+      atual = limitarLargura(w0 + ev.clientX - x0, larguraTrilho);
+      setLarguraPainel(atual);
+    }
+    function soltar() {
+      window.removeEventListener('mousemove', mover);
+      window.removeEventListener('mouseup', soltar);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      try { localStorage.setItem(K_LARGURA, String(atual)); } catch { /* ignora */ }
+    }
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    window.addEventListener('mousemove', mover);
+    window.addEventListener('mouseup', soltar);
+  }
+
   function voltar() { router.push('/painel'); }
 
   if (carregado && !talhao) {
@@ -148,7 +233,10 @@ export function TalhaoPage({ id }: { id: string }) {
   const ehProdutor = papelDoUsuario() === 'produtor';
   const plano = ehProdutor ? planoPorId(meuRegistro()?.planoId) : null;
   const tabsVisiveis = ehProdutor ? TABS.filter(t => !!plano?.secoes?.[t.id]) : TABS;
-  const tabAtivo: TabId = tabsVisiveis.some(t => t.id === tab) ? tab : (tabsVisiveis[0]?.id ?? 'resumo');
+  // Painel fechado é `null`; aba lembrada que o plano não libera cai na primeira.
+  const tabAtivo: TabId | null = tab === null ? null
+    : (tabsVisiveis.some(t => t.id === tab) ? tab : (tabsVisiveis[0]?.id ?? null));
+  const abaAtual = tabAtivo ? tabsVisiveis.find(t => t.id === tabAtivo) ?? null : null;
 
   return (
     <div className="flex flex-col h-screen overflow-hidden" style={{ background: '#061525' }}>
@@ -194,22 +282,52 @@ export function TalhaoPage({ id }: { id: string }) {
       </header>
 
       <div className="flex flex-1 overflow-hidden">
-        {/* Conteúdo (abas) */}
-        <aside className="flex flex-col flex-shrink-0" style={{ width: 440, background: 'var(--invicta-blue-dark)', borderRight: '1px solid #1a3a6b' }}>
-          {/* Navegação por abas */}
-          <nav className="flex flex-wrap gap-1 px-2 py-2 flex-shrink-0" style={{ borderBottom: '1px solid #1a3a6b' }}>
-            {tabsVisiveis.map(t => {
-              const sel = t.id === tabAtivo;
-              const Icon = t.icon;
-              return (
-                <button key={t.id} onClick={() => setTab(t.id)}
-                  className="flex items-center gap-1 px-2 py-1.5 rounded text-[11px] font-semibold transition-colors"
-                  style={{ background: sel ? 'var(--invicta-blue-mid)' : '#0f2240', color: sel ? '#fff' : (t.pronto ? '#93c5fd' : '#64748b') }}>
-                  <Icon size={12} /> {t.label}
-                </button>
-              );
-            })}
-          </nav>
+        {/* Trilho de módulos — sempre visível, largura fixa. Clicar no módulo
+            já aberto FECHA o painel e devolve a tela inteira ao mapa. */}
+        <nav className="flex flex-col flex-shrink-0 overflow-y-auto py-1"
+          style={{ width: larguraTrilho, background: 'var(--invicta-blue-dark)', borderRight: '1px solid #1a3a6b' }}>
+          {tabsVisiveis.map(t => {
+            const sel = t.id === tabAtivo;
+            const Icon = t.icon;
+            return (
+              <button key={t.id} onClick={() => setTab(a => a === t.id ? null : t.id)}
+                title={sel ? `Fechar ${t.label}` : t.label}
+                className="flex flex-col items-center gap-1 w-full px-1 py-2 transition-colors flex-shrink-0"
+                style={{
+                  background: sel ? 'var(--invicta-blue)' : 'transparent',
+                  color: sel ? '#fff' : (t.pronto ? 'var(--sidebar-text)' : '#475569'),
+                  borderLeft: sel ? '3px solid var(--invicta-green)' : '3px solid transparent',
+                }}
+                onMouseEnter={e => { if (!sel) (e.currentTarget as HTMLElement).style.background = 'var(--sidebar-item-hover)'; }}
+                onMouseLeave={e => { if (!sel) (e.currentTarget as HTMLElement).style.background = 'transparent'; }}>
+                <Icon size={18} />
+                {!trilhoCompacto && (
+                  <span className="text-[9px] font-medium leading-tight text-center" style={{ maxWidth: 56 }}>{t.curto}</span>
+                )}
+              </button>
+            );
+          })}
+
+          <button onClick={alternarTrilho} title={trilhoCompacto ? 'Mostrar nomes' : 'Recolher menu'}
+            className="flex items-center justify-center gap-1 w-full px-1 py-2 mt-auto flex-shrink-0 text-[9px] font-medium"
+            style={{ color: '#64748b', borderTop: '1px solid #0f2240' }}>
+            {trilhoCompacto ? <ChevronsRight size={14} /> : <><ChevronsLeft size={14} /> Recolher</>}
+          </button>
+        </nav>
+
+        {/* Painel do módulo — só existe quando há módulo aberto */}
+        {tabAtivo && (
+        <aside className="flex flex-col flex-shrink-0 relative" style={{ width: larguraPainel, background: 'var(--invicta-blue-dark)', borderRight: '1px solid #1a3a6b' }}>
+          <div className="flex items-center gap-2 px-3 py-2 flex-shrink-0" style={{ borderBottom: '1px solid #1a3a6b' }}>
+            {abaAtual && <abaAtual.icon size={14} style={{ color: 'var(--invicta-green)' }} />}
+            <h2 className="text-[11px] font-bold uppercase tracking-wider flex-1 truncate" style={{ color: '#fff' }}>
+              {abaAtual?.label ?? ''}
+            </h2>
+            <button onClick={() => setTab(null)} title="Fechar e ver o mapa inteiro"
+              className="p-1 rounded hover:bg-white/10 transition-colors">
+              <X size={14} style={{ color: 'var(--sidebar-text)' }} />
+            </button>
+          </div>
 
           <div className="flex-1 overflow-y-auto">
             {tabAtivo === 'resumo' && talhao && <ResumoTab talhao={talhao} fazenda={fazenda} safraNome={safraSel} cultura={cultura} />}
@@ -251,7 +369,14 @@ export function TalhaoPage({ id }: { id: string }) {
           <p className="text-center text-[10px] py-1.5 flex-shrink-0" style={{ color: '#334155', borderTop: '1px solid #0f2240' }}>
             INVICTA Platform · v{APP_VERSION}
           </p>
+
+          {/* Borda arrastável — a faixa é maior que o traço para o ponteiro
+              não precisar de pontaria de 1px. */}
+          <div onMouseDown={iniciarArrasto} title="Arraste para mudar a largura"
+            className="absolute top-0 right-0 h-full"
+            style={{ width: 6, marginRight: -3, cursor: 'col-resize', zIndex: 20 }} />
         </aside>
+        )}
 
         {/* Mapa do talhão */}
         <div className="flex-1 relative overflow-hidden">
