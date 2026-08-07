@@ -9,6 +9,8 @@
 import { emailUsuario } from '../auth';
 import { usarDadosSupabase, salvarDocSupabase, carregarDocsPorCampoSupabase, excluirDocSupabase, projetarDocsPorCampoSupabase } from '../supabaseData';
 import { comprimirGrid, descomprimirGrid, type Grid } from '../fertilidade';
+import { listar as bibListar, type ConteudoEquacao, type EstiloRecomendacao } from '../biblioteca';
+import { reidratarDoses, type RotulosEquacao } from './legendaViva';
 import type { DoseCalculada } from './aplicar';
 
 export interface Cenario {
@@ -58,12 +60,37 @@ export async function listarCenarios(talhaoId: string, safra?: string): Promise<
   return out.filter(c => !safra || c.safra === safra).sort((a, b) => b.geradoEm - a.geradoEm);
 }
 
-// Descomprime os grids das doses p/ visualizar/recolorir ao reabrir.
+// Rótulos ATUAIS de cada equação da Biblioteca (estilo/nome/produto), indexados
+// por id. NÃO filtra por `ativo`: desativar a equação não pode mudar a legenda de
+// um mapa já processado (mesmo critério de construirNumDe, em relatorioCenarios).
+// O estilo é clonado UMA vez por equação — as doses passam a compartilhar esse
+// clone, e nada a jusante toca no objeto que veio da Biblioteca.
+function rotulosAtuaisDasEquacoes(): Map<string, RotulosEquacao<EstiloRecomendacao>> {
+  const mapa = new Map<string, RotulosEquacao<EstiloRecomendacao>>();
+  for (const it of bibListar<ConteudoEquacao>('equacoes')) {
+    const e = it.conteudo?.estilo;
+    if (!e) continue;
+    mapa.set(it.id, {
+      estilo: { ...e, classes: e.classes.map(c => ({ ...c })) },
+      nome: it.nome,
+      produto: it.conteudo.produto,
+    });
+  }
+  return mapa;
+}
+
+// Descomprime os grids das doses p/ visualizar/recolorir ao reabrir, e re-hidrata
+// a LEGENDA (+ nome/produto) a partir da equação atual — ver legendaViva.ts. É
+// por aqui que passam TODOS os consumidores que desenham mapa de dose (PDF
+// oficial, relatório combinado, relatório da fazenda, JPG, shapefile, comparador
+// e o "reabrir" da tela), então a correção mora neste ponto único.
 export async function descomprimirCenario(cen: Cenario): Promise<Cenario> {
+  // Uma leitura da Biblioteca por CENÁRIO (fora do Promise.all) — nunca por dose.
+  const rotulos = rotulosAtuaisDasEquacoes();
   const doses = await Promise.all(cen.doses.map(async d => ({
     ...d, grid: d.grid?.comp === 'gz' ? await descomprimirGrid(d.grid as Grid) : d.grid,
   })));
-  return { ...cen, doses };
+  return { ...cen, doses: reidratarDoses(doses, rotulos) };
 }
 
 // Marca/desmarca o cenário como "Para uso" (oficial). Regrava o doc preservando

@@ -5,6 +5,7 @@
 // cores que não existiam na legenda. Roda: `npm run teste:faixas`.
 import assert from 'node:assert/strict';
 import { classesVisiveis, indiceClasse } from '../src/lib/recomendacao/faixas.ts';
+import { reidratarDoses, equacaoBaseDaDose, estiloUtilizavel } from '../src/lib/recomendacao/legendaViva.ts';
 
 let ok = 0, fail = 0;
 function t(nome, fn) {
@@ -89,6 +90,116 @@ t('classes fora de ordem/inválidas são ordenadas e filtradas', () => {
   ];
   const vis = classesVisiveis(bagunca, 0);
   assert.deepEqual(vis.map(c => c.limiteSuperior), [1000, 2000, 3000]);
+});
+
+// ── Legenda VIVA (re-hidratação dos rótulos da dose) ────────────────────────
+// Trava o bug de 07/08/2026: a dose guarda uma CÓPIA do estilo da equação, e o
+// relatório lia essa cópia — editar as faixas na Biblioteca nunca chegava ao
+// mapa do PDF. Estes casos moram aqui (e não num script próprio) porque é a
+// mesma regra de faixas da dose, e para não disputar o package.json.
+console.log('\nLegenda viva — rótulos vêm da equação atual\n');
+
+const NOVO = [
+  { cor: '#111111', limiteSuperior: 500 },
+  { cor: '#222222', limiteSuperior: 1500 },
+  { cor: '#333333', limiteSuperior: 2500 },
+];
+const rot = (nome, estilo, produto = 'KCL') => ({ nome, estilo: { classes: estilo }, produto });
+const dose = (equacaoId, extra = {}) => ({
+  equacaoId, estilo: { classes: CLASSES }, nomeEquacao: 'KCL antigo', produto: 'KCl',
+  doseMinima: 1000, custoHa: 42, ...extra,
+});
+
+t('equacaoBaseDaDose tira o sufixo de passada', () => {
+  assert.equal(equacaoBaseDaDose('eq1'), 'eq1');
+  assert.equal(equacaoBaseDaDose('eq1__ap2'), 'eq1');
+  assert.equal(equacaoBaseDaDose('eq1__ap12'), 'eq1');
+  assert.equal(equacaoBaseDaDose(''), '');
+});
+
+t('BUG: dose adota o estilo ATUAL da equação (era o snapshot congelado)', () => {
+  const [d] = reidratarDoses([dose('eq1')], new Map([['eq1', rot('KCL novo', NOVO)]]));
+  assert.deepEqual(d.estilo.classes.map(c => c.limiteSuperior), [500, 1500, 2500]);
+  assert.equal(d.nomeEquacao, 'KCL novo');
+  assert.equal(d.produto, 'KCL');
+});
+
+t('passadas (__apN) herdam o estilo da equação BASE', () => {
+  const atuais = new Map([['eq1', rot('KCL novo', NOVO)]]);
+  const out = reidratarDoses([dose('eq1__ap1'), dose('eq1__ap2'), dose('eq1__ap3')], atuais);
+  for (const d of out) assert.equal(d.estilo.classes[0].limiteSuperior, 500);
+});
+
+t('renomear preserva a marcação da passada', () => {
+  const d0 = dose('eq1__ap2', { nomeEquacao: 'KCL antigo — aplicação 2/3' });
+  const [d] = reidratarDoses([d0], new Map([['eq1', rot('KCL novo', NOVO)]]));
+  assert.equal(d.nomeEquacao, 'KCL novo — aplicação 2/3');
+});
+
+t('cada equação recebe o SEU estilo (não o da primeira dose)', () => {
+  const atuais = new Map([
+    ['eq1', rot('KCL novo', NOVO)],
+    ['eq2', rot('Calcário novo', [{ cor: '#999', limiteSuperior: 4200 }], 'Calcário')],
+  ]);
+  const out = reidratarDoses([dose('eq1'), dose('eq2')], atuais);
+  assert.equal(out[0].estilo.classes[0].limiteSuperior, 500);
+  assert.equal(out[1].estilo.classes[0].limiteSuperior, 4200);
+  assert.equal(out[1].produto, 'Calcário');
+});
+
+t('equação EXCLUÍDA → mantém o snapshot (mesma referência da dose)', () => {
+  const entrada = [dose('sumiu')];
+  const out = reidratarDoses(entrada, new Map([['eq1', rot('KCL novo', NOVO)]]));
+  assert.equal(out[0], entrada[0]);
+  assert.equal(out[0].estilo.classes[0].limiteSuperior, 1000);
+});
+
+t('estilo atual SEM classe finita → mantém o snapshot', () => {
+  for (const classes of [[], [{ cor: '#a', limiteSuperior: Number.NaN }], [{ cor: '#a', limiteSuperior: Infinity }]]) {
+    const [d] = reidratarDoses([dose('eq1')], new Map([['eq1', rot('X', classes)]]));
+    assert.equal(d.estilo.classes[0].limiteSuperior, 1000, `devia manter o snapshot com ${JSON.stringify(classes)}`);
+    assert.equal(d.nomeEquacao, 'KCL antigo');
+  }
+  assert.equal(estiloUtilizavel(undefined), false);
+  assert.equal(estiloUtilizavel({ classes: NOVO }), true);
+});
+
+t('cura ao contrário: snapshot inválido + atual válido → adota o atual', () => {
+  const [d] = reidratarDoses([dose('eq1', { estilo: { classes: [] } })], new Map([['eq1', rot('KCL novo', NOVO)]]));
+  assert.equal(d.estilo.classes[0].limiteSuperior, 500);
+});
+
+t('doseMinima e custos NÃO são re-hidratados (descrevem o cálculo)', () => {
+  const [d] = reidratarDoses([dose('eq1')], new Map([['eq1', rot('KCL novo', NOVO)]]));
+  assert.equal(d.doseMinima, 1000);
+  assert.equal(d.custoHa, 42);
+});
+
+t('não muta a entrada e preserva a ordem', () => {
+  const entrada = [dose('eq1'), dose('eq2')];
+  Object.freeze(entrada); entrada.forEach(Object.freeze);
+  const out = reidratarDoses(entrada, new Map([['eq1', rot('KCL novo', NOVO)]]));
+  assert.equal(entrada[0].estilo.classes[0].limiteSuperior, 1000, 'a dose original não pode mudar');
+  assert.equal(entrada[0].nomeEquacao, 'KCL antigo');
+  assert.deepEqual(out.map(d => d.equacaoId), ['eq1', 'eq2']);
+});
+
+t('lista vazia / mapa vazio não quebram', () => {
+  assert.deepEqual(reidratarDoses([], new Map()), []);
+  assert.equal(reidratarDoses([dose('eq1')], new Map())[0].nomeEquacao, 'KCL antigo');
+});
+
+t('PONTA A PONTA: depois de re-hidratar, mapa e tabela usam as faixas NOVAS', () => {
+  const [d] = reidratarDoses([dose('eq1')], new Map([['eq1', rot('KCL novo', NOVO)]]));
+  const vis = classesVisiveis(d.estilo.classes, d.doseMinima);   // mínima 1.000
+  const lims = vis.map(c => c.limiteSuperior);
+  assert.deepEqual(lims, [1500, 2500], 'a faixa até 500 não ocorre com mínima 1.000');
+  for (const v of [1000, 1400, 1500, 2400, 9999]) {
+    assert.equal(indiceClasse(v, lims), indiceClasse(v, lims), `mapa × tabela divergiram em v=${v}`);
+  }
+  assert.equal(corDe(vis, 1400), '#222222');
+  // Prova de que a regressão é detectável: com o snapshot antigo daria outra cor.
+  assert.equal(corDe(classesVisiveis(CLASSES, 1000), 1400), '#2f7fd1');
 });
 
 console.log(`\n${ok} ok, ${fail} falha(s)`);
