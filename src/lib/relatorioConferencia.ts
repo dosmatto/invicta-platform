@@ -13,7 +13,8 @@
 // Tudo dos dados LOCAIS já hidratados (mesma fonte dos KPIs do Início).
 
 import { getClientes, getFazendas, getTalhoes, getSafras, getPlantio, auditoriaCadastro } from './store';
-import { rotuloAno } from './periodo';
+import { rotuloAno, anoDaSafra } from './periodo';
+import { sanitizar } from './nomeExport';
 import { formatarColunaXlsx } from './formato';
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
@@ -133,7 +134,8 @@ export async function gerarConferenciaExcel(): Promise<{ talhoes: number; arquiv
   wsA['!cols'] = [{ wch: 38 }, { wch: 14 }];
   XLSX.utils.book_append_sheet(wb, wsA, 'Problemas');
 
-  const arquivo = `Conferencia_Cadastro_Ano_${safra.replace(/[^\w-]+/g, '-')}.xlsx`;
+  // Conferência do CADASTRO INTEIRO — não tem talhão nem fazenda, só o ano.
+  const arquivo = `CADASTRO_CONFER_${anoDaSafra(safra) ?? sanitizar(safra)}.xlsx`;
   XLSX.writeFile(wb, arquivo);
   return { talhoes: linhas.length, arquivo };
 }

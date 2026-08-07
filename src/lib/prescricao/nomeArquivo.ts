@@ -13,44 +13,18 @@
 // SEM acento, SEM espaço e SEM minúscula de propósito: monitor antigo trunca,
 // troca acento por lixo e às vezes ignora o arquivo por causa do nome.
 //
+// Este formato NÃO segue o padrão geral dos exportados (lib/nomeExport.ts, que
+// é talhão_TIPO_ano_época): ele já está em uso nos monitores e mudar o nome de
+// um arquivo que o operador reconhece de cor é convite para levar o errado. As
+// PRIMITIVAS, porém, são as mesmas — vêm de lá, para as duas convenções nunca
+// discordarem sobre o que é a sigla de uma fazenda.
+//
 // Módulo PURO. npm run teste:prescricao
 
 import { ehUnidadeSemente, type UnidadeDose } from './tipos.ts';
+import { siglaFazenda, numeroTalhao, soLetrasNum } from '../nomeExport.ts';
 
-/** Palavras que não entram na sigla — não distinguem uma fazenda de outra. */
-const GENERICAS = new Set([
-  'FAZENDA', 'FAZ', 'SITIO', 'CHACARA', 'ESTANCIA', 'AGROPECUARIA', 'GRANJA',
-  'DE', 'DA', 'DO', 'DAS', 'DOS', 'E',
-]);
-
-const semAcento = (s: string): string =>
-  (s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase();
-
-const soLetrasNum = (s: string): string => semAcento(s).replace(/[^A-Z0-9]/g, '');
-
-/**
- * Sigla da fazenda: a cadastrada, quando existe; senão as INICIAIS das palavras
- * que distinguem ("SERRA AZUL" → SA, "Fazenda Boa Vista" → BV).
- */
-export function siglaFazenda(nome: string, sigla?: string | null): string {
-  const s = soLetrasNum(sigla ?? '');
-  if (s) return s.slice(0, 4);
-  const palavras = semAcento(nome).split(/[^A-Z0-9]+/).filter(Boolean);
-  const uteis = palavras.filter(p => !GENERICAS.has(p));
-  const base = (uteis.length ? uteis : palavras).map(p => p[0]).join('');
-  return base.slice(0, 4) || 'FAZ';
-}
-
-/**
- * Número do talhão: o NÚMERO no fim do nome ("JCASA 03" → 03, "T-7" → 07).
- * Sem número, usa o nome enxugado — melhor um nome feio que dois arquivos
- * diferentes com o mesmo nome.
- */
-export function numeroTalhao(nome: string): string {
-  const m = semAcento(nome).match(/(\d+)\s*$/);
-  if (m) return m[1].padStart(2, '0');
-  return soLetrasNum(nome).slice(0, 6) || 'T';
-}
+export { siglaFazenda, numeroTalhao };
 
 /** Sufixo da régua: só quando NÃO é a população — é o que distingue dois
  *  arquivos da mesma prescrição exportados em unidades diferentes. */

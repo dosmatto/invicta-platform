@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import {
-  getSafras, getGrades, getImportacoesLab, getTalhoes, getPlantio,
+  getSafras, getGrades, getImportacoesLab, getTalhoes, getFazendas, getPlantio,
   getLegendas, getLegendasPorAtributo, ordenarLegendasDoAtributo, casasDecimaisVariavel,
   type ImportacaoLab, type GradeAmostragem,
 } from '@/lib/store';
@@ -720,6 +720,9 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
       await gerarRelatorioFertilidade({
         fazenda: nav.fazenda, produtor: nav.produtor, talhao: nav.talhao, safra: safraNome,
         cultura, areaHa: nav.area, municipio: local.municipio, estado: local.estado,
+        // só para o nome do arquivo (SA03_FERT_2026_EP01_SATCA)
+        siglaFazenda: getFazendas().find(f => f.id === nav.fazendaId)?.sigla ?? null,
+        ano: importacao?.ano ?? null, epoca: importacao?.epoca ?? null,
         atributo: legAtual.atributo, simbolo: legAtual.simbolo, metodo: legAtual.metodo ?? null,
         fonte: legAtual.fonte, unidade: legAtual.unidade, legenda: legAtual,
         dataInterpolacao: dataInterp, poligono, profundidades: profs, satelite: true, corLimite: '#ffffff',

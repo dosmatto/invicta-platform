@@ -8,7 +8,7 @@
 import type { jsPDF as JsPDF } from 'jspdf';
 import { capturarMapaZonas } from './capturaMapa';
 import { imagemParaPdf, reduzirLogo } from './pdfImagem';
-import type { DadosExportZonas } from './exportZonas';
+import { nomeArquivoBase, type DadosExportZonas } from './exportZonas';
 import { DATUM, desenharCabecalhoOficial, clipTexto, marcaInvicta } from './pdfCabecalho';
 
 const NAVY: [number, number, number] = [13, 33, 64];
@@ -185,6 +185,6 @@ export async function gerarRelatorioZonas(d: DadosExportZonas, opts: OpcoesRelat
   doc.text('INVICTA AP   |   Tecnologia que transforma dados em produtividade.', M + 26, H - 3.8);
   doc.setFont('helvetica', 'bold'); doc.text('www.invicta.agr.br', W - M, H - 3.8, { align: 'right' });
 
-  const nome = `zona_manejo_${(d.talhao || 'mapa')}`.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w-]+/g, '_');
-  doc.save(`${nome}.pdf`);
+  // Mesmo nome do SHP e do KML — uma função só (exportZonas.nomeArquivoBase).
+  doc.save(`${nomeArquivoBase(d)}.pdf`);
 }

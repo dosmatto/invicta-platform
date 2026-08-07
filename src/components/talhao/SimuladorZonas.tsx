@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useApp } from '@/context/AppContext';
-import { getTalhoes, getPadroesAmostragem, getPadroesElementos, getConfigEtiqueta, getSafras, getGrades, saveGrade, updateGrade, deleteGrade, marcarParaProcessar, ProfundidadeConfig, GradeAmostragem, PontoAmostragem } from '@/lib/store';
+import { getTalhoes, getFazendas, getPadroesAmostragem, getPadroesElementos, getConfigEtiqueta, getSafras, getGrades, saveGrade, updateGrade, deleteGrade, marcarParaProcessar, ProfundidadeConfig, GradeAmostragem, PontoAmostragem } from '@/lib/store';
+import { nomeExport } from '@/lib/nomeExport';
 import { rotuloAno, hojeSaoPauloISO, periodoDeData, rotuloEpoca } from '@/lib/periodo';
 import { classeZona, ORDEM_CLASSES } from '@/lib/zonas';
 import { pode } from '@/lib/empresa';
@@ -185,7 +186,12 @@ export function SimuladorZonas({ safraNome: safraProp }: { safraNome?: string } 
     }
     const cfg = getConfigEtiqueta();
     const layout = LAYOUTS_ETIQUETA.find(l => l.id === cfg.layoutId) ?? LAYOUTS_ETIQUETA[0];
-    gerarEtiquetasPDF(itens, layout, `${titulo}_zonas_etiquetas`, { dx: cfg.dx, dy: cfg.dy })
+    const faz = getFazendas().find(f => f.id === talhao?.fazendaId);
+    const nome = nomeExport({
+      fazenda: faz?.nome ?? '', siglaFazenda: faz?.sigla ?? null, talhao: titulo,
+      tipo: 'ETIQ', detalhe: 'zonas',
+    });
+    gerarEtiquetasPDF(itens, layout, nome, { dx: cfg.dx, dy: cfg.dy })
       .catch(err => console.error('Erro ao gerar etiquetas:', err));
   }
 
@@ -218,9 +224,13 @@ export function SimuladorZonas({ safraNome: safraProp }: { safraNome?: string } 
     if (!talhao?.zonasGeojson) return;
     let poligono: GeoJSON.FeatureCollection;
     try { poligono = JSON.parse(talhao.zonasGeojson) as GeoJSON.FeatureCollection; } catch { return; }
-    const input = { talhaoNome: talhao.nome || 'Talhao', poligono, pontos: g.pontos, poligonoTipo: 'zona' as const };
-    if (formato === 'kml') exportarKML(input, g.nome);
-    else exportarSHP(input, g.nome).catch(err => console.error('Erro ao exportar SHP:', err));
+    const faz = getFazendas().find(f => f.id === talhao.fazendaId);
+    const input = {
+      talhaoNome: talhao.nome || 'Talhao', poligono, pontos: g.pontos, poligonoTipo: 'zona' as const,
+      fazenda: faz?.nome ?? '', siglaFazenda: faz?.sigla ?? null, ano: g.ano, epoca: g.epoca,
+    };
+    if (formato === 'kml') exportarKML(input);
+    else exportarSHP(input).catch(err => console.error('Erro ao exportar SHP:', err));
   }
 
   return (

@@ -8,7 +8,8 @@ import type { Legenda } from './legendas';
 import { rampaVisualStops } from './legendas';
 import { capturarMapaFertilidade } from './capturaMapa';
 import { imagemParaPdf } from './pdfImagem';
-import { rotuloAno } from './periodo';
+import { rotuloAno, anoDaSafra } from './periodo';
+import { nomeExport } from './nomeExport';
 import { fmtHa } from './formato';
 
 type RGB = [number, number, number];
@@ -101,5 +102,8 @@ export async function gerarRelatorioComparacao(d: DadosComparacao): Promise<void
     doc.setTextColor(0);
   }
 
-  doc.save(`Comparacao_Prod_NDVI_${d.talhao}_${d.safra}.pdf`.replace(/[^\w.-]/g, '_'));
+  doc.save(`${nomeExport({
+    fazenda: d.fazenda, talhao: d.talhao, tipo: 'COMPARA',
+    ano: anoDaSafra(d.safra ?? ''), detalhe: 'prodndvi',
+  })}.pdf`);
 }

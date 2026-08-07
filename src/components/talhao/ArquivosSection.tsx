@@ -7,7 +7,9 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useApp } from '@/context/AppContext';
-import { getTalhoes } from '@/lib/store';
+import { getTalhoes, getFazendas } from '@/lib/store';
+import { anoDaSafra } from '@/lib/periodo';
+import { nomeExport } from '@/lib/nomeExport';
 import { extrairPoligono } from '@/lib/fertilidade';
 import { colorirDose } from '@/lib/raster';
 import { capturarMapaFertilidade } from '@/lib/capturaMapa';
@@ -61,10 +63,22 @@ export function ArquivosSection({ safraNome }: { safraNome?: string }) {
     return null;
   }, [nav.talhaoId]);
 
+  // SA03_RECOM_2026_CALCARIO. O nome do cenário/produto vira o detalhe — era ele
+  // sozinho no nome ("recomendacao-Calagem 2026.pdf"), com espaço e acento que o
+  // download engole mal e sem dizer de que talhão era.
+  function nomeRecom(c: Cenario, detalhe: string): string {
+    const t = getTalhoes().find(x => x.id === nav.talhaoId);
+    const f = t ? getFazendas().find(x => x.id === t.fazendaId) : undefined;
+    return nomeExport({
+      fazenda: f?.nome ?? '', siglaFazenda: f?.sigla ?? null, talhao: t?.nome ?? '',
+      tipo: 'RECOM', ano: anoDaSafra(c.safra ?? ''), detalhe,
+    });
+  }
+
   async function pdfOficial(c: Cenario) {
     const aba = typeof window !== 'undefined' ? window.open('', '_blank') : null;
     setBusy('pdf-' + c.id);
-    try { const full = await descomprimirCenario(c); const marc = { ...full, doses: full.doses.filter(d => d.usar) }; const blob = await montarBookOficial([marc]); abrirOuBaixar(blob, aba, `recomendacao-${c.nome}.pdf`); }
+    try { const full = await descomprimirCenario(c); const marc = { ...full, doses: full.doses.filter(d => d.usar) }; const blob = await montarBookOficial([marc]); abrirOuBaixar(blob, aba, `${nomeRecom(c, c.nome)}.pdf`); }
     catch (e) { if (aba) aba.close(); alert('Falha ao gerar o PDF: ' + (e instanceof Error ? e.message : String(e))); }
     finally { setBusy(''); }
   }
@@ -76,7 +90,7 @@ export function ArquivosSection({ safraNome }: { safraNome?: string }) {
       const d = full.doses.find(x => x.equacaoId === eqId); if (!d) return;
       const png = colorirDose(d.grid, d.estilo, d.doseMinima).dataUrl;
       const comp = await capturarMapaFertilidade({ rasterPng: png, bounds: d.bounds, poligono, valores: VAZIO, satelite: true, corLimite: '#ffffff', larguraPx: 1600, alturaPx: 1120 });
-      baixar(await pngParaJpeg(comp), `mapa-${c.nome}-${(d.produto || d.nomeEquacao)}.jpg`);
+      baixar(await pngParaJpeg(comp), `${nomeRecom(c, d.produto || d.nomeEquacao)}.jpg`);
     } catch (e) { alert('Falha ao gerar a imagem: ' + (e instanceof Error ? e.message : String(e))); }
     finally { setBusy(''); }
   }

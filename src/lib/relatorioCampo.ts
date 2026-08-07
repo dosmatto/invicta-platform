@@ -11,6 +11,8 @@
 
 import type { jsPDF as JsPDF } from 'jspdf';
 import { imagemParaPdf, reduzirLogo, type ImagemPdf } from './pdfImagem';
+import type { Epoca } from './periodo';
+import { nomeExport, periodoParaNome } from './nomeExport';
 
 const NAVY: [number, number, number] = [13, 33, 64];
 const GRAY: [number, number, number] = [100, 116, 139];
@@ -60,6 +62,10 @@ export interface DadosRelatorioCampo {
   grade: string;
   pontos: PontoCampo[];
   logoClienteUrl?: string | null;
+  // Só para o NOME DO ARQUIVO (lib/nomeExport) — período da grade.
+  siglaFazenda?: string | null;
+  ano?: number | null;
+  epoca?: Epoca | null;
 }
 
 const W = 210, H = 297, M = 12;
@@ -209,7 +215,9 @@ export async function gerarCadernoCampo(d: DadosRelatorioCampo): Promise<void> {
     doc.text('Nenhum registro de campo nesta grade.', W / 2, TOPO + 20, { align: 'center' });
   }
 
-  const nome = `caderno_campo_${d.talhao || 'talhao'}_${d.ciclo || ''}`
-    .normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w-]+/g, '_');
-  doc.save(`${nome}.pdf`);
+  const per = periodoParaNome({ ano: d.ano, epoca: d.epoca, safra: d.ciclo });
+  doc.save(`${nomeExport({
+    fazenda: d.fazenda, siglaFazenda: d.siglaFazenda, talhao: d.talhao,
+    tipo: 'CAMPO', ano: per.ano, epoca: per.epoca,
+  })}.pdf`);
 }

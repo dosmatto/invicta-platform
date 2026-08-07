@@ -54,6 +54,9 @@ export interface LinhaInternaExport {
   geometry: GeoJSON.LineString | GeoJSON.MultiLineString;
 }
 
+// Extensão .ts explícita: este módulo roda em node puro no teste (teste:zonas).
+import { nomeExport, periodoParaNome } from './nomeExport.ts';
+
 export interface DadosExportZonas {
   idMapa: string;
   nomeMapa: string;
@@ -426,8 +429,16 @@ export async function shpFiles(fc: GeoJSON.FeatureCollection, tipo: 'polygon' | 
   return out;
 }
 
-export const nomeArquivoBase = (d: DadosExportZonas): string =>
-  `zona_manejo_${(d.talhao || 'mapa')}`.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w-]+/g, '_').replace(/_+$/g, '');
+// Nome no padrão da casa: SA03_ZONAS_2026_EP02. A época sai da DATA DO MAPA —
+// zonas não têm dataReferencia como o laudo, mas a data em que o mapa foi feito
+// é o período a que ele se refere. O SHP, o KML e o PDF usam esta função (antes
+// eram duas expressões independentes que já haviam divergido num `replace`).
+export const nomeArquivoBase = (d: DadosExportZonas): string => {
+  const per = periodoParaNome({ data: d.dataMapa, safra: d.ano });
+  return nomeExport({
+    fazenda: d.fazenda, talhao: d.talhao, tipo: 'ZONAS', ano: per.ano, epoca: per.epoca,
+  });
+};
 
 export async function exportarSHPZonas(d: DadosExportZonas): Promise<Blob> {
   const { default: JSZip } = await import('jszip');

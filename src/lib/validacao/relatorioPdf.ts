@@ -25,6 +25,8 @@ import { COR_FAIXA, ROTULO_FAIXA, type Indicador } from './tipos.ts';
 import { linhaZonaPdf, producaoTotalT, paraPdf, ehProdutividade, numRel, METODOLOGIA } from './textoPdf.ts';
 import type { RelatorioCompleto } from './validar.ts';
 import type { Sugestao } from './sugestao.ts';
+import { anoDaSafra } from '../periodo.ts';
+import { nomeExport } from '../nomeExport.ts';
 
 const NAVY: [number, number, number] = [13, 33, 64];
 const GRAY: [number, number, number] = [100, 116, 139];
@@ -369,8 +371,10 @@ export async function gerarRelatorioValidacao(d: DadosRelatorioValidacao): Promi
 
   rodape(2);
 
-  const nome = `validacao_${(ident.talhao || 'talhao')}_${rel.cenarioNome}`
-    .normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w-]+/g, '_').slice(0, 70);
+  const nome = nomeExport({
+    fazenda: ident.fazenda, talhao: ident.talhao, tipo: 'VALID',
+    ano: anoDaSafra(ident.ano ?? ''), detalhe: rel.cenarioNome,
+  });
   doc.save(`${nome}.pdf`);
   return `${nome}.pdf`;
 }

@@ -12,7 +12,8 @@ import { rampaVisualStops, valorParaPosicaoVisual, dominioDaLegenda } from './le
 import { capturarMapaFertilidade } from './capturaMapa';
 import { imagemParaPdf, reduzirLogo } from './pdfImagem';
 import { formatarValorVariavel, variavelDeAnalise } from './store';
-import { rotuloAno } from './periodo';
+import { rotuloAno, type Epoca } from './periodo';
+import { nomeExport, periodoParaNome } from './nomeExport';
 import { DATUM, desenharCabecalhoOficial, marcaInvicta } from './pdfCabecalho';
 
 export interface ProfundidadeRel {
@@ -25,6 +26,11 @@ export interface ProfundidadeRel {
 export interface DadosRelatorioFert {
   fazenda: string; produtor: string; talhao: string; safra: string;
   cultura: string; areaHa: number; municipio: string; estado: string;
+  // Só para o NOME DO ARQUIVO (lib/nomeExport): sigla da fazenda e o período do
+  // laudo. Opcionais — sem eles o nome sai sem o segmento, nunca com "undefined".
+  siglaFazenda?: string | null;
+  ano?: number | null;
+  epoca?: Epoca | null;
   atributo: string; simbolo: string; metodo: string | null; fonte: string; unidade: string;
   legenda: Legenda;
   dataInterpolacao: string;        // "MM/AAAA"
@@ -375,11 +381,23 @@ async function gerarDoc(paginas: DadosRelatorioFert[], nomeArquivo: string, comC
   }
 }
 
+// Nome do arquivo no padrão da casa: SA03_FERT_2026_EP01_SATCA.
+// O detalhe é o atributoId, NÃO a sigla: "K%" e "K" viram os dois "K" depois do
+// saneamento, e aí Potássio e Saturação por Potássio brigam pelo mesmo arquivo.
+export function nomeArquivoFert(d: DadosRelatorioFert, tipo: 'FERT' | 'BOOK'): string {
+  const per = periodoParaNome({ ano: d.ano, epoca: d.epoca, safra: d.safra });
+  return nomeExport({
+    fazenda: d.fazenda, siglaFazenda: d.siglaFazenda, talhao: d.talhao, tipo,
+    ano: per.ano, epoca: per.epoca,
+    detalhe: tipo === 'FERT' ? d.legenda.atributoId : undefined,
+  });
+}
+
 // 1 elemento (usado na seção Fertilidade).
 export async function gerarRelatorioFertilidade(d: DadosRelatorioFert): Promise<void> {
   const erro = validarPagina(d);
   if (erro) throw new Error(erro);
-  await gerarDoc([d], `Fertilidade_${d.talhao}_${d.atributo}`);
+  await gerarDoc([d], nomeArquivoFert(d, 'FERT'));
 }
 
 // Vários elementos num PDF único (book) com CAPA (usado pelo Gerador de Relatórios). Retorna o Blob.

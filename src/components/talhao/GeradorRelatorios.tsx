@@ -15,11 +15,23 @@ import { carregarContextoRelatorio, montarPaginas, type ContextoRelatorio } from
 import { extrairPoligono } from '@/lib/fertilidade';
 import { gerarRelatorioCombinado } from '@/lib/relatorioCombinado';
 import { rotuloAno } from '@/lib/periodo';
+import { nomeExport, periodoParaNome } from '@/lib/nomeExport';
 import { listarCenarios, descomprimirCenario, type Cenario } from '@/lib/recomendacao/cenarios';
 import { salvarRelatorio, listarRelatorios, excluirRelatorio, type RegistroRelatorio } from '@/lib/relatoriosArquivo';
 import { emailUsuario } from '@/lib/auth';
 import { pode } from '@/lib/empresa';
 import { FileDown, Loader2, ChevronUp, ChevronDown, AlertTriangle, CheckSquare, Square, Satellite, Hash, History, Trash2, ExternalLink, Wand2, FlaskConical } from 'lucide-react';
+
+// Nome do book no padrão da casa: SA03_BOOK_2026_EP01. Sem contexto carregado
+// (relatório só de recomendação, reaberto do histórico), cai no nome do talhão
+// e no ano da safra — sem época, que só o laudo tem.
+function nomeBook(ctx: ContextoRelatorio | null, talhao: string, safra: string): string {
+  const per = periodoParaNome({ ano: ctx?.ano, epoca: ctx?.epoca, safra });
+  return nomeExport({
+    fazenda: ctx?.fazenda ?? '', siglaFazenda: ctx?.siglaFazenda, talhao,
+    tipo: 'BOOK', ano: per.ano, epoca: per.epoca,
+  });
+}
 
 export function GeradorRelatorios({ safraNome }: { safraNome?: string } = {}) {
   const { nav, uploadedGeo } = useApp();
@@ -133,7 +145,7 @@ export function GeradorRelatorios({ safraNome }: { safraNome?: string } = {}) {
       const { paginas } = await gerarRelatorioCombinado({
         recomendacao: usaRec ? recDescompr : undefined,
         fertilidade: usaFert ? paginasFert : undefined,
-        nomeArquivo: `Relatorio_${nomeTalhao}_${safra}`,
+        nomeArquivo: nomeBook(ctx, nomeTalhao, safra),
         somenteUsarRec: soMarcadas,
         resumoRec: soMarcadas,
       });
@@ -169,9 +181,11 @@ export function GeradorRelatorios({ safraNome }: { safraNome?: string } = {}) {
       // Fertilidade
       let paginasFert: ReturnType<typeof montarPaginas> = [];
       let nomeTalhao = nav.talhao;
+      let ctxNome: ContextoRelatorio | null = null;   // p/ o nome do arquivo
       if (reg.nuts.length > 0) {
         const c = (mesmoCtx && ctx) ? ctx : await carregarContextoRelatorio(reg.talhaoId, reg.safra, extrairPoligono(uploadedGeoRef.current));
         nomeTalhao = c.talhao;
+        ctxNome = c;
         // `!== false`: registro antigo, gravado antes destes campos existirem,
         // vinha com undefined e reabria o relatório SEM satélite e SEM valores.
         paginasFert = montarPaginas(c, reg.nuts, { satelite: reg.satelite !== false, valores: reg.valores !== false });
@@ -189,7 +203,7 @@ export function GeradorRelatorios({ safraNome }: { safraNome?: string } = {}) {
       await gerarRelatorioCombinado({
         recomendacao: recDescompr.length ? recDescompr : undefined,
         fertilidade: paginasFert.length ? paginasFert : undefined,
-        nomeArquivo: `Relatorio_${nomeTalhao}_${reg.safra}`,
+        nomeArquivo: nomeBook(ctxNome, nomeTalhao, reg.safra),
       });
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Falha ao reabrir o relatório.');

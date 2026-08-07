@@ -9,7 +9,8 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useApp } from '@/context/AppContext';
-import { getTalhoes, getLegendas, getMdes, saveMde, setMdeOficial, deleteMde, getMdeCamadasTopo, type MdeTalhao } from '@/lib/store';
+import { getTalhoes, getFazendas, getLegendas, getMdes, saveMde, setMdeOficial, deleteMde, getMdeCamadasTopo, type MdeTalhao } from '@/lib/store';
+import { nomeExport } from '@/lib/nomeExport';
 import { extrairPoligono, coordsFromBounds, exportarGeotiff, gradienteCss, type Grid } from '@/lib/fertilidade';
 import { colorirGridComLegenda, colorirGrid } from '@/lib/raster';
 import { tocarBackend } from '@/lib/interpUrl';
@@ -316,6 +317,17 @@ export function AltimetriaSection() {
     } finally { setGerandoPdf(false); }
   }
 
+  // SA03_MDE_ALTITUDE, SA03_MDE_TWI… Relevo é atributo PERSISTENTE do terreno:
+  // não leva ano nem época, e o nome da camada é o detalhe.
+  function nomeMde(camada: string): string {
+    const t = getTalhoes().find(x => x.id === nav.talhaoId);
+    const f = t ? getFazendas().find(x => x.id === t.fazendaId) : undefined;
+    return nomeExport({
+      fazenda: f?.nome ?? '', siglaFazenda: f?.sigla ?? null, talhao: t?.nome ?? '',
+      tipo: 'MDE', detalhe: camada,
+    });
+  }
+
   // GeoTIFF de uma camada GRID da análise (aspecto/tpi/twi/ls/…).
   async function baixarGeotiffAnalise(key: string) {
     if (!analise || exportando) return;
@@ -323,8 +335,7 @@ export function AltimetriaSection() {
     if (!g) return;
     setExportando(key);
     try {
-      const nomeT = getTalhoes().find(t => t.id === nav.talhaoId)?.nome ?? 'talhao';
-      const base = `${nomeT}_${key}`.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w.-]+/g, '_');
+      const base = nomeMde(key);
       const blob = await exportarGeotiff(g, analise.bounds, `${base}.tif`);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -344,8 +355,7 @@ export function AltimetriaSection() {
     if (!grid) return;
     setExportando(qual);
     try {
-      const nomeT = getTalhoes().find(t => t.id === nav.talhaoId)?.nome ?? 'talhao';
-      const base = `${nomeT}_${qual === 'alt' ? 'altitude' : 'declividade'}`.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w.-]+/g, '_');
+      const base = nomeMde(qual === 'alt' ? 'altitude' : 'declividade');
       const blob = await exportarGeotiff(grid, src.bounds, `${base}.tif`);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');

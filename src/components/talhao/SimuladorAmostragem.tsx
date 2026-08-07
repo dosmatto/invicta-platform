@@ -10,6 +10,7 @@ import { gerarEtiquetasPDF, itensDeGrade, LAYOUTS_ETIQUETA } from '@/lib/etiquet
 import { exportarRelatorioGradeXlsx } from '@/lib/relatorioGrade';
 import { getFazendas } from '@/lib/store';
 import { pode } from '@/lib/empresa';
+import { nomeExport } from '@/lib/nomeExport';
 import { AlertTriangle, RotateCcw, Shuffle, Layers, MapPin, Save, Trash2, CheckCircle2, Circle, Pencil, Move, Plus, Eraser, X, Check, Download, Printer, Eye, FileSpreadsheet } from 'lucide-react';
 
 // PRNG simples para shuffle determinístico
@@ -262,9 +263,13 @@ export function SimuladorAmostragem({ safraNome: safraProp }: { safraNome?: stri
 
   function exportar(g: GradeAmostragem, formato: 'kml' | 'shp') {
     if (!uploadedGeo) return;
-    const input = { talhaoNome: nav.talhao || 'Talhao', poligono: uploadedGeo, pontos: g.pontos };
-    if (formato === 'kml') exportarKML(input, g.nome);
-    else exportarSHP(input, g.nome).catch(err => console.error('Erro ao exportar SHP:', err));
+    const faz = getFazendas().find(f => f.id === nav.fazendaId);
+    const input = {
+      talhaoNome: nav.talhao || 'Talhao', poligono: uploadedGeo, pontos: g.pontos,
+      fazenda: nav.fazenda, siglaFazenda: faz?.sigla ?? null, ano: g.ano, epoca: g.epoca,
+    };
+    if (formato === 'kml') exportarKML(input);
+    else exportarSHP(input).catch(err => console.error('Erro ao exportar SHP:', err));
   }
 
   // Conferência da grade em Excel: mesmo formato da planilha que já vai ao
@@ -280,6 +285,7 @@ export function SimuladorAmostragem({ safraNome: safraProp }: { safraNome?: stri
       produtor: nav.produtor || '—',
       municipio: faz?.municipio || '—',
       fazenda: nav.fazenda || '—',
+      siglaFazenda: faz?.sigla ?? null,
       talhao: nav.talhao || '—',
       analisePorProfundidade,
     }, g).catch(err => console.error('Erro ao gerar conferência da grade:', err));
@@ -288,7 +294,12 @@ export function SimuladorAmostragem({ safraNome: safraProp }: { safraNome?: stri
   function gerarEtiquetas(g: GradeAmostragem) {
     const cfg = getConfigEtiqueta();
     const layout = LAYOUTS_ETIQUETA.find(l => l.id === cfg.layoutId) ?? LAYOUTS_ETIQUETA[0];
-    gerarEtiquetasPDF(itensDeGrade(nav.talhao || 'Talhao', g), layout, `${nav.talhao || 'talhao'}_${g.nome}_etiquetas`, { dx: cfg.dx, dy: cfg.dy })
+    const faz = getFazendas().find(f => f.id === nav.fazendaId);
+    const nome = nomeExport({
+      fazenda: nav.fazenda ?? '', siglaFazenda: faz?.sigla ?? null, talhao: nav.talhao ?? '',
+      tipo: 'ETIQ', ano: g.ano, epoca: g.epoca,
+    });
+    gerarEtiquetasPDF(itensDeGrade(nav.talhao || 'Talhao', g), layout, nome, { dx: cfg.dx, dy: cfg.dy })
       .catch(err => console.error('Erro ao gerar etiquetas:', err));
   }
 

@@ -18,6 +18,7 @@ import { ehAuxiliar20mPerdido } from './recomendacao/escolhaMapa';
 import { carregarNdviSalvos } from './meap/gerar';
 import { municipioDaFazenda } from './geocodeMunicipio';
 import { centroideGeom } from './recomendacao/zonasGrid';
+import type { Epoca } from './periodo';
 import type { DadosRelatorioFert, ProfundidadeRel } from './relatorioFertilidade';
 
 // Ponto representativo do talhão para o geocoding reverso do município.
@@ -35,6 +36,11 @@ export interface ElementoDisponivel { nut: string; atributo: string; simbolo: st
 export interface ContextoRelatorio {
   fazenda: string; produtor: string; talhao: string; safra: string; cultura: string;
   areaHa: number; municipio: string; estado: string;
+  // Para o NOME DO ARQUIVO (lib/nomeExport): a sigla cadastrada da fazenda e o
+  // PERÍODO do laudo (ano + época, derivados da Data de referência pelo store).
+  siglaFazenda: string | null;
+  ano: number | null;
+  epoca: Epoca | null;
   poligono: GeoJSON.Polygon | GeoJSON.MultiPolygon | null;
   dataInterpolacao: string;
   elementos: ElementoDisponivel[];
@@ -216,6 +222,8 @@ export async function carregarContextoRelatorio(
     fazenda: fazenda?.nome ?? '', produtor: cliente?.nome ?? '', talhao: talhao?.nome ?? '', safra,
     cultura: getPlantio(talhaoId, safra), areaHa: talhao?.areaHa ?? 0,
     municipio: local.municipio, estado: local.estado,
+    siglaFazenda: fazenda?.sigla ?? null,
+    ano: importacao?.ano ?? null, epoca: importacao?.epoca ?? null,
     poligono, dataInterpolacao, elementos, mapas, legendaPorNut, valoresDe, pontosGrade,
   };
 }
@@ -257,6 +265,7 @@ export function montarPaginas(ctx: ContextoRelatorio, nutsSelecionados: string[]
     paginas.push({
       fazenda: ctx.fazenda, produtor: ctx.produtor, talhao: ctx.talhao, safra: ctx.safra,
       cultura: ctx.cultura, areaHa: ctx.areaHa, municipio: ctx.municipio, estado: ctx.estado,
+      siglaFazenda: ctx.siglaFazenda, ano: ctx.ano, epoca: ctx.epoca,
       atributo: leg.atributo, simbolo: leg.simbolo, metodo: leg.metodo ?? null, fonte: leg.fonte, unidade: leg.unidade,
       legenda: leg, dataInterpolacao: ctx.dataInterpolacao, poligono: ctx.poligono,
       profundidades, satelite: config.satelite, corLimite: '#ffffff', logoClienteUrl: config.logoClienteUrl ?? null,

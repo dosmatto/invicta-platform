@@ -14,6 +14,8 @@ import { hexToRgb } from '../legendas';
 import { rotuloAno } from '../periodo';
 import { extrairPoligono, decodeGrid } from '../fertilidade';
 import { getTalhoes, getFazendas, getClientes, getPlantio } from '../store';
+import { anoDaSafra } from '../periodo';
+import { nomeExport } from '../nomeExport';
 import { listar as bibListar, type ConteudoEquacao } from '../biblioteca';
 import type { Cenario } from './cenarios';
 import { listarCenarios, descomprimirCenario } from './cenarios';
@@ -47,7 +49,13 @@ export async function gerarPdfComparador(cenarios: Cenario[]): Promise<void> {
   const aba = typeof window !== 'undefined' ? window.open('', '_blank') : null;
   try {
     const blob = await montarPdfComparador(cenarios);
-    abrirOuBaixar(blob, aba, `comparador-${cenarios[0]?.safra || 'cenarios'}.pdf`);
+    // O comparador cruza cenários de UM talhão — o nome sai dele.
+    const tal = getTalhoes().find(t => t.id === cenarios[0]?.talhaoId);
+    const faz = tal ? getFazendas().find(f => f.id === tal.fazendaId) : undefined;
+    abrirOuBaixar(blob, aba, nomeExport({
+      fazenda: faz?.nome ?? '', siglaFazenda: faz?.sigla ?? null, talhao: tal?.nome ?? '',
+      tipo: 'COMPARA', ano: anoDaSafra(cenarios[0]?.safra ?? ''), detalhe: 'cenarios',
+    }) + '.pdf');
   } catch (e) {
     if (aba) aba.close();
     throw e;
@@ -615,7 +623,10 @@ export async function gerarRelatorioRecomendacaoFazenda(fazendaId: string, safra
   try {
     const blob = await montarRelatorioRecomendacaoFazenda(fazendaId, safra);
     const faz = getFazendas().find(f => f.id === fazendaId);
-    abrirOuBaixar(blob, aba, `Recomendacao_${(faz?.nome ?? 'fazenda')}_${safra}`.replace(/[^\w.\-]+/g, '_') + '.pdf');
+    abrirOuBaixar(blob, aba, nomeExport({
+      fazenda: faz?.nome ?? '', siglaFazenda: faz?.sigla ?? null, tipo: 'RECOM',
+      ano: anoDaSafra(safra),
+    }) + '.pdf');
   } catch (e) {
     const msg = e instanceof Error ? (e.stack ?? e.message) : String(e);
     console.error('[relatorio-fazenda] falha:', e);
@@ -662,5 +673,7 @@ export async function gerarRecomendacaoFazendaExcel(fazendaId: string, safra: st
   ws['!cols'] = [{ wch: 16 }, { wch: 10 }, { wch: 42 }, { wch: 16 }, { wch: 14 }, { wch: 2 }, { wch: 18 }, { wch: 16 }, { wch: 14 }];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Recomendação');
-  XLSX.writeFile(wb, `Recomendacao_${faz.nome}_${safra}`.replace(/[^\w.\-]+/g, '_') + '.xlsx');
+  XLSX.writeFile(wb, nomeExport({
+    fazenda: faz.nome, siglaFazenda: faz.sigla ?? null, tipo: 'RECOM', ano: anoDaSafra(safra),
+  }) + '.xlsx');
 }

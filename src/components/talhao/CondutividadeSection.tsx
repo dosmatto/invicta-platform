@@ -10,10 +10,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import {
-  getTalhoes, getLegendas, getCondutividade, saveCondutividade, deleteCondutividade,
+  getTalhoes, getFazendas, getLegendas, getCondutividade, saveCondutividade, deleteCondutividade,
   setCondutividadeOficial, setProfundidadeOficialCondutividade, addRodadaCondutividade,
   type LevantamentoCondutividade, type RodadaCondutividade,
 } from '@/lib/store';
+import { nomeExport } from '@/lib/nomeExport';
 import {
   interpolar, rampaDaLegenda, gradienteCss, coordsFromBounds, extrairPoligono,
   comprimirGrid, descomprimirGrid, exportarGeotiff, type RespInterp,
@@ -386,11 +387,15 @@ export function CondutividadeSection() {
     if (!c?.resp.grid || exportando) return;
     setExportando(true);
     try {
-      const talhaoNome = getTalhoes().find(t => t.id === nav.talhaoId)?.nome ?? 'talhao';
+      // SA03_COND_CEA020 — condutividade é atributo persistente do solo: sem
+      // ano nem época; o detalhe é o símbolo + a profundidade.
+      const t = getTalhoes().find(x => x.id === nav.talhaoId);
+      const f = t ? getFazendas().find(x => x.id === t.fazendaId) : undefined;
       const simb = camadaSel?.legenda.simbolo ?? legenda?.simbolo ?? 'CEa';
-      const base = `${talhaoNome}_${simb}_${profundidade}`
-        .normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w.-]+/g, '_');
-      const nomeArq = `${base || 'condutividade'}.tif`;
+      const nomeArq = `${nomeExport({
+        fazenda: f?.nome ?? '', siglaFazenda: f?.sigla ?? null, talhao: t?.nome ?? '',
+        tipo: 'COND', detalhe: `${simb}${profundidade}`,
+      })}.tif`;
       const blob = await exportarGeotiff(c.resp.grid, c.resp.bounds, nomeArq);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');

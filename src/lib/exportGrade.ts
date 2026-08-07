@@ -4,12 +4,20 @@
 // Inclui os pontos numerados + o polígono do talhão.
 
 import type { PontoAmostragem } from './store';
+import type { Epoca } from './periodo';
+import { nomeExport } from './nomeExport';
 
 export interface ExportInput {
   talhaoNome: string;                    // ex: "FRNFI 21"
   poligono: GeoJSON.FeatureCollection;   // geometria do talhão (ou polígonos das zonas)
   pontos: PontoAmostragem[];
   poligonoTipo?: 'talhao' | 'zona';      // 'zona' nomeia cada polígono por id/classe
+  // Só para o NOME DO ARQUIVO (lib/nomeExport) — opcionais: sem eles o nome sai
+  // sem o segmento correspondente, nunca com "undefined".
+  fazenda?: string;
+  siglaFazenda?: string | null;
+  ano?: number | null;
+  epoca?: Epoca | null;
 }
 
 const PRJ_WGS84 =
@@ -102,15 +110,21 @@ function baixarBlob(blob: Blob, nomeArquivo: string) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-const nomeBase = (input: ExportInput, grade: string) =>
-  `${input.talhaoNome}_${grade}`.replace(/[^\w\-]+/g, '_');
+// SA03_GRADE_2026_EP01. O nome da grade ("Grade 1") NÃO entra: ele é livre e
+// repetido entre talhões — quem distingue duas grades do mesmo talhão é o
+// período, que agora está no nome.
+const nomeBase = (input: ExportInput) =>
+  nomeExport({
+    fazenda: input.fazenda ?? '', siglaFazenda: input.siglaFazenda, talhao: input.talhaoNome,
+    tipo: 'GRADE', ano: input.ano, epoca: input.epoca,
+  });
 
-export function exportarKML(input: ExportInput, grade: string) {
+export function exportarKML(input: ExportInput) {
   const kml = gerarKML(input);
-  baixarBlob(new Blob([kml], { type: 'application/vnd.google-earth.kml+xml' }), `${nomeBase(input, grade)}.kml`);
+  baixarBlob(new Blob([kml], { type: 'application/vnd.google-earth.kml+xml' }), `${nomeBase(input)}.kml`);
 }
 
-export async function exportarSHP(input: ExportInput, grade: string) {
+export async function exportarSHP(input: ExportInput) {
   const shpwrite = await import('@mapbox/shp-write');
   const geojson = geojsonGrade(input);
   const blob = await shpwrite.zip<'blob'>(geojson, {
@@ -119,5 +133,5 @@ export async function exportarSHP(input: ExportInput, grade: string) {
     prj: PRJ_WGS84,
     types: { point: 'pontos_amostragem', polygon: input.poligonoTipo === 'zona' ? 'zonas' : 'talhao' },
   });
-  baixarBlob(blob, `${nomeBase(input, grade)}_shp.zip`);
+  baixarBlob(blob, `${nomeBase(input)}_shp.zip`);
 }

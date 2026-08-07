@@ -7,6 +7,7 @@ import { capturarMapaFertilidade } from './capturaMapa';
 import { imagemParaPdf, reduzirLogo } from './pdfImagem';
 import { rampaVisualStops, type Legenda } from './legendas';
 import { rotuloAno } from './periodo';
+import { nomeExport, periodoParaNome } from './nomeExport';
 
 export interface MapaRelNdvi {
   titulo: string;                                      // "NDVI · Sentinel-2 · 12/07/2026"
@@ -261,6 +262,13 @@ export async function gerarRelatorioNdvi(d: DadosRelatorioNdvi): Promise<void> {
     desenharRodapeNdvi(doc, `${totalPag}/${totalPag}`);
   }
 
-  const nome = `Satelite_${d.talhao.replace(/\s+/g, '')}_${new Date().toISOString().slice(0, 10)}.pdf`;
-  doc.save(nome);
+  // SA03_NDVI_2026_EP02. O período sai da data da IMAGEM mais recente do
+  // relatório — é a ela que o mapa se refere, não ao dia em que se gerou o PDF
+  // (o nome antigo carimbava "hoje" e dois relatórios do mesmo talhão gerados em
+  // dias diferentes pareciam ser de safras diferentes).
+  const dataMaisRecente = d.mapas.map(m => m.data).filter(Boolean).sort().pop() ?? null;
+  const per = periodoParaNome({ data: dataMaisRecente, safra: d.safra });
+  doc.save(`${nomeExport({
+    fazenda: d.fazenda, talhao: d.talhao, tipo: 'NDVI', ano: per.ano, epoca: per.epoca,
+  })}.pdf`);
 }

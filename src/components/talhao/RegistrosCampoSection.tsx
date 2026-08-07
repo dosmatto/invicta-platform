@@ -18,6 +18,7 @@ import {
 } from '@/lib/coleta';
 import { gerarCadernoCampo, type PontoCampo } from '@/lib/relatorioCampo';
 import { fmtMax2 as fmt } from '@/lib/formato';
+import { nomeExport, periodoParaNome } from '@/lib/nomeExport';
 import {
   RefreshCw, Loader2, FileText, Table2, Camera, MapPin, User, Clock,
   ChevronDown, ChevronRight, StickyNote, AlertTriangle,
@@ -100,10 +101,13 @@ export function RegistrosCampoSection({ safraNome }: { safraNome?: string } = {}
     const t = getTalhoes().find(x => x.id === nav.talhaoId);
     const f = getFazendas().find(x => x.id === t?.fazendaId);
     const c = getClientes().find(x => x.id === f?.clienteId);
+    const g = grades.find(x => x.id === gradeAtual);
     return {
       talhao: t?.nome ?? '', fazenda: f?.nome ?? '', produtor: c?.nome ?? '',
-      grade: grades.find(g => g.id === gradeAtual)?.nome ?? '',
+      grade: g?.nome ?? '',
       logoClienteUrl: (c as { logoUrl?: string } | undefined)?.logoUrl ?? null,
+      // só para o nome do arquivo (SA03_CAMPO_2026_EP01)
+      siglaFazenda: f?.sigla ?? null, ano: g?.ano ?? null, epoca: g?.epoca ?? null,
     };
   }
 
@@ -159,8 +163,11 @@ export function RegistrosCampoSection({ safraNome }: { safraNome?: string } = {}
       }));
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(linhas), 'Registros de campo');
-      const nome = `registros_campo_${ctx.talhao}_${safra}`
-        .normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w-]+/g, '_');
+      const per = periodoParaNome({ ano: ctx.ano, epoca: ctx.epoca, safra });
+      const nome = nomeExport({
+        fazenda: ctx.fazenda, siglaFazenda: ctx.siglaFazenda, talhao: ctx.talhao,
+        tipo: 'CAMPO', ano: per.ano, epoca: per.epoca,
+      });
       XLSX.writeFile(wb, `${nome}.xlsx`);
     } catch (e) {
       setAviso(`Falha ao gerar a planilha: ${e instanceof Error ? e.message : String(e)}`);

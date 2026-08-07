@@ -15,6 +15,7 @@ import { getTalhoes, getFazendas, getClientes, getPlantio, type MdeTalhao } from
 import { abrirOuBaixar } from './recomendacao/relatorioCenarios';
 import { imagemParaPdf } from './pdfImagem';
 import type { RespMdeAnalise } from './mde';
+import { nomeExport } from './nomeExport';
 
 type RGB = [number, number, number];
 const NAVY: RGB = [13, 33, 64];
@@ -133,7 +134,10 @@ export async function gerarPdfMde(params: {
     doc.addPage();
     await paginaMapas(doc, ctx, oficial, mapas, logo);
 
-    abrirOuBaixar(doc.output('blob'), aba, `mde-${san(ctx.talhao) || 'talhao'}.pdf`);
+    // Relevo é atributo PERSISTENTE do terreno: não leva ano nem época.
+    abrirOuBaixar(doc.output('blob'), aba, `${nomeExport({
+      fazenda: ctx.fazenda, siglaFazenda: faz?.sigla ?? null, talhao: ctx.talhao, tipo: 'MDE',
+    })}.pdf`);
   } catch (e) {
     if (aba) aba.close();
     throw e;

@@ -7,7 +7,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useApp } from '@/context/AppContext';
-import { getImportacoesLab, getTalhoes, getPlantio, type ImportacaoLab } from '@/lib/store';
+import { getImportacoesLab, getTalhoes, getFazendas, getPlantio, type ImportacaoLab } from '@/lib/store';
+import { anoDaSafra } from '@/lib/periodo';
+import { nomeExport } from '@/lib/nomeExport';
 import { ExplicadorRecomendacaoIa } from '@/components/talhao/ExplicadorRecomendacaoIa';
 import { pode } from '@/lib/empresa';
 import { listar as bibListar, compararEquacoes, type ItemBiblioteca, type ConteudoEquacao, type ConteudoRecomendacao } from '@/lib/biblioteca';
@@ -274,7 +276,13 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
       }
       if (cens.length === 0) { if (aba) aba.close(); setErroBook('Nenhuma recomendação pôde ser aplicada — faltam mapas interpolados dos atributos usados.'); setBookEstado('erro'); return; }
       const blob = await montarBookOficial(cens);
-      abrirOuBaixar(blob, aba, `book-recomendacoes-${safra}.pdf`);
+      // SA03_RECOM_2026_BOOK — o nome antigo não dizia de que talhão era.
+      const t = getTalhoes().find(x => x.id === nav.talhaoId);
+      const f = t ? getFazendas().find(x => x.id === t.fazendaId) : undefined;
+      abrirOuBaixar(blob, aba, `${nomeExport({
+        fazenda: f?.nome ?? '', siglaFazenda: f?.sigla ?? null, talhao: t?.nome ?? '',
+        tipo: 'RECOM', ano: anoDaSafra(safra), detalhe: 'book',
+      })}.pdf`);
       await recarregarSalvos();
       setBookEstado('pronto');
     } catch (e) { if (aba) aba.close(); setErroBook(e instanceof Error ? e.message : String(e)); setBookEstado('erro'); }

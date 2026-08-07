@@ -18,6 +18,7 @@
 // elementos — não a escrita do arquivo.
 
 import type { GradeAmostragem, PontoAmostragem } from './store';
+import { nomeExport, periodoParaNome } from './nomeExport.ts';
 
 export interface LinhaRelatorioGrade {
   Produtor: string;
@@ -33,6 +34,7 @@ export interface ContextoGrade {
   produtor: string;
   municipio: string;
   fazenda: string;
+  siglaFazenda?: string | null;   // só para o nome do arquivo (lib/nomeExport)
   talhao: string;
   /** rótulo da profundidade → nome do padrão de elementos (coluna "Análises"). */
   analisePorProfundidade: Record<string, string>;
@@ -83,8 +85,15 @@ export function resumoDaGrade(linhas: LinhaRelatorioGrade[]) {
   return { amostras: linhas.length, pontos: pontos.size, porProfundidade };
 }
 
+// SA03_GRADE_2026_EP01_CONFERENCIA — fica ao lado do KML/SHP da mesma grade.
 export function nomeArquivoRelatorio(ctx: ContextoGrade, grade: GradeAmostragem): string {
-  return `${ctx.talhao}_${grade.nome}_conferencia`.replace(/[^\w.\-]+/g, '_') + '.xlsx';
+  const per = periodoParaNome({
+    ano: grade.ano, epoca: grade.epoca, dataReferencia: grade.dataReferencia, safra: grade.safra,
+  });
+  return nomeExport({
+    fazenda: ctx.fazenda, siglaFazenda: ctx.siglaFazenda, talhao: ctx.talhao,
+    tipo: 'GRADE', ano: per.ano, epoca: per.epoca, detalhe: 'conferencia',
+  }) + '.xlsx';
 }
 
 /** Gera e baixa o .xlsx. Retorna o resumo para a UI dar o retorno ao usuário. */
