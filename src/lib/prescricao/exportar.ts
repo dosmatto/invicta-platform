@@ -24,6 +24,7 @@ import { complementarNutriente, SIMBOLO_NUTRIENTE } from '../insumos';
 import { fmtHa, arredHa, formatarColunaXlsx, formatarLinhaXlsx } from '../formato';
 import { UNIDADE_TOTAL, ehUnidadeSemente, type Prescricao } from './tipos.ts';
 import { casarZonas } from './casar.ts';
+import { nomeArquivoPrescricao } from './nomeArquivo.ts';
 
 // Fator unidade-dose → unidade-base da prescrição (1 exceto sementes/m, que usa
 // o espaçamento salvo nos parâmetros da semente). Nunca lança na exportação —
@@ -119,24 +120,38 @@ export function fcPrescricao(p: Prescricao): GeoJSON.FeatureCollection {
   return { type: 'FeatureCollection', features };
 }
 
-const nomeBase = (p: Prescricao) =>
-  `prescricao_${p.produto || p.tipo}_${p.nome}`.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w-]+/g, '_').slice(0, 60);
+// Nome do arquivo: o padrão de campo (SA03_TX_MILHO) quando a chamada informa
+// fazenda e talhão; sem isso, o nome antigo — nenhuma exportação fica sem nome
+// por falta de cadastro. Ver lib/prescricao/nomeArquivo.ts.
+const nomeBase = (p: Prescricao, ident?: IdentArquivo) =>
+  (ident?.fazenda || ident?.talhao)
+    ? nomeArquivoPrescricao({
+        fazenda: ident.fazenda ?? '', siglaFazenda: ident.siglaFazenda,
+        talhao: ident.talhao ?? '', produto: p.produto || p.tipo, unidade: p.unidade,
+      })
+    : `prescricao_${p.produto || p.tipo}_${p.nome}`.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w-]+/g, '_').slice(0, 60);
+
+/** O que o nome do arquivo precisa saber (a tela sabe; o motor não). */
+export interface IdentArquivo { fazenda?: string; siglaFazenda?: string | null; talhao?: string }
 
 // ── SHP (.zip) ──────────────────────────────────────────────────────────────
-export async function exportarSHPPrescricao(p: Prescricao): Promise<string> {
+export async function exportarSHPPrescricao(p: Prescricao, ident?: IdentArquivo): Promise<string> {
   const { default: JSZip } = await import('jszip');
   const zip = new JSZip();
+  const base = nomeBase(p, ident);
   const files = await shpFiles(fcPrescricao(p), 'polygon');
-  for (const ext of ['.shp', '.shx', '.dbf', '.prj']) if (files[ext]) zip.file(`prescricao${ext}`, files[ext]);
-  zip.file('prescricao.cpg', new TextEncoder().encode('ISO-8859-1'));
+  // Os arquivos DENTRO do zip levam o mesmo nome: é o que o monitor mostra na
+  // lista, e "prescricao.shp" para todo talhão não distingue nada.
+  for (const ext of ['.shp', '.shx', '.dbf', '.prj']) if (files[ext]) zip.file(`${base}${ext}`, files[ext]);
+  zip.file(`${base}.cpg`, new TextEncoder().encode('ISO-8859-1'));
   const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
-  const nome = `${nomeBase(p)}.zip`;
+  const nome = `${base}.zip`;
   baixarBlob(blob, nome);
   return nome;
 }
 
 // ── Excel ───────────────────────────────────────────────────────────────────
-export async function exportarXlsxPrescricao(p: Prescricao): Promise<string> {
+export async function exportarXlsxPrescricao(p: Prescricao, ident?: IdentArquivo): Promise<string> {
   const XLSX = await import('xlsx');
   const fator = fatorDe(p);
   const r = resumoDoses(p.zonas, p.custoUnit, fator);
@@ -227,7 +242,7 @@ export async function exportarXlsxPrescricao(p: Prescricao): Promise<string> {
   formatarLinhaXlsx(XLSX, wsResumo, 'Área total (ha)');
   XLSX.utils.book_append_sheet(wb, wsDoses, 'Doses por zona');
   XLSX.utils.book_append_sheet(wb, wsResumo, 'Resumo');
-  const nome = `${nomeBase(p)}.xlsx`;
+  const nome = `${nomeBase(p, ident)}.xlsx`;
   XLSX.writeFile(wb, nome);
   return nome;
 }
@@ -254,6 +269,8 @@ function carregarImg(src: string): Promise<HTMLImageElement> {
 
 export interface IdentPdfPrescricao {
   produtor: string; fazenda: string; talhao: string; municipio?: string; estado?: string;
+  /** sigla cadastrada da fazenda — entra no nome do arquivo (SA03_TX_MILHO). */
+  siglaFazenda?: string | null;
   logoClienteUrl?: string | null;
 }
 
@@ -466,7 +483,7 @@ export async function exportarPDFPrescricao(p: Prescricao, ident: IdentPdfPrescr
   doc.text('INVICTA AP   |   Tecnologia que transforma dados em produtividade.', M + 26, H - 3.8);
   doc.setFont('helvetica', 'bold'); doc.text('www.invicta.agr.br', W - M, H - 3.8, { align: 'right' });
 
-  const nome = `${nomeBase(p)}.pdf`;
+  const nome = `${nomeBase(p, ident)}.pdf`;
   doc.save(nome);
   return nome;
 }

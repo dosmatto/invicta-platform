@@ -10,6 +10,7 @@ import { fatorCampo, sementesPorHa, metricasSementes, estoqueTotalSementes, dist
 import { dosesPorEquacao, variaveisDaEquacao } from '../src/lib/prescricao/equacao.ts';
 import { converterDose, prescricaoEmUnidade, podeConverter, precisaEspacamento, UNIDADES_SEMENTE } from '../src/lib/prescricao/unidade.ts';
 import { casarZonas } from '../src/lib/prescricao/casar.ts';
+import { nomeArquivoPrescricao, siglaFazenda, numeroTalhao } from '../src/lib/prescricao/nomeArquivo.ts';
 import { montarResumoPdf, temCompensacao, totalDoArquivo, kgDeSementes, doseArquivo as doseArquivoDe, fmtRel, arredRel, corDaDose } from '../src/lib/prescricao/resumo.ts';
 import { fmtHa, arredHa } from '../src/lib/formato.ts';
 
@@ -721,6 +722,46 @@ t('feature SEM geometria não vira polígono no shapefile', () => {
 t('fc vazio ou nulo não quebra', () => {
   assert.equal(casarZonas(null, [{ idZona: '01', nomeZona: '01' }]).pares.length, 0);
   assert.equal(casarZonas({ type: 'FeatureCollection', features: [] }, []).semPoligono.length, 0);
+});
+
+console.log('\nNome do arquivo que vai para a máquina\n');
+
+t('CASO PEDIDO: SERRA AZUL + JCASA 03 + Milho = SA03_TX_MILHO', () => {
+  assert.equal(nomeArquivoPrescricao({ fazenda: 'SERRA AZUL', talhao: 'JCASA 03', produto: 'Milho' }), 'SA03_TX_MILHO');
+});
+
+t('sigla CADASTRADA na fazenda ganha das iniciais', () => {
+  assert.equal(siglaFazenda('Fazenda São João', 'FSJ'), 'FSJ');
+  assert.equal(nomeArquivoPrescricao({ fazenda: 'Fazenda São João', siglaFazenda: 'FSJ', talhao: 'T-7', produto: 'Soja' }), 'FSJ07_TX_SOJA');
+});
+
+t('iniciais ignoram palavra genérica e acento', () => {
+  assert.equal(siglaFazenda('Fazenda Boa Vista'), 'BV');
+  assert.equal(siglaFazenda('Sítio São José do Norte'), 'SJN');
+  assert.equal(siglaFazenda('Agropecuária Aardoom'), 'A');
+  assert.equal(siglaFazenda(''), 'FAZ', 'sem nome, um rótulo qualquer — nunca vazio');
+});
+
+t('número do talhão sai do FIM do nome, com dois dígitos', () => {
+  assert.equal(numeroTalhao('JCASA 03'), '03');
+  assert.equal(numeroTalhao('T-7'), '07');
+  assert.equal(numeroTalhao('Talhao 124'), '124');
+  assert.equal(numeroTalhao('Baixada'), 'BAIXAD', 'sem número, usa o nome enxugado');
+});
+
+t('produto sem acento, sem espaço, em MAIÚSCULA', () => {
+  assert.equal(nomeArquivoPrescricao({ fazenda: 'Serra Azul', talhao: 'JCASA 03', produto: 'Ureia' }), 'SA03_TX_UREIA');
+  assert.equal(nomeArquivoPrescricao({ fazenda: 'Serra Azul', talhao: 'JCASA 03', produto: 'Super Simples' }), 'SA03_TX_SUPERSIMPLES');
+  const n = nomeArquivoPrescricao({ fazenda: 'Serra Azul', talhao: 'JCASA 03', produto: 'Milho' });
+  assert.match(n, /^[A-Z0-9_]+$/, `nome com caractere que monitor não engole: ${n}`);
+});
+
+t('RÉGUA diferente, arquivo com nome diferente — senão o operador leva o errado', () => {
+  const base = { fazenda: 'SERRA AZUL', talhao: 'JCASA 03', produto: 'Milho' };
+  assert.equal(nomeArquivoPrescricao({ ...base, unidade: 'sementes/ha' }), 'SA03_TX_MILHO');
+  assert.equal(nomeArquivoPrescricao({ ...base, unidade: 'sementes/m' }), 'SA03_TX_MILHO_M');
+  assert.equal(nomeArquivoPrescricao({ ...base, unidade: 'sementes/m2' }), 'SA03_TX_MILHO_M2');
+  assert.equal(nomeArquivoPrescricao({ ...base, produto: 'MAP', unidade: 'kg/ha' }), 'SA03_TX_MAP', 'adubo não leva sufixo');
 });
 
 console.log(`\n${ok} passaram, ${fail} falharam\n`);

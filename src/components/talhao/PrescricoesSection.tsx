@@ -592,11 +592,15 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
       const t = getTalhoes().find(x => x.id === talhaoId);
       const f = getFazendas().find(x => x.id === t?.fazendaId);
       const c = getClientes().find(x => x.id === f?.clienteId);
+      // Nome do arquivo no padrão de campo (SA03_TX_MILHO): a fazenda e o
+      // talhão só existem aqui na tela — o motor de exportação não os conhece.
+      const identArq = { fazenda: f?.nome ?? '', siglaFazenda: f?.sigla ?? null, talhao: t?.nome ?? '' };
       const nome =
-        formato === 'shp' ? await exportarSHPPrescricao(p)
-        : formato === 'xlsx' ? await exportarXlsxPrescricao(p)
+        formato === 'shp' ? await exportarSHPPrescricao(p, identArq)
+        : formato === 'xlsx' ? await exportarXlsxPrescricao(p, identArq)
         : await exportarPDFPrescricao(p, {
             produtor: c?.nome ?? '', fazenda: f?.nome ?? '', talhao: t?.nome ?? '',
+            siglaFazenda: f?.sigla ?? null,
             logoClienteUrl: (c as { logoUrl?: string } | undefined)?.logoUrl ?? null,
           });
       registrarExportePrescricao(p.id, formato, nome, emailUsuario() ?? 'sistema');
