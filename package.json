@@ -30,6 +30,7 @@
     "teste:nativo": "node scripts/teste-zoneamento-nativo.mjs",
     "teste:versoes": "node scripts/teste-versoes-zonas.mjs",
     "teste:lab": "node scripts/teste-lab-import.mjs",
+    "teste:elo": "node scripts/teste-elo-grade.mjs",
     "teste:insumos": "node scripts/teste-insumos.mjs",
     "teste:escala": "node scripts/teste-escala-classes.mjs",
     "teste:validacao": "node scripts/teste-validacao.mjs",

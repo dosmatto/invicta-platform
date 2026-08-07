@@ -172,7 +172,9 @@ export function GeradorRelatorios({ safraNome }: { safraNome?: string } = {}) {
       if (reg.nuts.length > 0) {
         const c = (mesmoCtx && ctx) ? ctx : await carregarContextoRelatorio(reg.talhaoId, reg.safra, extrairPoligono(uploadedGeoRef.current));
         nomeTalhao = c.talhao;
-        paginasFert = montarPaginas(c, reg.nuts, { satelite: reg.satelite, valores: reg.valores });
+        // `!== false`: registro antigo, gravado antes destes campos existirem,
+        // vinha com undefined e reabria o relatório SEM satélite e SEM valores.
+        paginasFert = montarPaginas(c, reg.nuts, { satelite: reg.satelite !== false, valores: reg.valores !== false });
       }
       // Recomendação
       let recDescompr: Cenario[] = [];

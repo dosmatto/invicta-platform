@@ -14,6 +14,7 @@ import {
   type RespInterp,
 } from '@/lib/fertilidade';
 import { colorirGridComLegenda, temGrid } from '@/lib/raster';
+import { resolverGradeDoLaudo, pontosPorNumero, casarAmostrasComPontos } from '@/lib/eloGrade';
 import { decodeGrid } from '@/lib/fertilidade';
 import { rasterizarZonas, centroideGeom, type ZonaValor } from '@/lib/recomendacao/zonasGrid';
 import { stopsParaBackend, dominioDaLegenda, paresDaClasse, respeitarPadraoHomonima } from '@/lib/legendas';
@@ -144,21 +145,14 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
 
   const grade = useMemo<GradeAmostragem | null>(() => {
     if (!importacao || !nav.talhaoId) return null;
-    const todas = getGrades(nav.talhaoId, safraNome);
-    const exata = todas.find(g => g.id === importacao.gradeId) ?? null;
-    if (exata && (exata.pontos?.length ?? 0) > 0) return exata;
-    // Fallback: a importação aponta p/ uma grade sem pontos (ou que não existe
-    // nesta safra) → usa a grade com MAIS pontos do talhão/safra. Sem isto a
-    // Fertilidade fica "0 pontos" mesmo com o laudo importado corretamente.
-    const comPontos = todas.filter(g => (g.pontos?.length ?? 0) > 0).sort((a, b) => (b.pontos?.length ?? 0) - (a.pontos?.length ?? 0));
-    return comPontos[0] ?? exata;
+    // Regra do elo laudo↔grade (eloGrade): a grade apontada quando tem pontos,
+    // senão a com MAIS pontos do talhão/safra — sem isto a Fertilidade fica
+    // "0 pontos" mesmo com o laudo importado corretamente. A MESMA função serve
+    // o relatório: era divergir aqui que deixava o PDF sem os valores.
+    return resolverGradeDoLaudo(getGrades(nav.talhaoId, safraNome), importacao.gradeId);
   }, [importacao, nav.talhaoId, safraNome]);
 
-  const pontoPorNumero = useMemo(() => {
-    const m = new Map<number, { lng: number; lat: number }>();
-    (grade?.pontos ?? []).forEach(p => m.set(p.numero ?? p.ordem + 1, { lng: p.lng, lat: p.lat }));
-    return m;
-  }, [grade]);
+  const pontoPorNumero = useMemo(() => pontosPorNumero(grade), [grade]);
 
   // Zonas de manejo do talhão (Fase Z1). Quando a importação está ligada a uma
   // grade de zonas, o mapa é CONSTANTE por zona (sem interpolação): cada zona
@@ -270,21 +264,12 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
 
   function pontosDe(nut: string, prof: string): Ponto[] {
     if (!importacao || !nut) return [];
-    const amostras = importacao.resultados.filter(r => r.profundidade === prof && r.valores[nut] != null && isFinite(r.valores[nut]));
-    // 1) Casa pelo NÚMERO da amostra ↔ nº do ponto (numero ?? ordem+1).
-    const porNumero: Ponto[] = [];
-    for (const r of amostras) { const pt = pontoPorNumero.get(r.numero); if (pt) porNumero.push({ lng: pt.lng, lat: pt.lat, valor: r.valores[nut] }); }
-    if (porNumero.length >= 3) return porNumero;
-    // 2) FALLBACK por ORDEM: quando os números do laudo NÃO batem com os da grade
-    //    (lab renumerou as amostras), assume que o laudo veio na ordem dos pontos
-    //    e casa a i-ésima amostra (por nº) com o i-ésimo ponto (por nº/ordem).
-    //    Só quando a grade tem pontos suficientes — senão devolve o que casou.
-    const ptsGrade = [...(grade?.pontos ?? [])].sort((a, b) => (a.numero ?? a.ordem + 1) - (b.numero ?? b.ordem + 1));
-    if (amostras.length >= 3 && ptsGrade.length >= amostras.length) {
-      const ord = [...amostras].sort((a, b) => a.numero - b.numero);
-      return ord.map((r, i) => ({ lng: ptsGrade[i].lng, lat: ptsGrade[i].lat, valor: r.valores[nut] }));
-    }
-    return porNumero;
+    // Casamento pelo NÚMERO da amostra ↔ nº do ponto, com fallback por ORDEM
+    // (lab que renumerou as amostras) — em eloGrade, compartilhado com o PDF.
+    const amostras = importacao.resultados
+      .filter(r => r.profundidade === prof && r.valores[nut] != null && isFinite(r.valores[nut]))
+      .map(r => ({ numero: r.numero, valor: r.valores[nut] }));
+    return casarAmostrasComPontos(amostras, grade);
   }
   function fcLabels(pts: Ponto[], nut: string): GeoJSON.FeatureCollection {
     return {

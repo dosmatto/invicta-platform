@@ -13,6 +13,7 @@ import { cloudCarregarMapasPorPrefixo } from './cloud';
 import { descomprimirGrid, decodeGrid, extrairPoligono, type RespInterp } from './fertilidade';
 import { colorirGridComLegenda, colorirGrid, temGrid } from './raster';
 import { rampaVisualStops, ordenarLegendasDoAtributo } from './legendas';
+import { resolverGradeDoLaudo, casarAmostrasComPontos } from './eloGrade';
 import { carregarNdviSalvos } from './meap/gerar';
 import type { DadosRelatorioFert, ProfundidadeRel } from './relatorioFertilidade';
 
@@ -63,9 +64,14 @@ export async function carregarContextoRelatorio(
 
   const importacoes = getImportacoesLab(talhaoId, safra).sort((a, b) => (b.criadoEm ?? '').localeCompare(a.criadoEm ?? ''));
   const importacao = importacoes[0] ?? null;
-  const grade = importacao ? getGrades(talhaoId, safra).find(g => g.id === importacao.gradeId) ?? null : null;
-  const pontoPorNumero = new Map<number, { lng: number; lat: number }>();
-  (grade?.pontos ?? []).forEach(p => pontoPorNumero.set(p.numero ?? p.ordem + 1, { lng: p.lng, lat: p.lat }));
+  // MESMA regra da tela (eloGrade): a grade apontada pelo laudo quando tem
+  // pontos; senão a grade com mais pontos do talhão/ano. Com o `find` estrito de
+  // antes, um laudo apontando p/ grade esvaziada deixava a capa SEM o nº dos
+  // pontos e os mapas SEM os valores — enquanto a tela mostrava os dois.
+  const grade = importacao ? resolverGradeDoLaudo(getGrades(talhaoId, safra), importacao.gradeId) : null;
+  if (importacao && !(grade?.pontos?.length ?? 0)) {
+    console.warn('[relatorio] sem pontos de grade p/ o laudo', importacao.id, '— capa sai sem numeração e os valores caem nos rótulos salvos com o mapa.');
+  }
   // Pontos de amostragem com o Nº DO PONTO — para o 1º mapa do relatório (capa).
   const pontosGrade: GeoJSON.FeatureCollection = {
     type: 'FeatureCollection',
@@ -110,20 +116,28 @@ export async function carregarContextoRelatorio(
     }
   }
 
-  // valores da amostra por nut/prof (planilha → ponto da grade)
+  // valores da amostra por nut/prof (planilha → ponto da grade). Casamento pelo
+  // nº da amostra, com fallback por ordem — o mesmo da tela (eloGrade).
+  // ÚLTIMO RECURSO: os rótulos SALVOS junto com o mapa na hora da interpolação
+  // (`labels`). É exatamente o que a tela faz quando o elo com a grade não
+  // resolve; sem isso o PDF saía com o mapa "pelado" e a tela cheia de valores.
   function valoresDe(nut: string, prof: string): GeoJSON.FeatureCollection {
-    const feats: GeoJSON.Feature[] = [];
-    for (const r of importacao?.resultados ?? []) {
-      if (r.profundidade !== prof) continue;
-      const v = r.valores[nut];
-      if (v == null || !isFinite(v)) continue;
-      const pt = pontoPorNumero.get(r.numero);
-      // Casas do rótulo do ponto: config da variável (Preferências de Análise) tem
-      // prioridade; senão pH/K = 1, demais 0 — igual ao mapa da tela (satk/satca/satmg=1).
-      const casas = casasDecimaisVariavel(nut) ?? ((nut === 'ph' || nut === 'k') ? 1 : 0);
-      if (pt) feats.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [pt.lng, pt.lat] }, properties: { txt: v.toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: casas }) } });
-    }
-    return { type: 'FeatureCollection', features: feats };
+    const amostras = (importacao?.resultados ?? [])
+      .filter(r => r.profundidade === prof && r.valores[nut] != null && isFinite(r.valores[nut]))
+      .map(r => ({ numero: r.numero, valor: r.valores[nut] }));
+    const pts = casarAmostrasComPontos(amostras, grade);
+    if (!pts.length) return mapas[`${nut}__${prof}`]?.labels ?? { type: 'FeatureCollection', features: [] };
+    // Casas do rótulo do ponto: config da variável (Preferências de Análise) tem
+    // prioridade; senão pH/K = 1, demais 0 — igual ao mapa da tela (satk/satca/satmg=1).
+    const casas = casasDecimaisVariavel(nut) ?? ((nut === 'ph' || nut === 'k') ? 1 : 0);
+    return {
+      type: 'FeatureCollection',
+      features: pts.map(p => ({
+        type: 'Feature' as const,
+        geometry: { type: 'Point' as const, coordinates: [p.lng, p.lat] },
+        properties: { txt: p.valor.toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: casas }) },
+      })),
+    };
   }
 
   // elementos disponíveis = nuts com ≥1 mapa + legenda
