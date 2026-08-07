@@ -9,6 +9,7 @@ import { redistribuirPorEstoque, distribuirProporcional, distribuirPorAjuste, re
 import { fatorCampo, sementesPorHa, metricasSementes, estoqueTotalSementes, distribuirSementes, doseCompensada } from '../src/lib/prescricao/sementes.ts';
 import { dosesPorEquacao, variaveisDaEquacao } from '../src/lib/prescricao/equacao.ts';
 import { converterDose, prescricaoEmUnidade, podeConverter, precisaEspacamento, UNIDADES_SEMENTE } from '../src/lib/prescricao/unidade.ts';
+import { casarZonas } from '../src/lib/prescricao/casar.ts';
 import { montarResumoPdf, temCompensacao, totalDoArquivo, kgDeSementes, doseArquivo as doseArquivoDe, fmtRel, arredRel, corDaDose } from '../src/lib/prescricao/resumo.ts';
 import { fmtHa, arredHa } from '../src/lib/formato.ts';
 
@@ -665,6 +666,61 @@ t('mesma unidade devolve a MESMA referência (sem cópia à toa)', () => {
 t('pedir conversão sem espaçamento explica o que falta', () => {
   const p = { unidade: 'sementes/ha', zonas: [], params: { sementes: { germinacaoPct: 95 } }, fc: { type: 'FeatureCollection', features: [] } };
   assert.throws(() => prescricaoEmUnidade(p, 'sementes/m'), /espaçamento entre linhas/i);
+});
+
+console.log('\nCasamento polígono <-> zona (o arquivo que vai para a máquina)\n');
+
+const featZona = (id, zona) => ({ type: 'Feature', properties: { id, zona }, geometry: { type: 'Polygon', coordinates: [[[0,0],[1,0],[1,1],[0,0]]] } });
+
+t('caso normal: todo polígono acha a sua zona', () => {
+  const zonas = [
+    { idZona: '01', nomeZona: '01' }, { idZona: '02', nomeZona: '02' }, { idZona: '03', nomeZona: '03' },
+  ];
+  const fc = { type: 'FeatureCollection', features: ['01', '02', '03'].map(i => featZona(i, i)) };
+  const c = casarZonas(fc, zonas);
+  assert.equal(c.pares.length, 3);
+  assert.equal(c.semZona.length, 0);
+  assert.equal(c.semPoligono.length, 0);
+});
+
+t('POLÍGONO PARTIDO no editor ("03_2") continua achando a zona pelo rótulo', () => {
+  // O corte por linha cria 03_2, 03_3… Se a prescrição foi montada antes, o
+  // idZona é "03" e o casamento por id sozinho jogaria os recortes fora — o SHP
+  // saía com um pedaço do talhão só, que foi o relato.
+  const zonas = [{ idZona: '03', nomeZona: '03' }];
+  const fc = { type: 'FeatureCollection', features: [featZona('03', '03'), featZona('03_2', '03'), featZona('03_3', '03')] };
+  const c = casarZonas(fc, zonas);
+  assert.equal(c.pares.length, 3, 'os três pedaços entram no arquivo');
+  assert.equal(c.semZona.length, 0);
+});
+
+t('polígono ÓRFÃO é reportado (não sai calado do arquivo)', () => {
+  const zonas = [{ idZona: '01', nomeZona: '01' }];
+  const fc = { type: 'FeatureCollection', features: [featZona('01', '01'), featZona('09', '09')] };
+  const c = casarZonas(fc, zonas);
+  assert.equal(c.pares.length, 1);
+  assert.equal(c.semZona.length, 1, 'quem não casou tem de aparecer para a validação bloquear');
+});
+
+t('zona sem polígono também é reportada', () => {
+  const zonas = [{ idZona: '01', nomeZona: '01' }, { idZona: '02', nomeZona: '02' }];
+  const fc = { type: 'FeatureCollection', features: [featZona('01', '01')] };
+  const c = casarZonas(fc, zonas);
+  assert.equal(c.semPoligono.length, 1);
+  assert.equal(c.semPoligono[0].idZona, '02');
+});
+
+t('feature SEM geometria não vira polígono no shapefile', () => {
+  const zonas = [{ idZona: '01', nomeZona: '01' }];
+  const fc = { type: 'FeatureCollection', features: [{ type: 'Feature', properties: { id: '01' }, geometry: null }] };
+  const c = casarZonas(fc, zonas);
+  assert.equal(c.pares.length, 0);
+  assert.equal(c.semZona.length, 0, 'sem geometria não é órfão — simplesmente não existe no mapa');
+});
+
+t('fc vazio ou nulo não quebra', () => {
+  assert.equal(casarZonas(null, [{ idZona: '01', nomeZona: '01' }]).pares.length, 0);
+  assert.equal(casarZonas({ type: 'FeatureCollection', features: [] }, []).semPoligono.length, 0);
 });
 
 console.log(`\n${ok} passaram, ${fail} falharam\n`);

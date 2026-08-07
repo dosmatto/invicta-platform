@@ -2,12 +2,17 @@
 // áreas, GeoJSON e KML). Node 22+ (type-stripping): `npm run teste:zonas`.
 import assert from 'node:assert/strict';
 import {
-  derivarLinhasInternas, montarDadosZonas, geojsonPoligonos, geojsonLinhas, gerarKMLZonas,
-} from '../src/lib/exportZonas.ts';
+  derivarLinhasInternas, montarDadosZonas, geojsonPoligonos, geojsonLinhas, gerarKMLZonas, explodirMultiparte, shpFiles } from '../src/lib/exportZonas.ts';
 
 let ok = 0, fail = 0;
 function t(nome, fn) {
   try { fn(); ok++; console.log('  ✓', nome); }
+  catch (e) { fail++; console.error('  ✗', nome, '—', e.message); }
+}
+// Versão que ESPERA: com o t() síncrono, um teste async "passava" antes de
+// rodar — o ✓ saía e a falha virava unhandled rejection lá na frente.
+async function ta(nome, fn) {
+  try { await fn(); ok++; console.log('  ✓', nome); }
   catch (e) { fail++; console.error('  ✗', nome, '—', e.message); }
 }
 
@@ -101,6 +106,40 @@ t('KML: pastas Zonas + Linhas internas, acentos escapados/preservados, WGS84', (
   assert.ok(kml.includes('<LineString>'), 'tem linhas internas');
   assert.ok(!/undefined|NaN/.test(kml), 'sem undefined/NaN');
 });
+
+// ── O bug do shapefile com uma zona só ─────────────────────────────────────
+{
+  const quad = (i) => ({ type: 'Polygon', coordinates: [[[i, 0], [i + 1, 0], [i + 1, 1], [i, 1], [i, 0]]] });
+  const multi = (i) => ({ type: 'MultiPolygon', coordinates: [quad(i).coordinates, quad(i + 10).coordinates] });
+  const feat = (g, dose) => ({ type: 'Feature', properties: { dose }, geometry: g });
+
+  t('explodir: multipolígono vira uma feição POR PARTE, com a mesma dose', () => {
+    const fc = { type: 'FeatureCollection', features: [feat(quad(0), 100), feat(multi(2), 200)] };
+    const out = explodirMultiparte(fc);
+    assert.equal(out.features.length, 3, '1 simples + 2 partes');
+    assert.ok(out.features.every(f => f.geometry.type === 'Polygon'), 'nenhum multiparte sobrevive');
+    assert.deepEqual(out.features.map(f => f.properties.dose), [100, 200, 200]);
+  });
+
+  t('explodir: feição sem geometria não vira registro fantasma', () => {
+    const fc = { type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry: null }, feat(quad(0), 1)] };
+    assert.equal(explodirMultiparte(fc).features.length, 1);
+  });
+
+  await ta('SHP DE VERDADE: 3 simples + 2 multi geram TODOS os registros no DBF', async () => {
+    // Sem explodir, o @mapbox/shp-write agrupa por tipo, as duas camadas caem no
+    // mesmo nome dentro do zip e o DBF sai com 2 registros — a prescrição de 5
+    // zonas virava um arquivo com uma zona só.
+    const fc = { type: 'FeatureCollection', features: [
+      feat(quad(0), 10), feat(quad(1), 20), feat(quad(2), 30), feat(multi(4), 40), feat(multi(6), 50),
+    ] };
+    const files = await shpFiles(fc, 'polygon');
+    const dbf = files['.dbf'];
+    assert.ok(dbf, 'DBF não saiu');
+    const n = new DataView(dbf.buffer, dbf.byteOffset).getUint32(4, true);
+    assert.equal(n, 7, `esperado 3 + 2×2 = 7 registros, veio ${n}`);
+  });
+}
 
 console.log(`\n${ok} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);

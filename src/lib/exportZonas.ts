@@ -373,11 +373,47 @@ ${linhasKml}
 
 // ── SHP (ZIP com 2 camadas + .cpg UTF-8) ────────────────────────────────────
 // Exportada: as Prescrições reusam este empacotador (mesmo DBF latin1 + .cpg).
+/**
+ * MULTIPARTE → UMA FEIÇÃO POR PARTE.
+ *
+ * O @mapbox/shp-write agrupa as feições por TIPO de geometria e escreve um
+ * arquivo por grupo. Com `types` mapeando Polygon e MultiPolygon para o MESMO
+ * nome de camada, o segundo grupo sobrescreve o primeiro dentro do zip — e o
+ * shapefile sai com uma fração das zonas, sem erro nenhum.
+ *
+ * MEDIDO (node, a mesma lib do app): 5 polígonos simples → 5 registros no DBF;
+ * 5 multipolígonos → 5; MISTURA de 3 simples + 2 multi → 2 registros. Foi assim
+ * que uma prescrição de 5 zonas virou um arquivo com uma zona só.
+ *
+ * Explodir resolve na raiz e ainda melhora a compatibilidade: monitor de
+ * máquina costuma engasgar com geometria multiparte. As propriedades (a dose)
+ * são copiadas para cada parte — o polígono continua com a dose certa.
+ */
+export function explodirMultiparte(fc: GeoJSON.FeatureCollection): GeoJSON.FeatureCollection {
+  const features: GeoJSON.Feature[] = [];
+  for (const f of fc.features ?? []) {
+    const g = f.geometry;
+    if (!g) continue;
+    if (g.type === 'MultiPolygon') {
+      for (const coords of g.coordinates) {
+        features.push({ ...f, geometry: { type: 'Polygon', coordinates: coords } });
+      }
+    } else if (g.type === 'MultiLineString') {
+      for (const coords of g.coordinates) {
+        features.push({ ...f, geometry: { type: 'LineString', coordinates: coords } });
+      }
+    } else {
+      features.push(f);
+    }
+  }
+  return { type: 'FeatureCollection', features };
+}
+
 export async function shpFiles(fc: GeoJSON.FeatureCollection, tipo: 'polygon' | 'polyline'): Promise<Record<string, Uint8Array>> {
   const shpwrite = await import('@mapbox/shp-write');
   const types = tipo === 'polygon' ? { polygon: 'camada' } : { polyline: 'camada', line: 'camada' };
   // arraybuffer (não 'blob'): consumível pelo JSZip em qualquer ambiente.
-  const ab = await shpwrite.zip<'arraybuffer'>(fc, { outputType: 'arraybuffer', compression: 'DEFLATE', prj: PRJ_WGS84, types });
+  const ab = await shpwrite.zip<'arraybuffer'>(explodirMultiparte(fc), { outputType: 'arraybuffer', compression: 'DEFLATE', prj: PRJ_WGS84, types });
   const { default: JSZip } = await import('jszip');
   const zin = await JSZip.loadAsync(ab);
   const out: Record<string, Uint8Array> = {};

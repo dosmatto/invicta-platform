@@ -23,6 +23,7 @@ export { corDaDose };
 import { complementarNutriente, SIMBOLO_NUTRIENTE } from '../insumos';
 import { fmtHa, arredHa, formatarColunaXlsx, formatarLinhaXlsx } from '../formato';
 import { UNIDADE_TOTAL, ehUnidadeSemente, type Prescricao } from './tipos.ts';
+import { casarZonas } from './casar.ts';
 
 // Fator unidade-dose → unidade-base da prescrição (1 exceto sementes/m, que usa
 // o espaçamento salvo nos parâmetros da semente). Nunca lança na exportação —
@@ -81,6 +82,16 @@ export function validarPrescricao(p: Prescricao): ValidacaoPrescricao {
     if (p.params.totalPorHa) avisos.push(`Acima da meta: ${msg} Os limites de dose mín/máx não deixaram fechar exato.`);
     else ressalvas.push(`Estoque insuficiente: ${msg} Confira antes de mandar para o campo — pode faltar produto.`);
   }
+  // COBERTURA DO MAPA: cada polígono precisa achar a sua zona. Sem isto o
+  // shapefile saía com parte do talhão — no relato, com UMA zona só — e a
+  // máquina aplica dose apenas onde há polígono; o resto passa em branco.
+  const casado = casarZonas(p.fc, p.zonas);
+  if (casado.semZona.length) {
+    erros.push(`${casado.semZona.length} polígono(s) do mapa não casam com nenhuma zona da prescrição — o arquivo sairia sem dose nessa parte do talhão. Refaça a prescrição a partir do zoneamento atual.`);
+  }
+  if (casado.semPoligono.length) {
+    avisos.push(`Zona(s) sem polígono no mapa (não vão para o arquivo): ${casado.semPoligono.map(z => z.nomeZona).join(', ')}.`);
+  }
   const pequenos = p.zonas.filter(z => z.areaHa > 0 && z.areaHa < 0.05);
   if (pequenos.length) avisos.push(`Polígono(s) muito pequeno(s) (<0,05 ha) — a máquina pode ignorar: ${pequenos.map(z => z.nomeZona).join(', ')}.`);
   // dose uniforme não é erro, mas taxa variável com 1 dose só costuma ser engano
@@ -89,30 +100,22 @@ export function validarPrescricao(p: Prescricao): ValidacaoPrescricao {
 }
 
 // ── FeatureCollection da prescrição (dose por polígono) ─────────────────────
-// Campos com nome ≤ 10 chars (limite do DBF do Shapefile).
+//
+// A TABELA DO SHAPEFILE LEVA UMA COLUNA SÓ: `dose`, numérica, por polígono.
+//
+// O monitor da máquina lê o atributo da dose e ignora o resto — mas nem todos
+// ignoram bem: campo de texto com acento ("Médio-alto") em DBF latin1, coluna
+// a mais, nome com mais de 10 caracteres, tudo isso já travou importação em
+// monitor. O que identifica o mapa (produto, unidade, zona, área) está no PDF
+// e no Excel, que são para gente ler. O arquivo de máquina fica com o mínimo
+// que ela precisa para aplicar.
 export function fcPrescricao(p: Prescricao): GeoJSON.FeatureCollection {
-  const porId = new Map(p.zonas.map(z => [z.idZona, z]));
-  const features: GeoJSON.Feature[] = [];
-  for (const f of p.fc.features) {
-    const id = String((f.properties as { id?: string } | null)?.id ?? '');
-    const z = porId.get(id);
-    if (!z || !f.geometry) continue;
-    features.push({
-      type: 'Feature',
-      geometry: f.geometry,
-      properties: {
-        zona: san(z.nomeZona),
-        classe: san(z.classe),
-        dose: arredRel(doseArquivo(p, z.dose)),
-        unidade: p.unidade,
-        // população-alvo fica no arquivo quando a dose foi compensada: é o que
-        // o agrônomo pediu, e sem ela ninguém confere a taxa lá na frente.
-        ...(temCompensacao(p) ? { pop_alvo: Math.round(z.dose) } : {}),
-        produto: san(p.produto).slice(0, 60),
-        area_ha: arredHa(z.areaHa),
-      },
-    });
-  }
+  const { pares } = casarZonas(p.fc, p.zonas);
+  const features: GeoJSON.Feature[] = pares.map(({ feature, zona }) => ({
+    type: 'Feature',
+    geometry: feature.geometry,
+    properties: { dose: arredRel(doseArquivo(p, zona.dose)) },
+  }));
   return { type: 'FeatureCollection', features };
 }
 
