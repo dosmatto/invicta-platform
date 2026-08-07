@@ -1,5 +1,12 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.30.3': [
+    'OS NÚMEROS SOBRE O MAPA DO RELATÓRIO CRESCERAM — tanto o nº do ponto na capa quanto o valor de cada nutriente. Eles saíam com corpo fixo (≈4,3 pt na página de dois mapas), tamanho de nota de rodapé: legível na tela, sofrível no papel. Agora o corpo se ADAPTA à grade e chega a ≈6,7 pt na mesma página — cerca de 1,6× maior, sem mudar mais nada no layout.',
+    'POR QUE ADAPTATIVO E NÃO UM NÚMERO MAIOR FIXO: o que limita o tamanho é o espaço entre os pontos, e isso muda de talhão para talhão. O app mede a distância de cada ponto ao vizinho mais próximo, pega o 1º quartil dessas distâncias (a média esconderia a região mais apertada) e cresce a fonte só até caber ali com folga — no máximo 62% da folga em largura e 75% em altura, para nenhum rótulo encostar no de baixo nem no do lado.',
+    'AMOSTRAGEM APERTADA NÃO PIORA: o tamanho tem um PISO, que é exatamente o de antes — grade densa continua saindo como saía, nunca menor. E tem um TETO, para o mapa não virar uma tabela de números numa amostragem muito folgada. Um par de pontos quase coincidente (duplicata do laudo) também não encolhe o mapa inteiro.',
+    'O contorno escuro do número acompanha o corpo da fonte: em número graúdo, um traço fino ficaria ralo sobre o satélite e o branco sumiria no claro da imagem.',
+    'Onde ver: Talhão → aba Relatórios → Gerar (vale para a capa e para os mapas de todos os elementos). 12 testes novos (npm run teste:rotulos) travam a regra, inclusive a de não sobrepor.',
+  ],
   '2.30.2': [
     'O RELATÓRIO DE FERTILIDADE VOLTOU A TRAZER O NÚMERO DOS PONTOS NA CAPA E OS VALORES SOBRE OS MAPAS. Os dois sumiram juntos porque dependem da MESMA coisa: o elo entre o laudo importado e a grade de amostragem — o laudo só traz o número da amostra, quem tem as coordenadas é a grade. Quando esse elo não fecha, a capa fica sem a numeração e cada mapa de nutriente sai sem os valores em cima, mesmo com tudo certo na tela.',
     'A CAUSA ERA DUAS REGRAS PARA A MESMA PERGUNTA: a tela da Fertilidade já tinha dois desvios — laudo apontando para uma grade que ficou sem pontos (usa a grade com mais pontos do talhão/ano) e laudo renumerado pelo laboratório, em que os números não batem com os da grade (casa a i-ésima amostra com o i-ésimo ponto). O relatório exigia o casamento exato e desistia calado. Agora a regra é ÚNICA, num só lugar, usada pela tela e pelo PDF.',

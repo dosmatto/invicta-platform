@@ -51,6 +51,44 @@ async function buscarTile(z: number, x: number, y: number): Promise<ImageBitmap 
   } catch { return null; }
 }
 
+// Corpo da fonte dos NÚMEROS sobre o mapa (valor da amostra / nº do ponto).
+// Regra: o rótulo pode crescer até onde a GRADE deixa. Mede a distância de cada
+// ponto ao vizinho mais próximo e usa o 1º QUARTIL dessas distâncias (a média
+// esconderia a região mais apertada; o mínimo puro deixaria um par quase
+// coincidente encolher o mapa inteiro). Dentro dessa folga cabem:
+//   - largura: o rótulo mais LARGO ≤ 62% da folga (os dois vizinhos são
+//     centrados no ponto, então metade de cada um soma menos que a folga);
+//   - altura:  o corpo da fonte ≤ 75% da folga (números de 1 dígito são mais
+//     altos que largos — sem esta trava, empilhavam na vertical).
+// Nunca abaixo do `piso` (tamanho histórico: não encolhe relatório nenhum) nem
+// acima do `teto` (mapa com número graúdo demais vira tabela).
+// `larguraMaxNoPiso` = largura em px do rótulo mais largo medida NO piso.
+export function tamanhoRotuloPontos(
+  pts: { x: number; y: number }[], larguraMaxNoPiso: number, piso: number, teto: number,
+): number {
+  if (pts.length < 2) return teto;                    // 1 rótulo: nada p/ colidir
+  if (!(larguraMaxNoPiso > 0)) return piso;
+  const MAX = 600;                                    // O(n²) contido (grades reais ≤ ~400 pontos)
+  const p = pts.length > MAX ? pts.slice(0, MAX) : pts;
+  const viz: number[] = [];
+  for (let i = 0; i < p.length; i++) {
+    let melhor = Infinity;
+    for (let j = 0; j < p.length; j++) {
+      if (i === j) continue;
+      const dx = p[i].x - p[j].x, dy = p[i].y - p[j].y;
+      const d = dx * dx + dy * dy;
+      if (d < melhor) melhor = d;
+    }
+    if (isFinite(melhor)) viz.push(Math.sqrt(melhor));
+  }
+  if (!viz.length) return piso;
+  viz.sort((a, b) => a - b);
+  const folga = viz[Math.floor((viz.length - 1) * 0.25)];
+  const porLargura = piso * ((folga * 0.62) / larguraMaxNoPiso);
+  const porAltura = folga * 0.75;
+  return Math.round(Math.max(piso, Math.min(teto, porLargura, porAltura)));
+}
+
 export async function capturarMapaFertilidade(c: CapturaMapa): Promise<string> {
   const W = c.larguraPx, H = c.alturaPx;
   const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
@@ -101,16 +139,29 @@ export async function capturarMapaFertilidade(c: CapturaMapa): Promise<string> {
     ctx.imageSmoothingEnabled = smooth;
   } catch { /* segue sem raster */ }
 
-  // 3) Valores (só o número, halo branco)
-  ctx.font = `bold ${Math.round(W / 90)}px sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.lineWidth = Math.max(2, W / 350); ctx.strokeStyle = '#1f2937'; ctx.fillStyle = '#ffffff';
+  // 3) Valores (só o número, halo). O CORPO DA FONTE SE ADAPTA À GRADE: em
+  // amostragem folgada o número cresce até o teto (era pequeno demais no PDF
+  // impresso); em grade apertada ele para no piso — o tamanho histórico —, de
+  // modo que nenhum rótulo encoste no vizinho. Ver tamanhoRotuloPontos.
+  const rotulos: { x: number; y: number; txt: string }[] = [];
   for (const f of c.valores.features) {
     if (f.geometry?.type !== 'Point') continue;
-    const [lng, lat] = (f.geometry as GeoJSON.Point).coordinates;
     const txt = String((f.properties as { txt?: string } | null)?.txt ?? '');
     if (!txt) continue;
-    const x = px(lng), y = py(lat);
-    ctx.strokeText(txt, x, y); ctx.fillText(txt, x, y);
+    const [lng, lat] = (f.geometry as GeoJSON.Point).coordinates;
+    rotulos.push({ x: px(lng), y: py(lat), txt });
+  }
+  if (rotulos.length) {
+    const piso = Math.round(W / 90), teto = Math.round(W / 60);
+    ctx.font = `bold ${piso}px sans-serif`;
+    const largMax = Math.max(...rotulos.map(r => ctx.measureText(r.txt).width));
+    const tam = tamanhoRotuloPontos(rotulos, largMax, piso, teto);
+    ctx.font = `bold ${tam}px sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    // Halo acompanha o corpo da fonte (contorno fino em número grande fica ralo
+    // sobre o satélite); nunca mais fino que o histórico.
+    ctx.lineWidth = Math.max(2, W / 350, tam / 6); ctx.strokeStyle = '#1f2937'; ctx.fillStyle = '#ffffff';
+    ctx.lineJoin = 'round';   // sem "farpas" nos cantos das letras quando o traço engrossa
+    for (const r of rotulos) { ctx.strokeText(r.txt, r.x, r.y); ctx.fillText(r.txt, r.x, r.y); }
   }
 
   // 4) Limite do talhão (contorno, por cima de tudo)
