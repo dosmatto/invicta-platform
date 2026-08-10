@@ -41,6 +41,9 @@ export interface ContextoRelatorio {
   siglaFazenda: string | null;
   ano: number | null;
   epoca: Epoca | null;
+  // Laboratório que FEZ a análise — vem do laudo importado, não da legenda.
+  // É ele que sai na coluna FONTE do quadro INTERPRETAÇÃO.
+  laboratorio: string;
   poligono: GeoJSON.Polygon | GeoJSON.MultiPolygon | null;
   dataInterpolacao: string;
   elementos: ElementoDisponivel[];
@@ -224,6 +227,7 @@ export async function carregarContextoRelatorio(
     municipio: local.municipio, estado: local.estado,
     siglaFazenda: fazenda?.sigla ?? null,
     ano: importacao?.ano ?? null, epoca: importacao?.epoca ?? null,
+    laboratorio: importacao?.laboratorio ?? '',
     poligono, dataInterpolacao, elementos, mapas, legendaPorNut, valoresDe, pontosGrade,
   };
 }
@@ -266,7 +270,12 @@ export function montarPaginas(ctx: ContextoRelatorio, nutsSelecionados: string[]
       fazenda: ctx.fazenda, produtor: ctx.produtor, talhao: ctx.talhao, safra: ctx.safra,
       cultura: ctx.cultura, areaHa: ctx.areaHa, municipio: ctx.municipio, estado: ctx.estado,
       siglaFazenda: ctx.siglaFazenda, ano: ctx.ano, epoca: ctx.epoca,
-      atributo: leg.atributo, simbolo: leg.simbolo, metodo: leg.metodo ?? null, fonte: leg.fonte, unidade: leg.unidade,
+      // FONTE = o LABORATÓRIO que fez a análise, e o LAUDO GANHA SEMPRE. A fonte
+      // da legenda só entra quando não há laudo por trás do mapa — ela vem fixa
+      // do seed ("Fundação ABC" em toda legenda do conjunto ABC), então trocar de
+      // laboratório não mudava nada no PDF.
+      atributo: leg.atributo, simbolo: leg.simbolo, metodo: leg.metodo ?? null,
+      fonte: ctx.laboratorio || leg.fonte, unidade: leg.unidade,
       legenda: leg, dataInterpolacao: ctx.dataInterpolacao, poligono: ctx.poligono,
       profundidades, satelite: config.satelite, corLimite: '#ffffff', logoClienteUrl: config.logoClienteUrl ?? null,
       pontosGrade: ctx.pontosGrade,

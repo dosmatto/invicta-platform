@@ -1,5 +1,11 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.43.1': [
+    'CORRIGIDO — A FONTE DO RELATÓRIO DIZIA SEMPRE "FUNDAÇÃO ABC", FOSSE QUAL FOSSE O LABORATÓRIO. A coluna FONTE do quadro INTERPRETAÇÃO não lia o laudo: ela repetia um campo da LEGENDA, e nas legendas do conjunto ABC esse campo vem escrito fixo no código. Quem importou um laudo da Interpartner recebia um PDF dizendo Fundação ABC — e, desde que o "Laboratório" saiu do rodapé, essa coluna era o único lugar do relatório que citava o laboratório.',
+    'AGORA A FONTE VEM DO LAUDO, E O LAUDO GANHA SEMPRE: sai o laboratório que você escolheu na importação (Biblioteca de perfis de laboratório) — Fundação ABC, Interpartner, o que estiver cadastrado. A fonte da legenda ficou como reserva, para mapa que não tenha laudo por trás.',
+    'Vale para os dois caminhos: o PDF de um elemento (aba Fertilidade) e o book do Gerador de Relatórios.',
+    'Onde conferir: Talhão → aba Fertilidade → importe/selecione o laudo → gere o PDF; a coluna FONTE, à direita da barra de interpretação, tem de bater com o laboratório da importação.',
+  ],
   '2.43.0': [
     'TODO ARQUIVO EXPORTADO PASSOU A TER O MESMO PADRÃO DE NOME: talhão · tipo · ano · época. "SA03_FERT_2026_EP01_SATCA" é o mapa de Saturação por Cálcio do talhão 03 da Serra Azul, 2026, 1ª época. Antes eram 43 pontos do sistema montando nome cada um do seu jeito, com SETE regras de saneamento diferentes — a mesma pasta de downloads tinha "Fertilidade_JCASA 03_Cálcio.pdf", "zona_manejo_JCASA_03.pdf", "Satelite_JCASA03_2026-08-07.pdf" e "Relatorio_JCASA 03_25-26.pdf", e nenhum deles dizia a época.',
     'A ORDEM É PROPOSITAL: ordenar a pasta por nome agrupa tudo de um talhão e, dentro dele, junta os mapas do mesmo tipo — a fertilidade de 2025 fica uma linha acima da de 2026, dá para comparar sem procurar. O identificador é a sigla da fazenda colada ao número do talhão, o mesmo "SA03" que a prescrição já usava no monitor da máquina.',

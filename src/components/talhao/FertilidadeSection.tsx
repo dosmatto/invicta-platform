@@ -724,7 +724,10 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
         siglaFazenda: getFazendas().find(f => f.id === nav.fazendaId)?.sigla ?? null,
         ano: importacao?.ano ?? null, epoca: importacao?.epoca ?? null,
         atributo: legAtual.atributo, simbolo: legAtual.simbolo, metodo: legAtual.metodo ?? null,
-        fonte: legAtual.fonte, unidade: legAtual.unidade, legenda: legAtual,
+        // FONTE = o LABORATÓRIO do laudo (o laudo ganha sempre); a fonte da
+        // legenda é só reserva para mapa sem importação por trás.
+        fonte: importacao?.laboratorio || legAtual.fonte,
+        unidade: legAtual.unidade, legenda: legAtual,
         dataInterpolacao: dataInterp, poligono, profundidades: profs, satelite: true, corLimite: '#ffffff',
       });
     } catch (e) {
