@@ -322,10 +322,16 @@ export interface ConteudoLaboratorio {
   config: PerfilLabConfig;
 }
 
-// Categoria 'labs' — o LABORATÓRIO em si (quem assina a análise). O nome fica em
-// ItemBiblioteca.nome, como nas demais categorias; aqui só o que é extra.
-// É este cadastro que alimenta a coluna FONTE do relatório de fertilidade.
+// Categoria 'labs' — o LABORATÓRIO em si (quem assina a análise).
+//
+// DOIS NOMES, de propósito: o mesmo laboratório costuma ter mais de um padrão de
+// planilha, e o usuário precisa distinguir as entradas na hora de escolher
+// ("Fundação ABC (via InCeres)" × "Fundação ABC (planilha)") — mas o relatório
+// tem de imprimir só "Fundação ABC" nas duas.
+//   • ItemBiblioteca.nome  → IDENTIFICAÇÃO, o que aparece nas listas e seletores;
+//   • conteudo.nomeFonte   → o que sai na coluna FONTE. Vazio = usa a identificação.
 export interface ConteudoLabAnalise {
+  nomeFonte?: string;
   cidade?: string;
   contato?: string;
   observacoes?: string;

@@ -295,7 +295,7 @@ function ConteudoLabsAnalise() {
   const Icon = def.icone;
   const [aba, setAba] = useState<EscopoBiblioteca>('empresa');
   const [refresh, setRefresh] = useState(0);
-  const [edit, setEdit] = useState<{ id: string | null; nome: string; cidade: string; contato: string } | null>(null);
+  const [edit, setEdit] = useState<{ id: string | null; nome: string; nomeFonte: string; cidade: string; contato: string } | null>(null);
   const recarregar = () => setRefresh(x => x + 1);
 
   useEffect(() => {
@@ -357,7 +357,7 @@ function ConteudoLabsAnalise() {
       </div>
 
       <div className="px-3 pt-2 flex-shrink-0">
-        <button onClick={() => setEdit({ id: null, nome: '', cidade: '', contato: '' })}
+        <button onClick={() => setEdit({ id: null, nome: '', nomeFonte: '', cidade: '', contato: '' })}
           className="w-full py-1.5 rounded text-[10px] font-bold text-white flex items-center justify-center gap-1"
           style={{ background: 'var(--invicta-green-dark)' }}>
           <Plus size={11} /> Novo laboratório
@@ -381,11 +381,16 @@ function ConteudoLabsAnalise() {
                     <div className="flex-1 min-w-0">
                       <div className="text-[11px] font-bold truncate" style={{ color: '#e2e8f0' }}>{it.nome}</div>
                       <div className="text-[9px]" style={{ color: '#64748b' }}>
-                        {[it.conteudo?.cidade, nLaudos > 0 ? `${nLaudos} laudo(s)` : 'sem laudos'].filter(Boolean).join(' · ')}
+                        {[
+                          it.conteudo?.nomeFonte?.trim() && it.conteudo.nomeFonte.trim() !== it.nome
+                            ? `FONTE: ${it.conteudo.nomeFonte.trim()}` : null,
+                          it.conteudo?.cidade,
+                          nLaudos > 0 ? `${nLaudos} laudo(s)` : 'sem laudos',
+                        ].filter(Boolean).join(' · ')}
                       </div>
                     </div>
                     {!it.ativo && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ background: '#1a3a6b', color: '#94a3b8' }}>inativo</span>}
-                    <button onClick={() => setEdit({ id: it.id, nome: it.nome, cidade: it.conteudo?.cidade ?? '', contato: it.conteudo?.contato ?? '' })}
+                    <button onClick={() => setEdit({ id: it.id, nome: it.nome, nomeFonte: it.conteudo?.nomeFonte ?? '', cidade: it.conteudo?.cidade ?? '', contato: it.conteudo?.contato ?? '' })}
                       title="Editar" className="p-1 rounded hover:bg-white/10" style={{ color: '#93c5fd' }}>
                       <Edit3 size={11} />
                     </button>
@@ -424,19 +429,21 @@ function ConteudoLabsAnalise() {
 }
 
 function LabAnaliseEditor({ state, escopo, onClose }: {
-  state: { id: string | null; nome: string; cidade: string; contato: string };
+  state: { id: string | null; nome: string; nomeFonte: string; cidade: string; contato: string };
   escopo: EscopoBiblioteca;
   onClose: () => void;
 }) {
   const [nome, setNome] = useState(state.nome);
+  const [nomeFonte, setNomeFonte] = useState(state.nomeFonte);
   const [cidade, setCidade] = useState(state.cidade);
   const [contato, setContato] = useState(state.contato);
 
   function salvar() {
     const n = nome.trim();
-    if (!n) { alert('Dê um nome ao laboratório.'); return; }
-    if (state.id) atualizarLaboratorio(state.id, { nome: n, cidade: cidade.trim(), contato: contato.trim() });
-    else criar<ConteudoLabAnalise>('labs', { nome: n, conteudo: { cidade: cidade.trim(), contato: contato.trim() }, escopo });
+    if (!n) { alert('Dê uma identificação ao laboratório.'); return; }
+    const conteudo = { nomeFonte: nomeFonte.trim(), cidade: cidade.trim(), contato: contato.trim() };
+    if (state.id) atualizarLaboratorio(state.id, { nome: n, ...conteudo });
+    else criar<ConteudoLabAnalise>('labs', { nome: n, conteudo, escopo });
     onClose();
   }
 
@@ -450,9 +457,21 @@ function LabAnaliseEditor({ state, escopo, onClose }: {
       </div>
       <div className="flex-1 overflow-y-auto p-3 space-y-2">
         <div>
-          <label className="text-[10px] font-semibold block mb-0.5" style={{ color: '#64748b' }}>Nome (sai como FONTE no relatório)</label>
-          <input value={nome} onChange={e => setNome(e.target.value)} placeholder="Ex.: Fundação ABC" autoFocus
+          <label className="text-[10px] font-semibold block mb-0.5" style={{ color: '#64748b' }}>Nome que SAI NA FONTE do relatório</label>
+          <input value={nomeFonte} onChange={e => setNomeFonte(e.target.value)} placeholder="Ex.: Fundação ABC" autoFocus
             className="w-full rounded px-2 py-1.5 text-xs outline-none" style={inputStyle} />
+          <p className="text-[9px] mt-0.5" style={{ color: '#475569' }}>
+            É este que o produtor lê no PDF. Vários padrões do mesmo laboratório devem repetir este nome.
+          </p>
+        </div>
+        <div>
+          <label className="text-[10px] font-semibold block mb-0.5" style={{ color: '#64748b' }}>Identificação (como VOCÊ reconhece)</label>
+          <input value={nome} onChange={e => setNome(e.target.value)} placeholder="Ex.: Fundação ABC (via InCeres)"
+            className="w-full rounded px-2 py-1.5 text-xs outline-none" style={inputStyle} />
+          <p className="text-[9px] mt-0.5" style={{ color: '#475569' }}>
+            Só aparece nas listas e no seletor da Fertilidade — nunca no relatório. Em branco na
+            FONTE acima, é esta identificação que vai impressa.
+          </p>
         </div>
         <div>
           <label className="text-[10px] font-semibold block mb-0.5" style={{ color: '#64748b' }}>Cidade (opcional)</label>

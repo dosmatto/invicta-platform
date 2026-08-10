@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import {
   getSafras, getGrades, getImportacoesLab, getTalhoes, getFazendas, getPlantio,
-  getLaboratorios, definirLaboratorioLab, nomeLaboratorioDoLaudo,
+  getLaboratorios, definirLaboratorioLab, nomeLaboratorioDoLaudo, fonteDoLaboratorio,
   getLegendas, getLegendasPorAtributo, ordenarLegendasDoAtributo, casasDecimaisVariavel,
   type ImportacaoLab, type GradeAmostragem,
 } from '@/lib/store';
@@ -805,7 +805,11 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
               {!importacao.laboratorioId && (
                 <option value="">{importacao.laboratorio || '—'} (não cadastrado — escolha)</option>
               )}
-              {laboratorios.map(l => <option key={l.id} value={l.id}>{l.nome}</option>)}
+              {laboratorios.map(l => (
+                <option key={l.id} value={l.id}>
+                  {l.nome}{fonteDoLaboratorio(l) !== l.nome ? ` → FONTE: ${fonteDoLaboratorio(l)}` : ''}
+                </option>
+              ))}
             </select>
             {laboratorios.length === 0 && (
               <p className="text-[10px] mt-1" style={{ color: '#fbbf24' }}>

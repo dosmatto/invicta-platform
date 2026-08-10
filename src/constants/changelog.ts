@@ -1,5 +1,12 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.46.0': [
+    'O LABORATÓRIO GANHOU DOIS NOMES, e isso resolve o caso de um mesmo laboratório ter vários padrões de planilha. "Nome que SAI NA FONTE do relatório" é o que o produtor lê no PDF — repita "Fundação ABC" em todas as entradas dela. "Identificação (como VOCÊ reconhece)" é interna: "Fundação ABC (via InCeres)", "Fundação ABC (planilha)" — aparece nas listas e no seletor da Fertilidade, e NUNCA no relatório.',
+    'ANTES ERA UM CAMPO SÓ e os dois usos brigavam: ou você deixava o nome bonito e perdia de vista de qual padrão o laudo veio, ou mantinha a distinção e ela ia impressa no PDF do produtor. Agora não precisa mais fundir as entradas repetidas para o relatório sair certo — funda só se quiser mesmo uma entrada só.',
+    'FONTE em branco = usa a identificação, então quem já tem o cadastro preenchido não muda nada até querer mudar.',
+    'O seletor da Fertilidade mostra os dois ("Fundação ABC (via InCeres) → FONTE: Fundação ABC"), e a lista da Biblioteca avisa o nome impresso quando ele difere da identificação.',
+    'Onde ver: Biblioteca → Laboratórios → Editar.',
+  ],
   '2.45.0': [
     'DÁ PARA EDITAR O LABORATÓRIO NA BIBLIOTECA. A categoria nasceu na v2.44.0 usando o painel genérico, que só sabia CRIAR: o item da lista tinha até uma setinha à direita, mas não abria nada. Agora tem Editar (nome, cidade, contato), Ativar/Inativar e Excluir, no mesmo padrão dos Perfis de planilha.',
     'E GANHOU O BOTÃO FUNDIR (escudo), que é o que resolve a bagunça da estreia: o cadastro foi semeado a partir dos laudos antigos, e eles guardavam o nome do PERFIL DE PLANILHA — a mesma Fundação ABC entrou três vezes ("via InCeres", "(planilha)" e limpa), mais o "InCeres / Interpartner (colunas id · prof)". Só renomear não resolveria: sobrariam três itens com o mesmo nome. Fundir manda os laudos de um para o outro e exclui o repetido, sem nenhum laudo perder o vínculo.',

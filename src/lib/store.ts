@@ -1556,12 +1556,20 @@ function _itemParaPerfilLab(it: ItemBiblioteca<ConteudoLaboratorio>): PerfilLab 
 // QUEM assina o laudo — separado do perfil de planilha, que diz COMO ler o
 // arquivo. O nome daqui é o que sai na coluna FONTE do relatório.
 
-export interface LaboratorioAnalise { id: string; nome: string; cidade?: string; contato?: string }
+// `nome` IDENTIFICA a entrada (é o que aparece nas listas e no seletor da
+// Fertilidade); `nomeFonte` é o que sai IMPRESSO na coluna FONTE do relatório.
+// Existem separados porque o mesmo laboratório costuma ter mais de um padrão de
+// planilha: duas entradas distinguíveis na tela, um nome só no papel.
+export interface LaboratorioAnalise { id: string; nome: string; nomeFonte?: string; cidade?: string; contato?: string }
+
+/** O que vai IMPRESSO — o nome de fonte quando houver, senão a identificação. */
+export const fonteDoLaboratorio = (l: Pick<LaboratorioAnalise, 'nome' | 'nomeFonte'>): string =>
+  (l.nomeFonte ?? '').trim() || l.nome;
 
 export function getLaboratorios(): LaboratorioAnalise[] {
   return bibListar<ConteudoLabAnalise>('labs')
     .filter(i => i.ativo)
-    .map(i => ({ id: i.id, nome: i.nome, cidade: i.conteudo?.cidade, contato: i.conteudo?.contato }))
+    .map(i => ({ id: i.id, nome: i.nome, nomeFonte: i.conteudo?.nomeFonte, cidade: i.conteudo?.cidade, contato: i.conteudo?.contato }))
     .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
 }
 
@@ -1625,7 +1633,7 @@ export function fundirLaboratorios(deId: string, paraId: string): number {
   for (const i of lista) {
     if (i.laboratorioId !== deId) continue;
     i.laboratorioId = destino.id;
-    i.laboratorio = destino.nome;
+    i.laboratorio = fonteDoLaboratorio(destino);
     i.atualizadoEm = agora;
     n++;
   }
@@ -1635,23 +1643,22 @@ export function fundirLaboratorios(deId: string, paraId: string): number {
 }
 
 /** Renomeia / edita um laboratório do cadastro. */
-export function atualizarLaboratorio(id: string, dados: { nome?: string; cidade?: string; contato?: string; observacoes?: string }) {
+export function atualizarLaboratorio(id: string, dados: { nome?: string; nomeFonte?: string; cidade?: string; contato?: string; observacoes?: string }) {
   const it = bibListar<ConteudoLabAnalise>('labs').find(i => i.id === id);
   if (!it) return;
   const { nome, ...conteudo } = dados;
+  const novoNome = nome?.trim() || it.nome;
   bibAtualizar<ConteudoLabAnalise>('labs', id, {
     ...(nome?.trim() ? { nome: nome.trim() } : {}),
     conteudo: { ...it.conteudo, ...conteudo },
   });
-  // O nome gravado nos laudos é só reserva, mas mantê-lo em dia evita um PDF
-  // gerado offline sair com o nome antigo.
-  const novoNome = nome?.trim();
-  if (novoNome) {
-    const lista = load<ImportacaoLab>('inv_lab');
-    let mudou = false;
-    for (const i of lista) if (i.laboratorioId === id && i.laboratorio !== novoNome) { i.laboratorio = novoNome; mudou = true; }
-    if (mudou) { save('inv_lab', lista); notificarLab(); }
-  }
+  // O snapshot gravado no laudo é reserva (PDF gerado offline), e o que ele
+  // guarda é o nome IMPRESSO — não a identificação interna.
+  const impresso = fonteDoLaboratorio({ nome: novoNome, nomeFonte: conteudo.nomeFonte ?? it.conteudo?.nomeFonte });
+  const lista = load<ImportacaoLab>('inv_lab');
+  let mudou = false;
+  for (const i of lista) if (i.laboratorioId === id && i.laboratorio !== impresso) { i.laboratorio = impresso; mudou = true; }
+  if (mudou) { save('inv_lab', lista); notificarLab(); }
 }
 
 /**
@@ -1663,8 +1670,8 @@ export function atualizarLaboratorio(id: string, dados: { nome?: string; cidade?
  */
 export function nomeLaboratorioDoLaudo(imp: Pick<ImportacaoLab, 'laboratorio' | 'laboratorioId'> | null | undefined): string {
   if (!imp) return '';
-  const doCadastro = imp.laboratorioId ? getLaboratorios().find(l => l.id === imp.laboratorioId)?.nome : null;
-  return doCadastro || imp.laboratorio || '';
+  const cad = imp.laboratorioId ? getLaboratorios().find(l => l.id === imp.laboratorioId) : null;
+  return (cad ? fonteDoLaboratorio(cad) : '') || imp.laboratorio || '';
 }
 
 export function getPerfisLab(): PerfilLab[] {
@@ -1771,7 +1778,7 @@ export function definirLaboratorioLab(id: string, laboratorioId: string): Import
   const i = lista.find(x => x.id === id);
   if (!i) return null;
   i.laboratorioId = lab.id;
-  i.laboratorio = lab.nome;
+  i.laboratorio = fonteDoLaboratorio(lab);   // snapshot = o que sai impresso
   i.atualizadoEm = new Date().toISOString();
   save('inv_lab', lista);
   notificarLab();
