@@ -1601,6 +1601,59 @@ export function migrarLaboratoriosDosLaudosV1() {
   localStorage.setItem('inv_migrado_labs_v1', '1');
 }
 
+/** Quantos laudos apontam para este laboratório — o custo de excluí-lo. */
+export function contarLaudosDoLaboratorio(labId: string): number {
+  return load<ImportacaoLab>('inv_lab').filter(i => i.laboratorioId === labId).length;
+}
+
+/**
+ * FUNDE dois laboratórios: os laudos do `deId` passam a apontar para o `paraId`
+ * e o `deId` é excluído. Devolve quantos laudos foram remanejados.
+ *
+ * Existe porque o cadastro nasceu semeado dos laudos antigos, que guardavam o
+ * nome do PERFIL de planilha — a mesma Fundação ABC entrou três vezes ("via
+ * InCeres", "(planilha)", limpa). Só renomear não resolve: geraria três itens
+ * homônimos. Aqui as três viram uma sem nenhum laudo perder a referência.
+ */
+export function fundirLaboratorios(deId: string, paraId: string): number {
+  if (deId === paraId) return 0;
+  if (!getLaboratorios().some(l => l.id === paraId)) return 0;
+  const lista = load<ImportacaoLab>('inv_lab');
+  const destino = getLaboratorios().find(l => l.id === paraId)!;
+  let n = 0;
+  const agora = new Date().toISOString();
+  for (const i of lista) {
+    if (i.laboratorioId !== deId) continue;
+    i.laboratorioId = destino.id;
+    i.laboratorio = destino.nome;
+    i.atualizadoEm = agora;
+    n++;
+  }
+  if (n) { save('inv_lab', lista); notificarLab(); }
+  bibExcluir('labs', deId);
+  return n;
+}
+
+/** Renomeia / edita um laboratório do cadastro. */
+export function atualizarLaboratorio(id: string, dados: { nome?: string; cidade?: string; contato?: string; observacoes?: string }) {
+  const it = bibListar<ConteudoLabAnalise>('labs').find(i => i.id === id);
+  if (!it) return;
+  const { nome, ...conteudo } = dados;
+  bibAtualizar<ConteudoLabAnalise>('labs', id, {
+    ...(nome?.trim() ? { nome: nome.trim() } : {}),
+    conteudo: { ...it.conteudo, ...conteudo },
+  });
+  // O nome gravado nos laudos é só reserva, mas mantê-lo em dia evita um PDF
+  // gerado offline sair com o nome antigo.
+  const novoNome = nome?.trim();
+  if (novoNome) {
+    const lista = load<ImportacaoLab>('inv_lab');
+    let mudou = false;
+    for (const i of lista) if (i.laboratorioId === id && i.laboratorio !== novoNome) { i.laboratorio = novoNome; mudou = true; }
+    if (mudou) { save('inv_lab', lista); notificarLab(); }
+  }
+}
+
 /**
  * Nome do laboratório de um laudo, para exibição — é o que sai como FONTE.
  *

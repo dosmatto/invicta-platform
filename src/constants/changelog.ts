@@ -1,5 +1,12 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.45.0': [
+    'DÁ PARA EDITAR O LABORATÓRIO NA BIBLIOTECA. A categoria nasceu na v2.44.0 usando o painel genérico, que só sabia CRIAR: o item da lista tinha até uma setinha à direita, mas não abria nada. Agora tem Editar (nome, cidade, contato), Ativar/Inativar e Excluir, no mesmo padrão dos Perfis de planilha.',
+    'E GANHOU O BOTÃO FUNDIR (escudo), que é o que resolve a bagunça da estreia: o cadastro foi semeado a partir dos laudos antigos, e eles guardavam o nome do PERFIL DE PLANILHA — a mesma Fundação ABC entrou três vezes ("via InCeres", "(planilha)" e limpa), mais o "InCeres / Interpartner (colunas id · prof)". Só renomear não resolveria: sobrariam três itens com o mesmo nome. Fundir manda os laudos de um para o outro e exclui o repetido, sem nenhum laudo perder o vínculo.',
+    'RENOMEAR CORRIGE TODOS OS LAUDOS DAQUELE LABORATÓRIO DE UMA VEZ — o laudo aponta para o cadastro, não copia o nome. O nome guardado no laudo é atualizado junto, para um PDF gerado offline não sair com o nome antigo.',
+    'EXCLUIR AVISA QUANTOS LAUDOS DEPENDEM do laboratório antes de confirmar, e a lista mostra essa contagem em cada item — para você saber o que pode apagar sem pensar duas vezes.',
+    'Onde ver: Biblioteca → Laboratórios.',
+  ],
   '2.44.0': [
     'A BIBLIOTECA GANHOU UM CADASTRO DE LABORATÓRIOS DE VERDADE. Você cadastra "Fundação ABC", "Interpartner" uma vez em Biblioteca → Laboratórios, e escolhe na Fertilidade qual fez o laudo. É esse nome que sai na coluna FONTE do relatório.',
     'POR QUE UMA CATEGORIA NOVA, E NÃO A QUE JÁ EXISTIA: a antiga "Laboratórios" guardava, na verdade, o DE-PARA das colunas da planilha — e um dos perfis embutidos se chama "InCeres / Interpartner (colunas id · prof)", que é nome de FORMATO, não de laboratório. Usar isso como fonte imprimiria essa string no relatório. Agora são duas coisas separadas: LABORATÓRIOS (quem assina a análise) e PERFIS DE PLANILHA (como ler o arquivo) — o mesmo laboratório pode trocar de formato, e o mesmo formato serve a dois laboratórios.',

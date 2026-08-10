@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   CATEGORIAS, listar, importar, exportar, criar, atualizar, excluir, ativar,
   type CategoriaBiblioteca, type EscopoBiblioteca, type DefCategoria,
-  type ItemBiblioteca, type ConteudoLaboratorio, type ConteudoPerfil,
+  type ItemBiblioteca, type ConteudoLaboratorio, type ConteudoLabAnalise, type ConteudoPerfil,
 } from '@/lib/biblioteca';
 import { Search, Plus, Download, Upload, ChevronRight, ChevronUp, ChevronDown, Edit3, Trash2, Save, X, Power, Shield } from 'lucide-react';
 import { LegendasPanel } from './LegendasPanel';
@@ -25,6 +25,7 @@ import {
   getConfigEtiqueta, saveConfigEtiqueta, getLegendasPorAtributo,
   getVariaveisAnalise, getVariaveisAtivas, garantirVariaveisComplementares, reordenarVariavelAtiva,
   saveVariavelAnalise, novaVariavelAnalise, deleteVariavelAnalise, siglaVariavel,
+  contarLaudosDoLaboratorio, fundirLaboratorios, atualizarLaboratorio,
   type PadraoElementos, type PadraoAmostragem, type ProfundidadeConfig, type ConfigEtiqueta, type VariavelAnalise,
 } from '@/lib/store';
 
@@ -82,6 +83,7 @@ function CategoriaConteudo({ slug }: { slug: SlugBiblioteca }) {
   if (slug === 'insumos') return <ConteudoInsumos />;
   if (slug === 'equacoes') return <EquacoesPanel />;
   if (slug === 'recomendacoes') return <RecomendacoesPanel />;
+  if (slug === 'labs') return <ConteudoLabsAnalise />;
   if (slug === 'laboratorios') return <ConteudoLaboratorios />;
   if (slug === 'perfis') return <ConteudoPerfis />;
   if (slug === 'safras') return <ConteudoSafras />;
@@ -282,7 +284,199 @@ function abaLabel(e: EscopoBiblioteca) {
   return e === 'meu' ? 'Meus padrões' : e === 'empresa' ? 'Empresa' : 'Sistema';
 }
 
-// ─── Laboratórios ─────────────────────────────────────────────────────────
+// ─── Laboratórios de análise (categoria 'labs') ───────────────────────────
+// QUEM assina o laudo — o nome que sai na coluna FONTE do relatório. Editável
+// aqui porque o cadastro nasceu SEMEADO dos laudos antigos, que guardavam o nome
+// do PERFIL de planilha: a mesma Fundação ABC entrou como "(via InCeres)",
+// "(planilha)" e limpa. Daí a FUSÃO — renomear as três só criaria homônimas.
+
+function ConteudoLabsAnalise() {
+  const def = CATEGORIAS.find(c => c.slug === 'labs')!;
+  const Icon = def.icone;
+  const [aba, setAba] = useState<EscopoBiblioteca>('empresa');
+  const [refresh, setRefresh] = useState(0);
+  const [edit, setEdit] = useState<{ id: string | null; nome: string; cidade: string; contato: string } | null>(null);
+  const recarregar = () => setRefresh(x => x + 1);
+
+  useEffect(() => {
+    const onCh = (e: Event) => {
+      const d = (e as CustomEvent).detail as { slug?: CategoriaBiblioteca } | undefined;
+      if (!d?.slug || d.slug === 'labs') recarregar();
+    };
+    if (typeof window !== 'undefined') window.addEventListener('inv:biblioteca', onCh);
+    return () => { if (typeof window !== 'undefined') window.removeEventListener('inv:biblioteca', onCh); };
+  }, []);
+
+  const itens = useMemo(
+    () => aba === 'sistema' ? [] : listar<ConteudoLabAnalise>('labs', aba),
+    [aba, refresh], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+
+  function excluirItem(it: ItemBiblioteca<ConteudoLabAnalise>) {
+    const n = contarLaudosDoLaboratorio(it.id);
+    const aviso = n > 0
+      ? `\n\n${n} laudo(s) apontam para ele. Eles NÃO serão apagados — passam a mostrar o nome guardado, sem vínculo com o cadastro. Para não perder o vínculo, use Fundir.`
+      : '';
+    if (!confirm(`Excluir o laboratório "${it.nome}"?${aviso}`)) return;
+    excluir('labs', it.id);
+    recarregar();
+  }
+
+  function fundir(it: ItemBiblioteca<ConteudoLabAnalise>) {
+    const outros = itens.filter(o => o.id !== it.id);
+    if (outros.length === 0) { alert('Não há outro laboratório para receber a fusão.'); return; }
+    const lista = outros.map((o, i) => `${i + 1} — ${o.nome}`).join('\n');
+    const escolha = prompt(`Fundir "${it.nome}" em qual laboratório?\n\n${lista}\n\nDigite o número:`);
+    const idx = Number(escolha) - 1;
+    if (!Number.isInteger(idx) || idx < 0 || idx >= outros.length) return;
+    const destino = outros[idx];
+    const n = contarLaudosDoLaboratorio(it.id);
+    if (!confirm(`"${it.nome}" será EXCLUÍDO e ${n} laudo(s) passarão a apontar para "${destino.nome}". Confirma?`)) return;
+    fundirLaboratorios(it.id, destino.id);
+    recarregar();
+  }
+
+  return (
+    <section className="flex-1 flex flex-col overflow-hidden relative">
+      <div className="px-4 py-3 flex-shrink-0" style={{ borderBottom: '1px solid #1a3a6b' }}>
+        <div className="flex items-center gap-2 mb-1">
+          <Icon size={14} style={{ color: '#93c5fd' }} />
+          <h3 className="text-sm font-bold uppercase tracking-wide" style={{ color: '#e2e8f0' }}>{def.nome}</h3>
+        </div>
+        <p className="text-[10px]" style={{ color: '#64748b' }}>{def.descricao}</p>
+      </div>
+
+      <div className="flex gap-1 px-3 pt-2 flex-shrink-0">
+        {([{ id: 'meu', label: 'Meus padrões' }, { id: 'empresa', label: 'Empresa' }] as { id: EscopoBiblioteca; label: string }[]).map(t => (
+          <button key={t.id} onClick={() => setAba(t.id)}
+            className="flex-1 py-1 rounded text-[10px] font-bold"
+            style={{ background: aba === t.id ? 'var(--invicta-blue-mid)' : '#1a3a6b', color: aba === t.id ? '#fff' : '#64748b' }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="px-3 pt-2 flex-shrink-0">
+        <button onClick={() => setEdit({ id: null, nome: '', cidade: '', contato: '' })}
+          className="w-full py-1.5 rounded text-[10px] font-bold text-white flex items-center justify-center gap-1"
+          style={{ background: 'var(--invicta-green-dark)' }}>
+          <Plus size={11} /> Novo laboratório
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-3 py-2">
+        {itens.length === 0 ? (
+          <div className="text-center py-8 px-4">
+            <p className="text-[10px]" style={{ color: '#64748b' }}>
+              Nenhum laboratório em <strong>{abaLabel(aba)}</strong>. Use <em>+ Novo laboratório</em>.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-1.5">
+            {itens.map(it => {
+              const nLaudos = contarLaudosDoLaboratorio(it.id);
+              return (
+                <div key={it.id} className="p-2 rounded-lg" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[11px] font-bold truncate" style={{ color: '#e2e8f0' }}>{it.nome}</div>
+                      <div className="text-[9px]" style={{ color: '#64748b' }}>
+                        {[it.conteudo?.cidade, nLaudos > 0 ? `${nLaudos} laudo(s)` : 'sem laudos'].filter(Boolean).join(' · ')}
+                      </div>
+                    </div>
+                    {!it.ativo && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ background: '#1a3a6b', color: '#94a3b8' }}>inativo</span>}
+                    <button onClick={() => setEdit({ id: it.id, nome: it.nome, cidade: it.conteudo?.cidade ?? '', contato: it.conteudo?.contato ?? '' })}
+                      title="Editar" className="p-1 rounded hover:bg-white/10" style={{ color: '#93c5fd' }}>
+                      <Edit3 size={11} />
+                    </button>
+                    <button onClick={() => fundir(it)} title="Fundir em outro laboratório" className="p-1 rounded hover:bg-white/10" style={{ color: '#a78bfa' }}>
+                      <Shield size={11} />
+                    </button>
+                    <button onClick={() => { ativar('labs', it.id, !it.ativo); recarregar(); }}
+                      title={it.ativo ? 'Inativar' : 'Ativar'} className="p-1 rounded hover:bg-white/10" style={{ color: it.ativo ? '#fbbf24' : '#22c55e' }}>
+                      <Power size={11} />
+                    </button>
+                    <button onClick={() => excluirItem(it)} title="Excluir" className="p-1 rounded hover:bg-white/10" style={{ color: '#f87171' }}>
+                      <Trash2 size={11} />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+            <p className="text-[9px] mt-3 px-1" style={{ color: '#475569' }}>
+              O nome daqui é o que sai na coluna FONTE do relatório de fertilidade. Renomear corrige
+              todos os laudos do laboratório de uma vez. Use <strong>Fundir</strong> (escudo) para juntar
+              entradas repetidas sem quebrar o vínculo dos laudos.
+            </p>
+          </div>
+        )}
+      </div>
+
+      {edit && (
+        <LabAnaliseEditor
+          state={edit}
+          escopo={aba}
+          onClose={() => { setEdit(null); recarregar(); }}
+        />
+      )}
+    </section>
+  );
+}
+
+function LabAnaliseEditor({ state, escopo, onClose }: {
+  state: { id: string | null; nome: string; cidade: string; contato: string };
+  escopo: EscopoBiblioteca;
+  onClose: () => void;
+}) {
+  const [nome, setNome] = useState(state.nome);
+  const [cidade, setCidade] = useState(state.cidade);
+  const [contato, setContato] = useState(state.contato);
+
+  function salvar() {
+    const n = nome.trim();
+    if (!n) { alert('Dê um nome ao laboratório.'); return; }
+    if (state.id) atualizarLaboratorio(state.id, { nome: n, cidade: cidade.trim(), contato: contato.trim() });
+    else criar<ConteudoLabAnalise>('labs', { nome: n, conteudo: { cidade: cidade.trim(), contato: contato.trim() }, escopo });
+    onClose();
+  }
+
+  return (
+    <div className="absolute inset-0 z-10 flex flex-col" style={{ background: '#0a1f38' }}>
+      <div className="px-4 py-3 flex items-center justify-between flex-shrink-0" style={{ borderBottom: '1px solid #1a3a6b' }}>
+        <h4 className="text-xs font-bold" style={{ color: '#e2e8f0' }}>
+          {state.id ? 'Editar laboratório' : 'Novo laboratório'}
+        </h4>
+        <button onClick={onClose} className="p-1 rounded hover:bg-white/10" style={{ color: '#94a3b8' }}><X size={13} /></button>
+      </div>
+      <div className="flex-1 overflow-y-auto p-3 space-y-2">
+        <div>
+          <label className="text-[10px] font-semibold block mb-0.5" style={{ color: '#64748b' }}>Nome (sai como FONTE no relatório)</label>
+          <input value={nome} onChange={e => setNome(e.target.value)} placeholder="Ex.: Fundação ABC" autoFocus
+            className="w-full rounded px-2 py-1.5 text-xs outline-none" style={inputStyle} />
+        </div>
+        <div>
+          <label className="text-[10px] font-semibold block mb-0.5" style={{ color: '#64748b' }}>Cidade (opcional)</label>
+          <input value={cidade} onChange={e => setCidade(e.target.value)}
+            className="w-full rounded px-2 py-1.5 text-xs outline-none" style={inputStyle} />
+        </div>
+        <div>
+          <label className="text-[10px] font-semibold block mb-0.5" style={{ color: '#64748b' }}>Contato (opcional)</label>
+          <input value={contato} onChange={e => setContato(e.target.value)}
+            className="w-full rounded px-2 py-1.5 text-xs outline-none" style={inputStyle} />
+        </div>
+      </div>
+      <div className="p-3 flex-shrink-0" style={{ borderTop: '1px solid #1a3a6b' }}>
+        <button onClick={salvar}
+          className="w-full py-2 rounded text-[11px] font-bold text-white flex items-center justify-center gap-1"
+          style={{ background: 'var(--invicta-green-dark)' }}>
+          <Save size={12} /> Salvar
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Perfis de planilha ───────────────────────────────────────────────────
 // Lista perfis de mapeamento (PerfilLabConfig) com ações reais. Aba Sistema
 // expõe PERFIS_BUILTIN readonly. Cadastro principal ainda nasce do "Salvar
 // perfil" dentro do LabImportSection — esta UI é gestão posterior.
