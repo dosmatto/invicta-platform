@@ -10,7 +10,7 @@ import { registrarLogin } from '@/lib/iam/auditoria';
 import { limparBaseOperacional } from '@/lib/admin/manutencao';
 import { TrocaSenhaObrigatoria } from '@/components/auth/TrocaSenhaObrigatoria';
 import { migrarLaboratoriosV1, migrarSafrasV1, migrarGradesV1, migrarPreferenciasV1, reKeyDonoBiblioteca } from '@/lib/biblioteca';
-import { seedLegendasSistema, migrarLegendaCtceV1, migrarLegendasSaturacoesV1, migrarLegendasSaturacoesV2, migrarLegendasSaturacoesV3, migrarLegendasHomonimasPadraoV1, garantirVariaveisComplementares, migrarSinonimosSeedV1, migrarOrdemPadraoFertV1, auditoriaCadastro, migrarAreasGeodesicasV1, migrarNomesMaiusculosV1, migrarGradesDuplicadasV1, migrarBboxTalhoesV1, migrarImportacoesLabPeriodoV1, migrarGradesPeriodoV1, migrarPeriodoDemaisV1, migrarInsumosParaSyncV1, migrarInsumosEscopoEmpresaV1, analisarTalhoesDuplicados, aplicarDedupTalhoesExatos, analisarFazendasOrfas, aplicarRemocaoFazendasOrfas } from '@/lib/store';
+import { seedLegendasSistema, migrarLegendaCtceV1, migrarLegendasSaturacoesV1, migrarLegendasSaturacoesV2, migrarLegendasSaturacoesV3, migrarLegendasHomonimasPadraoV1, garantirVariaveisComplementares, migrarSinonimosSeedV1, migrarOrdemPadraoFertV1, auditoriaCadastro, migrarAreasGeodesicasV1, migrarNomesMaiusculosV1, migrarGradesDuplicadasV1, migrarBboxTalhoesV1, migrarImportacoesLabPeriodoV1, migrarGradesPeriodoV1, migrarPeriodoDemaisV1, migrarInsumosParaSyncV1, migrarInsumosEscopoEmpresaV1, migrarLaboratoriosDosLaudosV1, analisarTalhoesDuplicados, aplicarDedupTalhoesExatos, analisarFazendasOrfas, aplicarRemocaoFazendasOrfas } from '@/lib/store';
 import { LEGENDAS_OFICIAIS } from '@/constants/legendasSeedOficial';
 import { authConfigurado, observarAuth, logout, type User } from '@/lib/auth';
 import { hidratarCachePesado } from '@/lib/localComprimido';
@@ -183,6 +183,7 @@ export function AppProvider({ children, redirectProdutorParaPortal, modoCampo }:
       passo('migrarGradesPeriodoV1', migrarGradesPeriodoV1);   // Data de referência + Ano nas grades antigas (preserva a época)
       passo('migrarPeriodoDemaisV1', migrarPeriodoDemaisV1);   // Ano em compactação/produtividade/condutividade antigos
       passo('migrarInsumosEscopoEmpresaV1', migrarInsumosEscopoEmpresaV1);   // insumo privado × equação da empresa = FK que só o dono enxerga
+      passo('migrarLaboratoriosDosLaudosV1', migrarLaboratoriosDosLaudosV1);   // semeia o cadastro de laboratórios com os que já estão nos laudos
       console.info(`[entrada] migrações/seeds locais: ${Math.round(performance.now() - t)}ms`);
     }
 

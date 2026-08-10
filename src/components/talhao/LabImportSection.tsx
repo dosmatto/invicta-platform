@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import {
   getSafras, getGrades, getPerfisLab, salvarPerfilLab, deletePerfilLab,
-  getImportacoesLab, saveImportacaoLab, deleteImportacaoLab, getVariaveisAtivas, siglaVariavel,
+  getImportacoesLab, saveImportacaoLab, deleteImportacaoLab, getVariaveisAtivas, siglaVariavel, salvarLaboratorio,
   GradeAmostragem, ImportacaoLab,
 } from '@/lib/store';
 import { lerArquivo, aplicarPerfil, autoConfig, PERFIS_BUILTIN, PERFIL_PADRAO, escolherPerfil, pontuarPerfil, CONFIANCA_MINIMA, norm, numerosDaGrade, valorLab, calcularDerivados, DERIVADOS_IDS, ELEMENTOS_LAB, PerfilLabConfig, type ResultadoAmostra } from '@/lib/lab';
@@ -65,7 +65,11 @@ export function LabImportSection({ safraNome: safraProp }: { safraNome?: string 
   // É o único caso em que o perfil pode casar por acaso e importar tudo trocado.
   const { cfg, perfilNome, ehAuto, posicional } = useMemo<{ cfg: PerfilLabConfig | null; perfilNome: string; ehAuto: boolean; posicional: boolean }>(() => {
     const doArquivo = () => (aoa ? autoConfig(aoa, getVariaveisAtivas()).config : null);
-    if (perfilId === 'auto') return { cfg: doArquivo(), perfilNome: nomeNovoLab.trim() || 'Novo laboratório', ehAuto: true, posicional: false };
+    // Sem nome digitado, o laboratório fica VAZIO — nunca a etiqueta genérica.
+    // "Novo laboratório" era gravado como se fosse o nome do laboratório e ia
+    // impresso na coluna FONTE do relatório; agora a aba Fertilidade pede para
+    // escolher um do cadastro (Biblioteca → Laboratórios).
+    if (perfilId === 'auto') return { cfg: doArquivo(), perfilNome: nomeNovoLab.trim(), ehAuto: true, posicional: false };
     const b = PERFIS_BUILTIN.find(p => p.id === perfilId);
     // Perfil de layout em COLUNAS (nº de colunas varia por laudo): as colunas
     // saem do cabeçalho do próprio arquivo, não de índices fixos.
@@ -178,7 +182,11 @@ export function LabImportSection({ safraNome: safraProp }: { safraNome?: string 
     if (!nav.talhaoId || !safraNome || resultadosEditados.length === 0) { setErro('Nada para importar (confira perfil, talhão e campanha).'); setEstado('erro'); return; }
     saveImportacaoLab({
       talhaoId: nav.talhaoId, safra: safraNome, gradeId: grade?.id ?? '',
-      laboratorio: perfilNome, campanha: campanhaEscolhida,
+      // O laboratório entra no CADASTRO (upsert por nome) e o laudo guarda a FK:
+      // renomear o laboratório na Biblioteca passa a corrigir todos os laudos.
+      laboratorio: perfilNome,
+      laboratorioId: salvarLaboratorio(perfilNome)?.id,
+      campanha: campanhaEscolhida,
       resultados: resultadosEditados, elementos: elementosImport,
       dataReferencia: dataRef,   // Ano/Época são recalculados no store a partir daqui
     });

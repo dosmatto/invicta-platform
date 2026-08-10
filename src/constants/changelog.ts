@@ -1,5 +1,14 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.44.0': [
+    'A BIBLIOTECA GANHOU UM CADASTRO DE LABORATÓRIOS DE VERDADE. Você cadastra "Fundação ABC", "Interpartner" uma vez em Biblioteca → Laboratórios, e escolhe na Fertilidade qual fez o laudo. É esse nome que sai na coluna FONTE do relatório.',
+    'POR QUE UMA CATEGORIA NOVA, E NÃO A QUE JÁ EXISTIA: a antiga "Laboratórios" guardava, na verdade, o DE-PARA das colunas da planilha — e um dos perfis embutidos se chama "InCeres / Interpartner (colunas id · prof)", que é nome de FORMATO, não de laboratório. Usar isso como fonte imprimiria essa string no relatório. Agora são duas coisas separadas: LABORATÓRIOS (quem assina a análise) e PERFIS DE PLANILHA (como ler o arquivo) — o mesmo laboratório pode trocar de formato, e o mesmo formato serve a dois laboratórios.',
+    'DÁ PARA CORRIGIR UM LAUDO JÁ IMPORTADO sem reimportar a planilha: na aba Fertilidade, abaixo da importação, escolha o laboratório no seletor "Laboratório (sai como FONTE no relatório)". Era o caso do laudo que aparecia como "Novo laboratório".',
+    'A ETIQUETA "NOVO LABORATÓRIO" NÃO É MAIS GRAVADA. Ela era o texto padrão da importação em modo automático quando ninguém digitava o nome, e ia impressa no PDF como se fosse o laboratório. Agora, sem nome, o laudo fica sem laboratório e a Fertilidade pede para escolher um do cadastro.',
+    'O LAUDO APONTA PARA O CADASTRO, não copia o nome: renomear um laboratório na Biblioteca corrige todos os laudos dele de uma vez. E os laboratórios que já apareciam nos seus laudos entram no cadastro sozinhos na primeira abertura (a etiqueta genérica fica de fora).',
+    'SEM LABORATÓRIO, A FONTE SAI "—". Antes ela caía na fonte da legenda, que vem escrita fixa no código — um laudo da Interpartner saía dizendo Fundação ABC. Melhor um traço honesto que um nome errado.',
+    'Onde ver: Biblioteca → Laboratórios (cadastro) e Talhão → aba Fertilidade (seletor, logo abaixo da importação).',
+  ],
   '2.43.1': [
     'CORRIGIDO — A FONTE DO RELATÓRIO DIZIA SEMPRE "FUNDAÇÃO ABC", FOSSE QUAL FOSSE O LABORATÓRIO. A coluna FONTE do quadro INTERPRETAÇÃO não lia o laudo: ela repetia um campo da LEGENDA, e nas legendas do conjunto ABC esse campo vem escrito fixo no código. Quem importou um laudo da Interpartner recebia um PDF dizendo Fundação ABC — e, desde que o "Laboratório" saiu do rodapé, essa coluna era o único lugar do relatório que citava o laboratório.',
     'AGORA A FONTE VEM DO LAUDO, E O LAUDO GANHA SEMPRE: sai o laboratório que você escolheu na importação (Biblioteca de perfis de laboratório) — Fundação ABC, Interpartner, o que estiver cadastrado. A fonte da legenda ficou como reserva, para mapa que não tenha laudo por trás.',

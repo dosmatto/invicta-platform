@@ -30,7 +30,8 @@ export type CategoriaBiblioteca =
   | 'preferencias-analise' | 'safras' | 'grades' | 'fertilidade'
   | 'analises-foliares' | 'altimetria' | 'imagem-satelite' | 'compactacao'
   | 'algebra-mapas' | 'pragas' | 'equacoes' | 'recomendacoes'
-  | 'produtividade' | 'perfis' | 'laboratorios' | 'legendas' | 'insumos';
+  | 'produtividade' | 'perfis' | 'laboratorios' | 'legendas' | 'insumos'
+  | 'labs';
 
 export interface ItemBiblioteca<TConteudo = unknown> {
   id: string;
@@ -91,8 +92,16 @@ export const CATEGORIAS: DefCategoria[] = [
     descricao: 'Padrões de mapas de colheita e classes de produtividade.' },
   { slug: 'perfis', nome: 'Perfis', icone: UserCog, status: 'disponivel',
     descricao: 'Combina laboratório + padrão de amostragem + legendas por elemento. Selecione um perfil na Fertilidade pra preencher tudo de uma vez.' },
-  { slug: 'laboratorios', nome: 'Laboratórios', icone: FlaskConical, status: 'disponivel',
-    descricao: 'Perfis de mapeamento de planilhas de laboratório (Fundação ABC, Interpartner, …).' },
+  // QUEM fez a análise. Separado dos perfis de planilha de propósito: um mesmo
+  // laboratório troca de formato de arquivo, e dois laboratórios usam o mesmo
+  // formato (o perfil embutido chama-se "InCeres / Interpartner"). É este nome
+  // que sai na coluna FONTE do relatório — nome de formato ali seria absurdo.
+  { slug: 'labs', nome: 'Laboratórios', icone: FlaskConical, status: 'disponivel',
+    descricao: 'Quem faz as análises (Fundação ABC, Interpartner, …). O laboratório escolhido na Fertilidade é o que sai como FONTE no relatório.' },
+  // COMO ler a planilha de cada laudo (de-para de colunas). Chamava-se
+  // "Laboratórios" e guardava as duas coisas juntas.
+  { slug: 'laboratorios', nome: 'Perfis de planilha', icone: FlaskConical, status: 'disponivel',
+    descricao: 'De-para das colunas de cada layout de planilha de laudo. Um laboratório pode ter mais de um; o mesmo layout pode servir a vários.' },
   { slug: 'legendas', nome: 'Legendas', icone: BookOpen, status: 'disponivel',
     descricao: 'Repositório de legendas para mapas (fertilidade, NDVI, colheita, condutividade, etc.).' },
 ];
@@ -311,6 +320,15 @@ export function _bibSaveRaw<T = unknown>(slug: CategoriaBiblioteca, data: ItemBi
 // já presentes na biblioteca; mantém a chave antiga intacta (rollback fácil).
 export interface ConteudoLaboratorio {
   config: PerfilLabConfig;
+}
+
+// Categoria 'labs' — o LABORATÓRIO em si (quem assina a análise). O nome fica em
+// ItemBiblioteca.nome, como nas demais categorias; aqui só o que é extra.
+// É este cadastro que alimenta a coluna FONTE do relatório de fertilidade.
+export interface ConteudoLabAnalise {
+  cidade?: string;
+  contato?: string;
+  observacoes?: string;
 }
 
 // Fase 4 — perfil agronômico (categoria 'perfis'). Refers Lab + PadrAmos +

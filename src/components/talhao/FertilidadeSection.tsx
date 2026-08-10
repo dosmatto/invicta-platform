@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import {
   getSafras, getGrades, getImportacoesLab, getTalhoes, getFazendas, getPlantio,
+  getLaboratorios, definirLaboratorioLab, nomeLaboratorioDoLaudo,
   getLegendas, getLegendasPorAtributo, ordenarLegendasDoAtributo, casasDecimaisVariavel,
   type ImportacaoLab, type GradeAmostragem,
 } from '@/lib/store';
@@ -85,6 +86,7 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
   const safraNome = safraProp ?? safraAtiva?.nome ?? '';
 
   const [importacoes, setImportacoes] = useState<ImportacaoLab[]>([]);
+  const laboratorios = useMemo(() => getLaboratorios(), []);
   const [importacaoId, setImportacaoId] = useState('');
   const [nutriente, setNutriente] = useState('');
   const [profundidade, setProfundidade] = useState('');
@@ -726,7 +728,10 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
         atributo: legAtual.atributo, simbolo: legAtual.simbolo, metodo: legAtual.metodo ?? null,
         // FONTE = o LABORATÓRIO do laudo (o laudo ganha sempre); a fonte da
         // legenda é só reserva para mapa sem importação por trás.
-        fonte: importacao?.laboratorio || legAtual.fonte,
+        // FONTE é SOMENTE o laboratório que fez a análise (decisão do usuário).
+        // Sem laboratório no laudo sai "—": a fonte da legenda diria "Fundação
+        // ABC" mesmo num laudo da Interpartner, que é justamente o erro corrigido.
+        fonte: nomeLaboratorioDoLaudo(importacao) || '—',
         unidade: legAtual.unidade, legenda: legAtual,
         dataInterpolacao: dataInterp, poligono, profundidades: profs, satelite: true, corLimite: '#ffffff',
       });
@@ -779,6 +784,36 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
           <option value="">Selecione a importação…</option>
           {importacoes.map(i => <option key={i.id} value={i.id}>{i.laboratorio}{i.campanha ? ` · ${i.campanha}` : ''} · {i.resultados.length} amostras</option>)}
         </select>
+
+        {/* Laboratório do laudo — é ELE que sai na coluna FONTE do relatório.
+            Editável aqui de propósito: laudo importado em modo automático sem
+            nome ficava gravado como "Novo laboratório" e ia impresso assim. */}
+        {importacao && (
+          <div className="mt-2">
+            <label className="text-[10px] font-semibold block mb-0.5" style={{ color: '#64748b' }}>
+              Laboratório (sai como FONTE no relatório)
+            </label>
+            <select
+              value={importacao.laboratorioId ?? ''}
+              onChange={e => {
+                if (!e.target.value) return;
+                definirLaboratorioLab(importacao.id, e.target.value);
+                setImportacoes(getImportacoesLab(nav.talhaoId!, safraNome));
+              }}
+              className="w-full rounded px-2 py-1.5 text-xs outline-none" style={inputStyle}
+            >
+              {!importacao.laboratorioId && (
+                <option value="">{importacao.laboratorio || '—'} (não cadastrado — escolha)</option>
+              )}
+              {laboratorios.map(l => <option key={l.id} value={l.id}>{l.nome}</option>)}
+            </select>
+            {laboratorios.length === 0 && (
+              <p className="text-[10px] mt-1" style={{ color: '#fbbf24' }}>
+                Nenhum laboratório cadastrado — cadastre em Biblioteca → Laboratórios.
+              </p>
+            )}
+          </div>
+        )}
         {mapasSalvos > 0 && (
           cloudPodeGravar() ? (
             <p className="text-[10px] mt-1 flex items-center gap-1" style={{ color: '#86efac' }}>

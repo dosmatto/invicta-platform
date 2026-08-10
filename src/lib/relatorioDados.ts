@@ -6,7 +6,7 @@
 
 import {
   getTalhoes, getFazendas, getClientes, getImportacoesLab, getGrades, getLegendas, getPlantio,
-  getVariaveisAnalise, casasDecimaisVariavel,
+  getVariaveisAnalise, casasDecimaisVariavel, nomeLaboratorioDoLaudo,
 } from './store';
 import type { Legenda } from './legendas';
 import { cloudCarregarMapasPorPrefixo } from './cloud';
@@ -227,7 +227,7 @@ export async function carregarContextoRelatorio(
     municipio: local.municipio, estado: local.estado,
     siglaFazenda: fazenda?.sigla ?? null,
     ano: importacao?.ano ?? null, epoca: importacao?.epoca ?? null,
-    laboratorio: importacao?.laboratorio ?? '',
+    laboratorio: nomeLaboratorioDoLaudo(importacao),
     poligono, dataInterpolacao, elementos, mapas, legendaPorNut, valoresDe, pontosGrade,
   };
 }
@@ -275,7 +275,7 @@ export function montarPaginas(ctx: ContextoRelatorio, nutsSelecionados: string[]
       // do seed ("Fundação ABC" em toda legenda do conjunto ABC), então trocar de
       // laboratório não mudava nada no PDF.
       atributo: leg.atributo, simbolo: leg.simbolo, metodo: leg.metodo ?? null,
-      fonte: ctx.laboratorio || leg.fonte, unidade: leg.unidade,
+      fonte: ctx.laboratorio || '—', unidade: leg.unidade,
       legenda: leg, dataInterpolacao: ctx.dataInterpolacao, poligono: ctx.poligono,
       profundidades, satelite: config.satelite, corLimite: '#ffffff', logoClienteUrl: config.logoClienteUrl ?? null,
       pontosGrade: ctx.pontosGrade,

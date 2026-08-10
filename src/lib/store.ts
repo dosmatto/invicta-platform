@@ -20,6 +20,7 @@ import {
   compartilhar as bibCompartilhar,
   type ItemBiblioteca,
   type ConteudoLaboratorio,
+  type ConteudoLabAnalise,
   type ConteudoSafra,
   type ConteudoGrade,
   type ConteudoEtiqueta,
@@ -1529,7 +1530,8 @@ export interface ImportacaoLab {
   talhaoId: string;
   safra: string;
   gradeId: string;
-  laboratorio: string;
+  laboratorio: string;        // nome gravado no import (retrocompat / reserva)
+  laboratorioId?: string;     // FK p/ Biblioteca → Laboratórios: a fonte da verdade
   campanha?: string;
   resultados: ResultadoAmostra[];
   elementos: string[];
@@ -1548,6 +1550,68 @@ export interface ImportacaoLab {
 
 function _itemParaPerfilLab(it: ItemBiblioteca<ConteudoLaboratorio>): PerfilLab {
   return { id: it.id, nome: it.nome, config: it.conteudo.config, criadoEm: it.criadoEm };
+}
+
+// ── Laboratórios de análise (categoria 'labs') ──────────────────────────────
+// QUEM assina o laudo — separado do perfil de planilha, que diz COMO ler o
+// arquivo. O nome daqui é o que sai na coluna FONTE do relatório.
+
+export interface LaboratorioAnalise { id: string; nome: string; cidade?: string; contato?: string }
+
+export function getLaboratorios(): LaboratorioAnalise[] {
+  return bibListar<ConteudoLabAnalise>('labs')
+    .filter(i => i.ativo)
+    .map(i => ({ id: i.id, nome: i.nome, cidade: i.conteudo?.cidade, contato: i.conteudo?.contato }))
+    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+}
+
+/** Cria (ou devolve o existente) pelo nome — upsert, para não duplicar. */
+export function salvarLaboratorio(nome: string, extra?: ConteudoLabAnalise): LaboratorioAnalise | null {
+  const n = nome.trim();
+  if (!n) return null;
+  const existente = bibListar<ConteudoLabAnalise>('labs').find(i => i.nome.toLowerCase() === n.toLowerCase());
+  if (existente) {
+    if (extra) bibAtualizar<ConteudoLabAnalise>('labs', existente.id, { conteudo: { ...existente.conteudo, ...extra } });
+    return { id: existente.id, nome: existente.nome };
+  }
+  const it = bibCriar<ConteudoLabAnalise>('labs', {
+    nome: n, conteudo: extra ?? {}, escopo: empresaAtivaId() ? 'empresa' : 'meu',
+  });
+  return { id: it.id, nome: it.nome };
+}
+
+/**
+ * Semeia o cadastro com os laboratórios que JÁ aparecem nos laudos importados,
+ * para o usuário não começar com a lista vazia e o histórico não se perder.
+ *
+ * Ignora a etiqueta "Novo laboratório": ela não é um laboratório, é o texto que
+ * a importação em modo automático gravava quando ninguém digitava o nome — foi
+ * ela que apareceu como FONTE num relatório e originou este cadastro.
+ */
+export function migrarLaboratoriosDosLaudosV1() {
+  if (typeof window === 'undefined') return;
+  if (localStorage.getItem('inv_migrado_labs_v1') === '1') return;
+  if (cloudAindaNaoHidratou()) return;   // sem a nuvem, semearia duplicata
+  const nomes = new Set(
+    load<ImportacaoLab>('inv_lab')
+      .map(i => (i.laboratorio ?? '').trim())
+      .filter(n => n && n.toLowerCase() !== 'novo laboratório'),
+  );
+  for (const n of nomes) salvarLaboratorio(n);
+  localStorage.setItem('inv_migrado_labs_v1', '1');
+}
+
+/**
+ * Nome do laboratório de um laudo, para exibição — é o que sai como FONTE.
+ *
+ * O CADASTRO manda: se o laudo aponta para um item da Biblioteca, o nome vem de
+ * lá, então renomear o laboratório corrige todos os laudos de uma vez. O nome
+ * gravado no import é só reserva (laudo antigo, anterior ao cadastro).
+ */
+export function nomeLaboratorioDoLaudo(imp: Pick<ImportacaoLab, 'laboratorio' | 'laboratorioId'> | null | undefined): string {
+  if (!imp) return '';
+  const doCadastro = imp.laboratorioId ? getLaboratorios().find(l => l.id === imp.laboratorioId)?.nome : null;
+  return doCadastro || imp.laboratorio || '';
 }
 
 export function getPerfisLab(): PerfilLab[] {
@@ -1638,6 +1702,27 @@ export function saveImportacaoLab(i: Omit<ImportacaoLab, 'id' | 'criadoEm'>): Im
   save('inv_lab', lista);
   notificarLab();
   return nova;
+}
+
+/**
+ * Troca o LABORATÓRIO de um laudo já importado (aba Fertilidade).
+ *
+ * Corrigir sem reimportar a planilha é o ponto: laudo gravado com a etiqueta
+ * "Novo laboratório" ia parar na FONTE do relatório, e reimportar só para
+ * arrumar o nome é caro. Grava o id (autoridade) e o nome (o que se lê offline).
+ */
+export function definirLaboratorioLab(id: string, laboratorioId: string): ImportacaoLab | null {
+  const lab = getLaboratorios().find(l => l.id === laboratorioId);
+  if (!lab) return null;
+  const lista = load<ImportacaoLab>('inv_lab');
+  const i = lista.find(x => x.id === id);
+  if (!i) return null;
+  i.laboratorioId = lab.id;
+  i.laboratorio = lab.nome;
+  i.atualizadoEm = new Date().toISOString();
+  save('inv_lab', lista);
+  notificarLab();
+  return i;
 }
 
 // Altera a Data de referência de um laudo já salvo e RECALCULA Ano/Época.
