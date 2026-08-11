@@ -2553,6 +2553,21 @@ export function destravarLegendasSistema(): number {
  * `inv_migrado_*`), rodar de novo é inofensivo: marcar pendente só força a
  * mescla, que preserva os dois lados.
  */
+/**
+ * O cadastro de LABORATÓRIOS (v2.44) nasceu fora de KEYS_LISTA: `cloudPushLista`
+ * era no-op para ele, então o cadastro e os nomes editados nunca subiam — ficavam
+ * presos no navegador onde foram digitados. Mesma dívida que os insumos tiveram,
+ * e mesma quitação: marcar pendente ANTES do boot, senão a primeira hidratação
+ * grava o vazio da nuvem por cima do que já existe aqui.
+ */
+export function migrarLabsParaSyncV1() {
+  if (typeof window === 'undefined') return;
+  if (localStorage.getItem('inv_migrado_labs_sync_v1') === '1') return;
+  if (load<unknown>('inv_bib_labs').length === 0) return;   // nada a proteger
+  cloudMarcarPendente('inv_bib_labs');
+  localStorage.setItem('inv_migrado_labs_sync_v1', '1');
+}
+
 export function migrarInsumosParaSyncV1() {
   if (typeof window === 'undefined') return;
   if (localStorage.getItem('inv_migrado_insumos_sync_v1') === '1') return;

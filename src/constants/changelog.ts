@@ -1,5 +1,10 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.46.2': [
+    'CORRIGIDO — O CADASTRO DE LABORATÓRIOS NÃO SUBIA PARA A NUVEM. A categoria nasceu na v2.44.0 fora da lista de coleções sincronizadas, e o espelhamento é silencioso para chave que não está lá: gravava no navegador e parava por ali. Na prática, o laboratório cadastrado (e o nome digitado no editor) não sobrevivia a abrir o sistema em outra máquina, e podia ser sobrescrito pela hidratação.',
+    'Quem já cadastrou laboratórios neste navegador não perde nada: eles são marcados para subida ANTES da primeira hidratação — a mesma proteção que os Insumos receberam na v2.42, e pelo mesmo motivo (sem ela, o boot grava o vazio da nuvem por cima do que existe aqui).',
+    'Onde conferir: cadastre ou renomeie um laboratório em Biblioteca → Laboratórios, recarregue a página e confirme que o nome ficou.',
+  ],
   '2.46.1': [
     'CORRIGIDO — A TELA APAGAVA SOZINHA NO MEIO DA MEDIÇÃO E A CAMINHADA PARAVA. "Manter a tela ligada" existia em um lugar só: o mapa da Amostragem de Solo. Na Medição, na Mancha e na Compactação o celular apagava a tela pelo tempo do sistema, e com a tela apagada o GPS para de entregar posição e o cronômetro congela — a gravação simplesmente parava dentro do bolso.',
     'O PIOR ERA NÃO AVISAR: ao acordar o aparelho, o próximo ponto gravado ligava em LINHA RETA ao último ponto antes de apagar. O trecho caminhado no meio sumia e a área/perímetro saíam menores, sem nenhuma mensagem — parecia uma medição normal.',

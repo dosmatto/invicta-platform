@@ -29,6 +29,12 @@ const KEYS_LISTA = [
   'inv_safras', 'inv_padroes_elem', 'inv_padroes_amos',
   'inv_grades',                        // grades reais (GradeAmostragem) — não muda
   'inv_bib_laboratorios',              // Fase 3
+  'inv_bib_labs',                      // Cadastro de LABORATÓRIOS (quem assina o laudo).
+                                       // Entrou no sync na v2.47: nasceu fora dele na v2.44 e,
+                                       // sem estar aqui, cloudPushLista era no-op — o cadastro
+                                       // e os nomes editados ficavam presos num navegador só.
+                                       // Quem já tem itens locais entra por
+                                       // migrarLabsParaSyncV1 (store.ts).
   'inv_bib_perfis',                    // Fase 4
   'inv_bib_safras',                    // Fase 5 — Safras
   'inv_bib_grades',                    // Fase 5 — Padrões de Amostragem + Elementos
@@ -119,7 +125,7 @@ const KEYS_PULAR_CAMPO = new Set<string>([
   'inv_condutividade', 'inv_produtividade', 'inv_mde', 'inv_mde_camadas',
   'inv_composicoes', 'inv_meap_ambientes', 'inv_meap_zoneamentos',
   'inv_lab', 'inv_compactacao', 'inv_precos', 'inv_paletas', 'inv_estilo_presets',
-  'inv_bib_laboratorios', 'inv_bib_perfis', 'inv_bib_preferencias-analise',
+  'inv_bib_laboratorios', 'inv_bib_labs', 'inv_bib_perfis', 'inv_bib_preferencias-analise',
   'inv_bib_equacoes', 'inv_bib_recomendacoes',
   'inv_padroes_elem', 'inv_padroes_amos',
   'inv_prescricoes',                   // plataforma-only: o app de campo não lê prescrições

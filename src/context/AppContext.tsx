@@ -10,7 +10,7 @@ import { registrarLogin } from '@/lib/iam/auditoria';
 import { limparBaseOperacional } from '@/lib/admin/manutencao';
 import { TrocaSenhaObrigatoria } from '@/components/auth/TrocaSenhaObrigatoria';
 import { migrarLaboratoriosV1, migrarSafrasV1, migrarGradesV1, migrarPreferenciasV1, reKeyDonoBiblioteca } from '@/lib/biblioteca';
-import { seedLegendasSistema, migrarLegendaCtceV1, migrarLegendasSaturacoesV1, migrarLegendasSaturacoesV2, migrarLegendasSaturacoesV3, migrarLegendasHomonimasPadraoV1, garantirVariaveisComplementares, migrarSinonimosSeedV1, migrarOrdemPadraoFertV1, auditoriaCadastro, migrarAreasGeodesicasV1, migrarNomesMaiusculosV1, migrarGradesDuplicadasV1, migrarBboxTalhoesV1, migrarImportacoesLabPeriodoV1, migrarGradesPeriodoV1, migrarPeriodoDemaisV1, migrarInsumosParaSyncV1, migrarInsumosEscopoEmpresaV1, migrarLaboratoriosDosLaudosV1, analisarTalhoesDuplicados, aplicarDedupTalhoesExatos, analisarFazendasOrfas, aplicarRemocaoFazendasOrfas } from '@/lib/store';
+import { seedLegendasSistema, migrarLegendaCtceV1, migrarLegendasSaturacoesV1, migrarLegendasSaturacoesV2, migrarLegendasSaturacoesV3, migrarLegendasHomonimasPadraoV1, garantirVariaveisComplementares, migrarSinonimosSeedV1, migrarOrdemPadraoFertV1, auditoriaCadastro, migrarAreasGeodesicasV1, migrarNomesMaiusculosV1, migrarGradesDuplicadasV1, migrarBboxTalhoesV1, migrarImportacoesLabPeriodoV1, migrarGradesPeriodoV1, migrarPeriodoDemaisV1, migrarInsumosParaSyncV1, migrarLabsParaSyncV1, migrarInsumosEscopoEmpresaV1, migrarLaboratoriosDosLaudosV1, analisarTalhoesDuplicados, aplicarDedupTalhoesExatos, analisarFazendasOrfas, aplicarRemocaoFazendasOrfas } from '@/lib/store';
 import { LEGENDAS_OFICIAIS } from '@/constants/legendasSeedOficial';
 import { authConfigurado, observarAuth, logout, type User } from '@/lib/auth';
 import { hidratarCachePesado } from '@/lib/localComprimido';
@@ -214,7 +214,7 @@ export function AppProvider({ children, redirectProdutorParaPortal, modoCampo }:
       // propósito: aquela roda depois do boot, quando o estrago já aconteceu.
       // No app de campo a chave nem é baixada (KEYS_PULAR_CAMPO), então marcar
       // pendente lá só criaria uma pendência órfã.
-      if (!modoCampo) migrarInsumosParaSyncV1();
+      if (!modoCampo) { migrarInsumosParaSyncV1(); migrarLabsParaSyncV1(); }
       const tLogin = performance.now();   // [entrada] cronômetro total até a tela liberar
       // Hidrata da nuvem com TEMPO-LIMITE: se o Supabase estiver degradado
       // (pendurado), entra com os dados locais em vez de prender o usuário no
