@@ -30,6 +30,11 @@ import { inputStyle } from '@/constants/ui';
 import { hojeSaoPauloISO, periodoDeData, rotuloEpoca } from '@/lib/periodo';
 import { fmtMax2 as fmt } from '@/lib/formato';
 
+// Resolução do mapa de compactação. 5 m é o padrão do app (igual à Fertilidade e
+// à Condutividade) — aqui era 20 m fixo, sem opção, e o mapa saía em blocos.
+const PIXEL_COMP_PADRAO = 5;
+const PIXEIS_COMP = [2, 3, 5, 10, 15, 20, 25, 30];
+
 type Ponto = { lng: number; lat: number; valor: number };
 type MapaPronto = { resp: RespInterp; labels: GeoJSON.FeatureCollection };
 
@@ -71,6 +76,7 @@ export function CompactacaoSection({ safraNome }: { safraNome?: string } = {}) {
   const [estado, setEstado] = useState<'idle' | 'processando' | 'pronto' | 'erro'>('idle');
   const [erro, setErro] = useState('');
   const [cache, setCache] = useState<Record<string, MapaPronto>>({});
+  const [pixelM, setPixelM] = useState(PIXEL_COMP_PADRAO);
 
   function recarregar() {
     if (nav.talhaoId && safra) {
@@ -180,7 +186,7 @@ export function CompactacaoSection({ safraNome }: { safraNome?: string } = {}) {
     setEstado('processando'); setErro('');
     try {
       const { dominio, stops } = rampaDaLegenda(legenda);
-      const resp = await interpolar({ pontos: pts, poligono, dominio, stops, metodo: 'krige', pixelM: 20, modeloFixo: null });
+      const resp = await interpolar({ pontos: pts, poligono, dominio, stops, metodo: 'krige', pixelM, modeloFixo: null });
       const labels = fcLabels(pts);
       setCache(c => ({ ...c, [prof]: { resp, labels } }));
       setEstado('pronto');
@@ -321,6 +327,14 @@ export function CompactacaoSection({ safraNome }: { safraNome?: string } = {}) {
                 );
               })}
             </div>
+          </div>
+
+          <div>
+            <label className="text-[10px] font-semibold block mb-1" style={{ color: '#64748b' }}>Pixel</label>
+            <select value={pixelM} onChange={e => setPixelM(Number(e.target.value))}
+              className="w-full rounded px-2 py-1 text-[11px] outline-none" style={inputStyle}>
+              {PIXEIS_COMP.map(p => <option key={p} value={p}>{p} × {p} m{p === PIXEL_COMP_PADRAO ? ' (padrão)' : ''}</option>)}
+            </select>
           </div>
 
           <button onClick={() => processar(profundidade)} disabled={processando || !poligono || !profundidade}

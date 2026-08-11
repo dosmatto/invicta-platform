@@ -1,5 +1,10 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.48.0': [
+    'COMPACTAÇÃO AGORA INTERPOLA EM 5 × 5 m, FECHANDO O PADRÃO DO APP. Era a última aba que ainda gerava em 20 m — e sem nenhuma opção de escolha, o valor estava fixo no código. Fertilidade, Condutividade e Compactação agora saem todas em 5 m por padrão.',
+    'E GANHOU O SELETOR DE PIXEL: um campo "Pixel" logo acima do botão Interpolar, com as mesmas opções da Condutividade (de 2 a 30 m), com 5 m marcado como padrão.',
+    'Vale para os PRÓXIMOS processamentos: os mapas de compactação já salvos continuam como estão — reinterpole a profundidade para o mapa sair na resolução nova.',
+  ],
   '2.47.0': [
     'CONDUTIVIDADE AGORA INTERPOLA EM 5 × 5 m, COMO O RESTO DO APP. O mapa de CEa estava saindo em blocos de 20 m — daí o aspecto quadriculado e o serrilhado grosso na divisa do talhão. O padrão passou para 5 m, o mesmo da Fertilidade.',
     'E O PIXEL ESCOLHIDO PASSOU A VALER DE VERDADE: o seletor só aparecia no modo "Manual" e, mesmo assim, o modo "Automática" ignorava a escolha e mandava 20 m fixo para o servidor. Agora o campo "Pixel (m)" fica visível nos dois modos e é respeitado nos dois. A lista vai de 2 a 30 m, com 5 m marcado como padrão.',
