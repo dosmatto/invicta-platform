@@ -1,5 +1,11 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.47.0': [
+    'CONDUTIVIDADE AGORA INTERPOLA EM 5 × 5 m, COMO O RESTO DO APP. O mapa de CEa estava saindo em blocos de 20 m — daí o aspecto quadriculado e o serrilhado grosso na divisa do talhão. O padrão passou para 5 m, o mesmo da Fertilidade.',
+    'E O PIXEL ESCOLHIDO PASSOU A VALER DE VERDADE: o seletor só aparecia no modo "Manual" e, mesmo assim, o modo "Automática" ignorava a escolha e mandava 20 m fixo para o servidor. Agora o campo "Pixel (m)" fica visível nos dois modos e é respeitado nos dois. A lista vai de 2 a 30 m, com 5 m marcado como padrão.',
+    'Vale para os PRÓXIMOS processamentos: os mapas de CEa já salvos continuam como estão — reprocesse a profundidade para o mapa sair na resolução nova. A qualidade do levantamento e a limpeza (MapFilter) não mudaram; isto é só a resolução da saída. Os pontos que entram na krigagem continuam sendo agrupados por média (limite de 600), então o mapa mais fino não deixa o processamento pesado.',
+    'OBS.: a aba Compactação ainda gera em 20 m fixo, sem opção de escolha — me avise se quiser que ela siga o mesmo padrão.',
+  ],
   '2.46.2': [
     'CORRIGIDO — O CADASTRO DE LABORATÓRIOS NÃO SUBIA PARA A NUVEM. A categoria nasceu na v2.44.0 fora da lista de coleções sincronizadas, e o espelhamento é silencioso para chave que não está lá: gravava no navegador e parava por ali. Na prática, o laboratório cadastrado (e o nome digitado no editor) não sobrevivia a abrir o sistema em outra máquina, e podia ser sobrescrito pela hidratação.',
     'Quem já cadastrou laboratórios neste navegador não perde nada: eles são marcados para subida ANTES da primeira hidratação — a mesma proteção que os Insumos receberam na v2.42, e pelo mesmo motivo (sem ela, o boot grava o vazio da nuvem por cima do que existe aqui).',

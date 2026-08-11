@@ -29,6 +29,11 @@ import { Upload, Loader2, Zap, Eraser, AlertTriangle, Save, Trash2, Play, Plus, 
 import { inputStyle } from '@/constants/ui';
 import { fmtMax2 as fmt } from '@/lib/formato';
 
+// Resolução do mapa de EC. 5 m é o padrão do app (o mesmo da Fertilidade) — a
+// lista mantém os valores grossos que já existiam aqui, para quem quiser.
+const PIXEL_EC_PADRAO = 5;
+const PIXEIS_EC = [2, 3, 5, 10, 15, 20, 25, 30];
+
 // Parâmetros padrão da limpeza (MapFilter). Vêm preenchidos e são editáveis.
 const PARAMS_LIMPEZA_PADRAO = { p_clip: 1, mf_global_v: 0.5, mf_local_r: 25, mf_local_v: 0.15, mf_aniso_tol: 25, mf_min_neighbors: 4 } as const;
 type ParamsLimpeza = { [K in keyof typeof PARAMS_LIMPEZA_PADRAO]: number };
@@ -103,7 +108,13 @@ export function CondutividadeSection() {
   const [krigModo, setKrigModo] = useState<'auto' | 'manual'>('auto');
   const [krigMetodo, setKrigMetodo] = useState<'krige' | 'idw'>('krige');
   const [krigModelo, setKrigModelo] = useState('spherical');
-  const [krigPixel, setKrigPixel] = useState(20);
+  // Pixel do mapa de EC. Padrão 5 m, o MESMO da Fertilidade — antes era 20 m aqui
+  // (e o modo automático nem olhava esta escolha: mandava 20 fixo), então o mapa
+  // saía em blocos grossos e visivelmente serrilhado na divisa. Vale para os dois
+  // modos. Nota: isto é a resolução da SAÍDA; a densidade dos pontos de entrada
+  // continua sendo reduzida por prepararPontosKrigagem (média por célula), que é
+  // o que protege a krigagem da matriz N×N do dado denso de EC.
+  const [krigPixel, setKrigPixel] = useState(PIXEL_EC_PADRAO);
   // Variograma manual completo (C2.b) — só entra quando o ALCANCE é preenchido.
   const [krigVar, setKrigVar] = useState({ patamar: '', alcance: '', pepita: '', vizinhos: '', anisoRatio: '', anisoAngle: '' });
   const [paramsAberto, setParamsAberto] = useState(false);
@@ -296,7 +307,7 @@ export function CondutividadeSection() {
       const resp = await interpolar({
         pontos: ptsK, poligono, dominio, stops,
         metodo: manual ? krigMetodo : 'krige',
-        pixelM: manual ? krigPixel : 20,
+        pixelM: krigPixel,
         modeloFixo: manual && krigMetodo === 'krige' && !varManual ? krigModelo : null,
         variogramaManual: varManual,
       });
@@ -311,7 +322,7 @@ export function CondutividadeSection() {
         const q = avaliarQualidade({ n: resp.stats.n, rmse: resp.stats.rmse, min: resp.stats.min, max: resp.stats.max, percRemovido: limpos[prof]?.rel?.perc_removido ?? null });
         addRodadaCondutividade(levId, prof, {
           metodo: manual ? 'manual' : 'auto',
-          krig: { metodo: manual ? krigMetodo : 'krige', modelo: (manual && krigMetodo === 'krige') ? krigModelo : resp.stats.modelo, pixel: manual ? krigPixel : 20, variograma: varManual },
+          krig: { metodo: manual ? krigMetodo : 'krige', modelo: (manual && krigMetodo === 'krige') ? krigModelo : resp.stats.modelo, pixel: krigPixel, variograma: varManual },
           usouLimpeza: !!limpos[prof],
           limpeza: limpos[prof] ? { ...params } : null,
           stats: { modelo: resp.stats.modelo, rmse: resp.stats.rmse, n: resp.stats.n, min: resp.stats.min, max: resp.stats.max },
@@ -648,8 +659,17 @@ export function CondutividadeSection() {
                         </button>
                       ))}
                     </div>
+                    {/* Pixel vale para os DOIS modos — antes ficava só no manual e o
+                        automático mandava 20 m fixo, ignorando a escolha. */}
+                    <div>
+                      <label className="text-[8px] block mb-0.5" style={{ color: '#64748b' }}>Pixel (m)</label>
+                      <select value={krigPixel} onChange={e => setKrigPixel(Number(e.target.value))}
+                        className="w-full rounded px-1 py-1 text-[9px] outline-none" style={{ background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' }}>
+                        {PIXEIS_EC.map(p => <option key={p} value={p}>{p} × {p} m{p === PIXEL_EC_PADRAO ? ' (padrão)' : ''}</option>)}
+                      </select>
+                    </div>
                     {krigModo === 'manual' && (<>
-                      <div className="grid grid-cols-3 gap-1.5">
+                      <div className="grid grid-cols-2 gap-1.5">
                         <div>
                           <label className="text-[8px] block mb-0.5" style={{ color: '#64748b' }}>Método</label>
                           <select value={krigMetodo} onChange={e => setKrigMetodo(e.target.value as 'krige' | 'idw')}
@@ -665,13 +685,6 @@ export function CondutividadeSection() {
                             <option value="spherical">Esférico</option>
                             <option value="exponential">Exponencial</option>
                             <option value="gaussian">Gaussiano</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label className="text-[8px] block mb-0.5" style={{ color: '#64748b' }}>Pixel (m)</label>
-                          <select value={krigPixel} onChange={e => setKrigPixel(Number(e.target.value))}
-                            className="w-full rounded px-1 py-1 text-[9px] outline-none" style={{ background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' }}>
-                            {[10, 15, 20, 25, 30].map(p => <option key={p} value={p}>{p}</option>)}
                           </select>
                         </div>
                       </div>
