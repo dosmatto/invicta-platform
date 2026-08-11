@@ -28,6 +28,7 @@ import {
 } from '@/lib/coleta';
 import type { PosOperador } from '@/components/coleta/MapaColeta';
 import { useGps } from '@/components/coleta/useGps';
+import { useTelaLigada } from '@/components/coleta/useTelaLigada';
 import { SyncBadge } from '@/components/shared/SyncBadge';
 import { APP_VERSION } from '@/constants/version';
 import {
@@ -100,6 +101,11 @@ export default function ColetaPage() {
   const [sincronizando, setSincronizando] = useState(false);
   const [instalar, setInstalar] = useState<(() => void) | null>(null);
   const sincronizarRef = useRef<(() => Promise<void>) | null>(null);
+
+  // Tela ligada em TODO o app de campo (Início, seleção, mapa, Medição, Mancha,
+  // Compactação) — antes valia só no mapa da Amostragem, e a Medição perdia a
+  // caminhada quando a tela apagava sozinha.
+  useTelaLigada();
 
   // service worker + estado online + prompt de instalação
   useEffect(() => {
@@ -658,23 +664,7 @@ function TelaMapa({ sel, setSel, online, pend, reload, setReload, sincronizar, s
   const [baixando, setBaixando] = useState<{ feitos: number; total: number } | null>(null);
   const avisadoRef = useRef(false);
 
-  // tela ligada durante o trabalho (quando o navegador suporta)
-  useEffect(() => {
-    type NavWakeLock = Navigator & { wakeLock?: { request: (t: 'screen') => Promise<{ release: () => Promise<void> }> } };
-    let lock: { release: () => Promise<void> } | null = null;
-    const pedir = () => {
-      (navigator as NavWakeLock).wakeLock?.request('screen')
-        .then(l => { lock = l; })
-        .catch(() => {});
-    };
-    pedir();
-    const onVis = () => { if (document.visibilityState === 'visible') pedir(); };
-    document.addEventListener('visibilitychange', onVis);
-    return () => {
-      document.removeEventListener('visibilitychange', onVis);
-      void lock?.release().catch(() => {});
-    };
-  }, []);
+  // (a tela ligada é pedida uma vez em ColetaPage, para o app de campo inteiro)
 
   const statusDe = useCallback((ordem: number): StatusPonto =>
     coletas.find(c => c.ordem === ordem)?.status ?? 'pendente', [coletas]);

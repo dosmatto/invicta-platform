@@ -1,5 +1,12 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.46.1': [
+    'CORRIGIDO — A TELA APAGAVA SOZINHA NO MEIO DA MEDIÇÃO E A CAMINHADA PARAVA. "Manter a tela ligada" existia em um lugar só: o mapa da Amostragem de Solo. Na Medição, na Mancha e na Compactação o celular apagava a tela pelo tempo do sistema, e com a tela apagada o GPS para de entregar posição e o cronômetro congela — a gravação simplesmente parava dentro do bolso.',
+    'O PIOR ERA NÃO AVISAR: ao acordar o aparelho, o próximo ponto gravado ligava em LINHA RETA ao último ponto antes de apagar. O trecho caminhado no meio sumia e a área/perímetro saíam menores, sem nenhuma mensagem — parecia uma medição normal.',
+    'AGORA A TELA FICA LIGADA NO APP DE CAMPO INTEIRO, do Início à Medição. Em troca, a tela não apaga mais sozinha enquanto o app estiver aberto na frente: em dia de campo longe do carregador, saia do app (ou tranque o aparelho) nos intervalos.',
+    'ISSO NÃO É MEDIR COM A TELA DESLIGADA. Se você apertar o botão de desligar, o sistema desliga mesmo e a medição para — continuar gravando de tela apagada exige um serviço nativo em primeiro plano (aquela notificação fixa de "medindo…"), que é trabalho à parte.',
+    'Onde ver: app de campo (Coleta) → qualquer módulo; a tela não escurece mais sozinha.',
+  ],
   '2.46.0': [
     'O LABORATÓRIO GANHOU DOIS NOMES, e isso resolve o caso de um mesmo laboratório ter vários padrões de planilha. "Nome que SAI NA FONTE do relatório" é o que o produtor lê no PDF — repita "Fundação ABC" em todas as entradas dela. "Identificação (como VOCÊ reconhece)" é interna: "Fundação ABC (via InCeres)", "Fundação ABC (planilha)" — aparece nas listas e no seletor da Fertilidade, e NUNCA no relatório.',
     'ANTES ERA UM CAMPO SÓ e os dois usos brigavam: ou você deixava o nome bonito e perdia de vista de qual padrão o laudo veio, ou mantinha a distinção e ela ia impressa no PDF do produtor. Agora não precisa mais fundir as entradas repetidas para o relatório sair certo — funda só se quiser mesmo uma entrada só.',
