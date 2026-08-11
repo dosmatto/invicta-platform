@@ -1,5 +1,9 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.48.2': [
+    'CORRIGIDO — AS SETINHAS DE ORDENAR PARARAM DE FUNCIONAR na v2.48.1. Junto com a correção do "pulo para o topo" entrou uma gravação em lote da nova ordem, e era ela que travava: nada se movia e nada dava erro. A gravação voltou a ser a de sempre, item por item; a correção do pulo continua de pé.',
+    'Onde ver: Biblioteca → Perfis → Legendas por elemento. As setas voltam a andar um degrau por clique.',
+  ],
   '2.48.1': [
     'CORRIGIDO — A SETINHA DE SUBIR JOGAVA O ELEMENTO PARA O TOPO em vez de andar um degrau. Com a lista em Textura · MO · pH, clicar em subir no pH devolvia pH · Textura · MO. Como a ordem que se formava não era a pedida, parecia que a Biblioteca não estava gravando.',
     'A CAUSA: a troca permutava os dois valores de "ordem" entre os vizinhos, e isso só funciona se toda variável tiver uma ordem diferente. Quando várias empatam — e empatavam —, quem decide a posição na tela passa a ser o desempate por sigla, e o valor recebido na permuta levava o elemento para qualquer lugar da lista.',

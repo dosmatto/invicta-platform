@@ -17,7 +17,6 @@ import {
   obter as bibObter,
   criar as bibCriar,
   atualizar as bibAtualizar,
-  atualizarVarios as bibAtualizarVarios,
   excluir as bibExcluir,
   compartilhar as bibCompartilhar,
   type ItemBiblioteca,
@@ -1448,9 +1447,8 @@ export function saveVariavelAnalise(v: VariavelAnalise) {
   // pode ser justamente a que não foi atualizada. A edição "não pegava".
   const itens = _itensVariaveis().filter(i => i.conteudo.varId === v.id);
   const conteudo: ConteudoVariavel = { tipo: 'variavel', varId: v.id, sigla: v.sigla, nome: v.nome, unidade: v.unidade, sinonimos: v.sinonimos, usar: v.usar, ordem: v.ordem, casasDecimais: v.casasDecimais };
-  if (itens.length === 1) bibAtualizar<ConteudoVariavel>('preferencias-analise', itens[0].id, { nome: `Variável: ${v.sigla}`, conteudo });
-  else if (itens.length > 1) bibAtualizarVarios<ConteudoVariavel>('preferencias-analise', itens.map(i => ({ id: i.id, patch: { nome: `Variável: ${v.sigla}`, conteudo } })));
-  else bibCriar<ConteudoVariavel>('preferencias-analise', { nome: `Variável: ${v.sigla}`, conteudo, escopo: empresaAtivaId() ? 'empresa' : 'meu' });
+  if (itens.length === 0) bibCriar<ConteudoVariavel>('preferencias-analise', { nome: `Variável: ${v.sigla}`, conteudo, escopo: empresaAtivaId() ? 'empresa' : 'meu' });
+  else for (const i of itens) bibAtualizar<ConteudoVariavel>('preferencias-analise', i.id, { nome: `Variável: ${v.sigla}`, conteudo });
 }
 
 // Ordem PADRÃO dos elementos de fertilidade (pedido do usuário 23/07/2026) — vira
@@ -1491,24 +1489,11 @@ export function reordenarVariavelAtiva(id: string, dir: -1 | 1) {
   if (!nova) return;                     // ponta da lista: nada a fazer
   const mudou = renumerar(nova);
   if (mudou.length === 0) return;
-
-  garantirVariaveisAnalise();
-  // EM LOTE: a primeira reordenação num catálogo com `ordem` bagunçada renumera
-  // dezenas de variáveis, e uma gravação por item seria uma escrita da coleção
-  // inteira e um push para a nuvem por variável.
-  const porVarId = new Map(_itensVariaveis().map(i => [i.conteudo.varId, i]));
-  const patches: Array<{ id: string; patch: { nome: string; conteudo: ConteudoVariavel } }> = [];
-  for (const { item, ordem } of mudou) {
-    const it = porVarId.get(item.id);
-    // Sem item materializado (ex.: a CTCe, que getVariaveisAnalise injeta em
-    // memória quando falta): cria pelo caminho normal.
-    if (!it) { saveVariavelAnalise({ ...item, ordem }); continue; }
-    patches.push({
-      id: it.id,
-      patch: { nome: `Variável: ${item.sigla}`, conteudo: { ...it.conteudo, ordem } },
-    });
-  }
-  if (patches.length) bibAtualizarVarios<ConteudoVariavel>('preferencias-analise', patches);
+  // UMA gravação por item mudado, pelo caminho normal (saveVariavelAnalise), que
+  // já sabe achar/criar/atualizar as duplicatas. Houve aqui uma versão em LOTE
+  // (bibAtualizarVarios) que travou a reordenação inteira — nada se movia e nada
+  // dava erro. Se voltar a incomodar a performance, medir antes: correção primeiro.
+  for (const { item, ordem } of mudou) saveVariavelAnalise({ ...item, ordem });
 }
 
 // Cria uma variável NOVA (id derivado da sigla, único). Devolve a variável criada.
