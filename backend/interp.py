@@ -975,9 +975,21 @@ def gerar_multi(camadas: list[dict], bounds, dims, n_classes: int,
     # LIMITE EXTERNO = POLÍGONO OFICIAL DO TALHÃO. O raster só decide as divisas
     # INTERNAS: as classes viram uma partição EXATA do talhão (faces do arranjo
     # células+talhão; faixas de borda/nodata vão para a vizinha de maior divisa)
-    # e a cobertura é simplificada com simplify_boundary=False — as arestas
-    # internas (escadinha das células) são suavizadas como UMA linha só por
-    # divisa e o contorno do talhão fica EXATAMENTE o cadastrado (sem pixels).
+    # e o contorno do talhão fica EXATAMENTE o cadastrado (sem pixels).
+    #
+    # A ESCADINHA SAI AQUI, não no botão "Suavizar limites". A divisa entre duas
+    # classes é uma decisão do dado, não do desenho da célula: entregá-la em
+    # degraus de um pixel é dizer que a mudança de ambiente acontece em ângulo
+    # reto de 5 em 5 metros. MEDIDO no IGEFI 04 (malha de 5 m, 3 camadas):
+    # a mediana dos segmentos das divisas internas era 4,98 m — UM pixel — e 69%
+    # deles cabiam numa célula; o `coverage_simplify` de meia célula que estava
+    # aqui não removia degrau nenhum (Douglas-Peucker com tolerância igual a
+    # metade do degrau preserva o degrau, por definição).
+    #
+    # A tolerância é UMA célula com uma passada de Chaikin: o mínimo que apaga a
+    # marca da grade. A divisa anda no máximo ~1 pixel, dentro da incerteza do
+    # próprio raster. Arredondar mais que isso é escolha agronômica e continua
+    # onde sempre esteve — no "Suavizar limites", com os níveis.
     dx_m = abs(dx) * 111320.0 * math.cos(math.radians(lat0))
     dy_m = abs(dy) * 110540.0
     zonas_finais: list[tuple[int, Any]] = []   # (rank, geometria em graus)
@@ -986,12 +998,15 @@ def gerar_multi(camadas: list[dict], bounds, dims, n_classes: int,
         zl = [_dissolver(_so_poligonos(_tf_local(g, lon0, lat0))) for _, g in por_rank]
         poly_loc = shapely.make_valid(_tf_local(poly, lon0, lat0))
         zl, _st = _montar_particao(zl, ranks_pr, poly_loc)
-        if hasattr(shapely, "coverage_simplify"):
-            try:
-                zl = list(shapely.coverage_simplify(zl, min(dx_m, dy_m) * 0.5, simplify_boundary=False))
-            except Exception:
-                pass
-        zonas_finais = [(r, _tf_geo(shapely.make_valid(g), lon0, lat0)) for r, g in zip(ranks_pr, zl)]
+        celula = min(dx_m, dy_m)
+        # Pó de vetorização (< RUIDO_M2) vira zona própria, com número e tudo:
+        # no IGEFI 04 saíam manchas de 25, 54, 74 e 215 m². Vão para a vizinha.
+        _absorver_fragmentos(zl, ranks_pr, 0.0, 0.0)
+        try:
+            zl = _suavizar_divisas(zl, ranks_pr, poly_loc, celula, celula, 1)
+        except ValueError:
+            pass       # zoneamento pequeno demais p/ remontar: a malha crua é melhor que erro
+        zonas_finais = list(zip(ranks_pr, _para_graus(zl, lon0, lat0)))
     else:
         # sem polígono do talhão: mantém a malha (contorno = borda das células)
         geoms = [g for _, g in por_rank]
@@ -1103,6 +1118,33 @@ def _multi(polys: list):
     if not polys:
         return shapely.Polygon()
     return polys[0] if len(polys) == 1 else shapely.MultiPolygon(polys)
+
+
+def _para_graus(geoms_loc: list, lon0: float, lat0: float) -> list:
+    """Plano métrico local → GRAUS, garantindo a validade NO SISTEMA QUE SAI.
+
+    Validar em metros NÃO basta, e isso não é teoria: no IGEFI 04, 2 das 31
+    zonas saíam do `suavizar_zonas` válidas em metros e com self-intersection
+    em graus — e a validação obrigatória, que rodava só em metros, deixava
+    passar. O usuário recebia a zona quebrada.
+
+    Por que quebra na conversão: ela divide x por ~101.000, y por ~110.540 e
+    SOMA lon0/lat0. Em metros o vértice é ~438,6 (4 dígitos antes da vírgula);
+    em graus vira −50,2949875839269 — o deslocamento come dígitos
+    significativos, e o detalhe (segmentos de 33 cm) vai parar perto do último
+    bit do double. Dois vértices quase colineares podem então cair do lado
+    ERRADO da aresta ao serem arredondados, e o anel passa a se cruzar.
+
+    Por isso o make_valid vive AQUI: é a única posição em que ele responde pela
+    geometria que o app de fato recebe.
+    """
+    saida = []
+    for g in geoms_loc:
+        gg = _tf_geo(g, lon0, lat0)
+        if not gg.is_valid:
+            gg = _multi(_so_poligonos(shapely.make_valid(gg)))
+        saida.append(gg)
+    return saida
 
 
 def _dissolver(partes: list):
@@ -1375,6 +1417,39 @@ def _absorver_fragmentos(zonas_geoms: list, ranks: list, frag_min_m2: float, lar
             break
     return n_inc, area_inc
 
+def _suavizar_divisas(zonas_loc: list, ranks: list, poly_loc, passo: float,
+                      tol: float, iters: int) -> list:
+    """Suaviza SÓ as divisas INTERNAS e remonta a partição (plano métrico).
+
+    Cada divisa é UMA linha só, partilhada pelas duas zonas: suavizada uma vez
+    e re-atribuída às duas — por construção não nasce sobreposição nem vão. O
+    contorno externo (talhão oficial, ou a borda da própria cobertura) fica
+    intacto SEMPRE.
+
+    Extraído de `suavizar_zonas` para o `gerar_multi` usar o MESMO caminho: a
+    escadinha de célula não é escolha do agrônomo, é resíduo da vetorização, e
+    tinha de sair já na geração.
+    """
+    eps_ext = max(passo * 0.02, 0.05)
+    alvo_ext = poly_loc if poly_loc is not None else shapely.union_all(
+        [g for g in zonas_loc if not g.is_empty])
+    faixa_ext = _borda(alvo_ext).buffer(eps_ext)
+    arestas = _arestas_do_arranjo(zonas_loc)
+    if not arestas:
+        raise ValueError("não foi possível extrair as linhas internas das zonas")
+    novas_linhas = [a if a.within(faixa_ext) else _suavizar_aresta(a, tol, iters)
+                    for a in arestas]
+    try:
+        faces2 = _polygonizar(novas_linhas)
+    except Exception as ex:
+        raise ValueError(f"não foi possível reconstruir as linhas internas: {ex}")
+    if not faces2:
+        raise ValueError("não foi possível reconstruir as linhas internas "
+                         "(tolerância incompatível com o tamanho das zonas)")
+    suaves, _vaos = _atribuir_e_montar(faces2, zonas_loc, ranks, poly_loc)
+    return suaves
+
+
 def suavizar_zonas(fc: dict, polygon_geojson: dict | None = None, nivel: str = "moderado",
                    tolerancia_m: float | None = None, iteracoes: int | None = None,
                    frag_min_ha: float = 0.0, largura_min_m: float = 0.0,
@@ -1437,33 +1512,8 @@ def suavizar_zonas(fc: dict, polygon_geojson: dict | None = None, nivel: str = "
     # 3) fragmentos / estreitos (opcional — ruído de vetorização sempre sai)
     n_frag, area_frag = _absorver_fragmentos(zonas_loc, ranks, frag_min_ha * 10000.0, largura_min_m)
 
-    # 4) suaviza SÓ as arestas INTERNAS (cada divisa uma vez, nós fixos). O
-    #    contorno externo (talhão oficial — ou, sem talhão, a borda da própria
-    #    cobertura) fica intacto SEMPRE.
-    eps_ext = max(passo * 0.02, 0.05)
-    if poly_loc is not None:
-        faixa_ext = _borda(poly_loc).buffer(eps_ext)
-    else:
-        faixa_ext = _borda(shapely.union_all([g for g in zonas_loc if not g.is_empty])).buffer(eps_ext)
-    arestas = _arestas_do_arranjo(zonas_loc)
-    if not arestas:
-        raise ValueError("não foi possível extrair as linhas internas das zonas")
-    novas_linhas = []
-    for a in arestas:
-        if a.within(faixa_ext):
-            novas_linhas.append(a)          # limite externo: SEMPRE intocado
-        else:
-            novas_linhas.append(_suavizar_aresta(a, tol, iters))
-
-    # 5) re-polygoniza e re-atribui (divisa única ⇒ sem sobreposição/vão)
-    try:
-        faces2 = _polygonizar(novas_linhas)
-    except Exception as ex:
-        raise ValueError(f"não foi possível reconstruir as linhas internas: {ex}")
-    if not faces2:
-        raise ValueError("não foi possível reconstruir as linhas internas "
-                         "(tolerância incompatível com o tamanho das zonas)")
-    suaves, _vaos2 = _atribuir_e_montar(faces2, zonas_loc, ranks, poly_loc)
+    # 4+5) suaviza SÓ as divisas INTERNAS e remonta a partição.
+    suaves = _suavizar_divisas(zonas_loc, ranks, poly_loc, passo, tol, iters)
 
     # 6) VALIDAÇÃO DA COBERTURA (obrigatória): união das zonas = talhão; sem
     #    sobreposição; sem geometria inválida. Falhou → NÃO devolve resultado.
@@ -1529,13 +1579,21 @@ def suavizar_zonas(fc: dict, polygon_geojson: dict | None = None, nivel: str = "
                      "geometry": mapping(_tf_geo(p, lon0, lat0))}
                     for p in _so_poligonos(dis) if p.area > 1.0]
 
-    # 7) monta o FC final (propriedades preservadas; areaHa recalculada)
+    # 7) monta o FC final (propriedades preservadas; areaHa recalculada).
+    #    A conversão para graus é o ÚLTIMO ponto em que a geometria ainda pode
+    #    quebrar — e é o sistema que o app recebe. A checagem do passo 6 roda em
+    #    METROS e, sozinha, deixava passar zona com self-intersection. Ver
+    #    _para_graus.
+    geos_saida = _para_graus(suaves, lon0, lat0)
+    for g in geos_saida:
+        if not g.is_valid:
+            raise ValueError("erro na reconstrução topológica: geometria final inválida")
     features = []
     for i, f in enumerate(feats):
         g1 = suaves[i]
         if g1.is_empty:
             continue
-        geo = _tf_geo(g1, lon0, lat0)
+        geo = geos_saida[i]
         props = dict(f.get("properties") or {})
         props["areaHa"] = round(_area_ha(geo, lon0, lat0), 2)
         features.append({"type": "Feature", "properties": props, "geometry": mapping(geo)})
