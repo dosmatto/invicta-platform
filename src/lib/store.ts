@@ -9,6 +9,7 @@ export { ordenarLegendasDoAtributo } from './legendas';
 import type { AmbienteProdutivo } from './meap/tipos';
 import { cloudPushLista, cloudAindaNaoHidratou, cloudMarcarPendente } from './cloud';
 import { lerListaLocal, gravarListaLocal, removerLocal } from './localComprimido';
+import { moverNaOrdem, renumerar } from './ordemCatalogo';
 import { areaHaGeo, areaHaGeoBruta } from './areaGeo';
 import { empresaAtivaId, uidUsuario, escopoClienteIds, escopoTalhaoIds, escopoFazendaIds } from './empresa';
 import {
@@ -16,6 +17,7 @@ import {
   obter as bibObter,
   criar as bibCriar,
   atualizar as bibAtualizar,
+  atualizarVarios as bibAtualizarVarios,
   excluir as bibExcluir,
   compartilhar as bibCompartilhar,
   type ItemBiblioteca,
@@ -1440,9 +1442,14 @@ export function getVariaveisAtivas(): VariavelAnalise[] {
 
 export function saveVariavelAnalise(v: VariavelAnalise) {
   garantirVariaveisAnalise();  // edição implica materializar o seed
-  const it = _itensVariaveis().find(i => i.conteudo.varId === v.id);
+  // TODAS as ocorrências do varId, não a primeira: se o catálogo tiver a mesma
+  // variável duplicada (corrida de seed em duas máquinas), gravar só numa deixa a
+  // gêmea com o valor velho — e quem lê ordena e fica com a de menor `ordem`, que
+  // pode ser justamente a que não foi atualizada. A edição "não pegava".
+  const itens = _itensVariaveis().filter(i => i.conteudo.varId === v.id);
   const conteudo: ConteudoVariavel = { tipo: 'variavel', varId: v.id, sigla: v.sigla, nome: v.nome, unidade: v.unidade, sinonimos: v.sinonimos, usar: v.usar, ordem: v.ordem, casasDecimais: v.casasDecimais };
-  if (it) bibAtualizar<ConteudoVariavel>('preferencias-analise', it.id, { nome: `Variável: ${v.sigla}`, conteudo });
+  if (itens.length === 1) bibAtualizar<ConteudoVariavel>('preferencias-analise', itens[0].id, { nome: `Variável: ${v.sigla}`, conteudo });
+  else if (itens.length > 1) bibAtualizarVarios<ConteudoVariavel>('preferencias-analise', itens.map(i => ({ id: i.id, patch: { nome: `Variável: ${v.sigla}`, conteudo } })));
   else bibCriar<ConteudoVariavel>('preferencias-analise', { nome: `Variável: ${v.sigla}`, conteudo, escopo: empresaAtivaId() ? 'empresa' : 'meu' });
 }
 
@@ -1474,14 +1481,34 @@ export function migrarOrdemPadraoFertV1() {
 // catálogo, trocando a `ordem` com a vizinha ativa. Essa ordem é o padrão da
 // ordem dos elementos no relatório (ver relatorioDados). Idempotente nas pontas.
 export function reordenarVariavelAtiva(id: string, dir: -1 | 1) {
-  const ativas = getVariaveisAtivas();   // já ordenadas por `ordem`
-  const i = ativas.findIndex(v => v.id === id);
-  const j = i + dir;
-  if (i < 0 || j < 0 || j >= ativas.length) return;
-  const a = ativas[i], b = ativas[j];
-  if (a.ordem === b.ordem) { saveVariavelAnalise({ ...a, ordem: a.ordem + dir * 0.001 }); return; }
-  saveVariavelAnalise({ ...a, ordem: b.ordem });
-  saveVariavelAnalise({ ...b, ordem: a.ordem });
+  // Reordena a LISTA e renumera 0..n-1 — NÃO permuta os dois valores de `ordem`.
+  // A permuta antiga jogava o item para o topo sempre que havia empate de `ordem`
+  // (ou varId duplicado): com empate quem manda na posição é o desempate por
+  // sigla, então o valor recebido na troca levava o item para qualquer lugar.
+  // Ver lib/ordemCatalogo.ts — npm run teste:ordem.
+  const todas = getVariaveisAnalise();   // catálogo inteiro, na ordem exibida
+  const nova = moverNaOrdem(todas, id, dir);
+  if (!nova) return;                     // ponta da lista: nada a fazer
+  const mudou = renumerar(nova);
+  if (mudou.length === 0) return;
+
+  garantirVariaveisAnalise();
+  // EM LOTE: a primeira reordenação num catálogo com `ordem` bagunçada renumera
+  // dezenas de variáveis, e uma gravação por item seria uma escrita da coleção
+  // inteira e um push para a nuvem por variável.
+  const porVarId = new Map(_itensVariaveis().map(i => [i.conteudo.varId, i]));
+  const patches: Array<{ id: string; patch: { nome: string; conteudo: ConteudoVariavel } }> = [];
+  for (const { item, ordem } of mudou) {
+    const it = porVarId.get(item.id);
+    // Sem item materializado (ex.: a CTCe, que getVariaveisAnalise injeta em
+    // memória quando falta): cria pelo caminho normal.
+    if (!it) { saveVariavelAnalise({ ...item, ordem }); continue; }
+    patches.push({
+      id: it.id,
+      patch: { nome: `Variável: ${item.sigla}`, conteudo: { ...it.conteudo, ordem } },
+    });
+  }
+  if (patches.length) bibAtualizarVarios<ConteudoVariavel>('preferencias-analise', patches);
 }
 
 // Cria uma variável NOVA (id derivado da sigla, único). Devolve a variável criada.

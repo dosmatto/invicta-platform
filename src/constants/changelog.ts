@@ -1,5 +1,13 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.48.1': [
+    'CORRIGIDO — A SETINHA DE SUBIR JOGAVA O ELEMENTO PARA O TOPO em vez de andar um degrau. Com a lista em Textura · MO · pH, clicar em subir no pH devolvia pH · Textura · MO. Como a ordem que se formava não era a pedida, parecia que a Biblioteca não estava gravando.',
+    'A CAUSA: a troca permutava os dois valores de "ordem" entre os vizinhos, e isso só funciona se toda variável tiver uma ordem diferente. Quando várias empatam — e empatavam —, quem decide a posição na tela passa a ser o desempate por sigla, e o valor recebido na permuta levava o elemento para qualquer lugar da lista.',
+    'AGORA A LISTA INTEIRA É RENUMERADA a cada movimento, então não sobra empate para herdar e o item anda exatamente um degrau. Elementos desativados continuam onde estavam: a seta pula por cima deles em vez de trocar de lugar com eles.',
+    'DE QUEBRA, EDIÇÃO DE VARIÁVEL DUPLICADA: se a mesma variável existisse duas vezes no catálogo (corrida de sincronização entre duas máquinas), a gravação acertava só uma e a leitura podia mostrar a outra — a edição "não pegava". Agora grava em todas as cópias.',
+    'A ordem é gravada em UMA tacada só: antes, renumerar um catálogo bagunçado seria uma gravação e uma subida à nuvem por variável.',
+    'Onde ver: Biblioteca → Perfis → Legendas por elemento. 13 testes novos (npm run teste:ordem) travam a regra, inclusive reproduzindo o pulo relatado.',
+  ],
   '2.48.0': [
     'COMPACTAÇÃO AGORA INTERPOLA EM 5 × 5 m, FECHANDO O PADRÃO DO APP. Era a última aba que ainda gerava em 20 m — e sem nenhuma opção de escolha, o valor estava fixo no código. Fertilidade, Condutividade e Compactação agora saem todas em 5 m por padrão.',
     'E GANHOU O SELETOR DE PIXEL: um campo "Pixel" logo acima do botão Interpolar, com as mesmas opções da Condutividade (de 2 a 30 m), com 5 m marcado como padrão.',
