@@ -16,7 +16,8 @@ import { capturarMapaZonas } from '../capturaMapa';
 import { imagemParaPdf, reduzirLogo } from '../pdfImagem';
 import { resumoDoses, nutrientesPorZona, fatorBaseDose } from './calculo.ts';
 import { doseCompensada } from './sementes.ts';
-import { doseArquivo, temCompensacao, totalDoArquivo, kgDeSementes, montarResumoPdf, fmtRel, arredRel, corDaDose } from './resumo.ts';
+import { doseArquivo, temCompensacao, totalDoArquivo, kgDeSementes, montarResumoPdf, fmtRel, arredRel, corDaDose, reguasDoRelatorio, doseFinalEm } from './resumo.ts';
+import { ROTULO_CURTO } from './unidade.ts';
 // A rampa de cor mora no módulo puro (testável em node); segue exportada daqui
 // porque a tela de Prescrições já a importa deste arquivo.
 export { corDaDose };
@@ -168,6 +169,12 @@ export async function exportarXlsxPrescricao(p: Prescricao, ident?: IdentArquivo
           [`População ajustada (${p.unidade})`]: arredRel(doseArquivo(p, z.dose)),
         }
       : { [`Dose (${p.unidade})`]: arredRel(z.dose) }),
+    // Réguas irmãs: a dose FINAL também em população por hectare e em sementes
+    // por metro linear — as mesmas colunas do PDF.
+    ...Object.fromEntries(reguasDoRelatorio(p).map(u => [
+      `${temCompensacao(p) ? 'População ajustada' : 'Dose'} (${ROTULO_CURTO(u)})`,
+      arredRel(doseFinalEm(p, z.dose, u)),
+    ])),
     [`Total (${un})`]: arredRel(doseArquivo(p, z.dose) * z.areaHa * fator),
     ...(nutri ? {
       'N (kg/ha)': Number(nutri[z.idZona].n.toFixed(1)),
@@ -189,6 +196,13 @@ export async function exportarXlsxPrescricao(p: Prescricao, ident?: IdentArquivo
     { Item: `Dose mínima (${p.unidade})`, Valor: arredRel(r.doseMin) },
     { Item: `Dose máxima (${p.unidade})`, Valor: arredRel(r.doseMax) },
     { Item: `Dose média (${p.unidade})`, Valor: arredRel(r.doseMedia) },
+    // Dose FINAL média (a que a máquina aplica) em todas as réguas.
+    ...(ehUnidadeSemente(p.unidade) ? [
+      { Item: `Dose final média (${ROTULO_CURTO(p.unidade)})`, Valor: arredRel(doseArquivo(p, r.doseMedia)) },
+      ...reguasDoRelatorio(p).map(u => ({
+        Item: `Dose final média (${ROTULO_CURTO(u)})`, Valor: arredRel(doseFinalEm(p, r.doseMedia, u)),
+      })),
+    ] : []),
     // Os dois totais NOMEADOS + o peso, que é como se compra semente.
     ...(temCompensacao(p) ? (() => {
       const semAjuste = r.usado, comAjuste = totalDoArquivo(p, fator);
@@ -354,11 +368,22 @@ export async function exportarPDFPrescricao(p: Prescricao, ident: IdentPdfPrescr
     doc.setFillColor(parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16));
     doc.rect(mapX + (i * lgW) / passos, lgY + 2, lgW / passos + 0.1, lgH, 'F');
   }
+  // Extremos da rampa = a dose que está DESENHADA no mapa (a ajustada, a mesma
+  // que rotula cada polígono). Antes vinham da população desejada: o mapa dizia
+  // "5" no polígono e a legenda "4,51 a 5,09" — dois números para a mesma cor.
   doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(...GRAY);
-  doc.text(fmtRel(r.doseMin), mapX, lgY + 10);
-  doc.text(fmtRel(r.doseMax), mapX + lgW, lgY + 10, { align: 'right' });
+  doc.text(fmtRel(doseArquivo(p, r.doseMin)), mapX, lgY + 10);
+  doc.text(fmtRel(doseArquivo(p, r.doseMax)), mapX + lgW, lgY + 10, { align: 'right' });
   doc.setFontSize(6.5); doc.text('menor dose', mapX, lgY + 13.5);
   doc.text('maior dose', mapX + lgW, lgY + 13.5, { align: 'right' });
+  // A MESMA faixa nas réguas irmãs, no centro: quem lê o mapa em sementes/m vê
+  // ali a população por hectare correspondente, sem ir à tabela.
+  const eqsMapa = reguasDoRelatorio(p);
+  if (eqsMapa.length) {
+    const faixa = eqsMapa.map(u =>
+      `${fmtRel(doseFinalEm(p, r.doseMin, u))} a ${fmtRel(doseFinalEm(p, r.doseMax, u))} ${ROTULO_CURTO(u)}`).join('  ·  ');
+    doc.text(san(`equivale a ${faixa}`), mapX + lgW / 2, lgY + 13.5, { align: 'center' });
+  }
 
   // ── tabela de doses (direita) ──
   const tabX = mapX + mapW + 6, tabW = W - M - tabX;
@@ -386,33 +411,60 @@ export async function exportarPDFPrescricao(p: Prescricao, ident: IdentPdfPrescr
   let ty = 30;
   doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(...NAVY);
   doc.text('DOSES POR ZONA', tabX, ty); ty += 4;
-  // Colunas por posição de FIM (números alinhados à direita). O layout antigo
-  // punha "Pop. -> dose (sementes/ha)" num vão de 22 mm com fonte 7: o título
-  // invadia o da coluna seguinte e as duas frases saíam embaralhadas no PDF.
-  // Com compensação são duas colunas de verdade — População e População
-  // ajustada —, cabeçalho em duas linhas e fonte menor.
+  // Colunas numéricas em LISTA, com a borda direita calculada por peso. Eram
+  // posições fixas em milímetro, e agora o número de colunas VARIA: além da
+  // unidade em que a prescrição foi feita, a tabela repete a dose final nas
+  // réguas irmãs (população por hectare e sementes por metro linear saem
+  // sempre; num mapa em m² as três aparecem). Nenhum layout fixo cabe nos dois
+  // casos — as larguras e as fontes se ajustam ao que existe.
   const comp = temCompensacao(p);
-  doc.setFontSize(6.2);
-  const fimArea = tabX + (comp ? 40 : 52);
-  const fimDose = tabX + (comp ? 64 : 82);
-  const fimAjuste = tabX + 87;
-  const fimTotal = tabX + tabW;
-  const cab = (txt1: string, txt2: string, x: number) => {
-    doc.text(txt1, x, ty, { align: 'right' });
-    if (txt2) doc.text(txt2, x, ty + 2.7, { align: 'right' });
-  };
-  doc.text('Zona', tabX, ty);
-  cab('Área', '(ha)', fimArea);
-  if (comp) {
-    cab('População', `(${p.unidade})`, fimDose);
-    cab('População ajustada', `(${p.unidade})`, fimAjuste);
-  } else {
-    cab('Dose', `(${p.unidade})`, fimDose);
-  }
-  cab('Total', `(${un})`, fimTotal);
-  ty += 4.2; doc.setDrawColor(...LINE); doc.line(tabX, ty, tabX + tabW, ty); ty += 4;
-  doc.setFont('helvetica', 'normal'); doc.setTextColor(40, 50, 70); doc.setFontSize(7.4);
+  const eqs = reguasDoRelatorio(p);
   const zonasOrd = [...p.zonas].sort((a, b) => b.dose - a.dose);
+  type ZonaP = (typeof p.zonas)[number];
+  type ColNum = { t1: string; t2: string; peso: number; v: (z: ZonaP) => string };
+  const colunas: ColNum[] = [
+    { t1: 'Área', t2: '(ha)', peso: 0.8, v: z => fmtHa(z.areaHa) },
+    { t1: comp ? 'População' : 'Dose', t2: `(${ROTULO_CURTO(p.unidade)})`, peso: 1.15, v: z => fmtRel(z.dose) },
+    ...(comp ? [{ t1: 'Ajustada', t2: `(${ROTULO_CURTO(p.unidade)})`, peso: 1.15, v: (z: ZonaP) => fmtRel(doseArquivo(p, z.dose)) }] : []),
+    // A régua irmã leva SEMPRE a dose final (a que a máquina aplica): é a que o
+    // usuário chama de "população final".
+    ...eqs.map(u => ({
+      t1: comp ? 'Ajustada' : 'Dose', t2: `(${ROTULO_CURTO(u)})`,
+      peso: u === 'sementes/ha' ? 1.4 : 1.2,
+      v: (z: ZonaP) => fmtRel(doseFinalEm(p, z.dose, u)),
+    })),
+    { t1: 'Total', t2: `(${un})`, peso: 1.4, v: z => fmtRel(doseArquivo(p, z.dose) * z.areaHa * fator) },
+  ];
+  // Largura da 1ª coluna medida no nome de zona mais longo — com 7 colunas cada
+  // milímetro conta, e "Zona" com folga fixa roubava espaço dos números.
+  const nomeZona = (z: ZonaP) => san(z.nomeZona).slice(0, 12);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(7.4);
+  const zonaW = Math.min(32, Math.max(15, 5.8 + Math.max(0, ...p.zonas.map(z => doc.getTextWidth(nomeZona(z))))));
+  const somaPeso = colunas.reduce((s, c) => s + c.peso, 0);
+  const unidadeW = (tabW - zonaW) / somaPeso;
+  const largura = colunas.map(c => c.peso * unidadeW);
+  const fimCol: number[] = [];
+  let accX = tabX + zonaW;
+  for (const w of largura) { accX += w; fimCol.push(accX); }
+  // Fonte que CABE: com a coluna de sementes/ha ("1.350.743") a 6 ou 7 colunas,
+  // um corpo fixo transbordaria para a coluna vizinha em vez de avisar.
+  const cabeNa = (fs: number, textos: (i: number) => string[]) => {
+    doc.setFontSize(fs);
+    return colunas.every((_, i) => textos(i).every(t => doc.getTextWidth(t) <= largura[i] - 1.2));
+  };
+  doc.setFont('helvetica', 'bold');
+  const fsCab = [6.2, 5.8, 5.4, 5].find(fs => cabeNa(fs, i => [colunas[i].t1, colunas[i].t2])) ?? 5;
+  doc.setFont('helvetica', 'normal');
+  const fsVal = [7.4, 7, 6.6, 6.2].find(fs => cabeNa(fs, i => zonasOrd.map(colunas[i].v))) ?? 6.2;
+
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(fsCab); doc.setTextColor(...NAVY);
+  doc.text('Zona', tabX, ty);
+  colunas.forEach((c, i) => {
+    doc.text(c.t1, fimCol[i], ty, { align: 'right' });
+    if (c.t2) doc.text(c.t2, fimCol[i], ty + 2.7, { align: 'right' });
+  });
+  ty += 4.2; doc.setDrawColor(...LINE); doc.line(tabX, ty, tabX + tabW, ty); ty += 4;
+  doc.setFont('helvetica', 'normal'); doc.setTextColor(40, 50, 70); doc.setFontSize(fsVal);
   // Quantas linhas cabem sem empurrar o RESUMO para cima do rodapé. Antes eram
   // 18 fixas com a folha vazia embaixo; agora a tabela usa o espaço que existe.
   const passoLin = 5;
@@ -422,12 +474,8 @@ export async function exportarPDFPrescricao(p: Prescricao, ident: IdentPdfPrescr
     const m = /^#(..)(..)(..)$/.exec(corDaDose(z.dose, r.doseMin, r.doseMax))!;
     doc.setFillColor(parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16));
     doc.rect(tabX, ty - 2.5, 2.8, 2.8, 'F');
-    doc.text(san(z.nomeZona).slice(0, 12), tabX + 4.4, ty);
-    doc.text(fmtHa(z.areaHa), fimArea, ty, { align: 'right' });
-    const dArq = doseArquivo(p, z.dose);
-    doc.text(fmtRel(z.dose), fimDose, ty, { align: 'right' });
-    if (comp) doc.text(fmtRel(dArq), fimAjuste, ty, { align: 'right' });
-    doc.text(fmtRel(dArq * z.areaHa * fator), fimTotal, ty, { align: 'right' });
+    doc.text(nomeZona(z), tabX + 4.4, ty);
+    colunas.forEach((c, i) => doc.text(c.v(z), fimCol[i], ty, { align: 'right' }));
     ty += passoLin;
   }
   const ocultas = p.zonas.length - mostradas.length;

@@ -84,6 +84,28 @@ export function prescricaoEmUnidade(p: Prescricao, para: UnidadeDose): Prescrica
   };
 }
 
+/**
+ * Réguas de EQUIVALÊNCIA que acompanham a unidade escolhida nos relatórios.
+ *
+ * O relatório sempre diz a mesma dose em mais de uma régua, porque cada leitor
+ * pensa na sua: o agrônomo em plantas por hectare, o operador no número que o
+ * monitor pede. Regra pedida em 13/08/2026:
+ *   - população (sementes/ha) → acompanha o metro LINEAR;
+ *   - metro linear           → acompanha a POPULAÇÃO;
+ *   - metro quadrado         → mantém o m² e leva população E metro linear.
+ * Fora de semente (kg/ha, t/ha, L/ha) não há régua irmã: devolve vazio.
+ *
+ * Filtra o que não dá para converter — sem o espaçamento entre linhas, o metro
+ * linear seria chute (e chute vira população errada no campo).
+ */
+export function reguasEquivalentes(u: UnidadeDose, espacamentoM?: number): UnidadeDose[] {
+  if (!ehUnidadeSemente(u)) return [];
+  const irmas: UnidadeDose[] = u === 'sementes/m2'
+    ? ['sementes/ha', 'sementes/m']
+    : u === 'sementes/ha' ? ['sementes/m'] : ['sementes/ha'];
+  return irmas.filter(i => i !== u && podeConverter(u, i, espacamentoM));
+}
+
 /** Rótulo curto para o seletor de saída. */
 export const ROTULO_SAIDA: Record<string, string> = {
   'sementes/ha': 'sementes/ha (população)',

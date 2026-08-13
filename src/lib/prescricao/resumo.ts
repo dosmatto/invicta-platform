@@ -7,7 +7,8 @@
 // Extensão .ts explícita nos imports: os testes rodam com type-stripping.
 
 import { doseCompensada } from './sementes.ts';
-import { UNIDADE_TOTAL, ehUnidadeSemente, type Prescricao } from './tipos.ts';
+import { reguasEquivalentes, converterDose, ROTULO_CURTO } from './unidade.ts';
+import { UNIDADE_TOTAL, ehUnidadeSemente, type Prescricao, type UnidadeDose } from './tipos.ts';
 import { complementarNutriente, SIMBOLO_NUTRIENTE } from '../insumos.ts';
 import { fmtHa } from '../formato.ts';
 
@@ -62,6 +63,48 @@ export const doseArquivo = (p: Prescricao, dose: number): number =>
 export function temCompensacao(p: Prescricao): boolean {
   if (!ehUnidadeSemente(p.unidade)) return false;
   return !!p.params.doseEhPopulacao && Math.abs(doseArquivo(p, 1) - 1) > 1e-9;
+}
+
+// ── Réguas equivalentes nos relatórios ──────────────────────────────────────
+//
+// O relatório mostra a MESMA dose em mais de uma régua (ver reguasEquivalentes):
+// população por hectare e sementes por metro linear saem sempre; num mapa feito
+// em metro quadrado, o m² continua sendo a régua principal e as outras duas o
+// acompanham. É conversão exata — não é conta nova, é o mesmo número medido de
+// outro jeito —, então nada do que está salvo muda.
+
+/** Réguas em que o relatório repete a dose, além da unidade da prescrição. */
+export function reguasDoRelatorio(p: Prescricao): UnidadeDose[] {
+  return reguasEquivalentes(p.unidade, p.params.sementes?.espacamentoM);
+}
+
+/**
+ * Dose FINAL (a que a máquina aplica — já compensada pela germinação) na régua
+ * pedida. É esta que o usuário chama de "população final": a desejada é a meta,
+ * a final é o que vai plantado.
+ */
+export function doseFinalEm(p: Prescricao, dose: number, para: UnidadeDose): number {
+  return converterDose(doseArquivo(p, dose), p.unidade, para, p.params.sementes?.espacamentoM);
+}
+
+/** Rótulo de coluna/linha: "5,19 sementes/m". */
+const comRegua = (v: number, u: UnidadeDose): string => `${fmtRel(v)} ${ROTULO_CURTO(u)}`;
+
+/**
+ * A dose final MÉDIA escrita em todas as réguas — a linha que fecha o resumo.
+ * A média é ponderada pela área (total do arquivo ÷ área), não a média simples
+ * das zonas: uma zona de 3 ha não pesa igual a uma de 19 ha.
+ * null quando não é semente (fertilizante não tem régua irmã).
+ */
+export function linhaEquivalencias(p: Prescricao, mediaFinalNaUnidade: number): string | null {
+  if (!ehUnidadeSemente(p.unidade)) return null;
+  const partes = [comRegua(mediaFinalNaUnidade, p.unidade)];
+  for (const u of reguasDoRelatorio(p)) {
+    partes.push(comRegua(converterDose(mediaFinalNaUnidade, p.unidade, u, p.params.sementes?.espacamentoM), u));
+  }
+  if (partes.length < 2) return null;   // sem espaçamento não há o que equivaler
+  const rotulo = temCompensacao(p) ? 'Taxa de semeadura (média final)' : 'Dose média';
+  return `${rotulo}: ${partes.join('  ·  ')}`;
 }
 
 /** Sementes → quilos pelo PMS (peso de mil sementes, em g). null sem PMS. */
@@ -145,7 +188,6 @@ export function montarResumoPdf(
       { txt: `Total SEM ajuste (população desejada): ${nTot(semAjuste)} ${un}${comKg(semAjuste)}` },
       { txt: `Total COM ajuste de germinação (${fmt(germ, 0)}%): ${nTot(comAjuste)} ${un}${comKg(comAjuste)}`, destaque: true },
       { txt: `Diferença a mais para comprar: ${nTot(dif)} ${un}${comKg(dif)} (+${fmt(pct, 1)}%)` },
-      { txt: `Taxa de semeadura: ${fmtRel(comAjuste / (r.areaHa || 1))} ${un}/ha` },
     );
   } else {
     linhas.push(
@@ -153,6 +195,13 @@ export function montarResumoPdf(
       { txt: `Quantidade usada: ${nTot(r.usado)} ${un}${comKg(r.usado)}` },
     );
   }
+
+  // A dose FINAL média em todas as réguas — população por hectare e sementes
+  // por metro linear saem SEMPRE, seja qual for a unidade em que a prescrição
+  // foi feita. Substitui a antiga linha "Taxa de semeadura: … sementes/ha", que
+  // dava a mesma média numa régua só.
+  const eq = linhaEquivalencias(p, doseArquivo(p, r.doseMedia));
+  if (eq) linhas.push({ txt: eq, destaque: true });
 
   // Complementação por nutriente (Parte XIV §11): a conta inteira no relatório,
   // porque é ela que justifica a dose — sem os números do produto base, a dose

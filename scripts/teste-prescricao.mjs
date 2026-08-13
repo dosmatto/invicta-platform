@@ -8,10 +8,10 @@ import assert from 'node:assert/strict';
 import { redistribuirPorEstoque, distribuirProporcional, distribuirPorAjuste, resumoDoses, nutrientesPorZona, pesoDoRank, fatorBaseDose, arredondarDose } from '../src/lib/prescricao/calculo.ts';
 import { fatorCampo, sementesPorHa, metricasSementes, estoqueTotalSementes, distribuirSementes, doseCompensada } from '../src/lib/prescricao/sementes.ts';
 import { dosesPorEquacao, variaveisDaEquacao } from '../src/lib/prescricao/equacao.ts';
-import { converterDose, prescricaoEmUnidade, podeConverter, precisaEspacamento, UNIDADES_SEMENTE } from '../src/lib/prescricao/unidade.ts';
+import { converterDose, prescricaoEmUnidade, podeConverter, precisaEspacamento, UNIDADES_SEMENTE, reguasEquivalentes } from '../src/lib/prescricao/unidade.ts';
 import { casarZonas } from '../src/lib/prescricao/casar.ts';
 import { nomeArquivoPrescricao, siglaFazenda, numeroTalhao } from '../src/lib/prescricao/nomeArquivo.ts';
-import { montarResumoPdf, temCompensacao, totalDoArquivo, kgDeSementes, sacosDeSementes, linhaParametrosSemente, doseArquivo as doseArquivoDe, fmtRel, arredRel, corDaDose } from '../src/lib/prescricao/resumo.ts';
+import { montarResumoPdf, temCompensacao, totalDoArquivo, kgDeSementes, sacosDeSementes, linhaParametrosSemente, doseArquivo as doseArquivoDe, fmtRel, arredRel, corDaDose, reguasDoRelatorio, doseFinalEm, linhaEquivalencias } from '../src/lib/prescricao/resumo.ts';
 import { fmtHa, arredHa } from '../src/lib/formato.ts';
 
 let ok = 0, fail = 0;
@@ -835,6 +835,99 @@ t('com compensação, TODOS os totais levam quilo e saco', () => {
   assert.match(texto, /Total SEM ajuste.*144 kg = 13,3 sacos/, texto);
   assert.match(texto, /Total COM ajuste.*160 kg = 14,8 sacos/, texto);
   assert.match(texto, /Diferença a mais para comprar.*1,5 sacos/, texto);
+});
+
+console.log('\nRéguas equivalentes nos relatórios\n');
+
+// Prescrição do caso real (13/08/2026): milho em sementes/m, espaçamento 0,60 m,
+// germinação 98%, população desejada por zona.
+const pMilho = (dose = 5.09, unidade = 'sementes/m', esp = 0.6) => ({
+  unidade, tipo: 'sementes', produto: 'Milho', nome: 'IGEFI 03 Milho',
+  params: { doseEhPopulacao: true, sementes: { germinacaoPct: 98, espacamentoM: esp } },
+  zonas: [{ idZona: 'a', nomeZona: '03', classe: 'Alta', cor: '#000', areaHa: 15.61, dose }],
+  fc: { type: 'FeatureCollection', features: [] },
+});
+
+t('população/ha acompanha o metro linear e vice-versa', () => {
+  assert.deepEqual(reguasEquivalentes('sementes/ha', 0.5), ['sementes/m']);
+  assert.deepEqual(reguasEquivalentes('sementes/m', 0.5), ['sementes/ha']);
+});
+
+t('mapa em METRO QUADRADO mantém o m² e leva população E metro linear', () => {
+  assert.deepEqual(reguasEquivalentes('sementes/m2', 0.5), ['sementes/ha', 'sementes/m']);
+});
+
+t('sem espaçamento, some só o metro linear — o resto continua', () => {
+  assert.deepEqual(reguasEquivalentes('sementes/ha'), []);          // só teria o linear
+  assert.deepEqual(reguasEquivalentes('sementes/m2'), ['sementes/ha']);
+});
+
+t('adubo/calcário não tem régua irmã', () => {
+  assert.deepEqual(reguasEquivalentes('kg/ha', 0.5), []);
+  assert.deepEqual(reguasEquivalentes('t/ha', 0.5), []);
+  assert.deepEqual(reguasDoRelatorio({ unidade: 'kg/ha', params: {} }), []);
+});
+
+t('a régua irmã leva a dose FINAL (já compensada), não a desejada', () => {
+  const p = pMilho();
+  // 5,09 sementes/m ÷ 98% = 5,194 → × (10.000 / 0,60) = 86.565 sementes/ha
+  assert.ok(Math.abs(doseFinalEm(p, 5.09, 'sementes/m') - 5.09 / 0.98) < 1e-9);
+  const porHa = doseFinalEm(p, 5.09, 'sementes/ha');
+  assert.ok(Math.abs(porHa - (5.09 / 0.98) * (10_000 / 0.6)) < 1e-6, `veio ${porHa}`);
+  assert.equal(fmtRel(porHa), '86.565');
+});
+
+t('a conversão é reversível — a régua irmã não inventa número', () => {
+  const p = pMilho();
+  const porHa = doseFinalEm(p, 5.09, 'sementes/ha');
+  assert.ok(Math.abs(converterDose(porHa, 'sementes/ha', 'sementes/m', 0.6) - doseArquivoDe(p, 5.09)) < 1e-9);
+});
+
+t('o RESUMO fecha com a média final nas duas réguas (prescrição em sementes/m)', () => {
+  const p = pMilho();
+  const r = { areaHa: 15.61, nZonas: 1, usado: 5.09 * 15.61 * (10_000 / 0.6), doseMin: 4.51, doseMax: 5.09, doseMedia: 5.09, custo: null };
+  const texto = montarResumoPdf(p, r, 10_000 / 0.6, 1).map(l => l.txt).join(' | ');
+  assert.match(texto, /Taxa de semeadura \(média final\): 5,19 sementes\/m\s+·\s+86\.565 sementes\/ha/, texto);
+  assert.ok(!/Taxa de semeadura: /.test(texto), 'a linha antiga, numa régua só, saiu de cena');
+});
+
+t('prescrição em POPULAÇÃO também sai com o metro linear', () => {
+  const p = pMilho(86_565, 'sementes/ha');
+  const r = { areaHa: 15.61, nZonas: 1, usado: 86_565 * 15.61, doseMin: 86_565, doseMax: 86_565, doseMedia: 86_565, custo: null };
+  const texto = montarResumoPdf(p, r, 1, 1).map(l => l.txt).join(' | ');
+  assert.match(texto, /88\.332 sementes\/ha\s+·\s+5,3 sementes\/m/, texto);   // 86.565 ÷ 98%
+});
+
+t('prescrição em m² sai com as TRÊS réguas', () => {
+  const p = pMilho(8.66, 'sementes/m2');
+  const r = { areaHa: 15.61, nZonas: 1, usado: 8.66 * 15.61 * 10_000, doseMin: 8.66, doseMax: 8.66, doseMedia: 8.66, custo: null };
+  const linha = linhaEquivalencias(p, doseArquivoDe(p, 8.66));
+  assert.match(linha, /sementes\/m²/, linha);
+  assert.match(linha, /sementes\/ha/, linha);
+  assert.match(linha, /sementes\/m(?!²)/, linha);
+  assert.ok(montarResumoPdf(p, r, 10_000, 1).some(l => l.txt === linha), 'a linha não entrou no resumo');
+});
+
+t('sem compensação a linha existe igual, com o nome certo', () => {
+  const p = { ...pMilho(), params: { sementes: { germinacaoPct: 98, espacamentoM: 0.6 } } };  // doseEhPopulacao off
+  assert.equal(temCompensacao(p), false);
+  const linha = linhaEquivalencias(p, 5.09);
+  assert.match(linha, /^Dose média: 5,09 sementes\/m\s+·\s+84\.833 sementes\/ha$/, linha);
+});
+
+t('sem espaçamento não há o que equivaler — nenhuma linha inventada', () => {
+  const p = { unidade: 'sementes/ha', tipo: 'sementes', produto: 'Milho', nome: 'x',
+    params: { doseEhPopulacao: true, sementes: { germinacaoPct: 98 } },   // sem espacamentoM
+    zonas: [], fc: { type: 'FeatureCollection', features: [] } };
+  assert.equal(linhaEquivalencias(p, 80_000), null);
+  const texto = montarResumoPdf(p, { areaHa: 10, nZonas: 1, usado: 800_000, doseMin: 80_000, doseMax: 80_000, doseMedia: 80_000, custo: null }, 1, 1)
+    .map(l => l.txt).join(' | ');
+  assert.ok(!/sementes\/m\b/.test(texto), texto);
+});
+
+t('adubo não ganha linha de equivalência', () => {
+  const p = { unidade: 'kg/ha', tipo: 'fertilizante', produto: 'MAP', nome: 'x', params: {}, zonas: [], fc: { type: 'FeatureCollection', features: [] } };
+  assert.equal(linhaEquivalencias(p, 300), null);
 });
 
 console.log(`\n${ok} passaram, ${fail} falharam\n`);
