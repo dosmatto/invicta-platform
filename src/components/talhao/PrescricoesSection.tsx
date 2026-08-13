@@ -37,7 +37,7 @@ import {
 import {
   ROTULO_TIPO, ROTULO_MODO, UNIDADE_TOTAL, ehUnidadeSemente,
   type Prescricao, type TipoPrescricao, type ModoCalculo, type UnidadeDose,
-  type ZonaDose, type ParamsCalculo,
+  type ZonaDose, type ParamsCalculo, type ParamsSementes,
 } from '@/lib/prescricao/tipos';
 import {
   Plus, Save, Trash2, FileDown, FileSpreadsheet, FileText, Loader2, AlertTriangle,
@@ -94,8 +94,21 @@ const CATEGORIA_DO_TIPO: Record<TipoPrescricao, CategoriaInsumo[]> = {
 const RASCUNHO_VAZIO: Rascunho = {
   editandoId: null, nome: '', tipo: 'fertilizante', produto: '', insumoId: '', unidade: 'kg/ha',
   custoUnit: '', zoneamentoId: '', zoneamentoNome: '', modo: 'manual',
-  params: {}, zonas: [], fc: null, equacaoId: '', valoresEquacao: {},
+  // Config inicial do rascunho = a que mais se usa na semente:
+  //   • Total fixo — consome o disponível (cenarioAjuste 'total'): parte-se do
+  //     estoque/meta e distribui-se por zona, em vez de somar dose a dose.
+  //   • Total POR HECTARE (sementes/ha): é como o agrônomo pensa a dose
+  //     ("80.000/ha"); digitar isso no modo "total" fazia a prescrição sair
+  //     dezenas de vezes menor sem avisar.
+  // Prescrição salva mantém o que foi gravado; só o rascunho novo nasce assim.
+  params: { totalPorHa: true, cenarioAjuste: 'total' }, zonas: [], fc: null, equacaoId: '', valoresEquacao: {},
 };
+
+// Padrão dos Parâmetros da semente quando ainda não foram informados: 98% de
+// germinação (semente comercial fiscalizada) e 60.000 sementes/saco (milho, o
+// mais comum). São só o VALOR INICIAL do campo — o agrônomo troca quando o lote
+// pede. Antes o padrão era 90% e o saco vinha vazio.
+const SEMENTE_PADRAO: ParamsSementes = { germinacaoPct: 98, sementesPorSaco: 60000 };
 
 // Zonas a partir de um zoneamento salvo (1 feature = 1 zona no MEAP).
 function zonasDoZoneamento(z: ZoneamentoMeap): ZonaDose[] {
@@ -218,7 +231,7 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
     if (c.organico?.garantiasKgT) patchParams({ organico: { ...r.params.organico, ...c.organico.garantiasKgT } });
     if (c.semente) {
       patchParams({ sementes: {
-        ...(r.params.sementes ?? { germinacaoPct: 90 }),
+        ...(r.params.sementes ?? SEMENTE_PADRAO),
         ...(c.semente.pmsG != null ? { pmsG: c.semente.pmsG } : {}),
         ...(c.semente.germinacaoPct != null ? { germinacaoPct: c.semente.germinacaoPct } : {}),
         ...(c.semente.cultivar ? { cultivar: c.semente.cultivar } : {}),
@@ -429,7 +442,7 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
   function usarEstoqueComoTotal() {
     setErro(''); setOkMsg('');
     try {
-      const ps = r.params.sementes ?? { germinacaoPct: 90 };
+      const ps = r.params.sementes ?? SEMENTE_PADRAO;
       const areaTot = r.zonas.reduce((s, z) => s + z.areaHa, 0);
       const v = Number(estSem.valor.replace(',', '.'));
       if (!v || v <= 0) { setErro('Informe o estoque de sementes.'); return; }
@@ -724,7 +737,7 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
                 <div className="flex-1">
                   <label className="text-[10px] font-semibold block mb-0.5" style={{ color: '#64748b' }}>Espaçamento entre linhas (m) *</label>
                   <InputNum valor={r.params.sementes?.espacamentoM}
-                    onMudou={v => patchParams({ sementes: { ...(r.params.sementes ?? { germinacaoPct: 90 }), espacamentoM: v } })} />
+                    onMudou={v => patchParams({ sementes: { ...(r.params.sementes ?? SEMENTE_PADRAO), espacamentoM: v } })} />
                 </div>
                 <p className="flex-[2] text-[9px] leading-relaxed" style={{ color: fatorBase == null ? '#fbbf24' : '#94a3b8' }}>
                   {fatorBase == null
@@ -1635,7 +1648,7 @@ function SementesCampos({ r, patchParams, estSem, setEstSem, usarComoTotal, most
   usarComoTotal: () => void;
   mostrarEstoque: boolean;
 }) {
-  const s = r.params.sementes ?? { germinacaoPct: 90 };
+  const s = r.params.sementes ?? SEMENTE_PADRAO;
   const set = (k: string, v: number | string | undefined) => patchParams({ sementes: { ...s, [k]: v } });
   const pop = !!r.params.doseEhPopulacao;
   const fator = fatorCampo(s);            // fração da semente que vira planta
@@ -1645,7 +1658,7 @@ function SementesCampos({ r, patchParams, estSem, setEstSem, usarComoTotal, most
       <p className="text-[10px] font-semibold flex items-center gap-1" style={{ color: '#93c5fd' }}><Sprout size={11} /> Parâmetros da semente</p>
       <div className="grid grid-cols-4 gap-1.5">
         <Campo rotulo="PMS (g)"><InputNum valor={s.pmsG} onMudou={v => set('pmsG', v)} /></Campo>
-        <Campo rotulo="Germinação (%)"><InputNum valor={s.germinacaoPct} onMudou={v => set('germinacaoPct', v ?? 90)} /></Campo>
+        <Campo rotulo="Germinação (%)"><InputNum valor={s.germinacaoPct} onMudou={v => set('germinacaoPct', v ?? 98)} /></Campo>
         <Campo rotulo="Espaçamento (m)"><InputNum valor={s.espacamentoM} onMudou={v => set('espacamentoM', v)} /></Campo>
         <Campo rotulo="Sementes/saco"><InputNum valor={s.sementesPorSaco} onMudou={v => set('sementesPorSaco', v)} /></Campo>
         <Campo rotulo="Pop. mínima (/ha)"><InputNum valor={s.populacaoMin} onMudou={v => set('populacaoMin', v)} /></Campo>
@@ -1663,7 +1676,7 @@ function SementesCampos({ r, patchParams, estSem, setEstSem, usarComoTotal, most
               compensação não acontecia e o aviso verde aqui embaixo prometia
               uma taxa que o arquivo não levava. */}
           <input type="checkbox" checked={pop}
-            onChange={e => patchParams({ doseEhPopulacao: e.target.checked, sementes: r.params.sementes ?? { germinacaoPct: 90 } })}
+            onChange={e => patchParams({ doseEhPopulacao: e.target.checked, sementes: r.params.sementes ?? SEMENTE_PADRAO })}
             className="mt-0.5 accent-green-500" />
           <span className="text-[10px] leading-relaxed" style={{ color: '#cbd5e1' }}>
             A dose que eu digito é a <strong style={{ color: '#86efac' }}>população desejada</strong> (plantas/ha) —
