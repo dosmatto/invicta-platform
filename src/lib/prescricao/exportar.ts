@@ -165,10 +165,10 @@ export async function exportarXlsxPrescricao(p: Prescricao, ident?: IdentArquivo
     'Área (ha)': arredHa(z.areaHa),
     ...(temCompensacao(p)
       ? {
-          [`População (${p.unidade})`]: arredRel(z.dose),
-          [`População ajustada (${p.unidade})`]: arredRel(doseArquivo(p, z.dose)),
+          [`População (${ROTULO_CURTO(p.unidade)})`]: arredRel(z.dose),
+          [`População ajustada (${ROTULO_CURTO(p.unidade)})`]: arredRel(doseArquivo(p, z.dose)),
         }
-      : { [`Dose (${p.unidade})`]: arredRel(z.dose) }),
+      : { [`Dose (${ROTULO_CURTO(p.unidade)})`]: arredRel(z.dose) }),
     // Réguas irmãs: a dose FINAL também em população por hectare e em sementes
     // por metro linear — as mesmas colunas do PDF.
     ...Object.fromEntries(reguasDoRelatorio(p).map(u => [

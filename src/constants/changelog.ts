@@ -1,5 +1,13 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.49.0': [
+    'O RELATÓRIO DA PRESCRIÇÃO PASSOU A DIZER A DOSE EM MAIS DE UMA RÉGUA, sempre. População por hectare e sementes por metro linear saem juntas, seja qual for a unidade em que a prescrição foi feita — e num mapa feito em sementes por METRO QUADRADO, o m² continua sendo a régua do arquivo e as outras duas o acompanham. Era o mesmo número medido de um jeito só: quem lia o PDF em sementes/m não tinha como saber a população por hectare sem fazer a conta na calculadora.',
+    'A TABELA "DOSES POR ZONA" GANHOU A COLUNA DA RÉGUA IRMÃ, zona a zona, e o quadro RESUMO fecha com a média final nas duas (ou três) réguas. O Excel saiu igual: as mesmas colunas na aba "Doses por zona" e as linhas de dose final média na aba "Resumo".',
+    'O QUE APARECE NA RÉGUA IRMÃ É A DOSE FINAL — a ajustada pela germinação, a que a máquina realmente aplica —, não a população desejada. É a que o campo chama de "população final".',
+    'CORRIGIDO DE QUEBRA: os extremos da rampa de cor do mapa mostravam a população DESEJADA enquanto os polígonos eram rotulados com a dose AJUSTADA. O mapa dizia "5" no polígono e a legenda "4,51 a 5,09" logo abaixo — dois números para a mesma cor. Agora a legenda descreve o que está desenhado, e no centro dela aparece a mesma faixa na régua irmã.',
+    'A conversão é EXATA e acontece na hora de ver e exportar: nada do que está salvo muda, e refazer a prescrição só para trocar de régua deixou de ser necessário. Sem o espaçamento entre linhas cadastrado (Parâmetros da semente), o metro linear é omitido em vez de chutado — sem ele a conversão seria adivinhação. Adubo, calcário e orgânico não têm régua irmã e seguem como estavam.',
+    'A tabela agora ajusta largura de coluna e corpo de fonte ao número de colunas que existe, então nada transborda para a coluna vizinha quando as três réguas aparecem juntas. Onde ver: Talhão → Prescrições → abrir uma prescrição → PDF/Excel. 12 testes novos em npm run teste:prescricao (95 no total).',
+  ],
   '2.48.2': [
     'CORRIGIDO — AS SETINHAS DE ORDENAR PARARAM DE FUNCIONAR na v2.48.1. Junto com a correção do "pulo para o topo" entrou uma gravação em lote da nova ordem, e era ela que travava: nada se movia e nada dava erro. A gravação voltou a ser a de sempre, item por item; a correção do pulo continua de pé.',
     'Onde ver: Biblioteca → Perfis → Legendas por elemento. As setas voltam a andar um degrau por clique.',
