@@ -60,14 +60,61 @@ function float32ParaB64(arr: Float32Array): string {
 
 export interface ZonaValor { id: string; geometry: GeoJSON.Geometry; valor: number; }
 
-// Centroide aproximado (média dos vértices do 1º anel externo) — só p/ rótulo.
+// Ponto do RÓTULO da zona: centroide por ÁREA da MAIOR parte, garantido dentro.
+//
+// A versão anterior era a média dos vértices do 1º anel — dois defeitos que
+// aglomeravam os rótulos no mapa: (1) o lado da divisa com mais vértices puxa a
+// média para si, então zonas vizinhas acabavam com os valores encostados na
+// mesma divisa; (2) numa zona multiparte o rótulo podia cair na parte pequena.
+// Agora: maior parte + centroide de área (fórmula do polígono); se a forma é
+// côncava e o centroide cai FORA, o ponto desliza para o meio do vão mais largo
+// naquela latitude (ponto representativo) — nunca rotula em cima do vizinho.
 export function centroideGeom(geom: GeoJSON.Geometry): [number, number] | null {
-  const ring = geom.type === 'Polygon' ? geom.coordinates[0]
-    : geom.type === 'MultiPolygon' ? geom.coordinates[0]?.[0] : null;
+  const polys = geom.type === 'Polygon' ? [geom.coordinates]
+    : geom.type === 'MultiPolygon' ? geom.coordinates : [];
+  if (polys.length === 0) return null;
+  const areaAnel = (r: GeoJSON.Position[]): number => {
+    let a = 0;
+    for (let i = 0, j = r.length - 1; i < r.length; j = i++) a += r[j][0] * r[i][1] - r[i][0] * r[j][1];
+    return Math.abs(a) / 2;
+  };
+  let rings: GeoJSON.Position[][] | null = null, maior = -1;
+  for (const rs of polys) {
+    const a = rs[0]?.length ? areaAnel(rs[0]) : 0;
+    if (a > maior) { maior = a; rings = rs; }
+  }
+  const ring = rings?.[0];
   if (!ring || ring.length === 0) return null;
-  let sx = 0, sy = 0;
-  for (const c of ring) { sx += c[0]; sy += c[1]; }
-  return [sx / ring.length, sy / ring.length];
+  // centroide por ÁREA (não por vértice): imune à densidade de pontos da borda
+  let cx = 0, cy = 0, a2 = 0;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const w = ring[j][0] * ring[i][1] - ring[i][0] * ring[j][1];
+    a2 += w; cx += (ring[j][0] + ring[i][0]) * w; cy += (ring[j][1] + ring[i][1]) * w;
+  }
+  if (Math.abs(a2) < 1e-18) {
+    let sx = 0, sy = 0;
+    for (const c of ring) { sx += c[0]; sy += c[1]; }
+    return [sx / ring.length, sy / ring.length];   // anel degenerado: média
+  }
+  let px = cx / (3 * a2);
+  const py = cy / (3 * a2);
+  // côncavo (ou furo): centroide fora → meio do vão mais largo nesta latitude
+  if (!dentroGeom({ type: 'Polygon', coordinates: rings! }, px, py)) {
+    const xs: number[] = [];
+    for (const r of rings!) {
+      for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
+        const [x1, y1] = r[j], [x2, y2] = r[i];
+        if ((y1 > py) !== (y2 > py)) xs.push(x1 + ((py - y1) * (x2 - x1)) / ((y2 - y1) || 1e-12));
+      }
+    }
+    xs.sort((a, b) => a - b);
+    let larg = -1;
+    for (let i = 0; i + 1 < xs.length; i += 2) {
+      const w = xs[i + 1] - xs[i];
+      if (w > larg) { larg = w; px = (xs[i] + xs[i + 1]) / 2; }
+    }
+  }
+  return [px, py];
 }
 
 // Rasteriza zonas (cada uma com 1 valor) num grid Float32 (norte no topo, igual

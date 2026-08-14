@@ -141,5 +141,36 @@ t('KML: pastas Zonas + Linhas internas, acentos escapados/preservados, WGS84', (
   });
 }
 
+
+// ── Ponto do rótulo da zona (centroideGeom) ─────────────────────────────────
+// O valor da análise é escrito neste ponto; a versão por média de vértices
+// aglomerava rótulos (borda densa puxava a média; multiparte caía na parte
+// pequena; côncava caía FORA da própria zona, em cima da vizinha).
+console.log('\nPonto do rótulo (centroideGeom)\n');
+const { centroideGeom, dentroGeom } = await import('../src/lib/recomendacao/zonasGrid.ts');
+
+t('zona côncava (U): o rótulo cai DENTRO da zona', () => {
+  const U = { type: 'Polygon', coordinates: [[[0,0],[9,0],[9,8],[6,8],[6,3],[3,3],[3,8],[0,8],[0,0]]] };
+  const c = centroideGeom(U);
+  assert.ok(c && dentroGeom(U, c[0], c[1]), `rótulo fora da zona: ${c}`);
+});
+
+t('zona multiparte: o rótulo vai para a parte GRANDE', () => {
+  const MP = { type: 'MultiPolygon', coordinates: [
+    [[[100,100],[101,100],[101,101],[100,101],[100,100]]],
+    [[[0,0],[20,0],[20,20],[0,20],[0,0]]],
+  ] };
+  const c = centroideGeom(MP);
+  assert.ok(Math.abs(c[0] - 10) < 0.5 && Math.abs(c[1] - 10) < 0.5, `esperava ~[10,10], veio ${c}`);
+});
+
+t('borda cheia de vértices não puxa mais o rótulo para si', () => {
+  const anel = [[0,0]];
+  for (let i = 1; i <= 200; i++) anel.push([0, (i * 10) / 200]);
+  anel.push([0,10],[10,10],[10,0],[0,0]);
+  const c = centroideGeom({ type: 'Polygon', coordinates: [anel] });
+  assert.ok(Math.abs(c[0] - 5) < 0.2 && Math.abs(c[1] - 5) < 0.2, `esperava ~[5,5], veio ${c}`);
+});
+
 console.log(`\n${ok} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);

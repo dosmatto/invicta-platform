@@ -1,5 +1,9 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.50.3': [
+    'O VALOR DA ANÁLISE FICOU CENTRALIZADO NA ZONA. O ponto do rótulo era a média dos vértices do contorno — o lado da divisa com mais vértices puxava o número para si, e zonas vizinhas acabavam com os valores encostados um no outro; em zona recortada o rótulo podia até cair FORA dela, em cima da vizinha. Agora o ponto é o centroide por área da MAIOR parte da zona e, se a forma é côncava, ele desliza para dentro — cada valor no centro da sua zona, afastado dos vizinhos.',
+    'Vale para o mapa por zona, os rótulos das zonas nos relatórios e mapas já processados (o ponto é calculado na hora de mostrar). 3 testes novos em npm run teste:zonas.',
+  ],
   '2.50.2': [
     'O MAPA POR ZONA GANHOU AS DIVISAS: cada zona aparece contornada em branco por cima do preenchimento, como no mapa de referência de campo. Sem as linhas, zonas vizinhas com valores parecidos (mesma cor) viravam uma mancha só e não dava para ver onde uma termina e a outra começa. As divisas saem no mapa e, por consequência, na captura que vai para o PDF de fertilidade.',
     'Onde ver: Talhão → Fertilidade → Processar em zona → processar um mapa. Vale também para mapas por zona já processados — as divisas são desenhadas na hora de mostrar, nada precisa ser reprocessado.',
