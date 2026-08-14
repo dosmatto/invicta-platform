@@ -139,6 +139,27 @@ export async function capturarMapaFertilidade(c: CapturaMapa): Promise<string> {
     ctx.imageSmoothingEnabled = smooth;
   } catch { /* segue sem raster */ }
 
+  // 2b) DIVISAS do mapa por zona: LineString/MultiLineString que vêm junto com
+  // os valores (mesma fonte do mapa vivo) — desenhadas por cima do raster para
+  // cada zona sair separada no PDF. MESMO ESTILO do mapa de prescrição
+  // (capturarMapaZonas): divisa interna ESCURA, limite do talhão branco por
+  // cima. Mapa interpolado não traz linhas e nada muda.
+  const linhasDivisa = c.valores.features.filter(f =>
+    f.geometry?.type === 'LineString' || f.geometry?.type === 'MultiLineString');
+  if (linhasDivisa.length) {
+    ctx.lineWidth = Math.max(1.6, W / 450); ctx.strokeStyle = '#111827';
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    for (const f of linhasDivisa) {
+      const g = f.geometry as GeoJSON.LineString | GeoJSON.MultiLineString;
+      const linhas = g.type === 'LineString' ? [g.coordinates] : g.coordinates;
+      for (const ln of linhas) {
+        ctx.beginPath();
+        ln.forEach((pt, i) => { const x = px(pt[0]), y = py(pt[1]); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+        ctx.stroke();
+      }
+    }
+  }
+
   // 3) Valores (só o número, halo). O CORPO DA FONTE SE ADAPTA À GRADE: em
   // amostragem folgada o número cresce até o teto (era pequeno demais no PDF
   // impresso); em grade apertada ele para no piso — o tamanho histórico —, de

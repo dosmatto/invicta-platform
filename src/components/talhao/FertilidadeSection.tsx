@@ -738,7 +738,15 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
       if (!st) continue;
       const url = temGrid(m.resp) ? colorirGridComLegenda(m.resp.grid, legAtual).dataUrl : m.resp.png;
       if (!url) continue;
-      profs.push({ profundidade: prof, rasterPng: url, bounds: m.resp.bounds, valores: m.labels, stats: st });
+      // Mapa POR ZONA: o PDF leva o mesmo que a tela — valor no centroide de
+      // cada zona + as DIVISAS como linhas (capturarMapaFertilidade desenha).
+      let valores = m.labels;
+      if (m.resp.stats?.modelo === 'zona' && zonas.length) {
+        const zl = fcLabelsZona(nutriente, prof);
+        const base = zl.features.length ? zl.features : (m.labels?.features ?? []);
+        valores = { type: 'FeatureCollection', features: [...base, ...divisasDasZonas(zonas)] };
+      }
+      profs.push({ profundidade: prof, rasterPng: url, bounds: m.resp.bounds, valores, stats: st });
     }
     if (profs.length === 0) {
       console.warn('[relatorio] sem mapas elegíveis. nutriente=', nutriente, 'profsAll=', profsAll,

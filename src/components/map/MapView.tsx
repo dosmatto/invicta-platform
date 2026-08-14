@@ -189,9 +189,11 @@ export function MapView({ mostrarVisaoGeral = false }: { mostrarVisaoGeral?: boo
       map.addSource('fert-labels', { type: 'geojson', data: EMPTY_FC });
       // DIVISAS do mapa por zona: linhas na MESMA fonte dos rótulos — é o que as
       // põe ACIMA do raster de fertilidade (a camada 'zonas' fica abaixo dele).
+      // Estilo do mapa de PRESCRIÇÃO: divisa interna escura; o limite do talhão
+      // (branco/âmbar) segue por cima na camada própria.
       map.addLayer({ id: 'fert-labels-line', type: 'line', source: 'fert-labels',
         filter: ['in', ['geometry-type'], ['literal', ['LineString', 'MultiLineString']]],
-        paint: { 'line-color': '#ffffff', 'line-width': 1.5 } });
+        paint: { 'line-color': '#111827', 'line-width': 1.8 } });
       map.addLayer({ id: 'fert-labels-text', type: 'symbol', source: 'fert-labels',
         filter: ['==', ['geometry-type'], 'Point'],
         layout: { 'text-field': ['get','txt'], 'text-size': 11, 'text-font': ['Open Sans Regular'], 'text-allow-overlap': true },
