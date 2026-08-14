@@ -1,5 +1,8 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.50.1': [
+    'CORRIGIDO — O "MODO DO MAPA" NÃO APARECIA em talhão com zoneamento salvo mas nunca marcado como Padrão. A Fertilidade lia as zonas só do retrato guardado no talhão (que só existe depois de "Tornar padrão"); agora resolve como o módulo Zonas mostra no mapa: zoneamento Padrão > o mais recente > retrato. Onde ver: Talhão → Fertilidade — o seletor Interpolação × Processar em zona aparece logo acima das Configurações da interpolação.',
+  ],
   '2.50.0': [
     'FERTILIDADE GANHOU O "MODO DO MAPA": Interpolação × Processar em zona. Quando o talhão tem zonas de manejo, um seletor aparece acima das configurações. Em INTERPOLAÇÃO tudo segue como sempre (krigagem/IDW, pixel, variograma). Em PROCESSAR EM ZONA o mapa NÃO é interpolado: cada zona é preenchida com o valor do seu ponto de amostragem, na escala de cores da legenda — mapa constante por zona, como a amostragem composta pede. As configurações de interpolação somem nesse modo, porque não valem nada nele.',
     'O VÍNCULO ZONA ↔ AMOSTRA PASSOU A SER PELA LOCALIZAÇÃO: o ponto de amostragem que cai DENTRO da zona é o que dá o valor dela. Antes o pareamento era só pela ordem (1ª zona ↔ menor número), que numa grade de pontos importada casava errado. A ordem ficou de reserva para zona sem ponto dentro, e a tabela continua editável por cima da sugestão.',
