@@ -252,16 +252,7 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
     } catch { return []; }
   }, [nav.talhaoId]);
 
-  // DOIS MODOS de mapa, e quem manda é o modo ESCOLHIDO (não o tipo de grade):
-  //   • Interpolar (krigagem) — o padrão do módulo Fertilidade;
-  //   • Preencher por zona — cada zona recebe UM valor (o composto daquela zona),
-  //     com a mesma escala de cores, SEM interpolação.
-  // O seletor só aparece quando o talhão tem zonas de manejo. Começa em
-  // interpolar: "se eu quiser interpolar, entro no módulo Fertilidade"; o
-  // preenchimento por zona é uma opção que se liga quando se quer.
-  const [modoZonaFill, setModoZonaFill] = useState(false);
-  const temZonas = zonas.length > 0;
-  const ehZona = modoZonaFill && temZonas;
+  const ehZona = grade?.metodo === 'zonas' && zonas.length > 0;
 
   // Vínculo zona ↔ nº da amostra (auto pela ordem; editável na tabela). Refaz ao
   // trocar de importação/talhão; estável dentro do mesmo par (preserva edições).
@@ -839,20 +830,6 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
           )
         )}
       </div>
-
-      {/* Seletor do MODO do mapa — só quando o talhão tem zonas. Interpolar
-          (padrão do módulo) × Preencher por zona (constante por zona). */}
-      {temZonas && (
-        <div className="flex items-center gap-1">
-          {([[false, 'Interpolar (krigagem)'], [true, 'Preencher por zona']] as const).map(([v, rot]) => (
-            <button key={String(v)} onClick={() => setModoZonaFill(v)}
-              className="px-2 py-1 rounded text-[10px] font-semibold flex-1"
-              style={{ background: modoZonaFill === v ? 'var(--invicta-blue-mid)' : '#0f2240', color: modoZonaFill === v ? '#fff' : '#93c5fd' }}>
-              {rot}
-            </button>
-          ))}
-        </div>
-      )}
 
       {/* Modo zona (Z1): mapa constante por zona — vínculo zona ↔ nº da amostra. */}
       {ehZona && (
