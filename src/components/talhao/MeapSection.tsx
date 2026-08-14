@@ -36,8 +36,6 @@ import type { AmbienteProdutivo, Homogeneidade, MetricasZonaMeap } from '@/lib/m
 import { Layers, AlertTriangle, Wand2, Loader2, X, Check, ChevronUp, ChevronDown, Save, Star, Trash2, BarChart3, Sparkles, Combine, CheckSquare, Square, Pencil, Undo2, Redo2, FlaskConical, Spline } from 'lucide-react';
 import { LaboratorioZonas } from './LaboratorioZonas';
 import { ExportarZonas } from './ExportarZonas';
-import { FertilidadePorZonaMeap } from './FertilidadePorZonaMeap';
-import type { OverlayPorZona } from '@/lib/meap/fertilidadePorZona';
 
 const EditorGeometria = dynamic(
   () => import('@/components/geo/EditorGeometria').then(m => ({ default: m.EditorGeometria })),
@@ -211,7 +209,6 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
   const [refreshAmb, setRefreshAmb] = useState(0);  // força re-derivar o ambiente adotado (após remover)
   const [importFc, setImportFc] = useState<GeoJSON.FeatureCollection | null>(null);  // prévia do assistente de importação
   const [fundoCh, setFundoCh] = useState<string | null>(null);  // camada de FUNDO sob as zonas (Avaliar)
-  const [fertZonaOverlay, setFertZonaOverlay] = useState<OverlayPorZona | null>(null);  // prévia "Fertilidade por zona"
 
   const poligono = useMemo(() => {
     if (!talhao.geojson) return null;
@@ -340,8 +337,6 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
       fc = featuresParaMapa(vendoFc);
     } else if (res && zonas.length) {
       fc = { type: 'FeatureCollection', features: zonas.map(z => ({ type: 'Feature' as const, properties: { cor: z.cor, rotulo: numDeRank.get(z.rank) ?? z.id, classeLabel: z.potencial, selecionada: false }, geometry: z.geometry! })) };
-    } else if (fertZonaOverlay) {
-      fc = null;  // "Fertilidade por zona" no mapa → não cobrir com as zonas coloridas por potencial
     } else if (previewCh) {
       fc = null;  // previewando uma camada → não cobrir com as zonas adotadas
     } else {
@@ -371,7 +366,7 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
     if (!fc) { setZonasManejo(null); return; }
     setZonasManejo(fc);
     return () => setZonasManejo(null);
-  }, [importFc, editorMapFc, suavMapFc, vendoFc, res, zonas, previewCh, fertZonaOverlay, numDeRank, zoneamentos, talhao.id, talhao.zonasGeojson, refreshAmb, setZonasManejo]);
+  }, [importFc, editorMapFc, suavMapFc, vendoFc, res, zonas, previewCh, numDeRank, zoneamentos, talhao.id, talhao.zonasGeojson, refreshAmb, setZonasManejo]);
 
   // Fecha os painéis de edição ao trocar de talhão ou limpar o preview gerado.
   useEffect(() => { setSuav(null); setSuavMapFc(null); setEditorZona(null); setEditorMapFc(null); }, [talhao.id]);
@@ -380,20 +375,13 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
   // Prévia: clicar numa camada mostra o raster dela sobre o talhão (fase de
   // seleção). Some quando há zonas geradas/visualizadas (aí o mapa mostra as zonas).
   useEffect(() => {
-    // Um ÚNICO dono do slot de overlay. A "Fertilidade por zona" tem prioridade:
-    // quando ligada, ela pinta e o preview de camada fica suprimido (sem corrida).
-    if (fertZonaOverlay) {
-      setFertilidadeOverlay({ url: fertZonaOverlay.url, coordinates: fertZonaOverlay.coordinates, opacity: 1 });
-      setFertilidadeLabels(fertZonaOverlay.labels);
-      return;
-    }
     if (!previewCh || !carregadas || res || vendoFc) { setFertilidadeOverlay(null); setFertilidadeLabels(null); return; }
     const c = carregadas.camadas.find(x => x.chave === previewCh);
     const url = c ? corDaCamadaPreview(c) : null;
     if (!url) { setFertilidadeOverlay(null); return; }
     setFertilidadeOverlay({ url, coordinates: coordsFromBounds(carregadas.bounds), opacity: 0.82 });
     setFertilidadeLabels(null);
-  }, [fertZonaOverlay, previewCh, carregadas, res, vendoFc, setFertilidadeOverlay, setFertilidadeLabels]);
+  }, [previewCh, carregadas, res, vendoFc, setFertilidadeOverlay, setFertilidadeLabels]);
   useEffect(() => () => { setFertilidadeOverlay(null); setFertilidadeLabels(null); }, [setFertilidadeOverlay, setFertilidadeLabels]);
 
   // MEAP — camada de FUNDO sob as zonas (etapa Avaliar / vendo um zoneamento):
@@ -1264,14 +1252,6 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
           </>
         )}
       </div>
-
-      {/* ── Fertilidade por zona (valor por zona, sem interpolação) ── */}
-      <FertilidadePorZonaMeap
-        talhaoId={talhao.id}
-        safraNome={safraNome}
-        zonasGeojson={talhao.zonasGeojson}
-        onOverlay={setFertZonaOverlay}
-      />
 
       {/* ── Zoneamentos salvos (1 padrão → Amostragem) ── */}
       {zoneamentos.length > 0 && (

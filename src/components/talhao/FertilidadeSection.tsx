@@ -20,6 +20,7 @@ import { colorirGridComLegenda, temGrid } from '@/lib/raster';
 import { resolverGradeDoLaudo, pontosPorNumero, casarAmostrasComPontos } from '@/lib/eloGrade';
 import { decodeGrid } from '@/lib/fertilidade';
 import { rasterizarZonas, centroideGeom, type ZonaValor } from '@/lib/recomendacao/zonasGrid';
+import { bindingAuto, bindingPorPontos } from '@/lib/meap/fertilidadePorZona';
 import { stopsParaBackend, dominioDaLegenda, paresDaClasse, respeitarPadraoHomonima } from '@/lib/legendas';
 import type { Legenda } from '@/lib/legendas';
 import { Play, Layers, Loader2, Eraser, AlertTriangle, Activity, Settings, BookOpen, Save, FileDown, RotateCcw } from 'lucide-react';
@@ -252,19 +253,33 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
     } catch { return []; }
   }, [nav.talhaoId]);
 
-  const ehZona = grade?.metodo === 'zonas' && zonas.length > 0;
+  // MODO DO MAPA — escolha do usuário quando o talhão tem zonas de manejo:
+  //   'interpolar' → krigagem/IDW, com as ferramentas de sempre;
+  //   'zona'       → SEM interpolação: cada zona recebe o valor do seu ponto de
+  //                  amostragem (vínculo por localização, editável na tabela).
+  // Default por importação: amostragem feita POR ZONA (grade metodo 'zonas')
+  // abre em 'zona'; grade de pontos abre em 'interpolar'. Sem zonas no talhão
+  // não há o que preencher — fica interpolação, sem seletor.
+  const [modoEscolhido, setModoEscolhido] = useState<'auto' | 'interpolar' | 'zona'>('auto');
+  const modoMapa: 'interpolar' | 'zona' = zonas.length === 0
+    ? 'interpolar'
+    : modoEscolhido === 'auto' ? (grade?.metodo === 'zonas' ? 'zona' : 'interpolar') : modoEscolhido;
+  // Sem importação não há valor para pôr na zona — o modo zona só age com laudo.
+  const ehZona = modoMapa === 'zona' && !!importacao;
 
   // Vínculo zona ↔ nº da amostra (auto pela ordem; editável na tabela). Refaz ao
   // trocar de importação/talhão; estável dentro do mesmo par (preserva edições).
   const [mapaZonaNumero, setMapaZonaNumero] = useState<Record<string, number>>({});
   useEffect(() => {
     if (!ehZona || !importacao) { setMapaZonaNumero({}); return; }
-    const nums = [...new Set(importacao.resultados.map(r => r.numero))].sort((a, b) => a - b);
-    const init: Record<string, number> = {};
-    zonas.forEach((z, i) => { init[z.id] = nums[i] ?? nums[nums.length - 1] ?? 0; });
-    setMapaZonaNumero(init);
+    // Vínculo pela LOCALIZAÇÃO: o ponto de amostragem que cai DENTRO da zona é a
+    // amostra dela ("preencher com o valor do ponto"); a ordem entra só como
+    // fallback p/ zona sem ponto dentro. A tabela continua editável por cima.
+    const pontos = (grade?.pontos ?? []).map(p => ({ numero: p.numero ?? p.ordem + 1, lng: p.lng, lat: p.lat }));
+    const nums = [...new Set(importacao.resultados.map(r => r.numero))];
+    setMapaZonaNumero(pontos.length ? bindingPorPontos(zonas, pontos, nums) : bindingAuto(zonas, nums));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ehZona, importacaoId, zonas]);
+  }, [ehZona, importacaoId, zonas, grade]);
 
   const poligono = useMemo(() => {
     const p = extrairPoligono(uploadedGeo);
@@ -895,7 +910,31 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
 
       {importacao && (
         <>
-          {/* Configurações da interpolação (recolhível) */}
+          {/* MODO DO MAPA — só aparece quando o talhão tem zonas de manejo:
+              Interpolação (ferramentas de sempre) × Processar em zona (cada
+              zona recebe o valor do SEU ponto de amostragem, sem interpolar). */}
+          {zonas.length > 0 && (
+            <div>
+              <label className="text-[10px] font-semibold block mb-1" style={{ color: '#64748b' }}>Modo do mapa</label>
+              <div className="flex gap-1">
+                {([['interpolar', 'Interpolação'], ['zona', 'Processar em zona']] as const).map(([m, rot]) => (
+                  <button key={m} onClick={() => setModoEscolhido(m)}
+                    className="flex-1 py-1.5 rounded text-[10px] font-bold"
+                    style={{ background: modoMapa === m ? 'var(--invicta-blue-mid)' : '#1a3a6b', color: modoMapa === m ? '#fff' : '#93c5fd' }}>
+                    {rot}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[9px] mt-1 leading-relaxed" style={{ color: '#475569' }}>
+                {modoMapa === 'zona'
+                  ? 'Sem interpolação: cada zona é preenchida com o valor do ponto de amostragem que cai dentro dela (vínculo editável abaixo), na escala de cores da legenda.'
+                  : 'Krigagem/IDW nos pontos da grade — as ferramentas de interpolação ficam liberadas abaixo.'}
+              </p>
+            </div>
+          )}
+
+          {/* Configurações da interpolação (recolhível) — não valem no modo zona */}
+          {!ehZona && (
           <div className="rounded-lg overflow-hidden" style={{ border: '1px solid #1a3a6b' }}>
             <button onClick={() => setCfgAberto(v => !v)} className="w-full flex items-center justify-between px-2.5 py-1.5 text-[10px] font-semibold" style={{ background: '#061525', color: '#93c5fd' }}>
               <span className="flex items-center gap-1"><Settings size={12} /> Configurações da interpolação</span>
@@ -971,6 +1010,7 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
               </div>
             )}
           </div>
+          )}
 
           {/* Processar */}
           {!poligono && <Aviso texto="Limite do talhão não carregado no mapa." />}

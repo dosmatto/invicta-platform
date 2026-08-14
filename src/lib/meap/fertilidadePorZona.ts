@@ -1,17 +1,16 @@
-// FERTILIDADE POR ZONA — cada zona recebe UM valor (o composto da amostra
-// daquela zona), sem NENHUMA interpolação, pintado com a escala da legenda.
+// FERTILIDADE POR ZONA — cada zona recebe UM valor (o da amostra daquela zona),
+// sem NENHUMA interpolação, pintado com a escala da legenda.
 //
-// Isto vive no MÓDULO ZONAS: lá o dado se comporta por zona. A interpolação
-// (krigagem) é do módulo Fertilidade e não entra aqui. O mesmo preenchimento já
-// existia no Fertilidade (caminho `ehZona`), mas amarrado à nuvem, ao mapa de
-// 20 m e a uma grade `metodo:'zonas'`. Aqui a lógica é EXTRAÍDA pura e enxuta:
-// só o necessário para desenhar o overlay — sem persistir nada (não polui o
-// prefixo de fertilidade da nuvem).
+// Serve o modo "Processar em zona" da aba Fertilidade: o usuário escolhe entre
+// INTERPOLAR (krigagem/IDW, as ferramentas de sempre) e PROCESSAR EM ZONA —
+// neste, o mapa é constante por zona. A peça central aqui é o VÍNCULO
+// zona↔amostra por LOCALIZAÇÃO: o ponto de amostragem que cai dentro da zona é
+// o que dá o valor dela (bindingPorPontos); a ordem só entra como fallback.
 //
 // Reusa `rasterizarZonas` (mesma malha/formato do interpolador) e
 // `colorirGridComLegenda` — zero duplicação da conta de raster/cor.
 
-import { rasterizarZonas, centroideGeom, type ZonaValor } from '../recomendacao/zonasGrid';
+import { rasterizarZonas, centroideGeom, dentroGeom, type ZonaValor } from '../recomendacao/zonasGrid';
 import { colorirGridComLegenda } from '../raster';
 import { coordsFromBounds } from '../fertilidade';
 import { casasDecimaisVariavel, type ImportacaoLab } from '../store';
@@ -41,6 +40,39 @@ export function bindingAuto(zonas: ZonaGeom[], numeros: number[]): Record<string
   const nums = [...new Set(numeros)].sort((a, b) => a - b);
   const init: Record<string, number> = {};
   zonas.forEach((z, i) => { init[z.id] = nums[i] ?? nums[nums.length - 1] ?? 0; });
+  return init;
+}
+
+/**
+ * Vínculo zona → nº da amostra pela LOCALIZAÇÃO do ponto de amostragem: o ponto
+ * que cai DENTRO da zona é a amostra dela — é o que "preencher com o valor do
+ * ponto" significa no campo. Regras:
+ *   • só entram pontos cujo número TEM resultado no laudo;
+ *   • cada amostra serve UMA zona (a primeira que a contém); com mais de um
+ *     ponto na zona, vale o de menor número ainda livre — determinístico;
+ *   • zona sem ponto dentro cai no fallback pela ORDEM (números restantes).
+ * A tabela da tela continua editável por cima desta sugestão.
+ */
+export function bindingPorPontos(
+  zonas: ZonaGeom[],
+  pontos: { numero: number; lng: number; lat: number }[],
+  numerosComDado: number[],
+): Record<string, number> {
+  const comDado = new Set(numerosComDado);
+  const pts = pontos.filter(p => comDado.has(p.numero)).sort((a, b) => a.numero - b.numero);
+  const init: Record<string, number> = {};
+  const usados = new Set<number>();
+  for (const z of zonas) {
+    const dentro = pts.find(p => !usados.has(p.numero) && dentroGeom(z.geometry, p.lng, p.lat));
+    if (dentro) { init[z.id] = dentro.numero; usados.add(dentro.numero); }
+  }
+  // fallback pela ordem para zonas que ficaram sem ponto dentro
+  const livres = [...comDado].sort((a, b) => a - b).filter(n => !usados.has(n));
+  let i = 0;
+  const ultimo = [...comDado].sort((a, b) => a - b).pop() ?? 0;
+  for (const z of zonas) {
+    if (init[z.id] == null) init[z.id] = livres[i++] ?? ultimo;
+  }
   return init;
 }
 

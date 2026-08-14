@@ -24,7 +24,8 @@ function pip(x: number, y: number, ring: Pt[]): boolean {
 
 // Ponto dentro de uma geometria (Polygon/MultiPolygon) respeitando buracos:
 // even-odd entre os anéis de cada polígono (externo conta, buraco descarta).
-function dentroGeom(geom: GeoJSON.Geometry, x: number, y: number): boolean {
+// Exportada: o vínculo zona↔amostra usa isto p/ achar o ponto DENTRO da zona.
+export function dentroGeom(geom: GeoJSON.Geometry, x: number, y: number): boolean {
   const polys: GeoJSON.Position[][][] =
     geom.type === 'Polygon' ? [geom.coordinates]
       : geom.type === 'MultiPolygon' ? geom.coordinates
