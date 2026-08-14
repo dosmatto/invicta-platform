@@ -109,6 +109,22 @@ export function fcLabelsZona(zv: ZonaValor[], nut: string): GeoJSON.FeatureColle
   return { type: 'FeatureCollection', features: feats };
 }
 
+/** As DIVISAS das zonas como linhas — desenhadas por cima do raster para cada
+ *  zona aparecer separada no mapa por zona (anéis externos e furos). */
+export function divisasDasZonas(zonas: ZonaGeom[]): GeoJSON.Feature[] {
+  const feats: GeoJSON.Feature[] = [];
+  for (const z of zonas) {
+    const polys = z.geometry.type === 'Polygon' ? [z.geometry.coordinates]
+      : z.geometry.type === 'MultiPolygon' ? z.geometry.coordinates : [];
+    for (const rings of polys) {
+      for (const ring of rings) {
+        feats.push({ type: 'Feature', geometry: { type: 'LineString', coordinates: ring }, properties: {} });
+      }
+    }
+  }
+  return feats;
+}
+
 export interface OverlayPorZona {
   url: string;
   coordinates: [[number, number], [number, number], [number, number], [number, number]];

@@ -187,7 +187,13 @@ export function MapView({ mostrarVisaoGeral = false }: { mostrarVisaoGeral?: boo
 
       // Rótulos de valor da fertilidade (valor da variável em cada ponto de amostragem)
       map.addSource('fert-labels', { type: 'geojson', data: EMPTY_FC });
+      // DIVISAS do mapa por zona: linhas na MESMA fonte dos rótulos — é o que as
+      // põe ACIMA do raster de fertilidade (a camada 'zonas' fica abaixo dele).
+      map.addLayer({ id: 'fert-labels-line', type: 'line', source: 'fert-labels',
+        filter: ['in', ['geometry-type'], ['literal', ['LineString', 'MultiLineString']]],
+        paint: { 'line-color': '#ffffff', 'line-width': 1.5 } });
       map.addLayer({ id: 'fert-labels-text', type: 'symbol', source: 'fert-labels',
+        filter: ['==', ['geometry-type'], 'Point'],
         layout: { 'text-field': ['get','txt'], 'text-size': 11, 'text-font': ['Open Sans Regular'], 'text-allow-overlap': true },
         paint:  { 'text-color': '#fff', 'text-halo-color': '#1e293b', 'text-halo-width': 2 } });
 

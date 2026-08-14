@@ -1,5 +1,9 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.50.2': [
+    'O MAPA POR ZONA GANHOU AS DIVISAS: cada zona aparece contornada em branco por cima do preenchimento, como no mapa de referência de campo. Sem as linhas, zonas vizinhas com valores parecidos (mesma cor) viravam uma mancha só e não dava para ver onde uma termina e a outra começa. As divisas saem no mapa e, por consequência, na captura que vai para o PDF de fertilidade.',
+    'Onde ver: Talhão → Fertilidade → Processar em zona → processar um mapa. Vale também para mapas por zona já processados — as divisas são desenhadas na hora de mostrar, nada precisa ser reprocessado.',
+  ],
   '2.50.1': [
     'CORRIGIDO — O "MODO DO MAPA" NÃO APARECIA em talhão com zoneamento salvo mas nunca marcado como Padrão. A Fertilidade lia as zonas só do retrato guardado no talhão (que só existe depois de "Tornar padrão"); agora resolve como o módulo Zonas mostra no mapa: zoneamento Padrão > o mais recente > retrato. Onde ver: Talhão → Fertilidade — o seletor Interpolação × Processar em zona aparece logo acima das Configurações da interpolação.',
   ],

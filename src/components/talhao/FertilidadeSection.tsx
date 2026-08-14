@@ -21,7 +21,7 @@ import { colorirGridComLegenda, temGrid } from '@/lib/raster';
 import { resolverGradeDoLaudo, pontosPorNumero, casarAmostrasComPontos } from '@/lib/eloGrade';
 import { decodeGrid } from '@/lib/fertilidade';
 import { rasterizarZonas, centroideGeom, type ZonaValor } from '@/lib/recomendacao/zonasGrid';
-import { bindingAuto, bindingPorPontos } from '@/lib/meap/fertilidadePorZona';
+import { bindingAuto, bindingPorPontos, divisasDasZonas } from '@/lib/meap/fertilidadePorZona';
 import { stopsParaBackend, dominioDaLegenda, paresDaClasse, respeitarPadraoHomonima } from '@/lib/legendas';
 import type { Legenda } from '@/lib/legendas';
 import { Play, Layers, Loader2, Eraser, AlertTriangle, Activity, Settings, BookOpen, Save, FileDown, RotateCcw } from 'lucide-react';
@@ -489,10 +489,20 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
     setFertilidadeOverlay({ url, coordinates: coordsFromBounds(r.resp.bounds), opacity: OPACIDADE });
     // Reformata os rótulos com as casas decimais por nutriente (pH/K=1, resto=0),
     // valendo também p/ mapas já salvos. Cai p/ os rótulos salvos se não houver pontos.
-    const pts = pontosDe(nutriente, profundidade);
-    setFertilidadeLabels(pts.length ? fcLabels(pts, nutriente) : r.labels);
+    if (r.resp.stats?.modelo === 'zona' && zonas.length) {
+      // Mapa POR ZONA: valor no centroide de cada zona + as DIVISAS desenhadas
+      // por cima do raster — sem elas, zonas vizinhas da mesma classe viravam
+      // uma mancha só e não dava para ver cada zona separada.
+      const zl = fcLabelsZona(nutriente, profundidade);
+      const base = zl.features.length ? zl.features : (r.labels?.features ?? []);
+      setFertilidadeLabels({ type: 'FeatureCollection', features: [...base, ...divisasDasZonas(zonas)] });
+    } else {
+      const pts = pontosDe(nutriente, profundidade);
+      setFertilidadeLabels(pts.length ? fcLabels(pts, nutriente) : r.labels);
+    }
   // legHash garante re-render quando o usuário edita classes/cores da legenda atual
-  }, [cache, nutriente, profundidade, legAtual, legHash, estiloAtual, setFertilidadeOverlay, setFertilidadeLabels]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cache, nutriente, profundidade, legAtual, legHash, estiloAtual, zonas, setFertilidadeOverlay, setFertilidadeLabels]);
 
   useEffect(() => () => { setFertilidadeOverlay(null); setFertilidadeLabels(null); }, [setFertilidadeOverlay, setFertilidadeLabels]);
 
