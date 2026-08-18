@@ -59,9 +59,13 @@ interface Props {
   ndviOverlay?: { url: string; bounds: [number, number, number, number] } | null;
   // #2: camada de REFERÊNCIA (talhão/medição/arquivo) visível durante a medição
   referencia?: GeoJSON.FeatureCollection | null;
+  // ZONAS DE MANEJO da grade por zonas: polígonos coloridos + divisas + rótulo
+  // (features com as props { cor, rotulo }). Fica por BAIXO de tudo, logo acima
+  // do satélite, para não cobrir pontos nem a posição do operador.
+  zonas?: GeoJSON.FeatureCollection | null;
 }
 
-export function MapaColeta({ talhaoGeo, bbox, pontos, userPos, alvo, raioM, modo, seguirGps, pedidoGps, pedidoEnquadrar, onSelecionarPonto, onGestoUsuario, desenho, onClickMapa, ndviOverlay, referencia }: Props) {
+export function MapaColeta({ talhaoGeo, bbox, pontos, userPos, alvo, raioM, modo, seguirGps, pedidoGps, pedidoEnquadrar, onSelecionarPonto, onGestoUsuario, desenho, onClickMapa, ndviOverlay, referencia, zonas }: Props) {
   const divRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const prontoRef = useRef(false);
@@ -91,6 +95,7 @@ export function MapaColeta({ talhaoGeo, bbox, pontos, userPos, alvo, raioM, modo
     mapRef.current = map;
 
     map.on('load', () => {
+      map.addSource('zonas', { type: 'geojson', data: EMPTY_FC });
       map.addSource('talhao', { type: 'geojson', data: EMPTY_FC });
       map.addSource('referencia', { type: 'geojson', data: EMPTY_FC });
       map.addSource('raio', { type: 'geojson', data: EMPTY_FC });
@@ -100,6 +105,15 @@ export function MapaColeta({ talhaoGeo, bbox, pontos, userPos, alvo, raioM, modo
       map.addSource('user-acc', { type: 'geojson', data: EMPTY_FC });
       map.addSource('user', { type: 'geojson', data: EMPTY_FC });
 
+      // zonas de manejo (mesmas cores da plataforma) — primeiras camadas, então
+      // ficam POR BAIXO do limite, dos pontos e do operador
+      map.addLayer({ id: 'zonas-fill', type: 'fill', source: 'zonas',
+        paint: { 'fill-color': ['get', 'cor'], 'fill-opacity': 0.45 } });
+      map.addLayer({ id: 'zonas-divisa', type: 'line', source: 'zonas',
+        paint: { 'line-color': '#ffffff', 'line-width': 1.5 } });
+      map.addLayer({ id: 'zonas-rotulo', type: 'symbol', source: 'zonas',
+        layout: { 'text-field': ['get', 'rotulo'], 'text-size': 12, 'text-font': ['Open Sans Regular'] },
+        paint: { 'text-color': '#fff', 'text-halo-color': '#000', 'text-halo-width': 1.4 } });
       map.addLayer({ id: 'talhao-line', type: 'line', source: 'talhao',
         paint: { 'line-color': '#60a5fa', 'line-width': 2 } });
       // #2: referência (laranja tracejado) — abaixo do desenho/pontos da medição
@@ -205,6 +219,13 @@ export function MapaColeta({ talhaoGeo, bbox, pontos, userPos, alvo, raioM, modo
       }
     });
   }, [talhaoGeo, bbox]);
+
+  // zonas de manejo da grade
+  useEffect(() => {
+    quandoPronto(map => {
+      (map.getSource('zonas') as maplibregl.GeoJSONSource)?.setData(zonas ?? EMPTY_FC);
+    });
+  }, [zonas]);
 
   // #2: camada de referência
   useEffect(() => {

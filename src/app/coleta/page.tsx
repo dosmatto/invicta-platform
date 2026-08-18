@@ -13,6 +13,7 @@ import {
 } from '@/lib/store';
 import { emailUsuario, logout, modoOffline } from '@/lib/auth';
 import { rotuloAno } from '@/lib/periodo';
+import { classeZona } from '@/lib/zonas';
 import { bootCloudCampo } from '@/lib/cloud';
 import {
   RegistroColeta, StatusPonto, COR_STATUS, ROTULO_STATUS,
@@ -35,7 +36,7 @@ import {
   ChevronLeft, ChevronRight, MapPin, Crosshair, Layers, List, Download,
   RefreshCw, LogOut, Settings, Camera, CheckCircle2, X, Wifi, WifiOff,
   Loader2, AlertTriangle, Navigation, CloudUpload, Maximize2, Ruler, Grid3x3,
-  Search, DownloadCloud, Eye, Satellite, Gauge,
+  Search, DownloadCloud, Eye, Satellite, Gauge, Shapes,
 } from 'lucide-react';
 
 const MapaColeta = dynamic(
@@ -634,6 +635,41 @@ function TelaMapa({ sel, setSel, online, pend, reload, setReload, sincronizar, s
   );
   const talhaoFC = useMemo(() => talhaoComoFC(talhao), [talhao]);
 
+  // ZONAS DE MANEJO: quando a grade foi montada por zonas, o operador precisa
+  // ver no campo as mesmas zonas coloridas e as MESMAS DIVISAS da plataforma —
+  // é a divisa que diz de qual zona é cada ponto (na composta, uma amostra por
+  // zona). A geometria vem do snapshot em talhao.zonasGeojson (já sincronizado
+  // com o aparelho) e as cores saem de classeZona(), as mesmas do desktop.
+  const zonasFC = useMemo<GeoJSON.FeatureCollection | null>(() => {
+    if (grade?.metodo !== 'zonas' || !talhao?.zonasGeojson) return null;
+    try {
+      const fc = JSON.parse(talhao.zonasGeojson) as GeoJSON.FeatureCollection;
+      const feats = (fc.features ?? [])
+        .filter(f => f.geometry?.type === 'Polygon' || f.geometry?.type === 'MultiPolygon')
+        .map(f => {
+          const pr = (f.properties ?? {}) as { id?: string; classe?: string };
+          const cz = classeZona(pr.classe ?? '');
+          return {
+            type: 'Feature' as const,
+            properties: { cor: cz.cor, rotulo: String(pr.id ?? ''), classeLabel: cz.label },
+            geometry: f.geometry!,
+          };
+        });
+      return feats.length ? { type: 'FeatureCollection', features: feats } : null;
+    } catch { return null; }
+  }, [grade, talhao]);
+
+  // legenda: uma entrada por classe presente, na ordem das zonas (Z01, Z02…)
+  const legendaZonas = useMemo(() => {
+    if (!zonasFC) return [];
+    const vistas = new Map<string, string>();
+    for (const f of zonasFC.features) {
+      const p = f.properties as { cor: string; classeLabel: string };
+      if (!vistas.has(p.classeLabel)) vistas.set(p.classeLabel, p.cor);
+    }
+    return [...vistas].map(([label, cor]) => ({ label, cor }));
+  }, [zonasFC]);
+
   // bbox pra enquadrar: o do talhão, ou (fallback) o dos pontos da grade
   const bboxArea = useMemo<[number, number, number, number] | null>(() => {
     if (talhao?.bbox) return talhao.bbox;
@@ -660,6 +696,7 @@ function TelaMapa({ sel, setSel, online, pend, reload, setReload, sincronizar, s
   const { userPos, velKmH, gpsErro } = useGps();
   const [mostraLista, setMostraLista] = useState(false);
   const [mostraCfg, setMostraCfg] = useState(false);
+  const [verZonas, setVerZonas] = useState(true);   // zonas coloridas ligadas por padrão
   const [coletando, setColetando] = useState(false);
   const [baixando, setBaixando] = useState<{ feitos: number; total: number } | null>(null);
   const avisadoRef = useRef(false);
@@ -765,6 +802,7 @@ function TelaMapa({ sel, setSel, online, pend, reload, setReload, sincronizar, s
         pedidoGps={pedidoGps} pedidoEnquadrar={pedidoEnquadrar}
         onSelecionarPonto={ordem => { setAlvoOrdem(ordem); avisadoRef.current = false; }}
         onGestoUsuario={() => setSeguir(false)}
+        zonas={verZonas ? zonasFC : null}
       />
 
       {/* topo: voltar + contexto + sync */}
@@ -827,6 +865,10 @@ function TelaMapa({ sel, setSel, online, pend, reload, setReload, sincronizar, s
         <BotaoMapa onClick={() => { setSeguir(false); setPedidoEnquadrar(x => x + 1); }}
           titulo="Ver a área de coleta"><Maximize2 size={18} /></BotaoMapa>
         <BotaoMapa onClick={() => setModo(m => (m === 'sat' ? 'ruas' : 'sat'))} titulo="Satélite / Ruas"><Layers size={18} /></BotaoMapa>
+        {zonasFC && (
+          <BotaoMapa ativo={verZonas} onClick={() => setVerZonas(v => !v)}
+            titulo="Mostrar/ocultar as zonas de manejo"><Shapes size={18} /></BotaoMapa>
+        )}
         <BotaoMapa onClick={() => setMostraLista(true)} titulo="Lista de pontos"><List size={18} /></BotaoMapa>
         <BotaoMapa onClick={() => void baixarMapa()} titulo="Baixar mapa offline">
           {baixando ? <Loader2 size={18} className="animate-spin" /> : <Download size={18} />}
@@ -864,6 +906,16 @@ function TelaMapa({ sel, setSel, online, pend, reload, setReload, sincronizar, s
             <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: COR_MULTI_PROF }} />
             2+ profundidades
           </p>
+        )}
+        {verZonas && legendaZonas.length > 0 && (
+          <div className="px-3 pb-1.5 -mt-1 flex items-center gap-2.5 flex-wrap text-[9px]" style={{ color: SUB }}>
+            {legendaZonas.map(z => (
+              <span key={z.label} className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-sm flex-shrink-0" style={{ background: z.cor }} />
+                {z.label}
+              </span>
+            ))}
+          </div>
         )}
 
         <div style={{ background: 'rgba(6,21,37,0.95)', borderTop: `1px solid ${BORDA}` }}>

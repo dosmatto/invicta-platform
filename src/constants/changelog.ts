@@ -1,5 +1,10 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.50.6': [
+    'O APP DE COLETA MOSTRA AS ZONAS DE MANEJO NO MAPA. Quando a grade foi montada por zonas, o mapa do campo passa a desenhar as zonas coloridas, com as divisas e o número de cada uma — nas mesmas cores da plataforma. É a divisa que diz de qual zona é cada ponto (na amostra composta, uma amostra por zona), e até agora quem estava no campo não enxergava isso no aparelho.',
+    'A camada vem ligada, com uma legenda das classes logo acima da barra do ponto, e um botão novo na coluna do mapa liga e desliga. As zonas ficam por baixo dos pontos e da sua posição — não cobrem nada.',
+    'Onde ver: app de Coleta → abrir uma grade feita por zonas → mapa.',
+  ],
   '2.50.5': [
     'AS VERSÕES ANTERIORES DA PRESCRIÇÃO FICAM SEMPRE À VISTA. Saiu o botão "ver N versão(ões) anterior(es)" / "ocultar": abaixo da versão atual, as anteriores aparecem listadas direto (discretas, com a barra à esquerda), com os mesmos botões de abrir, SHP, Excel, PDF e excluir.',
     'Onde ver: Talhão → Prescrições → PRESCRIÇÕES SALVAS (e o mesmo cartão no rodapé da aba Nova).',
