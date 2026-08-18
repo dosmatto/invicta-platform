@@ -8,7 +8,7 @@ import { rotuloAno, hojeSaoPauloISO, periodoDeData, rotuloEpoca } from '@/lib/pe
 import { classeZona, ORDEM_CLASSES } from '@/lib/zonas';
 import { pode } from '@/lib/empresa';
 import { gerarGrid, pontoInterno, ModoDistribuicao } from '@/lib/grid';
-import { gerarEtiquetasPDF, EtiquetaItem, LAYOUTS_ETIQUETA } from '@/lib/etiquetas';
+import { gerarEtiquetasPDF, EtiquetaItem, layoutPorId } from '@/lib/etiquetas';
 import { exportarKML, exportarSHP } from '@/lib/exportGrade';
 import { AlertTriangle, Layers, MapPin, Printer, RotateCcw, Save, Trash2, CheckCircle2, Circle, Pencil, Download, Eye } from 'lucide-react';
 
@@ -185,7 +185,7 @@ export function SimuladorZonas({ safraNome: safraProp }: { safraNome?: string } 
       }
     }
     const cfg = getConfigEtiqueta();
-    const layout = LAYOUTS_ETIQUETA.find(l => l.id === cfg.layoutId) ?? LAYOUTS_ETIQUETA[0];
+    const layout = layoutPorId(cfg.layoutId);
     const faz = getFazendas().find(f => f.id === talhao?.fazendaId);
     const nome = nomeExport({
       fazenda: faz?.nome ?? '', siglaFazenda: faz?.sigla ?? null, talhao: titulo,

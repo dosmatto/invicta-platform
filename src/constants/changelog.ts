@@ -1,5 +1,11 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.51.0': [
+    'A ETIQUETA PIMACO A4350 (55,8 × 99,0 mm — 10 por folha) VIROU O PADRÃO DAS AMOSTRAS. Ela entrou na lista de folhas e já vem selecionada: quem nunca mexeu na configuração e quem já tinha outra folha gravada passam para a A4350 automaticamente, uma vez só (o ajuste fino H/V volta a zero, porque calibração de outra folha não vale nesta). Quem preferir outro modelo troca em Configurações e a escolha fica valendo.',
+    'O CONTEÚDO DA ETIQUETA CRESCEU JUNTO COM ELA. Antes só o número acompanhava o tamanho da folha — talhão, profundidade e ano ficavam presos num corpo fixo e, numa etiqueta grande, viravam letrinhas ao lado de um número gigante. Agora os quatro campos crescem na mesma proporção, com a mesma cara de sempre. As folhas menores (A4361, A4260, A4355, A4356, 6181) saem exatamente iguais ao que já saíam.',
+    'NOME DE TALHÃO COMPRIDO NÃO QUEBRA MAIS EM DUAS LINHAS. Antes o nome longo pulava para uma segunda linha e invadia o espaço do número da amostra; agora ele diminui até caber em uma linha só.',
+    'Onde ver: Configurações → Etiquetas (ou Biblioteca → Preferências de Análise → aba Etiquetas). As etiquetas saem em Talhão → Amostragem → Gerar etiquetas, e no simulador de zonas.',
+  ],
   '2.50.6': [
     'O APP DE COLETA MOSTRA AS ZONAS DE MANEJO NO MAPA. Quando a grade foi montada por zonas, o mapa do campo passa a desenhar as zonas coloridas, com as divisas e o número de cada uma — nas mesmas cores da plataforma. É a divisa que diz de qual zona é cada ponto (na amostra composta, uma amostra por zona), e até agora quem estava no campo não enxergava isso no aparelho.',
     'A camada vem ligada, com uma legenda das classes logo acima da barra do ponto, e um botão novo na coluna do mapa liga e desliga. As zonas ficam por baixo dos pontos e da sua posição — não cobrem nada.',

@@ -6,7 +6,7 @@ import { getPadroesAmostragem, getPadroesElementos, getSafras, getGrades, saveGr
 import { rotuloAno, hojeSaoPauloISO, periodoDeData, rotuloEpoca } from '@/lib/periodo';
 import { gerarGrid, anguloMaiorDimensao, criarValidador, ModoDistribuicao } from '@/lib/grid';
 import { exportarKML, exportarSHP } from '@/lib/exportGrade';
-import { gerarEtiquetasPDF, itensDeGrade, LAYOUTS_ETIQUETA } from '@/lib/etiquetas';
+import { gerarEtiquetasPDF, itensDeGrade, layoutPorId } from '@/lib/etiquetas';
 import { exportarRelatorioGradeXlsx } from '@/lib/relatorioGrade';
 import { getFazendas } from '@/lib/store';
 import { pode } from '@/lib/empresa';
@@ -293,7 +293,7 @@ export function SimuladorAmostragem({ safraNome: safraProp }: { safraNome?: stri
 
   function gerarEtiquetas(g: GradeAmostragem) {
     const cfg = getConfigEtiqueta();
-    const layout = LAYOUTS_ETIQUETA.find(l => l.id === cfg.layoutId) ?? LAYOUTS_ETIQUETA[0];
+    const layout = layoutPorId(cfg.layoutId);
     const faz = getFazendas().find(f => f.id === nav.fazendaId);
     const nome = nomeExport({
       fazenda: nav.fazenda ?? '', siglaFazenda: faz?.sigla ?? null, talhao: nav.talhao ?? '',

@@ -4,7 +4,9 @@
 // Pimaco) — número da amostra em destaque + profundidade. Sem QR.
 
 import type { GradeAmostragem, PontoAmostragem } from './store';
-import { rotuloAno } from './periodo';
+// Extensão .ts explícita: o teste roda em node puro (type-stripping), que não
+// resolve import sem extensão — mesmo padrão de nomeExport/lab.
+import { rotuloAno } from './periodo.ts';
 import type { jsPDF as JsPDF } from 'jspdf';
 
 // ── Layouts de folha (presets) ───────────────────────────────────────────────
@@ -24,6 +26,7 @@ export interface LayoutEtiqueta {
 // e etiquetas contíguas (pitch = tamanho) como ponto de partida — a calibração
 // (ajuste fino dx/dy) acerta qualquer desvio da folha específica.
 export const LAYOUTS_ETIQUETA: LayoutEtiqueta[] = [
+  { id: 'A4350', nome: 'Pimaco A4350 — 55,8×99,0 (10/folha)', pageW: 210, pageH: 297, cols: 2, rows: 5, labelW: 99, labelH: 55.8, marginLeft: 6, marginTop: 9, pitchX: 99, pitchY: 55.8, desc: 'Padrão da casa — a maior; número e profundidade legíveis de longe' },
   { id: 'A4361', nome: 'Pimaco A4361 — 46,5×63,5 (18/folha)', pageW: 210, pageH: 297, cols: 3, rows: 6, labelW: 63.5, labelH: 46.5, marginLeft: 9.75, marginTop: 9, pitchX: 63.5, pitchY: 46.5, desc: 'Etiqueta maior — número grande' },
   { id: 'A4260', nome: 'Pimaco A4260 — 38,1×63,5 (21/folha)', pageW: 210, pageH: 297, cols: 3, rows: 7, labelW: 63.5, labelH: 38.1, marginLeft: 9.75, marginTop: 15.15, pitchX: 63.5, pitchY: 38.1, desc: 'Tamanho médio' },
   { id: 'A4355', nome: 'Pimaco A4355 — 31,0×63,5 (27/folha)', pageW: 210, pageH: 297, cols: 3, rows: 9, labelW: 63.5, labelH: 31.0, marginLeft: 9.75, marginTop: 9, pitchX: 63.5, pitchY: 31.0, desc: 'Compacta' },
@@ -32,7 +35,15 @@ export const LAYOUTS_ETIQUETA: LayoutEtiqueta[] = [
   { id: 'generico', nome: 'Genérico A4 (3×8, com contorno)', pageW: 210, pageH: 297, cols: 3, rows: 8, labelW: 64.67, labelH: 35.13, marginLeft: 8, marginTop: 8, pitchX: 64.67, pitchY: 35.13, bordaGuia: true, desc: 'Folha A4 comum + linhas de corte' },
 ];
 
-export const LAYOUT_PADRAO = 'A4361';
+// Padrão da casa. É o ÚNICO lugar que decide o padrão: o ETQ_PADRAO do store e
+// o fallback dos simuladores passam por aqui (antes cada um repetia o id na mão,
+// e o LAYOUT_PADRAO ficava declarado sem ninguém usar).
+export const LAYOUT_PADRAO = 'A4350';
+
+export function layoutPorId(id: string | undefined): LayoutEtiqueta {
+  return LAYOUTS_ETIQUETA.find(l => l.id === id)
+    ?? LAYOUTS_ETIQUETA.find(l => l.id === LAYOUT_PADRAO)!;
+}
 
 // ── Itens (uma etiqueta cada) ─────────────────────────────────────────────────
 export interface EtiquetaItem {
@@ -60,6 +71,15 @@ export function itensDeGrade(talhaoNome: string, grade: GradeAmostragem): Etique
 }
 
 const MM_PT = 2.83465; // mm → pt
+const H_REF = 46.5;    // altura da A4361 — referência da tipografia (ver `k` abaixo)
+
+// Encolhe a fonte até o texto caber na largura útil. A etiqueta é de UMA linha:
+// deixar o jsPDF quebrar sozinho (maxWidth) joga a 2ª linha PARA BAIXO, dentro da
+// faixa seguinte — nome de talhão comprido colidia com o número.
+function caber(doc: JsPDF, texto: string, larguraMax: number, fs: number, min = 4) {
+  doc.setFontSize(fs);
+  while (fs > min && doc.getTextWidth(texto) > larguraMax) { fs -= 0.5; doc.setFontSize(fs); }
+}
 
 // ── Renderização (pura — desenha num doc já criado; testável fora do browser) ──
 export function desenharEtiquetas(doc: JsPDF, itens: EtiquetaItem[], layout: LayoutEtiqueta, ajuste: { dx: number; dy: number } = { dx: 0, dy: 0 }) {
@@ -80,35 +100,42 @@ export function desenharEtiquetas(doc: JsPDF, itens: EtiquetaItem[], layout: Lay
     const mostraTitulo = h >= 24 && !!it.titulo;
     const mostraRodape = h >= 30 && !!it.rodape;
 
+    // Etiqueta maior = TUDO maior, na mesma proporção. O número já acompanhava a
+    // altura, mas título/profundidade/rodapé estavam presos em 9/13/8 pt fixos —
+    // numa A4350 (55,8 mm) isso virava um número de 66 pt ao lado de textos de 9.
+    // `k` só CRESCE (Math.max(1, …)): as folhas menores que a A4361 continuam
+    // saindo exatamente como sempre saíram.
+    const k = Math.max(1, h / H_REF);
+    const util = w - 2 * pad;
+
     // Título (talhão)
     if (mostraTitulo) {
       doc.setFont('helvetica', 'normal');
-      doc.setFontSize(Math.min(9, Math.max(6, h * 0.15 * MM_PT)));
       doc.setTextColor(110, 120, 140);
-      doc.text(it.titulo, cx, y + h * 0.17, { align: 'center', maxWidth: w - 2 * pad });
+      caber(doc, it.titulo, util, Math.min(9 * k, Math.max(6, h * 0.15 * MM_PT)));
+      doc.text(it.titulo, cx, y + h * 0.17, { align: 'center' });
     }
 
     // Número (destaque) — encolhe para caber na largura
-    let fs = h * 0.42 * MM_PT;
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(fs);
-    while (doc.getTextWidth(it.numero) > w - 2.5 * pad && fs > 6) { fs -= 1; doc.setFontSize(fs); }
+    doc.setFont('helvetica', 'bold');
+    caber(doc, it.numero, w - 2.5 * pad, h * 0.42 * MM_PT, 6);
     doc.setTextColor(15, 25, 45);
     doc.text(it.numero, cx, y + (mostraTitulo ? h * 0.57 : h * 0.5), { align: 'center' });
 
     // Profundidade
     if (it.sub) {
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(Math.min(13, Math.max(7, h * 0.17 * MM_PT)));
       doc.setTextColor(30, 60, 110);
-      doc.text(it.sub, cx, y + (mostraRodape ? h * 0.78 : h * 0.84), { align: 'center', maxWidth: w - 2 * pad });
+      caber(doc, it.sub, util, Math.min(13 * k, Math.max(7, h * 0.17 * MM_PT)));
+      doc.text(it.sub, cx, y + (mostraRodape ? h * 0.78 : h * 0.84), { align: 'center' });
     }
 
     // Rodapé (safra/época)
     if (mostraRodape) {
       doc.setFont('helvetica', 'normal');
-      doc.setFontSize(Math.min(8, Math.max(5, h * 0.12 * MM_PT)));
       doc.setTextColor(140, 150, 165);
-      doc.text(it.rodape!, cx, y + h * 0.93, { align: 'center', maxWidth: w - 2 * pad });
+      caber(doc, it.rodape!, util, Math.min(8 * k, Math.max(5, h * 0.12 * MM_PT)));
+      doc.text(it.rodape!, cx, y + h * 0.93, { align: 'center' });
     }
   }
 }

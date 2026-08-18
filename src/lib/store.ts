@@ -32,6 +32,7 @@ import {
 import { ELEMENTOS_LAB, simboloElemento, norm as normLab, calcularDerivados, DERIVADOS_IDS } from './lab';
 import { anoDeData, epocaDeData, periodoDeData, anoDaSafra, hojeSaoPauloISO, partesData, dataValida, type Epoca } from './periodo';
 import { VARIAVEIS_COMPLEMENTARES } from '../constants/variaveisSeedComplementar';
+import { LAYOUT_PADRAO } from './etiquetas';   // só o id do padrão (etiquetas.ts não importa store em runtime)
 
 export interface Cliente {
   id: string;
@@ -1262,7 +1263,7 @@ export function marcarParaProcessar(id: string) {
 // (conteudo.tipo === 'etiqueta'). API pública inalterada — Configurações e os
 // simuladores continuam usando get/saveConfigEtiqueta.
 export interface ConfigEtiqueta { layoutId: string; dx: number; dy: number; }
-const ETQ_PADRAO: ConfigEtiqueta = { layoutId: 'A4361', dx: 0, dy: 0 };
+const ETQ_PADRAO: ConfigEtiqueta = { layoutId: LAYOUT_PADRAO, dx: 0, dy: 0 };
 
 function _itemEtiqueta(): ItemBiblioteca<ConteudoEtiqueta> | undefined {
   return bibListar<ConteudoEtiqueta>('preferencias-analise').find(i => i.conteudo?.tipo === 'etiqueta');
@@ -1285,6 +1286,28 @@ export function saveConfigEtiqueta(c: ConfigEtiqueta) {
       nome: 'Etiquetas (Pimaco)', conteudo, escopo: empresaAtivaId() ? 'empresa' : 'meu',
     });
   }
+}
+
+/**
+ * A A4350 (55,8×99,0, 10/folha) virou a folha padrão da casa. Trocar só o
+ * ETQ_PADRAO não chegaria em ninguém: quem já usou a tela tem o item de etiqueta
+ * gravado na Biblioteca, e get/saveConfigEtiqueta leem de lá — o padrão novo só
+ * valeria para instalação nova (mesma armadilha do seed idempotente por id).
+ * Daí a migração one-shot. Zera o ajuste fino junto: dx/dy calibrados para OUTRA
+ * folha não têm sentido nesta. Roda 1× — quem preferir outra folha troca em
+ * Configurações › Etiquetas e a flag impede a migração de desfazer a escolha.
+ */
+export function migrarEtiquetaPadraoA4350() {
+  if (typeof window === 'undefined') return;
+  const FLAG = 'inv_migrado_etq_a4350_v1';
+  if (localStorage.getItem(FLAG) === '1') return;
+  const it = _itemEtiqueta();
+  if (it && it.conteudo.layoutId !== LAYOUT_PADRAO) {
+    bibAtualizar<ConteudoEtiqueta>('preferencias-analise', it.id, {
+      conteudo: { tipo: 'etiqueta', layoutId: LAYOUT_PADRAO, dx: 0, dy: 0 },
+    });
+  }
+  localStorage.setItem(FLAG, '1');
 }
 
 // ── Variáveis de Análise (catálogo, tipo "Preferências de Análise") ─────────
