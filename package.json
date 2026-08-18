@@ -20,6 +20,7 @@
     "teste:grids": "node scripts/teste-grids-recomendacao.mjs",
     "teste:iam": "node scripts/teste-iam.mjs",
     "teste:etiquetas": "node scripts/teste-etiquetas.mjs",
+    "teste:interpolador": "node scripts/teste-interpolador.mjs",
     "build:mobile": "node scripts/mobile-build.mjs",
     "android:sync": "npm run build:mobile && npx cap sync android",
     "android:open": "npx cap open android",

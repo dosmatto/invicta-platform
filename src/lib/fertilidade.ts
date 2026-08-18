@@ -4,10 +4,37 @@
 // derivados da legenda do nutriente. O backend devolve um PNG (raster
 // interpolado, recortado e colorido) + bounds para sobrepor no mapa.
 
-import { stopsParaBackend, gradienteCssDaLegenda, type Legenda } from './legendas';
-import { postBackend, isLocal } from './interpUrl';
+// Extensão .ts explícita: o teste roda em node puro (type-stripping), que não
+// resolve import sem extensão — mesmo padrão de lab/nomeExport.
+import { stopsParaBackend, gradienteCssDaLegenda, type Legenda } from './legendas.ts';
+import { postBackend, isLocal } from './interpUrl.ts';
 
 export type Stop = [number, [number, number, number]];
+
+// ── Mínimo de pontos por interpolador ───────────────────────────────────────
+// Abaixo de 3 pontos não sai mapa nenhum. A KRIGAGEM precisa de 4: com 3 o
+// ajuste do variograma nunca converge (medido no backend: 0/5 com 3 pontos,
+// 5/5 a partir de 4) e o servidor devolve "nao convergiu
+// (colineares/insuficientes?)". O IDW é exato e roda com 3.
+export const MIN_PTS_MAPA = 3;
+export const MIN_PTS_KRIGE = 4;
+
+/**
+ * Qual interpolador REALMENTE roda para um mapa, dado o que o usuário escolheu.
+ *
+ * O caso comum é o laudo amostrar a camada profunda em só parte dos pontos: a
+ * 20-40 fica com menos de 4 e a krigagem não tem como ajustar o variograma.
+ * Antes isso REPROVAVA o mapa e mandava trocar o interpolador na tela — só que
+ * essa chave é global, e trocá-la jogaria para IDW também a 0-20, que tem
+ * pontos de sobra e é justamente onde a krigagem vale a pena. Por isso a queda
+ * é POR MAPA (variável × profundidade), e quem chama avisa quais caíram.
+ */
+export function interpoladorEfetivo(
+  metodo: 'krige' | 'idw', nPontos: number,
+): { metodo: 'krige' | 'idw'; caiuParaIdw: boolean } {
+  const caiuParaIdw = metodo === 'krige' && nPontos < MIN_PTS_KRIGE;
+  return { metodo: caiuParaIdw ? 'idw' : metodo, caiuParaIdw };
+}
 
 // Domínio + paradas de cor para o backend (mapa raster).
 // A coloração é "discreta por classe" — cada pixel pega a cor da sua classe

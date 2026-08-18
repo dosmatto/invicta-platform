@@ -19,7 +19,7 @@ import {
 } from '@/lib/fertilidade';
 import { colorirGridComLegenda, temGrid } from '@/lib/raster';
 import { resolverGradeDoLaudo, pontosPorNumero, casarAmostrasComPontos } from '@/lib/eloGrade';
-import { decodeGrid } from '@/lib/fertilidade';
+import { decodeGrid, interpoladorEfetivo, MIN_PTS_MAPA, MIN_PTS_KRIGE } from '@/lib/fertilidade';
 import { rasterizarZonas, centroideGeom, type ZonaValor } from '@/lib/recomendacao/zonasGrid';
 import { bindingAuto, bindingPorPontos, divisasDasZonas } from '@/lib/meap/fertilidadePorZona';
 import { stopsParaBackend, dominioDaLegenda, paresDaClasse, respeitarPadraoHomonima } from '@/lib/legendas';
@@ -142,6 +142,9 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
   const metodoChave = interpolador === 'krige-fixo' ? 'krigefixa' : metodo;
   const [estado, setEstado] = useState<'idle' | 'processando' | 'pronto' | 'erro'>('idle');
   const [erro, setErro] = useState('');
+  // Mapas que tiveram de cair para IDW por falta de pontos na camada. Zerado a
+  // cada rodada — é um aviso do que ACABOU de sair, não um estado do talhão.
+  const [quedasIdw, setQuedasIdw] = useState<string[]>([]);
   const [aquecendo, setAquecendo] = useState(false);
   // Acorda o servidor de processamento (Render dorme sem uso) ao entrar na aba,
   // e mostra "aquecendo…" enquanto ele sobe (em vez de só falhar no cold start).
@@ -426,7 +429,7 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
   // sempre `nut__prof` (os 2 últimos campos do id, p/ ids novos e legados).
   useEffect(() => {
     abortRef.current?.abort();   // troca de contexto: cancela interpolação em voo (resultado obsoleto)
-    setCache({}); setEstado('idle'); setErro('');
+    setCache({}); setEstado('idle'); setErro(''); setQuedasIdw([]);
     fila20.current = []; setPendente20([]);   // a fila de 20 m era do talhão anterior
     if (!nav.talhaoId || !importacaoId) return;
     const prefixo = `${nav.talhaoId}__${importacaoId}__`;
@@ -560,29 +563,35 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
     return `os números do laudo não batem com os da grade (${comValor} amostras, ${nPontos} pontos)`;
   }
 
-  async function processarUm(nut: string, prof: string) {
-    if (ehZona) return processarUmZona(nut, prof);
+  // Devolve o rótulo do mapa que teve de cair para IDW (ou null). Quem chama
+  // junta os rótulos e mostra o aviso — ver `quedasIdw`.
+  async function processarUm(nut: string, prof: string): Promise<string | null> {
+    if (ehZona) { await processarUmZona(nut, prof); return null; }
     const leg = legendaDe(nut);
     if (!leg) throw new Error(`${nut}: sem legenda`);
     const pts = pontosDe(nut, prof);
-    if (pts.length < 3) throw new Error(`${leg.simbolo} ${prof}: ${motivoSemMapa(nut, prof)}`);
-    // Krigagem precisa de 4 pontos. Com 3 o ajuste do variograma NUNCA converge
-    // (medido no backend: 0/5 com 3 pontos, 5/5 a partir de 4) e o servidor
-    // devolve "nao convergiu (colineares/insuficientes?)" — técnico e repetido
-    // uma vez por variável. É o caso comum de laudo que amostra a camada profunda
-    // só em parte dos pontos. Barramos aqui, com o caminho de saída junto.
-    if (metodo === 'krige' && pts.length < 4) {
-      throw new Error(`${leg.simbolo} ${prof}: só ${pts.length} amostras nesta profundidade — a krigagem precisa de 4. Troque o interpolador para IDW em "Configurações da interpolação", ou amostre mais pontos nesta camada`);
-    }
+    if (pts.length < MIN_PTS_MAPA) throw new Error(`${leg.simbolo} ${prof}: ${motivoSemMapa(nut, prof)}`);
+    // Menos de 4 pontos: a krigagem não ajustaria o variograma e o backend
+    // devolveria "nao convergiu" — técnico e repetido uma vez por variável. É o
+    // caso comum de laudo que amostra a camada profunda só em parte dos pontos.
+    // Cai para IDW SÓ NESTE mapa (ver interpoladorEfetivo): antes o mapa era
+    // reprovado e o usuário tinha de virar a chave na tela, que é global e
+    // levaria junto a 0-20, que tem pontos de sobra.
+    const { metodo: metodoUsado, caiuParaIdw } = interpoladorEfetivo(metodo, pts.length);
+    // A chave da nuvem tem de dizer a verdade sobre o mapa gravado: um raster
+    // IDW salvo sob a chave 'krige' faria a releitura comparar coisas diferentes.
+    const chaveUsada = caiuParaIdw ? 'idw' : metodoChave;
+    const modeloUsado = caiuParaIdw ? '' : modeloEfetivo;
     // o backend devolve grid + bounds + stats + png; só usamos grid/bounds/stats.
     // O domínio e os stops vão só pra colorir o PNG do backend (ignorado aqui).
     const { dominio, stops } = rampaDaLegenda(leg);
     const resp = await interpolar({
-      pontos: pts, poligono: poligono!, dominio, stops, metodo, pixelM,
-      modeloFixo: modeloEfetivo || null,
+      pontos: pts, poligono: poligono!, dominio, stops, metodo: metodoUsado, pixelM,
+      modeloFixo: modeloUsado || null,
       // Krigagem fixa: manda o variograma pronto — o backend usa estes números
-      // direto, sem auto-ajuste e sem a guarda anti-degeneração.
-      variogramaManual: varFixoNum,
+      // direto, sem auto-ajuste e sem a guarda anti-degeneração. Na queda para
+      // IDW não vai variograma nenhum, senão o backend recusa o par.
+      variogramaManual: caiuParaIdw ? null : varFixoNum,
       signal: abortRef.current?.signal,
     });
     const labels = fcLabels(pts, nut);
@@ -606,9 +615,10 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
           : { resp: { ...resp, png: '', grid: undefined }, labels, interpoladoEm };
         console.warn(`[fertilidade] mapa grande p/ a nuvem — salvando ${dados.resp.png ? 'só PNG' : 'só metadados'} de ${nut} ${prof}.`);
       }
-      cloudSalvarMapa(idNuvem(nav.talhaoId, importacaoId, metodoChave, pixelM, modeloEfetivo, nut, prof), dados);
+      cloudSalvarMapa(idNuvem(nav.talhaoId, importacaoId, chaveUsada, pixelM, modeloUsado, nut, prof), dados);
     }
     enfileirar20m(nut, prof);
+    return caiuParaIdw ? `${leg.simbolo} ${prof} (${pts.length} pts)` : null;
   }
 
   // ── Mapa de 20 m para a Recomendação ──────────────────────────────────────
@@ -624,12 +634,18 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
     const leg = legendaDe(nut);
     if (!leg || !nav.talhaoId || !importacaoId) return;
     const pts = pontosDe(nut, prof);
-    if (pts.length < 3) return;
+    if (pts.length < MIN_PTS_MAPA) return;
+    // MESMA decisão do mapa fino. Se divergir, a camada com poucos pontos sai
+    // por IDW na tela e falha aqui ("nao convergiu") — a Recomendação fica sem
+    // mapa de 20 m justamente na profundidade que o usuário viu desenhada.
+    const { metodo: metodoUsado, caiuParaIdw } = interpoladorEfetivo(metodo, pts.length);
+    const chaveUsada = caiuParaIdw ? 'idw' : metodoChave;
+    const modeloUsado = caiuParaIdw ? '' : modeloEfetivo;
     const { dominio, stops } = rampaDaLegenda(leg);
     const resp = await interpolar({
-      pontos: pts, poligono: poligono!, dominio, stops, metodo, pixelM: PIXEL_RECOMENDACAO,
-      modeloFixo: modeloEfetivo || null,
-      variogramaManual: varFixoNum,
+      pontos: pts, poligono: poligono!, dominio, stops, metodo: metodoUsado, pixelM: PIXEL_RECOMENDACAO,
+      modeloFixo: modeloUsado || null,
+      variogramaManual: caiuParaIdw ? null : varFixoNum,
       // A malha cobre 100% do talhão: sem isto sobrava até um pixel (20 m) sem
       // dose em toda a divisa. Cada pixel de borda leva o valor que a krigagem
       // calculou para aquele nó — nada é preenchido. O corte exato pelo contorno
@@ -640,7 +656,7 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
     const gridGz = resp.grid ? await comprimirGrid(resp.grid) : undefined;
     // Sem labels e sem PNG: este mapa nunca é desenhado, só entra na conta.
     cloudSalvarMapa(
-      idDose20(nav.talhaoId, importacaoId, metodoChave, modeloEfetivo, nut, prof),
+      idDose20(nav.talhaoId, importacaoId, chaveUsada, modeloUsado, nut, prof),
       { resp: { ...resp, png: '', grid: gridGz }, labels: fcVazio(), interpoladoEm: new Date().toISOString() },
     );
   }
@@ -684,8 +700,12 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
     if (!alcanceFixoOk) { setErro('Krigagem fixa: informe um Alcance maior que zero (m).'); setEstado('erro'); return; }
     abortRef.current?.abort();               // cancela um processamento anterior em voo
     abortRef.current = new AbortController();
-    setEstado('processando'); setErro('');
-    try { await processarUm(nutriente, profundidade); setEstado('pronto'); }
+    setEstado('processando'); setErro(''); setQuedasIdw([]);
+    try {
+      const queda = await processarUm(nutriente, profundidade);
+      setQuedasIdw(queda ? [queda] : []);
+      setEstado('pronto');
+    }
     catch (e) {
       if (ehAbort(e)) return;                 // cancelado pelo usuário: não é erro
       setEstado('erro'); setErro(e instanceof Error ? e.message : 'Falha ao processar.');
@@ -698,9 +718,10 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
     if (!alcanceFixoOk) { setErro('Krigagem fixa: informe um Alcance maior que zero (m).'); setEstado('erro'); return; }
     abortRef.current?.abort();               // cancela um processamento anterior em voo
     abortRef.current = new AbortController();
-    setEstado('processando'); setErro('');
+    setEstado('processando'); setErro(''); setQuedasIdw([]);
     const total = nutrientes.length * profsAll.length;
     const falhas: string[] = [];
+    const quedas: string[] = [];
     // motivo → variáveis que caíram nele. Listar 16 nomes soltos não ajuda ninguém;
     // agrupado, o usuário lê "todas as de 20-40 estão sem valor no laudo" e sabe o
     // que fazer.
@@ -713,7 +734,7 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
         i++;
         const sim = legendaDe(nut)?.simbolo ?? nut;
         setProgresso({ atual: i, total, nome: `${sim} ${prof}` });
-        try { await processarUm(nut, prof); }
+        try { const q = await processarUm(nut, prof); if (q) quedas.push(q); }
         catch (e) {
           if (ehAbort(e)) { cancelado = true; break; }   // usuário abandonou: para tudo, sem erro
           if (ehBackendFora(e)) { backendOff = true; break; }
@@ -727,6 +748,7 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
       if (backendOff || cancelado) break;
     }
     setProgresso(null);
+    setQuedasIdw(quedas);
     if (cancelado) return;
     if (backendOff) {
       setEstado('erro');
@@ -742,7 +764,7 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
   }
 
   function limpar() {
-    setCache({}); setEstado('idle'); setErro('');
+    setCache({}); setEstado('idle'); setErro(''); setQuedasIdw([]);
     if (nav.talhaoId && importacaoId) {
       // Prefixo largo — apaga TODOS os mapas deste talhão+importação (qualquer config)
       // e também os auxiliares de 20 m da Recomendação, que vivem em gaveta própria.
@@ -1110,6 +1132,11 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
           )}
           {estado === 'erro' && <p className="text-[10px]" style={{ color: '#f87171' }}>{erro}</p>}
           {erro && estado !== 'erro' && <p className="text-[10px]" style={{ color: '#fbbf24' }}>{erro}</p>}
+          {quedasIdw.length > 0 && (
+            <p className="text-[10px]" style={{ color: '#fbbf24' }}>
+              Poucas amostras para krigar em {quedasIdw.join(', ')} — {quedasIdw.length === 1 ? 'esse mapa saiu' : 'esses mapas saíram'} por <b>IDW</b>. A krigagem precisa de {MIN_PTS_KRIGE} pontos para ajustar o variograma; abaixo disso ela não converge. As demais variáveis e profundidades continuam no interpolador escolhido.
+            </p>
+          )}
           {pendente20.length > 0 && (
             <p className="text-[10px]" style={{ color: '#fbbf24' }}>
               Mapa de 20 m da Recomendação pendente em {pendente20.length} {pendente20.length === 1 ? 'variável' : 'variáveis'} — a dose ainda sai, mas por reamostragem (extremos mais fracos). Processe de novo quando puder.

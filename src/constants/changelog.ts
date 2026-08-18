@@ -1,5 +1,12 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.56.0': [
+    'CAMADA COM POUCOS PONTOS NÃO REPROVA MAIS O MAPA — ELA CAI SOZINHA PARA IDW. A krigagem precisa de 4 amostras para ajustar o variograma, e é comum o laudo medir a 20-40 em só parte dos pontos. Na v2.53.0 o app passou a barrar esse caso e a explicar a saída; agora ele não barra mais — reconhece, interpola por IDW e avisa quais mapas saíram assim.',
+    'A troca é POR MAPA (variável × profundidade), não na chave da tela: a 0-20, que costuma ter pontos de sobra, continua krigada. Trocar o seletor levaria as duas camadas junto, que é justamente o que não se quer em fertilidade.',
+    'O mapa auxiliar de 20 m da Recomendação segue a mesma decisão. Sem isso, a camada curta aparecia desenhada na tela e a dose ficava sem mapa — a prescrição saía torta só naquela profundidade.',
+    'Vale também para a Compactação, que tinha o mesmo problema na camada mais funda.',
+    'Onde ver: Talhão → Fertilidade → Processar (o aviso amarelo aparece abaixo do botão, e o selo do mapa mostra "IDW · N pts").',
+  ],
   '2.55.0': [
     'A ETIQUETA GANHOU O CABEÇALHO PRODUTOR — FAZENDA no topo, em NEGRITO, e a sigla do talhão também passou a NEGRITO. Quem recebe o saco no laboratório identifica de quem é sem abrir o sistema. Vale para as etiquetas das grades por Zona e das grades por Grid. Quando não há produtor ou fazenda cadastrados, a linha some sozinha (não sai " — " solto).',
     'Onde ver: Amostragem → gerar/abrir uma grade → Etiquetas (PDF).',

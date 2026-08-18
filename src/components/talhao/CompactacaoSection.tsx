@@ -19,6 +19,7 @@ import { leiturasParaPontos } from '@/lib/compactacao';
 import {
   interpolar, rampaDaLegenda, gradienteCss, coordsFromBounds, extrairPoligono,
   comprimirGrid, descomprimirGrid, type RespInterp,
+  interpoladorEfetivo, MIN_PTS_MAPA, MIN_PTS_KRIGE,
 } from '@/lib/fertilidade';
 import { colorirGridComLegenda, temGrid } from '@/lib/raster';
 import { cloudSalvarMapa, cloudCarregarMapasPorPrefixo, cloudExcluirMapasPorPrefixo } from '@/lib/cloud';
@@ -75,6 +76,8 @@ export function CompactacaoSection({ safraNome }: { safraNome?: string } = {}) {
   // interpolação
   const [estado, setEstado] = useState<'idle' | 'processando' | 'pronto' | 'erro'>('idle');
   const [erro, setErro] = useState('');
+  // Camada que teve de sair por IDW (poucos pontos). Aviso da rodada, não estado.
+  const [quedaIdw, setQuedaIdw] = useState('');
   const [cache, setCache] = useState<Record<string, MapaPronto>>({});
   const [pixelM, setPixelM] = useState(PIXEL_COMP_PADRAO);
 
@@ -94,7 +97,7 @@ export function CompactacaoSection({ safraNome }: { safraNome?: string } = {}) {
 
   // Autoload: hidrata da nuvem os rasters já interpolados desta importação.
   useEffect(() => {
-    setCache({}); setEstado('idle'); setErro('');
+    setCache({}); setEstado('idle'); setErro(''); setQuedaIdw('');
     if (!nav.talhaoId || !importacaoId) return;
     const prefixo = prefixoNuvem(nav.talhaoId, importacaoId);
     (async () => {
@@ -182,11 +185,16 @@ export function CompactacaoSection({ safraNome }: { safraNome?: string } = {}) {
     if (!legenda) { setErro('Legenda de compactação não encontrada.'); setEstado('erro'); return; }
     if (!poligono) { setErro('Limite do talhão não encontrado — abra o talhão no mapa.'); setEstado('erro'); return; }
     const pts = pontosDe(prof);
-    if (pts.length < 3) { setErro(`${prof}: menos de 3 pontos válidos.`); setEstado('erro'); return; }
-    setEstado('processando'); setErro('');
+    if (pts.length < MIN_PTS_MAPA) { setErro(`${prof}: menos de ${MIN_PTS_MAPA} pontos válidos.`); setEstado('erro'); return; }
+    setEstado('processando'); setErro(''); setQuedaIdw('');
     try {
       const { dominio, stops } = rampaDaLegenda(legenda);
-      const resp = await interpolar({ pontos: pts, poligono, dominio, stops, metodo: 'krige', pixelM, modeloFixo: null });
+      // Mesma regra da Fertilidade: com menos de 4 pontos a krigagem não ajusta
+      // o variograma e o backend devolve "nao convergiu". Na penetrometria isso
+      // aparece na camada mais funda, medida em menos pontos que as de cima.
+      const { metodo, caiuParaIdw } = interpoladorEfetivo('krige', pts.length);
+      if (caiuParaIdw) setQuedaIdw(`${prof}: só ${pts.length} pontos — mapa por IDW (a krigagem precisa de ${MIN_PTS_KRIGE}).`);
+      const resp = await interpolar({ pontos: pts, poligono, dominio, stops, metodo, pixelM, modeloFixo: null });
       const labels = fcLabels(pts);
       setCache(c => ({ ...c, [prof]: { resp, labels } }));
       setEstado('pronto');
@@ -344,6 +352,7 @@ export function CompactacaoSection({ safraNome }: { safraNome?: string } = {}) {
           </button>
 
           {estado === 'erro' && <p className="text-[10px]" style={{ color: '#f87171' }}>{erro}</p>}
+          {quedaIdw && <p className="text-[10px]" style={{ color: '#fbbf24' }}>{quedaIdw}</p>}
 
           {/* Legenda + stats */}
           {cache[profundidade] && (
