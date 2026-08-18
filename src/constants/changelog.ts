@@ -1,5 +1,11 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.52.0': [
+    'AGORA O APP DIZ POR QUE UM MAPA NÃO SAIU. O aviso do "Processar tudo" era só uma lista de nomes ("Não processou: pH 20-40, P 20-40, K 20-40…") e por trás de todos eles havia uma única mensagem interna: "menos de 3 pontos". Com 15 variáveis reprovadas de uma vez numa profundidade, não dava para saber se o problema era o laudo, a grade ou a numeração das amostras — e cada um desses tem conserto diferente.',
+    'A mensagem passou a separar o motivo e a agrupar as variáveis por ele. Os casos que ela distingue: o laudo não tem nenhuma linha naquela profundidade; tem linhas, mas nenhuma com valor daquela variável (coluna em branco no arquivo); tem menos de 3 amostras com valor (o mínimo para interpolar); o talhão não tem grade com pontos; há mais amostras do que pontos na grade; ou os números do laudo não batem com os da grade.',
+    'Exemplo prático: um talhão em que todo o 20-40 falhava agora responde de cara se as linhas de 20-40 vieram sem valor no arquivo do laboratório — que é o caso mais comum quando só a camada superficial foi analisada.',
+    'Onde ver: Talhão → Fertilidade → Processar tudo. O aviso aparece logo abaixo dos botões.',
+  ],
   '2.51.0': [
     'A ETIQUETA PIMACO A4350 (55,8 × 99,0 mm — 10 por folha) VIROU O PADRÃO DAS AMOSTRAS. Ela entrou na lista de folhas e já vem selecionada: quem nunca mexeu na configuração e quem já tinha outra folha gravada passam para a A4350 automaticamente, uma vez só (o ajuste fino H/V volta a zero, porque calibração de outra folha não vale nesta). Quem preferir outro modelo troca em Configurações e a escolha fica valendo.',
     'O CONTEÚDO DA ETIQUETA CRESCEU JUNTO COM ELA. Antes só o número acompanhava o tamanho da folha — talhão, profundidade e ano ficavam presos num corpo fixo e, numa etiqueta grande, viravam letrinhas ao lado de um número gigante. Agora os quatro campos crescem na mesma proporção, com a mesma cara de sempre. As folhas menores (A4361, A4260, A4355, A4356, 6181) saem exatamente iguais ao que já saíam.',

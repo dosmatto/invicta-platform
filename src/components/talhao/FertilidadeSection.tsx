@@ -538,12 +538,34 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
     }
   }
 
+  // POR QUE um mapa não sai. "menos de 3 pontos" não dizia nada acionável: o
+  // usuário via 15 variáveis reprovadas numa profundidade e não tinha como saber
+  // se faltava valor no laudo, se a grade estava curta ou se a numeração não
+  // batia. Cada caso tem conserto DIFERENTE, então a mensagem tem de separá-los.
+  function motivoSemMapa(nut: string, prof: string): string {
+    if (!importacao) return 'sem importação de laboratório';
+    const comValor = importacao.resultados.filter(
+      r => r.profundidade === prof && r.valores[nut] != null && isFinite(r.valores[nut]),
+    ).length;
+    const nasProf = importacao.resultados.filter(r => r.profundidade === prof).length;
+    const nPontos = grade?.pontos?.length ?? 0;
+    if (comValor === 0) {
+      return nasProf > 0
+        ? `o laudo tem ${nasProf} linha(s) em ${prof}, mas nenhuma com valor desta variável`
+        : `o laudo não tem nenhuma linha em ${prof}`;
+    }
+    if (comValor < 3) return `só ${comValor} amostra(s) com valor em ${prof} (o mínimo é 3)`;
+    if (nPontos === 0) return 'o talhão não tem grade de amostragem com pontos';
+    if (nPontos < comValor) return `${comValor} amostras para ${nPontos} pontos na grade — sobram amostras sem lugar`;
+    return `os números do laudo não batem com os da grade (${comValor} amostras, ${nPontos} pontos)`;
+  }
+
   async function processarUm(nut: string, prof: string) {
     if (ehZona) return processarUmZona(nut, prof);
     const leg = legendaDe(nut);
     if (!leg) throw new Error(`${nut}: sem legenda`);
     const pts = pontosDe(nut, prof);
-    if (pts.length < 3) throw new Error(`${leg.simbolo} ${prof}: menos de 3 pontos`);
+    if (pts.length < 3) throw new Error(`${leg.simbolo} ${prof}: ${motivoSemMapa(nut, prof)}`);
     // o backend devolve grid + bounds + stats + png; só usamos grid/bounds/stats.
     // O domínio e os stops vão só pra colorir o PNG do backend (ignorado aqui).
     const { dominio, stops } = rampaDaLegenda(leg);
@@ -671,6 +693,10 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
     setEstado('processando'); setErro('');
     const total = nutrientes.length * profsAll.length;
     const falhas: string[] = [];
+    // motivo → variáveis que caíram nele. Listar 16 nomes soltos não ajuda ninguém;
+    // agrupado, o usuário lê "todas as de 20-40 estão sem valor no laudo" e sabe o
+    // que fazer.
+    const porMotivo = new Map<string, string[]>();
     let backendOff = false;
     let cancelado = false;
     let i = 0;
@@ -684,6 +710,10 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
           if (ehAbort(e)) { cancelado = true; break; }   // usuário abandonou: para tudo, sem erro
           if (ehBackendFora(e)) { backendOff = true; break; }
           falhas.push(`${sim} ${prof}`);
+          const msg = e instanceof Error ? e.message : String(e);
+          // a mensagem vem como "SIMBOLO PROF: motivo" — guarda só o motivo
+          const motivo = msg.slice(msg.indexOf(':') + 1).trim() || 'falha ao interpolar';
+          porMotivo.set(motivo, [...(porMotivo.get(motivo) ?? []), `${sim} ${prof}`]);
         }
       }
       if (backendOff || cancelado) break;
@@ -695,7 +725,11 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
       setErro(msgBackendFora());
     } else {
       setEstado(falhas.length === total ? 'erro' : 'pronto');
-      setErro(falhas.length ? `Não processou: ${falhas.join(', ')}.` : '');
+      setErro(falhas.length
+        ? [...porMotivo.entries()]
+            .map(([motivo, quais]) => `Não processou (${motivo}): ${quais.join(', ')}.`)
+            .join(' ')
+        : '');
     }
   }
 
