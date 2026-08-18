@@ -48,7 +48,8 @@
     "teste:cobertura": "node scripts/teste-cobertura.mjs",
     "teste:cobrir": "PY=\"$HOME/.invicta-fert-backend/venv/bin/python\"; [ -x \"$PY\" ] || PY=python3; \"$PY\" scripts/teste-cobrir-poligono.py",
     "teste:gradezonas": "node scripts/teste-grade-zonas.mjs",
-    "teste:geometria": "PY=\"$HOME/.invicta-fert-backend/venv/bin/python\"; [ -x \"$PY\" ] || PY=python3; \"$PY\" scripts/teste-geometria-zonas.py"
+    "teste:geometria": "PY=\"$HOME/.invicta-fert-backend/venv/bin/python\"; [ -x \"$PY\" ] || PY=python3; \"$PY\" scripts/teste-geometria-zonas.py",
+    "teste:janela": "node scripts/teste-janela-boot.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",

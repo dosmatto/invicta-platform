@@ -14,6 +14,7 @@
 // pra ligar o Auth Supabase não forçar os dados (evita tela vazia antes do import).
 
 import { getSupabase, supabaseConfigurado } from './supabase';
+import { marcarGravacaoLocal, editadaDuranteBoot, chavesEditadasDuranteBoot, type RegistroGravacoes } from './janelaBoot';
 import { lerRawLocal, gravarRawLocal, lerListaLocal } from './localComprimido';
 
 const TABELA_TALHOES_KEY = 'inv_talhoes';
@@ -186,6 +187,7 @@ async function bootIncremental(
   keysLista: string[], keysObj: string[], marca: string,
 ): Promise<boolean> {
   const t0 = performance.now();
+  const inicioBoot = Date.now();   // marco da janela (ver janelaBoot.ts)
   const todasCols = [...keysLista, ...keysObj];
 
   // counts + deltas em PARALELO (4 consultas pequenas)
@@ -216,8 +218,18 @@ async function bootIncremental(
 
   let novaMarca: string | null = marca;
 
+  // Chave editada localmente DEPOIS que este boot começou: o delta em mãos é
+  // anterior à edição, então aplicá-lo apagaria o que o usuário acabou de fazer.
+  // Nesses casos o local vence, a marca d'água NÃO avança (o próximo boot volta
+  // a trazer o delta, aí já com o valor novo que o push subiu) e a chave é
+  // re-enviada no fim. Ver lib/janelaBoot.ts.
+  const editadaAgora = (key: string) => editadaDuranteBoot(gravadoLocalEm, key, inicioBoot);
+  const preservadas: string[] = [];
+
   // aplica delta dos talhões por id
-  if (mudTal.length) {
+  if (editadaAgora(TABELA_TALHOES_KEY)) {
+    preservadas.push(TABELA_TALHOES_KEY);   // sem seedEspelho: o próximo push sobe tudo
+  } else if (mudTal.length) {
     const lista = lerLocalLista(TABELA_TALHOES_KEY);
     const porId = new Map(lista.map(r => [String((r as Rec).id), r]));
     for (const row of mudTal) { porId.set(String((row.dados as Rec).id), row.dados); novaMarca = maxIso(novaMarca, row.atualizado_em); }
@@ -237,6 +249,7 @@ async function bootIncremental(
   }
   for (const key of keysLista) {
     if (key === TABELA_TALHOES_KEY) continue;
+    if (editadaAgora(key)) { preservadas.push(key); continue; }
     const mudancas = porColecao.get(key);
     if (mudancas?.length) {
       const lista = lerLocalLista(key);
@@ -250,12 +263,20 @@ async function bootIncremental(
     }
   }
   for (const key of keysObj) {
+    if (editadaAgora(key)) { preservadas.push(key); continue; }
     const o = porColecao.get(key)?.find(m => m.item_id === ITEM_OBJ)?.dados as { valor?: string } | undefined;
     if (o?.valor != null) gravarSeMudou(key, o.valor);
   }
 
-  if (novaMarca) localStorage.setItem(MARCA_KEY, novaMarca);
-  console.info(`[boot] INCREMENTAL: ${mudTal.length + mudKv.length} mudança(s) em ${Math.round(performance.now() - t0)}ms`);
+  // Só avança a marca d'água se TUDO do delta foi aplicado — o que ficou de fora
+  // precisa voltar no próximo boot para reconciliar.
+  if (novaMarca && preservadas.length === 0) localStorage.setItem(MARCA_KEY, novaMarca);
+  for (const key of preservadas) {
+    if (keysObj.includes(key)) { const v = lerRawLocal(key); if (v != null) void pushObjSupabase(key, v); }
+    else void pushListaSupabase(key, lerLocalLista(key));
+  }
+  console.info(`[boot] INCREMENTAL: ${mudTal.length + mudKv.length} mudança(s) em ${Math.round(performance.now() - t0)}ms`
+    + (preservadas.length ? ` · edições locais preservadas: ${preservadas.join(', ')}` : ''));
   return true;
 }
 
@@ -288,6 +309,7 @@ export async function bootSupabaseData(keysLista: string[], keysObj: string[]): 
   const sb = getSupabase();
   if (!sb) throw new Error('Supabase não configurado.');
   const t0 = performance.now();
+  const inicioBoot = Date.now();   // marco da janela: nada gravado depois disto é sobrescrito
 
   // Caminho INCREMENTAL: marca presente, sem pendências locais e boot completo
   // recente (<24h). Qualquer divergência cai no caminho completo abaixo.
@@ -313,7 +335,11 @@ export async function bootSupabaseData(keysLista: string[], keysObj: string[]): 
   // IMPORTANTE: as flags são lidas NA HORA de gravar cada chave (não no início)
   // — um boot lento que termina em 2º plano precisa respeitar edições feitas
   // pelo usuário ENQUANTO ele rodava.
-  const ehSujo = (key: string) => !!lerSujos()[key];
+  // "Suja" agora inclui a chave EDITADA ENQUANTO o boot rodava, mesmo que o push
+  // dela já tenha confirmado (aí a pendência foi limpa e a checagem antiga
+  // deixava o retrato velho passar por cima). Ver lib/janelaBoot.ts.
+  const ehSujo = (key: string) =>
+    !!lerSujos()[key] || editadaDuranteBoot(gravadoLocalEm, key, inicioBoot);
 
   // Talhões + app_kv em PARALELO (antes eram sequenciais — 2 esperas somadas),
   // trazendo atualizado_em p/ registrar a marca d'água do boot incremental.
@@ -364,10 +390,14 @@ export async function bootSupabaseData(keysLista: string[], keysObj: string[]): 
 
   // Re-envia as pendências recuperadas (mescladas acima). Fire-and-forget: a
   // fila serializa, marca/limpa a pendência e o SyncBadge mostra o estado.
-  for (const key of Object.keys(lerSujos())) {
+  const editadasNaJanela = chavesEditadasDuranteBoot(gravadoLocalEm, [...keysLista, ...keysObj], inicioBoot);
+  for (const key of new Set([...Object.keys(lerSujos()), ...editadasNaJanela])) {
     if (keysLista.includes(key)) void pushListaSupabase(key, lerLocalLista(key));
     else if (keysObj.includes(key)) { const v = lerRawLocal(key); if (v != null) void pushObjSupabase(key, v); }
     else limparSujo(key);   // chave que saiu da whitelist — pendência órfã
+  }
+  if (editadasNaJanela.length) {
+    console.info('[boot] edições feitas durante o boot preservadas (nuvem não sobrescreveu):', editadasNaJanela.join(', '));
   }
 }
 
@@ -405,6 +435,12 @@ const pendenteSb: Record<string, { lista: unknown[]; obj?: false } | { json: str
 // Chaves que falharam e aguardam retry (guardam a última carga).
 const errosSb: Record<string, { lista: unknown[]; obj?: false } | { json: string; obj: true }> = {};
 
+// Quando cada chave foi gravada LOCALMENTE (todo save que espelha na nuvem passa
+// por enfileirar). O boot compara com o instante em que COMEÇOU: o retrato da
+// nuvem que ele tem em mãos é anterior a qualquer edição feita depois disso, e
+// gravá-lo por cima apagaria a edição. Ver lib/janelaBoot.ts — npm run teste:janela.
+const gravadoLocalEm: RegistroGravacoes = {};
+
 let onlineRegistrado = false;
 
 // Sinaliza o status do sync p/ a UI (SSR-safe).
@@ -440,6 +476,7 @@ function enfileirar(
   carga: { lista: unknown[]; obj?: false } | { json: string; obj: true },
 ): Promise<void> {
   garantirRetryOnline();
+  marcarGravacaoLocal(gravadoLocalEm, key, Date.now());   // janela do boot (ver janelaBoot.ts)
   marcarSujo(key);           // pendência persistente: só limpa com sucesso confirmado
   pendenteSb[key] = carga;   // coalescing: a última carga pendente vence
   const anterior = filaSb[key] ?? Promise.resolve();
