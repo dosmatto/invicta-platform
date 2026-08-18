@@ -1,5 +1,9 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.50.5': [
+    'AS VERSÕES ANTERIORES DA PRESCRIÇÃO FICAM SEMPRE À VISTA. Saiu o botão "ver N versão(ões) anterior(es)" / "ocultar": abaixo da versão atual, as anteriores aparecem listadas direto (discretas, com a barra à esquerda), com os mesmos botões de abrir, SHP, Excel, PDF e excluir.',
+    'Onde ver: Talhão → Prescrições → PRESCRIÇÕES SALVAS (e o mesmo cartão no rodapé da aba Nova).',
+  ],
   '2.50.4': [
     'AS DIVISAS DO MAPA POR ZONA SAEM NO PDF DE FERTILIDADE — e no MESMO ESTILO do mapa de prescrição: divisa interna escura entre as zonas, limite do talhão branco por cima. O relatório monta a própria imagem do mapa (não é a tela capturada) e ignorava as linhas; agora desenha as divisas por cima do raster, nas duas profundidades. O mapa na tela acompanhou o mesmo padrão (divisa escura).',
     'Onde ver: Talhão → Fertilidade → mapa processado em zona → Gerar PDF (Fertilidade). Vale para mapas por zona já processados — nada precisa ser reprocessado.',

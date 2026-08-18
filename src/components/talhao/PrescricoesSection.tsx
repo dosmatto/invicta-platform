@@ -1485,8 +1485,8 @@ function CampoTotalDisponivel({ rotulo, unidadeTotal, porHa, totalAbs, areaHa, s
 // funcionava: a confirmação aparecia no topo do formulário, longe do botão, que
 // fica no fim de uma tela longa. Agora o resultado do trabalho aparece embaixo,
 // como nas Zonas de Manejo e no NDVI.
-// Uma prescrição e TODAS as suas versões. A mais nova aberta; as anteriores
-// recolhidas atrás de "ver versões anteriores" — presentes, sem poluir a lista.
+// Uma prescrição e TODAS as suas versões: a mais nova em destaque e as
+// anteriores logo abaixo, discretas — sempre à vista, sem botão para recolher.
 function ListaVersoes({ versoes, exportando, onAbrir, onExportar, onExcluir }: {
   versoes: Prescricao[];
   exportando: string;
@@ -1494,27 +1494,17 @@ function ListaVersoes({ versoes, exportando, onAbrir, onExportar, onExcluir }: {
   onExportar: (formato: 'shp' | 'xlsx' | 'pdf', p: Prescricao) => void;
   onExcluir: (id: string) => void;
 }) {
-  const [aberto, setAberto] = useState(false);
   const [atual, ...antigas] = versoes;
   return (
     <div className="space-y-1">
       <CartaoSalva p={atual} exportando={exportando} onAbrir={onAbrir} onExportar={onExportar} onExcluir={onExcluir} />
       {antigas.length > 0 && (
-        <>
-          <button onClick={() => setAberto(a => !a)}
-            className="flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded" style={{ background: '#0f2240', color: '#93c5fd' }}>
-            <History size={10} />
-            {aberto ? 'ocultar' : `ver ${antigas.length} versão(ões) anterior(es)`}
-          </button>
-          {aberto && (
-            <div className="pl-3 space-y-1" style={{ borderLeft: '2px solid #1a3a6b' }}>
-              {antigas.map(v => (
-                <CartaoSalva key={v.id} p={v} anterior exportando={exportando}
-                  onAbrir={onAbrir} onExportar={onExportar} onExcluir={onExcluir} />
-              ))}
-            </div>
-          )}
-        </>
+        <div className="pl-3 space-y-1" style={{ borderLeft: '2px solid #1a3a6b' }}>
+          {antigas.map(v => (
+            <CartaoSalva key={v.id} p={v} anterior exportando={exportando}
+              onAbrir={onAbrir} onExportar={onExportar} onExcluir={onExcluir} />
+          ))}
+        </div>
       )}
     </div>
   );
