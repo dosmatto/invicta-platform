@@ -1,5 +1,11 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.53.0': [
+    'POUCAS AMOSTRAS NA CAMADA: AGORA O APP AVISA ANTES, E DIZ O QUE FAZER. Caso real (FCDBV 01, laudo Fundação ABC): o arquivo trazia 12 amostras em 0-20 e apenas 3 em 20-40 — os pontos 3, 7 e 11, ou seja, a camada profunda foi amostrada em 1 de cada 4 pontos. Com 3 amostras a KRIGAGEM não tem como ajustar um variograma, então as 15 variáveis de 20-40 falhavam, uma a uma, com um erro técnico vindo do servidor.',
+    'Medimos o limite no próprio interpolador: com 3 pontos a krigagem falha SEMPRE; a partir de 4 ela funciona. O app passa a barrar esse caso antes de mandar para o servidor e explica na hora: "só 3 amostras nesta profundidade — a krigagem precisa de 4. Troque o interpolador para IDW em Configurações da interpolação, ou amostre mais pontos nesta camada". O IDW funciona com 3 pontos, então há saída se você quiser o mapa mesmo assim.',
+    'NO MESMO LAUDO, A ARGILA 0-20 TAMBÉM FALHAVA por outro motivo: a coluna vinha em branco nas linhas de 0-20 (só as de 20-40 tinham valor). Esse caso já é explicado desde a versão anterior — "o laudo tem 12 linha(s) em 0-20, mas nenhuma com valor desta variável".',
+    'Onde ver: Talhão → Fertilidade → Processar tudo. Os avisos aparecem agrupados por motivo, logo abaixo dos botões.',
+  ],
   '2.52.0': [
     'AGORA O APP DIZ POR QUE UM MAPA NÃO SAIU. O aviso do "Processar tudo" era só uma lista de nomes ("Não processou: pH 20-40, P 20-40, K 20-40…") e por trás de todos eles havia uma única mensagem interna: "menos de 3 pontos". Com 15 variáveis reprovadas de uma vez numa profundidade, não dava para saber se o problema era o laudo, a grade ou a numeração das amostras — e cada um desses tem conserto diferente.',
     'A mensagem passou a separar o motivo e a agrupar as variáveis por ele. Os casos que ela distingue: o laudo não tem nenhuma linha naquela profundidade; tem linhas, mas nenhuma com valor daquela variável (coluna em branco no arquivo); tem menos de 3 amostras com valor (o mínimo para interpolar); o talhão não tem grade com pontos; há mais amostras do que pontos na grade; ou os números do laudo não batem com os da grade.',

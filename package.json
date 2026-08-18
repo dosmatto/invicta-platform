@@ -16,6 +16,7 @@
     "teste:nomes": "node scripts/teste-nome-export.mjs",
     "teste:ordem": "node scripts/teste-ordem-catalogo.mjs",
     "teste:faixas": "node scripts/teste-faixas.mjs",
+    "teste:motivo": "node scripts/teste-motivo-mapa.mjs",
     "teste:grids": "node scripts/teste-grids-recomendacao.mjs",
     "teste:iam": "node scripts/teste-iam.mjs",
     "teste:etiquetas": "node scripts/teste-etiquetas.mjs",
@@ -45,6 +46,7 @@
     "teste:corte": "PY=\"$HOME/.invicta-fert-backend/venv/bin/python\"; [ -x \"$PY\" ] || PY=python3; \"$PY\" scripts/teste-corte-zona.py",
     "teste:cobertura": "node scripts/teste-cobertura.mjs",
     "teste:cobrir": "PY=\"$HOME/.invicta-fert-backend/venv/bin/python\"; [ -x \"$PY\" ] || PY=python3; \"$PY\" scripts/teste-cobrir-poligono.py",
+    "teste:gradezonas": "node scripts/teste-grade-zonas.mjs",
     "teste:geometria": "PY=\"$HOME/.invicta-fert-backend/venv/bin/python\"; [ -x \"$PY\" ] || PY=python3; \"$PY\" scripts/teste-geometria-zonas.py"
   },
   "dependencies": {

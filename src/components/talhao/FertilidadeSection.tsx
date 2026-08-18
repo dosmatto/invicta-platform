@@ -566,6 +566,14 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
     if (!leg) throw new Error(`${nut}: sem legenda`);
     const pts = pontosDe(nut, prof);
     if (pts.length < 3) throw new Error(`${leg.simbolo} ${prof}: ${motivoSemMapa(nut, prof)}`);
+    // Krigagem precisa de 4 pontos. Com 3 o ajuste do variograma NUNCA converge
+    // (medido no backend: 0/5 com 3 pontos, 5/5 a partir de 4) e o servidor
+    // devolve "nao convergiu (colineares/insuficientes?)" — técnico e repetido
+    // uma vez por variável. É o caso comum de laudo que amostra a camada profunda
+    // só em parte dos pontos. Barramos aqui, com o caminho de saída junto.
+    if (metodo === 'krige' && pts.length < 4) {
+      throw new Error(`${leg.simbolo} ${prof}: só ${pts.length} amostras nesta profundidade — a krigagem precisa de 4. Troque o interpolador para IDW em "Configurações da interpolação", ou amostre mais pontos nesta camada`);
+    }
     // o backend devolve grid + bounds + stats + png; só usamos grid/bounds/stats.
     // O domínio e os stops vão só pra colorir o PNG do backend (ignorado aqui).
     const { dominio, stops } = rampaDaLegenda(leg);
