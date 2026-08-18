@@ -1,5 +1,9 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.55.0': [
+    'A ETIQUETA GANHOU O CABEÇALHO PRODUTOR — FAZENDA no topo, em NEGRITO, e a sigla do talhão também passou a NEGRITO. Quem recebe o saco no laboratório identifica de quem é sem abrir o sistema. Vale para as etiquetas das grades por Zona e das grades por Grid. Quando não há produtor ou fazenda cadastrados, a linha some sozinha (não sai " — " solto).',
+    'Onde ver: Amostragem → gerar/abrir uma grade → Etiquetas (PDF).',
+  ],
   '2.54.0': [
     'A GRADE DE ZONAS PASSOU A NUMERAR OS PONTOS POR ZONA — 1-1, 1-2, … 2-1, como no mapa que o campo já usa. Antes, ao salvar a grade, a numeração se perdia: o olho no mapa e o APP DE CAMPO mostravam uma contagem corrida de 1 a 50, e o operador não sabia em que zona estava. O número do ponto agora é gravado na grade e é o MESMO em todo lugar: simulação, mapa, app de campo, KML/SHP e etiquetas.',
     'AS ETIQUETAS VOLTARAM PARA A GRADE SALVA: cada grade de zonas tem o botão "Etiquetas", como a aba Grid sempre teve — salvar deixou de ser o fim da chance de reimprimir. Na amostra COMPOSTA sai uma etiqueta por zona (01, 02, 03, 04), que é o saco que chega ao laboratório; em pontos individuais, uma por ponto, com o mesmo número que o app mostra. O rodapé agora traz Ano e época, para não confundir a reimpressão com a do ano passado.',

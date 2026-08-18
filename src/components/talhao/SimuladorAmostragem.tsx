@@ -6,7 +6,7 @@ import { getPadroesAmostragem, getPadroesElementos, getSafras, getGrades, saveGr
 import { rotuloAno, hojeSaoPauloISO, periodoDeData, rotuloEpoca } from '@/lib/periodo';
 import { gerarGrid, anguloMaiorDimensao, criarValidador, ModoDistribuicao } from '@/lib/grid';
 import { exportarKML, exportarSHP } from '@/lib/exportGrade';
-import { gerarEtiquetasPDF, itensDeGrade, layoutPorId } from '@/lib/etiquetas';
+import { gerarEtiquetasPDF, itensDeGrade, cabecalhoEtiqueta, layoutPorId } from '@/lib/etiquetas';
 import { exportarRelatorioGradeXlsx } from '@/lib/relatorioGrade';
 import { getFazendas } from '@/lib/store';
 import { pode } from '@/lib/empresa';
@@ -299,7 +299,8 @@ export function SimuladorAmostragem({ safraNome: safraProp }: { safraNome?: stri
       fazenda: nav.fazenda ?? '', siglaFazenda: faz?.sigla ?? null, talhao: nav.talhao ?? '',
       tipo: 'ETIQ', ano: g.ano, epoca: g.epoca,
     });
-    gerarEtiquetasPDF(itensDeGrade(nav.talhao || 'Talhao', g), layout, nome, { dx: cfg.dx, dy: cfg.dy })
+    const cab = cabecalhoEtiqueta(nav.produtor, faz?.nome ?? nav.fazenda);
+    gerarEtiquetasPDF(itensDeGrade(nav.talhao || 'Talhao', g, cab), layout, nome, { dx: cfg.dx, dy: cfg.dy })
       .catch(err => console.error('Erro ao gerar etiquetas:', err));
   }
 

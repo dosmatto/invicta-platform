@@ -8,7 +8,7 @@ import { rotuloAno, hojeSaoPauloISO, periodoDeData, rotuloEpoca } from '@/lib/pe
 import { classeZona, ORDEM_CLASSES } from '@/lib/zonas';
 import { pode } from '@/lib/empresa';
 import { gerarGrid, pontoInterno, ModoDistribuicao } from '@/lib/grid';
-import { gerarEtiquetasPDF, EtiquetaItem, layoutPorId } from '@/lib/etiquetas';
+import { gerarEtiquetasPDF, cabecalhoEtiqueta, EtiquetaItem, layoutPorId } from '@/lib/etiquetas';
 import { exportarKML, exportarSHP } from '@/lib/exportGrade';
 import { numerarPontosZonas, rotuloDoPonto, amostrasDaGrade, type ZonaComPontos } from '@/lib/gradeZonas';
 import { rotuloZona } from '@/lib/meap/rotuloZona';
@@ -225,12 +225,14 @@ export function SimuladorZonas({ safraNome: safraProp }: { safraNome?: string } 
       alert('Esta grade foi salva antes da numeração por zona. Gere e salve a grade de novo para imprimir as etiquetas.');
       return;
     }
+    const faz0 = getFazendas().find(f => f.id === talhao?.fazendaId);
+    const cabecalho = cabecalhoEtiqueta(nav.produtor, faz0?.nome ?? nav.fazenda);
     const amostras = amostrasDaGrade(pts, mod);
     const itens: EtiquetaItem[] = [];
     amostras.forEach((a, i) => {
       for (const p of profsUso) {
         const cnt = p.percentual >= 100 ? amostras.length : Math.max(1, Math.round((amostras.length * p.percentual) / 100));
-        if (i < cnt) itens.push({ titulo, numero: a.rotulo, sub: `${p.rotulo} cm`, rodape: rod });
+        if (i < cnt) itens.push({ cabecalho, titulo, numero: a.rotulo, sub: `${p.rotulo} cm`, rodape: rod });
       }
     });
     if (itens.length === 0) return;

@@ -47,10 +47,19 @@ export function layoutPorId(id: string | undefined): LayoutEtiqueta {
 
 // ── Itens (uma etiqueta cada) ─────────────────────────────────────────────────
 export interface EtiquetaItem {
-  titulo: string;   // ex: talhão
+  cabecalho?: string; // ex: "Produtor — Fazenda" (negrito, no topo)
+  titulo: string;   // ex: talhão (sigla, negrito)
   numero: string;   // destaque (nº da amostra)
   sub?: string;     // ex: "00-20 cm"
   rodape?: string;  // ex: "Safra 25/26 · 1a época"
+}
+
+// Cabeçalho da etiqueta: "Produtor — Fazenda", sem o que faltar. Vai em negrito
+// no topo — quem recebe o saco no laboratório identifica de quem é sem abrir o
+// sistema.
+export function cabecalhoEtiqueta(produtor?: string, fazenda?: string): string | undefined {
+  const p = (produtor ?? '').trim(), f = (fazenda ?? '').trim();
+  return [p, f].filter(Boolean).join(' — ') || undefined;
 }
 
 // Profundidades de um ponto: usa os rótulos salvos; senão deriva da config da grade.
@@ -60,12 +69,12 @@ function profundidadesDoPonto(p: PontoAmostragem, grade: GradeAmostragem): strin
 }
 
 // Itens a partir de uma grade do Grid (ponto × profundidade).
-export function itensDeGrade(talhaoNome: string, grade: GradeAmostragem): EtiquetaItem[] {
+export function itensDeGrade(talhaoNome: string, grade: GradeAmostragem, cabecalho?: string): EtiquetaItem[] {
   const out: EtiquetaItem[] = [];
   const rodape = `Ano ${rotuloAno(grade.safra)} · ${grade.epoca}ª época`;
   for (const pt of grade.pontos) {
     const numero = String(pt.ordem + 1).padStart(3, '0');
-    for (const prof of profundidadesDoPonto(pt, grade)) out.push({ titulo: talhaoNome, numero, sub: `${prof} cm`, rodape });
+    for (const prof of profundidadesDoPonto(pt, grade)) out.push({ cabecalho, titulo: talhaoNome, numero, sub: `${prof} cm`, rodape });
   }
   return out;
 }
@@ -97,6 +106,7 @@ export function desenharEtiquetas(doc: JsPDF, itens: EtiquetaItem[], layout: Lay
 
     if (layout.bordaGuia) { doc.setDrawColor(220); doc.setLineWidth(0.1); doc.rect(x, y, w, h); }
 
+    const mostraCabecalho = h >= 24 && !!it.cabecalho;
     const mostraTitulo = h >= 24 && !!it.titulo;
     const mostraRodape = h >= 30 && !!it.rodape;
 
@@ -108,19 +118,28 @@ export function desenharEtiquetas(doc: JsPDF, itens: EtiquetaItem[], layout: Lay
     const k = Math.max(1, h / H_REF);
     const util = w - 2 * pad;
 
-    // Título (talhão)
+    // Cabeçalho (Produtor — Fazenda), em NEGRITO no topo. Quando existe, o
+    // talhão desce um degrau para os dois caberem no cabeçalho da etiqueta.
+    if (mostraCabecalho) {
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(40, 50, 70);
+      caber(doc, it.cabecalho!, util, Math.min(8 * k, Math.max(5.5, h * 0.12 * MM_PT)));
+      doc.text(it.cabecalho!, cx, y + h * 0.10, { align: 'center' });
+    }
+
+    // Título (sigla do talhão) — em NEGRITO, como pedido.
     if (mostraTitulo) {
-      doc.setFont('helvetica', 'normal');
-      doc.setTextColor(110, 120, 140);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(40, 50, 70);
       caber(doc, it.titulo, util, Math.min(9 * k, Math.max(6, h * 0.15 * MM_PT)));
-      doc.text(it.titulo, cx, y + h * 0.17, { align: 'center' });
+      doc.text(it.titulo, cx, y + (mostraCabecalho ? h * 0.20 : h * 0.17), { align: 'center' });
     }
 
     // Número (destaque) — encolhe para caber na largura
     doc.setFont('helvetica', 'bold');
     caber(doc, it.numero, w - 2.5 * pad, h * 0.42 * MM_PT, 6);
     doc.setTextColor(15, 25, 45);
-    doc.text(it.numero, cx, y + (mostraTitulo ? h * 0.57 : h * 0.5), { align: 'center' });
+    doc.text(it.numero, cx, y + (mostraTitulo ? (mostraCabecalho ? h * 0.60 : h * 0.57) : h * 0.5), { align: 'center' });
 
     // Profundidade
     if (it.sub) {
