@@ -18,6 +18,7 @@ import { ehAuxiliar20mPerdido } from './recomendacao/escolhaMapa';
 import { carregarNdviSalvos } from './meap/gerar';
 import { municipioDaFazenda } from './geocodeMunicipio';
 import { centroideGeom } from './recomendacao/zonasGrid';
+import { rotuloDoPonto } from './gradeZonas';
 import type { Epoca } from './periodo';
 import type { DadosRelatorioFert, ProfundidadeRel } from './relatorioFertilidade';
 
@@ -98,7 +99,7 @@ export async function carregarContextoRelatorio(
     features: (grade?.pontos ?? []).map(p => ({
       type: 'Feature' as const,
       geometry: { type: 'Point' as const, coordinates: [p.lng, p.lat] },
-      properties: { txt: String(p.numero ?? p.ordem + 1) },
+      properties: { txt: rotuloDoPonto(p) },   // grade de zonas mostra "2-3", como o app e o KML
     })),
   };
 

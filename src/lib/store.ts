@@ -547,8 +547,15 @@ export interface PadraoAmostragem {
 }
 
 export interface PontoAmostragem {
-  ordem: number;          // índice serpentina (0-based)
-  numero?: number;        // nº da amostra (grade importada de fora); join com lab usa numero ?? ordem+1
+  ordem: number;          // índice serpentina (0-based). CHAVE das coletas de campo
+                          // (inv_coletas usa `${gradeId}__${ordem}`) — não renumerar.
+  numero?: number;        // nº da AMOSTRA (grade importada de fora); join com lab usa numero ?? ordem+1
+  // Grade de ZONAS (lib/gradeZonas.ts): o ponto sabe de que zona é, e o operador
+  // o enxerga como `zona-sequencial` ("2-3"). O rótulo é TEXTO e nunca entra no
+  // campo numérico — o parser do laudo tira os não-dígitos e "1-1" viraria 11.
+  zona?: string;          // id da zona no zoneamento ("01", "02"…)
+  seqZona?: number;       // sequencial DENTRO da zona (1..n)
+  rotulo?: string;        // o que o campo vê: "2-3"
   lng: number;
   lat: number;
   profs: number;          // nº de profundidades (define a cor)

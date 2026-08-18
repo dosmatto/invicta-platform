@@ -14,6 +14,7 @@ import {
 import { emailUsuario, logout, modoOffline } from '@/lib/auth';
 import { rotuloAno } from '@/lib/periodo';
 import { classeZona } from '@/lib/zonas';
+import { rotuloZona } from '@/lib/meap/rotuloZona';
 import { bootCloudCampo } from '@/lib/cloud';
 import {
   RegistroColeta, StatusPonto, COR_STATUS, ROTULO_STATUS,
@@ -65,6 +66,12 @@ const AZUL_ESC = '#061525', AZUL = '#0a1929', BORDA = '#1a3a6b', TXT = '#e2e8f0'
 const COR_MULTI_PROF = '#a78bfa';
 
 function codigoPonto(p: PontoAmostragem): string {
+  // Grade de ZONAS: o ponto já vem rotulado `zona-sequencial` ("2-3") — é o que
+  // o operador tem no mapa impresso e nas etiquetas. Sem isto o app mostrava a
+  // contagem corrida (P-034), que não diz em qual zona ele está. Vai SEM o
+  // prefixo "P-": o rótulo já se explica, e "P-2-3" tem hífen demais para ler
+  // de relance no meio do talhão.
+  if (p.rotulo) return p.rotulo;
   return `P-${String(p.numero ?? p.ordem + 1).padStart(3, '0')}`;
 }
 
@@ -651,7 +658,9 @@ function TelaMapa({ sel, setSel, online, pend, reload, setReload, sincronizar, s
           const cz = classeZona(pr.classe ?? '');
           return {
             type: 'Feature' as const,
-            properties: { cor: cz.cor, rotulo: String(pr.id ?? ''), classeLabel: cz.label },
+            // Mesma regra do prefixo do ponto (rotuloZona): senão o polígono
+            // aparecia "01_2" e os pontos dele "1-3" — dois números na mesma tela.
+            properties: { cor: cz.cor, rotulo: rotuloZona(pr), classeLabel: cz.label },
             geometry: f.geometry!,
           };
         });

@@ -23,10 +23,15 @@ export interface ExportInput {
 const PRJ_WGS84 =
   'GEOGCS["GCS_WGS_1984",DATUM["D_WGS_1984",SPHEROID["WGS_1984",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["Degree",0.017453292519943295]]';
 
-// id legível do ponto (ex "FRNFI 21 - 001")
-function idPonto(talhaoNome: string, numero: number) {
-  return `${talhaoNome} - ${String(numero).padStart(3, '0')}`;
+// id legível do ponto (ex "FRNFI 21 - 001", ou "FRNFI 21 - 2-3" na grade de zonas)
+function idPonto(talhaoNome: string, numero: number | string) {
+  const n = typeof numero === 'number' ? String(numero).padStart(3, '0') : numero;
+  return `${talhaoNome} - ${n}`;
 }
+
+// O que identifica o ponto no arquivo que vai para o campo: na grade de ZONAS é
+// o rótulo `zona-sequencial`; nas demais, a contagem de sempre.
+const rotuloExport = (p: PontoAmostragem): string => p.rotulo ?? String(p.ordem + 1);
 
 // ── GeoJSON combinado (polígono + pontos) — usado no Shapefile ────────────────
 function geojsonGrade(input: ExportInput): GeoJSON.FeatureCollection {
@@ -40,7 +45,14 @@ function geojsonGrade(input: ExportInput): GeoJSON.FeatureCollection {
     });
   const pts: GeoJSON.Feature[] = input.pontos.map(p => ({
     type: 'Feature',
-    properties: { numero: p.ordem + 1, id: idPonto(input.talhaoNome, p.ordem + 1), profs: p.profs },
+    properties: {
+      numero: p.ordem + 1,                      // contagem no arquivo (inalterada)
+      id: idPonto(input.talhaoNome, p.rotulo ?? p.ordem + 1),
+      profs: p.profs,
+      // Só a grade de ZONAS ganha colunas novas — a grade comum sai idêntica ao
+      // que sempre saiu, para não mexer no .dbf de quem já usa o arquivo.
+      ...(p.rotulo ? { amostra: p.numero ?? p.ordem + 1, rotulo: p.rotulo, zona: p.zona ?? '' } : {}),
+    },
     geometry: { type: 'Point', coordinates: [p.lng, p.lat] },
   }));
   return { type: 'FeatureCollection', features: [...polys, ...pts] };
@@ -78,8 +90,9 @@ export function gerarKML(input: ExportInput): string {
     .join('\n');
 
   const pontos = input.pontos.map(p =>
-    `<Placemark><name>${p.ordem + 1}</name><styleUrl>#ponto</styleUrl>` +
-    `<ExtendedData><Data name="id"><value>${esc(idPonto(input.talhaoNome, p.ordem + 1))}</value></Data>` +
+    `<Placemark><name>${esc(rotuloExport(p))}</name><styleUrl>#ponto</styleUrl>` +
+    `<ExtendedData><Data name="id"><value>${esc(idPonto(input.talhaoNome, p.rotulo ?? p.ordem + 1))}</value></Data>` +
+    (p.rotulo ? `<Data name="zona"><value>${esc(p.zona ?? '')}</value></Data>` : '') +
     `<Data name="profundidades"><value>${p.profs}</value></Data></ExtendedData>` +
     `<Point><coordinates>${p.lng},${p.lat},0</coordinates></Point></Placemark>`
   ).join('\n');

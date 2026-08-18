@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useApp } from '@/context/AppContext';
-import { getTalhoes, getFazendas, getPadroesAmostragem, getPadroesElementos, getConfigEtiqueta, getSafras, getGrades, saveGrade, updateGrade, deleteGrade, marcarParaProcessar, ProfundidadeConfig, GradeAmostragem, PontoAmostragem } from '@/lib/store';
+import { getTalhoes, getFazendas, getPadroesAmostragem, getPadroesElementos, getConfigEtiqueta, getSafras, getGrades, saveGrade, updateGrade, deleteGrade, marcarParaProcessar, ProfundidadeConfig, GradeAmostragem } from '@/lib/store';
 import { nomeExport } from '@/lib/nomeExport';
 import { rotuloAno, hojeSaoPauloISO, periodoDeData, rotuloEpoca } from '@/lib/periodo';
 import { classeZona, ORDEM_CLASSES } from '@/lib/zonas';
@@ -10,10 +10,14 @@ import { pode } from '@/lib/empresa';
 import { gerarGrid, pontoInterno, ModoDistribuicao } from '@/lib/grid';
 import { gerarEtiquetasPDF, EtiquetaItem, layoutPorId } from '@/lib/etiquetas';
 import { exportarKML, exportarSHP } from '@/lib/exportGrade';
+import { numerarPontosZonas, rotuloDoPonto, amostrasDaGrade, type ZonaComPontos } from '@/lib/gradeZonas';
+import { rotuloZona } from '@/lib/meap/rotuloZona';
 import { AlertTriangle, Layers, MapPin, Printer, RotateCcw, Save, Trash2, CheckCircle2, Circle, Pencil, Download, Eye } from 'lucide-react';
 
 interface ZonaFeat {
-  id: string;
+  id: string;          // identidade do POLÍGONO ("01", "01_2") — densidade, seleção
+  zonaRot: string;     // o número que o MAPA mostra (lib/meap/rotuloZona): id numérico
+                       // puro é ele mesmo; sufixado ("01_2") rotula pelo `zona` oficial
   classeLabel: string;
   cor: string;
   areaHa: number;
@@ -80,9 +84,13 @@ export function SimuladorZonas({ safraNome: safraProp }: { safraNome?: string } 
       return fc.features
         .filter(f => f.geometry && (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon'))
         .map(f => {
-          const p = (f.properties ?? {}) as { id?: string; classe?: string; areaHa?: number };
+          const p = (f.properties ?? {}) as { id?: string; zona?: string; classe?: string; areaHa?: number };
           const cz = classeZona(p.classe ?? '');
-          return { id: String(p.id ?? '?'), classeLabel: cz.label, cor: cz.cor, areaHa: Number(p.areaHa ?? 0), geometry: f.geometry! };
+          return {
+            id: String(p.id ?? '?'),
+            zonaRot: rotuloZona(p),
+            classeLabel: cz.label, cor: cz.cor, areaHa: Number(p.areaHa ?? 0), geometry: f.geometry!,
+          };
         })
         .sort((a, b) => a.id.localeCompare(b.id));
     } catch { return []; }
@@ -100,12 +108,13 @@ export function SimuladorZonas({ safraNome: safraProp }: { safraNome?: string } 
     return () => setZonasManejo(null);
   }, [zonas, zonaSel, setZonasManejo]);
 
-  // Geração de pontos por zona (grid dentro de cada zona + aleatoriedade)
-  const { pontos, totalPontos, porZona } = useMemo(() => {
-    const out: { lng: number; lat: number; label: string }[] = [];
+  // Geração de pontos por zona (grid dentro de cada zona + aleatoriedade).
+  // A numeração `zona-sequencial` vem de lib/gradeZonas (pura, testada): é a
+  // MESMA aqui na simulação, na grade salva, no app de campo e nas etiquetas.
+  const { porZonaPts, porZona } = useMemo(() => {
+    const grupos = new Map<string, { lng: number; lat: number }[]>();
     const cont: Record<string, number> = {};
-    let seq = 0;
-    zonas.forEach((z, idxZona) => {
+    zonas.forEach(z => {
       const zonaFC: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry: z.geometry }] };
       const dz = densidadePorZona[z.id];
       const haPonto = dz && dz > 0 ? dz : (densidade > 0 ? densidade : 1); // override da zona ou padrão geral
@@ -115,37 +124,54 @@ export function SimuladorZonas({ safraNome: safraProp }: { safraNome?: string } 
         if (pi) pts = [{ lng: pi.lng, lat: pi.lat, ordem: 0 }];
       }
       cont[z.id] = pts.length;
-      const amostraNum = idxZona + 1; // modelo A: 1 amostra por zona
-      pts.forEach(p => {
-        seq++;
-        out.push({ lng: p.lng, lat: p.lat, label: modelo === 'A' ? String(amostraNum) : String(seq) });
-      });
+      // AGRUPA PELO NÚMERO QUE O MAPA MOSTRA (rotuloZona): assim o prefixo do
+      // ponto ("3-2") é o mesmo número da zona que o operador lê no mapa e no
+      // app. Duas manchas da mesma zona ("01" e "01_2") caem no MESMO grupo — o
+      // sequencial corre pela zona inteira e sai um saco só; agrupar pelo id
+      // cru faria "01_2" virar uma "zona 12" que não existe no talhão.
+      const g = grupos.get(z.zonaRot) ?? [];
+      g.push(...pts.map(p => ({ lng: p.lng, lat: p.lat })));
+      grupos.set(z.zonaRot, g);
     });
-    return { pontos: out, totalPontos: out.length, porZona: cont };
-  }, [zonas, modelo, densidade, densidadePorZona, aleatoriedade, distanciaBorda, seed, modoDist]);
+    return {
+      porZonaPts: [...grupos].map(([id, pts]) => ({ id, pts })) as ZonaComPontos[],
+      porZona: cont,
+    };
+  }, [zonas, densidade, densidadePorZona, aleatoriedade, distanciaBorda, seed, modoDist]);
+
+  // memo LEVE: numeração + profundidades. Separado do de cima para trocar o
+  // Padrão de Amostragem não refazer a geometria de todas as zonas.
+  const pontosGrade = useMemo(
+    () => numerarPontosZonas(porZonaPts, modelo, profs.map(p => p.rotulo)),
+    [porZonaPts, modelo, profs],
+  );
+  const totalPontos = pontosGrade.length;
 
   // Publica os pontos no mapa. Uma grade salva em visualização tem prioridade
   // sobre a simulação ao vivo.
   useEffect(() => {
     const vista = gradeViewId ? grades.find(g => g.id === gradeViewId) : null;
     if (vista) {
+      // Grade SALVA no mapa (o "olho"): mesmo rótulo `zona-sequencial` da
+      // simulação. Antes caía em `ordem+1` e mostrava 1..50 corrido — e era
+      // esse número que ia para o app de campo.
       const fcv: GeoJSON.FeatureCollection = {
         type: 'FeatureCollection',
-        features: vista.pontos.map(p => ({ type: 'Feature', properties: { label: String(p.numero ?? p.ordem + 1), cor: COR_PONTO }, geometry: { type: 'Point', coordinates: [p.lng, p.lat] } })),
+        features: vista.pontos.map(p => ({ type: 'Feature', properties: { label: rotuloDoPonto(p), cor: COR_PONTO }, geometry: { type: 'Point', coordinates: [p.lng, p.lat] } })),
       };
       setPontosSimulados(vista.pontos.length ? fcv : null);
       return () => setPontosSimulados(null);
     }
     const fc: GeoJSON.FeatureCollection = {
       type: 'FeatureCollection',
-      features: pontos.map(p => ({ type: 'Feature', properties: { label: p.label, cor: COR_PONTO }, geometry: { type: 'Point', coordinates: [p.lng, p.lat] } })),
+      features: pontosGrade.map(p => ({ type: 'Feature', properties: { label: rotuloDoPonto(p), cor: COR_PONTO }, geometry: { type: 'Point', coordinates: [p.lng, p.lat] } })),
     };
-    setPontosSimulados(pontos.length ? fc : null);
+    setPontosSimulados(pontosGrade.length ? fc : null);
     return () => setPontosSimulados(null);
-  }, [gradeViewId, grades, pontos, setPontosSimulados]);
+  }, [gradeViewId, grades, pontosGrade, setPontosSimulados]);
 
   // Ao mudar a simulação ao vivo (parâmetros/zonas), sai da visualização da grade salva.
-  useEffect(() => { setGradeViewId(null); }, [pontos]);
+  useEffect(() => { setGradeViewId(null); }, [pontosGrade]);
 
   if (!talhao?.zonasGeojson || zonas.length === 0) {
     return (
@@ -163,7 +189,10 @@ export function SimuladorZonas({ safraNome: safraProp }: { safraNome?: string } 
 
   const classesPresentes = ORDEM_CLASSES.filter(c => zonas.some(z => z.classeLabel === c));
   const areaTotal = Math.round(zonas.reduce((s, z) => s + z.areaHa, 0) * 100) / 100;
-  const numAmostras = modelo === 'A' ? zonas.length : totalPontos;
+  // Nº de sacos = o que `amostrasDaGrade` vai imprimir de fato. Contar zonas
+  // fazia a tela prometer 4 e o PDF sair com 3 quando uma zona ficava sem ponto
+  // (ou com manchas agrupadas).
+  const numAmostras = amostrasDaGrade(pontosGrade, modelo).length;
   // Etiquetas = amostras × profundidades (parciais aplicadas a % das amostras)
   const totalEtiquetas = profs.reduce((s, p) => s + (p.percentual >= 100 ? numAmostras : Math.max(1, Math.round((numAmostras * p.percentual) / 100))), 0);
 
@@ -172,18 +201,39 @@ export function SimuladorZonas({ safraNome: safraProp }: { safraNome?: string } 
   const temOverride = (id: string) => densidadePorZona[id] != null;
   const nZonasCustom = Object.keys(densidadePorZona).length;
 
-  function gerarEtiquetasZonas() {
-    if (!padrao || numAmostras <= 0) return;
+  // Etiquetas da AMOSTRA — o que vai colado no saco que chega ao laboratório.
+  //   modelo A (composta): UMA por zona (01, 02…) — os 50 pontos da caminhada
+  //     viram 4 sacos, um por zona;
+  //   modelo B (individual): uma por ponto, com o mesmo `zona-sequencial` que o
+  //     operador vê no app — o saco e a tela falam o mesmo número.
+  // Serve tanto a simulação ao vivo quanto uma grade JÁ SALVA (passar `g`).
+  function gerarEtiquetasZonas(g?: GradeAmostragem) {
+    const pts = g ? g.pontos : pontosGrade;
+    const mod = g ? (g.modelo ?? 'A') : modelo;
+    const profsUso = g ? g.profundidades : profs;
+    if (!profsUso.length || pts.length === 0) return;
     const titulo = talhao?.nome || 'Talhao';
-    const rod = modelo === 'A' ? 'Amostra composta' : 'Ponto individual';
-    const itens: EtiquetaItem[] = [];
-    for (let i = 1; i <= numAmostras; i++) {
-      const numero = String(i).padStart(3, '0');
-      for (const p of profs) {
-        const cnt = p.percentual >= 100 ? numAmostras : Math.max(1, Math.round((numAmostras * p.percentual) / 100));
-        if (i <= cnt) itens.push({ titulo, numero, sub: `${p.rotulo} cm`, rodape: rod });
-      }
+    const ano = g ? rotuloAno(g.safra) : rotuloAno(safraNome);
+    const ep = g ? g.epoca : (periodoZonas?.epoca ?? '1');
+    const rod = `${mod === 'A' ? 'Amostra composta' : 'Ponto individual'} · Ano ${ano} · ${ep}ª época`;
+    // Grade ANTIGA (salva antes da numeração por zona): os pontos não têm zona
+    // nem nº de amostra, então `amostrasDaGrade` acharia 50 amostras distintas
+    // e imprimiria 50 sacos para 4 compostas. Sem dado de zona, não há o que
+    // reimprimir com segurança — melhor não imprimir do que imprimir errado.
+    const semZona = mod === 'A' && !pts.some(p => p.zona || p.rotulo);
+    if (semZona) {
+      alert('Esta grade foi salva antes da numeração por zona. Gere e salve a grade de novo para imprimir as etiquetas.');
+      return;
     }
+    const amostras = amostrasDaGrade(pts, mod);
+    const itens: EtiquetaItem[] = [];
+    amostras.forEach((a, i) => {
+      for (const p of profsUso) {
+        const cnt = p.percentual >= 100 ? amostras.length : Math.max(1, Math.round((amostras.length * p.percentual) / 100));
+        if (i < cnt) itens.push({ titulo, numero: a.rotulo, sub: `${p.rotulo} cm`, rodape: rod });
+      }
+    });
+    if (itens.length === 0) return;
     const cfg = getConfigEtiqueta();
     const layout = layoutPorId(cfg.layoutId);
     const faz = getFazendas().find(f => f.id === talhao?.fazendaId);
@@ -195,21 +245,16 @@ export function SimuladorZonas({ safraNome: safraProp }: { safraNome?: string } 
       .catch(err => console.error('Erro ao gerar etiquetas:', err));
   }
 
-  function pontosParaGrade(): PontoAmostragem[] {
-    const rotulos = profs.map(p => p.rotulo);
-    return pontos.map((p, i) => ({ ordem: i, lng: p.lng, lat: p.lat, profs: rotulos.length, profundidades: rotulos }));
-  }
-
   function salvarGradeZonas() {
-    if (!padrao || !safraNome || pontos.length === 0 || !nav.talhaoId) return;
+    if (!padrao || !safraNome || pontosGrade.length === 0 || !nav.talhaoId) return;
     const lista = getGrades(nav.talhaoId, safraNome, 'zonas');
     saveGrade({
-      talhaoId: nav.talhaoId, safra: safraNome, epoca: '1', dataReferencia: dataRef, nome: `Zonas ${lista.length + 1}`, metodo: 'zonas',
+      talhaoId: nav.talhaoId, safra: safraNome, epoca: periodoZonas?.epoca ?? '1', dataReferencia: dataRef, nome: `Zonas ${lista.length + 1}`, metodo: 'zonas',
       modelo, modoDist, densidadePorZona,
       padraoAmostragemId: padrao.id, padraoNome: padrao.nome,
       customizado: nZonasCustom > 0 || densidade !== padrao.densidadeHaPonto,
       densidade, distanciaBorda, rotacao: 0, aleatoriedade, modoSel: 'regular',
-      profundidades: profs, pontos: pontosParaGrade(),
+      profundidades: profs, pontos: pontosGrade,
       paraProcessar: lista.length === 0,
     });
     recarregarGrades();
@@ -402,7 +447,7 @@ export function SimuladorZonas({ safraNome: safraProp }: { safraNome?: string } 
 
       {/* Etiquetas (modelo de folha em Configurações) */}
       {padrao && numAmostras > 0 && (
-        <button onClick={gerarEtiquetasZonas}
+        <button onClick={() => gerarEtiquetasZonas()}
           className="w-full py-2 rounded text-xs font-bold text-white flex items-center justify-center gap-2" style={{ background: '#065f46' }}>
           <Printer size={13} /> Etiquetas (PDF) · {totalEtiquetas}
         </button>
@@ -447,9 +492,9 @@ export function SimuladorZonas({ safraNome: safraProp }: { safraNome?: string } 
       {!pode('amostragem') ? null : !safraNome ? (
         <p className="text-[10px] text-center" style={{ color: '#fbbf24' }}>Defina um Ano (no topo do talhão) para salvar a grade.</p>
       ) : (
-        <button onClick={salvarGradeZonas} disabled={!padrao || pontos.length === 0}
+        <button onClick={salvarGradeZonas} disabled={!padrao || pontosGrade.length === 0}
           className="w-full py-2.5 rounded text-sm font-bold text-white flex items-center justify-center gap-2"
-          style={{ background: padrao && pontos.length ? 'var(--invicta-green-dark)' : '#1a3a6b', opacity: padrao && pontos.length ? 1 : 0.6 }}>
+          style={{ background: padrao && pontosGrade.length ? 'var(--invicta-green-dark)' : '#1a3a6b', opacity: padrao && pontosGrade.length ? 1 : 0.6 }}>
           <Save size={14} /> Salvar grade de zonas
         </button>
       )}
@@ -491,6 +536,12 @@ export function SimuladorZonas({ safraNome: safraProp }: { safraNome?: string } 
                   </button>
                   <button onClick={() => exportar(g, 'shp')} className="flex items-center gap-1 text-[9px] px-2 py-0.5 rounded font-semibold" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
                     <Download size={9} /> SHP
+                  </button>
+                  {/* Etiquetas da grade SALVA — como na aba Grid. Sem isto, salvar
+                      a grade tirava a única forma de reimprimir os sacos. */}
+                  <button onClick={() => gerarEtiquetasZonas(g)} title="Etiquetas (PDF)"
+                    className="flex items-center gap-1 text-[9px] px-2 py-0.5 rounded font-semibold" style={{ background: '#065f46', color: '#a7f3d0' }}>
+                    <Printer size={9} /> Etiquetas
                   </button>
                 </div>
               </div>
