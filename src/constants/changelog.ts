@@ -1,5 +1,11 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.58.0': [
+    'O GRID DAS ZONAS DE MANEJO GANHOU A EDIÇÃO DE POSIÇÃO: dá para arrastar os pontos no mapa e salvar onde você largou, como já existia no grid comum. Botão "Editar posições" → arraste → "Salvar alterações" (grade aberta pelo olho) ou "Salvar grade de zonas" (simulação nova).',
+    'CADA PONTO FICA PRESO NA SUA PRÓPRIA ZONA — não só dentro do talhão. Ao tentar arrastar para a zona vizinha, o ponto para na divisa; zona com várias manchas aceita o ponto em qualquer pedaço dela. Se a zona do ponto não existir mais (grade antiga), ele é preso ao menos no contorno do talhão, nunca solto.',
+    'MOVER NÃO MEXE NA NUMERAÇÃO: o número da amostra, a zona e o rótulo (1-1, 2-3…) continuam iguais — só a posição muda. As coletas já feitas em campo não se perdem. Trocar um parâmetro (densidade, padrão, distância da borda) regenera o grid e descarta a edição não salva, como no grid comum.',
+    'Onde ver: Amostragem → Zona de Manejo → Editar posições.',
+  ],
   '2.57.0': [
     'CORRIGIDO — COM O INTERPOLADOR DA MÁQUINA LIGADO, SATÉLITE E ALTIMETRIA PARAVAM DE FUNCIONAR. Quem marcava "Usar interpolador desta máquina" e deixava a janela aberta não conseguia mais gerar NDVI nem MDE. O motivo: o atalho mandava TODAS as chamadas para o programa da sua máquina, inclusive as que ela não tem como atender.',
     'A REGRA AGORA É POR TIPO DE TRABALHO. Vai para a sua máquina só o cálculo puro, feito em cima dos dados que o app manda: interpolação dos mapas, limpeza da condutividade, limpeza da colheita e zoneamento — que é justamente o trabalho pesado que o interpolador local existe para tirar da nuvem.',
