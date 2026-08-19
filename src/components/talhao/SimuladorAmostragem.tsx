@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useApp } from '@/context/AppContext';
 import { getPadroesAmostragem, getPadroesElementos, getSafras, getGrades, saveGrade, updateGrade, deleteGrade, marcarParaProcessar, getConfigEtiqueta, PadraoElementos, ProfundidadeConfig, GradeAmostragem, PontoAmostragem } from '@/lib/store';
 import { rotuloAno, hojeSaoPauloISO, periodoDeData, rotuloEpoca } from '@/lib/periodo';
-import { gerarGrid, anguloMaiorDimensao, criarValidador, ModoDistribuicao } from '@/lib/grid';
+import { gerarGrid, anguloMaiorDimensao, criarValidador, selecionarPorMalha, MalhaSelParams, ModoDistribuicao } from '@/lib/grid';
 import { exportarKML, exportarSHP } from '@/lib/exportGrade';
 import { gerarEtiquetasPDF, itensDeGrade, cabecalhoEtiqueta, layoutPorId } from '@/lib/etiquetas';
 import { exportarRelatorioGradeXlsx } from '@/lib/relatorioGrade';
@@ -13,17 +13,16 @@ import { pode } from '@/lib/empresa';
 import { nomeExport } from '@/lib/nomeExport';
 import { AlertTriangle, RotateCcw, Shuffle, Layers, MapPin, Save, Trash2, CheckCircle2, Circle, Pencil, Move, Plus, Eraser, X, Check, Download, Printer, Eye, FileSpreadsheet } from 'lucide-react';
 
-// PRNG simples para shuffle determinístico
-function shuffleSeed<T>(arr: T[], seed: number): T[] {
-  let a = seed >>> 0;
-  const rng = () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
-  const r = [...arr];
-  for (let i = r.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [r[i], r[j]] = [r[j], r[i]]; }
-  return r;
-}
+type ModoSel = 'regular' | 'equilibrado';
 
-// Seleciona os índices que recebem uma profundidade parcial
-function selecionar(n: number, percentual: number, modo: 'regular' | 'aleatorio', seed: number): Set<number> {
+// Seleciona os índices dos pontos que recebem uma profundidade parcial (ex: 20-40).
+// 'regular'     → índices igualmente espaçados na ordem serpentina (malha fixa).
+// 'equilibrado' → MALHA própria mais grossa (mesma rotação/cobertura da grade
+//                 principal) encaixada nos furos de 0-20 e refinada até o
+//                 espaçamento ficar regular no mapa; `variacao` (0-100) e `seed`
+//                 geram novas configurações, todas coerentes.
+function selecionar(pts: { lng: number; lat: number }[], percentual: number, modo: ModoSel, seed: number, variacao: number, malha: MalhaSelParams): Set<number> {
+  const n = pts.length;
   if (percentual >= 100) return new Set(Array.from({ length: n }, (_, i) => i));
   const count = Math.max(1, Math.round((n * percentual) / 100));
   if (modo === 'regular') {
@@ -31,7 +30,7 @@ function selecionar(n: number, percentual: number, modo: 'regular' | 'aleatorio'
     for (let k = 0; k < count; k++) sel.add(Math.floor(((k + 0.5) * n) / count));
     return sel;
   }
-  return new Set(shuffleSeed(Array.from({ length: n }, (_, i) => i), seed).slice(0, count));
+  return selecionarPorMalha(pts, count, malha, seed, variacao);
 }
 
 import { inputStyle } from '@/constants/ui';
@@ -74,7 +73,11 @@ export function SimuladorAmostragem({ safraNome: safraProp }: { safraNome?: stri
   const [aleatoriedade, setAleatoriedade] = useState(0);
   const [distanciaBorda, setDistanciaBorda] = useState(25);   // padrão 25 m (era 50 m)
   const [modoDist, setModoDist] = useState<ModoDistribuicao>('inteligente');
-  const [modoSel, setModoSel] = useState<'regular' | 'aleatorio'>('regular');
+  // 'equilibrado' é o padrão: o 'regular' espaça os ÍNDICES na ordem serpentina,
+  // o que não equivale a espaçar no MAPA (ao virar a linha, duas escolhas
+  // consecutivas caem coladas uma na outra) — origem dos pares grudados.
+  const [modoSel, setModoSel] = useState<ModoSel>('equilibrado');
+  const [variacaoSel, setVariacaoSel] = useState(40);
   const [seedPos, setSeedPos] = useState(1);
   const [seedSel, setSeedSel] = useState(1);
   const [grades, setGrades] = useState<GradeAmostragem[]>([]);
@@ -110,16 +113,22 @@ export function SimuladorAmostragem({ safraNome: safraProp }: { safraNome?: stri
   // Geração da grade + atribuição de profundidades (ao vivo, a partir dos parâmetros).
   // Só gera quando há um padrão selecionado: sem padrão, nada vai ao mapa (evita
   // pontos "automáticos" antes de o usuário acionar o grid).
-  const gerados = useMemo<PontoAmostragem[]>(() => {
+  // Grade base (0-20 cm) — memo próprio: mexer nos controles de PROFUNDIDADE
+  // (modo/variação/nova distribuição) não regera a grade, que é a parte cara.
+  const ptsGrid = useMemo(() => {
     if (!uploadedGeo || !padrao) return [];
-    const pts = gerarGrid({ geojson: uploadedGeo, densidadeHaPonto: densidade, distanciaBordaM: distanciaBorda, rotacaoGraus: rotacaoEfetiva, aleatoriedade, seed: seedPos, modo: modoDist });
-    const n = pts.length;
-    const selecoes = profs.map(p => selecionar(n, p.percentual, modoSel, seedSel + p.rotulo.length));
-    return pts.map((pt, i) => {
+    return gerarGrid({ geojson: uploadedGeo, densidadeHaPonto: densidade, distanciaBordaM: distanciaBorda, rotacaoGraus: rotacaoEfetiva, aleatoriedade, seed: seedPos, modo: modoDist });
+  }, [uploadedGeo, padrao, densidade, distanciaBorda, rotacaoEfetiva, aleatoriedade, seedPos, modoDist]);
+
+  const gerados = useMemo<PontoAmostragem[]>(() => {
+    if (!uploadedGeo || !padrao || ptsGrid.length === 0) return [];
+    const malha: MalhaSelParams = { geojson: uploadedGeo, densidadeHaPonto: densidade, distanciaBordaM: distanciaBorda, rotacaoGraus: rotacaoEfetiva, modo: modoDist };
+    const selecoes = profs.map(p => selecionar(ptsGrid, p.percentual, modoSel, seedSel + p.rotulo.length, variacaoSel, malha));
+    return ptsGrid.map((pt, i) => {
       const rotulos = profs.filter((_, pi) => selecoes[pi].has(i)).map(p => p.rotulo);
       return { ordem: i, lng: pt.lng, lat: pt.lat, profs: rotulos.length, profundidades: rotulos };
     });
-  }, [uploadedGeo, padrao, densidade, distanciaBorda, rotacaoEfetiva, aleatoriedade, seedPos, profs, modoSel, seedSel, modoDist]);
+  }, [uploadedGeo, padrao, ptsGrid, densidade, distanciaBorda, rotacaoEfetiva, modoDist, profs, modoSel, seedSel, variacaoSel]);
 
   // Pontos efetivos: edição manual (se houver) tem prioridade sobre os gerados
   const pontosEfetivos = pontosManuais ?? gerados;
@@ -229,7 +238,7 @@ export function SimuladorAmostragem({ safraNome: safraProp }: { safraNome?: stri
     const salva = saveGrade({
       talhaoId: nav.talhaoId, safra: safraNome, epoca, dataReferencia: dataRef, nome: `Grade ${n}`, metodo: 'grid',
       padraoAmostragemId: padrao.id, padraoNome: padrao.nome, customizado,
-      densidade, distanciaBorda, rotacao: rotacaoEfetiva, aleatoriedade, modoSel,
+      densidade, distanciaBorda, rotacao: rotacaoEfetiva, aleatoriedade, modoSel, variacaoSel,
       profundidades: profs, pontos: pontosEfetivos,
       paraProcessar: primeira, // primeira grade da safra já vira a "a processar"
     });
@@ -434,21 +443,35 @@ export function SimuladorAmostragem({ safraNome: safraProp }: { safraNome?: stri
                 <Layers size={11} /> Profundidades
               </label>
               <div className="flex gap-1">
-                {(['regular', 'aleatorio'] as const).map(m => (
+                {([['regular', 'Regular'], ['equilibrado', 'Equilibrado']] as const).map(([m, lbl]) => (
                   <button key={m} onClick={() => alterarParam(setModoSel, m)}
                     className="text-[9px] px-1.5 py-0.5 rounded font-semibold"
                     style={{ background: modoSel === m ? 'var(--invicta-blue-mid)' : '#1a3a6b', color: modoSel === m ? '#fff' : '#64748b' }}>
-                    {m === 'regular' ? 'Regular' : 'Aleatório'}
+                    {lbl}
                   </button>
                 ))}
-                {modoSel === 'aleatorio' && (
-                  <button onClick={() => alterarParam(setSeedSel, seedSel + 1)} title="Refazer sorteio"
-                    className="flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded font-semibold" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
-                    <Shuffle size={9} />
-                  </button>
-                )}
               </div>
             </div>
+            {modoSel === 'equilibrado' && (
+              <div className="mb-1.5 px-2 py-2 rounded" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
+                <div className="flex items-center justify-between mb-0.5">
+                  <label className="text-[10px] font-semibold" style={{ color: '#64748b' }}>
+                    Variação: {variacaoSel}%{variacaoSel === 0 ? ' (mínima)' : variacaoSel >= 100 ? ' (máxima)' : ''}
+                  </label>
+                  <button onClick={() => alterarParam(setSeedSel, seedSel + 1)} title="Gerar nova distribuição"
+                    disabled={variacaoSel === 0}
+                    className="flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded font-semibold"
+                    style={{ background: '#1a3a6b', color: variacaoSel === 0 ? '#475569' : '#93c5fd', opacity: variacaoSel === 0 ? 0.5 : 1 }}>
+                    <Shuffle size={9} /> Nova distribuição
+                  </button>
+                </div>
+                <input type="range" min="0" max="100" value={variacaoSel}
+                  onChange={e => alterarParam(setVariacaoSel, Number(e.target.value))} className="w-full accent-blue-500" />
+                <p className="text-[9px] mt-1" style={{ color: '#475569' }}>
+                  Malha própria (mais grossa) encaixada nos furos de 0-20 cm: espaçamento regular no mapa, cobrindo o talhão todo. A variação gera outras malhas igualmente coerentes — nunca vira sorteio.
+                </p>
+              </div>
+            )}
             <div className="space-y-1">
               {profs.map((p, i) => (
                 <div key={i} className="flex items-center gap-2 px-2 py-1.5 rounded" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>

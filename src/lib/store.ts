@@ -578,7 +578,8 @@ export interface GradeAmostragem {
   distanciaBorda: number;
   rotacao: number;
   aleatoriedade: number;
-  modoSel: 'regular' | 'aleatorio';
+  modoSel: 'regular' | 'aleatorio' | 'equilibrado'; // 'aleatorio' = legado (grades antigas)
+  variacaoSel?: number;                             // 0-100: variação da seleção equilibrada
   metodo?: 'grid' | 'zonas';                  // default 'grid'
   modelo?: 'A' | 'B';                         // zonas: composta (A) / individual (B)
   modoDist?: 'grade' | 'inteligente';         // zonas: distribuição
