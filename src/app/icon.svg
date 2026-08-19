@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="INVICTA">
+  <defs>
+    <linearGradient id="g" x1="10" y1="54" x2="54" y2="10" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0d4f3c"/>
+      <stop offset=".5" stop-color="#2f8236"/>
+      <stop offset="1" stop-color="#8cc63f"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(32 32) scale(1.16) translate(-32 -32)">
+    <path d="M6 58C6 26 26 6 58 6 58 38 38 58 6 58Z" fill="url(#g)"/>
+    <g stroke="#fff" stroke-width="3.4" stroke-linecap="round" fill="none">
+      <path d="M13 51 46 18"/>
+      <path d="M22 42 22 29"/>
+      <path d="M33 31 45 31"/>
+    </g>
+    <g fill="#fff">
+      <circle cx="46" cy="18" r="4.4"/>
+      <circle cx="22" cy="29" r="4"/>
+      <circle cx="45" cy="31" r="4"/>
+    </g>
+  </g>
+</svg>

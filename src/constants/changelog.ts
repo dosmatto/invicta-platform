@@ -1,5 +1,12 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.58.1': [
+    'A ABA DO NAVEGADOR GANHOU A MARCA DA INVICTA. Até agora o ícone era o do template do Next.js (aquele triângulo preto da Vercel) — nunca tinha sido trocado desde que o projeto nasceu. No lugar entrou a folha da INVICTA, com o degradê verde e as nervuras em rede, desenhada em vetor.',
+    'É UM DESENHO PRÓPRIO, não a logo encolhida: a marca original tem detalhe demais para 16 pixels e viraria um borrão. Esta versão tem a folha preenchendo o quadro e só três nós, então continua legível na aba, no favorito e no histórico — testada nos dois temas, barra clara e escura.',
+    'Entrou também o ícone de 180 px para quando alguém adiciona a plataforma à tela de início do iPhone ou iPad, com fundo azul da marca (o iOS não respeita transparência e deixaria fundo preto).',
+    'O ícone do app de COLETA não mudou: ele tem o alvo de GPS de propósito, para se distinguir da plataforma na tela do celular.',
+    'Se a aba ainda mostrar o ícone antigo, é cache do navegador — Ctrl+Shift+R (ou Cmd+Shift+R) resolve.',
+  ],
   '2.58.0': [
     'O GRID DAS ZONAS DE MANEJO GANHOU A EDIÇÃO DE POSIÇÃO: dá para arrastar os pontos no mapa e salvar onde você largou, como já existia no grid comum. Botão "Editar posições" → arraste → "Salvar alterações" (grade aberta pelo olho) ou "Salvar grade de zonas" (simulação nova).',
     'CADA PONTO FICA PRESO NA SUA PRÓPRIA ZONA — não só dentro do talhão. Ao tentar arrastar para a zona vizinha, o ponto para na divisa; zona com várias manchas aceita o ponto em qualquer pedaço dela. Se a zona do ponto não existir mais (grade antiga), ele é preso ao menos no contorno do talhão, nunca solto.',
