@@ -108,6 +108,64 @@ export function numerarPontosZonas(
   return out;
 }
 
+/**
+ * Renumera uma lista de pontos APÓS adicionar/remover na edição manual.
+ *
+ * Mover um ponto preserva `ordem`/`numero` (protege as coletas já feitas no
+ * campo). Adicionar ou remover, não: muda a contagem da zona, então o
+ * `zona-sequencial` tem de fechar sem buraco (removi 1-2 → 1-3 vira 1-2) e um
+ * ponto novo entra como o último da sua zona. Reagrupa por `zona` PRESERVANDO a
+ * ordem atual (primeira aparição da zona; ordem dos pontos dentro dela) e passa
+ * pelo mesmo `numerarPontosZonas` da geração — uma fonte de verdade só.
+ *
+ * Ponto sem `zona` (grade antiga, ou add fora de qualquer zona) cai num grupo
+ * de chave vazia: continua numerado, nunca some da lista.
+ */
+export function renumerarPontosZonas(
+  pontos: Array<Pick<PontoAmostragem, 'lng' | 'lat' | 'zona' | 'profundidades' | 'manual'>>,
+  modelo: 'A' | 'B',
+  profundidadesPadrao: string[],
+): PontoAmostragem[] {
+  const ordemZonas: string[] = [];
+  const porZona = new Map<string, typeof pontos>();
+  for (const p of pontos) {
+    const z = p.zona ?? '';
+    let g = porZona.get(z);
+    if (!g) { g = []; porZona.set(z, g); ordemZonas.push(z); }
+    g.push(p);
+  }
+  const nums = numerosDasZonas(ordemZonas);
+  const out: PontoAmostragem[] = [];
+  let ordem = 0;
+  let amostraSeq = 0;
+  ordemZonas.forEach((zid, iz) => {
+    const zonaNum = nums[iz];
+    porZona.get(zid)!.forEach((p, i) => {
+      const seq = i + 1;
+      if (modelo === 'B') amostraSeq++;
+      // PRESERVA a profundidade de CADA ponto (o generate uniformiza; o RE-numerar
+      // não pode — senão editar uma grade salva sem o Padrão selecionado zeraria
+      // `profundidades` de todos, e o app de campo (`?? grade.profundidades`) não
+      // reergue porque `[]` não é nullish → zero profundidades para coletar). Só o
+      // ponto NOVO (sem profundidade) herda o padrão.
+      const prof = p.profundidades && p.profundidades.length ? p.profundidades : profundidadesPadrao;
+      out.push({
+        ordem: ordem++,
+        numero: modelo === 'A' ? zonaNum : amostraSeq,
+        zona: zid,
+        seqZona: seq,
+        rotulo: rotuloPonto(zonaNum, seq),
+        lng: p.lng,
+        lat: p.lat,
+        profs: prof.length,
+        profundidades: prof,
+        ...(p.manual ? { manual: true } : {}),
+      });
+    });
+  });
+  return out;
+}
+
 /** O que o operador vê num ponto. Grade de zonas tem rótulo; as demais seguem
  *  no número da amostra (ou a ordem, quando o número não existe). */
 export const rotuloDoPonto = (p: Pick<PontoAmostragem, 'rotulo' | 'numero' | 'ordem'>): string =>

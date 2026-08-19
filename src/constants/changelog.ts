@@ -1,5 +1,12 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.59.0': [
+    'A EDIÇÃO DE PONTOS DAS ZONAS DE MANEJO FICOU IGUAL À DO GRID COMUM: a caixa "Edição manual" agora tem os três modos — MOVER, ADD e REMOVER. Antes só dava para arrastar; agora dá para acrescentar e tirar pontos direto no mapa. Onde ver: Amostragem → Zona de Manejo → Editar pontos no mapa.',
+    'ADD: clique dentro de uma zona e o ponto entra como o ÚLTIMO daquela zona (o app descobre sozinho em qual zona você clicou). Clique fora de qualquer zona não faz nada — todo ponto precisa pertencer a uma zona para receber número e saco. REMOVER: clique num ponto e ele sai.',
+    'A NUMERAÇÃO POR ZONA SE REFAZ SOZINHA E SEM BURACO. Tirou o ponto 1-2? Os seguintes viram 1-2, 1-3… e as OUTRAS zonas não mudam (o 2-1 continua 2-1). Na amostra composta, o ponto novo já herda o saco da sua zona; nos pontos individuais, as amostras se renumeram 1..N. O contador de amostras e etiquetas no resumo acompanha na hora.',
+    'MOVER continua sem mexer na numeração — só a posição muda, e o ponto segue preso dentro da própria zona, como antes. Trocar um parâmetro (densidade, padrão, borda) regenera o grid e descarta a edição não salva.',
+    'GRADE ANTIGA (salva antes da numeração por zona) aceita só o Mover — Add e Remover ficam ocultos nela, porque sem o número da zona não dá para renumerar sem embaralhar os sacos. Basta gerar e salvar a grade de novo para liberar os três modos.',
+  ],
   '2.58.1': [
     'A ABA DO NAVEGADOR GANHOU A MARCA DA INVICTA. Até agora o ícone era o do template do Next.js (aquele triângulo preto da Vercel) — nunca tinha sido trocado desde que o projeto nasceu. No lugar entrou a folha da INVICTA, com o degradê verde e as nervuras em rede, desenhada em vetor.',
     'É UM DESENHO PRÓPRIO, não a logo encolhida: a marca original tem detalhe demais para 16 pixels e viraria um borrão. Esta versão tem a folha preenchendo o quadro e só três nós, então continua legível na aba, no favorito e no histórico — testada nos dois temas, barra clara e escura.',

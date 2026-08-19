@@ -10,9 +10,10 @@ import { pode } from '@/lib/empresa';
 import { gerarGrid, pontoInterno, criarValidador, ModoDistribuicao } from '@/lib/grid';
 import { gerarEtiquetasPDF, cabecalhoEtiqueta, EtiquetaItem, layoutPorId } from '@/lib/etiquetas';
 import { exportarKML, exportarSHP } from '@/lib/exportGrade';
-import { numerarPontosZonas, rotuloDoPonto, amostrasDaGrade, type ZonaComPontos } from '@/lib/gradeZonas';
+import { numerarPontosZonas, renumerarPontosZonas, rotuloDoPonto, amostrasDaGrade, type ZonaComPontos } from '@/lib/gradeZonas';
 import { rotuloZona } from '@/lib/meap/rotuloZona';
-import { AlertTriangle, Layers, MapPin, Printer, RotateCcw, Save, Trash2, CheckCircle2, Circle, Pencil, Download, Eye, Move, Check, X } from 'lucide-react';
+import { dentroGeom } from '@/lib/recomendacao/zonasGrid';
+import { AlertTriangle, Layers, MapPin, Printer, RotateCcw, Save, Trash2, CheckCircle2, Circle, Pencil, Download, Eye, Move, Plus, Eraser, Check, X } from 'lucide-react';
 
 interface ZonaFeat {
   id: string;          // identidade do POLÍGONO ("01", "01_2") — densidade, seleção
@@ -29,7 +30,7 @@ const COR_PONTO = '#0f172a';
 
 export function SimuladorZonas({ safraNome: safraProp }: { safraNome?: string } = {}) {
   const { nav, setZonasManejo, setPontosSimulados, zonaEvent, setZonaEvent,
-          edicaoAtiva, setEdicaoAtiva, setEdicaoModo, pontoEvent, setPontoEvent } = useApp();
+          edicaoAtiva, setEdicaoAtiva, edicaoModo, setEdicaoModo, pontoEvent, setPontoEvent } = useApp();
 
   const [modelo, setModelo] = useState<'A' | 'B'>('A');
   const [dataRef, setDataRef] = useState<string>(() => hojeSaoPauloISO());
@@ -150,11 +151,15 @@ export function SimuladorZonas({ safraNome: safraProp }: { safraNome?: string } 
     () => numerarPontosZonas(porZonaPts, modelo, profs.map(p => p.rotulo)),
     [porZonaPts, modelo, profs],
   );
-  const totalPontos = pontosGrade.length;
-
-  // Posição efetiva: a edição manual (arrastar) tem prioridade sobre o gerado.
+  // Posição efetiva: a edição manual (arrastar/add/remover) tem prioridade.
   const pontosEfetivos = pontosManuais ?? pontosGrade;
+  // O resumo conta os pontos EFETIVOS: adicionar/remover na edição precisa
+  // mudar o número na hora (senão a tela promete um total e salva outro).
+  const totalPontos = pontosEfetivos.length;
   const editandoPontos = edicaoAtiva && pontosManuais != null;
+  // Grade LEGADA (salva antes da numeração por zona): pontos sem `zona`. Add e
+  // Remover reagrupam por zona e colapsariam tudo num saco só — nela, só Mover.
+  const gradeSemZona = editandoPontos && pontosEfetivos.some(p => !p.zona);
 
   // Geometria de cada zona pelo número que o mapa mostra — para PRENDER o ponto
   // movido DENTRO da sua própria zona (não só do talhão). Zona multiparte junta
@@ -173,25 +178,61 @@ export function SimuladorZonas({ safraNome: safraProp }: { safraNome?: string } 
     return m;
   }, [zonas]);
 
-  // Arrastar um ponto no mapa (evento vindo do MapView). Só MOVER: adicionar ou
-  // remover mudaria a contagem por zona e a numeração `zona-sequencial`. O ponto
-  // é preso na SUA zona; `ordem` e o número da amostra não mudam — só lng/lat.
+  // Eventos de edição vindos do MapView: mover, adicionar, remover.
+  //
+  // MOVER preserva `ordem` e o número da amostra (só muda lng/lat) — protege as
+  // coletas já feitas no campo, presas por `${gradeId}__${ordem}`. O ponto fica
+  // travado DENTRO da sua zona.
+  //
+  // ADICIONAR / REMOVER mudam a contagem da zona, então o `zona-sequencial` tem
+  // de fechar sem buraco: `renumerarPontosZonas` reagrupa por zona e renumera
+  // tudo (é uma edição de DESENHO, feita antes de ir a campo — o mesmo que a
+  // aba Grid faz ao resequenciar).
   useEffect(() => {
-    if (!pontoEvent || pontoEvent.tipo !== 'mover') { if (pontoEvent) setPontoEvent(null); return; }
+    if (!pontoEvent) return;
+    const profRotulos = profs.map(p => p.rotulo);
     setPontosManuais(prev => {
       const base = prev ?? pontosGrade;
-      const orig = base.find(p => p.ordem === pontoEvent.ordem);
-      if (!orig) return base;
-      // Prende o ponto DENTRO da sua zona. Se a zona não existe mais (grade
-      // antiga / zoneamento trocado), cai para o contorno do TALHÃO — nunca
-      // solto: melhor um ponto na zona vizinha que um fora da área.
-      const feats = geomPorZona.get(orig.zona ?? '') ?? geomTalhao;
-      const destino = feats.length
-        ? criarValidador({ type: 'FeatureCollection', features: feats }, distanciaBorda)
-            .ajustar(orig.lng, orig.lat, pontoEvent.lng, pontoEvent.lat)
-        : { lng: pontoEvent.lng, lat: pontoEvent.lat };
-      return base.map(p => p.ordem === pontoEvent.ordem
-        ? { ...p, lng: destino.lng, lat: destino.lat, manual: true } : p);
+      if (pontoEvent.tipo === 'mover') {
+        const orig = base.find(p => p.ordem === pontoEvent.ordem);
+        if (!orig) return base;
+        // Prende o ponto DENTRO da sua zona. Se a zona não existe mais (grade
+        // antiga / zoneamento trocado), cai para o contorno do TALHÃO — nunca
+        // solto: melhor um ponto na zona vizinha que um fora da área.
+        const feats = geomPorZona.get(orig.zona ?? '') ?? geomTalhao;
+        const destino = feats.length
+          ? criarValidador({ type: 'FeatureCollection', features: feats }, distanciaBorda)
+              .ajustar(orig.lng, orig.lat, pontoEvent.lng, pontoEvent.lat)
+          : { lng: pontoEvent.lng, lat: pontoEvent.lat };
+        return base.map(p => p.ordem === pontoEvent.ordem
+          ? { ...p, lng: destino.lng, lat: destino.lat, manual: true } : p);
+      }
+      // Add/Remover reagrupam por `zona`. Numa grade LEGADA (salva antes da
+      // numeração por zona) os pontos não têm `zona`: reagrupar jogaria as 4
+      // zonas num grupo só ('') e destruiria a grade num saco composto único.
+      // Nessa grade só o Mover é seguro — barra a mudança de estrutura.
+      if (base.some(p => !p.zona)) return base;
+      if (pontoEvent.tipo === 'remover') {
+        return renumerarPontosZonas(base.filter(p => p.ordem !== pontoEvent.ordem), modelo, profRotulos);
+      }
+      if (pontoEvent.tipo === 'add') {
+        // Em qual zona caiu o clique? O ponto novo TEM de pertencer a uma zona
+        // (é a zona que dá o prefixo e o saco). Fora de todas, ignora — não há
+        // como numerá-lo. `zonaRot` é o número que o mapa mostra, a mesma chave
+        // de agrupamento do resto.
+        const z = zonas.find(z => dentroGeom(z.geometry, pontoEvent.lng, pontoEvent.lat));
+        if (!z) return base;
+        // Profundidade do ponto novo: herda de um ponto EXISTENTE (da mesma zona,
+        // senão qualquer) — nunca vazia, senão o app de campo mostra 0 prof. O
+        // padrão selecionado é o último recurso.
+        const ref = base.find(p => p.zona === z.zonaRot) ?? base[0];
+        const prof = ref?.profundidades?.length ? ref.profundidades : profRotulos;
+        return renumerarPontosZonas(
+          [...base, { lng: pontoEvent.lng, lat: pontoEvent.lat, zona: z.zonaRot, profundidades: prof }],
+          modelo, profRotulos,
+        );
+      }
+      return base;
     });
     setPontoEvent(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -270,7 +311,7 @@ export function SimuladorZonas({ safraNome: safraProp }: { safraNome?: string } 
   // Nº de sacos = o que `amostrasDaGrade` vai imprimir de fato. Contar zonas
   // fazia a tela prometer 4 e o PDF sair com 3 quando uma zona ficava sem ponto
   // (ou com manchas agrupadas).
-  const numAmostras = amostrasDaGrade(pontosGrade, modelo).length;
+  const numAmostras = amostrasDaGrade(pontosEfetivos, modelo).length;
   // Etiquetas = amostras × profundidades (parciais aplicadas a % das amostras)
   const totalEtiquetas = profs.reduce((s, p) => s + (p.percentual >= 100 ? numAmostras : Math.max(1, Math.round((numAmostras * p.percentual) / 100))), 0);
 
@@ -286,7 +327,7 @@ export function SimuladorZonas({ safraNome: safraProp }: { safraNome?: string } 
   //     operador vê no app — o saco e a tela falam o mesmo número.
   // Serve tanto a simulação ao vivo quanto uma grade JÁ SALVA (passar `g`).
   function gerarEtiquetasZonas(g?: GradeAmostragem) {
-    const pts = g ? g.pontos : pontosGrade;
+    const pts = g ? g.pontos : pontosEfetivos;
     const mod = g ? (g.modelo ?? 'A') : modelo;
     const profsUso = g ? g.profundidades : profs;
     if (!profsUso.length || pts.length === 0) return;
@@ -326,13 +367,13 @@ export function SimuladorZonas({ safraNome: safraProp }: { safraNome?: string } 
   }
 
   function salvarGradeZonas() {
-    if (!padrao || !safraNome || pontosGrade.length === 0 || !nav.talhaoId) return;
+    if (!padrao || !safraNome || pontosEfetivos.length === 0 || !nav.talhaoId) return;
     const lista = getGrades(nav.talhaoId, safraNome, 'zonas');
     saveGrade({
       talhaoId: nav.talhaoId, safra: safraNome, epoca: periodoZonas?.epoca ?? '1', dataReferencia: dataRef, nome: `Zonas ${lista.length + 1}`, metodo: 'zonas',
       modelo, modoDist, densidadePorZona,
       padraoAmostragemId: padrao.id, padraoNome: padrao.nome,
-      customizado: nZonasCustom > 0 || densidade !== padrao.densidadeHaPonto,
+      customizado: nZonasCustom > 0 || densidade !== padrao.densidadeHaPonto || pontosManuais !== null,
       densidade, distanciaBorda, rotacao: 0, aleatoriedade, modoSel: 'regular',
       profundidades: profs, pontos: pontosEfetivos,
       paraProcessar: lista.length === 0,
@@ -568,36 +609,55 @@ export function SimuladorZonas({ safraNome: safraProp }: { safraNome?: string } 
         </div>
       </div>
 
-      {/* Editar posições dos pontos (arrastar no mapa) */}
+      {/* Edição manual dos pontos no mapa (igual à aba Grid: Mover / Add / Remover) */}
       {pode('amostragem') && pontosGrade.length > 0 && (
-        edicaoAtiva ? (
-          <div className="p-2.5 rounded-lg space-y-2" style={{ background: '#0b1f3a', border: '1px solid #2e5fa3' }}>
-            <p className="text-[10px] flex items-center gap-1.5" style={{ color: '#93c5fd' }}>
-              <Move size={12} /> Arraste os pontos no mapa. Cada ponto fica preso DENTRO da sua zona; o número não muda.
+        !edicaoAtiva ? (
+          <button onClick={iniciarEdicaoPontos}
+            className="w-full py-2 rounded text-xs font-semibold flex items-center justify-center gap-2" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
+            <Move size={13} /> Editar pontos no mapa {gradeViewId ? '(grade aberta)' : ''}
+          </button>
+        ) : (
+          <div className="p-2.5 rounded-lg space-y-2" style={{ background: '#0a1f33', border: '1px solid #2e5fa3' }}>
+            <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: '#93c5fd' }}>Edição manual</p>
+            <div className={`grid ${gradeSemZona ? 'grid-cols-1' : 'grid-cols-3'} gap-1`}>
+              {(gradeSemZona
+                ? [['mover', 'Mover', Move]] as const
+                : [['mover', 'Mover', Move], ['adicionar', 'Add', Plus], ['remover', 'Remover', Eraser]] as const
+              ).map(([m, lbl, Ic]) => (
+                <button key={m} onClick={() => setEdicaoModo(m)}
+                  className="py-1.5 rounded text-[10px] font-semibold flex flex-col items-center gap-0.5"
+                  style={{ background: edicaoModo === m ? 'var(--invicta-blue-mid)' : '#1a3a6b', color: edicaoModo === m ? '#fff' : '#93c5fd' }}>
+                  <Ic size={12} /> {lbl}
+                </button>
+              ))}
+            </div>
+            <p className="text-[9px]" style={{ color: '#64748b' }}>
+              {gradeSemZona
+                ? 'Grade antiga (sem numeração por zona): só dá para mover. Gere e salve a grade de novo para poder adicionar e remover pontos.'
+                : <>
+                    {edicaoModo === 'mover' && 'Arraste os pontos. Cada ponto fica preso na sua zona; o número não muda.'}
+                    {edicaoModo === 'adicionar' && 'Clique dentro de uma zona para adicionar um ponto. Ele entra como o último da zona.'}
+                    {edicaoModo === 'remover' && 'Clique num ponto para removê-lo. O sequencial da zona se fecha sem buraco.'}
+                  </>}
             </p>
-            <div className="flex gap-1.5">
+            <div className="flex gap-2">
+              <button onClick={descartarEdicaoPontos}
+                className="flex-1 py-1.5 rounded text-[10px] font-semibold flex items-center justify-center gap-1" style={{ background: '#1a3a6b', color: '#94a3b8' }}>
+                <X size={11} /> Descartar
+              </button>
               {gradeEditandoId ? (
                 <button onClick={salvarEdicaoPontos}
-                  className="flex-1 py-2 rounded text-xs font-bold text-white flex items-center justify-center gap-1.5" style={{ background: 'var(--invicta-green-dark)' }}>
-                  <Check size={13} /> Salvar alterações
+                  className="flex-1 py-1.5 rounded text-[10px] font-bold text-white flex items-center justify-center gap-1" style={{ background: 'var(--invicta-green-dark)' }}>
+                  <Check size={11} /> Salvar alterações
                 </button>
               ) : (
                 <button onClick={concluirEdicaoPontos}
-                  className="flex-1 py-2 rounded text-xs font-bold text-white flex items-center justify-center gap-1.5" style={{ background: 'var(--invicta-blue-mid)' }}>
-                  <Check size={13} /> Concluir (salvar a grade abaixo)
+                  className="flex-1 py-1.5 rounded text-[10px] font-bold text-white flex items-center justify-center gap-1" style={{ background: 'var(--invicta-blue-mid)' }}>
+                  <Check size={11} /> Concluir
                 </button>
               )}
-              <button onClick={descartarEdicaoPontos} title="Descartar edição"
-                className="px-2.5 py-2 rounded text-xs font-semibold flex items-center gap-1" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
-                <X size={13} />
-              </button>
             </div>
           </div>
-        ) : (
-          <button onClick={iniciarEdicaoPontos}
-            className="w-full py-2 rounded text-xs font-semibold flex items-center justify-center gap-1.5" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
-            <Move size={13} /> Editar posições {gradeViewId ? 'da grade aberta' : 'dos pontos'}
-          </button>
         )
       )}
 

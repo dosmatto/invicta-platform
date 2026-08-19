@@ -11,6 +11,7 @@
 import assert from 'node:assert/strict';
 import {
   numeroDaZona, numerosDasZonas, rotuloPonto, numerarPontosZonas, rotuloDoPonto, amostrasDaGrade,
+  renumerarPontosZonas,
 } from '../src/lib/gradeZonas.ts';
 
 let ok = 0, fail = 0;
@@ -166,6 +167,86 @@ t('grade de zonas mostra o rótulo; grade comum segue no número', () => {
   assert.equal(rotuloDoPonto(p), '2-1');
   assert.equal(rotuloDoPonto({ ordem: 6 }), '7');                  // grade antiga, sem número
   assert.equal(rotuloDoPonto({ ordem: 6, numero: 42 }), '42');     // grade importada
+});
+
+console.log('\nEdição manual: adicionar e remover pontos (renumerarPontosZonas)\n');
+
+t('remover fecha o buraco do sequencial DENTRO da zona', () => {
+  const p = numerarPontosZonas(ZONAS, 'A', PROFS);
+  // Remove o 2º ponto da zona 1 (rótulo 1-2).
+  const sobra = p.filter(x => x.rotulo !== '1-2');
+  const re = renumerarPontosZonas(sobra, 'A', PROFS);
+  const z1 = re.filter(x => x.zona === '01');
+  assert.equal(z1.length, 7, 'zona 1 ficou com 7 pontos');
+  assert.deepEqual(z1.map(x => x.rotulo), ['1-1', '1-2', '1-3', '1-4', '1-5', '1-6', '1-7'], 'sem buraco');
+  assert.equal(re.length, 49);
+});
+
+t('remover NÃO renumera as outras zonas (2-1 continua 2-1)', () => {
+  const p = numerarPontosZonas(ZONAS, 'A', PROFS);
+  const re = renumerarPontosZonas(p.filter(x => x.rotulo !== '1-3'), 'A', PROFS);
+  assert.equal(re.filter(x => x.zona === '02')[0].rotulo, '2-1');
+  assert.equal(re.filter(x => x.zona === '04').at(-1).rotulo, '4-17');
+});
+
+t('adicionar entra como o ÚLTIMO ponto da sua zona', () => {
+  const p = numerarPontosZonas(ZONAS, 'A', PROFS);
+  // Chega um ponto novo na zona 2 (sem seqZona ainda) — appendado ao fim da lista.
+  const comNovo = [...p, { lng: -49.9, lat: -24.9, zona: '02' }];
+  const re = renumerarPontosZonas(comNovo, 'A', PROFS);
+  const z2 = re.filter(x => x.zona === '02');
+  assert.equal(z2.length, 12, 'zona 2 passou de 11 para 12');
+  assert.equal(z2.at(-1).rotulo, '2-12', 'o novo é o último da zona');
+  assert.equal(re.length, 51);
+});
+
+t('COMPOSTA: ponto novo herda o nº de amostra da sua zona', () => {
+  const p = numerarPontosZonas(ZONAS, 'A', PROFS);
+  const re = renumerarPontosZonas([...p, { lng: -49.9, lat: -24.9, zona: '03' }], 'A', PROFS);
+  const novo = re.filter(x => x.zona === '03').at(-1);
+  assert.equal(novo.numero, 3, 'o saco é o da zona 3');
+  assert.equal(amostrasDaGrade(re, 'A').length, 4, 'continua 4 sacos');
+});
+
+t('INDIVIDUAL: remover renumera as amostras 1..N sem buraco', () => {
+  const p = numerarPontosZonas(ZONAS, 'B', PROFS);
+  const re = renumerarPontosZonas(p.filter(x => x.rotulo !== '1-2'), 'B', PROFS);
+  assert.deepEqual(re.map(x => x.numero), re.map((_, i) => i + 1));
+  assert.equal(re.length, 49);
+});
+
+t('`ordem` fecha 0..N-1 após editar (chave das coletas, sem buraco)', () => {
+  const p = numerarPontosZonas(ZONAS, 'A', PROFS);
+  const re = renumerarPontosZonas(p.filter(x => x.rotulo !== '3-5'), 'A', PROFS);
+  assert.deepEqual(re.map(x => x.ordem), re.map((_, i) => i));
+});
+
+t('PRESERVA a profundidade de cada ponto (não zera ao renumerar)', () => {
+  // Regressão: editar uma grade salva SEM o Padrão selecionado passava profs=[]
+  // e o renumerar zerava `profundidades` de todos → app de campo mostrava 0.
+  const p = numerarPontosZonas(ZONAS, 'A', PROFS);
+  // Simula: cada ponto guarda sua profundidade; o "padrão" chega VAZIO.
+  const re = renumerarPontosZonas(p.filter(x => x.rotulo !== '1-2'), 'A', []);
+  for (const x of re) {
+    assert.deepEqual(x.profundidades, PROFS, `perdeu a profundidade: ${JSON.stringify(x.profundidades)}`);
+    assert.equal(x.profs, PROFS.length);
+  }
+});
+
+t('ponto NOVO com profundidade herdada mantém a dele (não o padrão vazio)', () => {
+  const p = numerarPontosZonas(ZONAS, 'A', PROFS);
+  const novo = { lng: -49.9, lat: -24.9, zona: '02', profundidades: ['00-20'] };
+  const re = renumerarPontosZonas([...p, novo], 'A', []);
+  const z2ultimo = re.filter(x => x.zona === '02').at(-1);
+  assert.deepEqual(z2ultimo.profundidades, ['00-20']);
+  // e os antigos seguem com a sua
+  assert.deepEqual(re.filter(x => x.zona === '01')[0].profundidades, PROFS);
+});
+
+t('ponto sem zona não some da lista (grade antiga / add fora de zona)', () => {
+  const re = renumerarPontosZonas(
+    [{ lng: -50, lat: -25, zona: '01' }, { lng: -49, lat: -24, zona: undefined }], 'A', PROFS);
+  assert.equal(re.length, 2, 'os dois continuam');
 });
 
 console.log(`\n${ok} passaram, ${fail} falharam`);
