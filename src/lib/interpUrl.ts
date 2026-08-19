@@ -22,6 +22,29 @@ export function setUsarLocal(v: boolean): void {
   try { if (v) localStorage.setItem(K_LOCAL, '1'); else localStorage.removeItem(K_LOCAL); } catch { /* storage off */ }
   for (const cb of localListeners) { try { cb(v); } catch { /* ignora */ } }
 }
+// ── O que o interpolador DESTA MÁQUINA atende ───────────────────────────────
+// Só CÁLCULO PURO sobre dados que o próprio app envia (pontos, polígono,
+// parâmetros). É para isso que ele existe: tirar da nuvem o lote pesado de CPU.
+//
+// Todo o resto vai SEMPRE para a nuvem, porque a máquina do usuário não tem como
+// atender — e antes ia para o local do mesmo jeito, e simplesmente falhava:
+//   • /mde*      → precisa baixar modelo de elevação de fora;
+//   • /ndvi*, /indices → dependem dos catálogos de satélite;
+//   • /ia-*      → exige a chave da IA, que só existe no servidor;
+//   • /grid-geotiff → exportação, não é interpolação (e é chamada uma vez só).
+// Sintoma relatado: com o interpolador aberto no Windows, MDE e NDVI paravam de
+// funcionar. Não era o servidor local estar quebrado — é que ele nunca deveria
+// receber essas chamadas.
+const ROTAS_LOCAIS = new Set([
+  '/interpolar',          // krigagem / IDW — o motivo de o local existir
+  '/limpar-pontos',       // MapFilter da condutividade (denso, pesado)
+  '/colheita-processar',  // limpeza dos dados de colheita (denso, pesado)
+  '/zonear-analisar', '/zonear-gerar', '/zonear-suavizar', '/zonear-dividir',
+]);
+export function rotaVaiParaLocal(rota: string): boolean {
+  return ROTAS_LOCAIS.has(rota.split('?')[0]);
+}
+
 // URL EFETIVA das chamadas de INTERPOLAÇÃO (respeita o toggle). Admin usa INTERP_URL.
 export function interpUrl(): string { return usarLocal() ? INTERP_URL_LOCAL : INTERP_URL; }
 export function isLocal(): boolean { return usarLocal(); }
@@ -88,10 +111,14 @@ export async function backendVivo(timeoutMs = 4000): Promise<boolean> {
 
 // O servidor da nuvem ADORMECE sem uso e leva ~1 min para acordar. Este toque
 // dispara a subida sem esperar resposta — chamar ao abrir telas que processam.
-// (No modo local não há o que "acordar".)
+//
+// Toca a NUVEM mesmo no modo local: MDE, NDVI e IA vão sempre para lá, então
+// quem está com o interpolador da máquina aberto continua precisando dela
+// acordada. Antes o toque era pulado no modo local e a primeira imagem de
+// satélite pegava o servidor dormindo.
 export function tocarBackend(): void {
-  if (isLocal() || typeof fetch === 'undefined') return;
-  try { void fetch(`${interpUrl()}/health`, { cache: 'no-store', headers: headersBackend() }).catch(() => {}); } catch { /* offline */ }
+  if (typeof fetch === 'undefined') return;
+  try { void fetch(`${INTERP_URL}/health`, { cache: 'no-store', headers: headersBackend() }).catch(() => {}); } catch { /* offline */ }
 }
 
 // Aviso de "aquecendo o servidor" (cold start): a UI pode se inscrever para
@@ -142,7 +169,9 @@ async function esperarBackend(base: string, budgetMs = 150_000): Promise<boolean
 // que o local estiver no ar de novo.
 export async function postBackend(rota: string, body: unknown, opts?: { signal?: AbortSignal }): Promise<Response> {
   const signal = opts?.signal;
-  const local = isLocal();
+  // O toggle "usar esta máquina" só vale para as rotas que ela sabe atender.
+  // MDE, NDVI e IA vão SEMPRE para a nuvem, mesmo com o interpolador aberto.
+  const local = isLocal() && rotaVaiParaLocal(rota);
   const tentarEm = (base: string) => fetch(`${base}${rota}`, {
     method: 'POST',
     headers: headersBackend({ 'Content-Type': 'application/json' }),
@@ -155,7 +184,7 @@ export async function postBackend(rota: string, body: unknown, opts?: { signal?:
   const foraDoAr = (r: Response | null) => !r || r.status === 502 || r.status === 503 || r.status === 504;
 
   let r: Response | null = null;
-  try { r = await tentarEm(interpUrl()); }
+  try { r = await tentarEm(local ? INTERP_URL_LOCAL : INTERP_URL); }
   catch (e) {
     // Cancelamento explícito (usuário trocou de mapa/saiu): propaga o AbortError
     // SEM tentar acordar o backend (não é o servidor fora, é escolha do usuário).

@@ -77,9 +77,14 @@ function ServidorProcessamento() {
           {' '}Para voltar à nuvem, desmarque acima.
         </p>
       )}
-      {local && status === 'ok' && (
+      {local && status === 'ok' && (<>
         <p className="text-[10px]" style={{ color: '#4ade80' }}>Interpolador local no ar — as interpolações rodam nesta máquina.</p>
-      )}
+        <p className="text-[10px]" style={{ color: '#64748b' }}>
+          Passam por aqui: interpolação dos mapas, limpeza de condutividade e colheita, e zoneamento.
+          {' '}<b>Satélite (NDVI), altimetria (MDE) e IA continuam na nuvem</b> — dependem de dados e chaves
+          {' '}que só existem no servidor, e por isso não param quando você usa esta máquina.
+        </p>
+      </>)}
       <div className="pt-1">
         <a href="/interpolador-local-mac.zip" download
           className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded text-[11px] font-semibold text-white transition-opacity hover:opacity-90"

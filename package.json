@@ -17,6 +17,7 @@
     "teste:ordem": "node scripts/teste-ordem-catalogo.mjs",
     "teste:faixas": "node scripts/teste-faixas.mjs",
     "teste:motivo": "node scripts/teste-motivo-mapa.mjs",
+    "teste:rota": "node scripts/teste-rota-local.mjs",
     "teste:grids": "node scripts/teste-grids-recomendacao.mjs",
     "teste:iam": "node scripts/teste-iam.mjs",
     "teste:etiquetas": "node scripts/teste-etiquetas.mjs",
