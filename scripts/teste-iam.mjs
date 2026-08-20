@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 import {
   MATRIZ_PADRAO, CAP_PARA_PERM, permissoesEfetivas, temPermissao, contarPermissoes,
+  poderesDeAcesso, poderesSobreUsuario,
 } from '../src/lib/iam/permissoes.ts';
 import { CATEGORIAS, PAPEIS, MODULOS, ACOES, chavePerm } from '../src/lib/iam/tipos.ts';
 
@@ -98,6 +99,60 @@ t('nenhum papel comum administra usuários', () => {
   for (const papel of ['agronomo', 'operador', 'produtor', 'prestador', 'leitor', 'custom']) {
     assert.ok(!MATRIZ_PADRAO[papel]['usuarios.administrar'], `${papel} não administra usuários`);
   }
+});
+
+// ── Poderes na Central de Acessos (quem gera convite e quem aprova) ─────────
+// Checagem de permissão como a tela faz: matriz do papel, sem exceção própria.
+const comoPapel = papel => (modulo, acao) =>
+  papel === 'owner' ? true : MATRIZ_PADRAO[papel][`${modulo}.${acao}`] === true;
+
+t('ADMIN gera convite e aprova cadastro (era só o Owner)', () => {
+  const p = poderesDeAcesso(comoPapel('admin'));
+  assert.equal(p.convidar, true, 'admin gera/renova/cancela convite');
+  assert.equal(p.aprovar, true, 'admin aprova quem está pendente');
+  assert.equal(p.editar, true, 'admin edita papel, vínculos e permissões');
+  assert.equal(p.algum, true);
+});
+
+t('ADMIN continua fora do que é do dono', () => {
+  const p = poderesDeAcesso(comoPapel('admin'));
+  assert.equal(p.administrar, false, 'empresa/planos, perfis e matriz são do Owner');
+  assert.equal(p.excluir, false, 'remover acesso é do Owner');
+});
+
+t('OWNER pode tudo na Central de Acessos', () => {
+  const p = poderesDeAcesso(comoPapel('owner'));
+  for (const k of ['convidar', 'aprovar', 'editar', 'excluir', 'administrar']) {
+    assert.equal(p[k], true, `owner deveria poder ${k}`);
+  }
+});
+
+t('papel sem acesso a usuários não convida nem aprova', () => {
+  for (const papel of ['agronomo', 'operador', 'produtor', 'prestador', 'leitor']) {
+    const p = poderesDeAcesso(comoPapel(papel));
+    assert.equal(p.convidar, false, `${papel} não gera convite`);
+    assert.equal(p.aprovar, false, `${papel} não aprova`);
+    assert.equal(p.algum, false, `${papel} vê a tela só de leitura`);
+  }
+});
+
+t('TRAVA DO DONO: admin não edita nem remove o registro do Owner', () => {
+  const admin = poderesDeAcesso(comoPapel('admin'));
+  const sobreOwner = poderesSobreUsuario(admin, 'owner', false);
+  assert.deepEqual(sobreOwner, { podeEditar: false, podeExcluir: false },
+    'senão o admin rebaixaria o dono — PAPEIS_ATRIBUIVEIS não tem "owner" de volta');
+});
+
+t('o próprio Owner mexe no registro dele', () => {
+  const owner = poderesDeAcesso(comoPapel('owner'));
+  assert.deepEqual(poderesSobreUsuario(owner, 'owner', true),
+    { podeEditar: true, podeExcluir: true });
+});
+
+t('admin edita usuário comum normalmente (e não o remove)', () => {
+  const admin = poderesDeAcesso(comoPapel('admin'));
+  assert.deepEqual(poderesSobreUsuario(admin, 'agronomo', false),
+    { podeEditar: true, podeExcluir: false });
 });
 
 console.log(`\n${ok} ok, ${fail} falha(s)`);

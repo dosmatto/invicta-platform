@@ -27,8 +27,11 @@ import { Ban, Copy, KeyRound, Loader2, Save, Trash2, Unlock } from 'lucide-react
 
 type Secao = 'dados' | 'vinculos' | 'permissoes' | 'auditoria';
 
-export function DetalheUsuario({ email, onFechar, onMudou, souOwner }: {
-  email: string; onFechar: () => void; onMudou: () => void; souOwner: boolean;
+export function DetalheUsuario({ email, onFechar, onMudou, podeEditar, podeExcluir }: {
+  // Poderes vindos da matriz (usuarios.editar / usuarios.excluir), já com a
+  // trava do dono aplicada — ver lib/iam/permissoes.poderesSobreUsuario.
+  email: string; onFechar: () => void; onMudou: () => void;
+  podeEditar: boolean; podeExcluir: boolean;
 }) {
   const [secao, setSecao] = useState<Secao>('dados');
   const [msg, setMsg] = useState('');
@@ -48,7 +51,7 @@ export function DetalheUsuario({ email, onFechar, onMudou, souOwner }: {
   function atualizar(fn: () => void) { fn(); onMudou(); }
 
   async function resetarSenha() {
-    if (!souOwner || resetando) return;
+    if (!podeEditar || resetando) return;
     if (!confirm(`Enviar uma nova senha para ${u!.email}?\n\nO usuário receberá um e-mail do Supabase para definir a senha.`)) return;
     setResetando(true); setMsg('');
     try {
@@ -102,31 +105,35 @@ export function DetalheUsuario({ email, onFechar, onMudou, souOwner }: {
         {msg && <p className="text-[10px] rounded p-2" style={{ background: '#0f2240', color: COR.azul }}>{msg}</p>}
 
         {secao === 'dados' && (
-          <SecaoDados u={u} souOwner={souOwner} planos={planos} clientes={clientes}
+          <SecaoDados u={u} podeEditar={podeEditar} planos={planos} clientes={clientes}
             onMudou={onMudou} atualizar={atualizar} />
         )}
 
         {secao === 'vinculos' && (
-          <SecaoVinculos u={u} souOwner={souOwner} onMudou={onMudou} />
+          <SecaoVinculos u={u} podeEditar={podeEditar} onMudou={onMudou} />
         )}
 
         {secao === 'permissoes' && (
-          <SecaoPermissoes u={u} papel={papel} efetivas={efetivas} souOwner={souOwner} onMudou={onMudou} />
+          <SecaoPermissoes u={u} papel={papel} efetivas={efetivas} podeEditar={podeEditar} onMudou={onMudou} />
         )}
 
         {secao === 'auditoria' && <SecaoAuditoria email={u.email} />}
       </div>
 
       {/* Ações do rodapé */}
-      {souOwner && (
+      {(podeEditar || podeExcluir) && (
         <div className="flex flex-wrap gap-1.5 px-3 py-2 flex-shrink-0" style={{ borderTop: `1px solid ${COR.borda}` }}>
+          {podeEditar && (<>
           <Botao onClick={resetarSenha} disabled={resetando} titulo="Redefinir a senha deste usuário">
             {resetando ? <Loader2 size={11} className="animate-spin inline" /> : <KeyRound size={11} className="inline" />} Senha
           </Botao>
           {bloqueado
             ? <Botao tom="ok" onClick={() => atualizar(() => desbloquearUsuario(u.email))}><Unlock size={11} className="inline" /> Desbloquear</Botao>
             : <Botao tom="perigo" onClick={() => setConfirmar('bloquear')}><Ban size={11} className="inline" /> Bloquear</Botao>}
-          <Botao tom="perigo" onClick={() => setConfirmar('remover')}><Trash2 size={11} className="inline" /> Remover</Botao>
+          </>)}
+          {podeExcluir && (
+            <Botao tom="perigo" onClick={() => setConfirmar('remover')}><Trash2 size={11} className="inline" /> Remover</Botao>
+          )}
         </div>
       )}
 
@@ -156,8 +163,8 @@ export function DetalheUsuario({ email, onFechar, onMudou, souOwner }: {
 }
 
 // ── Dados pessoais + papel/categoria + validade ─────────────────────────────
-function SecaoDados({ u, souOwner, planos, clientes, onMudou, atualizar }: {
-  u: UsuarioIam; souOwner: boolean; onMudou: () => void;
+function SecaoDados({ u, podeEditar, planos, clientes, onMudou, atualizar }: {
+  u: UsuarioIam; podeEditar: boolean; onMudou: () => void;
   planos: Array<{ id: string; nome: string }>; clientes: Array<{ id: string; nome: string }>;
   atualizar: (fn: () => void) => void;
 }) {
@@ -171,14 +178,14 @@ function SecaoDados({ u, souOwner, planos, clientes, onMudou, atualizar }: {
       <div className="space-y-1">
         <Rotulo>Nome</Rotulo>
         <input className="w-full rounded px-2 py-1.5 text-xs" style={campoSt} value={nome}
-          disabled={!souOwner}
+          disabled={!podeEditar}
           onChange={e => setNome(e.target.value)}
           onBlur={() => nome !== (u.nome ?? '') && atualizar(() => { salvarUsuario(u.email, { nome }); })} />
       </div>
       <div className="space-y-1">
         <Rotulo>Telefone</Rotulo>
         <input className="w-full rounded px-2 py-1.5 text-xs" style={campoSt} value={tel}
-          disabled={!souOwner} placeholder="(00) 00000-0000"
+          disabled={!podeEditar} placeholder="(00) 00000-0000"
           onChange={e => setTel(e.target.value)}
           onBlur={() => tel !== (u.telefone ?? '') && atualizar(() => { salvarUsuario(u.email, { telefone: tel }); })} />
       </div>
@@ -186,7 +193,7 @@ function SecaoDados({ u, souOwner, planos, clientes, onMudou, atualizar }: {
       <div className="grid grid-cols-2 gap-2">
         <div className="space-y-1">
           <Rotulo>Categoria</Rotulo>
-          <select className="w-full rounded px-2 py-1.5 text-[11px]" style={campoSt} disabled={!souOwner}
+          <select className="w-full rounded px-2 py-1.5 text-[11px]" style={campoSt} disabled={!podeEditar}
             value={categoriaDe(u)}
             onChange={e => atualizar(() => definirCategoria(u.email, e.target.value as CategoriaIam))}>
             {CATEGORIAS.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
@@ -194,7 +201,7 @@ function SecaoDados({ u, souOwner, planos, clientes, onMudou, atualizar }: {
         </div>
         <div className="space-y-1">
           <Rotulo>Papel</Rotulo>
-          <select className="w-full rounded px-2 py-1.5 text-[11px]" style={campoSt} disabled={!souOwner}
+          <select className="w-full rounded px-2 py-1.5 text-[11px]" style={campoSt} disabled={!podeEditar}
             value={u.papel}
             onChange={e => atualizar(() => definirPapel(u.email, e.target.value as PapelIam))}>
             {PAPEIS.filter(p => p.id === 'owner' || PAPEIS_ATRIBUIVEIS.includes(p.id)).map(p =>
@@ -207,7 +214,7 @@ function SecaoDados({ u, souOwner, planos, clientes, onMudou, atualizar }: {
         <div className="grid grid-cols-2 gap-2">
           <div className="space-y-1">
             <Rotulo>Produtor (cliente)</Rotulo>
-            <select className="w-full rounded px-2 py-1.5 text-[11px]" style={campoSt} disabled={!souOwner}
+            <select className="w-full rounded px-2 py-1.5 text-[11px]" style={campoSt} disabled={!podeEditar}
               value={u.clienteId ?? ''}
               onChange={e => atualizar(() => { salvarUsuario(u.email, { clienteId: e.target.value }); })}>
               <option value="">— escolher —</option>
@@ -216,7 +223,7 @@ function SecaoDados({ u, souOwner, planos, clientes, onMudou, atualizar }: {
           </div>
           <div className="space-y-1">
             <Rotulo>Plano</Rotulo>
-            <select className="w-full rounded px-2 py-1.5 text-[11px]" style={campoSt} disabled={!souOwner}
+            <select className="w-full rounded px-2 py-1.5 text-[11px]" style={campoSt} disabled={!podeEditar}
               value={u.planoId ?? ''}
               onChange={e => atualizar(() => { salvarUsuario(u.email, { planoId: e.target.value }); registrar('plano_alterado', { alvo: u.email, para: e.target.value }); })}>
               <option value="">— escolher —</option>
@@ -235,7 +242,7 @@ function SecaoDados({ u, souOwner, planos, clientes, onMudou, atualizar }: {
               {rest == null ? 'sem validade' : rest < 0 ? 'EXPIRADO' : `${rest} dia(s)`}
             </span>
           </div>
-          {souOwner && (
+          {podeEditar && (
             <div className="flex gap-1.5">
               <input type="number" min={1} max={365} value={dias} onChange={e => setDias(Number(e.target.value))}
                 className="w-16 rounded px-2 py-1 text-[11px]" style={campoSt} />
@@ -261,7 +268,7 @@ const Linha = ({ k, v }: { k: string; v: string }) => (
 );
 
 // ── Vínculos: produtor → fazenda → talhão ───────────────────────────────────
-function SecaoVinculos({ u, souOwner, onMudou }: { u: UsuarioIam; souOwner: boolean; onMudou: () => void }) {
+function SecaoVinculos({ u, podeEditar, onMudou }: { u: UsuarioIam; podeEditar: boolean; onMudou: () => void }) {
   const clientes = useMemo(() => getClientes(), []);
   const [busca, setBusca] = useState('');
   const cli = new Set(u.clientesVinculados ?? []);
@@ -290,7 +297,7 @@ function SecaoVinculos({ u, souOwner, onMudou }: { u: UsuarioIam; souOwner: bool
 
       <Bloco titulo={`Produtores (${cli.size || 'todos'})`}>
         {clientes.map(c => (
-          <Marcar key={c.id} on={cli.has(c.id)} disabled={!souOwner} label={c.nome}
+          <Marcar key={c.id} on={cli.has(c.id)} disabled={!podeEditar} label={c.nome}
             onChange={() => { definirVinculos(u.email, { clientesVinculados: alternar(cli, c.id) }); onMudou(); }} />
         ))}
       </Bloco>
@@ -298,7 +305,7 @@ function SecaoVinculos({ u, souOwner, onMudou }: { u: UsuarioIam; souOwner: bool
       <Bloco titulo={`Fazendas (${faz.size || 'todas'})`}>
         {fazendas.length === 0 ? <p className="text-[10px]" style={{ color: COR.fraco }}>Nenhuma fazenda nos produtores marcados.</p>
           : fazendas.map(f => (
-            <Marcar key={f.id} on={faz.has(f.id)} disabled={!souOwner} label={f.nome}
+            <Marcar key={f.id} on={faz.has(f.id)} disabled={!podeEditar} label={f.nome}
               onChange={() => { definirVinculos(u.email, { fazendasVinculadas: alternar(faz, f.id) }); onMudou(); }} />
           ))}
       </Bloco>
@@ -307,13 +314,13 @@ function SecaoVinculos({ u, souOwner, onMudou }: { u: UsuarioIam; souOwner: bool
         <input className="w-full rounded px-2 py-1 text-[11px] mb-1" style={campoSt}
           placeholder="buscar talhão…" value={busca} onChange={e => setBusca(e.target.value)} />
         {talhoes.map(t => (
-          <Marcar key={t.id} on={tal.has(t.id)} disabled={!souOwner} label={t.nome}
+          <Marcar key={t.id} on={tal.has(t.id)} disabled={!podeEditar} label={t.nome}
             onChange={() => { definirVinculos(u.email, { talhoesVinculados: alternar(tal, t.id) }); onMudou(); }} />
         ))}
         {!busca && <p className="text-[9px] pt-1" style={{ color: COR.fraco }}>Mostrando os primeiros 60 — use a busca para achar outros.</p>}
       </Bloco>
 
-      {souOwner && (
+      {podeEditar && (
         <Botao onClick={() => { definirVinculos(u.email, { clientesVinculados: [], fazendasVinculadas: [], talhoesVinculados: [] }); onMudou(); }}>
           Limpar restrições (ver tudo)
         </Botao>
@@ -322,9 +329,9 @@ function SecaoVinculos({ u, souOwner, onMudou }: { u: UsuarioIam; souOwner: bool
   );
 }
 // ── Permissões granulares (módulo × ação) ───────────────────────────────────
-function SecaoPermissoes({ u, papel, efetivas, souOwner, onMudou }: {
+function SecaoPermissoes({ u, papel, efetivas, podeEditar, onMudou }: {
   u: UsuarioIam; papel: PapelIam; efetivas: Record<string, boolean | undefined>;
-  souOwner: boolean; onMudou: () => void;
+  podeEditar: boolean; onMudou: () => void;
 }) {
   const [clonarDe, setClonarDe] = useState('');
   const [perfilSel, setPerfilSel] = useState('');
@@ -353,7 +360,7 @@ function SecaoPermissoes({ u, papel, efetivas, souOwner, onMudou }: {
         </p>
       </div>
 
-      {souOwner && (
+      {podeEditar && (
         <div className="rounded p-2 space-y-1.5" style={{ background: '#0a1929', border: `1px solid ${COR.borda}` }}>
           <Rotulo>Perfil de permissões</Rotulo>
           <div className="flex gap-1.5">
@@ -414,7 +421,7 @@ function SecaoPermissoes({ u, papel, efetivas, souOwner, onMudou }: {
             <tr style={{ background: '#0f2240' }}>
               <th className="text-left px-1.5 py-1" style={{ color: COR.sub }}>Módulo</th>
               {ACOES.map(a => <th key={a.id} className="px-1 py-1" style={{ color: COR.sub }} title={a.nome}>{a.curto}</th>)}
-              {souOwner && <th className="px-1 py-1" style={{ color: COR.sub }} title="marcar/desmarcar a linha toda">tudo</th>}
+              {podeEditar && <th className="px-1 py-1" style={{ color: COR.sub }} title="marcar/desmarcar a linha toda">tudo</th>}
             </tr>
           </thead>
           <tbody>
@@ -433,12 +440,12 @@ function SecaoPermissoes({ u, papel, efetivas, souOwner, onMudou }: {
                       <td key={a.id} className="text-center px-1 py-1"
                         style={excecao ? { background: 'rgba(251,191,36,0.16)' } : undefined}
                         title={excecao ? `Ajuste próprio desta pessoa (o papel ${on ? 'não daria' : 'daria'} esta permissão)` : 'Igual ao padrão do papel'}>
-                        <input type="checkbox" checked={on} disabled={!souOwner}
+                        <input type="checkbox" checked={on} disabled={!podeEditar}
                           onChange={e => { definirPermissaoUsuario(u.email, ch, e.target.checked); onMudou(); }} />
                       </td>
                     );
                   })}
-                  {souOwner && (
+                  {podeEditar && (
                     <td className="text-center px-1 py-1">
                       <button onClick={() => linhaToda(m.id, nOn < ACOES.length)}
                         className="px-1 rounded text-[9px]" style={{ background: COR.borda, color: COR.azul }}

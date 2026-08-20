@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { getClientes, getFazendas } from '@/lib/store';
 import {
-  ehOwner, emailUsuario, getPlanos, salvarPlano, excluirPlano, toggleSecaoPlano,
+  ehOwner, emailUsuario, getPlanos, podeEm, salvarPlano, excluirPlano, toggleSecaoPlano,
   atualizarPlano, SECOES_PORTAL, empresaAtiva, updateEmpresa,
 } from '@/lib/empresa';
 import { getAuditoria } from '@/lib/iam/auditoria';
@@ -21,7 +21,7 @@ import {
   acessoDoConvite, cancelarConvite, conviteDoToken, criarConvite, criarConviteTipo, getConvites,
   linkDoConvite, reenviarConvite, VALIDADE_TIPO_DIAS,
 } from '@/lib/iam/convites';
-import { MATRIZ_PADRAO } from '@/lib/iam/permissoes';
+import { MATRIZ_PADRAO, poderesDeAcesso, poderesSobreUsuario } from '@/lib/iam/permissoes';
 import { getPerfil, getPerfis, salvarPerfil, excluirPerfil, renomearPerfil, permissoesDoPapel } from '@/lib/iam/perfis';
 import {
   ACOES, CATEGORIAS, MODULOS, PAPEIS, ROTULO_ACAO, chavePerm,
@@ -43,7 +43,11 @@ export function CentralAcessos() {
   const [tick, setTick] = useState(0);
   const [sel, setSel] = useState<string | null>(null);
   const [busca, setBusca] = useState('');
+  // Quem pode o quê nesta tela sai da MATRIZ (usuarios.criar/aprovar/editar/…),
+  // não de "sou o dono?" — é assim que o Administrador gera convite e aprova
+  // cadastro. Ver lib/iam/permissoes.poderesDeAcesso — npm run teste:iam.
   const souOwner = ehOwner();
+  const poderes = useMemo(() => poderesDeAcesso(podeEm), [tick]);
   const recarregar = useCallback(() => setTick(t => t + 1), []);
 
   useEffect(() => { migrarIamV1(); }, []);
@@ -104,7 +108,7 @@ export function CentralAcessos() {
           <div className="flex items-center gap-2">
             <ShieldCheck size={14} style={{ color: COR.azul }} />
             <p className="text-xs font-bold" style={{ color: COR.txt }}>Central de Acessos</p>
-            {!souOwner && <Chip cor={COR.alerta}>somente leitura</Chip>}
+            {!poderes.algum && <Chip cor={COR.alerta}>somente leitura</Chip>}
           </div>
           <Abas abas={abas} ativa={aba} onChange={setAba} />
           {ehListaDeUsuarios && (
@@ -119,15 +123,15 @@ export function CentralAcessos() {
               ? <Vazio texto={aba === 'pendentes' ? 'Nenhum cadastro aguardando aprovação.' : 'Ninguém nesta categoria ainda.'} />
               : lista.map(u => (
                   <CartaoUsuario key={u.email} u={u} selecionado={sel === u.email}
-                    souOwner={souOwner} pendente={statusDe(u) === 'aguardando_aprovacao'}
+                    podeAprovar={poderes.aprovar} pendente={statusDe(u) === 'aguardando_aprovacao'}
                     onAbrir={() => setSel(u.email)} onMudou={recarregar} />
                 ))
           )}
-          {aba === 'convites'   && <AbaConvites convites={convites} souOwner={souOwner} onMudou={recarregar} />}
+          {aba === 'convites'   && <AbaConvites convites={convites} podeConvidar={poderes.convidar} onMudou={recarregar} />}
           {aba === 'papeis'     && <AbaPapeis />}
-          {aba === 'perfis'     && <AbaPerfis souOwner={souOwner} onMudou={recarregar} tick={tick} />}
-          {aba === 'permissoes' && <AbaPermissoes souOwner={souOwner} onMudou={recarregar} tick={tick} />}
-          {aba === 'empresas'   && <AbaEmpresas souOwner={souOwner} onMudou={recarregar} />}
+          {aba === 'perfis'     && <AbaPerfis souOwner={poderes.administrar} onMudou={recarregar} tick={tick} />}
+          {aba === 'permissoes' && <AbaPermissoes />}
+          {aba === 'empresas'   && <AbaEmpresas souOwner={poderes.administrar} onMudou={recarregar} />}
           {aba === 'auditoria'  && <AbaAuditoria tick={tick} />}
         </div>
       </div>
@@ -135,7 +139,8 @@ export function CentralAcessos() {
       {/* Painel lateral do usuário */}
       {sel && (
         <div className="flex-shrink-0" style={{ width: 340, borderLeft: `1px solid ${COR.borda}` }}>
-          <DetalheUsuario email={sel} souOwner={souOwner}
+          <DetalheUsuario email={sel}
+            {...poderesSobreUsuario(poderes, usuarios.find(u => u.email === sel)?.papel, souOwner)}
             onFechar={() => setSel(null)} onMudou={recarregar} />
         </div>
       )}
@@ -218,9 +223,9 @@ function textoAcesso(cli?: string[], faz?: string[]): string {
 }
 
 // ── Cartão de usuário ───────────────────────────────────────────────────────
-function CartaoUsuario({ u, onAbrir, selecionado, pendente, souOwner, onMudou }: {
+function CartaoUsuario({ u, onAbrir, selecionado, pendente, podeAprovar, onMudou }: {
   u: UsuarioIam; onAbrir: () => void; selecionado: boolean; pendente: boolean;
-  souOwner: boolean; onMudou: () => void;
+  podeAprovar: boolean; onMudou: () => void;
 }) {
   const [aprovando, setAprovando] = useState(false);
   // Cadastro vindo de um LINK POR TIPO já chega com o papel proposto — abrir a
@@ -257,7 +262,7 @@ function CartaoUsuario({ u, onAbrir, selecionado, pendente, souOwner, onMudou }:
         <span className="text-[9px] ml-auto" style={{ color: COR.fraco }}>{fmtRelativo(u.ultimoAcesso)}</span>
       </div>
 
-      {pendente && souOwner && (
+      {pendente && podeAprovar && (
         <div className="rounded p-2 space-y-1.5" style={{ background: '#0f2240' }}>
           <Rotulo>Aprovar como</Rotulo>
           <div className="flex gap-1.5">
@@ -315,8 +320,8 @@ function CartaoUsuario({ u, onAbrir, selecionado, pendente, souOwner, onMudou }:
 }
 
 // ── Aba Convites ────────────────────────────────────────────────────────────
-function AbaConvites({ convites, souOwner, onMudou }: {
-  convites: ReturnType<typeof getConvites>; souOwner: boolean; onMudou: () => void;
+function AbaConvites({ convites, podeConvidar, onMudou }: {
+  convites: ReturnType<typeof getConvites>; podeConvidar: boolean; onMudou: () => void;
 }) {
   const [novo, setNovo] = useState(false);
   const [email, setEmail] = useState('');
@@ -393,7 +398,7 @@ function AbaConvites({ convites, souOwner, onMudou }: {
       <div className="rounded p-2 space-y-2" style={{ background: '#0b1d3a', border: `1px solid ${COR.borda}` }}>
         <div className="flex items-center justify-between gap-2">
           <Rotulo>Links por tipo de usuário</Rotulo>
-          {souOwner && !novoTipo && <Botao pequeno tom="ok" onClick={() => setNovoTipo(true)}><Link2 size={10} className="inline" /> Novo link</Botao>}
+          {podeConvidar && !novoTipo && <Botao pequeno tom="ok" onClick={() => setNovoTipo(true)}><Link2 size={10} className="inline" /> Novo link</Botao>}
         </div>
         <p className="text-[9px] leading-relaxed" style={{ color: COR.fraco }}>
           Um link só, que <b>várias pessoas</b> podem usar — dá para mandar no grupo dos produtores.
@@ -466,7 +471,7 @@ function AbaConvites({ convites, souOwner, onMudou }: {
                 <span>· expira {fmtData(c.expiraEm)}</span>
                 <span>· acesso: {textoAcesso(c.clientesVinculados, c.fazendasVinculadas) || 'sem restrição'}</span>
               </div>
-              {souOwner && (
+              {podeConvidar && (
                 <div className="flex gap-1.5 flex-wrap">
                   {c.status === 'pendente' && (
                     <Botao pequeno tom="ok" onClick={() => copiar(linkDoConvite(c.id), c.id)}>
@@ -486,7 +491,7 @@ function AbaConvites({ convites, souOwner, onMudou }: {
       </div>
 
       {/* ── CONVITE INDIVIDUAL ─────────────────────────────────────────── */}
-      {souOwner && !novo && <Botao tom="ok" onClick={() => setNovo(true)}><UserPlus size={11} className="inline" /> Convite para uma pessoa</Botao>}
+      {podeConvidar && !novo && <Botao tom="ok" onClick={() => setNovo(true)}><UserPlus size={11} className="inline" /> Convite para uma pessoa</Botao>}
 
       {novo && (
         <Cartao>
@@ -568,7 +573,7 @@ function AbaConvites({ convites, souOwner, onMudou }: {
             <span>· expira {fmtData(c.expiraEm)}</span>
             {c.usadoPor && <span>· usado por {c.usadoPor}</span>}
           </div>
-          {souOwner && (
+          {podeConvidar && (
             <div className="flex gap-1.5 flex-wrap">
               {c.status === 'pendente' && (
                 <Botao pequeno onClick={() => copiar(linkDoConvite(c.id), c.id)}>{copiado === c.id ? 'Copiado!' : <><Link2 size={10} className="inline" /> Copiar link</>}</Botao>
@@ -612,7 +617,7 @@ function AbaPapeis() {
 }
 
 // ── Aba Permissões (matriz padrão por papel) ────────────────────────────────
-function AbaPermissoes({ souOwner }: { souOwner: boolean; onMudou: () => void; tick: number }) {
+function AbaPermissoes() {
   const [papel, setPapel] = useState<PapelIam>('agronomo');
   const perms = MATRIZ_PADRAO[papel] ?? {};
   return (
@@ -626,7 +631,7 @@ function AbaPermissoes({ souOwner }: { souOwner: boolean; onMudou: () => void; t
       </div>
       <p className="text-[10px]" style={{ color: COR.fraco }}>
         Esta é a matriz PADRÃO do papel (referência). Para dar ou tirar permissão de alguém específico,
-        abra o usuário e use a aba <b>Permissões</b> do painel lateral{souOwner ? '' : ' (só o Owner edita)'}.
+        abra o usuário e use a aba <b>Permissões</b> do painel lateral.
       </p>
       <div className="rounded overflow-x-auto" style={{ border: `1px solid ${COR.borda}` }}>
         <table className="w-full text-[9px]" style={{ borderCollapse: 'collapse' }}>

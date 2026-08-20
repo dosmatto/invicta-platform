@@ -86,6 +86,61 @@ export const MATRIZ_PADRAO: Record<PapelIam, MapaPermissoes> = {
   viewer: conceder(nada(), TODOS_MODULOS.filter(m => m !== 'usuarios'), VER),
 };
 
+// ── Poderes na Central de Acessos ───────────────────────────────────────────
+// A tela nasceu inteira gateada em "sou o Owner?", o que contradizia a própria
+// matriz acima: o papel ADMIN já tem usuarios.criar/editar/aprovar e só é
+// barrado em `administrar` e `excluir`. Resultado prático: o administrador via
+// a Central de Acessos em modo leitura — não gerava convite nem aprovava
+// cadastro, e todo pendente dependia do dono.
+//
+// Aqui a matriz vira poder de tela, um por ação, para o Admin recuperar o que o
+// papel dele já dizia — sem abrir o que é do dono: empresa/planos, a biblioteca
+// de perfis, a matriz padrão e remover acesso.
+export interface PoderesAcessos {
+  /** Gerar, renovar e cancelar convites (links por tipo e individuais). */
+  convidar: boolean;
+  /** Aprovar ou rejeitar quem está aguardando aprovação. */
+  aprovar: boolean;
+  /** Editar dados, papel, categoria, vínculos, permissões, bloquear, senha. */
+  editar: boolean;
+  /** Remover o acesso de alguém (padrão: só o Owner). */
+  excluir: boolean;
+  /** Empresa/planos, biblioteca de perfis e matriz padrão (padrão: só o Owner). */
+  administrar: boolean;
+  /** Algum poder — falso = a tela é só de leitura. */
+  algum: boolean;
+}
+
+export function poderesDeAcesso(
+  pode: (modulo: string, acao: string) => boolean,
+): PoderesAcessos {
+  const convidar = pode('usuarios', 'criar');
+  const aprovar = pode('usuarios', 'aprovar');
+  const editar = pode('usuarios', 'editar');
+  const excluir = pode('usuarios', 'excluir');
+  const administrar = pode('usuarios', 'administrar');
+  return {
+    convidar, aprovar, editar, excluir, administrar,
+    algum: convidar || aprovar || editar || excluir || administrar,
+  };
+}
+
+/**
+ * Trava do dono: o registro de quem tem papel `owner` só é editável ou
+ * removível pelo PRÓPRIO Owner.
+ *
+ * Sem isto, abrir a edição para o Admin abriria junto o caminho para rebaixar
+ * o dono — PAPEIS_ATRIBUIVEIS não oferece 'owner', então salvar o papel do dono
+ * por outro qualquer o derrubaria, sem volta pela tela.
+ */
+export function poderesSobreUsuario(
+  poderes: PoderesAcessos, papelAlvo: string | undefined, souOwner: boolean,
+): { podeEditar: boolean; podeExcluir: boolean } {
+  const alvoEhOwner = papelAlvo === 'owner';
+  if (alvoEhOwner && !souOwner) return { podeEditar: false, podeExcluir: false };
+  return { podeEditar: poderes.editar, podeExcluir: poderes.excluir };
+}
+
 // ── Ponte: capacidades antigas → módulo.ação ────────────────────────────────
 // Usada por `pode()` (empresa.ts) para avaliar as capacidades legadas dentro do
 // modelo novo, sem precisar reescrever os 28 call sites de uma vez.
