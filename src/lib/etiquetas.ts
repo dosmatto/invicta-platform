@@ -71,7 +71,11 @@ function profundidadesDoPonto(p: PontoAmostragem, grade: GradeAmostragem): strin
 // Itens a partir de uma grade do Grid (ponto × profundidade).
 export function itensDeGrade(talhaoNome: string, grade: GradeAmostragem, cabecalho?: string): EtiquetaItem[] {
   const out: EtiquetaItem[] = [];
-  const rodape = `Ano ${rotuloAno(grade.safra)} · ${grade.epoca}ª época`;
+  // Código da remessa junto do rodapé: é o que liga o saco de terra ao talhão
+  // quando o laudo volta pela API. Vai aqui, e não numa faixa nova, para não
+  // mexer no desenho da etiqueta (que é calibrado e tem teste).
+  const rodape = [`Ano ${rotuloAno(grade.safra)} · ${grade.epoca}ª época`, grade.codigoRemessa]
+    .filter(Boolean).join(' · ');
   for (const pt of grade.pontos) {
     const numero = String(pt.ordem + 1).padStart(3, '0');
     for (const prof of profundidadesDoPonto(pt, grade)) out.push({ cabecalho, titulo: talhaoNome, numero, sub: `${prof} cm`, rodape });

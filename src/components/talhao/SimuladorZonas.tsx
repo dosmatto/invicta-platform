@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useApp } from '@/context/AppContext';
-import { getTalhoes, getFazendas, getPadroesAmostragem, getPadroesElementos, getConfigEtiqueta, getSafras, getGrades, saveGrade, updateGrade, deleteGrade, marcarParaProcessar, ProfundidadeConfig, GradeAmostragem, PontoAmostragem } from '@/lib/store';
+import { getTalhoes, getFazendas, getPadroesAmostragem, getPadroesElementos, getConfigEtiqueta, getSafras, getGrades, saveGrade, updateGrade, deleteGrade, marcarParaProcessar, garantirCodigoRemessa, ProfundidadeConfig, GradeAmostragem, PontoAmostragem } from '@/lib/store';
 import { nomeExport } from '@/lib/nomeExport';
 import { rotuloAno, hojeSaoPauloISO, periodoDeData, rotuloEpoca } from '@/lib/periodo';
 import { classeZona, ORDEM_CLASSES } from '@/lib/zonas';
@@ -334,7 +334,11 @@ export function SimuladorZonas({ safraNome: safraProp }: { safraNome?: string } 
     const titulo = talhao?.nome || 'Talhao';
     const ano = g ? rotuloAno(g.safra) : rotuloAno(safraNome);
     const ep = g ? g.epoca : (periodoZonas?.epoca ?? '1');
-    const rod = `${mod === 'A' ? 'Amostra composta' : 'Ponto individual'} · Ano ${ano} · ${ep}ª época`;
+    // Código de remessa só quando há grade SALVA: simulação ao vivo não é um
+    // lote enviado ao laboratório, e código impresso sem lote é código perdido.
+    const remessa = g ? garantirCodigoRemessa(g.id) : null;
+    const rod = [`${mod === 'A' ? 'Amostra composta' : 'Ponto individual'} · Ano ${ano} · ${ep}ª época`, remessa]
+      .filter(Boolean).join(' · ');
     // Grade ANTIGA (salva antes da numeração por zona): os pontos não têm zona
     // nem nº de amostra, então `amostrasDaGrade` acharia 50 amostras distintas
     // e imprimiria 50 sacos para 4 compostas. Sem dado de zona, não há o que

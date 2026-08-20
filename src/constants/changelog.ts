@@ -1,5 +1,13 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.62.0': [
+    'O LABORATÓRIO PASSA A MANDAR O LAUDO DIRETO PARA A PLATAFORMA, SEM NINGUÉM CARREGAR ARQUIVO. Terminou as análises, o sistema dele faz uma chamada e o laudo aparece na aba Fertilidade do talhão certo, com as unidades já convertidas. O caminho por arquivo continua igual e não muda em nada — a novidade é a porta a mais.',
+    'CADA GRADE GANHOU UM CÓDIGO DE REMESSA (INV-XXXX-XXXX), criado na primeira vez que você gera as etiquetas ou a conferência. Ele sai impresso na etiqueta e em toda linha da planilha de conferência, e é o que o laboratório devolve para dizer de qual talhão é o laudo. Sem ele a plataforma teria de adivinhar pelo NOME do talhão — e talhão homônimo colocaria o laudo no lugar errado, calado, virando mapa e virando dose de adubo.',
+    'O laboratório tem um endereço só para TESTAR: ele manda o laudo, recebe de volta o que a plataforma entendeu (amostras, variáveis, avisos) e nada é gravado. É onde o time de TI deles resolve formato, unidade e numeração antes da primeira remessa de verdade.',
+    'Reenviar o mesmo laudo ATUALIZA em vez de duplicar — laudo repetido distorceria mapa e recomendação sem dar erro nenhum.',
+    'Cada laboratório recebe uma chave própria, que pode ser revogada a qualquer momento e só enxerga as remessas da sua empresa.',
+    'Onde ver: o código de remessa aparece nas etiquetas e na conferência (Talhão → Amostragem → grade salva). Para liberar um laboratório, fale com o administrador: é preciso aplicar docs/api-laudos.sql e emitir a chave.',
+  ],
   '2.61.0': [
     'O ADMINISTRADOR PASSOU A GERAR CONVITE E APROVAR CADASTRO — antes tudo isso era só do dono da conta. Na Central de Acessos (Biblioteca → Acessos), quem tem papel Administrador agora vê os botões "Novo link", "Convite para uma pessoa", Copiar link, Renovar e Cancelar, e o bloco "Aprovar como" nos cadastros pendentes. Não era uma regra de segurança e sim uma incoerência: a matriz de permissões já dizia que o Admin pode criar, editar e APROVAR usuários — a tela é que estava inteira travada num "sou o dono?", e o administrador entrava só para olhar.',
     'A TELA AGORA OBEDECE À MATRIZ, ação por ação: usuarios.criar libera os convites; usuarios.aprovar libera aprovar/rejeitar quem está aguardando; usuarios.editar libera dados, papel, categoria, vínculos, permissões, bloquear e redefinir senha. Como é a matriz que manda, dá para soltar ou tirar cada uma dessas coisas de alguém específico pela aba Permissões do próprio usuário — inclusive de quem não é Admin.',

@@ -32,7 +32,8 @@ import {
 import { ELEMENTOS_LAB, simboloElemento, norm as normLab, calcularDerivados, DERIVADOS_IDS } from './lab';
 import { anoDeData, epocaDeData, periodoDeData, anoDaSafra, hojeSaoPauloISO, partesData, dataValida, type Epoca } from './periodo';
 import { VARIAVEIS_COMPLEMENTARES } from '../constants/variaveisSeedComplementar';
-import { LAYOUT_PADRAO } from './etiquetas';   // só o id do padrão (etiquetas.ts não importa store em runtime)
+import { LAYOUT_PADRAO } from './etiquetas';
+import { gerarCodigoRemessa } from './remessa';   // só o id do padrão (etiquetas.ts não importa store em runtime)
 
 export interface Cliente {
   id: string;
@@ -584,6 +585,10 @@ export interface GradeAmostragem {
   modelo?: 'A' | 'B';                         // zonas: composta (A) / individual (B)
   modoDist?: 'grade' | 'inteligente';         // zonas: distribuição
   densidadePorZona?: Record<string, number>;  // zonas: override por zona
+  /** Código do lote enviado ao laboratório (INV-XXXX-XXXX). Ver lib/remessa.ts.
+   *  Nasce na 1ª exportação (etiquetas/conferência) e é o que o laboratório
+   *  devolve na API para dizer de qual talhão é o laudo. */
+  codigoRemessa?: string;
   profundidades: ProfundidadeConfig[];
   pontos: PontoAmostragem[];
   paraProcessar: boolean;
@@ -1126,6 +1131,31 @@ export function getGrades(talhaoId?: string, safra?: string, metodo?: 'grid' | '
 function assinaturaGrade(g: Pick<GradeAmostragem, 'talhaoId' | 'safra' | 'epoca' | 'metodo' | 'pontos'>): string {
   const pts = (g.pontos ?? []).map(p => [p.ordem, p.lng, p.lat, p.numero ?? null]);
   return `${g.talhaoId}|${g.safra}|${g.epoca}|${g.metodo ?? 'grid'}|${JSON.stringify(pts)}`;
+}
+
+/**
+ * Código de remessa da grade, criando na primeira vez que é pedido.
+ *
+ * Nasce aqui, e não no `saveGrade`, porque só faz sentido quando o lote sai
+ * para o laboratório (etiquetas ou conferência) — grade rascunhada e descartada
+ * não precisa queimar código. Depois de criado nunca muda: ele já está impresso
+ * no papel que foi junto com as amostras.
+ */
+export function garantirCodigoRemessa(gradeId: string): string | null {
+  if (typeof window === 'undefined') return null;
+  const lista = load<GradeAmostragem>('inv_grades');
+  const g = lista.find(x => x.id === gradeId);
+  if (!g) return null;
+  if (!g.codigoRemessa) {
+    const usados = new Set(lista.map(x => x.codigoRemessa).filter(Boolean));
+    let c = gerarCodigoRemessa();
+    // Colisão é improvável, mas duas grades com o mesmo código fariam a API não
+    // saber em qual talhão gravar — e o certo ali é recusar, não escolher.
+    for (let i = 0; i < 10 && usados.has(c); i++) c = gerarCodigoRemessa();
+    g.codigoRemessa = c;
+    save('inv_grades', lista);
+  }
+  return g.codigoRemessa;
 }
 
 export function saveGrade(g: Omit<GradeAmostragem, 'id' | 'criadoEm'>): GradeAmostragem {

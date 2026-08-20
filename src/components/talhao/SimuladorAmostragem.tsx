@@ -8,7 +8,7 @@ import { gerarGrid, anguloMaiorDimensao, criarValidador, selecionarPorMalha, Mal
 import { exportarKML, exportarSHP } from '@/lib/exportGrade';
 import { gerarEtiquetasPDF, itensDeGrade, cabecalhoEtiqueta, layoutPorId } from '@/lib/etiquetas';
 import { exportarRelatorioGradeXlsx } from '@/lib/relatorioGrade';
-import { getFazendas } from '@/lib/store';
+import { getFazendas, garantirCodigoRemessa } from '@/lib/store';
 import { pode } from '@/lib/empresa';
 import { nomeExport } from '@/lib/nomeExport';
 import { AlertTriangle, RotateCcw, Shuffle, Layers, MapPin, Save, Trash2, CheckCircle2, Circle, Pencil, Move, Plus, Eraser, X, Check, Download, Printer, Eye, FileSpreadsheet } from 'lucide-react';
@@ -287,9 +287,12 @@ export function SimuladorAmostragem({ safraNome: safraProp }: { safraNome?: stri
   // planilha precisa refletir o que foi PROGRAMADO naquela grade, mesmo que o
   // padrão tenha sido editado depois.
   function exportarConferencia(g: GradeAmostragem) {
+    // O código de remessa nasce aqui: é este arquivo que vai junto das amostras,
+    // e é por ele que o laboratório diz de qual talhão é o laudo na API.
+    const gr = { ...g, codigoRemessa: garantirCodigoRemessa(g.id) ?? g.codigoRemessa };
     const faz = getFazendas().find(f => f.id === nav.fazendaId);
     const analisePorProfundidade: Record<string, string> = {};
-    for (const p of g.profundidades) analisePorProfundidade[p.rotulo] = nomeElem(p.padraoElementosId);
+    for (const p of gr.profundidades) analisePorProfundidade[p.rotulo] = nomeElem(p.padraoElementosId);
     exportarRelatorioGradeXlsx({
       produtor: nav.produtor || '—',
       municipio: faz?.municipio || '—',
@@ -297,19 +300,20 @@ export function SimuladorAmostragem({ safraNome: safraProp }: { safraNome?: stri
       siglaFazenda: faz?.sigla ?? null,
       talhao: nav.talhao || '—',
       analisePorProfundidade,
-    }, g).catch(err => console.error('Erro ao gerar conferência da grade:', err));
+    }, gr).catch(err => console.error('Erro ao gerar conferência da grade:', err));
   }
 
   function gerarEtiquetas(g: GradeAmostragem) {
+    const gr = { ...g, codigoRemessa: garantirCodigoRemessa(g.id) ?? g.codigoRemessa };
     const cfg = getConfigEtiqueta();
     const layout = layoutPorId(cfg.layoutId);
     const faz = getFazendas().find(f => f.id === nav.fazendaId);
     const nome = nomeExport({
       fazenda: nav.fazenda ?? '', siglaFazenda: faz?.sigla ?? null, talhao: nav.talhao ?? '',
-      tipo: 'ETIQ', ano: g.ano, epoca: g.epoca,
+      tipo: 'ETIQ', ano: gr.ano, epoca: gr.epoca,
     });
     const cab = cabecalhoEtiqueta(nav.produtor, faz?.nome ?? nav.fazenda);
-    gerarEtiquetasPDF(itensDeGrade(nav.talhao || 'Talhao', g, cab), layout, nome, { dx: cfg.dx, dy: cfg.dy })
+    gerarEtiquetasPDF(itensDeGrade(nav.talhao || 'Talhao', gr, cab), layout, nome, { dx: cfg.dx, dy: cfg.dy })
       .catch(err => console.error('Erro ao gerar etiquetas:', err));
   }
 

@@ -21,6 +21,10 @@ import type { GradeAmostragem, PontoAmostragem } from './store';
 import { nomeExport, periodoParaNome } from './nomeExport.ts';
 
 export interface LinhaRelatorioGrade {
+  /** Código do lote (INV-XXXX-XXXX). Repetido em TODA linha de propósito: assim
+   *  ele sobrevive ao laboratório importar a planilha no sistema deles — num
+   *  cabeçalho solto, se perderia no primeiro copiar-e-colar. */
+  Remessa: string;
   Produtor: string;
   'Município': string;
   Fazenda: string;
@@ -58,6 +62,7 @@ export function linhasDaGrade(ctx: ContextoGrade, grade: GradeAmostragem): Linha
     const id = pt.numero ?? pt.ordem + 1;
     for (const prof of profundidadesDoPonto(pt, grade)) {
       out.push({
+        Remessa: grade.codigoRemessa ?? '',
         Produtor: ctx.produtor,
         'Município': ctx.municipio,
         Fazenda: ctx.fazenda,
@@ -101,7 +106,7 @@ export async function exportarRelatorioGradeXlsx(ctx: ContextoGrade, grade: Grad
   const linhas = linhasDaGrade(ctx, grade);
   const XLSX = await import('xlsx');
   const ws = XLSX.utils.json_to_sheet(linhas);
-  ws['!cols'] = [{ wch: 26 }, { wch: 16 }, { wch: 20 }, { wch: 14 }, { wch: 6 }, { wch: 13 }, { wch: 18 }];
+  ws['!cols'] = [{ wch: 15 }, { wch: 26 }, { wch: 16 }, { wch: 20 }, { wch: 14 }, { wch: 6 }, { wch: 13 }, { wch: 18 }];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Conferência');
   XLSX.writeFile(wb, nomeArquivoRelatorio(ctx, grade));
