@@ -18,6 +18,11 @@ import { carregarGridsTalhao, calcularDose, dividirDoseEmPassadas, type DoseCalc
 import { salvarCenario, listarCenarios, descomprimirCenario, excluirCenario, type Cenario } from '@/lib/recomendacao/cenarios';
 import { colorirDose, recortarNoPoligono } from '@/lib/raster';
 import { coordsFromBounds, extrairPoligono } from '@/lib/fertilidade';
+import { agruparPorRotulo } from '@/lib/recomendacao/dosePorZona';
+import { dosesDiretasPorZona, nutrientesDaEquacao } from '@/lib/recomendacao/doseZonaDireta';
+import { bindingDasZonas, valoresDasZonas } from '@/lib/recomendacao/zonasComLaudo';
+import { zonasDoTalhao } from '@/lib/recomendacao/zonasDoTalhao';
+import { classesVisiveis, indiceClasse } from '@/lib/recomendacao/faixas';
 import { ComparadorCenarios } from '@/components/talhao/ComparadorCenarios';
 import { montarBookOficial, abrirOuBaixar } from '@/lib/recomendacao/relatorioCenarios';
 import { Play, Loader2, AlertTriangle, Wand2, Save, FolderOpen, Trash2, Eye, GitCompare, FileText, Star } from 'lucide-react';
@@ -41,7 +46,7 @@ function expandirDoses(doses: DoseCalculada[], div: DivCfg, areaHa: number): Dos
 }
 
 export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
-  const { nav, uploadedGeo, setFertilidadeOverlay, setFertilidadeLabels } = useApp();
+  const { nav, uploadedGeo, setFertilidadeOverlay, setFertilidadeLabels, setZonasManejo } = useApp();
   const safra = safraNome ?? '';
 
   const [modo, setModo] = useState<'equacao' | 'recomendacao'>('recomendacao');
@@ -130,8 +135,64 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
 
   // dose visível no mapa
   const doseAtiva = doses[visivel] ?? null;
+
+  // ── RECOMENDAÇÃO POR ZONA ────────────────────────────────────────────────
+  // Quando a fertilidade foi processada em zona, a dose é CHAPADA dentro de cada
+  // zona — ou seja, a zona tem UM valor, não um mosaico. Aí o mapa desenha o
+  // POLÍGONO da zona com a sua taxa, em vez de esticar um raster de 20 m que
+  // mostra a mesma coisa com a divisa em escadinha.
+  //
+  // A decisão é do próprio mapa, sem chave na tela: se a dose varia por dentro
+  // (veio de interpolação), `todasChapadas` dá falso e continua o raster —
+  // nunca achatamos à força uma superfície que de fato varia.
+  const zonasTalhao = useMemo(() => zonasDoTalhao(nav.talhaoId), [nav.talhaoId]);
+  // A taxa por zona vem PRONTA da dose (`porZona`), calculada direto da equação
+  // no momento de aplicar — aqui só casamos com a geometria para desenhar.
+  const dosePorZona = useMemo(() => {
+    if (!doseAtiva?.porZona?.length) return null;
+    const geomPorRotulo = new Map(agruparPorRotulo(zonasTalhao).map(z => [z.rotulo, z.geometry]));
+    const out = doseAtiva.porZona
+      .filter(z => Number.isFinite(z.dose) && geomPorRotulo.has(z.rotulo))
+      .map(z => ({ rotulo: z.rotulo, dose: z.dose, geometry: geomPorRotulo.get(z.rotulo)! }));
+    return out.length ? out : null;
+  }, [doseAtiva, zonasTalhao]);
+  // Zona que ficou sem taxa (faltou o valor no laudo) — tem de aparecer, senão
+  // some do mapa e do arquivo sem ninguém notar.
+  const zonasSemDose = useMemo(
+    () => (doseAtiva?.porZona ?? []).filter(z => !Number.isFinite(z.dose)),
+    [doseAtiva],
+  );
+
+  // Zonas coloridas pela faixa da dose + rótulo com a taxa (o número que vai
+  // para a máquina). Mesma classificação do raster e da legenda (faixas.ts).
+  const zonasMapa = useMemo<GeoJSON.FeatureCollection | null>(() => {
+    if (!dosePorZona || !doseAtiva) return null;
+    const classes = classesVisiveis(doseAtiva.estilo.classes, doseAtiva.doseMinima ?? 0);
+    if (!classes.length) return null;
+    const lims = classes.map(c => c.limiteSuperior);
+    const un = doseAtiva.unidade || 'kg/ha';
+    return {
+      type: 'FeatureCollection',
+      features: dosePorZona.map(z => ({
+        type: 'Feature' as const,
+        properties: {
+          cor: classes[indiceClasse(z.dose, lims)].cor,
+          // dose grande vira inteiro; pequena (t/ha) mantém casa decimal
+          rotulo: `Zona ${z.rotulo}\n${fmt(z.dose, Math.abs(z.dose) >= 100 ? 0 : 1)} ${un}`,
+          classeLabel: '',
+          selecionada: false,
+        },
+        geometry: z.geometry,
+      })),
+    };
+  }, [dosePorZona, doseAtiva]);
+
+  useEffect(() => { setZonasManejo(zonasMapa); return () => setZonasManejo(null); }, [zonasMapa, setZonasManejo]);
+
   useEffect(() => {
     if (!doseAtiva) { setFertilidadeOverlay(null); setFertilidadeLabels(null); return; }
+    // Mapa por zona no ar → o raster sairia por baixo dele, sem servir para nada.
+    if (zonasMapa) { setFertilidadeOverlay(null); setFertilidadeLabels(null); return; }
     let cancelado = false;
     (async () => {
       try {
@@ -149,7 +210,7 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
       } catch (e) { console.warn('[recomendacao] colorir falhou', e); }
     })();
     return () => { cancelado = true; };
-  }, [doseAtiva, poligono, setFertilidadeOverlay, setFertilidadeLabels]);
+  }, [doseAtiva, poligono, zonasMapa, setFertilidadeOverlay, setFertilidadeLabels]);
   useEffect(() => () => { setFertilidadeOverlay(null); setFertilidadeLabels(null); }, [setFertilidadeOverlay, setFertilidadeLabels]);
 
   async function aplicar() {
@@ -170,8 +231,39 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
       const area = talhao?.areaHa ?? 0;
       const ok: DoseCalculada[] = [];
       const erros: { nome: string; erro: string }[] = [];
+      // Taxa de cada zona CALCULADA DIRETO DA EQUAÇÃO, com o valor de laudo da
+      // própria zona — sem passar por raster e sem média. É o número que vai
+      // para o mapa, para o painel e para o arquivo da máquina. O grid continua
+      // sendo calculado ao lado porque é dele que saem a média ponderada, a
+      // tonelagem, o custo e o PDF.
+      const imp = importacoes.find(i => i.id === importacaoId) ?? null;
+      const zonasBase = agruparPorRotulo(zonasTalhao);
+      const binding = (imp && zonasBase.length && nav.talhaoId)
+        ? bindingDasZonas(nav.talhaoId, safra, imp, zonasBase) : null;
+
       for (const it of itens) {
-        try { ok.push(calcularDose(it, grids, area, poligono, insumos)); }
+        try {
+          const d = calcularDose(it, grids, area, poligono, insumos);
+          // Só quando TODOS os atributos vieram da fertilidade por zona: numa
+          // dose interpolada não existe "o valor da zona" para prescrever.
+          const soZona = (d.fontes?.length ?? 0) > 0 && d.fontes!.every(f => f.metodo === 'zona');
+          if (soZona && imp && binding && zonasBase.length) {
+            const c = it.conteudo;
+            const nuts = nutrientesDaEquacao(c.script, c.constantes);
+            const vals = valoresDasZonas(imp, binding, zonasBase, nuts, c.profundidade || '0-20');
+            const { doses: dz } = dosesDiretasPorZona(vals, {
+              script: c.script, constantes: c.constantes, naoNegativo: c.naoNegativo,
+              doseMinimaViavel: c.doseMinimaViavel, abaixoMinimo: c.abaixoMinimo, doseMaxima: c.doseMaxima,
+            });
+            const porId = new Map(dz.map(x => [x.id, x]));
+            d.porZona = zonasBase.map(z => ({
+              rotulo: z.rotulo,
+              dose: porId.get(z.id)?.dose ?? NaN,
+              erro: porId.get(z.id)?.erro,
+            }));
+          }
+          ok.push(d);
+        }
         catch (e) { erros.push({ nome: it.nome, erro: e instanceof Error ? e.message : String(e) }); }
       }
       // Divisão de aplicação (escolhida na hora) → grupo de mapas (passadas).
@@ -444,6 +536,39 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
               </p>
             );
           })()}
+
+          {/* Recomendação POR ZONA: o usuário precisa saber, porque muda o que
+              ele vê no mapa E o arquivo que a máquina vai receber. */}
+          {dosePorZona && (
+            <div className="p-2 rounded-lg" style={{ background: '#0f2a1a', border: '1px solid #166534' }}>
+              <p className="text-[10px] font-bold" style={{ color: '#86efac' }}>Recomendação por zona</p>
+              <p className="text-[9px] mt-0.5" style={{ color: '#94a3b8' }}>
+                A taxa de cada zona é a equação aplicada ao laudo daquela zona — sem interpolar e
+                sem média. O Shapefile de taxa variável sai com um polígono por zona (aba Arquivos).
+              </p>
+              <div className="mt-1.5 space-y-0.5">
+                {dosePorZona.map(z => (
+                  <div key={z.rotulo} className="flex items-center gap-2 text-[9px]" style={{ color: '#cbd5e1' }}>
+                    <span className="font-bold" style={{ color: '#e2e8f0', minWidth: '48px' }}>Zona {z.rotulo}</span>
+                    <span>{fmt(z.dose, Math.abs(z.dose) >= 100 ? 0 : 1)} {doseAtiva?.unidade || 'kg/ha'}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {zonasSemDose.length > 0 && (
+            <div className="p-2 rounded-lg" style={{ background: '#2d1a00', border: '1px solid #92400e' }}>
+              <p className="text-[10px] font-bold" style={{ color: '#fbbf24' }}>
+                Sem taxa {zonasSemDose.length > 1 ? 'nas zonas' : 'na zona'} {zonasSemDose.map(z => z.rotulo).join(', ')}
+              </p>
+              <p className="text-[9px] mt-0.5" style={{ color: '#a16207' }}>
+                {zonasSemDose[0].erro ?? 'faltou o resultado do laudo'} — essas zonas ficam FORA do
+                arquivo de taxa variável, e a máquina passaria nelas sem aplicar. Confira o laudo
+                (aba Fertilidade) antes de gerar o arquivo.
+              </p>
+            </div>
+          )}
 
           {/* legenda da dose visível */}
           {classesVis.length > 0 && doseAtiva && (

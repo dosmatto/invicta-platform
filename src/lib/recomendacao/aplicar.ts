@@ -243,6 +243,11 @@ export interface DoseCalculada {
                                   // casam por NOME, e os cenários já salvos não têm o campo.
   doseMinima?: number;            // dose mínima viável da equação — a 1ª faixa colorida começa aqui; abaixo (e zero) = transparente
   fontes?: ResultadoAplicacao['fontes'];   // de onde veio o mapa de cada atributo
+  // RECOMENDAÇÃO POR ZONA: a taxa de cada zona calculada DIRETO da equação, com
+  // o valor de laudo daquela zona — sem passar por raster e sem média. É o que
+  // vai para o mapa, para o painel e para o Shapefile quando o talhão é
+  // trabalhado por zona. Ausente = recomendação contínua (o caminho do raster).
+  porZona?: { rotulo: string; dose: number; erro?: string }[];
 }
 
 export function calcularDose(

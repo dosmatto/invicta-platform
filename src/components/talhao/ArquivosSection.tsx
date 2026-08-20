@@ -16,6 +16,8 @@ import { capturarMapaFertilidade } from '@/lib/capturaMapa';
 import { listarCenarios, descomprimirCenario, type Cenario } from '@/lib/recomendacao/cenarios';
 import { montarBookOficial, abrirOuBaixar } from '@/lib/recomendacao/relatorioCenarios';
 import { MONITORES, monitorPorId, gerarShapefileZip } from '@/lib/recomendacao/shapefile';
+import { agruparPorRotulo, type DoseDaZona } from '@/lib/recomendacao/dosePorZona';
+import { zonasDoTalhao } from '@/lib/recomendacao/zonasDoTalhao';
 import { pode } from '@/lib/empresa';
 import { FileText, FileImage, Loader2, FolderArchive, Star, FileCode } from 'lucide-react';
 import { fmtHa } from '@/lib/formato';
@@ -101,7 +103,39 @@ export function ArquivosSection({ safraNome }: { safraNome?: string }) {
       const d = full.doses.find(x => x.equacaoId === eqId); if (!d) return;
       const t = getTalhoes().find(x => x.id === nav.talhaoId);
       const caminho = comPasta ? monitorPorId(monitorId).caminho : '';
-      const { blob, nome } = await gerarShapefileZip(d, t?.nome ?? 'talhao', poligono, clipBorda, caminho);
+      // PRESCRIÇÃO POR ZONA. A taxa vem PRONTA no cenário (`d.porZona`),
+      // calculada direto da equação com o laudo de cada zona no momento de
+      // aplicar — aqui não se lê raster nem se tira média, só se casa a taxa com
+      // a geometria da zona. Cenário sem `porZona` é recomendação contínua
+      // (interpolada) e continua saindo na grade de 20 m, como antes.
+      //
+      // Zona SEM taxa (faltou o laudo) BLOQUEIA o arquivo: ela sairia como um
+      // buraco e a máquina cruzaria aquele pedaço sem aplicar nada. É a mesma
+      // decisão da aba Prescrições, que também recusa exportar nesse caso.
+      let porZona: DoseDaZona[] | null = null;
+      if (d.porZona?.length) {
+        const semTaxa = d.porZona.filter(z => !isFinite(z.dose));
+        if (semTaxa.length) {
+          throw new Error(
+            `Sem taxa na(s) zona(s) ${semTaxa.map(z => z.rotulo).join(', ')} — o arquivo sairia com `
+            + 'esse pedaço em branco e a máquina passaria nele sem aplicar. '
+            + 'Confira o laudo dessas zonas na aba Fertilidade e reaplique a recomendação.',
+          );
+        }
+        const geom = new Map(agruparPorRotulo(zonasDoTalhao(nav.talhaoId)).map(z => [z.rotulo, z]));
+        const casadas = d.porZona.filter(z => geom.has(z.rotulo));
+        if (casadas.length !== d.porZona.length) {
+          throw new Error(
+            'O zoneamento do talhão mudou depois que esta recomendação foi calculada — '
+            + 'as zonas não batem mais. Reaplique a recomendação antes de gerar o arquivo.',
+          );
+        }
+        porZona = casadas.map(z => ({
+          id: geom.get(z.rotulo)!.id, rotulo: z.rotulo, geometry: geom.get(z.rotulo)!.geometry,
+          dose: z.dose, celulas: 0, chapada: true,
+        }));
+      }
+      const { blob, nome } = await gerarShapefileZip(d, t?.nome ?? 'talhao', poligono, clipBorda, caminho, porZona);
       baixarBlob(blob, nome);
     } catch (e) { alert('Falha ao gerar o Shapefile: ' + (e instanceof Error ? e.message : String(e))); }
     finally { setBusy(''); }

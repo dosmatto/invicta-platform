@@ -1,5 +1,15 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.64.0': [
+    'RECOMENDAÇÃO POR ZONA DE MANEJO: A TAXA DE CADA ZONA AGORA É A EQUAÇÃO APLICADA AO LAUDO DAQUELA ZONA. Sem interpolar, sem tirar média e sem grade de 20 m — a mesma conta que você faria na mão: pega o resultado da análise da zona, joga na equação, e o que sai é a taxa da zona. Uma execução por zona.',
+    'Isso vale para os TRÊS lugares: o mapa na tela (cada zona pintada pelo seu contorno, com a taxa escrita dentro), o painel "Recomendação por zona" com a lista de taxas, e o SHAPEFILE de taxa variável, que passa a sair com UM POLÍGONO POR ZONA no lugar dos milhares de quadradinhos.',
+    'O decimal sai exato. Antes, ler a taxa de volta do mapa fazia o número passar por float32 e andar na última casa; agora a conta não passa por mapa nenhum.',
+    'ZONA PARTIDA EM VÁRIAS MANCHAS é UMA zona: as manchas dividem a mesma amostra composta e saem com a mesma taxa. Antes cada mancha podia disputar um número de amostra diferente e a zona sairia com duas taxas.',
+    'ZONA SEM LAUDO BLOQUEIA O ARQUIVO, de propósito. Ela sairia como um buraco no mapa de aplicação e a máquina cruzaria aquele pedaço sem aplicar nada. A tela avisa quais zonas estão sem taxa e o botão do Shapefile recusa gerar até você resolver — é a mesma decisão que a aba Prescrições já tomava.',
+    'O arquivo de máquina leva só a coluna da dose, como o da aba Prescrições. Coluna a mais, nome longo e texto com acento em DBF já travaram importação em monitor de verdade; o que identifica o mapa fica no PDF e no Excel, que são para gente ler. O arredondamento também mudou: uma dose de 0,8 t/ha continua 0,8 (antes virava 1 — 25% a mais no campo).',
+    'O vínculo zona↔amostra é o MESMO da aba Fertilidade (o ponto de coleta que cai dentro da zona é a amostra dela), e o zoneamento usado é o mesmo que ela usa: padrão salvo, senão o mais recente, senão o do talhão. Divergir aí faria o mapa mostrar um valor e a dose sair calculada com o laudo de outra zona.',
+    'Recomendação em cima de mapa interpolado continua exatamente como era, na grade — só o caminho por zona mudou.',
+  ],
   '2.63.0': [
     'CORRIGIDO — COM A FERTILIDADE PROCESSADA EM ZONA, A RECOMENDAÇÃO SAÍA INTERPOLADA. O mapa de fertilidade mostrava as zonas chapadas, mas a dose saía em manchas suaves, como se os pontos tivessem sido interpolados. Quem trabalha com análise por zona de manejo estava recebendo uma recomendação que não era a da zona.',
     'O MOTIVO: a Recomendação lê uma gaveta separada, com os mapas na resolução da dose, e essa gaveta só era escrita pelo caminho da interpolação. O mapa que sobrou de um processamento anterior continuava lá e alimentava a conta. Agora o modo zona escreve nela também — e, entre dois mapas, vale o que você processou por último.',

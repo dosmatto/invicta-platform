@@ -9,6 +9,7 @@
 import { decodeGrid } from '../fertilidade';
 import type { DoseCalculada } from './aplicar';
 import { classesVisiveis, indiceClasse } from './faixas';
+import type { DoseDaZona } from './dosePorZona';
 
 const PRJ_WGS84 =
   'GEOGCS["GCS_WGS_1984",DATUM["D_WGS_1984",SPHEROID["WGS_1984",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["Degree",0.017453292519943295]]';
@@ -141,11 +142,63 @@ function dosePolygons(dose: DoseCalculada, poligono: GeoJSON.Polygon | GeoJSON.M
   return { type: 'FeatureCollection', features: feats };
 }
 
+// PRESCRIÇÃO POR ZONA — um polígono por zona, uma taxa por zona.
+//
+// Quando a recomendação nasce de fertilidade processada em zona, a dose já é um
+// número só por zona (ver dosePorZona.ts). Exportar isso como a grade de 20×20
+// desenha a mesma coisa em milhares de quadradinhos, com a divisa em escadinha —
+// é o mosaico que o campo não quer ver no monitor. Aqui sai o desenho real: o
+// contorno da zona com a sua taxa.
+//
+// Zona de VÁRIAS MANCHAS vira uma feição por mancha, todas com a MESMA taxa: um
+// MultiPolygon por zona seria mais elegante, mas nem todo monitor lê, e a taxa é
+// o que importa. Zona sem dose (NaN) ou abaixo do mínimo aplicável é pulada —
+// não se manda a máquina passar onde não há recomendação.
+//
+// SÓ O CAMPO `dose`, e é de propósito. É a mesma decisão de `fcPrescricao`
+// (lib/prescricao/exportar.ts), tomada depois de monitor travar de verdade na
+// importação: coluna a mais, nome com mais de 10 caracteres e texto ACENTUADO
+// em DBF latin1 (o produto "Calcário") já emperraram máquina. O que identifica o
+// mapa — produto, unidade, zona, classe — vai no PDF e no Excel, que são para
+// gente ler; o arquivo da máquina leva o mínimo que ela precisa para aplicar.
+//
+// Arredondamento relativo (igual a `arredRel` da prescrição): inteiro quando o
+// número é grande, 2 casas quando é pequeno. `Math.round` puro — o que a grade
+// faz — transformaria uma dose de 0,8 t/ha em 1 t/ha, 25% a mais no campo.
+const arredRel = (v: number): number => (Math.abs(v) >= 100 ? Math.round(v) : Math.round(v * 100) / 100);
+
+function zonaPolygons(dose: DoseCalculada, zonas: DoseDaZona[]): GeoJSON.FeatureCollection {
+  const minDose = dose.doseMinima ?? 0;
+  const classes = classesVisiveis(dose.estilo.classes, minDose);
+  const lims = classes.map(c => c.limiteSuperior);
+  const feats: GeoJSON.Feature[] = [];
+  for (const z of zonas) {
+    if (!isFinite(z.dose)) continue;
+    // Zona abaixo do mínimo aplicável (faixa transparente) não entra no arquivo.
+    if (classes.length && dose.estilo.zeroTransparente) {
+      const k = indiceClasse(z.dose, lims);
+      if (classes[k].limiteSuperior <= dose.estilo.valorMinimo) continue;
+    }
+    const props = { dose: arredRel(z.dose) };
+    // uma feição por mancha (anéis preservados: furo continua furo)
+    const partes = z.geometry.type === 'Polygon' ? [z.geometry.coordinates]
+      : z.geometry.type === 'MultiPolygon' ? z.geometry.coordinates : [];
+    for (const aneis of partes) {
+      if (!aneis.length || aneis[0].length < 4) continue;
+      feats.push({ type: 'Feature', properties: props, geometry: { type: 'Polygon', coordinates: aneis } });
+    }
+  }
+  return { type: 'FeatureCollection', features: feats };
+}
+
 export async function gerarShapefileZip(
   dose: DoseCalculada, talhaoNome: string,
   poligono: GeoJSON.Polygon | GeoJSON.MultiPolygon | null, clip: boolean, caminho = '',
+  // Prescrição POR ZONA: quando vem preenchido, o arquivo sai com o contorno de
+  // cada zona no lugar da grade de 20×20.
+  zonas?: DoseDaZona[] | null,
 ): Promise<{ blob: Blob; nome: string }> {
-  const fc = dosePolygons(dose, poligono, clip);
+  const fc = (zonas && zonas.length) ? zonaPolygons(dose, zonas) : dosePolygons(dose, poligono, clip);
   if (fc.features.length === 0) throw new Error('Sem células de dose para exportar (tudo abaixo do mínimo / fora do talhão).');
   const shpwrite = await import('@mapbox/shp-write');
   const interno = await shpwrite.zip<'blob'>(fc, { outputType: 'blob', compression: 'DEFLATE', prj: PRJ_WGS84, types: { polygon: 'rx' } });
