@@ -176,7 +176,21 @@ export function aplicarEquacao(
   const [rows, cols] = ref.grid!.shape;
   const n = rows * cols;
   for (const arr of gridPorVar.values()) {
-    if (arr.length !== n) throw new Error('Os mapas dos atributos têm tamanhos diferentes (pixel diferente). Reprocesse-os com o mesmo pixel na aba Fertilidade.');
+    if (arr.length !== n) {
+      // Misturar mapa POR ZONA com mapa INTERPOLADO é a causa mais provável, e a
+      // mensagem antiga ("mesmo pixel") mandava o usuário para o lugar errado: os
+      // dois podem ser de 20 m e ainda assim ter malhas diferentes, porque a
+      // rasterização por zona parte da bbox das zonas e a interpolação, do talhão.
+      const metodos = new Set(fontes.map(f => f.metodo));
+      if (metodos.has('zona') && metodos.size > 1) {
+        const mistos = fontes.map(f => `${f.token} (${f.metodo === 'zona' ? 'zona' : 'interpolado'})`).join(', ');
+        throw new Error(
+          `Esta equação mistura mapa por ZONA com mapa INTERPOLADO: ${mistos}. `
+          + 'Processe TODOS os atributos dela no mesmo modo, na aba Fertilidade (Modo do mapa).',
+        );
+      }
+      throw new Error('Os mapas dos atributos têm tamanhos diferentes (pixel diferente). Reprocesse-os com o mesmo pixel na aba Fertilidade.');
+    }
   }
 
   const dose = executarGrid(prog, eq.constantes, gridPorVar, n);

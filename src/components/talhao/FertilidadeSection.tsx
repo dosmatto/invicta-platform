@@ -20,7 +20,7 @@ import {
 import { colorirGridComLegenda, temGrid } from '@/lib/raster';
 import { resolverGradeDoLaudo, pontosPorNumero, casarAmostrasComPontos } from '@/lib/eloGrade';
 import { decodeGrid, interpoladorEfetivo, MIN_PTS_MAPA, MIN_PTS_KRIGE } from '@/lib/fertilidade';
-import { rasterizarZonas, centroideGeom, type ZonaValor } from '@/lib/recomendacao/zonasGrid';
+import { rasterizarZonas, rasterizarZonasDose, centroideGeom, type ZonaValor } from '@/lib/recomendacao/zonasGrid';
 import { bindingAuto, bindingPorPontos, divisasDasZonas } from '@/lib/meap/fertilidadePorZona';
 import { stopsParaBackend, dominioDaLegenda, paresDaClasse, respeitarPadraoHomonima } from '@/lib/legendas';
 import type { Legenda } from '@/lib/legendas';
@@ -538,6 +538,32 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
       const gridGz = resp.grid ? await comprimirGrid(resp.grid) : undefined;
       const dados = { resp: { ...resp, png: '', grid: gridGz }, labels, interpoladoEm };
       cloudSalvarMapa(idNuvem(nav.talhaoId, importacaoId, 'zona', pixelM, '', nut, prof), dados);
+      // E O MAPA DA DOSE — sem isto a Recomendação continuava saindo INTERPOLADA
+      // mesmo com tudo processado em zona. Ela lê a gaveta `dose20__` ANTES de
+      // tudo, e essa gaveta só era escrita pelo caminho da interpolação: o mapa
+      // de 20 m que sobrou de um processamento anterior seguia lá e alimentava a
+      // dose. Agora a zona escreve na gaveta também, com `metodo='zona'`; entre
+      // dois mapas de 20 m o desempate é "o mais recente vence" (escolhaMapa),
+      // então o que o usuário acabou de processar é o que vale.
+      //
+      // Rasterizamos DE NOVO em 20 m em vez de reamostrar o fino: a reamostragem
+      // tira MÉDIA de blocos e borraria a divisa, criando na borda valores que
+      // não são de zona nenhuma — exatamente o "interpolado" que queremos evitar.
+      // É conta local e barata (sem backend), então sai aqui mesmo, sem fila.
+      //
+      // A malha é a do TALHÃO (rasterizarZonasDose), NÃO a bbox das zonas com
+      // valor: a Recomendação casa os atributos por índice, e nutrientes com
+      // conjuntos de zonas diferentes (o laudo não trouxe K numa zona, trouxe
+      // CTC) gerariam malhas diferentes — ou a equação quebra, ou os shapes
+      // batem por acaso e a conta sai deslocada, sem aviso nenhum.
+      if (poligono) {
+        const resp20 = rasterizarZonasDose(zv, poligono, PIXEL_RECOMENDACAO);
+        const grid20 = resp20.grid ? await comprimirGrid(resp20.grid) : undefined;
+        cloudSalvarMapa(
+          idDose20(nav.talhaoId, importacaoId, 'zona', '', nut, prof),
+          { resp: { ...resp20, png: '', grid: grid20 }, labels: fcVazio(), interpoladoEm },
+        );
+      }
     }
   }
 

@@ -117,10 +117,104 @@ export function centroideGeom(geom: GeoJSON.Geometry): [number, number] | null {
   return [px, py];
 }
 
+// ─── Malha da DOSE ────────────────────────────────────────────────────────
+// A Recomendação casa os grids dos atributos POR ÍNDICE (motor.executarGrid) e
+// pesa cada célula pela fração dentro do talhão (cobertura.coberturaDoGrid, que
+// põe o nó no CENTRO da célula e lê `bounds` como extensão dos NÓS). Então o
+// raster por zona que alimenta a dose não pode nascer da bbox das zonas COM
+// VALOR, como o do mapa de tela: nutrientes com conjuntos de zonas diferentes
+// (o laudo não trouxe K numa zona, trouxe CTC) dariam malhas diferentes — ou a
+// equação quebra, ou, quando a diferença é menor que um pixel, os shapes batem
+// e a conta sai SILENCIOSAMENTE deslocada.
+//
+// Aqui a malha é a MESMA que o backend constrói para o talhão (`_grid_axes` com
+// folga=1, o `cobrir_poligono`): nós em linspace(min,max,n) sobre a bbox do
+// POLÍGONO, mais uma coroa de um nó de cada lado. Assim todo atributo — por zona
+// ou interpolado — cai na mesma grade.
+const MAX_CELLS = 400;
+
+// Eixo do backend: linspace(min,max,n) estendido em `folga` nós de cada lado,
+// mantendo o passo (os nós originais não saem do lugar).
+function eixoMalha(min: number, max: number, passo: number, folga: number, teto: number): number[] {
+  const n = Math.min(Math.max(Math.ceil((max - min) / passo) + 1, 2), teto);
+  const d = (max - min) / (n - 1);
+  const out: number[] = [];
+  for (let i = -folga; i <= n - 1 + folga; i++) out.push(min + i * d);
+  return out;
+}
+
+/**
+ * Raster por zona na malha da DOSE (a do talhão), pronto para a Recomendação.
+ *
+ * Continua CHAPADO: cada nó recebe o valor da zona que o contém e, na faixa da
+ * borda onde nenhum centro cai dentro de zona nenhuma, COPIA o valor da zona
+ * mais próxima — nunca uma média entre duas (isso reintroduziria o "interpolado"
+ * na divisa, que é justamente o que o modo zona existe para evitar). Sem essa
+ * cópia sobraria uma faixa sem dose em toda a divisa, como acontecia na
+ * interpolação antes do `cobrirPoligono`.
+ */
+export function rasterizarZonasDose(
+  zonas: ZonaValor[],
+  poligono: GeoJSON.Polygon | GeoJSON.MultiPolygon,
+  pixelM = 20,
+): RespInterp {
+  const [minx, miny, maxx, maxy] = bboxDe([poligono]);
+  const lat0 = (miny + maxy) / 2;
+  const dLat = pixelM / METRO_GRAU;
+  const dLon = pixelM / (METRO_GRAU * Math.max(Math.cos(lat0 * Math.PI / 180), 1e-6));
+  const teto = Math.max(MAX_CELLS - 2, 2);          // a coroa não pode furar o teto
+  const gx = eixoMalha(minx, maxx, dLon, 1, teto);
+  const gy = eixoMalha(miny, maxy, dLat, 1, teto);
+  const cols = gx.length, rows = gy.length;
+  const arr = new Float32Array(rows * cols).fill(NaN);
+  // linha 0 = NORTE — a mesma leitura de índice→lat/lon do resto do pipeline.
+  for (let r = 0; r < rows; r++) {
+    const lat = gy[rows - 1 - r];
+    for (let c = 0; c < cols; c++) {
+      for (const z of zonas) {
+        if (dentroGeom(z.geometry, gx[c], lat)) { arr[r * cols + c] = z.valor; break; }
+      }
+    }
+  }
+  // Faixa da borda + coroa: valor da zona mais próxima (cópia, nunca média).
+  const RAIO = 2;
+  const estrito = Float32Array.from(arr);
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if (isFinite(estrito[r * cols + c])) continue;
+      let melhor = NaN, menor = Infinity;
+      for (let i = Math.max(0, r - RAIO); i <= Math.min(rows - 1, r + RAIO); i++) {
+        for (let j = Math.max(0, c - RAIO); j <= Math.min(cols - 1, c + RAIO); j++) {
+          const v = estrito[i * cols + j];
+          if (!isFinite(v)) continue;
+          const d2 = (i - r) * (i - r) + (j - c) * (j - c);
+          if (d2 < menor) { menor = d2; melhor = v; }
+        }
+      }
+      arr[r * cols + c] = melhor;
+    }
+  }
+  let mn = Infinity, mx = -Infinity, cnt = 0;
+  for (const v of arr) if (isFinite(v)) { cnt++; if (v < mn) mn = v; if (v > mx) mx = v; }
+  return {
+    // bounds = extensão dos NÓS (convenção do backend e da cobertura).
+    bounds: [gx[0], gy[0], gx[cols - 1], gy[rows - 1]],
+    png: '',
+    stats: {
+      n: cnt, modelo: 'zona', min: cnt ? mn : null, max: cnt ? mx : null,
+      nx: cols, ny: rows, pixel_m: pixelM, rmse: null, variograma: null,
+    },
+    grid: { b64: float32ParaB64(arr), shape: [rows, cols] },
+  };
+}
+
 // Rasteriza zonas (cada uma com 1 valor) num grid Float32 (norte no topo, igual
 // ao backend de interpolação). Cada pixel recebe o valor da zona que contém seu
 // centro; NaN se nenhuma zona o contém. pixelM define a resolução (default 20 m,
 // p/ casar com a grade 20×20 do Shapefile de taxa variável).
+//
+// É o mapa de TELA (aba Fertilidade). Para a dose use `rasterizarZonasDose`:
+// a malha tem de ser a do talhão, igual para todos os atributos.
 export function rasterizarZonas(zonas: ZonaValor[], pixelM = 20): RespInterp {
   const [w, s, e, n] = bboxDe(zonas.map(z => z.geometry));
   const latC = (s + n) / 2;

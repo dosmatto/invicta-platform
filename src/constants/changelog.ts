@@ -1,5 +1,13 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.63.0': [
+    'CORRIGIDO — COM A FERTILIDADE PROCESSADA EM ZONA, A RECOMENDAÇÃO SAÍA INTERPOLADA. O mapa de fertilidade mostrava as zonas chapadas, mas a dose saía em manchas suaves, como se os pontos tivessem sido interpolados. Quem trabalha com análise por zona de manejo estava recebendo uma recomendação que não era a da zona.',
+    'O MOTIVO: a Recomendação lê uma gaveta separada, com os mapas na resolução da dose, e essa gaveta só era escrita pelo caminho da interpolação. O mapa que sobrou de um processamento anterior continuava lá e alimentava a conta. Agora o modo zona escreve nela também — e, entre dois mapas, vale o que você processou por último.',
+    'A DIVISA NÃO BORRA. O mapa da dose é montado de novo a partir das zonas, em vez de tirar média do mapa fino: a média misturaria as duas zonas na célula que cai em cima da divisa e inventaria um valor que não é de zona nenhuma. Na faixa da borda, a célula copia o valor da zona mais próxima — nunca uma média entre duas.',
+    'E TODOS OS ATRIBUTOS PASSARAM A DIVIDIR A MESMA MALHA, a do talhão. Antes cada nutriente seria desenhado sobre as zonas que tivessem valor no laudo: um laudo que trouxe potássio em 4 zonas e CTC em 3 gerava malhas diferentes e a equação quebrava — ou, pior, batia por acaso e a dose saía deslocada sem avisar.',
+    'Quando a equação mistura mapa por zona com mapa interpolado, a mensagem agora diz exatamente isso e manda processar todos os atributos no mesmo modo (antes falava em "pixel diferente", que não resolvia nada).',
+    'Para valer nos talhões que você já processou: abra a aba Fertilidade em "Processar em zona" e rode "Processar tudo" de novo.',
+  ],
   '2.62.0': [
     'O LABORATÓRIO PASSA A MANDAR O LAUDO DIRETO PARA A PLATAFORMA, SEM NINGUÉM CARREGAR ARQUIVO. Terminou as análises, o sistema dele faz uma chamada e o laudo aparece na aba Fertilidade do talhão certo, com as unidades já convertidas. O caminho por arquivo continua igual e não muda em nada — a novidade é a porta a mais.',
     'CADA GRADE GANHOU UM CÓDIGO DE REMESSA (INV-XXXX-XXXX), criado na primeira vez que você gera as etiquetas ou a conferência. Ele sai impresso na etiqueta e em toda linha da planilha de conferência, e é o que o laboratório devolve para dizer de qual talhão é o laudo. Sem ele a plataforma teria de adivinhar pelo NOME do talhão — e talhão homônimo colocaria o laudo no lugar errado, calado, virando mapa e virando dose de adubo.',
