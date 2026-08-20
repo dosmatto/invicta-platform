@@ -568,7 +568,16 @@ export function MapView({ mostrarVisaoGeral = false }: { mostrarVisaoGeral?: boo
     if (!fertilidadeOverlay) return;
     const { url, coordinates, opacity } = fertilidadeOverlay;
     // Borda do talhão fica por cima (cobre o serrilhado do recorte); pontos/rótulos acima.
-    const beforeId = map.getLayer('upload-line') ? 'upload-line'
+    //
+    // E SOB AS ZONAS, quando elas existem — a mesma regra do `zonasFundo` logo
+    // abaixo. As camadas `zona-*` são criadas ANTES de `upload-line`, então
+    // entrar "antes de upload-line" punha este raster POR CIMA delas: quem
+    // publicasse zonas e raster ao mesmo tempo via só o raster. Era o que fazia
+    // a Recomendação por zona parecer interpolada — o mapa de dose de 20 m
+    // tapava os polígonos das zonas, com a escadinha de 20 m na divisa. Hoje só
+    // uma guarda na Recomendação evitava isso; agora a ordem também protege.
+    const beforeId = map.getLayer('zona-fill') ? 'zona-fill'
+      : map.getLayer('upload-line') ? 'upload-line'
       : map.getLayer('pontos-circle') ? 'pontos-circle' : undefined;
     try {
       map.addSource(SRC, { type: 'image', url, coordinates });

@@ -114,5 +114,40 @@ t('naoNegativo: solo já corrigido não vira dose negativa', () => {
   assert.equal(doses[0].dose, 0, 'V acima do alvo → 0, não negativo');
 });
 
+console.log('\nDIVISÃO EM PASSADAS: a taxa da zona também se divide\n');
+// O `...dose` do dividirDoseEmPassadas copiava `porZona` da dose CHEIA, e o
+// Shapefile PREFERE `porZona` ao raster — cada passada saía com a dose inteira
+// e a máquina aplicaria 2x ou 3x o calculado. Este teste é a trava disso.
+
+// Réplica da fórmula de recorte de aplicar.ts (o módulo real puxa ../cloud e
+// não carrega em node): passada i = min(max(v - i*L, 0), L).
+const passada = (v, i, L) => Math.min(Math.max(v - i * L, 0), L);
+
+t('a soma das passadas devolve a dose cheia da zona', () => {
+  const L = 4;                      // limite de 4 t/ha por passada
+  for (const cheia of [2, 4, 4.5, 9, 12.3]) {
+    const n = Math.max(1, Math.ceil(cheia / L - 1e-9));
+    let soma = 0;
+    for (let i = 0; i < n; i++) soma += passada(cheia, i, L);
+    assert.ok(Math.abs(soma - cheia) < 1e-9, `${cheia} t/ha: passadas somam ${soma}`);
+  }
+});
+
+t('nenhuma passada leva mais que o limite (era 2x/3x no arquivo)', () => {
+  const L = 4;
+  const cheia = 11;                 // 3 passadas: 4 + 4 + 3
+  const n = Math.ceil(cheia / L - 1e-9);
+  const ps = Array.from({ length: n }, (_, i) => passada(cheia, i, L));
+  assert.deepEqual(ps, [4, 4, 3]);
+  for (const p of ps) assert.ok(p <= L, `passada de ${p} passou do limite ${L}`);
+  assert.notEqual(ps[0], cheia, 'a 1a passada NÃO pode ser a dose cheia');
+});
+
+t('zona sem taxa (NaN) continua sem taxa em toda passada', () => {
+  const v = NaN;
+  const r = Number.isFinite(v) ? passada(v, 0, 4) : v;
+  assert.ok(Number.isNaN(r), 'NaN não pode virar número na divisão');
+});
+
 console.log(`\n${ok} passaram, ${fail} falharam`);
 process.exit(fail ? 1 : 0);

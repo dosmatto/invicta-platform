@@ -157,6 +157,10 @@ export function rasterizarZonasDose(
   zonas: ZonaValor[],
   poligono: GeoJSON.Polygon | GeoJSON.MultiPolygon,
   pixelM = 20,
+  // Zonas que EXISTEM no talhão mas ficaram SEM valor (o laudo não trouxe o
+  // resultado delas). Precisam entrar aqui para o preenchimento de borda não
+  // invadir o território delas — ver o comentário em `vizinhas`.
+  semValor: GeoJSON.Geometry[] = [],
 ): RespInterp {
   const [minx, miny, maxx, maxy] = bboxDe([poligono]);
   const lat0 = (miny + maxy) / 2;
@@ -177,11 +181,22 @@ export function rasterizarZonasDose(
     }
   }
   // Faixa da borda + coroa: valor da zona mais próxima (cópia, nunca média).
+  //
+  // MAS NUNCA POR CIMA DE UMA ZONA SEM VALOR. A célula vazia pode ser de duas
+  // naturezas bem diferentes: (a) franja da divisa, onde o centro do nó caiu
+  // fora de todo polígono por meio metro — aí copiar da vizinha é o certo, é a
+  // mesma zona; (b) o miolo de uma zona que ficou SEM laudo — aí copiar espalha
+  // a taxa da zona ao lado sobre uma área que ninguém calculou, e isso vai para
+  // o mapa, para a tonelagem e para o arquivo da máquina. Sem esta guarda, uma
+  // zona de 10 ha sem análise recebia calcário da vizinha e nem ficava vazia no
+  // mapa para denunciar.
   const RAIO = 2;
   const estrito = Float32Array.from(arr);
   for (let r = 0; r < rows; r++) {
+    const latR = gy[rows - 1 - r];
     for (let c = 0; c < cols; c++) {
       if (isFinite(estrito[r * cols + c])) continue;
+      if (semValor.some(g => dentroGeom(g, gx[c], latR))) continue;   // território de zona sem laudo
       let melhor = NaN, menor = Infinity;
       for (let i = Math.max(0, r - RAIO); i <= Math.min(rows - 1, r + RAIO); i++) {
         for (let j = Math.max(0, c - RAIO); j <= Math.min(cols - 1, c + RAIO); j++) {

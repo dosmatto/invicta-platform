@@ -322,9 +322,16 @@ export function calcularDosePorZona(
     throw new Error(`${eq.nome}: ${motivo}`);
   }
   // Raster A PARTIR das taxas exatas — mesma malha do talhão que a dose usa.
+  // As zonas SEM taxa vão como `semValor`: o preenchimento de borda não pode
+  // invadir o território delas, senão a taxa da vizinha se espalha por uma área
+  // que ninguém calculou — e isso entraria no mapa, na tonelagem e no arquivo
+  // da máquina, sem a zona nem ficar visualmente vazia para denunciar.
+  const semTaxa = zonas
+    .filter(z => !Number.isFinite(porId.get(z.id)?.dose ?? NaN))
+    .map(z => z.geometry);
   const resp = rasterizarZonasDose(
     comDose.map(x => ({ id: x.z.id, geometry: x.z.geometry, valor: x.d })),
-    poligono, PIXEL_RECOMENDACAO_M,
+    poligono, PIXEL_RECOMENDACAO_M, semTaxa,
   );
   const { valores: px } = decodeGrid(resp.grid!);
   // Média PONDERADA pela fração de cada célula dentro do talhão — a mesma conta
@@ -394,6 +401,14 @@ export function dividirDoseEmPassadas(dose: DoseCalculada, limiteMax: number, ar
       stats: { min: cnt ? mn : 0, media, max: cnt ? mx : 0, n: cnt },
       toneladas: tonHa * areaHa, custoProdutoHa, custoHa, custo: custoHa * areaHa, usar: true,
       doseMinima: 0,   // cada passada é fração — não cortar pela mínima (só zero fica transparente)
+      // A TAXA DE CADA ZONA TAMBÉM SE DIVIDE. O `...dose` acima copiava o
+      // `porZona` da dose CHEIA, e o Shapefile prefere `porZona` ao raster —
+      // então cada passada saía com a dose INTEIRA e a máquina aplicaria 2× ou
+      // 3× o calculado. Mesma fórmula de recorte do pixel, aplicada à taxa.
+      porZona: dose.porZona?.map(z => ({
+        ...z,
+        dose: Number.isFinite(z.dose) ? Math.min(Math.max(z.dose - i * limiteMax, 0), limiteMax) : z.dose,
+      })),
     });
   }
   return passes;

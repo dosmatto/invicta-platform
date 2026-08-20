@@ -51,6 +51,7 @@
     "teste:cobrir": "PY=\"$HOME/.invicta-fert-backend/venv/bin/python\"; [ -x \"$PY\" ] || PY=python3; \"$PY\" scripts/teste-cobrir-poligono.py",
     "teste:gradezonas": "node scripts/teste-grade-zonas.mjs",
     "teste:dosezona": "node scripts/teste-dose-zona.mjs",
+    "teste:zona-e2e": "node scripts/teste-zona-ponta-a-ponta.mjs",
     "teste:geometria": "PY=\"$HOME/.invicta-fert-backend/venv/bin/python\"; [ -x \"$PY\" ] || PY=python3; \"$PY\" scripts/teste-geometria-zonas.py",
     "teste:janela": "node scripts/teste-janela-boot.mjs"
   },

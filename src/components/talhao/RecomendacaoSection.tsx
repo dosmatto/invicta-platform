@@ -66,7 +66,25 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
   // Modo do mapa — o MESMO par da aba Fertilidade, para o usuário reconhecer.
   // 'zona' calcula a taxa de cada zona direto do laudo, sem depender de como os
   // mapas de fertilidade foram processados.
-  const [modoMapa, setModoMapa] = useState<'interpolar' | 'zona'>('interpolar');
+  //
+  // PERSISTIDO POR TALHÃO, e não é capricho: trocar de aba DESMONTA este
+  // componente (TalhaoPage renderiza `{tabAtivo === 'recomendacoes' && <.../>}`).
+  // Com o modo em estado volátil, o agrônomo escolhia "Por zona", aplicava, ia
+  // à aba Arquivos gerar o SHP, voltava — e encontrava "Interpolação" de novo.
+  // Clicava em Aplicar e recebia o mapa interpolado, sem nenhuma mensagem. Era
+  // literalmente o "continua entregando interpolado" do relato.
+  // Inicializador preguiçoso (o padrão da casa — ver SeletorLegenda /
+  // CondutividadeSection): o componente é remontado a cada volta para a aba,
+  // então ler aqui já restaura a escolha.
+  const [modoMapa, setModoMapaRaw] = useState<'interpolar' | 'zona'>(() =>
+    (typeof window !== 'undefined' && nav.talhaoId
+      && localStorage.getItem(`inv_recom_modo_${nav.talhaoId}`) === 'zona') ? 'zona' : 'interpolar');
+  const setModoMapa = useCallback((m: 'interpolar' | 'zona') => {
+    setModoMapaRaw(m);
+    if (typeof window !== 'undefined' && nav.talhaoId) {
+      localStorage.setItem(`inv_recom_modo_${nav.talhaoId}`, m);
+    }
+  }, [nav.talhaoId]);
 
   const [estado, setEstado] = useState<'idle' | 'carregando' | 'pronto' | 'erro'>('idle');
   const [erro, setErro] = useState('');
@@ -265,7 +283,11 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
       if (!finais.length) { setErro('Nenhuma equação pôde ser aplicada — veja os detalhes abaixo.'); return; }
       // Auto-salva o cenário na nuvem (id determinístico = não duplica ao reprocessar).
       const ref = modo === 'recomendacao' ? recomendacaoId : equacaoId;
-      const autoId = `cen_${nav.talhaoId}_${importacaoId}_${modo}_${ref}`;
+      // O MODO ENTRA NO ID. Sem isso, aplicar em interpolação gravava por cima do
+      // cenário por zona (mesmo doc na nuvem) e todos os entregáveis das abas
+      // Arquivos/Relatórios voltavam a sair interpolados.
+      const sufZona = porZonaAtivo ? '_zona' : '';
+      const autoId = `cen_${nav.talhaoId}_${importacaoId}_${modo}_${ref}${sufZona}`;
       const custoTotal = finais.reduce((s, d) => s + (d.custo ?? 0), 0);
       const nome = nomeCenario.trim() || `${recSel?.nome ?? eqSel?.nome ?? 'Cenário'}`;
       setCenMeta({ id: autoId, origem: modo, recomendacaoId: modo === 'recomendacao' ? recomendacaoId : undefined, nome });
@@ -294,6 +316,10 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
     try {
       const full = await descomprimirCenario(cen);
       setDoses(full.doses); setFalhas([]); setVisivel(0); setEstado('pronto');
+      // O cenário diz em que modo foi feito: se as doses trazem taxa por zona,
+      // o seletor tem de refletir isso — senão a tela mostra "Interpolação" com
+      // um resultado por zona na frente, e o próximo Aplicar troca tudo.
+      setModoMapa(full.doses.some(d => d.porZona?.length) ? 'zona' : 'interpolar');
       setCenMeta({ id: cen.id, origem: full.origem, recomendacaoId: full.recomendacaoId, nome: full.nome });
     } catch (e) { setErro('Falha ao reabrir: ' + (e instanceof Error ? e.message : String(e))); setEstado('erro'); }
   }
@@ -342,22 +368,43 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
     const aba = typeof window !== 'undefined' ? window.open('', '_blank') : null;  // antes de qualquer await
     setBookEstado('carregando');
     try {
-      const grids = await carregarGridsTalhao(nav.talhaoId, importacaoId, 'dose');
+      // O BOOK RESPEITA O MODO DO MAPA. Antes ele sempre recalculava por
+      // interpolação e regravava NO MESMO id do cenário — então um clique aqui
+      // desfazia a recomendação por zona já salva, e as abas Arquivos/Relatórios
+      // voltavam a entregar o mapa interpolado. Silenciosamente.
+      const porZonaBook = modoMapa === 'zona' && zonasTalhao.length > 0;
+      const impBook = importacoes.find(i => i.id === importacaoId) ?? null;
+      const zonasBook = agruparPorRotulo(zonasTalhao);
+      const bindBook = (porZonaBook && impBook && nav.talhaoId)
+        ? bindingDasZonas(nav.talhaoId, safra, impBook, zonasBook) : null;
+      const grids = porZonaBook ? {} : await carregarGridsTalhao(nav.talhaoId, importacaoId, 'dose');
       const area = talhao?.areaHa ?? 0;
       const cens: Cenario[] = [];
       for (const r of recs) {
         const itens = (r.conteudo.equacaoIds.map(id => equacoes.find(e => e.id === id)).filter(Boolean) as ItemBiblioteca<ConteudoEquacao>[]).sort(compararEquacoes);
         const ok: DoseCalculada[] = [];
-        for (const it of itens) { try { ok.push(calcularDose(it, grids, area, poligono, insumos)); } catch { /* sem mapa p/ essa equação */ } }
+        for (const it of itens) {
+          try {
+            if (porZonaBook && impBook && bindBook && poligono) {
+              const c = it.conteudo;
+              const vals = valoresDasZonas(impBook, bindBook, zonasBook, nutrientesDaEquacao(c.script, c.constantes), c.profundidade || '0-20');
+              ok.push(calcularDosePorZona(it, zonasBook, vals, area, poligono, insumos));
+            } else {
+              ok.push(calcularDose(it, grids, area, poligono, insumos));
+            }
+          } catch { /* sem dado p/ essa equação */ }
+        }
         if (ok.length === 0) continue;
         const divBook: DivCfg = { ativo: divAtivo, limiteMax: parseFloat(divLimite.replace(',', '.')) || 0, unidade: divUnid };
         const finais = expandirDoses(ok, divBook, area);   // divide em passadas se marcado
         const custoTotal = finais.reduce((s, d) => s + d.custo, 0);
         const financeiro = { custoTotal, custoHa: area ? custoTotal / area : 0, areaHa: area };
         cens.push({ id: '', talhaoId: nav.talhaoId, safra, importacaoId, origem: 'recomendacao', recomendacaoId: r.id, nome: r.nome, doses: finais, financeiro, geradoEm: Date.now(), geradoPor: '' });
-        salvarCenario({ talhaoId: nav.talhaoId, safra, importacaoId, origem: 'recomendacao', recomendacaoId: r.id, nome: r.nome, doses: finais, financeiro }, `cen_${nav.talhaoId}_${importacaoId}_recomendacao_${r.id}`).catch(() => {});
+        salvarCenario({ talhaoId: nav.talhaoId, safra, importacaoId, origem: 'recomendacao', recomendacaoId: r.id, nome: r.nome, doses: finais, financeiro }, `cen_${nav.talhaoId}_${importacaoId}_recomendacao_${r.id}${porZonaBook ? '_zona' : ''}`).catch(() => {});
       }
-      if (cens.length === 0) { if (aba) aba.close(); setErroBook('Nenhuma recomendação pôde ser aplicada — faltam mapas interpolados dos atributos usados.'); setBookEstado('erro'); return; }
+      if (cens.length === 0) { if (aba) aba.close(); setErroBook(porZonaBook
+          ? 'Nenhuma recomendação pôde ser aplicada por zona — falta o resultado do laudo dos atributos usados, nas zonas.'
+          : 'Nenhuma recomendação pôde ser aplicada — faltam mapas interpolados dos atributos usados.'); setBookEstado('erro'); return; }
       const blob = await montarBookOficial(cens);
       // SA03_RECOM_2026_BOOK — o nome antigo não dizia de que talhão era.
       const t = getTalhoes().find(x => x.id === nav.talhaoId);
@@ -566,6 +613,23 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* O MODO POR ZONA NÃO PODE FALHAR EM SILÊNCIO. Se o seletor está em
+              "Por zona" e o que está na tela não é por zona, o usuário tem de
+              saber POR QUÊ — antes desta caixa, o mapa simplesmente voltava a
+              ser o raster interpolado e ele só via "continua interpolado". */}
+          {modoMapa === 'zona' && doseAtiva && !dosePorZona && (
+            <div className="p-2.5 rounded-lg" style={{ background: '#2d1a00', border: '1px solid #92400e' }}>
+              <p className="text-[10px] font-bold" style={{ color: '#fbbf24' }}>
+                Este mapa NÃO é por zona — está interpolado
+              </p>
+              <p className="text-[9px] mt-1" style={{ color: '#a16207' }}>
+                {!doseAtiva.porZona?.length
+                  ? 'O resultado na tela veio de um cálculo por interpolação (cenário reaberto ou aplicado em outro modo). Clique em "Aplicar e salvar" para recalcular por zona.'
+                  : 'As zonas deste resultado não batem com o zoneamento atual do talhão — ele mudou depois do cálculo. Clique em "Aplicar e salvar" para recalcular.'}
+              </p>
             </div>
           )}
 
