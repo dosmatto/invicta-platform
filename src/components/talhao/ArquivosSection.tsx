@@ -132,7 +132,7 @@ export function ArquivosSection({ safraNome }: { safraNome?: string }) {
         }
         porZona = casadas.map(z => ({
           id: geom.get(z.rotulo)!.id, rotulo: z.rotulo, geometry: geom.get(z.rotulo)!.geometry,
-          dose: z.dose, celulas: 0, chapada: true,
+          dose: z.dose,
         }));
       }
       const { blob, nome } = await gerarShapefileZip(d, t?.nome ?? 'talhao', poligono, clipBorda, caminho, porZona);

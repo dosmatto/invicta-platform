@@ -14,12 +14,12 @@ import { ExplicadorRecomendacaoIa } from '@/components/talhao/ExplicadorRecomend
 import { pode } from '@/lib/empresa';
 import { listar as bibListar, compararEquacoes, type ItemBiblioteca, type ConteudoEquacao, type ConteudoRecomendacao } from '@/lib/biblioteca';
 import type { ConteudoInsumo } from '@/lib/insumos';
-import { carregarGridsTalhao, calcularDose, dividirDoseEmPassadas, type DoseCalculada } from '@/lib/recomendacao/aplicar';
+import { carregarGridsTalhao, calcularDose, calcularDosePorZona, dividirDoseEmPassadas, type DoseCalculada } from '@/lib/recomendacao/aplicar';
 import { salvarCenario, listarCenarios, descomprimirCenario, excluirCenario, type Cenario } from '@/lib/recomendacao/cenarios';
 import { colorirDose, recortarNoPoligono } from '@/lib/raster';
 import { coordsFromBounds, extrairPoligono } from '@/lib/fertilidade';
 import { agruparPorRotulo } from '@/lib/recomendacao/dosePorZona';
-import { dosesDiretasPorZona, nutrientesDaEquacao } from '@/lib/recomendacao/doseZonaDireta';
+import { nutrientesDaEquacao } from '@/lib/recomendacao/doseZonaDireta';
 import { bindingDasZonas, valoresDasZonas } from '@/lib/recomendacao/zonasComLaudo';
 import { zonasDoTalhao } from '@/lib/recomendacao/zonasDoTalhao';
 import { classesVisiveis, indiceClasse } from '@/lib/recomendacao/faixas';
@@ -63,6 +63,10 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
   const [divAtivo, setDivAtivo] = useState(false);
   const [divLimite, setDivLimite] = useState('4');
   const [divUnid, setDivUnid] = useState<'t/ha' | 'kg/ha'>('t/ha');
+  // Modo do mapa — o MESMO par da aba Fertilidade, para o usuário reconhecer.
+  // 'zona' calcula a taxa de cada zona direto do laudo, sem depender de como os
+  // mapas de fertilidade foram processados.
+  const [modoMapa, setModoMapa] = useState<'interpolar' | 'zona'>('interpolar');
 
   const [estado, setEstado] = useState<'idle' | 'carregando' | 'pronto' | 'erro'>('idle');
   const [erro, setErro] = useState('');
@@ -131,7 +135,7 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
   useEffect(() => { recarregarSalvos(); }, [recarregarSalvos]);
 
   // limpa resultado ao trocar contexto
-  useEffect(() => { setDoses([]); setFalhas([]); setEstado('idle'); setErro(''); setVisivel(0); setSalvoMsg(''); setCenMeta(null); }, [modo, equacaoId, recomendacaoId, importacaoId]);
+  useEffect(() => { setDoses([]); setFalhas([]); setEstado('idle'); setErro(''); setVisivel(0); setSalvoMsg(''); setCenMeta(null); }, [modo, equacaoId, recomendacaoId, importacaoId, modoMapa]);
 
   // dose visível no mapa
   const doseAtiva = doses[visivel] ?? null;
@@ -227,42 +231,29 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
     }
     setEstado('carregando');
     try {
-      const grids = await carregarGridsTalhao(nav.talhaoId, importacaoId, 'dose');
+      const porZonaAtivo = modoMapa === 'zona' && zonasTalhao.length > 0;
+      // O caminho por zona não lê mapa nenhum da nuvem.
+      const grids = porZonaAtivo ? {} : await carregarGridsTalhao(nav.talhaoId, importacaoId, 'dose');
       const area = talhao?.areaHa ?? 0;
       const ok: DoseCalculada[] = [];
       const erros: { nome: string; erro: string }[] = [];
-      // Taxa de cada zona CALCULADA DIRETO DA EQUAÇÃO, com o valor de laudo da
-      // própria zona — sem passar por raster e sem média. É o número que vai
-      // para o mapa, para o painel e para o arquivo da máquina. O grid continua
-      // sendo calculado ao lado porque é dele que saem a média ponderada, a
-      // tonelagem, o custo e o PDF.
       const imp = importacoes.find(i => i.id === importacaoId) ?? null;
       const zonasBase = agruparPorRotulo(zonasTalhao);
-      const binding = (imp && zonasBase.length && nav.talhaoId)
+      // POR ZONA: a taxa sai da equação com o laudo da própria zona, sem tocar
+      // nos mapas interpolados. Independe de como a Fertilidade foi processada.
+      const binding = (porZonaAtivo && imp && nav.talhaoId)
         ? bindingDasZonas(nav.talhaoId, safra, imp, zonasBase) : null;
 
       for (const it of itens) {
         try {
-          const d = calcularDose(it, grids, area, poligono, insumos);
-          // Só quando TODOS os atributos vieram da fertilidade por zona: numa
-          // dose interpolada não existe "o valor da zona" para prescrever.
-          const soZona = (d.fontes?.length ?? 0) > 0 && d.fontes!.every(f => f.metodo === 'zona');
-          if (soZona && imp && binding && zonasBase.length) {
+          if (porZonaAtivo && imp && binding && poligono) {
             const c = it.conteudo;
             const nuts = nutrientesDaEquacao(c.script, c.constantes);
             const vals = valoresDasZonas(imp, binding, zonasBase, nuts, c.profundidade || '0-20');
-            const { doses: dz } = dosesDiretasPorZona(vals, {
-              script: c.script, constantes: c.constantes, naoNegativo: c.naoNegativo,
-              doseMinimaViavel: c.doseMinimaViavel, abaixoMinimo: c.abaixoMinimo, doseMaxima: c.doseMaxima,
-            });
-            const porId = new Map(dz.map(x => [x.id, x]));
-            d.porZona = zonasBase.map(z => ({
-              rotulo: z.rotulo,
-              dose: porId.get(z.id)?.dose ?? NaN,
-              erro: porId.get(z.id)?.erro,
-            }));
+            ok.push(calcularDosePorZona(it, zonasBase, vals, area, poligono, insumos));
+          } else {
+            ok.push(calcularDose(it, grids, area, poligono, insumos));
           }
-          ok.push(d);
         }
         catch (e) { erros.push({ nome: it.nome, erro: e instanceof Error ? e.message : String(e) }); }
       }
@@ -409,6 +400,27 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
           {importacoes.map(i => <option key={i.id} value={i.id}>{i.laboratorio || 'Importação'} · {(i.criadoEm ?? '').slice(0, 10)}</option>)}
         </select>
       </div>
+
+      {/* Modo do mapa — mesmo par da aba Fertilidade. Só aparece com zoneamento. */}
+      {zonasTalhao.length > 0 && (
+        <div>
+          <label className="text-[10px] font-semibold block mb-1" style={{ color: '#cbd5e1' }}>Modo do mapa</label>
+          <div className="grid grid-cols-2 gap-1">
+            {([['interpolar', 'Interpolação'], ['zona', 'Por zona de manejo']] as const).map(([m, t]) => (
+              <button key={m} onClick={() => setModoMapa(m)}
+                className="py-1.5 px-2 rounded text-[11px] font-semibold"
+                style={{ background: modoMapa === m ? 'var(--invicta-blue-mid)' : '#1a3a6b', color: modoMapa === m ? '#fff' : '#93c5fd' }}>
+                {t}
+              </button>
+            ))}
+          </div>
+          <p className="text-[9px] mt-1" style={{ color: '#475569' }}>
+            {modoMapa === 'zona'
+              ? `Uma taxa por zona (${agruparPorRotulo(zonasTalhao).length} zonas): a equação é aplicada ao laudo de cada zona, sem interpolar e sem média. Não depende de como a Fertilidade foi processada.`
+              : 'Dose contínua, calculada nos mapas interpolados de fertilidade.'}
+          </p>
+        </div>
+      )}
 
       {modo === 'equacao' ? (
         <div>

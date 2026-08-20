@@ -12,6 +12,8 @@ import { escolherMapas, prefixoDose20, PIXEL_RECOMENDACAO_M, type UsoMapa } from
 import { coberturaDoGrid } from './cobertura';
 import type { ConteudoEquacao } from '../biblioteca';
 import { custosDaEquacao, type ConteudoInsumo } from '../insumos';
+import { rasterizarZonasDose } from './zonasGrid';
+import { dosesDiretasPorZona, nutrientesDaEquacao, type ValoresDaZona } from './doseZonaDireta';
 
 type MapaPronto = { resp: RespInterp; labels?: GeoJSON.FeatureCollection; interpoladoEm?: string };
 
@@ -276,6 +278,84 @@ export function calcularDose(
     insumoId: c.insumoId,
     doseMinima: c.doseMinimaViavel ?? 0,
     fontes: res.fontes,
+  };
+}
+
+/**
+ * DOSE POR ZONA — caminho INDEPENDENTE dos mapas interpolados.
+ *
+ * Não carrega grid nenhum da nuvem: a taxa de cada zona é a equação aplicada ao
+ * laudo daquela zona (`dosesDiretasPorZona`), e é ela que manda. O raster é
+ * gerado DEPOIS, a partir dessas taxas, só para o que precisa de um mapa —
+ * legenda, PDF, JPG, média ponderada, tonelagem e custo. Ou seja: o número da
+ * zona nunca sai de um pixel; o pixel é que sai do número da zona.
+ *
+ * É por isso que este caminho funciona mesmo num talhão cuja Fertilidade foi
+ * processada por interpolação: a recomendação por zona não depende de como os
+ * mapas de fertilidade foram feitos, só do laudo e do zoneamento. Amarrar as
+ * duas coisas foi o erro da primeira versão — o usuário pedia zona e continuava
+ * recebendo o mapa interpolado porque os mapas salvos eram `krige`.
+ */
+export function calcularDosePorZona(
+  eq: { id: string; nome: string; conteudo: ConteudoEquacao },
+  zonas: { id: string; rotulo: string; geometry: GeoJSON.Geometry }[],
+  valores: ValoresDaZona[],
+  areaHa: number,
+  poligono: GeoJSON.Polygon | GeoJSON.MultiPolygon,
+  insumos?: ReadonlyMap<string, ConteudoInsumo>,
+): DoseCalculada {
+  const c = eq.conteudo;
+  const { doses, erroCompilacao } = dosesDiretasPorZona(valores, {
+    script: c.script, constantes: c.constantes, naoNegativo: c.naoNegativo,
+    doseMinimaViavel: c.doseMinimaViavel, abaixoMinimo: c.abaixoMinimo, doseMaxima: c.doseMaxima,
+  });
+  if (erroCompilacao) throw new Error(erroCompilacao);
+  const porId = new Map(doses.map(d => [d.id, d]));
+  const porZona = zonas.map(z => ({
+    rotulo: z.rotulo, dose: porId.get(z.id)?.dose ?? NaN, erro: porId.get(z.id)?.erro,
+  }));
+  const comDose = zonas
+    .map(z => ({ z, d: porId.get(z.id)?.dose ?? NaN }))
+    .filter(x => Number.isFinite(x.d));
+  if (comDose.length === 0) {
+    const motivo = doses.find(d => d.erro)?.erro ?? 'nenhuma zona tem o valor de laudo que a equação pede';
+    throw new Error(`${eq.nome}: ${motivo}`);
+  }
+  // Raster A PARTIR das taxas exatas — mesma malha do talhão que a dose usa.
+  const resp = rasterizarZonasDose(
+    comDose.map(x => ({ id: x.z.id, geometry: x.z.geometry, valor: x.d })),
+    poligono, PIXEL_RECOMENDACAO_M,
+  );
+  const { valores: px } = decodeGrid(resp.grid!);
+  // Média PONDERADA pela fração de cada célula dentro do talhão — a mesma conta
+  // de `aplicarEquacao`, para a tonelagem bater com a do caminho interpolado.
+  const pesos = coberturaDoGrid(resp.grid!.shape, resp.bounds, poligono);
+  let sp = 0, sw = 0, mn = Infinity, mx = -Infinity, n = 0;
+  for (let i = 0; i < px.length; i++) {
+    const v = px[i], w = pesos[i];
+    if (!isFinite(v) || !(w > 0)) continue;
+    sp += v * w; sw += w; n++;
+    if (v < mn) mn = v; if (v > mx) mx = v;
+  }
+  const stats = { min: n ? mn : 0, media: sw > 0 ? sp / sw : 0, max: n ? mx : 0, n };
+  const u = (c.unidadeTratamento || '').toLowerCase();
+  const ehT = u.includes('t/ha') || u.includes('ton');
+  const toneladas = ehT ? stats.media * areaHa : stats.media * areaHa / 1000;
+  const tonHa = areaHa > 0 ? toneladas / areaHa : 0;
+  const cst = custosDaEquacao(c, c.insumoId ? insumos?.get(c.insumoId) : undefined);
+  const custoProdutoHa = tonHa * (cst.custoTonelada ?? 0);
+  const custoHa = custoProdutoHa + cst.freteHa + cst.aplicacaoHa;
+  return {
+    equacaoId: eq.id, nomeEquacao: eq.nome, produto: c.produto, unidade: c.unidadeTratamento,
+    estilo: c.estilo, grid: resp.grid!, bounds: resp.bounds, stats, toneladas,
+    custoTonelada: cst.custoTonelada, freteHa: cst.freteHa, aplicacaoHa: cst.aplicacaoHa,
+    custoProdutoHa, custoHa, custo: custoHa * areaHa,
+    insumoId: c.insumoId,
+    doseMinima: c.doseMinimaViavel ?? 0,
+    // Proveniência honesta: o mapa É por zona, veio do laudo, não de krigagem.
+    fontes: nutrientesDaEquacao(c.script, c.constantes)
+      .map(nut => ({ token: nut.toUpperCase(), metodo: 'zona', reamostrado: false })),
+    porZona,
   };
 }
 

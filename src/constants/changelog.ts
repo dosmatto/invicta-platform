@@ -1,5 +1,12 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.65.0': [
+    'AGORA VOCÊ ESCOLHE: a aba Recomendações ganhou o seletor "Modo do mapa — Interpolação × Por zona de manejo", o mesmo par que já existe na Fertilidade. Em talhão com zoneamento ele aparece logo abaixo da importação de laboratório.',
+    'POR QUE ISSO FALTAVA: na versão anterior a recomendação só saía por zona se os MAPAS de fertilidade tivessem sido processados em zona. Quem tinha os mapas salvos por krigagem continuava recebendo a dose interpolada, e a tela não dizia o porquê — só a linha "Mapas usados: CTC 20 m · krige" no rodapé denunciava. Amarrar uma coisa na outra era o erro.',
+    'A RECOMENDAÇÃO POR ZONA NÃO PRECISA DE MAPA NENHUM. Ela usa o laudo, o zoneamento e a equação: para cada zona, pega o resultado da análise daquela zona e roda a equação. É a mesma conta que você faria na mão, uma vez por zona. Não interpola, não tira média e não depende de como a Fertilidade foi processada.',
+    'O mapa desenhado, a legenda, o PDF, a tonelagem e o custo são gerados A PARTIR dessas taxas — nunca o contrário. O número da zona nunca sai de um pixel; o pixel é que sai do número da zona.',
+    'Trocar o modo limpa o resultado na tela, para nunca ficar um mapa de um modo com os números do outro.',
+  ],
   '2.64.0': [
     'RECOMENDAÇÃO POR ZONA DE MANEJO: A TAXA DE CADA ZONA AGORA É A EQUAÇÃO APLICADA AO LAUDO DAQUELA ZONA. Sem interpolar, sem tirar média e sem grade de 20 m — a mesma conta que você faria na mão: pega o resultado da análise da zona, joga na equação, e o que sai é a taxa da zona. Uma execução por zona.',
     'Isso vale para os TRÊS lugares: o mapa na tela (cada zona pintada pelo seu contorno, com a taxa escrita dentro), o painel "Recomendação por zona" com a lista de taxas, e o SHAPEFILE de taxa variável, que passa a sair com UM POLÍGONO POR ZONA no lugar dos milhares de quadradinhos.',
