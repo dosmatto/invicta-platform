@@ -1,5 +1,12 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.69.3': [
+    'CORRIGIDO — O MAPA SAIA AMARELADO NA TELA (NDVI, fertilidade, dose, produtividade). Achado pelo usuario, comparando a aba NDVI com o PDF: o mesmo EVI saia verde-escuro no relatorio e oliva na tela. Nao era a escala de cores — era uma camada por cima.',
+    'A CAUSA: o talhao e marcado no mapa por um preenchimento AMBAR (#f59e0b a 35%). O raster e inserido logo abaixo de `zona-fill` de proposito, para ficar SOB as zonas de manejo (regra da Recomendacao por zona). So que `zona-fill` e criada ANTES de `upload-fill` — entao esse mesmo posicionamento tambem jogava o raster para baixo do ambar, que passava a tingir o mapa inteiro.',
+    'SO ACONTECIA EM TALHAO COM ZONAS DE MANEJO. Sem zonas, o raster entra em outro ponto da pilha e fica acima do ambar — por isso o problema passou despercebido tanto tempo.',
+    'AGORA O AMBAR SOME enquanto houver qualquer raster na tela, e volta quando ele sai. Ele e um MARCADOR de "o talhao e aqui"; com uma camada de dado desenhada, esse trabalho ja esta feito pelo proprio raster, e o contorno continua marcando o limite. Corrigimos apagando o ambar, nao reordenando as camadas: o raster PRECISA continuar sob as zonas.',
+    'Efeito pratico: as cores na tela passam a ser as mesmas do PDF — que sempre esteve certo, porque o relatorio compoe a imagem em canvas proprio e nao tem essa camada.',
+  ],
   '2.69.2': [
     'CADASTRO APROVADO QUE CONTINUAVA VENDO "AGUARDANDO APROVAÇÃO" — CORRIGIDO. O caso relatado: produtor aprovado, ATIVO na Central de Acessos, seguia batendo em "Cadastro aguardando aprovação" no celular dele. Aprovar de novo não mudava nada e o botão "Tentar de novo" repetia a mesma resposta.',
     'A ASSIMETRIA QUE CAUSAVA ISSO: quem se cadastra grava "aguardando aprovação" no PRÓPRIO aparelho; quem aprova escreve no aparelho DELE. Na hora de decidir a entrada, o app lia só a cópia local — e nunca perguntava à nuvem. Quando essa cópia local vence a hidratação (o que acontece enquanto a lista de acessos estiver com envio pendente naquele aparelho, porque aí o boot mescla mantendo o local), o celular fica repetindo para sempre um estado que a nuvem já mudou.',

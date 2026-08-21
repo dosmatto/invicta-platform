@@ -46,6 +46,11 @@ const COMBINED_STYLE: maplibregl.StyleSpecification = {
   ],
 };
 
+// Preenchimento âmbar que marca o talhão no mapa. É um MARCADOR, não dado:
+// enquanto há raster (NDVI, fertilidade, dose, produtividade…) ele é apagado,
+// senão tinge as cores da camada — ver o efeito 6c.3.
+const OPACIDADE_TALHAO = 0.35;
+
 const EMPTY_FC: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
 
 
@@ -115,7 +120,7 @@ export function MapView({ mostrarVisaoGeral = false }: { mostrarVisaoGeral?: boo
     map.on('load', () => {
       // Talhões da fazenda — fonte persistente (clicáveis). Dados via setData.
       map.addSource('talhoes',    { type: 'geojson', data: EMPTY_FC });
-      map.addLayer({ id: 'talhao-fill',            type: 'fill',   source: 'talhoes', paint: { 'fill-color': '#f59e0b', 'fill-opacity': 0.35 } });
+      map.addLayer({ id: 'talhao-fill',            type: 'fill',   source: 'talhoes', paint: { 'fill-color': '#f59e0b', 'fill-opacity': OPACIDADE_TALHAO } });
       map.addLayer({ id: 'talhao-outline',         type: 'line',   source: 'talhoes', paint: { 'line-color': '#d97706', 'line-width': 2 } });
       map.addLayer({ id: 'talhao-label',           type: 'symbol', source: 'talhoes',
         layout: { 'text-field': ['get','nome'], 'text-size': 12, 'text-font': ['Open Sans Regular'] },
@@ -138,7 +143,7 @@ export function MapView({ mostrarVisaoGeral = false }: { mostrarVisaoGeral?: boo
       map.addSource('upload-geo', { type: 'geojson', data: EMPTY_FC });
       map.addLayer({ id: 'upload-fill',   type: 'fill',   source: 'upload-geo',
         filter: ['in',['geometry-type'],['literal',['Polygon','MultiPolygon']]],
-        paint: { 'fill-color': '#f59e0b', 'fill-opacity': 0.35 } });
+        paint: { 'fill-color': '#f59e0b', 'fill-opacity': OPACIDADE_TALHAO } });
       map.addLayer({ id: 'upload-line',   type: 'line',   source: 'upload-geo',
         paint: { 'line-color': '#fde68a', 'line-width': 2.5 } });
       map.addLayer({ id: 'upload-points', type: 'circle', source: 'upload-geo',
@@ -588,6 +593,29 @@ export function MapView({ mostrarVisaoGeral = false }: { mostrarVisaoGeral?: boo
         paint: { 'raster-opacity': opacity, 'raster-fade-duration': 0, 'raster-resampling': 'nearest' } }, beforeId);
     } catch (e) { console.warn('[mapa-fert] falha ao desenhar raster:', e); }
   }, [fertilidadeOverlay, mapReady]);
+
+  // ── 6c.3. O preenchimento âmbar do talhão SOME enquanto há raster ─────────
+  // Por que isto existe: o raster é inserido com `beforeId: 'zona-fill'` para
+  // ficar SOB as zonas de manejo (regra da Recomendação por zona). Só que
+  // `zona-fill` é criada ANTES de `upload-fill` — então, em talhão COM zonas,
+  // aquele mesmo `beforeId` também jogava o raster para baixo do preenchimento
+  // âmbar (#f59e0b a 35%), que passava a tingir o mapa inteiro. Era o "NDVI
+  // amarelado": um EVI verde-escuro saía oliva na tela e verde no PDF, que não
+  // tem esta camada. Em talhão SEM zonas o `beforeId` cai em 'upload-line' e o
+  // problema não aparecia — daí ele ter passado despercebido.
+  //
+  // A correção é apagar o âmbar, não reordenar as camadas: ele é um MARCADOR de
+  // "o talhão é aqui", e com uma camada de dado desenhada esse trabalho já está
+  // feito pelo próprio raster. O contorno continua marcando o limite. Reordenar
+  // quebraria a regra do raster sob as zonas, que é deliberada.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    const temRaster = !!fertilidadeOverlay || !!zonasFundo;
+    for (const id of ['upload-fill', 'talhao-fill']) {
+      try { if (map.getLayer(id)) map.setPaintProperty(id, 'fill-opacity', temRaster ? 0 : OPACIDADE_TALHAO); } catch {}
+    }
+  }, [fertilidadeOverlay, zonasFundo, mapReady]);
 
   // ── 6c.2. MEAP: camada de FUNDO (raster) SOB as zonas + opacidade das zonas ──
   // Permite comparar a zona com uma camada (NDVI, fertilidade, EC…) por baixo,
