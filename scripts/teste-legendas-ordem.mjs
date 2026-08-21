@@ -6,7 +6,8 @@
 // ORDER BY → ordem arbitrária, que muda com o tempo).
 // Roda: `npm run teste:legendas`.
 import assert from 'node:assert/strict';
-import { ordenarLegendasDoAtributo, deveSemearLegendas, respeitarPadraoHomonima, promocoesDeHomonimas } from '../src/lib/legendas.ts';
+import { ordenarLegendasDoAtributo, deveSemearLegendas, respeitarPadraoHomonima, promocoesDeHomonimas,
+  ordenarPorObjeto, agruparPorCategoria, chaveObjeto, categoriaSugerida, CATEGORIAS_LEGENDA } from '../src/lib/legendas.ts';
 
 let ok = 0, fail = 0;
 function t(nome, fn) {
@@ -164,6 +165,86 @@ t('já existe legenda → nunca semeia, hidratada ou não', () => {
   assert.equal(deveSemearLegendas(45, false), false);
   assert.equal(deveSemearLegendas(45, true), false);
   assert.equal(deveSemearLegendas(1, false), false);
+});
+
+// ── Organização da Biblioteca: categoria × ordem alfabética do objeto ───────
+const leg = (simbolo, categoria, extra = {}) => ({
+  id: `${categoria}-${simbolo}`, nome: `Legenda ${simbolo}`, simbolo,
+  atributo: simbolo, categoria, ...extra,
+});
+
+t('ordena pelo OBJETO da legenda (Ca, MO, P…), não pelo nome do cadastro', () => {
+  const lista = [leg('P', 'fertilidade'), leg('Al', 'fertilidade'), leg('MO', 'fertilidade'), leg('Ca', 'fertilidade')];
+  assert.deepEqual(ordenarPorObjeto(lista).map(l => l.simbolo), ['Al', 'Ca', 'MO', 'P']);
+});
+
+t('acento e caixa não bagunçam a ordem', () => {
+  const lista = [leg('zn', 'fertilidade'), leg('Água', 'fertilidade'), leg('Areia', 'fertilidade')];
+  assert.deepEqual(ordenarPorObjeto(lista).map(l => l.simbolo), ['Água', 'Areia', 'zn']);
+});
+
+t('sem símbolo, cai para o atributo e depois para o nome', () => {
+  assert.equal(chaveObjeto({ simbolo: '', atributo: 'Cálcio', nome: 'X' }), 'calcio');
+  assert.equal(chaveObjeto({ simbolo: '', atributo: '', nome: 'Só o nome' }), 'soonome');
+});
+
+t('NOTAÇÃO QUÍMICA não bagunça o alfabeto (Ca²⁺, M.O., m%)', () => {
+  // Com o símbolo cru, "Ca²⁺" saía DEPOIS de "Ca%" e "M.O." caía entre "K%" e
+  // "m%" — quem procura Cálcio não achava onde deveria.
+  assert.equal(chaveObjeto({ simbolo: 'Ca²⁺', atributo: '', nome: '' }), 'ca');
+  assert.equal(chaveObjeto({ simbolo: 'M.O.', atributo: '', nome: '' }), 'mo');
+  assert.equal(chaveObjeto({ simbolo: 'm%', atributo: '', nome: '' }), 'm');
+  assert.equal(chaveObjeto({ simbolo: 'SO4', atributo: '', nome: '' }), 'so4', 'dígito com significado fica');
+  const lista = [
+    { simbolo: 'M.O.', nome: 'Matéria Orgânica', atributo: '' },
+    { simbolo: 'Ca²⁺', nome: 'Fundação ABC - Cálcio', atributo: '' },
+    { simbolo: 'Ca%',  nome: 'Saturação por Cálcio', atributo: '' },
+    { simbolo: 'K',    nome: 'Fundação ABC - Potássio', atributo: '' },
+  ];
+  assert.deepEqual(ordenarPorObjeto(lista).map(l => l.simbolo), ['Ca²⁺', 'Ca%', 'K', 'M.O.'],
+    'elemento e saturação dele empatam na chave e ficam VIZINHOS, na ordem do nome');
+});
+
+t('duas legendas do MESMO objeto saem sempre na mesma ordem (desempate por nome)', () => {
+  const a = { ...leg('K', 'fertilidade'), nome: 'Fundação ABC - Potássio' };
+  const b = { ...leg('K', 'fertilidade'), nome: 'Antiga - Potássio' };
+  assert.deepEqual(ordenarPorObjeto([a, b]).map(l => l.nome), ['Antiga - Potássio', 'Fundação ABC - Potássio']);
+  assert.deepEqual(ordenarPorObjeto([b, a]).map(l => l.nome), ['Antiga - Potássio', 'Fundação ABC - Potássio']);
+});
+
+t('agrupa por categoria na ordem do vocabulário, não na de chegada', () => {
+  const lista = [leg('NDVI', 'ndvi'), leg('P', 'fertilidade'), leg('Argila', 'textura'), leg('Ca', 'fertilidade')];
+  const g = agruparPorCategoria(lista);
+  assert.deepEqual(g.map(x => x.id), ['fertilidade', 'textura', 'ndvi'],
+    'a ordem é a de CATEGORIAS_LEGENDA — fertilidade antes de textura antes de ndvi');
+  assert.deepEqual(g[0].itens.map(l => l.simbolo), ['Ca', 'P'], 'e cada grupo sai ordenado por objeto');
+});
+
+t('categoria só aparece se tiver legenda', () => {
+  const g = agruparPorCategoria([leg('P', 'fertilidade')]);
+  assert.equal(g.length, 1);
+  assert.ok(CATEGORIAS_LEGENDA.length > 1, 'o vocabulário tem várias, mas a tela mostra só as usadas');
+});
+
+t('categoria desconhecida ou ausente cai em "Outro" — nada some da tela', () => {
+  const g = agruparPorCategoria([leg('X', 'inventada'), leg('Y', undefined)]);
+  assert.deepEqual(g.map(x => x.id), ['outro']);
+  assert.equal(g[0].itens.length, 2);
+});
+
+t('legenda nova nasce na categoria provável do atributo', () => {
+  for (const id of ['b', 'zn', 'cu', 'mn', 'fe']) {
+    assert.equal(categoriaSugerida(id), 'micronutriente', `${id} é micronutriente`);
+  }
+  assert.equal(categoriaSugerida('s'), 'fertilidade', 'enxofre é macro secundário, não micro');
+  assert.equal(categoriaSugerida('argila'), 'textura');
+  assert.equal(categoriaSugerida('silte'), 'textura');
+  assert.equal(categoriaSugerida('ndvi'), 'ndvi');
+  assert.equal(categoriaSugerida('condutividade'), 'condutividade');
+  assert.equal(categoriaSugerida('altimetria'), 'altimetria-elevacao');
+  assert.equal(categoriaSugerida('produtividade'), 'produtividade-colheita');
+  assert.equal(categoriaSugerida('p'), 'fertilidade', 'o resto cai em fertilidade');
+  assert.equal(categoriaSugerida(''), 'fertilidade');
 });
 
 console.log(`\n${ok} passaram, ${fail} falharam\n`);

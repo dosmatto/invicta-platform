@@ -10,7 +10,7 @@ import { listar as listarBib, type ConteudoPerfil } from '@/lib/biblioteca';
 import {
   type Legenda, type ClasseLegenda, type CategoriaLegenda, type EstiloLegenda,
   gradienteCssDaLegenda, PARES_OFICIAIS_5, LARGURAS_VISUAIS_5, classesFertilidade5, paresDaClasse,
-  CATEGORIAS_LEGENDA,
+  CATEGORIAS_LEGENDA, agruparPorCategoria, categoriaSugerida,
 } from '@/lib/legendas';
 import { RAMPAS, coresDaRampa, corNaRampa, gradienteCssRampa } from '@/lib/estiloPresets';
 import {
@@ -78,22 +78,23 @@ function LegendasLista({
 }: { legendas: Legenda[]; onNova: () => void; onEditar: (id: string) => void; onMudou: () => void }) {
   const fileInput = useRef<HTMLInputElement>(null);
   const [filtro, setFiltro] = useState('');
+  const [cat, setCat] = useState<CategoriaLegenda | 'todas'>('todas');
 
-  const agrupadas = useMemo(() => {
-    const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  // Busca por texto primeiro; o agrupamento por categoria (e a ordem por objeto:
+  // Al, B, Ca, CTC, K, MO, P…) vem de lib/legendas — npm run teste:legendas.
+  const filtradas = useMemo(() => {
+    const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
     const f = norm(filtro);
-    const filtradas = !f ? legendas : legendas.filter(l => {
-      const alvo = norm(`${l.nome} ${l.atributo} ${l.simbolo} ${l.fonte} ${l.metodo ?? ''}`);
-      return alvo.includes(f);
-    });
-    const mapa = new Map<string, Legenda[]>();
-    for (const l of filtradas) {
-      const k = l.fonte || '(sem fonte)';
-      if (!mapa.has(k)) mapa.set(k, []);
-      mapa.get(k)!.push(l);
-    }
-    return [...mapa.entries()].sort((a, b) => a[0].localeCompare(b[0], 'pt-BR'));
+    if (!f) return legendas;
+    return legendas.filter(l => norm(`${l.nome} ${l.atributo} ${l.simbolo} ${l.fonte} ${l.metodo ?? ''}`).includes(f));
   }, [legendas, filtro]);
+
+  // As abas contam SEM o recorte de categoria (senão a aba escolhida seria a
+  // única com número) e COM o filtro de texto, para refletir o que há para ver.
+  const grupos = useMemo(() => agruparPorCategoria(filtradas), [filtradas]);
+  const visiveis = useMemo(
+    () => cat === 'todas' ? grupos : grupos.filter(g => g.id === cat),
+    [grupos, cat]);
 
   // Quando o MESMO atributo tem mais de uma legenda, o mapa usa uma só — a
   // primeira de ordenarLegendasDoAtributo. Deixar isso à vista evita o susto de
@@ -195,6 +196,18 @@ function LegendasLista({
         className="w-full rounded px-2 py-1 text-[11px] outline-none" style={inputStyle}
       />
 
+      {/* Separador por categoria: só aparecem as que têm legenda. */}
+      {grupos.length > 0 && (
+        <div className="flex gap-1 flex-wrap">
+          <ChipCategoria ativo={cat === 'todas'} onClick={() => setCat('todas')}
+            rotulo="Todas" n={filtradas.length} />
+          {grupos.map(g => (
+            <ChipCategoria key={g.id} ativo={cat === g.id} onClick={() => setCat(g.id)}
+              rotulo={g.nome} n={g.itens.length} />
+          ))}
+        </div>
+      )}
+
       {temSistema && (
         <button onClick={destravar} title="As oficiais viram suas (editáveis/excluíveis) e param de ser repostas pelo sistema"
           className="w-full py-1.5 rounded text-[10px] font-bold flex items-center justify-center gap-1.5"
@@ -209,11 +222,17 @@ function LegendasLista({
         </p>
       )}
 
-      {agrupadas.map(([fonte, lista]) => (
-        <div key={fonte}>
-          <div className="text-[9px] uppercase tracking-wider font-semibold mb-1 px-1" style={{ color: '#475569' }}>{fonte} · {lista.length}</div>
+      {legendas.length > 0 && visiveis.length === 0 && (
+        <p className="text-[10px] py-4 text-center" style={{ color: '#64748b' }}>
+          Nenhuma legenda para este filtro.
+        </p>
+      )}
+
+      {visiveis.map(({ id, nome: nomeCat, itens }) => (
+        <div key={id}>
+          <div className="text-[9px] uppercase tracking-wider font-semibold mb-1 px-1" style={{ color: '#475569' }}>{nomeCat} · {itens.length}</div>
           <div className="space-y-1.5">
-            {lista.map(l => (
+            {itens.map(l => (
               <div key={l.id} className="p-2 rounded-lg" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
                 <div className="flex items-start gap-1.5">
                   <div className="flex-1 min-w-0">
@@ -228,7 +247,7 @@ function LegendasLista({
                       {l.escopo === 'sistema' && <Badge tone="sys">Sistema</Badge>}
                       <Badge>{l.atributo}{l.metodo ? ` · ${l.metodo}` : ''}</Badge>
                       <Badge>{l.unidade}</Badge>
-                      <Badge tone="cat">{l.categoria}</Badge>
+                      <Badge tone="cat">{l.fonte || 'sem fonte'}</Badge>
                       {l.invertida && <Badge tone="warn">invertida</Badge>}
                       <Badge tone="muted">{l.classes.length} classes</Badge>
                     </div>
@@ -267,6 +286,20 @@ function LegendasLista({
   );
 }
 
+function ChipCategoria({ rotulo, n, ativo, onClick }: {
+  rotulo: string; n: number; ativo: boolean; onClick: () => void;
+}) {
+  return (
+    <button onClick={onClick}
+      className="px-2 py-1 rounded text-[9px] font-bold flex items-center gap-1 whitespace-nowrap"
+      style={{ background: ativo ? 'var(--invicta-blue-mid)' : '#1a3a6b', color: ativo ? '#fff' : '#93c5fd' }}>
+      {rotulo}
+      <span className="px-1 rounded-full text-[8px]"
+        style={{ background: ativo ? 'rgba(255,255,255,.25)' : '#061525', color: ativo ? '#fff' : '#64748b' }}>{n}</span>
+    </button>
+  );
+}
+
 function Badge({ children, tone = 'default' }: { children: React.ReactNode; tone?: 'default' | 'cat' | 'warn' | 'muted' | 'sys' }) {
   const bg = tone === 'warn' ? '#3a2300' : tone === 'cat' ? '#102a47' : tone === 'muted' ? '#0f1f3a' : tone === 'sys' ? '#064e3b' : '#1a3a6b';
   const fg = tone === 'warn' ? '#fbbf24' : tone === 'cat' ? '#7dd3fc' : tone === 'muted' ? '#64748b' : tone === 'sys' ? '#6ee7b7' : '#cbd5e1';
@@ -297,6 +330,7 @@ function novaLegendaVazia(semente?: SementeLegenda): Omit<Legenda, 'id' | 'criad
       // e, numa legenda de Boro, pareceriam plausíveis — dá para salvar sem
       // perceber. Em zero, é evidente que falta preencher.
       classes: classesFertilidade5([0, 0, 0, 0]),
+      categoria: categoriaSugerida(semente.atributoId),
     };
   }
   return {
