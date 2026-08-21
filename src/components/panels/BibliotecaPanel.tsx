@@ -18,6 +18,7 @@ import { ehAdmin } from '@/lib/empresa';
 // Slug interno: as categorias da Biblioteca + a aba especial "Usuários".
 type SlugBiblioteca = CategoriaBiblioteca | 'usuarios';
 import { EtiquetaLayoutPicker } from '../talhao/EtiquetaLayoutPicker';
+import { LegendaEditor, type SementeLegenda } from './LegendasPanel';
 import { PERFIS_BUILTIN, norm as normSinonimo } from '@/lib/lab';
 import {
   getPadroesAmostragem, savePadraoAmostragem, updatePadraoAmostragem, deletePadraoAmostragem,
@@ -933,6 +934,12 @@ function PerfilEditor({ state, onClose }: { state: PerfilEditState; onClose: () 
   const [legPorEl, setLegPorEl] = useState<Record<string, string>>(state.legendasPorElemento);
   const [erro, setErro] = useState('');
   const [ordemRefresh, setOrdemRefresh] = useState(0);
+  // Elemento SEM legenda cadastrada: a linha vira "criar legenda", que abre o
+  // editor de legendas POR CIMA deste formulário. Antes o <select> ficava
+  // desabilitado e clicar nele não fazia nada — quem queria a legenda de Boro
+  // (nenhuma das 12 oficiais cobre S, B, Cu, Mn nem a granulometria) batia num
+  // beco: sem ação, sem explicação e sem caminho para criar.
+  const [criarLegPara, setCriarLegPara] = useState<VariavelAnalise | null>(null);
   const variaveisAtivas = useMemo(() => getVariaveisAtivas(), [ordemRefresh]);
   function mover(id: string, dir: -1 | 1) { reordenarVariavelAtiva(id, dir); setOrdemRefresh(x => x + 1); }
 
@@ -1030,12 +1037,20 @@ function PerfilEditor({ state, onClose }: { state: PerfilEditState; onClose: () 
                       className="disabled:opacity-25" style={{ color: '#93c5fd', lineHeight: 0 }}><ChevronDown size={12} /></button>
                   </div>
                   <span className="text-[10px] font-mono flex-shrink-0" style={{ width: 52, color: '#93c5fd' }}>{el.sigla}</span>
-                  <select value={valor} onChange={e => setLeg(el.id, e.target.value)}
-                    disabled={legs.length === 0}
-                    className="flex-1 rounded px-2 py-1 text-[10px] outline-none" style={inputStyle}>
-                    <option value="">{legs.length === 0 ? '— sem legendas cadastradas' : '— Nenhuma'}</option>
-                    {legs.map(l => <option key={l.id} value={l.id}>{l.nome}</option>)}
-                  </select>
+                  {legs.length === 0 ? (
+                    <button type="button" onClick={() => setCriarLegPara(el)}
+                      title={`Nenhuma legenda cadastrada para ${el.sigla} — criar agora`}
+                      className="flex-1 rounded px-2 py-1 text-[10px] text-left"
+                      style={{ ...inputStyle, color: '#93c5fd', cursor: 'pointer' }}>
+                      + criar legenda para {el.sigla} — nenhuma cadastrada
+                    </button>
+                  ) : (
+                    <select value={valor} onChange={e => setLeg(el.id, e.target.value)}
+                      className="flex-1 rounded px-2 py-1 text-[10px] outline-none" style={inputStyle}>
+                      <option value="">— Nenhuma</option>
+                      {legs.map(l => <option key={l.id} value={l.id}>{l.nome}</option>)}
+                    </select>
+                  )}
                 </div>
               );
             })}
@@ -1061,8 +1076,35 @@ function PerfilEditor({ state, onClose }: { state: PerfilEditState; onClose: () 
           <Save size={11} /> Salvar
         </button>
       </div>
+
+      {/* Legenda nova SEM sair do perfil: por cima, não no lugar. Mandar o usuário
+          para a aba Legendas perderia o que ele já mexeu aqui (nome, ordem dos
+          elementos, legendas escolhidas) — o formulário do perfil desmonta ao
+          trocar de categoria. */}
+      {criarLegPara && (
+        <div className="absolute inset-0 z-20 flex flex-col" style={{ background: 'var(--invicta-blue-dark)' }}>
+          <div className="px-3 pt-3 flex-shrink-0">
+            <p className="text-[10px] leading-relaxed" style={{ color: '#93c5fd' }}>
+              Nova legenda para <b>{criarLegPara.sigla} — {criarLegPara.nome}</b>. Ajuste as classes e salve:
+              ela já entra selecionada neste perfil (que ainda precisa do <b>Salvar</b> lá embaixo).
+            </p>
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            <LegendaEditor
+              legenda={null}
+              semente={sementeDoElemento(criarLegPara)}
+              onClose={id => { if (id) setLeg(criarLegPara.id, id); setCriarLegPara(null); }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
+}
+
+/** Elemento do catálogo → semente da legenda (o atributoId é o id da variável). */
+function sementeDoElemento(v: VariavelAnalise): SementeLegenda {
+  return { atributoId: v.id, atributo: v.nome, simbolo: v.sigla, unidade: v.unidade };
 }
 
 // ─── Safras ───────────────────────────────────────────────────────────────

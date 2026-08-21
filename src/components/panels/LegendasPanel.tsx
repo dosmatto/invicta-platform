@@ -277,7 +277,28 @@ function Badge({ children, tone = 'default' }: { children: React.ReactNode; tone
 // EDITOR
 // ============================================================
 
-function novaLegendaVazia(): Omit<Legenda, 'id' | 'criadoEm' | 'atualizadoEm'> {
+/** Dados do elemento para já abrir a legenda nova no atributo certo — quem
+ *  chega pela Biblioteca → Perfis ("criar legenda para B") não deveria ter de
+ *  adivinhar o ID do atributo, que é a chave que liga a legenda ao módulo. */
+export interface SementeLegenda {
+  atributoId: string; atributo: string; simbolo: string; unidade?: string;
+}
+
+function novaLegendaVazia(semente?: SementeLegenda): Omit<Legenda, 'id' | 'criadoEm' | 'atualizadoEm'> {
+  if (semente) {
+    return {
+      ...novaLegendaVazia(),
+      nome: `${semente.atributo} — nova legenda`,
+      atributoId: semente.atributoId,
+      atributo: semente.atributo,
+      simbolo: semente.simbolo,
+      unidade: semente.unidade ?? '',
+      // Limites ZERADOS de propósito: os do molde são os do Fósforo (6/15/40/80)
+      // e, numa legenda de Boro, pareceriam plausíveis — dá para salvar sem
+      // perceber. Em zero, é evidente que falta preencher.
+      classes: classesFertilidade5([0, 0, 0, 0]),
+    };
+  }
   return {
     nome: 'Nova legenda',
     atributoId: 'p',
@@ -294,14 +315,20 @@ function novaLegendaVazia(): Omit<Legenda, 'id' | 'criadoEm' | 'atualizadoEm'> {
   };
 }
 
-function LegendaEditor({ legenda, onClose }: { legenda: Legenda | null; onClose: () => void }) {
+export function LegendaEditor({ legenda, semente, onClose }: {
+  legenda: Legenda | null;
+  /** Só para legenda NOVA: pré-preenche o atributo (ver SementeLegenda). */
+  semente?: SementeLegenda;
+  /** Recebe o id da legenda salva — quem abriu já consegue selecioná-la. */
+  onClose: (idSalvo?: string) => void;
+}) {
   // Editando uma OFICIAL: ela é editada no lugar (mesmo cadastro, mesmo id — tudo
   // que já aponta para ela continua valendo) e, ao salvar, deixa de ser oficial.
   // Antes o lápis clonava por baixo dos panos e editava o clone; a oficial seguia
   // sendo a usada no mapa, então a alteração não aparecia em lugar nenhum.
   const eraOficial = legenda?.escopo === 'sistema';
   // edição ou criação
-  const [form, setForm] = useState(() => legenda ? { ...legenda, classes: legenda.classes.map(c => ({ ...c })) } : novaLegendaVazia());
+  const [form, setForm] = useState(() => legenda ? { ...legenda, classes: legenda.classes.map(c => ({ ...c })) } : novaLegendaVazia(semente));
   const [aviso, setAviso] = useState('');
   const [paletas, setPaletas] = useState<Paleta[]>([]);
   useEffect(() => { setPaletas(getPaletas()); }, []);
@@ -392,16 +419,17 @@ function LegendaEditor({ legenda, onClose }: { legenda: Legenda | null; onClose:
           definirLegendaPadrao(legenda.id, true);
         }
       }
-    } else {
-      saveLegenda(form);
+      onClose(legenda.id);
+      return;
     }
-    onClose();
+    const criada = saveLegenda(form);
+    onClose(criada.id);
   }
 
   return (
     <div className="px-3 py-3 space-y-3">
       <div className="flex items-center justify-between">
-        <button onClick={onClose} className="flex items-center gap-1 text-[10px] font-semibold" style={{ color: '#93c5fd' }}>
+        <button onClick={() => onClose()} className="flex items-center gap-1 text-[10px] font-semibold" style={{ color: '#93c5fd' }}>
           <ChevronLeft size={12} /> Voltar
         </button>
         <button onClick={salvar} className="px-3 py-1.5 rounded text-[10px] font-bold text-white flex items-center gap-1" style={{ background: 'var(--invicta-green-dark)' }}>
