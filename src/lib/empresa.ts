@@ -122,7 +122,7 @@ export function papelDoEmail(email: string | null): PapelMembro | null {
 // local fica vazia e alguém que TEM papel via "Acesso ainda não liberado".
 // Aqui buscamos só o registro dele; se existir, gravamos local e liberamos.
 // Devolve null quando realmente não há papel (ou a nuvem não respondeu).
-export async function confirmarPapelNaNuvem(email: string | null): Promise<PapelMembro | null> {
+export async function confirmarAcessoNaNuvem(email: string | null): Promise<RegistroPapel | null> {
   const e = normEmail(email ?? '');
   if (!e) return null;
   try {
@@ -131,18 +131,29 @@ export async function confirmarPapelNaNuvem(email: string | null): Promise<Papel
     const achados = await carregarDocsPorCampoSupabase<RegistroPapel>(K_PAPEIS, 'email', e);
     const reg = achados.find(r => normEmail(r.email) === e);
     if (!reg?.papel) return null;
-    // Grava local para o resto do app (pode/papelDoUsuario/meuRegistro) enxergar.
+    // A linha da nuvem SOBRESCREVE a local. Antes só entrava quando não havia
+    // linha nenhuma — e é justamente a linha VELHA que trava o recém-aprovado:
+    // quem se cadastra grava "aguardando aprovação" no próprio aparelho, e essa
+    // cópia vence a da nuvem no merge do boot enquanto a chave tiver envio
+    // pendente. Aprovar em outro aparelho não chegava nunca.
     const lista = load<RegistroPapel>(K_PAPEIS);
-    if (!lista.some(p => normEmail(p.email) === e)) {
-      lista.push(reg);
-      save(K_PAPEIS, lista);
-    }
-    console.info('[acesso] papel confirmado na nuvem (boot local estava incompleto):', e, reg.papel);
-    return reg.papel;
+    const i = lista.findIndex(p => normEmail(p.email) === e);
+    if (i >= 0) lista[i] = { ...lista[i], ...reg }; else lista.push(reg);
+    // Grava SÓ no local, sem espelhar: a nuvem manda no acesso da própria
+    // pessoa, mas a lista local dela pode estar velha nas OUTRAS linhas —
+    // devolvê-la inteira sobrescreveria o cadastro de terceiros.
+    try { localStorage.setItem(K_PAPEIS, JSON.stringify(lista)); } catch { /* cota cheia: segue com o valor em memória */ }
+    console.info('[acesso] registro confirmado na nuvem:', e, reg.papel,
+      (reg as RegistroPapel & { status?: string }).status ?? 'ativo');
+    return reg;
   } catch (err) {
-    console.warn('[acesso] falha ao confirmar o papel na nuvem:', err);
+    console.warn('[acesso] falha ao confirmar o acesso na nuvem:', err);
     return null;
   }
+}
+
+export async function confirmarPapelNaNuvem(email: string | null): Promise<PapelMembro | null> {
+  return (await confirmarAcessoNaNuvem(email))?.papel ?? null;
 }
 
 export function definirPapelEmail(

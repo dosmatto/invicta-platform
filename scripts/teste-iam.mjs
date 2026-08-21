@@ -7,6 +7,7 @@ import {
 } from '../src/lib/iam/permissoes.ts';
 import { CATEGORIAS, PAPEIS, MODULOS, ACOES, chavePerm } from '../src/lib/iam/tipos.ts';
 import { clientesDoProdutor, clienteIdDoProdutor, produtorSemVinculo } from '../src/lib/iam/vinculoProdutor.ts';
+import { statusEfetivo, podeEntrar, precisaConfirmarNaNuvem } from '../src/lib/iam/acessoEfetivo.ts';
 
 let ok = 0, fail = 0;
 function t(nome, fn) {
@@ -186,6 +187,38 @@ t('vínculo múltiplo: o Portal mostra o primeiro, o escopo enxerga todos', () =
 
 t('id vazio no meio da lista não vira vínculo fantasma', () => {
   assert.deepEqual(clientesDoProdutor({ clientesVinculados: ['', 'cli_2'] }), ['cli_2']);
+});
+
+// ── Status de acesso: a nuvem manda no acesso da própria pessoa ─────────────
+t('CASO RELATADO: local diz "aguardando", nuvem diz "ativo" → entra', () => {
+  // Ele gravou "aguardando" no próprio aparelho ao se cadastrar; a aprovação
+  // aconteceu no aparelho do administrador. Sem consultar a nuvem, ficava preso.
+  const st = statusEfetivo('aguardando_aprovacao', 'ativo');
+  assert.equal(st, 'ativo');
+  assert.equal(podeEntrar(st), true);
+});
+
+t('bloqueio de verdade continua bloqueando', () => {
+  assert.equal(podeEntrar(statusEfetivo('ativo', 'bloqueado')), false, 'nuvem bloqueou depois');
+  assert.equal(podeEntrar(statusEfetivo('aguardando_aprovacao', 'aguardando_aprovacao')), false);
+  assert.equal(podeEntrar(statusEfetivo('ativo', 'rejeitado')), false);
+});
+
+t('sem resposta da nuvem (offline) vale o local', () => {
+  assert.equal(statusEfetivo('ativo', undefined), 'ativo');
+  assert.equal(podeEntrar(statusEfetivo('bloqueado', undefined)), false);
+});
+
+t('registro antigo sem status nenhum entra (regra que já valia)', () => {
+  assert.equal(podeEntrar(undefined), true);
+  assert.equal(podeEntrar(''), true);
+});
+
+t('só consulta a nuvem quando o local barraria — não gasta rede à toa', () => {
+  assert.equal(precisaConfirmarNaNuvem('ativo'), false);
+  assert.equal(precisaConfirmarNaNuvem(undefined), false);
+  assert.equal(precisaConfirmarNaNuvem('aguardando_aprovacao'), true);
+  assert.equal(precisaConfirmarNaNuvem('bloqueado'), true);
 });
 
 console.log(`\n${ok} ok, ${fail} falha(s)`);

@@ -4,8 +4,9 @@ import { createContext, useContext, useState, useEffect, useCallback, ReactNode,
 import { useRouter } from 'next/navigation';
 import { seedIfEmpty } from '@/lib/seed';
 import { bootCloud, bootCloudCampo, cloudExcluirMapasPorPrefixo, cloudExcluirPorPrefixo } from '@/lib/cloud';
-import { empresaIfEmpty, adotarEmpresasLocais, garantirEmpresaInvicta, uidUsuario, ehOwner, seedPapeis, seedPermissoes, seedPlanos, papelDoEmail, papelDoUsuario, emailUsuario, precisaTrocarSenha, meuRegistro, loginExpirado, confirmarPapelNaNuvem } from '@/lib/empresa';
+import { empresaIfEmpty, adotarEmpresasLocais, garantirEmpresaInvicta, uidUsuario, ehOwner, seedPapeis, seedPermissoes, seedPlanos, papelDoEmail, papelDoUsuario, emailUsuario, precisaTrocarSenha, meuRegistro, loginExpirado, confirmarPapelNaNuvem, confirmarAcessoNaNuvem } from '@/lib/empresa';
 import { migrarIamV1, marcarUltimoAcesso } from '@/lib/iam/usuarios';
+import { podeEntrar, precisaConfirmarNaNuvem, statusEfetivo } from '@/lib/iam/acessoEfetivo';
 import { registrarLogin } from '@/lib/iam/auditoria';
 import { limparBaseOperacional } from '@/lib/admin/manutencao';
 import { TrocaSenhaObrigatoria } from '@/components/auth/TrocaSenhaObrigatoria';
@@ -147,6 +148,10 @@ export function AppProvider({ children, redirectProdutorParaPortal, modoCampo }:
   // Fase U1: e-mail sem papel atribuído (inv_papeis) = acesso bloqueado.
   const [acessoBloqueado, setAcessoBloqueado] = useState(false);
   const [motivoBloqueio, setMotivoBloqueio] = useState<string>('');   // IAM: por que está bloqueado
+  // O que a NUVEM respondeu sobre o acesso (null = não respondeu). Aparece na
+  // tela de bloqueio: um print do usuário já diz se quem barrou foi o cadastro
+  // real ou uma cópia velha no aparelho dele — foi o que faltou para achar isto.
+  const [statusNuvem, setStatusNuvem] = useState<string | null>(null);
   // Fase U3: 1º acesso com senha provisória → troca obrigatória.
   const [trocaSenha, setTrocaSenha] = useState(false);
   // Prestador com validade de login vencida → bloqueado com mensagem própria.
@@ -206,7 +211,7 @@ export function AppProvider({ children, redirectProdutorParaPortal, modoCampo }:
 
     const unsub = observarAuth(async (user) => {
       setUsuario(user);
-      if (!user) { setDadosProntos(false); setAcessoBloqueado(false); setMotivoBloqueio(''); setTrocaSenha(false); setValidadeExpirada(false); setDataExpiracao(null); return; }
+      if (!user) { setDadosProntos(false); setAcessoBloqueado(false); setMotivoBloqueio(''); setStatusNuvem(null); setTrocaSenha(false); setValidadeExpirada(false); setDataExpiracao(null); return; }
       setDadosProntos(false);
       await hidrata;   // pesadas em memória antes do boot da nuvem (ver acima)
       // v2.42: `inv_bib_insumos` passou a sincronizar. Marca a chave como
@@ -254,8 +259,21 @@ export function AppProvider({ children, redirectProdutorParaPortal, modoCampo }:
       migrarIamV1();                                   // IAM: categoria/status nos registros antigos
       // IAM: status do usuário (bloqueado / aguardando aprovação / inativo) vale
       // mesmo com papel atribuído — quem não está ATIVO não entra.
-      const st = (meuRegistro() as { status?: string } | null)?.status;
-      if (st && st !== 'ativo') autorizado = false;
+      let st = (meuRegistro() as { status?: string } | null)?.status;
+      // …mas o status local pode estar VELHO. Quem se cadastra grava
+      // "aguardando aprovação" no PRÓPRIO aparelho; a aprovação acontece no
+      // aparelho do administrador. Se a cópia local vencer o merge do boot (a
+      // chave 'inv_papeis' fica pendente de envio quando o push do cadastro
+      // falhou), a pessoa fica presa em "Cadastro aguardando aprovação" para
+      // sempre — aprovar de novo não adianta, e "Tentar de novo" relê o mesmo
+      // local. Antes de barrar, confirma o registro na nuvem (1 linha).
+      if (precisaConfirmarNaNuvem(st)) {
+        const daNuvem = await confirmarAcessoNaNuvem(emailUsuario());
+        const stNuvem = daNuvem ? ((daNuvem as { status?: string }).status ?? 'ativo') : null;
+        setStatusNuvem(stNuvem);
+        if (daNuvem) st = statusEfetivo(st, stNuvem ?? undefined);
+      } else setStatusNuvem(null);
+      if (!podeEntrar(st)) autorizado = false;
       // Validade de login (prestador): papel existe mas venceu → bloqueio próprio.
       const reg = meuRegistro();
       const expirado = autorizado && loginExpirado(reg);
@@ -422,6 +440,11 @@ export function AppProvider({ children, redirectProdutorParaPortal, modoCampo }:
             </p>
             <p className="text-[10px]" style={{ color: '#64748b' }}>
               Se o administrador acabou de liberar, clique em “Tentar de novo”.
+            </p>
+            <p className="text-[9px]" style={{ color: '#475569' }}>
+              {statusNuvem
+                ? <>Situação confirmada na nuvem: <strong>{statusNuvem}</strong>.</>
+                : <>Sem resposta da nuvem agora — a situação acima veio deste aparelho. Confira a internet e tente de novo.</>}
             </p>
           </div>
           <div className="flex gap-2">
