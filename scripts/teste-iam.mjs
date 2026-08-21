@@ -6,6 +6,7 @@ import {
   poderesDeAcesso, poderesSobreUsuario,
 } from '../src/lib/iam/permissoes.ts';
 import { CATEGORIAS, PAPEIS, MODULOS, ACOES, chavePerm } from '../src/lib/iam/tipos.ts';
+import { clientesDoProdutor, clienteIdDoProdutor, produtorSemVinculo } from '../src/lib/iam/vinculoProdutor.ts';
 
 let ok = 0, fail = 0;
 function t(nome, fn) {
@@ -153,6 +154,38 @@ t('admin edita usuário comum normalmente (e não o remove)', () => {
   const admin = poderesDeAcesso(comoPapel('admin'));
   assert.deepEqual(poderesSobreUsuario(admin, 'agronomo', false),
     { podeEditar: true, podeExcluir: false });
+});
+
+// ── Vínculo do produtor: os DOIS campos são a mesma pergunta ────────────────
+t('CASO RELATADO: vínculo só no IAM (aba Vínculos/convite) libera o produtor', () => {
+  // Cadastro aprovado com "1 prod" no cartão e clienteId vazio: o Portal lia só
+  // o campo antigo e mostrava "Acesso ainda não vinculado".
+  const reg = { clientesVinculados: ['cli_1'] };
+  assert.deepEqual(clientesDoProdutor(reg), ['cli_1']);
+  assert.equal(clienteIdDoProdutor(reg), 'cli_1');
+  assert.equal(produtorSemVinculo('produtor', reg), false);
+});
+
+t('o campo ANTIGO tem preferência (foi escolha explícita de um cliente só)', () => {
+  const reg = { clienteId: 'cli_antigo', clientesVinculados: ['cli_novo', 'cli_outro'] };
+  assert.equal(clienteIdDoProdutor(reg), 'cli_antigo');
+});
+
+t('produtor sem vínculo nenhum é sinalizado (é o que trava a entrada)', () => {
+  assert.equal(produtorSemVinculo('produtor', {}), true);
+  assert.equal(produtorSemVinculo('produtor', { clientesVinculados: [] }), true);
+  assert.equal(produtorSemVinculo('produtor', null), true);
+  assert.equal(produtorSemVinculo('agronomo', {}), false, 'só vale para o papel produtor');
+});
+
+t('vínculo múltiplo: o Portal mostra o primeiro, o escopo enxerga todos', () => {
+  const reg = { clientesVinculados: ['cli_1', 'cli_2'] };
+  assert.equal(clienteIdDoProdutor(reg), 'cli_1');
+  assert.deepEqual(clientesDoProdutor(reg), ['cli_1', 'cli_2']);
+});
+
+t('id vazio no meio da lista não vira vínculo fantasma', () => {
+  assert.deepEqual(clientesDoProdutor({ clientesVinculados: ['', 'cli_2'] }), ['cli_2']);
 });
 
 console.log(`\n${ok} ok, ${fail} falha(s)`);

@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { meuRegistro, papelDoUsuario, planoPorId, ROTULO_PAPEL } from '@/lib/empresa';
+import { clienteIdDoProdutor } from '@/lib/iam/vinculoProdutor';
 import { getClientes, getFazendas, getTalhoes, getSafras } from '@/lib/store';
 import { rotuloAno } from '@/lib/periodo';
 import { logout, emailUsuario } from '@/lib/auth';
@@ -25,10 +26,18 @@ export default function PortalPage() {
 
   const reg = useMemo(() => meuRegistro(), [pronto]);
   const papel = papelDoUsuario();
-  const cliente = useMemo(() => reg?.clienteId ? getClientes().find(c => c.id === reg.clienteId) ?? null : null, [reg]);
+  // O vínculo do produtor vem do campo antigo (Dados) OU do IAM (Vínculos /
+  // convite / aprovação) — ler só o antigo trancava do lado de fora quem foi
+  // vinculado pela Central de Acessos. Ver lib/iam/vinculoProdutor.ts.
+  const cliente = useMemo(() => {
+    const id = clienteIdDoProdutor(reg);
+    return id ? getClientes().find(c => c.id === id) ?? null : null;
+  }, [reg]);
   const plano = useMemo(() => planoPorId(reg?.planoId), [reg]);
   const safras = useMemo(() => getSafras(), [pronto]);
-  const fazendas = useMemo(() => cliente ? getFazendas(cliente.id) : [], [cliente]);
+  // getFazendas() já vem filtrado pelo escopo do usuário; sem o id fixo, um
+  // produtor vinculado a mais de um cliente vê as fazendas de todos eles.
+  const fazendas = useMemo(() => cliente ? getFazendas() : [], [cliente]);
 
   if (!pronto) return null;
 

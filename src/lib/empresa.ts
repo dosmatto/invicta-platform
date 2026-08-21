@@ -11,6 +11,7 @@ import { usuarioAtual, authConfigurado } from './auth';
 import { cloudPushLista } from './cloud';
 import { lerListaLocal } from './localComprimido';
 import { CAP_PARA_PERM, MATRIZ_PADRAO } from './iam/permissoes';
+import { clientesDoProdutor } from './iam/vinculoProdutor';
 
 // 'leitor' (somente leitura) e 'custom' (permissões definidas uma a uma) vieram
 // com o IAM; 'editor'/'viewer' são legado mantido para registros antigos.
@@ -494,7 +495,11 @@ export function escopoClienteIds(): Set<string> | null {
   const papel = papelDoUsuario();
   if (!papel || papel === 'owner' || papel === 'admin' || papel === 'editor') return null;
   const reg = meuRegistro();
-  if (papel === 'produtor') return new Set(reg?.clienteId ? [reg.clienteId] : []);
+  // Produtor: o vínculo pode ter vindo do campo antigo (Dados → "Produtor
+  // (cliente)") OU do IAM (Vínculos/convite/aprovação). Ler só o antigo deixava
+  // o produtor com escopo VAZIO — não via nem o próprio produtor. Ver
+  // lib/iam/vinculoProdutor.ts — npm run teste:iam.
+  if (papel === 'produtor') return new Set(clientesDoProdutor(reg));
   const vinc = reg?.clientesVinculados;
   return vinc && vinc.length ? new Set(vinc) : null;
 }

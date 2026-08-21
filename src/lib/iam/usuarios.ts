@@ -177,7 +177,16 @@ export function definirVinculos(
   email: string,
   v: { clientesVinculados?: string[]; fazendasVinculadas?: string[]; talhoesVinculados?: string[] },
 ): void {
-  salvarUsuario(email, v);
+  // PRODUTOR: o vínculo de cliente vive em dois campos (o antigo `clienteId`,
+  // que o Portal lê, e `clientesVinculados`, do IAM). Gravar só um deixa os dois
+  // divergentes — e, como o antigo tem preferência na leitura, trocar o produtor
+  // AQUI não teria efeito nenhum enquanto o antigo apontasse para outro.
+  // Ver lib/iam/vinculoProdutor.ts.
+  const alvo = getUsuario(email);
+  const extra = (alvo?.papel === 'produtor' && v.clientesVinculados)
+    ? { clienteId: v.clientesVinculados[0] ?? '' }
+    : {};
+  salvarUsuario(email, { ...v, ...extra });
   const partes = [
     v.clientesVinculados ? `${v.clientesVinculados.length} produtor(es)` : null,
     v.fazendasVinculadas ? `${v.fazendasVinculadas.length} fazenda(s)` : null,

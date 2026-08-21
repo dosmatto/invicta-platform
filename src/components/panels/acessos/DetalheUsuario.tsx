@@ -17,6 +17,7 @@ import {
   type UsuarioIam,
 } from '@/lib/iam/usuarios';
 import { permissoesEfetivas, MATRIZ_PADRAO } from '@/lib/iam/permissoes';
+import { clienteIdDoProdutor, produtorSemVinculo } from '@/lib/iam/vinculoProdutor';
 import { getPerfis, getPerfil, salvarPerfil } from '@/lib/iam/perfis';
 import {
   ACOES, CATEGORIAS, MODULOS, PAPEIS, ROTULO_ACAO, chavePerm,
@@ -210,13 +211,30 @@ function SecaoDados({ u, podeEditar, planos, clientes, onMudou, atualizar }: {
         </div>
       </div>
 
+      {produtorSemVinculo(u.papel, u) && (
+        <p className="text-[10px] rounded p-2" style={{ background: '#3a2300', color: '#fbbf24', border: '1px solid #92400e' }}>
+          Este produtor <b>não consegue entrar</b>: falta escolher o produtor (cliente) abaixo.
+          Sem vínculo, o Portal do Produtor mostra “Acesso ainda não vinculado”, mesmo com o cadastro ativo.
+        </p>
+      )}
+
       {u.papel === 'produtor' && (
         <div className="grid grid-cols-2 gap-2">
           <div className="space-y-1">
             <Rotulo>Produtor (cliente)</Rotulo>
             <select className="w-full rounded px-2 py-1.5 text-[11px]" style={campoSt} disabled={!podeEditar}
-              value={u.clienteId ?? ''}
-              onChange={e => atualizar(() => { salvarUsuario(u.email, { clienteId: e.target.value }); })}>
+              value={clienteIdDoProdutor(u) ?? ''}
+              onChange={e => atualizar(() => {
+                // Grava nos DOIS campos: o antigo (que o Portal lê) e o do IAM
+                // (que a aba Vínculos e o convite preenchem). Enquanto viviam
+                // separados, dava para o cartão mostrar "1 prod" e o produtor
+                // não conseguir entrar. Ver lib/iam/vinculoProdutor.ts.
+                const id = e.target.value;
+                salvarUsuario(u.email, {
+                  clienteId: id,
+                  clientesVinculados: id ? [id] : [],
+                });
+              })}>
               <option value="">— escolher —</option>
               {clientes.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
             </select>
