@@ -10,27 +10,39 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { hojeSaoPauloISO, periodoDeData, rotuloEpoca } from '@/lib/periodo';
 import { useApp } from '@/context/AppContext';
 import {
-  getSafras, getPlantio, getTalhoes, getMapasProdutividade, saveMapaProdutividade,
+  getSafras, getPlantio, getTalhoes, getFazendas, getClientes, getLegendasPorAtributo,
+  getMapasProdutividade, saveMapaProdutividade,
   setMapaProdutividadeOficial, deleteMapaProdutividade, type MapaProdutividade,
 } from '@/lib/store';
 import {
-  extrairPoligono, coordsFromBounds, gradienteCss, comprimirGrid, descomprimirGrid, rampaDaLegenda,
+  extrairPoligono, coordsFromBounds, gradienteCss, comprimirGrid, descomprimirGrid, rampaDaLegenda, decodeGrid,
   type RespInterp, type Grid,
 } from '@/lib/fertilidade';
-import { colorirGridComLegenda } from '@/lib/raster';
+import { colorirGrid, colorirGridComLegenda, colorirGridPorQuantis } from '@/lib/raster';
+import type { ClassificacaoQuantis } from '@/lib/quantis';
 import { rasterizarPontos5, type Classe5 } from '@/lib/condutividade';
 import {
   parseCsvTexto, autoColunas, pontosDeCsv, lerShapefilePontos, pontosDeGeojson,
-  processarColheita, statsDoGrid, legendaDaCultura, emUnidade, rotuloUnidade, sugerirFiltroBruto,
+  processarColheita, statsDoGrid, legendaDaCultura, emUnidade, rotuloUnidade, sugerirFiltroBruto, quantisDaProdutividade,
   SACA_KG, PARAMS_COLHEITA_PADRAO,
   type PontoColheita, type Unidade, type StatsProd, type CsvParsed, type ParamsColheita, type RelatorioColheita,
 } from '@/lib/produtividade';
 import { cloudSalvarMapa, cloudCarregarMapasPorPrefixo, cloudPodeGravar } from '@/lib/cloud';
+import { carregarNdviSalvos, type NdviCamada } from '@/lib/meap/gerar';
+import { carregarContextoRelatorio } from '@/lib/relatorioDados';
+import { zonasDoTalhao } from '@/lib/zonasDoTalhao';
+import { amostrarPorZona } from '@/lib/validacao/amostragem';
+import { resumoValores, separacaoEntreZonas } from '@/lib/validacao/estatistica';
+import { correlacaoGrids, sobreposicaoBbox } from '@/lib/correlacaoGrid';
+import { classesQuantis } from '@/lib/quantis';
+import { gerarRelatorioProdutividade, type ZonaRel, type NdviRel } from '@/lib/relatorioProdutividade';
+import { classeZona } from '@/lib/zonas';
+import { areaHaGeo } from '@/lib/areaGeo';
 import { ComparadorProdNdvi } from '@/components/talhao/ComparadorProdNdvi';
 import { SeletorLegenda, legendasDoModulo, usePrefLegenda } from './SeletorLegenda';
-import { respeitarPadraoHomonima } from '@/lib/legendas';
+import { respeitarPadraoHomonima, rampaVisualStops, corCheiaDaClasse } from '@/lib/legendas';
 import type { Legenda } from '@/lib/legendas';
-import { Upload, Loader2, AlertTriangle, Save, Star, Trash2, Eye, Wand2, FileSpreadsheet, Plus, Layers, ChevronDown, ChevronUp } from 'lucide-react';
+import { Upload, Loader2, AlertTriangle, Save, Star, Trash2, Eye, Wand2, FileSpreadsheet, Plus, Layers, ChevronDown, ChevronUp, FileDown } from 'lucide-react';
 
 import { inputStyle } from '@/constants/ui';
 import { fmtMinMax0 as fmt, fmtHa } from '@/lib/formato';
@@ -95,6 +107,19 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
   const [fresco, setFresco] = useState(false);
   const [verBrutos, setVerBrutos] = useState(false);   // preview dos pontos crus em 5 classes
   const [classesBrutos, setClassesBrutos] = useState<Classe5[] | null>(null);
+  // Escala do mapa: 'absoluta' = faixas fixas da cultura (a lavoura é boa?);
+  // 'quantil' = 5 faixas de área igual, cortes vindos dos próprios dados
+  // (onde, DENTRO dela, está o melhor e o pior?).
+  const [modoMapa, setModoMapa] = useState<'absoluta' | 'quantil'>('absoluta');
+  // Relatório PDF: qual cena de índice entra na pág. 3 e no gráfico de dispersão.
+  const [ndvisProd, setNdvisProd] = useState<NdviCamada[]>([]);
+  const [ndviSelProd, setNdviSelProd] = useState('');
+  const [gerandoPdf, setGerandoPdf] = useState('');   // '' | 'atual' | id da versão
+  const [erroPdf, setErroPdf] = useState('');
+  const quantis: ClassificacaoQuantis | null = useMemo(
+    () => (res?.grid && legenda ? quantisDaProdutividade(res, legenda, 5) : null),
+    [res, legenda],
+  );
 
   const [versoes, setVersoes] = useState<MapaProdutividade[]>([]);
   const [rasters, setRasters] = useState<Record<string, { bounds: [number, number, number, number]; grid: Grid }>>({});
@@ -103,6 +128,7 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
   useEffect(() => {
     recarregar();
     setRes(null); setStats(null); setFresco(false); setMaqs([]); setColunas([]); setRelatorio(null); setBrutoTocado(false);
+    setNdvisProd([]); setNdviSelProd(''); setErroPdf('');
     if (!nav.talhaoId) return;
     (async () => {
       const docs = await cloudCarregarMapasPorPrefixo<{ resp: { bounds: [number, number, number, number]; grid?: Grid } }>(prefixoProd(nav.talhaoId!));
@@ -115,6 +141,10 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
         map[recId] = { bounds: d.dados.resp.bounds, grid };
       }
       setRasters(map);
+      // Índices mantidos do talhão — alimentam a página de NDVI e a dispersão.
+      const nd = await carregarNdviSalvos(nav.talhaoId!).catch(() => [] as NdviCamada[]);
+      setNdvisProd(nd);
+      setNdviSelProd(nd[0]?.chave ?? '');
     })();
   }, [nav.talhaoId, safra]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -162,12 +192,16 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
     setClassesBrutos(null);
     if (!res?.grid?.b64 || !legenda) { setFertilidadeOverlay(null); setFertilidadeLabels(null); return; }
     let url: string | undefined;
-    try { url = colorirGridComLegenda(res.grid, legenda).dataUrl; } catch (e) { console.warn('[prod] colorir falhou:', e); }
+    try {
+      url = modoMapa === 'quantil' && quantis
+        ? colorirGridPorQuantis(res.grid, quantis.breaks, quantis.faixas.map(f => f.cor)).dataUrl
+        : colorirGridComLegenda(res.grid, legenda).dataUrl;
+    } catch (e) { console.warn('[prod] colorir falhou:', e); }
     if (!url && res.png) url = res.png;
     if (!url) { setFertilidadeOverlay(null); return; }
     setFertilidadeOverlay({ url, coordinates: coordsFromBounds(res.bounds), opacity: 1 });
     setFertilidadeLabels(null);
-  }, [verBrutos, pontosBrutos, res, legenda, setFertilidadeOverlay, setFertilidadeLabels]);
+  }, [verBrutos, pontosBrutos, res, legenda, modoMapa, quantis, setFertilidadeOverlay, setFertilidadeLabels]);
 
   // Auto-sugere o filtro bruto pelos dados (até o usuário editar manualmente).
   useEffect(() => {
@@ -227,6 +261,99 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
     setStats({ nUsados: v.stats.nUsados, areaHa: v.stats.areaHa, producaoTotalKg: v.stats.producaoTotalKg, mediaKgha: v.stats.mediaKgha, minKgha: v.stats.minKgha, maxKgha: v.stats.maxKgha, cv: v.stats.cv, histograma: [] });
     setUnidade(v.unidade); setFresco(false);
   }
+  // ── Relatório PDF ───────────────────────────────────────────────────────────
+  // Serve os dois botões: sem argumento usa o mapa em tela; com `v`, uma versão
+  // salva (o raster vem da nuvem, em `rasters`).
+  async function exportarPdf(v?: MapaProdutividade) {
+    if (!nav.talhaoId || !poligono) { setErroPdf('Limite do talhão não encontrado — abra o talhão no mapa.'); return; }
+    const fonte = v
+      ? (() => { const r = rasters[v.id]; return r ? { grid: r.grid, bounds: r.bounds, pixelM: v.params.pixelM, cultura: v.cultura, unidade: v.unidade, dataRef: v.dataReferencia ?? v.criadoEm.slice(0, 10), stats: { nUsados: v.stats.nUsados, areaHa: v.stats.areaHa, producaoTotalKg: v.stats.producaoTotalKg, mediaKgha: v.stats.mediaKgha, minKgha: v.stats.minKgha, maxKgha: v.stats.maxKgha, cv: v.stats.cv, histograma: [] } as StatsProd, limpeza: null as RelatorioColheita | null, cleaningSalvo: v.cleaning, nPontos: v.stats.nPontos, versao: v.versao, nMaquinas: v.nMaquinas, mediaRealKgha: v.mediaRealKgha } : null; })()
+      : (res?.grid && stats ? { grid: res.grid, bounds: res.bounds, pixelM: res.stats?.pixel_m ?? pixelM, cultura, unidade, dataRef, stats, limpeza: relatorio, cleaningSalvo: clean as unknown as Record<string, number | boolean>, nPontos: nPontosTotal, versao: null, nMaquinas: maqs.length, mediaRealKgha: null } : null);
+    if (!fonte) { setErroPdf(v ? 'Raster desta versão não está na nuvem (reprocesse).' : 'Processe um mapa antes de gerar o relatório.'); return; }
+
+    setGerandoPdf(v ? v.id : 'atual'); setErroPdf('');
+    try {
+      const leg = legendaInicial(fonte.cultura);
+      if (!leg) throw new Error('Legenda de produtividade não encontrada.');
+
+      const ctx = await carregarContextoRelatorio(nav.talhaoId, safra, poligono);
+      const talhaoRec = getTalhoes().find(t => t.id === nav.talhaoId);
+      const faz = talhaoRec ? getFazendas().find(f => f.id === talhaoRec.fazendaId) : undefined;
+      const cli = faz ? getClientes().find(c => c.id === faz.clienteId) : undefined;
+      const logoClienteUrl = (cli as { logoUrl?: string } | undefined)?.logoUrl ?? null;
+
+      const dec = decodeGrid(fonte.grid);
+      const resumo = resumoValores(dec.valores);
+      const cores = leg.classes.length === 5 ? leg.classes.map(corCheiaDaClasse) : [];
+      const q = classesQuantis(dec.valores, {
+        k: 5, pixelM: fonte.pixelM,
+        cores: cores.length ? cores : ['#B3261E', '#E8710A', '#F2C200', '#7CB342', '#1B5E20'],
+        nomes: leg.classes.length === 5 ? leg.classes.map(c => c.nome) : ['Muito Baixa', 'Baixa', 'Média', 'Alta', 'Muito Alta'],
+      });
+      if (!q) throw new Error('Não foi possível calcular as faixas por quantil deste mapa.');
+
+      const rasterAbsolutoPng = colorirGridComLegenda(fonte.grid, leg).dataUrl;
+      const rasterQuantilPng = colorirGridPorQuantis(fonte.grid, q.breaks, q.faixas.map(f => f.cor)).dataUrl;
+
+      // ── NDVI escolhido (opcional) ──
+      const nd = ndvisProd.find(n => n.chave === ndviSelProd) ?? null;
+      const ndviLeg = getLegendasPorAtributo('ndvi')[0];
+      let ndvi: NdviRel | null = null;
+      let correlacao = null as ReturnType<typeof correlacaoGrids> | null;
+      let sobrepos: number | null = null;
+      if (nd && ndviLeg) {
+        const gNdvi = { b64: nd.b64, shape: nd.shape };
+        const decN = decodeGrid(gNdvi);
+        let soma = 0, n = 0;
+        for (let i = 0; i < decN.valores.length; i++) { const x = decN.valores[i]; if (isFinite(x)) { n++; soma += x; } }
+        ndvi = {
+          data: nd.data,
+          fonte: nd.nut.startsWith('ndvi_cbers') ? 'CBERS-4A' : 'Sentinel-2',
+          indice: nd.indice || 'NDVI',
+          rasterPng: colorirGrid(gNdvi, [0, 1], rampaVisualStops({ ...ndviLeg, estilo: 'continuo' })).dataUrl,
+          bounds: nd.bounds,
+          legenda: ndviLeg,
+          media: n ? soma / n : 0,
+        };
+        correlacao = correlacaoGrids(dec, decN, { maxAmostra: 1500, minN: 30 });
+        sobrepos = sobreposicaoBbox(fonte.bounds, nd.bounds);
+      }
+
+      // ── Zonas de manejo (mesma cascata do módulo Zonas) ──
+      const zs = zonasDoTalhao(nav.talhaoId);
+      const porZona = zs.length ? amostrarPorZona(zs.map(z => ({ idZona: z.id, geometry: z.geometry })), fonte.grid, fonte.bounds) : new Map<string, number[]>();
+      const zonas: ZonaRel[] = zs.map(z => ({
+        id: z.id, classe: z.classe, cor: classeZona(z.classe).cor,
+        geometry: z.geometry,
+        stats: resumoValores(porZona.get(z.id) ?? []),
+        areaHa: areaHaGeo(z.geometry),
+      }));
+      const grupos = zonas.filter(z => z.stats).map(z => ({ id: z.id, valores: porZona.get(z.id) ?? [] }));
+      const separacaoZonas = grupos.length >= 2 ? separacaoEntreZonas(grupos) : null;
+
+      await gerarRelatorioProdutividade({
+        fazenda: ctx.fazenda || nav.fazenda, produtor: ctx.produtor || nav.produtor,
+        talhao: ctx.talhao || nav.talhao, safra,
+        cultura: fonte.cultura, areaHa: ctx.areaHa || fonte.stats.areaHa,
+        municipio: ctx.municipio, estado: ctx.estado, siglaFazenda: ctx.siglaFazenda,
+        // Ano/época vêm da COLHEITA (dataReferencia), não do laudo de laboratório
+        // que alimenta ctx.ano/ctx.epoca — senão o mapa de colheita seria
+        // arquivado com o período da análise de solo.
+        ano: null, epoca: null,
+        dataReferencia: fonte.dataRef,
+        logoClienteUrl, poligono, satelite: true, corLimite: '#ffffff',
+        unidade: fonte.unidade, bounds: fonte.bounds, pixelM: fonte.pixelM, legenda: leg,
+        rasterAbsolutoPng, rasterQuantilPng, quantis: q,
+        stats: fonte.stats, resumo, limpeza: fonte.limpeza,
+        cleaningSalvo: fonte.cleaningSalvo, nPontosSalvo: fonte.nPontos,
+        versao: fonte.versao, nMaquinas: fonte.nMaquinas, mediaRealKgha: fonte.mediaRealKgha,
+        ndvi, correlacao, sobreposicaoNdvi: sobrepos, zonas, separacaoZonas,
+      });
+    } catch (e) {
+      setErroPdf(e instanceof Error ? e.message : 'Falha ao gerar o relatório.');
+    } finally { setGerandoPdf(''); }
+  }
+
   function tornarOficial(id: string) { setMapaProdutividadeOficial(id); recarregar(); }
   function excluir(v: MapaProdutividade) {
     if (!confirm(`Excluir o ${v.cultura} v${v.versao}?`)) return;
@@ -396,13 +523,50 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
           {stats.histograma.length > 0 && <Histograma h={stats.histograma} unidade={unidade} />}
           <SeletorLegenda legendas={legendasProd} valorId={legenda.id}
             onEscolher={id => { const l = legendasProd.find(x => x.id === id); if (l) { setLegenda(l); escolherLegProd(id); } }} />
-          <div className="h-3.5 rounded" style={{ border: '1px solid rgba(255,255,255,0.1)', background: gradienteCss(legenda) }} />
-          <p className="text-[9px]" style={{ color: '#64748b' }}>{legenda.nome} · pixel {res.stats?.pixel_m ?? pixelM} m</p>
+          <div className="flex gap-1">
+            {([['absoluta', 'Absoluta'], ['quantil', `Quantil (${quantis ? quantis.faixas.length : 5} faixas)`]] as const).map(([v, l]) => (
+              <button key={v} onClick={() => setModoMapa(v)} disabled={v === 'quantil' && !quantis}
+                className="flex-1 py-1 rounded text-[10px] font-bold disabled:opacity-40"
+                style={{ background: modoMapa === v ? '#2e5fa3' : '#1a3a6b', color: modoMapa === v ? '#fff' : '#93c5fd' }}>
+                {l}
+              </button>
+            ))}
+          </div>
+          {modoMapa === 'quantil' && quantis
+            ? <FaixasQuantil q={quantis} unidade={unidade} />
+            : <div className="h-3.5 rounded" style={{ border: '1px solid rgba(255,255,255,0.1)', background: gradienteCss(legenda) }} />}
+          <p className="text-[9px]" style={{ color: '#64748b' }}>
+            {modoMapa === 'quantil'
+              ? `Cortes calculados deste mapa · cada faixa ≈ ${quantis ? (100 / quantis.faixas.length).toFixed(0) : '20'}% da área`
+              : legenda.nome} · pixel {res.stats?.pixel_m ?? pixelM} m
+          </p>
           {fresco && (
             cloudPodeGravar()
               ? <button onClick={salvar} className="w-full py-2 rounded text-xs font-bold text-white flex items-center justify-center gap-1.5" style={{ background: 'var(--invicta-blue-mid)' }}><Save size={13} /> Salvar como Mapa Oficial</button>
               : <p className="text-[10px]" style={{ color: '#fbbf24' }}>Faça login para salvar.</p>
           )}
+
+          {/* Relatório PDF: mapa absoluto + quantil (+ NDVI) + resumo analítico */}
+          {ndvisProd.length > 0 && (
+            <Campo label="Índice do relatório (página de NDVI e dispersão)">
+              <select value={ndviSelProd} onChange={e => setNdviSelProd(e.target.value)} className="w-full rounded px-2 py-1 text-[11px] outline-none" style={inputStyle}>
+                <option value="">— sem NDVI —</option>
+                {ndvisProd.map(n => (
+                  <option key={n.chave} value={n.chave}>
+                    {n.indice || 'NDVI'} · {new Date(n.data + 'T00:00:00').toLocaleDateString('pt-BR')} · {n.nut.startsWith('ndvi_cbers') ? 'CBERS' : 'S2'}
+                  </option>
+                ))}
+              </select>
+            </Campo>
+          )}
+          <button onClick={() => exportarPdf()} disabled={gerandoPdf !== ''}
+            className="w-full py-2 rounded text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-50"
+            style={{ background: '#1a3a6b', color: '#93c5fd' }}>
+            {gerandoPdf === 'atual'
+              ? <><Loader2 size={13} className="animate-spin" /> Gerando PDF…</>
+              : <><FileDown size={13} /> Relatório de produtividade (PDF)</>}
+          </button>
+          {erroPdf && <p className="text-[10px]" style={{ color: '#f87171' }}>{erroPdf}</p>}
         </div>
       )}
 
@@ -423,6 +587,9 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
                   </p>
                 </div>
                 <button onClick={() => verVersao(v)} title="Ver no mapa" style={{ color: '#93c5fd' }}><Eye size={14} /></button>
+                <button onClick={() => exportarPdf(v)} disabled={gerandoPdf !== ''} title="Relatório PDF" className="disabled:opacity-40" style={{ color: '#86efac' }}>
+                  {gerandoPdf === v.id ? <Loader2 size={13} className="animate-spin" /> : <FileDown size={13} />}
+                </button>
                 {!v.oficial && <button onClick={() => tornarOficial(v.id)} title="Tornar oficial" style={{ color: '#fbbf24' }}><Star size={14} /></button>}
                 <button onClick={() => excluir(v)} title="Excluir" style={{ color: '#f87171' }}><Trash2 size={13} /></button>
               </div>
@@ -496,6 +663,34 @@ function Histograma({ h, unidade }: { h: { x0: number; x1: number; n: number }[]
     </div>
   );
 }
+// Faixas por quantil: cor CHAPADA + intervalo REAL de corte + área. A barra de
+// gradiente não serve aqui — ela mostra os limites FIXOS da legenda, e o que
+// interessa nesta escala são os cortes calculados a partir deste mapa.
+function FaixasQuantil({ q, unidade }: { q: ClassificacaoQuantis; unidade: Unidade }) {
+  const d = unidade === 'kg/ha' ? 0 : unidade === 'sc/ha' ? 1 : 2;
+  const val = (v: number) => fmt(emUnidade(v, unidade), d);
+  const n = q.faixas.length;
+  return (
+    <div className="space-y-0.5">
+      {q.faixas.map((f, i) => (
+        <div key={f.ordem} className="flex items-center gap-1.5 text-[9px]" style={{ color: '#cbd5e1' }}>
+          <span className="inline-block w-3 h-3 rounded-sm flex-shrink-0" style={{ background: f.cor }} />
+          <span className="flex-1 tabular-nums">
+            {i === 0 ? `≤ ${val(f.max)}` : i === n - 1 ? `≥ ${val(f.min)}` : `${val(f.min)} – ${val(f.max)}`}
+          </span>
+          <span style={{ color: '#94a3b8' }}>{fmtHa(f.areaHa)} ha</span>
+          <span className="w-9 text-right" style={{ color: '#64748b' }}>{fmt(f.pctArea, 1)}%</span>
+        </div>
+      ))}
+      {q.colapsadas > 0 && (
+        <p className="text-[8px] pt-0.5" style={{ color: '#fbbf24' }}>
+          {q.colapsadas} faixa{q.colapsadas > 1 ? 's' : ''} unida{q.colapsadas > 1 ? 's' : ''}: há valores repetidos neste mapa.
+        </p>
+      )}
+    </div>
+  );
+}
+
 function Aviso({ texto }: { texto: string }) {
   return (
     <div className="flex items-start gap-2 p-3 rounded-lg" style={{ background: '#2d1a00', border: '1px solid #92400e' }}>

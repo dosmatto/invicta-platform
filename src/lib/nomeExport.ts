@@ -97,7 +97,7 @@ export type TipoExport =
   | 'CAMPO'     // caderno de campo / registros
   | 'MDE'       // relevo (altimetria, declividade e derivados)
   | 'COND'      // condutividade elétrica
-  | 'PROD'      // produtividade/colheita — reservado, ainda sem export
+  | 'PROD'      // produtividade/colheita (mapa absoluto + quantil + analise)
   | 'COMPARA'   // comparações (produtividade × NDVI, cenários)
   | 'VALID'     // validação de zoneamento
   | 'CONFER';   // conferência de cadastro

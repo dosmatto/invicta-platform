@@ -292,6 +292,16 @@ export function paresDaClasse(c: ClasseLegenda): { inicio: string; fim: string }
   return { inicio: ajustarL(base, +0.18), fim: ajustarL(base, -0.16) };
 }
 
+// Cor CHEIA (única) de uma classe — a média do par início/fim, o mesmo tom
+// que `rampaVisualStops` já usa para representar a classe no estilo 'continuo'.
+// Serve a quem precisa de UMA cor chapada por classe (faixas por quantil,
+// swatch de tabela) em vez do gradiente interno.
+export function corCheiaDaClasse(c: ClasseLegenda): string {
+  const { inicio, fim } = paresDaClasse(c);
+  const [r, g, b] = mediaRgb(hexToRgb(inicio), hexToRgb(fim));
+  return '#' + [r, g, b].map(x => x.toString(16).padStart(2, '0')).join('');
+}
+
 // Encontra a classe à qual o valor pertence (com fronteiras semi-abertas).
 // Convenção: valor pertence à classe k se (min == null OR v > min) AND (max == null OR v <= max).
 export function classeDoValor(v: number, classes: ClasseLegenda[]): ClasseLegenda | undefined {

@@ -6,10 +6,10 @@ import {
   getSafras, getGrades, getImportacoesLab, getTalhoes, getFazendas, getPlantio,
   getLaboratorios, definirLaboratorioLab, nomeLaboratorioDoLaudo, fonteDoLaboratorio,
   getLegendas, getLegendasPorAtributo, ordenarLegendasDoAtributo, casasDecimaisVariavel,
-  getZoneamentosMeap,
   type ImportacaoLab, type GradeAmostragem,
 } from '@/lib/store';
 import { gerarRelatorioFertilidade, type ProfundidadeRel } from '@/lib/relatorioFertilidade';
+import { zonasDoTalhao } from '@/lib/zonasDoTalhao';
 import { municipioDaFazenda } from '@/lib/geocodeMunicipio';
 import { pontoDoPoligono } from '@/lib/relatorioDados';
 import {
@@ -241,32 +241,9 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
   // Zonas de manejo do talhão (Fase Z1). Quando a importação está ligada a uma
   // grade de zonas, o mapa é CONSTANTE por zona (sem interpolação): cada zona
   // recebe o valor da sua amostra composta.
-  const zonas = useMemo<{ id: string; classe: string; geometry: GeoJSON.Geometry }[]>(() => {
-    if (!nav.talhaoId) return [];
-    // As zonas COMO O MÓDULO ZONAS mostra: zoneamento PADRÃO salvo > o mais
-    // recente > snapshot do talhão. Ler só o snapshot (`talhao.zonasGeojson`,
-    // que só existe depois de "Tornar padrão") escondia o modo "Processar em
-    // zona" de talhão com zoneamento salvo mas nunca marcado como padrão — e é
-    // a mesma armadilha da numeração antiga corrigida no módulo Zonas.
-    let fc: GeoJSON.FeatureCollection | null = null;
-    const zs = getZoneamentosMeap(nav.talhaoId);
-    const salvo = zs.find(z => z.padrao)
-      ?? [...zs].sort((a, b) => (b.criadoEm ?? '').localeCompare(a.criadoEm ?? ''))[0];
-    if (salvo?.fc?.features?.length) {
-      fc = salvo.fc;
-    } else {
-      const t = getTalhoes().find(x => x.id === nav.talhaoId);
-      if (!t?.zonasGeojson) return [];
-      try { fc = JSON.parse(t.zonasGeojson) as GeoJSON.FeatureCollection; } catch { return []; }
-    }
-    return fc.features
-      .filter(f => f.geometry && (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon'))
-      .map(f => {
-        const p = (f.properties ?? {}) as { id?: string; classe?: string };
-        return { id: String(p.id ?? '?'), classe: String(p.classe ?? ''), geometry: f.geometry! };
-      })
-      .sort((a, b) => a.id.localeCompare(b.id));
-  }, [nav.talhaoId]);
+  // Cascata das zonas (padrão salvo > mais recente > snapshot do talhão) vive em
+  // lib/zonasDoTalhao.ts — compartilhada com o relatório de Produtividade.
+  const zonas = useMemo(() => zonasDoTalhao(nav.talhaoId), [nav.talhaoId]);
 
   // MODO DO MAPA — escolha do usuário quando o talhão tem zonas de manejo:
   //   'interpolar' → krigagem/IDW, com as ferramentas de sempre;

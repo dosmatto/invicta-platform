@@ -11,6 +11,7 @@ import { carregarNdviSalvos, type NdviCamada } from '@/lib/meap/gerar';
 import { extrairPoligono, decodeGrid, descomprimirGrid, type Grid } from '@/lib/fertilidade';
 import { cloudCarregarMapasPorPrefixo } from '@/lib/cloud';
 import { colorirGrid, colorirGridComLegenda } from '@/lib/raster';
+import { correlacao } from '@/lib/comparador';
 import { rampaVisualStops, type Legenda } from '@/lib/legendas';
 import { legendaDaCultura, emUnidade, type Unidade } from '@/lib/produtividade';
 import { rotulosLegenda, fmtMinMax0 as fmt, fmtHa } from '@/lib/formato';
@@ -20,41 +21,6 @@ import { MatrizFatores } from '@/components/talhao/MatrizFatores';
 import { Loader2, FileDown, GitCompare, Maximize2, Brain } from 'lucide-react';
 
 const prefixoProd = (talhaoId: string) => `${talhaoId}__prod__`;
-
-// Reamostragem bilinear NaN-aware (mesma extensão) — p/ co-registrar NDVI na malha da produtividade.
-function reamostrar(src: Float32Array, sr: number, sc: number, dr: number, dc: number): Float32Array {
-  if (sr === dr && sc === dc) return src;
-  const out = new Float32Array(dr * dc);
-  for (let j = 0; j < dr; j++) {
-    const fy = dr === 1 ? 0 : (j * (sr - 1)) / (dr - 1); const y0 = Math.floor(fy), y1 = Math.min(y0 + 1, sr - 1), wy = fy - y0;
-    for (let i = 0; i < dc; i++) {
-      const fx = dc === 1 ? 0 : (i * (sc - 1)) / (dc - 1); const x0 = Math.floor(fx), x1 = Math.min(x0 + 1, sc - 1), wx = fx - x0;
-      const w00 = (1 - wx) * (1 - wy), w01 = wx * (1 - wy), w10 = (1 - wx) * wy, w11 = wx * wy;
-      const a = src[y0 * sc + x0], b = src[y0 * sc + x1], c = src[y1 * sc + x0], dd = src[y1 * sc + x1];
-      let num = 0, den = 0;
-      if (isFinite(a)) { num += a * w00; den += w00; } if (isFinite(b)) { num += b * w01; den += w01; }
-      if (isFinite(c)) { num += c * w10; den += w10; } if (isFinite(dd)) { num += dd * w11; den += w11; }
-      out[j * dc + i] = den > 0 ? num / den : NaN;
-    }
-  }
-  return out;
-}
-
-function pearson(prod: Grid, ndvi: Grid): number | null {
-  const p = decodeGrid(prod); const q = decodeGrid(ndvi);
-  const qr = reamostrar(q.valores, q.rows, q.cols, p.rows, p.cols);
-  let n = 0, sx = 0, sy = 0, sxx = 0, syy = 0, sxy = 0;
-  for (let i = 0; i < p.valores.length; i++) {
-    const a = p.valores[i], b = qr[i];
-    if (!isFinite(a) || !isFinite(b)) continue;
-    n++; sx += a; sy += b; sxx += a * a; syy += b * b; sxy += a * b;
-  }
-  if (n < 30) return null;
-  const cov = sxy / n - (sx / n) * (sy / n);
-  const vx = sxx / n - (sx / n) ** 2, vy = syy / n - (sy / n) ** 2;
-  const d = Math.sqrt(vx * vy);
-  return d > 0 ? cov / d : null;
-}
 
 type ProdView = { rec: MapaProdutividade; grid: Grid; bounds: [number, number, number, number]; legenda: Legenda };
 
@@ -111,7 +77,7 @@ export function ComparadorProdNdvi({ safraNome }: { safraNome: string }) {
     const { valores } = decodeGrid(ndviGrid);
     let n = 0, soma = 0; for (let i = 0; i < valores.length; i++) { const v = valores[i]; if (isFinite(v)) { n++; soma += v; } }
     const ndviMedia = n ? soma / n : 0;
-    const r = pearson(prod.grid, ndviGrid);
+    const { r } = correlacao(prod.grid, ndviGrid);
     return { prodUrl, ndviUrl, ndviGrid, ndviMedia, r };
   }, [prod, ndvi, ndviLeg]);
 

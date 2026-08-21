@@ -103,14 +103,14 @@ const ndvi: Legenda = {
 // ── Produtividade (paleta SEMÁFORO própria: vermelho→laranja→amarelo→verde) ─
 // 3 variantes: Absoluta (kg/ha, limites por cultura), Percentil (% da área) e
 // % da Média (cada pixel vs média do talhão). As duas relativas são genéricas.
-const PARES_PROD = [
+export const PARES_PROD = [
   { inicio: '#7F0000', fim: '#E53935' }, // Muito Baixa — vermelho
   { inicio: '#E65100', fim: '#FB8C00' }, // Baixa — laranja
   { inicio: '#F9A825', fim: '#FDD835' }, // Média — amarelo
   { inicio: '#9CCC65', fim: '#689F38' }, // Alta — verde claro
   { inicio: '#388E3C', fim: '#1B5E20' }, // Muito Alta — verde escuro
 ];
-const NOMES_PROD = ['Muito Baixa', 'Baixa', 'Média', 'Alta', 'Muito Alta'];
+export const NOMES_PROD = ['Muito Baixa', 'Baixa', 'Média', 'Alta', 'Muito Alta'];
 
 function prodAbsoluta(id: string, cultura: string, bordas: [number, number, number, number]): Legenda {
   return {

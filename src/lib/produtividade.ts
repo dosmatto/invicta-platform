@@ -8,7 +8,9 @@
 import { interpolar, rampaDaLegenda, decodeGrid, type RespInterp } from '@/lib/fertilidade';
 import { getLegendasPorAtributo } from '@/lib/store';
 import { parseShapefile } from '@/lib/geo';
-import type { Legenda } from '@/lib/legendas';
+import { corCheiaDaClasse, type Legenda } from '@/lib/legendas';
+import { classesQuantis, type ClassificacaoQuantis } from '@/lib/quantis';
+import { PARES_PROD, NOMES_PROD } from '@/constants/legendasSeedOficial';
 import { postBackend } from '@/lib/interpUrl';
 
 export interface PontoColheita { lng: number; lat: number; valor: number; }
@@ -144,6 +146,25 @@ export function statsDoGrid(resp: RespInterp, nUsados: number): StatsProd | null
     cv: Math.round(cv * 10) / 10,
     histograma: hist,
   };
+}
+
+// ── Classificação por QUANTIL (5 faixas) ──────────────────────────────────────
+// A escala absoluta responde "esta lavoura é boa?"; a por quantil responde
+// "onde, DENTRO dela, está o melhor e o pior?". Cada faixa cobre a mesma
+// fração da área, então o contraste aparece mesmo num talhão uniforme.
+//
+// As cores saem da legenda em uso (uma cor CHEIA por classe, sem gradiente),
+// para o mapa por quantil falar a mesma língua visual do mapa absoluto. Se o
+// usuário editou a legenda e ela não tem k classes, cai na paleta semáforo
+// oficial — melhor a paleta da casa que faixa sem cor.
+export function quantisDaProdutividade(resp: RespInterp, leg: Legenda, k = 5): ClassificacaoQuantis | null {
+  if (!resp.grid) return null;
+  const { valores } = decodeGrid(resp.grid);
+  const pixelM = resp.stats?.pixel_m ?? 10;
+  const casa = leg.classes.length === k;
+  const cores = casa ? leg.classes.map(corCheiaDaClasse) : PARES_PROD.map(p => corCheiaDaClasse({ nome: '', valorMin: null, valorMax: null, corInicio: p.inicio, corFim: p.fim, larguraVisual: 0, ordem: 0 }));
+  const nomes = casa ? leg.classes.map(c => c.nome) : NOMES_PROD;
+  return classesQuantis(valores, { k, pixelM, cores, nomes });
 }
 
 // ── Legenda por cultura + unidade ─────────────────────────────────────────────

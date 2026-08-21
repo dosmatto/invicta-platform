@@ -147,5 +147,20 @@ t('PRESCRIÇÃO INTACTA: SA03_TX_MILHO byte a byte', () => {
   assert.equal(nomeArquivoPrescricao({ ...JM, produto: 'Milho', unidade: 'sementes/m2' }), 'SA03_TX_MILHO_M2');
 });
 
+
+// Produtividade: o relatório de colheita entrou no padrão de nomes (v2.69).
+t('produtividade sai como <talhão>_PROD_<ano>_EP0n_<cultura>', () => {
+  assert.equal(
+    nomeExport({ fazenda: 'Figueira', siglaFazenda: 'FRNFI', talhao: 'FRNFI 21', tipo: 'PROD', ano: 2026, epoca: '1', detalhe: 'soja' }),
+    'FRNF21_PROD_2026_EP01_SOJA',   // a sigla cadastrada é truncada em 4 letras
+  );
+});
+
+t('produtividade sem época não inventa segmento', () => {
+  assert.equal(
+    nomeExport({ fazenda: 'Barrinha', talhao: 'JRABA 01', tipo: 'PROD', ano: 2026, detalhe: 'milho' }),
+    'B01_PROD_2026_MILHO',
+  );
+});
 console.log(`\n${ok} passaram, ${fail} falharam\n`);
 process.exit(fail ? 1 : 0);

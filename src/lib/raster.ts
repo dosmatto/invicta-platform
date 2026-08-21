@@ -76,6 +76,44 @@ function posicionadorRelativo(valores: Float32Array | number[], leg: Legenda): (
   };
 }
 
+// Colorização por FAIXAS DE QUANTIL: cada pixel recebe a cor CHAPADA da sua
+// faixa (sem gradiente interno). Os cortes vêm de lib/quantis.ts, calculados a
+// partir dos próprios dados do mapa.
+//
+// Por que não reusar colorirGridComLegenda com escalaRelativa:'quantil': lá o
+// percentil vira posição CONTÍNUA na rampa, então (a) sai gradiente dentro de
+// cada faixa e (b) as fronteiras de cor caem nas larguras visuais da legenda
+// (22,5/22,5/22,5/22,5/10), não em 20/40/60/80 — os 20% mais produtivos ficam
+// espremidos nos últimos 10% da rampa e o mapa nunca casa com uma legenda de
+// faixas iguais. O molde certo é o colorirDose(), logo abaixo: classes
+// discretas por limite superior.
+export function colorirGridPorQuantis(
+  grid: { b64: string; shape: [number, number] },
+  breaks: number[],
+  cores: string[],
+): PngColorido {
+  const { valores, rows, cols } = decodeGrid(grid);
+  const rgb = cores.map(hexToRgb);
+  const ultima = rgb.length - 1;
+
+  const { canvas, ctx } = novoCanvas(cols, rows);
+  const img = ctx.createImageData(cols, rows);
+  const buf = img.data;
+  for (let i = 0; i < valores.length; i++) {
+    const v = valores[i];
+    const p4 = i * 4;
+    if (!isFinite(v)) { buf[p4 + 3] = 0; continue; }
+    // (min, max] — mesma convenção de indiceFaixa/classeDoValor: o valor exato
+    // do corte pertence à faixa de baixo.
+    let c = 0;
+    while (c < breaks.length && v > breaks[c]) c++;
+    const [r, g, b] = rgb[Math.min(c, ultima)] ?? [136, 136, 136];
+    buf[p4] = r; buf[p4 + 1] = g; buf[p4 + 2] = b; buf[p4 + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  return finalizarCanvas(canvas, cols, rows);
+}
+
 export function colorirGrid(
   grid: { b64: string; shape: [number, number] },
   dominio: [number, number],
