@@ -1,5 +1,15 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.69.1': [
+    'O INDICE DE VEGETACAO NO RELATORIO DE PRODUTIVIDADE AGORA E CLASSIFICADO POR QUINTIL, sempre. A pagina do NDVI/EVI/NDRE deixou de usar a rampa continua 0-1 e passou a ter 5 faixas de area igual, com os cortes calculados da propria cena, faixa de cor discreta e tabela FAIXA / INTERVALO / ha / % fechando em 100%.',
+    'POR QUE: a rampa continua obrigava a escolher entre "escala verdadeira" e "escala esticada", e as duas enganam em situacao diferente — a verdadeira apaga a variacao de um talhao uniforme, a esticada pinta de vermelho o minimo do talhao mesmo quando ele e alto. O quintil e auto-escalante: cada faixa e 20% da area, ponto. E faz a pagina do indice falar a mesma lingua da pagina do mapa por quantil.',
+    'AS CORES SAEM DA LEGENDA DO INDICE, nao da paleta de produtividade. Mesma estrutura nas duas paginas, paletas distintas — se fossem iguais, o leitor perderia a pista de que esta olhando duas grandezas diferentes.',
+    'A AREA DE CADA FAIXA VEM DA MALHA DA CENA, nao da malha da produtividade: Sentinel-2 tem pixel de 10 m e CBERS-4A de 2 m, entao o lado do pixel e derivado dos bounds e do shape de cada imagem.',
+    'CORRIGIDO — NAO DAVA PARA ESCOLHER EVI NEM NDRE em "Comparar com NDVI". A selecao era chaveada pela DATA, entao os tres indices da mesma cena tinham o mesmo valor: a lista aparecia com a data repetida tres vezes e a escolha caia sempre no primeiro. Agora e chaveada pela camada, e cada opcao mostra qual indice e.',
+    'E OS ROTULOS PARARAM DE MENTIR: o comparador e o PDF lado a lado escreviam "NDVI" fixo mesmo quando a camada era EVI ou NDRE.',
+    'BOXPLOT POR ZONA REDESENHADO (pagina 4 do relatorio). O veredito de separacao saiu do rodape e virou um painel a direita, com o eta quadrado em destaque, o percentual explicado e as zonas vizinhas que se confundem em linhas separadas. Com 5 zonas ou mais o texto colidia com os ticks e a legenda do grafico — agora a folga e garantida pela construcao, nao por ajuste fino.',
+    'E O GRAFICO FICOU MAIS ESTREITO (de ~155 mm para ~91 mm): as caixas esticadas na largura inteira da pagina atrapalhavam a comparacao entre zonas.',
+  ],
   '2.69.0': [
     'O MAPA DE PRODUTIVIDADE GANHOU A ESCALA POR QUANTIL (aba Produtividade, depois de processar). Um par de botões — Absoluta × Quantil (5 faixas) — troca a pintura do mapa na hora, sem reprocessar nada. Na escala absoluta as faixas são as fixas da cultura (soja 2.700/3.600/4.500/5.400 kg/ha); na de quantil, cada faixa cobre 20% da ÁREA do talhão e os cortes são calculados DESTE mapa.',
     'PARA QUE SERVE CADA UMA: a absoluta responde "esta lavoura é boa?" e permite comparar talhões e safras. A de quantil responde "onde, DENTRO dela, está o melhor e o pior?" — e é a que enxerga variação em talhão uniforme, onde a escala absoluta pinta tudo da mesma cor e parece não haver o que manejar.',

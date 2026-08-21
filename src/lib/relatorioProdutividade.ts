@@ -38,6 +38,9 @@ export interface NdviRel {
   bounds: [number, number, number, number];
   legenda: Legenda;
   media: number;
+  /** Faixas por QUINTIL do próprio índice — a página 3 é classificada assim.
+   *  null só quando a cena não tem pixels suficientes; aí cai na barra contínua. */
+  quantis: ClassificacaoQuantis | null;
 }
 
 export interface ZonaRel {
@@ -425,70 +428,136 @@ async function paginaQuantil(doc: JsPDF, d: DadosRelatorioProd, logos: Logos): P
 
 async function paginaNdvi(doc: JsPDF, d: DadosRelatorioProd, logos: Logos): Promise<void> {
   const nd = d.ndvi!;
+  const q = nd.quantis;
+  const rot = san(nd.indice) || 'NDVI';
+
+  // Sem quantis (cena degenerada) cai no layout antigo, de mapa centralizado
+  // com barra contínua — melhor uma página simples que uma página quebrada.
+  if (!q || !q.faixas.length) { await paginaNdviContinua(doc, d, logos); return; }
+
+  const mapaW = 168, mapaH = 116, mapaX = M, mapaY = 31;
+  const png = await capturarMapaFertilidade({
+    rasterPng: nd.rasterPng, bounds: nd.bounds, poligono: d.poligono, valores: EMPTY_FC,
+    satelite: d.satelite, corLimite: d.corLimite,
+    larguraPx: Math.round(mapaW * PXMM), alturaPx: Math.round(mapaH * PXMM),
+  });
+
+  cabecalho(doc, d, logos, rot,
+    `${san(nd.fonte)} - ${dataBR(nd.data)} · quintil (${q.faixas.length} faixas)`, [
+    `Area Total: ${fmt(d.areaHa, 2)} ha`,
+    `Municipio: ${municipioUf(d)}`,
+    `${rot} medio: ${fmt(nd.media, 2)}`,
+    `Datum: ${DATUM}`,
+  ]);
+
+  const jpg = await imagemParaPdf(png, mapaW);
+  doc.addImage(jpg.data, jpg.formato, mapaX, mapaY, mapaW, mapaH);
+  doc.setDrawColor(...LINE); doc.setLineWidth(0.4); doc.rect(mapaX, mapaY, mapaW, mapaH, 'S');
+  rosaDosVentos(doc, mapaX + 7, mapaY + mapaH - 7);
+
+  // Tira de cor DISCRETA + cortes reais — igual à página do mapa por quantil.
+  const tiraY = mapaY + mapaH + 5, tiraH = 5;
+  const n = q.faixas.length;
+  const larg = mapaW / n;
+  q.faixas.forEach((f, i) => { doc.setFillColor(...hexRgb(f.cor)); doc.rect(mapaX + i * larg, tiraY, larg, tiraH, 'F'); });
+  doc.setDrawColor(...LINE); doc.setLineWidth(0.2); doc.rect(mapaX, tiraY, mapaW, tiraH, 'S');
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(6); doc.setTextColor(...GRAY);
+  doc.text(fmt(q.faixas[0].min, 2), mapaX, tiraY + tiraH + 3.5, { align: 'left' });
+  q.breaks.forEach((b, i) => doc.text(fmt(b, 2), mapaX + (i + 1) * larg, tiraY + tiraH + 3.5, { align: 'center' }));
+  doc.text(fmt(q.faixas[n - 1].max, 2), mapaX + mapaW, tiraY + tiraH + 3.5, { align: 'right' });
+  doc.setFontSize(6.5); doc.setTextColor(...NAVY); doc.setFont('helvetica', 'bold');
+  doc.text(`Cortes calculados desta cena (indice)`, mapaX + mapaW / 2, tiraY - 1.5, { align: 'center' });
+
+  escalaGrafica(doc, mapaX + mapaW / 2, tiraY + tiraH + 10, nd.bounds, mapaW);
+
+  // TABELA das faixas — sem coluna de producao: indice de vegetacao nao tem
+  // tonelagem, e inventar uma seria mentir sobre o que a cena mede.
+  const tabX = mapaX + mapaW + 6, tabW = W - M - tabX;
+  let ty = mapaY;
+  doc.setFillColor(...NAVY); doc.rect(tabX, ty, tabW, 7, 'F');
+  doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(7);
+  doc.text('FAIXA', tabX + 8, ty + 4.8);
+  doc.text('INTERVALO', tabX + 36, ty + 4.8);
+  doc.text('ha', tabX + tabW - 22, ty + 4.8, { align: 'right' });
+  doc.text('%', tabX + tabW - 3, ty + 4.8, { align: 'right' });
+  ty += 7;
+
+  const rowH = 7.6;
+  let somaHa = 0;
+  q.faixas.forEach((f, i) => {
+    doc.setDrawColor(...LINE); doc.setLineWidth(0.2); doc.line(tabX, ty + rowH, tabX + tabW, ty + rowH);
+    doc.setFillColor(...hexRgb(f.cor)); doc.roundedRect(tabX + 2, ty + 1.8, 4, 4, 0.6, 0.6, 'F');
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(7); doc.setTextColor(...NAVY);
+    doc.text(clipTexto(doc, san(f.nome), 26), tabX + 8, ty + 5);
+    doc.setFont('helvetica', 'normal'); doc.setTextColor(...GRAY);
+    const txt = n === 1 ? `${fmt(f.min, 2)} - ${fmt(f.max, 2)}`
+      : i === 0 ? `<= ${fmt(f.max, 2)}`
+      : i === n - 1 ? `>= ${fmt(f.min, 2)}`
+      : `${fmt(f.min, 2)} - ${fmt(f.max, 2)}`;
+    doc.text(txt, tabX + 36, ty + 5);
+    doc.setTextColor(...NAVY);
+    doc.text(fmt(f.areaHa, 2), tabX + tabW - 22, ty + 5, { align: 'right' });
+    doc.text(fmt(f.pctArea, 1), tabX + tabW - 3, ty + 5, { align: 'right' });
+    somaHa += f.areaHa;
+    ty += rowH;
+  });
+  doc.setDrawColor(...NAVY); doc.setLineWidth(0.5); doc.line(tabX, ty + 0.5, tabX + tabW, ty + 0.5);
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor(...NAVY);
+  doc.text('TOTAL', tabX + 8, ty + 5.4);
+  doc.text(fmt(somaHa, 2), tabX + tabW - 22, ty + 5.4, { align: 'right' });
+  doc.text('100,0', tabX + tabW - 3, ty + 5.4, { align: 'right' });
+
+  const ry = ty + 12, rh = 34;
+  quadro(doc, tabX, ry, tabW, rh, 'RESUMO');
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(...GRAY);
+  const linhas = [
+    `Indice: ${rot} · ${san(nd.fonte)}`,
+    `Cena: ${dataBR(nd.data)} · medio ${fmt(nd.media, 2)}`,
+    `Faixas efetivas: ${n}`,
+    `Menor corte: ${q.breaks.length ? fmt(q.breaks[0], 2) : '—'}`,
+  ];
+  linhas.forEach((t, i) => doc.text(t, tabX + 4, ry + 12 + i * 4.6));
+  if (q.colapsadas > 0) {
+    doc.setTextColor(...VERM);
+    doc.text(`${q.colapsadas} faixa(s) unida(s): ha valores repetidos na cena.`, tabX + 4, ry + 12 + linhas.length * 4.6, { maxWidth: tabW - 8 });
+  }
+
+  marcaInvicta(doc, logos.inv, 'esquerda');
+  rodape(doc, logos);
+}
+
+// Reserva: cena sem quantis calculáveis — mapa centralizado + barra contínua.
+async function paginaNdviContinua(doc: JsPDF, d: DadosRelatorioProd, logos: Logos): Promise<void> {
+  const nd = d.ndvi!;
   const mapsY = 31, mapsH = 104, frameW = 200;
   const startX = (W - frameW) / 2;
-
   const png = await capturarMapaFertilidade({
     rasterPng: nd.rasterPng, bounds: nd.bounds, poligono: d.poligono, valores: EMPTY_FC,
     satelite: d.satelite, corLimite: d.corLimite,
     larguraPx: Math.round(frameW * PXMM), alturaPx: Math.round(mapsH * PXMM),
   });
-
   cabecalho(doc, d, logos, san(nd.indice) || 'NDVI', `${san(nd.fonte)} - ${dataBR(nd.data)}`, [
     `Area Total: ${fmt(d.areaHa, 2)} ha`,
     `Municipio: ${municipioUf(d)}`,
     `${san(nd.indice) || 'NDVI'} medio: ${fmt(nd.media, 2)}`,
     `Datum: ${DATUM}`,
   ]);
-
   const jpg = await imagemParaPdf(png, frameW);
   doc.addImage(jpg.data, jpg.formato, startX, mapsY, frameW, mapsH);
   doc.setDrawColor(...LINE); doc.setLineWidth(0.4); doc.rect(startX, mapsY, frameW, mapsH, 'S');
   rosaDosVentos(doc, startX + 7, mapsY + mapsH - 7);
-
-  const stY = mapsY + mapsH + 4, stH = 14;
-  doc.setDrawColor(...LINE); doc.setLineWidth(0.4); doc.roundedRect(startX, stY, frameW, stH, 2, 2, 'S');
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(...NAVY);
-  doc.text('VIGOR VEGETATIVO', startX + frameW / 2, stY + 4.5, { align: 'center' });
-  const cels: Array<[string, string]> = [
-    ['INDICE', san(nd.indice) || 'NDVI'],
-    ['MEDIO', fmt(nd.media, 2)],
-    ['FONTE', san(nd.fonte)],
-    ['DATA DA CENA', dataBR(nd.data)],
-  ];
-  cels.forEach(([lab, val], j) => {
-    const tx = startX + (frameW * (j + 0.5)) / cels.length;
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(6); doc.setTextColor(...GRAY); doc.text(lab, tx, stY + 8.5, { align: 'center' });
-    doc.setFontSize(10); doc.setTextColor(...NAVY); doc.text(val, tx, stY + 12.6, { align: 'center' });
-  });
-
-  // Barra contínua do índice, com ticks 0 … 1.
-  const lgY = stY + stH + 4, lgH = 20;
   const leg: Legenda = { ...nd.legenda, estilo: 'continuo' };
+  const lgY = mapsY + mapsH + 8, lgH = 20;
   doc.setDrawColor(...LINE); doc.setLineWidth(0.4); doc.roundedRect(M, lgY, W - 2 * M, lgH, 2, 2, 'S');
   doc.setTextColor(...NAVY); doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5);
   doc.text('INTERPRETACAO', M + 4, lgY + 7.5); doc.text('VIGOR', M + 4, lgY + 12);
   const barX = M + 40, barW = 150, barY = lgY + 8, barH = 6;
   doc.addImage(barraLegenda(leg, 600, 24), 'PNG', barX, barY, barW, barH);
   doc.setDrawColor(...LINE); doc.setLineWidth(0.2); doc.rect(barX, barY, barW, barH, 'S');
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(6.5); doc.setTextColor(...NAVY);
-  let acc = 0; const totalL = leg.classes.reduce((a, c) => a + c.larguraVisual, 0) || 1;
-  for (const c of leg.classes) {
-    const cx = barX + ((acc + c.larguraVisual / 2) / totalL) * barW; acc += c.larguraVisual;
-    doc.text(san(c.nome), cx, barY - 1.5, { align: 'center' });
-  }
   doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5); doc.setTextColor(...GRAY);
   for (const t of [0, 0.2, 0.4, 0.6, 0.8, 1]) {
     doc.text(fmt(t, 1), barX + valorParaPosicaoVisual(t, leg) * barW, barY + barH + 4, { align: 'center' });
   }
-  const cols: Array<[string, string]> = [['UNIDADE', 'indice'], ['SENSOR', san(nd.fonte)], ['CENA', dataBR(nd.data)]];
-  const cx0 = barX + barW + 8, cw = (W - M - cx0) / cols.length;
-  cols.forEach(([lab, val], i) => {
-    const cx = cx0 + cw * i + cw / 2;
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor(...NAVY); doc.text(lab, cx, lgY + 8, { align: 'center' });
-    doc.setFont('helvetica', 'normal'); doc.setTextColor(...GRAY); doc.text(val, cx, lgY + 14, { align: 'center', maxWidth: cw - 2 });
-  });
-
   escalaGrafica(doc, W / 2, lgY + lgH + 7, nd.bounds, frameW);
   marcaInvicta(doc, logos.inv, 'direita');
   rodape(doc, logos);
@@ -700,24 +769,33 @@ function blocoBoxplot(doc: JsPDF, d: DadosRelatorioProd, x: number, y: number, w
   const folga = (hi - lo) * 0.06 || 1;
   lo -= folga; hi += folga;
 
-  const calha = 40;                                  // nome + n + média
-  const gx = x + calha, gw = w - calha - 8;
+  // LARGURAS. O veredito de separação saiu do rodapé e virou um PAINEL à
+  // direita. Duas razões: (a) no rodapé ele colidia com os ticks e a legenda do
+  // gráfico — com 5 zonas a legenda caía em y+49,6 e o veredito em y+50; (b) o
+  // gráfico ocupava a largura toda (~155 mm) e as caixas ficavam esticadas
+  // demais para comparar. Com o painel, o gráfico cai para ~91 mm e a folga
+  // vertical passa a ser garantida por construção, não por ajuste fino.
+  const calha = 42;                                  // swatch + nome + média
+  const painel = 58;                                 // veredito de separação
+  const gx = x + calha, gw = Math.max(40, w - calha - painel - 10);
   const px = (v: number) => gx + ((v - lo) / (hi - lo || 1)) * gw;
 
   const topo = y + 11;
-  const disponivel = h - 11 - 12;                    // reserva o pé p/ ticks e veredito
-  const rowH = Math.min(9, disponivel / zs.length);
+  // Reserva do pé: linha dos ticks (+2) e legenda do gráfico (+5,4), com 2 mm
+  // de respiro até a borda do quadro.
+  const rowH = Math.min(8, Math.max(4, (h - 22) / zs.length));
 
   zs.forEach((z, i) => {
     const s = z.stats!;
     const cy = topo + i * rowH + rowH / 2;
+    const cor = corDaZonaPorMedia(d.quantis, s.media, z.cor);
     // Calha
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(6.5); doc.setTextColor(...NAVY);
-    doc.setFillColor(...hexRgb(corDaZonaPorMedia(d.quantis, s.media, z.cor)));
+    doc.setFillColor(...hexRgb(cor));
     doc.roundedRect(x + 4, cy - 1.4, 2.6, 2.6, 0.4, 0.4, 'F');
-    doc.text(clipTexto(doc, san(z.id ? `Zona ${z.id}` : z.classe), calha - 20), x + 8, cy + 1);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(6.5); doc.setTextColor(...NAVY);
+    doc.text(clipTexto(doc, san(z.id ? `Zona ${z.id}` : z.classe), calha - 22), x + 8, cy + 1);
     doc.setFont('helvetica', 'normal'); doc.setFontSize(5.5); doc.setTextColor(...GRAY);
-    doc.text(`${emU(s.media, d.unidade)}`, x + calha - 5, cy + 1, { align: 'right' });
+    doc.text(emU(s.media, d.unidade), x + calha - 5, cy + 1, { align: 'right' });
 
     // Amostra pequena: só a média, sem caixa (um boxplot de 12 pixels engana).
     if (s.n < 30) {
@@ -728,8 +806,7 @@ function blocoBoxplot(doc: JsPDF, d: DadosRelatorioProd, x: number, y: number, w
       return;
     }
 
-    const alt = Math.min(4.2, rowH * 0.5);
-    const cor = corDaZonaPorMedia(d.quantis, s.media, z.cor);
+    const alt = Math.min(3.6, rowH * 0.42);
     // Bigodes p5–p95 (não Tukey: p5/p95 já vêm do resumo e batem com o bloco A)
     doc.setDrawColor(...hexRgb(cor)); doc.setLineWidth(0.3);
     doc.line(px(s.p5), cy, px(s.p95), cy);
@@ -755,16 +832,37 @@ function blocoBoxplot(doc: JsPDF, d: DadosRelatorioProd, x: number, y: number, w
     const v = lo + ((hi - lo) * k) / 4;
     doc.text(emU(v, d.unidade), px(v), ty + 2, { align: 'center' });
   }
-  doc.setFontSize(5); doc.text(`Caixa P25-P75 | traco = mediana | circulo = media | bigodes P5-P95 (${rotuloUnidade(d.unidade)})`, gx, ty + 5.6);
+  doc.setFontSize(5);
+  doc.text(`Caixa P25-P75 | traco = mediana | circulo = media | bigodes P5-P95 (${rotuloUnidade(d.unidade)})`, gx, ty + 5.4);
 
-  // Veredito de separação — a pergunta que o boxplot ilustra.
+  // ── PAINEL: separação entre zonas (a pergunta que o boxplot ilustra) ──
   const sep = d.separacaoZonas;
-  if (sep) {
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(6.5); doc.setTextColor(...NAVY);
+  const pxPainel = x + w - painel - 4;
+  doc.setDrawColor(...LINE); doc.setLineWidth(0.3);
+  doc.roundedRect(pxPainel, y + 9, painel, h - 13, 1.5, 1.5, 'S');
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(6.5); doc.setTextColor(...NAVY);
+  doc.text('SEPARACAO ENTRE ZONAS', pxPainel + 3, y + 14);
+  if (!sep) {
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(6); doc.setTextColor(...GRAY);
+    doc.text('Precisa de ao menos 2 zonas com pixels para comparar.', pxPainel + 3, y + 20, { maxWidth: painel - 6 });
+  } else {
     const conf = sep.vizinhosConfundidos.length;
-    const txt = `Separacao entre zonas: eta2 = ${fmt(sep.eta2, 2)} (${fmt(sep.eta2 * 100, 0)}% da variacao explicada pelas zonas)`
-      + (conf ? ` | ${conf} par(es) vizinho(s) se confundem` : ' | todos os vizinhos se distinguem');
-    doc.text(txt, x + 4, y + h - 3, { maxWidth: w - 8 });
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor(...NAVY);
+    doc.text(fmt(sep.eta2, 2), pxPainel + 3, y + 23);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(5.5); doc.setTextColor(...GRAY);
+    doc.text('eta quadrado', pxPainel + 3, y + 27);
+    doc.setFontSize(6); doc.setTextColor(...GRAY);
+    doc.text(`${fmt(sep.eta2 * 100, 0)}% da variacao e explicada pela divisao em zonas.`,
+      pxPainel + 3, y + 32, { maxWidth: painel - 6 });
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(6); doc.setTextColor(...(conf ? VERM : NAVY));
+    doc.text(conf ? `${conf} par(es) vizinho(s) se confundem` : 'Todos os vizinhos se distinguem',
+      pxPainel + 3, y + 38, { maxWidth: painel - 6 });
+    if (conf) {
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(5.5); doc.setTextColor(...GRAY);
+      const pares = sep.vizinhosConfundidos.slice(0, 3).map(v => `${v.a}-${v.b}`).join(', ');
+      doc.text(`Candidatas a fusao: ${pares}${sep.vizinhosConfundidos.length > 3 ? '...' : ''}`,
+        pxPainel + 3, y + 43, { maxWidth: painel - 6 });
+    }
   }
 }
 

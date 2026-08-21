@@ -51,6 +51,16 @@ const EPOCAS: Array<{ v: string; l: string }> = [{ v: '', l: '—' }, { v: 'vera
 const prefixoProd = (talhaoId: string) => `${talhaoId}__prod__`;
 const idProd = (talhaoId: string, recId: string) => `${prefixoProd(talhaoId)}${recId}`;
 const paraKgha = (v: number, u: Unidade) => (u === 'sc/ha' ? v * SACA_KG : u === 't/ha' ? v * 1000 : v);
+// Lado do pixel (m) de um grid, pelos bounds e pelo shape. Cada fonte de imagem
+// tem a sua resolução (Sentinel-2 10 m, CBERS-4A 2 m no PAN), então a área das
+// faixas do índice precisa sair da malha DELE, não da malha da produtividade.
+const pixelMDoGrid = (b: [number, number, number, number], shape: [number, number]): number => {
+  const [w, s2, e, n] = b;
+  const cols = shape[1];
+  if (!cols) return 10;
+  const larguraM = Math.abs(e - w) * 111320 * Math.cos((((s2 + n) / 2) * Math.PI) / 180);
+  return larguraM / cols;
+};
 
 type MaqRaw = { id: string; nome: string; arquivo: string; csv?: CsvParsed; fc?: GeoJSON.FeatureCollection };
 
@@ -306,14 +316,35 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
         const decN = decodeGrid(gNdvi);
         let soma = 0, n = 0;
         for (let i = 0; i < decN.valores.length; i++) { const x = decN.valores[i]; if (isFinite(x)) { n++; soma += x; } }
+        // O índice do relatório é SEMPRE classificado por quintil (decisão do
+        // usuário): 5 faixas de área igual, cortes vindos da própria cena. Some
+        // a discussão "escala esticada × escala verdadeira" — quintil é
+        // auto-escalante — e a página fala a mesma língua da página do mapa por
+        // quantil. As cores saem da legenda do ÍNDICE, não da de produtividade:
+        // mesma estrutura, paletas distintas, para o leitor não confundir as
+        // duas grandezas.
+        const coresNd = ndviLeg.classes.length === 5 ? ndviLeg.classes.map(corCheiaDaClasse) : [];
+        const qNdvi = classesQuantis(decN.valores, {
+          k: 5,
+          pixelM: pixelMDoGrid(nd.bounds, nd.shape),
+          cores: coresNd.length ? coresNd : ['#7A1F00', '#E65100', '#D4E157', '#4CAF50', '#1B5E20'],
+          nomes: ndviLeg.classes.length === 5 ? ndviLeg.classes.map(c => c.nome) : ['Muito Baixo', 'Baixo', 'Médio', 'Alto', 'Muito Alto'],
+        });
+        let pngNd = '';
+        try {
+          pngNd = qNdvi
+            ? colorirGridPorQuantis(gNdvi, qNdvi.breaks, qNdvi.faixas.map(f => f.cor)).dataUrl
+            : colorirGrid(gNdvi, [0, 1], rampaVisualStops({ ...ndviLeg, estilo: 'continuo' })).dataUrl;
+        } catch { pngNd = colorirGrid(gNdvi, [0, 1], rampaVisualStops({ ...ndviLeg, estilo: 'continuo' })).dataUrl; }
         ndvi = {
           data: nd.data,
           fonte: nd.nut.startsWith('ndvi_cbers') ? 'CBERS-4A' : 'Sentinel-2',
           indice: nd.indice || 'NDVI',
-          rasterPng: colorirGrid(gNdvi, [0, 1], rampaVisualStops({ ...ndviLeg, estilo: 'continuo' })).dataUrl,
+          rasterPng: pngNd,
           bounds: nd.bounds,
           legenda: ndviLeg,
           media: n ? soma / n : 0,
+          quantis: qNdvi,
         };
         correlacao = correlacaoGrids(dec, decN, { maxAmostra: 1500, minN: 30 });
         sobrepos = sobreposicaoBbox(fonte.bounds, nd.bounds);

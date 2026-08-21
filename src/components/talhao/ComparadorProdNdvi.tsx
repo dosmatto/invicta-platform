@@ -57,14 +57,14 @@ export function ComparadorProdNdvi({ safraNome }: { safraNome: string }) {
         }
         const nd = await carregarNdviSalvos(nav.talhaoId!);
         if (!vivo) return;
-        setProd(pv); setNdvis(nd); setNdviSel(nd[0]?.data ?? '');
+        setProd(pv); setNdvis(nd); setNdviSel(nd[0]?.chave ?? '');
       } catch (e) { if (vivo) setErro(e instanceof Error ? e.message : 'Falha ao carregar.'); }
       finally { if (vivo) setCarregando(false); }
     })();
     return () => { vivo = false; };
   }, [nav.talhaoId, safraNome]);
 
-  const ndvi = useMemo(() => ndvis.find(n => n.data === ndviSel) ?? null, [ndvis, ndviSel]);
+  const ndvi = useMemo(() => ndvis.find(n => n.chave === ndviSel) ?? null, [ndvis, ndviSel]);
 
   // Imagens coloridas (thumbnails) + médias + correlação
   const view = useMemo(() => {
@@ -114,10 +114,10 @@ export function ComparadorProdNdvi({ safraNome }: { safraNome: string }) {
         subtitulo: `Média ${prodMedia} ${u} · ${fmtHa(prod.rec.stats.areaHa)} ha · v${prod.rec.versao}`,
         rasterPng: view.prodUrl, bounds: prod.bounds, legenda: prod.legenda, rotulos: rotulosLegenda(prod.legenda),
       };
-      const fonte = ndvi.nut === 'ndvi_cbers' ? 'CBERS-4A' : 'Sentinel-2';
+      const fonte = ndvi.nut.startsWith('ndvi_cbers') ? 'CBERS-4A' : 'Sentinel-2';
       const direita: LadoComparacao = {
-        titulo: `NDVI — ${fonte}`,
-        subtitulo: `${new Date(ndvi.data + 'T00:00:00').toLocaleDateString('pt-BR')} · NDVI médio ${fmt(view.ndviMedia, 2)}`,
+        titulo: `${ndvi.indice || 'NDVI'} — ${fonte}`,
+        subtitulo: `${new Date(ndvi.data + 'T00:00:00').toLocaleDateString('pt-BR')} · ${ndvi.indice || 'NDVI'} médio ${fmt(view.ndviMedia, 2)}`,
         rasterPng: view.ndviUrl, bounds: ndvi.bounds, legenda: { ...ndviLeg, estilo: 'continuo' }, rotulos: rotulosLegenda(ndviLeg),
       };
       await gerarRelatorioComparacao({
@@ -134,7 +134,7 @@ export function ComparadorProdNdvi({ safraNome }: { safraNome: string }) {
         <p className="text-[11px] font-semibold flex items-center gap-1" style={{ color: '#93c5fd' }}><GitCompare size={12} /> Comparar com NDVI</p>
         {ndvis.length > 1 && (
           <select value={ndviSel} onChange={e => setNdviSel(e.target.value)} className="rounded px-1.5 py-0.5 text-[10px] outline-none" style={{ background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' }}>
-            {ndvis.map(n => <option key={n.chave} value={n.data}>{new Date(n.data + 'T00:00:00').toLocaleDateString('pt-BR')} · {n.nut === 'ndvi_cbers' ? 'CBERS' : 'S2'}</option>)}
+            {ndvis.map(n => <option key={n.chave} value={n.chave}>{n.indice || 'NDVI'} · {new Date(n.data + 'T00:00:00').toLocaleDateString('pt-BR')} · {n.nut.startsWith('ndvi_cbers') ? 'CBERS' : 'S2'}</option>)}
           </select>
         )}
       </div>
@@ -143,7 +143,7 @@ export function ComparadorProdNdvi({ safraNome }: { safraNome: string }) {
         <>
           <div className="grid grid-cols-2 gap-2">
             <Lado titulo="Produtividade" sub={`${prodMedia} ${u}`} url={view.prodUrl} />
-            <Lado titulo={`NDVI · ${ndvi?.nut === 'ndvi_cbers' ? 'CBERS' : 'S2'}`} sub={`médio ${fmt(view.ndviMedia, 2)}`} url={view.ndviUrl} />
+            <Lado titulo={`${ndvi?.indice || 'NDVI'} · ${ndvi?.nut.startsWith('ndvi_cbers') ? 'CBERS' : 'S2'}`} sub={`médio ${fmt(view.ndviMedia, 2)}`} url={view.ndviUrl} />
           </div>
           {view.r != null && (
             <p className="text-[10px] text-center" style={{ color: '#cbd5e1' }}>
