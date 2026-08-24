@@ -219,17 +219,17 @@ export function NdviSection({ safraNome }: { safraNome?: string } = {}) {
   // O índice do talhão sai do grid que a tela JÁ tem (nada de rebuscar o
   // satélite); os outros três caminhos precisam de uma busca nova, porque o dado
   // guardado cobre só o retângulo do talhão.
-  async function baixarTiff(alvo: 'talhao' | 'tela') {
+  async function baixarTiff(tipo: 'indice' | 'imagem', alvo: 'talhao' | 'tela') {
     if (!sel || !poligono) return;
     if (alvo === 'tela' && !boundsTela) { setErroTiff('Ainda não sei o que está na tela — mexa no mapa e tente de novo.'); return; }
-    setBaixandoTiff(alvo); setErroTiff('');
+    setBaixandoTiff(`${tipo}:${alvo}`); setErroTiff('');
     const area = alvo === 'tela' ? retanguloDe(boundsTela!) : poligono;
     const pixelM = pixelDe(fonteSel);
-    const base = `${nav.talhao || 'talhao'}_${modo === 'ndvi' ? indSel : 'RGB'}_${dataSel || 'cena'}_${alvo}`
+    const base = `${nav.talhao || 'talhao'}_${tipo === 'indice' ? indSel : 'RGB'}_${dataSel || 'cena'}_${alvo}`
       .replace(/[^\w.-]+/g, '_');
     try {
       let blob: Blob;
-      if (modo === 'imagem') {
+      if (tipo === 'imagem') {
         blob = await baixarImagemGeotiff({
           poligono: area, cenaId: sel.resp.cena.id, fonte: fonteSel, pixelM,
           recortar: alvo === 'talhao', filename: base,
@@ -266,7 +266,7 @@ export function NdviSection({ safraNome }: { safraNome?: string } = {}) {
   // baixa 1 grid — do cache local se a versão da nuvem não mudou — e injeta na
   // cena. Cenas processadas nesta sessão já têm grid e não passam por aqui.
   const [carregandoGrid, setCarregandoGrid] = useState(false);
-  const [baixandoTiff, setBaixandoTiff] = useState<'' | 'talhao' | 'tela'>('');
+  const [baixandoTiff, setBaixandoTiff] = useState('');   // `${tipo}:${alvo}` em andamento
   const [erroTiff, setErroTiff] = useState('');
   useEffect(() => {
     const m = selKey ? cenas[selKey] : undefined;
@@ -795,30 +795,48 @@ export function NdviSection({ safraNome }: { safraNome?: string } = {}) {
             </button>
           </div>
 
-          {/* Download em GeoTIFF — dois recortes, porque servem a coisas diferentes:
-              TALHÃO é o dado da análise; JANELA é o que está na tela, para quando
-              a pergunta passa da divisa (vizinho, mata, carreador). */}
-          <div className="rounded p-2 space-y-1.5" style={{ background: '#0b1f38', border: '1px solid #1a3a6b' }}>
-            <p className="text-[10px] font-semibold" style={{ color: '#93c5fd' }}>
-              Baixar GeoTIFF · {modo === 'ndvi' ? indSel : 'imagem real'}
-            </p>
-            <div className="grid grid-cols-2 gap-1.5">
-              <button onClick={() => baixarTiff('talhao')} disabled={!!baixandoTiff}
-                className="py-1.5 rounded text-[10px] font-bold flex items-center justify-center gap-1"
-                style={{ background: '#1a3a6b', color: '#93c5fd', opacity: baixandoTiff ? 0.6 : 1 }}>
-                {baixandoTiff === 'talhao' ? <Loader2 size={11} className="animate-spin" /> : <Download size={11} />} Talhão
-              </button>
-              <button onClick={() => baixarTiff('tela')} disabled={!!baixandoTiff || !boundsTela}
-                className="py-1.5 rounded text-[10px] font-bold flex items-center justify-center gap-1"
-                style={{ background: '#1a3a6b', color: '#93c5fd', opacity: (baixandoTiff || !boundsTela) ? 0.6 : 1 }}>
-                {baixandoTiff === 'tela' ? <Loader2 size={11} className="animate-spin" /> : <Download size={11} />} Área da tela
-              </button>
-            </div>
+          {/* Download em GeoTIFF. Duas escolhas INDEPENDENTES, e as duas explícitas:
+              O QUE baixar (valores do índice, 1 banda × imagem real, 3 bandas RGB)
+              e ATÉ ONDE (talhão recortado na divisa × a janela que está na tela).
+              Antes isto seguia o botão NDVI/Imagem lá de cima: quem estava no NDVI
+              clicava em "Talhão" achando que levava a foto e recebia o índice de 1
+              banda — que abre cinza no QGIS. Escolher no próprio lugar do download
+              acaba com a confusão. */}
+          <div className="rounded p-2 space-y-2" style={{ background: '#0b1f38', border: '1px solid #1a3a6b' }}>
+            <p className="text-[10px] font-semibold" style={{ color: '#93c5fd' }}>Baixar GeoTIFF</p>
+
+            {([
+              { tipo: 'imagem' as const, rotulo: 'Imagem real (RGB)', nota: '3 bandas, cor verdadeira' },
+              { tipo: 'indice' as const, rotulo: `${indSel} (valores)`, nota: '1 banda — colorir no QGIS' },
+            ]).map(({ tipo, rotulo, nota }) => (
+              <div key={tipo} className="space-y-1">
+                <p className="text-[9px]" style={{ color: '#94a3b8' }}>
+                  <b style={{ color: '#cbd5e1' }}>{rotulo}</b> · {nota}
+                </p>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {([
+                    { alvo: 'talhao' as const, txt: 'Talhão' },
+                    { alvo: 'tela' as const, txt: 'Área da tela' },
+                  ]).map(({ alvo, txt }) => {
+                    const chave = `${tipo}:${alvo}`;
+                    const travado = !!baixandoTiff || (alvo === 'tela' && !boundsTela);
+                    return (
+                      <button key={alvo} onClick={() => baixarTiff(tipo, alvo)} disabled={travado}
+                        className="py-1.5 rounded text-[10px] font-bold flex items-center justify-center gap-1"
+                        style={{ background: '#1a3a6b', color: '#93c5fd', opacity: travado ? 0.6 : 1 }}>
+                        {baixandoTiff === chave ? <Loader2 size={11} className="animate-spin" /> : <Download size={11} />} {txt}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+
             <p className="text-[9px] leading-relaxed" style={{ color: '#64748b' }}>
               <b>Talhão</b>: recortado na divisa. <b>Área da tela</b>: o retângulo que você está vendo,
               {' '}sem recorte — busca o satélite de novo para a janela maior, então demora um pouco.
               {' '}Resolução da fonte ({pixelDe(fonteSel)} m); em janela muito ampla o servidor engrossa o
-              {' '}pixel para a malha caber.
+              {' '}pixel para a malha caber. Tudo em EPSG:4326.
             </p>
             {erroTiff && <p className="text-[10px]" style={{ color: '#f87171' }}>{erroTiff}</p>}
           </div>

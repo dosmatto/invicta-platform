@@ -1,5 +1,10 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.72.1': [
+    'CORRIGIDO — O TIFF SAÍA EM CINZA QUANDO VOCÊ QUERIA A IMAGEM COLORIDA. O download seguia, sem avisar, o botão NDVI/Imagem lá de cima: quem estava vendo o NDVI e clicava em "Talhão" recebia o índice de 1 banda (que abre cinza no QGIS, porque é valor e não foto), mesmo querendo a imagem de satélite.',
+    'AGORA AS DUAS ESCOLHAS SÃO SEPARADAS E ESTÃO NO PRÓPRIO LUGAR DO DOWNLOAD: primeiro "Imagem real (RGB) · 3 bandas, cor verdadeira", depois "NDVI (valores) · 1 banda — colorir no QGIS". Cada um com seus botões Talhão e Área da tela. Não depende mais de qual modo está aberto no mapa.',
+    'A geração da imagem colorida foi conferida ponta a ponta numa cena real do Sentinel-2: saem as 3 bandas identificadas como vermelho, verde e azul, com valores distintos entre si — ou seja, colorida de verdade, e não três cópias da mesma banda.',
+  ],
   '2.72.0': [
     'A ABA NDVI GANHOU DOWNLOAD EM GeoTIFF — EM DOIS RECORTES. Logo abaixo dos botões NDVI/Imagem aparece "Baixar GeoTIFF", com duas opções: TALHÃO (recortado exatamente na divisa, que é o dado da análise) e ÁREA DA TELA (o retângulo que você está enxergando, sem recorte nenhum), para quando a pergunta passa da cerca — vizinho, mata, carreador, uma mancha que continua do outro lado.',
     'VALE PARA OS ÍNDICES E PARA A IMAGEM REAL. Índice (NDVI, NDRE, SAVI…) sai como TIFF de 1 banda com o VALOR do índice — abre no QGIS pronto para receber a escala de cor que você quiser, e não uma figura já colorida. A imagem real sai como TIFF de 3 bandas em cor verdadeira, georreferenciado (antes ela só existia como PNG na tela, sem coordenada nenhuma).',
