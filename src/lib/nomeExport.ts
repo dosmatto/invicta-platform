@@ -100,7 +100,8 @@ export type TipoExport =
   | 'PROD'      // produtividade/colheita (mapa absoluto + quantil + analise)
   | 'COMPARA'   // comparações (produtividade × NDVI, cenários)
   | 'VALID'     // validação de zoneamento
-  | 'CONFER';   // conferência de cadastro
+  | 'CONFER'    // conferência de cadastro
+  | 'LIMITE';   // contorno cadastrado do talhão (KML/SHP) — cadastro, sem período
 
 export interface DadosNomeExport {
   fazenda?: string;

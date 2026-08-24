@@ -1,5 +1,12 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.70.0': [
+    'DÁ PARA BAIXAR O CONTORNO DE UM TALHÃO DIRETO DA LISTA. Na fazenda, cada talhão ganhou um botão verde de download ao lado do "Abrir": clique e escolha KML ou Shapefile (.zip). Antes só existia a IMPORTAÇÃO em massa — para tirar um talhão de dentro do sistema não havia caminho nenhum.',
+    'O ARQUIVO JÁ VAI IDENTIFICADO: além do contorno, leva talhão, área em hectares, fazenda, produtor e município. No QGIS isso aparece na tabela de atributos; no Google Earth, na descrição do polígono. O nome segue o padrão da casa — AFSS07_LIMITE.kml — sem ano nem época, porque contorno é cadastro e não muda de safra.',
+    'O botão só aparece em talhão que TEM contorno salvo. Sem geometria não há o que exportar, e um arquivo vazio seria pior que botão nenhum.',
+    'Detalhes que costumam estragar o arquivo e ficaram travados por teste: talhão com FURO (área excluída no meio) mantém o furo; talhão em duas manchas separadas sai como multipolígono; acento no nome do produtor não vira lixo na tabela (o .cpg declara a codificação); e "&" no nome do talhão não quebra o Google Earth.',
+    'Onde ver: Clientes → produtor → fazenda → a lista de talhões. 14 testes novos (npm run teste:talhao).',
+  ],
   '2.69.3': [
     'CORRIGIDO — O MAPA SAIA AMARELADO NA TELA (NDVI, fertilidade, dose, produtividade). Achado pelo usuario, comparando a aba NDVI com o PDF: o mesmo EVI saia verde-escuro no relatorio e oliva na tela. Nao era a escala de cores — era uma camada por cima.',
     'A CAUSA: o talhao e marcado no mapa por um preenchimento AMBAR (#f59e0b a 35%). O raster e inserido logo abaixo de `zona-fill` de proposito, para ficar SOB as zonas de manejo (regra da Recomendacao por zona). So que `zona-fill` e criada ANTES de `upload-fill` — entao esse mesmo posicionamento tambem jogava o raster para baixo do ambar, que passava a tingir o mapa inteiro.',

@@ -11,7 +11,9 @@ import { detectarMunicipiosFazenda } from '@/lib/geocode';
 import { prepararTalhoesEmMassa, CandidatoTalhao } from '@/lib/geo';
 import { conflitosDe, talhaoParaAlvo, areaHaFC, bboxDeFeatures, type AlvoOverlap, type Conflito } from '@/lib/overlap';
 import { verificarTrocaPoligono } from '@/lib/trocaPoligono';
-import { ChevronLeft, Plus, Map, AlertTriangle, Save, X, ExternalLink, MapPin, Loader2, Upload, CheckCircle2, Pencil, Trash2 } from 'lucide-react';
+import { baixarKMLTalhao, baixarSHPTalhao, poligonoDoTalhao } from '@/lib/exportTalhao';
+import { getClientes } from '@/lib/store';
+import { ChevronLeft, Plus, Map, AlertTriangle, Save, X, ExternalLink, MapPin, Loader2, Upload, CheckCircle2, Pencil, Trash2, Download } from 'lucide-react';
 import { PanelSection, PanelButton, StatusBadge } from './_shared';
 import { RelatoriosFazenda } from './RelatoriosFazenda';
 
@@ -33,6 +35,8 @@ export function FazendaDetailPanel() {
   const [msgMunicipio, setMsgMunicipio] = useState('');
   const [renomeando, setRenomeando] = useState(false);
   const [nomeTemp, setNomeTemp] = useState('');
+  const [baixarId, setBaixarId] = useState<string | null>(null);   // menu KML/SHP aberto nesta linha
+  const [baixando, setBaixando] = useState<string | null>(null);
   const [mostraExcluir, setMostraExcluir] = useState(false);
   const [txtConfirma, setTxtConfirma] = useState('');
   const [excluindo, setExcluindo] = useState(false);
@@ -101,6 +105,26 @@ export function FazendaDetailPanel() {
     const lista = getTalhoes(nav.fazendaId);
     setTalhoes(lista);
     publicarTalhoesNoMapa(lista);
+  }
+
+  // Contexto do arquivo (vai no nome e nos atributos do DBF/KML).
+  function ctxExport() {
+    const cli = fazenda ? getClientes().find(c => c.id === fazenda.clienteId) : undefined;
+    return {
+      fazenda: fazenda?.nome ?? '', siglaFazenda: fazenda?.sigla ?? null,
+      produtor: cli?.nome ?? '', municipio: fazenda?.municipio ?? '', estado: fazenda?.estado ?? '',
+    };
+  }
+
+  async function baixarGeometria(t: Talhao, fmt: 'kml' | 'shp') {
+    setBaixarId(null);
+    setBaixando(`${t.id}-${fmt}`);
+    try {
+      if (fmt === 'kml') baixarKMLTalhao(t, ctxExport());
+      else await baixarSHPTalhao(t, ctxExport());
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Falha ao gerar o arquivo.');
+    } finally { setBaixando(null); }
   }
 
   function abrirTalhao(t: Talhao) {
@@ -319,8 +343,40 @@ export function FazendaDetailPanel() {
                           {t.areaHa > 0 ? `${t.areaHa.toLocaleString('pt-BR')} ha` : 'Área não definida'}
                         </p>
                       </div>
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5 relative">
                         <StatusBadge status={t.status} />
+                        {/* Baixar a GEOMETRIA do talhão (KML / SHP). Só aparece com
+                            contorno salvo — sem ele não há o que exportar. */}
+                        {poligonoDoTalhao(t) && (
+                          <>
+                            <button
+                              onClick={e => { e.stopPropagation(); setBaixarId(baixarId === t.id ? null : t.id); }}
+                              title="Baixar o contorno do talhão (KML / SHP)"
+                              className="flex items-center px-1.5 py-1 rounded flex-shrink-0"
+                              style={{ background: '#14532d', color: '#86efac' }}>
+                              {baixando?.startsWith(t.id) ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
+                            </button>
+                            {baixarId === t.id && (
+                              <>
+                                {/* clique fora fecha */}
+                                <div className="fixed inset-0 z-20" onClick={e => { e.stopPropagation(); setBaixarId(null); }} />
+                                <div className="absolute right-0 top-full mt-1 z-30 rounded-lg overflow-hidden shadow-lg"
+                                  style={{ background: '#0a1f38', border: '1px solid #1a3a6b', minWidth: 132 }}>
+                                  {([['kml', 'KML'], ['shp', 'Shapefile (.zip)']] as const).map(([fmt, rot]) => (
+                                    <button key={fmt}
+                                      onClick={e => { e.stopPropagation(); void baixarGeometria(t, fmt); }}
+                                      className="w-full text-left px-3 py-2 text-[11px] font-semibold"
+                                      style={{ color: '#e2e8f0' }}
+                                      onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = '#1a3a6b'}
+                                      onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}>
+                                      {rot}
+                                    </button>
+                                  ))}
+                                </div>
+                              </>
+                            )}
+                          </>
+                        )}
                         {/* Abrir a PÁGINA COMPLETA do talhão (nova aba) — sempre visível (antes só no hover) */}
                         <button onClick={e => { e.stopPropagation(); window.open(`/talhao/${t.id}`, '_blank'); }}
                           title="Abrir página completa do talhão (nova aba)"
