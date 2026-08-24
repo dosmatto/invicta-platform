@@ -15,16 +15,22 @@ import {
   type LevantamentoCondutividade, type RodadaCondutividade,
 } from '@/lib/store';
 import { nomeExport } from '@/lib/nomeExport';
+import { getClientes } from '@/lib/store';
+import { classesQuantis } from '@/lib/quantis';
+import { corCheiaDaClasse } from '@/lib/legendas';
+import { colorirGridPorQuantis } from '@/lib/raster';
+import { gerarRelatorioCondutividade } from '@/lib/relatorioCondutividade';
 import {
   interpolar, rampaDaLegenda, gradienteCss, coordsFromBounds, extrairPoligono,
   comprimirGrid, descomprimirGrid, exportarGeotiff, type RespInterp,
 } from '@/lib/fertilidade';
 import { colorirGridComLegenda, temGrid } from '@/lib/raster';
+import { decodeGrid } from '@/lib/fertilidade';
 import { cloudSalvarMapa, cloudCarregarMapasPorPrefixo, cloudExcluirMapasPorPrefixo } from '@/lib/cloud';
 import { parseArquivoPontos, pontosCondutividade, avaliarQualidade, CORES_QUALIDADE, sugerirProfundidadesCEa, ehColunaAltitude, prepararPontosKrigagem, limparPontosEC, rasterizarPontos5, type ArquivoPontos, type RelatorioLimpeza, type Classe5 } from '@/lib/condutividade';
 import { ordenarLegendasDoAtributo, respeitarPadraoHomonima } from '@/lib/legendas';
 import type { Legenda } from '@/lib/legendas';
-import { Upload, Loader2, Zap, Eraser, AlertTriangle, Save, Trash2, Play, Plus, Layers, Star, Gauge, Mountain, SlidersHorizontal, ChevronDown, ChevronUp, RotateCcw, Download, History } from 'lucide-react';
+import { Upload, Loader2, Zap, Eraser, AlertTriangle, Save, Trash2, Play, Plus, Layers, Star, Gauge, Mountain, SlidersHorizontal, ChevronDown, ChevronUp, RotateCcw, Download, History, FileDown } from 'lucide-react';
 
 import { inputStyle } from '@/constants/ui';
 import { fmtMax2 as fmt } from '@/lib/formato';
@@ -102,6 +108,7 @@ export function CondutividadeSection() {
   const [limpos, setLimpos] = useState<Record<string, { pontos: Ponto[]; rel: RelatorioLimpeza }>>({});
   const [limpando, setLimpando] = useState(false);
   const [exportando, setExportando] = useState(false);  // baixando GeoTIFF do mapa
+  const [gerandoPdf, setGerandoPdf] = useState(false);  // PDF do mapa por quintil
   const [vistaInfo, setVistaInfo] = useState<{ n: number; classes: Classe5[] } | null>(null);  // pontos plotados em 5 classes
   const [params, setParams] = useState<ParamsLimpeza>({ ...PARAMS_LIMPEZA_PADRAO });
   // C2 — krigagem MANUAL (Modo 2): método/modelo do variograma/pixel ('auto' = como antes).
@@ -391,6 +398,50 @@ export function CondutividadeSection() {
   const qual = cache[profundidade]
     ? avaliarQualidade({ n: cache[profundidade].resp.stats.n, rmse: cache[profundidade].resp.stats.rmse, min: cache[profundidade].resp.stats.min, max: cache[profundidade].resp.stats.max, percRemovido: limpos[profundidade]?.rel?.perc_removido ?? null })
     : null;
+
+  // PDF do mapa por QUINTIL, no layout oficial. A CEa não tem faixa agronômica
+  // universal — o que informa é onde, DENTRO do talhão, o solo é mais condutivo —
+  // então a escala sai por quintil, com os cortes calculados deste levantamento.
+  async function gerarPdf() {
+    const c = cache[profundidade];
+    if (!c?.resp.grid || gerandoPdf) return;
+    if (!poligono) { setErro('Talhão sem contorno salvo — o mapa não pode ser recortado.'); return; }
+    setGerandoPdf(true); setErro('');
+    try {
+      const dec = decodeGrid(c.resp.grid);
+      // Cores e nomes saem da LEGENDA em uso quando ela tem 5 classes: o PDF fala
+      // a mesma língua da tela. Sem isso, a paleta padrão de 5 faixas.
+      const cls = legenda?.classes ?? [];
+      const q = classesQuantis(dec.valores, {
+        k: 5, pixelM: c.resp.stats.pixel_m,
+        cores: cls.length === 5 ? cls.map(corCheiaDaClasse) : ['#2166AC', '#67A9CF', '#F7F7F7', '#EF8A62', '#B2182B'],
+        nomes: cls.length === 5 ? cls.map(x => x.nome) : ['Muito Baixa', 'Baixa', 'Média', 'Alta', 'Muito Alta'],
+      });
+      if (!q) throw new Error('Não foi possível calcular as faixas por quintil deste mapa.');
+
+      const t = getTalhoes().find(x => x.id === nav.talhaoId);
+      const f = t ? getFazendas().find(x => x.id === t.fazendaId) : undefined;
+      const cli = f ? getClientes().find(x => x.id === f.clienteId) : undefined;
+      await gerarRelatorioCondutividade({
+        fazenda: f?.nome ?? '', produtor: cli?.nome ?? '', talhao: t?.nome ?? '',
+        siglaFazenda: f?.sigla ?? null,
+        areaHa: t?.areaHa ?? 0, municipio: f?.municipio ?? '', estado: f?.estado ?? '',
+        levantamento: lev?.nome ?? '', camada: profundidade,
+        dataLevantamento: lev?.data ?? null, ano: lev?.ano ?? null,
+        rasterPng: colorirGridPorQuantis(c.resp.grid, q.breaks, q.faixas.map(x => x.cor)).dataUrl,
+        bounds: c.resp.bounds, quantis: q, poligono,
+        unidade: legenda?.unidade || 'mS/m',
+        satelite: true, corLimite: '#ffffff',
+        nPontos: c.resp.stats.n, modelo: c.resp.stats.modelo, pixelM: c.resp.stats.pixel_m,
+        rmse: c.resp.stats.rmse, minObs: c.resp.stats.min, maxObs: c.resp.stats.max,
+        qualidade: qual ? { rotulo: qual.classe, apto: qual.apto } : null,
+        percRemovido: limpos[profundidade]?.rel?.perc_removido ?? null,
+        logoClienteUrl: (cli as { logoUrl?: string } | undefined)?.logoUrl ?? null,
+      });
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Falha ao gerar o PDF.');
+    } finally { setGerandoPdf(false); }
+  }
 
   // Baixa o mapa krigado atual como GeoTIFF (EPSG:4326) — abre em QGIS/máquina.
   async function baixarGeotiff() {
@@ -781,6 +832,11 @@ export function CondutividadeSection() {
                   <Zap size={12} /> {cache[profundidade].resp.stats.modelo}{binMsg[profundidade] ? ` · ${binMsg[profundidade]}` : ` · ${cache[profundidade].resp.stats.n} pts`}
                 </div>
                 <div className="flex items-center gap-3">
+                  {cache[profundidade].resp.grid && (
+                    <button onClick={gerarPdf} disabled={gerandoPdf} title="Relatório PDF do mapa, no layout oficial, com a escala por quintil" className="flex items-center gap-1 text-[10px] disabled:opacity-50" style={{ color: '#fca5a5' }}>
+                      {gerandoPdf ? <Loader2 size={11} className="animate-spin" /> : <FileDown size={11} />} PDF
+                    </button>
+                  )}
                   {cache[profundidade].resp.grid && (
                     <button onClick={baixarGeotiff} disabled={exportando} title="Baixar o mapa como GeoTIFF (EPSG:4326) — abre em QGIS/máquina" className="flex items-center gap-1 text-[10px] disabled:opacity-50" style={{ color: '#86efac' }}>
                       {exportando ? <Loader2 size={11} className="animate-spin" /> : <Download size={11} />} GeoTIFF

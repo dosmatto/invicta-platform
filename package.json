@@ -16,6 +16,7 @@
     "teste:nomes": "node scripts/teste-nome-export.mjs",
     "teste:ordem": "node scripts/teste-ordem-catalogo.mjs",
     "teste:talhao": "node scripts/teste-export-talhao.mjs",
+    "teste:cea": "node scripts/teste-relatorio-cea.mjs",
     "teste:faixas": "node scripts/teste-faixas.mjs",
     "teste:motivo": "node scripts/teste-motivo-mapa.mjs",
     "teste:rota": "node scripts/teste-rota-local.mjs",

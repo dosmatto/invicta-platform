@@ -1,5 +1,13 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.71.0': [
+    'A CONDUTIVIDADE GANHOU RELATÓRIO EM PDF, no layout oficial da casa — o mesmo cabeçalho, marca e rodapé de Fertilidade, Zonas e Produtividade. O botão PDF fica ao lado do GeoTIFF, no cartão do mapa interpolado.',
+    'O MAPA SAI POR QUINTIL: 5 faixas com 20% da área cada, e os cortes calculados DESTE levantamento. É a leitura que a CEa pede — ela não tem faixa agronômica universal como um nutriente tem ("40% de saturação é baixo"); o que informa é onde, DENTRO do talhão, o solo é mais e menos condutivo. A tira de cor sob o mapa anuncia os cortes reais em mS/m, não limites fixos de uma legenda.',
+    'A TABELA À DIREITA fecha em 100%: faixa, intervalo, hectares e percentual, com o TOTAL somado das linhas. Ao lado, o quadro LEVANTAMENTO com versão, pontos medidos, pixel, modelo do variograma, faixa medida, erro (RMSE) e a nota de qualidade — inclusive o aviso de "apto p/ Zonas de Manejo".',
+    'AS CORES SAEM DA LEGENDA em uso quando ela tem 5 classes, para o PDF falar a mesma língua da tela. Se a legenda tiver outro número de classes, entra uma paleta de 5 faixas própria.',
+    'MAPA UNIFORME NÃO INVENTA FAIXA: se o talhão tiver valores muito repetidos, as faixas que colapsariam são unidas e o relatório declara quantas — melhor dizer "3 faixas" que exibir duas com o mesmo intervalo.',
+    'Onde ver: Talhão → aba Condutividade → interpole → botão PDF. 11 testes novos (npm run teste:cea).',
+  ],
   '2.70.0': [
     'DÁ PARA BAIXAR O CONTORNO DE UM TALHÃO DIRETO DA LISTA. Na fazenda, cada talhão ganhou um botão verde de download ao lado do "Abrir": clique e escolha KML ou Shapefile (.zip). Antes só existia a IMPORTAÇÃO em massa — para tirar um talhão de dentro do sistema não havia caminho nenhum.',
     'O ARQUIVO JÁ VAI IDENTIFICADO: além do contorno, leva talhão, área em hectares, fazenda, produtor e município. No QGIS isso aparece na tabela de atributos; no Google Earth, na descrição do polígono. O nome segue o padrão da casa — AFSS07_LIMITE.kml — sem ano nem época, porque contorno é cadastro e não muda de safra.',
