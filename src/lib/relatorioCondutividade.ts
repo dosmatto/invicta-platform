@@ -144,6 +144,17 @@ function quadro(doc: JsPDF, x: number, y: number, w: number, h: number, titulo: 
   doc.text(titulo, x + 4, y + 6);
 }
 
+/**
+ * Média da faixa, na unidade do mapa.
+ *
+ * `somaKg` é Σ(valor) × área do pixel e `areaHa` é nPixels × área do pixel, logo
+ * a divisão cancela o pixel e sobra a média aritmética dos valores da faixa.
+ */
+export function mediaFaixaCea(q: ClassificacaoQuantis, i: number): number | null {
+  const f = q.faixas[i];
+  return f.areaHa > 0 ? f.somaKg / f.areaHa : null;
+}
+
 /** "<= 12,4" / "12,4 - 18,9" / ">= 24,1" — a mesma regra do relatório de produtividade. */
 export function rotuloFaixaCea(q: ClassificacaoQuantis, i: number): string {
   const f = q.faixas[i];
@@ -224,10 +235,14 @@ async function desenharPagina(doc: JsPDF, d: DadosRelatorioCondutividade, logos:
   let ty = mapaY;
   doc.setFillColor(...NAVY); doc.rect(tabX, ty, tabW, 7, 'F');
   doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(7);
+  // NÃO há coluna de % — nem de área comparativa: no quintil TODA faixa fica com
+  // ~20% da área por construção, então esses dois números seriam a mesma coisa
+  // repetida cinco vezes (foi o que o usuário viu como "valor travado"). O que
+  // varia de faixa para faixa, e portanto informa, é o INTERVALO e a MÉDIA.
   doc.text('FAIXA', tabX + 8, ty + 4.8);
-  doc.text(`INTERVALO (${san(d.unidade)})`, tabX + 34, ty + 4.8);
-  doc.text('ha', tabX + tabW - 20, ty + 4.8, { align: 'right' });
-  doc.text('%', tabX + tabW - 3, ty + 4.8, { align: 'right' });
+  doc.text(`INTERVALO (${san(d.unidade)})`, tabX + 30, ty + 4.8);
+  doc.text('MEDIA', tabX + tabW - 22, ty + 4.8, { align: 'right' });
+  doc.text('ha', tabX + tabW - 3, ty + 4.8, { align: 'right' });
   ty += 7;
 
   const rowH = 7.6;
@@ -238,18 +253,31 @@ async function desenharPagina(doc: JsPDF, d: DadosRelatorioCondutividade, logos:
     doc.setFont('helvetica', 'bold'); doc.setFontSize(7); doc.setTextColor(...NAVY);
     doc.text(clipTexto(doc, san(f.nome), 24), tabX + 8, ty + 5);
     doc.setFont('helvetica', 'normal'); doc.setTextColor(...GRAY);
-    doc.text(rotuloFaixaCea(q, i), tabX + 34, ty + 5);
+    doc.text(rotuloFaixaCea(q, i), tabX + 30, ty + 5);
     doc.setTextColor(...NAVY);
-    doc.text(fmt(f.areaHa, 2), tabX + tabW - 20, ty + 5, { align: 'right' });
-    doc.text(fmt(f.pctArea, 1), tabX + tabW - 3, ty + 5, { align: 'right' });
+    const md = mediaFaixaCea(q, i);
+    doc.text(md != null ? fmt(md, 1) : '—', tabX + tabW - 22, ty + 5, { align: 'right' });
+    doc.text(fmt(f.areaHa, 2), tabX + tabW - 3, ty + 5, { align: 'right' });
     somaHa += f.areaHa;
     ty += rowH;
   });
   doc.setDrawColor(...NAVY); doc.setLineWidth(0.5); doc.line(tabX, ty + 0.5, tabX + tabW, ty + 0.5);
   doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor(...NAVY);
   doc.text('TOTAL', tabX + 8, ty + 5.4);
-  doc.text(fmt(somaHa, 2), tabX + tabW - 20, ty + 5.4, { align: 'right' });
-  doc.text('100,0', tabX + tabW - 3, ty + 5.4, { align: 'right' });
+  const mdGeral = somaHa > 0 ? q.faixas.reduce((acc, f) => acc + f.somaKg, 0) / somaHa : null;
+  doc.text(mdGeral != null ? fmt(mdGeral, 1) : '—', tabX + tabW - 22, ty + 5.4, { align: 'right' });
+  doc.text(fmt(somaHa, 2), tabX + tabW - 3, ty + 5.4, { align: 'right' });
+
+  // Duas coisas que o leitor estranharia sem explicação: as áreas iguais (é o
+  // quintil funcionando) e o total não bater com a área cadastrada do talhão
+  // (aqui é a soma dos PIXELS, que depende da resolução).
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(6); doc.setTextColor(...GRAY);
+  doc.text(
+    `Cada faixa tem ~20% da area — e o que o quintil faz; o que muda entre elas e o intervalo. `
+    + `Area somada dos pixels de ${d.pixelM} m; a area cadastrada do talhao e ${fmt(d.areaHa, 2)} ha.`,
+    tabX, ty + 10, { maxWidth: tabW },
+  );
+  ty += 6;
 
   // ── LEVANTAMENTO: a aferição, que é o que diz se dá para confiar no mapa ──
   const ry = ty + 12, rh = 46;

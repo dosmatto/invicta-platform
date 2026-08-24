@@ -1,5 +1,11 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.71.1': [
+    'NA TABELA DO PDF DE CONDUTIVIDADE, "ha" E "%" SAÍAM IGUAIS NAS CINCO LINHAS — e pareciam um valor travado. Não estavam travados: no quintil cada faixa fica com 20% dos pixels POR CONSTRUÇÃO, então área e percentual são obrigatoriamente os mesmos em todas. As duas colunas mais visíveis da tabela não informavam nada.',
+    'A COLUNA "%" SAIU E ENTROU "MÉDIA": o valor médio de CEa daquela faixa, em mS/m. Esse sim varia de faixa para faixa e diz o que interessa — quanto o solo conduz em cada zona do mapa. A linha TOTAL passou a mostrar a média geral do talhão. Os hectares continuam, porque é o número que se usa para planejar.',
+    'ENTROU TAMBÉM UMA NOTA sob a tabela explicando as duas coisas que o leitor estranharia: por que as áreas são iguais, e por que o total pode não bater com a área cadastrada do talhão (a tabela soma os PIXELS do mapa, que dependem da resolução).',
+    'Onde ver: Talhão → aba Condutividade → PDF. 5 testes novos (npm run teste:cea, 16 no total) travam que a média varia entre as faixas, cresce da primeira à última e cai dentro do intervalo de cada uma.',
+  ],
   '2.71.0': [
     'A CONDUTIVIDADE GANHOU RELATÓRIO EM PDF, no layout oficial da casa — o mesmo cabeçalho, marca e rodapé de Fertilidade, Zonas e Produtividade. O botão PDF fica ao lado do GeoTIFF, no cartão do mapa interpolado.',
     'O MAPA SAI POR QUINTIL: 5 faixas com 20% da área cada, e os cortes calculados DESTE levantamento. É a leitura que a CEa pede — ela não tem faixa agronômica universal como um nutriente tem ("40% de saturação é baixo"); o que informa é onde, DENTRO do talhão, o solo é mais e menos condutivo. A tira de cor sob o mapa anuncia os cortes reais em mS/m, não limites fixos de uma legenda.',

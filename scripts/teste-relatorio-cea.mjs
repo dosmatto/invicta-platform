@@ -9,7 +9,7 @@
 //
 // Roda: `npm run teste:cea`.
 import assert from 'node:assert/strict';
-import { rotuloFaixaCea, validarCondutividade, nomeArquivoCondutividade } from '../src/lib/relatorioCondutividade.ts';
+import { rotuloFaixaCea, mediaFaixaCea, validarCondutividade, nomeArquivoCondutividade } from '../src/lib/relatorioCondutividade.ts';
 import { classesQuantis } from '../src/lib/quantis.ts';
 
 let ok = 0, fail = 0;
@@ -54,6 +54,39 @@ t('as faixas cobrem do mínimo ao máximo, sem buraco entre elas', () => {
   for (let i = 1; i < q.faixas.length; i++) {
     assert.equal(q.faixas[i].min, q.faixas[i - 1].max, `buraco entre a faixa ${i} e a ${i + 1}`);
   }
+});
+
+// ── A MÉDIA é o que substituiu as colunas tautológicas (ha e %) ──────────────
+// No quintil toda faixa fica com ~20% da área POR CONSTRUÇÃO, então área e
+// percentual saíam iguais nas cinco linhas — foi o que o usuário viu como
+// "valor travado". O que varia, e informa, é o intervalo e a média.
+
+t('a área é IGUAL em todas as faixas — é o quintil, não um valor travado', () => {
+  const areas = new Set(q.faixas.map(f => f.areaHa.toFixed(4)));
+  assert.equal(areas.size, 1, 'se isto falhar, a premissa da correção mudou');
+});
+
+t('a MÉDIA, ao contrário, é diferente em cada faixa', () => {
+  const medias = q.faixas.map((_, i) => mediaFaixaCea(q, i));
+  assert.equal(new Set(medias.map(m => m.toFixed(3))).size, medias.length, `médias repetidas: ${medias}`);
+});
+
+t('a média CRESCE da primeira à última faixa', () => {
+  const m = q.faixas.map((_, i) => mediaFaixaCea(q, i));
+  for (let i = 1; i < m.length; i++) assert.ok(m[i] > m[i - 1], `faixa ${i + 1} não é maior que a ${i}`);
+});
+
+t('a média de cada faixa cai DENTRO do intervalo dela', () => {
+  q.faixas.forEach((f, i) => {
+    const m = mediaFaixaCea(q, i);
+    assert.ok(m >= f.min && m <= f.max, `média ${m} fora de [${f.min}, ${f.max}]`);
+  });
+});
+
+t('valores 1..100 em quintis: as médias batem com a conta à mão', () => {
+  // faixa 1 = 1..20 → média 10,5; faixa 5 = 81..100 → média 90,5
+  assert.ok(Math.abs(mediaFaixaCea(q, 0) - 10.5) < 0.01);
+  assert.ok(Math.abs(mediaFaixaCea(q, 4) - 90.5) < 0.01);
 });
 
 // ── Rótulos: o que o leitor lê na tabela ─────────────────────────────────────
