@@ -93,6 +93,12 @@ interface AppContextType {
   setFertilidadeOverlay: (o: FertilidadeOverlay | null) => void;
   fertilidadeLabels: GeoJSON.FeatureCollection | null;
   setFertilidadeLabels: (fc: GeoJSON.FeatureCollection | null) => void;
+  // Limites [oeste, sul, leste, norte] do que está VISÍVEL no mapa agora.
+  // Publicado pelo MapView a cada movimento. Quem usa: o download em GeoTIFF da
+  // aba NDVI, para baixar exatamente a janela que o usuário está vendo (e não só
+  // o retângulo do talhão) quando a pergunta passa da divisa.
+  boundsTela: [number, number, number, number] | null;
+  setBoundsTela: (b: [number, number, number, number] | null) => void;
 }
 
 const AppContext = createContext<AppContextType>({
@@ -134,6 +140,8 @@ const AppContext = createContext<AppContextType>({
   setFertilidadeOverlay: () => {},
   fertilidadeLabels: null,
   setFertilidadeLabels: () => {},
+  boundsTela: null,
+  setBoundsTela: () => {},
 });
 
 export function AppProvider({ children, redirectProdutorParaPortal, modoCampo }: { children: ReactNode; redirectProdutorParaPortal?: boolean; modoCampo?: boolean }) {
@@ -358,6 +366,7 @@ export function AppProvider({ children, redirectProdutorParaPortal, modoCampo }:
   const [corteAtivo, setCorteAtivo] = useState(false);
   const [corteLinha, setCorteLinha] = useState<[number, number][]>([]);
   const [fertilidadeOverlay, setFertilidadeOverlay] = useState<FertilidadeOverlay | null>(null);
+  const [boundsTela, setBoundsTela] = useState<[number, number, number, number] | null>(null);
   const [fertilidadeLabels, setFertilidadeLabels] = useState<GeoJSON.FeatureCollection | null>(null);
   const [nav, setNavState] = useState<NavContext>({
     produtorId: null, produtor: '',
@@ -394,6 +403,7 @@ export function AppProvider({ children, redirectProdutorParaPortal, modoCampo }:
       corteLinha, setCorteLinha,
       fertilidadeOverlay, setFertilidadeOverlay,
       fertilidadeLabels, setFertilidadeLabels,
+      boundsTela, setBoundsTela,
     }}>
       {authConfigurado && usuario === undefined ? (
         <div className="fixed inset-0 flex items-center justify-center" style={{ background: '#061525' }}>

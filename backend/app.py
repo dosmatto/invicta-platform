@@ -447,6 +447,37 @@ def ndvi_imagem(req: ReqImagem):
         raise HTTPException(status_code=500, detail=f"falha ao gerar imagem: {e}")
 
 
+class ReqImagemTiff(BaseModel):
+    poligono: dict[str, Any]          # talhão, OU o retângulo da tela quando recortar=False
+    cena_id: str
+    pixel_m: float = 10.0
+    fonte: str = "sentinel"           # 'sentinel' | 'cbers'
+    recortar: bool = True             # True = recorta no polígono; False = janela inteira
+    filename: str = "imagem"
+
+
+@app.post("/ndvi-imagem-geotiff")
+def ndvi_imagem_geotiff(req: ReqImagemTiff):
+    """Imagem de cor verdadeira como GeoTIFF de 3 bandas (EPSG:4326).
+
+    A rota /ndvi-imagem devolve PNG, que serve para a tela mas não para levar a
+    outro software — perde georreferência e os valores das bandas. Com
+    recortar=False o polígono recebido é a JANELA (retângulo da tela), e nada é
+    mascarado: é como se enxerga o entorno do talhão."""
+    try:
+        if req.fonte == "cbers":
+            data = cbers.imagem_geotiff(req.poligono, req.cena_id, req.pixel_m, req.recortar)
+        else:
+            data = msr.imagem_geotiff(req.poligono, req.cena_id, req.pixel_m, req.recortar)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:  # pragma: no cover
+        raise HTTPException(status_code=500, detail=f"falha ao gerar GeoTIFF da imagem: {e}")
+    fn = req.filename if req.filename.lower().endswith(".tif") else f"{req.filename}.tif"
+    return Response(content=data, media_type="image/tiff",
+                    headers={"Content-Disposition": f'attachment; filename="{fn}"'})
+
+
 class ReqIndices(BaseModel):
     poligono: dict[str, Any]
     cena_id: str

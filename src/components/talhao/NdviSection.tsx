@@ -13,14 +13,16 @@ import { getTalhoes } from '@/lib/store';
 import { SeletorLegenda, legendasDoModulo, usePrefLegenda } from './SeletorLegenda';
 import {
   extrairPoligono, coordsFromBounds, comprimirGrid, descomprimirGrid,
-  decodeGrid, type Grid,
+  decodeGrid, exportarGeotiff, type Grid,
 } from '@/lib/fertilidade';
 import { colorirGrid } from '@/lib/raster';
 import { rampaVisualStops, respeitarPadraoHomonima } from '@/lib/legendas';
 import {
   listarCenasNdvi, buscarImagemSatelite, buscarIndices, indicesDisponiveis,
+  buscarNdviSentinel, baixarImagemGeotiff,
   type RespNdvi, type CenaDisponivel, type FonteNdvi,
 } from '@/lib/msr';
+import { retanguloDe } from '@/lib/janela';
 import { cloudSalvarMapa, cloudListarMapasMeta, cloudCarregarMapa, cloudExcluirMapasPorPrefixo, cloudPodeGravar } from '@/lib/cloud';
 import { getRejeitadasLocal, carregarRejeitadas, marcarRejeitada } from '@/lib/cenaEstados';
 import { onCaiuParaNuvem } from '@/lib/interpUrl';
@@ -31,7 +33,7 @@ import { getComposicoes } from '@/lib/store';
 import { listarNdviSalvos, carregarGridNdvi, type NdviCamadaMeta } from '@/lib/meap/gerar';
 import {
   Satellite, Loader2, AlertTriangle, Image as ImageIcon, Contrast, Check, Star,
-  Eye, XCircle, RotateCcw, Play, X, Layers3,
+  Eye, XCircle, RotateCcw, Play, X, Layers3, Download,
 } from 'lucide-react';
 
 import { inputStyle } from '@/constants/ui';
@@ -86,7 +88,7 @@ function percentis(grid: Grid, pLo: number, pHi: number): [number, number] {
 }
 
 export function NdviSection({ safraNome }: { safraNome?: string } = {}) {
-  const { nav, uploadedGeo, setFertilidadeOverlay, setFertilidadeLabels } = useApp();
+  const { nav, uploadedGeo, boundsTela, setFertilidadeOverlay, setFertilidadeLabels } = useApp();
   // IV5 — organização em ABAS (spec Composição Temporal): buscar & processar |
   // composição temporal | camadas salvas. O fluxo existente vive na 1ª.
   const [abaIv, setAbaIv] = useState<'buscar' | 'comp' | 'salvas'>('buscar');
@@ -212,9 +214,60 @@ export function NdviSection({ safraNome }: { safraNome?: string } = {}) {
   }, [nav.talhaoId]);
 
   // Grid SOB DEMANDA da cena selecionada (autoload leve não traz rasters):
+  // ── Download em GeoTIFF ────────────────────────────────────────────────────
+  // 'talhao' = recortado na divisa; 'tela' = o retângulo visível, sem recorte.
+  // O índice do talhão sai do grid que a tela JÁ tem (nada de rebuscar o
+  // satélite); os outros três caminhos precisam de uma busca nova, porque o dado
+  // guardado cobre só o retângulo do talhão.
+  async function baixarTiff(alvo: 'talhao' | 'tela') {
+    if (!sel || !poligono) return;
+    if (alvo === 'tela' && !boundsTela) { setErroTiff('Ainda não sei o que está na tela — mexa no mapa e tente de novo.'); return; }
+    setBaixandoTiff(alvo); setErroTiff('');
+    const area = alvo === 'tela' ? retanguloDe(boundsTela!) : poligono;
+    const pixelM = pixelDe(fonteSel);
+    const base = `${nav.talhao || 'talhao'}_${modo === 'ndvi' ? indSel : 'RGB'}_${dataSel || 'cena'}_${alvo}`
+      .replace(/[^\w.-]+/g, '_');
+    try {
+      let blob: Blob;
+      if (modo === 'imagem') {
+        blob = await baixarImagemGeotiff({
+          poligono: area, cenaId: sel.resp.cena.id, fonte: fonteSel, pixelM,
+          recortar: alvo === 'talhao', filename: base,
+        });
+      } else {
+        let grid = sel.resp.grid;
+        let bounds = sel.resp.bounds;
+        if (alvo === 'tela' || !grid?.b64) {
+          // Índice na janela (ou grid ainda não baixado): refaz o cálculo na área
+          // pedida. O recorte é o próprio retângulo, então nada é mascarado.
+          const r = indSel === 'NDVI'
+            ? await buscarNdviSentinel({ poligono: area, dataIni: dataSel, dataFim: dataSel, cenaId: sel.resp.cena.id, fonte: fonteSel, pixelM })
+            : await (async () => {
+                const ix = await buscarIndices({ poligono: area, cenaId: sel.resp.cena.id, indices: [indSel], fonte: fonteSel, pixelM });
+                const res = ix.resultados[indSel];
+                if (!res?.grid?.b64) throw new Error(`O servidor não devolveu o índice ${indSel} para esta cena.`);
+                return { grid: res.grid, bounds: ix.bounds };
+              })();
+          grid = r.grid; bounds = r.bounds;
+        }
+        if (!grid?.b64) throw new Error('Esta cena ainda não tem o mapa carregado.');
+        blob = await exportarGeotiff(grid, bounds, base);
+      }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `${base}.tif`;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    } catch (e) {
+      setErroTiff(e instanceof Error ? e.message : 'Falha ao gerar o GeoTIFF.');
+    } finally { setBaixandoTiff(''); }
+  }
+
   // baixa 1 grid — do cache local se a versão da nuvem não mudou — e injeta na
   // cena. Cenas processadas nesta sessão já têm grid e não passam por aqui.
   const [carregandoGrid, setCarregandoGrid] = useState(false);
+  const [baixandoTiff, setBaixandoTiff] = useState<'' | 'talhao' | 'tela'>('');
+  const [erroTiff, setErroTiff] = useState('');
   useEffect(() => {
     const m = selKey ? cenas[selKey] : undefined;
     if (!m || m.resp.grid || !m.nuvemId) return;
@@ -740,6 +793,34 @@ export function NdviSection({ safraNome }: { safraNome?: string } = {}) {
               style={{ background: modo === 'imagem' ? 'var(--invicta-blue-mid)' : '#1a3a6b', color: modo === 'imagem' ? '#fff' : '#93c5fd' }}>
               <ImageIcon size={11} /> Imagem
             </button>
+          </div>
+
+          {/* Download em GeoTIFF — dois recortes, porque servem a coisas diferentes:
+              TALHÃO é o dado da análise; JANELA é o que está na tela, para quando
+              a pergunta passa da divisa (vizinho, mata, carreador). */}
+          <div className="rounded p-2 space-y-1.5" style={{ background: '#0b1f38', border: '1px solid #1a3a6b' }}>
+            <p className="text-[10px] font-semibold" style={{ color: '#93c5fd' }}>
+              Baixar GeoTIFF · {modo === 'ndvi' ? indSel : 'imagem real'}
+            </p>
+            <div className="grid grid-cols-2 gap-1.5">
+              <button onClick={() => baixarTiff('talhao')} disabled={!!baixandoTiff}
+                className="py-1.5 rounded text-[10px] font-bold flex items-center justify-center gap-1"
+                style={{ background: '#1a3a6b', color: '#93c5fd', opacity: baixandoTiff ? 0.6 : 1 }}>
+                {baixandoTiff === 'talhao' ? <Loader2 size={11} className="animate-spin" /> : <Download size={11} />} Talhão
+              </button>
+              <button onClick={() => baixarTiff('tela')} disabled={!!baixandoTiff || !boundsTela}
+                className="py-1.5 rounded text-[10px] font-bold flex items-center justify-center gap-1"
+                style={{ background: '#1a3a6b', color: '#93c5fd', opacity: (baixandoTiff || !boundsTela) ? 0.6 : 1 }}>
+                {baixandoTiff === 'tela' ? <Loader2 size={11} className="animate-spin" /> : <Download size={11} />} Área da tela
+              </button>
+            </div>
+            <p className="text-[9px] leading-relaxed" style={{ color: '#64748b' }}>
+              <b>Talhão</b>: recortado na divisa. <b>Área da tela</b>: o retângulo que você está vendo,
+              {' '}sem recorte — busca o satélite de novo para a janela maior, então demora um pouco.
+              {' '}Resolução da fonte ({pixelDe(fonteSel)} m); em janela muito ampla o servidor engrossa o
+              {' '}pixel para a malha caber.
+            </p>
+            {erroTiff && <p className="text-[10px]" style={{ color: '#f87171' }}>{erroTiff}</p>}
           </div>
 
           {modo === 'ndvi' ? (

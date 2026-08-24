@@ -70,7 +70,7 @@ export function MapView({ mostrarVisaoGeral = false }: { mostrarVisaoGeral?: boo
           pontosSimulados, talhoesFazenda, zonasManejo, zonasFundo, zonasOpacidade,
           fertilidadeOverlay, fertilidadeLabels,
           edicaoAtiva, edicaoModo, setPontoEvent, setZonaEvent,
-          corteAtivo, corteLinha, setCorteLinha } = useApp();
+          corteAtivo, corteLinha, setCorteLinha, setBoundsTela } = useApp();
 
   const [kmlLoading, setKmlLoading] = useState(false);
 
@@ -117,7 +117,17 @@ export function MapView({ mostrarVisaoGeral = false }: { mostrarVisaoGeral?: boo
     map.addControl(new maplibregl.NavigationControl(), 'bottom-right');
     map.addControl(new maplibregl.ScaleControl(), 'bottom-left');
 
+    // Publica o que está VISÍVEL, para quem precisa da janela e não do talhão
+    // (hoje: o download em GeoTIFF da aba NDVI, que baixa o entorno). `moveend`
+    // cobre pan, zoom e resize; o primeiro disparo sai no 'load'.
+    const publicarBounds = () => {
+      const b = map.getBounds();
+      setBoundsTela([b.getWest(), b.getSouth(), b.getEast(), b.getNorth()]);
+    };
+    map.on('moveend', publicarBounds);
+
     map.on('load', () => {
+      publicarBounds();
       // Talhões da fazenda — fonte persistente (clicáveis). Dados via setData.
       map.addSource('talhoes',    { type: 'geojson', data: EMPTY_FC });
       map.addLayer({ id: 'talhao-fill',            type: 'fill',   source: 'talhoes', paint: { 'fill-color': '#f59e0b', 'fill-opacity': OPACIDADE_TALHAO } });

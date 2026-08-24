@@ -19,6 +19,7 @@
     "teste:cea": "node scripts/teste-relatorio-cea.mjs",
     "teste:faixas": "node scripts/teste-faixas.mjs",
     "teste:motivo": "node scripts/teste-motivo-mapa.mjs",
+    "teste:tiff": "node scripts/teste-tiff-ndvi.mjs",
     "teste:rota": "node scripts/teste-rota-local.mjs",
     "teste:grids": "node scripts/teste-grids-recomendacao.mjs",
     "teste:iam": "node scripts/teste-iam.mjs",

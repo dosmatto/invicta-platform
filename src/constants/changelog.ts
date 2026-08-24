@@ -1,5 +1,12 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.72.0': [
+    'A ABA NDVI GANHOU DOWNLOAD EM GeoTIFF — EM DOIS RECORTES. Logo abaixo dos botões NDVI/Imagem aparece "Baixar GeoTIFF", com duas opções: TALHÃO (recortado exatamente na divisa, que é o dado da análise) e ÁREA DA TELA (o retângulo que você está enxergando, sem recorte nenhum), para quando a pergunta passa da cerca — vizinho, mata, carreador, uma mancha que continua do outro lado.',
+    'VALE PARA OS ÍNDICES E PARA A IMAGEM REAL. Índice (NDVI, NDRE, SAVI…) sai como TIFF de 1 banda com o VALOR do índice — abre no QGIS pronto para receber a escala de cor que você quiser, e não uma figura já colorida. A imagem real sai como TIFF de 3 bandas em cor verdadeira, georreferenciado (antes ela só existia como PNG na tela, sem coordenada nenhuma).',
+    'A ÁREA DA TELA BUSCA O SATÉLITE DE NOVO, então demora um pouco mais que o download do talhão: o dado guardado cobre só o retângulo do talhão, e o entorno precisa ser lido na hora. O recorte é o próprio retângulo da tela — mexa o mapa até enquadrar o que quer e clique.',
+    'RESOLUÇÃO: sempre a da fonte (2 m no CBERS-4A, 10 m no Sentinel-2). Em janela muito ampla o servidor engrossa o pixel sozinho para a malha caber — se você precisa do detalhe fino num pedaço grande, aproxime o zoom e baixe em partes.',
+    'Todos os arquivos saem em EPSG:4326 (WGS 84), com área sem dado marcada como nodata — o QGIS já entende e deixa transparente.',
+  ],
   '2.71.1': [
     'NA TABELA DO PDF DE CONDUTIVIDADE, "ha" E "%" SAÍAM IGUAIS NAS CINCO LINHAS — e pareciam um valor travado. Não estavam travados: no quintil cada faixa fica com 20% dos pixels POR CONSTRUÇÃO, então área e percentual são obrigatoriamente os mesmos em todas. As duas colunas mais visíveis da tabela não informavam nada.',
     'A COLUNA "%" SAIU E ENTROU "MÉDIA": o valor médio de CEa daquela faixa, em mS/m. Esse sim varia de faixa para faixa e diz o que interessa — quanto o solo conduz em cada zona do mapa. A linha TOTAL passou a mostrar a média geral do talhão. Os hectares continuam, porque é o número que se usa para planejar.',

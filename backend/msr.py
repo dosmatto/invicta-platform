@@ -33,7 +33,7 @@ except Exception as _e:  # pragma: no cover
     _HAS_MSR = False
     _ERR_MSR = repr(_e)  # mostrado em /health p/ diagnosticar dep faltando no container
 
-VERSION = "msr-2-cenas-imagem"
+VERSION = "msr-3-geotiff"
 
 STAC_URL = "https://earth-search.aws.element84.com/v1"
 COLECAO = "sentinel-2-l2a"
@@ -343,6 +343,54 @@ def _ler_reproj_rgb(href: str, dst_transform, nx: int, ny: int) -> np.ndarray:
                     resampling=Resampling.bilinear,
                 )
     return out
+
+
+def imagem_geotiff(polygon_geojson: dict, cena_id: str, pixel_m: float = 10.0,
+                   recortar: bool = True) -> bytes:
+    """Imagem de COR VERDADEIRA da cena como GeoTIFF de 3 bandas (EPSG:4326).
+
+    Existe porque `gerar_imagem` devolve PNG — bom para a tela, inutil para levar
+    a outro software: perde a georreferencia e os valores das bandas. Aqui saem os
+    tres canais em uint8, com a MESMA grade do indice (overlay alinhado).
+
+    `recortar=True`  -> mascara fora do poligono (o talhao recortado).
+    `recortar=False` -> a janela inteira, para enxergar alem da divisa. Nesse caso
+                        o `polygon_geojson` costuma ser o retangulo da tela.
+    Fora da area valida vai nodata=0 (preto), a convencao de imagem de satelite.
+    """
+    if not _HAS_MSR:
+        raise ValueError("Dependências do MSR ausentes no backend (rasterio / pystac-client).")
+    from rasterio.io import MemoryFile
+
+    poly = shape(polygon_geojson)
+    minx, miny, maxx, maxy = poly.bounds
+    item = _item_por_id(cena_id)
+    if item is None:
+        raise ValueError(f"Cena {cena_id} não encontrada.")
+
+    href, _sc, _of, _nd = _asset(item, ASSET_VISUAL)
+    nx, ny = _grid_dims(minx, miny, maxx, maxy, pixel_m)
+    dst_transform = from_bounds(minx, miny, maxx, maxy, nx, ny)
+    rgb = _ler_reproj_rgb(href, dst_transform, nx, ny)
+
+    valido = np.all(np.isfinite(rgb), axis=0)
+    if recortar:
+        gx = minx + (np.arange(nx) + 0.5) * (maxx - minx) / nx
+        gy = maxy - (np.arange(ny) + 0.5) * (maxy - miny) / ny
+        XX, YY = np.meshgrid(gx, gy)
+        valido &= shapely.contains(poly, shapely.points(XX.ravel(), YY.ravel())).reshape(XX.shape)
+
+    out = np.zeros((3, ny, nx), dtype="uint8")
+    for b in range(3):
+        canal = np.clip(np.nan_to_num(rgb[b]), 0, 255).astype("uint8")
+        out[b] = np.where(valido, canal, 0)
+
+    with MemoryFile() as mem:
+        with mem.open(driver="GTiff", height=ny, width=nx, count=3, dtype="uint8",
+                      crs="EPSG:4326", transform=dst_transform, nodata=0,
+                      photometric="rgb", compress="deflate") as ds:
+            ds.write(out)
+        return mem.read()
 
 
 def gerar_imagem(polygon_geojson: dict, cena_id: str, pixel_m: float = 10.0) -> dict[str, Any]:

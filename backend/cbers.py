@@ -35,7 +35,7 @@ except Exception as _e:  # pragma: no cover
 
 import msr  # reusa _clip, _png_data_url, _GDAL_ENV
 
-VERSION = "cbers-1"
+VERSION = "cbers-2-geotiff"
 STAC_URL = "https://data.inpe.br/bdc/stac/v1"
 COLECAO = "CB4A-WPM-L4-DN-1"     # BAND0=PAN 2m, B1 azul, B2 verde, B3 red 8m, B4 nir 8m
 ASSET_PAN = ["BAND0"]
@@ -274,6 +274,45 @@ def _brovey(pan, R, G, B) -> np.ndarray:
             esc = np.nan_to_num((sharp - lo) / (hi - lo) * 255.0, nan=0.0, posinf=255.0, neginf=0.0)
             out[..., i] = np.clip(esc, 0, 255).astype(np.uint8)
     return out
+
+
+def imagem_geotiff(polygon_geojson: dict, cena_id: str, pixel_m: float = 2.0,
+                   recortar: bool = True) -> bytes:
+    """Cor verdadeira (Brovey 2 m) como GeoTIFF de 3 bandas — irmao de
+    msr.imagem_geotiff, para a fonte CBERS-4A. Ver la a explicacao do `recortar`."""
+    _erro_dep()
+    from rasterio.io import MemoryFile
+    poly = shape(polygon_geojson)
+    minx, miny, maxx, maxy = poly.bounds
+    item = _item_por_id(cena_id)
+    if item is None:
+        raise ValueError(f"Cena CBERS {cena_id} não encontrada.")
+
+    nx, ny = _grid_dims(minx, miny, maxx, maxy, pixel_m)
+    dst = from_bounds(minx, miny, maxx, maxy, nx, ny)
+    pan = _reproj(_href(item, ASSET_PAN), dst, nx, ny)
+    R = _reproj(_href(item, ASSET_RED), dst, nx, ny)
+    G = _reproj(_href(item, ASSET_GREEN), dst, nx, ny)
+    B = _reproj(_href(item, ASSET_BLUE), dst, nx, ny)
+    rgb = _brovey(pan, R, G, B)          # (ny, nx, 3) uint8
+
+    valido = np.isfinite(pan) & np.isfinite(R)
+    if recortar:
+        gx = minx + (np.arange(nx) + 0.5) * (maxx - minx) / nx
+        gy = maxy - (np.arange(ny) + 0.5) * (maxy - miny) / ny
+        XX, YY = np.meshgrid(gx, gy)
+        valido &= shapely.contains(poly, shapely.points(XX.ravel(), YY.ravel())).reshape(XX.shape)
+
+    out = np.zeros((3, ny, nx), dtype="uint8")
+    for b in range(3):
+        out[b] = np.where(valido, rgb[..., b], 0)
+
+    with MemoryFile() as mem:
+        with mem.open(driver="GTiff", height=ny, width=nx, count=3, dtype="uint8",
+                      crs="EPSG:4326", transform=dst, nodata=0,
+                      photometric="rgb", compress="deflate") as ds:
+            ds.write(out)
+        return mem.read()
 
 
 def gerar_imagem(polygon_geojson: dict, cena_id: str, pixel_m: float = 2.0) -> dict[str, Any]:

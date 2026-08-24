@@ -163,3 +163,39 @@ async function postMsr<T>(rota: string, body: unknown): Promise<T> {
   }
   return r.json();
 }
+
+// ── Download em GeoTIFF (QGIS e afins) ───────────────────────────────────────
+// Dois recortes, porque servem a coisas diferentes:
+//   • TALHÃO — só o que está dentro da divisa. É o dado da análise.
+//   • JANELA — o retângulo que está na tela, sem máscara. Serve para enxergar o
+//     entorno (vizinho, mata, carreador) quando a pergunta não para na cerca.
+// Em ambos vale a resolução da fonte (2 m no CBERS, 10 m no Sentinel); em janela
+// muito ampla o servidor engrossa o pixel sozinho para a malha caber.
+
+// Imagem de cor verdadeira como GeoTIFF de 3 bandas. Devolve o Blob p/ baixar.
+export async function baixarImagemGeotiff(params: {
+  poligono: GeoJSON.Polygon | GeoJSON.MultiPolygon;
+  cenaId: string;
+  pixelM?: number;
+  fonte?: FonteNdvi;
+  recortar: boolean;
+  filename: string;
+}): Promise<Blob> {
+  const r = await postBackend('/ndvi-imagem-geotiff', {
+    poligono: params.poligono,
+    cena_id: params.cenaId,
+    pixel_m: params.pixelM ?? (params.fonte === 'cbers' ? 2 : 10),
+    fonte: params.fonte ?? 'sentinel',
+    recortar: params.recortar,
+    filename: params.filename,
+  });
+  if (r.status === 404) {
+    throw new Error('O servidor de processamento ainda não tem o download em GeoTIFF — ele deve estar sendo atualizado. Tente de novo em alguns minutos.');
+  }
+  if (!r.ok) {
+    let msg = `Backend respondeu ${r.status}`;
+    try { const j = await r.json(); if (j?.detail) msg = String(j.detail); } catch {}
+    throw new Error(msg);
+  }
+  return r.blob();
+}
