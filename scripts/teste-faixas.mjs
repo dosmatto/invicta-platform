@@ -5,7 +5,7 @@
 // cores que não existiam na legenda. Roda: `npm run teste:faixas`.
 import assert from 'node:assert/strict';
 import { classesVisiveis, indiceClasse } from '../src/lib/recomendacao/faixas.ts';
-import { reidratarDoses, equacaoBaseDaDose, estiloUtilizavel } from '../src/lib/recomendacao/legendaViva.ts';
+import { reidratarDoses, equacaoBaseDaDose, estiloUtilizavel, sufixoFormulaEditada } from '../src/lib/recomendacao/legendaViva.ts';
 
 let ok = 0, fail = 0;
 function t(nome, fn) {
@@ -134,6 +134,42 @@ t('renomear preserva a marcação da passada', () => {
   const d0 = dose('eq1__ap2', { nomeEquacao: 'KCL antigo — aplicação 2/3' });
   const [d] = reidratarDoses([d0], new Map([['eq1', rot('KCL novo', NOVO)]]));
   assert.equal(d.nomeEquacao, 'KCL novo — aplicação 2/3');
+});
+
+t('BUG v2.73.0: reabrir o cenário apagava a marca da FÓRMULA EDITADA', () => {
+  // Todo relatório passa por descomprimirCenario → reidratarDoses, que troca o
+  // nome pelo da equação atual. Sem preservar a marca, o PDF de uma dose
+  // calculada com a fórmula editada no talhão saía com o nome da equação da
+  // Biblioteca — ou seja, passando por recomendação oficial padrão.
+  const d0 = dose('eq1', { nomeEquacao: 'KCL antigo (fórmula editada)', formulaEditada: true });
+  const [d] = reidratarDoses([d0], new Map([['eq1', rot('KCL novo', NOVO)]]));
+  assert.equal(d.nomeEquacao, 'KCL novo (fórmula editada)');
+});
+
+t('a marca da fórmula editada não duplica ao reabrir várias vezes', () => {
+  const atuais = new Map([['eq1', rot('KCL novo', NOVO)]]);
+  let [d] = reidratarDoses([dose('eq1', { nomeEquacao: 'X', formulaEditada: true })], atuais);
+  [d] = reidratarDoses([d], atuais);
+  [d] = reidratarDoses([d], atuais);
+  assert.equal(d.nomeEquacao, 'KCL novo (fórmula editada)');
+});
+
+t('cenário salvo ANTES da bandeira (só o nome marcado) continua marcado', () => {
+  const d0 = dose('eq1', { nomeEquacao: 'KCL antigo (fórmula editada)' });   // sem formulaEditada
+  const [d] = reidratarDoses([d0], new Map([['eq1', rot('KCL novo', NOVO)]]));
+  assert.equal(d.nomeEquacao, 'KCL novo (fórmula editada)');
+});
+
+t('dose NÃO editada não ganha marca nenhuma', () => {
+  const [d] = reidratarDoses([dose('eq1')], new Map([['eq1', rot('KCL novo', NOVO)]]));
+  assert.equal(d.nomeEquacao, 'KCL novo');
+  assert.equal(sufixoFormulaEditada(d), '');
+});
+
+t('passada + fórmula editada: as DUAS marcas sobrevivem, nessa ordem', () => {
+  const d0 = dose('eq1__ap2', { nomeEquacao: 'KCL antigo — aplicação 2/3 (fórmula editada)', formulaEditada: true });
+  const [d] = reidratarDoses([d0], new Map([['eq1', rot('KCL novo', NOVO)]]));
+  assert.equal(d.nomeEquacao, 'KCL novo — aplicação 2/3 (fórmula editada)');
 });
 
 t('cada equação recebe o SEU estilo (não o da primeira dose)', () => {

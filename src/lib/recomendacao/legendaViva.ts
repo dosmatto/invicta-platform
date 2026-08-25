@@ -34,6 +34,8 @@ export interface DoseRotulada<E extends EstiloComClasses> {
   estilo: E;
   nomeEquacao: string;
   produto: string;
+  /** A dose veio da fórmula EDITADA no talhão (Recomendação → Equação avulsa). */
+  formulaEditada?: boolean;
 }
 
 // Id da equação de origem, sem o sufixo de passada. A divisão em aplicações cria
@@ -47,6 +49,18 @@ export function equacaoBaseDaDose(equacaoId: string): string {
 export function sufixoPassada(nome: string): string {
   const m = /\s+—\s+aplicação\s+\d+\/\d+\s*$/.exec(nome ?? '');
   return m ? m[0] : '';
+}
+
+// Marca de que o mapa NÃO saiu da fórmula que está na Biblioteca. Mesmo caso do
+// sufixo de passada acima: é informação do PROCESSAMENTO, e renomear/reabrir não
+// pode apagá-la — o PDF estaria dizendo que aquela dose veio da equação oficial.
+export const MARCA_FORMULA_EDITADA = ' (fórmula editada)';
+const RE_MARCA = /\s*\(fórmula editada\)\s*$/;
+
+/** O sufixo a repor no nome. Aceita a bandeira (cenários novos) e o próprio nome
+ *  já marcado (cenários salvos na v2.73.0, antes da bandeira existir). */
+export function sufixoFormulaEditada(d: { formulaEditada?: boolean; nomeEquacao?: string }): string {
+  return (d.formulaEditada || RE_MARCA.test(d.nomeEquacao ?? '')) ? MARCA_FORMULA_EDITADA : '';
 }
 
 // Um estilo só serve se tiver ao menos uma classe com limite FINITO — mesma
@@ -68,7 +82,13 @@ export function reidratarDoses<E extends EstiloComClasses, D extends DoseRotulad
   return doses.map(d => {
     const atual = atuais.get(d.equacaoId) ?? atuais.get(equacaoBaseDaDose(d.equacaoId));
     if (!atual || !estiloUtilizavel(atual.estilo)) return d;
-    const nome = atual.nome ? atual.nome + sufixoPassada(d.nomeEquacao) : d.nomeEquacao;
+    // A marca da fórmula editada fica por ÚLTIMO, e sai do nome antes de
+    // procurar o sufixo de passada — senão "… — aplicação 2/3 (fórmula
+    // editada)" esconderia a passada do regex e a marcação dela se perderia.
+    const semMarca = (d.nomeEquacao ?? '').replace(RE_MARCA, '');
+    const nome = atual.nome
+      ? atual.nome + sufixoPassada(semMarca) + sufixoFormulaEditada(d)
+      : d.nomeEquacao;
     return Object.assign({}, d, {
       estilo: atual.estilo,
       nomeEquacao: nome,

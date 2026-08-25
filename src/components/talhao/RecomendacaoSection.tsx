@@ -325,9 +325,16 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
         }
         catch (e) { erros.push({ nome: it.nome, erro: e instanceof Error ? e.message : String(e) }); }
       }
+      // FÓRMULA EDITADA: vira BANDEIRA na dose, e não só texto no nome. Todo
+      // relatório reabre o cenário por `descomprimirCenario`, que re-hidrata o
+      // nome a partir da equação atual da Biblioteca — sem a bandeira, a
+      // marcação sumia do PDF e ele dizia que o mapa veio da equação oficial.
+      const marcadas = (editada && rascunho)
+        ? ok.map(d => ({ ...d, formulaEditada: true, scriptUsado: rascunho.script }))
+        : ok;
       // Divisão de aplicação (escolhida na hora) → grupo de mapas (passadas).
       const div: DivCfg = { ativo: divAtivo, limiteMax: parseFloat(divLimite.replace(',', '.')) || 0, unidade: divUnid };
-      const finais = (modo === 'recomendacao') ? expandirDoses(ok, div, area) : ok;
+      const finais = (modo === 'recomendacao') ? expandirDoses(marcadas, div, area) : marcadas;
       setDoses(finais); setFalhas(erros);
       setEstado(finais.length ? 'pronto' : 'erro');
       if (!finais.length) { setErro('Nenhuma equação pôde ser aplicada — veja os detalhes abaixo.'); return; }

@@ -245,6 +245,12 @@ export interface DoseCalculada {
                                   // casam por NOME, e os cenários já salvos não têm o campo.
   doseMinima?: number;            // dose mínima viável da equação — a 1ª faixa colorida começa aqui; abaixo (e zero) = transparente
   fontes?: ResultadoAplicacao['fontes'];   // de onde veio o mapa de cada atributo
+  // FÓRMULA AVULSA (v2.73.1): esta dose foi calculada com a fórmula EDITADA no
+  // talhão, não com a que está na Biblioteca. Tem de viajar como DADO, e não
+  // como texto colado no nome: `reidratarDoses` troca o nome pelo da equação
+  // atual a cada abertura do cenário, e a marcação sumia de todos os PDFs.
+  formulaEditada?: boolean;
+  scriptUsado?: string;           // a fórmula que gerou o mapa (sai no PDF oficial)
   // RECOMENDAÇÃO POR ZONA: a taxa de cada zona calculada DIRETO da equação, com
   // o valor de laudo daquela zona — sem passar por raster e sem média. É o que
   // vai para o mapa, para o painel e para o Shapefile quando o talhão é

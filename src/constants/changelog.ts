@@ -1,5 +1,12 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.73.1': [
+    'CORRIGIDO — O RELATÓRIO NÃO DIZIA QUE A FÓRMULA TINHA SIDO EDITADA. Você editava a equação no talhão, aplicava e salvava o cenário; na tela aparecia "(fórmula editada)", mas o PDF saía com o nome da equação da Biblioteca, como se fosse a recomendação oficial padrão. Motivo: todo relatório reabre o cenário e re-busca nome, produto e faixas na equação atual (é o que faz a legenda acompanhar edições de estilo) — e nessa volta a marcação, que era só texto no nome, era apagada.',
+    'AGORA A MARCAÇÃO É DADO DA DOSE, não texto: viaja dentro do cenário e sobrevive a reabrir, renomear a equação e gerar o PDF quantas vezes for. Vale para o PDF oficial, o book, o relatório combinado, o da fazenda e o comparador.',
+    'E O PDF OFICIAL PASSOU A IMPRIMIR A FÓRMULA USADA, num bloco no fim da coluna da esquerda: "FÓRMULA USADA (EDITADA NESTE TALHÃO)" com a conta que gerou aquele mapa e a nota de que a equação da Biblioteca continua como estava. Quem recebe o documento consegue conferir a conta, e não só o resultado.',
+    'Os cenários que você já salvou voltam a sair marcados no relatório. O bloco com a fórmula só aparece nos aplicados a partir desta versão — para tê-lo num cenário antigo, é só aplicar de novo.',
+    '5 testes novos travam o caso (npm run teste:faixas, 26 no total): a marca sobrevive à re-hidratação, não duplica ao reabrir várias vezes, convive com a marcação de passada ("aplicação 2/3") e não aparece em dose que não foi editada.',
+  ],
   '2.73.0': [
     'A ABA RECOMENDAÇÕES PASSOU A MOSTRAR A FÓRMULA DE VERDADE. No modo "Equação avulsa", ao escolher a equação aparece um quadro com a conta que vai rodar — escrita como está na Biblioteca —, mais a profundidade lida, a unidade da dose, as constantes e a lista de atributos que ela exige. Antes você escolhia pelo nome e aplicava no escuro.',
     'E DÁ PARA EDITAR ALI MESMO, SÓ PARA AQUELE TALHÃO. O botão "Editar" abre a fórmula num painel: mexer num número, trocar a profundidade, ou apagar tudo e reescrever do zero clicando nos atributos (V, CTC, K, P, Arg…) e nas funções (se, max, min, arredonda…). O teste ao lado já mostra a dose que sairia, com valores de exemplo. É o mesmo editor da Biblioteca, agora aberto de dentro do talhão.',
