@@ -11,7 +11,7 @@ import { registrarLogin } from '@/lib/iam/auditoria';
 import { limparBaseOperacional } from '@/lib/admin/manutencao';
 import { TrocaSenhaObrigatoria } from '@/components/auth/TrocaSenhaObrigatoria';
 import { migrarLaboratoriosV1, migrarSafrasV1, migrarGradesV1, migrarPreferenciasV1, reKeyDonoBiblioteca } from '@/lib/biblioteca';
-import { garantirCoeficientesExportacao, garantirInsumosSistema, seedLegendasSistema, migrarLegendaCtceV1, migrarLegendasSaturacoesV1, migrarLegendasSaturacoesV2, migrarLegendasSaturacoesV3, migrarLegendasHomonimasPadraoV1, garantirVariaveisComplementares, migrarSinonimosSeedV1, migrarEtiquetaPadraoA4350, migrarOrdemPadraoFertV1, auditoriaCadastro, migrarAreasGeodesicasV1, migrarNomesMaiusculosV1, migrarGradesDuplicadasV1, migrarBboxTalhoesV1, migrarImportacoesLabPeriodoV1, migrarGradesPeriodoV1, migrarPeriodoDemaisV1, migrarInsumosParaSyncV1, migrarLabsParaSyncV1, migrarInsumosEscopoEmpresaV1, migrarLaboratoriosDosLaudosV1, analisarTalhoesDuplicados, aplicarDedupTalhoesExatos, analisarFazendasOrfas, aplicarRemocaoFazendasOrfas } from '@/lib/store';
+import { seedLegendasSistema, migrarLegendaCtceV1, migrarLegendasSaturacoesV1, migrarLegendasSaturacoesV2, migrarLegendasSaturacoesV3, migrarLegendasHomonimasPadraoV1, garantirVariaveisComplementares, migrarSinonimosSeedV1, migrarEtiquetaPadraoA4350, migrarOrdemPadraoFertV1, auditoriaCadastro, migrarAreasGeodesicasV1, migrarNomesMaiusculosV1, migrarGradesDuplicadasV1, migrarBboxTalhoesV1, migrarImportacoesLabPeriodoV1, migrarGradesPeriodoV1, migrarPeriodoDemaisV1, migrarInsumosParaSyncV1, migrarLabsParaSyncV1, migrarInsumosEscopoEmpresaV1, migrarLaboratoriosDosLaudosV1, analisarTalhoesDuplicados, aplicarDedupTalhoesExatos, analisarFazendasOrfas, aplicarRemocaoFazendasOrfas } from '@/lib/store';
 import { LEGENDAS_OFICIAIS } from '@/constants/legendasSeedOficial';
 import { authConfigurado, observarAuth, logout, type User } from '@/lib/auth';
 import { hidratarCachePesado } from '@/lib/localComprimido';
@@ -186,9 +186,7 @@ export function AppProvider({ children, redirectProdutorParaPortal, modoCampo }:
       passo('migrarGradesDuplicadasV1', migrarGradesDuplicadasV1);
       passo('seedLegendasSistema', () => seedLegendasSistema(LEGENDAS_OFICIAIS));
       passo('migrarLegendaCtceV1', migrarLegendaCtceV1);   // legenda de CTCe clonando a de CTC (p/ interpolar/equações)
-      passo('garantirVariaveisComplementares', garantirVariaveisComplementares);
-      passo('garantirCoeficientesExportacao', garantirCoeficientesExportacao);   // exportação de nutrientes por cultura (idempotente: só em banco vazio)
-      passo('garantirInsumosSistema', garantirInsumosSistema);   // fertilizantes de referência p/ os equivalentes do relatório   // catálogo InCeres (idempotente por id)
+      passo('garantirVariaveisComplementares', garantirVariaveisComplementares);   // catálogo InCeres (idempotente por id)
       passo('migrarSinonimosSeedV1', migrarSinonimosSeedV1);   // sinônimos novos do seed no catálogo já materializado
       passo('migrarOrdemPadraoFertV1', migrarOrdemPadraoFertV1);   // ordem padrão dos elementos (1×; setas do usuário mandam depois)
       passo('migrarLegendasSaturacoesV1', migrarLegendasSaturacoesV1);   // legendas K%/Ca%/Mg% com faixas próprias

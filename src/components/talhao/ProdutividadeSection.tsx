@@ -52,7 +52,7 @@ import { Upload, Loader2, AlertTriangle, Save, Star, Trash2, Eye, Wand2, FileSpr
 
 import { inputStyle } from '@/constants/ui';
 import { fmtMoeda, lerMoeda, arredMoeda } from '@/lib/formato';
-import { precoPorKg, pontoEquilibrioKgha, rotuloPreco, gridRentabilidade, classesRentabilidade, resumoRentabilidade, type UnidadeVenda } from '@/lib/rentabilidade';
+import { precoPorKg, pontoEquilibrioKgha, rotuloPreco, gridRentabilidade, classesRentabilidade, resumoRentabilidade, arrendamentoPorHa, ALQUEIRES, ALQUEIRE_HA_PADRAO, type UnidadeVenda } from '@/lib/rentabilidade';
 import { coefDe, gridExportacao, resumoExportacao, equivalentesDe } from '@/lib/exportacao';
 import { coeficientesDaCultura, fertilizantesCom } from '@/lib/exportacaoBib';
 import { SIMBOLO_NUTRIENTE, type Nutriente } from '@/lib/insumos';
@@ -150,7 +150,12 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
   const [secRent, setSecRent] = useState(true);
   // Versão salva que está no mapa (null = mapa recém-processado, ainda sem
   // economia gravada). É dela que saem preço e custo para o relatório.
-  const [versaoVista, setVersaoVista] = useState<MapaProdutividade | null>(null);
+  //
+  // Guarda o ID, não o objeto: guardar o objeto o congelava no estado de
+  // quando o olho foi clicado, e aí editar preço/custo no lápis não chegava
+  // até aqui — a seção de rentabilidade seguia desabilitada depois de
+  // preenchida. Derivando da lista, qualquer recarregar() propaga.
+  const [versaoVistaId, setVersaoVistaId] = useState<string | null>(null);
   const [secK2O, setSecK2O] = useState(false);
   const [secP2O5, setSecP2O5] = useState(false);
   const [editando, setEditando] = useState<MapaProdutividade | null>(null);
@@ -164,7 +169,6 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
     return () => window.removeEventListener('inv:biblioteca', h);
   }, []);
   const coefCultura = useMemo(() => coeficientesDaCultura(cultura), [cultura, tickBib]);
-  const economiaAtual = versaoVista?.economia ?? null;
   const coefK2O = coefCultura ? coefDe(coefCultura.conteudo?.coeficientes, 'k2o') : null;
   const coefP2O5 = coefCultura ? coefDe(coefCultura.conteudo?.coeficientes, 'p2o5') : null;
 
@@ -176,6 +180,11 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
   const [versoes, setVersoes] = useState<MapaProdutividade[]>([]);
   const [rasters, setRasters] = useState<Record<string, { bounds: [number, number, number, number]; grid: Grid }>>({});
   const recarregar = () => setVersoes(nav.talhaoId ? getMapasProdutividade(nav.talhaoId, safra) : []);
+  const versaoVista = useMemo(
+    () => (versaoVistaId ? versoes.find(v => v.id === versaoVistaId) ?? null : null),
+    [versaoVistaId, versoes],
+  );
+  const economiaAtual = versaoVista?.economia ?? null;
 
   useEffect(() => {
     recarregar();
@@ -306,7 +315,7 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
 
       const st = statsDoGrid(r, r.relatorio.n_usados);
       if (!st) throw new Error('Não foi possível calcular o raster.');
-      setRes(r); setStats(st); setLegenda(leg); setRelatorio(r.relatorio); setCobFinal(cob); setVersaoVista(null); setFresco(true); setEstado('pronto');
+      setRes(r); setStats(st); setLegenda(leg); setRelatorio(r.relatorio); setCobFinal(cob); setVersaoVistaId(null); setFresco(true); setEstado('pronto');
     } catch (e) { setEstado('erro'); setErro(e instanceof Error ? e.message : 'Falha ao processar.'); }
   }
 
@@ -343,7 +352,7 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
     setLegenda(leg ?? null); setRelatorio(null);
     setRes({ bounds: r.bounds, grid: r.grid, png: '', stats: { n: 0, modelo: 'idw', min: v.stats.minKgha, max: v.stats.maxKgha, nx: 0, ny: 0, pixel_m: v.params.pixelM, rmse: null, variograma: null } });
     setStats({ nUsados: v.stats.nUsados, areaHa: v.stats.areaHa, producaoTotalKg: v.stats.producaoTotalKg, mediaKgha: v.stats.mediaKgha, minKgha: v.stats.minKgha, maxKgha: v.stats.maxKgha, cv: v.stats.cv, histograma: [] });
-    setUnidade(v.unidade); setFresco(false); setVersaoVista(v);
+    setUnidade(v.unidade); setFresco(false); setVersaoVistaId(v.id);
     setCobFinal(null);   // a máscara não é arquivada; os números vêm de v.cobertura
   }
   // ── Relatório PDF ───────────────────────────────────────────────────────────
@@ -440,19 +449,31 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
       // ── Seções opcionais ────────────────────────────────────────────────
       // Os VALORES viajam para o relatório, não os ids: o cadastro muda
       // depois e o PDF já entregue tem de continuar reproduzível.
-      let rentabilidade: Parameters<typeof gerarRelatorioProdutividade>[0]['rentabilidade'] = null;
+      const rentabilidades: NonNullable<Parameters<typeof gerarRelatorioProdutividade>[0]['rentabilidades']> = [];
       const eco = fonte.economia;
       const precoKgRel = eco ? precoPorKg({ valor: eco.precoVenda, unidade: eco.precoUnidade, sacaKg: eco.sacaKg }) : null;
       if (secRent && eco && precoKgRel != null && eco.custoHa > 0) {
-        const vRent = gridRentabilidade(dec.valores, precoKgRel, eco.custoHa);
-        const clsRent = classesRentabilidade(vRent, { k: 5, pixelM: fonte.pixelM });
-        const resRent = resumoRentabilidade(dec.valores, { precoKg: precoKgRel, custoHa: eco.custoHa, pixelM: fonte.pixelM });
-        if (clsRent && resRent) {
-          rentabilidade = {
-            precoLabel: rotuloPreco({ valor: eco.precoVenda, unidade: eco.precoUnidade, sacaKg: eco.sacaKg }),
+        const precoLabel = rotuloPreco({ valor: eco.precoVenda, unidade: eco.precoUnidade, sacaKg: eco.sacaKg });
+        const arrHa = eco.arrendamentoScAlq
+          ? arrendamentoPorHa(eco.arrendamentoScAlq, precoKgRel, eco.sacaKg ?? 60, eco.alqueireHa ?? ALQUEIRE_HA_PADRAO)
+          : null;
+        // Com arrendamento saem DUAS páginas. O arrendamento é custo uniforme,
+        // então a mancha não muda — mas o zero se desloca, e é a área que
+        // deixa de pagar as contas que interessa comparar.
+        const cenarios: Array<{ rotulo: string; custoHa: number; arr: number | null }> = arrHa != null
+          ? [{ rotulo: 'Sem arrendamento', custoHa: eco.custoHa, arr: null },
+             { rotulo: `Com arrendamento (${fmt(eco.arrendamentoScAlq!, 0)} sc/alq)`, custoHa: eco.custoHa + arrHa, arr: arrHa }]
+          : [{ rotulo: 'Terra propria', custoHa: eco.custoHa, arr: null }];
+        for (const cen of cenarios) {
+          const vRent = gridRentabilidade(dec.valores, precoKgRel, cen.custoHa);
+          const clsRent = classesRentabilidade(vRent, { k: 5, pixelM: fonte.pixelM });
+          const resRent = resumoRentabilidade(dec.valores, { precoKg: precoKgRel, custoHa: cen.custoHa, pixelM: fonte.pixelM });
+          if (!clsRent || !resRent) continue;
+          rentabilidades.push({
+            rotulo: cen.rotulo, precoLabel, arrendamentoHa: cen.arr,
             rasterPng: colorirGridPorQuantis({ b64: f32ParaB64(vRent), shape: fonte.grid.shape }, clsRent.breaks, clsRent.faixas.map(f => f.cor)).dataUrl,
             classes: clsRent, resumo: resRent,
-          };
+          });
         }
       }
 
@@ -501,7 +522,7 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
         versao: fonte.versao, nMaquinas: fonte.nMaquinas, mediaRealKgha: fonte.mediaRealKgha,
         ndvi, correlacao, sobreposicaoNdvi: sobrepos, zonas, separacaoZonas,
         cobertura: fonte.cobertura ?? null,
-        rentabilidade, exportacoes,
+        rentabilidades, exportacoes,
       });
     } catch (e) {
       setErroPdf(e instanceof Error ? e.message : 'Falha ao gerar o relatório.');
@@ -838,6 +859,8 @@ function EditarMapa({ mapa, onFechar, onSalvo }: { mapa: MapaProdutividade; onFe
   const [precoTxt, setPrecoTxt] = useState(mapa.economia ? fmtMoeda(mapa.economia.precoVenda) : '');
   const [precoUni, setPrecoUni] = useState<'sc' | 't'>(mapa.economia?.precoUnidade ?? 'sc');
   const [custoTxt, setCustoTxt] = useState(mapa.economia ? fmtMoeda(mapa.economia.custoHa) : '');
+  const [arrTxt, setArrTxt] = useState(mapa.economia?.arrendamentoScAlq ? String(mapa.economia.arrendamentoScAlq) : '');
+  const [alqHa, setAlqHa] = useState(mapa.economia?.alqueireHa ?? ALQUEIRE_HA_PADRAO);
   const [unidade, setUnidade] = useState<Unidade>(mapa.unidade);
 
   const per = periodoDeData(dataRef);
@@ -849,7 +872,11 @@ function EditarMapa({ mapa, onFechar, onSalvo }: { mapa: MapaProdutividade; onFe
   const precoVenda = arredMoeda(lerMoeda(precoTxt)) ?? 0;
   const custoHa = arredMoeda(lerMoeda(custoTxt)) ?? 0;
   const precoKg = precoPorKg({ valor: precoVenda, unidade: precoUni as UnidadeVenda });
+  const arrScAlq = Number(arrTxt.replace(",", ".")) || 0;
+  const arrHa = precoKg != null && arrScAlq > 0 ? arrendamentoPorHa(arrScAlq, precoKg, 60, alqHa) : null;
+  const custoTotalHa = custoHa + (arrHa ?? 0);
   const equilibrio = precoKg != null && custoHa > 0 ? pontoEquilibrioKgha(precoKg, custoHa) : null;
+  const equilibrioArr = precoKg != null && custoTotalHa > 0 && arrHa != null ? pontoEquilibrioKgha(precoKg, custoTotalHa) : null;
 
   function salvar() {
     updateMapaProdutividade(mapa.id, {
@@ -860,7 +887,12 @@ function EditarMapa({ mapa, onFechar, onSalvo }: { mapa: MapaProdutividade; onFe
       // 0 kg/ha, e preço 0 diria que a colheita não vale nada — as duas coisas
       // falsas. Sem os dois preenchidos, a economia simplesmente não existe.
       economia: precoVenda > 0 && custoHa > 0
-        ? { precoVenda, precoUnidade: precoUni, custoHa, atualizadoEm: new Date().toISOString() }
+        ? {
+            precoVenda, precoUnidade: precoUni, custoHa,
+            arrendamentoScAlq: arrScAlq > 0 ? arrScAlq : undefined,
+            alqueireHa: arrScAlq > 0 ? alqHa : undefined,
+            atualizadoEm: new Date().toISOString(),
+          }
         : undefined,
     });
     onSalvo();
@@ -922,10 +954,28 @@ function EditarMapa({ mapa, onFechar, onSalvo }: { mapa: MapaProdutividade; onFe
               </select>
             </Campo>
           </div>
-          <Campo label="Custo total por hectare (R$/ha)">
+          <Campo label="Custo de produção por hectare (R$/ha)">
             <input value={custoTxt} onChange={e => setCustoTxt(e.target.value)} inputMode="decimal" placeholder="ex.: 5.400,00"
               className="w-full rounded px-2 py-1 text-[11px] outline-none" style={inputStyle} />
           </Campo>
+          <div className="grid grid-cols-2 gap-2">
+            <Campo label="Arrendamento (sacas/alqueire)">
+              <input value={arrTxt} onChange={e => setArrTxt(e.target.value)} inputMode="decimal" placeholder="ex.: 40"
+                className="w-full rounded px-2 py-1 text-[11px] outline-none" style={inputStyle} />
+            </Campo>
+            <Campo label="Alqueire">
+              <select value={alqHa} onChange={e => setAlqHa(Number(e.target.value))}
+                className="w-full rounded px-2 py-1 text-[11px] outline-none" style={inputStyle}>
+                {ALQUEIRES.map(a => <option key={a.id} value={a.ha}>{a.nome} — {a.ha} ha</option>)}
+              </select>
+            </Campo>
+          </div>
+          {arrHa != null && (
+            <p className="text-[9px]" style={{ color: '#86efac' }}>
+              Arrendamento: R$ {fmtMoeda(arrHa)}/ha · custo total R$ {fmtMoeda(custoTotalHa)}/ha
+              {equilibrioArr != null && ` · equilíbrio com arrendamento ${fmt(equilibrioArr, 0)} kg/ha`}
+            </p>
+          )}
           <p className="text-[9px] mt-1" style={{ color: equilibrio != null ? '#86efac' : '#64748b' }}>
             {equilibrio != null
               ? `Ponto de equilíbrio: ${fmt(equilibrio, 0)} kg/ha (${fmt(emUnidade(equilibrio, mapa.unidade), mapa.unidade === 'kg/ha' ? 0 : 1)} ${mapa.unidade})`

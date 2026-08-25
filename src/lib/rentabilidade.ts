@@ -19,6 +19,23 @@ import { classesDeBreaks, indiceFaixa, type ClassificacaoQuantis } from './quant
 export const SACA_KG_PADRAO = 60;
 
 /**
+ * Tamanhos de alqueire, em hectares.
+ *
+ * Não existe "o alqueire": o paulista tem 2,42 ha e o mineiro 4,84 ha — o
+ * dobro. Errar qual está em uso dobra ou corta pela metade o custo de
+ * arrendamento sem nenhum sinal na tela, por isso o valor viaja gravado no
+ * mapa em vez de ser uma constante escondida no código.
+ */
+export const ALQUEIRES = [
+  { id: 'paulista', nome: 'Paulista', ha: 2.42 },
+  { id: 'mineiro', nome: 'Mineiro / goiano', ha: 4.84 },
+  { id: 'norte', nome: 'Do Norte', ha: 2.7225 },
+] as const;
+
+/** Paraná, São Paulo e Sul em geral. */
+export const ALQUEIRE_HA_PADRAO = 2.42;
+
+/**
  * Unidade em que o PREÇO DE VENDA do grão é cotado.
  *
  * Distinta de `insumos.UnidadePreco` ('kg' | 't'), que é preço de INSUMO.
@@ -81,6 +98,25 @@ export function pontoEquilibrioKgha(precoKg: number, custoHa: number): number | 
   if (!Number.isFinite(precoKg) || precoKg <= 0) return null;
   if (!Number.isFinite(custoHa)) return null;
   return custoHa / precoKg;
+}
+
+/**
+ * Arrendamento em SACAS POR ALQUEIRE convertido para R$/ha.
+ *
+ *   sacas/alq × kg por saca × R$/kg ÷ ha por alqueire
+ *
+ * O preço da saca entra porque o contrato é em produto: 40 sc/alq valem mais
+ * quando a saca sobe. null quando falta preço ou o alqueire é inválido —
+ * jamais 0, que diria "arrendamento de graça".
+ */
+export function arrendamentoPorHa(
+  sacasPorAlqueire: number, precoKg: number, sacaKg: number, alqueireHa: number,
+): number | null {
+  if (!Number.isFinite(sacasPorAlqueire) || sacasPorAlqueire <= 0) return null;
+  if (!Number.isFinite(precoKg) || precoKg <= 0) return null;
+  if (!Number.isFinite(sacaKg) || sacaKg <= 0) return null;
+  if (!Number.isFinite(alqueireHa) || alqueireHa <= 0) return null;
+  return (sacasPorAlqueire * sacaKg * precoKg) / alqueireHa;
 }
 
 export interface ResumoRentabilidade {

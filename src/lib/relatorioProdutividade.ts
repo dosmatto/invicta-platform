@@ -98,13 +98,18 @@ export interface DadosRelatorioProd {
   zonas: ZonaRel[];
   separacaoZonas: Separacao | null;
 
-  /** Página de RENTABILIDADE. Ausente/null = a seção não entra no PDF. */
-  rentabilidade?: {
+  /** Páginas de RENTABILIDADE. Vazio/ausente = a seção não entra no PDF.
+   *  Com arrendamento informado saem DUAS: sem e com. O arrendamento é um
+   *  custo uniforme, então a mancha não muda — mas o zero se desloca, e é
+   *  justamente a área que deixa de pagar as contas que interessa ver. */
+  rentabilidades?: Array<{
+    rotulo: string;
     precoLabel: string;
+    arrendamentoHa: number | null;
     rasterPng: string;
     classes: ClassificacaoQuantis & { iZero: number | null };
     resumo: ResumoRentabilidade;
-  } | null;
+  }>;
 
   /** Uma entrada por nutriente. Vazio/ausente = nenhuma página de exportação. */
   exportacoes?: Array<{
@@ -647,8 +652,9 @@ async function paginaNdviContinua(doc: JsPDF, d: DadosRelatorioProd, logos: Logo
 
 // ── Página de RENTABILIDADE ─────────────────────────────────────────────────
 
-async function paginaRentabilidade(doc: JsPDF, d: DadosRelatorioProd, logos: Logos): Promise<void> {
-  const r = d.rentabilidade!;
+async function paginaRentabilidade(
+  doc: JsPDF, d: DadosRelatorioProd, r: NonNullable<DadosRelatorioProd['rentabilidades']>[number], logos: Logos,
+): Promise<void> {
   const q = r.classes;
   const mapaW = 168, mapaH = 116, mapaX = M, mapaY = 31;
 
@@ -658,7 +664,7 @@ async function paginaRentabilidade(doc: JsPDF, d: DadosRelatorioProd, logos: Log
     larguraPx: Math.round(mapaW * PXMM), alturaPx: Math.round(mapaH * PXMM),
   });
 
-  cabecalho(doc, d, logos, 'RENTABILIDADE', `${san(r.precoLabel)} · Custo ${rs(r.resumo.custoHa, 2)}/ha`);
+  cabecalho(doc, d, logos, 'RENTABILIDADE', san(r.rotulo));
 
   const jpg = await imagemParaPdf(png, mapaW);
   doc.addImage(jpg.data, jpg.formato, mapaX, mapaY, mapaW, mapaH);
@@ -730,21 +736,29 @@ async function paginaRentabilidade(doc: JsPDF, d: DadosRelatorioProd, logos: Log
   doc.text('100,0', tabX + tabW - 20, ty + 5.4, { align: 'right' });
   doc.text(fmt(somaRs, 0), tabX + tabW - 3, ty + 5.4, { align: 'right' });
 
-  const ry = ty + 12, rh = 46;
+  const ry = ty + 12, rh = r.arrendamentoHa != null ? 52 : 46;
   quadro(doc, tabX, ry, tabW, rh, 'RESUMO');
   doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(...GRAY);
   const R = r.resumo;
   const eq = R.pontoEquilibrioKgha;
+  // Uma linha por assunto e todas CURTAS: juntar preço e custo fazia a linha
+  // quebrar em duas quando havia arrendamento e cair sobre a seguinte.
+  const producaoHa = R.custoHa - (r.arrendamentoHa ?? 0);
   const linhas = [
-    `Preco: ${san(r.precoLabel)}  ·  Custo: ${rs(R.custoHa, 2)}/ha`,
+    `Preco: ${san(r.precoLabel)}`,
+    `Custo de producao: ${rs(producaoHa, 2)}/ha`,
+    ...(r.arrendamentoHa != null ? [`Arrendamento: ${rs(r.arrendamentoHa, 2)}/ha`] : []),
+    ...(r.arrendamentoHa != null ? [`Custo total: ${rs(R.custoHa, 2)}/ha`] : []),
     eq != null
-      ? `Ponto de equilibrio: ${fmt(eq, 0)} kg/ha (${emU(eq, d.unidade)} ${rotuloUnidade(d.unidade)})`
+      // Em kg/ha os dois números seriam idênticos — só repete quando a
+      // unidade de exibição é outra.
+      ? `Ponto de equilibrio: ${fmt(eq, 0)} kg/ha` + (d.unidade !== 'kg/ha' ? ` (${emU(eq, d.unidade)} ${rotuloUnidade(d.unidade)})` : '')
       : 'Ponto de equilibrio: —',
-    `Receita media: ${rs(R.receitaMediaHa, 2)}/ha  ·  Margem media: ${rs(R.margemMediaHa, 2)}/ha`,
-    `Margem total: ${rs(R.margemTotal, 2)}` + (R.retornoSobreCustoPct != null ? `  ·  Retorno sobre o custo: ${fmt(R.retornoSobreCustoPct, 1)}%` : ''),
+    `Receita media: ${rs(R.receitaMediaHa, 2)}/ha  ·  Margem: ${rs(R.margemMediaHa, 2)}/ha`,
+    `Margem total: ${rs(R.margemTotal, 2)}` + (R.retornoSobreCustoPct != null ? `  ·  Retorno: ${fmt(R.retornoSobreCustoPct, 1)}%` : ''),
   ];
-  linhas.forEach((t, i) => doc.text(t, tabX + 4, ry + 12 + i * 4.6, { maxWidth: tabW - 8 }));
-  const yPrej = ry + 12 + linhas.length * 4.6;
+  linhas.forEach((t, i) => doc.text(t, tabX + 4, ry + 11 + i * 4.4, { maxWidth: tabW - 8 }));
+  const yPrej = ry + 11 + linhas.length * 4.4;
   if (R.areaPrejuizoHa > 0) {
     doc.setFont('helvetica', 'bold'); doc.setTextColor(...VERM);
     doc.text(`Area abaixo do equilibrio: ${fmt(R.areaPrejuizoHa, 2)} ha (${fmt(R.pctPrejuizo, 1)}%)`, tabX + 4, yPrej);
@@ -844,6 +858,13 @@ async function paginaExportacao(
   const eqH = Math.min(60, 16 + Math.min(6, e.equivalentes.length) * 5.6 + 10);
   quadro(doc, tabX, eqY, tabW, eqH, 'EQUIVALENTES EM FERTILIZANTE');
   let qy = eqY + 10;
+  if (!e.equivalentes.length) {
+    // Sem fertilizante cadastrado com garantia deste nutriente a tabela sairia
+    // vazia e pareceria defeito. Diz o que falta e onde resolver.
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5); doc.setTextColor(...GRAY);
+    doc.text(`Nenhum fertilizante cadastrado com garantia de ${san(e.simbolo)}. Cadastre em Biblioteca > Insumos para ver a equivalencia de reposicao.`,
+      tabX + 4, qy + 2, { maxWidth: tabW - 8 });
+  } else {
   doc.setFont('helvetica', 'bold'); doc.setFontSize(5.8); doc.setTextColor(...GRAY);
   doc.text('PRODUTO', tabX + 4, qy);
   doc.text('%', tabX + 52, qy, { align: 'right' });
@@ -867,6 +888,7 @@ async function paginaExportacao(
   if (e.equivalentes.length > 6) {
     doc.setFont('helvetica', 'italic'); doc.setFontSize(5.5); doc.setTextColor(...GRAY);
     doc.text(`+ ${e.equivalentes.length - 6} produto(s) nao listado(s)`, tabX + 4, qy);
+  }
   }
   // Obrigatória: sem ela a tabela vira prescrição, e não é.
   doc.setFont('helvetica', 'normal'); doc.setFontSize(5.8); doc.setTextColor(...VERM);
@@ -1311,8 +1333,9 @@ export function validarProd(d: DadosRelatorioProd): string | null {
   if (!d.quantis || !d.quantis.faixas.length) return 'Nao foi possivel calcular as faixas por quantil deste mapa.';
   if (!d.rasterQuantilPng) return 'Mapa por quantil nao pode ser colorido.';
   // As seções opcionais só são validadas quando foram PEDIDAS.
-  if (d.rentabilidade && (!d.rentabilidade.rasterPng || !d.rentabilidade.classes.faixas.length))
-    return 'Nao foi possivel montar o mapa de rentabilidade.';
+  for (const r of d.rentabilidades ?? []) {
+    if (!r.rasterPng || !r.classes.faixas.length) return 'Nao foi possivel montar o mapa de rentabilidade.';
+  }
   for (const e of d.exportacoes ?? []) {
     if (!e.rasterPng || !e.classes.faixas.length) return `Nao foi possivel montar o mapa de exportacao de ${e.simbolo}.`;
   }
@@ -1336,7 +1359,7 @@ export async function renderProdutividadeNoDoc(
   await pag(() => paginaQuantil(doc, d, logos));
   // Rentabilidade e exportação ficam JUNTO da narrativa de produtividade; NDVI
   // e resumo analítico continuam fechando o documento como bloco de análise.
-  if (d.rentabilidade) await pag(() => paginaRentabilidade(doc, d, logos));
+  for (const r of d.rentabilidades ?? []) await pag(() => paginaRentabilidade(doc, d, r, logos));
   for (const e of d.exportacoes ?? []) await pag(() => paginaExportacao(doc, d, e, logos));
   if (d.ndvi) await pag(() => paginaNdvi(doc, d, logos));
   await pag(() => paginaResumo(doc, d, logos));

@@ -14,6 +14,7 @@ import assert from 'node:assert/strict';
 import {
   precoPorKg, rotuloPreco, margemDoPixel, gridRentabilidade,
   pontoEquilibrioKgha, resumoRentabilidade, classesRentabilidade, SACA_KG_PADRAO,
+  arrendamentoPorHa, ALQUEIRES, ALQUEIRE_HA_PADRAO,
 } from '../src/lib/rentabilidade.ts';
 
 let ok = 0, fail = 0;
@@ -188,6 +189,48 @@ t('margem exatamente 0 cai na faixa DE BAIXO (convencao (min,max])', () => {
 
 t('so NaN devolve null', () => {
   assert.equal(classesRentabilidade(new Float32Array([NaN, NaN]), { k: 5, pixelM: 10 }), null);
+});
+
+console.log('\narrendamento');
+
+t('40 sc/alq a R$ 130/sc no alqueire paulista = R$ 2.148,76/ha', () => {
+  const v = arrendamentoPorHa(40, PKG, 60, 2.42);
+  assert.ok(Math.abs(v - (40 * 130) / 2.42) < 1e-9, String(v));
+  assert.ok(Math.abs(v - 2148.7603) < 1e-3, String(v));
+});
+
+t('o alqueire mineiro (4,84 ha) da METADE do paulista', () => {
+  const pau = arrendamentoPorHa(40, PKG, 60, 2.42);
+  const min = arrendamentoPorHa(40, PKG, 60, 4.84);
+  assert.ok(Math.abs(pau / min - 2) < 1e-9, 'esperava fator 2 exato');
+});
+
+t('o padrao da casa e o paulista, e os tres tamanhos estao declarados', () => {
+  assert.equal(ALQUEIRE_HA_PADRAO, 2.42);
+  assert.deepEqual(ALQUEIRES.map(a => a.ha), [2.42, 4.84, 2.7225]);
+});
+
+t('preco maior encarece o arrendamento (contrato e em produto)', () => {
+  const barato = arrendamentoPorHa(40, precoPorKg({ valor: 100, unidade: 'sc' }), 60, 2.42);
+  const caro = arrendamentoPorHa(40, precoPorKg({ valor: 150, unidade: 'sc' }), 60, 2.42);
+  assert.ok(caro > barato);
+  assert.ok(Math.abs(caro / barato - 1.5) < 1e-9);
+});
+
+t('entrada invalida devolve null, nunca 0 nem Infinity', () => {
+  assert.equal(arrendamentoPorHa(0, PKG, 60, 2.42), null);
+  assert.equal(arrendamentoPorHa(40, 0, 60, 2.42), null);
+  assert.equal(arrendamentoPorHa(40, PKG, 60, 0), null);
+  assert.equal(arrendamentoPorHa(NaN, PKG, 60, 2.42), null);
+  assert.equal(arrendamentoPorHa(40, PKG, 0, 2.42), null);
+});
+
+t('arrendamento soma ao custo e sobe o ponto de equilibrio', () => {
+  const arr = arrendamentoPorHa(40, PKG, 60, 2.42);
+  const semArr = pontoEquilibrioKgha(PKG, CUSTO);
+  const comArr = pontoEquilibrioKgha(PKG, CUSTO + arr);
+  assert.ok(comArr > semArr);
+  assert.ok(Math.abs(comArr - (CUSTO + arr) / PKG) < 1e-9);
 });
 
 console.log(`\n${ok} ok, ${fail} falhas\n`);

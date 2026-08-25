@@ -1,5 +1,15 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.75.2': [
+    'ARRENDAMENTO EM SACAS POR ALQUEIRE, e o relatorio passa a sair com DOIS mapas de rentabilidade: sem arrendamento e com. A conversao para R$/ha e automatica — sacas/alq x kg da saca x R$/kg ÷ hectares do alqueire — e usa o proprio preco de venda, porque o contrato e em produto: 40 sc/alq valem mais quando a saca sobe.',
+    'O ALQUEIRE E ESCOLHIDO NA TELA e gravado no mapa: paulista (2,42 ha), mineiro/goiano (4,84 ha) ou do Norte (2,7225 ha). Nao existe "o alqueire" — entre o paulista e o mineiro ha o DOBRO, e errar qual esta em uso dobraria o custo sem nenhum sinal. O padrao e o paulista, que e o do Parana e do Sul.',
+    'POR QUE DOIS MAPAS E NAO UM: o arrendamento e custo uniforme, entao a mancha nao muda — mas o ZERO se desloca, e a area que deixa de pagar as contas e exatamente o que interessa comparar. Num exemplo de soja a 130/sc, 40 sc/alq levaram o ponto de equilibrio de 2.492 para 3.484 kg/ha e puseram 12,6% do talhao no vermelho.',
+    'O resumo agora mostra a cadeia inteira: custo de producao, arrendamento, custo total, ponto de equilibrio e a area abaixo dele.',
+    'CORRIGIDO — O MAPA DE RENTABILIDADE NAO LIBERAVA depois de informar preco e custo. A tela guardava uma COPIA do mapa de quando voce clicou no olho; salvar no lapis recarregava a lista mas a copia continuava velha, sem a economia. Agora a tela le da lista, e qualquer edicao chega na hora.',
+    'REMOVIDOS OS VALORES QUE A PLATAFORMA TINHA INVENTADO. Na v2.75.1 os coeficientes de exportacao (soja, milho, trigo, feijao) e os fertilizantes de referencia (KCl, MAP, DAP, Gafsa, Arad, Super Simples e Triplo) vinham semeados com valores de literatura. Saem: os dois cadastros sao da casa e ela e quem os assina.',
+    'Coeficiente de exportacao errado nao quebra nada — produz um mapa plausivel e FALSO, que e o pior tipo de erro; e garantia de fertilizante varia por fornecedor. Os dois se cadastram em Biblioteca > Exportacao de Nutrientes e Biblioteca > Insumos.',
+    'Enquanto nao ha cadastro, a tela diz o que falta ("Sem coeficiente de K2O para soja — Biblioteca > Exportacao de Nutrientes") e a tabela de equivalentes do PDF explica em vez de sair vazia.',
+  ],
   '2.75.1': [
     'O RELATORIO DE PRODUTIVIDADE GANHOU DUAS SECOES OPCIONAIS: RENTABILIDADE e EXPORTACAO DE NUTRIENTES. Ate agora ele respondia "quanto colheu e onde"; nao respondia "deu lucro?" nem "quanto de nutriente saiu do talhao junto com o grao?".',
     'MAPA DE RENTABILIDADE. Voce informa o preco de venda (por saca ou por tonelada) e o custo total por hectare no lapis do mapa salvo; a plataforma calcula a margem pixel a pixel. Sai com tabela por faixa (R$/ha, hectares, %, R$ totais) e resumo com receita media, margem media, margem total e retorno sobre o custo.',

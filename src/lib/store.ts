@@ -24,16 +24,12 @@ import {
   type ConteudoLaboratorio,
   type ConteudoLabAnalise,
   type ConteudoSafra,
-  type ConteudoExportacao,
   type ConteudoGrade,
   type ConteudoEtiqueta,
   type ConteudoVariavel,
   type EstiloRecomendacao,
   type PresetEstiloRec,
 } from './biblioteca';
-import { EXPORTACAO_SEED } from '@/constants/exportacaoSeed';
-import { INSUMOS_SEED_SISTEMA } from '@/constants/insumosSeedSistema';
-import type { ConteudoInsumo } from './insumos';
 import { ELEMENTOS_LAB, simboloElemento, norm as normLab, calcularDerivados, DERIVADOS_IDS } from './lab';
 import { anoDeData, epocaDeData, periodoDeData, anoDaSafra, hojeSaoPauloISO, partesData, dataValida, type Epoca } from './periodo';
 import { VARIAVEIS_COMPLEMENTARES } from '../constants/variaveisSeedComplementar';
@@ -496,7 +492,20 @@ export interface MapaProdutividade {
    *  informados à MÃO. Ausente = não informado (≠ zero) e a página de
    *  rentabilidade fica fora do relatório. Vive no mapa porque muda de safra
    *  para safra e porque é ele que reproduz o PDF já entregue ao cliente. */
-  economia?: { precoVenda: number; precoUnidade: 'sc' | 't'; sacaKg?: number; custoHa: number; atualizadoEm?: string };
+  economia?: {
+    precoVenda: number;
+    precoUnidade: 'sc' | 't';
+    sacaKg?: number;
+    /** Custo de PRODUÇÃO por hectare, sem arrendamento. */
+    custoHa: number;
+    /** Arrendamento em SACAS POR ALQUEIRE. Ausente = terra própria, e o
+     *  relatório sai com um mapa de rentabilidade só. */
+    arrendamentoScAlq?: number;
+    /** Hectares por alqueire (paulista 2,42; mineiro 4,84). Gravado junto
+     *  porque errar qual está em uso dobra o custo sem sinal na tela. */
+    alqueireHa?: number;
+    atualizadoEm?: string;
+  };
   bounds: [number, number, number, number];
   arquivo: string;
   criadoEm: string;
@@ -2238,43 +2247,6 @@ export function deletePaleta(id: string) {
 // (falhou, estourou os 12s do AppContext, ou ainda roda em 2º plano), "vazio"
 // quer dizer "ainda não sei" — e semear aí é destrutivo.
 
-/**
- * Coeficientes de exportação oficiais como itens de escopo SISTEMA.
- *
- * Mesma disciplina de seedLegendasSistema: só num banco VAZIO e só depois da
- * nuvem hidratar. Enquanto o boot não confirma, "lista vazia" quer dizer
- * "ainda não sei" — semear aí sobe itens por push e duplica o cadastro em
- * todas as máquinas. E semear com a lista já populada faria a exclusão de um
- * item ressuscitar no boot seguinte.
- */
-export function garantirCoeficientesExportacao() {
-  if (typeof window === 'undefined') return;
-  const lista = _bibLoadRaw<ConteudoExportacao>('exportacao');
-  if (!deveSemearLegendas(lista.length, cloudAindaNaoHidratou())) return;
-  for (const s of EXPORTACAO_SEED) {
-    bibCriar<ConteudoExportacao>('exportacao', { nome: s.nome, conteudo: s.conteudo, escopo: 'sistema' });
-  }
-}
-
-/**
- * Fertilizantes de referência como insumos de escopo SISTEMA.
- *
- * A idempotência aqui NÃO é pela lista vazia, e sim pela ausência de qualquer
- * insumo de sistema: quem já usa o app tem insumos de empresa cadastrados, e
- * "lista vazia" nunca seria verdade para ele — o seed nunca rodaria.
- *
- * Efeito colateral aceito: apagar TODOS os do sistema faz o seed voltar no
- * próximo boot; apagar alguns, não. Editar (preço, frete) é preservado sempre,
- * que é o que importa.
- */
-export function garantirInsumosSistema() {
-  if (typeof window === 'undefined') return;
-  if (cloudAindaNaoHidratou()) return;
-  if (bibListar<ConteudoInsumo>('insumos', 'sistema').length > 0) return;
-  for (const s of INSUMOS_SEED_SISTEMA) {
-    bibCriar<ConteudoInsumo>('insumos', { nome: s.nome, conteudo: s.conteudo, escopo: 'sistema' });
-  }
-}
 export function seedLegendasSistema(seed: Legenda[]) {
   const lista = load<Legenda>('inv_legendas');
   if (!deveSemearLegendas(lista.length, cloudAindaNaoHidratou())) return;
