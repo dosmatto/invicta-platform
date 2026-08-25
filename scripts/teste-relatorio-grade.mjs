@@ -9,7 +9,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { linhasDaGrade, resumoDaGrade, nomeArquivoRelatorio } from '../src/lib/relatorioGrade.ts';
+import { linhasDaGrade, resumoDaGrade, nomeArquivoRelatorio, linhasDasZonas, resumoDasZonas } from '../src/lib/relatorioGrade.ts';
 
 const CTX = {
   produtor: 'Arthur Ferreira do Amaral',
@@ -109,4 +109,72 @@ test('invariante: linhas = soma das profundidades dos pontos', () => {
   }));
   const esperado = pontos.reduce((s, p) => s + p.profundidades.length, 0);
   assert.equal(linhasDaGrade(CTX, grade(pontos)).length, esperado);
+});
+
+// ─── CARTA DA AMOSTRAGEM POR ZONAS ────────────────────────────────────────
+// O que erra aqui é a expansão: na amostra COMPOSTA os 50 pontos da caminhada
+// viram 4 sacos. Listar ponto a ponto faria a planilha prometer 50 amostras ao
+// laboratório e chegarem 4 — e o erro só apareceria no laudo, semanas depois.
+
+const ptZ = (ordem, numero, rotulo, zona) => ({ ordem, numero, rotulo, zona, lng: -50, lat: -25 });
+
+// 4 zonas; a zona 1 com 3 pontos, as outras com 2 — 9 pontos, 4 sacos.
+const PONTOS_ZONA = [
+  ptZ(0, 1, '1-1', '1'), ptZ(1, 1, '1-2', '1'), ptZ(2, 1, '1-3', '1'),
+  ptZ(3, 2, '2-1', '2'), ptZ(4, 2, '2-2', '2'),
+  ptZ(5, 3, '3-1', '3'), ptZ(6, 3, '3-2', '3'),
+  ptZ(7, 4, '4-1', '4'), ptZ(8, 4, '4-2', '4'),
+];
+const gradeZona = (modelo, profundidades) => ({
+  id: 'gz1', nome: 'Zonas 1', metodo: 'zonas', modelo, profundidades, pontos: PONTOS_ZONA,
+});
+const P2 = [{ rotulo: '0-20', percentual: 100 }, { rotulo: '20-40', percentual: 100 }];
+
+test('COMPOSTA: uma linha por SACO × profundidade, não por ponto', () => {
+  const linhas = linhasDasZonas(CTX, gradeZona('A', P2));
+  assert.equal(linhas.length, 8, '4 sacos × 2 profundidades');
+  const r = resumoDasZonas(linhas);
+  assert.equal(r.sacos, 4, `9 pontos têm de virar 4 sacos, veio ${r.sacos}`);
+  assert.equal(r.amostras, 8);
+});
+
+test('COMPOSTA: o ID da planilha é o MESMO texto da etiqueta do saco', () => {
+  const linhas = linhasDasZonas(CTX, gradeZona('A', P2));
+  assert.deepEqual([...new Set(linhas.map(l => l.ID))], ['01', '02', '03', '04']);
+});
+
+test('INDIVIDUAL: uma linha por PONTO × profundidade, com o rótulo zona-seq', () => {
+  const linhas = linhasDasZonas(CTX, gradeZona('B', P2));
+  assert.equal(linhas.length, 18, '9 pontos × 2 profundidades');
+  assert.equal(linhas[0].ID, '1-1');
+  assert.ok(linhas.some(l => l.ID === '3-2'), 'o rótulo do campo tem de aparecer');
+});
+
+test('profundidade PARCIAL vale para as primeiras amostras, na ordem', () => {
+  // 20-40 em 50% de 4 sacos → só os sacos 01 e 02 vão à camada profunda.
+  const linhas = linhasDasZonas(CTX, gradeZona('A', [
+    { rotulo: '0-20', percentual: 100 }, { rotulo: '20-40', percentual: 50 },
+  ]));
+  const fundas = linhas.filter(l => l.Profundidade === '20-40').map(l => l.ID);
+  assert.deepEqual(fundas, ['01', '02']);
+  assert.equal(linhas.filter(l => l.Profundidade === '0-20').length, 4);
+});
+
+test('a remessa se repete em TODA linha (sobrevive ao copiar-e-colar do lab)', () => {
+  const g = { ...gradeZona('A', P2), codigoRemessa: 'INV-2026-0042' };
+  for (const l of linhasDasZonas(CTX, g)) assert.equal(l.Remessa, 'INV-2026-0042');
+});
+
+test('as colunas são EXATAMENTE as da carta da grade comum', () => {
+  const zon = Object.keys(linhasDasZonas(CTX, gradeZona('A', P2))[0]);
+  const gri = Object.keys(linhasDaGrade(CTX, grade([
+    { ordem: 0, profs: 1, profundidades: ['0-20'] },
+  ])) [0]);
+  assert.deepEqual(zon, gri, 'a carta de zonas tem de seguir o mesmo padrão');
+});
+
+test('profundidade sem padrão cadastrado marca "—" em vez de sumir', () => {
+  const linhas = linhasDasZonas(
+    { ...CTX, analisePorProfundidade: { '0-20': 'basica' } }, gradeZona('A', P2));
+  assert.equal(linhas.filter(l => l['Análises'] === '—').length, 4, 'as 4 de 20-40');
 });

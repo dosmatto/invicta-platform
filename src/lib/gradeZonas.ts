@@ -189,3 +189,37 @@ export function amostrasDaGrade(
     .sort((a, b) => a[0] - b[0])
     .map(([numero, rotulo]) => ({ numero, rotulo }));
 }
+
+/** Uma amostra que vai ao laboratório, já com a profundidade dela. */
+export interface AmostraProf { numero: number; rotulo: string; profundidade: string }
+
+/**
+ * As amostras da grade de zonas EXPANDIDAS por profundidade — a lista exata do
+ * que sai do campo para o laboratório.
+ *
+ * FONTE ÚNICA de propósito: é ela que as ETIQUETAS coladas nos sacos e a CARTA
+ * (planilha de conferência) usam. Divergirem seria o pior dos mundos — o
+ * laboratório receberia um número de sacos e uma planilha dizendo outro, e o
+ * erro só apareceria no laudo, semanas depois.
+ *
+ * Profundidade PARCIAL (percentual < 100) vale para as PRIMEIRAS amostras da
+ * lista, na ordem — mesma regra da grade comum. Ex.: 4 zonas com 20-40 em 50%
+ * → só as zonas 1 e 2 vão à camada profunda.
+ */
+export function amostrasComProfundidade(
+  pontos: PontoAmostragem[],
+  modelo: 'A' | 'B',
+  profundidades: { rotulo: string; percentual: number }[],
+): AmostraProf[] {
+  const amostras = amostrasDaGrade(pontos, modelo);
+  const out: AmostraProf[] = [];
+  amostras.forEach((a, i) => {
+    for (const p of profundidades) {
+      const cnt = p.percentual >= 100
+        ? amostras.length
+        : Math.max(1, Math.round((amostras.length * p.percentual) / 100));
+      if (i < cnt) out.push({ numero: a.numero, rotulo: a.rotulo, profundidade: p.rotulo });
+    }
+  });
+  return out;
+}

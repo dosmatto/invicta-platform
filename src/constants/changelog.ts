@@ -1,5 +1,12 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.75.0': [
+    'A AMOSTRAGEM POR ZONAS DE MANEJO GANHOU A CARTA PARA O LABORATÓRIO — a mesma planilha que a amostragem em Grid já gerava, com as mesmas colunas: Remessa, Produtor, Município, Fazenda, Talhão, ID, Profundidade e Análises. Botão "Carta", ao lado de Etiquetas, em cada grade de zonas salva.',
+    'A DIFERENÇA ESTÁ NO QUE CONTA COMO AMOSTRA. Na amostra composta, os pontos da caminhada viram UM saco por zona — então a planilha lista uma linha por SACO × profundidade, não por ponto. Listar ponto a ponto prometeria 50 amostras ao laboratório e chegariam 4. Em pontos individuais, é uma linha por ponto, com o rótulo do campo (1-1, 2-3).',
+    'O ID DA PLANILHA É O MESMO TEXTO IMPRESSO NA ETIQUETA do saco. A carta e as etiquetas passaram a usar a mesma conta: se discordassem, o laudo voltaria amarrado ao identificador errado e o erro só apareceria no mapa, semanas depois.',
+    'A profundidade parcial vale para as primeiras amostras, na ordem — igual à grade comum. Ex.: 20-40 em 50% de 4 zonas → só as zonas 01 e 02 vão à camada profunda, e é isso que sai na planilha e nas etiquetas.',
+    'O código de remessa (INV-XXXX-XXXX) nasce ao gerar a carta e se repete em toda linha, como na grade: é por ele que o laboratório identifica de qual talhão é o laudo na API.',
+  ],
   '2.74.0': [
     'RESUMO GERAL DAS RECOMENDAÇÕES MARCADAS — novo relatório que responde à pergunta da COMPRA e do ENVIO, não à da conferência: quanto de cada produto eu preciso, talhão a talhão, somando os anos que eu escolher, e quais recomendações vou ter de mandar para o campo. Sai em PDF e em Excel.',
     'ESCOLHA VÁRIOS ANOS DE UMA VEZ. Até aqui o relatório de recomendação da fazenda resolvia UM ano por vez, e quem queria o consolidado de duas safras somava na mão. Agora os anos com recomendação aparecem como botões e você marca quantos quiser; cada ano vira um bloco com o seu subtotal e, no fim, entra o TOTAL GERAL somando os anos escolhidos.',

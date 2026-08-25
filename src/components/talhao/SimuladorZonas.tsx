@@ -10,10 +10,11 @@ import { pode } from '@/lib/empresa';
 import { gerarGrid, pontoInterno, criarValidador, ModoDistribuicao } from '@/lib/grid';
 import { gerarEtiquetasPDF, cabecalhoEtiqueta, EtiquetaItem, layoutPorId } from '@/lib/etiquetas';
 import { exportarKML, exportarSHP } from '@/lib/exportGrade';
-import { numerarPontosZonas, renumerarPontosZonas, rotuloDoPonto, amostrasDaGrade, type ZonaComPontos } from '@/lib/gradeZonas';
+import { exportarRelatorioZonasXlsx } from '@/lib/relatorioGrade';
+import { numerarPontosZonas, renumerarPontosZonas, rotuloDoPonto, amostrasDaGrade, amostrasComProfundidade, type ZonaComPontos } from '@/lib/gradeZonas';
 import { rotuloZona } from '@/lib/meap/rotuloZona';
 import { dentroGeom } from '@/lib/recomendacao/zonasGrid';
-import { AlertTriangle, Layers, MapPin, Printer, RotateCcw, Save, Trash2, CheckCircle2, Circle, Pencil, Download, Eye, Move, Plus, Eraser, Check, X } from 'lucide-react';
+import { AlertTriangle, Layers, MapPin, Printer, RotateCcw, Save, Trash2, CheckCircle2, Circle, Pencil, Download, Eye, Move, Plus, Eraser, Check, X, FileSpreadsheet } from 'lucide-react';
 
 interface ZonaFeat {
   id: string;          // identidade do POLÍGONO ("01", "01_2") — densidade, seleção
@@ -350,14 +351,13 @@ export function SimuladorZonas({ safraNome: safraProp }: { safraNome?: string } 
     }
     const faz0 = getFazendas().find(f => f.id === talhao?.fazendaId);
     const cabecalho = cabecalhoEtiqueta(nav.produtor, faz0?.nome ?? nav.fazenda);
-    const amostras = amostrasDaGrade(pts, mod);
-    const itens: EtiquetaItem[] = [];
-    amostras.forEach((a, i) => {
-      for (const p of profsUso) {
-        const cnt = p.percentual >= 100 ? amostras.length : Math.max(1, Math.round((amostras.length * p.percentual) / 100));
-        if (i < cnt) itens.push({ cabecalho, titulo, numero: a.rotulo, sub: `${p.rotulo} cm`, rodape: rod });
-      }
-    });
+    // MESMA expansão da carta para o laboratório (`amostrasComProfundidade`).
+    // São dois papéis que têm de contar a mesma história: a etiqueta colada no
+    // saco e a planilha que viaja com ele. Cada um com a sua conta era o jeito
+    // de o laboratório receber N sacos e uma lista de outro tamanho.
+    const itens: EtiquetaItem[] = amostrasComProfundidade(pts, mod, profsUso).map(a => ({
+      cabecalho, titulo, numero: a.rotulo, sub: `${a.profundidade} cm`, rodape: rod,
+    }));
     if (itens.length === 0) return;
     const cfg = getConfigEtiqueta();
     const layout = layoutPorId(cfg.layoutId);
@@ -368,6 +368,34 @@ export function SimuladorZonas({ safraNome: safraProp }: { safraNome?: string } 
     });
     gerarEtiquetasPDF(itens, layout, nome, { dx: cfg.dx, dy: cfg.dy })
       .catch(err => console.error('Erro ao gerar etiquetas:', err));
+  }
+
+  // CARTA PARA O LABORATÓRIO — mesma planilha da aba Grid (Remessa, Produtor,
+  // Município, Fazenda, Talhão, ID, Profundidade, Análises). A diferença é o que
+  // conta como amostra: na composta os pontos da caminhada viram UM saco por
+  // zona, e é o saco que a planilha lista. A expansão é a MESMA das etiquetas
+  // (`amostrasComProfundidade`), então a lista e os sacos sempre batem.
+  function exportarCartaZonas(g: GradeAmostragem) {
+    // O código de remessa nasce aqui, como na grade comum: é este papel que vai
+    // junto das amostras, e é por ele que o laboratório diz de qual talhão é o
+    // laudo na API.
+    const gr = { ...g, codigoRemessa: garantirCodigoRemessa(g.id) ?? g.codigoRemessa };
+    const faz = getFazendas().find(f => f.id === talhao?.fazendaId);
+    // A análise sai da config DAQUELA grade, não do padrão atual: a planilha tem
+    // de refletir o que foi programado, mesmo que o padrão tenha mudado depois.
+    const analisePorProfundidade: Record<string, string> = {};
+    for (const p of gr.profundidades) analisePorProfundidade[p.rotulo] = nomeElem(p.padraoElementosId);
+    exportarRelatorioZonasXlsx({
+      produtor: nav.produtor || '—',
+      municipio: faz?.municipio || '—',
+      fazenda: faz?.nome || nav.fazenda || '—',
+      siglaFazenda: faz?.sigla ?? null,
+      talhao: talhao?.nome || nav.talhao || '—',
+      analisePorProfundidade,
+    }, gr).catch(err => {
+      console.error('Erro ao gerar a carta das zonas:', err);
+      alert('Não foi possível gerar a carta: ' + (err instanceof Error ? err.message : String(err)));
+    });
   }
 
   function salvarGradeZonas() {
@@ -719,6 +747,11 @@ export function SimuladorZonas({ safraNome: safraProp }: { safraNome?: string } 
                   <button onClick={() => gerarEtiquetasZonas(g)} title="Etiquetas (PDF)"
                     className="flex items-center gap-1 text-[9px] px-2 py-0.5 rounded font-semibold" style={{ background: '#065f46', color: '#a7f3d0' }}>
                     <Printer size={9} /> Etiquetas
+                  </button>
+                  <button onClick={() => exportarCartaZonas(g)}
+                    title="Carta para o laboratório (Excel) — uma linha por amostra × profundidade, com as análises de cada uma"
+                    className="flex items-center gap-1 text-[9px] px-2 py-0.5 rounded font-semibold" style={{ background: '#1e3a2f', color: '#86efac' }}>
+                    <FileSpreadsheet size={9} /> Carta
                   </button>
                 </div>
               </div>
