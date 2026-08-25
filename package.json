@@ -51,6 +51,8 @@
     "teste:escala": "node scripts/teste-escala-classes.mjs",
     "teste:validacao": "node scripts/teste-validacao.mjs",
     "teste:quantis": "node scripts/teste-quantis.mjs",
+    "teste:rentabilidade": "node scripts/teste-rentabilidade.mjs",
+    "teste:exportacao": "node scripts/teste-exportacao.mjs",
     "teste:cobertura-colheita": "node scripts/teste-cobertura-colheita.mjs",
     "teste:correlacao": "node scripts/teste-correlacao.mjs",
     "teste:rotulo": "node scripts/teste-rotulo-zona.mjs",

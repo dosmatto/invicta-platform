@@ -14,6 +14,7 @@ import { areaHaGeo, areaHaGeoBruta } from './areaGeo';
 import { empresaAtivaId, uidUsuario, escopoClienteIds, escopoTalhaoIds, escopoFazendaIds } from './empresa';
 import {
   listar as bibListar,
+  _bibLoadRaw,
   obter as bibObter,
   criar as bibCriar,
   atualizar as bibAtualizar,
@@ -23,12 +24,16 @@ import {
   type ConteudoLaboratorio,
   type ConteudoLabAnalise,
   type ConteudoSafra,
+  type ConteudoExportacao,
   type ConteudoGrade,
   type ConteudoEtiqueta,
   type ConteudoVariavel,
   type EstiloRecomendacao,
   type PresetEstiloRec,
 } from './biblioteca';
+import { EXPORTACAO_SEED } from '@/constants/exportacaoSeed';
+import { INSUMOS_SEED_SISTEMA } from '@/constants/insumosSeedSistema';
+import type { ConteudoInsumo } from './insumos';
 import { ELEMENTOS_LAB, simboloElemento, norm as normLab, calcularDerivados, DERIVADOS_IDS } from './lab';
 import { anoDeData, epocaDeData, periodoDeData, anoDaSafra, hojeSaoPauloISO, partesData, dataValida, type Epoca } from './periodo';
 import { VARIAVEIS_COMPLEMENTARES } from '../constants/variaveisSeedComplementar';
@@ -487,6 +492,11 @@ export interface MapaProdutividade {
   /** Qualidade do dado: quanto do talhão a máquina realmente percorreu.
    *  Ausente = mapa salvo antes da conferência de cobertura existir. */
   cobertura?: { pctCobertura: number; areaSemDadoHa: number; maiorVazioHa: number; raioM: number; recortado: boolean };
+  /** Economia do mapa: preço de venda do grão e custo total por hectare,
+   *  informados à MÃO. Ausente = não informado (≠ zero) e a página de
+   *  rentabilidade fica fora do relatório. Vive no mapa porque muda de safra
+   *  para safra e porque é ele que reproduz o PDF já entregue ao cliente. */
+  economia?: { precoVenda: number; precoUnidade: 'sc' | 't'; sacaKg?: number; custoHa: number; atualizadoEm?: string };
   bounds: [number, number, number, number];
   arquivo: string;
   criadoEm: string;
@@ -535,7 +545,7 @@ export function setMapaProdutividadeOficial(id: string) {
  */
 export function updateMapaProdutividade(
   id: string,
-  patch: Partial<Pick<MapaProdutividade, 'cultura' | 'epoca' | 'dataReferencia' | 'dataPlantio' | 'unidade'>>,
+  patch: Partial<Pick<MapaProdutividade, 'cultura' | 'epoca' | 'dataReferencia' | 'dataPlantio' | 'unidade' | 'economia'>>,
 ): MapaProdutividade | null {
   const lista = load<MapaProdutividade>('inv_produtividade');
   const i = lista.findIndex(m => m.id === id);
@@ -2227,6 +2237,44 @@ export function deletePaleta(id: string) {
 // configurada, ou com o boot da nuvem já concluído. Enquanto o boot não confirma
 // (falhou, estourou os 12s do AppContext, ou ainda roda em 2º plano), "vazio"
 // quer dizer "ainda não sei" — e semear aí é destrutivo.
+
+/**
+ * Coeficientes de exportação oficiais como itens de escopo SISTEMA.
+ *
+ * Mesma disciplina de seedLegendasSistema: só num banco VAZIO e só depois da
+ * nuvem hidratar. Enquanto o boot não confirma, "lista vazia" quer dizer
+ * "ainda não sei" — semear aí sobe itens por push e duplica o cadastro em
+ * todas as máquinas. E semear com a lista já populada faria a exclusão de um
+ * item ressuscitar no boot seguinte.
+ */
+export function garantirCoeficientesExportacao() {
+  if (typeof window === 'undefined') return;
+  const lista = _bibLoadRaw<ConteudoExportacao>('exportacao');
+  if (!deveSemearLegendas(lista.length, cloudAindaNaoHidratou())) return;
+  for (const s of EXPORTACAO_SEED) {
+    bibCriar<ConteudoExportacao>('exportacao', { nome: s.nome, conteudo: s.conteudo, escopo: 'sistema' });
+  }
+}
+
+/**
+ * Fertilizantes de referência como insumos de escopo SISTEMA.
+ *
+ * A idempotência aqui NÃO é pela lista vazia, e sim pela ausência de qualquer
+ * insumo de sistema: quem já usa o app tem insumos de empresa cadastrados, e
+ * "lista vazia" nunca seria verdade para ele — o seed nunca rodaria.
+ *
+ * Efeito colateral aceito: apagar TODOS os do sistema faz o seed voltar no
+ * próximo boot; apagar alguns, não. Editar (preço, frete) é preservado sempre,
+ * que é o que importa.
+ */
+export function garantirInsumosSistema() {
+  if (typeof window === 'undefined') return;
+  if (cloudAindaNaoHidratou()) return;
+  if (bibListar<ConteudoInsumo>('insumos', 'sistema').length > 0) return;
+  for (const s of INSUMOS_SEED_SISTEMA) {
+    bibCriar<ConteudoInsumo>('insumos', { nome: s.nome, conteudo: s.conteudo, escopo: 'sistema' });
+  }
+}
 export function seedLegendasSistema(seed: Legenda[]) {
   const lista = load<Legenda>('inv_legendas');
   if (!deveSemearLegendas(lista.length, cloudAindaNaoHidratou())) return;

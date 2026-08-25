@@ -82,7 +82,9 @@ export interface FaixaQuantil {
   nPixels: number;
   areaHa: number;
   pctArea: number;
-  /** Σ valor × área do pixel. Só faz sentido com o grid em kg/ha. */
+  /** Σ valor × área do pixel. Com o grid em kg/ha são KG; com o grid em R$/ha
+   *  são REAIS totais da faixa; com kg/ha de K2O, kg do nutriente. A unidade é
+   *  a do grid — o nome ficou de quando só havia produtividade. */
   somaKg: number;
 }
 
@@ -106,34 +108,52 @@ export function classesQuantis(
   valores: ArrayLike<number>,
   opts: { k?: number; pixelM: number; cores: string[]; nomes: string[] },
 ): ClassificacaoQuantis | null {
-  const k = opts.k ?? 5;
-  const b = breaksQuantis(valores, k);
+  const b = breaksQuantis(valores, opts.k ?? 5);
   if (!b) return null;
+  return classesDeBreaks(valores, b.breaks, { ...opts, min: b.min, max: b.max, colapsadas: b.colapsadas });
+}
 
-  const nFaixas = b.breaks.length + 1;
+/**
+ * Agrega os valores em faixas por CORTES JÁ DADOS.
+ *
+ * Separado de `classesQuantis` porque nem toda classificação vem de quantil: a
+ * rentabilidade precisa de faixas ancoradas no ZERO (quantil puro pintaria 20%
+ * de vermelho num talhão inteiramente lucrativo). A agregação — área, %, soma —
+ * é a mesma nos dois casos e não deve existir em duas cópias.
+ *
+ * `min`/`max` ancoram as PONTAS abertas; sem eles, saem do próprio conjunto.
+ */
+export function classesDeBreaks(
+  valores: ArrayLike<number>,
+  breaks: number[],
+  opts: { pixelM: number; cores: string[]; nomes: string[]; min?: number; max?: number; colapsadas?: number },
+): ClassificacaoQuantis | null {
+  const nFaixas = breaks.length + 1;
   const pixelHa = (opts.pixelM * opts.pixelM) / 10000;
 
   const nPix = new Array<number>(nFaixas).fill(0);
   const soma = new Array<number>(nFaixas).fill(0);
-  const mn = new Array<number>(nFaixas).fill(Infinity);
-  const mx = new Array<number>(nFaixas).fill(-Infinity);
+  let n = 0, vmin = Infinity, vmax = -Infinity;
 
   for (let i = 0; i < valores.length; i++) {
     const v = valores[i];
     if (!Number.isFinite(v)) continue;
-    const c = indiceFaixa(v, b.breaks);
+    n++;
+    if (v < vmin) vmin = v;
+    if (v > vmax) vmax = v;
+    const c = indiceFaixa(v, breaks);
     nPix[c]++; soma[c] += v;
-    if (v < mn[c]) mn[c] = v;
-    if (v > mx[c]) mx[c] = v;
   }
+  if (n === 0) return null;
 
-  const areaHa = b.n * pixelHa;
+  const lo0 = opts.min ?? vmin;
+  const hiN = opts.max ?? vmax;
   const faixas: FaixaQuantil[] = [];
   for (let i = 0; i < nFaixas; i++) {
     // Limites: os CORTES (não o mín/máx observado da faixa) — são eles que a
     // legenda anuncia. Pontas ancoradas no mín/máx do mapa.
-    const lo = i === 0 ? b.min : b.breaks[i - 1];
-    const hi = i === nFaixas - 1 ? b.max : b.breaks[i];
+    const lo = i === 0 ? lo0 : breaks[i - 1];
+    const hi = i === nFaixas - 1 ? hiN : breaks[i];
     faixas.push({
       ordem: i + 1,
       min: lo, max: hi,
@@ -144,14 +164,13 @@ export function classesQuantis(
       cor: opts.cores[posicaoNaPaleta(i, nFaixas, opts.cores.length)] ?? '#888888',
       nPixels: nPix[i],
       areaHa: nPix[i] * pixelHa,
-      pctArea: b.n > 0 ? (nPix[i] / b.n) * 100 : 0,
+      pctArea: n > 0 ? (nPix[i] / n) * 100 : 0,
       somaKg: soma[i] * pixelHa,
     });
   }
 
-  return { faixas, breaks: b.breaks, nPixels: b.n, areaHa, colapsadas: b.colapsadas };
+  return { faixas, breaks, nPixels: n, areaHa: n * pixelHa, colapsadas: opts.colapsadas ?? 0 };
 }
-
 // Reamostra uma paleta de `tam` entradas para `nFaixas` posições, preservando
 // a primeira e a última. Só faz diferença quando houve colapso por empate.
 function posicaoNaPaleta(i: number, nFaixas: number, tam: number): number {

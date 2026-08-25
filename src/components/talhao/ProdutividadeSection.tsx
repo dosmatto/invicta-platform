@@ -51,6 +51,11 @@ import type { Legenda } from '@/lib/legendas';
 import { Upload, Loader2, AlertTriangle, Save, Star, Trash2, Eye, Wand2, FileSpreadsheet, Plus, Layers, ChevronDown, ChevronUp, FileDown, Pencil } from 'lucide-react';
 
 import { inputStyle } from '@/constants/ui';
+import { fmtMoeda, lerMoeda, arredMoeda } from '@/lib/formato';
+import { precoPorKg, pontoEquilibrioKgha, rotuloPreco, gridRentabilidade, classesRentabilidade, resumoRentabilidade, type UnidadeVenda } from '@/lib/rentabilidade';
+import { coefDe, gridExportacao, resumoExportacao, equivalentesDe } from '@/lib/exportacao';
+import { coeficientesDaCultura, fertilizantesCom } from '@/lib/exportacaoBib';
+import { SIMBOLO_NUTRIENTE, type Nutriente } from '@/lib/insumos';
 import { fmtMinMax0 as fmt, fmtHa } from '@/lib/formato';
 const CULTURAS = ['soja', 'milho', 'trigo', 'feijao', 'outro'];
 const EPOCAS: Array<{ v: string; l: string }> = [{ v: '', l: '—' }, { v: 'verao', l: 'Verão' }, { v: 'safrinha', l: 'Safrinha' }, { v: 'inverno', l: 'Inverno' }];
@@ -139,8 +144,30 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
   const [ndvisProd, setNdvisProd] = useState<NdviCamada[]>([]);
   const [ndviSelProd, setNdviSelProd] = useState('');
   const [gerandoPdf, setGerandoPdf] = useState('');   // '' | 'atual' | id da versão
+  // Seções OPCIONAIS do relatório. Cada uma só liga quando tem de onde sair:
+  // rentabilidade precisa de preço+custo no mapa; exportação precisa de
+  // coeficiente cadastrado para a cultura.
+  const [secRent, setSecRent] = useState(true);
+  // Versão salva que está no mapa (null = mapa recém-processado, ainda sem
+  // economia gravada). É dela que saem preço e custo para o relatório.
+  const [versaoVista, setVersaoVista] = useState<MapaProdutividade | null>(null);
+  const [secK2O, setSecK2O] = useState(false);
+  const [secP2O5, setSecP2O5] = useState(false);
   const [editando, setEditando] = useState<MapaProdutividade | null>(null);
   const [erroPdf, setErroPdf] = useState('');
+  // O que as seções opcionais têm de onde sair. Recalcula quando a cultura
+  // muda ou quando o cadastro da Biblioteca é editado noutra aba.
+  const [tickBib, setTickBib] = useState(0);
+  useEffect(() => {
+    const h = () => setTickBib(t => t + 1);
+    window.addEventListener('inv:biblioteca', h);
+    return () => window.removeEventListener('inv:biblioteca', h);
+  }, []);
+  const coefCultura = useMemo(() => coeficientesDaCultura(cultura), [cultura, tickBib]);
+  const economiaAtual = versaoVista?.economia ?? null;
+  const coefK2O = coefCultura ? coefDe(coefCultura.conteudo?.coeficientes, 'k2o') : null;
+  const coefP2O5 = coefCultura ? coefDe(coefCultura.conteudo?.coeficientes, 'p2o5') : null;
+
   const quantis: ClassificacaoQuantis | null = useMemo(
     () => (res?.grid && legenda ? quantisDaProdutividade(res, legenda, 5) : null),
     [res, legenda],
@@ -279,7 +306,7 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
 
       const st = statsDoGrid(r, r.relatorio.n_usados);
       if (!st) throw new Error('Não foi possível calcular o raster.');
-      setRes(r); setStats(st); setLegenda(leg); setRelatorio(r.relatorio); setCobFinal(cob); setFresco(true); setEstado('pronto');
+      setRes(r); setStats(st); setLegenda(leg); setRelatorio(r.relatorio); setCobFinal(cob); setVersaoVista(null); setFresco(true); setEstado('pronto');
     } catch (e) { setEstado('erro'); setErro(e instanceof Error ? e.message : 'Falha ao processar.'); }
   }
 
@@ -316,7 +343,7 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
     setLegenda(leg ?? null); setRelatorio(null);
     setRes({ bounds: r.bounds, grid: r.grid, png: '', stats: { n: 0, modelo: 'idw', min: v.stats.minKgha, max: v.stats.maxKgha, nx: 0, ny: 0, pixel_m: v.params.pixelM, rmse: null, variograma: null } });
     setStats({ nUsados: v.stats.nUsados, areaHa: v.stats.areaHa, producaoTotalKg: v.stats.producaoTotalKg, mediaKgha: v.stats.mediaKgha, minKgha: v.stats.minKgha, maxKgha: v.stats.maxKgha, cv: v.stats.cv, histograma: [] });
-    setUnidade(v.unidade); setFresco(false);
+    setUnidade(v.unidade); setFresco(false); setVersaoVista(v);
     setCobFinal(null);   // a máscara não é arquivada; os números vêm de v.cobertura
   }
   // ── Relatório PDF ───────────────────────────────────────────────────────────
@@ -325,8 +352,8 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
   async function exportarPdf(v?: MapaProdutividade) {
     if (!nav.talhaoId || !poligono) { setErroPdf('Limite do talhão não encontrado — abra o talhão no mapa.'); return; }
     const fonte = v
-      ? (() => { const r = rasters[v.id]; return r ? { grid: r.grid, bounds: r.bounds, pixelM: v.params.pixelM, cultura: v.cultura, unidade: v.unidade, dataRef: v.dataReferencia ?? v.criadoEm.slice(0, 10), dataPlantio: v.dataPlantio ?? null, stats: { nUsados: v.stats.nUsados, areaHa: v.stats.areaHa, producaoTotalKg: v.stats.producaoTotalKg, mediaKgha: v.stats.mediaKgha, minKgha: v.stats.minKgha, maxKgha: v.stats.maxKgha, cv: v.stats.cv, histograma: [] } as StatsProd, limpeza: null as RelatorioColheita | null, cleaningSalvo: v.cleaning, nPontos: v.stats.nPontos, versao: v.versao, nMaquinas: v.nMaquinas, mediaRealKgha: v.mediaRealKgha, cobertura: v.cobertura ?? null } : null; })()
-      : (res?.grid && stats ? { grid: res.grid, bounds: res.bounds, pixelM: res.stats?.pixel_m ?? pixelM, cultura, unidade, dataRef, dataPlantio: null, stats, limpeza: relatorio, cleaningSalvo: clean as unknown as Record<string, number | boolean>, nPontos: nPontosTotal, versao: null, nMaquinas: maqs.length, mediaRealKgha: null, cobertura: cobFinal ? { pctCobertura: cobFinal.pctCobertura, areaSemDadoHa: cobFinal.areaSemDadoHa, maiorVazioHa: cobFinal.maiorVazioHa, raioM: cobFinal.raioM, recortado: recortarSemDados } : null } : null);
+      ? (() => { const r = rasters[v.id]; return r ? { grid: r.grid, bounds: r.bounds, pixelM: v.params.pixelM, cultura: v.cultura, unidade: v.unidade, dataRef: v.dataReferencia ?? v.criadoEm.slice(0, 10), dataPlantio: v.dataPlantio ?? null, stats: { nUsados: v.stats.nUsados, areaHa: v.stats.areaHa, producaoTotalKg: v.stats.producaoTotalKg, mediaKgha: v.stats.mediaKgha, minKgha: v.stats.minKgha, maxKgha: v.stats.maxKgha, cv: v.stats.cv, histograma: [] } as StatsProd, limpeza: null as RelatorioColheita | null, cleaningSalvo: v.cleaning, nPontos: v.stats.nPontos, versao: v.versao, nMaquinas: v.nMaquinas, mediaRealKgha: v.mediaRealKgha, cobertura: v.cobertura ?? null, economia: v.economia ?? null } : null; })()
+      : (res?.grid && stats ? { grid: res.grid, bounds: res.bounds, pixelM: res.stats?.pixel_m ?? pixelM, cultura, unidade, dataRef, dataPlantio: null, stats, limpeza: relatorio, cleaningSalvo: clean as unknown as Record<string, number | boolean>, nPontos: nPontosTotal, versao: null, nMaquinas: maqs.length, mediaRealKgha: null, economia: versaoVista?.economia ?? null, cobertura: cobFinal ? { pctCobertura: cobFinal.pctCobertura, areaSemDadoHa: cobFinal.areaSemDadoHa, maiorVazioHa: cobFinal.maiorVazioHa, raioM: cobFinal.raioM, recortado: recortarSemDados } : null } : null);
     if (!fonte) { setErroPdf(v ? 'Raster desta versão não está na nuvem (reprocesse).' : 'Processe um mapa antes de gerar o relatório.'); return; }
 
     setGerandoPdf(v ? v.id : 'atual'); setErroPdf('');
@@ -410,6 +437,51 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
       const grupos = zonas.filter(z => z.stats).map(z => ({ id: z.id, valores: porZona.get(z.id) ?? [] }));
       const separacaoZonas = grupos.length >= 2 ? separacaoEntreZonas(grupos) : null;
 
+      // ── Seções opcionais ────────────────────────────────────────────────
+      // Os VALORES viajam para o relatório, não os ids: o cadastro muda
+      // depois e o PDF já entregue tem de continuar reproduzível.
+      let rentabilidade: Parameters<typeof gerarRelatorioProdutividade>[0]['rentabilidade'] = null;
+      const eco = fonte.economia;
+      const precoKgRel = eco ? precoPorKg({ valor: eco.precoVenda, unidade: eco.precoUnidade, sacaKg: eco.sacaKg }) : null;
+      if (secRent && eco && precoKgRel != null && eco.custoHa > 0) {
+        const vRent = gridRentabilidade(dec.valores, precoKgRel, eco.custoHa);
+        const clsRent = classesRentabilidade(vRent, { k: 5, pixelM: fonte.pixelM });
+        const resRent = resumoRentabilidade(dec.valores, { precoKg: precoKgRel, custoHa: eco.custoHa, pixelM: fonte.pixelM });
+        if (clsRent && resRent) {
+          rentabilidade = {
+            precoLabel: rotuloPreco({ valor: eco.precoVenda, unidade: eco.precoUnidade, sacaKg: eco.sacaKg }),
+            rasterPng: colorirGridPorQuantis({ b64: f32ParaB64(vRent), shape: fonte.grid.shape }, clsRent.breaks, clsRent.faixas.map(f => f.cor)).dataUrl,
+            classes: clsRent, resumo: resRent,
+          };
+        }
+      }
+
+      const exportacoes: NonNullable<Parameters<typeof gerarRelatorioProdutividade>[0]['exportacoes']> = [];
+      const itemCoef = coeficientesDaCultura(fonte.cultura);
+      const pedidos: Nutriente[] = [...(secK2O ? ['k2o' as Nutriente] : []), ...(secP2O5 ? ['p2o5' as Nutriente] : [])];
+      for (const nut of pedidos) {
+        const coef = itemCoef ? coefDe(itemCoef.conteudo?.coeficientes, nut) : null;
+        if (coef == null || coef <= 0) continue;
+        const vExp = gridExportacao(dec.valores, coef);
+        const clsExp = classesQuantis(vExp, {
+          k: 5, pixelM: fonte.pixelM,
+          // Paleta PRÓPRIA (azul→roxo): a mancha é idêntica à da página do
+          // mapa por quantil e só a cor avisa que a grandeza mudou.
+          cores: ['#E3F2FD', '#90CAF9', '#42A5F5', '#5E35B1', '#311B92'],
+          nomes: ['Muito baixa', 'Baixa', 'Média', 'Alta', 'Muito alta'],
+        });
+        const resExp = resumoExportacao(dec.valores, { coefKgPorT: coef, pixelM: fonte.pixelM });
+        if (!clsExp || !resExp) continue;
+        exportacoes.push({
+          simbolo: SIMBOLO_NUTRIENTE[nut],
+          cultura: fonte.cultura,
+          fonteCoef: itemCoef?.conteudo?.fonte || itemCoef?.nome || 'coeficiente cadastrado',
+          rasterPng: colorirGridPorQuantis({ b64: f32ParaB64(vExp), shape: fonte.grid.shape }, clsExp.breaks, clsExp.faixas.map(f => f.cor)).dataUrl,
+          classes: clsExp, resumo: resExp,
+          equivalentes: equivalentesDe(resExp.mediaKgHa, resExp.areaHa, fertilizantesCom(nut)),
+        });
+      }
+
       await gerarRelatorioProdutividade({
         fazenda: ctx.fazenda || nav.fazenda, produtor: ctx.produtor || nav.produtor,
         talhao: ctx.talhao || nav.talhao, safra,
@@ -429,6 +501,7 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
         versao: fonte.versao, nMaquinas: fonte.nMaquinas, mediaRealKgha: fonte.mediaRealKgha,
         ndvi, correlacao, sobreposicaoNdvi: sobrepos, zonas, separacaoZonas,
         cobertura: fonte.cobertura ?? null,
+        rentabilidade, exportacoes,
       });
     } catch (e) {
       setErroPdf(e instanceof Error ? e.message : 'Falha ao gerar o relatório.');
@@ -673,6 +746,32 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
               </select>
             </Campo>
           )}
+          {/* Seções opcionais do relatório */}
+          <div className="space-y-1 p-2 rounded" style={{ background: '#0b1f3a', border: '1px solid #1a3a6b' }}>
+            <p className="text-[9px] font-semibold" style={{ color: '#93c5fd' }}>Seções opcionais do relatório</p>
+            <SecaoOpcional
+              marcado={secRent} onMudar={setSecRent}
+              rotulo="Mapa de rentabilidade"
+              disponivel={!!economiaAtual}
+              motivo="Informe preço e custo no lápis do mapa salvo"
+              detalhe={economiaAtual ? `${fmtMoeda(economiaAtual.precoVenda)}/${economiaAtual.precoUnidade} · custo ${fmtMoeda(economiaAtual.custoHa)}/ha` : undefined}
+            />
+            <SecaoOpcional
+              marcado={secK2O} onMudar={setSecK2O}
+              rotulo="Exportação de K₂O"
+              disponivel={coefK2O != null && coefK2O > 0}
+              motivo={`Sem coeficiente de K₂O para ${cultura} — Biblioteca → Exportação de Nutrientes`}
+              detalhe={coefK2O ? `${fmt(coefK2O, 1)} kg/t${coefCultura?.conteudo?.fonte ? ' · ' + coefCultura.conteudo.fonte : ''}` : undefined}
+            />
+            <SecaoOpcional
+              marcado={secP2O5} onMudar={setSecP2O5}
+              rotulo="Exportação de P₂O₅"
+              disponivel={coefP2O5 != null && coefP2O5 > 0}
+              motivo={`Sem coeficiente de P₂O₅ para ${cultura} — Biblioteca → Exportação de Nutrientes`}
+              detalhe={coefP2O5 ? `${fmt(coefP2O5, 1)} kg/t${coefCultura?.conteudo?.fonte ? ' · ' + coefCultura.conteudo.fonte : ''}` : undefined}
+            />
+          </div>
+
           <button onClick={() => exportarPdf()} disabled={gerandoPdf !== ''}
             className="w-full py-2 rounded text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-50"
             style={{ background: '#1a3a6b', color: '#93c5fd' }}>
@@ -736,6 +835,9 @@ function EditarMapa({ mapa, onFechar, onSalvo }: { mapa: MapaProdutividade; onFe
   const [epoca, setEpoca] = useState(mapa.epoca || '');
   const [dataRef, setDataRef] = useState(mapa.dataReferencia ?? mapa.criadoEm.slice(0, 10));
   const [dataPlantio, setDataPlantio] = useState(mapa.dataPlantio ?? '');
+  const [precoTxt, setPrecoTxt] = useState(mapa.economia ? fmtMoeda(mapa.economia.precoVenda) : '');
+  const [precoUni, setPrecoUni] = useState<'sc' | 't'>(mapa.economia?.precoUnidade ?? 'sc');
+  const [custoTxt, setCustoTxt] = useState(mapa.economia ? fmtMoeda(mapa.economia.custoHa) : '');
   const [unidade, setUnidade] = useState<Unidade>(mapa.unidade);
 
   const per = periodoDeData(dataRef);
@@ -744,11 +846,22 @@ function EditarMapa({ mapa, onFechar, onSalvo }: { mapa: MapaProdutividade; onFe
     : null;
   const cicloInvalido = ciclo != null && (!isFinite(ciclo) || ciclo <= 0);
 
+  const precoVenda = arredMoeda(lerMoeda(precoTxt)) ?? 0;
+  const custoHa = arredMoeda(lerMoeda(custoTxt)) ?? 0;
+  const precoKg = precoPorKg({ valor: precoVenda, unidade: precoUni as UnidadeVenda });
+  const equilibrio = precoKg != null && custoHa > 0 ? pontoEquilibrioKgha(precoKg, custoHa) : null;
+
   function salvar() {
     updateMapaProdutividade(mapa.id, {
       cultura, epoca, unidade,
       dataReferencia: dataRef,
       dataPlantio: dataPlantio || undefined,
+      // Zeros NÃO são gravados: custoHa 0 anunciaria um ponto de equilíbrio de
+      // 0 kg/ha, e preço 0 diria que a colheita não vale nada — as duas coisas
+      // falsas. Sem os dois preenchidos, a economia simplesmente não existe.
+      economia: precoVenda > 0 && custoHa > 0
+        ? { precoVenda, precoUnidade: precoUni, custoHa, atualizadoEm: new Date().toISOString() }
+        : undefined,
     });
     onSalvo();
   }
@@ -791,6 +904,34 @@ function EditarMapa({ mapa, onFechar, onSalvo }: { mapa: MapaProdutividade; onFe
         <p className="text-[9px]" style={{ color: '#64748b' }}>
           Sem data de plantio, o relatório simplesmente não fala de plantio nem de ciclo. O destino é buscá-la na plataforma de dados fitotécnicos.
         </p>
+
+        <div className="pt-1" style={{ borderTop: '1px solid #1a3a6b' }}>
+          <p className="text-[10px] font-semibold mb-1" style={{ color: '#93c5fd' }}>Economia (opcional)</p>
+          <div className="grid grid-cols-3 gap-2">
+            <div className="col-span-2">
+              <Campo label="Preço de venda (R$)">
+                <input value={precoTxt} onChange={e => setPrecoTxt(e.target.value)} inputMode="decimal" placeholder="ex.: 130,00"
+                  className="w-full rounded px-2 py-1 text-[11px] outline-none" style={inputStyle} />
+              </Campo>
+            </div>
+            <Campo label="por">
+              <select value={precoUni} onChange={e => setPrecoUni(e.target.value as 'sc' | 't')}
+                className="w-full rounded px-2 py-1 text-[11px] outline-none" style={inputStyle}>
+                <option value="sc">saca</option>
+                <option value="t">tonelada</option>
+              </select>
+            </Campo>
+          </div>
+          <Campo label="Custo total por hectare (R$/ha)">
+            <input value={custoTxt} onChange={e => setCustoTxt(e.target.value)} inputMode="decimal" placeholder="ex.: 5.400,00"
+              className="w-full rounded px-2 py-1 text-[11px] outline-none" style={inputStyle} />
+          </Campo>
+          <p className="text-[9px] mt-1" style={{ color: equilibrio != null ? '#86efac' : '#64748b' }}>
+            {equilibrio != null
+              ? `Ponto de equilíbrio: ${fmt(equilibrio, 0)} kg/ha (${fmt(emUnidade(equilibrio, mapa.unidade), mapa.unidade === 'kg/ha' ? 0 : 1)} ${mapa.unidade})`
+              : 'Informe preço e custo para habilitar o mapa de rentabilidade no relatório.'}
+          </p>
+        </div>
 
         <div className="text-[9px] space-y-0.5">
           <p style={{ color: per ? '#86efac' : '#fbbf24' }}>
@@ -905,6 +1046,26 @@ function FaixasQuantil({ q, unidade }: { q: ClassificacaoQuantis; unidade: Unida
 
 // Cobertura em números + veredito. O tom segue nivelCobertura(): abaixo de 85%
 // o mapa não descreve o talhão, ele descreve a parte que a máquina percorreu.
+// Uma seção opcional do relatório. Quando não dá para ligar, o checkbox DIZ
+// por quê — desabilitar sem explicar é o que faz o usuário achar que quebrou.
+function SecaoOpcional({ marcado, onMudar, rotulo, disponivel, motivo, detalhe }: {
+  marcado: boolean; onMudar: (v: boolean) => void; rotulo: string;
+  disponivel: boolean; motivo: string; detalhe?: string;
+}) {
+  return (
+    <label className="flex items-start gap-1.5 text-[10px]" style={{ color: disponivel ? '#cbd5e1' : '#475569' }}>
+      <input type="checkbox" checked={marcado && disponivel} disabled={!disponivel}
+        onChange={e => onMudar(e.target.checked)} className="mt-0.5" />
+      <span className="flex-1">
+        {rotulo}
+        <span className="block text-[9px]" style={{ color: disponivel ? '#64748b' : '#fbbf24' }}>
+          {disponivel ? (detalhe ?? '') : motivo}
+        </span>
+      </span>
+    </label>
+  );
+}
+
 function CoberturaResumo({ cob, nPontos, recortado }: { cob: Cobertura; nPontos?: number; recortado?: boolean }) {
   const nivel = nivelCobertura(cob.pctCobertura);
   const cor = nivel === 'ok' ? '#86efac' : nivel === 'atencao' ? '#fbbf24' : '#f87171';

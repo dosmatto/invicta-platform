@@ -15,7 +15,7 @@ import type {
 import {
   SlidersHorizontal, CalendarDays, Grid3x3, Leaf, Salad, Mountain, Package,
   Satellite, Layers, Calculator, Bug, Hash, Wand2, BarChart3,
-  UserCog, FlaskConical, BookOpen,
+  UserCog, FlaskConical, BookOpen, Recycle,
 } from 'lucide-react';
 import { empresaAtivaId, uidUsuario, idsReKeyDono } from './empresa';
 import { cloudPushLista } from './cloud';
@@ -31,7 +31,7 @@ export type CategoriaBiblioteca =
   | 'analises-foliares' | 'altimetria' | 'imagem-satelite' | 'compactacao'
   | 'algebra-mapas' | 'pragas' | 'equacoes' | 'recomendacoes'
   | 'produtividade' | 'perfis' | 'laboratorios' | 'legendas' | 'insumos'
-  | 'labs';
+  | 'labs' | 'exportacao';
 
 export interface ItemBiblioteca<TConteudo = unknown> {
   id: string;
@@ -64,6 +64,8 @@ export interface DefCategoria {
 export const CATEGORIAS: DefCategoria[] = [
   { slug: 'insumos', nome: 'Insumos', icone: Package, status: 'disponivel',
     descricao: 'Produtos usados nas prescrições: fertilizantes (com as garantias), corretivos, gesso, estercos, compostos, sementes e personalizados.' },
+  { slug: 'exportacao', nome: 'Exportação de Nutrientes', icone: Recycle, status: 'disponivel',
+    descricao: 'Quanto de cada nutriente sai do talhão por tonelada colhida, por cultura (K₂O, P₂O₅, N…). Alimenta o mapa de exportação do relatório de produtividade.' },
   { slug: 'preferencias-analise', nome: 'Preferências de Análise', icone: SlidersHorizontal, status: 'disponivel',
     descricao: 'Configurações cross-módulo. Hoje: modelo de etiqueta (folha Pimaco + ajuste fino).' },
   { slug: 'safras', nome: 'Anos', icone: CalendarDays, status: 'disponivel',
@@ -348,6 +350,22 @@ export interface ConteudoPerfil {
 
 // Fase 5 — Safras (categoria 'safras'). nome/criadoEm vêm do envelope; a flag
 // `ativa` (safra ativa do contexto) é distinta de ItemBiblioteca.ativo.
+/**
+ * Coeficientes de EXPORTAÇÃO de nutrientes pela colheita, por cultura.
+ *
+ * kg do nutriente na forma de ÓXIDO (K₂O, P₂O₅) por TONELADA de produto
+ * colhido. O número depende da umidade de referência — por isso ela viaja
+ * junto: um coeficiente a 13% não descreve grão a 20%.
+ */
+export interface ConteudoExportacao {
+  /** minúsculo, para casar com MapaProdutividade.cultura */
+  culturaId: string;
+  parteColhida?: string;        // 'grão'
+  umidadePct?: number;
+  coeficientes: { n?: number; p2o5?: number; k2o?: number; s?: number; ca?: number; mg?: number };
+  fonte?: string;
+  observacoes?: string;
+}
 export interface ConteudoSafra {
   anoInicio: number;
   anoFim: number;

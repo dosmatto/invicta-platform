@@ -28,6 +28,8 @@ import type { CorrelacaoGrid } from './correlacaoGrid';
 import type { ResumoValores } from './validacao/tipos';
 import type { Separacao } from './validacao/estatistica';
 import { nivelCobertura } from './cobertura';
+import type { ResumoRentabilidade } from './rentabilidade';
+import type { ResumoExportacao, EquivalenteFertilizante } from './exportacao';
 
 // ── Entrada ──────────────────────────────────────────────────────────────────
 
@@ -96,6 +98,25 @@ export interface DadosRelatorioProd {
   zonas: ZonaRel[];
   separacaoZonas: Separacao | null;
 
+  /** Página de RENTABILIDADE. Ausente/null = a seção não entra no PDF. */
+  rentabilidade?: {
+    precoLabel: string;
+    rasterPng: string;
+    classes: ClassificacaoQuantis & { iZero: number | null };
+    resumo: ResumoRentabilidade;
+  } | null;
+
+  /** Uma entrada por nutriente. Vazio/ausente = nenhuma página de exportação. */
+  exportacoes?: Array<{
+    simbolo: string;              // 'K2O' — já saneado, sem subscrito
+    cultura: string;
+    fonteCoef: string;
+    rasterPng: string;
+    classes: ClassificacaoQuantis;
+    resumo: ResumoExportacao;
+    equivalentes: EquivalenteFertilizante[];
+  }>;
+
   /** Qualidade do dado de colheita. Ausente = mapa antigo, sem a conferência. */
   cobertura?: {
     pctCobertura: number;
@@ -132,6 +153,11 @@ const municipioUf = (d: { municipio: string; estado: string }): string => {
 // Casas decimais por unidade — kg/ha é inteiro; sacas e toneladas pedem fração.
 const casasDe = (u: Unidade) => (u === 'kg/ha' ? 0 : u === 'sc/ha' ? 1 : 2);
 const emU = (kgha: number, u: Unidade) => fmt(emUnidade(kgha, u), casasDe(u));
+// ATENÇÃO: emU() converte kg/ha. Aplicá-lo a R$/ha dividiria dinheiro por 60 —
+// é o erro quase certo ao copiar paginaQuantil. Dinheiro usa rs().
+// Arredondar um valor negativo minúsculo dá "-0", que não quer dizer nada.
+const semZeroNegativo = (v: number, d: number) => (Math.abs(v) < 0.5 / Math.pow(10, d) ? 0 : v);
+const rs = (v: number, d = 0) => `R$ ${fmt(semZeroNegativo(v, d), d)}`;
 
 function carregarImg(src: string): Promise<HTMLImageElement> {
   return new Promise((res, rej) => {
@@ -619,6 +645,245 @@ async function paginaNdviContinua(doc: JsPDF, d: DadosRelatorioProd, logos: Logo
   rodape(doc, logos);
 }
 
+// ── Página de RENTABILIDADE ─────────────────────────────────────────────────
+
+async function paginaRentabilidade(doc: JsPDF, d: DadosRelatorioProd, logos: Logos): Promise<void> {
+  const r = d.rentabilidade!;
+  const q = r.classes;
+  const mapaW = 168, mapaH = 116, mapaX = M, mapaY = 31;
+
+  const png = await capturarMapaFertilidade({
+    rasterPng: r.rasterPng, bounds: d.bounds, poligono: d.poligono, valores: EMPTY_FC,
+    satelite: d.satelite, corLimite: d.corLimite,
+    larguraPx: Math.round(mapaW * PXMM), alturaPx: Math.round(mapaH * PXMM),
+  });
+
+  cabecalho(doc, d, logos, 'RENTABILIDADE', `${san(r.precoLabel)} · Custo ${rs(r.resumo.custoHa, 2)}/ha`);
+
+  const jpg = await imagemParaPdf(png, mapaW);
+  doc.addImage(jpg.data, jpg.formato, mapaX, mapaY, mapaW, mapaH);
+  doc.setDrawColor(...LINE); doc.setLineWidth(0.4); doc.rect(mapaX, mapaY, mapaW, mapaH, 'S');
+  rosaDosVentos(doc, mapaX + 7, mapaY + mapaH - 7);
+
+  // Tira discreta. O corte ZERO sai destacado: é o número que o mapa está de
+  // fato mostrando — "daqui para baixo, deu prejuízo".
+  const tiraY = mapaY + mapaH + 5, tiraH = 5;
+  const n = q.faixas.length;
+  const larg = mapaW / n;
+  q.faixas.forEach((f, i) => { doc.setFillColor(...hexRgb(f.cor)); doc.rect(mapaX + i * larg, tiraY, larg, tiraH, 'F'); });
+  doc.setDrawColor(...LINE); doc.setLineWidth(0.2); doc.rect(mapaX, tiraY, mapaW, tiraH, 'S');
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(6); doc.setTextColor(...GRAY);
+  doc.text(rs(q.faixas[0].min), mapaX, tiraY + tiraH + 3.5, { align: 'left' });
+  q.breaks.forEach((b, i) => {
+    const x = mapaX + (i + 1) * larg;
+    if (q.iZero === i) {
+      doc.setDrawColor(...NAVY); doc.setLineWidth(0.6);
+      doc.line(x, tiraY - 1.5, x, tiraY + tiraH + 1);
+      doc.setFont('helvetica', 'bold'); doc.setTextColor(...NAVY);
+      doc.text('0 (equilibrio)', x, tiraY + tiraH + 3.5, { align: 'center' });
+      doc.setFont('helvetica', 'normal'); doc.setTextColor(...GRAY);
+    } else {
+      doc.text(rs(b), x, tiraY + tiraH + 3.5, { align: 'center' });
+    }
+  });
+  doc.text(rs(q.faixas[n - 1].max), mapaX + mapaW, tiraY + tiraH + 3.5, { align: 'right' });
+  doc.setFontSize(6.5); doc.setTextColor(...NAVY); doc.setFont('helvetica', 'bold');
+  doc.text('Margem por hectare (R$/ha)', mapaX + mapaW / 2, tiraY - 1.5, { align: 'center' });
+
+  escalaGrafica(doc, mapaX + mapaW / 2, tiraY + tiraH + 10, d.bounds, mapaW);
+
+  const tabX = mapaX + mapaW + 6, tabW = W - M - tabX;
+  let ty = mapaY;
+  doc.setFillColor(...NAVY); doc.rect(tabX, ty, tabW, 7, 'F');
+  doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(7);
+  doc.text('FAIXA', tabX + 8, ty + 4.8);
+  doc.text('R$/ha', tabX + 34, ty + 4.8);
+  doc.text('ha', tabX + tabW - 34, ty + 4.8, { align: 'right' });
+  doc.text('%', tabX + tabW - 20, ty + 4.8, { align: 'right' });
+  doc.text('R$', tabX + tabW - 3, ty + 4.8, { align: 'right' });
+  ty += 7;
+
+  const rowH = 7.6;
+  let somaHa = 0, somaRs = 0;
+  q.faixas.forEach((f, i) => {
+    doc.setDrawColor(...LINE); doc.setLineWidth(0.2); doc.line(tabX, ty + rowH, tabX + tabW, ty + rowH);
+    doc.setFillColor(...hexRgb(f.cor)); doc.roundedRect(tabX + 2, ty + 1.8, 4, 4, 0.6, 0.6, 'F');
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(7); doc.setTextColor(...NAVY);
+    doc.text(clipTexto(doc, san(f.nome), 24), tabX + 8, ty + 5);
+    doc.setFont('helvetica', 'normal'); doc.setTextColor(...GRAY);
+    const txt = n === 1 ? `${rs(f.min)} - ${rs(f.max)}`
+      : i === 0 ? `<= ${rs(f.max)}`
+      : i === n - 1 ? `>= ${rs(f.min)}`
+      : `${rs(f.min)} - ${rs(f.max)}`;
+    doc.text(txt, tabX + 34, ty + 5);
+    doc.setTextColor(...NAVY);
+    doc.text(fmt(f.areaHa, 2), tabX + tabW - 34, ty + 5, { align: 'right' });
+    doc.text(fmt(f.pctArea, 1), tabX + tabW - 20, ty + 5, { align: 'right' });
+    doc.text(fmt(semZeroNegativo(f.somaKg, 0), 0), tabX + tabW - 3, ty + 5, { align: 'right' });
+    somaHa += f.areaHa; somaRs += f.somaKg;
+    ty += rowH;
+  });
+  doc.setDrawColor(...NAVY); doc.setLineWidth(0.5); doc.line(tabX, ty + 0.5, tabX + tabW, ty + 0.5);
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor(...NAVY);
+  doc.text('TOTAL', tabX + 8, ty + 5.4);
+  doc.text(fmt(somaHa, 2), tabX + tabW - 34, ty + 5.4, { align: 'right' });
+  doc.text('100,0', tabX + tabW - 20, ty + 5.4, { align: 'right' });
+  doc.text(fmt(somaRs, 0), tabX + tabW - 3, ty + 5.4, { align: 'right' });
+
+  const ry = ty + 12, rh = 46;
+  quadro(doc, tabX, ry, tabW, rh, 'RESUMO');
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(...GRAY);
+  const R = r.resumo;
+  const eq = R.pontoEquilibrioKgha;
+  const linhas = [
+    `Preco: ${san(r.precoLabel)}  ·  Custo: ${rs(R.custoHa, 2)}/ha`,
+    eq != null
+      ? `Ponto de equilibrio: ${fmt(eq, 0)} kg/ha (${emU(eq, d.unidade)} ${rotuloUnidade(d.unidade)})`
+      : 'Ponto de equilibrio: —',
+    `Receita media: ${rs(R.receitaMediaHa, 2)}/ha  ·  Margem media: ${rs(R.margemMediaHa, 2)}/ha`,
+    `Margem total: ${rs(R.margemTotal, 2)}` + (R.retornoSobreCustoPct != null ? `  ·  Retorno sobre o custo: ${fmt(R.retornoSobreCustoPct, 1)}%` : ''),
+  ];
+  linhas.forEach((t, i) => doc.text(t, tabX + 4, ry + 12 + i * 4.6, { maxWidth: tabW - 8 }));
+  const yPrej = ry + 12 + linhas.length * 4.6;
+  if (R.areaPrejuizoHa > 0) {
+    doc.setFont('helvetica', 'bold'); doc.setTextColor(...VERM);
+    doc.text(`Area abaixo do equilibrio: ${fmt(R.areaPrejuizoHa, 2)} ha (${fmt(R.pctPrejuizo, 1)}%)`, tabX + 4, yPrej);
+  } else {
+    doc.setTextColor(...GRAY);
+    doc.text('Nenhuma area abaixo do ponto de equilibrio.', tabX + 4, yPrej);
+  }
+  // Obrigatória: sem ela o documento sugere que se mediu custo por pixel.
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5); doc.setTextColor(...GRAY);
+  doc.text('Custo informado pelo usuario e UNIFORME no talhao: a variacao do mapa vem so da produtividade.',
+    tabX + 4, ry + rh - 3, { maxWidth: tabW - 8 });
+
+  marcaInvicta(doc, logos.inv, 'esquerda');
+  rodape(doc, logos);
+}
+
+// ── Página de EXPORTAÇÃO (uma por nutriente) ────────────────────────────────
+
+async function paginaExportacao(
+  doc: JsPDF, d: DadosRelatorioProd, e: NonNullable<DadosRelatorioProd['exportacoes']>[number], logos: Logos,
+): Promise<void> {
+  const q = e.classes;
+  // Mapa menor que o das outras páginas: aqui cabem DUAS tabelas na direita.
+  const mapaW = 150, mapaH = 116, mapaX = M, mapaY = 31;
+
+  const png = await capturarMapaFertilidade({
+    rasterPng: e.rasterPng, bounds: d.bounds, poligono: d.poligono, valores: EMPTY_FC,
+    satelite: d.satelite, corLimite: d.corLimite,
+    larguraPx: Math.round(mapaW * PXMM), alturaPx: Math.round(mapaH * PXMM),
+  });
+
+  // O símbolo é o título (mesmo padrão de Fertilidade, onde a sigla manda) e o
+  // assunto desce para o subtítulo: "EXPORTACAO DE K2O" a 22 pt estoura os
+  // 84 mm de TITULO_MAXW e sairia cortado. A fonte do coeficiente vai para o
+  // rodapé do mapa, que tem largura de sobra.
+  cabecalho(doc, d, logos, san(e.simbolo),
+    `Exportacao pela colheita · ${fmt(e.resumo.coefKgPorT, 1)} kg/t de ${san(e.cultura)}`);
+
+  const jpg = await imagemParaPdf(png, mapaW);
+  doc.addImage(jpg.data, jpg.formato, mapaX, mapaY, mapaW, mapaH);
+  doc.setDrawColor(...LINE); doc.setLineWidth(0.4); doc.rect(mapaX, mapaY, mapaW, mapaH, 'S');
+  rosaDosVentos(doc, mapaX + 7, mapaY + mapaH - 7);
+
+  const tiraY = mapaY + mapaH + 5, tiraH = 5;
+  const n = q.faixas.length;
+  const larg = mapaW / n;
+  q.faixas.forEach((f, i) => { doc.setFillColor(...hexRgb(f.cor)); doc.rect(mapaX + i * larg, tiraY, larg, tiraH, 'F'); });
+  doc.setDrawColor(...LINE); doc.setLineWidth(0.2); doc.rect(mapaX, tiraY, mapaW, tiraH, 'S');
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(6); doc.setTextColor(...GRAY);
+  doc.text(fmt(q.faixas[0].min, 1), mapaX, tiraY + tiraH + 3.5, { align: 'left' });
+  q.breaks.forEach((b, i) => doc.text(fmt(b, 1), mapaX + (i + 1) * larg, tiraY + tiraH + 3.5, { align: 'center' }));
+  doc.text(fmt(q.faixas[n - 1].max, 1), mapaX + mapaW, tiraY + tiraH + 3.5, { align: 'right' });
+  doc.setFontSize(6.5); doc.setTextColor(...NAVY); doc.setFont('helvetica', 'bold');
+  doc.text(`${san(e.simbolo)} exportado (kg/ha)`, mapaX + mapaW / 2, tiraY - 1.5, { align: 'center' });
+
+  escalaGrafica(doc, mapaX + mapaW / 2, tiraY + tiraH + 10, d.bounds, mapaW);
+
+  const tabX = mapaX + mapaW + 6, tabW = W - M - tabX;
+
+  let ty = mapaY;
+  doc.setFillColor(...NAVY); doc.rect(tabX, ty, tabW, 7, 'F');
+  doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(6.5);
+  doc.text('FAIXA', tabX + 7, ty + 4.6);
+  doc.text('kg/ha', tabX + 32, ty + 4.6);
+  doc.text('ha', tabX + tabW - 30, ty + 4.6, { align: 'right' });
+  doc.text('%', tabX + tabW - 18, ty + 4.6, { align: 'right' });
+  doc.text('kg', tabX + tabW - 3, ty + 4.6, { align: 'right' });
+  ty += 7;
+  const rowH = 6.4;
+  let somaHa = 0, somaKg = 0;
+  q.faixas.forEach((f, i) => {
+    doc.setDrawColor(...LINE); doc.setLineWidth(0.2); doc.line(tabX, ty + rowH, tabX + tabW, ty + rowH);
+    doc.setFillColor(...hexRgb(f.cor)); doc.roundedRect(tabX + 2, ty + 1.4, 3.2, 3.2, 0.5, 0.5, 'F');
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(6.5); doc.setTextColor(...NAVY);
+    doc.text(clipTexto(doc, san(f.nome), 22), tabX + 7, ty + 4.4);
+    doc.setFont('helvetica', 'normal'); doc.setTextColor(...GRAY);
+    const txt = n === 1 ? `${fmt(f.min, 1)} - ${fmt(f.max, 1)}`
+      : i === 0 ? `<= ${fmt(f.max, 1)}`
+      : i === n - 1 ? `>= ${fmt(f.min, 1)}`
+      : `${fmt(f.min, 1)} - ${fmt(f.max, 1)}`;
+    doc.text(txt, tabX + 32, ty + 4.4);
+    doc.setTextColor(...NAVY);
+    doc.text(fmt(f.areaHa, 2), tabX + tabW - 30, ty + 4.4, { align: 'right' });
+    doc.text(fmt(f.pctArea, 1), tabX + tabW - 18, ty + 4.4, { align: 'right' });
+    doc.text(fmt(f.somaKg, 0), tabX + tabW - 3, ty + 4.4, { align: 'right' });
+    somaHa += f.areaHa; somaKg += f.somaKg;
+    ty += rowH;
+  });
+  doc.setDrawColor(...NAVY); doc.setLineWidth(0.5); doc.line(tabX, ty + 0.5, tabX + tabW, ty + 0.5);
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(7); doc.setTextColor(...NAVY);
+  doc.text('TOTAL', tabX + 7, ty + 5);
+  doc.text(fmt(somaHa, 2), tabX + tabW - 30, ty + 5, { align: 'right' });
+  doc.text('100,0', tabX + tabW - 18, ty + 5, { align: 'right' });
+  doc.text(fmt(somaKg, 0), tabX + tabW - 3, ty + 5, { align: 'right' });
+
+  const eqY = ty + 10;
+  const eqH = Math.min(60, 16 + Math.min(6, e.equivalentes.length) * 5.6 + 10);
+  quadro(doc, tabX, eqY, tabW, eqH, 'EQUIVALENTES EM FERTILIZANTE');
+  let qy = eqY + 10;
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(5.8); doc.setTextColor(...GRAY);
+  doc.text('PRODUTO', tabX + 4, qy);
+  doc.text('%', tabX + 52, qy, { align: 'right' });
+  doc.text('kg/ha', tabX + 68, qy, { align: 'right' });
+  doc.text('TOTAL (t)', tabX + 90, qy, { align: 'right' });
+  doc.text('R$/ha', tabX + tabW - 4, qy, { align: 'right' });
+  qy += 4.2;
+  for (const x of e.equivalentes.slice(0, 6)) {
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(6.2); doc.setTextColor(...NAVY);
+    doc.text(clipTexto(doc, san(x.nome), 46), tabX + 4, qy);
+    doc.setTextColor(...GRAY);
+    doc.text(fmt(x.garantiaPct, 1), tabX + 52, qy, { align: 'right' });
+    doc.setTextColor(...NAVY);
+    doc.text(fmt(x.doseMediaKgHa, 1), tabX + 68, qy, { align: 'right' });
+    doc.text(fmt(x.totalT, 1), tabX + 90, qy, { align: 'right' });
+    // Preço ausente sai como travessão. Nunca 0,00 — 0 diria "de graça".
+    doc.setTextColor(...GRAY);
+    doc.text(x.custoHa != null ? fmt(x.custoHa, 2) : '—', tabX + tabW - 4, qy, { align: 'right' });
+    qy += 5.6;
+  }
+  if (e.equivalentes.length > 6) {
+    doc.setFont('helvetica', 'italic'); doc.setFontSize(5.5); doc.setTextColor(...GRAY);
+    doc.text(`+ ${e.equivalentes.length - 6} produto(s) nao listado(s)`, tabX + 4, qy);
+  }
+  // Obrigatória: sem ela a tabela vira prescrição, e não é.
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(5.8); doc.setTextColor(...VERM);
+  doc.text('Equivalencia de REPOSICAO da exportacao — nao e recomendacao de adubacao: nao considera teor do solo, resposta da cultura nem eficiencia do produto.',
+    tabX + 4, eqY + eqH - 6, { maxWidth: tabW - 8 });
+
+  // ABAIXO da escala gráfica: em tiraY+tiraH+16 esta linha caía por cima dos
+  // rótulos dela (a escala ocupa +10 a +17,5).
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(...GRAY);
+  doc.text(`Exportacao media: ${fmt(e.resumo.mediaKgHa, 1)} kg/ha de ${san(e.simbolo)}  ·  Total: ${fmt(e.resumo.totalKg / 1000, 2)} t`,
+    mapaX, tiraY + tiraH + 19, { maxWidth: mapaW });
+  doc.setFontSize(6); doc.text(`Coeficiente: ${san(e.fonteCoef)}`, mapaX, tiraY + tiraH + 23, { maxWidth: mapaW });
+
+  marcaInvicta(doc, logos.inv, 'esquerda');
+  rodape(doc, logos);
+}
+
 // ── Página 4: resumo analítico ───────────────────────────────────────────────
 
 // Bloco A — estatística do raster + relatório da limpeza.
@@ -1045,6 +1310,12 @@ export function validarProd(d: DadosRelatorioProd): string | null {
   if (!d.rasterAbsolutoPng) return 'Mapa absoluto nao pode ser colorido.';
   if (!d.quantis || !d.quantis.faixas.length) return 'Nao foi possivel calcular as faixas por quantil deste mapa.';
   if (!d.rasterQuantilPng) return 'Mapa por quantil nao pode ser colorido.';
+  // As seções opcionais só são validadas quando foram PEDIDAS.
+  if (d.rentabilidade && (!d.rentabilidade.rasterPng || !d.rentabilidade.classes.faixas.length))
+    return 'Nao foi possivel montar o mapa de rentabilidade.';
+  for (const e of d.exportacoes ?? []) {
+    if (!e.rasterPng || !e.classes.faixas.length) return `Nao foi possivel montar o mapa de exportacao de ${e.simbolo}.`;
+  }
   return null;
 }
 
@@ -1063,6 +1334,10 @@ export async function renderProdutividadeNoDoc(
   };
   await pag(() => paginaAbsoluta(doc, d, logos));
   await pag(() => paginaQuantil(doc, d, logos));
+  // Rentabilidade e exportação ficam JUNTO da narrativa de produtividade; NDVI
+  // e resumo analítico continuam fechando o documento como bloco de análise.
+  if (d.rentabilidade) await pag(() => paginaRentabilidade(doc, d, logos));
+  for (const e of d.exportacoes ?? []) await pag(() => paginaExportacao(doc, d, e, logos));
   if (d.ndvi) await pag(() => paginaNdvi(doc, d, logos));
   await pag(() => paginaResumo(doc, d, logos));
 }
