@@ -29,7 +29,12 @@ const talhoesDaFazenda = (fazendaId: string) => getTalhoes().filter(t => t.fazen
 
 // Anos com dado na fazenda (união recomendação + satélite), mais recente primeiro.
 export async function anosDaFazenda(fazendaId: string): Promise<AnoFazenda[]> {
-  const ids = talhoesDaFazenda(fazendaId).map(t => t.id);
+  return anosDeTalhoes(talhoesDaFazenda(fazendaId).map(t => t.id));
+}
+
+// A mesma descoberta para uma LISTA QUALQUER de talhões — é o que o resumo geral
+// usa no escopo do PRODUTOR, onde os talhões vêm de várias fazendas.
+export async function anosDeTalhoes(ids: string[]): Promise<AnoFazenda[]> {
   if (ids.length === 0) return [];
 
   const [safras, listasNdvi] = await Promise.all([

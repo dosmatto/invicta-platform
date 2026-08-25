@@ -65,7 +65,7 @@ export async function listarCenarios(talhaoId: string, safra?: string): Promise<
 // um mapa já processado (mesmo critério de construirNumDe, em relatorioCenarios).
 // O estilo é clonado UMA vez por equação — as doses passam a compartilhar esse
 // clone, e nada a jusante toca no objeto que veio da Biblioteca.
-function rotulosAtuaisDasEquacoes(): Map<string, RotulosEquacao<EstiloRecomendacao>> {
+export function rotulosAtuaisDasEquacoes(): Map<string, RotulosEquacao<EstiloRecomendacao>> {
   const mapa = new Map<string, RotulosEquacao<EstiloRecomendacao>>();
   for (const it of bibListar<ConteudoEquacao>('equacoes')) {
     const e = it.conteudo?.estilo;
@@ -77,6 +77,18 @@ function rotulosAtuaisDasEquacoes(): Map<string, RotulosEquacao<EstiloRecomendac
     });
   }
   return mapa;
+}
+
+// Re-hidrata SÓ OS RÓTULOS (nome/produto/estilo) das doses a partir da equação
+// atual, SEM descomprimir grid nenhum — `reidratarDoses` não toca em `grid`.
+// É o que o RESUMO GERAL precisa: ele não desenha mapa, e gunzipar o grid de
+// cada dose, de cada talhão, de cada ano escolhido inviabilizaria o multi-ano.
+// Passe `rotulos` pré-montado quando for hidratar muitos cenários — assim a
+// Biblioteca é lida UMA vez, não uma vez por cenário.
+export function hidratarRotulos(
+  cen: Cenario, rotulos?: Map<string, RotulosEquacao<EstiloRecomendacao>>,
+): Cenario {
+  return { ...cen, doses: reidratarDoses(cen.doses, rotulos ?? rotulosAtuaisDasEquacoes()) };
 }
 
 // Descomprime os grids das doses p/ visualizar/recolorir ao reabrir, e re-hidrata

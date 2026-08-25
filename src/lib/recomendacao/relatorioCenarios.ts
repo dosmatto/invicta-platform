@@ -28,20 +28,20 @@ import { coberturaDoGrid } from './cobertura';
 export const ordenarTalhoesAlfa = <T extends { nome?: string }>(arr: T[]): T[] =>
   [...arr].sort((a, b) => (a.nome ?? '').localeCompare(b.nome ?? '', 'pt-BR', { numeric: true }));
 
-type RGB = [number, number, number];
-const NAVY: RGB = [13, 33, 64];
-const GREEN: RGB = [31, 90, 26];
+export type RGB = [number, number, number];
+export const NAVY: RGB = [13, 33, 64];
+export const GREEN: RGB = [31, 90, 26];
 const GRAY: RGB = [100, 116, 139];
 const LINE: RGB = [210, 219, 232];
-const fmt = (v: number, d = 0) => v.toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d });
+export const fmt = (v: number, d = 0) => v.toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d });
 const SUB = '₀₁₂₃₄₅₆₇₈₉';
-const san = (s: string | null | undefined): string => (s ?? '')
+export const san = (s: string | null | undefined): string => (s ?? '')
   .replace(/[₀₁₂₃₄₅₆₇₈₉]/g, c => '0123456789'[SUB.indexOf(c)]).replace(/[^\x00-\xFF]/g, '');
 
-function carregarImg(src: string): Promise<HTMLImageElement> {
+export function carregarImg(src: string): Promise<HTMLImageElement> {
   return new Promise((res, rej) => { const img = new Image(); img.crossOrigin = 'anonymous'; img.onload = () => res(img); img.onerror = () => rej(new Error('img')); img.src = src; });
 }
-const chaveProduto = (d: DoseCalculada) => d.produto || d.nomeEquacao;
+export const chaveProduto = (d: DoseCalculada) => d.produto || d.nomeEquacao;
 
 export async function gerarPdfComparador(cenarios: Cenario[]): Promise<void> {
   if (cenarios.length < 2) throw new Error('Selecione ao menos 2 cenários.');
@@ -400,7 +400,7 @@ function ctxDoTalhao(tId: string, safra: string): Ctx | null {
 
 // nº do cadastro (janela de Equações, ConteudoEquacao.ordem) p/ ordenar/rotular
 // as doses. Doses de aplicação-parcelada têm equacaoId "<id>__apN" → usa o id BASE.
-function construirNumDe(): (equacaoId: string) => number | undefined {
+export function construirNumDe(): (equacaoId: string) => number | undefined {
   const ordem = new Map<string, number>();
   for (const it of bibListar<ConteudoEquacao>('equacoes')) {
     if (typeof it.conteudo?.ordem === 'number') ordem.set(it.id, it.conteudo.ordem);
@@ -408,10 +408,10 @@ function construirNumDe(): (equacaoId: string) => number | undefined {
   return (equacaoId: string) => ordem.get(equacaoId) ?? ordem.get(equacaoId.split('__ap')[0]);
 }
 
-interface ItemDose { cen: Cenario; d: DoseCalculada; numero: number; }
+export interface ItemDose { cen: Cenario; d: DoseCalculada; numero: number; }
 // Achata as doses de TODOS os cenários, opcionalmente só as marcadas com ★
 // (usar), e ordena GLOBALMENTE pelo nº do cadastro (01, 02, … 10, 23…).
-function achatarDoses(cenarios: Cenario[], numDe: (id: string) => number | undefined, somenteUsar: boolean): ItemDose[] {
+export function achatarDoses(cenarios: Cenario[], numDe: (id: string) => number | undefined, somenteUsar: boolean): ItemDose[] {
   const itens = cenarios.flatMap((cen, ci) =>
     cen.doses.filter(d => !somenteUsar || d.usar)
       .map((d, di) => ({ cen, d, numero: numDe(d.equacaoId) ?? 1e9 + ci * 1000 + di })));
@@ -420,7 +420,7 @@ function achatarDoses(cenarios: Cenario[], numDe: (id: string) => number | undef
 }
 
 // ── Cabeçalho navy compacto + rodapé + mini-tabela (reuso nos resumos) ──
-function cabecalhoNavy(doc: JsPDF, logo: HTMLImageElement | null, campos: [string, string][]): number {
+export function cabecalhoNavy(doc: JsPDF, logo: HTMLImageElement | null, campos: [string, string][]): number {
   const W = 297, M = 6;
   doc.setFillColor(...NAVY); doc.rect(0, 0, W, 16, 'F');
   if (logo) { const h = 9.5, w = h * (logo.naturalWidth / logo.naturalHeight); doc.addImage(logo, 'PNG', M, 3.2, w, h); }
@@ -432,16 +432,16 @@ function cabecalhoNavy(doc: JsPDF, logo: HTMLImageElement | null, campos: [strin
   }
   return 22;
 }
-function rodapeNavy(doc: JsPDF, logo: HTMLImageElement | null, txt: string) {
+export function rodapeNavy(doc: JsPDF, logo: HTMLImageElement | null, txt: string) {
   const W = 297, H = 210, M = 6;
   doc.setFillColor(...NAVY); doc.rect(0, H - 9, W, 9, 'F');
   if (logo) { const h = 4.5, w = h * (logo.naturalWidth / logo.naturalHeight); doc.addImage(logo, 'PNG', M, H - 7, w, h); }
   doc.setFontSize(7); doc.setTextColor(127, 163, 207); doc.setFont('helvetica', 'normal'); doc.text(txt, W - M, H - 3.5, { align: 'right' });
 }
-interface Col { titulo: string; w: number; align?: 'l' | 'r' | 'c'; }
+export interface Col { titulo: string; w: number; align?: 'l' | 'r' | 'c'; }
 const alinhamento = (a?: 'l' | 'r' | 'c'): 'left' | 'right' | 'center' => a === 'r' ? 'right' : a === 'c' ? 'center' : 'left';
 const larguraCols = (cols: Col[]) => cols.reduce((s, c) => s + c.w, 0);
-function cabTabela(doc: JsPDF, x0: number, y: number, cols: Col[]): number {
+export function cabTabela(doc: JsPDF, x0: number, y: number, cols: Col[]): number {
   doc.setFontSize(7); doc.setTextColor(...GRAY); doc.setFont('helvetica', 'bold');
   let cx = x0;
   for (const c of cols) {
@@ -452,7 +452,7 @@ function cabTabela(doc: JsPDF, x0: number, y: number, cols: Col[]): number {
   y += 1.5; doc.setDrawColor(...LINE); doc.setLineWidth(0.2); doc.line(x0, y, x0 + larguraCols(cols), y);
   return y + 3.6;
 }
-function linhaTabela(doc: JsPDF, x0: number, y: number, cols: Col[], cels: string[], opts?: { bold?: boolean; fill?: boolean; cor?: RGB; fontSize?: number }): number {
+export function linhaTabela(doc: JsPDF, x0: number, y: number, cols: Col[], cels: string[], opts?: { bold?: boolean; fill?: boolean; cor?: RGB; fontSize?: number }): number {
   const w = larguraCols(cols);
   if (opts?.fill) { doc.setFillColor(238, 246, 233); doc.rect(x0, y - 3.1, w, 4.6, 'F'); }
   doc.setFontSize(opts?.fontSize ?? 8); doc.setFont('helvetica', opts?.bold ? 'bold' : 'normal'); doc.setTextColor(...(opts?.cor ?? [40, 48, 58] as RGB));

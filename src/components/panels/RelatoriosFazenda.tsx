@@ -14,6 +14,8 @@ import { legendasDoModulo } from '@/components/talhao/SeletorLegenda';
 import { respeitarPadraoHomonima } from '@/lib/legendas';
 import type { Legenda } from '@/lib/legendas';
 import { FileDown, Loader2, Satellite, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react';
+import { getTalhoes, getFazendas, getClientes } from '@/lib/store';
+import { ResumoGeralRecomendacoes } from './ResumoGeralRecomendacoes';
 
 const fmtData = (s: string) => new Date(s + 'T00:00:00').toLocaleDateString('pt-BR');
 
@@ -32,6 +34,19 @@ export function RelatoriosFazenda({ fazendaId }: { fazendaId: string }) {
   const [datasSel, setDatasSel] = useState<Set<string>>(new Set());
   const [gerandoSat, setGerandoSat] = useState(false);
   const [progresso, setProgresso] = useState<{ feito: number; total: number; nome: string } | null>(null);
+
+  // Identificação e talhões da fazenda — o resumo geral trabalha sobre uma LISTA
+  // de talhões (o mesmo componente serve o produtor), não sobre o fazendaId.
+  const talhoesAlvo = useMemo(() => {
+    const faz = getFazendas().find(f => f.id === fazendaId) ?? null;
+    return getTalhoes().filter(t => t.fazendaId === fazendaId)
+      .map(t => ({ id: t.id, nome: t.nome, areaHa: t.areaHa ?? 0, fazenda: faz?.nome ?? '' }));
+  }, [fazendaId]);
+  const ident = useMemo(() => {
+    const faz = getFazendas().find(f => f.id === fazendaId) ?? null;
+    const cli = faz ? getClientes().find(c => c.id === faz.clienteId) ?? null : null;
+    return { fazenda: faz?.nome ?? '', sigla: faz?.sigla ?? null, produtor: cli?.nome ?? '' };
+  }, [fazendaId]);
 
   // Anos com dado (recomendação e/ou satélite), mais recente primeiro.
   // O componente é remontado por fazenda (key no pai), então o estado já nasce
@@ -166,6 +181,18 @@ export function RelatoriosFazenda({ fazendaId }: { fazendaId: string }) {
           Excel
         </button>
       </div>
+
+      {/* Resumo geral (vários anos) — não usa o seletor de Ano acima: tem a sua
+          própria seleção múltipla, porque a pergunta dele é de compra e envio,
+          não de conferência de um ano. */}
+      <ResumoGeralRecomendacoes
+        key={fazendaId}
+        escopo="fazenda"
+        produtor={ident.produtor}
+        fazenda={ident.fazenda}
+        siglaFazenda={ident.sigla}
+        talhoes={talhoesAlvo}
+      />
 
       {/* Satélite (NDVI / NDRE / SAVI…) */}
       <button onClick={alternarPainelSat} disabled={ocupado || !ano?.temSatelite}

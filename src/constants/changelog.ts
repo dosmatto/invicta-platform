@@ -1,5 +1,15 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.74.0': [
+    'RESUMO GERAL DAS RECOMENDAÇÕES MARCADAS — novo relatório que responde à pergunta da COMPRA e do ENVIO, não à da conferência: quanto de cada produto eu preciso, talhão a talhão, somando os anos que eu escolher, e quais recomendações vou ter de mandar para o campo. Sai em PDF e em Excel.',
+    'ESCOLHA VÁRIOS ANOS DE UMA VEZ. Até aqui o relatório de recomendação da fazenda resolvia UM ano por vez, e quem queria o consolidado de duas safras somava na mão. Agora os anos com recomendação aparecem como botões e você marca quantos quiser; cada ano vira um bloco com o seu subtotal e, no fim, entra o TOTAL GERAL somando os anos escolhidos.',
+    'TABELA EM MATRIZ: uma linha por talhão e UMA COLUNA POR PRODUTO, com a quantidade total na célula — o formato que se lê de bater o olho e que o Excel soma. Talhão que não recebeu determinado produto fica com a célula VAZIA, não com zero: zero diria que a conta deu zero, e não que não houve aplicação.',
+    'FILTRO DE PRODUTOS: depois de carregar, aparecem os produtos encontrados e você marca só os que interessam. O filtro NÃO volta à nuvem — o resumo é remontado na hora sobre o que já veio —, e um talhão que só tinha produto desmarcado sai da tabela em vez de virar uma linha de zeros.',
+    'RECOMENDAÇÕES A ENVIAR: fechando o relatório, a lista de conferência do despacho — cada recomendação com o ano, o produto, a quantidade total e OS TALHÕES em que ela é usada ("03 - Calcário taxa variável → IGEFI 01, 02, 05"). É por ela que se sabe quais arquivos mandar e para onde, sem abrir talhão por talhão.',
+    'DOIS ESCOPOS, SEPARADOS: na FAZENDA (aba Relatórios, abaixo do relatório de recomendação que já existia) e no PRODUTOR (aba Relatórios, nova), este consolidando todas as fazendas com uma coluna Fazenda a mais.',
+    'SEM MAPAS, DE PROPÓSITO — e é isso que o torna viável em vários anos: o resumo não descomprime nenhum mapa de dose (só lê nome, produto, quantidade e custo), e faz UMA consulta por talhão em vez de uma por talhão por ano. Quem quer os mapas continua no "Recomendação (PDF)".',
+    'Com muitos produtos a matriz não caberia na folha: em vez de encolher a fonte até ninguém ler, a tabela do ano se repete em grupos de produtos, mantendo talhão, área e investimento. 20 testes novos (npm run teste:resumo-geral) travam as contas — inclusive a que mais engana: a ÁREA do talhão conta uma vez por ano e uma vez no total geral, nunca uma vez por recomendação.',
+  ],
   '2.73.3': [
     'MAPA DE COLHEITA SALVO AGORA SE EDITA. Botao de lapis na linha do mapa, em "Mapas salvos": cultura, epoca de cultivo, data da colheita, data do plantio e unidade. Ate agora, um mapa salvo com a cultura errada so tinha um caminho — apagar e reprocessar tudo.',
     'TROCAR A CULTURA TROCA A LEGENDA, e com ela as cores do mapa e do relatorio: a legenda e escolhida na hora de desenhar, nao gravada no raster. Entao corrigir "Soja" para "Milho" ja acerta as faixas na tela e no PDF, sem reprocessar.',

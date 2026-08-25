@@ -6,6 +6,7 @@ import { getClientes, getFazendas, getTalhoes, saveFazenda, updateCliente, delet
 import { getUsuarios, statusDe, categoriaDe } from '@/lib/iam/usuarios';
 import { ChevronLeft, Plus, Building2, Phone, Mail, Edit2, Save, X, Trash2, Pencil, UserCog } from 'lucide-react';
 import { PanelSection, PanelButton, MockIndicator } from './_shared';
+import { ResumoGeralRecomendacoes } from './ResumoGeralRecomendacoes';
 
 const ESTADOS_BR = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'];
 const editInput = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
@@ -22,7 +23,7 @@ function FieldEdit({ label, value, onChange }: { label: string; value: string; o
 
 export function ProdutorDetailPanel() {
   const { nav, setNav, setActivePanel } = useApp();
-  const [tab, setTab] = useState<'fazendas' | 'dados'>('fazendas');
+  const [tab, setTab] = useState<'fazendas' | 'relatorios' | 'dados'>('fazendas');
   const [cliente, setCliente] = useState<Cliente | null>(null);
   const [fazendas, setFazendas] = useState<Fazenda[]>([]);
   const [mostraForm, setMostraForm] = useState(false);
@@ -39,6 +40,16 @@ export function ProdutorDetailPanel() {
   const [renomeando, setRenomeando] = useState(false);
   const [nomeTemp, setNomeTemp] = useState('');
   const [areasFaz, setAreasFaz] = useState<Record<string, number>>({});
+
+  // Todos os talhões do produtor (de todas as fazendas) — base do resumo geral.
+  // A fazenda viaja no próprio talhão porque a tabela do escopo produtor abre uma
+  // coluna para ela.
+  const talhoesDoProdutor = useMemo(() => {
+    const nomeFaz = new Map(fazendas.map(f => [f.id, f.nome]));
+    return getTalhoes()
+      .filter(t => nomeFaz.has(t.fazendaId))
+      .map(t => ({ id: t.id, nome: t.nome, areaHa: t.areaHa ?? 0, fazenda: nomeFaz.get(t.fazendaId) ?? '' }));
+  }, [fazendas]);
 
   function iniciarEdicaoCliente() { if (cliente) { setEditForm({ ...cliente }); setEditando(true); } }
   function salvarRenomeProdutor() {
@@ -153,8 +164,9 @@ export function ProdutorDetailPanel() {
       {/* Tabs */}
       <div className="flex flex-shrink-0" style={{ borderBottom: '1px solid #1a3a6b' }}>
         {[
-          { id: 'fazendas', label: `Fazendas (${fazendas.length})` },
-          { id: 'dados',    label: 'Dados' },
+          { id: 'fazendas',   label: `Fazendas (${fazendas.length})` },
+          { id: 'relatorios', label: 'Relatórios' },
+          { id: 'dados',      label: 'Dados' },
         ].map(t => (
           <button key={t.id} onClick={() => setTab(t.id as typeof tab)}
             className="flex-1 py-2.5 text-xs font-semibold"
@@ -273,6 +285,20 @@ export function ProdutorDetailPanel() {
               </>
             )}
           </>
+        )}
+
+        {tab === 'relatorios' && (
+          <div className="p-4">
+            {fazendas.length === 0
+              ? <p className="text-[11px]" style={{ color: '#64748b' }}>Cadastre uma fazenda para gerar o resumo.</p>
+              : <ResumoGeralRecomendacoes
+                  key={cliente?.id ?? ''}
+                  escopo="produtor"
+                  produtor={cliente?.nome ?? ''}
+                  nFazendas={fazendas.length}
+                  talhoes={talhoesDoProdutor}
+                />}
+          </div>
         )}
 
         {tab === 'dados' && (editando ? (

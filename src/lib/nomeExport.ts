@@ -92,6 +92,7 @@ export type TipoExport =
   | 'ZONAS'     // zonas de manejo (PDF/SHP/KML)
   | 'NDVI'      // mapas de satélite
   | 'RECOM'     // recomendação / cenários
+  | 'RESUMO'    // resumo geral das recomendações marcadas (fazenda ou produtor, vários anos)
   | 'GRADE'     // grade de amostragem
   | 'ETIQ'      // etiquetas das amostras
   | 'CAMPO'     // caderno de campo / registros

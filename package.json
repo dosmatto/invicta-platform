@@ -36,6 +36,7 @@
     "teste:legendas": "node scripts/teste-legendas-ordem.mjs",
     "teste:convite-regras": "node scripts/teste-convite-regras.mjs",
     "teste:prescricao": "node scripts/teste-prescricao.mjs",
+    "teste:resumo-geral": "node scripts/teste-resumo-geral.mjs",
     "teste:rls": "node scripts/teste-rls.mjs",
     "teste:relatorio-grade": "node scripts/teste-relatorio-grade.mjs",
     "teste:zonas-import": "node scripts/teste-zonas-import.mjs",
