@@ -22,9 +22,15 @@ import { colorirGrid, colorirGridComLegenda, colorirGridPorQuantis } from '@/lib
 import type { ClassificacaoQuantis } from '@/lib/quantis';
 import { rasterizarPontos5, type Classe5 } from '@/lib/condutividade';
 import {
+  coberturaEmGrid, coberturaEmPoligono, recortarPorCobertura, nivelCobertura,
+  RAIO_COBERTURA_PADRAO, type Cobertura,
+} from '@/lib/cobertura';
+import { rasterizarCobertura } from '@/lib/coberturaRender';
+import { pontoEmGeometria } from '@/lib/meap/cv';
+import {
   parseCsvTexto, autoColunas, pontosDeCsv, lerShapefilePontos, pontosDeGeojson,
   processarColheita, statsDoGrid, legendaDaCultura, emUnidade, rotuloUnidade, sugerirFiltroBruto, quantisDaProdutividade,
-  SACA_KG, PARAMS_COLHEITA_PADRAO,
+  SACA_KG, PARAMS_COLHEITA_PADRAO, f32ParaB64,
   type PontoColheita, type Unidade, type StatsProd, type CsvParsed, type ParamsColheita, type RelatorioColheita,
 } from '@/lib/produtividade';
 import { cloudSalvarMapa, cloudCarregarMapasPorPrefixo, cloudPodeGravar } from '@/lib/cloud';
@@ -116,6 +122,14 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
   const [relatorio, setRelatorio] = useState<RelatorioColheita | null>(null);
   const [fresco, setFresco] = useState(false);
   const [verBrutos, setVerBrutos] = useState(false);   // preview dos pontos crus em 5 classes
+  // Conferência de cobertura ANTES de processar: o IDW preenche o polígono
+  // inteiro, então um talhão colhido pela metade vira um mapa inteiro e
+  // plausível. Aqui a falta aparece como falta, antes dos 30–60 s do backend.
+  const [raioCob, setRaioCob] = useState(RAIO_COBERTURA_PADRAO);
+  const [recortarSemDados, setRecortarSemDados] = useState(true);
+  const [verCobertura, setVerCobertura] = useState(false);
+  const [cobPrevia, setCobPrevia] = useState<Cobertura | null>(null);
+  const [cobFinal, setCobFinal] = useState<Cobertura | null>(null);
   const [classesBrutos, setClassesBrutos] = useState<Classe5[] | null>(null);
   // Escala do mapa: 'absoluta' = faixas fixas da cultura (a lavoura é boa?);
   // 'quantil' = 5 faixas de área igual, cortes vindos dos próprios dados
@@ -194,6 +208,10 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
 
   // Overlay no mapa: preview dos pontos BRUTOS em 5 classes (quintis) OU o grid processado.
   useEffect(() => {
+    if (verCobertura && cobPrevia && legenda && pontosBrutos.length) {
+      const img = rasterizarCobertura(pontosBrutos, cobPrevia, legenda.classes.map(corCheiaDaClasse));
+      if (img) { setFertilidadeOverlay({ url: img.dataUrl, coordinates: coordsFromBounds(img.bounds), opacity: 1 }); setFertilidadeLabels(null); setClassesBrutos(null); return; }
+    }
     if (verBrutos && legenda && pontosBrutos.length) {
       const { dominio, stops } = rampaDaLegenda(legenda);
       const img = rasterizarPontos5(pontosBrutos, dominio, stops);
@@ -211,7 +229,15 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
     if (!url) { setFertilidadeOverlay(null); return; }
     setFertilidadeOverlay({ url, coordinates: coordsFromBounds(res.bounds), opacity: 1 });
     setFertilidadeLabels(null);
-  }, [verBrutos, pontosBrutos, res, legenda, modoMapa, quantis, setFertilidadeOverlay, setFertilidadeLabels]);
+  }, [verBrutos, verCobertura, cobPrevia, pontosBrutos, res, legenda, modoMapa, quantis, setFertilidadeOverlay, setFertilidadeLabels]);
+
+  // Cobertura estimada sobre o POLÍGONO — não depende do backend.
+  useEffect(() => {
+    if (!verCobertura || !poligono || !pontosBrutos.length) { setCobPrevia(null); return; }
+    try {
+      setCobPrevia(coberturaEmPoligono(poligono, pontosBrutos, pixelM, raioCob, pontoEmGeometria));
+    } catch (e) { console.warn('[prod] cobertura falhou:', e); setCobPrevia(null); }
+  }, [verCobertura, poligono, pontosBrutos, pixelM, raioCob]);
 
   // Auto-sugere o filtro bruto pelos dados (até o usuário editar manualmente).
   useEffect(() => {
@@ -234,9 +260,25 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
     try {
       const mr = parseFloat(mediaReal);
       const r = await processarColheita({ machines, cleaning: clean, poligono, pixelM, mediaRealKgha: isFinite(mr) && mr > 0 ? paraKgha(mr, unidade) : 0, legenda: leg });
+
+      // COBERTURA sobre o grid que voltou — mesma malha, então a máscara casa
+      // célula a célula. Recortar AQUI, antes de statsDoGrid, faz área,
+      // produção, quantis e cores saírem todos do mesmo raster: o grid é a
+      // fonte da verdade e ninguém mais precisa saber do recorte.
+      let cob: Cobertura | null = null;
+      if (r.grid?.b64) {
+        try {
+          const dec = decodeGrid(r.grid);
+          cob = coberturaEmGrid(dec.valores, dec.rows, dec.cols, r.bounds, pontosBrutos, r.stats?.pixel_m ?? pixelM, raioCob);
+          if (recortarSemDados && cob.areaSemDadoHa > 0) {
+            r.grid = { ...r.grid, b64: f32ParaB64(recortarPorCobertura(dec.valores, cob)) };
+          }
+        } catch (e) { console.warn('[prod] cobertura falhou:', e); cob = null; }
+      }
+
       const st = statsDoGrid(r, r.relatorio.n_usados);
       if (!st) throw new Error('Não foi possível calcular o raster.');
-      setRes(r); setStats(st); setLegenda(leg); setRelatorio(r.relatorio); setFresco(true); setEstado('pronto');
+      setRes(r); setStats(st); setLegenda(leg); setRelatorio(r.relatorio); setCobFinal(cob); setFresco(true); setEstado('pronto');
     } catch (e) { setEstado('erro'); setErro(e instanceof Error ? e.message : 'Falha ao processar.'); }
   }
 
@@ -254,6 +296,10 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
       bounds: res.bounds,
       stats: { nPontos: nPontosTotal, nUsados: stats.nUsados, areaHa: stats.areaHa, producaoTotalKg: stats.producaoTotalKg, mediaKgha: stats.mediaKgha, minKgha: stats.minKgha, maxKgha: stats.maxKgha, cv: stats.cv },
       arquivo: maqs.map(m => m.arquivo).join(', '),
+      cobertura: cobFinal ? {
+        pctCobertura: cobFinal.pctCobertura, areaSemDadoHa: cobFinal.areaSemDadoHa,
+        maiorVazioHa: cobFinal.maiorVazioHa, raioM: cobFinal.raioM, recortado: recortarSemDados,
+      } : undefined,
     });
     const gz = res.grid ? await comprimirGrid(res.grid) : undefined;
     cloudSalvarMapa(idProd(nav.talhaoId, rec.id), { resp: { bounds: res.bounds, grid: gz, stats: res.stats }, criadoEm: rec.criadoEm });
@@ -270,6 +316,7 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
     setRes({ bounds: r.bounds, grid: r.grid, png: '', stats: { n: 0, modelo: 'idw', min: v.stats.minKgha, max: v.stats.maxKgha, nx: 0, ny: 0, pixel_m: v.params.pixelM, rmse: null, variograma: null } });
     setStats({ nUsados: v.stats.nUsados, areaHa: v.stats.areaHa, producaoTotalKg: v.stats.producaoTotalKg, mediaKgha: v.stats.mediaKgha, minKgha: v.stats.minKgha, maxKgha: v.stats.maxKgha, cv: v.stats.cv, histograma: [] });
     setUnidade(v.unidade); setFresco(false);
+    setCobFinal(null);   // a máscara não é arquivada; os números vêm de v.cobertura
   }
   // ── Relatório PDF ───────────────────────────────────────────────────────────
   // Serve os dois botões: sem argumento usa o mapa em tela; com `v`, uma versão
@@ -277,8 +324,8 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
   async function exportarPdf(v?: MapaProdutividade) {
     if (!nav.talhaoId || !poligono) { setErroPdf('Limite do talhão não encontrado — abra o talhão no mapa.'); return; }
     const fonte = v
-      ? (() => { const r = rasters[v.id]; return r ? { grid: r.grid, bounds: r.bounds, pixelM: v.params.pixelM, cultura: v.cultura, unidade: v.unidade, dataRef: v.dataReferencia ?? v.criadoEm.slice(0, 10), stats: { nUsados: v.stats.nUsados, areaHa: v.stats.areaHa, producaoTotalKg: v.stats.producaoTotalKg, mediaKgha: v.stats.mediaKgha, minKgha: v.stats.minKgha, maxKgha: v.stats.maxKgha, cv: v.stats.cv, histograma: [] } as StatsProd, limpeza: null as RelatorioColheita | null, cleaningSalvo: v.cleaning, nPontos: v.stats.nPontos, versao: v.versao, nMaquinas: v.nMaquinas, mediaRealKgha: v.mediaRealKgha } : null; })()
-      : (res?.grid && stats ? { grid: res.grid, bounds: res.bounds, pixelM: res.stats?.pixel_m ?? pixelM, cultura, unidade, dataRef, stats, limpeza: relatorio, cleaningSalvo: clean as unknown as Record<string, number | boolean>, nPontos: nPontosTotal, versao: null, nMaquinas: maqs.length, mediaRealKgha: null } : null);
+      ? (() => { const r = rasters[v.id]; return r ? { grid: r.grid, bounds: r.bounds, pixelM: v.params.pixelM, cultura: v.cultura, unidade: v.unidade, dataRef: v.dataReferencia ?? v.criadoEm.slice(0, 10), stats: { nUsados: v.stats.nUsados, areaHa: v.stats.areaHa, producaoTotalKg: v.stats.producaoTotalKg, mediaKgha: v.stats.mediaKgha, minKgha: v.stats.minKgha, maxKgha: v.stats.maxKgha, cv: v.stats.cv, histograma: [] } as StatsProd, limpeza: null as RelatorioColheita | null, cleaningSalvo: v.cleaning, nPontos: v.stats.nPontos, versao: v.versao, nMaquinas: v.nMaquinas, mediaRealKgha: v.mediaRealKgha, cobertura: v.cobertura ?? null } : null; })()
+      : (res?.grid && stats ? { grid: res.grid, bounds: res.bounds, pixelM: res.stats?.pixel_m ?? pixelM, cultura, unidade, dataRef, stats, limpeza: relatorio, cleaningSalvo: clean as unknown as Record<string, number | boolean>, nPontos: nPontosTotal, versao: null, nMaquinas: maqs.length, mediaRealKgha: null, cobertura: cobFinal ? { pctCobertura: cobFinal.pctCobertura, areaSemDadoHa: cobFinal.areaSemDadoHa, maiorVazioHa: cobFinal.maiorVazioHa, raioM: cobFinal.raioM, recortado: recortarSemDados } : null } : null);
     if (!fonte) { setErroPdf(v ? 'Raster desta versão não está na nuvem (reprocesse).' : 'Processe um mapa antes de gerar o relatório.'); return; }
 
     setGerandoPdf(v ? v.id : 'atual'); setErroPdf('');
@@ -379,6 +426,7 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
         cleaningSalvo: fonte.cleaningSalvo, nPontosSalvo: fonte.nPontos,
         versao: fonte.versao, nMaquinas: fonte.nMaquinas, mediaRealKgha: fonte.mediaRealKgha,
         ndvi, correlacao, sobreposicaoNdvi: sobrepos, zonas, separacaoZonas,
+        cobertura: fonte.cobertura ?? null,
       });
     } catch (e) {
       setErroPdf(e instanceof Error ? e.message : 'Falha ao gerar o relatório.');
@@ -520,6 +568,36 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
           <Campo label={`Média real (${rotuloUnidade(unidade)}) — opcional, calibra o mapa`}>
             <input type="number" value={mediaReal} onChange={e => setMediaReal(e.target.value)} placeholder="ex.: da balança/notas" className="w-full rounded px-2 py-1 text-[11px] outline-none" style={inputStyle} />
           </Campo>
+          {/* Conferência de cobertura — antes de gastar 30–60 s no backend */}
+          <div className="space-y-1.5 p-2 rounded" style={{ background: '#0b1f3a', border: '1px solid #1a3a6b' }}>
+            <div className="flex items-center justify-between">
+              <p className="text-[9px] font-semibold" style={{ color: '#93c5fd' }}>Cobertura da colheita</p>
+              <button onClick={() => setVerCobertura(v => !v)}
+                className="flex items-center gap-1 text-[9px] font-semibold px-1.5 py-0.5 rounded"
+                style={{ background: verCobertura ? '#2e5fa3' : '#1a3a6b', color: verCobertura ? '#fff' : '#93c5fd' }}>
+                <Eye size={10} /> {verCobertura ? 'Ocultar' : 'Conferir no mapa'}
+              </button>
+            </div>
+            <div className="flex gap-2 items-end">
+              <Num label="Raio de cobertura (m)" v={raioCob} set={setRaioCob} />
+              <div className="flex-1 text-[9px]" style={{ color: '#64748b' }}>
+                Célula a mais de {raioCob} m de um ponto conta como sem dado.
+              </div>
+            </div>
+            {verCobertura && (cobPrevia
+              ? <CoberturaResumo cob={cobPrevia} nPontos={nPontosTotal} />
+              : <p className="text-[9px]" style={{ color: '#64748b' }}>Calculando…</p>)}
+            <label className="flex items-start gap-1.5 text-[10px]" style={{ color: '#cbd5e1' }}>
+              <input type="checkbox" checked={!recortarSemDados} onChange={e => setRecortarSemDados(!e.target.checked)} className="mt-0.5" />
+              <span>
+                Extrapolar áreas sem dado
+                <span className="block text-[9px]" style={{ color: '#64748b' }}>
+                  Desmarcado (padrão), o que a máquina não colheu vira buraco no mapa e sai da área e da produção.
+                </span>
+              </span>
+            </label>
+          </div>
+
           <button onClick={processar} disabled={proc || !poligono}
             className="w-full py-2 rounded text-xs font-bold text-white flex items-center justify-center gap-1.5"
             style={{ background: proc ? '#1a3a6b' : 'var(--invicta-green-dark)', opacity: !poligono ? 0.6 : 1 }}>
@@ -550,6 +628,9 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
               {relatorio.correcao_colhedora_global && <> · colhedoras corrigidas: {relatorio.correcao_colhedora_global.maquinas_corrigidas}</>}
               {relatorio.fator_media_real != null && <> · calibrado ×{fmt(relatorio.fator_media_real, 3)}</>}
             </div>
+          )}
+          {cobFinal && cobFinal.pctCobertura < 100 && (
+            <CoberturaResumo cob={cobFinal} nPontos={stats.nUsados} recortado={recortarSemDados} />
           )}
           {stats.histograma.length > 0 && <Histograma h={stats.histograma} unidade={unidade} />}
           <SeletorLegenda legendas={legendasProd} valorId={legenda.id}
@@ -716,6 +797,37 @@ function FaixasQuantil({ q, unidade }: { q: ClassificacaoQuantis; unidade: Unida
       {q.colapsadas > 0 && (
         <p className="text-[8px] pt-0.5" style={{ color: '#fbbf24' }}>
           {q.colapsadas} faixa{q.colapsadas > 1 ? 's' : ''} unida{q.colapsadas > 1 ? 's' : ''}: há valores repetidos neste mapa.
+        </p>
+      )}
+    </div>
+  );
+}
+
+// Cobertura em números + veredito. O tom segue nivelCobertura(): abaixo de 85%
+// o mapa não descreve o talhão, ele descreve a parte que a máquina percorreu.
+function CoberturaResumo({ cob, nPontos, recortado }: { cob: Cobertura; nPontos?: number; recortado?: boolean }) {
+  const nivel = nivelCobertura(cob.pctCobertura);
+  const cor = nivel === 'ok' ? '#86efac' : nivel === 'atencao' ? '#fbbf24' : '#f87171';
+  const dens = nPontos && cob.areaHa > 0 ? nPontos / cob.areaHa : null;
+  return (
+    <div className="space-y-1 text-[9px]" style={{ color: '#94a3b8' }}>
+      <div className="flex items-center gap-1.5">
+        <span className="text-sm font-bold" style={{ color: cor }}>{fmt(cob.pctCobertura, 1)}%</span>
+        <span>do talhão com dado de colheita</span>
+      </div>
+      <div className="flex flex-wrap gap-x-3 gap-y-0.5">
+        <span>sem dado: <strong style={{ color: cob.areaSemDadoHa > 0 ? '#fbbf24' : '#94a3b8' }}>{fmtHa(cob.areaSemDadoHa)} ha</strong></span>
+        {cob.maiorVazioHa > 0 && <span>maior vazio: {fmtHa(cob.maiorVazioHa)} ha</span>}
+        {dens != null && <span>densidade: {fmt(dens, 0)} pts/ha</span>}
+        <span>pixel {fmt(cob.pixelM, 0)} m</span>
+      </div>
+      {nivel !== 'ok' && (
+        <p style={{ color: cor }}>
+          {nivel === 'ruim'
+            ? 'Cobertura baixa — o mapa descreve a parte colhida, não o talhão.'
+            : 'Há falhas de cobertura relevantes; confira antes de usar para recomendação.'}
+          {recortado === true && ' A área sem dado foi recortada do mapa e das contas.'}
+          {recortado === false && ' A área sem dado está sendo EXTRAPOLADA pelo IDW.'}
         </p>
       )}
     </div>

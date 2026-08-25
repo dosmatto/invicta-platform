@@ -480,6 +480,9 @@ export interface MapaProdutividade {
   cleaning?: Record<string, number | boolean>;  // params do pipeline oficial (filtro bruto + colhedora + MapFilter)
   params: { removerZeros: boolean; pLo: number; pHi: number; min: number | null; max: number | null; pixelM: number };
   stats: { nPontos: number; nUsados: number; areaHa: number; producaoTotalKg: number; mediaKgha: number; minKgha: number; maxKgha: number; cv: number };
+  /** Qualidade do dado: quanto do talhão a máquina realmente percorreu.
+   *  Ausente = mapa salvo antes da conferência de cobertura existir. */
+  cobertura?: { pctCobertura: number; areaSemDadoHa: number; maiorVazioHa: number; raioM: number; recortado: boolean };
   bounds: [number, number, number, number];
   arquivo: string;
   criadoEm: string;

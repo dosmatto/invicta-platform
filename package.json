@@ -50,6 +50,7 @@
     "teste:escala": "node scripts/teste-escala-classes.mjs",
     "teste:validacao": "node scripts/teste-validacao.mjs",
     "teste:quantis": "node scripts/teste-quantis.mjs",
+    "teste:cobertura-colheita": "node scripts/teste-cobertura-colheita.mjs",
     "teste:correlacao": "node scripts/teste-correlacao.mjs",
     "teste:rotulo": "node scripts/teste-rotulo-zona.mjs",
     "teste:corte": "PY=\"$HOME/.invicta-fert-backend/venv/bin/python\"; [ -x \"$PY\" ] || PY=python3; \"$PY\" scripts/teste-corte-zona.py",

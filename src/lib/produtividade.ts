@@ -268,7 +268,7 @@ export function unificar(maquinas: Maquina[], normalizar: boolean): { pontos: Po
 }
 
 // ── Calibração pela média real (ajuste do mapa) ───────────────────────────────
-function f32ParaB64(a: Float32Array): string {
+export function f32ParaB64(a: Float32Array): string {
   const u8 = new Uint8Array(a.buffer, a.byteOffset, a.byteLength);
   let s = ''; const CH = 0x8000;
   for (let i = 0; i < u8.length; i += CH) s += String.fromCharCode(...u8.subarray(i, i + CH));

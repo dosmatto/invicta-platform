@@ -1,5 +1,16 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.73.2': [
+    'A PRODUTIVIDADE PASSOU A DIZER ONDE A COLHEDORA NAO PASSOU. Ate agora o interpolador preenchia o poligono INTEIRO: um talhao colhido pela metade virava um mapa inteiro, bonito e plausivel, e a metade inventada nao se distinguia da medida. Foi o caso do JCACR 02 — uma mancha clara ocupando uma ponta do talhao, sem uma unica passada por baixo.',
+    'CONFERENCIA ANTES DE PROCESSAR (etapa 4). Botao "Conferir no mapa": os pontos aparecem sobre o LIMITE DO TALHAO, com a area sem dado hachurada em vermelho, mais cobertura em %, hectares sem dado, maior vazio continuo e densidade em pontos por hectare. Tudo isso ANTES de gastar os 30–60 s do backend.',
+    'A PREVIA ANTIGA ("Ver pontos brutos") continua, mas nao servia para isso: ela e enquadrada pelos BOUNDS DOS PONTOS, entao num talhao colhido pela metade a imagem sai cheia — o enquadramento encolhe junto com os dados e some justamente o vazio que interessa ver.',
+    'AREA SEM DADO AGORA E RECORTADA por padrao: vira buraco no mapa e sai da area e da producao total. O recorte acontece no proprio raster, ANTES das estatisticas, entao area, producao, quantis e cores saem todos do mesmo grid — nao ha numero de um lado e mapa de outro. Da para voltar ao comportamento antigo na caixa "Extrapolar areas sem dado".',
+    'O RAIO E AJUSTAVEL (padrao 15 m, ~1,5 plataforma de colhedora): celula a mais que isso de um ponto conta como sem dado. E escolha agronomica, nao valor derivado — por isso fica na tela e vai impresso no relatorio.',
+    'NO RELATORIO, EM DOIS LUGARES. Pagina 1: faixa de aviso junto das estatisticas — "MAPA INCOMPLETO" ou "ATENCAO — COBERTURA PARCIAL", com o percentual, os hectares sem dado e se foram recortados ou extrapolados. Fica ali porque e ali que se le a media e a producao, e e delas que a falta de dado tira o sentido.',
+    'Pagina 4: bloco QUALIDADE DO DADO, antes do relatorio de limpeza. A limpeza conta quantos pontos foram descartados, mas nao sabe dizer se sobrou dado onde o talhao esta — um mapa pode ter 15 mil pontos usados e ainda assim ignorar um quarto da area.',
+    'A REGUA: 95% ou mais e cobertura boa; entre 85 e 95 aparece como atencao; abaixo de 85 o mapa e declarado incompleto, porque ele descreve a parte colhida e nao o talhao.',
+    '17 testes novos (npm run teste:cobertura-colheita), incluindo a guarda de que a linha 0 da malha e o NORTE — errar isso espelha o mapa no eixo Y e o erro so apareceria muito adiante.',
+  ],
   '2.73.1': [
     'CORRIGIDO — O RELATÓRIO NÃO DIZIA QUE A FÓRMULA TINHA SIDO EDITADA. Você editava a equação no talhão, aplicava e salvava o cenário; na tela aparecia "(fórmula editada)", mas o PDF saía com o nome da equação da Biblioteca, como se fosse a recomendação oficial padrão. Motivo: todo relatório reabre o cenário e re-busca nome, produto e faixas na equação atual (é o que faz a legenda acompanhar edições de estilo) — e nessa volta a marcação, que era só texto no nome, era apagada.',
     'AGORA A MARCAÇÃO É DADO DA DOSE, não texto: viaja dentro do cenário e sobrevive a reabrir, renomear a equação e gerar o PDF quantas vezes for. Vale para o PDF oficial, o book, o relatório combinado, o da fazenda e o comparador.',

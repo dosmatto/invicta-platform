@@ -27,6 +27,7 @@ import { indiceFaixa, type ClassificacaoQuantis } from './quantis';
 import type { CorrelacaoGrid } from './correlacaoGrid';
 import type { ResumoValores } from './validacao/tipos';
 import type { Separacao } from './validacao/estatistica';
+import { nivelCobertura } from './cobertura';
 
 // ── Entrada ──────────────────────────────────────────────────────────────────
 
@@ -91,6 +92,15 @@ export interface DadosRelatorioProd {
   sobreposicaoNdvi?: number | null;
   zonas: ZonaRel[];
   separacaoZonas: Separacao | null;
+
+  /** Qualidade do dado de colheita. Ausente = mapa antigo, sem a conferência. */
+  cobertura?: {
+    pctCobertura: number;
+    areaSemDadoHa: number;
+    maiorVazioHa: number;
+    raioM: number;
+    recortado: boolean;
+  } | null;
 }
 
 // ── Paleta e formatação (idênticas às de Fertilidade/Zonas) ──────────────────
@@ -236,7 +246,12 @@ function quadro(doc: JsPDF, x: number, y: number, w: number, h: number, titulo: 
 // ── Página 1: mapa absoluto ──────────────────────────────────────────────────
 
 async function paginaAbsoluta(doc: JsPDF, d: DadosRelatorioProd, logos: Logos): Promise<void> {
-  const mapsY = 31, mapsH = 104, frameW = 200;
+  const cob = d.cobertura;
+  const temAviso = !!cob && cob.pctCobertura < 99.5;
+  const avisoH = temAviso ? 12 : 0;
+  // O mapa cede a altura do aviso. Sem isso a faixa empurrava a legenda para
+  // cima da marca INVICTA e a escala para debaixo do rodapé.
+  const mapsY = 31, mapsH = 104 - avisoH, frameW = 200;
   const startX = (W - frameW) / 2;
 
   const png = await capturarMapaFertilidade({
@@ -274,8 +289,31 @@ async function paginaAbsoluta(doc: JsPDF, d: DadosRelatorioProd, logos: Logos): 
     doc.setFontSize(10); doc.setTextColor(...NAVY); doc.text(val, tx, stY + 12.6, { align: 'center' });
   });
 
+  // ── AVISO DE COBERTURA ──
+  // Fica na página 1, junto das estatísticas, porque é aqui que quem recebe o
+  // PDF lê a média e a produção — e é justamente delas que a falta de dado
+  // tira o sentido. Um mapa de 60% de cobertura descreve a parte colhida, não
+  // o talhão, e a média sai calculada só sobre ela.
+  let stFim = stY + stH;
+  if (cob && temAviso) {
+    const nivel = nivelCobertura(cob.pctCobertura);
+    const cor: [number, number, number] = nivel === 'ruim' ? VERM : [180, 83, 9];
+    const avY = stFim + 2.5, avH = avisoH - 3;
+    doc.setDrawColor(...cor); doc.setLineWidth(0.5);
+    doc.setFillColor(nivel === 'ruim' ? 254 : 255, nivel === 'ruim' ? 242 : 251, nivel === 'ruim' ? 242 : 235);
+    doc.roundedRect(startX, avY, frameW, avH, 1.5, 1.5, 'FD');
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor(...cor);
+    doc.text(nivel === 'ruim' ? 'MAPA INCOMPLETO' : 'ATENCAO — COBERTURA PARCIAL', startX + 4, avY + 5.6);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(7);
+    const txt = `${fmt(cob.pctCobertura, 1)}% do talhao tem dado de colheita · ${fmt(cob.areaSemDadoHa, 2)} ha sem dado`
+      + (cob.maiorVazioHa > 0.5 ? ` (maior vazio ${fmt(cob.maiorVazioHa, 2)} ha)` : '')
+      + (cob.recortado ? ' · recortada do mapa e das contas' : ' · EXTRAPOLADA pelo interpolador');
+    doc.text(txt, startX + 52, avY + 5.6, { maxWidth: frameW - 56 });
+    stFim = avY + avH;
+  }
+
   // ── LEGENDA (barra contínua da legenda da cultura) ──
-  const lgY = stY + stH + 4, lgH = 20;
+  const lgY = stFim + 4, lgH = 20;
   doc.setDrawColor(...LINE); doc.setLineWidth(0.4); doc.roundedRect(M, lgY, W - 2 * M, lgH, 2, 2, 'S');
   doc.setTextColor(...NAVY); doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5);
   doc.text('INTERPRETACAO', M + 4, lgY + 7.5); doc.text('PRODUTIVIDADE', M + 4, lgY + 12);
@@ -603,6 +641,39 @@ function blocoEstatistica(doc: JsPDF, d: DadosRelatorioProd, x: number, y: numbe
       doc.text(val, cx + colW - 6, cy, { align: 'right' });
     });
     yy += linhas * 4.5 + 3;
+  }
+
+  // ── QUALIDADE DO DADO ──
+  // Vem ANTES da limpeza de propósito: a limpeza conta quantos pontos foram
+  // descartados, mas não sabe dizer se sobrou dado onde o talhão está. Um mapa
+  // pode ter 15 mil pontos usados e mesmo assim ignorar um quarto da área.
+  const cob = d.cobertura;
+  if (cob) {
+    doc.setDrawColor(...LINE); doc.setLineWidth(0.3); doc.line(x + 4, yy, x + w - 4, yy);
+    yy += 5;
+    const nivel = nivelCobertura(cob.pctCobertura);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor(...(nivel === 'ok' ? NAVY : VERM));
+    doc.text('QUALIDADE DO DADO', x + 4, yy);
+    yy += 4.5;
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(...GRAY);
+    const linhas = [
+      `Cobertura: ${fmt(cob.pctCobertura, 1)}% do talhao com dado de colheita`,
+      `Area sem dado: ${fmt(cob.areaSemDadoHa, 2)} ha` + (cob.maiorVazioHa > 0.5 ? ` · maior vazio ${fmt(cob.maiorVazioHa, 2)} ha` : ''),
+      `Raio considerado: ${fmt(cob.raioM, 0)} m de um ponto colhido`,
+      cob.recortado
+        ? 'Area sem dado RECORTADA: nao entra no mapa, na area nem na producao.'
+        : 'Area sem dado EXTRAPOLADA pelo interpolador — os valores ali sao estimativa, nao medicao.',
+    ];
+    linhas.forEach((t, i) => doc.text(t, x + 4, yy + i * 4.2, { maxWidth: w - 8 }));
+    yy += linhas.length * 4.2 + 1;
+    if (nivel !== 'ok') {
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(7); doc.setTextColor(...VERM);
+      doc.text(nivel === 'ruim'
+        ? 'Mapa incompleto: descreve a parte colhida, nao o talhao.'
+        : 'Falhas de cobertura relevantes — conferir antes de usar para recomendacao.',
+        x + 4, yy, { maxWidth: w - 8 });
+      yy += 4.5;
+    }
   }
 
   // ── LIMPEZA ──
