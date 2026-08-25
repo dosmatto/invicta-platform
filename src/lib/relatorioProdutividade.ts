@@ -62,6 +62,9 @@ export interface DadosRelatorioProd {
   ano?: number | null;
   epoca?: Epoca | null;
   dataReferencia: string;            // ISO da colheita
+  /** ISO do plantio. Ausente = o relatório não fala de plantio nem de ciclo —
+   *  melhor calar que estimar uma data que ninguém informou. */
+  dataPlantio?: string | null;
   logoClienteUrl?: string | null;
   poligono: GeoJSON.Polygon | GeoJSON.MultiPolygon;
   satelite: boolean;
@@ -217,6 +220,21 @@ function escalaGrafica(doc: JsPDF, cx: number, y: number, bounds: [number, numbe
   }
 }
 
+// Plantio + colheita + ciclo numa LINHA SÓ. O bloco de informações da área
+// comporta 4 linhas antes da régua do cabeçalho (y 13, 17, 21, 25 e a régua em
+// 26,5); uma 5ª linha invadiria a régua. Sem data de plantio, sai só a colheita.
+function linhaDatas(d: DadosRelatorioProd): string {
+  const colh = dataBR(d.dataReferencia);
+  if (!d.dataPlantio) return `Colheita: ${colh}`;
+  const plt = dataBR(d.dataPlantio);
+  if (plt === '—') return `Colheita: ${colh}`;
+  const dias = Math.round(
+    (new Date(d.dataReferencia + 'T00:00:00').getTime() - new Date(d.dataPlantio + 'T00:00:00').getTime()) / 86400000,
+  );
+  const ciclo = Number.isFinite(dias) && dias > 0 ? ` · ${dias} d` : '';
+  return `Plantio ${plt} · Colheita ${colh}${ciclo}`;
+}
+
 function cabecalho(doc: JsPDF, d: DadosRelatorioProd, logos: Logos, titulo: string, subtitulo: string, infoExtra?: string[]): void {
   desenharCabecalhoOficial(doc, {
     logoCliente: logos.cli,
@@ -230,7 +248,7 @@ function cabecalho(doc: JsPDF, d: DadosRelatorioProd, logos: Logos, titulo: stri
     info: infoExtra ?? [
       `Area Total: ${fmt(d.areaHa, 2)} ha`,
       `Municipio: ${municipioUf(d)}`,
-      `Colheita: ${dataBR(d.dataReferencia)}`,
+      linhaDatas(d),
       `Datum: ${DATUM}`,
     ],
   });

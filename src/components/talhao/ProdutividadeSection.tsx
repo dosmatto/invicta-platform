@@ -12,7 +12,7 @@ import { useApp } from '@/context/AppContext';
 import {
   getSafras, getPlantio, getTalhoes, getFazendas, getClientes, getLegendasPorAtributo,
   getMapasProdutividade, saveMapaProdutividade,
-  setMapaProdutividadeOficial, deleteMapaProdutividade, type MapaProdutividade,
+  setMapaProdutividadeOficial, deleteMapaProdutividade, updateMapaProdutividade, type MapaProdutividade,
 } from '@/lib/store';
 import {
   extrairPoligono, coordsFromBounds, gradienteCss, comprimirGrid, descomprimirGrid, rampaDaLegenda, decodeGrid,
@@ -48,7 +48,7 @@ import { ComparadorProdNdvi } from '@/components/talhao/ComparadorProdNdvi';
 import { SeletorLegenda, legendasDoModulo, usePrefLegenda } from './SeletorLegenda';
 import { respeitarPadraoHomonima, rampaVisualStops, corCheiaDaClasse } from '@/lib/legendas';
 import type { Legenda } from '@/lib/legendas';
-import { Upload, Loader2, AlertTriangle, Save, Star, Trash2, Eye, Wand2, FileSpreadsheet, Plus, Layers, ChevronDown, ChevronUp, FileDown } from 'lucide-react';
+import { Upload, Loader2, AlertTriangle, Save, Star, Trash2, Eye, Wand2, FileSpreadsheet, Plus, Layers, ChevronDown, ChevronUp, FileDown, Pencil } from 'lucide-react';
 
 import { inputStyle } from '@/constants/ui';
 import { fmtMinMax0 as fmt, fmtHa } from '@/lib/formato';
@@ -139,6 +139,7 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
   const [ndvisProd, setNdvisProd] = useState<NdviCamada[]>([]);
   const [ndviSelProd, setNdviSelProd] = useState('');
   const [gerandoPdf, setGerandoPdf] = useState('');   // '' | 'atual' | id da versão
+  const [editando, setEditando] = useState<MapaProdutividade | null>(null);
   const [erroPdf, setErroPdf] = useState('');
   const quantis: ClassificacaoQuantis | null = useMemo(
     () => (res?.grid && legenda ? quantisDaProdutividade(res, legenda, 5) : null),
@@ -324,8 +325,8 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
   async function exportarPdf(v?: MapaProdutividade) {
     if (!nav.talhaoId || !poligono) { setErroPdf('Limite do talhão não encontrado — abra o talhão no mapa.'); return; }
     const fonte = v
-      ? (() => { const r = rasters[v.id]; return r ? { grid: r.grid, bounds: r.bounds, pixelM: v.params.pixelM, cultura: v.cultura, unidade: v.unidade, dataRef: v.dataReferencia ?? v.criadoEm.slice(0, 10), stats: { nUsados: v.stats.nUsados, areaHa: v.stats.areaHa, producaoTotalKg: v.stats.producaoTotalKg, mediaKgha: v.stats.mediaKgha, minKgha: v.stats.minKgha, maxKgha: v.stats.maxKgha, cv: v.stats.cv, histograma: [] } as StatsProd, limpeza: null as RelatorioColheita | null, cleaningSalvo: v.cleaning, nPontos: v.stats.nPontos, versao: v.versao, nMaquinas: v.nMaquinas, mediaRealKgha: v.mediaRealKgha, cobertura: v.cobertura ?? null } : null; })()
-      : (res?.grid && stats ? { grid: res.grid, bounds: res.bounds, pixelM: res.stats?.pixel_m ?? pixelM, cultura, unidade, dataRef, stats, limpeza: relatorio, cleaningSalvo: clean as unknown as Record<string, number | boolean>, nPontos: nPontosTotal, versao: null, nMaquinas: maqs.length, mediaRealKgha: null, cobertura: cobFinal ? { pctCobertura: cobFinal.pctCobertura, areaSemDadoHa: cobFinal.areaSemDadoHa, maiorVazioHa: cobFinal.maiorVazioHa, raioM: cobFinal.raioM, recortado: recortarSemDados } : null } : null);
+      ? (() => { const r = rasters[v.id]; return r ? { grid: r.grid, bounds: r.bounds, pixelM: v.params.pixelM, cultura: v.cultura, unidade: v.unidade, dataRef: v.dataReferencia ?? v.criadoEm.slice(0, 10), dataPlantio: v.dataPlantio ?? null, stats: { nUsados: v.stats.nUsados, areaHa: v.stats.areaHa, producaoTotalKg: v.stats.producaoTotalKg, mediaKgha: v.stats.mediaKgha, minKgha: v.stats.minKgha, maxKgha: v.stats.maxKgha, cv: v.stats.cv, histograma: [] } as StatsProd, limpeza: null as RelatorioColheita | null, cleaningSalvo: v.cleaning, nPontos: v.stats.nPontos, versao: v.versao, nMaquinas: v.nMaquinas, mediaRealKgha: v.mediaRealKgha, cobertura: v.cobertura ?? null } : null; })()
+      : (res?.grid && stats ? { grid: res.grid, bounds: res.bounds, pixelM: res.stats?.pixel_m ?? pixelM, cultura, unidade, dataRef, dataPlantio: null, stats, limpeza: relatorio, cleaningSalvo: clean as unknown as Record<string, number | boolean>, nPontos: nPontosTotal, versao: null, nMaquinas: maqs.length, mediaRealKgha: null, cobertura: cobFinal ? { pctCobertura: cobFinal.pctCobertura, areaSemDadoHa: cobFinal.areaSemDadoHa, maiorVazioHa: cobFinal.maiorVazioHa, raioM: cobFinal.raioM, recortado: recortarSemDados } : null } : null);
     if (!fonte) { setErroPdf(v ? 'Raster desta versão não está na nuvem (reprocesse).' : 'Processe um mapa antes de gerar o relatório.'); return; }
 
     setGerandoPdf(v ? v.id : 'atual'); setErroPdf('');
@@ -419,6 +420,7 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
         // arquivado com o período da análise de solo.
         ano: null, epoca: null,
         dataReferencia: fonte.dataRef,
+        dataPlantio: fonte.dataPlantio,
         logoClienteUrl, poligono, satelite: true, corLimite: '#ffffff',
         unidade: fonte.unidade, bounds: fonte.bounds, pixelM: fonte.pixelM, legenda: leg,
         rasterAbsolutoPng, rasterQuantilPng, quantis: q,
@@ -699,6 +701,7 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
                   </p>
                 </div>
                 <button onClick={() => verVersao(v)} title="Ver no mapa" style={{ color: '#93c5fd' }}><Eye size={14} /></button>
+                <button onClick={() => setEditando(v)} title="Editar identificação" style={{ color: '#cbd5e1' }}><Pencil size={13} /></button>
                 <button onClick={() => exportarPdf(v)} disabled={gerandoPdf !== ''} title="Relatório PDF" className="disabled:opacity-40" style={{ color: '#86efac' }}>
                   {gerandoPdf === v.id ? <Loader2 size={13} className="animate-spin" /> : <FileDown size={13} />}
                 </button>
@@ -710,12 +713,109 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
         </div>
       )}
 
+      {editando && (
+        <EditarMapa
+          mapa={editando}
+          onFechar={() => setEditando(null)}
+          onSalvo={() => { setEditando(null); recarregar(); }}
+        />
+      )}
+
       {/* 5) Comparar Produtividade × NDVI (+ relatório lado a lado) */}
       <ComparadorProdNdvi safraNome={safra} />
     </div>
   );
 }
 
+// Edição da IDENTIFICAÇÃO de um mapa salvo. Só o que descreve a colheita —
+// cultura, época, datas e unidade. Limpeza, pixel e média real ficam de fora:
+// mudá-los aqui deixaria as estatísticas gravadas descrevendo um mapa que não
+// existe mais. Para esses, o caminho é reprocessar.
+function EditarMapa({ mapa, onFechar, onSalvo }: { mapa: MapaProdutividade; onFechar: () => void; onSalvo: () => void }) {
+  const [cultura, setCultura] = useState(mapa.cultura || 'soja');
+  const [epoca, setEpoca] = useState(mapa.epoca || '');
+  const [dataRef, setDataRef] = useState(mapa.dataReferencia ?? mapa.criadoEm.slice(0, 10));
+  const [dataPlantio, setDataPlantio] = useState(mapa.dataPlantio ?? '');
+  const [unidade, setUnidade] = useState<Unidade>(mapa.unidade);
+
+  const per = periodoDeData(dataRef);
+  const ciclo = dataPlantio && dataRef
+    ? Math.round((new Date(dataRef + 'T00:00:00').getTime() - new Date(dataPlantio + 'T00:00:00').getTime()) / 86400000)
+    : null;
+  const cicloInvalido = ciclo != null && (!isFinite(ciclo) || ciclo <= 0);
+
+  function salvar() {
+    updateMapaProdutividade(mapa.id, {
+      cultura, epoca, unidade,
+      dataReferencia: dataRef,
+      dataPlantio: dataPlantio || undefined,
+    });
+    onSalvo();
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(2,8,20,0.7)' }} onClick={onFechar}>
+      <div className="w-full max-w-sm rounded-lg p-3 space-y-2.5" style={{ background: '#061525', border: '1px solid #1a3a6b' }} onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <p className="text-[11px] font-semibold" style={{ color: '#93c5fd' }}>Editar mapa de colheita</p>
+          <span className="text-[9px]" style={{ color: '#64748b' }}>v{mapa.versao}</span>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <Campo label="Cultura">
+            <select value={cultura} onChange={e => setCultura(e.target.value)} className="w-full rounded px-2 py-1 text-[11px] outline-none" style={inputStyle}>
+              {CULTURAS.map(c => <option key={c} value={c}>{c[0].toUpperCase() + c.slice(1)}</option>)}
+            </select>
+          </Campo>
+          <Campo label="Época de cultivo">
+            <select value={epoca} onChange={e => setEpoca(e.target.value)} className="w-full rounded px-2 py-1 text-[11px] outline-none" style={inputStyle}>
+              {EPOCAS.map(e2 => <option key={e2.v} value={e2.v}>{e2.l}</option>)}
+            </select>
+          </Campo>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <Campo label="Data da colheita">
+            <input type="date" value={dataRef} onChange={e => setDataRef(e.target.value)} className="w-full rounded px-2 py-1 text-[11px] outline-none" style={inputStyle} />
+          </Campo>
+          <Campo label="Unidade">
+            <select value={unidade} onChange={e => setUnidade(e.target.value as Unidade)} className="w-full rounded px-2 py-1 text-[11px] outline-none" style={inputStyle}>
+              {(['kg/ha', 'sc/ha', 't/ha'] as Unidade[]).map(uu => <option key={uu} value={uu}>{uu}</option>)}
+            </select>
+          </Campo>
+        </div>
+
+        <Campo label="Data do plantio (opcional)">
+          <input type="date" value={dataPlantio} onChange={e => setDataPlantio(e.target.value)} className="w-full rounded px-2 py-1 text-[11px] outline-none" style={inputStyle} />
+        </Campo>
+        <p className="text-[9px]" style={{ color: '#64748b' }}>
+          Sem data de plantio, o relatório simplesmente não fala de plantio nem de ciclo. O destino é buscá-la na plataforma de dados fitotécnicos.
+        </p>
+
+        <div className="text-[9px] space-y-0.5">
+          <p style={{ color: per ? '#86efac' : '#fbbf24' }}>
+            {per ? `Arquivado em Ano ${per.ano} · ${rotuloEpoca(per.epoca)}` : 'Data da colheita inválida'}
+          </p>
+          {ciclo != null && (
+            <p style={{ color: cicloInvalido ? '#f87171' : '#94a3b8' }}>
+              {cicloInvalido ? 'A colheita não pode ser anterior ao plantio.' : `Ciclo: ${ciclo} dias`}
+            </p>
+          )}
+          <p style={{ color: '#64748b' }}>
+            Trocar a cultura troca a legenda — o mapa e o relatório mudam de cores. Limpeza, pixel e média real não se editam aqui: exigem reprocessar.
+          </p>
+        </div>
+
+        <div className="flex gap-2 pt-0.5">
+          <button onClick={onFechar} className="flex-1 py-1.5 rounded text-[11px] font-bold" style={{ background: '#1a3a6b', color: '#93c5fd' }}>Cancelar</button>
+          <button onClick={salvar} disabled={!per || cicloInvalido}
+            className="flex-1 py-1.5 rounded text-[11px] font-bold text-white disabled:opacity-40"
+            style={{ background: 'var(--invicta-blue-mid)' }}>Salvar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
 function Etapa({ n, titulo, children }: { n: number; titulo: string; children: ReactNode }) {
   return (
     <div className="rounded-lg p-2.5 space-y-2" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>

@@ -1,5 +1,14 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.73.3': [
+    'MAPA DE COLHEITA SALVO AGORA SE EDITA. Botao de lapis na linha do mapa, em "Mapas salvos": cultura, epoca de cultivo, data da colheita, data do plantio e unidade. Ate agora, um mapa salvo com a cultura errada so tinha um caminho — apagar e reprocessar tudo.',
+    'TROCAR A CULTURA TROCA A LEGENDA, e com ela as cores do mapa e do relatorio: a legenda e escolhida na hora de desenhar, nao gravada no raster. Entao corrigir "Soja" para "Milho" ja acerta as faixas na tela e no PDF, sem reprocessar.',
+    'MUDAR A DATA DA COLHEITA REARQUIVA O MAPA no ano/epoca certos do periodo — a tela mostra em qual antes de voce salvar, para nao haver surpresa.',
+    'O QUE NAO SE EDITA, DE PROPOSITO: parametros de limpeza, pixel e media real. Mexer neles aqui deixaria as estatisticas gravadas (area, producao, CV) descrevendo um mapa que nao existe mais. Para esses, o caminho continua sendo reprocessar.',
+    'DATA DE PLANTIO (opcional). Quando preenchida, o cabecalho do relatorio passa a trazer "Plantio 12/10/2025 · Colheita 19/08/2026 · 311 d" — plantio, colheita e ciclo em dias. Quando nao ha, o relatorio simplesmente nao fala de plantio nem de ciclo: melhor calar que estimar uma data que ninguem informou.',
+    'Plantio e colheita saem na MESMA linha porque o bloco de informacoes da area comporta 4 linhas antes da regua do cabecalho; uma quinta invadiria a regua.',
+    'O campo e manual por enquanto. O destino e busca-lo na plataforma de dados fitotecnicos — por isso ele ja existe no registro do mapa, pronto para ser preenchido de fora.',
+  ],
   '2.73.2': [
     'A PRODUTIVIDADE PASSOU A DIZER ONDE A COLHEDORA NAO PASSOU. Ate agora o interpolador preenchia o poligono INTEIRO: um talhao colhido pela metade virava um mapa inteiro, bonito e plausivel, e a metade inventada nao se distinguia da medida. Foi o caso do JCACR 02 — uma mancha clara ocupando uma ponta do talhao, sem uma unica passada por baixo.',
     'CONFERENCIA ANTES DE PROCESSAR (etapa 4). Botao "Conferir no mapa": os pontos aparecem sobre o LIMITE DO TALHAO, com a area sem dado hachurada em vermelho, mais cobertura em %, hectares sem dado, maior vazio continuo e densidade em pontos por hectare. Tudo isso ANTES de gastar os 30–60 s do backend.',

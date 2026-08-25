@@ -469,6 +469,10 @@ export interface MapaProdutividade {
   safra: string;
   epoca: string;          // ÉPOCA DE CULTIVO: 'verao' | 'safrinha' | 'inverno' | '' (≠ 1ª/2ª época do período)
   dataReferencia?: string; // 'YYYY-MM-DD' — data operacional; deriva Ano/Época (1ª/2ª) do período
+  /** Data do PLANTIO (YYYY-MM-DD). Opcional e preenchida à mão por enquanto;
+   *  o destino é vir da plataforma de dados fitotécnicos. Ausente = o relatório
+   *  simplesmente não fala de plantio nem de ciclo. */
+  dataPlantio?: string;
   ano?: number;
   cultura: string;
   versao: number;
@@ -514,6 +518,34 @@ export function setMapaProdutividadeOficial(id: string) {
     if (m.talhaoId === alvo.talhaoId && m.safra === alvo.safra && m.epoca === alvo.epoca && m.cultura === alvo.cultura) m.oficial = m.id === id;
   });
   save('inv_produtividade', lista);
+}
+
+/**
+ * Edita a IDENTIFICAÇÃO de um mapa salvo — o que descreve a colheita, não o
+ * que a produziu.
+ *
+ * Só entram campos que NÃO mexem no raster: cultura, época, datas e unidade de
+ * exibição. Parâmetros de limpeza, pixel e média real ficam de fora de
+ * propósito — mudá-los aqui deixaria as estatísticas gravadas descrevendo um
+ * mapa que não existe mais. Para esses, o caminho é reprocessar.
+ *
+ * Trocar a cultura troca a legenda e, com ela, as cores do mapa e do relatório
+ * (a legenda é escolhida na hora de desenhar). A versao NAO é renumerada: ela
+ * é a identidade do registro e renumerar quebraria referências já exportadas.
+ */
+export function updateMapaProdutividade(
+  id: string,
+  patch: Partial<Pick<MapaProdutividade, 'cultura' | 'epoca' | 'dataReferencia' | 'dataPlantio' | 'unidade'>>,
+): MapaProdutividade | null {
+  const lista = load<MapaProdutividade>('inv_produtividade');
+  const i = lista.findIndex(m => m.id === id);
+  if (i < 0) return null;
+  // comAnoRef reavalia ano/época do PERÍODO a partir da data de referência —
+  // sem isso, mudar a data da colheita deixaria o mapa arquivado no ano antigo.
+  const atualizado = comAnoRef({ ...lista[i], ...patch });
+  lista[i] = atualizado;
+  save('inv_produtividade', lista);
+  return atualizado;
 }
 
 export function deleteMapaProdutividade(id: string) {
