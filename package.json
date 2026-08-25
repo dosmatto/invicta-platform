@@ -46,6 +46,7 @@
     "teste:rotulos": "node scripts/teste-rotulos-mapa.mjs",
     "teste:insumos": "node scripts/teste-insumos.mjs",
     "teste:custos": "node scripts/teste-custos-equacao.mjs",
+    "teste:formula": "node scripts/teste-formula-avulsa.mjs",
     "teste:escala": "node scripts/teste-escala-classes.mjs",
     "teste:validacao": "node scripts/teste-validacao.mjs",
     "teste:quantis": "node scripts/teste-quantis.mjs",

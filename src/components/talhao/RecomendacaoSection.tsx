@@ -24,8 +24,13 @@ import { bindingDasZonas, valoresDasZonas } from '@/lib/recomendacao/zonasComLau
 import { zonasDoTalhao } from '@/lib/recomendacao/zonasDoTalhao';
 import { classesVisiveis, indiceClasse } from '@/lib/recomendacao/faixas';
 import { ComparadorCenarios } from '@/components/talhao/ComparadorCenarios';
+import { ModalFormulaAvulsa } from '@/components/equacao/ModalFormulaAvulsa';
+import {
+  assinaturaRascunho, checarRascunho, equacaoComRascunho, formulaEditada, gravarRascunho,
+  lerRascunho, rascunhoDaEquacao, type RascunhoFormula,
+} from '@/lib/recomendacao/formulaAvulsa';
 import { montarBookOficial, abrirOuBaixar } from '@/lib/recomendacao/relatorioCenarios';
-import { Play, Loader2, AlertTriangle, Wand2, Save, FolderOpen, Trash2, Eye, GitCompare, FileText, Star } from 'lucide-react';
+import { Play, Loader2, AlertTriangle, Wand2, Save, FolderOpen, Trash2, Eye, GitCompare, FileText, Star, Calculator, Pencil, RotateCcw } from 'lucide-react';
 
 import { inputStyle } from '@/constants/ui';
 import { fmtDec as fmt, fmtHa } from '@/lib/formato';
@@ -147,13 +152,57 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
   const eqSel = equacoes.find(e => e.id === equacaoId) ?? null;
   const recSel = recomendacoes.find(r => r.id === recomendacaoId) ?? null;
 
+  // ── FÓRMULA AVULSA (v2.73) ───────────────────────────────────────────────
+  // A fórmula da equação escolhida aparece na tela e pode ser reescrita AQUI,
+  // valendo só para este talhão (lógica do InCeres, adaptada: a Biblioteca só
+  // muda por um botão de salvar). `rascunho` é a sobreposição aplicada; nulo =
+  // vale o cadastro. Persistido por talhão+equação porque trocar de aba
+  // desmonta esta seção — o mesmo motivo do `modoMapa` acima.
+  const [editandoFormula, setEditandoFormula] = useState(false);
+  const chaveRasc = nav.talhaoId && equacaoId ? `${nav.talhaoId}|${equacaoId}` : '';
+  // O que está gravado (lido uma vez por talhão+equação) e o que foi mexido
+  // nesta sessão de tela. Sem `useEffect`: a leitura é derivada da chave, do
+  // mesmo jeito que o `modoMapa` lê o localStorage no inicializador.
+  const rascunhoSalvo = useMemo(
+    () => (nav.talhaoId && equacaoId) ? lerRascunho(nav.talhaoId, equacaoId) : null,
+    [nav.talhaoId, equacaoId],
+  );
+  const [rascunhoMexido, setRascunhoMexido] = useState<Record<string, RascunhoFormula | null>>({});
+  const rascunho = chaveRasc && chaveRasc in rascunhoMexido ? rascunhoMexido[chaveRasc] : rascunhoSalvo;
+  const setRascunho = useCallback((r: RascunhoFormula | null) => {
+    if (!chaveRasc) return;
+    setRascunhoMexido(m => ({ ...m, [chaveRasc]: r }));
+    if (nav.talhaoId && equacaoId) gravarRascunho(nav.talhaoId, equacaoId, r);
+  }, [chaveRasc, nav.talhaoId, equacaoId]);
+
+  // A fórmula que de fato vai ser aplicada (cadastro + rascunho por cima).
+  const formulaEmUso = useMemo<RascunhoFormula | null>(() => {
+    if (!eqSel) return null;
+    return rascunho ?? rascunhoDaEquacao(eqSel.conteudo);
+  }, [eqSel, rascunho]);
+  const editada = !!(eqSel && rascunho && formulaEditada(eqSel.conteudo, rascunho));
+  const checagem = useMemo(() => formulaEmUso ? checarRascunho(formulaEmUso) : null, [formulaEmUso]);
+  // Equação a aplicar: a do cadastro, ou uma cópia com a fórmula editada. O `id`
+  // é preservado (a numeração da equação nos relatórios continua batendo); o
+  // nome carrega a marca, porque o cenário e o PDF têm de dizer que a conta que
+  // gerou aquele mapa não é mais a que está na Biblioteca.
+  const eqAplicar = useMemo(() => {
+    if (!eqSel) return null;
+    if (!editada || !rascunho) return eqSel;
+    return { ...eqSel, nome: `${eqSel.nome} (fórmula editada)`, conteudo: equacaoComRascunho(eqSel.conteudo, rascunho) };
+  }, [eqSel, editada, rascunho]);
+
   const recarregarSalvos = useCallback(async () => {
     if (nav.talhaoId && safra) setSalvos(await listarCenarios(nav.talhaoId, safra));
   }, [nav.talhaoId, safra]);
   useEffect(() => { recarregarSalvos(); }, [recarregarSalvos]);
 
+  // Assinatura da fórmula em uso — entra no id do cenário e na limpeza abaixo:
+  // mexer na fórmula invalida o mapa que está na tela.
+  const assinaturaFormula = useMemo(() => (editada && rascunho) ? assinaturaRascunho(rascunho) : '', [editada, rascunho]);
+
   // limpa resultado ao trocar contexto
-  useEffect(() => { setDoses([]); setFalhas([]); setEstado('idle'); setErro(''); setVisivel(0); setSalvoMsg(''); setCenMeta(null); }, [modo, equacaoId, recomendacaoId, importacaoId, modoMapa]);
+  useEffect(() => { setDoses([]); setFalhas([]); setEstado('idle'); setErro(''); setVisivel(0); setSalvoMsg(''); setCenMeta(null); }, [modo, equacaoId, recomendacaoId, importacaoId, modoMapa, assinaturaFormula]);
 
   // dose visível no mapa
   const doseAtiva = doses[visivel] ?? null;
@@ -240,8 +289,9 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
     if (!nav.talhaoId || !importacaoId) { setErro('Selecione uma importação de laboratório.'); setEstado('erro'); return; }
     let itens: ItemBiblioteca<ConteudoEquacao>[] = [];
     if (modo === 'equacao') {
-      if (!eqSel) { setErro('Escolha uma equação.'); setEstado('erro'); return; }
-      itens = [eqSel];
+      if (!eqSel || !eqAplicar) { setErro('Escolha uma equação.'); setEstado('erro'); return; }
+      if (checagem && !checagem.ok) { setErro(`Fórmula inválida: ${checagem.erro}`); setEstado('erro'); return; }
+      itens = [eqAplicar];
     } else {
       if (!recSel) { setErro('Escolha uma recomendação.'); setEstado('erro'); return; }
       itens = (recSel.conteudo.equacaoIds.map(id => equacoes.find(e => e.id === id)).filter(Boolean) as ItemBiblioteca<ConteudoEquacao>[]).sort(compararEquacoes);
@@ -287,9 +337,14 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
       // cenário por zona (mesmo doc na nuvem) e todos os entregáveis das abas
       // Arquivos/Relatórios voltavam a sair interpolados.
       const sufZona = porZonaAtivo ? '_zona' : '';
-      const autoId = `cen_${nav.talhaoId}_${importacaoId}_${modo}_${ref}${sufZona}`;
+      // A FÓRMULA EDITADA ENTRA NO ID, pelo mesmo motivo do `_zona`: sem isso,
+      // aplicar uma fórmula avulsa gravaria por cima do cenário da equação
+      // original — e todos os entregáveis daquele cenário passariam a sair com
+      // uma conta que não é a da Biblioteca, sem ninguém notar.
+      const sufFormula = assinaturaFormula ? `_f${assinaturaFormula}` : '';
+      const autoId = `cen_${nav.talhaoId}_${importacaoId}_${modo}_${ref}${sufZona}${sufFormula}`;
       const custoTotal = finais.reduce((s, d) => s + (d.custo ?? 0), 0);
-      const nome = nomeCenario.trim() || `${recSel?.nome ?? eqSel?.nome ?? 'Cenário'}`;
+      const nome = nomeCenario.trim() || `${recSel?.nome ?? eqAplicar?.nome ?? 'Cenário'}`;
       setCenMeta({ id: autoId, origem: modo, recomendacaoId: modo === 'recomendacao' ? recomendacaoId : undefined, nome });
       try {
         await salvarCenario({
@@ -419,7 +474,9 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
   }
 
   const classesVis = useMemo(() => doseAtiva ? [...doseAtiva.estilo.classes].sort((a, b) => a.limiteSuperior - b.limiteSuperior) : [], [doseAtiva]);
-  const podeAplicar = !!importacaoId && (modo === 'equacao' ? !!eqSel : !!recSel) && estado !== 'carregando';
+  const podeAplicar = !!importacaoId
+    && (modo === 'equacao' ? (!!eqSel && !!checagem?.ok) : !!recSel)
+    && estado !== 'carregando';
 
   if (!pode('recomendacoes')) return (
     <div className="px-6 py-4"><p className="text-[11px]" style={{ color: '#fbbf24' }}>Seu papel não trabalha com recomendações (somente visualização).</p></div>
@@ -479,6 +536,51 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
               <option value="">Escolha uma equação…</option>
               {equacoes.map(e => <option key={e.id} value={e.id}>{e.nome}{e.conteudo.profundidade ? ` (${e.conteudo.profundidade})` : ''}</option>)}
             </select>
+          )}
+
+          {/* A FÓRMULA NA TELA. Antes o agrônomo escolhia a equação pelo nome e
+              aplicava no escuro; aqui ele lê a conta que vai rodar e, se
+              precisar, reescreve para este talhão. */}
+          {eqSel && formulaEmUso && (
+            <div className="mt-2 rounded" style={{ background: '#061525', border: `1px solid ${editada ? '#7c5e12' : '#1a3a6b'}` }}>
+              <div className="flex items-center justify-between px-2 py-1" style={{ borderBottom: '1px solid #1a3a6b' }}>
+                <div className="flex items-center gap-1 min-w-0">
+                  <Calculator size={11} style={{ color: '#a78bfa' }} />
+                  <span className="text-[10px] font-bold" style={{ color: '#cbd5e1' }}>Fórmula</span>
+                  <span className="text-[9px] truncate" style={{ color: '#64748b' }}>
+                    · {formulaEmUso.profundidade} · {formulaEmUso.unidadeTratamento}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  {editada && (
+                    <button onClick={() => setRascunho(null)} title="Voltar à fórmula cadastrada na Biblioteca"
+                      className="p-1 rounded hover:bg-white/10" style={{ color: '#fbbf24' }}><RotateCcw size={11} /></button>
+                  )}
+                  <button onClick={() => setEditandoFormula(true)} title="Abrir a fórmula para editar"
+                    className="text-[9px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
+                    <Pencil size={9} /> Editar
+                  </button>
+                </div>
+              </div>
+              <pre className="px-2 py-1.5 text-[10px] font-mono whitespace-pre-wrap break-words m-0" style={{ color: '#a5d6a7', maxHeight: 140, overflowY: 'auto' }}>
+                {formulaEmUso.script.trim() || '(vazia)'}
+              </pre>
+              {formulaEmUso.constantes.length > 0 && (
+                <div className="px-2 pb-1 text-[9px] font-mono" style={{ color: '#93c5fd' }}>
+                  {formulaEmUso.constantes.map(k => `${k.nome} = ${k.valor}`).join(' · ')}
+                </div>
+              )}
+              <div className="px-2 pb-1.5 text-[9px]" style={{ color: checagem?.ok ? '#64748b' : '#fca5a5' }}>
+                {checagem?.ok
+                  ? `Atributos: ${checagem.vars.length ? checagem.vars.map(v => v.toUpperCase()).join(', ') : 'nenhum (só constantes)'}`
+                  : checagem?.erro}
+              </div>
+              {editada && (
+                <div className="px-2 py-1 text-[9px] font-semibold" style={{ background: '#2a230b', color: '#fbbf24' }}>
+                  Fórmula alterada só para este talhão — a equação da Biblioteca continua como estava.
+                </div>
+              )}
+            </div>
           )}
         </div>
       ) : (
@@ -762,6 +864,18 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
       )}
 
       {comparar && <ComparadorCenarios cenarios={comparar} onClose={() => setComparar(null)} />}
+
+      {editandoFormula && eqSel && formulaEmUso && (
+        <ModalFormulaAvulsa
+          equacao={eqSel}
+          rascunho={formulaEmUso}
+          outras={equacoes.filter(e => e.id !== eqSel.id)}
+          podeSalvarBiblioteca={pode('biblioteca')}
+          onUsar={setRascunho}
+          onTrocarEquacao={setEquacaoId}
+          onFechar={() => setEditandoFormula(false)}
+        />
+      )}
     </div>
   );
 }
