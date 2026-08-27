@@ -1,5 +1,14 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [20] Cadastro de cultivares e propósitos
+  '2.84.0': [
+    'PENDÊNCIA 20 — CADASTRO DE CULTIVARES E DE PROPÓSITOS (segunda parte da importação por planilha). Duas categorias novas na Biblioteca. Esta é a parte que resolve o item mais chato da planilha do cliente: o material vem como CÓDIGO, não como nome.',
+    'CULTIVARES — O CÓDIGO COMERCIAL VIRA DICIONÁRIO. A planilha manda "55I57RSF IPRO"; o material chama Brasmax Zeus IPRO. Não existe conta que leve de um ao outro, e o sistema NÃO INVENTA — errar o nome de um material é pior do que não ter. Você diz uma vez, o código fica gravado no cultivar, e da próxima planilha em diante ele é reconhecido sozinho. Um cultivar aceita vários códigos ("55I57RSF IPRO" e "55I57RSF"), e o mesmo código não pode pertencer a dois cultivares — a tela bloqueia e diz em qual já está.',
+    'O QUE VEM DE GRAÇA: quando o próprio código já traz o nome entre parênteses — "DP155100886 (P25300PWU)", "7602PRO4 (AS 1901 PRO4)" — o nome é extraído sozinho. E a marca é sugerida pelo prefixo quando ele não deixa dúvida (AG… Agroceres, DKB… Dekalb, AS… Agroeste, IPR… IAPAR, NS… Nidera). Códigos numéricos como "5995I2X" ou "581 E" NÃO recebem palpite de marca: são de vários obtentores e chutar ali só geraria cadastro errado.',
+    'PROPÓSITOS — JÁ VÊM OS QUATRO PRONTOS: Produção de Grãos, Campo de Semente, Silagem de Planta Inteira e Cobertura, cada um com as grafias que os clientes usam ("Sil.Planta Inteira", "Campo de Semente-UBS"). CAMPO DE SEMENTE CONTA COMO GRÃO nos cálculos — é a marcação "equivale a grão", com selo verde na lista — e ao mesmo tempo continua registrado como Campo de Semente, para não perder a informação de que aquele talhão produziu semente.',
+    'CULTURA DA PLANILHA: "SOJA TRANSGENICA" entra como Soja, "MILHO TRANSGENICO" como Milho, "BRACHIARIA" como Pastagem. O texto exato que veio da planilha é preservado no registro, não descartado — se um dia a plataforma tiver subcultura, a informação está lá. Cultura que não se reconhece vira pergunta, nunca chute.',
+    'Onde conferir: Biblioteca → Cultivares e Biblioteca → Propósitos. 18 testes novos (npm run teste:importacao-catalogo).',
+  ],
   // [18] Correção: o nome do talhão não é mais cortado na lista
   '2.83.1': [
     'PENDÊNCIA 18 (CORREÇÃO) — O NOME DO TALHÃO NÃO É MAIS CORTADO NA LISTA DA FAZENDA. A lista mostrava "IGEFI…" no lugar do nome, e num cadastro em que todos começam igual as reticências não identificam nada — a linha ficava ilegível justamente na coluna que importa.',

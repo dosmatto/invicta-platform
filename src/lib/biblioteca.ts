@@ -15,7 +15,7 @@ import type {
 import {
   SlidersHorizontal, CalendarDays, Grid3x3, Leaf, Salad, Mountain, Package,
   Satellite, Layers, Calculator, Bug, Hash, Wand2, BarChart3,
-  UserCog, FlaskConical, BookOpen, Recycle,
+  UserCog, FlaskConical, BookOpen, Recycle, Target, Sprout,
 } from 'lucide-react';
 import { empresaAtivaId, uidUsuario, idsReKeyDono } from './empresa';
 import { cloudPushLista } from './cloud';
@@ -32,7 +32,7 @@ export type CategoriaBiblioteca =
   | 'analises-foliares' | 'altimetria' | 'imagem-satelite' | 'compactacao'
   | 'algebra-mapas' | 'pragas' | 'equacoes' | 'recomendacoes'
   | 'produtividade' | 'perfis' | 'laboratorios' | 'legendas' | 'insumos'
-  | 'labs' | 'exportacao';
+  | 'labs' | 'exportacao' | 'propositos' | 'cultivares';
 
 export interface ItemBiblioteca<TConteudo = unknown> {
   id: string;
@@ -65,6 +65,10 @@ export interface DefCategoria {
 export const CATEGORIAS: DefCategoria[] = [
   { slug: 'insumos', nome: 'Insumos', icone: Package, status: 'disponivel',
     descricao: 'Produtos usados nas prescrições: fertilizantes (com as garantias), corretivos, gesso, estercos, compostos, sementes e personalizados.' },
+  { slug: 'cultivares', nome: 'Cultivares', icone: Sprout, status: 'disponivel',
+    descricao: 'Cultivares e híbridos com os CÓDIGOS COMERCIAIS pelos quais eles chegam nas planilhas dos clientes ("55I57RSF IPRO" é o Brasmax Zeus IPRO). Cada código confirmado uma vez é reconhecido sozinho nas importações seguintes.' },
+  { slug: 'propositos', nome: 'Propósitos', icone: Target, status: 'disponivel',
+    descricao: 'Para que a lavoura foi feita: Produção de Grãos, Campo de Semente, Silagem, Cobertura. Campo de Semente conta como grão nos cálculos — é o que a marcação "equivale a grão" faz.' },
   { slug: 'exportacao', nome: 'Exportação de Nutrientes', icone: Recycle, status: 'disponivel',
     descricao: 'Quanto de cada nutriente sai do talhão por tonelada colhida, por cultura (K₂O, P₂O₅, N…). Alimenta o mapa de exportação do relatório de produtividade.' },
   { slug: 'preferencias-analise', nome: 'Preferências de Análise', icone: SlidersHorizontal, status: 'disponivel',
@@ -373,6 +377,43 @@ export interface ConteudoExportacao {
   fonte?: string;
   observacoes?: string;
 }
+/**
+ * PROPÓSITO da lavoura (categoria 'propositos'). A planilha do cliente traz
+ * "Produção de Grãos", "Campo de Semente-UBS", "Sil.Planta Inteira", "Cobertura".
+ *
+ * `equivaleAGrao` existe porque Campo de Semente É produção de grão para efeito
+ * de cálculo (exportação de nutrientes, produtividade esperada), mas continua
+ * sendo Campo de Semente para efeito de registro — fundir os dois num só perderia
+ * a informação de que aquele talhão produziu semente.
+ */
+export interface ConteudoProposito {
+  equivaleAGrao: boolean;
+  /** Como o cliente escreve. Cresce a cada confirmação na importação. */
+  sinonimos: string[];
+}
+
+/**
+ * CULTIVAR / híbrido (categoria 'cultivares').
+ *
+ * `siglas` é o coração do ganho de tempo da importação de planilha: a maioria
+ * dos materiais chega como CÓDIGO COMERCIAL, não como nome. "55I57RSF IPRO" é o
+ * Brasmax Zeus IPRO; "5995I2X" é o nome mesmo, sem apelido. O sistema nunca
+ * adivinha essa correspondência — errar o nome do material é pior que não ter.
+ * O usuário confirma UMA vez, a sigla entra aqui, e a planilha do ano que vem
+ * casa sozinha.
+ */
+export interface ConteudoCultivar {
+  /** Um dos valores de CULTURAS (store.ts). Vazio = serve a qualquer uma. */
+  culturaId?: string;
+  /** Obtentor/marca: Brasmax, Dekalb, Agroeste, Pioneer… */
+  marca?: string;
+  /** Tecnologia/evento: IPRO, I2X, PRO3, PRO4, VIP3, E. */
+  tecnologia?: string;
+  /** Códigos comerciais pelos quais este material aparece nas planilhas. */
+  siglas: string[];
+  observacoes?: string;
+}
+
 export interface ConteudoSafra {
   anoInicio: number;
   anoFim: number;
@@ -661,5 +702,55 @@ export function migrarPreferenciasV1() {
       save('preferencias-analise', lista);
     }
   }
+  localStorage.setItem(FLAG, '1');
+}
+
+/**
+ * Semeia os quatro PROPÓSITOS que a planilha do cliente usa. Roda uma vez por
+ * navegador (flag versionada) e nunca duplica: se já houver propósito com o
+ * mesmo nome, sai sem tocar em nada.
+ *
+ * Os sinônimos saem exatamente como o cliente escreve — "Sil.Planta Inteira"
+ * com ponto e sem espaço, "Campo de Semente-UBS" com hífen. É esse texto que
+ * chega na importação.
+ */
+export function semearPropositosV1() {
+  if (typeof window === 'undefined') return;
+  const FLAG = 'inv_semeado_propositos_v1';
+  if (localStorage.getItem(FLAG)) return;
+
+  const PADRAO: { nome: string; conteudo: ConteudoProposito }[] = [
+    { nome: 'Produção de Grãos', conteudo: { equivaleAGrao: true, sinonimos: ['PRODUCAO DE GRAOS', 'GRAOS', 'GRAO', 'COMERCIAL'] } },
+    // Campo de semente É grão para efeito de cálculo, e continua sendo campo de
+    // semente para efeito de registro — é o pedido explícito do usuário.
+    { nome: 'Campo de Semente', conteudo: { equivaleAGrao: true, sinonimos: ['CAMPO DE SEMENTE-UBS', 'CAMPO DE SEMENTES-UBS', 'CAMPO DE SEMENTE', 'CAMPO DE SEMENTES', 'SEMENTE', 'UBS'] } },
+    { nome: 'Silagem de Planta Inteira', conteudo: { equivaleAGrao: false, sinonimos: ['SIL.PLANTA INTEIRA', 'SILAGEM PLANTA INTEIRA', 'SILAGEM', 'SIL PLANTA INTEIRA'] } },
+    { nome: 'Cobertura', conteudo: { equivaleAGrao: false, sinonimos: ['COBERTURA', 'PLANTA DE COBERTURA', 'ADUBACAO VERDE'] } },
+  ];
+
+  const lista = load<ConteudoProposito>('propositos');
+  const jaTem = new Set(lista.map(i => i.nome.trim().toLowerCase()));
+  const u = uidUsuario();
+  // `escopoDe(undefined)` herda a empresa ativa e devolve escopo 'empresa' —
+  // que é o certo aqui pelo mesmo motivo dos insumos (InsumosPanel.tsx:69): os
+  // registros de cultivo vão apontar para estes itens, e catálogo privado seria
+  // uma referência que só funciona para quem cadastrou. Passar a string
+  // 'empresa' aqui gravaria "empresa" como se fosse o ID do tenant.
+  const { escopo, empresaId } = escopoDe(undefined);
+  const agora = new Date().toISOString();
+  let adicionou = false;
+
+  for (const p of PADRAO) {
+    if (jaTem.has(p.nome.toLowerCase())) continue;
+    lista.push({
+      id: uid(), categoria: 'propositos', nome: p.nome, escopo,
+      donoUsuarioId: escopo === 'meu' ? u : undefined,
+      empresaId: escopo === 'empresa' ? empresaId : undefined,
+      ativo: true, versao: 1, criadoEm: agora, atualizadoEm: agora, criadoPor: u,
+      conteudo: p.conteudo,
+    });
+    adicionou = true;
+  }
+  if (adicionou) save('propositos', lista);
   localStorage.setItem(FLAG, '1');
 }

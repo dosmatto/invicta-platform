@@ -41,6 +41,12 @@ obra — não dá para "só trazer para o AP" porque o destino não existe.
 
 ### 2.1 Subcultura não existe
 
+> **Decidido em 27/08/2026:** manter a lista fixa `CULTURAS` e descartar o
+> qualificador de transgenia — `SOJA TRANSGENICA` entra como `Soja`. O texto
+> original da planilha é PRESERVADO no registro do cultivo, para o caso de a
+> subcultura vir a existir. A hierarquia Cultura → Subcultura da seção 5.1
+> **não** será construída.
+
 Não há `subcultura`, `sub-cultura` nem `espécie` em lugar nenhum do repositório.
 O que existe é **um nível só**, constante fixa em `src/lib/store.ts:109`:
 
@@ -557,7 +563,7 @@ utilizável ao fim de cada uma.
 | # | Fase | Entrega | Versão |
 |---|------|---------|--------|
 | 1 | Fundação de texto | `texto.ts` + `identidade.ts` + `casarTalhao.ts` e 86 testes node — **ENTREGUE** | 2.83.0 |
-| 2 | Catálogos | Cultura/Subcultura, Propósito, Cultivar na Biblioteca + semeadura + `CULTURAS` como wrapper (corrige o bug de acento) | 2.84.0 |
+| 2 | Catálogos | Propósito e Cultivar na Biblioteca + semeadura + mapa de cultura — **ENTREGUE** | 2.84.0 |
 | 3 | Grupos | `ConteudoGrupo` + `Cliente.grupoId` + UI no painel de produtores | 2.85.0 |
 | 4 | Cultivo | Entidade + `getPlantio` derivado + migração dos plantios existentes | 2.86.0 |
 | 5 | Leitor + motor | `planilha.ts` + `conferencia.ts` + testes contra a planilha real | 2.87.0 |

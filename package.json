@@ -47,6 +47,7 @@
     "teste:versoes": "node scripts/teste-versoes-zonas.mjs",
     "teste:lab": "node scripts/teste-lab-import.mjs",
     "teste:importacao": "node scripts/teste-importacao.mjs",
+    "teste:importacao-catalogo": "node scripts/teste-importacao-catalogo.mjs",
     "teste:elo": "node scripts/teste-elo-grade.mjs",
     "teste:rotulos": "node scripts/teste-rotulos-mapa.mjs",
     "teste:insumos": "node scripts/teste-insumos.mjs",

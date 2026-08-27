@@ -42,6 +42,10 @@ const KEYS_LISTA = [
   'inv_bib_equacoes',                  // Fase R1 — Equações de recomendação
   'inv_bib_recomendacoes',             // Fase R2 — Recomendações (conjuntos de equações)
   'inv_bib_exportacao',                // Coeficientes de exportação de nutrientes por cultura.
+  'inv_bib_propositos',                // Pendência 20 — propósito da lavoura (grãos, semente, silagem…)
+  'inv_bib_cultivares',                // Pendência 20 — cultivares + os códigos comerciais que a
+                                       // planilha do cliente usa. É o dicionário que faz a
+                                       // importação do ano seguinte não repetir trabalho manual.
                                        // Nasce dentro do sync (não há dado local anterior), então
                                        // NÃO precisa de migrar…ParaSyncV1 como os vizinhos.
   'inv_bib_insumos',                   // Parte XIV — Insumos. Entrou no sync na v2.42, quando
@@ -134,6 +138,7 @@ const KEYS_PULAR_CAMPO = new Set<string>([
   'inv_prescricoes',                   // plataforma-only: o app de campo não lê prescrições
   'inv_bib_insumos',                   // idem — insumos só servem às prescrições e às equações
   'inv_bib_exportacao',                // idem — só o relatório de produtividade usa
+  'inv_bib_propositos', 'inv_bib_cultivares',  // idem — só a importação de planilha usa
 ]);
 const KEYS_LISTA_CAMPO = KEYS_LISTA.filter(k => !KEYS_PULAR_CAMPO.has(k));
 

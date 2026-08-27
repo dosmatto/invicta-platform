@@ -29,6 +29,7 @@ levar mais de uma versão (repete o número na linha seguinte, com a correção)
 | 19 | Separar uma área do talhão (desmembrar / anexar / excluir) | 2.82.0 | Talhão → Limite do talhão → "Talhão em N áreas — separar uma delas" |
 | 18 | Nome do talhão sempre inteiro na lista (correção) | 2.83.1 | Produtores → fazenda → aba Talhões |
 | 20 | Motor de casamento da planilha fitotécnica | 2.83.0 | Sem tela (biblioteca `src/lib/importacao`); plano em `docs/IMPORTACAO-FITOTECNICA.md` |
+| 20 | Cadastro de cultivares e propósitos | 2.84.0 | Biblioteca → Cultivares · Biblioteca → Propósitos |
 
 > As pendências 1–17 foram entregues antes deste registro existir e não estão
 > catalogadas; procure pelo assunto no `changelog.ts`. Da 18 em diante, tudo
