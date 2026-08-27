@@ -32,6 +32,7 @@ levar mais de uma versão (repete o número na linha seguinte, com a correção)
 | 20 | Cadastro de cultivares e propósitos | 2.84.0 | Biblioteca → Cultivares · Biblioteca → Propósitos |
 | 20 | Cultivo: consórcio, talhão partido e safrinha | 2.85.0 | Talhão → seletor de Cultura (sem mudança visível; o registro por trás mudou) |
 | 20 | Leitor da planilha e motor de conferência | 2.86.0 | Sem tela (`src/lib/importacao/planilha.ts` e `conferencia.ts`) |
+| 20 | Importar planilha fitotécnica: a tela | 2.88.0 | Barra lateral → Importar planilha |
 
 > As pendências 1–17 foram entregues antes deste registro existir e não estão
 > catalogadas; procure pelo assunto no `changelog.ts`. Da 18 em diante, tudo

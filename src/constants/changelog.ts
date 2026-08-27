@@ -1,5 +1,16 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [20] Importar planilha fitotécnica: a tela
+  '2.88.0': [
+    'PENDÊNCIA 20 — A TELA DE IMPORTAÇÃO DA PLANILHA ESTÁ NO AR. Novo ícone "Importar planilha" na barra lateral. Você solta o arquivo do cliente e o sistema lê, confere linha por linha contra o seu cadastro e mostra o que consegue resolver sozinho. Nada é gravado até você mandar.',
+    'O PRÉ-VOO VEM ANTES DA TABELA, E É ELE QUE POUPA O TEMPO. Em vez de despejar 592 linhas, a primeira tela lista o que falta cadastrar ORDENADO PELO NÚMERO DE LINHAS QUE CADA ITEM DESTRAVA: cadastrar o produtor "Morro Chato" resolve 30 linhas de uma vez. Cada bloco (produtores, fazendas, talhões, cultivares, propósitos, culturas) diz quantos itens e quantas linhas estão presos nele.',
+    'CADASTRAR CULTIVAR SEM SAIR DA TELA. Ao lado de cada cultivar que falta há um botão que abre o cadastro por cima, JÁ PREENCHIDO: o código da planilha entra como código comercial e, quando o próprio código traz o nome entre parênteses — "SS261SVIP3 (NK 301 VIP3)" —, o nome vem preenchido também. Salvou, a janela fecha, a lista encolhe na hora e as linhas daquele material saem de pendentes. Mesma coisa para propósito.',
+    'A TABELA TEM QUATRO ABAS — Pendentes, Prontas, Fora e Tudo — e cada linha mostra, embaixo de cada campo, EXATAMENTE o que veio na planilha, para você conferir sem abrir o Excel ao lado. A coluna "O que falta" explica em português o que impede aquela linha de entrar, e uma linha pronta mostra por que casou.',
+    'RESOLVER UMA LINHA RESOLVE AS IGUAIS: escolher o produtor de uma linha aplica a todas as linhas dele; e o talhão "DNHDV 09a" e o "DNHDV 09 A" contam como a mesma decisão. A tela avisa quantas outras linhas vão junto.',
+    'TALHÃO COM DUAS LINHAS QUASE IDÊNTICAS vira pergunta com dois botões — "São partes" ou "Mesma área" — em vez de o sistema escolher por você. Qualquer linha pode ser tirada da importação sem sumir do relatório.',
+    'AO IMPORTAR, SAI UM EXCEL DE CONTROLE com três abas: o que ENTROU (com o motivo do casamento), o que NÃO ENTROU (com o número da linha no arquivo e o motivo, para tratar manualmente) e as DIVERGÊNCIAS DE ÁREA — onde a área declarada pelo cliente difere mais de 2% da área do talhão no cadastro. A área do talhão continua sendo a geodésica do polígono; a da planilha entra como área declarada, ao lado.',
+    'Onde conferir: barra lateral → Importar planilha. Verificado com a planilha real de 592 linhas.',
+  ],
   '2.87.0': [
     'DISTRIBUIÇÃO DO INSUMO POR ÁREA SEPARADA — opção nova no relatório de recomendação, DESLIGADA por padrão. Talhão multipolígono são duas ou mais manchas separadas por estrada, mata ou benfeitoria: a recomendação é uma só, mas a CARRETA é despachada para uma mancha de cada vez. O relatório dizia apenas o total do talhão e o rateio ficava na conta de cabeça de quem está no pátio.',
     'MARCANDO A OPÇÃO, entra uma página com o MAPA das manchas numeradas (1, 2, 3…) e, embaixo, a tabela: tamanho de cada uma, a fatia do talhão e QUANTO DE CADA INSUMO vai em cada uma, mais o investimento. O número do mapa é o mesmo da tabela — é por ele que o relatório e o motorista se entendem.',

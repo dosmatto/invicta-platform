@@ -567,8 +567,8 @@ utilizável ao fim de cada uma.
 | 3 | Grupos | `ConteudoGrupo` + `Cliente.grupoId` + UI no painel de produtores | 2.86.0 |
 | 4 | Cultivo | Entidade + `getPlantio` derivado + migração dos plantios existentes — **ENTREGUE** | 2.85.0 |
 | 5 | Leitor + motor | `planilha.ts` + `conferencia.ts` + testes contra a planilha real — **ENTREGUE** | 2.86.0 |
-| 6 | Painel | Tela cheia, tabela, agrupamento, modais de criação | 2.88.0 |
-| 7 | Gravação | `aplicar.ts` em lote + relatório XLSX + registro de importação | 2.89.0 |
+| 6 | Painel | Tela cheia, pré-voo, tabela, modais de criação — **ENTREGUE** | 2.88.0 |
+| 7 | Gravação | `aplicar.ts` em lote + relatório XLSX de 3 abas — **ENTREGUE** | 2.88.0 |
 
 Fases 1, 2 e 3 são independentes entre si e podem ser construídas em paralelo.
 

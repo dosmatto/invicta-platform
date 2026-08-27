@@ -12,6 +12,7 @@ import { TalhaoDetailPanel } from '@/components/panels/TalhaoDetailPanel';
 
 // Painéis auxiliares
 import { BibliotecaPanel } from '@/components/panels/BibliotecaPanel';
+import { ImportarFitotecnicoPanel } from '@/components/panels/ImportarFitotecnicoPanel';
 import { ConfiguracoesPanel } from '@/components/panels/ConfiguracoesPanel';
 import { EmpresaConfig } from '@/components/panels/EmpresaConfig';
 import { MedicoesPanel } from '@/components/panels/MedicoesPanel';
@@ -28,6 +29,22 @@ export function SlidePanel() {
   const { activePanel, setActivePanel } = useApp();
 
   if (!activePanel) return null;
+
+  // Importação de planilha em TELA CHEIA, pelo mesmo motivo da Biblioteca: são
+  // centenas de linhas com oito colunas, e 300 px de painel não comportam.
+  if (activePanel === 'importar-fito') {
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col" style={{ background: 'var(--invicta-blue-dark)' }}>
+        <div className="flex items-center justify-between px-4 py-3 flex-shrink-0" style={{ borderBottom: '1px solid #1a3a6b' }}>
+          <h2 className="text-sm font-semibold uppercase tracking-wide" style={{ color: '#fff' }}>Importar planilha fitotécnica</h2>
+          <button onClick={() => setActivePanel(null)} className="p-1 rounded hover:bg-white/10 transition-colors">
+            <X size={16} style={{ color: 'var(--sidebar-text)' }} />
+          </button>
+        </div>
+        <div className="flex-1 overflow-hidden flex"><ImportarFitotecnicoPanel /></div>
+      </div>
+    );
+  }
 
   // Biblioteca em TELA CHEIA (overlay) — sem o mapa, mais espaço para trabalhar.
   if (activePanel === 'biblioteca') {
