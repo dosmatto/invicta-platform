@@ -1,5 +1,13 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [18] Correção: o nome do talhão não é mais cortado na lista
+  '2.82.1': [
+    'PENDÊNCIA 18 (CORREÇÃO) — O NOME DO TALHÃO NÃO É MAIS CORTADO NA LISTA DA FAZENDA. A lista mostrava "IGEFI…" no lugar do nome, e num cadastro em que todos começam igual as reticências não identificam nada — a linha ficava ilegível justamente na coluna que importa.',
+    'O QUE COMIA O ESPAÇO: a linha tem 320 px e as ações do lado direito estavam levando quase todas. A pior era o selo "Ativo" repetido nas 18 linhas: ~50 px por linha para dizer o que o quadradinho verde da esquerda já diz. Ele agora só aparece quando NÃO é ativo — que é quando há algo a resolver (o quadradinho âmbar continua marcando "Incompleto", agora com o motivo na dica do mouse).',
+    'O "Abrir" perdeu o rótulo e ficou só com o ícone, os três botões encolheram de 13 para 12 px com metade do respiro lateral, e o selo de áreas separadas ficou mais estreito. No total, cerca de 90 px voltaram para o nome.',
+    'E O NOME NUNCA MAIS É CORTADO, por mais longo que seja: em vez de reticências ele quebra em duas linhas. "IGEFI 12B RETIRO GRANDE" cabe numa linha só; "IGEFI 01 RETIRO DO CAMPO ALTO DA SERRA" usa duas e aparece inteiro. Só a linha comprida cresce — o resto da lista continua igual.',
+    'Onde conferir: Produtores → fazenda → aba Talhões.',
+  ],
   // [20] Motor de casamento da planilha fitotécnica
   '2.83.0': [
     'PENDÊNCIA 20 — MOTOR DE CASAMENTO DA PLANILHA FITOTÉCNICA (primeira parte, ainda SEM TELA). Esta versão não muda nada do que você vê: é o miolo que vai ligar cada linha da planilha do cliente ao produtor, à fazenda e ao talhão do cadastro. A tela de conferência vem nas próximas versões.',

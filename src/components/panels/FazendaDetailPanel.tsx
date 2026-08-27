@@ -352,33 +352,41 @@ export function FazendaDetailPanel() {
                     return (
                     <div key={t.id} style={{ borderBottom: '1px solid #0f2240' }}>
                     <div role="button" tabIndex={0} onClick={() => abrirTalhao(t)}
-                      className="group w-full flex items-center gap-2.5 px-3 py-2.5 text-left transition-colors cursor-pointer"
+                      className="group w-full flex items-center gap-2 px-3 py-2.5 text-left transition-colors cursor-pointer"
                       onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'var(--sidebar-item-hover)'}
                       onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}>
                       <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
+                        title={t.status === 'ativo' ? 'Ativo' : 'Incompleto — falta o limite geográfico'}
                         style={{ background: t.status === 'ativo' ? '#166534' : '#78350f' }}>
                         <Map size={13} style={{ color: t.status === 'ativo' ? '#86efac' : '#fde68a' }} />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-[13px] font-semibold truncate leading-tight" style={{ color: '#e2e8f0' }}>{t.nome}</p>
+                        {/* O NOME NUNCA É CORTADO: quebra em duas linhas se precisar.
+                            Reticências num nome de talhão ("IGEFI…") não identificam
+                            nada numa lista em que todos começam igual. */}
+                        <p className="text-[13px] font-semibold leading-tight" style={{ color: '#e2e8f0', overflowWrap: 'anywhere' }}>{t.nome}</p>
                         <p className="text-[10px] truncate mt-0.5" style={{ color: '#64748b' }}>
                           {t.areaHa > 0 ? `${t.areaHa.toLocaleString('pt-BR')} ha` : 'Área não definida'}
                         </p>
                       </div>
-                      <div className="flex items-center gap-1.5 relative">
+                      <div className="flex items-center gap-1 relative flex-shrink-0">
                         {/* GAVETA das áreas separadas — só em talhão multipolígono. */}
                         {multi && (
                           <button
                             onClick={e => { e.stopPropagation(); setPartesAbertas(aberto ? null : t.id); }}
                             title={`Talhão em ${partes.length} áreas separadas — ver a área de cada uma`}
-                            className="flex items-center gap-0.5 px-1.5 py-1 rounded flex-shrink-0"
+                            className="flex items-center gap-0.5 px-1 py-1 rounded flex-shrink-0"
                             style={{ background: aberto ? '#78350f' : '#422006', color: '#fbbf24' }}>
-                            <Layers size={12} />
+                            <Layers size={11} />
                             <span className="text-[9px] font-semibold">{partes.length}</span>
-                            <ChevronDown size={11} style={{ transform: aberto ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }} />
+                            <ChevronDown size={10} style={{ transform: aberto ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }} />
                           </button>
                         )}
-                        <StatusBadge status={t.status} />
+                        {/* O selo de status só aparece quando há o que resolver: o
+                            quadradinho da esquerda já é verde para ativo e âmbar para
+                            incompleto, e escrever "Ativo" em 18 linhas seguidas custava
+                            ~50 px do nome sem dizer nada. */}
+                        {t.status !== 'ativo' && <StatusBadge status={t.status} />}
                         {/* Baixar a GEOMETRIA do talhão (KML / SHP). Só aparece com
                             contorno salvo — sem ele não há o que exportar. */}
                         {partes.length > 0 && (
@@ -386,9 +394,9 @@ export function FazendaDetailPanel() {
                             <button
                               onClick={e => { e.stopPropagation(); setBaixarId(baixarId === t.id ? null : t.id); }}
                               title="Baixar o contorno do talhão (KML / SHP)"
-                              className="flex items-center px-1.5 py-1 rounded flex-shrink-0"
+                              className="flex items-center px-1 py-1 rounded flex-shrink-0"
                               style={{ background: '#14532d', color: '#86efac' }}>
-                              {baixando?.startsWith(t.id) ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
+                              {baixando?.startsWith(t.id) ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
                             </button>
                             {baixarId === t.id && (
                               <>
@@ -414,8 +422,8 @@ export function FazendaDetailPanel() {
                         {/* Abrir a PÁGINA COMPLETA do talhão (nova aba) — sempre visível (antes só no hover) */}
                         <button onClick={e => { e.stopPropagation(); window.open(`/talhao/${t.id}`, '_blank'); }}
                           title="Abrir página completa do talhão (nova aba)"
-                          className="flex items-center gap-1 px-1.5 py-1 rounded flex-shrink-0" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
-                          <ExternalLink size={13} /><span className="text-[9px] font-semibold hidden sm:inline">Abrir</span>
+                          className="flex items-center px-1 py-1 rounded flex-shrink-0" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
+                          <ExternalLink size={12} />
                         </button>
                       </div>
                     </div>
