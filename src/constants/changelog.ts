@@ -1,5 +1,13 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.79.1': [
+    'CORRIGIDO — O RESUMO ANALITICO SE SOBREPUNHA quando o talhao tinha zonas de manejo. O bloco da esquerda recebia 92 mm de altura mas o conteudo (estatistica + qualidade do dado + limpeza) pedia ~108: a limpeza transbordava por cima do titulo do boxplot, e a linha da media real saia cortada. Acontecia ja com 3 zonas.',
+    'A estatistica passou a sair em TRES colunas (cinco linhas em vez de sete) e o relatorio de limpeza em linhas densas, com os assuntos juntos, em vez de seis linhas soltas. Tudo cabe, e a leitura ficou mais compacta em vez de mais pobre.',
+    'CORRIGIDO — O BOXPLOT POR ZONA ESTOURAVA A PARTIR DE 8 ZONAS. A altura da linha tinha um piso de 4 mm que garantia legibilidade mas passava do quadro: com 15 zonas seriam 60 mm num vao de 31, invadindo o rodape. O piso saiu — estourar e pior que apertar.',
+    'ACIMA DE 6 ZONAS A ANALISE GANHA PAGINA PROPRIA. Boxplot em largura total, painel de separacao entre zonas e mini-mapa maior, com a tabela COMPLETA (antes cortava em 6 linhas e resumia o resto em "+N zonas" — escondendo justamente a zona problematica). Cabem 15 zonas com 8 mm por linha, e ate cerca de 18.',
+    'ATE 6 ZONAS NADA MUDA: o resumo analitico continua numa folha so, com o mesmo desenho de antes. A pagina extra so aparece quando ela e necessaria.',
+    'De quebra, com a analise por zona em folha propria o bloco da estatistica recupera a altura cheia da pagina.',
+  ],
   '2.79.0': [
     'O IMPORTADOR DEIXOU DE DEPENDER DA POSIÇÃO DA COLUNA. Os perfis de laboratório leem por posição fixa, e toda coluna fora da lista era jogada fora sem uma palavra — foi assim que o Ferro sumiu, e é assim que somem H+Al, Sódio, Soma de Bases e Silte. Agora, depois de aplicar o perfil, o app varre as colunas que sobraram e aproveita as que reconhece pelo NOME do cabeçalho.',
     'E AVISA, EM VEZ DE FAZER CALADO: aparece um aviso verde na prévia dizendo quantas e quais colunas entraram por fora do perfil, pedindo para você conferir a unidade delas. Acrescentar em silêncio só trocaria uma falha muda por outra.',

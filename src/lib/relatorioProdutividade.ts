@@ -920,30 +920,33 @@ function blocoEstatistica(doc: JsPDF, d: DadosRelatorioProd, x: number, y: numbe
     doc.text('Sem estatistica disponivel para este mapa.', x + 4, yy);
   } else {
     const pares: Array<[string, string]> = [
-      ['Pixels validos', fmt(r.n, 0)],
+      ['Pixels', fmt(r.n, 0)],
       ['Media', `${emU(r.media, d.unidade)} ${u}`],
       ['Mediana', `${emU(r.mediana, d.unidade)} ${u}`],
       ['Minimo', `${emU(r.min, d.unidade)} ${u}`],
       ['Maximo', `${emU(r.max, d.unidade)} ${u}`],
       ['Amplitude', `${emU(r.amplitude, d.unidade)} ${u}`],
-      ['Desvio padrao', `${emU(r.desvio, d.unidade)} ${u}`],
+      ['Desvio', `${emU(r.desvio, d.unidade)} ${u}`],
       ['CV', r.cv != null ? `${fmt(r.cv, 1)}%` : '—'],
       ['P5', `${emU(r.p5, d.unidade)} ${u}`],
       ['P25', `${emU(r.p25, d.unidade)} ${u}`],
       ['P75', `${emU(r.p75, d.unidade)} ${u}`],
       ['P95', `${emU(r.p95, d.unidade)} ${u}`],
-      ['IQR (P75-P25)', `${emU(r.iqr, d.unidade)} ${u}`],
-      ['Outliers (Tukey)', `${fmt(r.outliers, 0)} (${fmt(r.pctOutliers, 1)}%)`],
+      ['IQR', `${emU(r.iqr, d.unidade)} ${u}`],
+      ['Outliers', `${fmt(r.outliers, 0)} (${fmt(r.pctOutliers, 1)}%)`],
     ];
-    const colW = (w - 8) / 2;
-    const linhas = Math.ceil(pares.length / 2);
+    // TRÊS colunas, não duas: em duas eram 7 linhas e o bloco inteiro pedia
+    // ~108 mm num espaço de 92 — a limpeza transbordava por cima do boxplot.
+    const nCols = 3;
+    const colW = (w - 8) / nCols;
+    const linhas = Math.ceil(pares.length / nCols);
     pares.forEach(([lab, val], i) => {
       const cx = x + 4 + Math.floor(i / linhas) * colW;
       const cy = yy + (i % linhas) * 4.5;
-      doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(...GRAY);
-      doc.text(lab, cx, cy);
-      doc.setFont('helvetica', 'bold'); doc.setTextColor(...NAVY);
-      doc.text(val, cx + colW - 6, cy, { align: 'right' });
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(6.2); doc.setTextColor(...GRAY);
+      doc.text(clipTexto(doc, lab, colW - 15), cx, cy);
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(6.5); doc.setTextColor(...NAVY);
+      doc.text(val, cx + colW - 5, cy, { align: 'right' });
     });
     yy += linhas * 4.5 + 3;
   }
@@ -989,33 +992,36 @@ function blocoEstatistica(doc: JsPDF, d: DadosRelatorioProd, x: number, y: numbe
   yy += 4.5;
   doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(...GRAY);
   const l = d.limpeza;
+  // Linhas DENSAS, com assuntos juntos: soltas eram seis e pediam 25 mm, que
+  // o bloco não tem quando as zonas dividem a página com ele.
+  const txt: string[] = [];
   if (l) {
-    const txt = [
-      `${fmt(l.n_bruto, 0)} pontos brutos -> filtro ${fmt(l.n_apos_filtro_bruto, 0)}`,
-      `MapFilter global -${fmt(l.mapfilter_global_removidos, 0)} | local -${fmt(l.mapfilter_local_removidos, 0)}`,
-      `${fmt(l.n_usados, 0)} pontos usados na interpolacao`,
-      l.correcao_colhedora_global ? `Colhedoras corrigidas: ${l.correcao_colhedora_global.maquinas_corrigidas}` : null,
-      l.fator_media_real != null ? `Calibrado pela media real x${fmt(l.fator_media_real, 3)}` : null,
-      d.nMaquinas ? `Maquinas importadas: ${d.nMaquinas}` : null,
-    ].filter((s): s is string => !!s);
-    txt.forEach((t, i) => doc.text(t, x + 4, yy + i * 4.2, { maxWidth: w - 8 }));
+    txt.push(`${fmt(l.n_bruto, 0)} brutos -> ${fmt(l.n_usados, 0)} usados (apos filtro ${fmt(l.n_apos_filtro_bruto, 0)})`);
+    txt.push(`MapFilter global -${fmt(l.mapfilter_global_removidos, 0)} | local -${fmt(l.mapfilter_local_removidos, 0)}`
+      + (l.correcao_colhedora_global ? ` · ${l.correcao_colhedora_global.maquinas_corrigidas} colhedora(s) corrigida(s)` : ''));
+    if (l.fator_media_real != null) {
+      txt.push(`Calibrado pela media real x${fmt(l.fator_media_real, 3)}` + (d.nMaquinas ? ` · ${d.nMaquinas} maquina(s)` : ''));
+    } else if (d.nMaquinas) {
+      txt.push(`${d.nMaquinas} maquina(s) importada(s)`);
+    }
   } else {
     // Versão reaberta da nuvem: os contadores por etapa não foram arquivados,
     // então imprimimos o que EXISTE em vez de inventar números.
     const c = d.cleaningSalvo ?? {};
     const num = (k: string) => (typeof c[k] === 'number' ? fmt(c[k] as number, 0) : null);
-    const txt = [
-      d.nPontosSalvo != null ? `${fmt(d.nPontosSalvo, 0)} pontos importados -> ${fmt(d.stats.nUsados, 0)} usados` : `${fmt(d.stats.nUsados, 0)} pontos usados`,
-      num('hard_min') && num('hard_max') ? `Filtro bruto: ${num('hard_min')} a ${num('hard_max')} kg/ha` : null,
-      typeof c.mf_global_v === 'number' ? `MapFilter global +-${fmt((c.mf_global_v as number) * 100, 0)}% | local +-${typeof c.mf_local_v === 'number' ? fmt((c.mf_local_v as number) * 100, 0) : '?'}% em ${num('mf_local_r') ?? '?'} m` : null,
-      c.corrigir_colhedora ? 'Correcao entre colhedoras: ativa' : null,
-      d.mediaRealKgha ? `Media real informada: ${emU(d.mediaRealKgha, d.unidade)} ${u}` : null,
-      'Contadores por etapa nao foram arquivados nesta versao.',
-    ].filter((s): s is string => !!s);
-    txt.forEach((t, i) => doc.text(t, x + 4, yy + i * 4.2, { maxWidth: w - 8 }));
+    txt.push(d.nPontosSalvo != null
+      ? `${fmt(d.nPontosSalvo, 0)} importados -> ${fmt(d.stats.nUsados, 0)} usados`
+      : `${fmt(d.stats.nUsados, 0)} pontos usados`);
+    if (num('hard_min') && num('hard_max')) txt.push(`Filtro bruto: ${num('hard_min')} a ${num('hard_max')} kg/ha`);
+    if (typeof c.mf_global_v === 'number') {
+      txt.push(`MapFilter +-${fmt((c.mf_global_v as number) * 100, 0)}% global`
+        + (typeof c.mf_local_v === 'number' ? ` · +-${fmt((c.mf_local_v as number) * 100, 0)}% local em ${num('mf_local_r') ?? '?'} m` : ''));
+    }
+    txt.push('Contadores por etapa nao arquivados nesta versao.');
   }
+  doc.setFontSize(6.5);
+  txt.forEach((t, i) => doc.text(t, x + 4, yy + i * 4, { maxWidth: w - 8 }));
 }
-
 // Bloco B — dispersão NDVI × produtividade.
 function blocoDispersao(doc: JsPDF, d: DadosRelatorioProd, x: number, y: number, w: number, h: number): void {
   quadro(doc, x, y, w, h, 'DISPERSAO NDVI x PRODUTIVIDADE');
@@ -1130,6 +1136,15 @@ function corDaZonaPorMedia(q: ClassificacaoQuantis, media: number, fallback: str
   return q.faixas[Math.min(indiceFaixa(media, q.breaks), q.faixas.length - 1)].cor;
 }
 
+/**
+ * Acima deste número de zonas a análise ganha PÁGINA PRÓPRIA.
+ *
+ * No rodapé da página 4 sobram 31 mm para as linhas. Sete zonas ainda cabem
+ * (4,4 mm cada); a partir de oito o piso de altura de linha passa do espaço e
+ * o gráfico invade o rodapé — com 15 seriam 60 mm num vão de 31.
+ */
+export const ZONAS_INLINE_MAX = 6;
+
 function blocoBoxplot(doc: JsPDF, d: DadosRelatorioProd, x: number, y: number, w: number, h: number): void {
   quadro(doc, x, y, w, h, 'PRODUTIVIDADE POR ZONA DE MANEJO');
   const zs = d.zonas.filter(z => z.stats);
@@ -1159,7 +1174,10 @@ function blocoBoxplot(doc: JsPDF, d: DadosRelatorioProd, x: number, y: number, w
   const topo = y + 11;
   // Reserva do pé: linha dos ticks (+2) e legenda do gráfico (+5,4), com 2 mm
   // de respiro até a borda do quadro.
-  const rowH = Math.min(8, Math.max(4, (h - 22) / zs.length));
+  // Sem piso: um piso garante linha legível mas ESTOURA o quadro quando há
+  // zona demais, e estourar é pior que apertar. Acima de ZONAS_INLINE_MAX a
+  // página própria dá espaço de sobra, então aqui o aperto nunca acontece.
+  const rowH = Math.min(8, (h - 22) / zs.length);
 
   zs.forEach((z, i) => {
     const s = z.stats!;
@@ -1243,7 +1261,9 @@ function blocoBoxplot(doc: JsPDF, d: DadosRelatorioProd, x: number, y: number, w
 }
 
 // Bloco D — mini-mapa da média por zona + tabela.
-async function blocoMapaZonas(doc: JsPDF, d: DadosRelatorioProd, x: number, y: number, w: number, h: number): Promise<void> {
+async function blocoMapaZonas(
+  doc: JsPDF, d: DadosRelatorioProd, x: number, y: number, w: number, h: number, todas = false,
+): Promise<void> {
   quadro(doc, x, y, w, h, 'MEDIA POR ZONA');
   const zs = d.zonas.filter(z => z.stats);
   if (!zs.length) {
@@ -1257,7 +1277,10 @@ async function blocoMapaZonas(doc: JsPDF, d: DadosRelatorioProd, x: number, y: n
   // do talhão — melhor que inventar uma rampa min–máx só para esta figura.
   const corDaZona = (media: number, fallback: string): string => corDaZonaPorMedia(d.quantis, media, fallback);
 
-  const mapaW = w - 8, mapaH = h - 16 - Math.min(zs.length, 6) * 4.4 - 6;
+  // Na página própria a tabela mostra TODAS as zonas: é ela que o técnico usa
+  // para decidir manejo, e cortar nela esconde justamente a zona problemática.
+  const nLinhas = todas ? zs.length : Math.min(zs.length, 6);
+  const mapaW = w - 8, mapaH = Math.max(40, h - 16 - nLinhas * 4.4 - 6);
   const png = await capturarMapaZonas({
     bounds: d.bounds, externo: d.poligono,
     zonas: zs.map(z => ({ geometry: z.geometry, cor: corDaZona(z.stats!.media, z.cor), rotulo: z.id })),
@@ -1278,7 +1301,7 @@ async function blocoMapaZonas(doc: JsPDF, d: DadosRelatorioProd, x: number, y: n
   doc.text('ha', x + w - 17, ty, { align: 'right' });
   doc.text('CV', x + w - 4, ty, { align: 'right' });
   ty += 3.6;
-  for (const z of zs.slice(0, 6)) {
+  for (const z of zs.slice(0, nLinhas)) {
     const s = z.stats!;
     doc.setFillColor(...hexRgb(corDaZona(s.media, z.cor))); doc.roundedRect(x + 4, ty - 2.4, 3, 3, 0.5, 0.5, 'F');
     doc.setFont('helvetica', 'normal'); doc.setFontSize(6); doc.setTextColor(...NAVY);
@@ -1289,9 +1312,9 @@ async function blocoMapaZonas(doc: JsPDF, d: DadosRelatorioProd, x: number, y: n
     doc.text(s.cv != null ? `${fmt(s.cv, 0)}%` : '—', x + w - 4, ty, { align: 'right' });
     ty += 4.4;
   }
-  if (zs.length > 6) {
+  if (zs.length > nLinhas) {
     doc.setFont('helvetica', 'italic'); doc.setFontSize(5.5); doc.setTextColor(...GRAY);
-    doc.text(`+ ${zs.length - 6} zona(s) no grafico ao lado`, x + 9, ty);
+    doc.text(`+ ${zs.length - nLinhas} zona(s) no grafico ao lado`, x + 9, ty);
   }
 }
 
@@ -1299,7 +1322,11 @@ async function paginaResumo(doc: JsPDF, d: DadosRelatorioProd, logos: Logos): Pr
   cabecalho(doc, d, logos, 'PRODUTIVIDADE', 'Resumo analitico');
 
   const topY = 31;
-  const temZonas = d.zonas.some(z => z.stats);
+  const nZonas = d.zonas.filter(z => z.stats).length;
+  // Com zona demais a análise vai para PÁGINA PRÓPRIA (ver paginaZonas): aqui
+  // ela dividiria 31 mm entre todas e invadiria o rodapé. De quebra, o bloco
+  // da estatística recupera a altura cheia da página.
+  const temZonas = nZonas > 0 && nZonas <= ZONAS_INLINE_MAX;
   const gap = 4;
 
   // Sem zonas, a dispersão herda a largura do bloco D — a página não fica com
@@ -1325,6 +1352,31 @@ async function paginaResumo(doc: JsPDF, d: DadosRelatorioProd, logos: Logos): Pr
   rodape(doc, logos);
 }
 
+// ── Página de ANÁLISE POR ZONA (quando são muitas) ──────────────────────────
+
+/**
+ * A mesma análise da página 4, em folha inteira.
+ *
+ * Sai quando o talhão tem mais de ZONAS_INLINE_MAX zonas: no rodapé da página
+ * 4 sobram 31 mm, e quinze zonas ali dariam 2 mm por linha. Aqui há 127 mm
+ * úteis — 15 zonas com 8 mm cada, e ainda cabem ~18.
+ *
+ * Mesmos blocos e mesmo estilo da página 4, só maiores: quem já leu um
+ * relatório reconhece a folha sem precisar reaprender nada.
+ */
+async function paginaZonas(doc: JsPDF, d: DadosRelatorioProd, logos: Logos): Promise<void> {
+  cabecalho(doc, d, logos, 'PRODUTIVIDADE', 'Analise por zona de manejo');
+
+  const topY = 31, gap = 4;
+  const fimUtil = MARCA_Y - 4;              // 180
+  const wD = 100;                            // mini-mapa + tabela completa
+  const wBox = W - 2 * M - wD - gap;
+  blocoBoxplot(doc, d, M, topY, wBox, fimUtil - topY);
+  await blocoMapaZonas(doc, d, M + wBox + gap, topY, wD, fimUtil - topY, true);
+
+  marcaInvicta(doc, logos.inv, 'esquerda');
+  rodape(doc, logos);
+}
 // ── Orquestração ─────────────────────────────────────────────────────────────
 
 export function validarProd(d: DadosRelatorioProd): string | null {
@@ -1363,6 +1415,10 @@ export async function renderProdutividadeNoDoc(
   for (const e of d.exportacoes ?? []) await pag(() => paginaExportacao(doc, d, e, logos));
   if (d.ndvi) await pag(() => paginaNdvi(doc, d, logos));
   await pag(() => paginaResumo(doc, d, logos));
+  // Zona demais para caber no rodapé da página anterior → folha própria.
+  if (d.zonas.filter(z => z.stats).length > ZONAS_INLINE_MAX) {
+    await pag(() => paginaZonas(doc, d, logos));
+  }
 }
 
 export function nomeArquivoProd(d: DadosRelatorioProd): string {
