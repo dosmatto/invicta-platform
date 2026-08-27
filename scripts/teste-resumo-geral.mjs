@@ -5,7 +5,8 @@
 // for contada uma vez por dose, ou se um produto não recebido virar zero em vez
 // de célula vazia, o relatório mente sobre quanto comprar e onde aplicar.
 import assert from 'node:assert/strict';
-import { montarResumoGeral, produtosDe, planejarTabela, LARGURA_UTIL_MM, LARG_MIN_PRODUTO_MM } from '../src/lib/recomendacao/resumoGeral.ts';
+import { montarResumoGeral, produtosDe, planejarTabela, nomeArquivoResumo, LARGURA_UTIL_MM, LARG_MIN_PRODUTO_MM } from '../src/lib/recomendacao/resumoGeral.ts';
+import { comExtensao } from '../src/lib/abrirPdf.ts';
 
 let ok = 0, fail = 0;
 function t(nome, fn) {
@@ -218,6 +219,45 @@ t('coluna de produto nunca fica menor que o minimo legivel', () => {
 
 t('sem produto nenhum nao quebra', () => {
   assert.deepEqual(planejarTabela([], FIXAS_FAZENDA).grupos, []);
+});
+
+
+console.log('\nNome do arquivo\n');
+
+const resumoDe = (...anos) => montarResumoGeral(anos.map(ano => L({ talhaoId: 't' + ano, ano, safra: String(ano).slice(2) + '/x' })));
+
+t('nome LEGIVEL, com o nome da fazenda e o ano — nao a sigla de maquina', () => {
+  const n = nomeArquivoResumo(resumoDe(2026), { escopo: 'fazenda', produtor: 'William Nolte', fazenda: 'Campos Gerais' });
+  assert.equal(n, 'Resumo Campos Gerais 2026');
+});
+
+t('varios anos viram um intervalo', () => {
+  const n = nomeArquivoResumo(resumoDe(2024, 2025, 2026), { escopo: 'fazenda', produtor: 'W', fazenda: 'Campos Gerais' });
+  assert.equal(n, 'Resumo Campos Gerais 2024-2026');
+});
+
+t('escopo produtor usa o nome do produtor', () => {
+  const n = nomeArquivoResumo(resumoDe(2026), { escopo: 'produtor', produtor: 'William Nolte' });
+  assert.equal(n, 'Resumo William Nolte 2026');
+});
+
+t('caractere que quebra nome de arquivo sai; acento e espaco ficam', () => {
+  const n = nomeArquivoResumo(resumoDe(2026), { escopo: 'fazenda', produtor: 'W', fazenda: 'São João / Gleba 2' });
+  assert.equal(n, 'Resumo São João Gleba 2 2026');
+  assert.ok(!/[\\/:*?"<>|]/.test(n));
+});
+
+t('sem nada preenchido ainda devolve um nome utilizavel', () => {
+  const vazio = montarResumoGeral([]);
+  assert.equal(nomeArquivoResumo(vazio, { escopo: 'fazenda', produtor: '', fazenda: '' }), 'Resumo de recomendações');
+});
+
+t('a extensao entra uma vez so', () => {
+  assert.equal(comExtensao('Resumo Campos Gerais 2026'), 'Resumo Campos Gerais 2026.pdf');
+  assert.equal(comExtensao('Resumo Campos Gerais 2026.pdf'), 'Resumo Campos Gerais 2026.pdf');
+  assert.equal(comExtensao('Resumo.PDF'), 'Resumo.PDF');
+  assert.equal(comExtensao('planilha', '.xlsx'), 'planilha.xlsx');
+  assert.equal(comExtensao(''), 'relatorio.pdf');
 });
 
 console.log(`\n${ok} passaram, ${fail} falharam\n`);

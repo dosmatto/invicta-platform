@@ -16,6 +16,7 @@ import { extrairPoligono, decodeGrid } from '../fertilidade';
 import { getTalhoes, getFazendas, getClientes, getPlantio } from '../store';
 import { anoDaSafra } from '../periodo';
 import { nomeExport } from '../nomeExport';
+import { abrirPdfNaAba } from '../abrirPdf.ts';
 import { listar as bibListar, type ConteudoEquacao } from '../biblioteca';
 import type { Cenario } from './cenarios';
 import { listarCenarios, descomprimirCenario } from './cenarios';
@@ -97,10 +98,7 @@ export async function montarPdfComparador(cenarios: Cenario[]): Promise<Blob> {
 }
 
 export function abrirOuBaixar(blob: Blob, aba: Window | null, nome: string) {
-  const url = URL.createObjectURL(blob);
-  if (aba) { aba.location.href = url; }
-  else { const a = document.createElement('a'); a.href = url; a.download = nome; document.body.appendChild(a); a.click(); a.remove(); }
-  setTimeout(() => URL.revokeObjectURL(url), 60000);
+  abrirPdfNaAba(aba, blob, nome);
 }
 
 interface Ctx { fazenda: string; talhao: string; safra: string; cultura: string; produtor: string; areaHa: number; poligono: GeoJSON.Polygon | GeoJSON.MultiPolygon | null; }

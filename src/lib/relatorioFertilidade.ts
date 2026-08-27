@@ -11,6 +11,7 @@ import type { Legenda } from './legendas';
 import { rampaVisualStops, valorParaPosicaoVisual, dominioDaLegenda } from './legendas';
 import { capturarMapaFertilidade } from './capturaMapa';
 import { imagemParaPdf, reduzirLogo } from './pdfImagem';
+import { abrirPdfNaAba } from './abrirPdf.ts';
 import { formatarValorVariavel, variavelDeAnalise } from './store';
 import { rotuloAno, type Epoca } from './periodo';
 import { nomeExport, periodoParaNome } from './nomeExport';
@@ -370,8 +371,7 @@ async function gerarDoc(paginas: DadosRelatorioFert[], nomeArquivo: string, comC
     await renderFertilidadeNoDoc(doc, paginas, { novaPaginaAntes: false, comCapa });
     const nome = nomeArquivo.replace(/[^\w.\-]+/g, '_') + '.pdf';
     const blob = doc.output('blob');
-    if (aba) { const url = URL.createObjectURL(blob); aba.location.href = url; setTimeout(() => URL.revokeObjectURL(url), 60000); }
-    else doc.save(nome);
+    abrirPdfNaAba(aba, blob, nome);
     return blob;
   } catch (e) {
     const msg = e instanceof Error ? (e.stack ?? e.message) : String(e);

@@ -14,6 +14,7 @@
 // esquerda, tira de cor com os cortes, tabela de faixas à direita).
 
 import type { jsPDF as JsPDF } from 'jspdf';
+import { abrirPdfNaAba } from './abrirPdf.ts';
 import { capturarMapaFertilidade } from './capturaMapa.ts';
 import { imagemParaPdf, reduzirLogo } from './pdfImagem.ts';
 import { nomeExport } from './nomeExport.ts';
@@ -320,8 +321,7 @@ export async function gerarRelatorioCondutividade(d: DadosRelatorioCondutividade
     const logos = await carregarLogos(d.logoClienteUrl);
     await desenharPagina(doc, d, logos);
     const blob = doc.output('blob');
-    if (aba) { const url = URL.createObjectURL(blob); aba.location.href = url; setTimeout(() => URL.revokeObjectURL(url), 60000); }
-    else doc.save(`${nomeArquivoCondutividade(d)}.pdf`);
+    abrirPdfNaAba(aba, blob, `${nomeArquivoCondutividade(d)}.pdf`);
     return blob;
   } catch (e) {
     const msg = e instanceof Error ? (e.stack ?? e.message) : String(e);

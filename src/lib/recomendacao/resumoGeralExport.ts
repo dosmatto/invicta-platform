@@ -19,9 +19,8 @@ import {
   cabecalhoNavy, rodapeNavy, cabTabela, linhaTabela, fmt, san, GREEN, NAVY,
   type Col, type ItemDose,
 } from './relatorioCenarios';
-import { montarResumoGeral, produtosDe, planejarTabela, LARG_MIN_PRODUTO_MM, type Lancamento, type ResumoGeral } from './resumoGeral';
+import { montarResumoGeral, produtosDe, planejarTabela, nomeArquivoResumo, LARG_MIN_PRODUTO_MM, type Lancamento, type ResumoGeral } from './resumoGeral';
 import { anoDaSafra } from '../periodo';
-import { nomeExport } from '../nomeExport';
 
 export interface TalhaoAlvo { id: string; nome: string; areaHa: number; fazenda: string }
 
@@ -198,13 +197,6 @@ async function carregarLogoBranca(): Promise<HTMLImageElement | null> {
   });
 }
 
-const nomeArquivo = (r: ResumoGeral, ident: IdentResumo) => nomeExport({
-  fazenda: ident.escopo === 'fazenda' ? (ident.fazenda ?? '') : ident.produtor,
-  siglaFazenda: ident.escopo === 'fazenda' ? ident.siglaFazenda ?? null : null,
-  tipo: 'RESUMO',
-  ano: r.anos[0]?.ano ?? null,
-  detalhe: r.anos.length > 1 ? `${r.anos[r.anos.length - 1].ano}a${r.anos[0].ano}` : '',
-});
 
 export async function gerarResumoGeralPdf(r: ResumoGeral, ident: IdentResumo): Promise<void> {
   if (r.anos.length === 0) throw new Error('Nada a resumir: nenhuma recomendação marcada (★) nos anos e produtos escolhidos.');
@@ -215,7 +207,7 @@ export async function gerarResumoGeralPdf(r: ResumoGeral, ident: IdentResumo): P
     const { jsPDF } = await import('jspdf');
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4', compress: true }) as JsPDF;
     montarPdfResumoGeral(doc, r, ident, logo);
-    abrirOuBaixar(doc.output('blob'), aba, nomeArquivo(r, ident) + '.pdf');
+    abrirOuBaixar(doc.output('blob'), aba, nomeArquivoResumo(r, ident) + '.pdf');
   } catch (e) {
     const msg = e instanceof Error ? (e.stack ?? e.message) : String(e);
     console.error('[resumo-geral] falha:', e);
@@ -277,7 +269,7 @@ export async function gerarResumoGeralExcel(r: ResumoGeral, ident: IdentResumo):
   const wsRec = XLSX.utils.aoa_to_sheet(recs);
   wsRec['!cols'] = [{ wch: 8 }, { wch: 40 }, { wch: 22 }, { wch: 60 }, { wch: 11 }, { wch: 14 }, { wch: 14 }];
   XLSX.utils.book_append_sheet(wb, wsRec, 'Recomendações');
-  XLSX.writeFile(wb, nomeArquivo(r, ident) + '.xlsx');
+  XLSX.writeFile(wb, nomeArquivoResumo(r, ident) + '.xlsx');
 }
 
 /** Atalho usado pela tela: filtra os produtos e devolve o resumo pronto. */

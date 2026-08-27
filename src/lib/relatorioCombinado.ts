@@ -8,6 +8,7 @@
 
 import { renderFertilidadeNoDoc, type DadosRelatorioFert } from './relatorioFertilidade';
 import { renderBookOficialNoDoc } from './recomendacao/relatorioCenarios';
+import { abrirPdfNaAba } from './abrirPdf.ts';
 import type { Cenario } from './recomendacao/cenarios';
 
 export interface ArgsRelatorioCombinado {
@@ -48,8 +49,7 @@ export async function gerarRelatorioCombinado(args: ArgsRelatorioCombinado): Pro
     const paginas = doc.getNumberOfPages();
     const nome = args.nomeArquivo.replace(/[^\w.\-]+/g, '_') + '.pdf';
     const blob = doc.output('blob');
-    if (aba) { const url = URL.createObjectURL(blob); aba.location.href = url; setTimeout(() => URL.revokeObjectURL(url), 60000); }
-    else doc.save(nome);
+    abrirPdfNaAba(aba, blob, nome);
     return { paginas };
   } catch (e) {
     const msg = e instanceof Error ? (e.stack ?? e.message) : String(e);

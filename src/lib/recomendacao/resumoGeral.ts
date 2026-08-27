@@ -202,3 +202,22 @@ export function planejarTabela(
   for (let i = 0; i < produtos.length; i += cabem) grupos.push(produtos.slice(i, i + cabem));
   return { grupos, wProduto: disp / cabem };
 }
+
+// Nome LEGÍVEL, não a sigla de arquivo de máquina: "Resumo Campos Gerais 2026".
+// O padrão SA03_TX_MILHO existe para o arquivo que vai ao monitor da máquina —
+// este aqui é um relatório de escritório, que a pessoa salva, anexa em e-mail e
+// procura depois pelo nome. Multi-ano vira "2024-2026".
+export function nomeArquivoResumo(r: ResumoGeral, ident: { escopo: 'fazenda' | 'produtor'; produtor: string; fazenda?: string }): string {
+  const anos = r.anos.map(a => a.ano);
+  const periodo = anos.length === 0 ? ''
+    : anos.length === 1 ? String(anos[0])
+      : `${Math.min(...anos)}-${Math.max(...anos)}`;
+  const quem = (ident.escopo === 'fazenda' ? ident.fazenda : ident.produtor) || '';
+  // Só o que atrapalha nome de arquivo sai (barra, dois-pontos…); acento e
+  // espaço ficam — é o que torna o nome legível.
+  const limpar = (x: string) => x.replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const partes = [quem, periodo].map(limpar).filter(Boolean);
+  // Sem fazenda e sem ano sobraria a palavra "Resumo" sozinha — nome que não
+  // diz nada na pasta de Downloads.
+  return partes.length ? `Resumo ${partes.join(' ')}` : 'Resumo de recomendações';
+}

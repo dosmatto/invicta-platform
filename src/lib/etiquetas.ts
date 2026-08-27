@@ -4,6 +4,7 @@
 // Pimaco) — número da amostra em destaque + profundidade. Sem QR.
 
 import type { GradeAmostragem, PontoAmostragem } from './store';
+import { abrirPdfNaAba } from './abrirPdf.ts';
 // Extensão .ts explícita: o teste roda em node puro (type-stripping), que não
 // resolve import sem extensão — mesmo padrão de nomeExport/lab.
 import { rotuloAno } from './periodo.ts';
@@ -174,9 +175,7 @@ export async function gerarEtiquetasPDF(itens: EtiquetaItem[], layout: LayoutEti
   desenharEtiquetas(doc, itens, layout, ajuste);
   const arquivo = `${nomeArquivo.replace(/[^\w.\-]+/g, '_')}.pdf`;
   if (aba) {
-    const url = URL.createObjectURL(doc.output('blob'));
-    aba.location.href = url;
-    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    abrirPdfNaAba(aba, doc.output('blob'), arquivo);
   } else {
     doc.save(arquivo); // pop-up bloqueado → baixa o arquivo
   }

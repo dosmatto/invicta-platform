@@ -9,6 +9,7 @@
 // O usuário escolhe ANO + ÍNDICE(s) + DATAS na tela da fazenda; aqui só geramos.
 
 import type { jsPDF as JsPDF } from 'jspdf';
+import { abrirPdfNaAba } from './abrirPdf.ts';
 import { getTalhoes, getFazendas, getClientes, type Talhao } from './store';
 import { extrairPoligono } from './fertilidade';
 import { carregarGridNdvi } from './meap/gerar';
@@ -200,7 +201,6 @@ export async function gerarRelatorioNdviFazenda(o: OpcoesRelNdviFazenda): Promis
   if (aba) aba.document.write('<title>Gerando…</title><p style="font:14px sans-serif;padding:24px">⏳ Gerando o relatório de satélite da fazenda…</p>');
   try {
     const blob = await montarRelatorioNdviFazenda(o);
-    const url = URL.createObjectURL(blob);
     // SA_NDVI_2026 — sem número de talhão (o relatório cobre a fazenda toda),
     // mas COM a sigla: "Satelite_Fazenda_2026.pdf" era o mesmo nome para dois
     // produtores diferentes no mesmo ano.
@@ -208,12 +208,7 @@ export async function gerarRelatorioNdviFazenda(o: OpcoesRelNdviFazenda): Promis
     const nome = `${nomeExport({
       fazenda: faz?.nome ?? '', siglaFazenda: faz?.sigla ?? null, tipo: 'NDVI', ano: o.ano,
     })}.pdf`;
-    if (aba) { aba.location.href = url; }
-    else {
-      const a = document.createElement('a');
-      a.href = url; a.download = nome; document.body.appendChild(a); a.click(); a.remove();
-    }
-    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    abrirPdfNaAba(aba, blob, nome);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     if (aba) aba.document.body.innerHTML = `<p style="font:14px sans-serif;padding:24px;color:#b91c1c">${msg}</p>`;

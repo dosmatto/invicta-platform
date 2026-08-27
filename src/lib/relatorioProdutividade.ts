@@ -15,6 +15,7 @@
 // layout já aprovado em campo.
 
 import type { jsPDF as JsPDF } from 'jspdf';
+import { abrirPdfNaAba } from './abrirPdf.ts';
 import type { Legenda } from './legendas';
 import { rampaVisualStops, valorParaPosicaoVisual, dominioDaLegenda, ajustarL } from './legendas';
 import { capturarMapaFertilidade, capturarMapaZonas } from './capturaMapa';
@@ -1482,8 +1483,7 @@ export async function gerarRelatorioProdutividade(d: DadosRelatorioProd): Promis
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4', compress: true });
     await renderProdutividadeNoDoc(doc, d, { novaPaginaAntes: false });
     const blob = doc.output('blob');
-    if (aba) { const url = URL.createObjectURL(blob); aba.location.href = url; setTimeout(() => URL.revokeObjectURL(url), 60000); }
-    else doc.save(`${nomeArquivoProd(d).replace(/[^\w.\-]+/g, '_')}.pdf`);
+    abrirPdfNaAba(aba, blob, `${nomeArquivoProd(d).replace(/[^\w.\-]+/g, '_')}.pdf`);
     return blob;
   } catch (e) {
     const msg = e instanceof Error ? (e.stack ?? e.message) : String(e);
