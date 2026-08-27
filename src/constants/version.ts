@@ -1,2 +1,2 @@
 // Versão atual do app. O histórico (CHANGELOG) fica em src/constants/changelog.ts.
-export const APP_VERSION = '2.86.1';
+export const APP_VERSION = '2.87.0';

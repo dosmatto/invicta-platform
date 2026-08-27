@@ -7,7 +7,7 @@
 // colorirDose e o padrão jsPDF (abre em nova aba) dos relatórios de fertilidade.
 
 import type { jsPDF as JsPDF } from 'jspdf';
-import { capturarMapaFertilidade } from '../capturaMapa';
+import { capturarMapaFertilidade, capturarMapaZonas } from '../capturaMapa';
 import { imagemParaPdf } from '../pdfImagem';
 import { colorirDose } from '../raster';
 import { hexToRgb } from '../legendas';
@@ -22,6 +22,8 @@ import { listarCenarios, descomprimirCenario } from './cenarios';
 import type { DoseCalculada } from './aplicar';
 import { classesVisiveis, indiceClasse } from './faixas';
 import { coberturaDoGrid } from './cobertura';
+import { volumesPorParte, totaisPorProduto, parteComoPoligono, nPartes } from './porPoligono';
+import { planejarTabela } from './resumoGeral';
 
 // Ordena talhões pelo nome de forma ALFANUMÉRICA (DNHDV 01 < 02 < 10) — ordem
 // padrão de TODOS os relatórios que listam vários talhões.
@@ -495,12 +497,118 @@ function desenharResumoRecomendacao(doc: JsPDF, ctx: Ctx, itens: ItemDose[], log
   rodapeNavy(doc, logo, 'Resumo de recomendações — taxa variável');
 }
 
+// ── Distribuição por ÁREA SEPARADA (talhão multipolígono) ───────────────────
+//
+// Página OPCIONAL: quando o talhão tem mais de uma mancha, diz quanto de cada
+// insumo vai em cada uma. Quem despacha carreta precisa desse número — o total
+// do talhão não ajuda a carregar o caminhão que vai para a área do fundo.
+// Fora do padrão de propósito: a maioria dos talhões é de área única e a página
+// sairia com uma linha só.
+
+const CORES_PARTE = ['#2563eb', '#16a34a', '#ea580c', '#9333ea', '#0891b2', '#ca8a04', '#dc2626', '#4f46e5'];
+
+function bboxDoPoligono(p: GeoJSON.Polygon | GeoJSON.MultiPolygon): [number, number, number, number] {
+  let w = Infinity, s = Infinity, e = -Infinity, n = -Infinity;
+  const polys = p.type === 'Polygon' ? [p.coordinates] : p.coordinates;
+  for (const rings of polys) for (const ring of rings) for (const c of ring) {
+    if (c[0] < w) w = c[0]; if (c[0] > e) e = c[0];
+    if (c[1] < s) s = c[1]; if (c[1] > n) n = c[1];
+  }
+  return isFinite(w) ? [w, s, e, n] : [-0.001, -0.001, 0.001, 0.001];
+}
+
+/** Desenha a página. Devolve false quando não há o que ratear (área única). */
+async function desenharDistribuicaoPorParte(
+  doc: JsPDF, ctx: Ctx, itens: ItemDose[], logo: HTMLImageElement | null,
+): Promise<boolean> {
+  const W = 297, M = 6;
+  if (!ctx.poligono || nPartes(ctx.poligono) < 2 || itens.length === 0) return false;
+
+  const doses = itens.map(it => {
+    const { valores, rows, cols } = decodeGrid(it.d.grid);
+    return {
+      produto: chaveProduto(it.d), valores, shape: [rows, cols] as [number, number],
+      bounds: it.d.bounds, toneladas: it.d.toneladas ?? 0, custo: it.d.custo ?? 0,
+    };
+  });
+  const partes = volumesPorParte(ctx.poligono, doses);
+  if (partes.length < 2) return false;
+  const produtos = [...new Set(doses.map(d => d.produto))];
+
+  // Mapa: cada mancha com a sua cor e o seu NÚMERO — é por ele que a tabela
+  // embaixo e o motorista se entendem.
+  let mapa = '';
+  try {
+    mapa = await capturarMapaZonas({
+      bounds: bboxDoPoligono(ctx.poligono), externo: ctx.poligono, linhas: [], satelite: true,
+      zonas: partes.map((p, i) => ({
+        geometry: parteComoPoligono(ctx.poligono!, p.indice),
+        cor: CORES_PARTE[i % CORES_PARTE.length], rotulo: String(i + 1),
+      })),
+      larguraPx: 1400, alturaPx: 540, preencherAlpha: 0.5,
+    });
+  } catch { /* sem satélite o resto da página ainda vale */ }
+
+  const campos: [string, string][] = [
+    ['FAZENDA', ctx.fazenda], ['TALHÃO', ctx.talhao], ['ANO', rotuloAno(ctx.safra)],
+    ['ÁREAS SEPARADAS', String(partes.length)], ['ÁREA', `${fmt(ctx.areaHa, 1)} ha`], ['DATA', dataHoje()],
+  ];
+  let y = cabecalhoNavy(doc, logo, campos) + 3;
+  doc.setFontSize(12); doc.setTextColor(...GREEN); doc.setFont('helvetica', 'bold');
+  doc.text('Distribuição do insumo por área separada', M, y); y += 4.5;
+  doc.setFontSize(7.5); doc.setTextColor(...GRAY); doc.setFont('helvetica', 'normal');
+  doc.text(san('O número no mapa é o mesmo da tabela. A quantidade de cada área sai da dose aplicada nela (não do rateio por hectare) e as partes fecham com o total do talhão.'), M, y);
+  y += 4;
+
+  const mapH = 104;
+  if (mapa) {
+    const img = await imagemParaPdf(mapa, W - 2 * M);
+    doc.addImage(img.data, img.formato, M, y, W - 2 * M, mapH);
+    doc.setDrawColor(...LINE); doc.setLineWidth(0.3); doc.rect(M, y, W - 2 * M, mapH, 'S');
+  }
+  y += mapH + 6;
+
+  // Tabela: uma linha por mancha, uma coluna por produto. Com muitos produtos a
+  // largura não cabe na folha — `planejarTabela` (do resumo geral, já coberto por
+  // teste) reparte em grupos, repetindo as colunas fixas em cada um.
+  const FIXAS = 26 + 22 + 16 + 32;
+  const plano = planejarTabela(produtos, FIXAS, W - 2 * M);
+  const tot = totaisPorProduto(partes);
+  for (const grupo of plano.grupos) {
+    const cols: Col[] = [
+      { titulo: 'Área', w: 26 }, { titulo: 'Tamanho (ha)', w: 22, align: 'r' }, { titulo: '% do talhão', w: 16, align: 'r' },
+      ...grupo.map(p => ({ titulo: `${p} (t)`, w: plano.wProduto, align: 'r' as const })),
+      { titulo: 'Investimento (R$)', w: 32, align: 'r' as const },
+    ];
+    if (y > 178) { doc.addPage(); y = cabecalhoNavy(doc, logo, campos) + 6; }
+    y = cabTabela(doc, M, y, cols);
+    for (const [i, p] of partes.entries()) {
+      const m = /^#(..)(..)(..)$/.exec(CORES_PARTE[i % CORES_PARTE.length])!;
+      doc.setFillColor(parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16));
+      doc.rect(M, y - 2.5, 2.8, 2.8, 'F');
+      y = linhaTabela(doc, M, y, cols, [
+        `  ${i + 1} · ${p.rotulo}`, fmt(p.areaHa, 2), fmt(p.pct, 1),
+        ...grupo.map(k => fmt(p.porProduto[k] ?? 0, 1)), fmt(p.custo, 2),
+      ]);
+    }
+    y = linhaTabela(doc, M, y, cols, [
+      'TOTAL', fmt(partes.reduce((s, p) => s + p.areaHa, 0), 2), '100,0',
+      ...grupo.map(k => fmt(tot[k] ?? 0, 1)), fmt(partes.reduce((s, p) => s + p.custo, 0), 2),
+    ], { bold: true, cor: GREEN, fill: true });
+    y += 4;
+  }
+
+  rodapeNavy(doc, logo, 'Distribuição por área separada — direcionamento de carga');
+  return true;
+}
+
 // Renderiza a seção de Recomendações num doc jsPDF JÁ EXISTENTE (A4 paisagem).
 // `somenteUsar` = só as doses marcadas com ★. `resumo` = 1ª página com a tabela-
 // resumo (fórmula + quantidade total) antes dos mapas. Reutilizado pelo book
 // (montarBookOficial), pelo relatório COMBINADO e pelo relatório da FAZENDA.
 export async function renderBookOficialNoDoc(
-  doc: JsPDF, cenarios: Cenario[], opts?: { novaPaginaAntes?: boolean; somenteUsar?: boolean; resumo?: boolean },
+  doc: JsPDF, cenarios: Cenario[],
+  opts?: { novaPaginaAntes?: boolean; somenteUsar?: boolean; resumo?: boolean; porPoligono?: boolean },
 ): Promise<void> {
   if (cenarios.length === 0) return;
   const tId = cenarios[0].talhaoId, safra = cenarios[0].safra;
@@ -518,6 +626,15 @@ export async function renderBookOficialNoDoc(
     if (precisaPagina) doc.addPage();
     desenharResumoRecomendacao(doc, ctx, itens, logo);
     precisaPagina = true;
+  }
+  // Distribuição por área separada: logo depois do resumo (é página de
+  // planejamento, lida antes dos mapas) e só quando o talhão tem mais de uma
+  // mancha — `desenharDistribuicaoPorParte` devolve false e nada é gasto.
+  if (opts?.porPoligono) {
+    if (precisaPagina) doc.addPage();
+    const saiu = await desenharDistribuicaoPorParte(doc, ctx, itens, logo);
+    if (saiu) precisaPagina = true;
+    else if (precisaPagina) doc.deletePage(doc.getNumberOfPages());
   }
   for (const it of itens) {
     const numero = it.numero < 1e9 ? it.numero : 0;   // sem nº definido → título "00"
@@ -620,7 +737,7 @@ async function coletarGruposFazenda(fazendaId: string, safra: string) {
   return { faz, cli, grupos };
 }
 
-export async function montarRelatorioRecomendacaoFazenda(fazendaId: string, safra: string): Promise<Blob> {
+export async function montarRelatorioRecomendacaoFazenda(fazendaId: string, safra: string, opts?: { porPoligono?: boolean }): Promise<Blob> {
   const { faz, cli, grupos } = await coletarGruposFazenda(fazendaId, safra);
   if (!faz) throw new Error('Fazenda não encontrada.');
   if (grupos.length === 0) throw new Error('Nenhuma recomendação marcada com ★ nesta fazenda/safra. Marque as doses (★) na aba Recomendações dos talhões.');
@@ -632,17 +749,17 @@ export async function montarRelatorioRecomendacaoFazenda(fazendaId: string, safr
   // Cada talhão: só os MAPAS das doses ★ (o resumo já está consolidado na pág. 1).
   for (const g of grupos) {
     doc.addPage();
-    try { await renderBookOficialNoDoc(doc, g.cenarios, { novaPaginaAntes: false, somenteUsar: true, resumo: false }); }
+    try { await renderBookOficialNoDoc(doc, g.cenarios, { novaPaginaAntes: false, somenteUsar: true, resumo: false, porPoligono: opts?.porPoligono }); }
     catch (e) { console.warn('[relatorio-fazenda] talhão', g.talhao.nome, 'falhou:', e); }
   }
   return doc.output('blob');
 }
 
-export async function gerarRelatorioRecomendacaoFazenda(fazendaId: string, safra: string): Promise<void> {
+export async function gerarRelatorioRecomendacaoFazenda(fazendaId: string, safra: string, opts?: { porPoligono?: boolean }): Promise<void> {
   const aba = typeof window !== 'undefined' ? window.open('', '_blank') : null;
   if (aba) try { aba.document.write('<!doctype html><meta charset="utf-8"><title>Relatório</title><body style="font-family:system-ui,sans-serif;padding:28px;color:#334155"><p>⏳ Gerando o relatório de recomendação da fazenda… aguarde (capturando os mapas de todos os talhões).</p></body>'); } catch {}
   try {
-    const blob = await montarRelatorioRecomendacaoFazenda(fazendaId, safra);
+    const blob = await montarRelatorioRecomendacaoFazenda(fazendaId, safra, opts);
     const faz = getFazendas().find(f => f.id === fazendaId);
     abrirOuBaixar(blob, aba, nomeExport({
       fazenda: faz?.nome ?? '', siglaFazenda: faz?.sigla ?? null, tipo: 'RECOM',

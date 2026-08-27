@@ -13,7 +13,7 @@ import { gerarRelatorioNdviFazenda } from '@/lib/relatorioNdviFazenda';
 import { legendasDoModulo } from '@/components/talhao/SeletorLegenda';
 import { respeitarPadraoHomonima } from '@/lib/legendas';
 import type { Legenda } from '@/lib/legendas';
-import { FileDown, Loader2, Satellite, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react';
+import { FileDown, Loader2, Satellite, ChevronDown, ChevronUp, AlertTriangle, CheckSquare, Square } from 'lucide-react';
 import { getTalhoes, getFazendas, getClientes } from '@/lib/store';
 import { ResumoGeralRecomendacoes } from './ResumoGeralRecomendacoes';
 
@@ -25,6 +25,8 @@ export function RelatoriosFazenda({ fazendaId }: { fazendaId: string }) {
   const [erro, setErro] = useState('');
   const [gerandoRel, setGerandoRel] = useState(false);
   const [gerandoXls, setGerandoXls] = useState(false);
+  // Distribuição por área separada — opcional, desligada por padrão.
+  const [porPoligono, setPorPoligono] = useState(false);
 
   // Satélite
   const [painelSat, setPainelSat] = useState(false);
@@ -99,7 +101,7 @@ export function RelatoriosFazenda({ fazendaId }: { fazendaId: string }) {
     setErro('');
     if (tipo === 'pdf') setGerandoRel(true); else setGerandoXls(true);
     try {
-      if (tipo === 'pdf') await gerarRelatorioRecomendacaoFazenda(fazendaId, safra);
+      if (tipo === 'pdf') await gerarRelatorioRecomendacaoFazenda(fazendaId, safra, { porPoligono });
       else await gerarRecomendacaoFazendaExcel(fazendaId, safra);
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Falha ao gerar o relatório.');
@@ -181,6 +183,18 @@ export function RelatoriosFazenda({ fazendaId }: { fazendaId: string }) {
           Excel
         </button>
       </div>
+
+      {/* Talhão multipolígono: quanto de insumo vai em cada mancha (só no PDF). */}
+      <button onClick={() => setPorPoligono(v => !v)} disabled={ocupado || !ano?.temRecomendacao}
+        title="Página a mais, por talhão, com o mapa das áreas separadas numeradas e a quantidade de cada insumo em cada uma"
+        className="w-full flex items-start gap-2 px-2 py-1.5 rounded-lg text-left disabled:opacity-40"
+        style={{ background: porPoligono ? '#221b3a' : '#081627', border: `1px solid ${porPoligono ? '#a78bfa66' : '#0f2240'}` }}>
+        {porPoligono ? <CheckSquare size={14} style={{ color: '#c4b5fd', marginTop: 1 }} /> : <Square size={14} style={{ color: '#475569', marginTop: 1 }} />}
+        <span className="flex-1">
+          <span className="block text-[11px] font-semibold" style={{ color: porPoligono ? '#e2e8f0' : '#94a3b8' }}>Distribuição por área separada</span>
+          <span className="block text-[9px]" style={{ color: '#64748b' }}>Para direcionar as carretas. Só sai nos talhões com mais de uma área.</span>
+        </span>
+      </button>
 
       {/* Resumo geral (vários anos) — não usa o seletor de Ano acima: tem a sua
           própria seleção múltipla, porque a pergunta dele é de compra e envio,

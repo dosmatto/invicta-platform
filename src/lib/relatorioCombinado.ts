@@ -19,6 +19,8 @@ export interface ArgsRelatorioCombinado {
   // página-resumo (fórmula + quantidade total) antes dos mapas.
   somenteUsarRec?: boolean;
   resumoRec?: boolean;
+  /** Página de distribuição por área separada (talhão multipolígono). Opcional. */
+  porPoligonoRec?: boolean;
 }
 
 // Gera o PDF combinado, abre em nova aba e devolve o total de páginas (p/ o
@@ -40,7 +42,7 @@ export async function gerarRelatorioCombinado(args: ArgsRelatorioCombinado): Pro
       temConteudo = true;
     }
     if (temRec) {
-      await renderBookOficialNoDoc(doc, args.recomendacao!, { novaPaginaAntes: temConteudo, somenteUsar: args.somenteUsarRec, resumo: args.resumoRec });
+      await renderBookOficialNoDoc(doc, args.recomendacao!, { novaPaginaAntes: temConteudo, somenteUsar: args.somenteUsarRec, resumo: args.resumoRec, porPoligono: args.porPoligonoRec });
       temConteudo = true;
     }
     const paginas = doc.getNumberOfPages();

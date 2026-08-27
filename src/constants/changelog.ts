@@ -1,5 +1,13 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.87.0': [
+    'DISTRIBUIÇÃO DO INSUMO POR ÁREA SEPARADA — opção nova no relatório de recomendação, DESLIGADA por padrão. Talhão multipolígono são duas ou mais manchas separadas por estrada, mata ou benfeitoria: a recomendação é uma só, mas a CARRETA é despachada para uma mancha de cada vez. O relatório dizia apenas o total do talhão e o rateio ficava na conta de cabeça de quem está no pátio.',
+    'MARCANDO A OPÇÃO, entra uma página com o MAPA das manchas numeradas (1, 2, 3…) e, embaixo, a tabela: tamanho de cada uma, a fatia do talhão e QUANTO DE CADA INSUMO vai em cada uma, mais o investimento. O número do mapa é o mesmo da tabela — é por ele que o relatório e o motorista se entendem.',
+    'A QUANTIDADE DE CADA MANCHA SAI DA DOSE APLICADA NELA, não do rateio por hectare: duas áreas de 10 ha podem pedir tonelagens bem diferentes se uma for mais ácida que a outra. A conta é a integral do mapa de dose ponderada pela fração de cada célula que cai dentro da mancha — a mesma que já sustenta a dose média e o custo do PDF.',
+    'AS PARTES FECHAM COM O TOTAL: o rateio é feito sobre a quantidade que o relatório já mostra. Discretizar o raster dá um número um pouco diferente da área de cadastro, e um relatório em que a soma das partes não bate com o total é um relatório que se confere na calculadora e não se usa mais.',
+    'ONDE MARCAR: Talhão → Relatórios → seção Recomendação, e Fazenda → Relatórios (vale para todos os talhões do PDF). Fica fora do padrão de propósito — a maioria dos talhões é de área única e a página sairia com uma linha só; nesses casos, mesmo marcada, a página não é gerada.',
+    '12 testes novos (npm run teste:porpoligono) travam as contas: a soma das partes fechando com o total, o rateio seguindo a dose e não o hectare, cada produto rateado por conta própria, mapa vazio caindo no rateio por área sem virar NaN e talhão de área única devolvendo uma parte só.',
+  ],
   '2.86.1': [
     'O MAPA DE ZONAS DO RELATORIO PASSOU A MOSTRAR A CLASSIFICACAO ORIGINAL DA ZONA, nao a produtividade medida. Ate agora cada zona era pintada pela faixa de quantil da propria media — o que tornava a folha tautologica: a zona sempre concordava consigo mesma e o documento nao dizia nada sobre o zoneamento estar certo.',
     'A PERGUNTA QUE A PAGINA RESPONDE AGORA E OUTRA: dentro da classe que a zona JA TINHA, como a colheita se comportou? E comparando as duas coisas que se decide reclassificar.',
