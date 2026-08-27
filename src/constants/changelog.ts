@@ -1,5 +1,12 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.76.0': [
+    'TALHÃO COM DUAS ÁREAS: O APP AGORA AVISA QUANDO UMA DELAS ESTÁ SEM AMOSTRA NO LAUDO. Caso real (WNOCG 06, condomínio Figueira): o talhão tem uma área grande e outra separada, e o mapa de fertilidade saía com a área separada de UMA COR SÓ. Investigando: o laudo trouxe 34 amostras e faltavam exatamente os números 4, 5, 17, 18, 19, 20, 21, 22, 38 e 39 — que são, um a um, os dez pontos daquela área.',
+    'O APP ESTAVA CERTO; O QUE FALTAVA ERA O DADO. Confirmamos no interpolador que a área separada É coberta normalmente: reproduzindo o talhão com as amostras faltando, ela sai com variação ZERO; colocando 10 amostras nela, sai interpolada como a outra. Sem nenhum ponto por perto, a krigagem prediz a média das demais amostras — e o resultado é uma mancha chapada.',
+    'O PROBLEMA ERA O SILÊNCIO. Essa mancha era pintada igual a um dado medido, ia para o PDF e para a Recomendação, e nada avisava — porque todos os diagnósticos olhavam QUANTAS amostras casaram (34 de 44, tudo "verde") e nenhum olhava ONDE elas estão. Agora a aba Fertilidade avisa em amarelo, dizendo quais números de ponto faltam, para você cobrar exatamente essas análises do laboratório.',
+    'O aviso só aparece em talhão de mais de uma área, e some assim que a parte tiver ao menos uma amostra. Talhão de uma área só continua sendo tratado pelo aviso de "sem mapa", que já existia.',
+    'Verificado também que o casamento amostra↔ponto estava correto neste caso (por número, não por ordem) — ou seja, nenhum valor foi para o ponto errado. 9 testes novos travam a regra (npm run teste:partes).',
+  ],
   '2.75.2': [
     'ARRENDAMENTO EM SACAS POR ALQUEIRE, e o relatorio passa a sair com DOIS mapas de rentabilidade: sem arrendamento e com. A conversao para R$/ha e automatica — sacas/alq x kg da saca x R$/kg ÷ hectares do alqueire — e usa o proprio preco de venda, porque o contrato e em produto: 40 sc/alq valem mais quando a saca sobe.',
     'O ALQUEIRE E ESCOLHIDO NA TELA e gravado no mapa: paulista (2,42 ha), mineiro/goiano (4,84 ha) ou do Norte (2,7225 ha). Nao existe "o alqueire" — entre o paulista e o mineiro ha o DOBRO, e errar qual esta em uso dobraria o custo sem nenhum sinal. O padrao e o paulista, que e o do Parana e do Sul.',

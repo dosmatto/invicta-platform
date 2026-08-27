@@ -31,6 +31,7 @@ import { pode } from '@/lib/empresa';
 import { listar as bibListar, criar as bibCriar, type ConteudoPerfil, type ItemBiblioteca } from '@/lib/biblioteca';
 
 import { inputStyle } from '@/constants/ui';
+import { partesDoTalhao, partesSemAmostra } from '@/lib/partesTalhao';
 // Resolução em que a Recomendação calcula a dose — fonte única, para o mapa que
 // geramos aqui em segundo plano ser exatamente o que ela procura lá.
 import {
@@ -499,6 +500,23 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
     return { amostras: amostras.length, nPontos, porNum, modo };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [importacao, nutriente, profundidade, pontoPorNumero, grade, ehZona]);
+
+  // COBERTURA por parte do talhão. O diagnóstico acima é por CONTAGEM — quantas
+  // amostras casaram — e por isso não vê o caso do talhão com duas áreas em que
+  // uma delas ficou inteira de fora do laudo: 34 de 44 casam, tudo "verde", e a
+  // área sem amostra sai chapada no mapa (a krigagem prediz a média onde não há
+  // ponto por perto), parecendo medição. Aqui olhamos ONDE as amostras estão.
+  const partesVazias = useMemo(() => {
+    if (!importacao || !nutriente || ehZona || !poligono || !grade?.pontos?.length) return [];
+    const comValor = new Set(
+      importacao.resultados
+        .filter(r => r.profundidade === profundidade && r.valores[nutriente] != null && isFinite(r.valores[nutriente]))
+        .map(r => r.numero),
+    );
+    const pts = grade.pontos.map((p, i) => ({ numero: p.numero ?? i + 1, lng: p.lng, lat: p.lat }));
+    return partesSemAmostra(partesDoTalhao(poligono, pts, n => comValor.has(n)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [importacao, nutriente, profundidade, grade, poligono, ehZona]);
 
   // Modo zona (Z1): pinta cada zona com o valor da sua amostra e salva no MESMO
   // formato/chave da interpolação (metodo='zona') → a Recomendação lê transparente.
@@ -1196,6 +1214,14 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
               {diagCasamento?.modo === 'nenhum' && diagCasamento.amostras > 0 && (
                 <p className="text-[10px] mt-0.5" style={{ color: '#f87171' }}>
                   ⚠ As {diagCasamento.amostras} amostras não casaram com a grade ({diagCasamento.nPontos} pontos). Salve/associe a grade certa na aba Amostragem (mesmo Ano) e reimporte.
+                </p>
+              )}
+              {partesVazias.length > 0 && (
+                <p className="text-[10px] mt-0.5 leading-relaxed" style={{ color: '#fbbf24' }}>
+                  ⚠ {partesVazias.length === 1 ? 'Uma área separada deste talhão está' : `${partesVazias.length} áreas separadas deste talhão estão`}
+                  {' '}SEM AMOSTRA no laudo (pontos {partesVazias.map(p => p.semAmostra.join(', ')).join(' · ')}).
+                  {' '}O mapa vai pintar {partesVazias.length === 1 ? 'essa área' : 'essas áreas'} de uma cor só — é a MÉDIA das outras
+                  {' '}amostras, não medição. Peça {partesVazias.length === 1 ? 'essa análise' : 'essas análises'} ao laboratório e reimporte.
                 </p>
               )}
             </div>
