@@ -17,7 +17,7 @@
 import assert from 'node:assert/strict';
 import {
   autoConfig, aplicarPerfil, escolherPerfil, pontuarPerfil, normCab,
-  PERFIS_BUILTIN, CONFIANCA_MINIMA, ELEMENTOS_LAB,
+  PERFIS_BUILTIN, CONFIANCA_MINIMA, ELEMENTOS_LAB, completarPorCabecalho,
 } from '../src/lib/lab.ts';
 
 let ok = 0, fail = 0;
@@ -254,6 +254,89 @@ t('cabeçalho "Fe" casa por autoConfig (era o que falhava no catálogo antigo)',
 t('cabeçalho "Ferro" por extenso também casa', () => {
   const aoa = [['id', 'prof', 'Ferro'], ['1', '0-20', '74']];
   assert.equal(autoConfig(aoa).config.elementos.fe, 2);
+});
+
+// ── Rede de segurança do perfil posicional (v2.79.0) ─────────────────────────
+// Perfil posicional lê por índice fixo e descarta em SILÊNCIO toda coluna fora da
+// lista — foi assim que o Ferro sumiu. A rede aproveita as sobras pelo cabeçalho.
+// Uma versão ingênua disso CORROMPE dados (medido: 4 valores trocados num laudo
+// com colunas repetidas), então as três travas abaixo não são opcionais.
+const CFG_POS = {
+  linhaCabecalho: 0, colId: 0, colProfundidade: 1,
+  elementos: { ph: 2, k: 3, s: 4 },
+};
+const AOA_POS = [
+  ['id', 'prof', 'pH', 'K', 'S', 'Fe', 'H + Al', 'pH CaCl2', 'S'],
+  ['1', '0-20', '5.1', '3.1', '8.1', '74', '4.8', '4.7', '9.9'],
+];
+
+t('REDE: aproveita a coluna que o perfil não previa (o caso do Ferro)', () => {
+  const { config, adicionados } = completarPorCabecalho(AOA_POS, CFG_POS);
+  assert.equal(config.elementos.fe, 5, 'Fe estava fora do perfil e tem de entrar');
+  assert.ok(adicionados.includes('fe'));
+});
+
+t('TRAVA 1: coluna já mapeada pelo perfil fica intocada', () => {
+  const { config } = completarPorCabecalho(AOA_POS, CFG_POS);
+  assert.equal(config.elementos.ph, 2, 'pH continua na coluna do perfil');
+  assert.equal(config.elementos.k, 3);
+  assert.equal(config.elementos.s, 4);
+});
+
+t('TRAVA 3: elemento já mapeado NÃO é remapeado (era o que corrompia)', () => {
+  // O arquivo tem uma SEGUNDA coluna "S" (índice 8) e uma "pH CaCl2" (7).
+  // Sem esta trava, elas roubavam o S e o pH que o perfil já lia certo.
+  const { config, adicionados } = completarPorCabecalho(AOA_POS, CFG_POS);
+  assert.equal(config.elementos.s, 4, 'o S do perfil (col 4) não pode virar col 8');
+  assert.equal(config.elementos.ph, 2, 'o pH do perfil não pode virar "pH CaCl2"');
+  assert.ok(!adicionados.includes('s') && !adicionados.includes('ph'));
+});
+
+t('TRAVA 2: coluna de metadado declarada no perfil fica de fora', () => {
+  const cfg = { linhaCabecalho: 0, colId: 2, colProfundidade: 1, elementos: { ph: 3 } };
+  const aoa = [['x', 'prof', 'Amostra', 'pH'], ['1', '0-20', '7', '5.2']];
+  const { adicionados } = completarPorCabecalho(aoa, cfg);
+  assert.deepEqual(adicionados, [], 'a coluna de id não pode virar elemento');
+});
+
+t('REDE: nenhum valor pré-existente muda', () => {
+  const antes = aplicarPerfil(AOA_POS, CFG_POS).resultados[0].valores;
+  const { config } = completarPorCabecalho(AOA_POS, CFG_POS);
+  const depois = aplicarPerfil(AOA_POS, config).resultados[0].valores;
+  for (const [id, v] of Object.entries(antes)) {
+    assert.equal(depois[id], v, `${id} mudou de ${v} para ${depois[id]} — a rede tem de ser ADITIVA`);
+  }
+});
+
+t('REDE: sem coluna nova, devolve a MESMA config (não recria objeto à toa)', () => {
+  const cfg = { linhaCabecalho: 0, colId: 0, colProfundidade: 1, elementos: { ph: 2 } };
+  const aoa = [['id', 'prof', 'pH'], ['1', '0-20', '5.2']];
+  const r = completarPorCabecalho(aoa, cfg);
+  assert.equal(r.config, cfg);
+  assert.deepEqual(r.adicionados, []);
+});
+
+// ── "Amostra" não é Matéria Orgânica (v2.79.0) ───────────────────────────────
+// BUG VIVO, independente da rede: 'mos' (sinônimo de MO) é substring de
+// "aMOStra". Com UMA coluna de amostra o estrago não aparecia — ela vira a coluna
+// de id e sai do rastreio. Com DUAS ("ID Amostra" + "Nº Amostra"), o NÚMERO da
+// amostra era importado como valor de Matéria Orgânica. Reproduzido antes do fix.
+t('BUG QUE ISTO TRAVA: "Nº Amostra" não vira M.O.', () => {
+  const aoa = [['ID Amostra', 'prof', 'Nº Amostra', 'pH'], ['1', '0-20', '101', '5.2']];
+  assert.equal(autoConfig(aoa).config.elementos.mo, undefined,
+    'o número da amostra entrando como M.O. é corrupção silenciosa');
+});
+
+t('...e as formas legítimas de M.O. continuam casando', () => {
+  for (const cab of ['MOS', 'M.O.', 'MO', 'Matéria Orgânica']) {
+    const aoa = [['id', 'prof', cab, 'pH'], ['1', '0-20', '35.2', '5.2']];
+    assert.equal(autoConfig(aoa).config.elementos.mo, 2, `"${cab}" deveria casar com M.O.`);
+  }
+});
+
+t('a regra do "contido" segue valendo para os demais', () => {
+  const aoa = [['id', 'prof', 'Argila (%)', 'pH'], ['1', '0-20', '35', '5.2']];
+  assert.equal(autoConfig(aoa).config.elementos.textura, 2);
 });
 
 console.log(`\n${ok} passaram, ${fail} falharam\n`);

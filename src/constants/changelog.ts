@@ -1,5 +1,12 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.79.0': [
+    'O IMPORTADOR DEIXOU DE DEPENDER DA POSIÇÃO DA COLUNA. Os perfis de laboratório leem por posição fixa, e toda coluna fora da lista era jogada fora sem uma palavra — foi assim que o Ferro sumiu, e é assim que somem H+Al, Sódio, Soma de Bases e Silte. Agora, depois de aplicar o perfil, o app varre as colunas que sobraram e aproveita as que reconhece pelo NOME do cabeçalho.',
+    'E AVISA, EM VEZ DE FAZER CALADO: aparece um aviso verde na prévia dizendo quantas e quais colunas entraram por fora do perfil, pedindo para você conferir a unidade delas. Acrescentar em silêncio só trocaria uma falha muda por outra.',
+    'TRÊS TRAVAS PROTEGEM O QUE JÁ FUNCIONAVA, e nenhuma é enfeite: testamos a versão sem elas e ela TROCOU quatro valores num laudo com colunas repetidas. Coluna que o perfil já lê fica intocada; coluna de identificação (amostra, talhão, profundidade) nunca vira elemento; e elemento que o perfil já mapeia não é remapeado — se o arquivo tem duas colunas "S", vale a do perfil. Além disso, a rede só age quando o perfil já está batendo com o arquivo: pendurar uma coluna certa num perfil que lê todo o resto trocado seria pior que a coluna faltando.',
+    'CORRIGIDO NO CAMINHO — "Nº AMOSTRA" ERA LIDO COMO MATÉRIA ORGÂNICA. O apelido "MOS" da matéria orgânica está escondido dentro da palavra "aMOStra". Em laudo com uma coluna de amostra o problema não aparecia (ela vira a coluna de identificação), mas com duas — por exemplo "ID Amostra" e "Nº Amostra" — o NÚMERO da amostra era importado como valor de M.O. Reproduzimos e travamos. As formas legítimas (MOS, MO, M.O., Matéria Orgânica) seguem funcionando.',
+    '14 testes automáticos novos cobrem a rede e esse bug (npm run teste:lab, 33 no total), incluindo a garantia de que nenhum valor que já era importado muda de lugar.',
+  ],
   '2.78.0': [
     'O FERRO AGORA VEM MESMO — ERAM TRÊS BLOQUEIOS, NÃO UM. A correção anterior (v2.77.0) resolveu só o primeiro, por isso reimportar não adiantou. Rodando o caminho de importação com o arquivo real, apareceram os outros dois.',
     'BLOQUEIO 2 — o perfil "Fundação ABC (planilha)" lê as colunas por POSIÇÃO e pulava justamente a do Ferro (a 17, entre Cobre e Manganês). Conferido contra o arquivo de exemplo desse layout que existe no próprio sistema. As colunas 12 e 20 continuam puladas de propósito: são CTCe e K%, que o app calcula em vez de ler.',

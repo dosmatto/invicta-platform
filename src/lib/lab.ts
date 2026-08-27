@@ -192,9 +192,65 @@ export function autoConfig(
 // Um cabeçalho casa com a variável? Sinônimo com < 3 letras exige igualdade
 // (senão "P" pegaria qualquer coluna com "p" no nome); a partir de 3, basta estar
 // contido ("Argila (%)" casa 'argila').
+//
+// EXCEÇÕES à regra do "contido": sinônimos curtos que são substring de palavras
+// comuns de cabeçalho. O caso que motivou: 'mos' (MO seca) está dentro de
+// "aMOStra" — então "Nº Amostra" casava com Matéria Orgânica, e o NÚMERO da
+// amostra entrava como valor de M.O. Em laudo com uma coluna de amostra só o
+// estrago não aparecia (ela vira a coluna de id e sai do rastreio); com duas
+// (ex.: "ID Amostra" + "Nº Amostra") o defeito é real e silencioso — reproduzido.
+// Para estes, exige-se igualdade exata, como já se faz com os de 1-2 letras.
+const SO_EXATO = new Set(['mos', 'mo', 'sb', 'ras', 'areia']);
+
 function casaCabecalho(header: string, sinonimos: string[]): boolean {
   const n = normCab(header);
-  return sinonimos.includes(n) || sinonimos.some(s => s.length >= 3 && n.includes(s));
+  if (sinonimos.includes(n)) return true;
+  return sinonimos.some(s => s.length >= 3 && !SO_EXATO.has(s) && n.includes(s));
+}
+
+/**
+ * REDE DE SEGURANÇA do perfil POSICIONAL: aproveita, pelo CABEÇALHO, as colunas
+ * que o perfil não mapeia.
+ *
+ * Perfil posicional lê por índice fixo. Toda coluna fora da lista é descartada em
+ * silêncio — foi assim que o Ferro sumiu (col 17 do layout Fundação ABC), e é
+ * assim que somem H+Al, Na, Soma de Bases e Silte. Aqui varremos o que sobrou e
+ * casamos por nome, do mesmo jeito que `autoConfig` já faz.
+ *
+ * TRÊS TRAVAS, e nenhuma é opcional — sem elas a rede CORROMPE dados (medido:
+ * uma versão ingênua trocou 4 valores num laudo com colunas repetidas):
+ *   1. coluna já mapeada pelo perfil    → intocada;
+ *   2. coluna de METADADO declarada     → intocada (id, talhão, profundidade,
+ *      protocolo, campanha);
+ *   3. elemento já mapeado pelo perfil  → NÃO é remapeado. O posicional MANDA.
+ *      Sem isto, uma segunda coluna "S" ou "pH CaCl2" roubava o elemento que o
+ *      perfil já lia certo, e o valor bom era substituído pelo errado.
+ *
+ * Devolve a config aumentada e QUAIS elementos entraram, para a tela poder
+ * mostrar — acrescentar em silêncio só trocaria uma falha muda por outra.
+ */
+export function completarPorCabecalho(
+  aoa: string[][],
+  cfg: PerfilLabConfig,
+  vars: { id: string; sinonimos: string[] }[] = ELEMENTOS_LAB,
+): { config: PerfilLabConfig; adicionados: string[] } {
+  const headers = (aoa[cfg.linhaCabecalho ?? 0] ?? []).map(h => String(h ?? ''));
+  const jaMapeadas = new Set(Object.values(cfg.elementos ?? {}));
+  const jaElementos = new Set(Object.keys(cfg.elementos ?? {}));
+  for (const c of [cfg.colId, cfg.colTalhao, cfg.colProfundidade, cfg.colProtocolo, cfg.colCampanha]) {
+    if (c != null) jaMapeadas.add(c);
+  }
+  const elementos = { ...(cfg.elementos ?? {}) };
+  const adicionados: string[] = [];
+  for (const el of vars) {
+    if (jaElementos.has(el.id)) continue;                       // trava 3
+    const idx = headers.findIndex((h, i) => !jaMapeadas.has(i) && casaCabecalho(h, el.sinonimos));
+    if (idx < 0) continue;
+    elementos[el.id] = idx;
+    jaMapeadas.add(idx);
+    adicionados.push(el.id);
+  }
+  return { config: adicionados.length ? { ...cfg, elementos } : cfg, adicionados };
 }
 
 // A linha logo abaixo do cabeçalho é a linha de UNIDADES? (export InCeres e afins

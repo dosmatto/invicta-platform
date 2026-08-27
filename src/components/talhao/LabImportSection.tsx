@@ -7,7 +7,7 @@ import {
   getImportacoesLab, saveImportacaoLab, deleteImportacaoLab, getVariaveisAtivas, siglaVariavel, salvarLaboratorio,
   GradeAmostragem, ImportacaoLab,
 } from '@/lib/store';
-import { lerArquivo, aplicarPerfil, autoConfig, PERFIS_BUILTIN, PERFIL_PADRAO, escolherPerfil, pontuarPerfil, CONFIANCA_MINIMA, norm, numerosDaGrade, valorLab, calcularDerivados, DERIVADOS_IDS, ELEMENTOS_LAB, PerfilLabConfig, type ResultadoAmostra } from '@/lib/lab';
+import { lerArquivo, aplicarPerfil, autoConfig, PERFIS_BUILTIN, PERFIL_PADRAO, escolherPerfil, pontuarPerfil, completarPorCabecalho, CONFIANCA_MINIMA, norm, numerosDaGrade, valorLab, calcularDerivados, DERIVADOS_IDS, ELEMENTOS_LAB, PerfilLabConfig, type ResultadoAmostra } from '@/lib/lab';
 import { unidadesDe, unidadeCanonica, precisaConverter } from '@/lib/unidades';
 import { hojeSaoPauloISO, periodoDeData, rotuloEpoca, anoDaSafra } from '@/lib/periodo';
 import { detectarOutliers, chaveAmostra, contarOutliers } from '@/lib/labOutliers';
@@ -81,21 +81,35 @@ export function LabImportSection({ safraNome: safraProp }: { safraNome?: string 
   }, [perfilId, aoa, perfis, nomeNovoLab]);
 
   // Aplica os overrides de unidade escolhidos na tela sobre o perfil.
-  const cfgEfetivo = useMemo<PerfilLabConfig | null>(() => {
-    if (!cfg) return null;
-    if (Object.keys(unidadeOverride).length === 0) return cfg;
-    const det: NonNullable<PerfilLabConfig['detalhes']> = { ...(cfg.detalhes ?? {}) };
-    for (const [elId, u] of Object.entries(unidadeOverride)) det[elId] = { ...(det[elId] ?? {}), unidade: u };
-    return { ...cfg, detalhes: det };
-  }, [cfg, unidadeOverride]);
-
-  const aplic = useMemo(() => (aoa && cfgEfetivo) ? aplicarPerfil(aoa, cfgEfetivo) : null, [aoa, cfgEfetivo]);
-
   // Perfil posicional que "funciona" no arquivo errado é pior do que perfil que
   // não funciona: entram todas as amostras, com os valores de outras colunas, e
   // nada avisa. Só a conferência do cabeçalho denuncia.
+  //
+  // Pontua o cfg CRU de propósito: a rede de segurança abaixo só acrescenta
+  // colunas que casam, então toda adição é um acerto e a confiança seria
+  // empurrada para 1 — o alarme calaria justamente no arquivo errado.
   const pont = useMemo(() => (aoa && cfg && posicional) ? pontuarPerfil(aoa, cfg, getVariaveisAtivas()) : null, [aoa, cfg, posicional]);
   const perfilSuspeito = !!pont && pont.esperados > 0 && pont.confianca < CONFIANCA_MINIMA;
+
+  // REDE DE SEGURANÇA: no perfil posicional, aproveita pelo CABEÇALHO as colunas
+  // que ele não mapeia (Fe, H+Al, Silte…). Só quando o perfil já é CONFIÁVEL:
+  // pendurar uma coluna certa num perfil que lê todo o resto deslocado é pior que
+  // a coluna faltando — dado bom colado em dado podre.
+  const extra = useMemo(() => {
+    if (!aoa || !cfg || !posicional || perfilSuspeito) return { config: cfg, adicionados: [] as string[] };
+    return completarPorCabecalho(aoa, cfg, getVariaveisAtivas());
+  }, [aoa, cfg, posicional, perfilSuspeito]);
+
+  const cfgEfetivo = useMemo<PerfilLabConfig | null>(() => {
+    const base = extra.config;
+    if (!base) return null;
+    if (Object.keys(unidadeOverride).length === 0) return base;
+    const det: NonNullable<PerfilLabConfig['detalhes']> = { ...(base.detalhes ?? {}) };
+    for (const [elId, u] of Object.entries(unidadeOverride)) det[elId] = { ...(det[elId] ?? {}), unidade: u };
+    return { ...base, detalhes: det };
+  }, [extra, unidadeOverride]);
+
+  const aplic = useMemo(() => (aoa && cfgEfetivo) ? aplicarPerfil(aoa, cfgEfetivo) : null, [aoa, cfgEfetivo]);
 
   const talhaoAuto = aplic ? (aplic.talhoes.find(t => matchN(t, nav.talhao)) ?? aplic.talhoes[0] ?? '') : '';
   const talhaoEscolhido = talhaoFiltro || talhaoAuto;
@@ -262,6 +276,17 @@ export function LabImportSection({ safraNome: safraProp }: { safraNome?: string 
                 <strong>Este perfil não parece ser deste arquivo:</strong> {pont.esperados - pont.acertos} de {pont.esperados} colunas não batem com o cabeçalho
                 {pont.exemplo && <> (espera <strong>{siglaVariavel(pont.exemplo.elId)}</strong> na coluna {pont.exemplo.coluna + 1}, e o arquivo tem &quot;{pont.exemplo.cabecalho || '—'}&quot; ali)</>}.
                 Escolha o perfil certo ou &quot;Detectar automaticamente&quot; — importar assim grava os valores nas variáveis erradas.
+              </p>
+            </div>
+          )}
+          {extra.adicionados.length > 0 && (
+            <div className="flex items-start gap-1.5 p-2 rounded" style={{ background: '#0b2a1a', border: '1px solid #166534' }}>
+              <CheckCircle2 size={12} style={{ color: '#4ade80' }} className="flex-shrink-0 mt-0.5" />
+              <p className="text-[9px]" style={{ color: '#86efac' }}>
+                <strong>{extra.adicionados.length} coluna{extra.adicionados.length === 1 ? '' : 's'} a mais reconhecida{extra.adicionados.length === 1 ? '' : 's'} pelo cabeçalho:</strong>{' '}
+                {extra.adicionados.map(siglaVariavel).join(', ')}. O perfil escolhido não previa
+                {' '}{extra.adicionados.length === 1 ? 'essa coluna' : 'essas colunas'}, e {extra.adicionados.length === 1 ? 'ela foi aproveitada' : 'elas foram aproveitadas'}
+                {' '}pelo nome. Confira a unidade {extra.adicionados.length === 1 ? 'dela' : 'delas'} na prévia abaixo.
               </p>
             </div>
           )}
