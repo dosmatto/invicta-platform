@@ -12,8 +12,9 @@ import { prepararTalhoesEmMassa, CandidatoTalhao } from '@/lib/geo';
 import { conflitosDe, talhaoParaAlvo, areaHaFC, bboxDeFeatures, type AlvoOverlap, type Conflito } from '@/lib/overlap';
 import { verificarTrocaPoligono } from '@/lib/trocaPoligono';
 import { baixarKMLTalhao, baixarSHPTalhao, poligonoDoTalhao } from '@/lib/exportTalhao';
+import { partesComArea, type ParteArea } from '@/lib/areaGeo';
 import { getClientes } from '@/lib/store';
-import { ChevronLeft, Plus, Map, AlertTriangle, Save, X, ExternalLink, MapPin, Loader2, Upload, CheckCircle2, Pencil, Trash2, Download } from 'lucide-react';
+import { ChevronLeft, ChevronDown, Plus, Map, AlertTriangle, Save, X, ExternalLink, MapPin, Loader2, Upload, CheckCircle2, Pencil, Trash2, Download, Layers } from 'lucide-react';
 import { PanelSection, PanelButton, StatusBadge } from './_shared';
 import { RelatoriosFazenda } from './RelatoriosFazenda';
 
@@ -36,6 +37,7 @@ export function FazendaDetailPanel() {
   const [renomeando, setRenomeando] = useState(false);
   const [nomeTemp, setNomeTemp] = useState('');
   const [baixarId, setBaixarId] = useState<string | null>(null);   // menu KML/SHP aberto nesta linha
+  const [partesAbertas, setPartesAbertas] = useState<string | null>(null);  // gaveta de áreas separadas aberta nesta linha
   const [baixando, setBaixando] = useState<string | null>(null);
   const [mostraExcluir, setMostraExcluir] = useState(false);
   const [txtConfirma, setTxtConfirma] = useState('');
@@ -180,6 +182,18 @@ export function FazendaDetailPanel() {
   const incompletos = talhoes.filter(t => t.status === 'incompleto').length;
   const areaTotal = talhoes.reduce((s, t) => s + (t.areaHa || 0), 0);
   const areaFmt = (n: number) => n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  // ÁREAS SEPARADAS de cada talhão, calculadas UMA VEZ por lista. O polígono já
+  // era lido a cada render (para decidir se cabe o botão de baixar); agora é
+  // lido uma vez só e serve aos dois usos.
+  const partesPorTalhao = useMemo(() => {
+    const out: Record<string, ParteArea[]> = {};
+    for (const t of talhoes) {
+      const poly = poligonoDoTalhao(t);
+      out[t.id] = poly ? partesComArea(poly) : [];
+    }
+    return out;
+  }, [talhoes]);
 
   // Agrônomos = usuários da EQUIPE (categoria "Interno") e ATIVOS. É a lista da
   // qual o responsável pela fazenda é escolhido. tick recarrega ao mudar dados.
@@ -327,10 +341,18 @@ export function FazendaDetailPanel() {
                     <p className="text-xs mt-1" style={{ color: '#2e3f5c' }}>Clique em "Novo Talhão" acima.</p>
                   </div>
                 ) : (
-                  [...talhoes].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR', { numeric: true })).map(t => (
-                    <div key={t.id} role="button" tabIndex={0} onClick={() => abrirTalhao(t)}
+                  [...talhoes].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR', { numeric: true })).map(t => {
+                    // TALHÃO EM VÁRIAS ÁREAS (multipolígono): o cadastro só guarda a
+                    // SOMA, e a gaveta abaixo abre a área de cada pedaço.
+                    const partes = partesPorTalhao[t.id] ?? [];
+                    const multi = partes.length > 1;
+                    const aberto = multi && partesAbertas === t.id;
+                    const somaPartes = partes.reduce((s, p) => s + p.areaHa, 0);
+                    const difereDoCadastro = t.areaHa > 0 && Math.abs(somaPartes - t.areaHa) > 0.02;
+                    return (
+                    <div key={t.id} style={{ borderBottom: '1px solid #0f2240' }}>
+                    <div role="button" tabIndex={0} onClick={() => abrirTalhao(t)}
                       className="group w-full flex items-center gap-2.5 px-3 py-2.5 text-left transition-colors cursor-pointer"
-                      style={{ borderBottom: '1px solid #0f2240' }}
                       onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'var(--sidebar-item-hover)'}
                       onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}>
                       <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
@@ -344,10 +366,22 @@ export function FazendaDetailPanel() {
                         </p>
                       </div>
                       <div className="flex items-center gap-1.5 relative">
+                        {/* GAVETA das áreas separadas — só em talhão multipolígono. */}
+                        {multi && (
+                          <button
+                            onClick={e => { e.stopPropagation(); setPartesAbertas(aberto ? null : t.id); }}
+                            title={`Talhão em ${partes.length} áreas separadas — ver a área de cada uma`}
+                            className="flex items-center gap-0.5 px-1.5 py-1 rounded flex-shrink-0"
+                            style={{ background: aberto ? '#78350f' : '#422006', color: '#fbbf24' }}>
+                            <Layers size={12} />
+                            <span className="text-[9px] font-semibold">{partes.length}</span>
+                            <ChevronDown size={11} style={{ transform: aberto ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }} />
+                          </button>
+                        )}
                         <StatusBadge status={t.status} />
                         {/* Baixar a GEOMETRIA do talhão (KML / SHP). Só aparece com
                             contorno salvo — sem ele não há o que exportar. */}
-                        {poligonoDoTalhao(t) && (
+                        {partes.length > 0 && (
                           <>
                             <button
                               onClick={e => { e.stopPropagation(); setBaixarId(baixarId === t.id ? null : t.id); }}
@@ -385,7 +419,35 @@ export function FazendaDetailPanel() {
                         </button>
                       </div>
                     </div>
-                  ))
+
+                    {aberto && (
+                      <div className="px-3 pb-2.5 pt-1" style={{ background: '#08182c' }}>
+                        <p className="text-[9px] font-semibold uppercase tracking-wide mb-1" style={{ color: '#64748b' }}>
+                          {partes.length} áreas separadas · da maior para a menor
+                        </p>
+                        {partes.map((parte, i) => (
+                          <div key={parte.indice} className="flex items-center gap-2 py-[3px]">
+                            <span className="text-[10px] font-semibold flex-shrink-0" style={{ color: '#93c5fd', width: 46 }}>Área {i + 1}</span>
+                            <div className="flex-1 rounded" style={{ height: 5, background: '#0f2240' }}>
+                              <div style={{ width: `${Math.max(3, parte.pct)}%`, height: '100%', borderRadius: 3, background: '#166534' }} />
+                            </div>
+                            <span className="text-[10px] font-semibold flex-shrink-0 text-right" style={{ color: '#e2e8f0', width: 66 }}>
+                              {areaFmt(parte.areaHa)} ha
+                            </span>
+                            <span className="text-[9px] flex-shrink-0 text-right" style={{ color: '#64748b', width: 34 }}>
+                              {parte.pct.toFixed(1)}%
+                            </span>
+                          </div>
+                        ))}
+                        <p className="text-[9px] mt-1.5 leading-snug" style={{ color: '#475569' }}>
+                          Soma {areaFmt(somaPartes)} ha · área geodésica (elipsoide WGS84, igual ao QGIS), com os furos descontados.
+                          {difereDoCadastro && ` O cadastro traz ${areaFmt(t.areaHa)} ha — medida gravada na importação deste talhão.`}
+                        </p>
+                      </div>
+                    )}
+                    </div>
+                    );
+                  })
                 )}
               </>
             )}

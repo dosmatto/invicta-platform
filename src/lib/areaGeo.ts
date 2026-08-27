@@ -77,3 +77,54 @@ export function areaHaGeoBruta(geojson: GeoInput): number {
   walk(geojson);
   return Math.round((m2 * f / 10000) * 100) / 100;
 }
+
+// ── ÁREA DE CADA PARTE SEPARADA (talhão multipolígono) ──────────────────────
+//
+// Um talhão pode ser um multipolígono: duas ou mais áreas separadas que são o
+// mesmo talhão (ver lib/partesTalhao.ts). O cadastro guarda só a SOMA, e quem
+// olha a lista não tem como saber quanto vale cada pedaço.
+//
+// Duas decisões que evitam número que não fecha na tela:
+// 1) UM ÚNICO fator geodésico para todas as partes — o da latitude do talhão
+//    inteiro. Se cada parte usasse o seu, a soma delas não bateria com a área
+//    total já gravada no cadastro (que foi medida do polígono inteiro).
+// 2) O arredondamento é COMPENSADO (maior resto): arredondar cada parte a 2
+//    casas de forma independente faz 100,125 + 13,215 virar 100,13 + 13,22 =
+//    113,35 ao lado de um total de 113,34. A conta certa, discordando do total
+//    por um centavo de hectare, passa por erro.
+
+/** Arredonda a 2 casas de modo que a soma das partes seja a soma arredondada. */
+function arredondarFechando(vals: number[]): number[] {
+  const alvo = Math.round(vals.reduce((s, v) => s + v, 0) * 100);   // total em centésimos
+  const base = vals.map(v => Math.floor(v * 100));
+  let resto = alvo - base.reduce((s, v) => s + v, 0);
+  const ordem = vals.map((v, i) => ({ i, frac: v * 100 - base[i] })).sort((a, b) => b.frac - a.frac);
+  for (let k = 0; resto > 0 && k < ordem.length; k++, resto--) base[ordem[k].i]++;
+  for (let k = ordem.length - 1; resto < 0 && k >= 0; k--, resto++) base[ordem[k].i]--;
+  return base.map(v => v / 100);
+}
+
+export interface ParteArea {
+  indice: number;    // ordem da parte NA GEOMETRIA (0-based) — o rótulo da tela é outro
+  areaHa: number;    // geodésica, furos descontados
+  pct: number;       // fatia do talhão, em % (0–100)
+}
+
+/**
+ * As partes separadas do polígono, com a área de cada uma, ORDENADAS DA MAIOR
+ * PARA A MENOR. A ordem da geometria vem do shapefile e é arbitrária — mostrar
+ * "Área 1" para o pedaço menor só porque ele veio primeiro no arquivo confunde.
+ * `indice` preserva a posição original para quem precisar casar com a geometria.
+ * Polygon (área única) devolve uma parte só.
+ */
+export function partesComArea(p: GeoJSON.Polygon | GeoJSON.MultiPolygon): ParteArea[] {
+  const partes = p.type === 'Polygon' ? [p.coordinates] : p.coordinates;
+  const f = fatorGeodesico(latCentro(p));
+  const ha = arredondarFechando(
+    partes.map(coordinates => (turfArea({ type: 'Polygon', coordinates }) * f) / 10000),
+  );
+  const total = ha.reduce((s, v) => s + v, 0);
+  return ha
+    .map((areaHa, indice) => ({ indice, areaHa, pct: total > 0 ? (areaHa / total) * 100 : 0 }))
+    .sort((a, b) => b.areaHa - a.areaHa);
+}

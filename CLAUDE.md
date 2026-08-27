@@ -21,6 +21,7 @@ There is **no test framework** configured and no test files in the repo — "run
 ## Critical project rules
 
 - **Versioning is mandatory on every change.** Bump `src/constants/version.ts`: increment `APP_VERSION` and add a new `CHANGELOG` entry (newest first) in the *same commit*. The Configurações panel renders this changelog to users.
+- **Numbered pendências.** The user tracks platform requests by number ("18 - adicionar gaveta expansiva..."). When you deliver pendência N: give it a short title you invent, put `// [N] <título>` above the new version in `changelog.ts`, start that entry's first bullet with `PENDÊNCIA N — `, name the commit `vX.Y.Z — [N] <título>`, and add the row to `docs/PENDENCIAS.md`. Full rules there.
 - **Deploy = push to `master`.** Vercel auto-deploys to https://invicta-platform.vercel.app. If a deploy doesn't appear, a TypeScript error most likely failed the build silently — run `npx tsc --noEmit`. CSS for external libs (MapLibre) must live in `globals.css`, never imported inside a component.
 - UI copy and code comments are **Portuguese (pt-BR)** — match the existing language.
 

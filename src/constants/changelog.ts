@@ -1,5 +1,15 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [18] Áreas separadas do talhão
+  '2.81.0': [
+    'PENDÊNCIA 18 — ÁREAS SEPARADAS DO TALHÃO, UMA A UMA. Talhão que é multipolígono (duas ou mais áreas soltas no mapa que são o mesmo talhão) mostrava só a SOMA na lista da fazenda — "IGEFI 02 · 113,34 ha" — e não havia onde ver quanto vale cada pedaço sem abrir o QGIS.',
+    'AGORA A LINHA TEM UMA GAVETA. Quando o talhão tem mais de uma área, aparece ao lado do status um selo âmbar com o número de áreas; clicando nele a linha abre e lista cada uma, da MAIOR PARA A MENOR, com hectares, a fatia em % e uma barrinha proporcional. Clicar no selo não abre mais o talhão — só a gaveta.',
+    'A ORDEM É POR TAMANHO, NÃO A DO ARQUIVO. A ordem em que as áreas estão dentro do shapefile é arbitrária: chamar de "Área 1" o pedaço de 4 ha só porque ele veio primeiro no arquivo faria a lista mudar de significado a cada reimportação.',
+    'A SOMA DAS PARTES FECHA COM A ÁREA DO CADASTRO — de propósito. Arredondar cada parte por conta própria erra o centésimo em metade dos casos (medimos: 152 de 300 talhões de teste), e 100,13 + 13,22 ao lado de um total de 113,34 vira uma discussão sobre a conta estar errada quando ela está certa. As partes usam o MESMO fator geodésico do talhão inteiro e o arredondamento é compensado.',
+    'A medida é a geodésica do elipsoide WGS84, a mesma que casa com o QGIS, com os furos descontados — é a mesma conta da área total que já estava na tela. Se o cadastro do talhão trouxer um número diferente (importação antiga, medida de outra época), a gaveta diz isso em vez de esconder.',
+    'De quebra, o polígono de cada talhão passou a ser lido UMA VEZ por lista, e não a cada redesenho da tela como era antes.',
+    'Onde conferir: Produtores → fazenda → aba Talhões. 6 testes novos (npm run teste:areas).',
+  ],
   '2.80.0': [
     'A ORDEM DOS ELEMENTOS E AS PREFERÊNCIAS DE ANÁLISE PARARAM DE MUDAR SOZINHAS. As duas telas (Perfil → "Legendas por elemento" e Biblioteca → Preferências de Análise) leem o MESMO catálogo de variáveis, então nunca foram dois problemas — era um só, visto de dois lugares. A revisão achou QUATRO caminhos distintos que mexiam nesse catálogo sem ninguém pedir; todos foram fechados.',
     'O PIOR DELES: ABRIR O APP DE COLETA APAGAVA O CATÁLOGO NA NUVEM. O app de campo, para caber no celular, apaga do aparelho as coleções que ele não usa — e o catálogo de variáveis é uma delas. Só que as migrações do boot rodavam mesmo assim, viam o catálogo "vazio" e o semeavam do zero; e o primeiro envio, sem ter com o que comparar, ainda mandava a nuvem apagar tudo que não estivesse nesse seed novo. Resultado: bastava alguém abrir a coleta no celular para a plataforma inteira voltar ao catálogo de fábrica — ordem, siglas editadas, variáveis criadas e as que estavam desligadas. Agora o app de campo não envia mais coleção que ele não baixou, e a limpeza de órfãos na nuvem só vale para coleção que aquele boot realmente carregou.',

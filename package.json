@@ -20,6 +20,7 @@
     "teste:faixas": "node scripts/teste-faixas.mjs",
     "teste:motivo": "node scripts/teste-motivo-mapa.mjs",
     "teste:partes": "node scripts/teste-partes-talhao.mjs",
+    "teste:areas": "node scripts/teste-partes-area.mjs",
     "teste:tiff": "node scripts/teste-tiff-ndvi.mjs",
     "teste:rota": "node scripts/teste-rota-local.mjs",
     "teste:grids": "node scripts/teste-grids-recomendacao.mjs",
