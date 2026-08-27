@@ -10,7 +10,6 @@ import { Search, Plus, Download, Upload, ChevronRight, ChevronUp, ChevronDown, E
 import { LegendasPanel } from './LegendasPanel';
 import { EquacoesPanel } from './EquacoesPanel';
 import { InsumosPanel } from './InsumosPanel';
-import { CultivaresPanel, PropositosPanel } from './CatalogosImportacaoPanel';
 import { ExportacaoPanel } from './ExportacaoPanel';
 import { RecomendacoesPanel } from './RecomendacoesPanel';
 import { SafrasPanel } from './SafrasPanel';
@@ -92,29 +91,8 @@ function CategoriaConteudo({ slug }: { slug: SlugBiblioteca }) {
   if (slug === 'perfis') return <ConteudoPerfis />;
   if (slug === 'safras') return <ConteudoSafras />;
   if (slug === 'grades') return <ConteudoGrades />;
-  if (slug === 'cultivares') return <ComCabecalho slug="cultivares"><CultivaresPanel /></ComCabecalho>;
-  if (slug === 'propositos') return <ComCabecalho slug="propositos"><PropositosPanel /></ComCabecalho>;
   if (slug === 'preferencias-analise') return <ConteudoPreferencias />;
   return <ConteudoGenerico slug={slug} />;
-}
-
-/** Cabeçalho padrão da categoria + corpo rolável. Extraído porque as categorias
- *  novas repetiam, letra por letra, o mesmo bloco de ConteudoInsumos. */
-function ComCabecalho({ slug, children }: { slug: CategoriaBiblioteca; children: React.ReactNode }) {
-  const def = CATEGORIAS.find(c => c.slug === slug)!;
-  const Icon = def.icone;
-  return (
-    <section className="flex-1 flex flex-col overflow-hidden">
-      <div className="px-4 py-3 flex-shrink-0" style={{ borderBottom: '1px solid #1a3a6b' }}>
-        <div className="flex items-center gap-2 mb-1">
-          <Icon size={14} style={{ color: '#93c5fd' }} />
-          <h3 className="text-sm font-bold uppercase tracking-wide" style={{ color: '#e2e8f0' }}>{def.nome}</h3>
-        </div>
-        <p className="text-[10px]" style={{ color: '#64748b' }}>{def.descricao}</p>
-      </div>
-      <div className="flex-1 overflow-y-auto">{children}</div>
-    </section>
-  );
 }
 
 function ConteudoExportacaoNutrientes() {

@@ -15,7 +15,7 @@ import type {
 import {
   SlidersHorizontal, CalendarDays, Grid3x3, Leaf, Salad, Mountain, Package,
   Satellite, Layers, Calculator, Bug, Hash, Wand2, BarChart3,
-  UserCog, FlaskConical, BookOpen, Recycle, Target, Sprout,
+  UserCog, FlaskConical, BookOpen, Recycle,
 } from 'lucide-react';
 import { empresaAtivaId, uidUsuario, idsReKeyDono } from './empresa';
 import { cloudPushLista } from './cloud';
@@ -65,10 +65,6 @@ export interface DefCategoria {
 export const CATEGORIAS: DefCategoria[] = [
   { slug: 'insumos', nome: 'Insumos', icone: Package, status: 'disponivel',
     descricao: 'Produtos usados nas prescrições: fertilizantes (com as garantias), corretivos, gesso, estercos, compostos, sementes e personalizados.' },
-  { slug: 'cultivares', nome: 'Cultivares', icone: Sprout, status: 'disponivel',
-    descricao: 'Cultivares e híbridos com os CÓDIGOS COMERCIAIS pelos quais eles chegam nas planilhas dos clientes ("55I57RSF IPRO" é o Brasmax Zeus IPRO). Cada código confirmado uma vez é reconhecido sozinho nas importações seguintes.' },
-  { slug: 'propositos', nome: 'Propósitos', icone: Target, status: 'disponivel',
-    descricao: 'Para que a lavoura foi feita: Produção de Grãos, Campo de Semente, Silagem, Cobertura. Campo de Semente conta como grão nos cálculos — é o que a marcação "equivale a grão" faz.' },
   { slug: 'exportacao', nome: 'Exportação de Nutrientes', icone: Recycle, status: 'disponivel',
     descricao: 'Quanto de cada nutriente sai do talhão por tonelada colhida, por cultura (K₂O, P₂O₅, N…). Alimenta o mapa de exportação do relatório de produtividade.' },
   { slug: 'preferencias-analise', nome: 'Preferências de Análise', icone: SlidersHorizontal, status: 'disponivel',

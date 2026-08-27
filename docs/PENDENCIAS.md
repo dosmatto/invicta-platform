@@ -34,11 +34,7 @@ verdadeira (fusão de talhões) chegou depois; foi preciso renumerar.
 | S/N | Separar uma área do talhão (desmembrar / anexar / excluir) | 2.82.0 | Talhão → Limite do talhão → "Talhão em N áreas — separar uma delas" |
 | 18 | Nome do talhão sempre inteiro na lista (correção) | 2.83.1 | Produtores → fazenda → aba Talhões |
 | 19 | Fundir dois talhões, escolhendo o nome que fica | 2.89.0 | Talhão → "Fundir com outro talhão" (e ao renomear para um nome existente) |
-| 20 | Motor de casamento da planilha fitotécnica | 2.83.0 | Sem tela (biblioteca `src/lib/importacao`); plano em `docs/IMPORTACAO-FITOTECNICA.md` |
-| 20 | Cadastro de cultivares e propósitos | 2.84.0 | Biblioteca → Cultivares · Biblioteca → Propósitos |
-| 20 | Cultivo: consórcio, talhão partido e safrinha | 2.85.0 | Talhão → seletor de Cultura (sem mudança visível; o registro por trás mudou) |
-| 20 | Leitor da planilha e motor de conferência | 2.86.0 | Sem tela (`src/lib/importacao/planilha.ts` e `conferencia.ts`) |
-| 20 | Importar planilha fitotécnica: a tela | 2.88.0 | Barra lateral → Importar planilha |
+| 20 | Importação por planilha — feita na plataforma errada e revertida | 2.90.0 | Refeita na plataforma fitotécnica (Django) |
 
 > As pendências 1–17 foram entregues antes deste registro existir e não estão
 > catalogadas; procure pelo assunto no `changelog.ts`. Da 18 em diante, tudo

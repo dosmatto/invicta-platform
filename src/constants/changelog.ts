@@ -1,5 +1,12 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [20] Importação de planilha REMOVIDA daqui — o lugar dela é a plataforma fitotécnica
+  '2.90.0': [
+    'REMOVIDA A IMPORTAÇÃO DE PLANILHA FITOTÉCNICA QUE ENTROU NAS VERSÕES 2.83 A 2.88. Ela foi construída na plataforma ERRADA: dados fitotécnicos (subcultura, variedade/híbrido, finalidade, grupo de produtores, o lançamento em massa) já existem, prontos e em uso, na plataforma fitotécnica — não aqui. Some o ícone "Importar planilha" da barra lateral e as categorias Cultivares e Propósitos da Biblioteca.',
+    'NADA DE DADO SE PERDEU: nenhum lançamento tinha sido feito pela tela removida, e o cadastro de culturas dos talhões continua exatamente como estava.',
+    'O trabalho de análise não foi perdido — ele vai junto para a plataforma certa: a calibração contra a planilha real de 592 linhas, o corte de 33 caracteres do sistema do cliente, as armadilhas de nomes de família (MARIO × MARIA, THIAGO × LUCIANO Aardoon) e a distinção entre consórcio, talhão partido e dúvida.',
+    'Onde conferir: a barra lateral volta a ter Início, Clientes, Medições, Biblioteca e Configurações.',
+  ],
   // [19] Fundir dois talhões (vínculo pelo nome)
   '2.89.0': [
     'PENDÊNCIA 19 — FUNDIR DOIS TALHÕES, ESCOLHENDO QUAL NOME PERMANECE. O caso: "05A" é, na verdade, parte do talhão "05". A ferramenta une os dois contornos, traz junto tudo que estava pendurado no talhão absorvido e o tira do cadastro — deixando registrado, no talhão que ficou, que ele existiu.',
