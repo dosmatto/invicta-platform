@@ -11,7 +11,7 @@ import { registrarLogin } from '@/lib/iam/auditoria';
 import { limparBaseOperacional } from '@/lib/admin/manutencao';
 import { TrocaSenhaObrigatoria } from '@/components/auth/TrocaSenhaObrigatoria';
 import { migrarLaboratoriosV1, migrarSafrasV1, migrarGradesV1, migrarPreferenciasV1, reKeyDonoBiblioteca } from '@/lib/biblioteca';
-import { seedLegendasSistema, migrarLegendaCtceV1, migrarLegendasSaturacoesV1, migrarLegendasSaturacoesV2, migrarLegendasSaturacoesV3, migrarLegendasHomonimasPadraoV1, garantirVariaveisComplementares, migrarSinonimosSeedV1, migrarFeAtivoV1, migrarEtiquetaPadraoA4350, migrarOrdemPadraoFertV1, auditoriaCadastro, migrarAreasGeodesicasV1, migrarNomesMaiusculosV1, migrarGradesDuplicadasV1, migrarBboxTalhoesV1, migrarImportacoesLabPeriodoV1, migrarGradesPeriodoV1, migrarPeriodoDemaisV1, migrarInsumosParaSyncV1, migrarLabsParaSyncV1, migrarInsumosEscopoEmpresaV1, migrarLaboratoriosDosLaudosV1, analisarTalhoesDuplicados, aplicarDedupTalhoesExatos, analisarFazendasOrfas, aplicarRemocaoFazendasOrfas } from '@/lib/store';
+import { seedLegendasSistema, migrarLegendaCtceV1, migrarLegendasSaturacoesV1, migrarLegendasSaturacoesV2, migrarLegendasSaturacoesV3, migrarLegendasHomonimasPadraoV1, garantirVariaveisComplementares, migrarVariaveisGemeasV1, migrarSinonimosSeedV1, migrarFeAtivoV1, migrarEtiquetaPadraoA4350, migrarOrdemPadraoFertV1, auditoriaCadastro, migrarAreasGeodesicasV1, migrarNomesMaiusculosV1, migrarGradesDuplicadasV1, migrarBboxTalhoesV1, migrarImportacoesLabPeriodoV1, migrarGradesPeriodoV1, migrarPeriodoDemaisV1, migrarInsumosParaSyncV1, migrarLabsParaSyncV1, migrarInsumosEscopoEmpresaV1, migrarLaboratoriosDosLaudosV1, analisarTalhoesDuplicados, aplicarDedupTalhoesExatos, analisarFazendasOrfas, aplicarRemocaoFazendasOrfas } from '@/lib/store';
 import { LEGENDAS_OFICIAIS } from '@/constants/legendasSeedOficial';
 import { authConfigurado, observarAuth, logout, type User } from '@/lib/auth';
 import { hidratarCachePesado } from '@/lib/localComprimido';
@@ -186,6 +186,7 @@ export function AppProvider({ children, redirectProdutorParaPortal, modoCampo }:
       passo('migrarGradesDuplicadasV1', migrarGradesDuplicadasV1);
       passo('seedLegendasSistema', () => seedLegendasSistema(LEGENDAS_OFICIAIS));
       passo('migrarLegendaCtceV1', migrarLegendaCtceV1);   // legenda de CTCe clonando a de CTC (p/ interpolar/equações)
+      passo('migrarVariaveisGemeasV1', migrarVariaveisGemeasV1);   // remove variáveis duplicadas por seed prematuro
       passo('garantirVariaveisComplementares', garantirVariaveisComplementares);   // catálogo InCeres (idempotente por id)
       passo('migrarSinonimosSeedV1', migrarSinonimosSeedV1);   // sinônimos novos do seed no catálogo já materializado
       passo('migrarFeAtivoV1', migrarFeAtivoV1);   // Fe virou elemento base: liga quem já tinha o catálogo montado

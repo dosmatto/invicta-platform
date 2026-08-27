@@ -5,6 +5,7 @@
 import type { ResultadoAmostra, PerfilLabConfig } from './lab';
 import type { Legenda } from './legendas';
 import { classesFertilidade5, ordenarLegendasDoAtributo, deveSemearLegendas, promocoesDeHomonimas } from './legendas';
+import { deveSemearCatalogo, podeMigrarCatalogo, gemeasAExcluir } from './catalogoVariaveis';
 export { ordenarLegendasDoAtributo } from './legendas';
 import type { AmbienteProdutivo } from './meap/tipos';
 import { cloudPushLista, cloudAindaNaoHidratou, cloudMarcarPendente } from './cloud';
@@ -1465,9 +1466,14 @@ function _deConteudo(c: ConteudoVariavel): VariavelAnalise {
   return { id: c.varId, sigla: c.sigla, nome: c.nome, unidade: c.unidade, sinonimos: c.sinonimos ?? [], usar: c.usar !== false, ordem: c.ordem ?? 999, casasDecimais: c.casasDecimais };
 }
 
-// Semeia o catálogo na 1ª abertura (idempotente; só quando não há nenhuma variável).
+// Semeia o catálogo na 1ª abertura. Vazio SÓ autoriza semear depois que a nuvem
+// respondeu: antes disso "vazio" quer dizer "ainda não sei". Diferente das
+// legendas (id fixo, que seriam sobrescritas), variável tem id aleatório e o
+// varId mora dentro do conteúdo — semear cedo demais não sobrescreve, DUPLICA.
+// Ver lib/catalogoVariaveis.ts — npm run teste:catalogo.
 export function garantirVariaveisAnalise() {
-  if (typeof window === 'undefined' || _itensVariaveis().length > 0) return;
+  if (typeof window === 'undefined') return;
+  if (!deveSemearCatalogo(_itensVariaveis().length, cloudAindaNaoHidratou())) return;
   for (const v of VARIAVEIS_SEED) {
     bibCriar<ConteudoVariavel>('preferencias-analise', {
       nome: `Variável: ${v.sigla}`,
@@ -1485,6 +1491,10 @@ export function garantirVariaveisAnalise() {
 // "usar" de cada uma (ativa/inativa) vem do próprio seed complementar.
 export function garantirVariaveisComplementares() {
   if (typeof window === 'undefined') return;
+  // A checagem de hidratação vem ANTES: chamar o seed básico primeiro tornava
+  // inútil a guarda de baixo — ele acabava de encher o catálogo, então
+  // `itens.length === 0` nunca era verdade.
+  if (cloudAindaNaoHidratou()) return;
   garantirVariaveisAnalise();
   const itens = _itensVariaveis();
   if (itens.length === 0) return;   // catálogo ainda não hidratado — tenta no próximo boot
@@ -1596,6 +1606,14 @@ export function saveVariavelAnalise(v: VariavelAnalise) {
   // gêmea com o valor velho — e quem lê ordena e fica com a de menor `ordem`, que
   // pode ser justamente a que não foi atualizada. A edição "não pegava".
   const itens = _itensVariaveis().filter(i => i.conteudo.varId === v.id);
+  // Nada gravado E nuvem ainda muda: criar agora fabricaria uma gêmea — a lista
+  // que a tela mostra nesse intervalo é o seed EM MEMÓRIA, não o catálogo real.
+  // Melhor a gravação não valer do que valer duplicando (a tela relê e volta ao
+  // estado de antes). Acontece só na janela do boot lento.
+  if (itens.length === 0 && cloudAindaNaoHidratou()) {
+    console.warn('[catálogo] gravação ignorada: a nuvem ainda não respondeu —', v.id);
+    return;
+  }
   const conteudo: ConteudoVariavel = { tipo: 'variavel', varId: v.id, sigla: v.sigla, nome: v.nome, unidade: v.unidade, sinonimos: v.sinonimos, usar: v.usar, ordem: v.ordem, casasDecimais: v.casasDecimais };
   if (itens.length === 0) bibCriar<ConteudoVariavel>('preferencias-analise', { nome: `Variável: ${v.sigla}`, conteudo, escopo: empresaAtivaId() ? 'empresa' : 'meu' });
   else for (const i of itens) bibAtualizar<ConteudoVariavel>('preferencias-analise', i.id, { nome: `Variável: ${v.sigla}`, conteudo });
@@ -1609,13 +1627,42 @@ const ORDEM_PADRAO_FERT: string[] = [
   's', 'b', 'zn', 'cu', 'mn', 'fe', 'al', 'textura',
 ];
 
+// CURA as variáveis GÊMEAS que as versões anteriores criaram: duas (ou mais)
+// linhas com o mesmo varId, nascidas de um seed que rodou antes de a nuvem
+// responder. Enquanto elas existem, a leitura deduplica ficando com a de menor
+// `ordem` e, no empate, com a que estiver primeiro no array — que muda de um
+// boot para o outro. É isso que fazia a ordem dos elementos e as Preferências de
+// Análise mudarem sozinhas, variável a variável.
+//
+// SEM FLAG de propósito: é barato (só age quando há duplicata) e precisa poder
+// rodar de novo, porque um aparelho ainda na versão antiga volta a criar gêmeas.
+// Fica a linha EDITADA POR ÚLTIMO — ver lib/catalogoVariaveis.gemeasAExcluir.
+export function migrarVariaveisGemeasV1() {
+  if (typeof window === 'undefined') return;
+  if (cloudAindaNaoHidratou()) return;         // sem a nuvem, "duplicata" pode ser meia lista
+  const itens = _itensVariaveis();
+  if (itens.length === 0) return;
+  const fora = gemeasAExcluir(itens.map(i => ({
+    id: i.id, varId: i.conteudo.varId, atualizadoEm: i.atualizadoEm,
+  })));
+  if (fora.length === 0) return;
+  for (const id of fora) bibExcluir('preferencias-analise', id);
+  console.info(`[catálogo] ${fora.length} variável(is) duplicada(s) removida(s) — sobrou a editada por último.`);
+}
+
 // Aplica a ORDEM_PADRAO_FERT ao catálogo UMA VEZ (flag). Depois disso o usuário
 // reordena com as setas (Perfil) e essas mudanças NÃO são sobrescritas.
 export function migrarOrdemPadraoFertV1() {
   if (typeof window === 'undefined') return;
   if (localStorage.getItem('inv_migrado_ordem_fert_v1') === '1') return;
+  // A guarda antiga (`getVariaveisAnalise().length === 0`) NUNCA era verdadeira:
+  // aquela função cai num seed em memória quando não há nada gravado. A migração
+  // rodava contra o seed, gravava a ordem de fábrica por cima do que o usuário
+  // tinha arrumado nas setinhas e ainda queimava a flag — uma vez por aparelho,
+  // em cima de um dado que é global. Agora exige catálogo MATERIALIZADO e nuvem
+  // respondida, e a flag só é gravada se a migração realmente rodou.
+  if (!podeMigrarCatalogo(_itensVariaveis().length, cloudAindaNaoHidratou())) return;
   const vars = getVariaveisAnalise();
-  if (vars.length === 0) return;   // catálogo ainda não hidratado — tenta no próximo boot
   const idx = new Map(ORDEM_PADRAO_FERT.map((id, i) => [id, i]));
   const rest = vars.filter(v => !idx.has(v.id)).sort((a, b) => a.ordem - b.ordem);
   for (const v of vars) {

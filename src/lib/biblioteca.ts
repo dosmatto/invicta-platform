@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { empresaAtivaId, uidUsuario, idsReKeyDono } from './empresa';
 import { cloudPushLista } from './cloud';
+import { lerListaLocal, gravarRawLocal } from './localComprimido';
 import type { PerfilLabConfig } from './lab';
 import type { ProfundidadeConfig } from './store';
 
@@ -117,9 +118,15 @@ export const defCategoria = (slug: CategoriaBiblioteca): DefCategoria | undefine
 const chaveCat = (slug: CategoriaBiblioteca) => `inv_bib_${slug}`;
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2);
 
+// Leitura/gravação passam pelo espelho local (localComprimido) e NÃO pelo
+// localStorage cru. Gravar cru não invalidava `cacheListas`, então quem lesse
+// pelo caminho do espelho — o boot da nuvem faz isso em mesclarPorId e no
+// re-envio — recebia a lista ANTERIOR à edição, regravava essa cópia velha e
+// ainda a empurrava para a nuvem. A defesa da janela do boot virava o veículo
+// que desfazia a edição.
 function load<T>(slug: CategoriaBiblioteca): ItemBiblioteca<T>[] {
   if (typeof window === 'undefined') return [];
-  try { return JSON.parse(localStorage.getItem(chaveCat(slug)) ?? '[]'); } catch { return []; }
+  return lerListaLocal<ItemBiblioteca<T>>(chaveCat(slug));
 }
 // Aviso de quota estourada: só 1x por sessão pra não martelar o usuário com
 // alert() a cada save() subsequente enquanto o armazenamento seguir cheio.
@@ -128,7 +135,7 @@ let avisouQuotaCheia = false;
 function save<T>(slug: CategoriaBiblioteca, data: ItemBiblioteca<T>[]) {
   if (typeof window === 'undefined') return;
   try {
-    localStorage.setItem(chaveCat(slug), JSON.stringify(data));
+    gravarRawLocal(chaveCat(slug), JSON.stringify(data));
   } catch (e) {
     console.error(`[biblioteca] falha ao gravar "${chaveCat(slug)}" no localStorage:`, e);
     if (!avisouQuotaCheia) {

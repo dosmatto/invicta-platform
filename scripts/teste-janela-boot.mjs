@@ -6,7 +6,7 @@
 // logo depois de abrir o app. A gravação local acontecia, o push subia, e o boot
 // — que já tinha o retrato antigo em mãos — regravava o localStorage por cima.
 import assert from 'node:assert/strict';
-import { marcarGravacaoLocal, editadaDuranteBoot, chavesEditadasDuranteBoot } from '../src/lib/janelaBoot.ts';
+import { marcarGravacaoLocal, editadaDuranteBoot, chavesEditadasDuranteBoot, mesclarGravacoes } from '../src/lib/janelaBoot.ts';
 
 let ok = 0, fail = 0;
 const t = (nome, fn) => {
@@ -75,6 +75,34 @@ t('cenário do bug: reordenar → push confirma → boot termina', () => {
   assert.equal(defesaAntiga, false, 'era exatamente por isso que a nuvem passava por cima');
   // 4) o boot termina e vai gravar: agora a janela segura
   assert.equal(defesaAntiga || editadaDuranteBoot(reg, CATALOGO, T0), true);
+});
+
+// ── Entre ABAS: a memória é de uma aba só ───────────────────────────────────
+t('gravação de OUTRA aba (persistida) conta na janela desta', () => {
+  // Aba A editou e o push confirmou (pendência limpa). Aba B, bootando, não
+  // tinha nada em memória — e gravava o retrato antigo por cima.
+  const memoriaDaAbaB = {};
+  const persistido = { [CATALOGO]: T0 + 900 };
+  const tudo = mesclarGravacoes(memoriaDaAbaB, persistido);
+  assert.equal(editadaDuranteBoot(tudo, CATALOGO, T0), true);
+});
+
+t('mescla fica com a gravação MAIS RECENTE de cada chave', () => {
+  const tudo = mesclarGravacoes(
+    { a: T0 + 100, b: T0 + 50 },
+    { a: T0 + 10,  b: T0 + 999, c: T0 + 7 });
+  assert.deepEqual(tudo, { a: T0 + 100, b: T0 + 999, c: T0 + 7 });
+});
+
+t('mescla não inventa chave nem perde as que só existem de um lado', () => {
+  assert.deepEqual(mesclarGravacoes({}, {}), {});
+  assert.deepEqual(mesclarGravacoes({ x: 5 }, {}), { x: 5 });
+  assert.deepEqual(mesclarGravacoes({}, { y: 9 }), { y: 9 });
+});
+
+t('gravação persistida ANTIGA não trava o boot', () => {
+  const tudo = mesclarGravacoes({}, { [CATALOGO]: T0 - 5000 });
+  assert.equal(editadaDuranteBoot(tudo, CATALOGO, T0), false);
 });
 
 console.log(`\n${ok} passaram, ${fail} falharam\n`);

@@ -40,6 +40,26 @@ export function editadaDuranteBoot(reg: RegistroGravacoes, key: string, inicioMs
   return t !== undefined && t >= inicioMs;
 }
 
+/**
+ * Junta o registro EM MEMÓRIA (desta aba) com o PERSISTIDO (qualquer aba, e
+ * sessões anteriores), ficando com a gravação mais recente de cada chave.
+ *
+ * Por que precisa: a memória é por aba. Com a plataforma e a coleta abertas — ou
+ * duas abas da plataforma —, a aba A edita e o push confirma (limpando a
+ * pendência); a aba B, que estava bootando, não vê nem a pendência nem a
+ * gravação, e grava o retrato antigo por cima. Era o mesmo bug de 18/08 por uma
+ * porta que a correção não cobria.
+ */
+export function mesclarGravacoes(
+  memoria: RegistroGravacoes, persistido: RegistroGravacoes,
+): RegistroGravacoes {
+  const out: RegistroGravacoes = { ...persistido };
+  for (const [k, t] of Object.entries(memoria)) {
+    if (out[k] === undefined || t > out[k]) out[k] = t;
+  }
+  return out;
+}
+
 /** Todas as chaves de `keys` editadas durante o boot (para re-enviar no fim). */
 export function chavesEditadasDuranteBoot(
   reg: RegistroGravacoes, keys: string[], inicioMs: number,

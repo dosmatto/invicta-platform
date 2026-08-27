@@ -137,11 +137,24 @@ const KEYS_PULAR_CAMPO = new Set<string>([
 ]);
 const KEYS_LISTA_CAMPO = KEYS_LISTA.filter(k => !KEYS_PULAR_CAMPO.has(k));
 
+// MODO CAMPO LIGADO. O boot do app de coleta APAGA do aparelho as coleções acima
+// e não as hidrata — logo, o que sobra delas no localStorage é vazio (ou um seed
+// que as migrações do boot acabaram de criar em cima do vazio). Empurrar isso
+// para a nuvem substitui o cadastro REAL de todo mundo pelo seed de fábrica.
+//
+// Foi o que aconteceu (27/08/2026): abrir /coleta apagava `inv_bib_preferencias-
+// analise` do aparelho, as migrações do boot semeavam o catálogo do zero e o
+// primeiro push, sem espelho para comparar, ainda podava na nuvem tudo que não
+// estivesse no seed. A plataforma inteira via a ordem dos elementos e as
+// Preferências de Análise "mudarem sozinhas".
+let modoCampoLigado = false;
+
 // Boot do app de CAMPO: hidrata SÓ as coleções que a Coleta usa e, antes,
 // APAGA do localStorage as coleções pesadas que boots antigos (versão anterior)
 // deixaram — é o que libera o "armazenamento cheio" já na próxima abertura.
 export async function bootCloudCampo(): Promise<boolean> {
   if (typeof window === 'undefined') return false;
+  modoCampoLigado = true;   // trava os pushes das coleções que este boot NÃO hidrata
   if (!usarDadosSupabase()) return false;
   // Limpa as coleções pesadas que boots antigos deixaram; anota se removeu
   // alguma (= este aparelho vinha do boot completo antigo).
@@ -177,6 +190,10 @@ export async function bootCloudCampo(): Promise<boolean> {
 // Espelha uma gravação de lista no Supabase.
 export function cloudPushLista(key: string, lista: unknown[]) {
   if (!KEYS_LISTA.includes(key)) return;
+  if (modoCampoLigado && KEYS_PULAR_CAMPO.has(key)) {
+    console.warn('[nuvem] campo: push bloqueado em', key, '— coleção não hidratada neste aparelho.');
+    return;
+  }
   if (!usarDadosSupabase()) return;
   void pushListaSupabase(key, lista);
 }

@@ -14,7 +14,7 @@
 // pra ligar o Auth Supabase não forçar os dados (evita tela vazia antes do import).
 
 import { getSupabase, supabaseConfigurado } from './supabase';
-import { marcarGravacaoLocal, editadaDuranteBoot, chavesEditadasDuranteBoot, type RegistroGravacoes } from './janelaBoot';
+import { marcarGravacaoLocal, editadaDuranteBoot, chavesEditadasDuranteBoot, mesclarGravacoes, type RegistroGravacoes } from './janelaBoot';
 import { lerRawLocal, gravarRawLocal, lerListaLocal } from './localComprimido';
 
 const TABELA_TALHOES_KEY = 'inv_talhoes';
@@ -160,6 +160,7 @@ function gravarSeMudou(key: string, json: string): void {
 // talhões ≈ MBs — e disparava a poda not-in). Com o espelho semeado, a poda
 // nunca roda em operação normal.
 function seedEspelho(key: string, recs: unknown[]): void {
+  chavesHidratadas.add(key);
   const m = new Map<string, string>();
   for (const r of recs) {
     const id = (r as Rec)?.id;
@@ -223,12 +224,13 @@ async function bootIncremental(
   // Nesses casos o local vence, a marca d'água NÃO avança (o próximo boot volta
   // a trazer o delta, aí já com o valor novo que o push subiu) e a chave é
   // re-enviada no fim. Ver lib/janelaBoot.ts.
-  const editadaAgora = (key: string) => editadaDuranteBoot(gravadoLocalEm, key, inicioBoot);
+  const editadaAgora = (key: string) => editadaDuranteBoot(gravacoes(), key, inicioBoot);
   const preservadas: string[] = [];
 
   // aplica delta dos talhões por id
   if (editadaAgora(TABELA_TALHOES_KEY)) {
     preservadas.push(TABELA_TALHOES_KEY);   // sem seedEspelho: o próximo push sobe tudo
+    chavesHidratadas.add(TABELA_TALHOES_KEY);
   } else if (mudTal.length) {
     const lista = lerLocalLista(TABELA_TALHOES_KEY);
     const porId = new Map(lista.map(r => [String((r as Rec).id), r]));
@@ -249,7 +251,7 @@ async function bootIncremental(
   }
   for (const key of keysLista) {
     if (key === TABELA_TALHOES_KEY) continue;
-    if (editadaAgora(key)) { preservadas.push(key); continue; }
+    if (editadaAgora(key)) { preservadas.push(key); chavesHidratadas.add(key); continue; }
     const mudancas = porColecao.get(key);
     if (mudancas?.length) {
       const lista = lerLocalLista(key);
@@ -339,7 +341,7 @@ export async function bootSupabaseData(keysLista: string[], keysObj: string[]): 
   // dela já tenha confirmado (aí a pendência foi limpa e a checagem antiga
   // deixava o retrato velho passar por cima). Ver lib/janelaBoot.ts.
   const ehSujo = (key: string) =>
-    !!lerSujos()[key] || editadaDuranteBoot(gravadoLocalEm, key, inicioBoot);
+    !!lerSujos()[key] || editadaDuranteBoot(gravacoes(), key, inicioBoot);
 
   // Talhões + app_kv em PARALELO (antes eram sequenciais — 2 esperas somadas),
   // trazendo atualizado_em p/ registrar a marca d'água do boot incremental.
@@ -390,7 +392,7 @@ export async function bootSupabaseData(keysLista: string[], keysObj: string[]): 
 
   // Re-envia as pendências recuperadas (mescladas acima). Fire-and-forget: a
   // fila serializa, marca/limpa a pendência e o SyncBadge mostra o estado.
-  const editadasNaJanela = chavesEditadasDuranteBoot(gravadoLocalEm, [...keysLista, ...keysObj], inicioBoot);
+  const editadasNaJanela = chavesEditadasDuranteBoot(gravacoes(), [...keysLista, ...keysObj], inicioBoot);
   for (const key of new Set([...Object.keys(lerSujos()), ...editadasNaJanela])) {
     if (keysLista.includes(key)) void pushListaSupabase(key, lerLocalLista(key));
     else if (keysObj.includes(key)) { const v = lerRawLocal(key); if (v != null) void pushObjSupabase(key, v); }
@@ -428,6 +430,13 @@ const espelhoSb: Record<string, Map<string, string>> = {};
 // não perder dados. Começa false e vira true no fim de bootSupabaseData.
 let bootCompleto = false;
 
+// Coleções que ESTE boot realmente hidratou. A poda de órfãos (delete not-in) só
+// pode rodar sobre elas: uma coleção que o boot nem baixou tem estado local
+// vazio ou semeado do zero, e podar a partir daí APAGA o cadastro real na nuvem.
+// O app de coleta boota com uma lista reduzida (KEYS_LISTA_CAMPO) — as de fora
+// nunca passam por aqui.
+const chavesHidratadas = new Set<string>();
+
 // Fila por chave: promise-chain do push em andamento (encadeia o próximo).
 const filaSb: Record<string, Promise<void>> = {};
 // Última lista pendente por chave (coalescing) — a mais recente vence.
@@ -441,6 +450,25 @@ const errosSb: Record<string, { lista: unknown[]; obj?: false } | { json: string
 // gravá-lo por cima apagaria a edição. Ver lib/janelaBoot.ts — npm run teste:janela.
 const gravadoLocalEm: RegistroGravacoes = {};
 
+// …e a mesma anotação PERSISTIDA, para valer entre abas e entre sessões (a de
+// cima é memória desta aba). Ver janelaBoot.mesclarGravacoes.
+const GRAVADO_KEY = 'inv_sync_gravado';
+function lerGravadosPersistidos(): RegistroGravacoes {
+  try { return JSON.parse(localStorage.getItem(GRAVADO_KEY) || '{}'); } catch { return {}; }
+}
+function persistirGravacao(key: string, agora: number): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const m = lerGravadosPersistidos();
+    m[key] = agora;
+    localStorage.setItem(GRAVADO_KEY, JSON.stringify(m));
+  } catch { /* cota cheia: segue só com a memória desta aba */ }
+}
+/** Registro completo (memória desta aba + persistido de todas). */
+function gravacoes(): RegistroGravacoes {
+  return mesclarGravacoes(gravadoLocalEm, lerGravadosPersistidos());
+}
+
 let onlineRegistrado = false;
 
 // Sinaliza o status do sync p/ a UI (SSR-safe).
@@ -453,7 +481,17 @@ function emitirSync(key: string, status: 'ok' | 'erro') {
 function retentarPendentes() {
   for (const [key, carga] of Object.entries(errosSb)) {
     delete errosSb[key];
-    enfileirar(key, carga);   // re-enfileira a última carga que falhou
+    // Reenvia o estado ATUAL, não a carga que falhou: entre a falha e o retry o
+    // usuário pode ter editado de novo, e a carga velha drenaria DEPOIS da nova
+    // — desfazendo a edição e, pior, apagando na nuvem (idsDelete) os itens que
+    // ela criou. Se o estado atual não for legível, cai na carga antiga.
+    if (carga.obj) {
+      const json = lerRawLocal(key);
+      enfileirar(key, json != null ? { json, obj: true } : carga);
+    } else {
+      const lista = lerLocalLista(key);
+      enfileirar(key, lista.length ? { lista } : carga);
+    }
   }
 }
 
@@ -476,7 +514,9 @@ function enfileirar(
   carga: { lista: unknown[]; obj?: false } | { json: string; obj: true },
 ): Promise<void> {
   garantirRetryOnline();
-  marcarGravacaoLocal(gravadoLocalEm, key, Date.now());   // janela do boot (ver janelaBoot.ts)
+  const agoraMs = Date.now();
+  marcarGravacaoLocal(gravadoLocalEm, key, agoraMs);   // janela do boot (ver janelaBoot.ts)
+  persistirGravacao(key, agoraMs);                     // …visível para as outras abas
   marcarSujo(key);           // pendência persistente: só limpa com sucesso confirmado
   pendenteSb[key] = carga;   // coalescing: a última carga pendente vence
   const anterior = filaSb[key] ?? Promise.resolve();
@@ -553,7 +593,7 @@ async function syncLista(sb: NonNullable<ReturnType<typeof getSupabase>>, key: s
       const up = await sb.from('talhoes').upsert(rows, { onConflict: 'id' });
       if (up.error) { console.warn('[supabase] upsert talhoes:', up.error.message); return false; }
     }
-    if (primeira && bootCompleto) {
+    if (primeira && bootCompleto && chavesHidratadas.has(TABELA_TALHOES_KEY)) {
       // Poda órfãos remotos: apaga o que não está na lista atual (uma vez).
       // Só com boot íntegro — senão um local parcial apagaria dados reais.
       let del = sb.from('talhoes').delete();
@@ -574,7 +614,7 @@ async function syncLista(sb: NonNullable<ReturnType<typeof getSupabase>>, key: s
       const up = await sb.from('app_kv').upsert(rows, { onConflict: 'colecao,item_id' });
       if (up.error) { console.warn(`[supabase] upsert ${key}:`, up.error.message); return false; }
     }
-    if (primeira && bootCompleto) {
+    if (primeira && bootCompleto && chavesHidratadas.has(key)) {
       // Poda órfãos remotos (uma vez) — só com boot íntegro (ver acima).
       let del = sb.from('app_kv').delete().eq('colecao', key);
       const ids = [...next.keys()];
