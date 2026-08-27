@@ -26,6 +26,7 @@ levar mais de uma versão (repete o número na linha seguinte, com a correção)
 | Nº | Título | Versão | Onde na tela |
 |---:|--------|--------|--------------|
 | 18 | Áreas separadas do talhão, uma a uma | 2.81.0 | Produtores → fazenda → aba Talhões (gaveta no selo âmbar) |
+| 19 | Separar uma área do talhão (desmembrar / anexar / excluir) | 2.82.0 | Talhão → Limite do talhão → "Talhão em N áreas — separar uma delas" |
 
 > As pendências 1–17 foram entregues antes deste registro existir e não estão
 > catalogadas; procure pelo assunto no `changelog.ts`. Da 18 em diante, tudo

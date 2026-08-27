@@ -194,6 +194,53 @@ export function contarPendentesSync(): number {
   return loadColetas().filter(c => c.syncPendente).length;
 }
 
+/**
+ * DESMEMBRAMENTO de talhão: as coletas de campo dos pontos que mudam de grade
+ * seguem junto, com o MESMO `ordem` (a caminhada já feita não se refaz).
+ *
+ * O id é `${gradeId}__${ordem}`, então mudar de grade muda o id — as movidas
+ * voltam a `syncPendente` para subirem sob o id novo. O registro antigo na
+ * nuvem vira órfão (o app lê por gradeId, então não aparece em lugar nenhum);
+ * não o apagamos daqui de propósito: apagar coleta é irreversível e o custo de
+ * uma linha órfã é zero perto do de perder uma caminhada.
+ *
+ * Devolve quantas coletas mudaram de grade.
+ */
+export function moverColetasDeGrade(
+  gradeOrigemId: string, gradeDestinoId: string, ordens: number[], talhaoIdDestino?: string,
+): number {
+  if (!gradeOrigemId || !gradeDestinoId || ordens.length === 0) return 0;
+  const alvo = new Set(ordens);
+  const lista = loadColetas();
+  let n = 0;
+  for (let i = 0; i < lista.length; i++) {
+    const c = lista[i];
+    if (c.gradeId !== gradeOrigemId || !alvo.has(c.ordem)) continue;
+    lista[i] = {
+      ...c,
+      id: idColeta(gradeDestinoId, c.ordem),
+      gradeId: gradeDestinoId,
+      talhaoId: talhaoIdDestino ?? c.talhaoId,
+      syncPendente: true,
+      atualizadoEm: new Date().toISOString(),
+    };
+    n++;
+  }
+  if (n > 0) { saveColetas(lista); void pushColetasPendentes().catch(() => {}); }
+  return n;
+}
+
+/** Coletas dos pontos que saíram junto com uma área EXCLUÍDA — some com elas. */
+export function removerColetasDaGrade(gradeId: string, ordens: number[]): number {
+  if (!gradeId || ordens.length === 0) return 0;
+  const alvo = new Set(ordens);
+  const lista = loadColetas();
+  const restam = lista.filter(c => !(c.gradeId === gradeId && alvo.has(c.ordem)));
+  const n = lista.length - restam.length;
+  if (n > 0) saveColetas(restam);
+  return n;
+}
+
 // ENVIAR: empurra cada coleta pendente como doc individual (upsert idempotente).
 export async function pushColetasPendentes(): Promise<number> {
   if (!usarDadosSupabase() || (typeof navigator !== 'undefined' && !navigator.onLine)) return 0;

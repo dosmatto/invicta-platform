@@ -35,8 +35,8 @@ function pontoEmAnel(lng: number, lat: number, anel: GeoJSON.Position[]): boolea
   return dentro;
 }
 
-// Dentro do anel externo e fora de todos os furos.
-function pontoEmParte(lng: number, lat: number, aneis: GeoJSON.Position[][]): boolean {
+/** Dentro do anel externo e fora de todos os furos. */
+export function pontoEmParte(lng: number, lat: number, aneis: GeoJSON.Position[][]): boolean {
   if (!aneis.length || !pontoEmAnel(lng, lat, aneis[0])) return false;
   for (let h = 1; h < aneis.length; h++) if (pontoEmAnel(lng, lat, aneis[h])) return false;
   return true;

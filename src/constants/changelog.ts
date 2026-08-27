@@ -1,5 +1,17 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [19] Separar uma área do talhão (desmembrar / anexar / excluir)
+  '2.82.0': [
+    'PENDÊNCIA 19 — SEPARAR UMA ÁREA DO TALHÃO, COM A AMOSTRAGEM JUNTO. Talhão multipolígono às vezes carrega uma área que não é dele: veio junto no shapefile, entrou no cadastro, e a grade foi gerada por cima. Até agora não havia como tirá-la — pior, o editor de traçado RECUSA mexer no limite quando o ciclo já tem grade ou laudo (e recusa com razão: ele substitui o polígono inteiro e invalida o que foi calculado em cima).',
+    'ONDE ESTÁ: Talhão → Limite do talhão → "Talhão em N áreas — separar uma delas". Escolhe-se a área, o destino, e a tela mostra o que vai acontecer ANTES de aplicar. Três destinos: DESMEMBRAR em talhão novo, ANEXAR a um talhão já cadastrado (o vizinho a que a área pertence de verdade) ou EXCLUIR.',
+    'A REGRA QUE MANDA EM TUDO: NÚMERO DE AMOSTRA NÃO SE RENUMERA. Ele está impresso na etiqueta do saco, foi na carta ao laboratório junto com a remessa e é a chave do casamento laudo↔ponto. A grade que muda de talhão leva os números ORIGINAIS — 4, 5, 18, 19 — esburacada de propósito. Renumerar faria o resultado da amostra 18 cair no ponto errado: um mapa plausível e FALSO, o pior erro que existe aqui.',
+    'O QUE ACOMPANHA A ÁREA: os pontos da grade (número e ordem intactos), as COLETAS DE CAMPO daqueles pontos (a caminhada já feita não se refaz), o código de remessa, os RESULTADOS DE LAUDO daqueles números, as zonas de manejo que caem dentro e a cultura da safra. Ao ANEXAR num talhão que já tem grade do mesmo ano, tudo se funde numa grade e num laudo só — dois laudos do mesmo ano deixariam a Fertilidade lendo metade das amostras, sem nada avisando.',
+    'QUANDO OS NÚMEROS COLIDEM, NÃO FUNDE — E DIZ POR QUÊ. Se a grade que chega tem um número que já existe na do destino, os pontos entram como uma GRADE SEPARADA em vez de virar duas amostras "18" na mesma grade. Não há desempate automático seguro: o número já está impresso na etiqueta dos dois sacos.',
+    'EXCLUIR PEDE CONFIRMAÇÃO EXPLÍCITA, com a contagem do que se perde ("2 pontos e 2 resultados serão descartados") e uma caixa para marcar. A numeração dos pontos que ficam não muda nem aí.',
+    'O LIMITE ANTERIOR FICA ARQUIVADO como versão do talhão — os ciclos que já usaram aquela geometria continuam apontando para ela. Por isso os mapas de fertilidade NÃO são apagados: em vez disso, a aba Fertilidade passa a avisar que o mapa é anterior à mudança e ainda pinta a área que saiu, pedindo o reprocessamento.',
+    'AS ÁREAS FECHAM. A área que sai é a mesma fatia que a gaveta de áreas separadas (v2.81.0) mostra, e a que fica é a medição nova do que restou — as duas somam o que o talhão tinha, e a gaveta de cada talhão continua batendo com o cadastro dele. Um centavo de hectare fora do lugar aqui viraria discussão sobre a conta estar errada.',
+    'Onde conferir: Produtores → fazenda → talhão → Limite do talhão. 8 testes novos (npm run teste:desmembrar) travam a preservação dos números e da ordem, a detecção de colisão e o fechamento das áreas.',
+  ],
   // [18] Áreas separadas do talhão
   '2.81.0': [
     'PENDÊNCIA 18 — ÁREAS SEPARADAS DO TALHÃO, UMA A UMA. Talhão que é multipolígono (duas ou mais áreas soltas no mapa que são o mesmo talhão) mostrava só a SOMA na lista da fazenda — "IGEFI 02 · 113,34 ha" — e não havia onde ver quanto vale cada pedaço sem abrir o QGIS.',

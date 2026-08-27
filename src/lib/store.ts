@@ -1751,6 +1751,10 @@ export interface ImportacaoLab {
   ano?: number;              // = ano(dataReferencia)
   epoca?: Epoca;             // '1' (jan–jun) | '2' (jul–dez)
   atualizadoEm?: string;     // auditoria (distinto de criadoEm)
+  /** ISO da última cirurgia no limite do talhão (desmembrar/excluir área). Os
+   *  mapas processados ANTES desta data foram krigados com o limite antigo — a
+   *  aba Fertilidade avisa e pede reprocessamento. Ver lib/desmembrarTalhao.ts. */
+  limiteAlteradoEm?: string;
 }
 
 // Wrappers de retrocompat (Fase 3): perfis de laboratório agora vivem dentro
@@ -2007,6 +2011,18 @@ export function atualizarDataReferenciaLab(id: string, dataReferencia: string): 
 
 export function deleteImportacaoLab(id: string) {
   save('inv_lab', load<ImportacaoLab>('inv_lab').filter(i => i.id !== id));
+  notificarLab();
+}
+
+/** Patch cru numa importação (usado pelo desmembramento: mover resultados de
+ *  amostra para outro talhão). NÃO recalcula período — quem chama é responsável
+ *  por manter dataReferencia/ano/epoca coerentes. */
+export function updateImportacaoLab(id: string, data: Partial<ImportacaoLab>) {
+  const lista = load<ImportacaoLab>('inv_lab');
+  const i = lista.findIndex(x => x.id === id);
+  if (i < 0) return;
+  lista[i] = { ...lista[i], ...data, atualizadoEm: new Date().toISOString() };
+  save('inv_lab', lista);
   notificarLab();
 }
 

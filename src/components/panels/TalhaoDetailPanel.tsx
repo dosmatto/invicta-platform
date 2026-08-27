@@ -24,6 +24,7 @@ import { paraFC, compartilharLinkCampo } from '@/lib/campoLink';
 import { extrairEditavel, paraFeature, areaHaDe, areaHaSemFuros } from '@/lib/geoEditor';
 import { conflitosDe, talhaoParaAlvo, bboxDeFeatures, type AlvoOverlap, type Conflito } from '@/lib/overlap';
 import { verificarTrocaPoligono, mensagemBloqueioTroca, notaCicloVerificado, type VerificacaoTroca } from '@/lib/trocaPoligono';
+import { partesDoTalhaoGeo } from '@/lib/desmembrarTalhao';
 import { carregarEcOficial, rotuloEc, type EcCamada } from '@/lib/meap/gerar';
 import { classeZona } from '@/lib/zonas';
 import { cloudCarregarMapasPorPrefixo } from '@/lib/cloud';
@@ -42,6 +43,11 @@ const EditorGeometria = dynamic(
   { ssr: false },
 );
 
+const SepararArea = dynamic(
+  () => import('@/components/talhao/SepararArea').then(m => ({ default: m.SepararArea })),
+  { ssr: false },
+);
+
 // ── seção de limite geográfico (atualizar polígono) ──────────────────────────
 function GeoSection({ talhao, onUploaded }: { talhao: Talhao | null; onUploaded: (areaHa: number) => void }) {
   const { setUploadedGeo, setUploadedBbox } = useApp();
@@ -54,8 +60,13 @@ function GeoSection({ talhao, onUploaded }: { talhao: Talhao | null; onUploaded:
   // Geometria parseada/editada AGUARDANDO resolução de sobreposição (não gravada).
   const [pendente, setPendente] = useState<{ fc: GeoJSON.FeatureCollection; bbox: [number, number, number, number]; areaHa: number; areaHaBruta: number } | null>(null);
   const [conflitos, setConflitos] = useState<Conflito[]>([]);
+  const [separando, setSeparando] = useState(false);
 
   const temGeo = !!talhao?.geojson;
+
+  // Nº de ÁREAS SEPARADAS (multipolígono). Só com mais de uma faz sentido
+  // oferecer a separação — ver lib/desmembrarTalhao.ts.
+  const nPartes = talhao?.geojson ? partesDoTalhaoGeo(talhao).length : 0;
 
   function fcDoTalhao(): GeoJSON.FeatureCollection | null {
     try { return JSON.parse(talhao!.geojson!) as GeoJSON.FeatureCollection; } catch { return null; }
@@ -192,8 +203,37 @@ function GeoSection({ talhao, onUploaded }: { talhao: Talhao | null; onUploaded:
             </button>
           </div>
         )}
+        {/* TALHÃO EM VÁRIAS ÁREAS: separar uma delas (desmembrar / anexar /
+            excluir). Fica FORA do editor de traçado de propósito — o editor
+            substitui o polígono inteiro e é bloqueado quando o ciclo tem dados;
+            esta operação é cirúrgica e leva a amostragem junto. */}
+        {temGeo && nPartes > 1 && estado !== 'loading' && estado !== 'conflito' && (
+          <button onClick={() => setSeparando(true)}
+            className="mt-1.5 w-full flex items-center justify-center gap-1 py-1.5 rounded text-[10px] font-semibold transition-opacity hover:opacity-80"
+            style={{ background: '#422006', color: '#fbbf24' }}>
+            <Layers size={11} /> Talhão em {nPartes} áreas — separar uma delas
+          </button>
+        )}
         <input ref={inputRef} type="file" accept=".kml,.zip,.geojson,.json" className="hidden" onChange={onFileChange} />
       </div>
+
+      {separando && talhao && (
+        <SepararArea talhao={talhao} onFechar={() => setSeparando(false)}
+          onAplicado={msg => {
+            setSeparando(false);
+            const atual = getTalhoes().find(t => t.id === talhao.id);
+            // Republica a geometria NOVA no mapa — senão a área que acabou de
+            // sair continua desenhada até o usuário navegar para outra tela.
+            if (atual?.geojson) {
+              try {
+                setUploadedGeo(JSON.parse(atual.geojson) as GeoJSON.FeatureCollection);
+                if (atual.bbox) setUploadedBbox(atual.bbox);
+              } catch { /* geometria ilegível: o mapa se resolve na próxima navegação */ }
+            }
+            setAvisos([msg]); setEstado('ok'); setErroMsg('');
+            onUploaded(atual?.areaHa ?? talhao.areaHa);
+          }} />
+      )}
 
       {editando && talhao && (() => {
         const fc = pendente?.fc ?? fcDoTalhao();

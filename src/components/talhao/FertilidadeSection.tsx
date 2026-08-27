@@ -530,6 +530,17 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [importacao, nutriente, profundidade, grade, poligono, ehZona]);
 
+  // MAPA ANTERIOR À CIRURGIA NO LIMITE. Quando uma área é separada/excluída
+  // (lib/desmembrarTalhao.ts) a importação recebe `limiteAlteradoEm`. Os mapas
+  // já processados não são apagados — o histórico dos ciclos que usaram a
+  // geometria antiga continua válido — mas quem olha ESTA tela precisa saber
+  // que o raster ainda pinta a área que saiu.
+  const mapasAnterioresAoLimite = useMemo(() => {
+    const marca = importacao?.limiteAlteradoEm;
+    if (!marca) return 0;
+    return Object.values(cache).filter(m => (m.interpoladoEm ?? '') < marca).length;
+  }, [importacao, cache]);
+
   // Modo zona (Z1): pinta cada zona com o valor da sua amostra e salva no MESMO
   // formato/chave da interpolação (metodo='zona') → a Recomendação lê transparente.
   async function processarUmZona(nut: string, prof: string) {
@@ -1234,6 +1245,13 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
               {diagCasamento?.modo === 'nenhum' && diagCasamento.amostras > 0 && (
                 <p className="text-[10px] mt-0.5" style={{ color: '#f87171' }}>
                   ⚠ As {diagCasamento.amostras} amostras não casaram com a grade ({diagCasamento.nPontos} pontos). Salve/associe a grade certa na aba Amostragem (mesmo Ano) e reimporte.
+                </p>
+              )}
+              {mapasAnterioresAoLimite > 0 && (
+                <p className="text-[10px] mt-0.5 leading-relaxed" style={{ color: '#fbbf24' }}>
+                  ⚠ O LIMITE DO TALHÃO MUDOU depois {mapasAnterioresAoLimite === 1 ? 'deste mapa' : `de ${mapasAnterioresAoLimite} destes mapas`} —
+                  {' '}uma área foi separada ou excluída. {mapasAnterioresAoLimite === 1 ? 'Ele foi interpolado' : 'Eles foram interpolados'} com o
+                  {' '}contorno antigo e ainda {mapasAnterioresAoLimite === 1 ? 'pinta' : 'pintam'} o que saiu. Reprocesse para o mapa valer o limite de hoje.
                 </p>
               )}
               {partesVazias.length > 0 && (
