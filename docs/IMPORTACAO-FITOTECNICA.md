@@ -564,8 +564,8 @@ utilizável ao fim de cada uma.
 |---|------|---------|--------|
 | 1 | Fundação de texto | `texto.ts` + `identidade.ts` + `casarTalhao.ts` e 86 testes node — **ENTREGUE** | 2.83.0 |
 | 2 | Catálogos | Propósito e Cultivar na Biblioteca + semeadura + mapa de cultura — **ENTREGUE** | 2.84.0 |
-| 3 | Grupos | `ConteudoGrupo` + `Cliente.grupoId` + UI no painel de produtores | 2.85.0 |
-| 4 | Cultivo | Entidade + `getPlantio` derivado + migração dos plantios existentes | 2.86.0 |
+| 3 | Grupos | `ConteudoGrupo` + `Cliente.grupoId` + UI no painel de produtores | 2.86.0 |
+| 4 | Cultivo | Entidade + `getPlantio` derivado + migração dos plantios existentes — **ENTREGUE** | 2.85.0 |
 | 5 | Leitor + motor | `planilha.ts` + `conferencia.ts` + testes contra a planilha real | 2.87.0 |
 | 6 | Painel | Tela cheia, tabela, agrupamento, modais de criação | 2.88.0 |
 | 7 | Gravação | `aplicar.ts` em lote + relatório XLSX + registro de importação | 2.89.0 |

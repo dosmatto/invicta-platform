@@ -56,7 +56,11 @@ const KEYS_LISTA = [
                                        // de mexer nesta linha.
   'inv_estilo_presets',                // Presets de divisão de classes do estilo de dose
   'inv_lab', 'inv_legendas',
-  'inv_plantios',                      // Fase 8.B — cultura por talhão+safra
+  'inv_plantios',
+  'inv_cultivos',                      // Pendência 20 — registro fitotécnico rico (cultura,
+                                       // cultivar, propósito, área declarada) por talhão+safra+
+                                       // época+parte. `inv_plantios` continua no sync porque
+                                       // outros dispositivos podem estar em versão anterior.                      // Fase 8.B — cultura por talhão+safra
   'inv_compactacao',                   // Fase 8.C — penetrometria por profundidade
   'inv_grades_compact',                // #36 — grades de compactação (plataforma cria; app de campo coleta)
   'inv_mde',                           // MDE F1 — metadados das bases altimétricas aprovadas (rasters em inv_mapas_fert)

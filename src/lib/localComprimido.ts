@@ -42,7 +42,8 @@ const PESADAS = new Set<string>([
   'inv_meap_ambientes',   // ambientes produtivos
   'inv_compactacao',      // penetrometria por profundidade
   'inv_grades_compact',   // grades de compactacao
-  'inv_plantios',         // cultura por talhao+safra
+  'inv_plantios',         // cultura por talhao+safra (legado; migrado p/ inv_cultivos)
+  'inv_cultivos',         // registro fitotecnico por talhao+safra+epoca+parte
 ]);
 
 // ── Cache de leitura em memoria ─────────────────────────────────────────────

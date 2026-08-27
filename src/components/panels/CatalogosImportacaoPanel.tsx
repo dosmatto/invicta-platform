@@ -75,7 +75,9 @@ export function CultivaresPanel({ nomeInicial, onCriado }: { nomeInicial?: strin
   const [erro, setErro] = useState('');
   const [filtro, setFiltro] = useState('');
 
-  const itens = useMemo(() => listar<ConteudoCultivar>('cultivares'), [tick]);
+  // `tick` é o gatilho manual de recarga (o linter não enxerga que a lista vem
+  // de fora do React). Mesmo padrão de ConteudoGenerico em BibliotecaPanel.
+  const itens = useMemo(() => listar<ConteudoCultivar>('cultivares'), [tick]); // eslint-disable-line react-hooks/exhaustive-deps
   const visiveis = useMemo(() => {
     const f = na(filtro);
     if (!f) return itens;
@@ -222,7 +224,7 @@ export function PropositosPanel({ nomeInicial, onCriado }: { nomeInicial?: strin
   const [r, setR] = useState<RascunhoProposito>(() => propositoVazio(nomeInicial ?? ''));
   const [erro, setErro] = useState('');
 
-  const itens = useMemo(() => listar<ConteudoProposito>('propositos'), [tick]);
+  const itens = useMemo(() => listar<ConteudoProposito>('propositos'), [tick]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function salvar() {
     const nome = r.nome.trim();

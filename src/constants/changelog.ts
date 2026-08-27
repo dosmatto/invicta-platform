@@ -1,5 +1,17 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [20] Cultivo: consórcio, talhão partido e safrinha
+  '2.85.0': [
+    'PENDÊNCIA 20 — O REGISTRO DE CULTURA DO TALHÃO VIROU REGISTRO FITOTÉCNICO. Até aqui, um talhão tinha UMA cultura por ano e ponto final. Se você lançasse milho e depois braquiária no mesmo talhão, o segundo APAGAVA o primeiro, sem avisar. A planilha dos clientes tem três situações que não cabiam nisso — e todas as três estão na planilha de sementes que serviu de referência.',
+    'CONSÓRCIO: milho e braquiária na MESMA área, mesmo talhão, mesmo ano (CKLBV 10 a, 36,49 ha nas duas linhas). Agora são dois registros, e a área NÃO é somada — somar daria 72,98 ha num talhão de 36,49.',
+    'TALHÃO PARTIDO: "HABPU 02 a" com 20,76 ha e "HABPU 02 b" com 76,90, cada pedaço com o seu cultivar. Cada parte é um registro com o seu rótulo, e a soma (97,66) é o que se confere contra a área do talhão.',
+    'SAFRINHA: soja no verão e milho depois, no mesmo talhão e no mesmo ano. Antes, o milho apagava a soja.',
+    'CADA REGISTRO GUARDA MUITO MAIS: cultivar (ligado ao cadastro, com o nome copiado para o relatório não depender dele), propósito, área declarada pelo cliente, data de plantio e de qual importação ele veio. Esse último é o que vai permitir auditar e desfazer uma planilha inteira.',
+    'A ÁREA DA PLANILHA NÃO SOBRESCREVE A DO TALHÃO. A área do talhão continua sendo a geodésica calculada do polígono, a mesma que casa com o QGIS. A área que o cliente declara fica no registro do cultivo, ao lado — e a diferença entre as duas é exatamente o que a conferência da importação vai mostrar.',
+    'NADA MUDA NA SUA TELA. O seletor de Cultura do talhão funciona igual, e todo o histórico de culturas já lançado foi convertido automaticamente na primeira abertura, preservando as datas originais. Os 14 lugares do app que leem a cultura (fertilidade, produtividade, recomendação, relatórios, troca de polígono) continuam lendo pelo mesmo caminho.',
+    'CORRIGIDO DE PASSAGEM: a versão do app tinha ficado em 2.83.1 enquanto o changelog já anunciava a 2.84.0 — duas sessões editaram o mesmo arquivo. Agora está 2.85.0.',
+    'Onde conferir: talhão → seletor de Cultura no topo. 22 testes novos (npm run teste:cultivo).',
+  ],
   // [20] Cadastro de cultivares e propósitos
   '2.84.0': [
     'PENDÊNCIA 20 — CADASTRO DE CULTIVARES E DE PROPÓSITOS (segunda parte da importação por planilha). Duas categorias novas na Biblioteca. Esta é a parte que resolve o item mais chato da planilha do cliente: o material vem como CÓDIGO, não como nome.',

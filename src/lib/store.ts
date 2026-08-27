@@ -95,37 +95,91 @@ export interface VersaoPoligono {
   safras: string[];      // safras que tinham dados do talhão quando esta versão vigorava
 }
 
-// Plantio: cultura de um talhão numa safra (um por talhão+safra). Talhões
-// diferentes podem ter culturas diferentes na mesma safra, por isso é entidade
-// própria (não um campo da Safra global).
-export interface Plantio {
-  id: string;
-  talhaoId: string;
-  safra: string;
-  cultura: string;
-  criadoEm: string;
-}
+// ── Cultivo: I/O ─────────────────────────────────────────────────────────
+// As REGRAS (chave de unicidade, quem sobrescreve quem, migração) ficam em
+// `./cultivo.ts`, que é puro e testado em node — `store.ts` não roda fora do
+// navegador. Aqui só load → regra → save.
+export type { Cultivo, NovoCultivo, EpocaCultivo } from './cultivo';
+import {
+  compararCultivos, aplicarCultivo, culturaPrincipal, definirCulturaPrincipal, migrarPlantios,
+  type Cultivo, type NovoCultivo, type PlantioLegado,
+} from './cultivo';
 
 export const CULTURAS = ['Soja', 'Milho', 'Trigo', 'Feijão', 'Algodão', 'Aveia', 'Sorgo', 'Cevada', 'Pastagem', 'Outra'];
 
-export function getPlantio(talhaoId: string, safra: string): string {
-  if (!talhaoId || !safra) return '';
-  const p = loadFiltrado<Plantio>('inv_plantios').find(x => x.talhaoId === talhaoId && x.safra === safra);
-  return p?.cultura ?? '';
+/** Retrocompat: a forma antiga do registro, hoje só usada pela migração. */
+export type Plantio = PlantioLegado;
+
+export function getCultivos(talhaoId?: string, safra?: string): Cultivo[] {
+  let all = loadFiltrado<Cultivo>('inv_cultivos');
+  if (talhaoId) all = all.filter(c => c.talhaoId === talhaoId);
+  if (safra) all = all.filter(c => c.safra === safra);
+  return all.sort(compararCultivos);
 }
 
-// Upsert da cultura por talhão+safra. Cultura vazia remove o registro.
-export function setPlantio(talhaoId: string, safra: string, cultura: string) {
-  if (!talhaoId || !safra) return;
-  const lista = load<Plantio>('inv_plantios');
-  const i = lista.findIndex(x => x.talhaoId === talhaoId && x.safra === safra);
-  if (i >= 0) {
-    if (cultura) lista[i] = { ...lista[i], cultura };
-    else lista.splice(i, 1);
-  } else if (cultura) {
-    lista.push(comEmpresa({ id: uid(), talhaoId, safra, cultura, criadoEm: new Date().toISOString() }));
+export function saveCultivo(c: NovoCultivo): Cultivo {
+  const { lista, salvo } = aplicarCultivo(load<Cultivo>('inv_cultivos'), c, new Date().toISOString(), uid);
+  save('inv_cultivos', lista.map(x => (x.id === salvo.id ? comEmpresa(x) as Cultivo : x)));
+  return salvo;
+}
+
+export function deleteCultivo(id: string) {
+  save('inv_cultivos', load<Cultivo>('inv_cultivos').filter(c => c.id !== id));
+}
+
+/**
+ * Gravação em lote da importação: UMA escrita local e UM push da lista, como
+ * `importarTalhoesLote`. Item a item, 592 linhas gerariam 592 pushes da lista
+ * inteira — lento e sem resposta na tela.
+ */
+export function importarCultivosLote(
+  novos: NovoCultivo[],
+  atualizacoes: Array<{ id: string; data: Partial<Cultivo> }> = [],
+): { criados: number; atualizados: number } {
+  const lista = load<Cultivo>('inv_cultivos');
+  const agora = new Date().toISOString();
+  let atualizados = 0;
+  for (const a of atualizacoes) {
+    const i = lista.findIndex(c => c.id === a.id);
+    if (i >= 0) { lista[i] = { ...lista[i], ...a.data, atualizadoEm: agora }; atualizados++; }
   }
-  save('inv_plantios', lista);
+  for (const n of novos) {
+    lista.push(comEmpresa({ ...n, id: n.id ?? uid(), criadoEm: agora, atualizadoEm: agora }) as Cultivo);
+  }
+  save('inv_cultivos', lista);
+  return { criados: novos.length, atualizados };
+}
+
+/**
+ * RETROCOMPAT — a cultura do cultivo principal do talhão naquela safra.
+ * Assinatura idêntica à de antes: 14 pontos do app leem cultura por aqui.
+ */
+export function getPlantio(talhaoId: string, safra: string): string {
+  return culturaPrincipal(loadFiltrado<Cultivo>('inv_cultivos'), talhaoId, safra);
+}
+
+/** RETROCOMPAT — grava a cultura do cultivo PRINCIPAL. */
+export function setPlantio(talhaoId: string, safra: string, cultura: string) {
+  const antes = load<Cultivo>('inv_cultivos');
+  const depois = definirCulturaPrincipal(antes, talhaoId, safra, cultura, new Date().toISOString(), uid);
+  if (depois !== antes) save('inv_cultivos', depois.map(c => comEmpresa(c) as Cultivo));
+}
+
+/**
+ * Migra `inv_plantios` → `inv_cultivos`. Aditiva: a chave antiga continua no
+ * sync (outros dispositivos podem estar em versão anterior) e nada é apagado.
+ */
+export function migrarPlantiosV1() {
+  if (typeof window === 'undefined') return;
+  const FLAG = 'inv_migrado_cultivos_v1';
+  if (localStorage.getItem(FLAG) === '1') return;
+  const antigos = lerListaLocal<PlantioLegado>('inv_plantios');
+  if (antigos.length) {
+    const atuais = load<Cultivo>('inv_cultivos');
+    const novos = migrarPlantios(antigos, atuais);
+    if (novos.length !== atuais.length) save('inv_cultivos', novos);
+  }
+  localStorage.setItem(FLAG, '1');
 }
 
 // ── Compactação (penetrometria) ───────────────────────────────────────────

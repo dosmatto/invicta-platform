@@ -30,6 +30,7 @@ levar mais de uma versão (repete o número na linha seguinte, com a correção)
 | 18 | Nome do talhão sempre inteiro na lista (correção) | 2.83.1 | Produtores → fazenda → aba Talhões |
 | 20 | Motor de casamento da planilha fitotécnica | 2.83.0 | Sem tela (biblioteca `src/lib/importacao`); plano em `docs/IMPORTACAO-FITOTECNICA.md` |
 | 20 | Cadastro de cultivares e propósitos | 2.84.0 | Biblioteca → Cultivares · Biblioteca → Propósitos |
+| 20 | Cultivo: consórcio, talhão partido e safrinha | 2.85.0 | Talhão → seletor de Cultura (sem mudança visível; o registro por trás mudou) |
 
 > As pendências 1–17 foram entregues antes deste registro existir e não estão
 > catalogadas; procure pelo assunto no `changelog.ts`. Da 18 em diante, tudo
