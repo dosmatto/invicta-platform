@@ -116,8 +116,12 @@ export interface DadosRelatorioProd {
     resumo: ResumoRentabilidade;
   }>;
 
-  /** Uma entrada por nutriente. Vazio/ausente = nenhuma página de exportação. */
+  /** Uma entrada por nutriente E POR BASE. Vazio/ausente = nenhuma página.
+   *  A mesma página serve exportação e extração: muda o coeficiente, o título
+   *  e — o que mais importa — a ressalva embaixo da tabela de equivalentes,
+   *  porque repor a EXTRAÇÃO inteira aduba a palhada que ficou no talhão. */
   exportacoes?: Array<{
+    base?: 'exportacao' | 'extracao';   // ausente = exportação (páginas antigas)
     simbolo: string;              // 'K2O' — já saneado, sem subscrito
     cultura: string;
     fonteCoef: string;
@@ -799,8 +803,12 @@ async function paginaExportacao(
   // assunto desce para o subtítulo: "EXPORTACAO DE K2O" a 22 pt estoura os
   // 84 mm de TITULO_MAXW e sairia cortado. A fonte do coeficiente vai para o
   // rodapé do mapa, que tem largura de sobra.
+  const extracao = e.base === 'extracao';
+  const ROT = extracao
+    ? { titulo: 'Extracao pela cultura', part: 'extraido', media: 'Extracao media' }
+    : { titulo: 'Exportacao pela colheita', part: 'exportado', media: 'Exportacao media' };
   cabecalho(doc, d, logos, san(e.simbolo),
-    `Exportacao pela colheita · ${fmt(e.resumo.coefKgPorT, 1)} kg/t de ${san(e.cultura)}`);
+    `${ROT.titulo} · ${fmt(e.resumo.coefKgPorT, 1)} kg/t de ${san(e.cultura)}`);
 
   const jpg = await imagemParaPdf(png, mapaW);
   doc.addImage(jpg.data, jpg.formato, mapaX, mapaY, mapaW, mapaH);
@@ -817,7 +825,7 @@ async function paginaExportacao(
   q.breaks.forEach((b, i) => doc.text(fmt(b, 1), mapaX + (i + 1) * larg, tiraY + tiraH + 3.5, { align: 'center' }));
   doc.text(fmt(q.faixas[n - 1].max, 1), mapaX + mapaW, tiraY + tiraH + 3.5, { align: 'right' });
   doc.setFontSize(6.5); doc.setTextColor(...NAVY); doc.setFont('helvetica', 'bold');
-  doc.text(`${san(e.simbolo)} exportado (kg/ha)`, mapaX + mapaW / 2, tiraY - 1.5, { align: 'center' });
+  doc.text(`${san(e.simbolo)} ${ROT.part} (kg/ha)`, mapaX + mapaW / 2, tiraY - 1.5, { align: 'center' });
 
   escalaGrafica(doc, mapaX + mapaW / 2, tiraY + tiraH + 10, d.bounds, mapaW);
 
@@ -897,13 +905,15 @@ async function paginaExportacao(
   }
   // Obrigatória: sem ela a tabela vira prescrição, e não é.
   doc.setFont('helvetica', 'normal'); doc.setFontSize(5.8); doc.setTextColor(...VERM);
-  doc.text('Equivalencia de REPOSICAO da exportacao — nao e recomendacao de adubacao: nao considera teor do solo, resposta da cultura nem eficiencia do produto.',
+  doc.text(extracao
+    ? 'Equivalente da EXTRACAO TOTAL (grao + palhada) — NAO reponha este valor: a palhada fica no talhao e devolve boa parte ao solo. Serve de referencia da demanda da cultura.'
+    : 'Equivalencia de REPOSICAO da exportacao — nao e recomendacao de adubacao: nao considera teor do solo, resposta da cultura nem eficiencia do produto.',
     tabX + 4, eqY + eqH - 6, { maxWidth: tabW - 8 });
 
   // ABAIXO da escala gráfica: em tiraY+tiraH+16 esta linha caía por cima dos
   // rótulos dela (a escala ocupa +10 a +17,5).
   doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(...GRAY);
-  doc.text(`Exportacao media: ${fmt(e.resumo.mediaKgHa, 1)} kg/ha de ${san(e.simbolo)}  ·  Total: ${fmt(e.resumo.totalKg / 1000, 2)} t`,
+  doc.text(`${ROT.media}: ${fmt(e.resumo.mediaKgHa, 1)} kg/ha de ${san(e.simbolo)}  ·  Total: ${fmt(e.resumo.totalKg / 1000, 2)} t`,
     mapaX, tiraY + tiraH + 19, { maxWidth: mapaW });
   doc.setFontSize(6); doc.text(`Coeficiente: ${san(e.fonteCoef)}`, mapaX, tiraY + tiraH + 23, { maxWidth: mapaW });
 
@@ -1417,7 +1427,9 @@ export function validarProd(d: DadosRelatorioProd): string | null {
     if (!r.rasterPng || !r.classes.faixas.length) return 'Nao foi possivel montar o mapa de rentabilidade.';
   }
   for (const e of d.exportacoes ?? []) {
-    if (!e.rasterPng || !e.classes.faixas.length) return `Nao foi possivel montar o mapa de exportacao de ${e.simbolo}.`;
+    if (!e.rasterPng || !e.classes.faixas.length) {
+      return `Nao foi possivel montar o mapa de ${e.base === 'extracao' ? 'extracao' : 'exportacao'} de ${e.simbolo}.`;
+    }
   }
   return null;
 }

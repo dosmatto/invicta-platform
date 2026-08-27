@@ -80,6 +80,8 @@ export interface ConteudoInsumo {
   precoMedio?: number;
   /** Unidade de `precoMedio`. Ausente = 'kg' (cadastros anteriores à v2.41). */
   precoUnidade?: UnidadePreco;
+  /** Entra na tabela EQUIVALENTES EM FERTILIZANTE do relatório de colheita. */
+  usarNoRelatorio?: boolean;
   /**
    * Frete em R$/ha. Mora aqui, e não na equação, pelo mesmo motivo do preço:
    * dez equações de calcário copiavam o mesmo frete dez vezes, e corrigir o
@@ -192,6 +194,23 @@ export function custosDaEquacao(eq: CustosProprios, insumo?: ConteudoInsumo | nu
     custoTonelada, freteHa, aplicacaoHa,
     fonte: { custo: fonteCusto, frete: fonteFrete, aplicacao: fonteAplic },
   };
+}
+
+/**
+ * Quais produtos entram na tabela de equivalentes do relatório.
+ *
+ * Sem marcação nenhuma a tabela lista TODO fertilizante que declare o
+ * nutriente, ordenado por concentração e cortado nos primeiros — foi o que fez
+ * a folha do cliente sair com dois "MAP" e um "Super Triplo" que ninguém
+ * escolheu. Marcando, o agrônomo diz quais são os produtos da casa.
+ *
+ * Ninguém marcado ainda = mantém todos. Uma tabela vazia de repente pareceria
+ * defeito, e a marcação é opt-in: quem não souber que ela existe não pode
+ * perder o relatório que já tinha.
+ */
+export function paraRelatorio<T extends { usarNoRelatorio?: boolean }>(produtos: readonly T[]): T[] {
+  const marcados = produtos.filter(p => p.usarNoRelatorio === true);
+  return marcados.length ? marcados : [...produtos];
 }
 
 /** A complementação por nutriente só vale para fertilizante mineral (regra 12.5). */

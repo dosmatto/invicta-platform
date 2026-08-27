@@ -369,7 +369,13 @@ export interface ConteudoExportacao {
   culturaId: string;
   parteColhida?: string;        // 'grão'
   umidadePct?: number;
+  /** EXPORTAÇÃO: kg do nutriente por tonelada COLHIDA — o que sai do talhão
+   *  dentro do grão. É a conta de reposição. */
   coeficientes: { n?: number; p2o5?: number; k2o?: number; s?: number; ca?: number; mg?: number };
+  /** EXTRAÇÃO: kg por tonelada colhida absorvidos pela PLANTA INTEIRA (grão +
+   *  palhada). Sempre maior que a exportação, e não se repõe integralmente —
+   *  a palhada fica no talhão. Ausente = a cultura só tem exportação cadastrada. */
+  coeficientesExtracao?: { n?: number; p2o5?: number; k2o?: number; s?: number; ca?: number; mg?: number };
   fonte?: string;
   observacoes?: string;
 }

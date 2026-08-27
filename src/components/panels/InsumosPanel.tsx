@@ -209,6 +209,23 @@ export function InsumosPanel() {
           </div>
         )}
 
+        {/* Só no fertilizante: é a única categoria que a tabela de equivalentes
+            do relatório de colheita consulta. */}
+        {cat === 'fertilizante' && (
+          <label className="flex items-start gap-1.5 cursor-pointer">
+            <input type="checkbox" checked={!!r.conteudo.usarNoRelatorio}
+              onChange={e => setC({ usarNoRelatorio: e.target.checked })}
+              className="mt-0.5 flex-shrink-0" />
+            <span className="text-[9px] leading-relaxed" style={{ color: '#93c5fd' }}>
+              <strong>Usar no relatório de exportação</strong> — entra na tabela &quot;Equivalentes em fertilizante&quot;
+              do relatório de colheita.{' '}
+              <span style={{ color: '#64748b' }}>
+                Sem nenhum produto marcado, o relatório lista todos os fertilizantes com garantia do nutriente.
+              </span>
+            </span>
+          </label>
+        )}
+
         <Campo rotulo="Observações">
           <input value={r.conteudo.observacoes ?? ''} onChange={e => setC({ observacoes: e.target.value })}
             className="w-full rounded px-2 py-1.5 text-xs outline-none" style={inputStyle} />

@@ -7,7 +7,7 @@
 // deve saber de grid. Este arquivo é a única costura entre os dois.
 
 import { listar, type ItemBiblioteca, type ConteudoExportacao } from './biblioteca';
-import { garantiaDe, precoNaUnidade, type ConteudoInsumo, type Nutriente } from './insumos';
+import { garantiaDe, precoNaUnidade, paraRelatorio, type ConteudoInsumo, type Nutriente } from './insumos';
 import type { ProdutoEquivalente } from './exportacao';
 
 /**
@@ -29,17 +29,23 @@ export function coeficientesDaCultura(cultura: string): ItemBiblioteca<ConteudoE
  * Fertilizantes que servem de equivalente para um nutriente, do mais
  * concentrado para o menos. Produto sem garantia declarada fica de fora — não
  * há como dividir por ela.
+ *
+ * A escolha de QUAIS produtos é do cadastro, não do código: vale a marca
+ * "usar no relatório" do insumo (`paraRelatorio`), e ela é aplicada ANTES do
+ * corte por garantia — marcar um produto que não declara o nutriente não
+ * esvazia a tabela dos outros, só não acrescenta esse.
  */
 export function fertilizantesCom(nutriente: Nutriente): ProdutoEquivalente[] {
-  return listar<ConteudoInsumo>('insumos')
-    .filter(i => i.ativo !== false && i.conteudo?.categoria === 'fertilizante')
-    .map(i => ({
-      insumoId: i.id,
-      nome: i.nome,
-      garantiaPct: garantiaDe(i.conteudo, nutriente),
+  const fertilizantes = listar<ConteudoInsumo>('insumos')
+    .filter(i => i.ativo !== false && i.conteudo?.categoria === 'fertilizante');
+  return paraRelatorio(fertilizantes.map(i => ({ id: i.id, nome: i.nome, c: i.conteudo, usarNoRelatorio: i.conteudo?.usarNoRelatorio })))
+    .map(({ id, nome, c: conteudo }) => ({
+      insumoId: id,
+      nome,
+      garantiaPct: garantiaDe(conteudo, nutriente),
       // precoNaUnidade devolve undefined quando não há preço; aqui vira null,
       // que é o "desconhecido" que o resto do módulo entende.
-      precoT: precoNaUnidade(i.conteudo, 't') ?? null,
+      precoT: precoNaUnidade(conteudo, 't') ?? null,
     }))
     .filter(p => p.garantiaPct > 0)
     .sort((a, b) => b.garantiaPct - a.garantiaPct);

@@ -64,6 +64,9 @@ export function ExportacaoPanel() {
       coeficientes: Object.fromEntries(
         Object.entries(c.coeficientes).filter(([, v]) => Number.isFinite(v)),
       ) as ConteudoExportacao['coeficientes'],
+      coeficientesExtracao: Object.fromEntries(
+        Object.entries(c.coeficientesExtracao ?? {}).filter(([, v]) => Number.isFinite(v)),
+      ) as ConteudoExportacao['coeficientesExtracao'],
     };
     if (editando) atualizar<ConteudoExportacao>('exportacao', editando.id, { nome, conteudo: limpo });
     else criar<ConteudoExportacao>('exportacao', { nome: nome || 'Sem nome', conteudo: limpo, escopo: 'empresa' });
@@ -76,9 +79,9 @@ export function ExportacaoPanel() {
     recarregar();
   }
 
-  const setCoef = (n: Nutriente, txt: string) => {
+  const setCoef = (base: 'coeficientes' | 'coeficientesExtracao', n: Nutriente, txt: string) => {
     const v = txt.trim() === '' ? undefined : Number(txt.replace(',', '.'));
-    setC(x => ({ ...x, coeficientes: { ...x.coeficientes, [n]: Number.isFinite(v) ? v : undefined } }));
+    setC(x => ({ ...x, [base]: { ...(x[base] ?? {}), [n]: Number.isFinite(v) ? v : undefined } }));
   };
 
   const editorAberto = novo || !!editando;
@@ -128,19 +131,38 @@ export function ExportacaoPanel() {
 
           <div>
             <p className="text-[10px] font-semibold mb-1" style={{ color: '#64748b' }}>
-              Coeficientes — kg por tonelada colhida
+              EXPORTAÇÃO — kg por tonelada colhida que sai do talhão no grão
             </p>
             <div className="grid grid-cols-3 gap-1.5">
               {NUTRIENTES.map(n => (
                 <Campo key={n} label={SIMBOLO_NUTRIENTE[n]}>
                   <input type="number" step="0.1" value={c.coeficientes[n] ?? ''}
-                    onChange={e => setCoef(n, e.target.value)}
+                    onChange={e => setCoef('coeficientes', n, e.target.value)}
                     className="w-full rounded px-1.5 py-1 text-[11px] outline-none" style={inputStyle} />
                 </Campo>
               ))}
             </div>
             <p className="text-[9px] mt-1" style={{ color: '#64748b' }}>
               Em branco = não declarado. Zero = declarado como zero — são coisas diferentes no relatório.
+            </p>
+          </div>
+
+          <div>
+            <p className="text-[10px] font-semibold mb-1" style={{ color: '#64748b' }}>
+              EXTRAÇÃO — kg por tonelada colhida absorvidos pela planta inteira (grão + palhada)
+            </p>
+            <div className="grid grid-cols-3 gap-1.5">
+              {NUTRIENTES.map(n => (
+                <Campo key={n} label={SIMBOLO_NUTRIENTE[n]}>
+                  <input type="number" step="0.1" value={c.coeficientesExtracao?.[n] ?? ''}
+                    onChange={e => setCoef('coeficientesExtracao', n, e.target.value)}
+                    className="w-full rounded px-1.5 py-1 text-[11px] outline-none" style={inputStyle} />
+                </Campo>
+              ))}
+            </div>
+            <p className="text-[9px] mt-1" style={{ color: '#64748b' }}>
+              Opcional, e sempre maior que a exportação. Serve para dimensionar a DEMANDA da cultura —
+              não para repor: a palhada fica no talhão e devolve boa parte ao solo.
             </p>
           </div>
 
@@ -182,6 +204,7 @@ export function ExportacaoPanel() {
                   {usados.length
                     ? usados.map(n => `${SIMBOLO_NUTRIENTE[n]} ${co[n]}`).join(' · ') + ' kg/t'
                     : 'sem coeficiente declarado'}
+                  {NUTRIENTES.some(n => Number.isFinite(it.conteudo?.coeficientesExtracao?.[n])) && ' · com extração'}
                 </p>
                 {it.conteudo?.fonte && <p className="text-[9px] truncate" style={{ color: '#64748b' }}>{it.conteudo.fonte}</p>}
               </div>

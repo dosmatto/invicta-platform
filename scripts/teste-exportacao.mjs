@@ -11,6 +11,7 @@ import assert from 'node:assert/strict';
 import {
   coefDe, exportadoDoPixel, gridExportacao, resumoExportacao, equivalentesDe,
 } from '../src/lib/exportacao.ts';
+import { paraRelatorio } from '../src/lib/insumos.ts';
 
 let ok = 0, fail = 0;
 function t(nome, fn) {
@@ -154,6 +155,51 @@ t('com preco: custo = dose(t) x R$/t', () => {
 t('nutriente invalido devolve lista vazia', () => {
   assert.deepEqual(equivalentesDe(NaN, 1, PRODUTOS), []);
   assert.deepEqual(equivalentesDe(-1, 1, PRODUTOS), []);
+});
+
+console.log('\nparaRelatorio — quem entra na tabela de equivalentes');
+
+const CATALOGO = [
+  { nome: 'MAP', usarNoRelatorio: true },
+  { nome: 'MAP (2)' },
+  { nome: 'Super Triplo', usarNoRelatorio: false },
+  { nome: 'DAP', usarNoRelatorio: true },
+];
+
+t('marcados vencem: so eles entram, na ordem do cadastro', () => {
+  assert.deepEqual(paraRelatorio(CATALOGO).map(p => p.nome), ['MAP', 'DAP']);
+});
+
+t('ninguem marcado = todos (a tabela nao pode sumir de quem ja usava)', () => {
+  const semMarca = CATALOGO.map(({ nome }) => ({ nome }));
+  assert.deepEqual(paraRelatorio(semMarca).map(p => p.nome), semMarca.map(p => p.nome));
+});
+
+t('false e "nao usar", nao "nao respondi"', () => {
+  const so = [{ nome: 'A', usarNoRelatorio: false }, { nome: 'B', usarNoRelatorio: true }];
+  assert.deepEqual(paraRelatorio(so).map(p => p.nome), ['B']);
+});
+
+t('nao muta a lista de entrada nem devolve a mesma referencia', () => {
+  const entrada = Object.freeze([Object.freeze({ nome: 'A' })]);
+  const saida = paraRelatorio(entrada);
+  assert.notEqual(saida, entrada);
+  assert.deepEqual(saida.map(p => p.nome), ['A']);
+});
+
+t('lista vazia continua vazia', () => {
+  assert.deepEqual(paraRelatorio([]), []);
+});
+
+t('PONTA A PONTA: marcar 2 produtos tira a nota do "+ N nao listado(s)"', () => {
+  // Sete fertilizantes com P2O5 dariam 6 linhas + "mais 1 nao listado"; com
+  // dois marcados a tabela sai com exatamente os dois escolhidos.
+  const sete = Array.from({ length: 7 }, (_, i) => ({ nome: `F${i}`, garantiaPct: 50 - i, usarNoRelatorio: i < 2 }));
+  const escolhidos = paraRelatorio(sete);
+  assert.equal(escolhidos.length, 2);
+  const eq = equivalentesDe(60, 10, escolhidos);
+  assert.deepEqual(eq.map(x => x.nome), ['F0', 'F1']);
+  assert.ok(eq.length <= 6, 'nao sobra nada para o corte de 6 linhas');
 });
 
 console.log(`\n${ok} ok, ${fail} falhas\n`);

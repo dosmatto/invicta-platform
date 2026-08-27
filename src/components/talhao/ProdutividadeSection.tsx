@@ -158,6 +158,8 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
   const [versaoVistaId, setVersaoVistaId] = useState<string | null>(null);
   const [secK2O, setSecK2O] = useState(false);
   const [secP2O5, setSecP2O5] = useState(false);
+  const [secK2OExt, setSecK2OExt] = useState(false);
+  const [secP2O5Ext, setSecP2O5Ext] = useState(false);
   const [editando, setEditando] = useState<MapaProdutividade | null>(null);
   const [erroPdf, setErroPdf] = useState('');
   // O que as seções opcionais têm de onde sair. Recalcula quando a cultura
@@ -171,6 +173,11 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
   const coefCultura = useMemo(() => coeficientesDaCultura(cultura), [cultura, tickBib]);
   const coefK2O = coefCultura ? coefDe(coefCultura.conteudo?.coeficientes, 'k2o') : null;
   const coefP2O5 = coefCultura ? coefDe(coefCultura.conteudo?.coeficientes, 'p2o5') : null;
+  // EXTRAÇÃO é outro conjunto de números da MESMA cultura na Biblioteca: o que a
+  // planta inteira absorveu, não o que saiu no grão. Cultura sem ele cadastrado
+  // simplesmente não oferece a seção.
+  const coefK2OExt = coefCultura ? coefDe(coefCultura.conteudo?.coeficientesExtracao, 'k2o') : null;
+  const coefP2O5Ext = coefCultura ? coefDe(coefCultura.conteudo?.coeficientesExtracao, 'p2o5') : null;
 
   const quantis: ClassificacaoQuantis | null = useMemo(
     () => (res?.grid && legenda ? quantisDaProdutividade(res, legenda, 5) : null),
@@ -494,9 +501,17 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
 
       const exportacoes: NonNullable<Parameters<typeof gerarRelatorioProdutividade>[0]['exportacoes']> = [];
       const itemCoef = coeficientesDaCultura(fonte.cultura);
-      const pedidos: Nutriente[] = [...(secK2O ? ['k2o' as Nutriente] : []), ...(secP2O5 ? ['p2o5' as Nutriente] : [])];
-      for (const nut of pedidos) {
-        const coef = itemCoef ? coefDe(itemCoef.conteudo?.coeficientes, nut) : null;
+      const pedidos: Array<{ nut: Nutriente; base: 'exportacao' | 'extracao' }> = [
+        ...(secK2O ? [{ nut: 'k2o' as Nutriente, base: 'exportacao' as const }] : []),
+        ...(secP2O5 ? [{ nut: 'p2o5' as Nutriente, base: 'exportacao' as const }] : []),
+        ...(secK2OExt ? [{ nut: 'k2o' as Nutriente, base: 'extracao' as const }] : []),
+        ...(secP2O5Ext ? [{ nut: 'p2o5' as Nutriente, base: 'extracao' as const }] : []),
+      ];
+      for (const { nut, base } of pedidos) {
+        // O coeficiente vem SEMPRE do cadastro da cultura — nunca de constante
+        // no código: é o número que multiplica a colheita inteira.
+        const tabela = base === 'extracao' ? itemCoef?.conteudo?.coeficientesExtracao : itemCoef?.conteudo?.coeficientes;
+        const coef = itemCoef ? coefDe(tabela, nut) : null;
         if (coef == null || coef <= 0) continue;
         const vExp = gridExportacao(dec.valores, coef);
         const clsExp = classesQuantis(vExp, {
@@ -509,6 +524,7 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
         const resExp = resumoExportacao(dec.valores, { coefKgPorT: coef, pixelM: fonte.pixelM });
         if (!clsExp || !resExp) continue;
         exportacoes.push({
+          base,
           simbolo: SIMBOLO_NUTRIENTE[nut],
           cultura: fonte.cultura,
           fonteCoef: itemCoef?.conteudo?.fonte || itemCoef?.nome || 'coeficiente cadastrado',
@@ -805,6 +821,20 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
               disponivel={coefP2O5 != null && coefP2O5 > 0}
               motivo={`Sem coeficiente de P₂O₅ para ${cultura} — Biblioteca → Exportação de Nutrientes`}
               detalhe={coefP2O5 ? `${fmt(coefP2O5, 1)} kg/t${coefCultura?.conteudo?.fonte ? ' · ' + coefCultura.conteudo.fonte : ''}` : undefined}
+            />
+            <SecaoOpcional
+              marcado={secK2OExt} onMudar={setSecK2OExt}
+              rotulo="Extração de K₂O (planta inteira)"
+              disponivel={coefK2OExt != null && coefK2OExt > 0}
+              motivo={`Sem coeficiente de EXTRAÇÃO de K₂O para ${cultura} — Biblioteca → Exportação de Nutrientes`}
+              detalhe={coefK2OExt ? `${fmt(coefK2OExt, 1)} kg/t${coefCultura?.conteudo?.fonte ? ' · ' + coefCultura.conteudo.fonte : ''}` : undefined}
+            />
+            <SecaoOpcional
+              marcado={secP2O5Ext} onMudar={setSecP2O5Ext}
+              rotulo="Extração de P₂O₅ (planta inteira)"
+              disponivel={coefP2O5Ext != null && coefP2O5Ext > 0}
+              motivo={`Sem coeficiente de EXTRAÇÃO de P₂O₅ para ${cultura} — Biblioteca → Exportação de Nutrientes`}
+              detalhe={coefP2O5Ext ? `${fmt(coefP2O5Ext, 1)} kg/t${coefCultura?.conteudo?.fonte ? ' · ' + coefCultura.conteudo.fonte : ''}` : undefined}
             />
           </div>
 
