@@ -1,5 +1,12 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.77.0': [
+    'O FERRO (Fe) VOLTOU A SER LIDO DO LAUDO. A coluna Fe do arquivo do laboratório era lida e DESCARTADA em silêncio: o Ferro faltava na lista de elementos que a importação reconhece, então ele nunca chegava à aba Fertilidade para interpolar — enquanto B, Cu, Mn, Zn e S apareciam normalmente. Agora "Fe" e "Ferro" são reconhecidos, na unidade mg/dm³ como os demais micronutrientes.',
+    'A ausência era invisível porque o RESTO do app já contava com o Fe: ele estava na ordem padrão dos elementos (entre Mn e Al) e no catálogo de Variáveis de Análise. Só o leitor do laudo não o conhecia, e nada acusava a diferença.',
+    'PARA VER O FERRO NO SEU TALHÃO: reimporte o laudo (a importação antiga foi salva sem a coluna Fe, e nenhuma correção recupera dado que não foi guardado) e crie a legenda do Ferro em Biblioteca → Legendas — do mesmo jeito que você fez para B, Cu, Mn e Zn. Sem legenda, a variável não entra na lista de mapas.',
+    'E O APP DEIXOU DE ESCONDER ESSE SEGUNDO CASO: quando uma variável vem no laudo mas não tem legenda cadastrada, ela sumia da lista sem nenhuma palavra — e quem procurava por ela concluía que "o laudo não trouxe". Agora a aba Fertilidade lista essas variáveis em amarelo, dizendo que basta criar a legenda.',
+    '4 testes novos travam o reconhecimento do Fe na importação (npm run teste:lab), incluindo a garantia de que a relação "Fe/Mn" não seja confundida com o micronutriente.',
+  ],
   '2.76.0': [
     'TALHÃO COM DUAS ÁREAS: O APP AGORA AVISA QUANDO UMA DELAS ESTÁ SEM AMOSTRA NO LAUDO. Caso real (WNOCG 06, condomínio Figueira): o talhão tem uma área grande e outra separada, e o mapa de fertilidade saía com a área separada de UMA COR SÓ. Investigando: o laudo trouxe 34 amostras e faltavam exatamente os números 4, 5, 17, 18, 19, 20, 21, 22, 38 e 39 — que são, um a um, os dez pontos daquela área.',
     'O APP ESTAVA CERTO; O QUE FALTAVA ERA O DADO. Confirmamos no interpolador que a área separada É coberta normalmente: reproduzindo o talhão com as amostras faltando, ela sai com variação ZERO; colocando 10 amostras nela, sai interpolada como a outra. Sem nenhum ponto por perto, a krigagem prediz a média das demais amostras — e o resultado é uma mancha chapada.',

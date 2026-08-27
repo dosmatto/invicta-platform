@@ -180,5 +180,37 @@ t('perfil certo tem confiança máxima', () => {
   assert.equal(pontuarPerfil(AOA, config, ativas).confianca, 1);
 });
 
+// ── Ferro (v2.77.0) ──────────────────────────────────────────────────────────
+// O Fe faltava em ELEMENTOS_LAB, então a coluna do laudo era lida e descartada
+// em SILÊNCIO — o Ferro nunca chegava à lista de mapas da Fertilidade. O resto do
+// app já contava com ele (ORDEM_PADRAO_FERT em store.ts e o catálogo de
+// variáveis), o que tornava a ausência invisível: nada acusava nada.
+t('Fe está no catálogo de elementos do laudo', () => {
+  const fe = ELEMENTOS_LAB.find(e => e.id === 'fe');
+  assert.ok(fe, 'sem isto a coluna Fe do laudo é descartada sem aviso');
+  assert.equal(fe.simbolo, 'Fe');
+});
+
+t('cabeçalhos reais de Fe são reconhecidos', () => {
+  const fe = ELEMENTOS_LAB.find(e => e.id === 'fe');
+  for (const cab of ['Fe', 'fe', 'FERRO', 'Ferro']) {
+    assert.ok(fe.sinonimos.includes(normCab(cab)), `"${cab}" deveria casar com Fe`);
+  }
+});
+
+t('Fe não rouba coluna de outro elemento', () => {
+  // "Fe/Mn" é RELAÇÃO (variável complementar), não o micro Ferro.
+  const fe = ELEMENTOS_LAB.find(e => e.id === 'fe');
+  assert.ok(!fe.sinonimos.includes(normCab('Fe/Mn')), 'Fe/Mn é relação, não o Ferro');
+  const ids = ELEMENTOS_LAB.map(e => e.id);
+  assert.equal(new Set(ids).size, ids.length, 'ids duplicados no catálogo');
+});
+
+t('a ordem do catálogo põe Fe depois de Mn, como o resto do app espera', () => {
+  const ids = ELEMENTOS_LAB.map(e => e.id);
+  assert.ok(ids.indexOf('fe') > ids.indexOf('mn'), 'Fe depois de Mn');
+  assert.ok(ids.indexOf('fe') < ids.indexOf('textura'), 'Fe antes da textura');
+});
+
 console.log(`\n${ok} passaram, ${fail} falharam\n`);
 process.exit(fail ? 1 : 0);

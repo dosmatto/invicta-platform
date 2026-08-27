@@ -32,6 +32,7 @@ import { listar as bibListar, criar as bibCriar, type ConteudoPerfil, type ItemB
 
 import { inputStyle } from '@/constants/ui';
 import { partesDoTalhao, partesSemAmostra } from '@/lib/partesTalhao';
+import { simboloElemento } from '@/lib/lab';
 // Resolução em que a Recomendação calcula a dose — fonte única, para o mapa que
 // geramos aqui em segundo plano ser exatamente o que ela procura lá.
 import {
@@ -291,6 +292,17 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
   const nutrientes = useMemo(() => {
     if (!importacao) return [] as string[];
     return importacao.elementos.filter(temLegenda);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [importacao, legendas]);
+
+  // O filtro acima descarta em SILÊNCIO toda variável do laudo que não tem
+  // legenda cadastrada — ela some da lista de mapas sem uma palavra, e quem
+  // procura por ela conclui que "o laudo não veio com isso". Foi assim que o
+  // Ferro passou despercebido. Aqui juntamos as descartadas para dizer quais são
+  // e o que fazer (criar a legenda em Biblioteca → Legendas).
+  const semLegenda = useMemo(() => {
+    if (!importacao) return [] as string[];
+    return importacao.elementos.filter(e => !temLegenda(e)).map(simboloElemento);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [importacao, legendas]);
 
@@ -1200,6 +1212,14 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
                   );
                 })}
               </div>
+              {semLegenda.length > 0 && (
+                <p className="text-[10px] mt-1 leading-relaxed" style={{ color: '#fbbf24' }}>
+                  ⚠ {semLegenda.length === 1 ? 'Esta variável veio no laudo mas não tem legenda' : 'Estas variáveis vieram no laudo mas não têm legenda'}
+                  {' '}cadastrada, então {semLegenda.length === 1 ? 'não aparece' : 'não aparecem'} acima:
+                  {' '}<strong style={{ color: '#fcd34d' }}>{semLegenda.join(', ')}</strong>.
+                  {' '}Crie a legenda em Biblioteca → Legendas (mesma sigla) e {semLegenda.length === 1 ? 'ela entra' : 'elas entram'} na lista.
+                </p>
+              )}
               <p className="text-[10px] mt-1" style={{ color: '#94a3b8' }}>
                 {ehZona
                   ? <><strong style={{ color: '#86efac' }}>{zonas.length}</strong> zonas</>

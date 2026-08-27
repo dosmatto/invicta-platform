@@ -28,6 +28,12 @@ export const ELEMENTOS_LAB: { id: string; simbolo: string; sinonimos: string[] }
   { id: 'zn',  simbolo: 'Zn',  sinonimos: ['zn', 'zinco'] },
   { id: 'cu',  simbolo: 'Cu',  sinonimos: ['cu', 'cobre'] },
   { id: 'mn',  simbolo: 'Mn',  sinonimos: ['mn', 'manganes'] },
+  // Fe entrou depois (v2.77.0): o catálogo de ordenação do app já contava com ele
+  // (ORDEM_PADRAO_FERT, entre Mn e Al) e o catálogo de variáveis também, mas AQUI
+  // ele faltava — então a coluna Fe do laudo era lida e descartada em silêncio, e
+  // o Ferro nunca aparecia para interpolar. Unidade canônica: mg/dm³ (não está em
+  // CARGA/PERCENTUAL/GRANULOMETRIA em unidades.ts, então cai no padrão dos micros).
+  { id: 'fe',  simbolo: 'Fe',  sinonimos: ['fe', 'ferro'] },
   { id: 'textura', simbolo: 'Textura', sinonimos: ['textura', 'argila', 'granulometria'] },
 ];
 
