@@ -9,14 +9,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-npm run dev          # dev server on :3000 (launch config "invicta-platform")
+npm run dev          # dev server on :3100 (launch config "invicta-platform")
 npm run build        # next build — full production build; ALSO runs the complete TS check (~1–2 min)
 npm start -- --port 3006   # serve the production build locally — reproduces Vercel (launch config "invicta-prod")
 npm run lint         # eslint (eslint-config-next)
 npx tsc --noEmit     # fast type-check without building
 ```
 
-There is **no test framework** configured and no test files in the repo — "run a single test" does not apply. Verification is done via `npx tsc --noEmit` + `npm run build`.
+There is **no test framework** configured, but there ARE tests: ~60 plain-Node scripts in `scripts/teste-*.mjs`, one per pure module in `src/lib`, run via `npm run teste:<nome>` (e.g. `teste:areas`, `teste:lab`, `teste:importacao`). They import the `.ts` sources directly through Node type-stripping, which is why those modules must stay pure (no DOM, no I/O) and import each other with an explicit `.ts` extension. Full verification is `npx tsc --noEmit` + `npm run build`.
 
 ## Critical project rules
 
