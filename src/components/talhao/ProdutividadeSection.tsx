@@ -42,7 +42,7 @@ import { resumoValores, separacaoEntreZonas } from '@/lib/validacao/estatistica'
 import { correlacaoGrids, sobreposicaoBbox } from '@/lib/correlacaoGrid';
 import { classesQuantis } from '@/lib/quantis';
 import { gerarRelatorioProdutividade, type ZonaRel, type NdviRel } from '@/lib/relatorioProdutividade';
-import { classeZona } from '@/lib/zonas';
+import { classeZona, classeReconhecida } from '@/lib/zonas';
 import { areaHaGeo } from '@/lib/areaGeo';
 import { ComparadorProdNdvi } from '@/components/talhao/ComparadorProdNdvi';
 import { SeletorLegenda, legendasDoModulo, usePrefLegenda } from './SeletorLegenda';
@@ -438,7 +438,13 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
       const zs = zonasDoTalhao(nav.talhaoId);
       const porZona = zs.length ? amostrarPorZona(zs.map(z => ({ idZona: z.id, geometry: z.geometry })), fonte.grid, fonte.bounds) : new Map<string, number[]>();
       const zonas: ZonaRel[] = zs.map(z => ({
-        id: z.id, classe: z.classe, cor: classeZona(z.classe).cor,
+        id: z.id, classe: z.classe,
+        // O rótulo e a cor da classe ORIGINAL viajam junto: é por ela que o
+        // relatório pinta as zonas, para a folha comparar o zoneamento com a
+        // colheita em vez de a zona concordar consigo mesma.
+        classeLabel: classeZona(z.classe).label,
+        classeConhecida: classeReconhecida(z.classe),
+        cor: classeZona(z.classe).cor,
         geometry: z.geometry,
         stats: resumoValores(porZona.get(z.id) ?? []),
         areaHa: areaHaGeo(z.geometry),

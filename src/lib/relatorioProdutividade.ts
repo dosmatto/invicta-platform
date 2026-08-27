@@ -49,6 +49,11 @@ export interface NdviRel {
 export interface ZonaRel {
   id: string;
   classe: string;
+  /** Rótulo normalizado da classe ORIGINAL ("Alta", "Média-baixa"). */
+  classeLabel: string;
+  /** false quando a classe não é reconhecida (zona sem classificação). */
+  classeConhecida: boolean;
+  /** Cor da CLASSE ORIGINAL — não da produtividade medida. */
   cor: string;
   geometry: GeoJSON.Polygon | GeoJSON.MultiPolygon;
   /** Produtividade (kg/ha) dentro da zona. null = nenhum pixel caiu nela. */
@@ -1127,13 +1132,21 @@ function recortarNaCaixa(
 }
 
 // Bloco C — boxplot da produtividade por zona.
-// Cor de uma zona nesta página: a faixa de quantil em que a MÉDIA dela cai.
-// Boxplot e mini-mapa usam a MESMA função de propósito — duas linguagens de cor
-// na mesma folha (classe da zona de um lado, quantil do outro) fazem a Zona 1
-// aparecer verde num gráfico e laranja no outro.
-function corDaZonaPorMedia(q: ClassificacaoQuantis, media: number, fallback: string): string {
-  if (!q.faixas.length) return fallback;
-  return q.faixas[Math.min(indiceFaixa(media, q.breaks), q.faixas.length - 1)].cor;
+// Reserva para talhão cujas zonas não têm classe reconhecida: sem ela todas
+// sairiam do mesmo cinza e o mapa ficaria ilegível.
+const CORES_SEM_CLASSE = ['#1d4ed8', '#0891b2', '#7c3aed', '#c2410c', '#4d7c0f', '#be185d'];
+
+/**
+ * Cor de uma zona nesta página: a da sua CLASSE ORIGINAL.
+ *
+ * Antes era a faixa de quantil da própria média medida — e isso tornava a
+ * folha tautológica: a zona sempre "concordava" consigo mesma e o documento
+ * não dizia nada sobre o zoneamento estar certo. A pergunta que esta página
+ * responde é outra: dentro da classe que a zona JÁ TINHA, como a colheita se
+ * comportou? É comparando as duas coisas que se decide reclassificar.
+ */
+function corDaZona(z: ZonaRel, i: number, algumaClasse: boolean): string {
+  return algumaClasse ? z.cor : CORES_SEM_CLASSE[i % CORES_SEM_CLASSE.length];
 }
 
 /**
@@ -1179,15 +1192,18 @@ function blocoBoxplot(doc: JsPDF, d: DadosRelatorioProd, x: number, y: number, w
   // página própria dá espaço de sobra, então aqui o aperto nunca acontece.
   const rowH = Math.min(8, (h - 22) / zs.length);
 
+  const algumaClasse = zs.some(z => z.classeConhecida);
   zs.forEach((z, i) => {
     const s = z.stats!;
     const cy = topo + i * rowH + rowH / 2;
-    const cor = corDaZonaPorMedia(d.quantis, s.media, z.cor);
+    const cor = corDaZona(z, i, algumaClasse);
     // Calha
     doc.setFillColor(...hexRgb(cor));
     doc.roundedRect(x + 4, cy - 1.4, 2.6, 2.6, 0.4, 0.4, 'F');
     doc.setFont('helvetica', 'bold'); doc.setFontSize(6.5); doc.setTextColor(...NAVY);
-    doc.text(clipTexto(doc, san(z.id ? `Zona ${z.id}` : z.classe), calha - 22), x + 8, cy + 1);
+    doc.text(clipTexto(doc, san(z.id ? `Zona ${z.id}` : z.classeLabel), calha - 30), x + 8, cy + 1);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(5); doc.setTextColor(...GRAY);
+    doc.text(clipTexto(doc, san(z.classeLabel), 16), x + 8, cy + 4.2);
     doc.setFont('helvetica', 'normal'); doc.setFontSize(5.5); doc.setTextColor(...GRAY);
     doc.text(emU(s.media, d.unidade), x + calha - 5, cy + 1, { align: 'right' });
 
@@ -1228,6 +1244,10 @@ function blocoBoxplot(doc: JsPDF, d: DadosRelatorioProd, x: number, y: number, w
   }
   doc.setFontSize(5);
   doc.text(`Caixa P25-P75 | traco = mediana | circulo = media | bigodes P5-P95 (${rotuloUnidade(d.unidade)})`, gx, ty + 5.4);
+  doc.text(algumaClasse
+    ? 'A COR e a classe ORIGINAL da zona, nao a produtividade medida — compare as duas para decidir reclassificar.'
+    : 'Zonas sem classificacao: as cores apenas distinguem uma da outra.',
+    gx, ty + 8.8, { maxWidth: gw });
 
   // ── PAINEL: separação entre zonas (a pergunta que o boxplot ilustra) ──
   const sep = d.separacaoZonas;
@@ -1264,7 +1284,7 @@ function blocoBoxplot(doc: JsPDF, d: DadosRelatorioProd, x: number, y: number, w
 async function blocoMapaZonas(
   doc: JsPDF, d: DadosRelatorioProd, x: number, y: number, w: number, h: number, todas = false,
 ): Promise<void> {
-  quadro(doc, x, y, w, h, 'MEDIA POR ZONA');
+  quadro(doc, x, y, w, h, 'ZONAS DE MANEJO x COLHEITA');
   const zs = d.zonas.filter(z => z.stats);
   if (!zs.length) {
     doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(...GRAY);
@@ -1275,7 +1295,7 @@ async function blocoMapaZonas(
   // Cor = a faixa de quantil em que a MÉDIA da zona cai. Amarra este mapa à
   // legenda da página 2: zona na faixa "Alta" está, literalmente, na faixa Alta
   // do talhão — melhor que inventar uma rampa min–máx só para esta figura.
-  const corDaZona = (media: number, fallback: string): string => corDaZonaPorMedia(d.quantis, media, fallback);
+  const algumaClasse = zs.some(z => z.classeConhecida);
 
   // Na página própria a tabela mostra TODAS as zonas: é ela que o técnico usa
   // para decidir manejo, e cortar nela esconde justamente a zona problemática.
@@ -1283,7 +1303,7 @@ async function blocoMapaZonas(
   const mapaW = w - 8, mapaH = Math.max(40, h - 16 - nLinhas * 4.4 - 6);
   const png = await capturarMapaZonas({
     bounds: d.bounds, externo: d.poligono,
-    zonas: zs.map(z => ({ geometry: z.geometry, cor: corDaZona(z.stats!.media, z.cor), rotulo: z.id })),
+    zonas: zs.map((z, i) => ({ geometry: z.geometry, cor: corDaZona(z, i, algumaClasse), rotulo: z.id })),
     linhas: [],
     satelite: false,
     preencherAlpha: 0.9,
@@ -1297,15 +1317,21 @@ async function blocoMapaZonas(
   let ty = y + 9 + Math.max(20, mapaH) + 4;
   doc.setFont('helvetica', 'bold'); doc.setFontSize(5.5); doc.setTextColor(...GRAY);
   doc.text('ZONA', x + 9, ty);
+  doc.text('CLASSE', x + 20, ty);
   doc.text(`MEDIA (${rotuloUnidade(d.unidade)})`, x + w - 34, ty, { align: 'right' });
   doc.text('ha', x + w - 17, ty, { align: 'right' });
   doc.text('CV', x + w - 4, ty, { align: 'right' });
   ty += 3.6;
   for (const z of zs.slice(0, nLinhas)) {
     const s = z.stats!;
-    doc.setFillColor(...hexRgb(corDaZona(s.media, z.cor))); doc.roundedRect(x + 4, ty - 2.4, 3, 3, 0.5, 0.5, 'F');
+    doc.setFillColor(...hexRgb(corDaZona(z, zs.indexOf(z), algumaClasse))); doc.roundedRect(x + 4, ty - 2.4, 3, 3, 0.5, 0.5, 'F');
     doc.setFont('helvetica', 'normal'); doc.setFontSize(6); doc.setTextColor(...NAVY);
-    doc.text(clipTexto(doc, san(z.id), 16), x + 9, ty);
+    doc.text(clipTexto(doc, san(z.id), 10), x + 9, ty);
+    // A CLASSE ORIGINAL ao lado da média medida: é a comparação das duas que
+    // diz se o zoneamento acertou — uma zona "Alta" com a menor média salta.
+    doc.setTextColor(...GRAY);
+    doc.text(clipTexto(doc, san(z.classeLabel), 26), x + 20, ty);
+    doc.setTextColor(...NAVY);
     doc.text(emU(s.media, d.unidade), x + w - 34, ty, { align: 'right' });
     doc.setTextColor(...GRAY);
     doc.text(fmt(z.areaHa, 1), x + w - 17, ty, { align: 'right' });

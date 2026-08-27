@@ -1,5 +1,17 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [20] Leitor da planilha e motor de conferência
+  '2.86.0': [
+    'PENDÊNCIA 20 — O SISTEMA JÁ LÊ A PLANILHA E DIZ, LINHA POR LINHA, O QUE ELE CONSEGUE RESOLVER SOZINHO (ainda sem tela; ela é a próxima). Rodado contra a planilha real de 592 linhas e o cadastro de produção.',
+    'AS COLUNAS SÃO ACHADAS PELO NOME, NUNCA PELA POSIÇÃO. A planilha do cliente tem 39 colunas e a ordem não é contrato — no ano que vem o ERP pode mudar tudo de lugar. O sistema procura SAFRA, PRODUTOR, FAZENDA, TALHÃO, ÁREA, CULTURA, PROPÓSITO e CULTIVAR pelo cabeçalho, aceitando as variações que os clientes usam. E não confunde "DT. RET." com "DATA CRIAÇÃO", que é o que definiria a época do cultivo errada.',
+    'NÚMERO E DATA EM PORTUGUÊS: "1.799,10" é 1.799,10 ha e não 1,799; "05/10/2026" é 5 de outubro. Área zerada, negativa ou ilegível NÃO vira zero — vira pendência, porque zero silencioso passa batido. Rodapé e linha em branco são descartados sem virar registro fantasma.',
+    'O ANO DA PLANILHA CASA COM O DO CADASTRO: "2026/2027" encontra o ano "26/27" que você já tem, comparando o ano e não o texto.',
+    'CADA LINHA SAI CLASSIFICADA EM QUATRO ESTADOS: pronta, confirmar, partir (subdivisão ou consórcio) e cadastrar. A pior etapa manda — linha com produtor certo e talhão inexistente é "cadastrar" — e cada linha carrega, em português, exatamente o que a impede de entrar.',
+    'O PRÉ-VOO É O QUE MAIS POUPA TEMPO: antes de abrir 592 linhas, o sistema lista o que falta cadastrar ORDENADO PELO QUE MAIS DESTRAVA. Na planilha de referência, cadastrar o produtor Morro Chato resolve 30 linhas de uma vez; os 22 produtores ausentes travam 146 linhas juntos.',
+    'MEDIDO, NÃO ESTIMADO: com os cultivares cadastrados (o trabalho da primeira planilha), 61% das linhas ficam prontas sozinhas. Feito o pré-voo, são 93% — 551 de 592 — sobrando 41 decisões suas. A conferência inteira leva 37 milissegundos, então a tela vai poder recalcular tudo a cada escolha sua.',
+    'DUAS LINHAS NO MESMO TALHÃO CONTINUAM SENDO TRÊS COISAS DIFERENTES: consórcio (mesma área, culturas diferentes), partes (áreas e materiais diferentes) e dúvida (tudo igual menos a área) — e a dúvida vira pergunta, não chute.',
+    'Onde conferir: nada na tela ainda. 32 testes novos (npm run teste:importacao-planilha).',
+  ],
   // [20] Cultivo: consórcio, talhão partido e safrinha
   '2.85.0': [
     'PENDÊNCIA 20 — O REGISTRO DE CULTURA DO TALHÃO VIROU REGISTRO FITOTÉCNICO. Até aqui, um talhão tinha UMA cultura por ano e ponto final. Se você lançasse milho e depois braquiária no mesmo talhão, o segundo APAGAVA o primeiro, sem avisar. A planilha dos clientes tem três situações que não cabiam nisso — e todas as três estão na planilha de sementes que serviu de referência.',

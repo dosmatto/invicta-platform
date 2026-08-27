@@ -49,6 +49,7 @@
     "teste:importacao": "node scripts/teste-importacao.mjs",
     "teste:importacao-catalogo": "node scripts/teste-importacao-catalogo.mjs",
     "teste:cultivo": "node scripts/teste-cultivo.mjs",
+    "teste:importacao-planilha": "node scripts/teste-importacao-planilha.mjs",
     "teste:elo": "node scripts/teste-elo-grade.mjs",
     "teste:rotulos": "node scripts/teste-rotulos-mapa.mjs",
     "teste:insumos": "node scripts/teste-insumos.mjs",
