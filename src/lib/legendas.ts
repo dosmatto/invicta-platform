@@ -6,7 +6,7 @@
 // usada e gera o agrupamento dentro da Biblioteca → Legendas.
 export type CategoriaLegenda =
   | 'fertilidade' | 'micronutriente' | 'textura'
-  | 'produtividade-colheita' | 'ndvi' | 'condutividade'
+  | 'produtividade-colheita' | 'rentabilidade' | 'ndvi' | 'condutividade'
   | 'altimetria-elevacao' | 'compactacao' | 'pragas' | 'outro';
 
 export const CATEGORIAS_LEGENDA: Array<{ id: CategoriaLegenda; nome: string }> = [
@@ -14,6 +14,7 @@ export const CATEGORIAS_LEGENDA: Array<{ id: CategoriaLegenda; nome: string }> =
   { id: 'micronutriente',         nome: 'Micronutriente' },
   { id: 'textura',                nome: 'Textura do solo' },
   { id: 'produtividade-colheita', nome: 'Produtividade / Colheita' },
+  { id: 'rentabilidade',          nome: 'Rentabilidade' },
   { id: 'ndvi',                   nome: 'Índice de vegetação (NDVI)' },
   { id: 'condutividade',          nome: 'Condutividade' },
   { id: 'altimetria-elevacao',    nome: 'Altimetria / Elevação' },
@@ -94,6 +95,7 @@ export function categoriaSugerida(atributoId: string): CategoriaLegenda {
   if (id === 'condutividade') return 'condutividade';
   if (id === 'altimetria') return 'altimetria-elevacao';
   if (id === 'produtividade') return 'produtividade-colheita';
+  if (id === 'rentabilidade') return 'rentabilidade';
   if (id === 'compactacao') return 'compactacao';
   return 'fertilidade';
 }
@@ -280,6 +282,35 @@ export function classesComPares(
     corInicio: pares[i].inicio,
     corFim: pares[i].fim,
     larguraVisual: larguras[i],
+    ordem: i + 1,
+  }));
+}
+
+/**
+ * Classes a partir de N-1 BORDAS — a versão sem o 5 fixo de `classesComPares`.
+ *
+ * Existe para as escalas DIVERGENTES (rentabilidade), que precisam de número
+ * par de classes com o zero no meio: com 5 classes o zero cairia DENTRO de uma
+ * delas e a faixa central misturaria prejuízo com lucro na mesma cor — que é
+ * exatamente a única leitura que o mapa de dinheiro precisa garantir.
+ *
+ * Larguras ausentes = todas iguais (soma 100).
+ */
+export function classesComBordas(
+  bordas: number[],
+  pares: Array<{ inicio: string; fim: string }>,
+  nomes: string[],
+  larguras?: number[],
+): ClasseLegenda[] {
+  const n = bordas.length + 1;
+  const larg = larguras ?? new Array(n).fill(100 / n);
+  return Array.from({ length: n }, (_, i) => ({
+    nome: nomes[i] ?? `Faixa ${i + 1}`,
+    valorMin: i === 0 ? null : bordas[i - 1],
+    valorMax: i === n - 1 ? null : bordas[i],
+    corInicio: pares[i]?.inicio,
+    corFim: pares[i]?.fim,
+    larguraVisual: larg[i],
     ordem: i + 1,
   }));
 }

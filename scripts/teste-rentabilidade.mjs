@@ -13,9 +13,11 @@
 import assert from 'node:assert/strict';
 import {
   precoPorKg, rotuloPreco, margemDoPixel, gridRentabilidade,
-  pontoEquilibrioKgha, resumoRentabilidade, classesRentabilidade, SACA_KG_PADRAO,
+  pontoEquilibrioKgha, resumoRentabilidade, classesRentabilidade, classesRentabilidadeDaLegenda, SACA_KG_PADRAO,
   arrendamentoPorHa, ALQUEIRES, ALQUEIRE_HA_PADRAO,
 } from '../src/lib/rentabilidade.ts';
+import { classesComBordas, corCheiaDaClasse } from '../src/lib/legendas.ts';
+import { legendaRentabilidade, BORDAS_RENTAB } from '../src/constants/legendasSeedOficial.ts';
 
 let ok = 0, fail = 0;
 function t(nome, fn) {
@@ -231,6 +233,105 @@ t('arrendamento soma ao custo e sobe o ponto de equilibrio', () => {
   const comArr = pontoEquilibrioKgha(PKG, CUSTO + arr);
   assert.ok(comArr > semArr);
   assert.ok(Math.abs(comArr - (CUSTO + arr) / PKG) < 1e-9);
+});
+
+console.log('\nclassesRentabilidadeDaLegenda — a Biblioteca manda nas faixas');
+
+// A legenda oficial, achatada como a tela faz antes de chamar a conta.
+const CLS_OFICIAL = legendaRentabilidade.classes.map(c => ({
+  nome: c.nome, valorMin: c.valorMin, valorMax: c.valorMax, cor: corCheiaDaClasse(c),
+}));
+
+t('os cortes do mapa sao os limites do cadastro, nao quantis dos dados', () => {
+  // Margens espalhadas de -3.000 a +3.000; o quantil escolheria outros cortes.
+  const v = Float32Array.from([-3000, -2500, -1500, -800, -100, 100, 800, 1500, 2500, 3000]);
+  const r = classesRentabilidadeDaLegenda(v, CLS_OFICIAL, { pixelM: 10 });
+  assert.deepEqual(r.breaks, BORDAS_RENTAB);
+  assert.equal(r.faixas.length, BORDAS_RENTAB.length + 1);
+});
+
+t('o ZERO e borda de faixa e o PDF sabe onde destaca-lo', () => {
+  const v = Float32Array.from([-1200, -300, 200, 1800]);
+  const r = classesRentabilidadeDaLegenda(v, CLS_OFICIAL, { pixelM: 10 });
+  assert.equal(r.breaks[r.iZero], 0, 'iZero tem de apontar para o corte 0');
+  // Nenhuma faixa pode atravessar o zero: prejuizo e lucro na mesma cor e a
+  // unica leitura que o mapa de dinheiro nao pode errar.
+  for (const f of r.faixas) assert.ok(!(f.min < 0 && f.max > 0), `faixa ${f.nome} atravessa o zero`);
+});
+
+t('vermelho abaixo de zero, azul acima — nunca o contrario', () => {
+  const azul = (c) => { const n = parseInt(c.slice(1), 16); return (n & 255) > ((n >> 16) & 255); };
+  CLS_OFICIAL.forEach((c, i) => {
+    const negativa = c.valorMax != null && c.valorMax <= 0;
+    assert.equal(azul(c.cor), !negativa, `classe ${i + 1} (${c.nome}) com a cor do outro lado`);
+  });
+});
+
+t('mais perto do zero, mais claro; no extremo, mais escuro', () => {
+  const lum = (c) => { const n = parseInt(c.slice(1), 16); return ((n >> 16) & 255) * 0.299 + ((n >> 8) & 255) * 0.587 + (n & 255) * 0.114; };
+  const l = CLS_OFICIAL.map(c => lum(c.cor));
+  const meio = CLS_OFICIAL.length / 2;
+  for (let i = 1; i < meio; i++) assert.ok(l[i] > l[i - 1], `lado negativo nao clareia rumo ao zero em ${i}`);
+  for (let i = meio + 1; i < l.length; i++) assert.ok(l[i] < l[i - 1], `lado positivo nao escurece rumo ao extremo em ${i}`);
+  assert.ok(l[meio - 1] > l[0], 'o extremo negativo tem de ser o vermelho mais escuro');
+  assert.ok(l[meio] > l[l.length - 1], 'o extremo positivo tem de ser o azul mais escuro');
+});
+
+t('area por faixa fecha com o total (mesma conta da pagina 1)', () => {
+  const v = Float32Array.from([-3000, -1500, -700, -200, 300, 900, 1600, 4000]);
+  const r = classesRentabilidadeDaLegenda(v, CLS_OFICIAL, { pixelM: 20 });
+  const soma = r.faixas.reduce((s, f) => s + f.areaHa, 0);
+  assert.ok(Math.abs(soma - 8 * (20 * 20) / 10000) < 1e-9);
+  assert.ok(Math.abs(r.faixas.reduce((s, f) => s + f.pctArea, 0) - 100) < 1e-9);
+});
+
+t('talhao inteiramente lucrativo nao ganha uma faixa vermelha de mentira', () => {
+  const v = Float32Array.from([200, 600, 1200, 2500, 4000]);
+  const r = classesRentabilidadeDaLegenda(v, CLS_OFICIAL, { pixelM: 10 });
+  const vermelhoComArea = r.faixas.filter(f => f.max <= 0 && f.areaHa > 0);
+  assert.equal(vermelhoComArea.length, 0);
+});
+
+t('NaN nao entra em faixa nenhuma', () => {
+  const v = Float32Array.from([NaN, NaN, 500, NaN]);
+  const r = classesRentabilidadeDaLegenda(v, CLS_OFICIAL, { pixelM: 10 });
+  assert.equal(r.faixas.reduce((s, f) => s + f.nPixels, 0), 1);
+});
+
+t('legenda quebrada devolve null — quem chama cai no quantil', () => {
+  const v = Float32Array.from([-100, 100]);
+  assert.equal(classesRentabilidadeDaLegenda(v, [], { pixelM: 10 }), null, 'sem classes');
+  assert.equal(classesRentabilidadeDaLegenda(v, [CLS_OFICIAL[0]], { pixelM: 10 }), null, 'uma classe so');
+  const semLimite = [{ nome: 'a', valorMin: null, valorMax: null, cor: '#f00' }, { nome: 'b', valorMin: null, valorMax: null, cor: '#00f' }];
+  assert.equal(classesRentabilidadeDaLegenda(v, semLimite, { pixelM: 10 }), null, 'borda aberta no meio');
+  const foraDeOrdem = [
+    { nome: 'a', valorMin: null, valorMax: 500, cor: '#f00' },
+    { nome: 'b', valorMin: 500, valorMax: 100, cor: '#0f0' },
+    { nome: 'c', valorMin: 100, valorMax: null, cor: '#00f' },
+  ];
+  assert.equal(classesRentabilidadeDaLegenda(v, foraDeOrdem, { pixelM: 10 }), null, 'cortes fora de ordem');
+});
+
+t('legenda EDITADA pelo usuario muda o mapa (a Biblioteca tem de mandar)', () => {
+  const v = Float32Array.from([-100, 100, 400, 900]);
+  const pares = [{ inicio: '#8E0000', fim: '#D32F2F' }, { inicio: '#B7D7FF', fim: '#0D47A1' }];
+  const editada = classesComBordas([0], pares, ['Prejuizo', 'Lucro']).map(c => ({
+    nome: c.nome, valorMin: c.valorMin, valorMax: c.valorMax, cor: corCheiaDaClasse(c),
+  }));
+  const r = classesRentabilidadeDaLegenda(v, editada, { pixelM: 10 });
+  assert.deepEqual(r.breaks, [0]);
+  assert.equal(r.faixas.length, 2);
+  assert.equal(r.faixas[0].nPixels, 1);
+  assert.equal(r.faixas[1].nPixels, 3);
+});
+
+t('classesComBordas: N-1 bordas viram N classes com as pontas abertas', () => {
+  const cs = classesComBordas([-1, 0, 1], [{ inicio: '#000', fim: '#111' }, { inicio: '#222', fim: '#333' }, { inicio: '#444', fim: '#555' }, { inicio: '#666', fim: '#777' }], ['a', 'b', 'c', 'd']);
+  assert.equal(cs.length, 4);
+  assert.equal(cs[0].valorMin, null);
+  assert.equal(cs[3].valorMax, null);
+  assert.deepEqual(cs.map(c => c.ordem), [1, 2, 3, 4]);
+  assert.ok(Math.abs(cs.reduce((s, c) => s + c.larguraVisual, 0) - 100) < 1e-9);
 });
 
 console.log(`\n${ok} ok, ${fail} falhas\n`);

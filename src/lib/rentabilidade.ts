@@ -268,5 +268,56 @@ export function classesRentabilidade(
   return { ...cls, iZero };
 }
 
+/**
+ * Uma classe da legenda da Biblioteca, já achatada numa cor sólida por faixa.
+ *
+ * O módulo NÃO importa `lib/legendas` de propósito: aquilo é vocabulário de
+ * cadastro (pares de cor, largura visual, escopo) e isto aqui é conta. Quem
+ * costura os dois é a tela, e assim este arquivo segue rodando em node.
+ */
+export interface ClasseDeLegenda {
+  nome: string;
+  valorMin: number | null;
+  valorMax: number | null;
+  cor: string;
+}
+
+/**
+ * Faixas de rentabilidade tiradas de uma LEGENDA DA BIBLIOTECA.
+ *
+ * Diferença de fundo para `classesRentabilidade`: lá os cortes saem dos DADOS
+ * (quantil dentro de cada lado do zero), aqui saem do CADASTRO. Com quantil,
+ * dois talhões da mesma fazenda ganham escalas diferentes e as cores não se
+ * comparam entre folhas; com a legenda, "azul escuro" quer dizer a mesma coisa
+ * em todo relatório — e o agrônomo manda nos limites.
+ *
+ * Devolve null quando a legenda não serve (menos de duas classes, borda aberta
+ * no meio, cortes fora de ordem): quem chama cai no quantil, que é melhor do
+ * que um mapa pintado por uma escala quebrada.
+ */
+export function classesRentabilidadeDaLegenda(
+  valoresRs: ArrayLike<number>,
+  classes: readonly ClasseDeLegenda[],
+  opts: { pixelM: number },
+): (ClassificacaoQuantis & { iZero: number | null }) | null {
+  if (!classes || classes.length < 2) return null;
+  const breaks: number[] = [];
+  for (let i = 0; i < classes.length - 1; i++) {
+    const b = classes[i].valorMax;
+    if (b == null || !Number.isFinite(b)) return null;     // ponta aberta no meio
+    if (breaks.length && b <= breaks[breaks.length - 1]) return null;   // fora de ordem
+    breaks.push(b);
+  }
+  const cls = classesDeBreaks(valoresRs, breaks, {
+    pixelM: opts.pixelM,
+    cores: classes.map(c => c.cor),
+    nomes: classes.map(c => c.nome),
+  });
+  if (!cls) return null;
+  // O zero só é destacado no PDF quando ele é DE FATO uma borda desta legenda.
+  const iZero = breaks.indexOf(0);
+  return { ...cls, iZero: iZero >= 0 ? iZero : null };
+}
+
 /** Índice da faixa de um valor — reexportado para quem desenha os ticks. */
 export { indiceFaixa };

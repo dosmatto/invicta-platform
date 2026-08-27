@@ -52,7 +52,7 @@ import { Upload, Loader2, AlertTriangle, Save, Star, Trash2, Eye, Wand2, FileSpr
 
 import { inputStyle } from '@/constants/ui';
 import { fmtMoeda, lerMoeda, arredMoeda } from '@/lib/formato';
-import { precoPorKg, pontoEquilibrioKgha, rotuloPreco, gridRentabilidade, classesRentabilidade, resumoRentabilidade, arrendamentoPorHa, ALQUEIRES, ALQUEIRE_HA_PADRAO, type UnidadeVenda } from '@/lib/rentabilidade';
+import { precoPorKg, pontoEquilibrioKgha, rotuloPreco, gridRentabilidade, classesRentabilidade, classesRentabilidadeDaLegenda, resumoRentabilidade, arrendamentoPorHa, ALQUEIRES, ALQUEIRE_HA_PADRAO, type UnidadeVenda } from '@/lib/rentabilidade';
 import { coefDe, gridExportacao, resumoExportacao, equivalentesDe } from '@/lib/exportacao';
 import { coeficientesDaCultura, fertilizantesCom } from '@/lib/exportacaoBib';
 import { SIMBOLO_NUTRIENTE, type Nutriente } from '@/lib/insumos';
@@ -470,9 +470,18 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
           ? [{ rotulo: 'Sem arrendamento', custoHa: eco.custoHa, arr: null },
              { rotulo: `Com arrendamento (${fmt(eco.arrendamentoScAlq!, 0)} sc/alq)`, custoHa: eco.custoHa + arrHa, arr: arrHa }]
           : [{ rotulo: 'Terra propria', custoHa: eco.custoHa, arr: null }];
+        // A legenda MANDA. Faixas e cores saem de Biblioteca -> Legendas
+        // (categoria Rentabilidade), para o vermelho/azul querer dizer a mesma
+        // coisa em todo relatorio; sem legenda cadastrada (ou com ela quebrada)
+        // cai no quantil ancorado no zero, que e como era antes.
+        const legRent = getLegendasPorAtributo('rentabilidade')[0];
+        const classesRent = legRent?.classes.map(c => ({
+          nome: c.nome, valorMin: c.valorMin, valorMax: c.valorMax, cor: corCheiaDaClasse(c),
+        }));
         for (const cen of cenarios) {
           const vRent = gridRentabilidade(dec.valores, precoKgRel, cen.custoHa);
-          const clsRent = classesRentabilidade(vRent, { k: 5, pixelM: fonte.pixelM });
+          const clsRent = (classesRent && classesRentabilidadeDaLegenda(vRent, classesRent, { pixelM: fonte.pixelM }))
+            || classesRentabilidade(vRent, { k: 5, pixelM: fonte.pixelM });
           const resRent = resumoRentabilidade(dec.valores, { precoKg: precoKgRel, custoHa: cen.custoHa, pixelM: fonte.pixelM });
           if (!clsRent || !resRent) continue;
           rentabilidades.push({

@@ -5,6 +5,7 @@
 import type { ResultadoAmostra, PerfilLabConfig } from './lab';
 import type { Legenda } from './legendas';
 import { classesFertilidade5, ordenarLegendasDoAtributo, deveSemearLegendas, promocoesDeHomonimas } from './legendas';
+import { legendaRentabilidade } from '@/constants/legendasSeedOficial';
 import { deveSemearCatalogo, podeMigrarCatalogo, gemeasAExcluir } from './catalogoVariaveis';
 export { ordenarLegendasDoAtributo } from './legendas';
 import type { AmbienteProdutivo } from './meap/tipos';
@@ -2504,6 +2505,36 @@ export function migrarLegendaCtceV1() {
   save('inv_legendas', [...todas, nova]);
   notificarLegendas();
   localStorage.setItem('inv_migrado_leg_ctce_v1', '1');
+}
+
+/**
+ * Entrega a legenda oficial de RENTABILIDADE a quem já tinha Biblioteca.
+ *
+ * `seedLegendasSistema` só age em banco VAZIO (1º boot) — de propósito, senão o
+ * seed sobrescreveria a cada boot o que o usuário editou. O efeito colateral é
+ * que legenda oficial NOVA nunca chega a quem já usa o app, e sem ela o mapa de
+ * rentabilidade continuaria com as cores fixas do código.
+ *
+ * Idempotente por ATRIBUTO (não por id): quem já tem uma legenda de
+ * rentabilidade — própria ou a oficial — não recebe outra. Excluir a oficial
+ * também vale: a flag por navegador não a traz de volta.
+ */
+export function migrarLegendaRentabilidadeV1() {
+  if (typeof window === 'undefined') return;
+  if (localStorage.getItem('inv_migrado_leg_rentab_v1') === '1') return;
+  // Mesma trava das migrações acima: com a nuvem ainda não hidratada, "não tem"
+  // quer dizer "ainda não sei", e criar aqui nasce gêmea em cada máquina.
+  if (cloudAindaNaoHidratou()) return;
+  const todas = load<Legenda>('inv_legendas');
+  // Banco vazio de verdade é trabalho do seed, que entrega a lista inteira.
+  if (todas.length === 0) return;
+  if (todas.some(l => l.atributoId === 'rentabilidade')) {
+    localStorage.setItem('inv_migrado_leg_rentab_v1', '1');
+    return;
+  }
+  save('inv_legendas', [...todas, { ...legendaRentabilidade, escopo: 'sistema' as const }]);
+  notificarLegendas();
+  localStorage.setItem('inv_migrado_leg_rentab_v1', '1');
 }
 
 // Faixas AGRONÔMICAS padrão de cada saturação na CTC (bordas de 5 classes +

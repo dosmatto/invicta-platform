@@ -5,8 +5,12 @@
 // São semeadas no boot (seedLegendasSistema) — visíveis a todas as empresas,
 // read-only (o usuário duplica para editar).
 
-import { classesComPares, classesFertilidade5, type Legenda } from '@/lib/legendas';
-import { LEGENDAS_SEED_ABC } from './legendasSeedABC';
+// Import RELATIVO (e com extensao) de proposito: o alias '@/' nao existe no
+// node, e os testes de rentabilidade leem a legenda oficial daqui em vez de
+// manterem uma copia das cores — copia e o jeito de o teste passar com a
+// paleta errada.
+import { classesComPares, classesComBordas, classesFertilidade5, type Legenda } from '../lib/legendas.ts';
+import { LEGENDAS_SEED_ABC } from './legendasSeedABC.ts';
 
 const DT = '2026-06-13T00:00:00.000Z';
 
@@ -151,6 +155,43 @@ const prodMedia: Legenda = {
   classes: classesComPares([80, 90, 110, 120], PARES_PROD, NOMES_PROD),
 };
 
+// ── Rentabilidade (R$/ha; divergente ancorada no ZERO) ────────────────────
+// Escala DIVERGENTE, não semáforo: o vermelho não é "ruim numa fila de notas",
+// é PREJUÍZO — o outro lado da mesma conta. Por isso duas rampas espelhadas em
+// torno do zero, claras junto dele (onde a margem é quase nula e o sinal quase
+// não importa) e escuras nos extremos (onde o dinheiro pesa).
+//
+// O ZERO é BORDA de classe, nunca meio: "esta mancha deu prejuízo" é a única
+// leitura que o mapa de dinheiro precisa garantir, e uma faixa que atravessa o
+// zero pinta lucro e prejuízo com a mesma cor.
+const PARES_RENTAB = [
+  { inicio: '#5C0000', fim: '#8E0000' },   // prejuízo alto — vermelho escuro
+  { inicio: '#B31217', fim: '#D32F2F' },
+  { inicio: '#E85D5D', fim: '#F58F8F' },
+  { inicio: '#FFC1C1', fim: '#FFE0E0' },   // encosta no zero — vermelho claro
+  { inicio: '#DCEBFF', fim: '#B7D7FF' },   // encosta no zero — azul claro
+  { inicio: '#8FC0F7', fim: '#5EA3EF' },
+  { inicio: '#2E7FDD', fim: '#1565C0' },
+  { inicio: '#0D47A1', fim: '#06285C' },   // lucro alto — azul escuro
+];
+const NOMES_RENTAB = [
+  'Prejuízo alto', 'Prejuízo médio', 'Prejuízo baixo', 'Prejuízo leve',
+  'Lucro leve', 'Lucro baixo', 'Lucro médio', 'Lucro alto',
+];
+
+export const BORDAS_RENTAB: number[] = [-2000, -1000, -500, 0, 500, 1000, 2000];
+
+export const legendaRentabilidade: Legenda = {
+  ...baseFix,
+  id: 'sys_rentabilidade',
+  nome: 'Rentabilidade (R$/ha)',
+  atributoId: 'rentabilidade', atributo: 'Rentabilidade', simbolo: 'R$/ha',
+  unidade: 'R$/ha', metodo: 'Margem (receita − custo)',
+  categoria: 'rentabilidade', invertida: false,
+  observacao: 'Margem por hectare do mapa de colheita. O zero é borda de classe: vermelho = prejuízo, azul = lucro.',
+  classes: classesComBordas(BORDAS_RENTAB, PARES_RENTAB, NOMES_RENTAB),
+};
+
 // ── Compactação (MPa; invertida: alta compactação = vermelho/alarme) ───────
 const compactacao: Legenda = {
   ...baseFix,
@@ -184,6 +225,7 @@ export const LEGENDAS_OFICIAIS: Legenda[] = [
   ndvi,
   prodSoja, prodMilho, prodTrigo, prodFeijao,
   prodPercentil, prodMedia,
+  legendaRentabilidade,
   compactacao,
   condutividade,
 ];

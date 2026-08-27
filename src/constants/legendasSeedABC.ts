@@ -3,7 +3,7 @@
 // larguras visuais 22,5/22,5/22,5/22,5/10. Para escalas invertidas (Al, m%),
 // as cores são invertidas (Roxo no Muito Baixo, Vermelho no Muito Alto).
 
-import { classesFertilidade5, type Legenda, PARES_OFICIAIS_5 } from '@/lib/legendas';
+import { classesFertilidade5, type Legenda, PARES_OFICIAIS_5 } from '../lib/legendas.ts';
 
 const dtIso = '2026-06-11T00:00:00.000Z';
 const base = { fonte: 'Fundação ABC', categoria: 'fertilidade' as const, tipoEscala: 'gradiente' as const, estilo: 'segmentado' as const, criadoEm: dtIso, atualizadoEm: dtIso };
