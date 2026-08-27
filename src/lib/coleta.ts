@@ -230,6 +230,43 @@ export function moverColetasDeGrade(
   return n;
 }
 
+/**
+ * FUSÃO de talhões: as coletas de uma grade acompanham o novo dono.
+ *
+ * Dois casos, e a diferença importa:
+ *  • a grade INTEIRA migrou (mesmo id) — só o carimbo `talhaoId` muda e o id
+ *    da coleta (`${gradeId}__${ordem}`) continua válido, sem sync pendente;
+ *  • a grade foi FUNDIDA na do hospedeiro — muda o gradeId e, nos pontos que a
+ *    fusão renumerou, também o `ordem`. Os dois entram no id, então esses
+ *    registros voltam a `syncPendente` para subirem sob o id novo.
+ *
+ * `remapOrdem` leva ordem antigo → novo (vazio quando nada foi renumerado).
+ */
+export function repontarColetasDeTalhao(
+  gradeOrigemId: string, gradeDestinoId: string, talhaoIdDestino: string, remapOrdem: Map<number, number>,
+): number {
+  const lista = loadColetas();
+  let n = 0;
+  for (let i = 0; i < lista.length; i++) {
+    const c = lista[i];
+    if (c.gradeId !== gradeOrigemId) continue;
+    const ordemNova = remapOrdem.get(c.ordem) ?? c.ordem;
+    const mudouId = gradeDestinoId !== gradeOrigemId || ordemNova !== c.ordem;
+    lista[i] = {
+      ...c,
+      id: idColeta(gradeDestinoId, ordemNova),
+      gradeId: gradeDestinoId,
+      ordem: ordemNova,
+      talhaoId: talhaoIdDestino,
+      syncPendente: mudouId ? true : c.syncPendente,
+      atualizadoEm: new Date().toISOString(),
+    };
+    n++;
+  }
+  if (n > 0) { saveColetas(lista); void pushColetasPendentes().catch(() => {}); }
+  return n;
+}
+
 /** Coletas dos pontos que saíram junto com uma área EXCLUÍDA — some com elas. */
 export function removerColetasDaGrade(gradeId: string, ordens: number[]): number {
   if (!gradeId || ordens.length === 0) return 0;

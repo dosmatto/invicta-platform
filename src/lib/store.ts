@@ -79,6 +79,23 @@ export interface Talhao {
   criadoEm: string;
   geoVersao?: number;             // versão do limite atual (ausente = 1)
   geoVersoes?: VersaoPoligono[];  // versões anteriores arquivadas (histórico)
+  fusoes?: FusaoRegistro[];       // talhões absorvidos por este (ver desmembrar/fundir)
+}
+
+// FUSÃO de dois talhões (lib/fundirTalhoes.ts): o talhão absorvido sai do
+// cadastro, mas o registro de que ele existiu fica AQUI, no que sobreviveu —
+// "o antigo permanece no histórico, mas não depois". Guarda o contorno dele
+// para que a origem daquela área continue demonstrável anos depois.
+export interface FusaoRegistro {
+  em: string;                  // ISO
+  nomeAbsorvido: string;
+  talhaoIdAbsorvido: string;
+  areaHaAbsorvida: number;
+  geojsonAbsorvido?: string;
+  nomeAnterior?: string;       // nome que ESTE talhão tinha, quando a fusão o mudou
+  dissolveu: boolean;          // os contornos se encostavam e viraram uma área só
+  pontosMovidos: number;
+  laudosMovidos: number;
 }
 
 // Versão anterior do limite, arquivada quando o polígono é substituído. Os
@@ -660,6 +677,8 @@ export interface PontoAmostragem {
   ordem: number;          // índice serpentina (0-based). CHAVE das coletas de campo
                           // (inv_coletas usa `${gradeId}__${ordem}`) — não renumerar.
   numero?: number;        // nº da AMOSTRA (grade importada de fora); join com lab usa numero ?? ordem+1
+  numeroAnterior?: number; // nº que este ponto tinha antes de uma FUSÃO renumerá-lo
+                          // (lib/fundirTalhoes.ts) — rastreia a etiqueta impressa
   // Grade de ZONAS (lib/gradeZonas.ts): o ponto sabe de que zona é, e o operador
   // o enxerga como `zona-sequencial` ("2-3"). O rótulo é TEXTO e nunca entra no
   // campo numérico — o parser do laudo tira os não-dígitos e "1-1" viraria 11.
@@ -802,6 +821,47 @@ export function deleteCliente(id: string) {
 // próprios talhões — local + nuvem (save propaga a remoção via cloudPushLista).
 // Docs fora das listas (mapas `${tid}__*`, cenários `cen_${tid}_*`) são do
 // chamador. NÃO toca na Biblioteca nem em legendas/safras/padrões.
+// Coleções LOCAIS cujo registro aponta para um talhão pelo campo `talhaoId`.
+// Uma lista só, usada pela contagem e pelo repontamento da FUSÃO — duas cópias
+// divergiriam e a fusão deixaria dado órfão sem ninguém perceber.
+const COLECOES_POR_TALHAO = [
+  'inv_lab', 'inv_grades', 'inv_plantios', 'inv_compactacao', 'inv_grades_compact',
+  'inv_mde', 'inv_mde_camadas', 'inv_composicoes', 'inv_condutividade',
+  'inv_meap_ambientes', 'inv_meap_zoneamentos',
+] as const;
+
+/**
+ * Quantos registros locais estão pendurados neste talhão (informativo).
+ * `exceto` tira coleções da conta — a tela de fusão já lista grades e laudos um
+ * a um e contá-los de novo em "outros registros" dobraria o mesmo dado.
+ */
+export function contarRegistrosDoTalhao(talhaoId: string, exceto: readonly string[] = []): number {
+  let n = 0;
+  for (const key of COLECOES_POR_TALHAO) {
+    if (exceto.includes(key)) continue;
+    n += load<{ talhaoId?: string }>(key).filter(r => r.talhaoId === talhaoId).length;
+  }
+  return n;
+}
+
+/**
+ * FUSÃO: tudo que apontava para `de` passa a apontar para `para`. Não mexe em
+ * conteúdo — só no dono. Grades e laudos já foram tratados um a um pelo
+ * fundirTalhoes (numeração/remapeamento); aqui eles entram por segurança, para
+ * nenhum registro sobrar apontando para um talhão que deixou de existir.
+ */
+export function repontarTalhaoNasColecoes(de: string, para: string): number {
+  if (de === para) return 0;
+  let n = 0;
+  for (const key of COLECOES_POR_TALHAO) {
+    const lista = load<{ talhaoId?: string }>(key);
+    let mudou = false;
+    for (const r of lista) if (r.talhaoId === de) { r.talhaoId = para; n++; mudou = true; }
+    if (mudou) save(key, lista);
+  }
+  return n;
+}
+
 function removerTalhoesCascata(talhaoIds: string[]) {
   const tal = new Set(talhaoIds);
   save('inv_lab', load<ImportacaoLab>('inv_lab').filter(i => !tal.has(i.talhaoId)));

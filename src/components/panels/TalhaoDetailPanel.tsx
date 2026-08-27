@@ -33,13 +33,18 @@ import { descomprimirGrid, coordsFromBounds, type RespInterp } from '@/lib/ferti
 import { colorirGridComLegenda, temGrid } from '@/lib/raster';
 import {
   ChevronLeft, Layers, Upload, MapPin, CheckCircle2, AlertTriangle, Plus, X, Save,
-  ExternalLink, Trash2, Pencil, Grid3x3, TestTube, Leaf, Activity, Mountain, BarChart3, Zap, Eye, Loader2, Share2,
+  ExternalLink, Trash2, Pencil, Grid3x3, TestTube, Leaf, Activity, Mountain, BarChart3, Zap, Eye, Loader2, Share2, Combine,
 } from 'lucide-react';
 
 type MapaNuvem = { resp: RespInterp; labels: GeoJSON.FeatureCollection; interpoladoEm?: string };
 
 const EditorGeometria = dynamic(
   () => import('@/components/geo/EditorGeometria').then(m => ({ default: m.EditorGeometria })),
+  { ssr: false },
+);
+
+const FundirTalhoes = dynamic(
+  () => import('@/components/talhao/FundirTalhoes').then(m => ({ default: m.FundirTalhoes })),
   { ssr: false },
 );
 
@@ -456,9 +461,26 @@ export function TalhaoDetailPanel() {
   const [nomeTemp, setNomeTemp] = useState('');
   const [numDependencias, setNumDependencias] = useState(0);
 
+  // Fusão aberta: `outroId`/`nome` vêm preenchidos quando ela nasce do renomear.
+  const [fundindo, setFundindo] = useState<{ outroId?: string; nome?: string } | null>(null);
+  const [avisoFusao, setAvisoFusao] = useState('');
+
   function salvarRenome() {
     const novo = nomeTemp.trim();
-    if (!nav.talhaoId || !novo) { setRenomeando(false); return; }
+    if (!nav.talhaoId || !novo || !talhao) { setRenomeando(false); return; }
+    // VÍNCULO PELO NOME: renomear "05A" para "05" quando "05" já existe é, quase
+    // sempre, dizer que as duas áreas são o mesmo talhão. Mas NUNCA fundimos
+    // calado — um dedo errado no teclado apagaria um talhão inteiro. A tela
+    // oferece a fusão; e o nome duplicado não é gravado, porque a importação em
+    // massa casa talhão POR NOME (dois "05" na mesma fazenda tornam ambíguo
+    // qual deles um KML atualiza).
+    const igual = getTalhoes(talhao.fazendaId)
+      .find(t => t.id !== talhao.id && t.nome.trim().toUpperCase() === novo.toUpperCase());
+    if (igual) {
+      setRenomeando(false);
+      setFundindo({ outroId: igual.id, nome: igual.nome });
+      return;
+    }
     updateTalhao(nav.talhaoId, { nome: novo });
     setNav({ talhao: novo });
     setTalhao(t => (t ? { ...t, nome: novo } : t));
@@ -566,6 +588,30 @@ export function TalhaoDetailPanel() {
             <Share2 size={13} /> Link do prestador (só o mapa)
           </button>
 
+          <button onClick={() => setFundindo({})} disabled={!talhao?.geojson}
+            className="mt-2 w-full flex items-center justify-center gap-1.5 py-1.5 rounded text-[11px] font-semibold disabled:opacity-40"
+            style={{ background: '#2e1065', color: '#ddd6fe' }}>
+            <Combine size={12} /> Fundir com outro talhão
+          </button>
+
+          {avisoFusao && <p className="mt-2 text-[10px] leading-snug" style={{ color: '#a78bfa' }}>✓ {avisoFusao}</p>}
+
+          {/* HISTÓRICO: o talhão absorvido não aparece mais em lugar nenhum, mas
+              o registro de que ele existiu fica aqui — com nome, área e data. */}
+          {(talhao?.fusoes ?? []).length > 0 && (
+            <div className="mt-2 p-2 rounded-lg" style={{ background: '#0f2240' }}>
+              <p className="text-[9px] font-bold uppercase tracking-wide mb-1" style={{ color: '#64748b' }}>Fusões</p>
+              {(talhao!.fusoes ?? []).map((f, i) => (
+                <p key={i} className="text-[10px] leading-snug" style={{ color: '#93c5fd' }}>
+                  Absorveu <strong style={{ color: '#e2e8f0' }}>{f.nomeAbsorvido}</strong> ({f.areaHaAbsorvida.toLocaleString('pt-BR')} ha)
+                  {' '}em {new Date(f.em).toLocaleDateString('pt-BR')}
+                  {f.nomeAnterior ? ` · antes chamava-se ${f.nomeAnterior}` : ''}
+                  {f.pontosMovidos > 0 ? ` · ${f.pontosMovidos} ponto(s)` : ''}
+                </p>
+              ))}
+            </div>
+          )}
+
           <button onClick={apagarTalhao}
             className="mt-2 w-full flex items-center justify-center gap-1.5 py-1.5 rounded text-[11px] font-semibold"
             style={{ background: numDependencias > 0 ? '#1a3a6b' : '#7f1d1d', color: numDependencias > 0 ? '#475569' : '#fca5a5' }}>
@@ -616,6 +662,19 @@ export function TalhaoDetailPanel() {
       {/* Conteúdo informativo */}
       <div className="flex-1 overflow-y-auto">
         <GeoSection talhao={talhao} onUploaded={handleUploaded} />
+        {fundindo && talhao && (
+          <FundirTalhoes talhao={talhao} outroIdInicial={fundindo.outroId} nomeInicial={fundindo.nome}
+            onFechar={() => setFundindo(null)}
+            onAplicado={(msg, idQueFicou) => {
+              setFundindo(null);
+              setAvisoFusao(msg);
+              // O talhão aberto pode ter sido o ABSORVIDO — nesse caso ele não
+              // existe mais e a ficha tem de seguir para o que sobrou.
+              const vivo = getTalhoes().find(t => t.id === idQueFicou) ?? null;
+              setTalhao(vivo);
+              if (vivo) setNav({ talhaoId: vivo.id, talhao: vivo.nome, area: vivo.areaHa });
+            }} />
+        )}
         <ResumoSafra talhaoId={nav.talhaoId ?? ''} safra={safra} />
         <MapasDefinitivos talhao={talhao} safra={safra} />
       </div>

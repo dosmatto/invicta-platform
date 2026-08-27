@@ -21,13 +21,19 @@ Ao entregar a pendência **N**:
 Uma versão pode fechar mais de uma pendência (`[16][17]`), e uma pendência pode
 levar mais de uma versão (repete o número na linha seguinte, com a correção).
 
+**O número é DO USUÁRIO.** Pedido que chegar em texto livre, sem número, entra
+como `S/N` — nunca inventando o próximo número da lista dele. Em 2026-08-27 a
+separação de área foi publicada como "PENDÊNCIA 19" por um palpite meu, e a 19
+verdadeira (fusão de talhões) chegou depois; foi preciso renumerar.
+
 ## Registro
 
 | Nº | Título | Versão | Onde na tela |
 |---:|--------|--------|--------------|
 | 18 | Áreas separadas do talhão, uma a uma | 2.81.0 | Produtores → fazenda → aba Talhões (gaveta no selo âmbar) |
-| 19 | Separar uma área do talhão (desmembrar / anexar / excluir) | 2.82.0 | Talhão → Limite do talhão → "Talhão em N áreas — separar uma delas" |
+| S/N | Separar uma área do talhão (desmembrar / anexar / excluir) | 2.82.0 | Talhão → Limite do talhão → "Talhão em N áreas — separar uma delas" |
 | 18 | Nome do talhão sempre inteiro na lista (correção) | 2.83.1 | Produtores → fazenda → aba Talhões |
+| 19 | Fundir dois talhões, escolhendo o nome que fica | 2.89.0 | Talhão → "Fundir com outro talhão" (e ao renomear para um nome existente) |
 | 20 | Motor de casamento da planilha fitotécnica | 2.83.0 | Sem tela (biblioteca `src/lib/importacao`); plano em `docs/IMPORTACAO-FITOTECNICA.md` |
 | 20 | Cadastro de cultivares e propósitos | 2.84.0 | Biblioteca → Cultivares · Biblioteca → Propósitos |
 | 20 | Cultivo: consórcio, talhão partido e safrinha | 2.85.0 | Talhão → seletor de Cultura (sem mudança visível; o registro por trás mudou) |
