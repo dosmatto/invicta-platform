@@ -1,5 +1,14 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.86.1': [
+    'O MAPA DE ZONAS DO RELATORIO PASSOU A MOSTRAR A CLASSIFICACAO ORIGINAL DA ZONA, nao a produtividade medida. Ate agora cada zona era pintada pela faixa de quantil da propria media — o que tornava a folha tautologica: a zona sempre concordava consigo mesma e o documento nao dizia nada sobre o zoneamento estar certo.',
+    'A PERGUNTA QUE A PAGINA RESPONDE AGORA E OUTRA: dentro da classe que a zona JA TINHA, como a colheita se comportou? E comparando as duas coisas que se decide reclassificar.',
+    'NA PRATICA: uma zona classificada como Alta que aparece verde no boxplot mas com a caixa na ponta ESQUERDA (menor produtividade) denuncia o desacordo na hora. Antes, pintada pela propria media, ela sairia verde e no lugar certo — parecendo coerente.',
+    'A tabela ganhou a coluna CLASSE ao lado da media medida, e o boxplot traz a classe embaixo do nome de cada zona. O bloco virou "ZONAS DE MANEJO x COLHEITA".',
+    'A legenda do grafico avisa que a cor e a classe original e nao a produtividade — sem isso o leitor interpretaria a cor como resultado.',
+    'Talhao com zonas SEM classificacao reconhecida usa cores apenas para distinguir uma da outra, e o grafico diz isso: no cinza unico da classe desconhecida o mapa ficaria ilegivel.',
+    'Removidas duas paginas de teste (smoke-temp e api/smoke-pdf) que entraram no repositorio por engano na v2.86.0.',
+  ],
   // [20] Leitor da planilha e motor de conferência
   '2.86.0': [
     'PENDÊNCIA 20 — O SISTEMA JÁ LÊ A PLANILHA E DIZ, LINHA POR LINHA, O QUE ELE CONSEGUE RESOLVER SOZINHO (ainda sem tela; ela é a próxima). Rodado contra a planilha real de 592 linhas e o cadastro de produção.',

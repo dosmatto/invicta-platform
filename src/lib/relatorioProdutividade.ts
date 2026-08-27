@@ -1190,7 +1190,9 @@ function blocoBoxplot(doc: JsPDF, d: DadosRelatorioProd, x: number, y: number, w
   // Sem piso: um piso garante linha legível mas ESTOURA o quadro quando há
   // zona demais, e estourar é pior que apertar. Acima de ZONAS_INLINE_MAX a
   // página própria dá espaço de sobra, então aqui o aperto nunca acontece.
-  const rowH = Math.min(8, (h - 22) / zs.length);
+  // Reserva 26 mm no pé: linha dos ticks, legenda do gráfico E a nota de que a
+  // cor é a classe original. Com 22 a nota caía 0,8 mm além da borda.
+  const rowH = Math.min(8, (h - 26) / zs.length);
 
   const algumaClasse = zs.some(z => z.classeConhecida);
   zs.forEach((z, i) => {
