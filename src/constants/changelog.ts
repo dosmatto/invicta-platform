@@ -1,5 +1,13 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.78.0': [
+    'O FERRO AGORA VEM MESMO — ERAM TRÊS BLOQUEIOS, NÃO UM. A correção anterior (v2.77.0) resolveu só o primeiro, por isso reimportar não adiantou. Rodando o caminho de importação com o arquivo real, apareceram os outros dois.',
+    'BLOQUEIO 2 — o perfil "Fundação ABC (planilha)" lê as colunas por POSIÇÃO e pulava justamente a do Ferro (a 17, entre Cobre e Manganês). Conferido contra o arquivo de exemplo desse layout que existe no próprio sistema. As colunas 12 e 20 continuam puladas de propósito: são CTCe e K%, que o app calcula em vez de ler.',
+    'BLOQUEIO 3 — para quem já usava o app, o Ferro estava no catálogo de Variáveis de Análise como DESLIGADO, e com um detalhe cruel: o único sinônimo cadastrado era "Ferro" por extenso. Como a busca de colunas é feita pelos sinônimos, uma coluna escrita "Fe" não casava nem depois de ligar. Agora o app liga o Ferro sozinho, uma única vez, e acrescenta o sinônimo que faltava — sem mexer em nenhuma outra variável que você tenha desligado de propósito.',
+    'CONFERIDO NOS DOIS LAYOUTS REAIS: no laudo em que o Ferro está na coluna 23 e no de exemplo do sistema, em que está na 17 — os dois passaram a reconhecê-lo.',
+    'O QUE VOCÊ PRECISA FAZER: reimportar o laudo (a importação anterior foi gravada sem a coluna) e ter a legenda do Ferro cadastrada em Biblioteca → Legendas. Se ela já existe, é só reimportar.',
+    '11 testes automáticos travam o Ferro na importação (npm run teste:lab), incluindo a garantia de que nenhum perfil leia a mesma coluna duas vezes e de que as colunas calculadas continuem fora.',
+  ],
   '2.77.0': [
     'O FERRO (Fe) VOLTOU A SER LIDO DO LAUDO. A coluna Fe do arquivo do laboratório era lida e DESCARTADA em silêncio: o Ferro faltava na lista de elementos que a importação reconhece, então ele nunca chegava à aba Fertilidade para interpolar — enquanto B, Cu, Mn, Zn e S apareciam normalmente. Agora "Fe" e "Ferro" são reconhecidos, na unidade mg/dm³ como os demais micronutrientes.',
     'A ausência era invisível porque o RESTO do app já contava com o Fe: ele estava na ordem padrão dos elementos (entre Mn e Al) e no catálogo de Variáveis de Análise. Só o leitor do laudo não o conhecia, e nada acusava a diferença.',

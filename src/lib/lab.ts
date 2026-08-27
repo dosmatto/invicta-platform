@@ -260,7 +260,10 @@ export const PERFIS_BUILTIN: PerfilLabBuiltin[] = [
     nome: 'Fundação ABC (planilha)',
     config: {
       linhaCabecalho: 1, colId: 0, regexNumero: '(\\d+)', colProfundidade: 1,
-      elementos: { p: 2, mo: 3, ph: 4, al: 5, k: 6, ca: 7, mg: 8, ctc: 9, v: 10, m: 11, textura: 13, s: 14, b: 15, cu: 16, mn: 18, zn: 19 },
+      // col 12 = t (CTCe) e col 20 = K% são DERIVADAS — puladas de propósito.
+      // col 17 = Fe: faltava, e por isso o Ferro sumia neste layout. Conferido
+      // contra public/teste/igefi07_lab.xlsx, o arquivo real deste perfil.
+      elementos: { p: 2, mo: 3, ph: 4, al: 5, k: 6, ca: 7, mg: 8, ctc: 9, v: 10, m: 11, textura: 13, s: 14, b: 15, cu: 16, fe: 17, mn: 18, zn: 19 },
     },
   },
   {

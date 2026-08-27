@@ -212,5 +212,49 @@ t('a ordem do catálogo põe Fe depois de Mn, como o resto do app espera', () =>
   assert.ok(ids.indexOf('fe') < ids.indexOf('textura'), 'Fe antes da textura');
 });
 
+// ── Ferro: os TRÊS bloqueios (v2.78.0) ───────────────────────────────────────
+// Adicionar Fe ao catálogo de elementos (v2.77.0) não bastou. O usuário reimportou
+// e o Fe continuou sumindo. Rodando o caminho real, apareceram mais dois:
+//   1. o perfil POSICIONAL 'fundacao-abc-planilha' pulava a coluna 17 (= Fe);
+//   2. o catálogo JÁ MATERIALIZADO tinha o Fe como variável complementar
+//      DESLIGADA e com sinônimo só 'ferro' — então nem ligando ele casava com um
+//      cabeçalho escrito "Fe", porque o casamento é pelos sinônimos.
+// A tela importa com `autoConfig(aoa, getVariaveisAtivas())`, e é aí que os dois
+// se combinavam para deixar tudo em silêncio.
+t('Fe está no perfil posicional da Fundação ABC (planilha), coluna 17', () => {
+  const pl = PERFIS_BUILTIN.find(p => p.id === 'fundacao-abc-planilha');
+  assert.equal(pl.config.elementos.fe, 17,
+    'conferido contra public/teste/igefi07_lab.xlsx, o arquivo real deste layout');
+});
+
+t('as colunas derivadas seguem FORA do perfil (t e K% são calculadas)', () => {
+  const pl = PERFIS_BUILTIN.find(p => p.id === 'fundacao-abc-planilha');
+  const cols = Object.values(pl.config.elementos);
+  assert.ok(!cols.includes(12), 'col 12 = t (CTCe) é derivada, não pode ser lida');
+  assert.ok(!cols.includes(20), 'col 20 = K% é derivada, não pode ser lida');
+});
+
+t('nenhuma coluna do perfil é mapeada duas vezes', () => {
+  for (const p of PERFIS_BUILTIN) {
+    const cols = Object.values(p.config.elementos ?? {});
+    assert.equal(new Set(cols).size, cols.length, `perfil ${p.id} tem coluna repetida`);
+  }
+});
+
+t('cabeçalho "Fe" casa por autoConfig (era o que falhava no catálogo antigo)', () => {
+  const aoa = [
+    ['id', 'prof', 'pH', 'K', 'Ca', 'Fe'],
+    ['1', '0-20', '5.2', '3.1', '40', '74'],
+    ['2', '0-20', '5.4', '2.8', '38', '68'],
+  ];
+  const { config } = autoConfig(aoa);
+  assert.equal(config.elementos.fe, 5, '"Fe" tem de casar, não só "Ferro" por extenso');
+});
+
+t('cabeçalho "Ferro" por extenso também casa', () => {
+  const aoa = [['id', 'prof', 'Ferro'], ['1', '0-20', '74']];
+  assert.equal(autoConfig(aoa).config.elementos.fe, 2);
+});
+
 console.log(`\n${ok} passaram, ${fail} falharam\n`);
 process.exit(fail ? 1 : 0);

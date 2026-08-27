@@ -1529,6 +1529,41 @@ export function migrarSinonimosSeedV1() {
   localStorage.setItem('inv_migrado_sinonimos_seed_v1', '1');
 }
 
+// O Fe MUDOU DE CATEGORIA (v2.78.0): era variável COMPLEMENTAR — cadastrada e
+// DESLIGADA por padrão — e virou elemento BASE (entrou em ELEMENTOS_LAB, onde
+// todos são `usar: true`). Só que os catálogos já materializados não voltam:
+// `garantirVariaveisAnalise` só semeia quando o catálogo está VAZIO e
+// `garantirVariaveisComplementares` pula os ids que já existem. Resultado: quem
+// já usava o app continuava com o Fe desligado — e a importação, que filtra por
+// `getVariaveisAtivas()`, seguia descartando a coluna Fe do laudo em silêncio,
+// mesmo depois de o Fe entrar no catálogo de elementos.
+//
+// Liga SÓ o Fe, uma vez. Não mexe em nenhuma outra variável: desligar algo é uma
+// escolha legítima do usuário, e o Fe nunca foi escolha — nasceu desligado antes
+// de ser básico.
+export function migrarFeAtivoV1() {
+  if (typeof window === 'undefined') return;
+  if (localStorage.getItem('inv_migrado_fe_ativo_v1') === '1') return;
+  const itens = _itensVariaveis();
+  if (itens.length === 0) return;   // catálogo ainda não hidratado — tenta no próximo boot
+  const it = itens.find(i => i.conteudo.varId === 'fe');
+  if (it) {
+    // Dois consertos: LIGAR e dar os sinônimos do elemento base. O catálogo antigo
+    // guardou só ['ferro'] (era o seed complementar), e o casamento por cabeçalho
+    // é pelos SINÔNIMOS — então uma coluna escrita "Fe" não casava nem com o Fe
+    // ligado. Só por extenso, "Ferro", funcionava.
+    const base = ELEMENTOS_LAB.find(e => e.id === 'fe')?.sinonimos ?? [];
+    const atuais = it.conteudo.sinonimos ?? [];
+    const sinonimos = [...atuais, ...base.filter(x => !atuais.includes(x))];
+    if (it.conteudo.usar === false || sinonimos.length !== atuais.length) {
+      bibAtualizar<ConteudoVariavel>('preferencias-analise', it.id, {
+        conteudo: { ...it.conteudo, usar: true, sinonimos },
+      });
+    }
+  }
+  localStorage.setItem('inv_migrado_fe_ativo_v1', '1');
+}
+
 // Catálogo completo (fallback = seed em memória, p/ quem nunca abriu o painel).
 export function getVariaveisAnalise(): VariavelAnalise[] {
   const itens = _itensVariaveis();

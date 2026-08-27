@@ -69,7 +69,10 @@ export const VARIAVEIS_COMPLEMENTARES: VariavelComplementar[] = [
   { id: 'so4',   sigla: 'SO4',  nome: 'Sulfato (SO4)',            unidade: 'meq/L',     sinonimos: ['so4', 'sulfato'],                    usar: false },
 
   // ── Micronutrientes e outros elementos ────────────────────────────────────
-  { id: 'fe',    sigla: 'Fe', nome: 'Ferro',      unidade: 'mg/dm³',    sinonimos: ['ferro'],      usar: false },
+  // Fe NÃO está aqui: virou elemento BASE em ELEMENTOS_LAB (v2.77.0), com
+  // sinônimos ['fe', 'ferro'] e sempre ativo. Mantê-lo também nesta lista fazia
+  // migrarSinonimosSeedV1 sobrescrever os sinônimos do base pelos daqui (só
+  // 'ferro'), e o cabeçalho "Fe" do laudo deixava de casar.
   // ATENÇÃO: header "Mo" cru cai na Matéria Orgânica ('mo'); molibdênio só automapa
   // por extenso. Se um dia virar token de equação, usar 'Molib' (nunca 'Mo' ≍ MO).
   { id: 'molib', sigla: 'Mo', nome: 'Molibdênio', unidade: 'mg/dm³',    sinonimos: ['molibdenio'], usar: false },
