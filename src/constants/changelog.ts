@@ -1,5 +1,11 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.94.0': [
+    'O RELATÓRIO DE PRODUTIVIDADE FOI REORDENADO para seguir a leitura de quem o usa: primeiro o que a lavoura PRODUZIU, depois o que ela PAGOU. A ordem agora é — Produtividade (mapa absoluto), Produtividade por quantil, NDVI, Resumo analítico, análise por zona de manejo (quando as zonas não cabem no rodapé do resumo), Rentabilidade e, fechando tudo, Exportação e Extração de nutrientes.',
+    'ANTES A RENTABILIDADE E A EXPORTAÇÃO VINHAM NO MEIO, logo depois dos dois mapas de produtividade, e empurravam o NDVI e o resumo analítico para o fim — quem lia o documento encontrava o custo antes de ter visto a análise da safra.',
+    'DENTRO DA RENTABILIDADE, TERRA PRÓPRIA VEM ANTES DA ARRENDADA: o arrendamento é um custo a mais, e ver primeiro o resultado sem ele é o que permite medir quanto ele pesa. Nas páginas de nutrientes, exportação vem antes de extração.',
+    '7 testes novos (npm run teste:rentabilidade, 48 no total) travam a ordem — inclusive a estabilidade, para dois cenários do mesmo grupo manterem a ordem em que foram montados na tela.',
+  ],
   '2.93.0': [
     'O RELATÓRIO ABERTO NO NAVEGADOR JÁ CHEGA COM NOME DE ARQUIVO. Ao salvar um PDF, a caixa do navegador vinha preenchida com um código do tipo "736c4637-3320-4ecd-87a9-616fe58ad162" e o nome tinha de ser digitado à mão, toda vez, em todo relatório. A causa: o PDF é gerado no seu navegador e aberto por um endereço temporário (blob), e o navegador nomeia o arquivo pela última parte do endereço — que é justamente esse código.',
     'AGORA A ABA É UMA PÁGINA NOSSA: o nome do arquivo aparece no título da aba e numa barra em cima do relatório, com o botão SALVAR PDF ao lado. Clicando nele, a caixa de salvar abre JÁ PREENCHIDA (ou o arquivo baixa direto com o nome certo, se você não usa "perguntar onde salvar").',

@@ -30,6 +30,7 @@ import type { ResumoValores } from './validacao/tipos';
 import type { Separacao } from './validacao/estatistica';
 import { nivelCobertura } from './cobertura';
 import type { ResumoRentabilidade } from './rentabilidade';
+import { ordenarRentabilidades, ordenarExportacoes } from './rentabilidade.ts';
 import type { ResumoExportacao, EquivalenteFertilizante } from './exportacao';
 
 // ── Entrada ──────────────────────────────────────────────────────────────────
@@ -1448,18 +1449,20 @@ export async function renderProdutividadeNoDoc(
     await fn();
     precisa = true;
   };
+  // ORDEM DO RELATÓRIO (pedido do usuário, 28/08/2026): primeiro o que a lavoura
+  // PRODUZIU — mapa absoluto, quantil, NDVI e o resumo analítico —, depois o que
+  // ela PAGOU (rentabilidade, terra própria antes da arrendada) e, fechando
+  // tudo, exportação e extração de nutrientes.
   await pag(() => paginaAbsoluta(doc, d, logos));
   await pag(() => paginaQuantil(doc, d, logos));
-  // Rentabilidade e exportação ficam JUNTO da narrativa de produtividade; NDVI
-  // e resumo analítico continuam fechando o documento como bloco de análise.
-  for (const r of d.rentabilidades ?? []) await pag(() => paginaRentabilidade(doc, d, r, logos));
-  for (const e of d.exportacoes ?? []) await pag(() => paginaExportacao(doc, d, e, logos));
   if (d.ndvi) await pag(() => paginaNdvi(doc, d, logos));
   await pag(() => paginaResumo(doc, d, logos));
-  // Zona demais para caber no rodapé da página anterior → folha própria.
+  // Zona demais para caber no rodapé do resumo → folha própria, logo depois dele.
   if (d.zonas.filter(z => z.stats).length > ZONAS_INLINE_MAX) {
     await pag(() => paginaZonas(doc, d, logos));
   }
+  for (const r of ordenarRentabilidades(d.rentabilidades ?? [])) await pag(() => paginaRentabilidade(doc, d, r, logos));
+  for (const e of ordenarExportacoes(d.exportacoes ?? [])) await pag(() => paginaExportacao(doc, d, e, logos));
 }
 
 export function nomeArquivoProd(d: DadosRelatorioProd): string {

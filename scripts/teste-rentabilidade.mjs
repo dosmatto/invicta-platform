@@ -15,6 +15,7 @@ import {
   precoPorKg, rotuloPreco, margemDoPixel, gridRentabilidade,
   pontoEquilibrioKgha, resumoRentabilidade, classesRentabilidade, classesRentabilidadeDaLegenda, SACA_KG_PADRAO,
   arrendamentoPorHa, ALQUEIRES, ALQUEIRE_HA_PADRAO,
+  ordenarRentabilidades, ordenarExportacoes,
 } from '../src/lib/rentabilidade.ts';
 import { classesComBordas, corCheiaDaClasse } from '../src/lib/legendas.ts';
 import { legendaRentabilidade, BORDAS_RENTAB } from '../src/constants/legendasSeedOficial.ts';
@@ -332,6 +333,54 @@ t('classesComBordas: N-1 bordas viram N classes com as pontas abertas', () => {
   assert.equal(cs[3].valorMax, null);
   assert.deepEqual(cs.map(c => c.ordem), [1, 2, 3, 4]);
   assert.ok(Math.abs(cs.reduce((s, c) => s + c.larguraVisual, 0) - 100) < 1e-9);
+});
+
+
+console.log('\nOrdem das paginas no relatorio\n');
+
+t('rentabilidade: SEM arrendamento antes de COM arrendamento', () => {
+  const fora = [
+    { rotulo: 'Com arrendamento (30 sc/alq)', arrendamentoHa: 1240 },
+    { rotulo: 'Sem arrendamento', arrendamentoHa: null },
+  ];
+  assert.deepEqual(ordenarRentabilidades(fora).map(x => x.rotulo),
+    ['Sem arrendamento', 'Com arrendamento (30 sc/alq)']);
+});
+
+t('ja na ordem certa, nada se move', () => {
+  const certa = [{ rotulo: 'Sem', arrendamentoHa: null }, { rotulo: 'Com', arrendamentoHa: 900 }];
+  assert.deepEqual(ordenarRentabilidades(certa).map(x => x.rotulo), ['Sem', 'Com']);
+});
+
+t('ordenacao ESTAVEL: dois do mesmo grupo mantem a ordem de origem', () => {
+  const lista = [
+    { rotulo: 'Com A', arrendamentoHa: 100 }, { rotulo: 'Sem A', arrendamentoHa: null },
+    { rotulo: 'Com B', arrendamentoHa: 200 }, { rotulo: 'Sem B', arrendamentoHa: null },
+  ];
+  assert.deepEqual(ordenarRentabilidades(lista).map(x => x.rotulo), ['Sem A', 'Sem B', 'Com A', 'Com B']);
+});
+
+t('terra propria (arrendamento nulo) conta como SEM arrendamento', () => {
+  const lista = [{ rotulo: 'Terra propria', arrendamentoHa: null }];
+  assert.deepEqual(ordenarRentabilidades(lista).map(x => x.rotulo), ['Terra propria']);
+});
+
+t('nao muta a lista recebida', () => {
+  const orig = [{ rotulo: 'Com', arrendamentoHa: 10 }, { rotulo: 'Sem', arrendamentoHa: null }];
+  ordenarRentabilidades(orig);
+  assert.deepEqual(orig.map(x => x.rotulo), ['Com', 'Sem']);
+});
+
+t('exportacao antes de extracao; pagina antiga (sem base) conta como exportacao', () => {
+  const lista = [
+    { simbolo: 'K2O', base: 'extracao' }, { simbolo: 'P2O5', base: 'exportacao' }, { simbolo: 'N' },
+  ];
+  assert.deepEqual(ordenarExportacoes(lista).map(x => x.simbolo), ['P2O5', 'N', 'K2O']);
+});
+
+t('lista vazia nao quebra', () => {
+  assert.deepEqual(ordenarRentabilidades([]), []);
+  assert.deepEqual(ordenarExportacoes([]), []);
 });
 
 console.log(`\n${ok} ok, ${fail} falhas\n`);

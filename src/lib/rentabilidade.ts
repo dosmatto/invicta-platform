@@ -321,3 +321,25 @@ export function classesRentabilidadeDaLegenda(
 
 /** Índice da faixa de um valor — reexportado para quem desenha os ticks. */
 export { indiceFaixa };
+
+// ── Ordem das páginas no relatório ──────────────────────────────────────────
+//
+// A leitura do relatório é uma narrativa: primeiro o que a lavoura PRODUZIU,
+// depois o que ela PAGOU. Dentro da rentabilidade, a terra própria vem antes da
+// arrendada — o arrendamento é um custo a mais, e ver primeiro o resultado sem
+// ele é o que deixa medir quanto ele pesa.
+//
+// Ordenação ESTÁVEL: dois cenários do mesmo grupo mantêm a ordem em que foram
+// montados (é ela que casa com a lista da tela).
+
+/** Sem arrendamento primeiro, com arrendamento depois. */
+export function ordenarRentabilidades<T extends { arrendamentoHa: number | null }>(lista: readonly T[]): T[] {
+  return [...lista].sort((a, b) =>
+    Number(a.arrendamentoHa != null) - Number(b.arrendamentoHa != null));
+}
+
+/** Exportação antes de extração (páginas antigas, sem `base`, são exportação). */
+export function ordenarExportacoes<T extends { base?: 'exportacao' | 'extracao' }>(lista: readonly T[]): T[] {
+  return [...lista].sort((a, b) =>
+    Number(a.base === 'extracao') - Number(b.base === 'extracao'));
+}
