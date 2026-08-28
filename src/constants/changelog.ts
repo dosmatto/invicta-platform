@@ -1,5 +1,13 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.96.0': [
+    'RENTABILIDADE POR ZONA DE MANEJO — páginas novas no relatório de produtividade, uma por cenário (sem arrendamento e com arrendamento), logo depois dos mapas de rentabilidade do talhão. Elas respondem a pergunta que o mapa pixel a pixel não responde de bate-pronto: QUANTO CADA ZONA RENDEU EM DINHEIRO.',
+    'A MARGEM DE CADA ZONA VEM DA PRODUTIVIDADE MÉDIA DELA — "a zona alta rendeu 4.380 kg/ha, a baixa 2.640" —, multiplicada pelo preço e descontado o custo. O custo é o mesmo em todas as zonas (é um R$/ha só), então diferença de margem entre zonas é, por construção, diferença de PRODUTIVIDADE.',
+    'A TABELA traz zona, classe, área, produtividade média, receita/ha, margem/ha e margem total, da zona mais rentável para a menos, com a margem negativa em vermelho e a linha de fechamento do talhão. O mapa ao lado pinta cada zona com a MESMA faixa de cor do mapa da página anterior — zona vermelha está, literalmente, na faixa vermelha da rentabilidade.',
+    'O QUE A MÉDIA NÃO DIZ, a página diz com todas as letras: uma zona pode fechar positiva com manchas negativas dentro. Quanto cada zona rendeu é aqui; ONDE deu prejuízo continua sendo o mapa pixel a pixel. Zona sem nenhum pixel de colheita fica fora da conta e é nomeada no rodapé, em vez de entrar como zero.',
+    'Com arrendamento, todas as margens caem exatamente o valor do arrendamento — dá para ler no par de páginas quanto ele pesa em cada zona.',
+    '9 testes novos (npm run teste:rentabilidade, 57 no total): a margem saindo da média, a média do talhão ponderada PELA ÁREA (e não a média das zonas), os totais fechando e a zona sem dado ficando de fora.',
+  ],
   '2.95.0': [
     'EXPORTAÇÃO E EXTRAÇÃO DE NUTRIENTES PASSARAM A SER EM ELEMENTO: onde se lia K₂O agora se lê K, e onde se lia P₂O₅ agora se lê P. Vale para o cadastro (Biblioteca → Exportação de Nutrientes, nas duas tabelas), para as caixas de seleção do relatório de produtividade e para o próprio relatório. É como a literatura de absorção e exportação publica os números.',
     'A CONVERSÃO USA AS MASSAS ATÔMICAS, não um decimal copiado de tabela: P₂O₅ = 141,9425 g/mol e K₂O = 94,1956 g/mol, de onde saem P = P₂O₅ × 0,436427 e K = K₂O × 0,830151 (a volta é × 2,291335 e × 1,204600). Os fatores ficam num módulo só, com a conta à vista, e os testes conferem os quatro números e a ida-e-volta.',

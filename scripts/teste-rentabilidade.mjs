@@ -15,7 +15,7 @@ import {
   precoPorKg, rotuloPreco, margemDoPixel, gridRentabilidade,
   pontoEquilibrioKgha, resumoRentabilidade, classesRentabilidade, classesRentabilidadeDaLegenda, SACA_KG_PADRAO,
   arrendamentoPorHa, ALQUEIRES, ALQUEIRE_HA_PADRAO,
-  ordenarRentabilidades, ordenarExportacoes,
+  ordenarRentabilidades, ordenarExportacoes, rentabilidadePorZona,
 } from '../src/lib/rentabilidade.ts';
 import { classesComBordas, corCheiaDaClasse } from '../src/lib/legendas.ts';
 import { legendaRentabilidade, BORDAS_RENTAB } from '../src/constants/legendasSeedOficial.ts';
@@ -381,6 +381,78 @@ t('exportacao antes de extracao; pagina antiga (sem base) conta como exportacao'
 t('lista vazia nao quebra', () => {
   assert.deepEqual(ordenarRentabilidades([]), []);
   assert.deepEqual(ordenarExportacoes([]), []);
+});
+
+
+console.log('\nRentabilidade por zona de manejo\n');
+
+// Preco 1,50/kg e custo 4.500/ha -> equilibrio em 3.000 kg/ha.
+const PZ = { precoKg: 1.5, custoHa: 4500 };
+const Z = (id, classe, areaHa, mediaKgha) => ({ id, classeLabel: classe, areaHa, mediaKgha });
+
+t('a margem de cada zona sai da MEDIA de produtividade dela', () => {
+  const r = rentabilidadePorZona([Z('1', 'Alta', 10, 4200)], PZ);
+  const z = r.zonas[0];
+  assert.equal(z.receitaHa, 6300);          // 4200 x 1,50
+  assert.equal(z.margemHa, 1800);           // 6300 - 4500
+  assert.equal(z.margemTotal, 18_000);      // x 10 ha
+  assert.equal(z.lucrativa, true);
+});
+
+t('zona abaixo do ponto de equilibrio fecha NEGATIVA', () => {
+  const r = rentabilidadePorZona([Z('3', 'Baixa', 8, 2600)], PZ);
+  assert.equal(r.zonas[0].margemHa, -600);  // 3900 - 4500
+  assert.equal(r.zonas[0].lucrativa, false);
+  assert.equal(r.areaPrejuizoHa, 8);
+});
+
+t('zonas saem da MAIOR margem/ha para a menor', () => {
+  const r = rentabilidadePorZona([Z('3', 'Baixa', 8, 2600), Z('1', 'Alta', 10, 4200), Z('2', 'Media', 12, 3400)], PZ);
+  assert.deepEqual(r.zonas.map(z => z.id), ['1', '2', '3']);
+});
+
+t('a margem media do talhao e PONDERADA PELA AREA, nao a media das zonas', () => {
+  // 10 ha a +1800 e 30 ha a -600 -> total 0; a media simples das zonas daria +600.
+  const r = rentabilidadePorZona([Z('1', 'Alta', 10, 4200), Z('2', 'Baixa', 30, 2600)], PZ);
+  assert.equal(r.margemTotal, 18_000 - 18_000);
+  assert.equal(r.margemMediaHa, 0);
+});
+
+t('totais fecham: receita, custo e margem', () => {
+  const r = rentabilidadePorZona([Z('1', 'Alta', 10, 4200), Z('2', 'Baixa', 20, 2800)], PZ);
+  assert.equal(r.areaHa, 30);
+  assert.equal(r.custoTotal, 135_000);                       // 4500 x 30
+  assert.equal(r.receitaTotal, 6300 * 10 + 4200 * 20);
+  assert.ok(Math.abs(r.margemTotal - (r.receitaTotal - r.custoTotal)) < 1e-6);
+});
+
+t('zona SEM pixel de colheita fica de fora da conta, mas e nomeada', () => {
+  const r = rentabilidadePorZona([Z('1', 'Alta', 10, 4200), Z('9', 'Sem dado', 5, null)], PZ);
+  assert.equal(r.zonas.length, 1);
+  assert.equal(r.areaHa, 10, 'a area da zona sem dado nao entra');
+  assert.deepEqual(r.zonasSemDado, ['9']);
+});
+
+t('percentual de area soma 100 entre as zonas com dado', () => {
+  const r = rentabilidadePorZona([Z('1', 'Alta', 10, 4000), Z('2', 'Baixa', 30, 3000)], PZ);
+  assert.ok(Math.abs(r.zonas.reduce((s, z) => s + z.pctArea, 0) - 100) < 1e-9);
+});
+
+t('sem zona nenhuma nao quebra nem divide por zero', () => {
+  const r = rentabilidadePorZona([], PZ);
+  assert.deepEqual(r.zonas, []);
+  assert.equal(r.margemMediaHa, 0);
+  assert.equal(r.margemTotal, 0);
+});
+
+t('custo maior (com arrendamento) desloca TODAS as margens pelo mesmo valor', () => {
+  const zs = [Z('1', 'Alta', 10, 4200), Z('2', 'Baixa', 20, 2800)];
+  const sem = rentabilidadePorZona(zs, PZ);
+  const com = rentabilidadePorZona(zs, { ...PZ, custoHa: 5500 });
+  for (const [i, z] of com.zonas.entries()) {
+    assert.ok(Math.abs((sem.zonas[i].margemHa - z.margemHa) - 1000) < 1e-9, 'diferenca = o arrendamento');
+  }
+  assert.deepEqual(com.zonas.map(z => z.id), sem.zonas.map(z => z.id), 'a ordem nao muda');
 });
 
 console.log(`\n${ok} ok, ${fail} falhas\n`);

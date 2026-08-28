@@ -30,7 +30,7 @@ import type { ResumoValores } from './validacao/tipos';
 import type { Separacao } from './validacao/estatistica';
 import { nivelCobertura } from './cobertura';
 import type { ResumoRentabilidade } from './rentabilidade';
-import { ordenarRentabilidades, ordenarExportacoes } from './rentabilidade.ts';
+import { ordenarRentabilidades, ordenarExportacoes, rentabilidadePorZona } from './rentabilidade.ts';
 import type { ResumoExportacao, EquivalenteFertilizante } from './exportacao';
 
 // ── Entrada ──────────────────────────────────────────────────────────────────
@@ -1417,6 +1417,113 @@ async function paginaZonas(doc: JsPDF, d: DadosRelatorioProd, logos: Logos): Pro
   marcaInvicta(doc, logos.inv, 'esquerda');
   rodape(doc, logos);
 }
+// ── Rentabilidade POR ZONA DE MANEJO ────────────────────────────────────────
+//
+// Uma página por cenário (sem e com arrendamento). A margem de cada zona vem da
+// PRODUTIVIDADE MÉDIA dela — a conta está em lib/rentabilidade.ts, com teste.
+//
+// O mapa usa as MESMAS faixas de cor da página anterior: zona pintada de
+// vermelho está, literalmente, na faixa vermelha do mapa pixel a pixel. Inventar
+// uma rampa só para esta figura faria o leitor comparar duas escalas diferentes.
+async function paginaRentabilidadeZonas(
+  doc: JsPDF, d: DadosRelatorioProd, r: NonNullable<DadosRelatorioProd['rentabilidades']>[number], logos: Logos,
+): Promise<void> {
+  const zs = d.zonas.filter(z => z.stats);
+  const R = rentabilidadePorZona(
+    d.zonas.map(z => ({ id: z.id, classeLabel: z.classeLabel, areaHa: z.areaHa, mediaKgha: z.stats?.media ?? null })),
+    { precoKg: r.resumo.precoKg, custoHa: r.resumo.custoHa },
+  );
+  const q = r.classes;
+  const corDaMargem = (margemHa: number) => q.faixas[Math.min(q.faixas.length - 1, indiceFaixa(margemHa, q.breaks))]?.cor ?? '#94a3b8';
+  const geomDe = new Map(zs.map(z => [z.id, z.geometry]));
+
+  cabecalho(doc, d, logos, 'RENTABILIDADE', san(`Por zona de manejo - ${r.rotulo}`));
+
+  // ── mapa (esquerda) ──
+  const mapaX = M, mapaY = 31, mapaW = 126, mapaH = 118;
+  try {
+    const png = await capturarMapaZonas({
+      bounds: d.bounds, externo: d.poligono, linhas: [], satelite: false, preencherAlpha: 0.9,
+      zonas: R.zonas.filter(z => geomDe.has(z.id)).map(z => ({
+        geometry: geomDe.get(z.id)!, cor: corDaMargem(z.margemHa), rotulo: z.id,
+      })),
+      larguraPx: Math.round(mapaW * PXMM), alturaPx: Math.round(mapaH * PXMM),
+    });
+    const jpg = await imagemParaPdf(png, mapaW);
+    doc.addImage(jpg.data, jpg.formato, mapaX, mapaY, mapaW, mapaH);
+  } catch { /* sem mapa a tabela ainda vale */ }
+  doc.setDrawColor(...LINE); doc.setLineWidth(0.4); doc.rect(mapaX, mapaY, mapaW, mapaH, 'S');
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(6); doc.setTextColor(...GRAY);
+  doc.text(san('Cor = a mesma faixa de margem do mapa da pagina anterior.'), mapaX, mapaY + mapaH + 4);
+
+  // ── tabela (direita) ──
+  const tx = mapaX + mapaW + 6, tw = W - M - tx;
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(5.5); doc.setTextColor(...GRAY);
+  // Colunas com folga medida: à direita, número e cabeçalho terminam na MESMA
+  // borda, então duas colunas coladas se sobrepõem em vez de avisar.
+  const cHa = tx + 60, cMedia = tx + 86, cRec = tx + 110, cMar = tx + 131, cTot = tx + tw;
+  let ty = mapaY + 4;
+  doc.text('ZONA', tx + 5, ty);
+  doc.text('CLASSE', tx + 22, ty);
+  doc.text('ha', cHa, ty, { align: 'right' });
+  doc.text(`MEDIA (${rotuloUnidade(d.unidade)})`, cMedia, ty, { align: 'right' });
+  doc.text('RECEITA/ha', cRec, ty, { align: 'right' });
+  doc.text('MARGEM/ha', cMar, ty, { align: 'right' });
+  doc.text('MARGEM TOTAL', cTot, ty, { align: 'right' });
+  ty += 1.5; doc.setDrawColor(...LINE); doc.setLineWidth(0.2); doc.line(tx, ty, tx + tw, ty); ty += 4;
+
+  const cabem = Math.max(6, Math.floor((MARCA_Y - 34 - ty) / 4.4));
+  const mostradas = R.zonas.slice(0, cabem);
+  for (const z of mostradas) {
+    doc.setFillColor(...hexRgb(corDaMargem(z.margemHa))); doc.roundedRect(tx, ty - 2.4, 3, 3, 0.5, 0.5, 'F');
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(6.2); doc.setTextColor(...NAVY);
+    doc.text(clipTexto(doc, san(z.id), 15), tx + 5, ty);
+    doc.setTextColor(...GRAY);
+    doc.text(clipTexto(doc, san(z.classeLabel), 30), tx + 22, ty);
+    doc.text(fmt(z.areaHa, 1), cHa, ty, { align: 'right' });
+    doc.setTextColor(...NAVY);
+    doc.text(emU(z.mediaKgha, d.unidade), cMedia, ty, { align: 'right' });
+    doc.setTextColor(...GRAY);
+    doc.text(rs(z.receitaHa), cRec, ty, { align: 'right' });
+    // Prejuízo em vermelho: é o que se procura na tabela.
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(...(z.lucrativa ? NAVY : [192, 57, 43] as [number, number, number]));
+    doc.text(rs(z.margemHa), cMar, ty, { align: 'right' });
+    doc.text(rs(z.margemTotal), cTot, ty, { align: 'right' });
+    ty += 4.4;
+  }
+  if (R.zonas.length > mostradas.length) {
+    doc.setFont('helvetica', 'italic'); doc.setFontSize(5.5); doc.setTextColor(...GRAY);
+    doc.text(san(`+ ${R.zonas.length - mostradas.length} zona(s) — ver a planilha de zonas`), tx + 5, ty); ty += 4;
+  }
+
+  // Linha de fechamento
+  doc.setDrawColor(...LINE); doc.setLineWidth(0.2); doc.line(tx, ty - 3, tx + tw, ty - 3);
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(6.5); doc.setTextColor(...NAVY);
+  doc.text('TOTAL', tx + 5, ty + 0.5);
+  doc.text(fmt(R.areaHa, 1), cHa, ty + 0.5, { align: 'right' });
+  doc.text(rs(R.margemMediaHa), cMar, ty + 0.5, { align: 'right' });
+  doc.text(rs(R.margemTotal), cTot, ty + 0.5, { align: 'right' });
+  ty += 7;
+
+  // Nota — o que esta página responde e o que ela NÃO responde.
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(6); doc.setTextColor(...GRAY);
+  const nota = [
+    `Margem de cada zona = produtividade MEDIA dela x ${rs(r.resumo.precoKg, 2)}/kg - ${rs(r.resumo.custoHa)}/ha (custo igual em todas).`,
+    R.areaPrejuizoHa > 0
+      ? `${fmt(R.areaPrejuizoHa, 1)} ha em zonas cuja media NAO paga o custo.`
+      : 'Todas as zonas fecham no positivo pela media.',
+    'A media diz quanto cada zona rendeu; ONDE deu prejuizo dentro dela, ver o mapa pixel a pixel da pagina anterior.',
+    ...(R.zonasSemDado.length ? [`Sem pixel de colheita (fora da conta): ${san(R.zonasSemDado.join(', '))}.`] : []),
+  ];
+  for (const linha of nota) {
+    for (const parte of doc.splitTextToSize(san(linha), tw) as string[]) { doc.text(parte, tx, ty); ty += 3; }
+  }
+
+  marcaInvicta(doc, logos.inv, 'esquerda');
+  rodape(doc, logos);
+}
+
 // ── Orquestração ─────────────────────────────────────────────────────────────
 
 export function validarProd(d: DadosRelatorioProd): string | null {
@@ -1461,7 +1568,13 @@ export async function renderProdutividadeNoDoc(
   if (d.zonas.filter(z => z.stats).length > ZONAS_INLINE_MAX) {
     await pag(() => paginaZonas(doc, d, logos));
   }
-  for (const r of ordenarRentabilidades(d.rentabilidades ?? [])) await pag(() => paginaRentabilidade(doc, d, r, logos));
+  const rents = ordenarRentabilidades(d.rentabilidades ?? []);
+  for (const r of rents) await pag(() => paginaRentabilidade(doc, d, r, logos));
+  // Rentabilidade POR ZONA — uma página por cenário, na mesma ordem (sem
+  // arrendamento antes de com). Só existe se houver zona com pixel de colheita.
+  if (d.zonas.some(z => z.stats)) {
+    for (const r of rents) await pag(() => paginaRentabilidadeZonas(doc, d, r, logos));
+  }
   for (const e of ordenarExportacoes(d.exportacoes ?? [])) await pag(() => paginaExportacao(doc, d, e, logos));
 }
 

@@ -343,3 +343,90 @@ export function ordenarExportacoes<T extends { base?: 'exportacao' | 'extracao' 
   return [...lista].sort((a, b) =>
     Number(a.base === 'extracao') - Number(b.base === 'extracao'));
 }
+
+// ── Rentabilidade POR ZONA DE MANEJO ────────────────────────────────────────
+//
+// A margem de cada zona sai da PRODUTIVIDADE MÉDIA dela (decisão do usuário),
+// não da integral pixel a pixel: é assim que a conversa acontece no campo —
+// "a zona alta rendeu 4.200 kg/ha, a baixa 2.600" — e é o número que já está na
+// tabela de zonas do relatório.
+//
+// A margem é LINEAR na produtividade (margem = preço × kg/ha − custo), então
+// usar a média da zona dá exatamente a margem média DELA. O que a média não diz
+// é quanto de área dentro da zona ficou no vermelho: uma zona pode fechar
+// positiva com manchas negativas dentro. Por isso esta tabela responde "quanto
+// cada zona rendeu", e o mapa pixel a pixel da página anterior continua sendo
+// quem responde "onde deu prejuízo" — o relatório diz isso com todas as letras.
+//
+// O CUSTO é o mesmo em todas as zonas: o usuário informa um R$/ha só. Diferença
+// de margem entre zonas é, portanto, diferença de PRODUTIVIDADE.
+
+export interface ZonaParaRentabilidade {
+  id: string;
+  classeLabel: string;
+  areaHa: number;
+  /** Produtividade média da zona (kg/ha). null = nenhum pixel caiu nela. */
+  mediaKgha: number | null;
+}
+
+export interface RentabilidadeZona {
+  id: string;
+  classeLabel: string;
+  areaHa: number;
+  pctArea: number;
+  mediaKgha: number;
+  receitaHa: number;
+  margemHa: number;
+  margemTotal: number;
+  lucrativa: boolean;
+}
+
+export interface RentabilidadePorZona {
+  /** Zonas da MAIOR margem por hectare para a menor. */
+  zonas: RentabilidadeZona[];
+  areaHa: number;
+  receitaTotal: number;
+  custoTotal: number;
+  margemTotal: number;
+  /** Ponderada pela área — não a média simples das zonas. */
+  margemMediaHa: number;
+  /** Área das zonas cuja MÉDIA não paga o custo. */
+  areaPrejuizoHa: number;
+  /** Zonas sem nenhum pixel de colheita: ficam de fora da conta, mas são ditas. */
+  zonasSemDado: string[];
+}
+
+export function rentabilidadePorZona(
+  zonas: readonly ZonaParaRentabilidade[],
+  params: { precoKg: number; custoHa: number },
+): RentabilidadePorZona {
+  const { precoKg, custoHa } = params;
+  const validas = zonas.filter(z => z.mediaKgha != null && Number.isFinite(z.mediaKgha) && z.areaHa > 0);
+  const areaHa = validas.reduce((s, z) => s + z.areaHa, 0);
+
+  const linhas: RentabilidadeZona[] = validas.map(z => {
+    const mediaKgha = z.mediaKgha as number;
+    const receitaHa = mediaKgha * precoKg;
+    const margemHa = receitaHa - custoHa;
+    return {
+      id: z.id, classeLabel: z.classeLabel, areaHa: z.areaHa,
+      pctArea: areaHa > 0 ? (z.areaHa / areaHa) * 100 : 0,
+      mediaKgha, receitaHa, margemHa,
+      margemTotal: margemHa * z.areaHa,
+      lucrativa: margemHa >= 0,
+    };
+  }).sort((a, b) => b.margemHa - a.margemHa);
+
+  const receitaTotal = linhas.reduce((s, z) => s + z.receitaHa * z.areaHa, 0);
+  const margemTotal = linhas.reduce((s, z) => s + z.margemTotal, 0);
+  return {
+    zonas: linhas,
+    areaHa,
+    receitaTotal,
+    custoTotal: custoHa * areaHa,
+    margemTotal,
+    margemMediaHa: areaHa > 0 ? margemTotal / areaHa : 0,
+    areaPrejuizoHa: linhas.filter(z => !z.lucrativa).reduce((s, z) => s + z.areaHa, 0),
+    zonasSemDado: zonas.filter(z => z.mediaKgha == null || !Number.isFinite(z.mediaKgha)).map(z => z.id),
+  };
+}
