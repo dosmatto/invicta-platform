@@ -1,5 +1,11 @@
-// EXPORTAÇÃO DE NUTRIENTES pela colheita: quanto de K2O e P2O5 saiu do talhão
-// dentro do grão, e quanto de fertilizante reporia isso.
+// EXPORTAÇÃO DE NUTRIENTES pela colheita: quanto de cada nutriente saiu do
+// talhão dentro do grão, e quanto de fertilizante reporia isso.
+//
+// BASE DAS UNIDADES (desde 27/08/2026): os coeficientes de exportação e
+// extração são em ELEMENTO (P, K); a garantia do fertilizante continua em
+// ÓXIDO (P₂O₅, K₂O), como vem no saco. Quem chama `equivalentesDe` é
+// responsável por converter a demanda para óxido antes — ver
+// lib/nutrienteBase.ts e ProdutividadeSection.
 //
 // Mesma forma matemática de `nutrientesPorZona` (prescricao/calculo.ts):
 // quantidade × teor. Aqui a quantidade é a produtividade do pixel e o teor é o
@@ -16,9 +22,9 @@
 import type { Nutriente } from './insumos.ts';
 
 /**
- * kg do nutriente, na forma de ÓXIDO (K2O, P2O5), exportados por TONELADA de
- * produto colhido na umidade comercial. O coeficiente depende da umidade de
- * referência — por isso ela viaja junto no cadastro.
+ * kg do nutriente, em ELEMENTO (P, K), exportados por TONELADA de produto
+ * colhido na umidade comercial. O coeficiente depende da umidade de referência
+ * — por isso ela viaja junto no cadastro.
  */
 export type CoeficientesExportacao = Partial<Record<Nutriente, number>>;
 
@@ -103,6 +109,10 @@ export interface EquivalenteFertilizante extends ProdutoEquivalente {
 
 /**
  * Quanto de cada produto reporia a exportação média.
+ *
+ * `nutrienteMedioKgHa` tem de chegar na MESMA base da garantia do produto —
+ * óxido. A exportação é calculada em elemento, então o chamador converte antes
+ * (paraOxido). Dividir elemento por garantia em óxido erra a dose para MENOS.
  *
  * Garantia ausente, zero ou negativa é PULADA, não dividida: o resultado seria
  * Infinity chegando à tela como uma dose absurda e crível.

@@ -376,6 +376,11 @@ export interface ConteudoExportacao {
    *  palhada). Sempre maior que a exportação, e não se repõe integralmente —
    *  a palhada fica no talhão. Ausente = a cultura só tem exportação cadastrada. */
   coeficientesExtracao?: { n?: number; p2o5?: number; k2o?: number; s?: number; ca?: number; mg?: number };
+  /** Os coeficientes acima estão em ELEMENTO (P, K) e não em óxido (P₂O₅,
+   *  K₂O). Marca posta pela migração de 27/08/2026 e por todo cadastro novo —
+   *  é ela que impede converter duas vezes. Ausente = cadastro antigo, ainda
+   *  em óxido. Ver lib/nutrienteBase.ts. */
+  baseElemento?: boolean;
   fonte?: string;
   observacoes?: string;
 }

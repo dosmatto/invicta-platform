@@ -7,6 +7,7 @@ import type { Legenda } from './legendas';
 import { classesFertilidade5, ordenarLegendasDoAtributo, deveSemearLegendas, promocoesDeHomonimas } from './legendas';
 import { legendaRentabilidade } from '@/constants/legendasSeedOficial';
 import { deveSemearCatalogo, podeMigrarCatalogo, gemeasAExcluir } from './catalogoVariaveis';
+import { coefsParaElemento } from './nutrienteBase';
 export { ordenarLegendasDoAtributo } from './legendas';
 import type { AmbienteProdutivo } from './meap/tipos';
 import { cloudPushLista, cloudAindaNaoHidratou, cloudMarcarPendente } from './cloud';
@@ -31,6 +32,7 @@ import {
   type ConteudoVariavel,
   type EstiloRecomendacao,
   type PresetEstiloRec,
+  type ConteudoExportacao,
 } from './biblioteca';
 import { ELEMENTOS_LAB, simboloElemento, norm as normLab, calcularDerivados, DERIVADOS_IDS } from './lab';
 import { anoDeData, epocaDeData, periodoDeData, anoDaSafra, hojeSaoPauloISO, partesData, dataValida, type Epoca } from './periodo';
@@ -1741,6 +1743,41 @@ const ORDEM_PADRAO_FERT: string[] = [
   'mo', 'ph', 'm', 'v', 'ctc', 'p', 'k', 'satk', 'ca', 'mg', 'satca', 'satmg', 't',
   's', 'b', 'zn', 'cu', 'mn', 'fe', 'al', 'textura',
 ];
+
+// EXPORTAÇÃO/EXTRAÇÃO passaram a ser cadastradas em ELEMENTO (P, K) — decisão
+// do usuário em 27/08/2026, para acompanhar a literatura de absorção. O que já
+// estava cadastrado veio em ÓXIDO (P₂O₅, K₂O), como o próprio módulo declarava,
+// então é convertido UMA vez: P₂O₅ × 0,436427 e K₂O × 0,830151.
+//
+// A trava contra converter duas vezes é a MARCA NO PRÓPRIO REGISTRO
+// (`baseElemento`), não uma flag no aparelho: flag de localStorage é por
+// navegador e o dado é sincronizado — foi assim que a ordem dos elementos ficou
+// sendo reescrita a cada máquina nova (v2.80.0). Aqui, item marcado nunca mais
+// é tocado, em nenhum aparelho.
+//
+// A garantia do fertilizante NÃO entra nesta conversão: continua em óxido, que
+// é o que a lei manda estampar no saco. Quem cruza os dois converte na hora
+// (ver ProdutividadeSection → equivalentesDe).
+export function migrarExportacaoElementarV1() {
+  if (typeof window === 'undefined') return;
+  if (cloudAindaNaoHidratou()) return;   // não converter contra um cadastro pela metade
+  const itens = bibListar<ConteudoExportacao>('exportacao');
+  let n = 0;
+  for (const it of itens) {
+    const c = it.conteudo;
+    if (!c || c.baseElemento) continue;
+    bibAtualizar<ConteudoExportacao>('exportacao', it.id, {
+      conteudo: {
+        ...c,
+        coeficientes: coefsParaElemento(c.coeficientes) ?? c.coeficientes,
+        coeficientesExtracao: coefsParaElemento(c.coeficientesExtracao),
+        baseElemento: true,
+      },
+    });
+    n++;
+  }
+  if (n) console.info(`[exportação] ${n} cadastro(s) convertido(s) de óxido para elemento (P, K).`);
+}
 
 // CURA as variáveis GÊMEAS que as versões anteriores criaram: duas (ou mais)
 // linhas com o mesmo varId, nascidas de um seed que rodou antes de a nuvem

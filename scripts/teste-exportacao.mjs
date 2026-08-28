@@ -12,6 +12,7 @@ import {
   coefDe, exportadoDoPixel, gridExportacao, resumoExportacao, equivalentesDe,
 } from '../src/lib/exportacao.ts';
 import { paraRelatorio } from '../src/lib/insumos.ts';
+import { OXIDO_PARA_ELEMENTO, ELEMENTO_PARA_OXIDO, MASSA_MOLAR, paraElemento, paraOxido, coefsParaElemento, SIMBOLO_ELEMENTO } from '../src/lib/nutrienteBase.ts';
 
 let ok = 0, fail = 0;
 function t(nome, fn) {
@@ -200,6 +201,76 @@ t('PONTA A PONTA: marcar 2 produtos tira a nota do "+ N nao listado(s)"', () => 
   const eq = equivalentesDe(60, 10, escolhidos);
   assert.deepEqual(eq.map(x => x.nome), ['F0', 'F1']);
   assert.ok(eq.length <= 6, 'nao sobra nada para o corte de 6 linhas');
+});
+
+// ── OXIDO x ELEMENTO (exportacao/extracao passaram a ser elementares) ──────
+const perto = (a, b, casas = 6) => assert.equal(Number(a.toFixed(casas)), Number(b.toFixed(casas)));
+
+t('massas molares conferem com a literatura', () => {
+  perto(MASSA_MOLAR.P2O5, 141.9425, 4);
+  perto(MASSA_MOLAR.K2O, 94.1956, 4);
+});
+
+t('fatores de conversao conferem (P 0,436427 · K 0,830151)', () => {
+  perto(OXIDO_PARA_ELEMENTO.p2o5, 0.436427);
+  perto(OXIDO_PARA_ELEMENTO.k2o, 0.830151);
+  perto(ELEMENTO_PARA_OXIDO.p2o5, 2.291335);
+  perto(ELEMENTO_PARA_OXIDO.k2o, 1.204600);
+});
+
+t('ida e volta devolve o mesmo numero', () => {
+  for (const nut of ['p2o5', 'k2o']) {
+    for (const v of [1, 6.4, 20, 137.5]) perto(paraOxido(nut, paraElemento(nut, v)), v, 9);
+  }
+});
+
+t('N, S, Ca e Mg passam direto — ja sao elementares no app', () => {
+  for (const nut of ['n', 's', 'ca', 'mg']) {
+    assert.equal(paraElemento(nut, 33), 33);
+    assert.equal(paraOxido(nut, 33), 33);
+  }
+});
+
+t('A DOSE DE ADUBO NAO MUDA — e a invariante desta mudanca', () => {
+  // Soja 60 sc/ha (3.600 kg/ha), coeficiente cadastrado 20 kg K2O/t, KCl 60%.
+  const prodKgha = 3600, coefOxidoKgT = 20, garantiaKClPct = 60;
+  const doseAntes = ((prodKgha / 1000) * coefOxidoKgT) / (garantiaKClPct / 100);
+  const coefElemento = paraElemento('k2o', coefOxidoKgT);
+  const demandaK = (prodKgha / 1000) * coefElemento;
+  const doseDepois = paraOxido('k2o', demandaK) / (garantiaKClPct / 100);
+  perto(doseDepois, doseAntes, 9);
+  perto(doseAntes, 120, 6);
+});
+
+t('esquecer de converter no cruzamento erraria a dose', () => {
+  // Se alguem dividir a demanda ELEMENTAR pela garantia em oxido sem converter,
+  // a dose cai para 83% no K e 43,6% no P — numero menor e ainda plausivel.
+  perto((1 / ELEMENTO_PARA_OXIDO.k2o) * 100, 83.0151, 3);
+  perto((1 / ELEMENTO_PARA_OXIDO.p2o5) * 100, 43.6427, 3);
+});
+
+t('converter a tabela mexe so em P e K, e nao inventa campo ausente', () => {
+  const antes = { n: 33, p2o5: 6, k2o: 20, s: 2.5 };
+  const dep = coefsParaElemento(antes);
+  assert.equal(dep.n, 33, 'N nao e oxido');
+  assert.equal(dep.s, 2.5);
+  perto(dep.p2o5, 6 * OXIDO_PARA_ELEMENTO.p2o5);
+  perto(dep.k2o, 20 * OXIDO_PARA_ELEMENTO.k2o);
+  perto(dep.p2o5, 2.6186, 4);   // 6 kg P2O5/t -> 2,62 kg P/t
+  perto(dep.k2o, 16.6030, 4);   // 20 kg K2O/t -> 16,60 kg K/t
+  assert.equal('ca' in dep, false, 'campo ausente continua AUSENTE (nao vira 0)');
+  assert.deepEqual(antes, { n: 33, p2o5: 6, k2o: 20, s: 2.5 }, 'nao muta a entrada');
+});
+
+t('zero declarado continua zero (e diferente de nao declarado)', () => {
+  assert.equal(coefsParaElemento({ k2o: 0 }).k2o, 0);
+  assert.equal(coefsParaElemento(undefined), undefined);
+});
+
+t('o simbolo exibido na exportacao/extracao e o do ELEMENTO', () => {
+  assert.equal(SIMBOLO_ELEMENTO.k2o, 'K');
+  assert.equal(SIMBOLO_ELEMENTO.p2o5, 'P');
+  assert.equal(SIMBOLO_ELEMENTO.n, 'N');
 });
 
 console.log(`\n${ok} ok, ${fail} falhas\n`);

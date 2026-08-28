@@ -4,9 +4,15 @@
 // talhão dentro do grão, por tonelada colhida.
 //
 // É o cadastro que alimenta o mapa de exportação do relatório de produtividade.
-// Os coeficientes vêm em ÓXIDO (K₂O, P₂O₅), que é como o mercado de fertilizante
-// fala, e dependem da UMIDADE de referência — daí o campo: um coeficiente
-// medido a 13% não descreve grão a 20%.
+// Os coeficientes são em ELEMENTO (P, K) — decisão do usuário em 27/08/2026,
+// para acompanhar a literatura de absorção/exportação. A GARANTIA DO
+// FERTILIZANTE continua em óxido (P₂O₅, K₂O), que é o que a lei manda estampar
+// no saco; quem cruza os dois converte na hora (ver lib/nutrienteBase.ts).
+// O cadastro que já existia foi convertido uma vez por
+// store.migrarExportacaoElementarV1, com marca no registro para não repetir.
+//
+// Os coeficientes dependem da UMIDADE de referência — daí o campo: um
+// coeficiente medido a 13% não descreve grão a 20%.
 //
 // A casa semeia valores de literatura como escopo Sistema; eles são editáveis
 // e cada item declara a fonte, porque a referência adotada é decisão
@@ -14,7 +20,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { listar, criar, atualizar, excluir as excluirItem, type ItemBiblioteca, type ConteudoExportacao } from '@/lib/biblioteca';
-import { NUTRIENTES, SIMBOLO_NUTRIENTE, type Nutriente } from '@/lib/insumos';
+import { NUTRIENTES, type Nutriente } from '@/lib/insumos';
+import { SIMBOLO_ELEMENTO } from '@/lib/nutrienteBase';
 import { CULTURAS } from '@/lib/store';
 import { inputStyle } from '@/constants/ui';
 import { Plus, Save, Trash2, Pencil, X, Recycle } from 'lucide-react';
@@ -59,6 +66,9 @@ export function ExportacaoPanel() {
     const limpo: ConteudoExportacao = {
       ...c,
       culturaId: (c.culturaId || 'outra').toLowerCase(),
+      // O que se digita aqui é ELEMENTO (P, K) — a marca impede que a migração
+      // de conversão (store.migrarExportacaoElementarV1) mexa nestes números.
+      baseElemento: true,
       // Coeficiente vazio é AUSENTE, não zero: zero declarado significa "esta
       // cultura não exporta este nutriente", que é outra afirmação.
       coeficientes: Object.fromEntries(
@@ -131,11 +141,11 @@ export function ExportacaoPanel() {
 
           <div>
             <p className="text-[10px] font-semibold mb-1" style={{ color: '#64748b' }}>
-              EXPORTAÇÃO — kg por tonelada colhida que sai do talhão no grão
+              EXPORTAÇÃO — kg por tonelada colhida que sai do talhão no grão (elemento: P, K)
             </p>
             <div className="grid grid-cols-3 gap-1.5">
               {NUTRIENTES.map(n => (
-                <Campo key={n} label={SIMBOLO_NUTRIENTE[n]}>
+                <Campo key={n} label={SIMBOLO_ELEMENTO[n]}>
                   <input type="number" step="0.1" value={c.coeficientes[n] ?? ''}
                     onChange={e => setCoef('coeficientes', n, e.target.value)}
                     className="w-full rounded px-1.5 py-1 text-[11px] outline-none" style={inputStyle} />
@@ -149,11 +159,11 @@ export function ExportacaoPanel() {
 
           <div>
             <p className="text-[10px] font-semibold mb-1" style={{ color: '#64748b' }}>
-              EXTRAÇÃO — kg por tonelada colhida absorvidos pela planta inteira (grão + palhada)
+              EXTRAÇÃO — kg por tonelada colhida absorvidos pela planta inteira (grão + palhada), em elemento
             </p>
             <div className="grid grid-cols-3 gap-1.5">
               {NUTRIENTES.map(n => (
-                <Campo key={n} label={SIMBOLO_NUTRIENTE[n]}>
+                <Campo key={n} label={SIMBOLO_ELEMENTO[n]}>
                   <input type="number" step="0.1" value={c.coeficientesExtracao?.[n] ?? ''}
                     onChange={e => setCoef('coeficientesExtracao', n, e.target.value)}
                     className="w-full rounded px-1.5 py-1 text-[11px] outline-none" style={inputStyle} />
@@ -202,7 +212,7 @@ export function ExportacaoPanel() {
                 </p>
                 <p className="text-[9px]" style={{ color: '#94a3b8' }}>
                   {usados.length
-                    ? usados.map(n => `${SIMBOLO_NUTRIENTE[n]} ${co[n]}`).join(' · ') + ' kg/t'
+                    ? usados.map(n => `${SIMBOLO_ELEMENTO[n]} ${co[n]}`).join(' · ') + ' kg/t'
                     : 'sem coeficiente declarado'}
                   {NUTRIENTES.some(n => Number.isFinite(it.conteudo?.coeficientesExtracao?.[n])) && ' · com extração'}
                 </p>
