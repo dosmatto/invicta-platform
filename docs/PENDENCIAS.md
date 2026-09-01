@@ -37,6 +37,8 @@ verdadeira (fusão de talhões) chegou depois; foi preciso renumerar.
 | 20 | Importação por planilha — feita na plataforma errada e revertida | 2.90.0 | Refeita na plataforma fitotécnica (Django) |
 | S/N | Gaveta dos cenários salvos (produtos, dose, faixa e custo sem reabrir) | 2.100.0 | Talhão → Recomendações → Cenários salvos |
 | 24 | Contraste e download em GeoTIFF na composição temporal | 2.101.0 | Talhão → NDVI → Composição temporal (e aba Camadas salvas) |
+| 25 | Comparativo visual de camadas ao classificar zonas | 2.102.0 | Talhão → Zonas → Editor Manual → Sugerir classificação → "Ver a camada no mapa" |
+| 26 | Incorporar divisas internas ao polígono atual do talhão | 2.107.0 | Talhão → Zonas → Zoneamentos e versões → ícone da tesoura |
 
 > As pendências 1–17 foram entregues antes deste registro existir e não estão
 > catalogadas; procure pelo assunto no `changelog.ts`. Da 18 em diante, tudo

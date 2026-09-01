@@ -17,7 +17,7 @@
 import { useMemo, useState } from 'react';
 import type { ZoneamentoMeap } from '@/lib/store';
 import { montarLinhagens, nomeCurto, type VersaoZoneamento } from '@/lib/meap/versoes';
-import { Star, Trash2, Eye, Pencil, Spline, GitCompare, RotateCcw, Tag, Check, X, AlertTriangle } from 'lucide-react';
+import { Star, Trash2, Eye, Pencil, Spline, Scissors, GitCompare, RotateCcw, Tag, Check, X, AlertTriangle } from 'lucide-react';
 
 interface Props {
   zoneamentos: ZoneamentoMeap[];
@@ -27,6 +27,8 @@ interface Props {
   onTornarPadrao: (id: string) => void;
   onEditar: (z: ZoneamentoMeap) => void;
   onSuavizar: (z: ZoneamentoMeap) => void;
+  /** Reajusta as divisas internas ao contorno ATUAL do talhão (cria nova versão). */
+  onIncorporar: (z: ZoneamentoMeap) => void;
   onExcluir: (id: string) => void;
   onRenomear: (id: string, nome: string) => void;
   onRestaurar: (v: VersaoZoneamento, nomeBase: string) => void;
@@ -47,7 +49,7 @@ function dataCurta(iso: string): string {
 
 export function VersoesZoneamentos({
   zoneamentos, vendoId, podeEditar,
-  onVer, onTornarPadrao, onEditar, onSuavizar, onExcluir, onRenomear, onRestaurar, onComparar,
+  onVer, onTornarPadrao, onEditar, onSuavizar, onIncorporar, onExcluir, onRenomear, onRestaurar, onComparar,
 }: Props) {
   const linhagens = useMemo(() => montarLinhagens(zoneamentos), [zoneamentos]);
   const [sel, setSel] = useState<string[]>([]);          // ids marcados p/ comparar
@@ -167,6 +169,9 @@ export function VersoesZoneamentos({
                             <button onClick={e => { e.stopPropagation(); onSuavizar(z); }}
                               title="Suavizar limites (cria uma NOVA versão; esta fica intacta)"
                               className="p-1 rounded" style={{ background: '#0b3a44', color: '#22d3ee' }}><Spline size={11} /></button>
+                            <button onClick={e => { e.stopPropagation(); onIncorporar(z); }}
+                              title="Incorporar as divisas internas ao contorno ATUAL do talhão — estica as que não alcançam (seguindo a trajetória da linha) e corta as que passam. Cria uma NOVA versão."
+                              className="p-1 rounded" style={{ background: '#0a2a44', color: '#7dd3fc' }}><Scissors size={11} /></button>
                             {!ultima && (
                               <button onClick={e => { e.stopPropagation(); onRestaurar(v, l.nome); }}
                                 title="Voltar a esta versão — ela é COPIADA para o topo da linha do tempo; nada do que veio depois é apagado"

@@ -324,6 +324,39 @@ export interface RespSuavizarZonas {
   resumo: ResumoSuavizacao;
 }
 
+/** Resposta de `/zonear-incorporar-divisas` — mesmo formato do suavizar, para
+ *  a tela reusar o painel de prévia que já existe. */
+export interface RespIncorporarDivisas {
+  fc: GeoJSON.FeatureCollection;
+  /** O que o talhão GANHOU e PERDEU em relação ao zoneamento antigo (a prévia pinta). */
+  diff: GeoJSON.FeatureCollection;
+  resumo: {
+    areaTalhaoHa: number; nZonas: number;
+    nDivisas: number; mDivisas: number;
+    nEsticadas: number; mEsticado: number;
+    nCortadas: number; mCortado: number;
+    nDescartadas: number;
+    areaGanhaHa: number; areaPerdidaHa: number;
+    coberturaPct: number; faltaM2: number; sobreposicaoM2: number;
+  };
+  avisos: string[];
+}
+
+/**
+ * Reajusta um zoneamento ANTIGO ao contorno ATUAL do talhão: descarta o limite
+ * externo velho, aproveita as divisas internas, estica as que não alcançam
+ * (seguindo a TRAJETÓRIA da linha) e corta as que passam.
+ */
+export async function incorporarDivisas(params: {
+  fc: GeoJSON.FeatureCollection;
+  poligono: GeoJSON.Polygon | GeoJSON.MultiPolygon;
+}): Promise<RespIncorporarDivisas> {
+  const r = await postZonear('/zonear-incorporar-divisas', {
+    fc: params.fc, poligono: params.poligono,
+  });
+  return r.json();
+}
+
 export async function suavizarZonas(params: {
   fc: GeoJSON.FeatureCollection;
   poligono?: GeoJSON.Polygon | GeoJSON.MultiPolygon | null;

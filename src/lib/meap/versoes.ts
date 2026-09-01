@@ -15,7 +15,7 @@
 
 import type { ZoneamentoMeap } from '../store';
 
-export type TipoVersao = 'importada' | 'gerada' | 'suavizada' | 'ajuste-manual' | 'restaurada';
+export type TipoVersao = 'importada' | 'gerada' | 'suavizada' | 'ajuste-manual' | 'restaurada' | 'incorporada';
 
 export const ROTULO_TIPO: Record<TipoVersao, string> = {
   importada: 'Importada',
@@ -23,6 +23,7 @@ export const ROTULO_TIPO: Record<TipoVersao, string> = {
   suavizada: 'Suavizada',
   'ajuste-manual': 'Ajuste manual',
   restaurada: 'Restaurada',
+  incorporada: 'Divisas incorporadas',
 };
 
 export interface VersaoZoneamento {
@@ -49,7 +50,7 @@ export interface Linhagem {
 /** De onde esta versão veio (id do zoneamento pai), se veio de alguma. */
 export function origemDe(z: ZoneamentoMeap): { id?: string; nome?: string } {
   const m = z.meta;
-  const fonte = m.restauracao ?? m.edicaoManual ?? m.suavizacao;
+  const fonte = m.restauracao ?? m.incorporacao ?? m.edicaoManual ?? m.suavizacao;
   return { id: fonte?.origemId, nome: fonte?.origemNome };
 }
 
@@ -57,6 +58,7 @@ export function origemDe(z: ZoneamentoMeap): { id?: string; nome?: string } {
 export function tipoDaVersao(z: ZoneamentoMeap): TipoVersao {
   const m = z.meta;
   if (m.restauracao) return 'restaurada';
+  if (m.incorporacao) return 'incorporada';
   if (m.edicaoManual) return 'ajuste-manual';
   if (m.suavizacao) return 'suavizada';
   if (m.importacao) return 'importada';
@@ -74,6 +76,17 @@ export function resumoDaVersao(z: ZoneamentoMeap): string {
   const polis = m.nPoligonos ? `${m.nPoligonos} polígonos` : '';
   if (m.restauracao) {
     return `cópia da ${m.restauracao.origemNome ?? 'versão anterior'} — o histórico segue intacto`;
+  }
+  if (m.incorporacao) {
+    const c = m.incorporacao;
+    const partes = [
+      `${c.nDivisas} divisa(s) interna(s) aproveitada(s)`,
+      c.nEsticadas ? `${c.nEsticadas} esticada(s) até o limite atual` : '',
+      c.nCortadas ? `${c.nCortadas} cortada(s) no limite` : '',
+      c.nDescartadas ? `${c.nDescartadas} descartada(s)` : '',
+      polis,
+    ].filter(Boolean);
+    return partes.join(' · ');
   }
   if (m.edicaoManual) {
     const e = m.edicaoManual;
@@ -103,12 +116,12 @@ export function resumoDaVersao(z: ZoneamentoMeap): string {
 /** Quem assinou a versão (quando ficou registrado). */
 export function usuarioDaVersao(z: ZoneamentoMeap): string | undefined {
   const m = z.meta;
-  return m.restauracao?.usuario ?? m.edicaoManual?.usuario ?? m.suavizacao?.usuario ?? m.importacao?.usuario;
+  return m.restauracao?.usuario ?? m.incorporacao?.usuario ?? m.edicaoManual?.usuario ?? m.suavizacao?.usuario ?? m.importacao?.usuario;
 }
 
 // Sufixos que as derivações penduram no nome. Tirados para o cabeçalho da
 // linhagem mostrar o nome do zoneamento, não a pilha de operações.
-const SUFIXOS = /\s+—\s+(Suavização|Ajuste manual|V\d+\s|Restaurada).*$/i;
+const SUFIXOS = /\s+—\s+(Suavização|Ajuste manual|V\d+\s|Restaurada|Divisas incorporadas).*$/i;
 
 export function nomeBase(nome: string): string {
   let n = nome;

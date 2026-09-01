@@ -13,7 +13,8 @@ import { useApp } from '@/context/AppContext';
 import { getZoneamentosMeap, saveZoneamentoMeap, deleteZoneamentoMeap, renameZoneamentoMeap, setZoneamentoPadraoMeap, removerAdocaoMeap, getTalhoes, getLegendasPorAtributo, type Talhao, type ZoneamentoMeap, type SuavizacaoMeta, type EdicaoManualMeta, type OperacaoEdicaoZona } from '@/lib/store';
 import { usuarioAtual } from '@/lib/auth';
 import { pode } from '@/lib/empresa';
-import type { RespSuavizarZonas } from '@/lib/fertilidade';
+import type { RespSuavizarZonas, RespIncorporarDivisas } from '@/lib/fertilidade';
+import { IncorporarDivisas } from '@/components/talhao/IncorporarDivisas';
 import { SuavizarLimites } from './SuavizarLimites';
 import { EditorZonasManual } from './EditorZonasManual';
 import { obterOuAdotarAmbiente } from '@/lib/meap/adocao';
@@ -208,6 +209,9 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
   // Suavizar limites (S1): alvo (preview em edição OU zoneamento salvo) + prévia p/ o mapa.
   const [suav, setSuav] = useState<{ origem: 'preview' | { id: string; nome: string }; fc: GeoJSON.FeatureCollection } | null>(null);
   const [suavMapFc, setSuavMapFc] = useState<GeoJSON.FeatureCollection | null>(null);
+  // Incorporar divisas: zoneamento cujo contorno não bate mais com o talhão.
+  const [incorp, setIncorp] = useState<{ id: string; nome: string; fc: GeoJSON.FeatureCollection } | null>(null);
+  const [incorpMapFc, setIncorpMapFc] = useState<GeoJSON.FeatureCollection | null>(null);
   // Editor manual: zoneamento salvo em edição manual + prévia p/ o mapa.
   const [editorZona, setEditorZona] = useState<{ id: string; nome: string; fc: GeoJSON.FeatureCollection } | null>(null);
   const [editorMapFc, setEditorMapFc] = useState<GeoJSON.FeatureCollection | null>(null);
@@ -331,14 +335,16 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
   }, [potenciais]);
 
   // Mapa: prioridade = IMPORTAÇÃO em conferência > EDITOR MANUAL > prévia da
-  // SUAVIZAÇÃO > zoneamento salvo em visualização > preview gerado > (prévia de
-  // camada) > zonas adotadas.
+  // INCORPORAÇÃO DE DIVISAS > prévia da SUAVIZAÇÃO > zoneamento salvo em
+  // visualização > preview gerado > (prévia de camada) > zonas adotadas.
   useEffect(() => {
     let fc: GeoJSON.FeatureCollection | null = null;
     if (importFc) {
       fc = importFc;      // já vem pronto (cor + rotulo = nº da zona)
     } else if (editorMapFc) {
       fc = editorMapFc;   // já vem pronto (cor + rotulo=id + selecionada)
+    } else if (incorpMapFc) {
+      fc = incorpMapFc;   // já vem pronto (resultado + diff em amarelo)
     } else if (suavMapFc) {
       fc = featuresParaMapa(suavMapFc);
     } else if (vendoFc) {
@@ -374,7 +380,7 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
     if (!fc) { setZonasManejo(null); return; }
     setZonasManejo(fc);
     return () => setZonasManejo(null);
-  }, [importFc, editorMapFc, suavMapFc, vendoFc, res, zonas, previewCh, numDeRank, zoneamentos, talhao.id, talhao.zonasGeojson, refreshAmb, setZonasManejo]);
+  }, [importFc, editorMapFc, incorpMapFc, suavMapFc, vendoFc, res, zonas, previewCh, numDeRank, zoneamentos, talhao.id, talhao.zonasGeojson, refreshAmb, setZonasManejo]);
 
   // Fecha os painéis de edição ao trocar de talhão ou limpar o preview gerado.
   useEffect(() => { setSuav(null); setSuavMapFc(null); setEditorZona(null); setEditorMapFc(null); }, [talhao.id]);
@@ -682,6 +688,43 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
     saveZoneamentoMeap({ talhaoId: talhao.id, nome: nomeVersaoSuavizada(nomeBase, rotuloNivel), padrao: false, fc: fcNovo, meta });
     recarregarZon();
     setSuav(null); setSuavMapFc(null);
+  }
+
+  // ── Incorporar divisas: salvar como NOVA versão (o original é preservado) ──
+  function nomeVersaoIncorporada(base: string): string {
+    const desejado = `${base} — Divisas incorporadas`;
+    const nomes = new Set(getZoneamentosMeap(talhao.id).map(z => z.nome));
+    if (!nomes.has(desejado)) return desejado;
+    let n = 2;
+    while (nomes.has(`${desejado} (${n})`)) n++;
+    return `${desejado} (${n})`;
+  }
+
+  function salvarVersaoIncorporada(fcNovo: GeoJSON.FeatureCollection, resp: RespIncorporarDivisas) {
+    if (!incorp) return;
+    const r = resp.resumo;
+    const orig = zoneamentos.find(z => z.id === incorp.id) ?? null;
+    const meta: ZoneamentoMeap['meta'] = {
+      ...(orig?.meta ?? { camadas: [], algoritmo: '—', nPotenciais: 0, areaMinHa: 0, nZonas: 0 }),
+      nPoligonos: fcNovo.features.length,
+      nZonas: r.nZonas,
+      incorporacao: {
+        nDivisas: r.nDivisas, mDivisas: r.mDivisas,
+        nEsticadas: r.nEsticadas, mEsticado: r.mEsticado,
+        nCortadas: r.nCortadas, mCortado: r.mCortado,
+        nDescartadas: r.nDescartadas,
+        areaGanhaHa: r.areaGanhaHa, areaPerdidaHa: r.areaPerdidaHa,
+        coberturaPct: r.coberturaPct, avisos: resp.avisos,
+        origemId: orig?.id, origemNome: orig?.nome,
+        data: new Date().toISOString(), usuario: usuarioAtual()?.email ?? undefined,
+      },
+    };
+    saveZoneamentoMeap({
+      talhaoId: talhao.id, nome: nomeVersaoIncorporada(orig?.nome ?? incorp.nome),
+      padrao: false, fc: fcNovo, meta,
+    });
+    recarregarZon();
+    setIncorp(null); setIncorpMapFc(null);
   }
 
   // ── Editor manual: salvar como NOVA versão (o original é preservado) ──
@@ -1288,6 +1331,12 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
             onTornarPadrao={tornarPadrao}
             onEditar={z => { setEditorZona({ id: z.id, nome: z.nome, fc: z.fc }); setSuav(null); setSuavMapFc(null); }}
             onSuavizar={z => { setSuav({ origem: { id: z.id, nome: z.nome }, fc: z.fc }); setEditorZona(null); setEditorMapFc(null); }}
+            onIncorporar={z => {
+              // Um painel de cada vez: dois desenhando no mapa ao mesmo tempo
+              // deixaria o usuário sem saber qual prévia está vendo.
+              setIncorp({ id: z.id, nome: z.nome, fc: z.fc });
+              setSuav(null); setSuavMapFc(null); setEditorZona(null); setEditorMapFc(null);
+            }}
             onExcluir={excluir}
             onRenomear={renomearVersao}
             onRestaurar={restaurarVersao}
@@ -1320,6 +1369,12 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
               onPreview={setSuavMapFc}
               onSalvarVersao={salvarVersaoSuavizada}
               onClose={() => { setSuav(null); setSuavMapFc(null); }} />
+          )}
+          {incorp && (
+            <IncorporarDivisas titulo={incorp.nome} fcOriginal={incorp.fc} poligono={poligono}
+              onPreview={setIncorpMapFc}
+              onSalvarVersao={salvarVersaoIncorporada}
+              onClose={() => { setIncorp(null); setIncorpMapFc(null); }} />
           )}
         </div>
       )}

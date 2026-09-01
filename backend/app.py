@@ -16,6 +16,7 @@ from pydantic import BaseModel
 
 import admin_usuarios
 import interp
+import divisas
 import msr
 import cbers
 import colheita
@@ -583,6 +584,30 @@ def zonear_dividir(req: ReqDividirZona):
         raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:  # pragma: no cover
         raise HTTPException(status_code=500, detail=f"falha ao dividir a zona: {e}")
+
+
+class ReqIncorporarDivisas(BaseModel):
+    fc: dict[str, Any]                 # FeatureCollection do zoneamento ANTIGO
+    poligono: dict[str, Any]           # contorno ATUAL do talhão (Polygon/MultiPolygon)
+
+
+@app.post("/zonear-incorporar-divisas")
+def zonear_incorporar_divisas(req: ReqIncorporarDivisas):
+    """INCORPORAR DIVISAS INTERNAS ao polígono ATUAL do talhão.
+
+    O zoneamento é antigo e o contorno do talhão mudou depois: partes das zonas
+    ultrapassam o limite novo, outras não alcançam. Descarta o contorno externo
+    antigo, aproveita as DIVISAS INTERNAS (o trabalho agronômico), ESTICA as que
+    não alcançam SEGUINDO A TRAJETÓRIA da linha (não a menor distância), CORTA
+    as que passam, e reparticiona o talhão atual — cada face herdando a classe
+    da zona antiga. Só devolve resultado se a soma das faces fechar com o
+    talhão."""
+    try:
+        return divisas.incorporar_divisas(req.fc, req.poligono)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:  # pragma: no cover
+        raise HTTPException(status_code=500, detail=f"falha ao incorporar as divisas: {e}")
 
 
 @app.post("/zonear-analisar")

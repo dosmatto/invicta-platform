@@ -2226,7 +2226,7 @@ export interface ZoneamentoMeap {
   nome: string;
   padrao: boolean;
   fc: GeoJSON.FeatureCollection;   // polígonos {id, zona, classe, areaHa, potencialRank}
-  meta: { camadas: string[]; algoritmo: string; nPotenciais: number; areaMinHa: number; nZonas: number; nPoligonos?: number; cvMedio?: number | null; pesos?: Record<string, number>; chaves?: string[]; suavizacao?: SuavizacaoMeta; edicaoManual?: EdicaoManualMeta; importacao?: ImportacaoMeta; restauracao?: RestauracaoMeta };
+  meta: { camadas: string[]; algoritmo: string; nPotenciais: number; areaMinHa: number; nZonas: number; nPoligonos?: number; cvMedio?: number | null; pesos?: Record<string, number>; chaves?: string[]; suavizacao?: SuavizacaoMeta; edicaoManual?: EdicaoManualMeta; importacao?: ImportacaoMeta; restauracao?: RestauracaoMeta; incorporacao?: IncorporacaoMeta };
   criadoEm: string;
 }
 
@@ -2281,6 +2281,28 @@ export interface EdicaoManualMeta {
   origemId?: string;             // zoneamento de origem (versão restaurável)
   origemNome?: string;
   data: string;                  // ISO
+  usuario?: string;
+}
+
+// Registro de uma INCORPORAÇÃO DE DIVISAS ao polígono atual (versão derivada).
+// O zoneamento era antigo e o contorno do talhão mudou depois: o limite externo
+// velho foi descartado e as divisas internas foram esticadas/cortadas até fechar
+// com o contorno atual. Guarda o que foi feito para a versão contar a história.
+export interface IncorporacaoMeta {
+  nDivisas: number;              // divisas internas aproveitadas
+  mDivisas: number;
+  nEsticadas: number;            // quantas não alcançavam o limite
+  mEsticado: number;             // metros acrescentados seguindo a trajetória
+  nCortadas: number;             // quantas ultrapassavam
+  mCortado: number;
+  nDescartadas: number;          // não alcançaram nada e saíram (com aviso)
+  areaGanhaHa: number;           // o que o talhão ganhou em relação ao antigo
+  areaPerdidaHa: number;
+  coberturaPct: number;
+  avisos: string[];
+  origemId?: string;             // zoneamento de origem (versão original)
+  origemNome?: string;
+  data: string;
   usuario?: string;
 }
 

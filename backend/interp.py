@@ -62,7 +62,7 @@ AMPLITUDE_MIN = 0.30
 NUGGET_MAX = 0.10
 # Versao do motor de interpolacao (conferir em GET /health para saber se o
 # backend foi reiniciado com o codigo novo).
-VERSION = "interp-27-faixa-amostras"
+VERSION = "interp-28-incorporar-divisas"
 
 
 # ============================================================ instrumentacao

@@ -40,6 +40,7 @@ const ROTAS_LOCAIS = new Set([
   '/limpar-pontos',       // MapFilter da condutividade (denso, pesado)
   '/colheita-processar',  // limpeza dos dados de colheita (denso, pesado)
   '/zonear-analisar', '/zonear-gerar', '/zonear-suavizar', '/zonear-dividir',
+  '/zonear-incorporar-divisas',
 ]);
 export function rotaVaiParaLocal(rota: string): boolean {
   return ROTAS_LOCAIS.has(rota.split('?')[0]);

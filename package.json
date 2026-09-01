@@ -57,6 +57,8 @@
     "teste:custos": "node scripts/teste-custos-equacao.mjs",
     "teste:formula": "node scripts/teste-formula-avulsa.mjs",
     "teste:escala": "node scripts/teste-escala-classes.mjs",
+    "teste:divisas": "PY=\"$HOME/.invicta-fert-backend/venv/bin/python\"; [ -x \"$PY\" ] || PY=python3; \"$PY\" scripts/teste-incorporar-divisas.py",
+    "teste:divisas-proto": "PY=\"$HOME/.invicta-fert-backend/venv/bin/python\"; [ -x \"$PY\" ] || PY=python3; \"$PY\" scripts/teste-reajuste-divisas.py",
     "teste:validacao": "node scripts/teste-validacao.mjs",
     "teste:quantis": "node scripts/teste-quantis.mjs",
     "teste:rentabilidade": "node scripts/teste-rentabilidade.mjs",
