@@ -62,7 +62,7 @@ AMPLITUDE_MIN = 0.30
 NUGGET_MAX = 0.10
 # Versao do motor de interpolacao (conferir em GET /health para saber se o
 # backend foi reiniciado com o codigo novo).
-VERSION = "interp-26-cobrir-poligono"
+VERSION = "interp-27-faixa-amostras"
 
 
 # ============================================================ instrumentacao
@@ -564,6 +564,30 @@ def gerar_grid(points: list[dict], polygon_geojson: dict, pixel_m: float = 20.0,
             )
 
     if etapas: etapas.marca("interpolacao")
+
+    # LIMITE NA FAIXA DAS AMOSTRAS. A krigagem ordinaria NAO e combinacao convexa:
+    # os pesos podem ser NEGATIVOS (efeito de tela — um ponto proximo "esconde" o
+    # que esta atras dele), e ai a predicao sai da faixa dos dados. Nao e defeito
+    # de implementacao, e propriedade do metodo; o IDW nao tem isso porque e
+    # convexo por construcao.
+    #
+    # Medido neste repo: em 12 sorteios no modo automatico, 4 sairam da faixa —
+    # pior caso -30,7 a 87,1 com amostras de 4 a 70. O gaussiano e o mais propenso,
+    # mas o esferico tambem produz negativo. Caso real relatado: mapa de P com
+    # minimo -16,1 mg/dm3 e amostras todas positivas.
+    #
+    # Por que importa alem do mapa: o valor entra CRU na equacao de recomendacao.
+    # Um P negativo vira dose inflada — medido: +51% de tonelagem e +R$2.447 por
+    # causa de UM pixel —, e nada a jusante segura (ajustarDose limita a DOSE, nao
+    # o insumo; naoNegativo trata o caso oposto; doseMaxima e opcional).
+    #
+    # Limitamos AQUI, no fim, de proposito: o ajuste do variograma, a validacao
+    # cruzada e a guarda anti-degeneracao continuam vendo a krigagem crua, entao
+    # nenhuma DECISAO do algoritmo muda — so a saida. Pixel que ja estava na faixa
+    # fica identico, bit a bit.
+    if len(z):
+        grid = np.clip(grid, float(np.min(z)), float(np.max(z)))
+
     grid = _clip(grid, gx, gy, poly, mask)
     if etapas: etapas.marca("recorte")
     # bounds = extensao REAL da malha, nao o bbox do poligono. Sem folga os dois
