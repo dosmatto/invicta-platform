@@ -134,5 +134,26 @@ t('tres manchas: soma fecha e nenhuma fica de fora', () => {
   assert.deepEqual(r.map(x => x.rotulo), ['Área 1', 'Área 2', 'Área 3']);
 });
 
+
+t('AREA das partes fecha com a area do CADASTRO quando ela e informada', () => {
+  const r = volumesPorParte(TALHAO, [dose('Calcario', 1000, 1000, 90)], { areaTotalHa: 33.7 });
+  const soma = r.reduce((s, p) => s + p.areaHa, 0);
+  assert.ok(Math.abs(soma - 33.7) < 1e-6, `somou ${soma}`);
+  // a PROPORCAO entre as manchas nao muda com a reescala
+  const semEscala = volumesPorParte(TALHAO, [dose('Calcario', 1000, 1000, 90)]);
+  assert.ok(Math.abs((r[0].areaHa / r[1].areaHa) - (semEscala[0].areaHa / semEscala[1].areaHa)) < 1e-9);
+});
+
+t('sem area de cadastro (ou zero), usa a area geodesica da geometria', () => {
+  const a = volumesPorParte(TALHAO, [dose('Calcario', 1000, 1000, 90)]);
+  const b = volumesPorParte(TALHAO, [dose('Calcario', 1000, 1000, 90)], { areaTotalHa: 0 });
+  assert.deepEqual(a.map(p => p.areaHa), b.map(p => p.areaHa));
+});
+
+t('reescala nao mexe na QUANTIDADE de insumo (ela ja fecha com o total da dose)', () => {
+  const r = volumesPorParte(TALHAO, [dose('Calcario', 1500, 800, 137.4)], { areaTotalHa: 33.7 });
+  assert.ok(Math.abs(totaisPorProduto(r).Calcario - 137.4) < 1e-6);
+});
+
 console.log(`\n${ok} passaram, ${fail} falharam\n`);
 process.exit(fail ? 1 : 0);

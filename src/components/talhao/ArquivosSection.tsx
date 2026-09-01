@@ -14,12 +14,13 @@ import { extrairPoligono } from '@/lib/fertilidade';
 import { colorirDose } from '@/lib/raster';
 import { capturarMapaFertilidade } from '@/lib/capturaMapa';
 import { listarCenarios, descomprimirCenario, type Cenario } from '@/lib/recomendacao/cenarios';
-import { montarBookOficial, abrirOuBaixar } from '@/lib/recomendacao/relatorioCenarios';
+import { montarBookOficial, montarPdfDistribuicaoPorParte, abrirOuBaixar } from '@/lib/recomendacao/relatorioCenarios';
+import { nPartes } from '@/lib/recomendacao/porPoligono';
 import { MONITORES, monitorPorId, gerarShapefileZip } from '@/lib/recomendacao/shapefile';
 import { agruparPorRotulo, type DoseDaZona } from '@/lib/recomendacao/dosePorZona';
 import { zonasDoTalhao } from '@/lib/recomendacao/zonasDoTalhao';
 import { pode } from '@/lib/empresa';
-import { FileText, FileImage, Loader2, FolderArchive, Star, FileCode } from 'lucide-react';
+import { FileText, FileImage, Loader2, FolderArchive, Star, FileCode, Split } from 'lucide-react';
 import { fmtHa } from '@/lib/formato';
 
 const VAZIO: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
@@ -65,6 +66,9 @@ export function ArquivosSection({ safraNome }: { safraNome?: string }) {
     return null;
   }, [nav.talhaoId]);
 
+  // Talhão em manchas separadas: só aí faz sentido dizer quanto vai em cada uma.
+  const areasSeparadas = useMemo(() => nPartes(poligono), [poligono]);
+
   // SA03_RECOM_2026_CALCARIO. O nome do cenário/produto vira o detalhe — era ele
   // sozinho no nome ("recomendacao-Calagem 2026.pdf"), com espaço e acento que o
   // download engole mal e sem dizer de que talhão era.
@@ -84,6 +88,23 @@ export function ArquivosSection({ safraNome }: { safraNome?: string }) {
     catch (e) { if (aba) aba.close(); alert('Falha ao gerar o PDF: ' + (e instanceof Error ? e.message : String(e))); }
     finally { setBusy(''); }
   }
+  // Distribuição por área separada: PDF com o mapa das manchas numeradas e
+  // quanto de cada insumo vai em cada uma. Vive AQUI, junto do arquivo que vai
+  // para a máquina — é papel de despacho de carga, não de leitura de relatório.
+  async function distribuicao(c: Cenario) {
+    const aba = typeof window !== 'undefined' ? window.open('', '_blank') : null;
+    setBusy('dist-' + c.id);
+    try {
+      const full = await descomprimirCenario(c);
+      const marc = { ...full, doses: full.doses.filter(d => d.usar) };
+      const blob = await montarPdfDistribuicaoPorParte([marc]);
+      abrirOuBaixar(blob, aba, `${nomeRecom(c, c.nome + ' areas')}.pdf`);
+    } catch (e) {
+      if (aba) aba.close();
+      alert('Falha ao gerar a distribuição: ' + (e instanceof Error ? e.message : String(e)));
+    } finally { setBusy(''); }
+  }
+
   async function jpgDose(c: Cenario, eqId: string) {
     if (!poligono) { alert('Talhão sem polígono salvo.'); return; }
     setBusy(`jpg-${c.id}-${eqId}`);
@@ -173,6 +194,14 @@ export function ArquivosSection({ safraNome }: { safraNome?: string }) {
                   <div className="text-[11px] font-bold truncate" style={{ color: '#e2e8f0' }}>{c.nome}</div>
                   <div className="text-[9px]" style={{ color: '#64748b' }}>{c.doses.filter(d => d.usar).length} mapa(s) p/ uso · {fmtHa(c.financeiro.areaHa)} ha</div>
                 </div>
+                {areasSeparadas > 1 && (
+                  <button onClick={() => distribuicao(c)} disabled={!!busy}
+                    title={`Quanto de cada insumo vai em cada uma das ${areasSeparadas} áreas separadas do talhão`}
+                    className="px-2 py-1 rounded text-[10px] font-bold flex items-center gap-1"
+                    style={{ background: '#2a1e4d', color: '#c4b5fd', opacity: busy ? 0.6 : 1 }}>
+                    {busy === 'dist-' + c.id ? <Loader2 size={11} className="animate-spin" /> : <Split size={11} />} Distribuição
+                  </button>
+                )}
                 <button onClick={() => pdfOficial(c)} disabled={!!busy}
                   className="px-2 py-1 rounded text-[10px] font-bold text-white flex items-center gap-1" style={{ background: 'var(--invicta-green-dark)', opacity: busy ? 0.6 : 1 }}>
                   {busy === 'pdf-' + c.id ? <Loader2 size={11} className="animate-spin" /> : <FileText size={11} />} PDF oficial

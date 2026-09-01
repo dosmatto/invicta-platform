@@ -529,7 +529,7 @@ async function desenharDistribuicaoPorParte(
       bounds: it.d.bounds, toneladas: it.d.toneladas ?? 0, custo: it.d.custo ?? 0,
     };
   });
-  const partes = volumesPorParte(ctx.poligono, doses);
+  const partes = volumesPorParte(ctx.poligono, doses, { areaTotalHa: ctx.areaHa });
   if (partes.length < 2) return false;
   const produtos = [...new Set(doses.map(d => d.produto))];
 
@@ -606,7 +606,7 @@ async function desenharDistribuicaoPorParte(
 // (montarBookOficial), pelo relatório COMBINADO e pelo relatório da FAZENDA.
 export async function renderBookOficialNoDoc(
   doc: JsPDF, cenarios: Cenario[],
-  opts?: { novaPaginaAntes?: boolean; somenteUsar?: boolean; resumo?: boolean; porPoligono?: boolean },
+  opts?: { novaPaginaAntes?: boolean; somenteUsar?: boolean; resumo?: boolean },
 ): Promise<void> {
   if (cenarios.length === 0) return;
   const tId = cenarios[0].talhaoId, safra = cenarios[0].safra;
@@ -625,21 +625,36 @@ export async function renderBookOficialNoDoc(
     desenharResumoRecomendacao(doc, ctx, itens, logo);
     precisaPagina = true;
   }
-  // Distribuição por área separada: logo depois do resumo (é página de
-  // planejamento, lida antes dos mapas) e só quando o talhão tem mais de uma
-  // mancha — `desenharDistribuicaoPorParte` devolve false e nada é gasto.
-  if (opts?.porPoligono) {
-    if (precisaPagina) doc.addPage();
-    const saiu = await desenharDistribuicaoPorParte(doc, ctx, itens, logo);
-    if (saiu) precisaPagina = true;
-    else if (precisaPagina) doc.deletePage(doc.getNumberOfPages());
-  }
   for (const it of itens) {
     const numero = it.numero < 1e9 ? it.numero : 0;   // sem nº definido → título "00"
     if (precisaPagina) doc.addPage();
     precisaPagina = true;
     await desenharPaginaOficial(doc, it.d, it.cen.nome, ctx, logo, numero);
   }
+}
+
+/**
+ * PDF SÓ da distribuição por área separada — é o arquivo que a aba Arquivos
+ * gera. Fica ao lado do PDF oficial e do shapefile porque é material de
+ * DESPACHO (quanto mandar para cada mancha), não de leitura de relatório.
+ */
+export async function montarPdfDistribuicaoPorParte(cenarios: Cenario[]): Promise<Blob> {
+  if (cenarios.length === 0) throw new Error('Nenhuma recomendação selecionada.');
+  const ctx = ctxDoTalhao(cenarios[0].talhaoId, cenarios[0].safra);
+  if (!ctx) throw new Error('Talhão não encontrado.');
+  if (!ctx.poligono || nPartes(ctx.poligono) < 2) {
+    throw new Error('Este talhão é de área única — não há o que distribuir entre manchas.');
+  }
+  const itens = achatarDoses(cenarios, construirNumDe(), true);
+  if (itens.length === 0) {
+    throw new Error('Nenhuma dose marcada com ★ (estrela). Na aba Recomendações, marque as doses que serão utilizadas.');
+  }
+  const logo = await carregarImg('/images/logo-branca.png').catch(() => null);
+  const { jsPDF } = await import('jspdf');
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4', compress: true });
+  const saiu = await desenharDistribuicaoPorParte(doc, ctx, itens, logo);
+  if (!saiu) throw new Error('Nao foi possivel montar a distribuicao por area.');
+  return doc.output('blob');
 }
 
 export async function montarBookOficial(cenarios: Cenario[]): Promise<Blob> {
@@ -735,7 +750,7 @@ async function coletarGruposFazenda(fazendaId: string, safra: string) {
   return { faz, cli, grupos };
 }
 
-export async function montarRelatorioRecomendacaoFazenda(fazendaId: string, safra: string, opts?: { porPoligono?: boolean }): Promise<Blob> {
+export async function montarRelatorioRecomendacaoFazenda(fazendaId: string, safra: string): Promise<Blob> {
   const { faz, cli, grupos } = await coletarGruposFazenda(fazendaId, safra);
   if (!faz) throw new Error('Fazenda não encontrada.');
   if (grupos.length === 0) throw new Error('Nenhuma recomendação marcada com ★ nesta fazenda/safra. Marque as doses (★) na aba Recomendações dos talhões.');
@@ -747,17 +762,17 @@ export async function montarRelatorioRecomendacaoFazenda(fazendaId: string, safr
   // Cada talhão: só os MAPAS das doses ★ (o resumo já está consolidado na pág. 1).
   for (const g of grupos) {
     doc.addPage();
-    try { await renderBookOficialNoDoc(doc, g.cenarios, { novaPaginaAntes: false, somenteUsar: true, resumo: false, porPoligono: opts?.porPoligono }); }
+    try { await renderBookOficialNoDoc(doc, g.cenarios, { novaPaginaAntes: false, somenteUsar: true, resumo: false }); }
     catch (e) { console.warn('[relatorio-fazenda] talhão', g.talhao.nome, 'falhou:', e); }
   }
   return doc.output('blob');
 }
 
-export async function gerarRelatorioRecomendacaoFazenda(fazendaId: string, safra: string, opts?: { porPoligono?: boolean }): Promise<void> {
+export async function gerarRelatorioRecomendacaoFazenda(fazendaId: string, safra: string): Promise<void> {
   const aba = typeof window !== 'undefined' ? window.open('', '_blank') : null;
   if (aba) try { aba.document.write('<!doctype html><meta charset="utf-8"><title>Relatório</title><body style="font-family:system-ui,sans-serif;padding:28px;color:#334155"><p>⏳ Gerando o relatório de recomendação da fazenda… aguarde (capturando os mapas de todos os talhões).</p></body>'); } catch {}
   try {
-    const blob = await montarRelatorioRecomendacaoFazenda(fazendaId, safra, opts);
+    const blob = await montarRelatorioRecomendacaoFazenda(fazendaId, safra);
     const faz = getFazendas().find(f => f.id === fazendaId);
     abrirOuBaixar(blob, aba, nomeExport({
       fazenda: faz?.nome ?? '', siglaFazenda: faz?.sigla ?? null, tipo: 'RECOM',

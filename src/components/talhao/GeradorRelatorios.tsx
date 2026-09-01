@@ -61,9 +61,6 @@ export function GeradorRelatorios({ safraNome }: { safraNome?: string } = {}) {
   // Recomendação: só as doses marcadas com ★ + página-resumo (fórmula + qtd total).
   // Desligado por padrão = comportamento antigo (todas as doses, sem resumo).
   const [soMarcadas, setSoMarcadas] = useState(false);
-  // Distribuição por área separada: OPCIONAL e desligada por padrão — a maioria
-  // dos talhões é de área única e a página sairia com uma linha só.
-  const [porPoligono, setPorPoligono] = useState(false);
 
   const [historico, setHistorico] = useState<RegistroRelatorio[]>([]);
 
@@ -151,7 +148,6 @@ export function GeradorRelatorios({ safraNome }: { safraNome?: string } = {}) {
         nomeArquivo: nomeBook(ctx, nomeTalhao, safra),
         somenteUsarRec: soMarcadas,
         resumoRec: soMarcadas,
-        porPoligonoRec: porPoligono,
       });
 
       const elPorNut = ctx ? Object.fromEntries(ctx.elementos.map(e => [e.nut, e])) : {};
@@ -298,16 +294,6 @@ export function GeradorRelatorios({ safraNome }: { safraNome?: string } = {}) {
                 {soMarcadas
                   ? <p className="text-[9px] pl-1" style={{ color: '#8b7fd6' }}>Sai uma página-resumo (fórmula + quantidade total) + 1 mapa por dose marcada. {nStarSel === 0 && <span style={{ color: '#fbbf24' }}>Nenhuma ★ nos cenários selecionados — marque na aba Recomendações.</span>}</p>
                   : <p className="text-[9px] pl-1" style={{ color: '#64748b' }}>Saem todas as doses dos cenários selecionados (como antes).</p>}
-                {/* Talhão multipolígono: quanto de insumo vai em cada mancha. */}
-                <button onClick={() => setPorPoligono(v => !v)}
-                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left"
-                  style={{ background: porPoligono ? '#221b3a' : '#081627', border: `1px solid ${porPoligono ? '#a78bfa66' : '#0f2240'}` }}>
-                  {porPoligono ? <CheckSquare size={15} style={{ color: '#c4b5fd' }} /> : <Square size={15} style={{ color: '#475569' }} />}
-                  <span className="flex-1 text-[11px] font-semibold" style={{ color: porPoligono ? '#e2e8f0' : '#94a3b8' }}>Distribuição por área separada</span>
-                </button>
-                <p className="text-[9px] pl-1" style={{ color: porPoligono ? '#8b7fd6' : '#64748b' }}>
-                  Página a mais com o mapa das manchas numeradas e quanto de cada insumo vai em cada uma — para direcionar as carretas. Só sai em talhão com mais de uma área separada.
-                </p>
                 {cenarios.map(c => {
                   const on = selCen.has(c.id);
                   const nStar = c.doses.filter(d => d.usar).length;

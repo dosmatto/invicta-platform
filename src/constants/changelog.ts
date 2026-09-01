@@ -1,5 +1,12 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.97.0': [
+    'A DISTRIBUIÇÃO DO INSUMO POR ÁREA SEPARADA MUDOU DE LUGAR: saiu das opções do relatório e virou um BOTÃO NA ABA ARQUIVOS, ao lado do PDF oficial, do JPG e do SHP. É onde ela pertence — o número serve para carregar caminhão, não para ler relatório, e quem está despachando entra na aba Arquivos, não na de Relatórios.',
+    'O botão só aparece nos talhões com MAIS DE UMA ÁREA SEPARADA; em talhão de mancha única não há o que distribuir e ele nem é desenhado. Gera um PDF próprio, com o mapa das manchas numeradas e a tabela de quanto de cada insumo vai em cada uma.',
+    'CORRIGIDO NA MESMA PASSADA: a soma das áreas da tabela podia não fechar com a ÁREA do cabeçalho. A área de cada mancha é geodésica, calculada da geometria; a do cabeçalho é a do cadastro — e quando as duas divergem (limite reeditado, área digitada à mão) a conferência do usuário dava errado logo na primeira linha. Agora as partes são reescaladas para fechar com a área do cadastro, mantendo a proporção entre elas. A quantidade de insumo não muda: ela já fechava com o total da dose.',
+    'As opções antigas nas telas de Relatórios (talhão e fazenda) foram removidas — a função é a mesma, só que no lugar certo.',
+    '3 testes novos (npm run teste:porpoligono, 15 no total) travam o novo fechamento de área, inclusive a proporção entre as manchas ficando intacta.',
+  ],
   '2.96.0': [
     'RENTABILIDADE POR ZONA DE MANEJO — páginas novas no relatório de produtividade, uma por cenário (sem arrendamento e com arrendamento), logo depois dos mapas de rentabilidade do talhão. Elas respondem a pergunta que o mapa pixel a pixel não responde de bate-pronto: QUANTO CADA ZONA RENDEU EM DINHEIRO.',
     'A MARGEM DE CADA ZONA VEM DA PRODUTIVIDADE MÉDIA DELA — "a zona alta rendeu 4.380 kg/ha, a baixa 2.640" —, multiplicada pelo preço e descontado o custo. O custo é o mesmo em todas as zonas (é um R$/ha só), então diferença de margem entre zonas é, por construção, diferença de PRODUTIVIDADE.',

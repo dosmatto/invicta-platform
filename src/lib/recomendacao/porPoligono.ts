@@ -64,9 +64,18 @@ export function nPartes(p: GeoJSON.Polygon | GeoJSON.MultiPolygon | null): numbe
 export function volumesPorParte(
   poligono: GeoJSON.Polygon | GeoJSON.MultiPolygon,
   doses: DoseParaParte[],
+  opts?: { areaTotalHa?: number },
 ): ParteComVolume[] {
-  const areas = partesComArea(poligono);
-  if (areas.length === 0) return [];
+  const brutas = partesComArea(poligono);
+  if (brutas.length === 0) return [];
+  // A área de cada parte é geodésica, da GEOMETRIA; a do cabeçalho é a do
+  // CADASTRO. Quando as duas divergem (limite reeditado, área digitada à mão),
+  // a soma da tabela não fecharia com o total impresso na mesma folha — e é essa
+  // conferência que o usuário faz primeiro. Reescala mantendo as proporções.
+  const somaBruta = brutas.reduce((s, a) => s + a.areaHa, 0);
+  const alvo = opts?.areaTotalHa;
+  const k = alvo != null && alvo > 0 && somaBruta > 0 ? alvo / somaBruta : 1;
+  const areas = k === 1 ? brutas : brutas.map(a => ({ ...a, areaHa: a.areaHa * k }));
 
   // Cobertura de cada parte por GRID distinto — equações diferentes podem ter
   // malhas diferentes, e recalcular por dose custaria caro à toa.
