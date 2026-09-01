@@ -9,15 +9,17 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import { getPlantio, getComposicoes, saveComposicao, deleteComposicao, type ComposicaoTemporal } from '@/lib/store';
-import { coordsFromBounds, comprimirGrid, decodeGrid, type Grid } from '@/lib/fertilidade';
+import { coordsFromBounds, comprimirGrid, descomprimirGrid, decodeGrid, exportarGeotiff, type Grid } from '@/lib/fertilidade';
 import { colorirGrid } from '@/lib/raster';
+import { faixaPercentis } from '@/lib/quantis';
+import { sanitizar } from '@/lib/nomeExport';
 import { rampaVisualStops, type Legenda } from '@/lib/legendas';
 import { legendasDoModulo } from './SeletorLegenda';
 import { carregarNdviSalvos, encodeF32, type NdviCamada } from '@/lib/meap/gerar';
 import { cloudSalvarMapa, cloudCarregarMapasPorPrefixo, cloudExcluirMapasPorPrefixo } from '@/lib/cloud';
 import { compor, nomeTecnico, METODOS_COMPOSICAO, MIN_PCT_VALIDOS_ZONAS, type MetodoComposicao, type ResultadoComposicao, type CenaComposicao } from '@/lib/composicao';
 import { emailUsuario } from '@/lib/empresa';
-import { Layers3, Loader2, CheckCircle2, AlertTriangle, Trash2, Eye, Play } from 'lucide-react';
+import { Layers3, Loader2, CheckCircle2, AlertTriangle, Trash2, Eye, Play, Contrast, Download } from 'lucide-react';
 
 import { inputStyle } from '@/constants/ui';
 const fmt = (v: number, d = 2) => v.toLocaleString('pt-BR', { maximumFractionDigits: d });
@@ -25,11 +27,35 @@ const ddmmyy = (s: string) => new Date(s + 'T00:00:00').toLocaleDateString('pt-B
 
 const idNuvemComp = (talhaoId: string, compId: string) => `composicao__${talhaoId}__${compId}`;
 
+// Grid + bounds de uma composição SALVA (o raster mora na nuvem, não no meta).
+// Devolve o grid já descomprimido — serve tanto ao overlay quanto ao GeoTIFF.
+async function carregarGridSalvo(talhaoId: string, compId: string): Promise<{ grid: Grid; bounds: [number, number, number, number] } | null> {
+  const docs = await cloudCarregarMapasPorPrefixo<{ resp: { bounds: [number, number, number, number]; grid?: Grid } }>(idNuvemComp(talhaoId, compId));
+  const d = docs[0]?.dados?.resp;
+  if (!d?.grid?.b64) return null;
+  const grid = d.grid.comp === 'gz' ? await descomprimirGrid(d.grid) : d.grid;
+  return { grid, bounds: d.bounds };
+}
+
+// Dispara o download de um Blob já pronto (o <a> some depois do clique).
+function baixarBlob(blob: Blob, nomeArquivo: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = nomeArquivo;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
 export function ComposicaoTemporalPanel({ safraNome }: { safraNome?: string }) {
   const { nav, setFertilidadeOverlay } = useApp();
   const talhaoId = nav.talhaoId ?? '';
 
   const legNdvi = useMemo<Legenda | undefined>(() => legendasDoModulo('ndvi')[0], []);
+  const gradCss = useMemo(() => {
+    if (!legNdvi) return 'transparent';
+    const stops = rampaVisualStops({ ...legNdvi, estilo: 'continuo' });
+    return `linear-gradient(to right, ${stops.map(([pos, [r, g, b]]) => `rgb(${r},${g},${b}) ${(pos * 100).toFixed(1)}%`).join(', ')})`;
+  }, [legNdvi]);
 
   const [cenas, setCenas] = useState<NdviCamada[]>([]);
   const [carregando, setCarregando] = useState(true);
@@ -44,6 +70,10 @@ export function ComposicaoTemporalPanel({ safraNome }: { safraNome?: string }) {
   const [salvando, setSalvando] = useState(false);
   const [salvas, setSalvas] = useState<ComposicaoTemporal[]>([]);
   const [vendo, setVendo] = useState<string | null>(null);   // composição salva em visualização
+  const [contraste, setContraste] = useState(false);         // escala esticada p2–p98
+  const [dominioMapa, setDominioMapa] = useState<[number, number] | null>(null);  // escala do que está no mapa
+  const [baixandoTif, setBaixandoTif] = useState('');        // 'previa' | id da composição salva
+  const [erroTif, setErroTif] = useState('');
 
   // Cenas mantidas do talhão (aprovadas na prévia RGB), agrupadas por índice.
   useEffect(() => {
@@ -108,34 +138,53 @@ export function ComposicaoTemporalPanel({ safraNome }: { safraNome?: string }) {
         return;
       }
       if (vendo && talhaoId) {
-        const docs = await cloudCarregarMapasPorPrefixo<{ resp: { bounds: [number, number, number, number]; grid?: Grid } }>(idNuvemComp(talhaoId, vendo));
-        const d = docs[0]?.dados?.resp;
-        if (d?.grid) {
-          let g = d.grid;
-          if (g.comp === 'gz') { try { const { descomprimirGrid } = await import('@/lib/fertilidade'); g = await descomprimirGrid(g); } catch { return; } }
-          const meta = salvas.find(s => s.id === vendo);
-          mostrarGrid(g, d.bounds, meta?.indice ?? 'NDVI');
-        }
+        try {
+          const d = await carregarGridSalvo(talhaoId, vendo);
+          if (d) mostrarGrid(d.grid, d.bounds, salvas.find(s => s.id === vendo)?.indice ?? 'NDVI');
+        } catch {}
         return;
       }
       setFertilidadeOverlay(null);
+      setDominioMapa(null);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [previa, vendo]);
+  }, [previa, vendo, contraste]);
 
+  // Escala de cor do que vai ao mapa. Sem contraste: NDVI no domínio da legenda
+  // oficial (0–1, comparável entre datas e talhões) e os demais índices no
+  // mín–máx do composto. Com CONTRASTE: p2–p98 do próprio composto — a mediana
+  // do período aperta a distribuição (é essa a graça dela), e no domínio fixo o
+  // talhão inteiro sai de um verde só, escondendo justamente a variação interna
+  // que a composição existe para mostrar.
   function mostrarGrid(grid: Grid, bounds: [number, number, number, number], ind: string) {
     if (!legNdvi) return;
     const stops = rampaVisualStops({ ...legNdvi, estilo: 'continuo' });
-    // NDVI usa o domínio da legenda oficial; outros índices, mín–máx do composto
     let dominio: [number, number] = [legNdvi.dominioMin ?? 0, legNdvi.dominioMax ?? 1];
-    if (ind !== 'NDVI') {
+    if (contraste) {
+      dominio = faixaPercentis(decodeGrid(grid).valores, 2, 98);
+    } else if (ind !== 'NDVI') {
       const { valores } = decodeGrid(grid);
       let mn = Infinity, mx = -Infinity;
       for (let i = 0; i < valores.length; i++) { const v = valores[i]; if (isFinite(v)) { if (v < mn) mn = v; if (v > mx) mx = v; } }
       if (mn < mx) dominio = [mn, mx];
     }
     const { dataUrl } = colorirGrid(grid, dominio, stops);
+    setDominioMapa(dominio);
     setFertilidadeOverlay({ url: dataUrl, coordinates: coordsFromBounds(bounds), opacity: 1 });
+  }
+
+  // GeoTIFF da PRÉVIA (ainda não salva) — mesmos valores que estão no mapa,
+  // EPSG:4326, float32, nodata onde nenhuma cena tinha dado.
+  async function baixarTifPrevia() {
+    if (!previa || baixandoTif) return;
+    setBaixandoTif('previa'); setErroTif('');
+    try {
+      const base = sanitizar(nomeTecnico(previa.indice, previa.metodo, previa.datas));
+      const blob = await exportarGeotiff({ b64: encodeF32(previa.valores), shape: previa.shape }, previa.bounds, base);
+      baixarBlob(blob, `${base}.tif`);
+    } catch (e) {
+      setErroTif(e instanceof Error ? e.message : 'Falha ao gerar o GeoTIFF.');
+    } finally { setBaixandoTif(''); }
   }
 
   async function aprovarSalvar() {
@@ -247,10 +296,39 @@ export function ComposicaoTemporalPanel({ safraNome }: { safraNome?: string }) {
                   className="flex-1 py-2 rounded text-xs font-bold text-white flex items-center justify-center gap-1.5 disabled:opacity-50" style={{ background: '#15803d' }}>
                   {salvando ? <><Loader2 size={12} className="animate-spin" /> Salvando…</> : <><CheckCircle2 size={12} /> Aprovar e salvar</>}
                 </button>
+                <button onClick={() => void baixarTifPrevia()} disabled={!!baixandoTif} title="Baixar esta prévia em GeoTIFF"
+                  className="px-3 py-2 rounded text-xs flex items-center gap-1 disabled:opacity-50" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
+                  {baixandoTif === 'previa' ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />} TIF
+                </button>
                 <button onClick={() => setPrevia(null)} className="px-3 py-2 rounded text-xs" style={{ background: '#1a3a6b', color: '#cbd5e1' }}>Descartar</button>
               </div>
+              {erroTif && <p className="text-[10px]" style={{ color: '#f87171' }}>{erroTif}</p>}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Escala do que está no mapa — vale para a prévia e para a composição salva em visualização. */}
+      {(previa || vendo) && dominioMapa && (
+        <div className="rounded-lg p-2.5 space-y-1.5" style={{ background: '#0a1a2f', border: '1px solid #1a3a6b' }}>
+          <button onClick={() => setContraste(v => !v)}
+            className="w-full py-1 rounded text-[10px] font-semibold flex items-center justify-center gap-1"
+            style={{ background: contraste ? 'var(--invicta-green-dark)' : '#1a3a6b', color: contraste ? '#fff' : '#93c5fd' }}>
+            <Contrast size={11} /> Contraste {contraste ? 'realçado' : 'normal'}
+          </button>
+          <div>
+            <div className="h-4 rounded" style={{ border: '1px solid rgba(255,255,255,0.1)', background: gradCss }} />
+            <div className="flex justify-between text-[8px] mt-0.5" style={{ color: '#cbd5e1' }}>
+              <span>{fmt(dominioMapa[0])}</span>
+              <span>{fmt((dominioMapa[0] + dominioMapa[1]) / 2)}</span>
+              <span>{fmt(dominioMapa[1])}</span>
+            </div>
+          </div>
+          <p className="text-[9px] leading-relaxed" style={{ color: '#64748b' }}>
+            {contraste
+              ? 'Esticada p2–p98 do próprio composto: mostra a variação DENTRO do talhão, mas as cores não se comparam com outro mapa.'
+              : 'Escala fixa da legenda — comparável entre datas e talhões. Se o talhão sair de uma cor só, ligue o contraste.'}
+          </p>
         </div>
       )}
 
@@ -266,6 +344,24 @@ export function ListaComposicoes({ salvas, vendo, onVer, onExcluir }: {
   onVer?: (id: string) => void;
   onExcluir?: (c: ComposicaoTemporal) => void;
 }) {
+  // Download do GeoTIFF: mora AQUI (e não no painel) para valer também na aba
+  // "Camadas salvas", que usa esta mesma lista sem os callbacks de ver/excluir.
+  const [baixando, setBaixando] = useState('');
+  const [erro, setErro] = useState('');
+
+  async function baixarTif(c: ComposicaoTemporal) {
+    if (baixando) return;
+    setBaixando(c.id); setErro('');
+    try {
+      const d = await carregarGridSalvo(c.talhaoId, c.id);
+      if (!d) throw new Error('O raster desta composição não está na nuvem — gere-a de novo.');
+      const base = sanitizar(c.nomeTecnico || c.nome) || 'composicao';
+      baixarBlob(await exportarGeotiff(d.grid, d.bounds, base), `${base}.tif`);
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Falha ao gerar o GeoTIFF.');
+    } finally { setBaixando(''); }
+  }
+
   if (salvas.length === 0) return null;
   return (
     <div className="rounded-lg p-2.5 space-y-1.5" style={{ background: '#0a1a2f', border: '1px solid #1a3a6b' }}>
@@ -280,6 +376,9 @@ export function ListaComposicoes({ salvas, vendo, onVer, onExcluir }: {
             {onVer && (
               <button onClick={() => onVer(c.id)} title="Ver no mapa" className="p-1 rounded" style={{ color: vendo === c.id ? '#22d3ee' : '#93c5fd' }}><Eye size={12} /></button>
             )}
+            <button onClick={() => void baixarTif(c)} disabled={!!baixando} title="Baixar em GeoTIFF (EPSG:4326)" className="p-1 rounded disabled:opacity-40" style={{ color: '#93c5fd' }}>
+              {baixando === c.id ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
+            </button>
             {onExcluir && (
               <button onClick={() => onExcluir(c)} title="Excluir" className="p-1 rounded" style={{ color: '#f87171' }}><Trash2 size={12} /></button>
             )}
@@ -290,6 +389,7 @@ export function ListaComposicoes({ salvas, vendo, onVer, onExcluir }: {
           </p>
         </div>
       ))}
+      {erro && <p className="text-[10px]" style={{ color: '#f87171' }}>{erro}</p>}
     </div>
   );
 }

@@ -16,6 +16,7 @@ import {
   decodeGrid, exportarGeotiff, type Grid,
 } from '@/lib/fertilidade';
 import { colorirGrid } from '@/lib/raster';
+import { faixaPercentis } from '@/lib/quantis';
 import { rampaVisualStops, respeitarPadraoHomonima } from '@/lib/legendas';
 import {
   listarCenasNdvi, buscarImagemSatelite, buscarIndices, indicesDisponiveis,
@@ -73,19 +74,10 @@ const ROTULO_FONTE: Record<FonteNdvi, string> = { sentinel: 'Sentinel-2', cbers:
 
 // Cenas rejeitadas: persistidas na NUVEM por talhão (IV4) — ver lib/cenaEstados.
 
-// p-ésimo percentil de um grid (p em 0..100). Usado pelo contraste.
-function percentis(grid: Grid, pLo: number, pHi: number): [number, number] {
-  const { valores } = decodeGrid(grid);
-  const arr: number[] = [];
-  for (let i = 0; i < valores.length; i++) { const v = valores[i]; if (isFinite(v)) arr.push(v); }
-  if (!arr.length) return [0, 1];
-  arr.sort((a, b) => a - b);
-  const q = (p: number) => arr[Math.min(arr.length - 1, Math.max(0, Math.round((p / 100) * (arr.length - 1))))];
-  let lo = q(pLo), hi = q(pHi);
-  if (hi - lo < 1e-4) { lo = arr[0]; hi = arr[arr.length - 1]; }
-  if (hi - lo < 1e-4) hi = lo + 1e-4;
-  return [lo, hi];
-}
+// p2–p98 de um grid (o contraste realçado). A faixa em si vive em lib/quantis,
+// para a Composição Temporal usar exatamente a mesma escala.
+const percentis = (grid: Grid, pLo: number, pHi: number): [number, number] =>
+  faixaPercentis(decodeGrid(grid).valores, pLo, pHi);
 
 export function NdviSection({ safraNome }: { safraNome?: string } = {}) {
   const { nav, uploadedGeo, boundsTela, setFertilidadeOverlay, setFertilidadeLabels } = useApp();

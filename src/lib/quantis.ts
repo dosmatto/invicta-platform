@@ -178,3 +178,27 @@ function posicaoNaPaleta(i: number, nFaixas: number, tam: number): number {
   if (nFaixas <= 1) return tam - 1;
   return Math.round((i / (nFaixas - 1)) * (tam - 1));
 }
+
+/**
+ * Faixa de EXIBIÇÃO por percentis — o "contraste realçado" dos mapas de índice.
+ *
+ * Estica a rampa entre o p2 e o p98 em vez do mín–máx: duas bordas de nuvem ou
+ * uma sombra bastam para o mín–máx cobrir toda a escala, e aí o talhão inteiro
+ * sai de uma cor só. Cortar as pontas devolve a variação que existe de fato.
+ *
+ * Usa o rank MAIS PRÓXIMO (não interpola como `quantil`): isto é a escala de
+ * uma barra de cores, não uma estatística publicada, e o número das pontas tem
+ * de ser um valor que EXISTE no mapa. Mapa quase constante cai para o mín–máx
+ * e, se nem isso separar, abre 1e-4 — rampa de largura zero pinta tudo igual.
+ */
+export function faixaPercentis(valores: ArrayLike<number>, pLo = 2, pHi = 98): [number, number] {
+  const arr: number[] = [];
+  for (let i = 0; i < valores.length; i++) { const v = valores[i]; if (isFinite(v)) arr.push(v); }
+  if (!arr.length) return [0, 1];
+  arr.sort((a, b) => a - b);
+  const q = (p: number) => arr[Math.min(arr.length - 1, Math.max(0, Math.round((p / 100) * (arr.length - 1))))];
+  let lo = q(pLo), hi = q(pHi);
+  if (hi - lo < 1e-4) { lo = arr[0]; hi = arr[arr.length - 1]; }
+  if (hi - lo < 1e-4) hi = lo + 1e-4;
+  return [lo, hi];
+}

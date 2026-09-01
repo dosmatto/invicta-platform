@@ -10,7 +10,7 @@
 //      fronteira.
 
 import assert from 'node:assert/strict';
-import { breaksQuantis, indiceFaixa, classesQuantis } from '../src/lib/quantis.ts';
+import { breaksQuantis, indiceFaixa, classesQuantis, faixaPercentis } from '../src/lib/quantis.ts';
 
 let ok = 0, fail = 0;
 function t(nome, fn) {
@@ -179,6 +179,42 @@ t('pixelM diferente muda a área proporcionalmente', () => {
   const a = classesQuantis(uniforme, opts({ pixelM: 10 }));
   const b = classesQuantis(uniforme, opts({ pixelM: 20 }));
   assert.ok(Math.abs(b.areaHa - a.areaHa * 4) < 1e-9);
+});
+
+// ── faixaPercentis: a escala do "contraste realçado" (NDVI e composição) ────
+
+t('contraste corta as pontas: dois outliers não mandam mais na escala', () => {
+  const v = [-5, ...Array.from({ length: 98 }, (_, i) => 0.40 + i * 0.001), 9];
+  const [lo, hi] = faixaPercentis(v, 2, 98);
+  assert.ok(lo > 0 && hi < 1, `esperava a faixa dentro dos dados, veio [${lo}, ${hi}]`);
+  assert.ok(!v.slice(0, 1).includes(lo) && hi !== 9, 'o outlier não pode ser a ponta da rampa');
+});
+
+t('as pontas são valores QUE EXISTEM no mapa (rank, não interpolação)', () => {
+  const v = Array.from({ length: 101 }, (_, i) => i / 100);
+  const [lo, hi] = faixaPercentis(v, 2, 98);
+  assert.ok(v.includes(lo) && v.includes(hi), `[${lo}, ${hi}] não são valores do conjunto`);
+});
+
+t('NaN (nuvem, sombra, fora do talhão) não entra na conta', () => {
+  const limpo = Array.from({ length: 100 }, (_, i) => 0.3 + i * 0.004);
+  const sujo = [...limpo, NaN, NaN, Infinity, -Infinity];
+  assert.deepEqual(faixaPercentis(sujo, 2, 98), faixaPercentis(limpo, 2, 98));
+});
+
+t('mapa constante não devolve rampa de largura zero (pintaria tudo igual)', () => {
+  const [lo, hi] = faixaPercentis(Array(50).fill(0.62), 2, 98);
+  assert.ok(hi > lo, `faixa degenerada: [${lo}, ${hi}]`);
+});
+
+t('grid sem nenhum pixel válido cai no 0–1 e não em NaN', () => {
+  assert.deepEqual(faixaPercentis([NaN, NaN], 2, 98), [0, 1]);
+});
+
+t('quase constante: cai para o mín–máx antes de abrir o intervalo mínimo', () => {
+  const v = [...Array(98).fill(0.5), 0.2, 0.9];
+  const [lo, hi] = faixaPercentis(v, 2, 98);
+  assert.equal(lo, 0.2); assert.equal(hi, 0.9);
 });
 
 console.log(`\n${ok} ok, ${fail} falhas\n`);

@@ -1,5 +1,17 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [24] Contraste e download em GeoTIFF na composição temporal
+  '2.101.0': [
+    'PENDÊNCIA 24 — A COMPOSIÇÃO TEMPORAL GANHOU CONTRASTE E DOWNLOAD EM GEOTIFF. Duas coisas que a aba Imagens & índices já tinha e a composição, não: o botão que estica a escala de cor e o arquivo para levar o mapa embora.',
+    'POR QUE O CONTRASTE FALTAVA JUSTAMENTE ALI. A mediana de 4 datas APERTA a distribuição — é essa a graça dela, tirar o pico de uma data isolada. Só que na escala fixa 0–1 do NDVI o resultado apertado sai todo dentro de uma única faixa de cor, e o talhão inteiro fica de um verde só: some exatamente a variação interna que a composição existe para revelar. Ligado o contraste, a rampa se estica entre o p2 e o p98 do próprio composto e o desenho do talhão reaparece.',
+    'A ESCALA APARECE AGORA NA TELA — barra de cores com o valor mínimo, o do meio e o máximo do que está no mapa. Antes o composto era pintado sem dizer em que faixa, e não dava para saber se o verde era 0,45 ou 0,82. Vale tanto para a PRÉVIA quanto para a composição salva que estiver em visualização.',
+    'A LINHA ABAIXO DA BARRA DIZ O QUE CADA MODO CUSTA: escala fixa é comparável entre datas e talhões; esticada mostra a variação DENTRO do talhão mas as cores não se comparam com outro mapa. É a diferença que faz alguém concluir errado ao colocar dois PDFs lado a lado.',
+    'O CONTRASTE É O MESMO CÓDIGO do botão da aba Imagens & índices — a conta do p2–p98 saiu de dentro da tela de NDVI e virou função única (lib/quantis). Duas telas com dois cálculos de percentil acabariam divergindo, e aí o mesmo talhão sairia com faixas diferentes em cada aba.',
+    'GEOTIFF DA COMPOSIÇÃO: botão TIF na prévia (antes mesmo de aprovar, para conferir no QGIS antes de salvar) e um ícone de download em CADA composição salva, nas duas abas em que a lista aparece. Arquivo em EPSG:4326, float32, nodata onde nenhuma cena tinha dado — o mesmo formato do TIFF dos índices individuais, e o nome sai do nome técnico da camada (comp_ndvi_mediana_2023-08-05_2026-08-01_4d.tif).',
+    'DETALHE QUE EVITA ARQUIVO ERRADO: o TIFF sai com os VALORES do composto, não com as cores da tela — mudar o contraste muda o mapa exibido e não muda um pixel do arquivo baixado. Contraste é escala de exibição; o dado é o dado.',
+    '6 testes novos travam a escala do contraste (npm run teste:quantis, 28 no total): outlier não manda mais na rampa, NaN de nuvem fica fora da conta, mapa constante não vira rampa de largura zero e as pontas são sempre valores que EXISTEM no mapa.',
+    'Onde conferir: talhão → NDVI → Composição temporal (e aba Camadas salvas, para o download).',
+  ],
   // [S/N] Gaveta dos cenários salvos (pedido avulso)
   '2.100.0': [
     'CENÁRIO SALVO ABRE UMA GAVETA COM OS PRODUTOS DENTRO. Clicar na linha em Recomendações → Cenários salvos abre e fecha um painel que lista produto por produto: dose média COM A FAIXA (mín–máx), toneladas, R$ total e R$/ha, com a ★ de "p/ uso" em cada um. Um cenário aberto por vez.',
