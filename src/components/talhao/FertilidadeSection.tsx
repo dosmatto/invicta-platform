@@ -31,6 +31,7 @@ import { pode } from '@/lib/empresa';
 import { listar as bibListar, criar as bibCriar, type ConteudoPerfil, type ItemBiblioteca } from '@/lib/biblioteca';
 
 import { inputStyle } from '@/constants/ui';
+import { faixaDe, limitarNaFaixa, paraB64 } from '@/lib/faixaAmostras';
 import { partesDoTalhao, partesSemAmostra } from '@/lib/partesTalhao';
 import { simboloElemento } from '@/lib/lab';
 // Resolução em que a Recomendação calcula a dose — fonte única, para o mapa que
@@ -609,6 +610,27 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
 
   // Devolve o rótulo do mapa que teve de cair para IDW (ou null). Quem chama
   // junta os rótulos e mostra o aviso — ver `quedasIdw`.
+  // GARANTIA DE FAIXA, no app. O servidor já limita, mas ele não é o único
+  // produtor: o INTERPOLADOR DESTA MÁQUINA não se atualiza sozinho — no caso
+  // relatado o usuário reprocessou com o local antigo e recebeu o mapa sem
+  // limite. Aplicamos ANTES de guardar, para o mapa gravado já nascer certo — e
+  // assim TUDO que lê depois (tela, PDF, recomendação, zonas, exportação) recebe
+  // dado limpo, sem precisar de um limite próprio em cada consumidor.
+  function limitarResp(resp: RespInterp, pts: Ponto[]): RespInterp {
+    if (!resp.grid?.b64) return resp;
+    const faixa = faixaDe(pts.map(p => p.valor));
+    if (!faixa) return resp;
+    const { valores, rows, cols } = decodeGrid(resp.grid);
+    const { valores: lim, alterados } = limitarNaFaixa(valores, faixa);
+    if (alterados === 0) return resp;
+    console.warn(`[fertilidade] ${alterados} pixel(s) fora da faixa das amostras [${faixa[0]}, ${faixa[1]}] — limitados no app. Se persistir, o interpolador desta máquina pode estar desatualizado.`);
+    return {
+      ...resp,
+      grid: { b64: paraB64(lim), shape: [rows, cols] },
+      stats: { ...resp.stats, min: faixa[0], max: faixa[1] },
+    };
+  }
+
   async function processarUm(nut: string, prof: string): Promise<string | null> {
     if (ehZona) { await processarUmZona(nut, prof); return null; }
     const leg = legendaDe(nut);
@@ -629,7 +651,7 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
     // o backend devolve grid + bounds + stats + png; só usamos grid/bounds/stats.
     // O domínio e os stops vão só pra colorir o PNG do backend (ignorado aqui).
     const { dominio, stops } = rampaDaLegenda(leg);
-    const resp = await interpolar({
+    const respBruto = await interpolar({
       pontos: pts, poligono: poligono!, dominio, stops, metodo: metodoUsado, pixelM,
       modeloFixo: modeloUsado || null,
       // Krigagem fixa: manda o variograma pronto — o backend usa estes números
@@ -638,6 +660,9 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
       variogramaManual: caiuParaIdw ? null : varFixoNum,
       signal: abortRef.current?.signal,
     });
+    // Limita ANTES de qualquer uso: o que vai para a tela, para o PDF e para a
+    // nuvem é o mesmo grid já dentro da faixa das amostras.
+    const resp = limitarResp(respBruto, pts);
     const labels = fcLabels(pts, nut);
     const interpoladoEm = new Date().toISOString();
     // Sessão guarda o PNG do backend como fallback (~10-30 KB). Quem economiza é a nuvem.
@@ -686,7 +711,7 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
     const chaveUsada = caiuParaIdw ? 'idw' : metodoChave;
     const modeloUsado = caiuParaIdw ? '' : modeloEfetivo;
     const { dominio, stops } = rampaDaLegenda(leg);
-    const resp = await interpolar({
+    const respBruto = await interpolar({
       pontos: pts, poligono: poligono!, dominio, stops, metodo: metodoUsado, pixelM: PIXEL_RECOMENDACAO,
       modeloFixo: modeloUsado || null,
       variogramaManual: caiuParaIdw ? null : varFixoNum,
@@ -697,6 +722,10 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
       cobrirPoligono: true,
       signal: abortRef.current?.signal,
     });
+    // Mesma garantia do mapa fino: este é o grid que ALIMENTA A DOSE, então um
+    // valor fora da faixa aqui vira recomendação errada — é o pior lugar para
+    // deixar passar.
+    const resp = limitarResp(respBruto, pts);
     const gridGz = resp.grid ? await comprimirGrid(resp.grid) : undefined;
     // Sem labels e sem PNG: este mapa nunca é desenhado, só entra na conta.
     cloudSalvarMapa(

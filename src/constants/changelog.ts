@@ -1,5 +1,13 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.103.0': [
+    'VALOR NEGATIVO NO MAPA: AGORA O APP GARANTE A FAIXA, NÃO SÓ O SERVIDOR. A correção anterior limitou o cálculo no servidor da nuvem — e ele está correto, conferimos rodando quatro configurações contra o servidor de produção. Mas o problema continuou aparecendo, e a causa é esta: quem usa o INTERPOLADOR DESTA MÁQUINA não está usando esse servidor. O programa da sua máquina NÃO se atualiza sozinho, então ele seguia calculando com o código antigo, sem limite.',
+    'AGORA O PRÓPRIO APP LIMITA, ao receber o mapa e ANTES de guardar. Não importa quem calculou — nuvem nova, interpolador local desatualizado, qualquer um: o mapa que vai para a tela, para o PDF, para a nuvem e para a recomendação já sai dentro da faixa das amostras. Se algum pixel precisar ser corrigido, fica registrado no console do navegador, com um aviso de que o interpolador local pode estar velho.',
+    'VALE TAMBÉM PARA O MAPA QUE ALIMENTA A DOSE (o de 20 m da Recomendação), que é o pior lugar para deixar passar: um teor negativo ali vira recomendação de adubo errada.',
+    'SE VOCÊ USA O INTERPOLADOR DESTA MÁQUINA, ATUALIZE-O: baixe o pacote de novo em Configurações e substitua o que está instalado. O app agora protege o resultado de qualquer jeito, mas o programa antigo continua calculando errado por baixo — e ele é usado por outras contas também.',
+    'MAPAS JÁ SALVOS antes desta versão continuam com o valor antigo gravado; reprocesse a variável para o limite valer neles.',
+    '10 testes automáticos novos no lado do app (npm run teste:faixa-front), somados aos 7 do servidor, incluindo: valor de dentro da faixa fica idêntico, área sem dado continua sem dado, e faixa legitimamente negativa (quando a própria amostra é negativa) não é cortada.',
+  ],
   '2.102.0': [
     '25 — COMPARATIVO VISUAL NO EDITOR MANUAL DE ZONAS: agora dá para ver NDVI, produtividade, condutividade ou fertilidade POR BAIXO das zonas, enquanto você reclassifica. Marque "Ver a camada no mapa" dentro de "Sugerir classificação".',
     'É A MESMA CAMADA DA SUGESTÃO, de propósito. O número que o editor já mostrava ("#04 · 3.140 · Média → Baixa") e a figura no mapa passam a falar da mesma camada — comparar a média de uma com o desenho de outra seria pior do que não comparar.',
