@@ -15,6 +15,7 @@ import { colorirGridComLegenda, colorirGrid, temGrid } from './raster';
 import { rampaVisualStops, ordenarLegendasDoAtributo } from './legendas';
 import { resolverGradeDoLaudo, casarAmostrasComPontos } from './eloGrade';
 import { ehAuxiliar20mPerdido } from './recomendacao/escolhaMapa';
+import { faixaDoLaudo, limitarRespAFaixa } from './faixaAmostras';
 import { carregarNdviSalvos } from './meap/gerar';
 import { municipioDaFazenda } from './geocodeMunicipio';
 import { centroideGeom } from './recomendacao/zonasGrid';
@@ -138,6 +139,10 @@ export async function carregarContextoRelatorio(
       if (dados.resp?.grid?.comp === 'gz') {
         try { dados.resp.grid = await descomprimirGrid(dados.resp.grid); } catch { /* segue */ }
       }
+      // Mapa salvo antes da correção de faixa: limita na leitura, senão o PDF
+      // imprime "mínimo -16,1" mesmo com a origem já corrigida. Também acerta o
+      // `stats` do servidor antigo, que é o fallback de statsRaster.
+      dados.resp = limitarRespAFaixa(dados.resp, faixaDoLaudo(importacao, nut, prof, dados.interpoladoEm));
       mapas[chave] = dados;
       if ((dados.interpoladoEm ?? '') > dataMaisRecente) dataMaisRecente = dados.interpoladoEm ?? '';
     }

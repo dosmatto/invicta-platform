@@ -7,7 +7,7 @@
 // faixa, já que reabrir não refaz a conta.
 // Roda: `npm run teste:faixa-front`
 import assert from 'node:assert/strict';
-import { faixaDe, limitarNaFaixa } from '../src/lib/faixaAmostras.ts';
+import { faixaDe, limitarNaFaixa, faixaDoLaudo, limitarGrid, limitarRespAFaixa } from '../src/lib/faixaAmostras.ts';
 
 let ok = 0, fail = 0;
 const t = (n, f) => { try { f(); ok++; console.log('  ✓', n); } catch (e) { fail++; console.error('  ✗', n, '—', e.message); } };
@@ -72,6 +72,77 @@ t('faixa negativa legítima é respeitada (ex.: temperatura, saldo)', () => {
 t('conta quantos pixels foram corrigidos (para a tela poder avisar)', () => {
   const { alterados } = limitarNaFaixa(f32([-1, -2, 5, 99, 100]), [0, 50]);
   assert.equal(alterados, 4);
+});
+
+// ── Nível GRID e faixa do laudo (v2.104.0) ───────────────────────────────────
+// A garantia agora vale em QUATRO portas: interpolar() (todo grid novo, de
+// qualquer servidor) e as três hidratações de mapa já salvo — aba Fertilidade,
+// gerador de relatórios e o caminho da DOSE.
+const enc = (arr) => {
+  const u8 = new Uint8Array(Float32Array.from(arr).buffer);
+  let bin = ''; for (const b of u8) bin += String.fromCharCode(b);
+  return Buffer.from(bin, 'binary').toString('base64');
+};
+const dec = (b64) => {
+  const buf = Buffer.from(b64, 'base64');
+  return Array.from(new Float32Array(buf.buffer, buf.byteOffset, buf.byteLength / 4));
+};
+const LAUDO = { resultados: [
+  { profundidade: '0-20', valores: { p: 4 } },
+  { profundidade: '0-20', valores: { p: 26 } },
+  { profundidade: '0-20', valores: { p: 70 } },
+  { profundidade: '20-40', valores: { p: 2 } },
+] };
+
+t('faixaDoLaudo: usa só a profundidade pedida', () => {
+  assert.deepEqual(faixaDoLaudo(LAUDO, 'p', '0-20'), [4, 70]);
+  assert.deepEqual(faixaDoLaudo(LAUDO, 'p', '20-40'), [2, 2]);
+});
+
+t('faixaDoLaudo: variável sem valor no laudo devolve null (não inventa limite)', () => {
+  assert.equal(faixaDoLaudo(LAUDO, 'k', '0-20'), null);
+  assert.equal(faixaDoLaudo(null, 'p', '0-20'), null);
+});
+
+t('faixaDoLaudo: laudo alterado DEPOIS do mapa → não limita', () => {
+  // desmembrar/fundir talhão troca os resultados sob o mesmo id e carimba
+  // limiteAlteradoEm. A faixa atual não é a que gerou aquele mapa — cortar por
+  // ela seria inventar.
+  const alterado = { ...LAUDO, limiteAlteradoEm: '2026-09-01T12:00:00Z' };
+  assert.equal(faixaDoLaudo(alterado, 'p', '0-20', '2026-08-30T10:00:00Z'), null);
+  assert.deepEqual(faixaDoLaudo(alterado, 'p', '0-20', '2026-09-02T10:00:00Z'), [4, 70]);
+});
+
+t('limitarGrid: corrige o b64 e devolve o MESMO objeto quando nada muda', () => {
+  const fora = { b64: enc([-16.1, 8, 87.1]), shape: [1, 3] };
+  const lim = limitarGrid(fora, [4, 70]);
+  assert.deepEqual(dec(lim.b64).map(v => Math.round(v * 10) / 10), [4, 8, 70]);
+  const dentro = { b64: enc([4, 8, 70]), shape: [1, 3] };
+  assert.equal(limitarGrid(dentro, [4, 70]), dentro, 'sem alteração, mesmo objeto');
+});
+
+t('limitarGrid: grid COMPRIMIDO não é tocado (quem chama descomprime antes)', () => {
+  const gz = { b64: 'qualquer', shape: [1, 1], comp: 'gz' };
+  assert.equal(limitarGrid(gz, [4, 70]), gz);
+});
+
+t('limitarRespAFaixa: corrige TAMBÉM o stats — é o fallback do PDF', () => {
+  // Sem isto o relatório imprimiria "mínimo -16,1" mesmo com o mapa já correto.
+  const resp = { grid: { b64: enc([-16.1, 30]), shape: [1, 2] }, stats: { min: -30.69, max: 87.08 } };
+  const lim = limitarRespAFaixa(resp, [4, 70]);
+  assert.equal(lim.stats.min, 4);
+  assert.equal(lim.stats.max, 70);
+  assert.deepEqual(dec(lim.grid.b64).map(v => Math.round(v)), [4, 30]);
+});
+
+t('limitarRespAFaixa: tudo dentro da faixa devolve a MESMA resposta', () => {
+  const resp = { grid: { b64: enc([4, 30, 70]), shape: [1, 3] }, stats: { min: 4, max: 70 } };
+  assert.equal(limitarRespAFaixa(resp, [4, 70]), resp);
+});
+
+t('limitarRespAFaixa: sem faixa não mexe em nada', () => {
+  const resp = { grid: { b64: enc([-16.1]), shape: [1, 1] }, stats: { min: -16.1, max: -16.1 } };
+  assert.equal(limitarRespAFaixa(resp, null), resp);
 });
 
 console.log(`\n${ok} passaram, ${fail} falharam`);

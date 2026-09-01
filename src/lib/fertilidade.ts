@@ -8,6 +8,7 @@
 // resolve import sem extensão — mesmo padrão de lab/nomeExport.
 import { stopsParaBackend, gradienteCssDaLegenda, type Legenda } from './legendas.ts';
 import { postBackend, isLocal } from './interpUrl.ts';
+import { faixaDosPontos, limitarRespAFaixa } from './faixaAmostras.ts';
 
 export type Stop = [number, [number, number, number]];
 
@@ -177,7 +178,19 @@ export async function interpolar(params: {
     try { const j = await r.json(); if (j?.detail) msg = String(j.detail); } catch {}
     throw new Error(msg);
   }
-  return r.json();
+  // GARANTIA DE FAIXA — aqui, e não em cada tela. Este é o gargalo por onde passa
+  // TODO grid novo: Fertilidade, Condutividade, Compactação e Produtividade.
+  //
+  // O servidor já limita (interp-27), mas ele não é o único produtor: o
+  // INTERPOLADOR DESTA MÁQUINA não se atualiza sozinho. Confirmado no caso real —
+  // a cópia instalada era a interp-24, que falha o teste de faixa; a interp-27
+  // passa. Quem reprocessava com o local antigo recebia o mapa sem limite.
+  //
+  // A krigagem pode sair da faixa porque não é combinação convexa: os pesos podem
+  // ser negativos (efeito de tela). Propriedade do método, não defeito — o IDW não
+  // tem isso. Limitar aqui vale para qualquer servidor, de qualquer versão.
+  const resp = await r.json() as RespInterp;
+  return limitarRespAFaixa(resp, faixaDosPontos(params.pontos));
 }
 
 // Zona por SIMILARIDADE: clusteriza mapas JÁ interpolados (não interpola).

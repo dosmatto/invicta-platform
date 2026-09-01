@@ -9,6 +9,8 @@ import { cloudCarregarMapasPorPrefixo } from '../cloud';
 import { descomprimirGrid, decodeGrid, type RespInterp } from '../fertilidade';
 import { compilar, executarGrid, atributoPorToken, ajustarDose } from './motor';
 import { escolherMapas, prefixoDose20, PIXEL_RECOMENDACAO_M, type UsoMapa } from './escolhaMapa';
+import { faixaDoLaudo, limitarRespAFaixa } from '../faixaAmostras';
+import { getImportacoesLab } from '../store';
 import { coberturaDoGrid } from './cobertura';
 import type { ConteudoEquacao } from '../biblioteca';
 import { custosDaEquacao, type ConteudoInsumo } from '../insumos';
@@ -43,6 +45,15 @@ export async function carregarGridsTalhao(
 ): Promise<Record<string, GridRecomendacao>> {
   const out: Record<string, GridRecomendacao> = {};
   const prefFert = `${talhaoId}__${importacaoId}__`;
+  // Faixa das amostras, para limitar mapas SALVOS antes da correção. Este é o
+  // caminho da DOSE: um teor fora da faixa aqui vira recomendação de adubo
+  // errada — medido, +51% de tonelagem por causa de um pixel. `faixaDoLaudo`
+  // devolve null (não mexe) quando o laudo mudou depois do mapa.
+  const imp = getImportacoesLab(talhaoId).find(i => i.id === importacaoId) ?? null;
+  const limitar = (resp: RespInterp, chave: string, em?: string): RespInterp => {
+    const [nut, prof] = chave.split('__');
+    return limitarRespAFaixa(resp, faixaDoLaudo(imp, nut, prof, em));
+  };
 
   // A dose procura primeiro na gaveta própria — lá só existem mapas de 20 m.
   if (uso === 'dose') {
@@ -54,7 +65,7 @@ export async function carregarGridsTalhao(
       if (resp?.grid?.comp === 'gz') {
         try { resp.grid = await descomprimirGrid(resp.grid); } catch { /* segue */ }
       }
-      out[k] = { ...resp, origem: { pixel: e.pixel ?? PIXEL_RECOMENDACAO_M, metodo: e.metodo, reamostrado: false } };
+      out[k] = { ...limitar(resp, k, carregados[e.indice].dados.interpoladoEm), origem: { pixel: e.pixel ?? PIXEL_RECOMENDACAO_M, metodo: e.metodo, reamostrado: false } };
     }
   }
 
@@ -68,12 +79,13 @@ export async function carregarGridsTalhao(
     }
     // ZONA fica com o mapa como ele é (o mais fino): reamostrar para 20 m
     // engrossaria a malha e a divisa da zona sairia em escadinha de 20 m.
+    const lim = limitar(resp, k, carregados[e.indice].dados.interpoladoEm);
     if (uso === 'zona') {
-      out[k] = { ...resp, origem: { pixel: e.pixel, metodo: e.metodo, reamostrado: false } };
+      out[k] = { ...lim, origem: { pixel: e.pixel, metodo: e.metodo, reamostrado: false } };
       continue;
     }
     const origem = { pixel: e.pixel, metodo: e.metodo, reamostrado: !e.eh20 };
-    out[k] = e.eh20 ? { ...resp, origem } : { ...reamostrarPara20m(resp), origem };
+    out[k] = e.eh20 ? { ...lim, origem } : { ...reamostrarPara20m(lim), origem };
   }
   return out;
 }
