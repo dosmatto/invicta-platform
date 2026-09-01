@@ -4,8 +4,8 @@
 // OFICIAIS/co-registráveis do talhão (Produtividade, NDVI, Fertilidade…) como
 // grids no mesmo formato, e oferece correlação espacial + distribuição por classe.
 
-import { getMapasProdutividade, getImportacoesLab, getLegendasPorAtributo, getLegendas } from '@/lib/store';
-import { ordenarLegendasDoAtributo } from '@/lib/legendas';
+import { getMapasProdutividade, getImportacoesLab, getLegendasPorAtributo } from '@/lib/store';
+import { legendaDesignada, PREF_LEGENDA } from '@/lib/legendaDesignada';
 import { carregarGridsTalhao } from '@/lib/recomendacao/aplicar';
 import { carregarNdviSalvos, carregarEcOficial, rotuloEc } from '@/lib/meap/gerar';
 import { cloudCarregarMapasPorPrefixo } from '@/lib/cloud';
@@ -42,21 +42,23 @@ export async function listarCamadas(talhaoId: string, safra: string): Promise<Ca
       const doc = docs.find(d => d.id.endsWith(p.id));
       let grid = doc?.dados?.resp?.grid;
       if (grid?.comp === 'gz') { try { grid = await descomprimirGrid(grid); } catch { grid = undefined; } }
-      const leg = legendaDaCultura(p.cultura);
+      const leg = legendaDesignada('produtividade', PREF_LEGENDA.produtividade, legendaDaCultura(p.cultura));
       if (grid && leg && doc) out.push({ id: `prod_${p.id}`, grupo: 'Produtividade', nome: `${cap(p.cultura)} v${p.versao}${p.oficial ? ' (oficial)' : ''}`, sub: p.safra || undefined, bounds: doc.dados.resp.bounds, grid, legenda: leg, unidade: p.unidade, periodo: p.safra || (p.ano ? String(p.ano) : undefined) });
     }
   }
 
   // Índices vegetativos mantidos (NDVI, SAVI, NDRE… — IV2)
   const nd = await carregarNdviSalvos(talhaoId);
-  const ndviLeg = getLegendasPorAtributo('ndvi')[0];
+  const ndviLeg = legendaDesignada('ndvi', PREF_LEGENDA.ndvi);
   if (ndviLeg) for (const n of nd) out.push({ id: `ndvi_${n.data}_${n.nut}`, grupo: 'NDVI', nome: `${n.indice} ${ddmm(n.data)}`, sub: n.nut.startsWith('ndvi_cbers') ? 'CBERS' : 'S2', bounds: n.bounds, grid: { b64: n.b64, shape: n.shape }, legenda: ndviLeg, unidade: 'índice' });
 
   // Condutividade elétrica OFICIAL (C3) — variável fixa do talhão
   const ec = await carregarEcOficial(talhaoId);
   if (ec.length) {
-    // Ordem canônica (padrão → sistema → nome) — a mesma legenda da tela de Condutividade.
-    const ecLeg = ordenarLegendasDoAtributo(getLegendas().filter(l => l.atributoId === 'condutividade' || l.categoria === 'condutividade'))[0];
+    // A legenda DESIGNADA na aba Condutividade (o seletor "Legenda do mapa"),
+    // não a primeira da ordem canônica: o usuário escolhe, por exemplo, a de
+    // quartil, e o comparativo tem de sair nas cores que ele já conhece.
+    const ecLeg = legendaDesignada('condutividade', PREF_LEGENDA.condutividade);
     if (ecLeg) for (const e of ec) out.push({ id: `ec_${e.prof}`, grupo: 'Condutividade', nome: rotuloEc(e.prof), sub: 'oficial', bounds: e.bounds, grid: { b64: e.b64, shape: e.shape }, legenda: ecLeg, unidade: ecLeg.unidade });
   }
 

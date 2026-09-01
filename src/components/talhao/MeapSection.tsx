@@ -21,6 +21,7 @@ import { paraZoneamentoNativo } from '@/lib/meap/nativo';
 import { ImportarZoneamento } from './ImportarZoneamento';
 import { VersoesZoneamentos } from './VersoesZoneamentos';
 import { montarLinhagens, nomeVersaoRestaurada, origemDe, type VersaoZoneamento } from '@/lib/meap/versoes';
+import { legendaDesignada, PREF_LEGENDA } from '@/lib/legendaDesignada';
 import { carregarCamadas, analisarMulti, gerarMulti, dadosLabCV, type CamadasCarregadas } from '@/lib/meap/gerar';
 import { calcularCVZonas } from '@/lib/meap/cv';
 import { unirFeatures, limparZona } from '@/lib/meap/fundir';
@@ -150,8 +151,15 @@ function corDaCamadaPreview(c: { nut: string; b64: string; shape: [number, numbe
   const grid = { b64: c.b64, shape: c.shape };
   try {
     if (c.nut.startsWith('ndvi')) {
-      const leg = getLegendasPorAtributo('ndvi')[0];
+      // Legenda DESIGNADA na aba NDVI (o seletor "Legenda do mapa").
+      const leg = legendaDesignada('ndvi', PREF_LEGENDA.ndvi);
       if (leg) return colorirGrid(grid, [0, 1], rampaVisualStops({ ...leg, estilo: 'continuo' })).dataUrl;
+    } else if (c.nut.startsWith('ec_')) {
+      // A condutividade entra no catálogo como `ec_<prof>`, que não casa com
+      // nenhum `atributoId` de legenda — por isso caía na rampa genérica e
+      // aparecia em viridis, nada a ver com as cores da aba Condutividade.
+      const leg = legendaDesignada('condutividade', PREF_LEGENDA.condutividade);
+      if (leg) return colorirGridComLegenda(grid, leg).dataUrl;
     } else {
       const leg = getLegendasPorAtributo(c.nut)[0];
       if (leg) return colorirGridComLegenda(grid, leg).dataUrl;

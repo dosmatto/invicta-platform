@@ -22,6 +22,8 @@ import { classeZona, classeReconhecida, corZonaPorPosicao } from '@/lib/zonas';
 import { escalaClasses, remapeamentoDeRanks, type ClasseEscala } from '@/lib/meap/escalaClasses';
 import { carregarCamadasValidacao } from '@/lib/validacao/carregar';
 import { colorirGrid, colorirGridComLegenda } from '@/lib/raster';
+import { gradienteCss } from '@/lib/fertilidade';
+import { rotulosLegenda } from '@/lib/formato';
 import { coordsFromBounds, decodeGrid } from '@/lib/fertilidade';
 import { amostrarPorZona } from '@/lib/validacao/amostragem';
 import { resumoValores, separacaoEntreZonas } from '@/lib/validacao/estatistica';
@@ -653,11 +655,28 @@ export function EditorZonasManual({ talhaoId, nomeZoneamento, fcOriginal, areaMi
                     </div>
                     <input type="range" min={0} max={1} step={0.05} value={zonasOpacidade}
                       onChange={e => setZonasOpacidade(Number(e.target.value))} className="w-full accent-blue-500" />
-                    <p className="text-[9px]" style={{ color: '#475569' }}>
-                      {cam?.legenda
-                        ? <>Cores da legenda <strong style={{ color: '#93c5fd' }}>{cam.legenda.nome}</strong>{cam.unidade ? ` · ${cam.unidade}` : ''} — a mesma da aba desta camada.</>
-                        : <>Esta camada não tem legenda cadastrada: as cores seguem apenas do menor ao maior valor do talhão, e não correspondem a nenhuma escala oficial.</>}
-                    </p>
+                    {/* A BARRA DA LEGENDA. Sem ela dá para ver a mancha mas não
+                        o valor — e o comparativo não fecha o raciocínio: não se
+                        sabe se aquele tom é 8 ou 13 mS/m. É a mesma escala que a
+                        aba da camada mostra. */}
+                    {cam?.legenda ? (
+                      <div>
+                        <div className="h-2.5 rounded w-full"
+                          style={{ border: '1px solid rgba(255,255,255,0.1)', background: gradienteCss(cam.legenda) }} />
+                        <div className="relative h-3">
+                          {rotulosLegenda(cam.legenda).map((r, i) => (
+                            <span key={i} className="absolute text-[8px] tabular-nums" style={{ left: `${r.pos * 100}%`, transform: 'translateX(-50%)', color: '#64748b' }}>{r.txt}</span>
+                          ))}
+                        </div>
+                        <p className="text-[9px]" style={{ color: '#475569' }}>
+                          <strong style={{ color: '#93c5fd' }}>{cam.legenda.nome}</strong>{cam.unidade ? ` · ${cam.unidade}` : ''} — a mesma legenda da aba desta camada.
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="text-[9px]" style={{ color: '#fbbf24' }}>
+                        Esta camada não tem legenda cadastrada: as cores seguem só do menor ao maior valor do talhão e não correspondem a nenhuma escala oficial.
+                      </p>
+                    )}
                   </>
                 )}
               </div>

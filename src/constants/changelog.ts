@@ -1,5 +1,12 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.105.0': [
+    'CORRIGIDO — O MAPA DE FUNDO SAÍA COM CORES QUE NÃO ERAM AS DA CAMADA. No comparativo das Zonas de Manejo, a condutividade aparecia em tons de laranja (e, na prévia do MEAP, em roxo/verde/amarelo), enquanto a aba Condutividade mostrava a legenda por quartil que você escolheu. Duas telas, duas paletas, a mesma camada — o comparativo perdia o sentido.',
+    'AGORA O FUNDO USA A LEGENDA QUE VOCÊ DESIGNOU. O seletor "Legenda do mapa" de cada aba (Condutividade, Produtividade, NDVI) passou a valer também no comparativo e no fundo do editor de zonas. Escolheu a de quartil na Condutividade? É ela que pinta o fundo.',
+    'O QUE ESTAVA ERRADO: o comparativo pegava a primeira legenda da lista, ignorando a sua escolha. E, na prévia do MEAP, a condutividade nem chegava a procurar legenda — ela entra no catálogo com um identificador próprio que não casava com nenhuma, então caía direto na rampa genérica.',
+    'A BARRA DA LEGENDA APARECE NO EDITOR, com os valores das classes. Sem ela dava para ver a mancha, mas não para saber se aquele tom era 8 ou 13 mS/m — e o comparativo não fechava o raciocínio.',
+    'Camada sem legenda cadastrada continua avisando, agora em amarelo: as cores são só do menor ao maior valor do talhão e não correspondem a escala nenhuma.',
+  ],
   '2.104.0': [
     'VALOR FORA DA FAIXA: AGORA SÃO QUATRO PORTAS FECHADAS, NÃO UMA. A correção anterior cobria só os mapas gerados pela aba Fertilidade. Uma varredura completa mostrou que faltavam três caminhos, e que era por eles que o problema continuava aparecendo.',
     'PORTA 1 — TODO MAPA NOVO, DE QUALQUER SERVIDOR. O limite passou para dentro da própria chamada de interpolação, que é por onde passa tudo: Fertilidade, Condutividade, Compactação e Produtividade. Não importa mais quem calculou — nuvem atualizada ou interpolador da sua máquina desatualizado —, o mapa chega dentro da faixa das amostras.',
