@@ -1,5 +1,11 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.110.0': [
+    'COLUNA DOSE MÉDIA no resumo de recomendações da fazenda (Fazenda → Relatórios → Recomendação): cada linha passa a dizer a dose aplicada naquele talhão — "1,08 t/ha", "263 kg/ha", "3,49 sementes/m". A tabela mostrava só a quantidade total, que depende do tamanho do talhão; a dose é o número que se confere primeiro, porque não depende dele.',
+    'AS CASAS DECIMAIS SEGUEM A MAGNITUDE: acima de 100 a casa decimal não informa nada ("263 kg/ha" é a dose); abaixo dela é o dado — sementes por metro é 3,49, e arredondar para 3 erraria a população em quase 15 por cento. A mesma regra passou a valer na página-resumo do talhão, que antes cortava as casas e mostrava "3" nesse caso.',
+    'A coluna também entrou no EXCEL da fazenda, separada em DOSE MÉDIA (número) e UNIDADE (texto), para dar para somar e filtrar na planilha.',
+    'CORRIGIDO ao conferir a folha: a área do talhão encostava no nome da recomendação — saía "44,405 - Calcário" no lugar de "44,4" e "05 - Calcário". A coluna de área é alinhada à direita e a seguinte à esquerda, então as duas terminavam e começavam na mesma borda; entrou um respiro entre elas.',
+  ],
   '2.109.0': [
     'A CAIXA DE ESTATÍSTICAS DO RELATÓRIO NÃO BATIA COM OS PONTOS DO MAPA. No BOOK do WNOCG 03, o mapa de K 0-20 cm traz as amostras escritas, de 0,8 a 8,1 mmolc/dm³ — e a caixa dizia MÍNIMO 1,1 e MÁXIMO 7,8. O mesmo em todos os atributos: no Mg% há uma amostra de 6,3% desenhada no mapa e a caixa começava em 7,7%.',
     'A PROVA ESTAVA NA MESMA PÁGINA: no pH, a caixa do 20-40 cm (8 amostras) bate exatamente com os pontos — 5,0 e 6,3 —, enquanto a do 0-20 cm (45 amostras) não bate. Mesmo talhão, mesmo dia, mesmo arquivo. Não era erro de conta.',

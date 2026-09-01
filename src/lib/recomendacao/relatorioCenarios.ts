@@ -487,7 +487,7 @@ function desenharResumoRecomendacao(doc: JsPDF, ctx: Ctx, itens: ItemDose[], log
     if (y > H - 20) { doc.addPage(); y = cabecalhoNavy(doc, logo, campos) + 3; y = cabTabela(doc, M, y, cols); }
     y = linhaTabela(doc, M, y, cols, [
       it.numero < 1e9 ? String(it.numero).padStart(2, '0') : '—',
-      d.nomeEquacao, d.produto || '—', `${fmt(d.stats.media)} ${d.unidade || 'kg/ha'}`, fmt(d.toneladas, 1), fmt(d.custo ?? 0, 2),
+      d.nomeEquacao, d.produto || '—', doseMediaTexto(d), fmt(d.toneladas, 1), fmt(d.custo ?? 0, 2),
     ]);
   }
   y += 1;
@@ -685,6 +685,15 @@ function volumePorProduto(grupos: GrupoTalhao[]): [string, { ton: number; custo:
   return [...mapa.entries()].sort((a, b) => b[1].ton - a[1].ton);
 }
 
+// DOSE MÉDIA de uma dose, já com a unidade. As casas seguem a MAGNITUDE: acima
+// de 100 a casa decimal não informa nada ("391 kg/ha" é a dose); abaixo dela é o
+// dado — sementes por metro é 3,49, e arredondar para 3 erra a população em 14%.
+export function doseMediaTexto(d: DoseCalculada): string {
+  const v = d.stats?.media;
+  if (!Number.isFinite(v)) return '—';
+  return `${fmt(v, Math.abs(v) >= 100 ? 0 : 2)} ${d.unidade || 'kg/ha'}`;
+}
+
 function desenharCapaFazenda(doc: JsPDF, fazenda: string, produtor: string, safra: string, grupos: GrupoTalhao[], logo: HTMLImageElement | null) {
   const M = 6, H = 210;
   const areaTotal = grupos.reduce((s, g) => s + (g.talhao.areaHa || 0), 0);
@@ -708,7 +717,15 @@ function desenharCapaFazenda(doc: JsPDF, fazenda: string, produtor: string, safr
 
   // Tabela ESQUERDA — por talhão (paginável).
   const colsL: Col[] = [
-    { titulo: 'Talhão', w: 32 }, { titulo: 'Área (ha)', w: 18, align: 'r' }, { titulo: 'Recomendação (Nº - fórmula)', w: 82 },
+    { titulo: 'Talhão', w: 30 }, { titulo: 'Área (ha)', w: 16, align: 'r' },
+    // Coluna vazia de 3 mm: "Área" é alinhada à DIREITA e "Recomendação" à
+    // esquerda, então elas terminam e começam na mesma borda — sem o respiro
+    // saía "44,405 - Calcario" (a área colada no nº da fórmula).
+    { titulo: '', w: 3 },
+    { titulo: 'Recomendação (Nº - fórmula)', w: 61 },
+    // A dose média é o número que o agrônomo confere primeiro: a quantidade
+    // total depende do tamanho do talhão, a dose não.
+    { titulo: 'Dose média', w: 32, align: 'r' },
     { titulo: 'Qtd (t)', w: 18, align: 'r' }, { titulo: 'Invest. (R$)', w: 34, align: 'r' },
   ];
   y += 6;
@@ -720,15 +737,15 @@ function desenharCapaFazenda(doc: JsPDF, fazenda: string, produtor: string, safr
       const d = it.d; totInvest += d.custo ?? 0;
       if (y > H - 16) { doc.addPage(); y = cab() + 4; y = cabTabela(doc, xL, y, colsL); }
       y = linhaTabela(doc, xL, y, colsL, [
-        primeiro ? g.talhao.nome : '', primeiro ? fmt(g.talhao.areaHa, 1) : '',
-        `${numTxt(it)}${d.nomeEquacao}`, fmt(d.toneladas, 1), fmt(d.custo ?? 0, 2),
+        primeiro ? g.talhao.nome : '', primeiro ? fmt(g.talhao.areaHa, 1) : '', '',
+        `${numTxt(it)}${d.nomeEquacao}`, doseMediaTexto(d), fmt(d.toneladas, 1), fmt(d.custo ?? 0, 2),
       ]);
       primeiro = false;
     }
   }
   y += 1;
   if (y > H - 16) { doc.addPage(); y = cab() + 4; }
-  linhaTabela(doc, xL, y, colsL, ['TOTAL FAZENDA', '', '', '', 'R$ ' + fmt(totInvest, 2)], { bold: true, cor: GREEN, fill: true });
+  linhaTabela(doc, xL, y, colsL, ['TOTAL FAZENDA', '', '', '', '', '', 'R$ ' + fmt(totInvest, 2)], { bold: true, cor: GREEN, fill: true });
   rodapeNavy(doc, logo, 'Recomendação — resumo da fazenda');
 }
 
@@ -804,24 +821,26 @@ export async function gerarRecomendacaoFazendaExcel(fazendaId: string, safra: st
     let primeiro = true;
     for (const it of g.itens) {
       totInvest += it.d.custo ?? 0;
-      left.push([primeiro ? g.talhao.nome : '', primeiro ? r1(g.talhao.areaHa) : '', rot(it), r1(it.d.toneladas), r2(it.d.custo ?? 0)]);
+      left.push([primeiro ? g.talhao.nome : '', primeiro ? r1(g.talhao.areaHa) : '', rot(it),
+        Number.isFinite(it.d.stats?.media) ? r2(it.d.stats.media) : '', it.d.unidade || 'kg/ha',
+        r1(it.d.toneladas), r2(it.d.custo ?? 0)]);
       primeiro = false;
     }
-    left.push(['', '', '', '', '']);   // separador entre talhões
+    left.push(['', '', '', '', '', '', '']);   // separador entre talhões
   }
-  left.push(['TOTAL FAZENDA', '', '', '', r2(totInvest)]);
+  left.push(['TOTAL FAZENDA', '', '', '', '', '', r2(totInvest)]);
 
   const right: (string | number)[][] = volumePorProduto(grupos).map(([k, v]) => [k, r1(v.ton), r2(v.custo)]);
 
   const XLSX = await import('xlsx');
   const aoa: (string | number)[][] = [
-    ['TALHÃO', 'ÁREA (ha)', 'PRODUTO (Nº - fórmula)', 'TOTAL PRODUTO (t)', 'INVEST. (R$)', '', 'PRODUTO', 'VOLUME TOTAL (t)', 'INVEST. (R$)'],
+    ['TALHÃO', 'ÁREA (ha)', 'PRODUTO (Nº - fórmula)', 'DOSE MÉDIA', 'UNIDADE', 'TOTAL PRODUTO (t)', 'INVEST. (R$)', '', 'PRODUTO', 'VOLUME TOTAL (t)', 'INVEST. (R$)'],
   ];
   const n = Math.max(left.length, right.length);
-  for (let i = 0; i < n; i++) aoa.push([...(left[i] ?? ['', '', '', '', '']), '', ...(right[i] ?? ['', '', ''])]);
+  for (let i = 0; i < n; i++) aoa.push([...(left[i] ?? ['', '', '', '', '', '', '']), '', ...(right[i] ?? ['', '', ''])]);
 
   const ws = XLSX.utils.aoa_to_sheet(aoa);
-  ws['!cols'] = [{ wch: 16 }, { wch: 10 }, { wch: 42 }, { wch: 16 }, { wch: 14 }, { wch: 2 }, { wch: 18 }, { wch: 16 }, { wch: 14 }];
+  ws['!cols'] = [{ wch: 16 }, { wch: 10 }, { wch: 42 }, { wch: 12 }, { wch: 14 }, { wch: 16 }, { wch: 14 }, { wch: 2 }, { wch: 18 }, { wch: 16 }, { wch: 14 }];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Recomendação');
   XLSX.writeFile(wb, nomeExport({
