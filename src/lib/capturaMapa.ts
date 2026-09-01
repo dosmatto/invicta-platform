@@ -8,6 +8,8 @@
 //   4. Limite do talhão (contorno, por cima)
 // Sem satélite (ou se os tiles falharem por CORS/rede) → fundo branco.
 
+import { posicionarRotulos } from './rotulosMapa.ts';
+
 export interface CapturaMapa {
   rasterPng: string;                                   // raster colorido (dataUrl)
   bounds: [number, number, number, number];            // [w,s,e,n]
@@ -221,6 +223,25 @@ function hexRgba(hex: string, a: number): string {
   return `rgba(${r},${g},${b},${a})`;
 }
 
+// Anéis da MAIOR parte da geometria — é onde o rótulo deve ir quando a zona é
+// multipolígono. `aneisDe` achata tudo numa lista só e perde a hierarquia
+// externo/furo, que o posicionador precisa para não escrever dentro de um furo.
+function aneisDoRotulo(g: GeoJSON.Polygon | GeoJSON.MultiPolygon): GeoJSON.Position[][] {
+  const partes = g.type === 'Polygon' ? [g.coordinates] : g.coordinates;
+  let melhor: GeoJSON.Position[][] = partes[0] ?? [];
+  let maior = -1;
+  for (const rings of partes) {
+    const anel = rings[0] ?? [];
+    let s = 0;
+    for (let i = 0, j = anel.length - 1; i < anel.length; j = i++) {
+      s += anel[j][0] * anel[i][1] - anel[i][0] * anel[j][1];
+    }
+    const a = Math.abs(s) / 2;
+    if (a > maior) { maior = a; melhor = rings; }
+  }
+  return melhor;
+}
+
 export async function capturarMapaZonas(c: CapturaZonas): Promise<string> {
   const W = c.larguraPx, H = c.alturaPx;
   const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
@@ -283,18 +304,42 @@ export async function capturarMapaZonas(c: CapturaZonas): Promise<string> {
     }
   }
 
-  // 4) Rótulo (nº da zona) no centroide aproximado
-  ctx.font = `bold ${Math.round(W / 45)}px sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  // 4) Rótulo (nº/dose da zona). A posição é decidida de UMA VEZ para todos
+  // (lib/rotulosMapa.ts): quem cabe fica dentro da mancha, quem não cabe sai
+  // para o lado com um TRAÇO ligando ao polígono. Antes cada rótulo ia na média
+  // dos vértices, sem olhar para os vizinhos — em zona estreita os números
+  // saíam empilhados uns sobre os outros e, em zona em C, fora da própria zona.
+  const corpo = Math.round(W / 45);
+  ctx.font = `bold ${corpo}px sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const comRotulo = c.zonas.filter(z => z.rotulo);
+  const postos = posicionarRotulos(
+    comRotulo.map(z => ({
+      texto: z.rotulo!,
+      aneis: aneisDoRotulo(z.geometry).map(anel => anel.map(pt => [px(pt[0]), py(pt[1])] as [number, number])),
+      largura: ctx.measureText(z.rotulo!).width,
+      altura: corpo,
+    })),
+    { largura: W, altura: H },
+    { folga: corpo * 0.35, margem: corpo * 0.6 },
+  );
+
+  // Traços primeiro (escuro por baixo, claro por cima: some tanto no verde
+  // quanto no vermelho da rampa), com um pingo na ponta que fica no polígono.
+  for (const p of postos) {
+    if (!p.traco) continue;
+    for (const [cor, esp] of [['rgba(31,41,55,0.9)', Math.max(2.4, W / 420)], ['#ffffff', Math.max(1.1, W / 900)]] as const) {
+      ctx.strokeStyle = cor; ctx.lineWidth = esp;
+      ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.traco.x, p.traco.y); ctx.stroke();
+    }
+    ctx.fillStyle = '#ffffff'; ctx.strokeStyle = 'rgba(31,41,55,0.9)'; ctx.lineWidth = Math.max(1, W / 900);
+    ctx.beginPath(); ctx.arc(p.traco.x, p.traco.y, Math.max(1.8, W / 450), 0, Math.PI * 2);
+    ctx.fill(); ctx.stroke();
+  }
+
   ctx.lineWidth = Math.max(2, W / 300);
-  for (const z of c.zonas) {
-    if (!z.rotulo) continue;
-    const aneis = aneisDe(z.geometry);
-    let sx = 0, sy = 0, np = 0;
-    for (const pt of aneis[0] ?? []) { sx += px(pt[0]); sy += py(pt[1]); np++; }
-    if (!np) continue;
-    const x = sx / np, y = sy / np;
-    ctx.strokeStyle = '#1f2937'; ctx.fillStyle = '#ffffff';
-    ctx.strokeText(z.rotulo, x, y); ctx.fillText(z.rotulo, x, y);
+  for (const p of postos) {
+    ctx.strokeStyle = '#1f2937'; ctx.fillStyle = '#ffffff'; ctx.lineJoin = 'round';
+    ctx.strokeText(p.texto, p.x, p.y); ctx.fillText(p.texto, p.x, p.y);
   }
 
   return cv.toDataURL('image/png');

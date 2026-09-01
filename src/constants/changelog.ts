@@ -1,5 +1,13 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.98.0': [
+    'OS NÚMEROS DAS ZONAS PARARAM DE SAIR EMPILHADOS NO MAPA. No PDF de prescrição, zonas estreitas e vizinhas escreviam a dose uma por cima da outra ("77.764" sobre "76.239" sobre "73.952") e não dava para saber qual número era de qual mancha — que é exatamente o que o mapa existe para dizer.',
+    'A CAUSA ERAM DUAS. O rótulo ia na MÉDIA DOS VÉRTICES do contorno, que não é o centro de nada: em zona comprida ou em C, esse ponto cai fora da própria zona. E cada número era desenhado sem olhar para os outros, então dois vizinhos escreviam no mesmo lugar.',
+    'AGORA A POSIÇÃO DE TODOS É DECIDIDA DE UMA VEZ. Cada zona ganha uma âncora no ponto mais FUNDO dela (o mais distante de qualquer borda), que sempre cai dentro — inclusive em zona com furo. Se a caixa do número couber ali e não bater em nenhum rótulo já colocado, ele fica dentro da mancha, como antes.',
+    'QUANDO NÃO COUBER, O NÚMERO SAI PARA O LADO COM UM TRAÇO ligando ao ponto dentro da zona, com um pingo na ponta. Nenhum número é descartado: um valor solto no mapa confunde mais do que um valor apertado, e o traço resolve a dúvida de quem lê.',
+    'As manchas MAIORES escolhem primeiro o lugar bom — elas quase sempre ficam sem traço, e sobra para as pequenas, que são as que de fato não cabem. O rótulo também nunca sai da borda da imagem.',
+    'Vale para todo mapa de zonas do app: prescrição, zonas de manejo, distribuição por área separada e rentabilidade por zona. 11 testes novos (npm run teste:rotulos-mapa) travam a regra, inclusive a de nenhuma caixa cruzar com outra em cinco zonas grudadas.',
+  ],
   '2.97.0': [
     'A DISTRIBUIÇÃO DO INSUMO POR ÁREA SEPARADA MUDOU DE LUGAR: saiu das opções do relatório e virou um BOTÃO NA ABA ARQUIVOS, ao lado do PDF oficial, do JPG e do SHP. É onde ela pertence — o número serve para carregar caminhão, não para ler relatório, e quem está despachando entra na aba Arquivos, não na de Relatórios.',
     'O botão só aparece nos talhões com MAIS DE UMA ÁREA SEPARADA; em talhão de mancha única não há o que distribuir e ele nem é desenhado. Gera um PDF próprio, com o mapa das manchas numeradas e a tabela de quanto de cada insumo vai em cada uma.',
