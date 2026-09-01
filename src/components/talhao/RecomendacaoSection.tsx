@@ -15,7 +15,7 @@ import { pode } from '@/lib/empresa';
 import { listar as bibListar, compararEquacoes, type ItemBiblioteca, type ConteudoEquacao, type ConteudoRecomendacao } from '@/lib/biblioteca';
 import type { ConteudoInsumo } from '@/lib/insumos';
 import { carregarGridsTalhao, calcularDose, calcularDosePorZona, dividirDoseEmPassadas, type DoseCalculada } from '@/lib/recomendacao/aplicar';
-import { salvarCenario, listarCenarios, descomprimirCenario, excluirCenario, type Cenario } from '@/lib/recomendacao/cenarios';
+import { salvarCenario, listarCenarios, descomprimirCenario, excluirCenario, hidratarRotulos, type Cenario } from '@/lib/recomendacao/cenarios';
 import { colorirDose, recortarNoPoligono } from '@/lib/raster';
 import { coordsFromBounds, extrairPoligono } from '@/lib/fertilidade';
 import { agruparPorRotulo } from '@/lib/recomendacao/dosePorZona';
@@ -30,10 +30,20 @@ import {
   lerRascunho, rascunhoDaEquacao, type RascunhoFormula,
 } from '@/lib/recomendacao/formulaAvulsa';
 import { montarBookOficial, abrirOuBaixar } from '@/lib/recomendacao/relatorioCenarios';
-import { Play, Loader2, AlertTriangle, Wand2, Save, FolderOpen, Trash2, Eye, GitCompare, FileText, Star, Calculator, Pencil, RotateCcw } from 'lucide-react';
+import { Play, Loader2, AlertTriangle, Wand2, Save, FolderOpen, Trash2, Eye, GitCompare, FileText, Star, Calculator, Pencil, RotateCcw, ChevronDown } from 'lucide-react';
 
 import { inputStyle } from '@/constants/ui';
 import { fmtDec as fmt, fmtHa } from '@/lib/formato';
+
+// Número de cenário ANTIGO pode não existir. Quando `inv_cenarios` nasceu
+// (v0.49.0) a dose era só `toneladas` + `custo: number | null` — `custoHa` só
+// chegou na v0.51.0. `fmtDec` chama toLocaleString direto e estoura tanto em
+// undefined quanto em null, derrubando a seção inteira ao abrir a gaveta.
+// (A janela entre as duas versões é de um dia, então talvez não exista nenhum
+// documento assim; a guarda custa nada e a alternativa é uma tela quebrada.)
+// Ausente vira travessão, que é a verdade: não foi gravado.
+const num = (v: number | null | undefined, dec = 0): string =>
+  typeof v === 'number' && Number.isFinite(v) ? fmt(v, dec) : '—';
 
 // Converte o limite (t/ha ou kg/ha) p/ a unidade da dose e divide em passadas.
 function limiteNaUnidadeDaDose(limite: number, unidLimite: 't/ha' | 'kg/ha', unidDose: string): number {
@@ -191,6 +201,21 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
     if (!editada || !rascunho) return eqSel;
     return { ...eqSel, nome: `${eqSel.nome} (fórmula editada)`, conteudo: equacaoComRascunho(eqSel.conteudo, rascunho) };
   }, [eqSel, editada, rascunho]);
+
+  // GAVETA do cenário salvo: um por vez. Ver o conteúdo NÃO custa nada (os
+  // rótulos são re-hidratados sem descomprimir grid) e, principalmente, não
+  // mexe na tela — o "Reabrir" baixa e descomprime todos os grids e SUBSTITUI o
+  // que está aberto, então usá-lo só para conferir o que tem dentro custa caro
+  // e ainda faz perder o trabalho em andamento.
+  const [cenarioAberto, setCenarioAberto] = useState<string | null>(null);
+  const detalheCenario = useMemo(() => {
+    const c = salvos.find(x => x.id === cenarioAberto);
+    return c ? hidratarRotulos(c) : null;
+    // `equacoes` entra como SINAL de que a Biblioteca mudou: hidratarRotulos lê
+    // dela por dentro, e sem esta dependência renomear uma equação atualizava a
+    // tela e deixava a gaveta aberta com o nome velho — exatamente o que a
+    // legenda viva (legendaViva.ts) existe para não deixar acontecer.
+  }, [cenarioAberto, salvos, equacoes]);
 
   const recarregarSalvos = useCallback(async () => {
     if (nav.talhaoId && safra) setSalvos(await listarCenarios(nav.talhaoId, safra));
@@ -374,6 +399,12 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
   }, [doses, talhao]);
 
   async function reabrir(cen: Cenario) {
+    // REABRIR SUBSTITUI o que está na tela. Enquanto ele era o único jeito de
+    // espiar o conteúdo de um cenário salvo, avisar seria atrapalhar; agora que
+    // a gaveta mostra tudo sem custo, quem clica aqui quer mesmo trocar — e
+    // trocar por engano custa o trabalho em andamento.
+    if (estado === 'pronto' && doses.length > 0 && cen.id !== cenMeta?.id
+      && !confirm(`Reabrir "${cen.nome}" substitui os ${doses.length} mapa(s) que estão na tela. Continuar?`)) return;
     setEstado('carregando'); setErro('');
     try {
       const full = await descomprimirCenario(cen);
@@ -389,6 +420,10 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
     if (!confirm(`Excluir o cenário "${c.nome}"?`)) return;
     await excluirCenario(c.id); await recarregarSalvos();
     setSelCompara(prev => { const n = new Set(prev); n.delete(c.id); return n; });
+    // O id do cenário é DETERMINÍSTICO (`cen_${talhaoId}_${importacaoId}_…`, sem
+    // timestamp): sem limpar isto, aplicar de novo a mesma equação recria o
+    // MESMO id e a gaveta reapareceria aberta sem ninguém ter clicado.
+    setCenarioAberto(prev => (prev === c.id ? null : prev));
   }
   // Marca/desmarca um MAPA (dose) como "será utilizado" e persiste o cenário atual.
   async function toggleUsar(i: number) {
@@ -817,20 +852,111 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
           <div className="space-y-1">
             {salvos.map(c => {
               const marcado = selCompara.has(c.id);
+              const aberto = cenarioAberto === c.id;
+              const doses = aberto ? (detalheCenario?.doses ?? c.doses) : c.doses;
+              const nUso = c.doses.filter(d => d.usar).length;
+              // Produto sem custo/tonelada entra no total como ZERO. A lista de
+              // cima já marca isso com asterisco (fin.temSemCusto); sem a mesma
+              // marca aqui, um cenário incompleto parece o mais barato — na tela
+              // em que se escolhe cenário por dinheiro.
+              const semCusto = c.doses.some(d => d.custoTonelada == null);
               return (
-                <div key={c.id} className="p-2 rounded-lg flex items-center gap-2" style={{ background: '#061525', border: marcado ? '1px solid var(--invicta-green)' : '1px solid #1a3a6b' }}>
-                  <input type="checkbox" checked={marcado} onChange={() => toggleCompara(c.id)} disabled={!marcado && selCompara.size >= 3} title="Comparar" />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[10px] font-bold truncate flex items-center gap-1" style={{ color: '#e2e8f0' }}>
-                      {c.nome}
-                      {c.doses.some(d => d.usar) && <span className="text-[8px] font-bold px-1 py-0.5 rounded" style={{ background: 'var(--invicta-green-dark)', color: '#fff' }}>{c.doses.filter(d => d.usar).length} p/ uso</span>}
+                <div key={c.id} className="rounded-lg overflow-hidden" style={{ background: '#061525', border: marcado ? '1px solid var(--invicta-green)' : '1px solid #1a3a6b' }}>
+                  {/* A LINHA INTEIRA abre/fecha a gaveta. Caixa de comparar e os
+                      botões de ação param o clique — cada um tem seu próprio efeito. */}
+                  {/* A linha inteira abre/fecha no MOUSE, por conveniência — mas
+                      quem carrega o papel de botão é a seta. Pôr role="button" no
+                      container faria dele o único elemento que o leitor de tela
+                      enxerga (filhos de um botão são presentacionais na ARIA), e
+                      Comparar / Reabrir / Excluir sumiriam para quem navega assim. */}
+                  <div className="p-2 flex items-center gap-2 cursor-pointer"
+                    onClick={() => setCenarioAberto(aberto ? null : c.id)}>
+                    <input type="checkbox" checked={marcado} onClick={e => e.stopPropagation()}
+                      onChange={() => toggleCompara(c.id)} disabled={!marcado && selCompara.size >= 3} title="Comparar" />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[10px] font-bold truncate flex items-center gap-1" style={{ color: '#e2e8f0' }}>
+                        {c.nome}
+                        {nUso > 0 && <span className="text-[8px] font-bold px-1 py-0.5 rounded" style={{ background: 'var(--invicta-green-dark)', color: '#fff' }}>{nUso} p/ uso</span>}
+                      </div>
+                      <div className="text-[9px]" style={{ color: '#64748b' }}>
+                        {new Date(c.geradoEm).toLocaleDateString('pt-BR')} · {c.doses.length} produto(s) · R$ {num(c.financeiro?.custoTotal, 2)}{semCusto ? '*' : ''}
+                      </div>
                     </div>
-                    <div className="text-[9px]" style={{ color: '#64748b' }}>
-                      {new Date(c.geradoEm).toLocaleDateString('pt-BR')} · {c.doses.length} produto(s) · R$ {fmt(c.financeiro.custoTotal, 2)}
-                    </div>
+                    <button aria-expanded={aberto} aria-label={`Ver os produtos de ${c.nome}`}
+                      onClick={e => { e.stopPropagation(); setCenarioAberto(aberto ? null : c.id); }}
+                      title={aberto ? 'Fechar' : 'Ver os produtos deste cenário'}
+                      className="flex items-center px-1 py-0.5 rounded flex-shrink-0"
+                      style={{ background: aberto ? '#2e5fa3' : '#1a3a6b', color: aberto ? '#fff' : '#93c5fd' }}>
+                      <ChevronDown size={12} style={{ transform: aberto ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }} />
+                    </button>
+                    <button onClick={e => { e.stopPropagation(); reabrir(c); }} title="Reabrir — substitui os mapas que estão na tela" className="p-1 rounded hover:bg-white/10" style={{ color: '#93c5fd' }}><FolderOpen size={12} /></button>
+                    <button onClick={e => { e.stopPropagation(); excluirSalvo(c); }} title="Excluir" className="p-1 rounded hover:bg-white/10" style={{ color: '#f87171' }}><Trash2 size={12} /></button>
                   </div>
-                  <button onClick={() => reabrir(c)} title="Reabrir (marcar mapas p/ uso)" className="p-1 rounded hover:bg-white/10" style={{ color: '#93c5fd' }}><FolderOpen size={12} /></button>
-                  <button onClick={() => excluirSalvo(c)} title="Excluir" className="p-1 rounded hover:bg-white/10" style={{ color: '#f87171' }}><Trash2 size={12} /></button>
+
+                  {aberto && (
+                    <div style={{ borderTop: '1px solid #1a3a6b', background: '#03101f' }}>
+                      <div className="px-2 py-1.5 flex items-center gap-2 text-[9px]" style={{ color: '#64748b', borderBottom: '1px solid #0f2240' }}>
+                        <span>R$ {num(c.financeiro?.custoHa, 2)}/ha</span>
+                        <span>·</span>
+                        <span>{num(c.financeiro?.areaHa, 2)} ha</span>
+                      </div>
+                      <div style={{ maxHeight: 220, overflowY: 'auto' }}>
+                        {doses.map((d, i) => {
+                          // MESMA linguagem da lista de doses da tela (logo acima):
+                          // ★ âmbar para "p/ uso", "NN · equação" no título e o
+                          // produto no subtítulo. Duas listas dos mesmos produtos
+                          // com dois vocabulários obrigam a traduzir de cabeça.
+                          const n = numeroEquacao(d.equacaoId);
+                          const semPreco = d.custoTonelada == null;
+                          // `unidade` pode vir STRING VAZIA (não só ausente): sem o
+                          // fallback, "1.200 · 30 t" não diz se é kg/ha ou t/ha — mil
+                          // vezes de diferença na tela em que se decide. 'kg/ha' é o
+                          // mesmo padrão que o relatório usa (relatorioCenarios).
+                          const unidade = d.unidade || 'kg/ha';
+                          // E em t/ha o arredondamento a zero casas apagaria a dose:
+                          // 0,4 t/ha viraria "0".
+                          const casas = /t\/ha|ton/i.test(unidade) ? 2 : 0;
+                          const min = d.stats?.min, max = d.stats?.max;
+                          const varia = typeof min === 'number' && typeof max === 'number'
+                            && Number.isFinite(min) && Number.isFinite(max) && max - min > 0.5;
+                          return (
+                            <div key={`${d.equacaoId}_${i}`} className="px-2 py-1 flex items-center gap-2"
+                              style={{ borderBottom: i < doses.length - 1 ? '1px solid #0a1c30' : undefined }}>
+                              <Star size={11} fill={d.usar ? '#fbbf24' : 'none'} className="flex-shrink-0"
+                                style={{ color: d.usar ? '#fbbf24' : '#334155' }}
+                                aria-label={d.usar ? 'Marcado para uso' : 'Não marcado'} />
+                              <div className="flex-1 min-w-0">
+                                <div className="text-[10px] font-bold truncate" style={{ color: d.usar ? '#e2e8f0' : '#94a3b8' }}>
+                                  {n != null && <span style={{ color: '#93c5fd' }}>{String(n).padStart(2, '0')} · </span>}
+                                  {d.nomeEquacao || d.produto}
+                                  {d.porZona?.length ? <span className="ml-1 text-[8px] px-1 rounded" style={{ background: '#1a3a6b', color: '#93c5fd' }}>zona</span> : null}
+                                  {d.formulaEditada ? <span className="ml-1 text-[8px] px-1 rounded" style={{ background: '#422006', color: '#fbbf24' }}>fórmula editada</span> : null}
+                                </div>
+                                {/* A FAIXA, não só a média: em taxa variável "méd 300"
+                                    tanto pode ser 300 chapado quanto 120–480, e é
+                                    justamente essa diferença que se quer saber. */}
+                                <div className="text-[9px] truncate" style={{ color: '#64748b' }}>
+                                  {d.produto && d.produto !== d.nomeEquacao ? `${d.produto} · ` : ''}méd {num(d.stats?.media, casas)}
+                                  {varia ? ` (${num(min, casas)}–${num(max, casas)})` : ''} {unidade} · {num(d.toneladas, 1)} t
+                                </div>
+                              </div>
+                              <div className="text-right flex-shrink-0">
+                                <div className="text-[10px]" style={{ color: semPreco ? '#fbbf24' : '#cbd5e1' }}>
+                                  R$ {num(d.custo, 2)}{semPreco ? '*' : ''}
+                                </div>
+                                <div className="text-[9px]" style={{ color: '#64748b' }}>R$ {num(d.custoHa, 2)}/ha</div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {semCusto && (
+                        <div className="px-2 py-1 text-[8px]" style={{ color: '#64748b', borderTop: '1px solid #0f2240' }}>
+                          * alguns produtos sem custo/tonelada — insumo sem preço, ou equação não vinculada
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}

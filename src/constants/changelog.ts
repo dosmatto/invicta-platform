@@ -1,5 +1,17 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Gaveta dos cenários salvos (pedido avulso)
+  '2.100.0': [
+    'CENÁRIO SALVO ABRE UMA GAVETA COM OS PRODUTOS DENTRO. Clicar na linha em Recomendações → Cenários salvos abre e fecha um painel que lista produto por produto: dose média COM A FAIXA (mín–máx), toneladas, R$ total e R$/ha, com a ★ de "p/ uso" em cada um. Um cenário aberto por vez.',
+    'O QUE ISSO POUPA: até agora, para saber o que havia dentro de "KCL · 29 produtos · R$ 838.796,89" só clicando em REABRIR — que baixa e descomprime todos os mapas da nuvem E SUBSTITUI o que está na tela, fazendo perder o trabalho em andamento. A gaveta custa zero: os nomes são re-hidratados da equação atual sem tocar em um único grid.',
+    'A FAIXA, E NÃO SÓ A MÉDIA. Em taxa variável, "méd 300 kg/ha" tanto pode ser 300 chapado quanto 120–480 — e é justamente essa diferença que se quer saber ao escolher um cenário. A faixa só aparece quando existe variação.',
+    'PRODUTO SEM PREÇO DEIXOU DE PASSAR POR R$ 0,00. Quem não tem custo/tonelada entra no total como zero, e o cenário incompleto parecia o mais barato — na tela em que se escolhe cenário por dinheiro. Agora sai em âmbar com asterisco, na gaveta e no total da linha, com a mesma nota que a lista de cima já usava.',
+    'A GAVETA FALA A MESMA LÍNGUA DA LISTA DE CIMA: ★ âmbar para "p/ uso", "NN · equação" no título e o produto no subtítulo. Duas listas dos mesmos produtos com vocabulários diferentes obrigavam a traduzir de cabeça.',
+    'REABRIR AGORA AVISA ANTES DE SUBSTITUIR os mapas da tela — e só quando há trabalho a perder. Enquanto ele era o único jeito de espiar um cenário, avisar seria atrapalhar; com a gaveta, quem clica ali quer mesmo trocar.',
+    'DETALHES QUE EVITAM TELA QUEBRADA: cenário salvo na v0.49 não tinha custo por hectare na dose, e a formatação estourava em campo ausente — agora sai travessão. Unidade em branco não deixa mais a dose sem unidade (mil vezes de diferença entre kg/ha e t/ha), e dose em t/ha não é mais arredondada a zero.',
+    'ACESSIBILIDADE: quem abre é um botão de verdade, com aria-expanded — a linha inteira continua abrindo no mouse, mas sem virar um único botão gigante que escondia Comparar, Reabrir e Excluir do leitor de tela.',
+    'Onde conferir: talhão → Recomendações → Cenários salvos.',
+  ],
   '2.99.0': [
     'CORRIGIDO — O MAPA INTERPOLADO NÃO PODE MAIS PASSAR DA FAIXA DAS AMOSTRAS. Um mapa de Fósforo saiu com MÍNIMO de -16,1 mg/dm³ sendo que todas as amostras eram positivas. Agora nenhum pixel fica abaixo do menor valor amostrado nem acima do maior.',
     'POR QUE ACONTECIA: não é defeito de programação, é uma propriedade da krigagem. Diferente de uma média comum, ela pode dar peso NEGATIVO a uma amostra (quando um ponto próximo "esconde" outro atrás dele), e aí o resultado escapa da faixa dos dados. Medimos aqui: em 12 mapas sorteados no modo automático, 4 saíram da faixa — o pior indo de -30,7 a 87,1 com amostras entre 4 e 70. Acontece justamente com o tipo de dado do fósforo: muitos valores baixos e alguns picos.',
