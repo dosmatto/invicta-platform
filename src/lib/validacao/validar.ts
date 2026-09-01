@@ -20,6 +20,8 @@ import {
   type IdIndicador, type Indicador, type Recomendacao, type RelatorioValidacao, type ValidacaoZona,
 } from './tipos.ts';
 
+import type { Legenda } from '../legendas';
+
 export interface CamadaValidacao {
   id: string;
   nome: string;
@@ -29,6 +31,11 @@ export interface CamadaValidacao {
   bounds: Bounds;
   /** safra/ano/data — presente ⇒ entra na série temporal do IPE. */
   periodo?: string;
+  /** Legenda OFICIAL da camada (classes e cores cadastradas). Vem junto para
+   *  quem desenha a camada pintar nas mesmas cores que o resto da plataforma —
+   *  sem ela sobra a rampa genérica, e aí a legenda mostrada mentiria sobre o
+   *  mapa. Opcional: quem só calcula estatística não precisa dela. */
+  legenda?: Legenda;
 }
 
 export interface PoligonoZona {

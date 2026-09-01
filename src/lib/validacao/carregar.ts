@@ -43,6 +43,7 @@ export async function carregarCamadasValidacao(talhaoId: string): Promise<Camada
       grid: c.grid,
       bounds: c.bounds,
       periodo,
+      legenda: c.legenda,
     });
   }
 

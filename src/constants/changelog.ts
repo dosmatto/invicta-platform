@@ -1,5 +1,13 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.102.0': [
+    '25 — COMPARATIVO VISUAL NO EDITOR MANUAL DE ZONAS: agora dá para ver NDVI, produtividade, condutividade ou fertilidade POR BAIXO das zonas, enquanto você reclassifica. Marque "Ver a camada no mapa" dentro de "Sugerir classificação".',
+    'É A MESMA CAMADA DA SUGESTÃO, de propósito. O número que o editor já mostrava ("#04 · 3.140 · Média → Baixa") e a figura no mapa passam a falar da mesma camada — comparar a média de uma com o desenho de outra seria pior do que não comparar.',
+    'O CONTORNO E O NÚMERO DA ZONA FICAM POR CIMA. Só o preenchimento obedece ao slider de opacidade, então no zero você vê a camada pura COM a divisa da zona desenhada em cima — dá para ler direto se a mancha respeita o limite da zona ou vaza para a vizinha. É essa leitura que classifica.',
+    'BOTÃO "SEGURE PARA ESPIAR": enquanto segura, as zonas somem e volta só a camada. O olho compara muito melhor por diferença (piscando entre as duas imagens) do que julgando uma mistura translúcida.',
+    'AS CORES SÃO AS DA LEGENDA OFICIAL da camada — a mesma que você já conhece da aba dela. Quando a camada não tem legenda cadastrada, a tela AVISA que as cores seguem só do menor ao maior valor do talhão e não correspondem a escala nenhuma; antes isso acontecia calado e o fundo mostrava cores que não queriam dizer nada.',
+    'POR QUE NÃO TELA DIVIDIDA: avaliamos as quatro formas (tela dividida, cortina, fundo com opacidade e alternar). Tela dividida e cortina, por construção, NUNCA põem a divisa da zona em cima da camada de dentro daquela zona — e é exatamente essa sobreposição que decide a classificação. Ficaram de fora por isso, não por custo.',
+  ],
   // [24] Contraste e download em GeoTIFF na composição temporal
   '2.101.0': [
     'PENDÊNCIA 24 — A COMPOSIÇÃO TEMPORAL GANHOU CONTRASTE E DOWNLOAD EM GEOTIFF. Duas coisas que a aba Imagens & índices já tinha e a composição, não: o botão que estica a escala de cor e o arquivo para levar o mapa embora.',

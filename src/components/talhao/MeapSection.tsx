@@ -375,24 +375,31 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
   // Prévia: clicar numa camada mostra o raster dela sobre o talhão (fase de
   // seleção). Some quando há zonas geradas/visualizadas (aí o mapa mostra as zonas).
   useEffect(() => {
-    if (!previewCh || !carregadas || res || vendoFc) { setFertilidadeOverlay(null); setFertilidadeLabels(null); return; }
+    // `editorMapFc` também derruba a prévia: no Editor Manual quem manda no
+    // fundo é o editor, e sem esta condição o overlay da seleção entraria por
+    // baixo das zonas junto com o dele — dois rasters empilhados.
+    if (!previewCh || !carregadas || res || vendoFc || editorMapFc) { setFertilidadeOverlay(null); setFertilidadeLabels(null); return; }
     const c = carregadas.camadas.find(x => x.chave === previewCh);
     const url = c ? corDaCamadaPreview(c) : null;
     if (!url) { setFertilidadeOverlay(null); return; }
     setFertilidadeOverlay({ url, coordinates: coordsFromBounds(carregadas.bounds), opacity: 0.82 });
     setFertilidadeLabels(null);
-  }, [previewCh, carregadas, res, vendoFc, setFertilidadeOverlay, setFertilidadeLabels]);
+  }, [previewCh, carregadas, res, vendoFc, editorMapFc, setFertilidadeOverlay, setFertilidadeLabels]);
   useEffect(() => () => { setFertilidadeOverlay(null); setFertilidadeLabels(null); }, [setFertilidadeOverlay, setFertilidadeLabels]);
 
   // MEAP — camada de FUNDO sob as zonas (etapa Avaliar / vendo um zoneamento):
   // mostra o raster de uma camada por BAIXO das zonas semitransparentes.
   useEffect(() => {
+    // No Editor Manual o fundo é publicado pelo PRÓPRIO editor (ele tem a
+    // camada de produtividade, que o catálogo do MEAP não tem). Se este efeito
+    // continuasse rodando ali, zeraria o fundo do editor a cada render.
+    if (editorMapFc) return;
     if (!fundoCh || !carregadas || !(res || vendoFc)) { setZonasFundo(null); return; }
     const c = carregadas.camadas.find(x => x.chave === fundoCh);
     const url = c ? corDaCamadaPreview(c) : null;
     if (!url) { setZonasFundo(null); return; }
     setZonasFundo({ url, coordinates: coordsFromBounds(carregadas.bounds), opacity: 1 });
-  }, [fundoCh, carregadas, res, vendoFc, setZonasFundo]);
+  }, [fundoCh, carregadas, res, vendoFc, editorMapFc, setZonasFundo]);
   useEffect(() => () => { setZonasFundo(null); setZonasOpacidade(0.5); }, [setZonasFundo, setZonasOpacidade]);
 
   // Mudar camadas/pesos/método invalida a análise (a curva FPI/NCE muda) e o preview.

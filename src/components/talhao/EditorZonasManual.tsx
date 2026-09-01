@@ -21,6 +21,8 @@ import { extrairEditavel, paraFeature, areaHaDe, perimetroMDe } from '@/lib/geoE
 import { classeZona, classeReconhecida, corZonaPorPosicao } from '@/lib/zonas';
 import { escalaClasses, remapeamentoDeRanks, type ClasseEscala } from '@/lib/meap/escalaClasses';
 import { carregarCamadasValidacao } from '@/lib/validacao/carregar';
+import { colorirGrid, colorirGridComLegenda } from '@/lib/raster';
+import { coordsFromBounds, decodeGrid } from '@/lib/fertilidade';
 import { amostrarPorZona } from '@/lib/validacao/amostragem';
 import { resumoValores, separacaoEntreZonas } from '@/lib/validacao/estatistica';
 import { sugerirClassificacao, type Sugestao } from '@/lib/validacao/sugestao';
@@ -66,8 +68,30 @@ export interface EditorZonasManualProps {
   onClose: () => void;
 }
 
+// Rampa genérica (viridis-like) para camada SEM legenda cadastrada.
+const RAMPA_FUNDO: Array<[number, [number, number, number]]> = [
+  [0, [68, 1, 84]], [0.25, [59, 82, 139]], [0.5, [33, 145, 140]], [0.75, [94, 201, 98]], [1, [253, 231, 37]],
+];
+
+/** PNG da camada para o fundo do mapa. Usa a legenda OFICIAL quando existe —
+ *  é o que faz o comparativo servir: a cor no mapa é a mesma que o agrônomo já
+ *  conhece da aba daquela camada. Sem legenda cadastrada, cai numa rampa por
+ *  amplitude, e a tela DIZ que caiu (senão a escala exibida mentiria). */
+function pngDaCamada(c: CamadaValidacao): string | null {
+  if (!c.grid) return null;
+  try {
+    if (c.legenda) return colorirGridComLegenda(c.grid, c.legenda).dataUrl;
+    const { valores } = decodeGrid(c.grid);
+    let mn = Infinity, mx = -Infinity;
+    for (let i = 0; i < valores.length; i++) { const v = valores[i]; if (isFinite(v)) { if (v < mn) mn = v; if (v > mx) mx = v; } }
+    if (mn < mx) return colorirGrid(c.grid, [mn, mx], RAMPA_FUNDO).dataUrl;
+  } catch (e) { console.warn('[editor-zonas] fundo da camada falhou:', e); }
+  return null;
+}
+
 export function EditorZonasManual({ talhaoId, nomeZoneamento, fcOriginal, areaMinHa = 0, camadasStats, boundsStats, onMapFc, onSalvarVersao, onClose }: EditorZonasManualProps) {
-  const { zonaEvent, setZonaEvent, setCorteAtivo, corteLinha, setCorteLinha } = useApp();
+  const { zonaEvent, setZonaEvent, setCorteAtivo, corteLinha, setCorteLinha,
+          setZonasFundo, zonasOpacidade, setZonasOpacidade } = useApp();
   // Permissões granulares do editor (spec §9). Modo local (bancada) libera tudo.
   const podeUnif = pode('zonasUnificar'), podeRecl = pode('zonasReclassificar'), podeDiv = pode('zonasDividir'), podeSalvar = pode('zonasSalvar');
 
@@ -106,7 +130,33 @@ export function EditorZonasManual({ talhaoId, nomeZoneamento, fcOriginal, areaMi
   const [sugCamadaId, setSugCamadaId] = useState('');
   const [sugestao, setSugestao] = useState<Sugestao | null>(null);
   const [sugErro, setSugErro] = useState<string | null>(null);
+  // COMPARATIVO VISUAL (pendência #25): a camada escolhida para a sugestão
+  // aparece POR BAIXO das zonas. Amarrada ao MESMO `sugCamadaId` de propósito —
+  // o número ("#04 · 3.140 · Média → Baixa") e a figura têm de falar da mesma
+  // camada, senão o agrônomo compara a média de uma com o desenho de outra.
+  const [fundoLigado, setFundoLigado] = useState(false);
+  // Guarda a opacidade antes do "espiar" para o botão devolver onde estava.
+  const opacAntesRef = useRef<number | null>(null);
   const minM2 = Math.max((areaMinHa || 0) * 10000, 1000);
+
+  // Publica o raster da camada escolhida SOB as zonas. O contorno e o número da
+  // zona ficam por cima (só o preenchimento obedece à opacidade), então com o
+  // slider no zero vê-se a camada pura COM a divisa desenhada em cima — que é
+  // a leitura que decide se a mancha respeita o limite da zona ou vaza.
+  useEffect(() => {
+    const c = sugCamadas?.find(x => x.id === sugCamadaId);
+    if (!fundoLigado || !c?.grid || !c.bounds) { setZonasFundo(null); return; }
+    try {
+      // Legenda OFICIAL da camada quando ela existe; sem ela, a rampa por
+      // amplitude — e o rótulo abaixo do slider avisa qual foi usada.
+      const png = pngDaCamada(c);
+      if (!png) { setZonasFundo(null); return; }
+      setZonasFundo({ url: png, coordinates: coordsFromBounds(c.bounds), opacity: 1 });
+    } catch { setZonasFundo(null); }
+  }, [fundoLigado, sugCamadas, sugCamadaId, setZonasFundo]);
+
+  // Ao fechar o editor o mapa volta ao normal (fundo fora, zonas opacas).
+  useEffect(() => () => { setZonasFundo(null); setZonasOpacidade(0.5); }, [setZonasFundo, setZonasOpacidade]);
 
   // Classes distintas presentes (rank → label/cor) — alvos de reclassificar/unificar.
   const classes = useMemo(() => {
@@ -566,6 +616,53 @@ export function EditorZonasManual({ talhaoId, nomeZoneamento, fcOriginal, areaMi
             )}
             {sugCarregando && <span className="text-[9px]" style={{ color: '#64748b' }}>carregando camadas…</span>}
           </div>
+
+          {/* COMPARATIVO VISUAL (#25) — a MESMA camada da sugestão, desenhada por
+              baixo das zonas. O contorno e o número ficam por cima, então no
+              zero vê-se a camada pura com a divisa em cima: dá para ler se a
+              mancha respeita o limite da zona ou vaza para a vizinha. */}
+          {sugCamadas && sugCamadas.length > 0 && (() => {
+            const cam = sugCamadas.find(x => x.id === sugCamadaId);
+            return (
+              <div className="p-1.5 rounded space-y-1" style={{ background: '#0a1f33', border: '1px solid #2e5fa3' }}>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <label className="flex items-center gap-1.5 text-[9px] cursor-pointer" style={{ color: '#93c5fd' }}>
+                    <input type="checkbox" checked={fundoLigado} className="accent-blue-500"
+                      onChange={e => setFundoLigado(e.target.checked)} />
+                    <strong>Ver a camada no mapa</strong> (por baixo das zonas)
+                  </label>
+                  {fundoLigado && (
+                    <button
+                      onMouseDown={() => { opacAntesRef.current = zonasOpacidade; setZonasOpacidade(0); }}
+                      onMouseUp={() => { if (opacAntesRef.current != null) { setZonasOpacidade(opacAntesRef.current); opacAntesRef.current = null; } }}
+                      onMouseLeave={() => { if (opacAntesRef.current != null) { setZonasOpacidade(opacAntesRef.current); opacAntesRef.current = null; } }}
+                      title="Segure para esconder as zonas e ver só a camada — o olho compara melhor por diferença do que por transparência"
+                      className="text-[9px] px-2 py-0.5 rounded font-semibold"
+                      style={{ background: '#1a3a6b', color: '#93c5fd' }}>
+                      Segure para espiar
+                    </button>
+                  )}
+                </div>
+                {fundoLigado && (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-[9px]" style={{ color: '#64748b' }}>
+                        Opacidade das zonas <span style={{ color: '#475569' }}>(↓ mostra mais a camada)</span>
+                      </span>
+                      <span className="text-[9px] font-bold tabular-nums" style={{ color: '#93c5fd' }}>{Math.round(zonasOpacidade * 100)}%</span>
+                    </div>
+                    <input type="range" min={0} max={1} step={0.05} value={zonasOpacidade}
+                      onChange={e => setZonasOpacidade(Number(e.target.value))} className="w-full accent-blue-500" />
+                    <p className="text-[9px]" style={{ color: '#475569' }}>
+                      {cam?.legenda
+                        ? <>Cores da legenda <strong style={{ color: '#93c5fd' }}>{cam.legenda.nome}</strong>{cam.unidade ? ` · ${cam.unidade}` : ''} — a mesma da aba desta camada.</>
+                        : <>Esta camada não tem legenda cadastrada: as cores seguem apenas do menor ao maior valor do talhão, e não correspondem a nenhuma escala oficial.</>}
+                    </p>
+                  </>
+                )}
+              </div>
+            );
+          })()}
 
           {sugErro && <p className="text-[9px]" style={{ color: '#fbbf24' }}>{sugErro}</p>}
 
