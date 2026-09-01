@@ -9,6 +9,7 @@ import {
   type ImportacaoLab, type GradeAmostragem,
 } from '@/lib/store';
 import { gerarRelatorioFertilidade, type ProfundidadeRel } from '@/lib/relatorioFertilidade';
+import { estatisticaDaPagina, casasDoRotulo } from '@/lib/estatisticaMapa';
 import { zonasDoTalhao } from '@/lib/zonasDoTalhao';
 import { municipioDaFazenda } from '@/lib/geocodeMunicipio';
 import { pontoDoPoligono } from '@/lib/relatorioDados';
@@ -45,7 +46,7 @@ const fmt = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits: 1 
 // Casas decimais do rótulo do ponto no mapa: config da variável (Preferências de
 // Análise) tem prioridade; senão pH/K = 1, demais = 0. Faz K%/Ca%/Mg% (satk…=1)
 // saírem com 1 casa, como pedido.
-const casasPonto = (nut: string) => casasDecimaisVariavel(nut) ?? ((nut === 'ph' || nut === 'k') ? 1 : 0);
+const casasPonto = (nut: string) => casasDoRotulo(nut, casasDecimaisVariavel(nut));
 const fmtPonto = (v: number, nut: string) => v.toLocaleString('pt-BR', { minimumFractionDigits: casasPonto(nut), maximumFractionDigits: casasPonto(nut) });
 const OPACIDADE = 1; // fixo 100%
 
@@ -377,7 +378,8 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
       features: pts.map(p => ({
         type: 'Feature',
         geometry: { type: 'Point', coordinates: [p.lng, p.lat] },
-        properties: { txt: fmtPonto(p.valor, nut) },
+        // `v` = o número cru: a caixa ESTATÍSTICAS conta EXATAMENTE estes valores.
+        properties: { txt: fmtPonto(p.valor, nut), v: p.valor },
       })),
     };
   }
@@ -400,7 +402,8 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
     const feats: GeoJSON.Feature[] = [];
     for (const z of zonasComValor(nut, prof)) {
       const c = centroideGeom(z.geometry);
-      if (c) feats.push({ type: 'Feature', geometry: { type: 'Point', coordinates: c }, properties: { txt: fmtPonto(z.valor, nut) } });
+      // `v` cru junto do texto: a caixa de estatísticas conta o valor da zona, não o arredondado do rótulo.
+      if (c) feats.push({ type: 'Feature', geometry: { type: 'Point', coordinates: c }, properties: { txt: fmtPonto(z.valor, nut), v: z.valor } });
     }
     return { type: 'FeatureCollection', features: feats };
   }
@@ -825,20 +828,13 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
     }
   }
 
-  // Estatísticas a partir do RASTER interpolado (spec: nunca dos pontos).
-  // Fallback p/ min/max do backend (também do raster) se o grid não decodificar.
-  function statsRaster(resp: RespInterp): { min: number; media: number; max: number } | null {
-    if (resp.grid) {
-      try {
-        const { valores } = decodeGrid(resp.grid);
-        let n = 0, soma = 0, mn = Infinity, mx = -Infinity;
-        for (let i = 0; i < valores.length; i++) { const v = valores[i]; if (!isFinite(v)) continue; n++; soma += v; if (v < mn) mn = v; if (v > mx) mx = v; }
-        if (n) return { min: mn, media: soma / n, max: mx };
-      } catch { /* cai no fallback */ }
-    }
-    const st = resp.stats;
-    if (st && st.min != null && st.max != null) return { min: st.min, media: (st.min + st.max) / 2, max: st.max };
-    return null;
+  // A caixa ESTATÍSTICAS do PDF fala das ANÁLISES — os mesmos números impressos
+  // nos pontos do mapa. A regra antiga ("nunca dos pontos", sempre o raster) não
+  // fechava: a krigagem alisa e o mapa não alcança os extremos amostrados. Ver
+  // src/lib/estatisticaMapa.ts.
+  function pixelsDoGrid(resp: RespInterp): Float32Array | null {
+    if (!temGrid(resp)) return null;
+    try { return decodeGrid(resp.grid).valores; } catch { return null; }
   }
 
   // Gera o PDF "Layout Oficial Fertilidade V1" do atributo atual (todas as
@@ -850,25 +846,50 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
     for (const prof of profsAll) {
       const m = cache[ck(nutriente, prof)];
       if (!m) continue;
-      const st = statsRaster(m.resp);
-      if (!st) continue;
       const url = temGrid(m.resp) ? colorirGridComLegenda(m.resp.grid, legAtual).dataUrl : m.resp.png;
       if (!url) continue;
-      // Mapa POR ZONA: o PDF leva o mesmo que a tela — valor no centroide de
-      // cada zona + as DIVISAS como linhas (capturarMapaFertilidade desenha).
-      let valores = m.labels;
+      // RÓTULOS FRESCOS, os MESMOS da tela (ver o efeito de :503). `m.labels` foi
+      // congelado na hora da interpolação; corrigir um valor no laudo sem
+      // reprocessar deixava o PDF desta aba com o número velho. Isso era invisível
+      // enquanto a caixa vinha do raster — agora ela conta os rótulos, e um rótulo
+      // velho aqui faria este PDF discordar do BOOK, que recalcula.
+      // Mapa POR ZONA: valor no centroide de cada zona + as DIVISAS como linhas
+      // (capturarMapaFertilidade desenha).
+      let valores: GeoJSON.FeatureCollection;
       if (m.resp.stats?.modelo === 'zona' && zonas.length) {
         const zl = fcLabelsZona(nutriente, prof);
         const base = zl.features.length ? zl.features : (m.labels?.features ?? []);
         valores = { type: 'FeatureCollection', features: [...base, ...divisasDasZonas(zonas)] };
+      } else {
+        const pts = pontosDe(nutriente, prof);
+        valores = pts.length ? fcLabels(pts, nutriente) : m.labels;
       }
+      // LAUDO ALTERADO DEPOIS DO MAPA (desmembrar/fundir): as amostras de hoje não
+      // são as que geraram este raster — que segue pintando a faixa antiga. A caixa
+      // então descreve o RASTER; falar das amostras seria prometer um mínimo/máximo
+      // que os pixels desenhados não cumprem. É o mesmo estado que a tela avisa em
+      // `mapasAnterioresAoLimite`.
+      const marca = importacao?.limiteAlteradoEm;
+      const laudoMudouDepois = !!marca && (m.interpoladoEm ?? '') < marca;
+      const st = estatisticaDaPagina({
+        rotulos: laudoMudouDepois ? null : valores,
+        grid: pixelsDoGrid(m.resp), servidor: m.resp.stats,
+      });
+      if (!st) continue;
       profs.push({ profundidade: prof, rasterPng: url, bounds: m.resp.bounds, valores, stats: st });
     }
     if (profs.length === 0) {
       console.warn('[relatorio] sem mapas elegíveis. nutriente=', nutriente, 'profsAll=', profsAll,
         'chaves no cache=', Object.keys(cache), 'temGrid/stats por prof=',
-        profsAll.map(p => { const m = cache[ck(nutriente, p)]; return { p, existe: !!m, temGrid: m ? temGrid(m.resp) : false, stats: m ? !!statsRaster(m.resp) : false }; }));
-      setErro('Processe o(s) mapa(s) antes de gerar o PDF.'); setEstado('erro'); return;
+        profsAll.map(p => { const m = cache[ck(nutriente, p)]; return { p, existe: !!m, temGrid: m ? temGrid(m.resp) : false, rotulos: m?.labels?.features?.length ?? 0 }; }));
+      // Distingue "não processou" de "processou, mas este navegador não consegue
+      // ler o mapa salvo" (grid gravado comprimido + navegador sem
+      // DecompressionStream). A mensagem antiga mandava fazer o que já foi feito.
+      const haMapa = profsAll.some(p => !!cache[ck(nutriente, p)]);
+      setErro(haMapa
+        ? 'O mapa salvo não pôde ser lido neste navegador. Reprocesse o mapa (ou abra em um navegador atualizado).'
+        : 'Processe o(s) mapa(s) antes de gerar o PDF.');
+      setEstado('erro'); return;
     }
 
     const cultura = nav.talhaoId ? getPlantio(nav.talhaoId, safraNome) : '';

@@ -230,7 +230,9 @@ function interpolarCor(
 
 // Helper: confere se a resposta da interpolação tem grid utilizável.
 export function temGrid(resp: RespInterp | null | undefined): resp is RespInterp & { grid: { b64: string; shape: [number, number] } } {
-  return !!resp && !!resp.grid && !!resp.grid.b64 && !!resp.grid.shape;
+  // `comp` = ainda comprimido (a descompressão da hidratação falhou). Não é grid
+  // utilizável: decodificar renderia lixo silencioso. Quem chama cai no PNG.
+  return !!resp && !!resp.grid && !!resp.grid.b64 && !!resp.grid.shape && !resp.grid.comp;
 }
 
 // Recorta um PNG já colorido pelo contorno do talhão, devolvendo outro dataURL.

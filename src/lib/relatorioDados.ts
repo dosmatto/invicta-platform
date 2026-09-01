@@ -22,6 +22,7 @@ import { centroideGeom } from './recomendacao/zonasGrid';
 import { rotuloDoPonto } from './gradeZonas';
 import type { Epoca } from './periodo';
 import type { DadosRelatorioFert, ProfundidadeRel } from './relatorioFertilidade';
+import { estatisticaDaPagina, statsDeGrid, casasDoRotulo } from './estatisticaMapa';
 
 // Ponto representativo do talhão para o geocoding reverso do município.
 export function pontoDoPoligono(
@@ -31,7 +32,13 @@ export function pontoDoPoligono(
   return c ? { lng: c[0], lat: c[1] } : null;
 }
 
-type MapaCarregado = { resp: RespInterp; labels: GeoJSON.FeatureCollection; interpoladoEm?: string };
+type MapaCarregado = {
+  resp: RespInterp; labels: GeoJSON.FeatureCollection; interpoladoEm?: string;
+  // LAUDO ALTERADO DEPOIS DESTE MAPA (desmembrar/fundir talhão troca os
+  // resultados sob o mesmo id e carimba `limiteAlteradoEm`). Marcado na
+  // hidratação, não vem da nuvem.
+  laudoMudouDepois?: boolean;
+};
 
 export interface ElementoDisponivel { nut: string; atributo: string; simbolo: string; profundidades: string[]; ehIndice?: boolean }
 
@@ -58,18 +65,19 @@ export interface ContextoRelatorio {
 // Ordem padrão de capítulos de fertilidade (spec).
 const ORDEM = ['mo', 'ph', 'm', 'v', 'ctc', 'p', 'k', 'ca', 'mg', 'b', 'mn', 'cu', 'fe', 'zn', 'al'];
 
-function statsRaster(resp: RespInterp): { min: number; media: number; max: number } | null {
-  if (resp.grid) {
-    try {
-      const { valores } = decodeGrid(resp.grid);
-      let n = 0, soma = 0, mn = Infinity, mx = -Infinity;
-      for (let i = 0; i < valores.length; i++) { const v = valores[i]; if (!isFinite(v)) continue; n++; soma += v; if (v < mn) mn = v; if (v > mx) mx = v; }
-      if (n) return { min: mn, media: soma / n, max: mx };
-    } catch { /* fallback */ }
-  }
-  const st = resp.stats;
-  if (st && st.min != null && st.max != null) return { min: st.min, media: (st.min + st.max) / 2, max: st.max };
-  return null;
+// Pixels do raster, quando o grid decodifica. Serve para DUAS coisas diferentes:
+// o domínio de cor dos índices satelitais (que esticam min–máx) e o fallback da
+// caixa de estatísticas quando não há laudo por trás do mapa.
+// Faixa do raster para esticar a rampa contínua. Calculada só onde é usada — a
+// varredura completa do grid é cara e o resto da página não precisa dela.
+function faixaDoRaster(pixels: Float32Array | null, reserva: { min: number; max: number }): [number, number] {
+  const st = statsDeGrid(pixels);
+  return st ? [st.min, st.max] : [reserva.min, reserva.max];
+}
+
+function pixelsDoGrid(resp: RespInterp): Float32Array | null {
+  if (!temGrid(resp)) return null;
+  try { return decodeGrid(resp.grid).valores; } catch { return null; }
 }
 
 export async function carregarContextoRelatorio(
@@ -141,8 +149,14 @@ export async function carregarContextoRelatorio(
       }
       // Mapa salvo antes da correção de faixa: limita na leitura, senão o PDF
       // imprime "mínimo -16,1" mesmo com a origem já corrigida. Também acerta o
-      // `stats` do servidor antigo, que é o fallback de statsRaster.
-      dados.resp = limitarRespAFaixa(dados.resp, faixaDoLaudo(importacao, nut, prof, dados.interpoladoEm));
+      // `stats` do servidor antigo, que é o último recurso da caixa de estatísticas.
+      const faixa = faixaDoLaudo(importacao, nut, prof, dados.interpoladoEm);
+      dados.resp = limitarRespAFaixa(dados.resp, faixa);
+      // Sem faixa por laudo alterado depois do mapa: o raster continua pintando a
+      // faixa ANTIGA. A caixa de estatísticas não pode falar das amostras de hoje
+      // — prometeria um mínimo/máximo que os pixels desenhados não respeitam.
+      dados.laudoMudouDepois = !!importacao.limiteAlteradoEm && !!dados.interpoladoEm
+        && dados.interpoladoEm < importacao.limiteAlteradoEm;
       mapas[chave] = dados;
       if ((dados.interpoladoEm ?? '') > dataMaisRecente) dataMaisRecente = dados.interpoladoEm ?? '';
     }
@@ -161,13 +175,15 @@ export async function carregarContextoRelatorio(
     if (!pts.length) return mapas[`${nut}__${prof}`]?.labels ?? { type: 'FeatureCollection', features: [] };
     // Casas do rótulo do ponto: config da variável (Preferências de Análise) tem
     // prioridade; senão pH/K = 1, demais 0 — igual ao mapa da tela (satk/satca/satmg=1).
-    const casas = casasDecimaisVariavel(nut) ?? ((nut === 'ph' || nut === 'k') ? 1 : 0);
+    const casas = casasDoRotulo(nut, casasDecimaisVariavel(nut));
     return {
       type: 'FeatureCollection',
       features: pts.map(p => ({
         type: 'Feature' as const,
         geometry: { type: 'Point' as const, coordinates: [p.lng, p.lat] },
-        properties: { txt: p.valor.toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: casas }) },
+        // `v` = o número cru. A caixa ESTATÍSTICAS conta EXATAMENTE estes valores,
+        // então ela não tem como divergir do que está escrito no mapa.
+        properties: { txt: p.valor.toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: casas }), v: p.valor },
       })),
     };
   }
@@ -253,7 +269,18 @@ export function montarPaginas(ctx: ContextoRelatorio, nutsSelecionados: string[]
     for (const prof of el.profundidades) {
       const m = ctx.mapas[`${nut}__${prof}`];
       if (!m) continue;
-      const st = statsRaster(m.resp);
+      // Os rótulos saem SEMPRE (mesmo com "valores" desligado no PDF): são eles
+      // que definem a caixa de estatísticas. Sem laudo por trás (índice
+      // satelital) a lista sai vazia e a caixa cai no raster.
+      const rotulos = ctx.valoresDe(nut, prof);
+      const pixels = pixelsDoGrid(m.resp);
+      const st = estatisticaDaPagina({
+        // Mapa gerado por um laudo que já mudou: a caixa descreve o RASTER, que é
+        // o que está desenhado. Falar das amostras de hoje seria prometer uma
+        // faixa que os pixels não cumprem (ver `laudoMudouDepois`).
+        rotulos: m.laudoMudouDepois ? null : rotulos,
+        grid: pixels, servidor: m.resp.stats,
+      });
       if (!st) continue;
       // Índices satelitais que não são NDVI variam de faixa por cena → render
       // contínuo esticado min–máx (igual à tela); NDVI e fertilidade usam a legenda.
@@ -261,13 +288,16 @@ export function montarPaginas(ctx: ContextoRelatorio, nutsSelecionados: string[]
       let url: string | undefined;
       if (temGrid(m.resp)) {
         url = indiceNaoNdvi
-          ? colorirGrid(m.resp.grid, [st.min, st.max], rampaVisualStops({ ...leg, estilo: 'continuo' })).dataUrl
+          // Domínio de cor do índice satelital: SEMPRE do raster — esticar a rampa
+          // pela faixa das amostras pintaria o mapa errado. (Aqui `pixels` nunca é
+          // nulo: estamos dentro do `temGrid`.)
+          ? colorirGrid(m.resp.grid, faixaDoRaster(pixels, st), rampaVisualStops({ ...leg, estilo: 'continuo' })).dataUrl
           : colorirGridComLegenda(m.resp.grid, leg).dataUrl;
       } else url = m.resp.png;
       if (!url) continue;
       profundidades.push({
         profundidade: prof, rasterPng: url, bounds: m.resp.bounds,
-        valores: config.valores ? ctx.valoresDe(nut, prof) : vazio, stats: st,
+        valores: config.valores ? rotulos : vazio, stats: st,
       });
     }
     if (profundidades.length === 0) continue;

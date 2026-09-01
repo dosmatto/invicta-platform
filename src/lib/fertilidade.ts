@@ -58,6 +58,9 @@ export interface RespInterp {
   stats: {
     n: number; modelo: string; min: number | null; max: number | null; nx: number; ny: number;
     pixel_m: number; rmse: number | null;
+    // Faixa das AMOSTRAS que geraram o grid (interp-29+). Permite conferir a
+    // coerência do mapa sem ter o laudo em mãos. Ausente em mapas antigos.
+    faixa_amostras?: [number, number] | null;
     variograma: {
       alcance_m: number; patamar: number; pepita: number;
       manual?: boolean;    // variograma DIGITADO pelo usuário (Krigagem fixa) — sem auto-ajuste
@@ -73,6 +76,12 @@ export type Grid = NonNullable<RespInterp['grid']>;
 
 // Decodifica o grid base64 (cru) -> Float32Array. Use grid_oriented[r*cols + c].
 export function decodeGrid(g: Grid): { valores: Float32Array; rows: number; cols: number } {
+  // Grid AINDA COMPRIMIDO não pode ser lido como Float32: os bytes do gzip
+  // viram números aleatórios e ninguém percebe — sai estatística de lixo no PDF
+  // e dose de lixo na recomendação, sem erro nenhum. Acontece quando
+  // `descomprimirGrid` falha na hidratação (o catch de lá segue em frente).
+  // Falhar alto é o certo: quem chama cai no PNG salvo.
+  if (g.comp) throw new Error('grid ainda comprimido — descomprima antes de decodificar');
   const bin = atob(g.b64);
   const buf = new ArrayBuffer(bin.length);
   const u8 = new Uint8Array(buf);
@@ -111,7 +120,15 @@ export async function comprimirGrid(grid: Grid): Promise<Grid> {
 }
 
 export async function descomprimirGrid(grid: Grid): Promise<Grid> {
-  if (grid.comp !== 'gz' || typeof DecompressionStream === 'undefined') return grid;
+  if (grid.comp !== 'gz') return grid;
+  // FALHA ALTO, nunca devolve o comprimido. Devolver o grid intacto parecia
+  // inofensivo, mas o `comp` se perdia na cópia seguinte (meap/gerar.ts monta
+  // `{ b64, shape }` sem ele) e os bytes do gzip acabavam lidos como Float32:
+  // raster e estatística de lixo, sem erro em lugar nenhum. Quem chama já trata
+  // a exceção pulando o mapa.
+  if (typeof DecompressionStream === 'undefined') {
+    throw new Error('este navegador não descomprime o mapa salvo (DecompressionStream indisponível)');
+  }
   const cru = await porStream(b64ToBytes(grid.b64), new DecompressionStream('gzip'));
   return { shape: grid.shape, b64: cru };
 }

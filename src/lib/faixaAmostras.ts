@@ -117,10 +117,30 @@ export function limitarGrid(grid: Grid | undefined, faixa: [number, number] | nu
  * O stats vem do servidor e é o FALLBACK das estatísticas do PDF — limitar só o
  * grid deixaria o relatório imprimindo "mínimo -16,1" mesmo com o mapa correto.
  */
-export function limitarRespAFaixa<T extends { grid?: Grid; stats?: { min: number | null; max: number | null } }>(
+/**
+ * A faixa que a PRÓPRIA resposta carrega (interp-29+): as amostras que geraram
+ * aquele grid, gravadas junto com ele.
+ *
+ * É a faixa certa quando o laudo mudou depois do mapa (desmembrar/fundir) —
+ * `faixaDoLaudo` devolve null ali, e sem isto o mapa ficava SEM limite nenhum,
+ * justamente no caso em que ninguém mais sabe de onde ele veio. Aqui a
+ * procedência viaja com o dado.
+ */
+export function faixaDaResposta(resp: { stats?: { faixa_amostras?: [number, number] | null } }): [number, number] | null {
+  const fa = resp.stats?.faixa_amostras;
+  if (!fa || fa.length !== 2) return null;
+  const [a, b] = fa;
+  return Number.isFinite(a) && Number.isFinite(b) && a <= b ? [a, b] : null;
+}
+
+export function limitarRespAFaixa<T extends {
+  grid?: Grid;
+  stats?: { min: number | null; max: number | null; faixa_amostras?: [number, number] | null };
+}>(
   resp: T,
-  faixa: [number, number] | null,
+  faixaPedida: [number, number] | null,
 ): T {
+  const faixa = faixaPedida ?? faixaDaResposta(resp);
   if (!faixa) return resp;
   const grid = limitarGrid(resp.grid, faixa);
   const st = resp.stats;

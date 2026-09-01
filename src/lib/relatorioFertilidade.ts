@@ -12,7 +12,8 @@ import { rampaVisualStops, valorParaPosicaoVisual, dominioDaLegenda } from './le
 import { capturarMapaFertilidade } from './capturaMapa';
 import { imagemParaPdf, reduzirLogo } from './pdfImagem';
 import { abrirPdfNaAba } from './abrirPdf.ts';
-import { formatarValorVariavel, variavelDeAnalise } from './store';
+import { formatarValorVariavel, variavelDeAnalise, casasDecimaisVariavel } from './store';
+import { casasDoRotulo, type FonteEstat } from './estatisticaMapa';
 import { rotuloAno, type Epoca } from './periodo';
 import { nomeExport, periodoParaNome } from './nomeExport';
 import { DATUM, desenharCabecalhoOficial, marcaInvicta } from './pdfCabecalho';
@@ -21,8 +22,11 @@ export interface ProfundidadeRel {
   profundidade: string;
   rasterPng: string;
   bounds: [number, number, number, number];
-  valores: GeoJSON.FeatureCollection;             // pontos da planilha { txt }
-  stats: { min: number; media: number; max: number }; // do raster interpolado
+  valores: GeoJSON.FeatureCollection;             // pontos da planilha { txt, v }
+  // A caixa ESTATÍSTICAS. `fonte: 'amostras'` = os mesmos números impressos nos
+  // pontos do mapa (o padrão quando há laudo); 'mapa' = pixels do raster (índice
+  // satelital); 'servidor' = só min/máx, sem média (mapa salvo "só PNG").
+  stats: { min: number; media: number | null; max: number; fonte?: FonteEstat };
 }
 export interface DadosRelatorioFert {
   fazenda: string; produtor: string; talhao: string; safra: string;
@@ -188,11 +192,24 @@ async function desenharPaginaMapa(doc: JsPDF, d: DadosRelatorioFert, logos: Logo
     doc.setDrawColor(...LINE); doc.setLineWidth(0.4); doc.roundedRect(x, stBandY, frameW, stBandH, 2, 2, 'S');
     doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(...NAVY);
     doc.text(`ESTATÍSTICAS  ${p.profundidade} cm`, cx, stBandY + 4.5, { align: 'center' });
-    const tri: [string, number][] = [['MÍNIMO', p.stats.min], ['MÉDIO', p.stats.media], ['MÁXIMO', p.stats.max]];
+    // Casas decimais: quando os números vêm das ANÁLISES, seguem a MESMA regra do
+    // rótulo desenhado no ponto (config da variável; sem config, pH/K = 1 e os
+    // demais inteiros). Sem isto a caixa imprimiria "144,0" onde o mapa escreve
+    // "144" — mesmo número, grafia diferente, e a conferência do agrônomo trava.
+    const id = d.legenda.atributoId;
+    const casas = p.stats.fonte === 'amostras' ? casasDoRotulo(id, casasDecimaisVariavel(id)) : 1;
+    const tri: [string, number | null][] = [['MÍNIMO', p.stats.min], ['MÉDIO', p.stats.media], ['MÁXIMO', p.stats.max]];
     tri.forEach(([lab, val], j) => {
       const tx = x + frameW * (j + 0.5) / 3;
       doc.setFont('helvetica', 'bold'); doc.setFontSize(6); doc.setTextColor(...GRAY); doc.text(lab, tx, stBandY + 8.5, { align: 'center' });
-      doc.setFontSize(11); doc.setTextColor(...NAVY); doc.text(`${formatarValorVariavel(d.legenda.atributoId, val, fmt)} ${san(d.unidade)}`, tx, stBandY + 12.6, { align: 'center' });
+      // Média ausente = "—". Antes vinha (mín+máx)/2 rotulado como MÉDIO, que não
+      // é média de nada — num mapa assimétrico (P, K) superestimava feio.
+      // MÍNIMO e MÁXIMO saem com as casas do rótulo (são rótulos do mapa). O MÉDIO
+      // não é rótulo de nada e fica com pelo menos 1 casa — arredondá-lo junto
+      // transformava média 24,3 de P em "24", perdendo precisão à toa.
+      const casasVal = lab === 'MÉDIO' ? Math.max(casas, 1) : casas;
+      const txt = val == null ? '—' : `${formatarValorVariavel(id, val, v => fmt(v, casasVal))} ${san(d.unidade)}`;
+      doc.setFontSize(11); doc.setTextColor(...NAVY); doc.text(txt, tx, stBandY + 12.6, { align: 'center' });
     });
   });
 

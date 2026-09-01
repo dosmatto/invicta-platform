@@ -7,7 +7,7 @@
 // faixa, já que reabrir não refaz a conta.
 // Roda: `npm run teste:faixa-front`
 import assert from 'node:assert/strict';
-import { faixaDe, limitarNaFaixa, faixaDoLaudo, limitarGrid, limitarRespAFaixa } from '../src/lib/faixaAmostras.ts';
+import { faixaDe, limitarNaFaixa, faixaDoLaudo, limitarGrid, limitarRespAFaixa, faixaDaResposta } from '../src/lib/faixaAmostras.ts';
 
 let ok = 0, fail = 0;
 const t = (n, f) => { try { f(); ok++; console.log('  ✓', n); } catch (e) { fail++; console.error('  ✗', n, '—', e.message); } };
@@ -140,9 +140,37 @@ t('limitarRespAFaixa: tudo dentro da faixa devolve a MESMA resposta', () => {
   assert.equal(limitarRespAFaixa(resp, [4, 70]), resp);
 });
 
-t('limitarRespAFaixa: sem faixa não mexe em nada', () => {
+t('limitarRespAFaixa: sem faixa e sem procedência, não mexe em nada', () => {
   const resp = { grid: { b64: enc([-16.1]), shape: [1, 1] }, stats: { min: -16.1, max: -16.1 } };
   assert.equal(limitarRespAFaixa(resp, null), resp);
+});
+
+t('limitarRespAFaixa: sem faixa, usa a que a RESPOSTA carrega (interp-29+)', () => {
+  // Laudo alterado depois do mapa (desmembrar/fundir) → `faixaDoLaudo` devolve
+  // null. Antes o mapa ficava sem limite NENHUM justamente aí; agora a faixa das
+  // amostras que geraram o grid viaja junto com ele.
+  const resp = {
+    grid: { b64: enc([-16.1, 30, 200]), shape: [1, 3] },
+    stats: { min: -16.1, max: 200, faixa_amostras: [4, 70] },
+  };
+  const lim = limitarRespAFaixa(resp, null);
+  assert.deepEqual(dec(lim.grid.b64).map(v => Math.round(v)), [4, 30, 70]);
+  assert.equal(lim.stats.min, 4);
+  assert.equal(lim.stats.max, 70);
+});
+
+t('faixaDaResposta: procedência ausente ou inválida devolve null', () => {
+  assert.deepEqual(faixaDaResposta({ stats: { faixa_amostras: [4, 70] } }), [4, 70]);
+  assert.equal(faixaDaResposta({ stats: {} }), null);
+  assert.equal(faixaDaResposta({}), null);
+  assert.equal(faixaDaResposta({ stats: { faixa_amostras: [70, 4] } }), null);
+  assert.equal(faixaDaResposta({ stats: { faixa_amostras: [NaN, 70] } }), null);
+});
+
+t('a faixa PEDIDA ganha da procedência (laudo é a fonte, quando confiável)', () => {
+  const resp = { grid: { b64: enc([1, 50]), shape: [1, 2] }, stats: { min: 1, max: 50, faixa_amostras: [0, 100] } };
+  const lim = limitarRespAFaixa(resp, [10, 20]);
+  assert.deepEqual(dec(lim.grid.b64).map(v => Math.round(v)), [10, 20]);
 });
 
 console.log(`\n${ok} passaram, ${fail} falharam`);

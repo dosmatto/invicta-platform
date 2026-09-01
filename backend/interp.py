@@ -59,10 +59,19 @@ AMPLITUDE_MIN = 0.30
 # Capando a pepita, a krigagem passa mais perto dos pontos (honra as amostras) —
 # mantendo o alcance/modelo que o auto-ajuste encontrou. Decisao do usuario:
 # mapa de fertilidade deve bater com os pontos.
-NUGGET_MAX = 0.10
+#
+# MEDIDO (01/09/2026, campo sintetico de 36 amostras/90 ha, pixel 5 m): a
+# amplitude que o mapa PERDE em relacao as amostras e ~2,2x a razao de pepita.
+#   pepita 10% do patamar -> 22% da amplitude perdida, erro mediano de 3,3 a
+#                            8,1% NO PROPRIO PONTO amostrado (pior caso 49%)
+#   pepita  2% do patamar ->  6% da amplitude perdida, erro mediano 1,2 a 2,7%
+#   pepita  0             ->  1% (piso geometrico: o no da grade nao cai em cima
+#                                 do ponto; a 2,5 m o exponencial ja subiu ~2,5%)
+# Abaixo de 2% o ganho e pequeno e a pepita ainda regulariza o sistema linear.
+NUGGET_MAX = 0.02
 # Versao do motor de interpolacao (conferir em GET /health para saber se o
 # backend foi reiniciado com o codigo novo).
-VERSION = "interp-28-incorporar-divisas"
+VERSION = "interp-29-honra-amostras"
 
 
 # ============================================================ instrumentacao
@@ -342,9 +351,20 @@ def _krige_constrangido(xm, ym, z, gxm, gym, modelo, spacing):
     (pepita ~= patamar / alcance < espacamento -> krige preve a media -> mapa
     uniforme). Em vez de cair para IDW (que o usuario nao quer em fertilidade),
     forca um variograma que honra os pontos e varia: patamar = variancia dos
-    dados, alcance = ~3x o espacamento das amostras, pepita pequena (10%)."""
+    dados, alcance = ~3x o espacamento das amostras, pepita no mesmo teto do
+    resto (NUGGET_MAX do patamar).
+
+    A pepita daqui era 10% da variancia (= 9,1% do patamar) fixa no codigo, e
+    este ramo NAO passa pelo cap la de baixo (esta no `if`, nao no `elif`).
+    Resultado medido: era justamente aqui que sobrava alisamento depois de
+    apertar o NUGGET_MAX — 6 de 12 combinacoes semente x ruido guardavam so
+    76 a 90% da amplitude das amostras, todas com a assinatura deste ramo
+    (pepita 9,1%, alcance 330 m). Uma constante esquecida vale por toda a
+    politica."""
     var = float(np.var(z)) or 1.0
-    return _krige_fixo(xm, ym, z, gxm, gym, modelo, var, max(3.0 * spacing, 1.0), 0.10 * var)
+    psill = var * (1.0 - NUGGET_MAX)
+    return _krige_fixo(xm, ym, z, gxm, gym, modelo, psill,
+                       max(3.0 * spacing, 1.0), var * NUGGET_MAX)
 
 
 def _amplitude_no_poligono(grid: np.ndarray, gx, gy, poly, mask=None) -> float:
@@ -544,11 +564,15 @@ def gerar_grid(points: list[dict], polygon_geojson: dict, pixel_m: float = 20.0,
                         modelo = "idw"
                         rmse = None
                         variograma = None
-                elif (not modelo_fixo) and (pepita > NUGGET_MAX * patamar):
+                elif pepita > NUGGET_MAX * patamar:
                     # Tem estrutura, mas a pepita alta faz a krigagem ALISAR demais
                     # (os extremos viram a media da vizinhanca -> o mapa nao bate com
                     # os pontos). Capa a pepita mantendo alcance/modelo -> a krigagem
                     # passa mais perto dos pontos (honra as amostras). Continua krigagem.
+                    #
+                    # Vale TAMBEM com modelo forcado: escolher "esferico" no seletor
+                    # nao pode desligar a guarda — so o VARIOGRAMA MANUAL (Krigagem
+                    # fixa) escapa, porque ali os numeros sao do usuario.
                     nugget_cap = NUGGET_MAX * patamar
                     grid, params2 = _krige_fixo(xm, ym, z, gxm, gym, modelo, patamar - nugget_cap, alcance, nugget_cap)
                     params, rmse = params2, None
@@ -595,6 +619,7 @@ def gerar_grid(points: list[dict], polygon_geojson: dict, pixel_m: float = 20.0,
     # a imagem sobre os bounds, entao devolver o bbox deslocaria o raster inteiro.
     return {
         "grid": grid, "gx": gx, "gy": gy,
+        "faixa_amostras": [float(np.min(z)), float(np.max(z))] if len(z) else None,
         "bounds": [float(gx[0]), float(gy[0]), float(gx[-1]), float(gy[-1])],
         "modelo": modelo, "rmse": rmse, "variograma": variograma,
         "lon0": lon0, "lat0": lat0, "n": int(len(z)),
@@ -649,6 +674,9 @@ def interpolar(points: list[dict], polygon_geojson: dict, dominio, stops,
         "modelo": g["modelo"],
         "min": float(np.min(finitos)) if finitos.size else None,
         "max": float(np.max(finitos)) if finitos.size else None,
+        # Faixa das AMOSTRAS que geraram este grid. Vai na resposta para o app
+        # poder conferir a coerencia (nenhum pixel fora) sem depender do laudo.
+        "faixa_amostras": g.get("faixa_amostras"),
         "nx": int(len(gx)),
         "ny": int(len(gy)),
         "celulas": int(len(gx) * len(gy)),
