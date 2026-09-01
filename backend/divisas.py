@@ -226,13 +226,25 @@ def curar_cobertura(zonas, classes, avisos):
     if n_gap:
         avisos.append(f"{n_gap} vão(s) no arquivo antigo ({area_gap:.0f} m²) — costurados na zona vizinha")
 
-    # dissolve por CLASSE: divisa entre duas zonas de MESMA classe não é divisa
-    por_classe = {}
+    # Dissolve pela IDENTIDADE DA ZONA — NUNCA pelo rótulo da classe.
+    #
+    # A primeira versão dissolvia por classe, com o raciocínio "divisa entre duas
+    # zonas de mesma classe não é divisa agronômica". Está errado, e quebrou feio
+    # no MCACA 22: 13 zonas com ~5 rótulos (Alta, Média, Baixa, Média-alta,
+    # Média-baixa) viraram 2. As divisas entre zonas vizinhas de mesmo rótulo
+    # foram APAGADAS, sobraram cacos de 5 a 17 m que não alcançavam nada, e o
+    # talhão inteiro virou uma mancha só.
+    #
+    # O rótulo é uma leitura do potencial; a ZONA é a unidade de manejo que o
+    # agrônomo desenhou. Duas zonas "Alta" lado a lado continuam sendo duas
+    # zonas — a linha entre elas é justamente o trabalho que esta ferramenta
+    # existe para preservar.
+    por_zona = {}
     for k, f in enumerate(faces):
         if donos[k] >= 0:
-            por_classe.setdefault(cls[donos[k]], []).append(f)
-    curadas = [unary_union(v) for v in por_classe.values()]
-    nomes = list(por_classe.keys())
+            por_zona.setdefault(cls[donos[k]], []).append(f)
+    curadas = [unary_union(v) for v in por_zona.values()]
+    nomes = list(por_zona.keys())
     curadas, nomes = _absorver_componentes(curadas, nomes, avisos)
     return _tapar_furos(curadas, nomes, avisos)
 
@@ -643,11 +655,11 @@ def prolongar(divisas, contorno, avisos, stats):
             continue
         _, d, kappa, jan, dg = dados[u]
         if exts[u] is None:
+            # NÃO gera um aviso por divisa: num arquivo sujo isso vira uma parede
+            # de dezenas de linhas quase idênticas, que afoga o que de fato pede
+            # decisão (classe que sumiu, empate na herança). O relato sai
+            # AGREGADO no fim do laço.
             perdidas.append(i)
-            Lmax = min(P["LMAX_MULT"] * divisas[i].length, P["LMAX_DIAM"] * diag, P["LMAX_ABS_M"])
-            if i not in perdidas[:-1]:
-                avisos.append(f"divisa #{i} ({divisas[i].length:.0f} m): prolongamento NÃO encontrou nada "
-                              f"em {Lmax:.0f} m — divisa DESCARTADA (não reparticiona nada)")
         else:
             saida.append(exts[u])
             if "OSCILANTE" in dg["modo"]:
@@ -656,7 +668,21 @@ def prolongar(divisas, contorno, avisos, stats):
             fim_pt = Point(exts[u].coords[-1])
             onde = "contorno" if contorno.boundary.distance(fim_pt) <= 0.05 else "outra divisa/prolongamento"
             relato.append((i, exts[u].length, dg["modo"], dg["raio_m"], onde))
+    # Relato AGREGADO dos descartes. Os comprimentos são o que informa: cacos de
+    # vetorização vêm em metros; divisa de verdade sem alcance vem em centenas.
+    if perdidas:
+        comps = sorted(divisas[i].length for i in set(perdidas))
+        cabeca = (f"{len(set(perdidas))} divisa(s) não alcançaram nada e foram DESCARTADAS "
+                  f"(de {comps[0]:.0f} a {comps[-1]:.0f} m, somando {sum(comps):.0f} m)")
+        if comps[-1] < 30.0:
+            cabeca += (" — todas com menos de 30 m: são cacos de vetorização do arquivo "
+                       "antigo, não divisas de manejo")
+        avisos.append(cabeca)
     stats["prolongamentos"] = relato
+    stats["n_esticadas"] = len(relato)
+    stats["m_esticado"] = float(sum(r[1] for r in relato))
+    stats["n_descartadas"] = len(set(perdidas))
+    stats["n_costuradas"] = len(costuradas)
     return saida + pontes, perdidas, relato
 
 
@@ -674,6 +700,15 @@ def recortar(divisas, contorno, avisos, stats):
         depois += sum(x.length for x in ps)
         out.extend(ps)
     stats["m_recortados"] = antes - depois
+    # Métricas que o painel mostra. Antes NINGUÉM as preenchia e a tela exibia
+    # "cortadas: 0 (0 m)" mesmo tendo recortado centenas de metros — mentira
+    # silenciosa, e das piores: o usuário conferia o número e confiava.
+    stats["m_cortado"] = max(0.0, antes - depois)
+    stats["n_cortadas"] = sum(
+        1 for l in divisas
+        if abs(sum(x.length for x in _linhas(l.intersection(contorno))) - l.length) > 1.0
+    )
+    stats["n_fora"] = fora
     if antes - depois > 1.0:
         avisos.append(f"{antes - depois:.0f} m de divisa ULTRAPASSAVAM o contorno novo — recortados")
     if fora:
@@ -801,14 +836,29 @@ def reajustar(zonas, classes, contorno):
 # CAMADA PÚBLICA — graus ⇄ plano métrico local, e a resposta que o app consome
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _classe_de(props: dict) -> str:
-    """Rótulo da classe de uma zona. Aceita as chaves que o app usa; sem
-    nenhuma, cai no id — assim uma zona nunca fica sem identidade e some."""
-    for k in ("classe", "classeLabel", "potencial", "zona", "id"):
+def _chave_de(props: dict, i: int) -> str:
+    """IDENTIDADE da zona — a unidade que a ferramenta preserva.
+
+    `zona` primeiro (o número OFICIAL: duas manchas da mesma zona, "01" e
+    "01_2", têm o mesmo `zona` e entram como UMA), depois `id`. O rótulo da
+    classe NÃO entra: zonas vizinhas de mesmo rótulo são zonas diferentes, e
+    dissolvê-las apaga a divisa que o agrônomo desenhou.
+
+    Sem nenhuma chave, o índice garante que a zona não se funde com outra."""
+    for k in ("zona", "id"):
         v = props.get(k)
         if v not in (None, ""):
             return str(v)
-    return "?"
+    return f"#{i}"
+
+
+def _classe_de(props: dict) -> str:
+    """Rótulo de POTENCIAL da zona — só para exibição/herança de properties."""
+    for k in ("classe", "classeLabel", "potencial"):
+        v = props.get(k)
+        if v not in (None, ""):
+            return str(v)
+    return ""
 
 
 def incorporar_divisas(fc: dict, poligono: dict) -> dict[str, Any]:
@@ -834,8 +884,8 @@ def incorporar_divisas(fc: dict, poligono: dict) -> dict[str, Any]:
     contorno = _multi(_so_poligonos(_tf_local(alvo_geo, lon0, lat0)))
     contorno = shapely.make_valid(contorno)
 
-    zonas, classes, props_por_classe = [], [], {}
-    for f in feats:
+    zonas, chaves, props_por_zona = [], [], {}
+    for i, f in enumerate(feats):
         try:
             g = shapely.geometry.shape(f["geometry"])
         except Exception:
@@ -844,17 +894,17 @@ def incorporar_divisas(fc: dict, poligono: dict) -> dict[str, Any]:
         polys = _so_poligonos(g)
         if not polys:
             continue
-        cls = _classe_de(f.get("properties") or {})
+        ch = _chave_de(f.get("properties") or {}, i)
         zonas.append(_multi(polys))
-        classes.append(cls)
-        # Guarda as properties da PRIMEIRA zona de cada classe: a face nova sai
-        # com cor/rótulo do original, senão o mapa perderia a identidade visual.
-        props_por_classe.setdefault(cls, dict(f.get("properties") or {}))
+        chaves.append(ch)
+        # Properties da PRIMEIRA feição de cada zona: a face nova sai com a cor,
+        # o número e a classe do original — senão o mapa perde a identidade.
+        props_por_zona.setdefault(ch, dict(f.get("properties") or {}))
 
     if not zonas:
         raise ValueError("Nenhum polígono válido no zoneamento.")
 
-    r = reajustar(zonas, classes, contorno)
+    r = reajustar(zonas, chaves, contorno)
     faces_loc = [x["face"] for x in r["faces"]]
     if not faces_loc:
         raise ValueError("A reconstrução não produziu nenhuma zona — confira se o zoneamento cobre o talhão.")
@@ -875,9 +925,10 @@ def incorporar_divisas(fc: dict, poligono: dict) -> dict[str, Any]:
     saida_geo = _para_graus(faces_loc, lon0, lat0)
     features = []
     for x, g in zip(r["faces"], saida_geo):
-        base = dict(props_por_classe.get(x["classe"], {}))
+        base = dict(props_por_zona.get(x["classe"], {}))
         base.update({
-            "classe": x["classe"],
+            "zona": x["classe"],
+            "classe": _classe_de(base) or x["classe"],
             "areaHa": round(x["face"].area / 1e4, 4),
             "heranca": x.get("origem", "sobreposicao"),
             "herancaFrac": round(float(x.get("frac", 1.0)), 4),

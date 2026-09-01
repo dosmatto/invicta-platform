@@ -1,5 +1,13 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.108.0': [
+    '26 — CORRIGIDO: A INCORPORAÇÃO DE DIVISAS FUNDIA AS ZONAS. No MCACA 22, um zoneamento de 13 zonas voltou como 2, com uma parede de avisos de divisas descartadas. A ferramenta estava inutilizável.',
+    'A CAUSA: ela dissolvia as zonas pelo RÓTULO DA CLASSE, com o raciocínio "divisa entre duas zonas de mesma classe não é divisa agronômica". Está errado. Suas 13 zonas usam ~5 rótulos (Alta, Média, Baixa, Média-alta, Média-baixa), e várias vizinhas compartilham o mesmo — as divisas entre elas foram APAGADAS, sobraram cacos de 5 a 17 m que não alcançavam nada, e o talhão virou uma mancha só.',
+    'AGORA A UNIDADE É A ZONA, nunca o rótulo. Duas zonas "Alta" lado a lado continuam sendo duas zonas — a linha entre elas é justamente o trabalho que a ferramenta existe para preservar. Zona partida em várias manchas (01 e 01_2) continua contando como uma só.',
+    'CORRIGIDO TAMBÉM: O PAINEL MENTIA NOS NÚMEROS. Ele mostrava "esticadas: 0 · cortadas: 0" sempre, porque essas contas nunca eram feitas — o campo simplesmente não existia e a tela lia zero. Num teste com 13 zonas, o que aparecia como 0 eram na verdade 36 divisas esticadas, somando 1.353 m.',
+    'OS AVISOS PARARAM DE AFOGAR O QUE IMPORTA. Em vez de dezenas de linhas quase idênticas ("divisa #7 descartada", "divisa #8 descartada"…), sai uma linha só com o total e a faixa de comprimentos — e, quando todas têm menos de 30 m, ela diz o que são: cacos de vetorização do arquivo antigo, não divisas de manejo.',
+    'E o banco de provas passou a exercitar o código de produção. Ele tinha uma CÓPIA do algoritmo, e as duas divergiram na primeira correção: o backend foi corrigido e o banco continuou aprovando o código antigo. Um teste que testa outra coisa é pior que teste nenhum.',
+  ],
   '2.107.0': [
     '26 — INCORPORAR DIVISAS INTERNAS AO POLÍGONO ATUAL. Quando o zoneamento é antigo e o contorno do talhão foi atualizado depois, partes das zonas ultrapassam o limite novo e outras não alcançam. A ferramenta descarta o limite externo antigo, aproveita as DIVISAS INTERNAS (o trabalho agronômico de verdade) e reparticiona o talhão atual. Onde ver: Zonas → Zoneamentos e versões → ícone da tesoura, em qualquer versão.',
     'AS DIVISAS QUE NÃO ALCANÇAM SÃO ESTICADAS SEGUINDO A TRAJETÓRIA DA LINHA — não pela distância mais curta. A diferença não é detalhe: num arco real de 600 m de raio, pela trajetória a divisa encosta na borda 190 metros adiante de onde a perpendicular encostaria. É a diferença entre uma zona que faz sentido e uma que corta o talhão no lugar errado.',

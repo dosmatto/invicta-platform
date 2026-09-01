@@ -126,6 +126,76 @@ def erro_esperado(fn, trecho):
     raise AssertionError("deveria ter recusado")
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# A REGRESSÃO DO MCACA 22 — o pior defeito que esta ferramenta já teve.
+#
+# A 1ª versão dissolvia as zonas por RÓTULO DE CLASSE ("divisa entre duas zonas
+# de mesma classe não é divisa agronômica"). No talhão real, 13 zonas com ~5
+# rótulos (Alta, Média, Baixa, Média-alta, Média-baixa) voltaram como 2: as
+# divisas entre zonas VIZINHAS de mesmo rótulo foram apagadas, sobraram cacos de
+# 5 a 17 m que não alcançavam nada, e o talhão virou uma mancha só.
+#
+# A unidade é a ZONA, não o rótulo. Duas zonas "Alta" lado a lado continuam
+# sendo duas zonas — a linha entre elas é o trabalho que a ferramenta preserva.
+# ─────────────────────────────────────────────────────────────────────────────
+
+FAIXAS_MESMA_CLASSE = fc(*[
+    {"type": "Feature",
+     "properties": {"id": f"{i+1:02d}", "zona": f"{i+1:02d}", "classe": "Alta", "cor": "#22c55e"},
+     "geometry": poly([(i * 300, 0), (i * 300 + 300, 0), (i * 300 + 300, 1000), (i * 300, 1000)])}
+    for i in range(3)])
+
+t("MCACA 22: zonas VIZINHAS de mesmo rótulo NÃO se fundem", lambda: (
+    (lambda r: (
+        eq(r["resumo"]["nZonas"] == 3, f"3 zonas 'Alta' vizinhas viraram {r['resumo']['nZonas']}"),
+        eq(r["resumo"]["nDivisas"] >= 2, f"as divisas sumiram: {r['resumo']['nDivisas']}"),
+    ))(incorporar_divisas(FAIXAS_MESMA_CLASSE, TALHAO))))
+
+t("MCACA 22: o número da zona sobrevive na saída", lambda: (
+    (lambda r: eq({f["properties"].get("zona") for f in r["fc"]["features"]} == {"01", "02", "03"},
+                  "os números das zonas se perderam"))(
+        incorporar_divisas(FAIXAS_MESMA_CLASSE, TALHAO))))
+
+t("MCACA 22: o rótulo da classe continua na saída, para exibir", lambda: (
+    (lambda r: eq(all(f["properties"].get("classe") == "Alta" for f in r["fc"]["features"]),
+                  "a classe se perdeu"))(
+        incorporar_divisas(FAIXAS_MESMA_CLASSE, TALHAO))))
+
+# Duas manchas separadas continuam sendo DUAS feições no mapa (é assim que o
+# resto do app modela zona multiparte: ids "01" e "01_2"). O que não pode se
+# perder é o NÚMERO da zona — as duas manchas têm de voltar como zona "01".
+t("duas MANCHAS da mesma zona voltam com o MESMO número de zona", lambda: (
+    (lambda r: (
+        eq({f["properties"].get("zona") for f in r["fc"]["features"]} == {"01", "02"},
+           f"números de zona na saída: {sorted(str(f['properties'].get('zona')) for f in r['fc']['features'])}"),
+        eq(sum(1 for f in r["fc"]["features"] if f["properties"].get("zona") == "01") == 2,
+           "as duas manchas da zona 01 deviam continuar existindo"),
+    ))(
+        incorporar_divisas(fc(
+            {"type": "Feature", "properties": {"id": "01", "zona": "01", "classe": "Alta"},
+             "geometry": poly([(0, 0), (300, 0), (300, 1000), (0, 1000)])},
+            {"type": "Feature", "properties": {"id": "02", "zona": "02", "classe": "Media"},
+             "geometry": poly([(300, 0), (700, 0), (700, 1000), (300, 1000)])},
+            {"type": "Feature", "properties": {"id": "01_2", "zona": "01", "classe": "Alta"},
+             "geometry": poly([(700, 0), (1000, 0), (1000, 1000), (700, 1000)])},
+        ), TALHAO))))
+
+# As métricas do painel NUNCA eram calculadas: as chaves n_esticadas/m_esticado/
+# n_cortadas/m_cortado não existiam no `stats`, e o `.get(..., 0)` da camada
+# pública devolvia zero. A tela exibia "esticadas: 0 · cortadas: 0" mesmo tendo
+# esticado 1,3 km. Mentira silenciosa, e das piores — o usuário confere e confia.
+t("MÉTRICAS: quando a divisa é esticada, o painel conta (não fica em zero)", lambda: (
+    (lambda r: (
+        eq(r["resumo"]["nEsticadas"] > 0, "esticou mas reportou 0 — o painel voltaria a mentir"),
+        eq(r["resumo"]["mEsticado"] > 0, "metros esticados em zero"),
+    ))(incorporar_divisas(MENOR, TALHAO))))
+
+t("MÉTRICAS: quando a divisa é cortada, o painel conta (não fica em zero)", lambda: (
+    (lambda r: (
+        eq(r["resumo"]["nCortadas"] > 0, "cortou mas reportou 0"),
+        eq(r["resumo"]["mCortado"] > 0, "metros cortados em zero"),
+    ))(incorporar_divisas(MAIOR, TALHAO))))
+
 t("zoneamento vazio é recusado com mensagem de usuário", lambda: erro_esperado(
     lambda: incorporar_divisas(fc(), TALHAO), "nenhum polígono"))
 
