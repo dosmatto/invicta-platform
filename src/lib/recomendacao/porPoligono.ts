@@ -19,7 +19,7 @@
 // Módulo PURO — `npm run teste:porpoligono`.
 
 import { coberturaDoGrid } from './cobertura.ts';
-import { partesComArea } from '../areaGeo.ts';
+import { partesComArea, fatiarArea } from '../areaGeo.ts';
 
 export interface DoseParaParte {
   produto: string;                                  // chave de agregação (produto || fórmula)
@@ -72,10 +72,8 @@ export function volumesPorParte(
   // CADASTRO. Quando as duas divergem (limite reeditado, área digitada à mão),
   // a soma da tabela não fecharia com o total impresso na mesma folha — e é essa
   // conferência que o usuário faz primeiro. Reescala mantendo as proporções.
-  const somaBruta = brutas.reduce((s, a) => s + a.areaHa, 0);
-  const alvo = opts?.areaTotalHa;
-  const k = alvo != null && alvo > 0 && somaBruta > 0 ? alvo / somaBruta : 1;
-  const areas = k === 1 ? brutas : brutas.map(a => ({ ...a, areaHa: a.areaHa * k }));
+  const fatias = fatiarArea(brutas.map(a => a.areaHa), opts?.areaTotalHa ?? 0);
+  const areas = brutas.map((a, i) => ({ ...a, areaHa: fatias[i] ?? a.areaHa }));
 
   // Cobertura de cada parte por GRID distinto — equações diferentes podem ter
   // malhas diferentes, e recalcular por dose custaria caro à toa.

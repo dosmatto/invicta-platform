@@ -318,6 +318,9 @@ export function MapView({ mostrarVisaoGeral = false }: { mostrarVisaoGeral?: boo
           type: 'Feature' as const,
           geometry: { type: 'Point' as const, coordinates: [t.lng, t.lat] },
           properties: { talhaoId: t.id, nome: t.nome, fazenda: t.fazenda,
+            // `area` aqui não é enfeite: é o que a trilha do topo lê ao clicar
+            // no talhão pelo mapa. Sem ela, o clique zerava a área.
+            area: t.areaHa ?? 0,
             municipio: m, cor: cores[m] ?? '#64748b' },
         };
       }),

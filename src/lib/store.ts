@@ -948,6 +948,8 @@ export interface TalhaoCentroide {
   id: string; nome: string; fazendaId: string; fazenda: string;
   municipio: string; estado: string;
   lng: number; lat: number;
+  /** Área do POLÍGONO — a trilha do topo lê daqui ao clicar no talhão pelo mapa. */
+  areaHa: number;
 }
 
 // bbox [minX,minY,maxX,maxY] calculado do geojson (string). null se inválido.
@@ -1019,7 +1021,7 @@ export function getTalhoesCentroides(): TalhaoCentroide[] {
     out.push({
       id: t.id, nome: t.nome, fazendaId: t.fazendaId, fazenda: fz?.nome ?? '',
       municipio: fz?.municipio || '—', estado: (fz?.estado || '').toUpperCase(),
-      lng: c.lng, lat: c.lat,
+      lng: c.lng, lat: c.lat, areaHa: t.areaHa ?? 0,
     });
   }
   return out;

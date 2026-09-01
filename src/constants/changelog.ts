@@ -1,5 +1,13 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.106.0': [
+    'UMA ÁREA SÓ PARA O TALHÃO: a do POLÍGONO. O mesmo talhão aparecia com três números diferentes — 143,5 ha na trilha do topo, 142,38 ha no limite e 139,28 ha na prescrição — e não havia como saber qual valia. Agora a área do polígono é a régua de tudo, e o que é fatiado por zonas de manejo SOMA essa área de volta.',
+    'DE ONDE VINHA CADA UM: 143,5 era uma CÓPIA feita quando você entrava no talhão, que não acompanhava a troca de limite (o seu está em v2) — a trilha e o título do painel passam a ler a área atual do cadastro. 142,38 é a área geodésica do limite, e continua sendo a verdade. 139,28 era a soma das áreas das 13 zonas, que nascem sobre uma malha (raster, suavização, área mínima) e fechavam 3,1 ha abaixo do limite.',
+    'AS ZONAS VIRARAM FATIAS DO POLÍGONO: a proporção entre elas continua sendo a que o zoneamento decidiu, mas a régua passou a ser a área do talhão, com arredondamento compensado — a soma bate no centavo de hectare. Vale para o painel de Zonas de Manejo (áreas e percentuais), para a prescrição, para as zonas do relatório de produtividade (e, por tabela, para a rentabilidade por zona) e para a distribuição por área separada.',
+    'CLICAR NO TALHÃO PELO MAPA também zerava a área da trilha: a feature do mapa não levava esse dado. Agora leva.',
+    'PRESCRIÇÕES JÁ SALVAS NÃO MUDAM. Elas guardam as áreas com que foram calculadas, e foi com esses números que a quantidade foi comprada e mandada para o campo — reimprimir com outra área faria o PDF discordar do que está na lavoura. A regra nova vale para as próximas; para atualizar uma antiga, refaça a prescrição.',
+    '8 testes novos (npm run teste:fatiar) travam o fechamento — inclusive a zona de área zero, que não pode ganhar hectare do nada.',
+  ],
   '2.105.0': [
     'CORRIGIDO — O MAPA DE FUNDO SAÍA COM CORES QUE NÃO ERAM AS DA CAMADA. No comparativo das Zonas de Manejo, a condutividade aparecia em tons de laranja (e, na prévia do MEAP, em roxo/verde/amarelo), enquanto a aba Condutividade mostrava a legenda por quartil que você escolheu. Duas telas, duas paletas, a mesma camada — o comparativo perdia o sentido.',
     'AGORA O FUNDO USA A LEGENDA QUE VOCÊ DESIGNOU. O seletor "Legenda do mapa" de cada aba (Condutividade, Produtividade, NDVI) passou a valer também no comparativo e no fundo do editor de zonas. Escolheu a de quartil na Condutividade? É ela que pinta o fundo.',

@@ -128,3 +128,26 @@ export function partesComArea(p: GeoJSON.Polygon | GeoJSON.MultiPolygon): ParteA
     .map((areaHa, indice) => ({ indice, areaHa, pct: total > 0 ? (areaHa / total) * 100 : 0 }))
     .sort((a, b) => b.areaHa - a.areaHa);
 }
+
+/**
+ * FATIA a área do polígono entre as partes — a regra do app desde 01/09/2026:
+ * a área que vale é a do POLÍGONO do talhão, e o que é fatiado por zonas de
+ * manejo tem de SOMAR essa área de volta.
+ *
+ * Por que não usar direto a área geodésica de cada zona: as zonas são desenhadas
+ * sobre uma malha (raster do zoneamento, suavização, área mínima), então a soma
+ * delas fica alguns hectares abaixo do limite — o caso relatado tinha 139,28 ha
+ * de zonas num talhão de 142,38 ha. Os três números diferentes na tela (trilha,
+ * limite e prescrição) vinham daí, e quem confere na calculadora não tem como
+ * saber qual está certo.
+ *
+ * A PROPORÇÃO entre as zonas é preservada (é ela que o zoneamento decidiu); o
+ * que muda é a régua. Sem total válido, devolve as partes como vieram — melhor
+ * o número da geometria do que um número inventado.
+ */
+export function fatiarArea(partesHa: readonly number[], totalHa: number): number[] {
+  const soma = partesHa.reduce((s, v) => s + (Number.isFinite(v) ? v : 0), 0);
+  if (!(totalHa > 0) || !(soma > 0)) return arredondarFechando(partesHa.map(v => (Number.isFinite(v) ? v : 0)));
+  const k = totalHa / soma;
+  return arredondarFechando(partesHa.map(v => (Number.isFinite(v) ? v : 0) * k));
+}

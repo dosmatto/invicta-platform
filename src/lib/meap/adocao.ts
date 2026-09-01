@@ -7,6 +7,7 @@
 
 import { getTalhoes, getImportacoesLab, getGrades, getAmbienteMeap, saveAmbienteMeap } from '@/lib/store';
 import { classeZona } from '@/lib/zonas';
+import { fatiarArea } from '@/lib/areaGeo';
 import { calcularCVZonas } from './cv';
 import type { AmbienteProdutivo, VersaoMeap, ZonaMeap, MetricasZonaMeap } from './tipos';
 
@@ -63,8 +64,14 @@ export function obterOuAdotarAmbiente(talhaoId: string): AmbienteProdutivo | nul
     resultados: imp?.resultados ?? [],
   });
 
-  const areaTotal = zonas.reduce((s, z) => s + z.areaHa, 0) || 1;
-  const zonasMeap: ZonaMeap[] = zonas.map(z => {
+  // REGRA DA CASA: a área que vale é a do POLÍGONO do talhão; as zonas são
+  // FATIAS dela e têm de somá-la de volta. As zonas são desenhadas sobre uma
+  // malha (raster, suavização, área mínima), então a soma delas fica alguns
+  // hectares abaixo do limite — e a tela mostrava uma área para o talhão e
+  // outra para a soma das zonas.
+  const areasFatiadas = fatiarArea(zonas.map(z => z.areaHa), talhao.areaHa ?? 0);
+  const areaTotal = areasFatiadas.reduce((s, a) => s + a, 0) || 1;
+  const zonasMeap: ZonaMeap[] = zonas.map((z, i) => {
     const cz = classeZona(z.classe);
     const m: MetricasZonaMeap = cv.porZona[z.id] ?? {
       cvValidacao: null, variavelValidacao: cv.variavelValidacao, cvPorAtributo: {}, homogeneidade: null, nPontos: 0,
@@ -75,7 +82,8 @@ export function obterOuAdotarAmbiente(talhaoId: string): AmbienteProdutivo | nul
     // nome dado e fundindo duas zonas distintas. Só arquivo cru (sem rank)
     // precisa da normalização.
     const classeLabel = z.rank != null ? (z.classe || cz.label) : cz.label;
-    return { id: z.id, rotulo: `Zona ${z.id}`, classeLabel, cor: z.cor ?? cz.cor, rank: z.rank, areaHa: z.areaHa, percTalhao: z.areaHa / areaTotal, metricas: m };
+    const areaHa = areasFatiadas[i] ?? z.areaHa;
+    return { id: z.id, rotulo: `Zona ${z.id}`, classeLabel, cor: z.cor ?? cz.cor, rank: z.rank, areaHa, percTalhao: areaHa / areaTotal, metricas: m };
   });
 
   // CV médio intra-zona ponderado por área (só zonas com CV calculado).

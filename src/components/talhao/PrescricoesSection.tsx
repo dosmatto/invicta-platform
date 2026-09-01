@@ -34,6 +34,7 @@ import {
   validarPrescricao, exportarSHPPrescricao, exportarXlsxPrescricao, exportarPDFPrescricao,
   corDaDose, areaHaDe,
 } from '@/lib/prescricao/exportar';
+import { fatiarArea } from '@/lib/areaGeo';
 import {
   ROTULO_TIPO, ROTULO_MODO, UNIDADE_TOTAL, ehUnidadeSemente,
   type Prescricao, type TipoPrescricao, type ModoCalculo, type UnidadeDose,
@@ -111,7 +112,14 @@ const RASCUNHO_VAZIO: Rascunho = {
 const SEMENTE_PADRAO: ParamsSementes = { germinacaoPct: 98, sementesPorSaco: 60000 };
 
 // Zonas a partir de um zoneamento salvo (1 feature = 1 zona no MEAP).
-function zonasDoZoneamento(z: ZoneamentoMeap): ZonaDose[] {
+//
+// A área de cada zona é uma FATIA da área do polígono do talhão, não a área
+// geodésica crua do desenho dela: as zonas nascem sobre uma malha (raster,
+// suavização, área mínima) e somavam alguns hectares a menos que o limite — a
+// prescrição imprimia "139,28 ha" num talhão de 142,38 ha, e a diferença virava
+// dúvida em vez de informação.
+function zonasDoZoneamento(z: ZoneamentoMeap, areaTalhaoHa = 0): ZonaDose[] {
+  const areas = fatiarArea(z.fc.features.map(f => areaHaDe(f)), areaTalhaoHa);
   return z.fc.features.map((f, i) => {
     const p = (f.properties ?? {}) as { id?: string; zona?: string | number; classe?: string; cor?: string; potencialRank?: number };
     return {
@@ -119,7 +127,7 @@ function zonasDoZoneamento(z: ZoneamentoMeap): ZonaDose[] {
       nomeZona: p.zona != null || p.id != null ? rotuloZona(p) : String(i + 1),
       classe: String(p.classe ?? '—'),
       cor: String(p.cor ?? '#94a3b8'),
-      areaHa: areaHaDe(f),
+      areaHa: areas[i] ?? areaHaDe(f),
       potencialRank: typeof p.potencialRank === 'number' ? p.potencialRank : undefined,
       dose: 0,
     };
@@ -131,6 +139,12 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
   const talhaoId = nav.talhaoId ?? '';
   const [aba, setAba] = useState<AbaId>('nova');
   const [tick, setTick] = useState(0);
+  // A área do POLÍGONO do talhão é a régua de tudo: as zonas são fatias dela.
+  const areaTalhaoHa = useMemo(
+    () => getTalhoes().find(t => t.id === talhaoId)?.areaHa ?? 0,
+    [talhaoId, tick],   // eslint-disable-line react-hooks/exhaustive-deps
+  );
+
 
   useEffect(() => {
     const h = () => setTick(t => t + 1);
@@ -182,7 +196,7 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
   function escolherZoneamento(id: string) {
     const z = zoneamentos.find(x => x.id === id);
     if (!z) { patch({ zoneamentoId: '', zoneamentoNome: '', zonas: [], fc: null }); return; }
-    patch({ zoneamentoId: z.id, zoneamentoNome: z.nome, zonas: zonasDoZoneamento(z), fc: z.fc });
+    patch({ zoneamentoId: z.id, zoneamentoNome: z.nome, zonas: zonasDoZoneamento(z, areaTalhaoHa), fc: z.fc });
     setAvisosCalc([]); setErro(''); setOkMsg('');
   }
 

@@ -569,7 +569,7 @@ export function TalhaoDetailPanel() {
                 </p>
               )}
               <p className="text-xs mt-0.5" style={{ color: '#93c5fd' }}>{nav.fazenda}</p>
-              <p className="text-xs" style={{ color: '#64748b' }}>{nav.area > 0 ? `${nav.area.toLocaleString('pt-BR')} ha · ` : ''}{nav.produtor}</p>
+              <p className="text-xs" style={{ color: '#64748b' }}>{(talhao?.areaHa ?? nav.area) > 0 ? `${(talhao?.areaHa ?? nav.area).toLocaleString('pt-BR')} ha · ` : ''}{nav.produtor}</p>
             </div>
             <span className="text-[10px] px-2 py-1 rounded-full font-semibold"
               style={{ background: talhao?.status === 'ativo' ? '#166534' : '#78350f', color: talhao?.status === 'ativo' ? '#86efac' : '#fde68a' }}>

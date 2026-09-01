@@ -4,13 +4,20 @@ import Image from 'next/image';
 import { useEffect, useState } from 'react';
 import { ChevronRight, Wifi, User, LogOut } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
-import { getSafras } from '@/lib/store';
+import { getSafras, getTalhoes } from '@/lib/store';
 import { rotuloAno } from '@/lib/periodo';
 import { EmpresaSwitcher } from './EmpresaSwitcher';
 import { logout, emailUsuario, authConfigurado } from '@/lib/auth';
 
 export function TopBar() {
   const { nav: context } = useApp();
+
+  // ÁREA = a do POLÍGONO do talhão, lida do cadastro a cada render. `nav.area` é
+  // só uma cópia feita na navegação e não acompanha a troca de limite (o caso
+  // relatado: trilha com 143,5 ha e o limite v2 com 142,38 na mesma tela).
+  const areaTalhao = (context.talhaoId
+    ? getTalhoes().find(t => t.id === context.talhaoId)?.areaHa
+    : undefined) ?? context.area;
 
   // Safra exibida = a ATIVA de verdade (getSafras), não o default de nav.safra.
   // Reage à troca de safra (dispara inv:biblioteca) e à troca de empresa.
@@ -49,11 +56,11 @@ export function TopBar() {
           </span>
         ))}
 
-        {context.area > 0 && (
+        {areaTalhao > 0 && (
           <>
             <ChevronRight size={12} className="opacity-40" style={{ color: '#fff' }} />
             <span className="font-bold flex-shrink-0" style={{ color: '#86efac' }}>
-              {context.area.toLocaleString('pt-BR')} ha
+              {areaTalhao.toLocaleString('pt-BR')} ha
             </span>
           </>
         )}

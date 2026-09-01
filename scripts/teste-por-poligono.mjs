@@ -139,9 +139,12 @@ t('AREA das partes fecha com a area do CADASTRO quando ela e informada', () => {
   const r = volumesPorParte(TALHAO, [dose('Calcario', 1000, 1000, 90)], { areaTotalHa: 33.7 });
   const soma = r.reduce((s, p) => s + p.areaHa, 0);
   assert.ok(Math.abs(soma - 33.7) < 1e-6, `somou ${soma}`);
-  // a PROPORCAO entre as manchas nao muda com a reescala
+  // A PROPORCAO entre as manchas e preservada dentro do arredondamento: a soma
+  // fecha EXATO em 2 casas (fatiarArea), entao a razao pode andar um centesimo.
   const semEscala = volumesPorParte(TALHAO, [dose('Calcario', 1000, 1000, 90)]);
-  assert.ok(Math.abs((r[0].areaHa / r[1].areaHa) - (semEscala[0].areaHa / semEscala[1].areaHa)) < 1e-9);
+  const razao = (x) => x[0].areaHa / x[1].areaHa;
+  assert.ok(Math.abs(razao(r) - razao(semEscala)) < 0.01,
+    `razao ${razao(r).toFixed(4)} x ${razao(semEscala).toFixed(4)}`);
 });
 
 t('sem area de cadastro (ou zero), usa a area geodesica da geometria', () => {

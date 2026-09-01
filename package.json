@@ -21,6 +21,7 @@
     "teste:motivo": "node scripts/teste-motivo-mapa.mjs",
     "teste:partes": "node scripts/teste-partes-talhao.mjs",
     "teste:areas": "node scripts/teste-partes-area.mjs",
+    "teste:fatiar": "node scripts/teste-fatiar-area.mjs",
     "teste:desmembrar": "node scripts/teste-desmembrar.mjs",
     "teste:fundir": "node scripts/teste-fundir.mjs",
     "teste:tiff": "node scripts/teste-tiff-ndvi.mjs",

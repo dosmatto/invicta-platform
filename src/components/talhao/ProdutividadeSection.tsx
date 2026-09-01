@@ -43,7 +43,7 @@ import { correlacaoGrids, sobreposicaoBbox } from '@/lib/correlacaoGrid';
 import { classesQuantis } from '@/lib/quantis';
 import { gerarRelatorioProdutividade, type ZonaRel, type NdviRel } from '@/lib/relatorioProdutividade';
 import { classeZona, classeReconhecida } from '@/lib/zonas';
-import { areaHaGeo } from '@/lib/areaGeo';
+import { areaHaGeo, fatiarArea } from '@/lib/areaGeo';
 import { ComparadorProdNdvi } from '@/components/talhao/ComparadorProdNdvi';
 import { SeletorLegenda, legendasDoModulo, usePrefLegenda } from './SeletorLegenda';
 import { respeitarPadraoHomonima, rampaVisualStops, corCheiaDaClasse } from '@/lib/legendas';
@@ -89,6 +89,12 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
     if (t?.geojson) { try { return extrairPoligono(JSON.parse(t.geojson)); } catch {} }
     return null;
   }, [uploadedGeo, nav.talhaoId]);
+
+  // Área do POLÍGONO do talhão — a régua que as zonas têm de somar de volta.
+  const areaTalhao = useMemo(
+    () => (nav.talhaoId ? getTalhoes().find(t => t.id === nav.talhaoId)?.areaHa ?? 0 : 0),
+    [nav.talhaoId],
+  );
 
   const culturaPlantio = useMemo(() => (nav.talhaoId ? getPlantio(nav.talhaoId, safra) : ''), [nav.talhaoId, safra]);
   const [cultura, setCultura] = useState('soja');
@@ -445,7 +451,11 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
       // ── Zonas de manejo (mesma cascata do módulo Zonas) ──
       const zs = zonasDoTalhao(nav.talhaoId);
       const porZona = zs.length ? amostrarPorZona(zs.map(z => ({ idZona: z.id, geometry: z.geometry })), fonte.grid, fonte.bounds) : new Map<string, number[]>();
-      const zonas: ZonaRel[] = zs.map(z => ({
+      // As zonas são FATIAS da área do polígono do talhão: a soma delas tem de
+      // dar a área do talhão, senão a rentabilidade por zona fecha com um total
+      // diferente do que a capa do relatório imprime.
+      const areasZona = fatiarArea(zs.map(z => areaHaGeo(z.geometry)), areaTalhao);
+      const zonas: ZonaRel[] = zs.map((z, iz) => ({
         id: z.id, classe: z.classe,
         // O rótulo e a cor da classe ORIGINAL viajam junto: é por ela que o
         // relatório pinta as zonas, para a folha comparar o zoneamento com a
@@ -455,7 +465,7 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
         cor: classeZona(z.classe).cor,
         geometry: z.geometry,
         stats: resumoValores(porZona.get(z.id) ?? []),
-        areaHa: areaHaGeo(z.geometry),
+        areaHa: areasZona[iz] ?? areaHaGeo(z.geometry),
       }));
       const grupos = zonas.filter(z => z.stats).map(z => ({ id: z.id, valores: porZona.get(z.id) ?? [] }));
       const separacaoZonas = grupos.length >= 2 ? separacaoEntreZonas(grupos) : null;
@@ -542,7 +552,7 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
       await gerarRelatorioProdutividade({
         fazenda: ctx.fazenda || nav.fazenda, produtor: ctx.produtor || nav.produtor,
         talhao: ctx.talhao || nav.talhao, safra,
-        cultura: fonte.cultura, areaHa: ctx.areaHa || fonte.stats.areaHa,
+        cultura: fonte.cultura, areaHa: ctx.areaHa || areaTalhao || fonte.stats.areaHa,
         municipio: ctx.municipio, estado: ctx.estado, siglaFazenda: ctx.siglaFazenda,
         // Ano/época vêm da COLHEITA (dataReferencia), não do laudo de laboratório
         // que alimenta ctx.ano/ctx.epoca — senão o mapa de colheita seria
