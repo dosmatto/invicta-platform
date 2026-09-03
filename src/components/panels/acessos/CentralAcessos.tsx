@@ -15,7 +15,7 @@ import {
 import { getAuditoria } from '@/lib/iam/auditoria';
 import {
   aprovarUsuario, categoriaDe, getUsuarios, migrarIamV1, rejeitarUsuario,
-  statusDe, PAPEIS_ATRIBUIVEIS, type UsuarioIam,
+  sincronizarPendentesDaNuvem, statusDe, PAPEIS_ATRIBUIVEIS, type UsuarioIam,
 } from '@/lib/iam/usuarios';
 import {
   acessoDoConvite, cancelarConvite, conviteDoToken, criarConvite, criarConviteTipo, getConvites,
@@ -32,7 +32,7 @@ import {
   campoSt, fmtData, fmtDataHora, fmtRelativo,
 } from './ui';
 import { DetalheUsuario } from './DetalheUsuario';
-import { Check, Copy, Link2, Loader2, Send, ShieldCheck, UserPlus, X } from 'lucide-react';
+import { Check, Copy, Link2, Loader2, RefreshCw, Send, ShieldCheck, UserPlus, X } from 'lucide-react';
 
 type AbaId =
   | 'pendentes' | 'internos' | 'produtores' | 'consultores' | 'gerentes' | 'operadores'
@@ -51,6 +51,25 @@ export function CentralAcessos() {
   const recarregar = useCallback(() => setTick(t => t + 1), []);
 
   useEffect(() => { migrarIamV1(); }, []);
+  // Busca os pendentes na NUVEM ao abrir a tela (e no botão Atualizar). Sem isto
+  // a lista é só o localStorage: quem se cadastra grava no aparelho dele e o
+  // pedido nunca aparecia aqui sem F5. Ver iam/usuarios.sincronizarPendentesDaNuvem.
+  const [buscando, setBuscando] = useState(false);
+  const buscarPendentes = useCallback(() => {
+    setBuscando(true);
+    void sincronizarPendentesDaNuvem()
+      .then(n => { if (n) recarregar(); })
+      .catch(() => {})
+      .finally(() => setBuscando(false));
+  }, [recarregar]);
+  // Na montagem a busca roda sem tocar em `buscando` de forma síncrona (o spinner
+  // é do botão, não da abertura da tela) — setState dentro do corpo do efeito
+  // encadeia renders à toa.
+  useEffect(() => {
+    let vivo = true;
+    void sincronizarPendentesDaNuvem().then(n => { if (vivo && n) recarregar(); }).catch(() => {});
+    return () => { vivo = false; };
+  }, [recarregar]);
   useEffect(() => {
     const h = () => recarregar();
     window.addEventListener('inv:empresa', h);
@@ -109,6 +128,11 @@ export function CentralAcessos() {
             <ShieldCheck size={14} style={{ color: COR.azul }} />
             <p className="text-xs font-bold" style={{ color: COR.txt }}>Central de Acessos</p>
             {!poderes.algum && <Chip cor={COR.alerta}>somente leitura</Chip>}
+            <button onClick={buscarPendentes} disabled={buscando} title="Buscar cadastros pendentes na nuvem"
+              className="ml-auto flex items-center gap-1 text-[10px] disabled:opacity-50" style={{ color: COR.sub }}>
+              <RefreshCw size={11} className={buscando ? 'animate-spin' : undefined} />
+              {buscando ? 'buscando…' : 'atualizar'}
+            </button>
           </div>
           <Abas abas={abas} ativa={aba} onChange={setAba} />
           {ehListaDeUsuarios && (

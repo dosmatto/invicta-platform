@@ -7,6 +7,7 @@
 
 import { lerListaLocal, gravarListaLocal } from '../localComprimido';
 import { cloudPushLista } from '../cloud';
+import { usarDadosSupabase, carregarDocsPorCampoSupabase, pushListaSupabase } from '../supabaseData';
 import { emailUsuario, type RegistroPapel } from '../empresa';
 import { registrar } from './auditoria';
 import { MATRIZ_PADRAO, permissoesEfetivas } from './permissoes';
@@ -33,6 +34,54 @@ export function getUsuarios(): UsuarioIam[] {
 export function getUsuario(email: string): UsuarioIam | null {
   const e = norm(email);
   return ler().find(u => norm(u.email) === e) ?? null;
+}
+
+/**
+ * Traz da NUVEM os cadastros que estão aguardando aprovação. Devolve quantos
+ * eram desconhecidos neste aparelho.
+ *
+ * POR QUE EXISTE: quem se cadastra pelo link grava o pedido no aparelho DELE; a
+ * Central de Acessos só relia `inv_papeis` do localStorage, e nada no app relê a
+ * nuvem depois do boot (o único retry periódico é de ESCRITA). Com a aba aberta
+ * — o normal de quem administra — o pedido não aparecia nunca.
+ *
+ * Leitura PONTUAL e sem push: mescla no espelho local e avisa a UI. Só ACRESCENTA
+ * e-mails desconhecidos; jamais rebaixa um registro que já existe aqui, para uma
+ * aprovação recém-feita (e ainda não sincronizada) não voltar para a fila.
+ */
+/**
+ * Empurra `inv_papeis` e ESPERA a confirmação da nuvem. `false` = não gravou.
+ *
+ * POR QUE EXISTE: `cloudPushLista` é fire-and-forget — a tela do convite dizia
+ * "Cadastro enviado!" mesmo quando a gravação era recusada (RLS, rede), e a
+ * pessoa ficava esperando uma aprovação que ninguém tinha como ver. O status
+ * real vem do evento `inv:sync` que o `drenar` emite (ver supabaseData.ts).
+ */
+export async function confirmarEnvioNaNuvem(): Promise<boolean> {
+  if (!usarDadosSupabase() || typeof window === 'undefined') return true;
+  let falhou = false;
+  const ouvir = (e: Event) => {
+    const d = (e as CustomEvent<{ key: string; status: 'ok' | 'erro' }>).detail;
+    if (d?.key === K_PAPEIS && d.status === 'erro') falhou = true;
+  };
+  window.addEventListener('inv:sync', ouvir);
+  try { await pushListaSupabase(K_PAPEIS, ler() as unknown as { id: unknown }[]); }
+  finally { window.removeEventListener('inv:sync', ouvir); }
+  return !falhou;
+}
+
+export async function sincronizarPendentesDaNuvem(): Promise<number> {
+  if (!usarDadosSupabase()) return 0;
+  const daNuvem = await carregarDocsPorCampoSupabase<UsuarioIam>(K_PAPEIS, 'status', 'aguardando_aprovacao');
+  if (!daNuvem.length) return 0;
+  const lista = ler();
+  const conhecidos = new Set(lista.map(u => norm(u.email)));
+  const novos = daNuvem.filter(u => u?.email && !conhecidos.has(norm(u.email)))
+    .map(u => ({ ...u, id: u.id || norm(u.email), email: norm(u.email) }));
+  if (!novos.length) return 0;
+  gravarListaLocal(K_PAPEIS, [...lista, ...novos]);   // SEM cloudPushLista: isto é leitura
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('inv:empresa'));
+  return novos.length;
 }
 
 // Status derivado: registros antigos não têm o campo (nasceram "ativos").

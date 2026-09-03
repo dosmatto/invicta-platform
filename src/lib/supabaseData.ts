@@ -229,8 +229,12 @@ async function bootIncremental(
 
   // aplica delta dos talhões por id
   if (editadaAgora(TABELA_TALHOES_KEY)) {
-    preservadas.push(TABELA_TALHOES_KEY);   // sem seedEspelho: o próximo push sobe tudo
-    chavesHidratadas.add(TABELA_TALHOES_KEY);
+    // Sem seedEspelho (o próximo push sobe tudo) e SEM marcar como hidratada: o
+    // estado local desta chave sabidamente NÃO corresponde ao da nuvem — o delta
+    // foi descartado. Espelho ausente + hidratada = `primeira && bootCompleto &&
+    // chavesHidratadas.has(key)` na poda do syncLista, que apagaria da nuvem tudo
+    // que este aparelho ainda não baixou. Ver a poda em syncLista.
+    preservadas.push(TABELA_TALHOES_KEY);
   } else if (mudTal.length) {
     const lista = lerLocalLista(TABELA_TALHOES_KEY);
     const porId = new Map(lista.map(r => [String((r as Rec).id), r]));
@@ -251,7 +255,7 @@ async function bootIncremental(
   }
   for (const key of keysLista) {
     if (key === TABELA_TALHOES_KEY) continue;
-    if (editadaAgora(key)) { preservadas.push(key); chavesHidratadas.add(key); continue; }
+    if (editadaAgora(key)) { preservadas.push(key); continue; }   // sem hidratar: ver o ramo dos talhões acima
     const mudancas = porColecao.get(key);
     if (mudancas?.length) {
       const lista = lerLocalLista(key);
@@ -567,6 +571,12 @@ async function syncLista(sb: NonNullable<ReturnType<typeof getSupabase>>, key: s
 
   const prev = espelhoSb[key];
   const primeira = prev === undefined;
+  // Direito de PODAR decidido AGORA, junto com `primeira` — não depois do await
+  // do upsert. Entre uma coisa e outra o boot pode terminar e virar bootCompleto:
+  // a poda rodaria contra a lista velha (a que este push começou a subir) e
+  // apagaria da nuvem o que o boot acabou de trazer. Ver o teste de auto-cadastro
+  // (npm run teste:autocadastro), passo B.
+  const podePodar = primeira && bootCompleto && chavesHidratadas.has(key);
 
   // Ids a fazer upsert (novos/alterados) e a deletar (saíram).
   let idsUpsert: string[];
@@ -593,7 +603,7 @@ async function syncLista(sb: NonNullable<ReturnType<typeof getSupabase>>, key: s
       const up = await sb.from('talhoes').upsert(rows, { onConflict: 'id' });
       if (up.error) { console.warn('[supabase] upsert talhoes:', up.error.message); return false; }
     }
-    if (primeira && bootCompleto && chavesHidratadas.has(TABELA_TALHOES_KEY)) {
+    if (podePodar) {
       // Poda órfãos remotos: apaga o que não está na lista atual (uma vez).
       // Só com boot íntegro — senão um local parcial apagaria dados reais.
       let del = sb.from('talhoes').delete();
@@ -614,7 +624,7 @@ async function syncLista(sb: NonNullable<ReturnType<typeof getSupabase>>, key: s
       const up = await sb.from('app_kv').upsert(rows, { onConflict: 'colecao,item_id' });
       if (up.error) { console.warn(`[supabase] upsert ${key}:`, up.error.message); return false; }
     }
-    if (primeira && bootCompleto && chavesHidratadas.has(key)) {
+    if (podePodar) {
       // Poda órfãos remotos (uma vez) — só com boot íntegro (ver acima).
       let del = sb.from('app_kv').delete().eq('colecao', key);
       const ids = [...next.keys()];

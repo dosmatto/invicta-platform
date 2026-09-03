@@ -16,7 +16,7 @@ import Image from 'next/image';
 import { useSearchParams } from 'next/navigation';
 import { cadastrarComConvite, loginEmailSenha, mensagemErroLogin } from '@/lib/auth';
 import { validarConvite, marcarConviteUsado, MOTIVO_TEXTO } from '@/lib/iam/convites';
-import { salvarUsuario } from '@/lib/iam/usuarios';
+import { confirmarEnvioNaNuvem, salvarUsuario } from '@/lib/iam/usuarios';
 import { getPerfil } from '@/lib/iam/perfis';
 import { registrar } from '@/lib/iam/auditoria';
 import type { Convite } from '@/lib/iam/tipos';
@@ -138,12 +138,33 @@ function ConviteConteudo() {
         salvarUsuario(em, {
           nome: nome.trim(), telefone: telefone.trim() || undefined,
           papel: 'leitor',                       // provisório: sem acesso até aprovar
+          categoria: 'interno',                  // mesmo valor que categoriaDe() derivaria
+                                                 // de papel 'leitor'. Gravado aqui para o
+                                                 // registro não chegar incompleto e fazer
+                                                 // migrarIamV1 sujar inv_papeis (e forçar
+                                                 // boot completo) em TODO boot de admin.
           status: 'aguardando_aprovacao',
           criadoEm: agora, criadoPor: em,
           aceiteLgpdEm: agora, aceiteTermosEm: agora,
           conviteId: token || undefined,
         });
         registrar('cadastro_solicitado', { alvo: em, detalhe: nome.trim() });
+      }
+      // A gravação do pedido é o PRODUTO desta tela: sem confirmação da nuvem não
+      // existe nada para o administrador aprovar. Se o push do ramo automático for
+      // recusado (a RLS só aceita 'aguardando_aprovacao' de quem não é admin),
+      // rebaixa para a fila de aprovação em vez de deixar a pessoa no vácuo.
+      let enviado = await confirmarEnvioNaNuvem();
+      if (!enviado && liberaAuto) {
+        salvarUsuario(em, { status: 'aguardando_aprovacao', papel: 'leitor', categoria: 'interno' });
+        registrar('cadastro_solicitado', { alvo: em, detalhe: nome.trim() });
+        setLiberado(false);
+        enviado = await confirmarEnvioNaNuvem();
+      }
+      if (!enviado) {
+        setErro('Sua conta foi criada, mas o pedido de acesso não chegou ao servidor. '
+          + 'Confira a conexão e envie de novo — se persistir, avise o administrador.');
+        setEnviando(false); return;
       }
       if (token) marcarConviteUsado(token, em);
       setPronto(true);

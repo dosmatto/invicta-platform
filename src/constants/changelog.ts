@@ -1,5 +1,15 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] O pedido de aprovação parava de sumir — e agora chega sozinho na tela
+  '2.118.0': [
+    'O CADASTRO PELO LINK VOLTOU A CHEGAR PARA APROVAÇÃO. Quem se cadastrava ficava preso em "aguardando aprovação" e do outro lado não aparecia nada para aprovar. O pedido ERA gravado na nuvem — e depois era APAGADO pelo aparelho de quem administra.',
+    'O QUE APAGAVA: no primeiro envio de uma lista, o app limpa da nuvem o que não existe no aparelho ("poda"). Isso só pode acontecer depois de um boot íntegro, e havia um caminho em que a lista de acessos era marcada como baixada sem ter sido — quando o boot preserva uma edição local feita durante a própria abertura (Supabase lento). A partir daí, qualquer gravação de usuário mandava "apague todo acesso que não está aqui" — e o pedido recém-criado por OUTRO aparelho não estava. Agora chave preservada nunca conta como baixada, e o direito de podar é decidido antes do envio, não depois (a rede terminava no meio e virava o jogo).',
+    'A CENTRAL DE ACESSOS AGORA BUSCA OS PENDENTES NA NUVEM ao abrir, e tem botão "atualizar". Antes ela lia só o que estava neste navegador: com a aba aberta o dia todo — o normal — um cadastro novo não aparecia nunca, nem depois de aprovado o boot. A busca só ACRESCENTA quem é desconhecido: aprovação recém-feita não volta para a fila.',
+    'A TELA DO CONVITE PAROU DE DIZER "ENVIADO" QUANDO NÃO ENVIOU. A gravação era disparada e ninguém esperava a resposta; se a nuvem recusasse, a pessoa via a tela de sucesso e esperava para sempre. Agora o envio é confirmado antes, e a falha aparece escrita, com o que fazer.',
+    'E se a liberação automática do convite for recusada pela nuvem, o cadastro CAI NA FILA DE APROVAÇÃO em vez de se perder — ter que aprovar na mão é um aborrecimento; sumir sem deixar rastro é o defeito que gerou tudo isto.',
+    'O registro do pedido passou a nascer com a categoria preenchida. Faltando ela, toda abertura de todo administrador "sujava" a lista de acessos e forçava a recarga completa — que é justamente a condição que destravava a poda acima.',
+    'Teste novo (npm run teste:autocadastro, 6 asserções): dois aparelhos contra um Supabase de mentira que aplica as regras de segurança reais. Ele reprova a poda, o sumiço e a tela do administrador sem o pedido.',
+  ],
   // [S/N] Link de grupo também libera o acesso na hora, sem aprovação
   '2.117.0': [
     'O LINK DE GRUPO (POR TIPO DE USUÁRIO) AGORA TAMBÉM LIBERA O ACESSO NA HORA, sem aprovação — igual ao convite individual. Como o link já sai com categoria, papel, perfil e vínculos definidos, quem se cadastra por ele entra ativo direto. Ficou valendo para os dois tipos de convite.',

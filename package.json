@@ -10,6 +10,7 @@
     "start": "next start",
     "lint": "eslint",
     "teste:convite": "node scripts/teste-convite.mjs",
+    "teste:autocadastro": "node scripts/teste-autocadastro.mjs",
     "teste:periodo": "node scripts/teste-periodo.mjs",
     "teste:zonas": "node scripts/teste-export-zonas.mjs",
     "teste:cabecalho": "node scripts/teste-cabecalho.mjs",
