@@ -161,6 +161,15 @@ export function montarPdfResumoGeral(
           fmt(bloco.areaHa, 1), ...grupo.map(p => num(bloco.totalProduto[p])), fmt(bloco.totalCusto, 2)],
         destaque: true,
       });
+      // Quanto do investimento é de CADA produto. A linha de cima diz quantas
+      // toneladas; sem esta, o total em R$ chega fechado e não dá para saber o
+      // peso do calcário contra o do KCl sem refazer a conta à mão.
+      linhas.push({
+        cels: [...(ident.escopo === 'produtor' ? ['R$ por produto', ''] : ['R$ por produto']),
+          '', ...grupo.map(p => (bloco.totalCustoProduto[p] == null ? '' : fmt(bloco.totalCustoProduto[p], 2))),
+          fmt(bloco.totalCusto, 2)],
+        destaque: true,
+      });
       tabela(cols, linhas);
       y += 5;
     }
@@ -175,7 +184,10 @@ export function montarPdfResumoGeral(
       doc.text(san(`Total geral - ${r.anos.length} anos`), M, y); y += 4;
       const cels = ident.escopo === 'produtor' ? ['TOTAL GERAL', ''] : ['TOTAL GERAL'];
       cels.push(fmt(r.totalGeral.areaHa, 1), ...grupo.map(p => num(r.totalGeral.porProduto[p])), fmt(r.totalGeral.custo, 2));
-      tabela(cols, [{ cels, destaque: true }]);
+      const celsR$ = ident.escopo === 'produtor' ? ['R$ por produto', ''] : ['R$ por produto'];
+      celsR$.push('', ...grupo.map(p => (r.totalGeral.custoPorProduto[p] == null ? '' : fmt(r.totalGeral.custoPorProduto[p], 2))),
+        fmt(r.totalGeral.custo, 2));
+      tabela(cols, [{ cels, destaque: true }, { cels: celsR$, destaque: true }]);
       y += 5;
     }
   }
@@ -240,9 +252,10 @@ export function montarPdfResumoGeral(
   tabela(colsRec, r.recomendacoes.map(rec => ({
     cels: [
       String(rec.ano), rec.rotulo, rec.produto,
-      (rec.precoT == null ? '—'
-        : rec.precoTMax != null ? `${fmt(rec.precoT, 2)}+` : fmt(rec.precoT, 2))
-        + (rec.fontePreco === 'biblioteca' ? ' *' : ''),
+      // Sem asterisco aqui: a marca do preço geral já está no bloco de cima e
+      // repetir a mesma informação em duas tabelas só polui.
+      rec.precoT == null ? '—'
+        : rec.precoTMax != null ? `${fmt(rec.precoT, 2)}+` : fmt(rec.precoT, 2),
       fmt(rec.toneladas, 1), '', rec.talhoes.join(', '),
     ],
     fs: 7.4,
@@ -309,6 +322,11 @@ export async function gerarResumoGeralExcel(r: ResumoGeral, ident: IdentResumo):
     aoa.push([
       ...(comFazenda ? [''] : []), `TOTAL ${bloco.ano}`, r1(bloco.areaHa),
       ...r.produtos.map(p => (bloco.totalProduto[p] == null ? '' : r1(bloco.totalProduto[p]))),
+      r2(bloco.totalCusto),
+    ]);
+    aoa.push([
+      ...(comFazenda ? [''] : []), 'R$ POR PRODUTO', '',
+      ...r.produtos.map(p => (bloco.totalCustoProduto[p] == null ? '' : r2(bloco.totalCustoProduto[p]))),
       r2(bloco.totalCusto),
     ]);
     aoa.push([]);

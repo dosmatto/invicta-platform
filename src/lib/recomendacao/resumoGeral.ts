@@ -47,6 +47,8 @@ export interface BlocoAno {
   safras: string[];
   linhas: LinhaResumo[];
   totalProduto: Record<string, number>;
+  /** R$ por produto — quanto do investimento é calcário, quanto é gesso… */
+  totalCustoProduto: Record<string, number>;
   totalCusto: number;
   areaHa: number;       // soma das áreas dos talhões DISTINTOS do ano
   nTalhoes: number;
@@ -81,7 +83,7 @@ export interface ResumoGeral {
   /** Preço base por produto — o que multiplicou as toneladas. */
   precos: PrecoUsado[];
   anos: BlocoAno[];     // mais recente primeiro
-  totalGeral: { porProduto: Record<string, number>; custo: number; areaHa: number; nTalhoes: number };
+  totalGeral: { porProduto: Record<string, number>; custoPorProduto: Record<string, number>; custo: number; areaHa: number; nTalhoes: number };
   recomendacoes: RecomendacaoUso[];
 }
 
@@ -119,12 +121,13 @@ export function montarResumoGeral(lancs: Lancamento[], filtro?: Iterable<string>
     safras: Set<string>;
     porTalhao: Map<string, LinhaResumo>;
     totalProduto: Record<string, number>;
+    totalCustoProduto: Record<string, number>;
     totalCusto: number;
   }>();
 
   for (const l of usados) {
     let a = porAno.get(l.ano);
-    if (!a) { a = { safras: new Set(), porTalhao: new Map(), totalProduto: {}, totalCusto: 0 }; porAno.set(l.ano, a); }
+    if (!a) { a = { safras: new Set(), porTalhao: new Map(), totalProduto: {}, totalCustoProduto: {}, totalCusto: 0 }; porAno.set(l.ano, a); }
     if (l.safra) a.safras.add(l.safra);
     let t = a.porTalhao.get(l.talhaoId);
     if (!t) {
@@ -134,6 +137,7 @@ export function montarResumoGeral(lancs: Lancamento[], filtro?: Iterable<string>
     soma(t.porProduto, l.produto, l.toneladas);
     t.custo += l.custo;
     soma(a.totalProduto, l.produto, l.toneladas);
+    soma(a.totalCustoProduto, l.produto, l.custo);
     a.totalCusto += l.custo;
   }
 
@@ -147,6 +151,7 @@ export function montarResumoGeral(lancs: Lancamento[], filtro?: Iterable<string>
         safras: [...a.safras].sort(),
         linhas,
         totalProduto: a.totalProduto,
+        totalCustoProduto: a.totalCustoProduto,
         totalCusto: a.totalCusto,
         areaHa: linhas.reduce((s, l) => s + l.areaHa, 0),
         nTalhoes: linhas.length,
@@ -156,10 +161,12 @@ export function montarResumoGeral(lancs: Lancamento[], filtro?: Iterable<string>
   // total geral: área por talhão DISTINTO, não por ano
   const areaPorTalhao = new Map<string, number>();
   const porProdutoGeral: Record<string, number> = {};
+  const custoPorProdutoGeral: Record<string, number> = {};
   let custoGeral = 0;
   for (const l of usados) {
     areaPorTalhao.set(l.talhaoId, l.areaHa);
     soma(porProdutoGeral, l.produto, l.toneladas);
+    soma(custoPorProdutoGeral, l.produto, l.custo);
     custoGeral += l.custo;
   }
 
@@ -218,6 +225,7 @@ export function montarResumoGeral(lancs: Lancamento[], filtro?: Iterable<string>
     anos,
     totalGeral: {
       porProduto: porProdutoGeral,
+      custoPorProduto: custoPorProdutoGeral,
       custo: custoGeral,
       areaHa: [...areaPorTalhao.values()].reduce((s, v) => s + v, 0),
       nTalhoes: areaPorTalhao.size,

@@ -306,5 +306,35 @@ t('preço GERAL (biblioteca) é distinguível do personalizado — é o que leva
   assert.equal(r.precos.find(p => p.produto === 'KCl').fonte, 'fazenda');
 });
 
+t('R$ por produto fecha com o investimento total do ano', () => {
+  const r = montarResumoGeral([
+    L({ talhaoId: 'a', ano: 2026, produto: 'Calcário', toneladas: 30, custo: 6300 }),
+    L({ talhaoId: 'b', ano: 2026, produto: 'Calcário', toneladas: 20, custo: 4200 }),
+    L({ talhaoId: 'a', ano: 2026, produto: 'KCl', toneladas: 5, custo: 15000 }),
+  ]);
+  const b = r.anos[0];
+  assert.equal(b.totalCustoProduto['Calcário'], 10500);
+  assert.equal(b.totalCustoProduto['KCl'], 15000);
+  assert.equal(b.totalCustoProduto['Calcário'] + b.totalCustoProduto['KCl'], b.totalCusto,
+    'a soma por produto TEM de fechar com o total — senão a linha nova mente');
+});
+
+t('R$ por produto do total geral soma os anos', () => {
+  const r = montarResumoGeral([
+    L({ talhaoId: 'a', ano: 2026, produto: 'Calcário', toneladas: 10, custo: 2100 }),
+    L({ talhaoId: 'a', ano: 2025, produto: 'Calcário', toneladas: 10, custo: 1900 }),
+  ]);
+  assert.equal(r.totalGeral.custoPorProduto['Calcário'], 4000);
+  assert.equal(r.totalGeral.custo, 4000);
+});
+
+t('produto sem lançamento no ano não vira zero na linha de R$', () => {
+  const r = montarResumoGeral([
+    L({ talhaoId: 'a', ano: 2026, produto: 'Calcário', toneladas: 10, custo: 2100 }),
+    L({ talhaoId: 'a', ano: 2025, produto: 'Gesso', toneladas: 10, custo: 2300 }),
+  ]);
+  assert.equal(r.anos[0].totalCustoProduto['Gesso'], undefined, 'célula vazia, não R$ 0,00');
+});
+
 console.log(`\n${ok} passaram, ${fail} falharam\n`);
 process.exit(fail ? 1 : 0);

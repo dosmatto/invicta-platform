@@ -1,5 +1,11 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.115.0': [
+    'A TABELA DO ANO GANHOU A LINHA "R$ POR PRODUTO", logo abaixo do total de toneladas: quanto do investimento é calcário, quanto é gesso, quanto é KCl. Antes o total chegava fechado (R$ 517.449,20) e não dava para saber o peso de cada insumo sem refazer a conta à mão. A soma dessa linha fecha com o total — e isso virou teste, porque uma linha dessas que não fecha é pior que não ter linha nenhuma.',
+    'Vale também no total geral quando o resumo tem mais de um ano, e no Excel, com a mesma linha.',
+    'SAÍRAM OS ASTERISCOS da tabela "Recomendações a enviar": a marca do preço geral já está no bloco de preços acima, e repetir a mesma informação em duas tabelas só polui.',
+    'Produto sem lançamento naquele ano continua com a célula VAZIA na linha de R$, não com R$ 0,00 — zero diria que o produto entrou e não custou nada.',
+  ],
   '2.114.2': [
     'NO PREÇO BASE, AGORA SÓ UM ASTERISCO: preço personalizado (do produtor ou da fazenda) aparece limpo, e o preço GERAL — o da Biblioteca, sem valor próprio daquele cliente — leva um * ao lado do número, explicado uma vez no rodapé. Some o texto repetido em toda linha.',
     'O mesmo * vale na coluna R$/t da lista "Recomendações a enviar", para dar a mesma leitura nas duas tabelas.',
