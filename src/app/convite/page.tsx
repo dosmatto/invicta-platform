@@ -95,19 +95,19 @@ function ConviteConteudo() {
 
       // Autenticado (ou aguardando confirmação): grava o acesso.
       const agora = new Date().toISOString();
-      // INDIVIDUAL = convite conhecido e NÃO multiuso. O admin já definiu papel,
-      // perfil e vínculos ao gerar o link, para UMA pessoa; pedir aprovação de
-      // novo é redundante — e, quando o registro do pedido não voltava para o
-      // aparelho do admin, a pessoa ficava presa em "aguardando aprovação" sem
-      // ninguém para aprovar. Entra ATIVA, já com o que o link concedeu.
-      // MULTIUSO (link de grupo) NÃO: o desenho dele é liberar só após aprovação
-      // manual (um link solto num grupo não pode dar acesso sozinho).
-      const individual = !!conv && !conv.multiuso;
+      // LIBERAÇÃO AUTOMÁTICA: todo convite CONHECIDO (individual OU de grupo) já
+      // sai do admin com categoria, papel, perfil e vínculos definidos — então
+      // quem se cadastra por ele entra ATIVO, sem passar por aprovação. Decisão
+      // do usuário (o link de grupo também libera na hora). Um link de grupo
+      // ainda pode ser cancelado/expirado se vazar; a validade curta é a defesa.
+      // Só cai em "aguardando aprovação" quando o convite NÃO é conhecido neste
+      // aparelho (lista não sincronizada) — aí não dá para saber o que conceder.
+      const liberaAuto = !!conv;
       const vinc = {
         clientesVinculados: conv?.clientesVinculados?.length ? conv.clientesVinculados : undefined,
         fazendasVinculadas: conv?.fazendasVinculadas?.length ? conv.fazendasVinculadas : undefined,
       };
-      if (individual) {
+      if (liberaAuto) {
         // Permissões: o perfil escolhido no link (se houver) vira as permissões
         // próprias; sem perfil, valem as do papel (padrão da matriz). Mesmo
         // resultado da aprovação manual, só que automático.
@@ -118,32 +118,30 @@ function ConviteConteudo() {
           categoria: conv?.categoria,
           status: 'ativo',
           criadoEm: agora, criadoPor: em,
-          aprovadoEm: agora, aprovadoPor: 'convite individual (liberação automática)',
+          aprovadoEm: agora,
+          aprovadoPor: `convite ${conv?.multiuso ? 'de grupo' : 'individual'} (liberação automática)`,
           aceiteLgpdEm: agora, aceiteTermosEm: agora,
           conviteId: token || undefined,
           ...(perfil ? { permissoes: perfil.permissoes } : {}),
           ...vinc,
         });
         registrar('usuario_aprovado', {
-          alvo: em, detalhe: 'liberado automaticamente pelo link individual', para: 'ativo',
+          alvo: em,
+          detalhe: `liberado automaticamente pelo ${conv?.multiuso ? 'link de grupo' : 'link individual'}`,
+          para: 'ativo',
         });
         setLiberado(true);
       } else {
+        // Só chega aqui quando o convite NÃO é conhecido neste aparelho (conv é
+        // nulo): não há papel/perfil/vínculos para conceder, então entra na fila
+        // de aprovação, como antes.
         salvarUsuario(em, {
           nome: nome.trim(), telefone: telefone.trim() || undefined,
           papel: 'leitor',                       // provisório: sem acesso até aprovar
-          categoria: conv?.categoria,
           status: 'aguardando_aprovacao',
           criadoEm: agora, criadoPor: em,
           aceiteLgpdEm: agora, aceiteTermosEm: agora,
           conviteId: token || undefined,
-          // Guardadas para a tela de aprovação já abrir preenchida com o que o
-          // link propunha — quem aprova continua podendo mudar.
-          papelSugerido: conv?.papel,
-          perfilSugeridoId: conv?.perfilId,
-          // Acesso definido no convite (produtores/fazendas). Só restringe, e o
-          // registro ainda está "aguardando aprovação" — não libera nada aqui.
-          ...vinc,
         });
         registrar('cadastro_solicitado', { alvo: em, detalhe: nome.trim() });
       }
@@ -255,7 +253,7 @@ function ConviteConteudo() {
           {enviando ? 'Enviando…' : 'Criar meu acesso'}
         </button>
         <p className="text-[10px] text-center" style={{ color: '#64748b' }}>
-          {conv && !conv.multiuso
+          {conv
             ? 'Seu acesso já vem liberado por este convite — é só criar a senha e entrar.'
             : 'Depois de enviar, seu acesso passa por aprovação do administrador.'}
         </p>

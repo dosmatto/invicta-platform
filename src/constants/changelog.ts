@@ -1,5 +1,11 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Link de grupo também libera o acesso na hora, sem aprovação
+  '2.117.0': [
+    'O LINK DE GRUPO (POR TIPO DE USUÁRIO) AGORA TAMBÉM LIBERA O ACESSO NA HORA, sem aprovação — igual ao convite individual. Como o link já sai com categoria, papel, perfil e vínculos definidos, quem se cadastra por ele entra ativo direto. Ficou valendo para os dois tipos de convite.',
+    'ATENÇÃO: o acesso é imediato, então quem receber o link entra sozinho. Para cortar, cancele o link na Central de Acessos ou deixe a validade vencer (o padrão do link de grupo é 365 dias). O texto na tela foi atualizado para deixar isso claro.',
+    'Só cai em "aguardando aprovação" quem abre um convite que este aparelho não reconhece (lista de convites ainda não sincronizada) — nesse caso não dá para saber o que o link concedia.',
+  ],
   // [S/N] Convite individual libera o acesso na hora, sem aprovação
   '2.116.0': [
     'CONVITE PARA UMA PESSOA AGORA JÁ ENTRA LIBERADO — SEM PASSAR POR APROVAÇÃO. Como o link individual já é criado com a categoria, o papel, o perfil de permissões e os vínculos que você escolheu, pedir aprovação de novo era redundante. Quem abre o link, cria a senha e entra direto, ativo, com exatamente o que o convite concedeu. O link de GRUPO (por tipo de usuário) continua caindo em "aguardando aprovação": um link solto num grupo não pode dar acesso sozinho.',

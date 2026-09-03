@@ -418,9 +418,9 @@ function AbaConvites({ convites, podeConvidar, onMudou }: {
         </div>
         <p className="text-[9px] leading-relaxed" style={{ color: COR.fraco }}>
           Um link só, que <b>várias pessoas</b> podem usar — dá para mandar no grupo dos produtores.
-          Cada uma informa o próprio e-mail, cria a própria senha e entra como <b>aguardando aprovação</b>,
-          já com a categoria, o papel e o perfil de permissões deste link. O link <b>não libera ninguém sozinho</b>:
-          a aprovação continua sendo sua.
+          Cada uma informa o próprio e-mail, cria a própria senha e <b>já entra liberada</b>, com a categoria,
+          o papel e o perfil de permissões deste link. Como o acesso é <b>imediato</b>, cuidado ao repassar:
+          quem tiver o link entra sozinho. Para cortar, cancele o link ou deixe a validade vencer.
         </p>
 
         {novoTipo && (

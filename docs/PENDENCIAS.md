@@ -41,6 +41,7 @@ verdadeira (fusão de talhões) chegou depois; foi preciso renumerar.
 | 26 | Incorporar divisas internas ao polígono atual do talhão | 2.107.0 | Talhão → Zonas → Zoneamentos e versões → ícone da tesoura |
 | S/N | Convite individual libera o acesso na hora (sem aprovação); link de grupo mantém aprovação | 2.116.0 | Central de Acessos → Convites → "Convite para uma pessoa" + página pública /convite |
 | S/N | "Gerar link" não trava mais em silêncio (erro aparece na tela) | 2.116.0 | Central de Acessos → Convites → "Gerar link" |
+| S/N | Link de grupo também libera o acesso na hora (sem aprovação) | 2.117.0 | Central de Acessos → Convites → "Novo link" + página pública /convite |
 
 > As pendências 1–17 foram entregues antes deste registro existir e não estão
 > catalogadas; procure pelo assunto no `changelog.ts`. Da 18 em diante, tudo

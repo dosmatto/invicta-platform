@@ -121,9 +121,11 @@ function resumoVinculos(c: Convite): string {
 
 // CONVITE DE TIPO (multiuso): um link por perfil de usuário, para mandar no
 // grupo do WhatsApp dos produtores em vez de gerar um convite por pessoa.
-// Cada um que abrir informa o próprio e-mail e cria a própria senha; todos caem
-// em "Aguardando aprovação" já com a categoria/papel/perfil deste link — a
-// aprovação continua sendo manual, o link não dá acesso a ninguém sozinho.
+// Cada um que abrir informa o próprio e-mail e cria a própria senha e JÁ ENTRA
+// LIBERADO com a categoria/papel/perfil deste link (decisão do usuário: o link
+// de grupo também libera na hora, sem aprovação — ver app/convite/page.tsx).
+// Como o acesso é imediato, a defesa contra vazamento é cancelar o link ou a
+// validade curta.
 //
 // Validade: 365 dias por padrão (renovável). Link de acesso sem prazo nenhum é
 // convite para vazar num grupo e continuar valendo anos depois.
