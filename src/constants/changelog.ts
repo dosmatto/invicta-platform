@@ -1,5 +1,10 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.114.2': [
+    'NO PREÇO BASE, AGORA SÓ UM ASTERISCO: preço personalizado (do produtor ou da fazenda) aparece limpo, e o preço GERAL — o da Biblioteca, sem valor próprio daquele cliente — leva um * ao lado do número, explicado uma vez no rodapé. Some o texto repetido em toda linha.',
+    'O mesmo * vale na coluna R$/t da lista "Recomendações a enviar", para dar a mesma leitura nas duas tabelas.',
+    'Saiu o "posto na fazenda" dos títulos e da nota — a coluna é simplesmente R$/t. A coluna de observação continua aparecendo só quando avisa algo de verdade: preço gravado na recomendação ou preços diferentes entre talhões.',
+  ],
   '2.114.1': [
     'O BLOCO "PREÇO BASE" FICOU LIMPO: saiu o "cadastro atual" repetido em toda linha — é o caso normal e não informa nada. A coluna de observação só aparece quando tem o que avisar: preço GRAVADO na recomendação (aquele produto não seguiu o cadastro) ou preços diferentes entre talhões. Com tudo normal, some a coluna inteira.',
     'CORRIGIDO O NÚMERO COLADO NO TEXTO ("210,00cadastro atual"): faltava a coluna vazia de separação entre o preço, que é alinhado à direita, e o texto seguinte — o mesmo cuidado que a tabela de recomendações já tinha.',

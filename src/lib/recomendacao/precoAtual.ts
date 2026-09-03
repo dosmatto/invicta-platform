@@ -21,8 +21,10 @@ import type { Epoca } from '../periodo';
 export { custoAtualDaDose } from '../custosProdutor';
 
 export interface PrecoAtualResolvido {
-  /** R$/t posto na fazenda (produto + frete). null = não deu para resolver. */
+  /** R$/t (produto + frete). null = não deu para resolver. */
   precoTotalT: number | null;
+  /** De onde veio: 'fazenda'/'produtor' = personalizado; 'biblioteca' = geral. */
+  nivel?: string;
   insumoId?: string;
 }
 
@@ -58,7 +60,7 @@ export function construirPrecoAtual(ano: number | null, epoca?: Epoca | null) {
     const r = precoResolvidoDoInsumo(insumoId, insumoPorId.get(insumoId), {
       clienteId, fazendaId, ano, epoca: epoca ?? null,
     });
-    return { precoTotalT: r.precoTotalT, insumoId };
+    return { precoTotalT: r.precoTotalT, nivel: r.fonte.preco, insumoId };
   };
 }
 

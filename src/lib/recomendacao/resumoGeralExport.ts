@@ -76,13 +76,14 @@ export async function coletarLancamentos(
       // CUSTO REFEITO NA HORA: preço de hoje (produto + frete, já com a camada
       // do produtor) × as toneladas da dose. Sem conseguir resolver, fica o
       // valor gravado — melhor o número de antes do que nenhum.
-      const preco = precoAtual(ano)(it.d.equacaoId, t.id).precoTotalT;
+      const res = precoAtual(ano)(it.d.equacaoId, t.id);
+      const preco = res.precoTotalT;
       out.push({
         fazenda: t.fazenda, talhaoId: t.id, talhao: t.nome, areaHa: t.areaHa ?? 0,
         ano, safra: it.cen.safra, numero: it.numero,
         rotulo: rotuloRecomendacao(it), produto: chaveProduto(it.d),
         toneladas: it.d.toneladas ?? 0, custo: custoAtualDaDose(it.d, preco),
-        precoT: preco, fontePreco: preco != null ? 'cadastro' : 'gravado',
+        precoT: preco, fontePreco: preco != null ? (res.nivel ?? 'biblioteca') : 'gravado',
       });
     }
   }
@@ -183,44 +184,46 @@ export function montarPdfResumoGeral(
   // Sem isto o relatório mostra o investimento e esconde a régua: quem confere
   // não tem como saber se o total saiu do preço certo, nem de onde ele veio.
   if (r.precos.length) {
-    // "cadastro atual" é o caso NORMAL e não precisa ser dito em toda linha —
-    // vira ruído e ainda encavala na coluna do preço. A origem só aparece
-    // quando ela avisa alguma coisa: preço GRAVADO na recomendação (não seguiu
-    // o cadastro) ou preços diferentes entre talhões.
-    const origemDe = (p: (typeof r.precos)[number]): string =>
-      p.fonte === 'cadastro' || p.fonte === '—' ? ''
-        : p.fonte === 'gravado' ? 'preço gravado na recomendação'
-        : p.fonte;
-    const temOrigem = r.precos.some(p => origemDe(p) !== '');
+    // Preço personalizado (produtor/fazenda) é o esperado e não recebe marca.
+    // O que merece aviso é o GERAL — o da Biblioteca, sem valor próprio deste
+    // cliente — e ele leva só um asterisco, sem texto repetido em toda linha.
+    const geral = (f?: string) => f === 'biblioteca';
+    const obsDe = (f?: string) => f === 'gravado' ? 'preço gravado na recomendação'
+      : f === 'vários' ? 'preços diferentes entre talhões' : '';
+    const temObs = r.precos.some(p => obsDe(p.fonte) !== '');
+    const temGeral = r.precos.some(p => geral(p.fonte));
     const temFaixa = r.precos.some(p => p.precoTMax != null);
 
     espaco(16);
     doc.setFontSize(11); doc.setTextColor(...GREEN); doc.setFont('helvetica', 'bold');
     doc.text('Preço base usado no cálculo', M, y); y += 5;
-    // A coluna vazia de 6 mm separa o número (à direita) do texto seguinte —
-    // sem ela sai "210,00cadastro atual", grudado.
+    // Coluna vazia entre o número (à direita) e o texto: sem ela sai grudado.
     const colsP: Col[] = [
-      { titulo: 'Produto', w: 60 }, { titulo: 'R$/t (posto)', w: 34, align: 'r' },
+      { titulo: 'Produto', w: 60 }, { titulo: 'R$/t', w: 34, align: 'r' },
       { titulo: '', w: 6 },
-      ...(temOrigem ? [{ titulo: 'Observação', w: 60 } as Col] : []),
-      { titulo: '', w: UTIL - (temOrigem ? 160 : 100) },
+      ...(temObs ? [{ titulo: 'Observação', w: 60 } as Col] : []),
+      { titulo: '', w: UTIL - (temObs ? 160 : 100) },
     ];
     tabela(colsP, r.precos.map(p => ({
       cels: [
         p.produto,
-        p.precoT == null ? '—'
+        (p.precoT == null ? '—'
           : p.precoTMax != null ? `${fmt(p.precoT, 2)} a ${fmt(p.precoTMax, 2)}`
-          : fmt(p.precoT, 2),
+          : fmt(p.precoT, 2)) + (geral(p.fonte) ? ' *' : ''),
         '',
-        ...(temOrigem ? [origemDe(p)] : []),
+        ...(temObs ? [obsDe(p.fonte)] : []),
         '',
       ],
       fs: 7.4,
     })));
-    doc.setFontSize(6.6); doc.setTextColor(120); doc.setFont('helvetica', 'normal');
-    doc.text(san('Preco posto na fazenda (produto + frete).'
-      + (temFaixa ? ' Faixa (a) = talhoes com precos diferentes.' : '')), M, y);
-    y += 5;
+    const notas = [
+      temGeral ? '* preco geral da Biblioteca (sem valor proprio deste produtor/fazenda).' : '',
+      temFaixa ? 'Faixa (a) = talhoes com precos diferentes.' : '',
+    ].filter(Boolean).join('  ');
+    if (notas) {
+      doc.setFontSize(6.6); doc.setTextColor(120); doc.setFont('helvetica', 'normal');
+      doc.text(san(notas), M, y); y += 5;
+    }
   }
 
   // ── Recomendações a enviar ──
@@ -237,8 +240,9 @@ export function montarPdfResumoGeral(
   tabela(colsRec, r.recomendacoes.map(rec => ({
     cels: [
       String(rec.ano), rec.rotulo, rec.produto,
-      rec.precoT == null ? '—'
-        : rec.precoTMax != null ? `${fmt(rec.precoT, 2)}+` : fmt(rec.precoT, 2),
+      (rec.precoT == null ? '—'
+        : rec.precoTMax != null ? `${fmt(rec.precoT, 2)}+` : fmt(rec.precoT, 2))
+        + (rec.fontePreco === 'biblioteca' ? ' *' : ''),
       fmt(rec.toneladas, 1), '', rec.talhoes.join(', '),
     ],
     fs: 7.4,
@@ -317,7 +321,7 @@ export async function gerarResumoGeralExcel(r: ResumoGeral, ident: IdentResumo):
     ]);
   }
 
-  const recs: (string | number)[][] = [['ANO', 'RECOMENDAÇÃO', 'PRODUTO', 'R$/t (POSTO)', 'TALHÕES', 'Nº TALHÕES', 'QTD TOTAL (t)', 'INVEST. (R$)']];
+  const recs: (string | number)[][] = [['ANO', 'RECOMENDAÇÃO', 'PRODUTO', 'R$/t', 'TALHÕES', 'Nº TALHÕES', 'QTD TOTAL (t)', 'INVEST. (R$)']];
   for (const rec of r.recomendacoes) {
     recs.push([
       rec.ano, rec.rotulo, rec.produto,
@@ -327,15 +331,16 @@ export async function gerarResumoGeralExcel(r: ResumoGeral, ident: IdentResumo):
   }
   // Aba própria do preço base: é a régua do investimento e precisa ser
   // conferível sem abrir o PDF.
-  const precos: (string | number)[][] = [['PRODUTO', 'R$/t (POSTO)', 'R$/t MÁX', 'OBSERVAÇÃO']];
+  const precos: (string | number)[][] = [['PRODUTO', 'R$/t', 'R$/t MÁX', 'OBSERVAÇÃO']];
   for (const p of r.precos) {
     precos.push([
       p.produto,
       p.precoT == null ? '' : r2(p.precoT),
       p.precoTMax == null ? '' : r2(p.precoTMax),
-      // Vazio no caso normal: dizer "cadastro atual" em toda linha é ruído.
-      p.fonte === 'cadastro' || p.fonte === '—' ? ''
-        : p.fonte === 'gravado' ? 'preço gravado na recomendação' : p.fonte,
+      // Vazio no caso normal (preço do produtor/fazenda). Só avisa o que importa.
+      p.fonte === 'biblioteca' ? 'preço geral da Biblioteca'
+        : p.fonte === 'gravado' ? 'preço gravado na recomendação'
+        : p.fonte === 'vários' ? 'preços diferentes entre talhões' : '',
     ]);
   }
 

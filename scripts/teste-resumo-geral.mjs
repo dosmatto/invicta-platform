@@ -263,13 +263,13 @@ t('a extensao entra uma vez so', () => {
 // ── Preço base exibido no relatório ────────────────────────────────────────
 t('preço base sai do resolvido; sem ele, deduz de custo/toneladas', () => {
   const r = montarResumoGeral([
-    L({ talhaoId: 'a', produto: 'Calcário', toneladas: 10, custo: 2750, precoT: 275, fontePreco: 'cadastro' }),
+    L({ talhaoId: 'a', produto: 'Calcário', toneladas: 10, custo: 2750, precoT: 275, fontePreco: 'produtor' }),
     L({ talhaoId: 'b', produto: 'Gesso', toneladas: 4, custo: 1200 }),
   ]);
   const calc = r.precos.find(p => p.produto === 'Calcário');
   const gesso = r.precos.find(p => p.produto === 'Gesso');
   assert.equal(calc.precoT, 275);
-  assert.equal(calc.fonte, 'cadastro');
+  assert.equal(calc.fonte, 'produtor', 'preço personalizado — não leva asterisco');
   assert.equal(gesso.precoT, 300, '1200 / 4 t — o preço que de fato entrou na conta');
   assert.equal(gesso.fonte, 'gravado');
 });
@@ -295,6 +295,15 @@ t('recomendação carrega o preço usado', () => {
 t('sem tonelagem não inventa preço (não divide por zero)', () => {
   const r = montarResumoGeral([L({ talhaoId: 'a', produto: 'X', toneladas: 0, custo: 500 })]);
   assert.equal(r.precos.find(p => p.produto === 'X').precoT, null);
+});
+
+t('preço GERAL (biblioteca) é distinguível do personalizado — é o que leva *', () => {
+  const r = montarResumoGeral([
+    L({ talhaoId: 'a', produto: 'Calcário', toneladas: 10, custo: 2100, precoT: 210, fontePreco: 'biblioteca' }),
+    L({ talhaoId: 'b', produto: 'KCl', toneladas: 5, custo: 15000, precoT: 3000, fontePreco: 'fazenda' }),
+  ]);
+  assert.equal(r.precos.find(p => p.produto === 'Calcário').fonte, 'biblioteca');
+  assert.equal(r.precos.find(p => p.produto === 'KCl').fonte, 'fazenda');
 });
 
 console.log(`\n${ok} passaram, ${fail} falharam\n`);
