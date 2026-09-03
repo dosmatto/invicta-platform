@@ -1,5 +1,12 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Convite individual libera o acesso na hora, sem aprovação
+  '2.116.0': [
+    'CONVITE PARA UMA PESSOA AGORA JÁ ENTRA LIBERADO — SEM PASSAR POR APROVAÇÃO. Como o link individual já é criado com a categoria, o papel, o perfil de permissões e os vínculos que você escolheu, pedir aprovação de novo era redundante. Quem abre o link, cria a senha e entra direto, ativo, com exatamente o que o convite concedeu. O link de GRUPO (por tipo de usuário) continua caindo em "aguardando aprovação": um link solto num grupo não pode dar acesso sozinho.',
+    'ISSO TAMBÉM RESOLVE O CADASTRO QUE FICAVA PRESO em "aguardando aprovação" sem nada aparecendo para você aprovar: no convite individual não há mais fila — a liberação é automática e fica registrada na Auditoria como aprovação pelo link.',
+    'A tela do convite individual passou a dizer que o acesso já vem liberado, e a mensagem final orienta a entrar direto (ou confirmar o e-mail antes, quando o provedor exigir).',
+    'CORREÇÃO — "GERAR LINK" NÃO TRAVA MAIS EM SILÊNCIO: se a gravação do convite falhar (ex.: cache do navegador cheio), o link ainda é criado na memória e enviado à nuvem, e qualquer erro passa a aparecer escrito abaixo do botão em vez de um clique que não fazia nada.',
+  ],
   '2.115.0': [
     'A TABELA DO ANO GANHOU A LINHA "R$ POR PRODUTO", logo abaixo do total de toneladas: quanto do investimento é calcário, quanto é gesso, quanto é KCl. Antes o total chegava fechado (R$ 517.449,20) e não dava para saber o peso de cada insumo sem refazer a conta à mão. A soma dessa linha fecha com o total — e isso virou teste, porque uma linha dessas que não fecha é pior que não ter linha nenhuma.',
     'Vale também no total geral quando o resumo tem mais de um ano, e no Excel, com a mesma linha.',

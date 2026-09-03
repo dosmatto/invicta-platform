@@ -33,8 +33,17 @@ function gerarToken(): string {
 }
 
 function ler(): Convite[] { return lerListaLocal<Convite>(K_CONVITES); }
+// Mesma regra do store.save: cache local cheio NÃO pode abortar a criação do
+// convite. gravarListaLocal já deixou a lista nova em memória (a sessão segue
+// coerente) e disparou 'inv:quota-erro' (o cabeçalho mostra "armazenamento
+// cheio"); a nuvem recebe do mesmo jeito. Antes, o throw daqui subia até o
+// clique em "Gerar link" e a tela não fazia NADA — sem link, sem aviso.
 function gravar(lista: Convite[]): void {
-  gravarListaLocal(K_CONVITES, lista);
+  try {
+    gravarListaLocal(K_CONVITES, lista);
+  } catch (e) {
+    console.error('[convites] cache local falhou ao gravar (segue pela memória + nuvem):', e);
+  }
   cloudPushLista(K_CONVITES, lista as unknown as { id: unknown }[]);
   if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('inv:empresa'));
 }

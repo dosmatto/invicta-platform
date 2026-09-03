@@ -370,23 +370,39 @@ function AbaConvites({ convites, podeConvidar, onMudou }: {
       setAvisoPessoa('E-mail inválido. Apague o campo para gerar um link que a própria pessoa preenche, ou corrija o e-mail.');
       return;
     }
-    const c = criarConvite({
-      email: email.trim(), nome: nome || undefined, rotulo: rotuloP || undefined,
-      categoria: cat, papel, dias,
-      clientesVinculados: cliP, fazendasVinculadas: fazP,
-    });
+    let c;
+    try {
+      c = criarConvite({
+        email: email.trim(), nome: nome || undefined, rotulo: rotuloP || undefined,
+        categoria: cat, papel, dias,
+        clientesVinculados: cliP, fazendasVinculadas: fazP,
+      });
+    } catch (e) {
+      // Qualquer erro na criação vira texto na tela — nunca mais um clique mudo.
+      setAvisoPessoa(`Não foi possível gerar o link: ${mensagemErro(e)}`);
+      return;
+    }
     setCriadoPessoa(linkDoConvite(c.id)); setAvisoPessoa('');
     setEmail(''); setNome(''); setRotuloP(''); setCliP([]); setFazP([]);
     setNovo(false); onMudou();
   }
   function criarTipo() {
-    const c = criarConviteTipo({
-      rotulo: rotuloEfetivo(), categoria: catT, papel: papelT,
-      perfilId: perfilT || undefined, dias: diasT,
-      clientesVinculados: cliT, fazendasVinculadas: fazT,
-    });
+    let c;
+    try {
+      c = criarConviteTipo({
+        rotulo: rotuloEfetivo(), categoria: catT, papel: papelT,
+        perfilId: perfilT || undefined, dias: diasT,
+        clientesVinculados: cliT, fazendasVinculadas: fazT,
+      });
+    } catch (e) {
+      setAvisoTipo(`Não foi possível gerar o link: ${mensagemErro(e)}`);
+      return;
+    }
     setCriadoTipo(linkDoConvite(c.id)); setAvisoTipo('');
     setRotulo(''); setPerfilT(''); setCliT([]); setFazT([]); setNovoTipo(false); onMudou();
+  }
+  function mensagemErro(e: unknown): string {
+    return e instanceof Error && e.message ? e.message : 'erro inesperado neste navegador (veja o console).';
   }
   function copiar(txt: string, marca = 'x') {
     navigator.clipboard?.writeText(txt).then(() => { setCopiado(marca); setTimeout(() => setCopiado(''), 2000); }).catch(() => {});

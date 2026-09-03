@@ -39,6 +39,8 @@ verdadeira (fusão de talhões) chegou depois; foi preciso renumerar.
 | 24 | Contraste e download em GeoTIFF na composição temporal | 2.101.0 | Talhão → NDVI → Composição temporal (e aba Camadas salvas) |
 | 25 | Comparativo visual de camadas ao classificar zonas | 2.102.0 | Talhão → Zonas → Editor Manual → Sugerir classificação → "Ver a camada no mapa" |
 | 26 | Incorporar divisas internas ao polígono atual do talhão | 2.107.0 | Talhão → Zonas → Zoneamentos e versões → ícone da tesoura |
+| S/N | Convite individual libera o acesso na hora (sem aprovação); link de grupo mantém aprovação | 2.116.0 | Central de Acessos → Convites → "Convite para uma pessoa" + página pública /convite |
+| S/N | "Gerar link" não trava mais em silêncio (erro aparece na tela) | 2.116.0 | Central de Acessos → Convites → "Gerar link" |
 
 > As pendências 1–17 foram entregues antes deste registro existir e não estão
 > catalogadas; procure pelo assunto no `changelog.ts`. Da 18 em diante, tudo

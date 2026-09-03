@@ -17,6 +17,7 @@ import { useSearchParams } from 'next/navigation';
 import { cadastrarComConvite, loginEmailSenha, mensagemErroLogin } from '@/lib/auth';
 import { validarConvite, marcarConviteUsado, MOTIVO_TEXTO } from '@/lib/iam/convites';
 import { salvarUsuario } from '@/lib/iam/usuarios';
+import { getPerfil } from '@/lib/iam/perfis';
 import { registrar } from '@/lib/iam/auditoria';
 import type { Convite } from '@/lib/iam/tipos';
 import { CheckCircle2, Loader2, ShieldCheck, AlertTriangle } from 'lucide-react';
@@ -41,6 +42,10 @@ function ConviteConteudo() {
   const [erro, setErro] = useState('');
   const [pronto, setPronto] = useState(false);
   const [precisaConfirmar, setPrecisaConfirmar] = useState(false);
+  // Convite INDIVIDUAL já traz papel/perfil/vínculos escolhidos pelo admin — não
+  // precisa de aprovação de novo: entra ATIVO. O link de TIPO (multiuso) continua
+  // caindo em "aguardando aprovação" (é o desenho dele; ver comentários abaixo).
+  const [liberado, setLiberado] = useState(false);
 
   // Validação do token: só é possível quando a lista de convites está local
   // (o admin abriu o app nesta máquina) OU depois do login. Antes disso
@@ -88,27 +93,61 @@ function ConviteConteudo() {
       }
       if (r.precisaConfirmar) setPrecisaConfirmar(true);
 
-      // Autenticado (ou aguardando confirmação): grava o PEDIDO de acesso.
+      // Autenticado (ou aguardando confirmação): grava o acesso.
       const agora = new Date().toISOString();
-      salvarUsuario(em, {
-        nome: nome.trim(), telefone: telefone.trim() || undefined,
-        papel: 'leitor',                       // provisório: sem acesso até aprovar
-        categoria: conv?.categoria,
-        status: 'aguardando_aprovacao',
-        criadoEm: agora, criadoPor: em,
-        aceiteLgpdEm: agora, aceiteTermosEm: agora,
-        conviteId: token || undefined,
-        // Guardadas para a tela de aprovação já abrir preenchida com o que o
-        // link propunha — quem aprova continua podendo mudar.
-        papelSugerido: conv?.papel,
-        perfilSugeridoId: conv?.perfilId,
-        // Acesso definido no convite (produtores/fazendas). Só restringe, e o
-        // registro ainda está "aguardando aprovação" — não libera nada aqui.
+      // INDIVIDUAL = convite conhecido e NÃO multiuso. O admin já definiu papel,
+      // perfil e vínculos ao gerar o link, para UMA pessoa; pedir aprovação de
+      // novo é redundante — e, quando o registro do pedido não voltava para o
+      // aparelho do admin, a pessoa ficava presa em "aguardando aprovação" sem
+      // ninguém para aprovar. Entra ATIVA, já com o que o link concedeu.
+      // MULTIUSO (link de grupo) NÃO: o desenho dele é liberar só após aprovação
+      // manual (um link solto num grupo não pode dar acesso sozinho).
+      const individual = !!conv && !conv.multiuso;
+      const vinc = {
         clientesVinculados: conv?.clientesVinculados?.length ? conv.clientesVinculados : undefined,
         fazendasVinculadas: conv?.fazendasVinculadas?.length ? conv.fazendasVinculadas : undefined,
-      });
+      };
+      if (individual) {
+        // Permissões: o perfil escolhido no link (se houver) vira as permissões
+        // próprias; sem perfil, valem as do papel (padrão da matriz). Mesmo
+        // resultado da aprovação manual, só que automático.
+        const perfil = conv?.perfilId ? getPerfil(conv.perfilId) : null;
+        salvarUsuario(em, {
+          nome: nome.trim(), telefone: telefone.trim() || undefined,
+          papel: conv?.papel ?? 'leitor',
+          categoria: conv?.categoria,
+          status: 'ativo',
+          criadoEm: agora, criadoPor: em,
+          aprovadoEm: agora, aprovadoPor: 'convite individual (liberação automática)',
+          aceiteLgpdEm: agora, aceiteTermosEm: agora,
+          conviteId: token || undefined,
+          ...(perfil ? { permissoes: perfil.permissoes } : {}),
+          ...vinc,
+        });
+        registrar('usuario_aprovado', {
+          alvo: em, detalhe: 'liberado automaticamente pelo link individual', para: 'ativo',
+        });
+        setLiberado(true);
+      } else {
+        salvarUsuario(em, {
+          nome: nome.trim(), telefone: telefone.trim() || undefined,
+          papel: 'leitor',                       // provisório: sem acesso até aprovar
+          categoria: conv?.categoria,
+          status: 'aguardando_aprovacao',
+          criadoEm: agora, criadoPor: em,
+          aceiteLgpdEm: agora, aceiteTermosEm: agora,
+          conviteId: token || undefined,
+          // Guardadas para a tela de aprovação já abrir preenchida com o que o
+          // link propunha — quem aprova continua podendo mudar.
+          papelSugerido: conv?.papel,
+          perfilSugeridoId: conv?.perfilId,
+          // Acesso definido no convite (produtores/fazendas). Só restringe, e o
+          // registro ainda está "aguardando aprovação" — não libera nada aqui.
+          ...vinc,
+        });
+        registrar('cadastro_solicitado', { alvo: em, detalhe: nome.trim() });
+      }
       if (token) marcarConviteUsado(token, em);
-      registrar('cadastro_solicitado', { alvo: em, detalhe: nome.trim() });
       setPronto(true);
     } catch (err) {
       setErro(mensagemErroLogin(err));
@@ -133,11 +172,17 @@ function ConviteConteudo() {
       <Moldura>
         <div className="text-center space-y-3">
           <CheckCircle2 size={40} className="mx-auto" style={{ color: '#4ade80' }} />
-          <p className="text-base font-bold" style={{ color: TXT }}>Cadastro enviado!</p>
+          <p className="text-base font-bold" style={{ color: TXT }}>
+            {liberado ? 'Acesso liberado!' : 'Cadastro enviado!'}
+          </p>
           <p className="text-sm" style={{ color: SUB }}>
             {precisaConfirmar
-              ? 'Confirme seu e-mail pelo link que enviamos e aguarde a liberação do administrador.'
-              : 'Seu acesso está aguardando aprovação do administrador. Você será avisado quando for liberado.'}
+              ? (liberado
+                  ? 'Confirme seu e-mail pelo link que enviamos e depois é só entrar — seu acesso já está liberado.'
+                  : 'Confirme seu e-mail pelo link que enviamos e aguarde a liberação do administrador.')
+              : (liberado
+                  ? 'Seu acesso já está liberado. Abra a plataforma e entre com o seu e-mail e senha.'
+                  : 'Seu acesso está aguardando aprovação do administrador. Você será avisado quando for liberado.')}
           </p>
           <p className="text-xs" style={{ color: '#64748b' }}>Pode fechar esta página.</p>
         </div>
@@ -210,7 +255,9 @@ function ConviteConteudo() {
           {enviando ? 'Enviando…' : 'Criar meu acesso'}
         </button>
         <p className="text-[10px] text-center" style={{ color: '#64748b' }}>
-          Depois de enviar, seu acesso passa por aprovação do administrador.
+          {conv && !conv.multiuso
+            ? 'Seu acesso já vem liberado por este convite — é só criar a senha e entrar.'
+            : 'Depois de enviar, seu acesso passa por aprovação do administrador.'}
         </p>
       </form>
     </Moldura>
