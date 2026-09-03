@@ -20,6 +20,7 @@ import { abrirPdfNaAba } from '../abrirPdf.ts';
 import { listar as bibListar, type ConteudoEquacao } from '../biblioteca';
 import type { Cenario } from './cenarios';
 import { listarCenarios, descomprimirCenario } from './cenarios';
+import { cenariosComPrecoAtual } from './precoAtual';
 import type { DoseCalculada } from './aplicar';
 import { classesVisiveis, indiceClasse } from './faixas';
 import { coberturaDoGrid } from './cobertura';
@@ -758,7 +759,12 @@ async function coletarGruposFazenda(fazendaId: string, safra: string) {
   const numDe = construirNumDe();
   const grupos: GrupoTalhao[] = [];
   for (const t of talhoes) {
-    const cens = await listarCenarios(t.id, safra).catch(() => [] as Cenario[]);
+    // Custos refeitos com o preço de HOJE (produto + frete, camada do produtor):
+    // mudar o preço e gerar o relatório de novo tem de sair com a conta nova,
+    // sem reprocessar mapa. Ver lib/recomendacao/precoAtual.ts.
+    const cens = cenariosComPrecoAtual(
+      await listarCenarios(t.id, safra).catch(() => [] as Cenario[]),
+      t.id, anoDaSafra(safra));
     if (!cens.length) continue;
     const desc = await Promise.all(cens.map(descomprimirCenario));
     const itens = achatarDoses(desc, numDe, true);

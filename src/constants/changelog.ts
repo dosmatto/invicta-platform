@@ -1,5 +1,12 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.113.0': [
+    'O RESUMO GERAL E A RECOMENDAÇÃO (PDF) PASSARAM A REFAZER A CONTA COM O PREÇO DE HOJE. Era o que faltava: mudar o preço no produtor e pedir o relatório continuava mostrando o investimento antigo, porque o custo de cada dose é GRAVADO quando o cenário é criado e os dois relatórios liam esse número congelado. Agora, na hora de gerar, o custo é recalculado como toneladas × preço atual — sem reprocessar mapa nenhum.',
+    'O PREÇO ATUAL VEM DA CADEIA INTEIRA: dose → equação → insumo → preço posto na fazenda (produto + frete), já passando pela camada do produtor e da fazenda. Vale no "Resumo geral (PDF/Excel)" do produtor e da fazenda, na "Recomendação (PDF)" e nos relatórios gerados dentro do talhão.',
+    'SE NÃO DER PARA RESOLVER O PREÇO — equação sem insumo vinculado, insumo excluído do cadastro ou produtor sem preço próprio —, fica o valor que estava gravado. Nenhum relatório sai SEM custo por causa disso; o que muda é só quem consegue ser atualizado.',
+    'A dose, a tonelagem e o mapa NÃO são recalculados: o preço mudou, a recomendação agronômica não. Só o dinheiro é refeito.',
+    '5 testes novos (npm run teste:custos-produtor, 28 no total) travam o recálculo, o retorno ao valor gravado e o preço zero — que refaz a conta para zero em vez de ser lido como "sem preço".',
+  ],
   '2.112.0': [
     'CORRIGIDO O ANO ERRADO NO BLOCO DE CUSTOS: a tela mostrava 2024 com a barra do topo em 2026, e não havia como trocar. O ano vinha do padrão da navegação, não da safra ATIVA (que é o que a barra mostra). Agora o bloco tem seletor próprio de ANO — lista as safras cadastradas mais o ano corrente, já aberto no ano ativo.',
     'CUSTO DA LAVOURA PASSOU A SER POR CULTURA: soja e milho no mesmo ano não custam o mesmo, e um número só descrevia mal os dois. Escolha a cultura e informe o custo dela; "Todas as culturas" continua valendo para as que você não detalhar. O relatório usa o custo da cultura DAQUELE mapa de colheita.',

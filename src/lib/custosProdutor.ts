@@ -172,3 +172,23 @@ export function custoLavoura(
 export const ROTULO_NIVEL: Record<NivelCusto, string> = {
   fazenda: 'da fazenda', produtor: 'do produtor', biblioteca: 'da biblioteca', nenhum: 'não informado',
 };
+
+/**
+ * Custo de uma dose JÁ SALVA, refeito com o preço de hoje.
+ *
+ * O cenário grava `custo` na criação (t × R$/t da época). Isso serve para
+ * reproduzir um PDF antigo e atrapalha o pedido do usuário: mudar o preço e
+ * gerar o relatório de novo tem de sair com a conta nova, sem reprocessar mapa.
+ *
+ * Sem preço resolvido — equação sem insumo, insumo excluído, produtor sem
+ * cadastro — fica o valor gravado: nenhum relatório pode sair SEM custo por
+ * causa disto. `0` resolvido é zero de verdade e refaz a conta para zero.
+ */
+export function custoAtualDaDose(
+  d: { toneladas?: number | null; custo?: number | null },
+  precoTotalT: number | null,
+): number {
+  const t = typeof d.toneladas === 'number' && Number.isFinite(d.toneladas) ? d.toneladas : null;
+  if (precoTotalT == null || t == null) return d.custo ?? 0;
+  return t * precoTotalT;
+}

@@ -8,7 +8,7 @@
 //   3. linha de outra fazenda ou de outro semestre NUNCA entra na conta;
 //   4. sobrescrever preço não obriga a redigitar a aplicação.
 import assert from 'node:assert/strict';
-import { linhasAplicaveis, precoDoInsumo, custoLavoura } from '../src/lib/custosProdutor.ts';
+import { linhasAplicaveis, precoDoInsumo, custoLavoura, custoAtualDaDose } from '../src/lib/custosProdutor.ts';
 
 let ok = 0, fail = 0;
 const t = (nome, fn) => {
@@ -201,6 +201,29 @@ t('ordem de chegada não importa — a específica sempre vence', () => {
   for (const todas of [[a, b], [b, a]]) {
     assert.equal(precoDoInsumo('kcl', BIB, linhasAplicaveis(todas, ctx())).precoT, 2400);
   }
+});
+
+// ── Relatório refaz a conta com o preço de hoje ────────────────────────────
+t('custo da dose é REFEITO: toneladas x preço de hoje', () => {
+  // 48,1 t de calcário a R$ 275/t posto (180 produto + 95 frete).
+  assert.equal(custoAtualDaDose({ toneladas: 48.1, custo: 3759.76 }, 275), 48.1 * 275);
+});
+
+t('sem preço resolvido, fica o valor GRAVADO — relatório nunca fica sem custo', () => {
+  assert.equal(custoAtualDaDose({ toneladas: 48.1, custo: 3759.76 }, null), 3759.76);
+});
+
+t('dose sem tonelagem também cai no gravado', () => {
+  assert.equal(custoAtualDaDose({ toneladas: null, custo: 1200 }, 275), 1200);
+  assert.equal(custoAtualDaDose({ custo: 1200 }, 275), 1200);
+});
+
+t('preço ZERO refaz a conta para zero (não é "sem preço")', () => {
+  assert.equal(custoAtualDaDose({ toneladas: 10, custo: 5000 }, 0), 0);
+});
+
+t('sem custo gravado e sem preço, zero — nunca NaN no PDF', () => {
+  assert.equal(custoAtualDaDose({}, null), 0);
 });
 
 console.log(`\n${ok} passaram, ${fail} falharam\n`);

@@ -17,6 +17,8 @@ import { gerarRelatorioCombinado } from '@/lib/relatorioCombinado';
 import { rotuloAno } from '@/lib/periodo';
 import { nomeExport, periodoParaNome } from '@/lib/nomeExport';
 import { listarCenarios, descomprimirCenario, type Cenario } from '@/lib/recomendacao/cenarios';
+import { cenariosComPrecoAtual } from '@/lib/recomendacao/precoAtual';
+import { anoDaSafra } from '@/lib/periodo';
 import { salvarRelatorio, listarRelatorios, excluirRelatorio, type RegistroRelatorio } from '@/lib/relatoriosArquivo';
 import { emailUsuario } from '@/lib/auth';
 import { pode } from '@/lib/empresa';
@@ -76,7 +78,8 @@ export function GeradorRelatorios({ safraNome }: { safraNome?: string } = {}) {
     const talhaoId = nav.talhaoId;
     Promise.all([
       carregarContextoRelatorio(talhaoId, safra, extrairPoligono(uploadedGeoRef.current)),
-      listarCenarios(talhaoId, safra).catch(() => [] as Cenario[]),
+      listarCenarios(talhaoId, safra).catch(() => [] as Cenario[])
+        .then(cs => cenariosComPrecoAtual(cs, talhaoId, anoDaSafra(safra))),
     ])
       .then(([c, cens]) => {
         if (cancel) return;
@@ -193,7 +196,10 @@ export function GeradorRelatorios({ safraNome }: { safraNome?: string } = {}) {
       // Recomendação
       let recDescompr: Cenario[] = [];
       if (reg.cenarioIds?.length) {
-        const cens = (mesmoCtx && cenarios.length) ? cenarios : await listarCenarios(reg.talhaoId, reg.safra).catch(() => []);
+        const cens = (mesmoCtx && cenarios.length) ? cenarios
+          : cenariosComPrecoAtual(
+              await listarCenarios(reg.talhaoId, reg.safra).catch(() => [] as Cenario[]),
+              reg.talhaoId, anoDaSafra(reg.safra));
         const escolhidos = cens.filter(c => reg.cenarioIds!.includes(c.id));
         recDescompr = await Promise.all(escolhidos.map(descomprimirCenario));
       }

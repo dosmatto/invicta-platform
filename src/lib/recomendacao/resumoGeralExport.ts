@@ -21,6 +21,7 @@ import {
 } from './relatorioCenarios';
 import { montarResumoGeral, produtosDe, planejarTabela, nomeArquivoResumo, LARG_MIN_PRODUTO_MM, type Lancamento, type ResumoGeral } from './resumoGeral';
 import { anoDaSafra } from '../periodo';
+import { construirPrecoAtual, custoAtualDaDose } from './precoAtual';
 
 export interface TalhaoAlvo { id: string; nome: string; areaHa: number; fazenda: string }
 
@@ -54,6 +55,12 @@ export async function coletarLancamentos(
   const alvo = new Set(safras);
   const numDe = construirNumDe();
   const rotulos = rotulosAtuaisDasEquacoes();   // Biblioteca lida UMA vez
+  const cachePreco = new Map<number, ReturnType<typeof construirPrecoAtual>>();
+  const precoAtual = (ano: number) => {
+    let f = cachePreco.get(ano);
+    if (!f) { f = construirPrecoAtual(ano); cachePreco.set(ano, f); }
+    return f;
+  };
   const ordenados = ordenarTalhoesAlfa(talhoes);
   const out: Lancamento[] = [];
 
@@ -66,11 +73,15 @@ export async function coletarLancamentos(
     for (const it of achatarDoses(doAno, numDe, true)) {
       const ano = anoDaSafra(it.cen.safra);
       if (ano == null) continue;
+      // CUSTO REFEITO NA HORA: preço de hoje (produto + frete, já com a camada
+      // do produtor) × as toneladas da dose. Sem conseguir resolver, fica o
+      // valor gravado — melhor o número de antes do que nenhum.
+      const preco = precoAtual(ano)(it.d.equacaoId, t.id).precoTotalT;
       out.push({
         fazenda: t.fazenda, talhaoId: t.id, talhao: t.nome, areaHa: t.areaHa ?? 0,
         ano, safra: it.cen.safra, numero: it.numero,
         rotulo: rotuloRecomendacao(it), produto: chaveProduto(it.d),
-        toneladas: it.d.toneladas ?? 0, custo: it.d.custo ?? 0,
+        toneladas: it.d.toneladas ?? 0, custo: custoAtualDaDose(it.d, preco),
       });
     }
   }
