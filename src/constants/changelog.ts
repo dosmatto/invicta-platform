@@ -1,5 +1,10 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.114.1': [
+    'O BLOCO "PREÇO BASE" FICOU LIMPO: saiu o "cadastro atual" repetido em toda linha — é o caso normal e não informa nada. A coluna de observação só aparece quando tem o que avisar: preço GRAVADO na recomendação (aquele produto não seguiu o cadastro) ou preços diferentes entre talhões. Com tudo normal, some a coluna inteira.',
+    'CORRIGIDO O NÚMERO COLADO NO TEXTO ("210,00cadastro atual"): faltava a coluna vazia de separação entre o preço, que é alinhado à direita, e o texto seguinte — o mesmo cuidado que a tabela de recomendações já tinha.',
+    'A nota de rodapé encolheu junto e só menciona a faixa de preços quando existe alguma. No Excel, a coluna passou a se chamar OBSERVAÇÃO e fica vazia no caso normal.',
+  ],
   '2.114.0': [
     'OS RELATÓRIOS PASSARAM A MOSTRAR O PREÇO BASE DE CADA INSUMO. Antes eles davam o investimento e escondiam a régua: não dava para saber se o total saiu do preço certo nem de onde ele veio.',
     'NO RESUMO GERAL entrou o bloco "Preço base usado no cálculo" — produto, R$/t posto na fazenda (produto + frete) e a ORIGEM: "cadastro atual" (Biblioteca com o preço do produtor/fazenda, refeito na hora) ou "gravado na recomendação" (o preço de quando ela foi criada). A lista "Recomendações a enviar" ganhou a coluna R$/t.',

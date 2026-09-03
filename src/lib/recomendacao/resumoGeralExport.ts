@@ -183,12 +183,27 @@ export function montarPdfResumoGeral(
   // Sem isto o relatório mostra o investimento e esconde a régua: quem confere
   // não tem como saber se o total saiu do preço certo, nem de onde ele veio.
   if (r.precos.length) {
+    // "cadastro atual" é o caso NORMAL e não precisa ser dito em toda linha —
+    // vira ruído e ainda encavala na coluna do preço. A origem só aparece
+    // quando ela avisa alguma coisa: preço GRAVADO na recomendação (não seguiu
+    // o cadastro) ou preços diferentes entre talhões.
+    const origemDe = (p: (typeof r.precos)[number]): string =>
+      p.fonte === 'cadastro' || p.fonte === '—' ? ''
+        : p.fonte === 'gravado' ? 'preço gravado na recomendação'
+        : p.fonte;
+    const temOrigem = r.precos.some(p => origemDe(p) !== '');
+    const temFaixa = r.precos.some(p => p.precoTMax != null);
+
     espaco(16);
     doc.setFontSize(11); doc.setTextColor(...GREEN); doc.setFont('helvetica', 'bold');
     doc.text('Preço base usado no cálculo', M, y); y += 5;
+    // A coluna vazia de 6 mm separa o número (à direita) do texto seguinte —
+    // sem ela sai "210,00cadastro atual", grudado.
     const colsP: Col[] = [
       { titulo: 'Produto', w: 60 }, { titulo: 'R$/t (posto)', w: 34, align: 'r' },
-      { titulo: 'Origem', w: 40 }, { titulo: '', w: UTIL - 134 },
+      { titulo: '', w: 6 },
+      ...(temOrigem ? [{ titulo: 'Observação', w: 60 } as Col] : []),
+      { titulo: '', w: UTIL - (temOrigem ? 160 : 100) },
     ];
     tabela(colsP, r.precos.map(p => ({
       cels: [
@@ -196,15 +211,15 @@ export function montarPdfResumoGeral(
         p.precoT == null ? '—'
           : p.precoTMax != null ? `${fmt(p.precoT, 2)} a ${fmt(p.precoTMax, 2)}`
           : fmt(p.precoT, 2),
-        p.fonte === 'cadastro' ? 'cadastro atual'
-          : p.fonte === 'gravado' ? 'gravado na recomendação'
-          : p.fonte,
+        '',
+        ...(temOrigem ? [origemDe(p)] : []),
         '',
       ],
       fs: 7.4,
     })));
     doc.setFontSize(6.6); doc.setTextColor(120); doc.setFont('helvetica', 'normal');
-    doc.text(san('Preco posto na fazenda (produto + frete). "Cadastro atual" = Biblioteca com o preco do produtor/fazenda, refeito agora; "gravado" = o preco de quando a recomendacao foi criada. Faixa (a) = talhoes com precos diferentes.'), M, y);
+    doc.text(san('Preco posto na fazenda (produto + frete).'
+      + (temFaixa ? ' Faixa (a) = talhoes com precos diferentes.' : '')), M, y);
     y += 5;
   }
 
@@ -312,13 +327,15 @@ export async function gerarResumoGeralExcel(r: ResumoGeral, ident: IdentResumo):
   }
   // Aba própria do preço base: é a régua do investimento e precisa ser
   // conferível sem abrir o PDF.
-  const precos: (string | number)[][] = [['PRODUTO', 'R$/t (POSTO)', 'R$/t MÁX', 'ORIGEM']];
+  const precos: (string | number)[][] = [['PRODUTO', 'R$/t (POSTO)', 'R$/t MÁX', 'OBSERVAÇÃO']];
   for (const p of r.precos) {
     precos.push([
       p.produto,
       p.precoT == null ? '' : r2(p.precoT),
       p.precoTMax == null ? '' : r2(p.precoTMax),
-      p.fonte === 'cadastro' ? 'cadastro atual' : p.fonte === 'gravado' ? 'gravado na recomendação' : p.fonte,
+      // Vazio no caso normal: dizer "cadastro atual" em toda linha é ruído.
+      p.fonte === 'cadastro' || p.fonte === '—' ? ''
+        : p.fonte === 'gravado' ? 'preço gravado na recomendação' : p.fonte,
     ]);
   }
 
