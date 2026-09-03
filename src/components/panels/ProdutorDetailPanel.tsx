@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useApp } from '@/context/AppContext';
+import { CustosProdutorEditor } from './CustosProdutorEditor';
+import { anoDaSafra } from '@/lib/periodo';
 import { getClientes, getFazendas, getTalhoes, saveFazenda, updateCliente, deleteCliente, Cliente, Fazenda } from '@/lib/store';
 import { getUsuarios, statusDe, categoriaDe } from '@/lib/iam/usuarios';
 import { ChevronLeft, Plus, Building2, Phone, Mail, Edit2, Save, X, Trash2, Pencil, UserCog } from 'lucide-react';
@@ -360,6 +362,14 @@ export function ProdutorDetailPanel() {
                 </div>
               )}
             </PanelSection>
+
+            {/* Custos que sobrepõem a Biblioteca para ESTE produtor no ano da
+                navegação. Fica na aba Dados de propósito: é cadastro do cliente,
+                não configuração da casa. */}
+            <div style={{ borderTop: '1px solid #0f2240' }}>
+              <CustosProdutorEditor clienteId={cliente.id} ano={anoDaSafra(nav.safra) ?? new Date().getFullYear()} />
+            </div>
+
             <div className="p-4">
               <button onClick={apagarCliente}
                 className="w-full flex items-center justify-center gap-1.5 py-2 rounded text-xs font-semibold"

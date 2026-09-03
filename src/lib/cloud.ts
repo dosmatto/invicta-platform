@@ -72,6 +72,7 @@ const KEYS_LISTA = [
   'inv_meap_zoneamentos',              // MEAP — zoneamentos salvos (1 padrão → Amostragem)
   'inv_produtividade',                 // Módulo 12 — Mapas de Colheita (metadados/versões; raster sob demanda)
   'inv_precos',                        // #33 — Tabela de preços única (produtos/frete/aplicação) reusada nas Equações
+  'inv_custos_produtor',               // preço/aplicação/custo da lavoura por PRODUTOR (e fazenda), por ano+época
   'inv_empresas',                      // multi-tenant — empresas/membros (sync entre máquinas)
   'inv_papeis',                        // papéis por e-mail (owner/admin/…) — fonte da verdade de acesso
   'inv_permissoes',                    // capacidades por papel (U2, editável pelo Owner)
@@ -142,6 +143,7 @@ const KEYS_PULAR_CAMPO = new Set<string>([
   'inv_prescricoes',                   // plataforma-only: o app de campo não lê prescrições
   'inv_bib_insumos',                   // idem — insumos só servem às prescrições e às equações
   'inv_bib_exportacao',                // idem — só o relatório de produtividade usa
+  'inv_custos_produtor',               // idem — custo é da plataforma, não da coleta
   'inv_bib_propositos', 'inv_bib_cultivares',  // idem — só a importação de planilha usa
 ]);
 const KEYS_LISTA_CAMPO = KEYS_LISTA.filter(k => !KEYS_PULAR_CAMPO.has(k));

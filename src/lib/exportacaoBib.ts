@@ -9,6 +9,8 @@
 import { listar, type ItemBiblioteca, type ConteudoExportacao } from './biblioteca';
 import { garantiaDe, precoNaUnidade, paraRelatorio, type ConteudoInsumo, type Nutriente } from './insumos';
 import type { ProdutoEquivalente } from './exportacao';
+import { precoResolvidoDoInsumo } from './store';
+import type { Epoca } from './periodo';
 
 /**
  * Coeficientes cadastrados para uma cultura.
@@ -35,7 +37,11 @@ export function coeficientesDaCultura(cultura: string): ItemBiblioteca<ConteudoE
  * corte por garantia — marcar um produto que não declara o nutriente não
  * esvazia a tabela dos outros, só não acrescenta esse.
  */
-export function fertilizantesCom(nutriente: Nutriente): ProdutoEquivalente[] {
+export function fertilizantesCom(
+  nutriente: Nutriente,
+  /** Contexto do produtor: sem ele, vale o preço da Biblioteca (como antes). */
+  ctx?: { clienteId?: string | null; fazendaId?: string | null; ano?: number | null; epoca?: Epoca | null },
+): ProdutoEquivalente[] {
   const fertilizantes = listar<ConteudoInsumo>('insumos')
     .filter(i => i.ativo !== false && i.conteudo?.categoria === 'fertilizante');
   return paraRelatorio(fertilizantes.map(i => ({ id: i.id, nome: i.nome, c: i.conteudo, usarNoRelatorio: i.conteudo?.usarNoRelatorio })))
@@ -43,9 +49,12 @@ export function fertilizantesCom(nutriente: Nutriente): ProdutoEquivalente[] {
       insumoId: id,
       nome,
       garantiaPct: garantiaDe(conteudo, nutriente),
-      // precoNaUnidade devolve undefined quando não há preço; aqui vira null,
-      // que é o "desconhecido" que o resto do módulo entende.
-      precoT: precoNaUnidade(conteudo, 't') ?? null,
+      // Preço RESOLVIDO: biblioteca → produtor → fazenda. Sem contexto, é o da
+      // biblioteca, como sempre foi. null = desconhecido (nunca 0, que diria
+      // "de graça").
+      precoT: ctx
+        ? precoResolvidoDoInsumo(id, conteudo, ctx).precoT
+        : precoNaUnidade(conteudo, 't') ?? null,
     }))
     .filter(p => p.garantiaPct > 0)
     .sort((a, b) => b.garantiaPct - a.garantiaPct);

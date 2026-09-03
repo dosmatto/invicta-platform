@@ -8,6 +8,11 @@ import { classesFertilidade5, ordenarLegendasDoAtributo, deveSemearLegendas, pro
 import { legendaRentabilidade } from '@/constants/legendasSeedOficial';
 import { deveSemearCatalogo, podeMigrarCatalogo, gemeasAExcluir } from './catalogoVariaveis';
 import { coefsParaElemento } from './nutrienteBase';
+import { precoNaUnidade, type ConteudoInsumo } from './insumos';
+import {
+  linhasAplicaveis, precoDoInsumo, custoLavoura,
+  type CustosDoProdutor, type PrecoResolvido, type NivelCusto,
+} from './custosProdutor';
 export { ordenarLegendasDoAtributo } from './legendas';
 import type { AmbienteProdutivo } from './meap/tipos';
 import { cloudPushLista, cloudAindaNaoHidratou, cloudMarcarPendente } from './cloud';
@@ -1454,6 +1459,83 @@ export function savePrecoProduto(p: Omit<PrecoProduto, 'id' | 'atualizadoEm'>): 
 
 export function deletePrecoProduto(id: string) {
   save('inv_precos', load<PrecoProduto>('inv_precos').filter(p => p.id !== id));
+}
+
+// ── CUSTOS POR PRODUTOR / FAZENDA (sobrepõem a Biblioteca) ──────────────────
+// A regra de resolução mora em lib/custosProdutor.ts (pura, testada). Aqui só o
+// armazenamento e o atalho que junta os dois lados: o cadastro global do insumo
+// e as linhas do produtor.
+export const K_CUSTOS_PRODUTOR = 'inv_custos_produtor';
+
+export function getCustosProdutor(clienteId?: string): CustosDoProdutor[] {
+  const todos = loadFiltrado<CustosDoProdutor>(K_CUSTOS_PRODUTOR);
+  return clienteId ? todos.filter(c => c.clienteId === clienteId) : todos;
+}
+
+/**
+ * Upsert pela CHAVE do escopo (cliente + fazenda + ano + época) — salvar o
+ * mesmo escopo atualiza a linha em vez de criar uma segunda, que produziria
+ * duas verdades para o mesmo contexto.
+ */
+export function salvarCustosProdutor(
+  chave: { clienteId: string; fazendaId?: string | null; ano: number; epoca?: Epoca | null },
+  patch: Partial<Pick<CustosDoProdutor, 'insumos' | 'aplicacaoPadraoHa' | 'custoLavouraHa'>>,
+): CustosDoProdutor {
+  const lista = load<CustosDoProdutor>(K_CUSTOS_PRODUTOR);
+  const mesma = (x: CustosDoProdutor) =>
+    x.clienteId === chave.clienteId
+    && (x.fazendaId ?? null) === (chave.fazendaId ?? null)
+    && x.ano === chave.ano
+    && (x.epoca ?? null) === (chave.epoca ?? null);
+  const idx = lista.findIndex(mesma);
+  const reg: CustosDoProdutor = comEmpresa({
+    ...(idx >= 0 ? lista[idx] : { id: uid() }),
+    clienteId: chave.clienteId,
+    fazendaId: chave.fazendaId ?? undefined,
+    ano: chave.ano,
+    epoca: chave.epoca ?? undefined,
+    ...patch,
+    atualizadoEm: new Date().toISOString(),
+  });
+  if (idx >= 0) lista[idx] = reg; else lista.push(reg);
+  save(K_CUSTOS_PRODUTOR, lista);
+  return reg;
+}
+
+export function excluirCustosProdutor(id: string) {
+  save(K_CUSTOS_PRODUTOR, load<CustosDoProdutor>(K_CUSTOS_PRODUTOR).filter(c => c.id !== id));
+}
+
+/**
+ * Preço e aplicação de um insumo JÁ resolvidos no contexto — é a função que as
+ * telas e os relatórios devem chamar no lugar de `precoNaUnidade` direto.
+ *
+ * `insumoId` é o id do item da Biblioteca; `conteudo`, o cadastro dele.
+ */
+export function precoResolvidoDoInsumo(
+  insumoId: string,
+  conteudo: ConteudoInsumo | null | undefined,
+  ctx: { clienteId?: string | null; fazendaId?: string | null; ano?: number | null; epoca?: Epoca | null },
+): PrecoResolvido {
+  const daBiblioteca = {
+    precoT: conteudo ? precoNaUnidade(conteudo, 't') ?? null : null,
+    aplicacaoHa: conteudo?.aplicacaoHa ?? null,
+  };
+  if (!ctx.clienteId || ctx.ano == null) return precoDoInsumo(insumoId, daBiblioteca, []);
+  const linhas = linhasAplicaveis(getCustosProdutor(ctx.clienteId), {
+    clienteId: ctx.clienteId, fazendaId: ctx.fazendaId, ano: ctx.ano, epoca: ctx.epoca,
+  });
+  return precoDoInsumo(insumoId, daBiblioteca, linhas);
+}
+
+/** Custo da lavoura (R$/ha) do contexto — o padrão do mapa de rentabilidade. */
+export function custoLavouraDoContexto(
+  ctx: { clienteId?: string | null; fazendaId?: string | null; ano?: number | null; epoca?: Epoca | null },
+): { custoHa: number | null; fonte: NivelCusto } {
+  if (!ctx.clienteId || ctx.ano == null) return { custoHa: null, fonte: 'nenhum' };
+  return custoLavoura(linhasAplicaveis(getCustosProdutor(ctx.clienteId), {
+    clienteId: ctx.clienteId, fazendaId: ctx.fazendaId, ano: ctx.ano, epoca: ctx.epoca,
+  }));
 }
 
 // Marca uma grade para processar, desmarcando as outras do mesmo talhão+safra.

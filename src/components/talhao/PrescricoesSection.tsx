@@ -14,7 +14,9 @@ import {
   getZoneamentosMeap, getPrescricoes, savePrescricao, salvarVersaoPrescricao,
   deletePrescricao, registrarExportePrescricao, getTalhoes, getFazendas, getClientes,
   type ZoneamentoMeap,
+  precoResolvidoDoInsumo,
 } from '@/lib/store';
+import { anoDaSafra } from '@/lib/periodo';
 import { emailUsuario } from '@/lib/empresa';
 import { listar as bibListar, type ItemBiblioteca, type ConteudoEquacao } from '@/lib/biblioteca';
 import {
@@ -240,7 +242,16 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
     // Unidade-base que não é de massa (sementes, litro) não sai do peso: melhor
     // deixar em branco do que preencher com número errado.
     const base = UNIDADE_TOTAL[r.unidade];
-    const preco = base === 'kg' || base === 't' ? precoNaUnidade(c, base) : undefined;
+    // Preço RESOLVIDO (biblioteca → produtor → fazenda): se este produtor tem
+    // preço próprio no ano, é ele que entra na prescrição. `precoResolvido`
+    // devolve R$/t; a dose em kg/ha precisa de R$/kg.
+    const resolvido = precoResolvidoDoInsumo(id, c, {
+      clienteId: nav.produtorId, fazendaId: nav.fazendaId,
+      ano: anoDaSafra(nav.safra), epoca: null,
+    });
+    const preco = base === 't' ? resolvido.precoT ?? undefined
+      : base === 'kg' ? (resolvido.precoT != null ? resolvido.precoT / 1000 : undefined)
+      : undefined;
     if (preco != null && !r.custoUnit) extras.custoUnit = String(preco);
     if (c.organico?.garantiasKgT) patchParams({ organico: { ...r.params.organico, ...c.organico.garantiasKgT } });
     if (c.semente) {

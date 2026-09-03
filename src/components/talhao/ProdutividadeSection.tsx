@@ -55,6 +55,8 @@ import { fmtMoeda, lerMoeda, arredMoeda } from '@/lib/formato';
 import { precoPorKg, pontoEquilibrioKgha, rotuloPreco, gridRentabilidade, classesRentabilidade, classesRentabilidadeDaLegenda, resumoRentabilidade, arrendamentoPorHa, ALQUEIRES, ALQUEIRE_HA_PADRAO, type UnidadeVenda } from '@/lib/rentabilidade';
 import { coefDe, gridExportacao, resumoExportacao, equivalentesDe } from '@/lib/exportacao';
 import { SIMBOLO_ELEMENTO, paraOxido } from '@/lib/nutrienteBase';
+import { custoLavouraDoContexto } from '@/lib/store';
+import { anoDaSafra, epocaDeData } from '@/lib/periodo';
 import { coeficientesDaCultura, fertilizantesCom } from '@/lib/exportacaoBib';
 import { type Nutriente } from '@/lib/insumos';
 import { fmtMinMax0 as fmt, fmtHa } from '@/lib/formato';
@@ -545,7 +547,11 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
           // ÓXIDO (P₂O₅, K₂O) — converter antes de dividir é o que mantém a
           // DOSE idêntica à de antes desta mudança. Sem isso o erro seria de
           // 20% no K e de 129% no P, com o número continuando plausível.
-          equivalentes: equivalentesDe(paraOxido(nut, resExp.mediaKgHa), resExp.areaHa, fertilizantesCom(nut)),
+          equivalentes: equivalentesDe(paraOxido(nut, resExp.mediaKgHa), resExp.areaHa,
+            fertilizantesCom(nut, {
+              clienteId: nav.produtorId, fazendaId: nav.fazendaId,
+              ano: anoDaSafra(safra), epoca: epocaDeData(fonte.dataRef) ?? null,
+            })),
         });
       }
 
@@ -912,13 +918,23 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
 // mudá-los aqui deixaria as estatísticas gravadas descrevendo um mapa que não
 // existe mais. Para esses, o caminho é reprocessar.
 function EditarMapa({ mapa, onFechar, onSalvo }: { mapa: MapaProdutividade; onFechar: () => void; onSalvo: () => void }) {
+  const { nav } = useApp();
   const [cultura, setCultura] = useState(mapa.cultura || 'soja');
   const [epoca, setEpoca] = useState(mapa.epoca || '');
   const [dataRef, setDataRef] = useState(mapa.dataReferencia ?? mapa.criadoEm.slice(0, 10));
   const [dataPlantio, setDataPlantio] = useState(mapa.dataPlantio ?? '');
   const [precoTxt, setPrecoTxt] = useState(mapa.economia ? fmtMoeda(mapa.economia.precoVenda) : '');
   const [precoUni, setPrecoUni] = useState<'sc' | 't'>(mapa.economia?.precoUnidade ?? 'sc');
-  const [custoTxt, setCustoTxt] = useState(mapa.economia ? fmtMoeda(mapa.economia.custoHa) : '');
+  // Sem custo gravado NESTE mapa, começa com o custo da lavoura cadastrado no
+  // produtor/fazenda do ano — é o "não precisa mais digitar em cada mapa". O que
+  // for digitado aqui continua valendo só para este mapa.
+  const custoDoProdutor = useMemo(() => custoLavouraDoContexto({
+    clienteId: nav.produtorId, fazendaId: nav.fazendaId,
+    ano: anoDaSafra(nav.safra), epoca: epocaDeData(mapa.dataReferencia ?? mapa.criadoEm) ?? null,
+  }), [nav.produtorId, nav.fazendaId, nav.safra, mapa.dataReferencia, mapa.criadoEm]);
+  const [custoTxt, setCustoTxt] = useState(
+    mapa.economia ? fmtMoeda(mapa.economia.custoHa)
+      : custoDoProdutor.custoHa != null ? fmtMoeda(custoDoProdutor.custoHa) : '');
   const [arrTxt, setArrTxt] = useState(mapa.economia?.arrendamentoScAlq ? String(mapa.economia.arrendamentoScAlq) : '');
   const [alqHa, setAlqHa] = useState(mapa.economia?.alqueireHa ?? ALQUEIRE_HA_PADRAO);
   const [unidade, setUnidade] = useState<Unidade>(mapa.unidade);
@@ -1018,6 +1034,11 @@ function EditarMapa({ mapa, onFechar, onSalvo }: { mapa: MapaProdutividade; onFe
             <input value={custoTxt} onChange={e => setCustoTxt(e.target.value)} inputMode="decimal" placeholder="ex.: 5.400,00"
               className="w-full rounded px-2 py-1 text-[11px] outline-none" style={inputStyle} />
           </Campo>
+          {!mapa.economia && custoDoProdutor.custoHa != null && (
+            <p className="text-[9px]" style={{ color: '#86efac' }}>
+              Veio do custo da lavoura cadastrado {custoDoProdutor.fonte === 'fazenda' ? 'na fazenda' : 'no produtor'} — dá para mudar só para este mapa.
+            </p>
+          )}
           <div className="grid grid-cols-2 gap-2">
             <Campo label="Arrendamento (sacas/alqueire)">
               <input value={arrTxt} onChange={e => setArrTxt(e.target.value)} inputMode="decimal" placeholder="ex.: 40"
