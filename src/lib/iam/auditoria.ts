@@ -9,6 +9,7 @@
 
 import { lerListaLocal, gravarListaLocal } from '../localComprimido';
 import { cloudPushLista } from '../cloud';
+import { usarDadosSupabase, salvarDocSupabase } from '../supabaseData';
 import { emailUsuario } from '../empresa';
 import type { AcaoAuditoria, EventoAuditoria } from './tipos';
 
@@ -24,6 +25,37 @@ export function getAuditoria(): EventoAuditoria[] {
 export function auditoriaDe(email: string): EventoAuditoria[] {
   const e = email.trim().toLowerCase();
   return getAuditoria().filter(x => x.alvo === e || x.quem === e);
+}
+
+/**
+ * Mesma trilha, mas gravando UM documento na nuvem em vez da lista inteira.
+ * Existe pela mesma razão de `registrarPedidoDeAcesso` (iam/usuarios.ts): quem
+ * ainda não é usuário não pode reenviar a auditoria dos outros — a RLS recusa o
+ * comando todo e o evento "cadastro solicitado" se perdia.
+ */
+export async function registrarDoc(
+  acao: AcaoAuditoria,
+  dados: { alvo?: string; detalhe?: string; de?: string; para?: string } = {},
+): Promise<void> {
+  if (typeof window === 'undefined') return;
+  const ev: EventoAuditoria = {
+    id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`,
+    em: new Date().toISOString(),
+    quem: emailUsuario() ?? 'sistema',
+    acao,
+    alvo: dados.alvo?.trim().toLowerCase(),
+    detalhe: dados.detalhe,
+    de: dados.de,
+    para: dados.para,
+  };
+  try {
+    const lista = lerListaLocal<EventoAuditoria>(K_AUDITORIA);
+    lista.push(ev);
+    gravarListaLocal(K_AUDITORIA, lista.length > TETO ? lista.slice(-TETO) : lista);
+    if (usarDadosSupabase()) await salvarDocSupabase(K_AUDITORIA, ev.id, ev);
+  } catch (e) {
+    console.warn('[auditoria] falha ao registrar', acao, e);
+  }
 }
 
 export function registrar(

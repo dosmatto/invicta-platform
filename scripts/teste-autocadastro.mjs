@@ -301,6 +301,38 @@ async function registrar(ap, acao, dados = {}) {
   await pushLista(ap, K_AUDITORIA, lista);
 }
 
+// usuarios.ts — registrarPedidoDeAcesso: grava o PRÓPRIO pedido como UM documento.
+// Não empurra a lista: a exceção de RLS do auto-cadastro só autoriza a linha do
+// próprio e-mail, e num aparelho que já abriu a plataforma a lista local carrega
+// as outras pessoas — o Postgres recusa o comando inteiro (ver PASSO D).
+async function registrarPedidoDeAcesso(ap, email, patch) {
+  const e = norm(email);
+  const lista = lerLocalLista(ap, K_PAPEIS);
+  const i = lista.findIndex(u => norm(u.email) === e);
+  const registro = i >= 0
+    ? { ...lista[i], ...patch, id: lista[i].id || e, email: e }
+    : { id: e, email: e, papel: patch.papel ?? 'leitor', criadoEm: new Date().toISOString(), criadoPor: e, ...patch };
+  if (i >= 0) lista[i] = registro; else lista.push(registro);
+  gravarListaLocal(ap, K_PAPEIS, lista);
+  const up = await ap.sb.from('app_kv').upsert(
+    { colecao: K_PAPEIS, item_id: e, dados: registro, atualizado_em: new Date().toISOString() },
+    { onConflict: 'colecao,item_id' });
+  if (up.error) { ap.avisos.push(`[supabase] salvar ${K_PAPEIS}: ${up.error.message}`); return false; }
+  return true;
+}
+
+// auditoria.ts — registrarDoc: mesma ideia, um evento por vez.
+async function registrarDoc(ap, acao, dados = {}) {
+  const ev = { id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`, em: new Date().toISOString(), quem: ap.sessao?.email ?? 'sistema', acao, alvo: dados.alvo };
+  const lista = lerLocalLista(ap, K_AUDITORIA);
+  lista.push(ev);
+  gravarListaLocal(ap, K_AUDITORIA, lista);
+  const up = await ap.sb.from('app_kv').upsert(
+    { colecao: K_AUDITORIA, item_id: ev.id, dados: ev, atualizado_em: new Date().toISOString() },
+    { onConflict: 'colecao,item_id' });
+  if (up.error) ap.avisos.push(`[supabase] salvar ${K_AUDITORIA}: ${up.error.message}`);
+}
+
 // usuarios.ts:196-205 — roda em TODA abertura do app (1× por hora)
 async function marcarUltimoAcesso(ap, email) {
   const lista = lerLocalLista(ap, K_PAPEIS);
@@ -313,12 +345,13 @@ async function marcarUltimoAcesso(ap, email) {
 // exatamente o do link de GRUPO. Entra na fila de aprovação.
 async function cadastrarPeloConvite(ap, email, nome, token) {
   const agora = new Date().toISOString();
-  await salvarUsuario(ap, email, {
-    nome, papel: 'leitor', status: 'aguardando_aprovacao',
+  const enviado = await registrarPedidoDeAcesso(ap, email, {
+    nome, papel: 'leitor', categoria: 'interno', status: 'aguardando_aprovacao',
     criadoEm: agora, criadoPor: email,
     aceiteLgpdEm: agora, aceiteTermosEm: agora, conviteId: token,
   });
-  await registrar(ap, 'cadastro_solicitado', { alvo: email });
+  if (enviado) await registrarDoc(ap, 'cadastro_solicitado', { alvo: email });
+  return enviado;
 }
 
 // ── Boots ───────────────────────────────────────────────────────────────────
@@ -527,6 +560,48 @@ const pendentes = lerLocalLista(adminFresco, K_PAPEIS).filter(u => u.status === 
 t('C · o administrador ENXERGA o candidato na fila de aprovação', () => {
   assert.deepEqual(pendentes.map(u => u.email), [NOVO],
     'a Central de Acessos do admin não mostra o pedido');
+});
+linha();
+
+// ── PASSO D — o celular de QUEM JÁ USA o app (o caso relatado em produção) ──
+// O aparelho não é virgem: já abriu a plataforma alguma vez, então o localStorage
+// tem inv_papeis com TODA a equipe. Foi o que aconteceu no celular do Jhon: a
+// conta era criada e o pedido não chegava. O erro na tela dizia a verdade.
+console.log('PASSO D — celular que JÁ tem a lista de acessos de outras pessoas…');
+const OUTRO_NOVO = 'jnatan@exemplo.com';
+const reincidente = criarAparelho('celular de quem já usa o app', nuvem, { email: OUTRO_NOVO });
+// A lista local que um aparelho desses carrega (veio de um boot antigo, de outra conta).
+gravarListaLocal(reincidente, K_PAPEIS, [
+  { id: OWNER, email: OWNER, papel: 'owner', status: 'ativo' },
+  { id: OUTRO, email: OUTRO, papel: 'agronomo', status: 'ativo' },
+  { id: NOVO, email: NOVO, papel: 'leitor', status: 'aguardando_aprovacao' },
+]);
+
+// D1 documenta a CAUSA: o caminho antigo (salvarUsuario → push da LISTA) manda
+// junto as linhas das outras pessoas. A exceção de auto-cadastro só autoriza a
+// linha do próprio e-mail, e o Postgres recusa o comando INTEIRO (42501).
+const listaComOutros = [...lerLocalLista(reincidente, K_PAPEIS),
+  { id: OUTRO_NOVO, email: OUTRO_NOVO, papel: 'leitor', status: 'aguardando_aprovacao' }];
+const okListaInteira = await pushLista(reincidente, K_PAPEIS, listaComOutros);
+t('D1 · empurrar a LISTA INTEIRA daqui é recusado pela RLS (a causa do defeito)', () => {
+  assert.equal(okListaInteira, false, 'a lista inteira passou — a simulação da RLS está frouxa');
+  assert.ok(!naNuvem(nuvem, K_PAPEIS, OUTRO_NOVO), 'nada deveria ter sido gravado');
+});
+
+// D2 é a correção: um documento só, que é exatamente o que a política autoriza.
+const enviouD = await cadastrarPeloConvite(reincidente, OUTRO_NOVO, 'Cadastro do celular', TOKEN);
+t('D2 · gravando UM documento, o pedido chega mesmo com a lista dos outros no aparelho', () => {
+  assert.equal(enviouD, true, `o envio falhou — avisos: ${reincidente.avisos.join(' | ') || '(nenhum)'}`);
+  const row = naNuvem(nuvem, K_PAPEIS, OUTRO_NOVO);
+  assert.ok(row, 'o pedido não chegou à nuvem');
+  assert.equal(row.dados.status, 'aguardando_aprovacao');
+});
+
+// D3: e as linhas das OUTRAS pessoas continuam intactas — o aparelho de quem se
+// cadastra não pode alterar nada além do próprio registro.
+t('D3 · os registros das outras pessoas não foram tocados', () => {
+  assert.equal(naNuvem(nuvem, K_PAPEIS, OWNER)?.dados?.papel, 'owner');
+  assert.equal(naNuvem(nuvem, K_PAPEIS, NOVO)?.dados?.status, 'aguardando_aprovacao');
 });
 linha();
 

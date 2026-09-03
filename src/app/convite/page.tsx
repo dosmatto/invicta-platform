@@ -16,9 +16,9 @@ import Image from 'next/image';
 import { useSearchParams } from 'next/navigation';
 import { cadastrarComConvite, loginEmailSenha, mensagemErroLogin } from '@/lib/auth';
 import { validarConvite, marcarConviteUsado, MOTIVO_TEXTO } from '@/lib/iam/convites';
-import { confirmarEnvioNaNuvem, salvarUsuario } from '@/lib/iam/usuarios';
+import { registrarPedidoDeAcesso } from '@/lib/iam/usuarios';
 import { getPerfil } from '@/lib/iam/perfis';
-import { registrar } from '@/lib/iam/auditoria';
+import { registrarDoc } from '@/lib/iam/auditoria';
 import type { Convite } from '@/lib/iam/tipos';
 import { CheckCircle2, Loader2, ShieldCheck, AlertTriangle } from 'lucide-react';
 
@@ -107,12 +107,18 @@ function ConviteConteudo() {
         clientesVinculados: conv?.clientesVinculados?.length ? conv.clientesVinculados : undefined,
         fazendasVinculadas: conv?.fazendasVinculadas?.length ? conv.fazendasVinculadas : undefined,
       };
+      // A gravação do pedido é o PRODUTO desta tela: sem confirmação da nuvem não
+      // existe nada para o administrador aprovar. Por isso ela é ESPERADA, e é
+      // feita por DOCUMENTO (registrarPedidoDeAcesso) — mandar a lista inteira de
+      // acessos, como faz salvarUsuario, é recusado pela RLS em todo aparelho que
+      // já tenha os registros de outras pessoas no navegador. Ver iam/usuarios.ts.
+      let enviado: boolean;
       if (liberaAuto) {
         // Permissões: o perfil escolhido no link (se houver) vira as permissões
         // próprias; sem perfil, valem as do papel (padrão da matriz). Mesmo
         // resultado da aprovação manual, só que automático.
         const perfil = conv?.perfilId ? getPerfil(conv.perfilId) : null;
-        salvarUsuario(em, {
+        enviado = await registrarPedidoDeAcesso(em, {
           nome: nome.trim(), telefone: telefone.trim() || undefined,
           papel: conv?.papel ?? 'leitor',
           categoria: conv?.categoria,
@@ -125,17 +131,24 @@ function ConviteConteudo() {
           ...(perfil ? { permissoes: perfil.permissoes } : {}),
           ...vinc,
         });
-        registrar('usuario_aprovado', {
-          alvo: em,
-          detalhe: `liberado automaticamente pelo ${conv?.multiuso ? 'link de grupo' : 'link individual'}`,
-          para: 'ativo',
-        });
-        setLiberado(true);
+        if (enviado) {
+          await registrarDoc('usuario_aprovado', {
+            alvo: em,
+            detalhe: `liberado automaticamente pelo ${conv?.multiuso ? 'link de grupo' : 'link individual'}`,
+            para: 'ativo',
+          });
+          setLiberado(true);
+        }
       } else {
-        // Só chega aqui quando o convite NÃO é conhecido neste aparelho (conv é
-        // nulo): não há papel/perfil/vínculos para conceder, então entra na fila
-        // de aprovação, como antes.
-        salvarUsuario(em, {
+        enviado = false;
+      }
+
+      // Fila de aprovação: caminho normal (convite desconhecido neste aparelho) e
+      // também a rede de segurança do ramo acima — a RLS só aceita 'ativo' de quem
+      // já é admin, e perder o cadastro é pior que ter de aprovar na mão.
+      if (!enviado) {
+        setLiberado(false);
+        enviado = await registrarPedidoDeAcesso(em, {
           nome: nome.trim(), telefone: telefone.trim() || undefined,
           papel: 'leitor',                       // provisório: sem acesso até aprovar
           categoria: 'interno',                  // mesmo valor que categoriaDe() derivaria
@@ -148,19 +161,9 @@ function ConviteConteudo() {
           aceiteLgpdEm: agora, aceiteTermosEm: agora,
           conviteId: token || undefined,
         });
-        registrar('cadastro_solicitado', { alvo: em, detalhe: nome.trim() });
+        if (enviado) await registrarDoc('cadastro_solicitado', { alvo: em, detalhe: nome.trim() });
       }
-      // A gravação do pedido é o PRODUTO desta tela: sem confirmação da nuvem não
-      // existe nada para o administrador aprovar. Se o push do ramo automático for
-      // recusado (a RLS só aceita 'aguardando_aprovacao' de quem não é admin),
-      // rebaixa para a fila de aprovação em vez de deixar a pessoa no vácuo.
-      let enviado = await confirmarEnvioNaNuvem();
-      if (!enviado && liberaAuto) {
-        salvarUsuario(em, { status: 'aguardando_aprovacao', papel: 'leitor', categoria: 'interno' });
-        registrar('cadastro_solicitado', { alvo: em, detalhe: nome.trim() });
-        setLiberado(false);
-        enviado = await confirmarEnvioNaNuvem();
-      }
+
       if (!enviado) {
         setErro('Sua conta foi criada, mas o pedido de acesso não chegou ao servidor. '
           + 'Confira a conexão e envie de novo — se persistir, avise o administrador.');

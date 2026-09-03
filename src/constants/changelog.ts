@@ -1,5 +1,13 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] O cadastro pelo link parava de ser recusado em silêncio pelo servidor
+  '2.119.0': [
+    'O CADASTRO PELO LINK VOLTOU A CHEGAR — INCLUSIVE NO CELULAR DE QUEM JÁ USA O APP. Era esse o caso que continuava falhando depois da v2.118: a conta era criada e o pedido de acesso, não.',
+    'A CAUSA: ao gravar o pedido, o aparelho mandava para o servidor a LISTA INTEIRA de acessos que tivesse guardada — e não só o próprio cadastro. Num navegador que já abriu a plataforma alguma vez, essa lista tem toda a equipe. A regra de segurança do banco autoriza quem ainda não é usuário a gravar UMA linha, a dele; vendo as outras juntas, o banco recusa o comando inteiro. Resultado: nada era gravado. Em navegador virgem a lista tinha um registro só e passava — por isso funcionava para uns e não para outros.',
+    'AGORA A TELA DO CONVITE GRAVA UM DOCUMENTO SÓ, o do próprio cadastro — que é exatamente o que a regra permite. A trilha de auditoria do cadastro passou a ser gravada do mesmo jeito, um evento por vez, e por isso o "cadastro solicitado" também parou de se perder.',
+    'DE QUEBRA, ISSO PROTEGE QUEM SE CADASTRA de mexer em registro alheio: o aparelho dele não tem mais como reenviar o cadastro de ninguém.',
+    'O teste do auto-cadastro ganhou o passo D (npm run teste:autocadastro, 9 asserções), que reproduz exatamente o celular com a lista dos outros dentro: com a lista inteira o banco recusa; com um documento, o pedido chega e os registros das outras pessoas ficam intactos.',
+  ],
   // [S/N] O pedido de aprovação parava de sumir — e agora chega sozinho na tela
   '2.118.0': [
     'O CADASTRO PELO LINK VOLTOU A CHEGAR PARA APROVAÇÃO. Quem se cadastrava ficava preso em "aguardando aprovação" e do outro lado não aparecia nada para aprovar. O pedido ERA gravado na nuvem — e depois era APAGADO pelo aparelho de quem administra.',

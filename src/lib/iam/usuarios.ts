@@ -7,7 +7,7 @@
 
 import { lerListaLocal, gravarListaLocal } from '../localComprimido';
 import { cloudPushLista } from '../cloud';
-import { usarDadosSupabase, carregarDocsPorCampoSupabase, pushListaSupabase } from '../supabaseData';
+import { usarDadosSupabase, carregarDocsPorCampoSupabase, salvarDocSupabase } from '../supabaseData';
 import { emailUsuario, type RegistroPapel } from '../empresa';
 import { registrar } from './auditoria';
 import { MATRIZ_PADRAO, permissoesEfetivas } from './permissoes';
@@ -50,26 +50,53 @@ export function getUsuario(email: string): UsuarioIam | null {
  * aprovação recém-feita (e ainda não sincronizada) não voltar para a fila.
  */
 /**
- * Empurra `inv_papeis` e ESPERA a confirmação da nuvem. `false` = não gravou.
+ * Grava o PRÓPRIO pedido de acesso: no aparelho e como UM documento na nuvem.
+ * Devolve `false` quando a nuvem recusou (aí não há o que aprovar do outro lado).
  *
- * POR QUE EXISTE: `cloudPushLista` é fire-and-forget — a tela do convite dizia
- * "Cadastro enviado!" mesmo quando a gravação era recusada (RLS, rede), e a
- * pessoa ficava esperando uma aprovação que ninguém tinha como ver. O status
- * real vem do evento `inv:sync` que o `drenar` emite (ver supabaseData.ts).
+ * POR QUE NÃO USA `salvarUsuario`: aquele caminho manda a LISTA INTEIRA de
+ * `inv_papeis` (cloudPushLista → syncLista), e a exceção de RLS do auto-cadastro
+ * só autoriza a linha do PRÓPRIO e-mail. Num aparelho que já abriu a plataforma
+ * alguma vez — o celular de quem já é usuário, por exemplo — a lista local traz
+ * também os registros das outras pessoas, e o Postgres recusa o comando INTEIRO
+ * (42501): o pedido não era gravado e nada aparecia para aprovar. Num navegador
+ * virgem a lista tem só um registro e passava — daí o defeito ser intermitente.
+ *
+ * Um documento por vez é o que a política permite e é tudo de que a tela do
+ * convite precisa. Ver docs/seguranca-rls.sql (app_kv_insert_autocadastro) e
+ * npm run teste:autocadastro (passo D).
  */
-export async function confirmarEnvioNaNuvem(): Promise<boolean> {
-  if (!usarDadosSupabase() || typeof window === 'undefined') return true;
-  let falhou = false;
-  const ouvir = (e: Event) => {
-    const d = (e as CustomEvent<{ key: string; status: 'ok' | 'erro' }>).detail;
-    if (d?.key === K_PAPEIS && d.status === 'erro') falhou = true;
-  };
-  window.addEventListener('inv:sync', ouvir);
-  try { await pushListaSupabase(K_PAPEIS, ler() as unknown as { id: unknown }[]); }
-  finally { window.removeEventListener('inv:sync', ouvir); }
-  return !falhou;
+export async function registrarPedidoDeAcesso(
+  email: string, patch: Partial<UsuarioIam>,
+): Promise<boolean> {
+  const e = norm(email);
+  const lista = ler();
+  const i = lista.findIndex(u => norm(u.email) === e);
+  const registro = (i >= 0
+    ? { ...lista[i], ...patch, id: lista[i].id || e, email: e }
+    : {
+        id: e, email: e, papel: patch.papel ?? 'leitor',
+        criadoEm: new Date().toISOString(), criadoPor: e, ...patch,
+      }) as UsuarioIam;
+  if (i >= 0) lista[i] = registro; else lista.push(registro);
+  gravarListaLocal(K_PAPEIS, lista);   // local sim; push da LISTA não (ver acima)
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('inv:empresa'));
+  if (!usarDadosSupabase()) return true;
+  return salvarDocSupabase(K_PAPEIS, e, registro);
 }
 
+/**
+ * Traz da NUVEM os cadastros que estão aguardando aprovação. Devolve quantos
+ * eram desconhecidos neste aparelho.
+ *
+ * POR QUE EXISTE: quem se cadastra pelo link grava o pedido no aparelho DELE; a
+ * Central de Acessos só relia `inv_papeis` do localStorage, e nada no app relê a
+ * nuvem depois do boot (o único retry periódico é de ESCRITA). Com a aba aberta
+ * — o normal de quem administra — o pedido não aparecia nunca.
+ *
+ * Leitura PONTUAL e sem push: mescla no espelho local e avisa a UI. Só ACRESCENTA
+ * e-mails desconhecidos; jamais rebaixa um registro que já existe aqui, para uma
+ * aprovação recém-feita (e ainda não sincronizada) não voltar para a fila.
+ */
 export async function sincronizarPendentesDaNuvem(): Promise<number> {
   if (!usarDadosSupabase()) return 0;
   const daNuvem = await carregarDocsPorCampoSupabase<UsuarioIam>(K_PAPEIS, 'status', 'aguardando_aprovacao');
