@@ -478,21 +478,27 @@ function desenharResumoRecomendacao(doc: JsPDF, ctx: Ctx, itens: ItemDose[], log
   let y = cabecalhoNavy(doc, logo, campos) + 3;
   doc.setFontSize(12); doc.setTextColor(...GREEN); doc.setFont('helvetica', 'bold'); doc.text(san(titulo), M, y); y += 6;
   const cols: Col[] = [
-    { titulo: 'Nº', w: 12, align: 'c' }, { titulo: 'Recomendação (fórmula)', w: 95 }, { titulo: 'Produto', w: 58 },
-    { titulo: 'Dose média', w: 34, align: 'r' }, { titulo: 'Qtd total (t)', w: 32, align: 'r' }, { titulo: 'Investimento (R$)', w: 44, align: 'r' },
+    { titulo: 'Nº', w: 12, align: 'c' }, { titulo: 'Recomendação (fórmula)', w: 88 }, { titulo: 'Produto', w: 52 },
+    { titulo: 'Dose média', w: 32, align: 'r' }, { titulo: 'Qtd total (t)', w: 28, align: 'r' },
+    { titulo: 'R$/t', w: 25, align: 'r' }, { titulo: 'Investimento (R$)', w: 38, align: 'r' },
   ];
   y = cabTabela(doc, M, y, cols);
   let totInvest = 0;
   for (const it of itens) {
     const d = it.d; totInvest += d.custo ?? 0;
     if (y > H - 20) { doc.addPage(); y = cabecalhoNavy(doc, logo, campos) + 3; y = cabTabela(doc, M, y, cols); }
+    // R$/t: o preço BASE que multiplicou as toneladas — sem ele a tabela mostra
+    // o investimento e esconde a régua de onde ele saiu.
+    const precoT = d.custoTonelada != null ? d.custoTonelada
+      : (d.toneladas > 0 && d.custo != null ? d.custo / d.toneladas : null);
     y = linhaTabela(doc, M, y, cols, [
       it.numero < 1e9 ? String(it.numero).padStart(2, '0') : '—',
-      d.nomeEquacao, d.produto || '—', doseMediaTexto(d), fmt(d.toneladas, 1), fmt(d.custo ?? 0, 2),
+      d.nomeEquacao, d.produto || '—', doseMediaTexto(d), fmt(d.toneladas, 1),
+      precoT != null ? fmt(precoT, 2) : '—', fmt(d.custo ?? 0, 2),
     ]);
   }
   y += 1;
-  linhaTabela(doc, M, y, cols, ['', 'TOTAL', '', '', '', 'R$ ' + fmt(totInvest, 2)], { bold: true, cor: GREEN, fill: true });
+  linhaTabela(doc, M, y, cols, ['', 'TOTAL', '', '', '', '', 'R$ ' + fmt(totInvest, 2)], { bold: true, cor: GREEN, fill: true });
   rodapeNavy(doc, logo, 'Resumo de recomendações — taxa variável');
 }
 

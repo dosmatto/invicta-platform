@@ -1,5 +1,13 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  '2.114.0': [
+    'OS RELATÓRIOS PASSARAM A MOSTRAR O PREÇO BASE DE CADA INSUMO. Antes eles davam o investimento e escondiam a régua: não dava para saber se o total saiu do preço certo nem de onde ele veio.',
+    'NO RESUMO GERAL entrou o bloco "Preço base usado no cálculo" — produto, R$/t posto na fazenda (produto + frete) e a ORIGEM: "cadastro atual" (Biblioteca com o preço do produtor/fazenda, refeito na hora) ou "gravado na recomendação" (o preço de quando ela foi criada). A lista "Recomendações a enviar" ganhou a coluna R$/t.',
+    'QUANDO O MESMO PRODUTO SAIU POR PREÇOS DIFERENTES — o que acontece com o frete por fazenda —, o relatório mostra a FAIXA (ex.: 275,00 a 320,00) em vez de uma média. A média de 297,50 não teria sido usada em talhão nenhum, e é o tipo de número que passa por verdade numa conferência.',
+    'NA RECOMENDAÇÃO (PDF) a tabela de resumo ganhou a coluna R$/t ao lado do investimento, com o mesmo preço que multiplicou as toneladas.',
+    'NO EXCEL do resumo entrou a aba "Preço base" e a coluna R$/t na aba de recomendações — a régua tem de ser conferível sem abrir o PDF.',
+    'Quando não há preço resolvido, o valor exibido é deduzido de investimento ÷ toneladas: é literalmente o que entrou na conta daquela dose, e continua sendo mostrado em vez de um traço. 4 testes novos (npm run teste:resumo-geral, 30 no total).',
+  ],
   '2.113.0': [
     'O RESUMO GERAL E A RECOMENDAÇÃO (PDF) PASSARAM A REFAZER A CONTA COM O PREÇO DE HOJE. Era o que faltava: mudar o preço no produtor e pedir o relatório continuava mostrando o investimento antigo, porque o custo de cada dose é GRAVADO quando o cenário é criado e os dois relatórios liam esse número congelado. Agora, na hora de gerar, o custo é recalculado como toneladas × preço atual — sem reprocessar mapa nenhum.',
     'O PREÇO ATUAL VEM DA CADEIA INTEIRA: dose → equação → insumo → preço posto na fazenda (produto + frete), já passando pela camada do produtor e da fazenda. Vale no "Resumo geral (PDF/Excel)" do produtor e da fazenda, na "Recomendação (PDF)" e nos relatórios gerados dentro do talhão.',

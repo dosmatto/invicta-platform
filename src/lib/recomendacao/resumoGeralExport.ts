@@ -82,6 +82,7 @@ export async function coletarLancamentos(
         ano, safra: it.cen.safra, numero: it.numero,
         rotulo: rotuloRecomendacao(it), produto: chaveProduto(it.d),
         toneladas: it.d.toneladas ?? 0, custo: custoAtualDaDose(it.d, preco),
+        precoT: preco, fontePreco: preco != null ? 'cadastro' : 'gravado',
       });
     }
   }
@@ -178,6 +179,35 @@ export function montarPdfResumoGeral(
     }
   }
 
+  // ── Preço base usado ────────────────────────────────────────────────────
+  // Sem isto o relatório mostra o investimento e esconde a régua: quem confere
+  // não tem como saber se o total saiu do preço certo, nem de onde ele veio.
+  if (r.precos.length) {
+    espaco(16);
+    doc.setFontSize(11); doc.setTextColor(...GREEN); doc.setFont('helvetica', 'bold');
+    doc.text('Preço base usado no cálculo', M, y); y += 5;
+    const colsP: Col[] = [
+      { titulo: 'Produto', w: 60 }, { titulo: 'R$/t (posto)', w: 34, align: 'r' },
+      { titulo: 'Origem', w: 40 }, { titulo: '', w: UTIL - 134 },
+    ];
+    tabela(colsP, r.precos.map(p => ({
+      cels: [
+        p.produto,
+        p.precoT == null ? '—'
+          : p.precoTMax != null ? `${fmt(p.precoT, 2)} a ${fmt(p.precoTMax, 2)}`
+          : fmt(p.precoT, 2),
+        p.fonte === 'cadastro' ? 'cadastro atual'
+          : p.fonte === 'gravado' ? 'gravado na recomendação'
+          : p.fonte,
+        '',
+      ],
+      fs: 7.4,
+    })));
+    doc.setFontSize(6.6); doc.setTextColor(120); doc.setFont('helvetica', 'normal');
+    doc.text(san('Preco posto na fazenda (produto + frete). "Cadastro atual" = Biblioteca com o preco do produtor/fazenda, refeito agora; "gravado" = o preco de quando a recomendacao foi criada. Faixa (a) = talhoes com precos diferentes.'), M, y);
+    y += 5;
+  }
+
   // ── Recomendações a enviar ──
   espaco(20);
   doc.setFontSize(11); doc.setTextColor(...GREEN); doc.setFont('helvetica', 'bold');
@@ -185,11 +215,17 @@ export function montarPdfResumoGeral(
   // A coluna de 4 mm entre "Qtd" (alinhada à direita) e "Talhões" (à esquerda)
   // não é enfeite: sem ela o número encosta na primeira letra e sai "88,8IGEFI 01".
   const colsRec: Col[] = [
-    { titulo: 'Ano', w: 14 }, { titulo: 'Recomendação', w: 72 }, { titulo: 'Produto', w: 38 },
-    { titulo: 'Qtd (t)', w: 18, align: 'r' }, { titulo: '', w: 4 }, { titulo: 'Talhões', w: UTIL - 146 },
+    { titulo: 'Ano', w: 14 }, { titulo: 'Recomendação', w: 66 }, { titulo: 'Produto', w: 34 },
+    { titulo: 'R$/t', w: 20, align: 'r' },
+    { titulo: 'Qtd (t)', w: 18, align: 'r' }, { titulo: '', w: 4 }, { titulo: 'Talhões', w: UTIL - 156 },
   ];
   tabela(colsRec, r.recomendacoes.map(rec => ({
-    cels: [String(rec.ano), rec.rotulo, rec.produto, fmt(rec.toneladas, 1), '', rec.talhoes.join(', ')],
+    cels: [
+      String(rec.ano), rec.rotulo, rec.produto,
+      rec.precoT == null ? '—'
+        : rec.precoTMax != null ? `${fmt(rec.precoT, 2)}+` : fmt(rec.precoT, 2),
+      fmt(rec.toneladas, 1), '', rec.talhoes.join(', '),
+    ],
     fs: 7.4,
   })));
 
@@ -266,9 +302,24 @@ export async function gerarResumoGeralExcel(r: ResumoGeral, ident: IdentResumo):
     ]);
   }
 
-  const recs: (string | number)[][] = [['ANO', 'RECOMENDAÇÃO', 'PRODUTO', 'TALHÕES', 'Nº TALHÕES', 'QTD TOTAL (t)', 'INVEST. (R$)']];
+  const recs: (string | number)[][] = [['ANO', 'RECOMENDAÇÃO', 'PRODUTO', 'R$/t (POSTO)', 'TALHÕES', 'Nº TALHÕES', 'QTD TOTAL (t)', 'INVEST. (R$)']];
   for (const rec of r.recomendacoes) {
-    recs.push([rec.ano, rec.rotulo, rec.produto, rec.talhoes.join(', '), rec.talhoes.length, r1(rec.toneladas), r2(rec.custo)]);
+    recs.push([
+      rec.ano, rec.rotulo, rec.produto,
+      rec.precoT == null ? '' : (rec.precoTMax != null ? `${r2(rec.precoT)} a ${r2(rec.precoTMax)}` : r2(rec.precoT)),
+      rec.talhoes.join(', '), rec.talhoes.length, r1(rec.toneladas), r2(rec.custo),
+    ]);
+  }
+  // Aba própria do preço base: é a régua do investimento e precisa ser
+  // conferível sem abrir o PDF.
+  const precos: (string | number)[][] = [['PRODUTO', 'R$/t (POSTO)', 'R$/t MÁX', 'ORIGEM']];
+  for (const p of r.precos) {
+    precos.push([
+      p.produto,
+      p.precoT == null ? '' : r2(p.precoT),
+      p.precoTMax == null ? '' : r2(p.precoTMax),
+      p.fonte === 'cadastro' ? 'cadastro atual' : p.fonte === 'gravado' ? 'gravado na recomendação' : p.fonte,
+    ]);
   }
 
   const XLSX = await import('xlsx');
@@ -278,8 +329,11 @@ export async function gerarResumoGeralExcel(r: ResumoGeral, ident: IdentResumo):
     ...r.produtos.map(() => ({ wch: 16 })), { wch: 14 }];
   XLSX.utils.book_append_sheet(wb, ws, 'Resumo');
   const wsRec = XLSX.utils.aoa_to_sheet(recs);
-  wsRec['!cols'] = [{ wch: 8 }, { wch: 40 }, { wch: 22 }, { wch: 60 }, { wch: 11 }, { wch: 14 }, { wch: 14 }];
+  wsRec['!cols'] = [{ wch: 8 }, { wch: 40 }, { wch: 22 }, { wch: 14 }, { wch: 60 }, { wch: 11 }, { wch: 14 }, { wch: 14 }];
   XLSX.utils.book_append_sheet(wb, wsRec, 'Recomendações');
+  const wsPrecos = XLSX.utils.aoa_to_sheet(precos);
+  wsPrecos['!cols'] = [{ wch: 24 }, { wch: 14 }, { wch: 14 }, { wch: 26 }];
+  XLSX.utils.book_append_sheet(wb, wsPrecos, 'Preço base');
   XLSX.writeFile(wb, nomeArquivoResumo(r, ident) + '.xlsx');
 }
 

@@ -25,6 +25,12 @@ export interface Lancamento {
   produto: string;     // chaveProduto: produto || nome da fórmula
   toneladas: number;
   custo: number;
+  /** R$/t POSTO (produto + frete) que o cálculo usou. null = não resolvido —
+   *  aí o preço exibido é deduzido de custo/toneladas, que é o que de fato
+   *  entrou na conta. */
+  precoT?: number | null;
+  /** 'produtor' | 'fazenda' | 'biblioteca' | 'gravado' — de onde veio o preço. */
+  fontePreco?: string;
 }
 
 export interface LinhaResumo {
@@ -54,10 +60,26 @@ export interface RecomendacaoUso {
   talhoes: string[];    // nomes, ordem alfanumérica, sem repetir
   toneladas: number;
   custo: number;
+  /** Preço unitário usado. Quando os talhões usaram preços diferentes (frete
+   *  por fazenda, por exemplo), vem a FAIXA — esconder isso numa média faria o
+   *  relatório afirmar um preço que não foi usado em lugar nenhum. */
+  precoT: number | null;
+  precoTMax?: number | null;
+  fontePreco?: string;
+}
+
+/** Preço base de um produto, para o relatório mostrar de onde saiu a conta. */
+export interface PrecoUsado {
+  produto: string;
+  precoT: number | null;
+  precoTMax?: number | null;   // preenchido só quando houve mais de um preço
+  fonte: string;
 }
 
 export interface ResumoGeral {
   produtos: string[];   // ordenados pelo volume total (maior primeiro)
+  /** Preço base por produto — o que multiplicou as toneladas. */
+  precos: PrecoUsado[];
   anos: BlocoAno[];     // mais recente primeiro
   totalGeral: { porProduto: Record<string, number>; custo: number; areaHa: number; nTalhoes: number };
   recomendacoes: RecomendacaoUso[];
@@ -141,28 +163,58 @@ export function montarResumoGeral(lancs: Lancamento[], filtro?: Iterable<string>
     custoGeral += l.custo;
   }
 
+  // ── Preço base usado por produto ──────────────────────────────────────────
+  // O preço EFETIVO de um lançamento é o resolvido; sem ele, custo/toneladas —
+  // que é literalmente o número que entrou na conta daquela dose.
+  const precoEfetivo = (l: Lancamento): number | null => {
+    if (typeof l.precoT === 'number' && Number.isFinite(l.precoT)) return l.precoT;
+    return l.toneladas > 0 && Number.isFinite(l.custo) ? l.custo / l.toneladas : null;
+  };
+  const cent = (v: number) => Math.round(v * 100) / 100;
+  const faixaDe = (ls: Lancamento[]): { precoT: number | null; precoTMax?: number | null; fonte: string } => {
+    const vals = ls.map(precoEfetivo).filter((v): v is number => v != null).map(cent);
+    if (!vals.length) return { precoT: null, fonte: '—' };
+    const min = Math.min(...vals), max = Math.max(...vals);
+    const fontes = [...new Set(ls.map(l => l.fontePreco).filter(Boolean))] as string[];
+    return {
+      precoT: min,
+      ...(max > min ? { precoTMax: max } : {}),
+      fonte: fontes.length === 1 ? fontes[0] : fontes.length ? 'vários' : 'gravado',
+    };
+  };
+  const porProdutoLanc = new Map<string, Lancamento[]>();
+  for (const l of usados) {
+    if (!porProdutoLanc.has(l.produto)) porProdutoLanc.set(l.produto, []);
+    porProdutoLanc.get(l.produto)!.push(l);
+  }
+  const precos: PrecoUsado[] = produtos.map(p => ({ produto: p, ...faixaDe(porProdutoLanc.get(p) ?? []) }));
+
   // índice recomendação -> talhões
-  const porRec = new Map<string, RecomendacaoUso & { ordem: number; talhoesSet: Set<string> }>();
+  const porRec = new Map<string, RecomendacaoUso & { ordem: number; talhoesSet: Set<string>; lancs: Lancamento[] }>();
   for (const l of usados) {
     const k = `${l.ano} ${l.rotulo}`;
     let r = porRec.get(k);
     if (!r) {
-      r = { rotulo: l.rotulo, ano: l.ano, produto: l.produto, talhoes: [], toneladas: 0, custo: 0, ordem: l.numero, talhoesSet: new Set() };
+      r = { rotulo: l.rotulo, ano: l.ano, produto: l.produto, talhoes: [], toneladas: 0, custo: 0, precoT: null, ordem: l.numero, talhoesSet: new Set(), lancs: [] };
       porRec.set(k, r);
     }
     r.talhoesSet.add(l.talhao);
     r.toneladas += l.toneladas;
     r.custo += l.custo;
+    r.lancs.push(l);
   }
   const recomendacoes: RecomendacaoUso[] = [...porRec.values()]
     .sort((x, y) => (y.ano - x.ano) || (x.ordem - y.ordem) || alfa(x.rotulo, y.rotulo))
     .map(r => ({
       rotulo: r.rotulo, ano: r.ano, produto: r.produto,
       talhoes: [...r.talhoesSet].sort(alfa), toneladas: r.toneladas, custo: r.custo,
+      ...faixaDe(r.lancs),
+      fontePreco: faixaDe(r.lancs).fonte,
     }));
 
   return {
     produtos,
+    precos,
     anos,
     totalGeral: {
       porProduto: porProdutoGeral,

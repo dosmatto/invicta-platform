@@ -260,5 +260,42 @@ t('a extensao entra uma vez so', () => {
   assert.equal(comExtensao(''), 'relatorio.pdf');
 });
 
+// ── Preço base exibido no relatório ────────────────────────────────────────
+t('preço base sai do resolvido; sem ele, deduz de custo/toneladas', () => {
+  const r = montarResumoGeral([
+    L({ talhaoId: 'a', produto: 'Calcário', toneladas: 10, custo: 2750, precoT: 275, fontePreco: 'cadastro' }),
+    L({ talhaoId: 'b', produto: 'Gesso', toneladas: 4, custo: 1200 }),
+  ]);
+  const calc = r.precos.find(p => p.produto === 'Calcário');
+  const gesso = r.precos.find(p => p.produto === 'Gesso');
+  assert.equal(calc.precoT, 275);
+  assert.equal(calc.fonte, 'cadastro');
+  assert.equal(gesso.precoT, 300, '1200 / 4 t — o preço que de fato entrou na conta');
+  assert.equal(gesso.fonte, 'gravado');
+});
+
+t('preços diferentes no mesmo produto viram FAIXA, não média', () => {
+  // Frete por fazenda faz o mesmo calcário custar diferente em cada talhão.
+  const r = montarResumoGeral([
+    L({ talhaoId: 'a', produto: 'Calcário', toneladas: 10, custo: 2750, precoT: 275 }),
+    L({ talhaoId: 'b', produto: 'Calcário', toneladas: 10, custo: 3200, precoT: 320 }),
+  ]);
+  const calc = r.precos.find(p => p.produto === 'Calcário');
+  assert.equal(calc.precoT, 275);
+  assert.equal(calc.precoTMax, 320, 'a média (297,50) não foi usada em talhão nenhum');
+});
+
+t('recomendação carrega o preço usado', () => {
+  const r = montarResumoGeral([
+    L({ talhaoId: 'a', rotulo: '05 - Calcario', produto: 'Calcário', toneladas: 10, custo: 2750, precoT: 275 }),
+  ]);
+  assert.equal(r.recomendacoes[0].precoT, 275);
+});
+
+t('sem tonelagem não inventa preço (não divide por zero)', () => {
+  const r = montarResumoGeral([L({ talhaoId: 'a', produto: 'X', toneladas: 0, custo: 500 })]);
+  assert.equal(r.precos.find(p => p.produto === 'X').precoT, null);
+});
+
 console.log(`\n${ok} passaram, ${fail} falharam\n`);
 process.exit(fail ? 1 : 0);
