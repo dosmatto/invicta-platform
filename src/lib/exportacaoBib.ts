@@ -53,7 +53,7 @@ export function fertilizantesCom(
       // biblioteca, como sempre foi. null = desconhecido (nunca 0, que diria
       // "de graça").
       precoT: ctx
-        ? precoResolvidoDoInsumo(id, conteudo, ctx).precoT
+        ? precoResolvidoDoInsumo(id, conteudo, ctx).precoTotalT   // posto na fazenda (produto + frete)
         : precoNaUnidade(conteudo, 't') ?? null,
     }))
     .filter(p => p.garantiaPct > 0)

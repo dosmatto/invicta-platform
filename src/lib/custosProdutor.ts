@@ -27,8 +27,12 @@ export type NivelCusto = 'fazenda' | 'produtor' | 'biblioteca' | 'nenhum';
 
 /** Valores que um nível pode sobrescrever. Ausente/null = herda. */
 export interface CustosNivel {
-  /** R$ por tonelada do insumo. */
+  /** R$ por tonelada do insumo, SEM frete. */
   precoT?: number | null;
+  /** R$ por tonelada de FRETE — soma ao preço para dar o valor final posto na
+   *  fazenda. É o caso do calcário e do gesso, em que o frete pesa mais que o
+   *  produto e muda de fazenda para fazenda. */
+  freteT?: number | null;
   /** R$/ha da aplicação DESTE insumo. */
   aplicacaoHa?: number | null;
 }
@@ -46,7 +50,11 @@ export interface CustosDoProdutor {
   insumos?: Record<string, CustosNivel>;
   /** R$/ha de aplicação quando o insumo não tem o dele. */
   aplicacaoPadraoHa?: number | null;
-  /** R$/ha da lavoura — o custo de produção que alimenta a rentabilidade. */
+  /** R$/ha da lavoura POR CULTURA (chave em minúsculas: 'soja', 'milho'…).
+   *  Soja e milho no mesmo ano têm custos diferentes; um número só para tudo
+   *  descreveria mal os dois. */
+  custosLavouraPorCultura?: Record<string, number>;
+  /** R$/ha da lavoura para a cultura que não tiver o seu próprio valor. */
   custoLavouraHa?: number | null;
   atualizadoEm?: string;
 }
@@ -81,11 +89,16 @@ export function linhasAplicaveis(
 }
 
 export interface PrecoResolvido {
-  /** R$/t. null = ninguém sabe o preço (≠ 0, que seria "de graça"). */
+  /** R$/t do produto, SEM frete. null = ninguém sabe (≠ 0, "de graça"). */
   precoT: number | null;
+  /** R$/t de frete. Sem ninguém declarando, 0 — frete não declarado não inventa custo. */
+  freteT: number;
+  /** R$/t POSTO NA FAZENDA (preço + frete) — é este que as contas usam.
+   *  null quando o preço é desconhecido: frete sozinho não é preço. */
+  precoTotalT: number | null;
   /** R$/ha da aplicação. Sempre um número: sem ninguém declarando, é 0. */
   aplicacaoHa: number;
-  fonte: { preco: NivelCusto; aplicacao: NivelCusto };
+  fonte: { preco: NivelCusto; frete: NivelCusto; aplicacao: NivelCusto };
 }
 
 /**
@@ -102,6 +115,8 @@ export function precoDoInsumo(
 ): PrecoResolvido {
   let precoT = num(daBiblioteca.precoT);
   let fontePreco: NivelCusto = precoT != null ? 'biblioteca' : 'nenhum';
+  let freteT: number | null = null;
+  let fonteFrete: NivelCusto = 'nenhum';
   let aplic = num(daBiblioteca.aplicacaoHa);
   let fonteAplic: NivelCusto = aplic != null ? 'biblioteca' : 'nenhum';
 
@@ -110,28 +125,48 @@ export function precoDoInsumo(
     const proprio = l.insumos?.[insumoId];
     const p = num(proprio?.precoT);
     if (p != null) { precoT = p; fontePreco = nivel; }
+    const f = num(proprio?.freteT);
+    if (f != null) { freteT = f; fonteFrete = nivel; }
     const a = num(proprio?.aplicacaoHa);
     if (a != null) { aplic = a; fonteAplic = nivel; }
     // Aplicação PADRÃO do nível: só vale para insumo que não declarou a dele.
     const padrao = num(l.aplicacaoPadraoHa);
-    if (padrao != null && a == null && num(proprio?.aplicacaoHa) == null) {
-      aplic = padrao; fonteAplic = nivel;
-    }
+    if (padrao != null && a == null) { aplic = padrao; fonteAplic = nivel; }
   }
-  return { precoT, aplicacaoHa: aplic ?? 0, fonte: { preco: fontePreco, aplicacao: fonteAplic } };
+  const frete = freteT ?? 0;
+  return {
+    precoT, freteT: frete,
+    // Frete só entra se HÁ preço: somar frete a um preço desconhecido
+    // produziria um "total" que é só o frete, e ele passaria por preço.
+    precoTotalT: precoT != null ? precoT + frete : null,
+    aplicacaoHa: aplic ?? 0,
+    fonte: { preco: fontePreco, frete: fonteFrete, aplicacao: fonteAplic },
+  };
 }
 
-/** Custo da lavoura (R$/ha) do contexto. null = não informado. */
+/**
+ * Custo da lavoura (R$/ha) do contexto, POR CULTURA.
+ *
+ * Dentro de cada linha, o valor da cultura vence o valor geral — e entre
+ * linhas continua valendo o mais específico (fazenda > produtor). Sem cultura
+ * informada, ou cultura sem valor próprio, cai no geral da linha.
+ */
 export function custoLavoura(
   linhas: readonly CustosDoProdutor[],
-): { custoHa: number | null; fonte: NivelCusto } {
+  cultura?: string | null,
+): { custoHa: number | null; fonte: NivelCusto; porCultura: boolean } {
+  const chave = (cultura ?? '').trim().toLowerCase();
   let custoHa: number | null = null;
   let fonte: NivelCusto = 'nenhum';
+  let porCultura = false;
   for (const l of linhas) {
-    const v = num(l.custoLavouraHa);
-    if (v != null) { custoHa = v; fonte = l.fazendaId ? 'fazenda' : 'produtor'; }
+    const nivel: NivelCusto = l.fazendaId ? 'fazenda' : 'produtor';
+    const geral = num(l.custoLavouraHa);
+    if (geral != null) { custoHa = geral; fonte = nivel; porCultura = false; }
+    const daCultura = chave ? num(l.custosLavouraPorCultura?.[chave]) : null;
+    if (daCultura != null) { custoHa = daCultura; fonte = nivel; porCultura = true; }
   }
-  return { custoHa, fonte };
+  return { custoHa, fonte, porCultura };
 }
 
 export const ROTULO_NIVEL: Record<NivelCusto, string> = {

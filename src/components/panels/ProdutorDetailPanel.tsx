@@ -3,7 +3,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useApp } from '@/context/AppContext';
 import { CustosProdutorEditor } from './CustosProdutorEditor';
-import { anoDaSafra } from '@/lib/periodo';
 import { getClientes, getFazendas, getTalhoes, saveFazenda, updateCliente, deleteCliente, Cliente, Fazenda } from '@/lib/store';
 import { getUsuarios, statusDe, categoriaDe } from '@/lib/iam/usuarios';
 import { ChevronLeft, Plus, Building2, Phone, Mail, Edit2, Save, X, Trash2, Pencil, UserCog } from 'lucide-react';
@@ -367,7 +366,7 @@ export function ProdutorDetailPanel() {
                 navegação. Fica na aba Dados de propósito: é cadastro do cliente,
                 não configuração da casa. */}
             <div style={{ borderTop: '1px solid #0f2240' }}>
-              <CustosProdutorEditor clienteId={cliente.id} ano={anoDaSafra(nav.safra) ?? new Date().getFullYear()} />
+              <CustosProdutorEditor clienteId={cliente.id} />
             </div>
 
             <div className="p-4">

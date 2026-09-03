@@ -27,7 +27,7 @@ t('sem nenhuma linha, vale a Biblioteca', () => {
   const r = precoDoInsumo('kcl', BIB, []);
   assert.equal(r.precoT, 3000);
   assert.equal(r.aplicacaoHa, 50);
-  assert.deepEqual(r.fonte, { preco: 'biblioteca', aplicacao: 'biblioteca' });
+  assert.deepEqual(r.fonte, { preco: 'biblioteca', frete: 'nenhum', aplicacao: 'biblioteca' });
 });
 
 t('preço do PRODUTOR vence o da biblioteca', () => {
@@ -106,13 +106,93 @@ t('custo da lavoura: fazenda vence produtor; ausente é null', () => {
     linha({ id: 'p', custoLavouraHa: 5400 }),
     linha({ id: 'f', fazendaId: FAZ, custoLavouraHa: 5900 }),
   ], ctx());
-  assert.deepEqual(custoLavoura(ls), { custoHa: 5900, fonte: 'fazenda' });
-  assert.deepEqual(custoLavoura([]), { custoHa: null, fonte: 'nenhum' });
+  assert.equal(custoLavoura(ls).custoHa, 5900);
+  assert.equal(custoLavoura(ls).fonte, 'fazenda');
+  assert.equal(custoLavoura([]).custoHa, null);
 });
 
 t('custo da lavoura ZERO é declarado, não ausente', () => {
   const ls = linhasAplicaveis([linha({ custoLavouraHa: 0 })], ctx());
-  assert.deepEqual(custoLavoura(ls), { custoHa: 0, fonte: 'produtor' });
+  assert.equal(custoLavoura(ls).custoHa, 0);
+  assert.equal(custoLavoura(ls).fonte, 'produtor');
+});
+
+// ── Custo POR CULTURA — soja e milho não têm o mesmo custo ─────────────────
+t('custo da CULTURA vence o geral da mesma linha', () => {
+  const ls = linhasAplicaveis([linha({
+    custoLavouraHa: 5400,
+    custosLavouraPorCultura: { soja: 5900, milho: 7200 },
+  })], ctx());
+  assert.equal(custoLavoura(ls, 'soja').custoHa, 5900);
+  assert.equal(custoLavoura(ls, 'milho').custoHa, 7200);
+  assert.equal(custoLavoura(ls, 'soja').porCultura, true);
+});
+
+t('cultura sem valor próprio cai no geral', () => {
+  const ls = linhasAplicaveis([linha({ custoLavouraHa: 5400, custosLavouraPorCultura: { soja: 5900 } })], ctx());
+  assert.equal(custoLavoura(ls, 'trigo').custoHa, 5400);
+  assert.equal(custoLavoura(ls, 'trigo').porCultura, false);
+  assert.equal(custoLavoura(ls, null).custoHa, 5400, 'sem cultura informada, o geral');
+});
+
+t('cultura casa sem depender de caixa', () => {
+  const ls = linhasAplicaveis([linha({ custosLavouraPorCultura: { soja: 5900 } })], ctx());
+  assert.equal(custoLavoura(ls, 'SOJA').custoHa, 5900);
+  assert.equal(custoLavoura(ls, ' Soja ').custoHa, 5900);
+});
+
+t('custo por cultura da FAZENDA vence o do produtor', () => {
+  const ls = linhasAplicaveis([
+    linha({ id: 'p', custosLavouraPorCultura: { soja: 5900 } }),
+    linha({ id: 'f', fazendaId: FAZ, custosLavouraPorCultura: { soja: 6300 } }),
+  ], ctx());
+  assert.equal(custoLavoura(ls, 'soja').custoHa, 6300);
+  assert.equal(custoLavoura(ls, 'soja').fonte, 'fazenda');
+});
+
+// ── FRETE: valor final = produto + frete (calcário, gesso) ─────────────────
+t('frete SOMA ao preço e o total é o que as contas usam', () => {
+  const ls = linhasAplicaveis([linha({ insumos: { calc: { precoT: 180, freteT: 95 } } })], ctx());
+  const r = precoDoInsumo('calc', { precoT: 200 }, ls);
+  assert.equal(r.precoT, 180, 'produto');
+  assert.equal(r.freteT, 95, 'frete');
+  assert.equal(r.precoTotalT, 275, 'posto na fazenda');
+  assert.equal(r.fonte.frete, 'produtor');
+});
+
+t('sem frete declarado, total = preço (frete não inventa custo)', () => {
+  const r = precoDoInsumo('kcl', BIB, []);
+  assert.equal(r.freteT, 0);
+  assert.equal(r.precoTotalT, 3000);
+  assert.equal(r.fonte.frete, 'nenhum');
+});
+
+t('frete sem preço NÃO vira preço', () => {
+  const ls = linhasAplicaveis([linha({ insumos: { x: { freteT: 95 } } })], ctx());
+  const r = precoDoInsumo('x', { precoT: null }, ls);
+  assert.equal(r.precoTotalT, null, 'total desconhecido — frete sozinho não é preço');
+  assert.equal(r.freteT, 95);
+});
+
+t('frete da FAZENDA vence o do produtor (é ele que muda por distância)', () => {
+  const ls = linhasAplicaveis([
+    linha({ id: 'p', insumos: { calc: { precoT: 180, freteT: 95 } } }),
+    linha({ id: 'f', fazendaId: FAZ, insumos: { calc: { freteT: 140 } } }),
+  ], ctx());
+  const r = precoDoInsumo('calc', { precoT: 200 }, ls);
+  assert.equal(r.precoT, 180, 'preço continua o do produtor');
+  assert.equal(r.freteT, 140);
+  assert.equal(r.precoTotalT, 320);
+});
+
+t('frete ZERO é declarado (retira o frete herdado)', () => {
+  const ls = linhasAplicaveis([
+    linha({ id: 'p', insumos: { calc: { freteT: 95 } } }),
+    linha({ id: 'f', fazendaId: FAZ, insumos: { calc: { freteT: 0 } } }),
+  ], ctx());
+  const r = precoDoInsumo('calc', { precoT: 200 }, ls);
+  assert.equal(r.freteT, 0);
+  assert.equal(r.precoTotalT, 200);
 });
 
 t('ordem de chegada não importa — a específica sempre vence', () => {

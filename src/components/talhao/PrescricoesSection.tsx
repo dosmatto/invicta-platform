@@ -249,8 +249,11 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
       clienteId: nav.produtorId, fazendaId: nav.fazendaId,
       ano: anoDaSafra(nav.safra), epoca: null,
     });
-    const preco = base === 't' ? resolvido.precoT ?? undefined
-      : base === 'kg' ? (resolvido.precoT != null ? resolvido.precoT / 1000 : undefined)
+    // precoTotalT = produto + frete (posto na fazenda) — no calcário e no gesso
+    // o frete pesa mais que o produto, e é o valor final que entra na conta.
+    const total = resolvido.precoTotalT;
+    const preco = base === 't' ? total ?? undefined
+      : base === 'kg' ? (total != null ? total / 1000 : undefined)
       : undefined;
     if (preco != null && !r.custoUnit) extras.custoUnit = String(preco);
     if (c.organico?.garantiasKgT) patchParams({ organico: { ...r.params.organico, ...c.organico.garantiasKgT } });

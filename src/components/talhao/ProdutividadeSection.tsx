@@ -478,7 +478,17 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
       const rentabilidades: NonNullable<Parameters<typeof gerarRelatorioProdutividade>[0]['rentabilidades']> = [];
       const eco = fonte.economia;
       const precoKgRel = eco ? precoPorKg({ valor: eco.precoVenda, unidade: eco.precoUnidade, sacaKg: eco.sacaKg }) : null;
-      if (secRent && eco && precoKgRel != null && eco.custoHa > 0) {
+      // CUSTO RESOLVIDO NA HORA DE GERAR, não o que ficou congelado no mapa:
+      // mudar o custo da lavoura no produtor (ou na fazenda) e pedir o relatório
+      // de novo refaz a conta na hora, sem reprocessar mapa nenhum. Sem cadastro
+      // no produtor, vale o que foi digitado no mapa — que é como era antes.
+      const custoProd = custoLavouraDoContexto({
+        clienteId: nav.produtorId, fazendaId: nav.fazendaId,
+        ano: anoDaSafra(safra), epoca: epocaDeData(fonte.dataRef) ?? null,
+        cultura: fonte.cultura,
+      });
+      const custoHaRel = custoProd.custoHa ?? eco?.custoHa ?? 0;
+      if (secRent && eco && precoKgRel != null && custoHaRel > 0) {
         const precoLabel = rotuloPreco({ valor: eco.precoVenda, unidade: eco.precoUnidade, sacaKg: eco.sacaKg });
         const arrHa = eco.arrendamentoScAlq
           ? arrendamentoPorHa(eco.arrendamentoScAlq, precoKgRel, eco.sacaKg ?? 60, eco.alqueireHa ?? ALQUEIRE_HA_PADRAO)
@@ -487,9 +497,9 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
         // então a mancha não muda — mas o zero se desloca, e é a área que
         // deixa de pagar as contas que interessa comparar.
         const cenarios: Array<{ rotulo: string; custoHa: number; arr: number | null }> = arrHa != null
-          ? [{ rotulo: 'Sem arrendamento', custoHa: eco.custoHa, arr: null },
-             { rotulo: `Com arrendamento (${fmt(eco.arrendamentoScAlq!, 0)} sc/alq)`, custoHa: eco.custoHa + arrHa, arr: arrHa }]
-          : [{ rotulo: 'Terra propria', custoHa: eco.custoHa, arr: null }];
+          ? [{ rotulo: 'Sem arrendamento', custoHa: custoHaRel, arr: null },
+             { rotulo: `Com arrendamento (${fmt(eco.arrendamentoScAlq!, 0)} sc/alq)`, custoHa: custoHaRel + arrHa, arr: arrHa }]
+          : [{ rotulo: 'Terra propria', custoHa: custoHaRel, arr: null }];
         // A legenda MANDA. Faixas e cores saem de Biblioteca -> Legendas
         // (categoria Rentabilidade), para o vermelho/azul querer dizer a mesma
         // coisa em todo relatorio; sem legenda cadastrada (ou com ela quebrada)
@@ -931,7 +941,8 @@ function EditarMapa({ mapa, onFechar, onSalvo }: { mapa: MapaProdutividade; onFe
   const custoDoProdutor = useMemo(() => custoLavouraDoContexto({
     clienteId: nav.produtorId, fazendaId: nav.fazendaId,
     ano: anoDaSafra(nav.safra), epoca: epocaDeData(mapa.dataReferencia ?? mapa.criadoEm) ?? null,
-  }), [nav.produtorId, nav.fazendaId, nav.safra, mapa.dataReferencia, mapa.criadoEm]);
+    cultura: mapa.cultura,
+  }), [nav.produtorId, nav.fazendaId, nav.safra, mapa.dataReferencia, mapa.criadoEm, mapa.cultura]);
   const [custoTxt, setCustoTxt] = useState(
     mapa.economia ? fmtMoeda(mapa.economia.custoHa)
       : custoDoProdutor.custoHa != null ? fmtMoeda(custoDoProdutor.custoHa) : '');

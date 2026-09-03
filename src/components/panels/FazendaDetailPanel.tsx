@@ -4,7 +4,6 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { useApp } from '@/context/AppContext';
 import { CustosProdutorEditor } from './CustosProdutorEditor';
-import { anoDaSafra } from '@/lib/periodo';
 import { getFazendas, getTalhoes, saveTalhao, importarTalhoesLote, updateFazenda, excluirFazendaCascata, Fazenda, Talhao } from '@/lib/store';
 import { cloudExcluirMapasPorPrefixo, cloudExcluirPorPrefixo } from '@/lib/cloud';
 import { pode } from '@/lib/empresa';
@@ -543,8 +542,7 @@ export function FazendaDetailPanel() {
             {/* Custos DESTA fazenda: vencem os do produtor, que vencem a
                 Biblioteca. Em branco, herda do nível de cima. */}
             <div style={{ borderTop: '1px solid #0f2240' }}>
-              <CustosProdutorEditor clienteId={fazenda.clienteId} fazendaId={fazenda.id}
-                ano={anoDaSafra(nav.safra) ?? new Date().getFullYear()} />
+              <CustosProdutorEditor clienteId={fazenda.clienteId} fazendaId={fazenda.id} />
             </div>
           </PanelSection>
         )}

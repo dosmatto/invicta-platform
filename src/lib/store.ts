@@ -1479,7 +1479,7 @@ export function getCustosProdutor(clienteId?: string): CustosDoProdutor[] {
  */
 export function salvarCustosProdutor(
   chave: { clienteId: string; fazendaId?: string | null; ano: number; epoca?: Epoca | null },
-  patch: Partial<Pick<CustosDoProdutor, 'insumos' | 'aplicacaoPadraoHa' | 'custoLavouraHa'>>,
+  patch: Partial<Pick<CustosDoProdutor, 'insumos' | 'aplicacaoPadraoHa' | 'custoLavouraHa' | 'custosLavouraPorCultura'>>,
 ): CustosDoProdutor {
   const lista = load<CustosDoProdutor>(K_CUSTOS_PRODUTOR);
   const mesma = (x: CustosDoProdutor) =>
@@ -1530,12 +1530,12 @@ export function precoResolvidoDoInsumo(
 
 /** Custo da lavoura (R$/ha) do contexto — o padrão do mapa de rentabilidade. */
 export function custoLavouraDoContexto(
-  ctx: { clienteId?: string | null; fazendaId?: string | null; ano?: number | null; epoca?: Epoca | null },
-): { custoHa: number | null; fonte: NivelCusto } {
-  if (!ctx.clienteId || ctx.ano == null) return { custoHa: null, fonte: 'nenhum' };
+  ctx: { clienteId?: string | null; fazendaId?: string | null; ano?: number | null; epoca?: Epoca | null; cultura?: string | null },
+): { custoHa: number | null; fonte: NivelCusto; porCultura: boolean } {
+  if (!ctx.clienteId || ctx.ano == null) return { custoHa: null, fonte: 'nenhum', porCultura: false };
   return custoLavoura(linhasAplicaveis(getCustosProdutor(ctx.clienteId), {
     clienteId: ctx.clienteId, fazendaId: ctx.fazendaId, ano: ctx.ano, epoca: ctx.epoca,
-  }));
+  }), ctx.cultura);
 }
 
 // Marca uma grade para processar, desmarcando as outras do mesmo talhão+safra.
