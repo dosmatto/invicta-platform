@@ -1,5 +1,11 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Talhão do produtor: fertilidade e amostragem sumiam sem plano; fertilidade e recomendações só ver + relatórios
+  '2.124.0': [
+    'FERTILIDADE E AMOSTRAGEM SUMIAM para o produtor sem plano atribuído: o trilho só listava o que não é seção de plano (relevo, satélite). Agora sem plano — ou plano que não carregou — nenhuma seção é restringida; o plano é um filtro opcional. Vale no trilho do talhão e nos cadeados do Painel do Produtor. Para restringir, atribua um plano ao usuário na Central de Acessos → Dados.',
+    'FERTILIDADE só para ver: quem não processa (produtor, leitor) escolhe a importação, a profundidade e a variável, vê o mapa e tira o PDF. Somem laboratório-fonte, perfil, modo do mapa, configurações da interpolação, o vínculo zona↔amostra, "regenerar" e o aviso de papel.',
+    'RECOMENDAÇÕES só para ver ganha o relatório: a lista de cenários do ano agora vem com o book de recomendações em PDF (o mesmo de quem calcula) — só gera, não grava.',
+  ],
   // [S/N] Talhão do produtor: relevo, CE, zonas e colheita só para ver; satélite liberado
   '2.123.0': [
     'ALTIMETRIA, CONDUTIVIDADE, ZONAS DE MANEJO E PRODUTIVIDADE só para ver, para o produtor: somem buscar/aprovar base de relevo, gerar análise, nova versão de CE, limpar, interpolar, apagar, gerar zonas por similaridade, remover adoção, laboratório, renomear/suavizar/incorporar/restaurar/excluir versões, importar máquinas, unificar, limpar e interpolar colheita, editar/oficializar/excluir mapas. Ficam: trocar versão, camada e vista, os mapas no mapa, downloads (GeoTIFF, PDF), comparar colheita com NDVI e gerar relatórios. Compactação segue a mesma regra.',

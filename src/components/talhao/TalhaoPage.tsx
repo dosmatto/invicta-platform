@@ -281,10 +281,13 @@ export function TalhaoPage({ id }: { id: string }) {
   // (em qualquer ano) dentro do que o plano libera. Owner/admin — e a bancada
   // sem login — veem a mesma coisa com `?preview=1`. A trava de gravação de
   // verdade fica na porta da nuvem (lib/somenteLeitura.ts) e vale só para o
-  // papel produtor; o preview sem plano libera todas as seções.
+  // papel produtor; sem plano (produtor ou preview) todas as seções entram.
   const modoProdutor = ehProdutor || (previewProdutor && (!authConfigurado || ehAdmin()));
   const plano = ehProdutor ? planoPorId(meuRegistro()?.planoId) : modoProdutor ? planoPorId(planoPreview ?? undefined) : null;
-  const semPlano = modoProdutor && !ehProdutor && !plano;
+  // Sem plano atribuído (ou plano que não carregou) = nenhuma restrição: o
+  // plano é um filtro opcional, não uma chave. Antes o produtor sem plano via
+  // só as abas que não são seção de plano — fertilidade e amostragem sumiam.
+  const semPlano = modoProdutor && !plano;
   const tabsVisiveis = modoProdutor
     ? TABS.filter(t => abasExistentes.has(t.id) && (t.id === 'resumo' || semPlano || !SECOES_PLANO.has(t.id) || !!plano?.secoes?.[t.id]))
     : TABS;

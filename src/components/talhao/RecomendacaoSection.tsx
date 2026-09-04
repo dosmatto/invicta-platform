@@ -556,6 +556,29 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
           </div>
         );
       })}
+      {/* Relatório: o mesmo book PDF oficial de quem calcula — só gera, não grava. */}
+      {recomendacoes.length > 0 && (
+        <div style={{ borderTop: '1px solid #1a3a6b', paddingTop: 10 }}>
+          <div className="flex items-center gap-1.5 mb-1">
+            <FileText size={13} style={{ color: '#a78bfa' }} />
+            <span className="text-[11px] font-bold uppercase tracking-wide" style={{ color: '#93c5fd' }}>Book de recomendações (PDF)</span>
+          </div>
+          <div className="space-y-0.5 mb-2">
+            {recomendacoes.map(r => (
+              <label key={r.id} className="flex items-center gap-2 text-[10px] p-1 rounded cursor-pointer" style={{ color: '#cbd5e1' }}>
+                <input type="checkbox" checked={bookSel.has(r.id)} onChange={() => toggleBook(r.id)} />
+                <span className="flex-1 truncate">{r.nome}</span>
+              </label>
+            ))}
+          </div>
+          <button onClick={gerarBook} disabled={bookSel.size === 0 || !importacaoId || bookEstado === 'carregando'}
+            className="w-full py-2 rounded text-[11px] font-bold text-white flex items-center justify-center gap-1.5"
+            style={{ background: (bookSel.size === 0 || !importacaoId || bookEstado === 'carregando') ? '#1a3a6b' : 'var(--invicta-green-dark)' }}>
+            {bookEstado === 'carregando' ? <><Loader2 size={13} className="animate-spin" /> Gerando book…</> : <><FileText size={13} /> Gerar book PDF ({bookSel.size})</>}
+          </button>
+          {erroBook && <p className="mt-2 text-[10px]" style={{ color: '#fca5a5' }}>{erroBook}</p>}
+        </div>
+      )}
       <p className="text-[10px]" style={{ color: '#475569' }}>Os arquivos para aplicação dos cenários marcados “para uso” estão na aba Arquivos.</p>
     </div>
   );

@@ -171,9 +171,9 @@ export function PainelProdutor({ cliente, plano, papel, preview }: {
     // Camada que não é seção de plano (zonas, relevo, CE, satélite, colheita):
     // abre direto — a página do talhão só lista a aba quando ela existe.
     if (!def.secao) return true;
-    if (preview && !plano) return true;
+    if (!plano) return true;   // sem plano atribuído = nenhuma restrição
     return !!plano?.secoes?.[def.secao];
-  }, [plano, preview]);
+  }, [plano]);
 
   const abrir = useCallback((id: string, aba?: string | null) => {
     const q = new URLSearchParams();
@@ -483,10 +483,10 @@ export function PainelProdutor({ cliente, plano, papel, preview }: {
                   </ul>
                 )}
               </Cartao>
-              <Cartao className="lg:col-span-4" titulo="Seu plano" sub={plano?.nome ?? (preview ? 'Todas as seções liberadas' : undefined)}>
+              <Cartao className="lg:col-span-4" titulo="Seu plano" sub={plano?.nome ?? 'Todas as seções liberadas'}>
                 <ul className="space-y-1.5">
                   {SECOES_PORTAL.map(s => {
-                    const ok = preview && !plano ? true : !!plano?.secoes?.[s.id];
+                    const ok = !plano ? true : !!plano.secoes?.[s.id];
                     return (
                       <li key={s.id} className="flex items-center gap-2 text-sm" style={{ color: ok ? COR.texto : COR.texto2 }}>
                         {ok ? <Check size={14} style={{ color: COR.verde }} /> : <Lock size={13} style={{ color: COR.texto2 }} />}

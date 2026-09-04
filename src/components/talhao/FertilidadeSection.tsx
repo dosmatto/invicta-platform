@@ -970,7 +970,7 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
         {/* Laboratório do laudo — é ELE que sai na coluna FONTE do relatório.
             Editável aqui de propósito: laudo importado em modo automático sem
             nome ficava gravado como "Novo laboratório" e ia impresso assim. */}
-        {importacao && (
+        {podeProcessar && importacao && (
           <div className="mt-2">
             <label className="text-[10px] font-semibold block mb-0.5" style={{ color: '#64748b' }}>
               Laboratório (sai como FONTE no relatório)
@@ -1014,7 +1014,7 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
       </div>
 
       {/* Modo zona (Z1): mapa constante por zona — vínculo zona ↔ nº da amostra. */}
-      {ehZona && (
+      {podeProcessar && ehZona && (
         <div className="rounded-lg p-2.5" style={{ background: '#0b1f3a', border: '1px solid #2e5fa3' }}>
           <p className="text-[11px] font-semibold mb-1 flex items-center gap-1" style={{ color: '#93c5fd' }}>
             <Layers size={12} /> Mapa por zona (sem interpolação)
@@ -1040,7 +1040,7 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
       )}
 
       {/* Desatualizado (Etapa 3): existe importação mais recente que a destes mapas. */}
-      {desatualizado && importacaoMaisRecente && (
+      {podeProcessar && desatualizado && importacaoMaisRecente && (
         <div className="flex items-start gap-2 p-2.5 rounded-lg" style={{ background: '#2d1a00', border: '1px solid #92400e' }}>
           <AlertTriangle size={13} style={{ color: '#fbbf24' }} className="flex-shrink-0 mt-0.5" />
           <div className="flex-1">
@@ -1057,7 +1057,8 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
         </div>
       )}
 
-      {/* Perfil agronômico — preset opcional (Biblioteca > Perfis). */}
+      {/* Perfil agronômico — preset opcional (Biblioteca > Perfis). Só para quem processa. */}
+      {podeProcessar && (
       <div>
         <label className="text-[10px] font-semibold block mb-0.5" style={{ color: '#64748b' }}>Perfil (preenche legendas)</label>
         <div className="flex gap-1">
@@ -1074,13 +1075,14 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
           </button>
         </div>
       </div>
+      )}
 
       {importacao && (
         <>
           {/* MODO DO MAPA — só aparece quando o talhão tem zonas de manejo:
               Interpolação (ferramentas de sempre) × Processar em zona (cada
               zona recebe o valor do SEU ponto de amostragem, sem interpolar). */}
-          {zonas.length > 0 && (
+          {podeProcessar && zonas.length > 0 && (
             <div>
               <label className="text-[10px] font-semibold block mb-1" style={{ color: '#64748b' }}>Modo do mapa</label>
               <div className="flex gap-1">
@@ -1101,7 +1103,7 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
           )}
 
           {/* Configurações da interpolação (recolhível) — não valem no modo zona */}
-          {!ehZona && (
+          {podeProcessar && !ehZona && (
           <div className="rounded-lg overflow-hidden" style={{ border: '1px solid #1a3a6b' }}>
             <button onClick={() => setCfgAberto(v => !v)} className="w-full flex items-center justify-between px-2.5 py-1.5 text-[10px] font-semibold" style={{ background: '#061525', color: '#93c5fd' }}>
               <span className="flex items-center gap-1"><Settings size={12} /> Configurações da interpolação</span>
@@ -1181,9 +1183,8 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
 
           {/* Processar */}
           {!poligono && <Aviso texto="Limite do talhão não carregado no mapa." />}
-          {!podeProcessar ? (
-            <Aviso texto="Seu papel não processa mapas de fertilidade (somente visualização)." />
-          ) : (<>
+          {/* Quem não processa (produtor, leitor) só escolhe o mapa e tira o PDF — sem aviso, sem botão. */}
+          {!podeProcessar ? null : (<>
             <button onClick={processarTodos} disabled={processando || !poligono || nutrientes.length === 0}
               className="w-full py-2 rounded text-xs font-bold text-white flex items-center justify-center gap-1.5"
               style={{ background: (processando || !poligono || nutrientes.length === 0) ? '#1a3a6b' : 'var(--invicta-green-dark)', opacity: (!poligono || nutrientes.length === 0) ? 0.6 : 1 }}>

@@ -46,6 +46,7 @@ verdadeira (fusão de talhões) chegou depois; foi preciso renumerar.
 | S/N | Produtor com acesso a uma fazenda que não está no nome dele | 2.121.0 | /portal (produtor); Central de Acessos → usuário → Vínculos → fazendas |
 | S/N | Talhão do produtor: só o que existe, e só para ver | 2.122.0 | /talhao/[id] como produtor; /portal em preview → clicar no talhão |
 | S/N | Talhão do produtor: relevo, CE, zonas e colheita só para ver; satélite liberado | 2.123.0 | /talhao/[id] como produtor → abas Altimetria, Condutividade, Zonas, Produtividade, Compactação, NDVI |
+| S/N | Talhão do produtor: fertilidade e amostragem sumiam sem plano; fertilidade e recomendações só ver + relatórios | 2.124.0 | /talhao/[id] como produtor sem plano → trilho; abas Fertilidade e Recomendações |
 
 > As pendências 1–17 foram entregues antes deste registro existir e não estão
 > catalogadas; procure pelo assunto no `changelog.ts`. Da 18 em diante, tudo
