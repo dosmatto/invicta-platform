@@ -21,7 +21,7 @@ import { cenariosComPrecoAtual } from '@/lib/recomendacao/precoAtual';
 import { anoDaSafra } from '@/lib/periodo';
 import { salvarRelatorio, listarRelatorios, excluirRelatorio, type RegistroRelatorio } from '@/lib/relatoriosArquivo';
 import { emailUsuario } from '@/lib/auth';
-import { pode } from '@/lib/empresa';
+import { pode, podeEm } from '@/lib/empresa';
 import { FileDown, Loader2, ChevronUp, ChevronDown, AlertTriangle, CheckSquare, Square, Satellite, Hash, History, Trash2, ExternalLink, Wand2, FlaskConical } from 'lucide-react';
 
 // Nome do book no padrão da casa: SA03_BOOK_2026_EP01. Sem contexto carregado
@@ -155,7 +155,9 @@ export function GeradorRelatorios({ safraNome }: { safraNome?: string } = {}) {
 
       const elPorNut = ctx ? Object.fromEntries(ctx.elementos.map(e => [e.nut, e])) : {};
       const tipo = usaRec && usaFert ? 'Recomendação + Fertilidade' : usaRec ? 'Recomendação' : 'Fertilidade';
-      try {
+      // Quem só exporta (produtor, leitor) gera e baixa, sem entrar no histórico
+      // — o histórico é do escritório.
+      if (podeEm('relatorios', 'criar')) try {
         await salvarRelatorio({
           talhaoId: nav.talhaoId!, safra, tipo,
           titulo: `Relatório (${paginas} ${paginas === 1 ? 'pág' : 'págs'})`,
@@ -248,6 +250,18 @@ export function GeradorRelatorios({ safraNome }: { safraNome?: string } = {}) {
             Monte um <strong style={{ color: '#cbd5e1' }}>PDF único</strong> com as seções abaixo. As duas vêm marcadas — <strong style={{ color: '#cbd5e1' }}>desmarque uma</strong> para gerar só a outra.
           </p>
 
+          {/* Tudo de uma vez: as duas seções, todos os elementos e todas as recomendações. */}
+          <div className="flex gap-1.5">
+            <button onClick={() => { if (temFert) { setIncluirFert(true); setSel(new Set(ordem)); } if (temRec) { setIncluirRec(true); setSelCen(new Set(cenarios.map(c => c.id))); } }}
+              className="flex-1 py-1.5 rounded text-[10px] font-bold flex items-center justify-center gap-1" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
+              <CheckSquare size={12} /> Selecionar tudo o que há
+            </button>
+            <button onClick={() => { setSel(new Set()); setSelCen(new Set()); }}
+              className="px-3 py-1.5 rounded text-[10px] font-bold flex items-center justify-center gap-1" style={{ background: '#0f2240', color: '#94a3b8' }}>
+              <Square size={12} /> Limpar
+            </button>
+          </div>
+
           {/* ── Seção FERTILIDADE (vem primeiro no PDF) ── */}
           <SecaoHeader on={incluirFert} disabled={!temFert} onToggle={() => setIncluirFert(v => !v)}
             icon={FlaskConical} cor="#4ade80" titulo="Fertilidade" sub={temFert ? `${nSelFert}/${ctx!.elementos.length} selecionado${ctx!.elementos.length === 1 ? '' : 's'}` : 'nenhum mapa'} />
@@ -333,7 +347,7 @@ export function GeradorRelatorios({ safraNome }: { safraNome?: string } = {}) {
               : <><FileDown size={13} /> Gerar relatório{totalPags > 0 ? ` (${totalPags} ${totalPags === 1 ? 'pág' : 'págs'})` : ''}</>}
           </button>
           <p className="text-[9px]" style={{ color: '#475569' }}>
-            Usa o que já está salvo na nuvem (recomendações da aba Recomendações + mapas da aba Fertilidade). Cada PDF gerado é arquivado no histórico abaixo.
+            Usa o que já está salvo na nuvem (recomendações da aba Recomendações + mapas da aba Fertilidade).{podeEm('relatorios', 'criar') ? ' Cada PDF gerado é arquivado no histórico abaixo.' : ' O PDF é baixado direto para o seu computador.'}
           </p>
         </div>
       )}
@@ -349,7 +363,7 @@ export function GeradorRelatorios({ safraNome }: { safraNome?: string } = {}) {
           <p className="text-[10px]" style={{ color: '#475569' }}>Nenhum relatório arquivado ainda para este talhão.</p>
         ) : (
           <div className="space-y-1">
-            {historico.map(r => <LinhaHistorico key={r.id} reg={r} onAbrir={() => abrirRelatorio(r)}
+            {historico.map(r => <LinhaHistorico key={r.id} reg={r} onAbrir={() => abrirRelatorio(r)} podeExcluir={podeEm('relatorios', 'excluir')}
               onExcluir={async () => {
                 try { await excluirRelatorio(r); }
                 catch (e) { alert(e instanceof Error ? e.message : 'Falha ao excluir o relatório.'); }
@@ -362,7 +376,7 @@ export function GeradorRelatorios({ safraNome }: { safraNome?: string } = {}) {
   );
 }
 
-function LinhaHistorico({ reg, onAbrir, onExcluir }: { reg: RegistroRelatorio; onAbrir: () => Promise<void>; onExcluir: () => void }) {
+function LinhaHistorico({ reg, onAbrir, onExcluir, podeExcluir = true }: { reg: RegistroRelatorio; onAbrir: () => Promise<void>; onExcluir: () => void; podeExcluir?: boolean }) {
   const [apagando, setApagando] = useState(false);
   const [abrindo, setAbrindo] = useState(false);
   const data = new Date(reg.geradoEm).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -389,11 +403,13 @@ function LinhaHistorico({ reg, onAbrir, onExcluir }: { reg: RegistroRelatorio; o
       </button>
       {/* Excluir em 2 cliques: o 1º arma e MOSTRA "Confirmar?" (antes só mudava a
           cor do ícone — parecia que o lixo não funcionava); o 2º exclui de fato. */}
-      <button onClick={async () => { if (apagando) { await onExcluir(); } else { setApagando(true); setTimeout(() => setApagando(false), 3500); } }}
-        title={apagando ? 'Clique de novo para confirmar a exclusão' : 'Excluir'}
-        className="p-1 rounded flex items-center gap-1" style={{ color: apagando ? '#f87171' : '#64748b', background: apagando ? '#2a0d0d' : 'transparent' }}>
-        <Trash2 size={15} />{apagando && <span className="text-[9px] font-bold">Confirmar?</span>}
-      </button>
+      {podeExcluir && (
+        <button onClick={async () => { if (apagando) { await onExcluir(); } else { setApagando(true); setTimeout(() => setApagando(false), 3500); } }}
+          title={apagando ? 'Clique de novo para confirmar a exclusão' : 'Excluir'}
+          className="p-1 rounded flex items-center gap-1" style={{ color: apagando ? '#f87171' : '#64748b', background: apagando ? '#2a0d0d' : 'transparent' }}>
+          <Trash2 size={15} />{apagando && <span className="text-[9px] font-bold">Confirmar?</span>}
+        </button>
+      )}
     </div>
   );
 }

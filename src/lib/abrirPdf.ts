@@ -18,6 +18,8 @@
 // lesse o relatório com calma e só então clicasse em salvar recebia um arquivo
 // quebrado. Agora a vida do URL é a da aba que o usa.
 
+import { somenteLeitura } from './somenteLeitura';
+
 const escapar = (s: string) => s.replace(/[<>&"']/g, c =>
   ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&#39;' }[c]!));
 
@@ -42,6 +44,13 @@ export function baixarComNome(blob: Blob, nome: string): void {
  */
 export function abrirPdfNaAba(aba: Window | null, blob: Blob, nome: string): void {
   const arquivo = comExtensao(nome);
+  // Produtor (04/09/2026): baixa DIRETO para o computador, sem a aba de leitura —
+  // ele quer o arquivo na máquina. A aba em branco aberta antes do await é fechada.
+  if (somenteLeitura()) {
+    try { aba?.close(); } catch { /* aba já fechada */ }
+    baixarComNome(blob, arquivo);
+    return;
+  }
   if (!aba || aba.closed) { baixarComNome(blob, arquivo); return; }
   try {
     // Object URL no contexto da ABA: some junto com ela, sem prazo de validade.

@@ -1,5 +1,12 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Produtor baixa direto: arquivos marcados, PDF da fertilidade e relatórios com "selecionar tudo"
+  '2.126.0': [
+    'PDF BAIXA DIRETO para o produtor: todo relatório gerado (Arquivos, Fertilidade, Relatórios, book de recomendações, satélite) vai para o computador com o nome certo, sem a aba de leitura no meio.',
+    'ARQUIVOS: continua listando só os cenários com mapas marcados ★ "para uso", e só essas doses têm JPG e SHP — é o que o produtor baixa. PDF oficial e distribuição por área também.',
+    'FERTILIDADE: o "Gerar PDF (Fertilidade)" já era do produtor; o "Limpar mapas" (que apaga na nuvem) passa a ser só de quem processa.',
+    'RELATÓRIOS: botão "Selecionar tudo o que há" liga as duas seções e marca todos os elementos e todas as recomendações de uma vez (e "Limpar" desmarca). Quem só exporta (produtor, leitor) gera e baixa sem entrar no histórico, e não vê o excluir do histórico.',
+  ],
   // [S/N] Recomendações do produtor: clicar no cenário mostra os mapas
   '2.125.0': [
     'RECOMENDAÇÕES SÓ PARA VER agora mostra os mapas, como a Fertilidade: clicar num cenário desenha no mapa a dose do primeiro produto, clicar num produto troca o mapa, e a legenda da dose visível aparece embaixo. Sem a pergunta "substituir os mapas da tela?" — quem só vê não tem trabalho em andamento a perder.',

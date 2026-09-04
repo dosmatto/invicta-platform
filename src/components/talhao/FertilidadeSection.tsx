@@ -1328,9 +1328,11 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
                     : stats.modelo === 'idw' ? `IDW · ${stats.n} pts`
                       : `Krigagem${stats.variograma?.manual ? ' fixa' : ''} · ${stats.modelo} · ${stats.n} pts`}
                 </div>
-                <button onClick={limpar} title="Limpar mapas" className="flex items-center gap-1 text-[10px]" style={{ color: '#93c5fd' }}>
-                  <Eraser size={11} /> Limpar
-                </button>
+                {podeProcessar && (
+                  <button onClick={limpar} title="Limpar mapas" className="flex items-center gap-1 text-[10px]" style={{ color: '#93c5fd' }}>
+                    <Eraser size={11} /> Limpar
+                  </button>
+                )}
               </div>
 
               <div className="text-[9px] leading-relaxed" style={{ color: '#64748b' }}>
