@@ -47,6 +47,7 @@ verdadeira (fusão de talhões) chegou depois; foi preciso renumerar.
 | S/N | Talhão do produtor: só o que existe, e só para ver | 2.122.0 | /talhao/[id] como produtor; /portal em preview → clicar no talhão |
 | S/N | Talhão do produtor: relevo, CE, zonas e colheita só para ver; satélite liberado | 2.123.0 | /talhao/[id] como produtor → abas Altimetria, Condutividade, Zonas, Produtividade, Compactação, NDVI |
 | S/N | Talhão do produtor: fertilidade e amostragem sumiam sem plano; fertilidade e recomendações só ver + relatórios | 2.124.0 | /talhao/[id] como produtor sem plano → trilho; abas Fertilidade e Recomendações |
+| S/N | Recomendações do produtor: clicar no cenário mostra os mapas | 2.125.0 | /talhao/[id] como produtor → aba Recomendações → clicar no cenário / produto |
 
 > As pendências 1–17 foram entregues antes deste registro existir e não estão
 > catalogadas; procure pelo assunto no `changelog.ts`. Da 18 em diante, tudo

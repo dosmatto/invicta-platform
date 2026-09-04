@@ -1,5 +1,9 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Recomendações do produtor: clicar no cenário mostra os mapas
+  '2.125.0': [
+    'RECOMENDAÇÕES SÓ PARA VER agora mostra os mapas, como a Fertilidade: clicar num cenário desenha no mapa a dose do primeiro produto, clicar num produto troca o mapa, e a legenda da dose visível aparece embaixo. Sem a pergunta "substituir os mapas da tela?" — quem só vê não tem trabalho em andamento a perder.',
+  ],
   // [S/N] Talhão do produtor: fertilidade e amostragem sumiam sem plano; fertilidade e recomendações só ver + relatórios
   '2.124.0': [
     'FERTILIDADE E AMOSTRAGEM SUMIAM para o produtor sem plano atribuído: o trilho só listava o que não é seção de plano (relevo, satélite). Agora sem plano — ou plano que não carregou — nenhuma seção é restringida; o plano é um filtro opcional. Vale no trilho do talhão e nos cadeados do Painel do Produtor. Para restringir, atribua um plano ao usuário na Central de Acessos → Dados.',

@@ -398,12 +398,12 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
     return { area, custoTotal, custoHa: area ? custoTotal / area : 0, temSemCusto };
   }, [doses, talhao]);
 
-  async function reabrir(cen: Cenario) {
+  async function reabrir(cen: Cenario, semConfirmar = false) {
     // REABRIR SUBSTITUI o que está na tela. Enquanto ele era o único jeito de
     // espiar o conteúdo de um cenário salvo, avisar seria atrapalhar; agora que
     // a gaveta mostra tudo sem custo, quem clica aqui quer mesmo trocar — e
     // trocar por engano custa o trabalho em andamento.
-    if (estado === 'pronto' && doses.length > 0 && cen.id !== cenMeta?.id
+    if (!semConfirmar && estado === 'pronto' && doses.length > 0 && cen.id !== cenMeta?.id
       && !confirm(`Reabrir "${cen.nome}" substitui os ${doses.length} mapa(s) que estão na tela. Continuar?`)) return;
     setEstado('carregando'); setErro('');
     try {
@@ -529,29 +529,69 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
         <Wand2 size={14} style={{ color: '#a78bfa' }} />
         <h3 className="text-sm font-bold" style={{ color: '#e2e8f0' }}>Recomendações do ano</h3>
       </div>
+      {salvos.length > 0 && (
+        <p className="text-[10px]" style={{ color: '#64748b' }}>Clique num cenário para ver os mapas dele; clique num produto para trocar o mapa.</p>
+      )}
+      {estado === 'carregando' && (
+        <p className="text-[10px] flex items-center gap-1.5" style={{ color: '#93c5fd' }}><Loader2 size={11} className="animate-spin" /> Carregando os mapas…</p>
+      )}
       {salvos.length === 0 ? (
         <p className="text-[11px]" style={{ color: '#64748b' }}>Nenhum cenário de recomendação neste ano.</p>
       ) : salvos.map(c => {
         const emUso = c.doses.filter(d => d.usar);
+        // Cenário "na tela" = reaberto (doses descomprimidas) → o mapa da dose
+        // visível está desenhado (efeito de doseAtiva, o mesmo de quem calcula).
+        const naTela = cenMeta?.id === c.id && estado === 'pronto';
+        const verDose = (i: number) => {
+          if (naTela) { setVisivel(i); return; }
+          void reabrir(c, true).then(() => setVisivel(i));
+        };
         return (
-          <div key={c.id} className="p-2.5 rounded-lg space-y-1" style={{ background: '#061525', border: `1px solid ${emUso.length ? 'var(--invicta-green)' : '#1a3a6b'}` }}>
-            <div className="text-[11px] font-bold flex items-center gap-1.5" style={{ color: '#e2e8f0' }}>
-              {c.nome}
-              {emUso.length > 0 && <span className="text-[8px] font-bold px-1 py-0.5 rounded" style={{ background: 'var(--invicta-green-dark)', color: '#fff' }}>para uso</span>}
-            </div>
-            <div className="text-[10px]" style={{ color: '#94a3b8' }}>
-              {new Date(c.geradoEm).toLocaleDateString('pt-BR')} · {c.doses.length} produto(s) · R$ {num(c.financeiro?.custoTotal, 2)} ({num(c.financeiro?.custoHa, 2)}/ha)
-            </div>
+          <div key={c.id} className="p-2.5 rounded-lg space-y-1" style={{ background: naTela ? '#0b1f3a' : '#061525', border: `1px solid ${naTela ? '#2e5fa3' : emUso.length ? 'var(--invicta-green)' : '#1a3a6b'}` }}>
+            <button type="button" onClick={() => verDose(0)} className="w-full text-left" title="Ver os mapas deste cenário">
+              <div className="text-[11px] font-bold flex items-center gap-1.5" style={{ color: '#e2e8f0' }}>
+                <Eye size={11} style={{ color: naTela ? '#4ade80' : '#475569', flexShrink: 0 }} />
+                {c.nome}
+                {emUso.length > 0 && <span className="text-[8px] font-bold px-1 py-0.5 rounded" style={{ background: 'var(--invicta-green-dark)', color: '#fff' }}>para uso</span>}
+              </div>
+              <div className="text-[10px]" style={{ color: '#94a3b8' }}>
+                {new Date(c.geradoEm).toLocaleDateString('pt-BR')} · {c.doses.length} produto(s) · R$ {num(c.financeiro?.custoTotal, 2)} ({num(c.financeiro?.custoHa, 2)}/ha)
+              </div>
+            </button>
             {c.doses.length > 0 && (
               <ul className="text-[10px] space-y-0.5" style={{ color: '#cbd5e1' }}>
-                {c.doses.map((d, i) => (
-                  <li key={i} className="flex items-center gap-1.5">
-                    <span style={{ color: d.usar ? '#4ade80' : '#475569' }}>{d.usar ? '●' : '○'}</span>
-                    <span className="truncate">{d.produto}</span>
-                    <span className="ml-auto tabular-nums" style={{ color: '#94a3b8' }}>{num(d.stats?.media, 0)} {d.unidade} · {num(d.toneladas, 1)} t</span>
-                  </li>
-                ))}
+                {c.doses.map((d, i) => {
+                  const ativo = naTela && i === visivel;
+                  return (
+                    <li key={i}>
+                      <button type="button" onClick={() => verDose(i)} title="Ver este mapa"
+                        className="w-full flex items-center gap-1.5 rounded px-1 py-0.5 text-left"
+                        style={{ background: ativo ? '#11305a' : 'transparent', border: ativo ? '1px solid #2e5fa3' : '1px solid transparent' }}>
+                        <span style={{ color: d.usar ? '#4ade80' : '#475569' }}>{d.usar ? '●' : '○'}</span>
+                        <span className="truncate" style={{ color: ativo ? '#fff' : undefined }}>{d.produto}</span>
+                        <span className="ml-auto tabular-nums" style={{ color: '#94a3b8' }}>{num(d.stats?.media, 0)} {d.unidade} · {num(d.toneladas, 1)} t</span>
+                      </button>
+                    </li>
+                  );
+                })}
               </ul>
+            )}
+            {naTela && doseAtiva && classesVis.length > 0 && (
+              <div className="pt-1" style={{ borderTop: '1px solid #1a3a6b' }}>
+                <div className="text-[9px] font-semibold mb-1" style={{ color: '#94a3b8' }}>Legenda · {doseAtiva.nomeEquacao} ({doseAtiva.unidade})</div>
+                <div className="space-y-0.5">
+                  {classesVis.map((cl, i) => {
+                    const inf = i === 0 ? 0 : classesVis[i - 1].limiteSuperior;
+                    const transp = doseAtiva.estilo.zeroTransparente && cl.limiteSuperior <= doseAtiva.estilo.valorMinimo;
+                    return (
+                      <div key={i} className="flex items-center gap-1.5 text-[9px]" style={{ color: '#cbd5e1' }}>
+                        <span className="w-4 h-3 rounded" style={{ background: transp ? 'transparent' : cl.cor, border: transp ? '1px dashed #64748b' : '1px solid #2e5fa3' }} />
+                        <span>{fmt(inf)} – {fmt(cl.limiteSuperior)}{transp ? ' (transparente)' : ''}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             )}
           </div>
         );
