@@ -64,9 +64,15 @@ export const MATRIZ_PADRAO: Record<PapelIam, MapaPermissoes> = {
     return m;
   })(),
 
-  // Produtor: portal — só enxerga (o plano de assinatura ainda filtra seções).
-  produtor: conceder(nada(),
-    ['cadastro', 'fertilidade', 'recomendacoes', 'compactacao', 'relatorios', 'arquivos'], VER_EXP),
+  // Produtor: portal — enxerga e exporta (o plano de assinatura ainda filtra
+  // seções). Decisão de 04/09/2026: no SATÉLITE ele trabalha — gera índices e,
+  // se quiser, salva. Relevo, CE, zonas, colheita e compactação: só ver.
+  produtor: (() => {
+    const m = conceder(nada(),
+      ['cadastro', 'fertilidade', 'zonas', 'recomendacoes', 'compactacao', 'produtividade', 'relatorios', 'arquivos'], VER_EXP);
+    conceder(m, ['satelite'], TRABALHAR);
+    return m;
+  })(),
 
   // Prestador: serviço temporário — mesmo desenho do operador (com validade).
   prestador: (() => {

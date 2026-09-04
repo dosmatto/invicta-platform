@@ -676,7 +676,7 @@ export async function pushObjSupabase(key: string, json: string): Promise<void> 
 export async function salvarMapaSupabase(id: string, dados: object, atualizadoEm?: string): Promise<void> {
   const sb = getSupabase();
   if (!sb) return;
-  if (escritaBloqueada(COL_MAPAS)) return;   // produtor: somente leitura
+  if (escritaBloqueada(COL_MAPAS, id)) return;   // produtor: somente leitura (satélite passa)
   const up = await sb.from('app_kv').upsert(
     { colecao: COL_MAPAS, item_id: id, dados, atualizado_em: atualizadoEm ?? new Date().toISOString() },
     { onConflict: 'colecao,item_id' },
@@ -784,7 +784,7 @@ export async function carregarMapaSupabase<T>(id: string): Promise<{ id: string;
 export async function excluirMapasPorPrefixoSupabase(prefixo: string): Promise<void> {
   const sb = getSupabase();
   if (!sb) return;
-  if (escritaBloqueada(COL_MAPAS)) return;   // produtor: somente leitura
+  if (escritaBloqueada(COL_MAPAS, prefixo)) return;   // produtor: somente leitura (satélite passa)
   const r = await sb.from('app_kv').delete().eq('colecao', COL_MAPAS).like('item_id', escLike(prefixo) + '%');
   if (r.error) console.warn('[supabase] excluir mapas:', r.error.message);
 }

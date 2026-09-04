@@ -49,6 +49,12 @@ import { SeletorLegenda, legendasDoModulo, usePrefLegenda } from './SeletorLegen
 import { respeitarPadraoHomonima, rampaVisualStops, corCheiaDaClasse } from '@/lib/legendas';
 import type { Legenda } from '@/lib/legendas';
 import { Upload, Loader2, AlertTriangle, Save, Star, Trash2, Eye, Wand2, FileSpreadsheet, Plus, Layers, ChevronDown, ChevronUp, FileDown, Pencil } from 'lucide-react';
+import { podeEm } from '@/lib/empresa';
+
+// Quem NÃO processa colheita (produtor, leitor) só vê os mapas salvos, compara
+// com NDVI e gera relatórios — sem importar, unificar, limpar, interpolar,
+// salvar, editar, oficializar ou excluir.
+const podeProcessar = () => podeEm('produtividade', 'criar');
 
 import { inputStyle } from '@/constants/ui';
 import { fmtMoeda, lerMoeda, arredMoeda } from '@/lib/formato';
@@ -625,6 +631,7 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
         <div className="col-span-2 flex items-end pb-1 text-[10px]" style={{ color: periodoProd ? '#86efac' : '#fbbf24' }}>{periodoProd ? `Ano ${periodoProd.ano} · ${rotuloEpoca(periodoProd.epoca)}` : 'data inválida'}</div>
       </div>
 
+      {podeProcessar() && (<>
       {/* 1) Máquinas */}
       <Etapa n={1} titulo="Importar máquinas">
         <label className="flex items-center justify-center gap-1 py-1.5 rounded text-[10px] font-bold cursor-pointer" style={{ background: 'var(--invicta-blue-mid)', color: '#fff' }}>
@@ -765,6 +772,7 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
         </Etapa>
       )}
 
+      </>)}
       {estado === 'erro' && <p className="text-[10px]" style={{ color: '#f87171' }}>{erro}</p>}
 
       {/* Resultado */}
@@ -810,7 +818,7 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
               ? `Cortes calculados deste mapa · cada faixa ≈ ${quantis ? (100 / quantis.faixas.length).toFixed(0) : '20'}% da área`
               : legenda.nome} · pixel {res.stats?.pixel_m ?? pixelM} m
           </p>
-          {fresco && (
+          {podeProcessar() && fresco && (
             cloudPodeGravar()
               ? <button onClick={salvar} className="w-full py-2 rounded text-xs font-bold text-white flex items-center justify-center gap-1.5" style={{ background: 'var(--invicta-blue-mid)' }}><Save size={13} /> Salvar como Mapa Oficial</button>
               : <p className="text-[10px]" style={{ color: '#fbbf24' }}>Faça login para salvar.</p>
@@ -897,12 +905,12 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
                   </p>
                 </div>
                 <button onClick={() => verVersao(v)} title="Ver no mapa" style={{ color: '#93c5fd' }}><Eye size={14} /></button>
-                <button onClick={() => setEditando(v)} title="Editar identificação" style={{ color: '#cbd5e1' }}><Pencil size={13} /></button>
+                {podeProcessar() && <button onClick={() => setEditando(v)} title="Editar identificação" style={{ color: '#cbd5e1' }}><Pencil size={13} /></button>}
                 <button onClick={() => exportarPdf(v)} disabled={gerandoPdf !== ''} title="Relatório PDF" className="disabled:opacity-40" style={{ color: '#86efac' }}>
                   {gerandoPdf === v.id ? <Loader2 size={13} className="animate-spin" /> : <FileDown size={13} />}
                 </button>
-                {!v.oficial && <button onClick={() => tornarOficial(v.id)} title="Tornar oficial" style={{ color: '#fbbf24' }}><Star size={14} /></button>}
-                <button onClick={() => excluir(v)} title="Excluir" style={{ color: '#f87171' }}><Trash2 size={13} /></button>
+                {podeProcessar() && !v.oficial && <button onClick={() => tornarOficial(v.id)} title="Tornar oficial" style={{ color: '#fbbf24' }}><Star size={14} /></button>}
+                {podeProcessar() && <button onClick={() => excluir(v)} title="Excluir" style={{ color: '#f87171' }}><Trash2 size={13} /></button>}
               </div>
             ))}
           </div>

@@ -26,6 +26,11 @@ import { cloudSalvarMapa, cloudCarregarMapasPorPrefixo, cloudExcluirMapasPorPref
 import { parseArquivoPontos, pontosCompactacao, type ArquivoPontos } from '@/lib/compactacao';
 import type { Legenda } from '@/lib/legendas';
 import { Upload, Loader2, Activity, Eraser, AlertTriangle, Save, Trash2, Play, Plus, Layers, Grid3x3, RefreshCw, MapPin, ChevronDown, ChevronUp } from 'lucide-react';
+import { podeEm } from '@/lib/empresa';
+
+// Quem NÃO processa compactação (produtor, leitor) só troca importação/profundidade
+// e vê o mapa — sem importar, criar grade, interpolar, limpar ou excluir.
+const podeProcessar = () => podeEm('compactacao', 'criar');
 
 import { inputStyle } from '@/constants/ui';
 import { hojeSaoPauloISO, periodoDeData, rotuloEpoca } from '@/lib/periodo';
@@ -240,11 +245,11 @@ export function CompactacaoSection({ safraNome }: { safraNome?: string } = {}) {
             <select value={importacaoId} onChange={e => setImportacaoId(e.target.value)} className="flex-1 rounded px-2 py-1.5 text-xs outline-none" style={inputStyle}>
               {importacoes.map(i => <option key={i.id} value={i.id}>{i.nome} · {i.pontos.length} pts · {i.profundidades.length} prof.</option>)}
             </select>
-            <button onClick={() => setModoUpload(v => !v)} title="Nova importação"
+{podeProcessar() && (            <button onClick={() => setModoUpload(v => !v)} title="Nova importação"
               className="px-2 py-1.5 rounded text-[10px] font-bold flex items-center gap-1" style={{ background: 'var(--invicta-green-dark)', color: '#fff' }}>
               <Plus size={11} />
-            </button>
-            {importacao && (
+            </button>)}
+            {podeProcessar() && importacao && (
               <button onClick={excluirImportacao} title="Excluir importação"
                 className="px-2 py-1.5 rounded text-[10px]" style={{ background: '#1a3a6b', color: '#f87171' }}>
                 <Trash2 size={12} />
@@ -260,14 +265,14 @@ export function CompactacaoSection({ safraNome }: { safraNome?: string } = {}) {
       )}
 
       {/* #36 — Grade de compactação: plataforma cria, app de campo coleta, aqui vira levantamento */}
-      {nav.talhaoId && (
+      {podeProcessar() && nav.talhaoId && (
         <GradeCampo talhaoId={nav.talhaoId} safra={safra} poligono={poligono}
           onVerPontos={setFertilidadeLabels}
           onLevantamentoCriado={id => { recarregar(); setImportacaoId(id); setModoUpload(false); }} />
       )}
 
       {/* Upload + mapeamento de colunas */}
-      {mostrarUpload && (
+      {podeProcessar() && mostrarUpload && (
         <div className="rounded-lg p-3 space-y-2" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
           <p className="text-[11px] font-semibold" style={{ color: '#93c5fd' }}>Importar pontos do penetrômetro</p>
           <button onClick={() => inputRef.current?.click()}
@@ -345,11 +350,11 @@ export function CompactacaoSection({ safraNome }: { safraNome?: string } = {}) {
             </select>
           </div>
 
-          <button onClick={() => processar(profundidade)} disabled={processando || !poligono || !profundidade}
+{podeProcessar() && (          <button onClick={() => processar(profundidade)} disabled={processando || !poligono || !profundidade}
             className="w-full py-2 rounded text-xs font-bold text-white flex items-center justify-center gap-1.5"
             style={{ background: (processando || !poligono) ? '#1a3a6b' : 'var(--invicta-green-dark)' }}>
             {processando ? <><Loader2 size={13} className="animate-spin" /> Interpolando…</> : <><Play size={13} /> Interpolar {profundidade}</>}
-          </button>
+          </button>)}
 
           {estado === 'erro' && <p className="text-[10px]" style={{ color: '#f87171' }}>{erro}</p>}
           {quedaIdw && <p className="text-[10px]" style={{ color: '#fbbf24' }}>{quedaIdw}</p>}
@@ -361,10 +366,10 @@ export function CompactacaoSection({ safraNome }: { safraNome?: string } = {}) {
                 <div className="flex items-center gap-1.5 text-[10px]" style={{ color: '#86efac' }}>
                   <Activity size={12} /> {cache[profundidade].resp.stats.modelo} · {cache[profundidade].resp.stats.n} pts
                 </div>
-                <button onClick={() => limparProf(profundidade)}
+{podeProcessar() && (                <button onClick={() => limparProf(profundidade)}
                   className="flex items-center gap-1 text-[10px]" style={{ color: '#93c5fd' }}>
                   <Eraser size={11} /> Limpar
-                </button>
+                </button>)}
               </div>
               <div>
                 <div className="relative h-4 rounded overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.1)', background: gradienteCss(legenda) }} />

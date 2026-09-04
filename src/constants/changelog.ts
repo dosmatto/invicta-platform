@@ -1,5 +1,12 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Talhão do produtor: relevo, CE, zonas e colheita só para ver; satélite liberado
+  '2.123.0': [
+    'ALTIMETRIA, CONDUTIVIDADE, ZONAS DE MANEJO E PRODUTIVIDADE só para ver, para o produtor: somem buscar/aprovar base de relevo, gerar análise, nova versão de CE, limpar, interpolar, apagar, gerar zonas por similaridade, remover adoção, laboratório, renomear/suavizar/incorporar/restaurar/excluir versões, importar máquinas, unificar, limpar e interpolar colheita, editar/oficializar/excluir mapas. Ficam: trocar versão, camada e vista, os mapas no mapa, downloads (GeoTIFF, PDF), comparar colheita com NDVI e gerar relatórios. Compactação segue a mesma regra.',
+    'SATÉLITE LIBERADO PARA O PRODUTOR: ele gera os índices (NDVI e demais) e, se quiser, mantém na nuvem — inclusive composições temporais e cenas rejeitadas. É a única porta de gravação aberta para o papel produtor (lib/somenteLeitura.ts); o resto continua travado.',
+    'A regra vale pelo papel, não pela tela: quem tiver a permissão (agrônomo, admin) continua com tudo; quem não tiver (produtor, leitor) vê a versão só de leitura. Exceções granulares por usuário na Central de Acessos continuam vencendo o padrão.',
+    'Prescrições continuam como estavam: só visualiza e baixa (SHP, Excel, PDF).',
+  ],
   // [S/N] Talhão do produtor: só o que existe, e só para ver
   '2.122.0': [
     'PÁGINA DO TALHÃO PARA O PRODUTOR: o trilho de módulos lista SÓ o que existe neste talhão, em qualquer ano — relevo, condutividade, zonas, amostragem, fertilidade, recomendações, prescrições, arquivos, satélite, colheita, compactação, relatórios — dentro do que o plano libera. Antes ele via as seções do plano mesmo vazias, e nunca via zonas, relevo, CE, satélite e colheita, que não são seções de plano.',

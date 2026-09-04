@@ -31,6 +31,11 @@ import { parseArquivoPontos, pontosCondutividade, avaliarQualidade, CORES_QUALID
 import { ordenarLegendasDoAtributo, respeitarPadraoHomonima } from '@/lib/legendas';
 import type { Legenda } from '@/lib/legendas';
 import { Upload, Loader2, Zap, Eraser, AlertTriangle, Save, Trash2, Play, Plus, Layers, Star, Gauge, Mountain, SlidersHorizontal, ChevronDown, ChevronUp, RotateCcw, Download, History, FileDown } from 'lucide-react';
+import { podeEm } from '@/lib/empresa';
+
+// Quem NÃO processa CE (produtor, leitor) só troca versão/camada/vista e exporta
+// (PDF, GeoTIFF) — sem nova versão, limpar, interpolar, apagar ou oficializar.
+const podeProcessar = () => podeEm('zonas', 'criar');
 
 import { inputStyle } from '@/constants/ui';
 import { fmtMax2 as fmt } from '@/lib/formato';
@@ -488,11 +493,11 @@ export function CondutividadeSection() {
             <select value={levId} onChange={e => setLevId(e.target.value)} className="flex-1 rounded px-2 py-1.5 text-xs outline-none" style={inputStyle}>
               {levs.map(l => <option key={l.id} value={l.id}>{l.oficial ? '★ ' : ''}{l.nome}{l.data ? ` · ${l.data}` : ''} · {l.pontos.length} pts</option>)}
             </select>
-            <button onClick={() => setModoUpload(v => !v)} title="Nova versão"
+{podeProcessar() && (            <button onClick={() => setModoUpload(v => !v)} title="Nova versão"
               className="px-2 py-1.5 rounded text-[10px] font-bold flex items-center gap-1" style={{ background: 'var(--invicta-green-dark)', color: '#fff' }}>
               <Plus size={11} />
-            </button>
-            {lev && (
+            </button>)}
+            {podeProcessar() && lev && (
               <button onClick={excluirLevantamento} title="Excluir versão"
                 className="px-2 py-1.5 rounded text-[10px]" style={{ background: '#1a3a6b', color: '#f87171' }}>
                 <Trash2 size={12} />
@@ -503,7 +508,7 @@ export function CondutividadeSection() {
             <div className="flex items-center gap-2 mt-1">
               {lev.oficial
                 ? <span className="text-[10px] flex items-center gap-1 font-bold" style={{ color: '#fbbf24' }}><Star size={10} fill="#fbbf24" /> Versão oficial</span>
-                : <button onClick={tornarOficial} className="text-[10px] px-1.5 py-0.5 rounded font-semibold" style={{ background: '#1a3a6b', color: '#93c5fd' }}>Tornar oficial</button>}
+                : !podeProcessar() ? null : <button onClick={tornarOficial} className="text-[10px] px-1.5 py-0.5 rounded font-semibold" style={{ background: '#1a3a6b', color: '#93c5fd' }}>Tornar oficial</button>}
               {mapasSalvos > 0 && (
                 <span className="text-[10px] flex items-center gap-1 ml-auto" style={{ color: '#86efac' }}>
                   <Layers size={10} /> {mapasSalvos} {mapasSalvos === 1 ? 'mapa salvo' : 'mapas salvos'}
@@ -527,7 +532,7 @@ export function CondutividadeSection() {
       )}
 
       {/* Upload + mapeamento de colunas */}
-      {mostrarUpload && (
+      {podeProcessar() && mostrarUpload && (
         <div className="rounded-lg p-3 space-y-2" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
           <p className="text-[11px] font-semibold" style={{ color: '#93c5fd' }}>Importar pontos de condutividade</p>
           <button onClick={() => inputRef.current?.click()}
@@ -631,7 +636,7 @@ export function CondutividadeSection() {
                       style={{ background: sel ? 'var(--invicta-blue-mid)' : '#1a3a6b', color: sel ? '#fff' : (feito ? '#86efac' : '#93c5fd') }}>
                       {c.tipo === 'extra' && <Mountain size={9} />}{c.nome}{c.tipo === 'extra' ? ` · ${c.legenda.atributo}` : ''}{feito ? ' ✓' : ''}
                     </button>
-                    {c.tipo === 'cea' && (
+                    {podeProcessar() && c.tipo === 'cea' && (
                       <button onClick={() => definirProfOficial(c.nome)} title={oficial ? 'camada oficial' : 'definir como oficial'}
                         className="px-1.5 py-1" style={{ background: '#0b1f3a' }}>
                         <Star size={11} fill={oficial ? '#fbbf24' : 'none'} style={{ color: oficial ? '#fbbf24' : '#475569' }} />
@@ -672,6 +677,7 @@ export function CondutividadeSection() {
                 </div>
               </div>
             )}
+            {podeProcessar() && (<>
             {/* Parâmetros da limpeza (recolhível; vêm com padrão, editáveis) */}
             <div>
               <button onClick={() => setParamsAberto(v => !v)} className="flex items-center gap-1 text-[9px] font-semibold" style={{ color: '#93c5fd' }}>
@@ -771,6 +777,7 @@ export function CondutividadeSection() {
                 {processando ? <><Loader2 size={13} className="animate-spin" /> Interpolando…</> : <><Play size={13} /> Interpolar{limpos[profundidade] ? ' (limpos)' : ''}</>}
               </button>
             </div>
+            </>)}
             {limpos[profundidade] && (() => {
               const r = limpos[profundidade].rel;
               const filtroRem = r.n_bruto - r.n_apos_filtro_bruto;
@@ -842,9 +849,9 @@ export function CondutividadeSection() {
                       {exportando ? <Loader2 size={11} className="animate-spin" /> : <Download size={11} />} GeoTIFF
                     </button>
                   )}
-                  <button onClick={() => limparProf(profundidade)} title="Apagar o mapa interpolado" className="flex items-center gap-1 text-[10px]" style={{ color: '#93c5fd' }}>
+{podeProcessar() && (                  <button onClick={() => limparProf(profundidade)} title="Apagar o mapa interpolado" className="flex items-center gap-1 text-[10px]" style={{ color: '#93c5fd' }}>
                     <Trash2 size={11} /> Apagar
-                  </button>
+                  </button>)}
                 </div>
               </div>
 
@@ -911,7 +918,7 @@ export function CondutividadeSection() {
                             {' · '}{new Date(r.criadoEm).toLocaleDateString('pt-BR')} {new Date(r.criadoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                           </div>
                         </div>
-                        {!atual && (
+                        {podeProcessar() && !atual && (
                           <button onClick={() => usarParametros(r)} title="Repor estes parâmetros nos controles (depois clique em Interpolar)" className="shrink-0 flex items-center gap-1 px-1.5 py-1 rounded text-[9px]" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
                             <RotateCcw size={10} /> Usar
                           </button>

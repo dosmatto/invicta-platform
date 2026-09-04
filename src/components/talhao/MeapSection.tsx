@@ -929,10 +929,10 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
             </div>
             <div className="flex items-center gap-1.5">
               <span className="text-[9px] px-1.5 py-0.5 rounded font-semibold" style={{ background: '#0b1f3a', color: '#93c5fd', border: '1px solid #1e3a8a' }}>{ESTADO[amb!.estado]}</span>
-              <button onClick={removerAdocao} title="Remover as zonas adotadas (desadotar)"
+{pode('zonasSalvar') && (              <button onClick={removerAdocao} title="Remover as zonas adotadas (desadotar)"
                 className="flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded font-semibold" style={{ background: '#2a0f12', color: '#f87171', border: '1px solid #7f1d1d' }}>
                 <Trash2 size={10} /> Remover
-              </button>
+              </button>)}
             </div>
           </div>
           <p className="text-[10px] leading-relaxed" style={{ color: '#64748b' }}>
@@ -941,7 +941,7 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
 
           {/* Zonas adotadas SOLTAS (arquivo colado no talhão, sem zoneamento
               salvo): o mapa aparece mas nenhuma ferramenta o enxerga. */}
-          {!zoneamentos.some(z => z.padrao) && (
+          {pode('zonasSalvar') && !zoneamentos.some(z => z.padrao) && (
             <div className="rounded p-2 space-y-1.5" style={{ background: '#08243a', border: '1px solid #0e7490' }}>
               <p className="text-[10px] leading-relaxed" style={{ color: '#cbd5e1' }}>
                 Estas zonas vieram de um arquivo colado no talhão — por isso <strong style={{ color: '#7dd3fc' }}>suavizar, editar, versionar, exportar e prescrever</strong> não aparecem para elas. Converter resolve de uma vez, sem precisar do arquivo de novo.
@@ -982,6 +982,7 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
           onSalvo={() => { recarregarZon(); setRefreshAmb(n => n + 1); setAmb(obterOuAdotarAmbiente(talhao.id)); }} />
       )}
 
+      {pode('zonasSalvar') && (<>
       {/* ── Gerar zonas por similaridade (M2) ── */}
       <div className="rounded-lg p-2.5 space-y-2" style={{ background: '#0b1f3a', border: '1px dashed #2e5fa3' }}>
         <div className="flex items-center gap-2">
@@ -1311,6 +1312,8 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
         )}
       </div>
 
+      </>)}
+
       {/* ── Zoneamentos salvos (1 padrão → Amostragem) ── */}
       {zoneamentos.length > 0 && (
         <div className="rounded-lg p-2.5 space-y-1.5" style={{ background: '#0a1929', border: '1px solid #1a3a6b' }}>
@@ -1319,9 +1322,9 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
             <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color: '#cbd5e1' }}>Zoneamentos e versões ({zoneamentos.length})</span>
             <div className="ml-auto flex items-center gap-2">
               <ExportarZonas talhao={talhao} zoneamentos={zoneamentos} safraNome={safraNome} />
-              <button onClick={() => { setLabPar(null); setLabAberto(true); }} title="Comparar os cenários de zona (métricas + concordância)" className="flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded" style={{ background: '#1e3a5f', color: '#93c5fd' }}>
+{pode('zonasSalvar') && (              <button onClick={() => { setLabPar(null); setLabAberto(true); }} title="Comparar os cenários de zona (métricas + concordância)" className="flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded" style={{ background: '#1e3a5f', color: '#93c5fd' }}>
                 <FlaskConical size={11} /> Laboratório
-              </button>
+              </button>)}
             </div>
           </div>
           <VersoesZoneamentos

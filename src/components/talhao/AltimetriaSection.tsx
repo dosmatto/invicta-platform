@@ -26,6 +26,11 @@ import { ordenarLegendasDoAtributo } from '@/lib/legendas';
 import type { Legenda } from '@/lib/legendas';
 import { CruzamentoRelevo } from '@/components/talhao/CruzamentoRelevo';
 import { Mountain, Loader2, Search, CheckCircle2, AlertTriangle, Trash2, Download, Star, Layers, Play, Waves, FileText, Upload } from 'lucide-react';
+import { podeEm } from '@/lib/empresa';
+
+// Quem NÃO gera relevo (produtor, leitor) só vê a base oficial, as camadas e os
+// downloads — sem buscar base nova, aprovar, gerar análise ou mexer nas versões.
+const podeGerar = () => podeEm('zonas', 'criar');
 
 import { inputStyle } from '@/constants/ui';
 import { fmtMax1 as fmt } from '@/lib/formato';
@@ -389,6 +394,7 @@ export function AltimetriaSection() {
         </div>
       )}
 
+      {podeGerar() && (<>
       {/* Busca */}
       <div className="rounded-lg p-2.5 space-y-2" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
         <p className="text-[11px] font-semibold flex items-center gap-1.5" style={{ color: '#93c5fd' }}><Mountain size={13} /> {oficial ? 'Nova base de MDE' : 'MDE do talhão'}</p>
@@ -449,6 +455,8 @@ export function AltimetriaSection() {
         {!poligono && <p className="text-[9px]" style={{ color: '#fbbf24' }}>Limite do talhão não encontrado.</p>}
         {erro && <p className="text-[10px]" style={{ color: '#f87171' }}>{erro}</p>}
       </div>
+
+      </>)}
 
       {/* Prévia / visualização */}
       {temDados && (
@@ -551,6 +559,7 @@ export function AltimetriaSection() {
             <Waves size={13} /> Análise topográfica agronômica
           </p>
 
+          {podeGerar() && (
           <div className="flex gap-1 items-end">
             <label className="flex-1 text-[9px]" style={{ color: '#64748b' }}>Sensibilidade da rede de drenagem
               <select value={sensib} onChange={e => setSensib(e.target.value as SensibilidadeDrenagem)} className="w-full rounded px-2 py-1.5 text-xs outline-none mt-0.5" style={inputStyle}>
@@ -565,6 +574,7 @@ export function AltimetriaSection() {
               {gerandoAnalise ? <><Loader2 size={12} className="animate-spin" /> Gerando…</> : <><Play size={12} /> {analise ? 'Gerar de novo' : 'Gerar análise'}</>}
             </button>
           </div>
+          )}
           <p className="text-[9px] leading-relaxed" style={{ color: '#475569' }}>
             Gera TPI, TWI, LS Factor, curvaturas, rugosidade, fluxo, curvas de nível, rede de drenagem e a classificação do relevo — tudo derivado da base oficial ({oficial.rotuloFonte}), com buffer.
           </p>
@@ -584,6 +594,7 @@ export function AltimetriaSection() {
                 </select>
               </div>
 
+              {podeGerar() && (<>
               {/* F4 — enviar o relevo para as Zonas de Manejo */}
               <div className="rounded p-2 space-y-1" style={{ background: '#0a1a2f', border: '1px solid #1a3a6b' }}>
                 <p className="text-[9px] leading-relaxed" style={{ color: '#94a3b8' }}>
@@ -604,6 +615,7 @@ export function AltimetriaSection() {
                 {zonasMsg && <p className="text-[9px]" style={{ color: zonasMsg.startsWith('✓') || zonasMsg.startsWith(String(nSalvasZonas)) ? '#86efac' : '#fbbf24' }}>{zonasMsg}</p>}
               </div>
 
+              </>)}
               {/* F4.b — Cruzamento por classe de relevo (§12.1) */}
               <CruzamentoRelevo analise={analise} talhaoId={nav.talhaoId!} />
 
@@ -674,12 +686,12 @@ export function AltimetriaSection() {
                 {m.rotuloFonte} · {new Date(m.criadoEm).toLocaleDateString('pt-BR')}
                 {m.oficial && <span className="ml-1 font-bold" style={{ color: '#86efac' }}>· oficial</span>}
               </span>
-              {!m.oficial && (
+              {podeGerar() && !m.oficial && (
                 <button onClick={() => tornarOficial(m)} title="Restaurar esta base como oficial" className="flex items-center gap-0.5" style={{ color: '#fbbf24' }}>
                   <Star size={10} /> Tornar oficial
                 </button>
               )}
-              <button onClick={() => excluirVersao(m)} title="Excluir versão" style={{ color: '#f87171' }}><Trash2 size={10} /></button>
+              {podeGerar() && <button onClick={() => excluirVersao(m)} title="Excluir versão" style={{ color: '#f87171' }}><Trash2 size={10} /></button>}
             </div>
           ))}
         </div>

@@ -123,7 +123,7 @@ export function VersoesZoneamentos({
                         {vendo && <Eye size={11} className="flex-shrink-0" style={{ color: '#22d3ee' }} />}
                         {z.padrao
                           ? <span className="text-[9px] px-1.5 py-0.5 rounded font-bold flex items-center gap-1 flex-shrink-0" style={{ background: '#3a2e0a', color: '#fbbf24' }}><Star size={8} /> Padrão</span>
-                          : <button onClick={e => { e.stopPropagation(); onTornarPadrao(z.id); }} title="Usar esta versão na Amostragem e nas Prescrições"
+                          : !podeEditar ? null : <button onClick={e => { e.stopPropagation(); onTornarPadrao(z.id); }} title="Usar esta versão na Amostragem e nas Prescrições"
                               className="text-[9px] px-1.5 py-0.5 rounded font-semibold flex-shrink-0" style={{ background: '#1a3a6b', color: '#93c5fd' }}>Tornar padrão</button>}
                       </div>
 
@@ -159,26 +159,26 @@ export function VersoesZoneamentos({
                           </>
                         ) : (
                           <>
-                            <button onClick={e => { e.stopPropagation(); setRenomeando({ id: z.id, texto: z.nome }); }}
-                              title="Renomear esta versão" className="p-1 rounded" style={{ background: '#0b1f3a', color: '#93c5fd' }}><Tag size={11} /></button>
+{podeEditar && (                            <button onClick={e => { e.stopPropagation(); setRenomeando({ id: z.id, texto: z.nome }); }}
+                              title="Renomear esta versão" className="p-1 rounded" style={{ background: '#0b1f3a', color: '#93c5fd' }}><Tag size={11} /></button>)}
                             {podeEditar && (
                               <button onClick={e => { e.stopPropagation(); onEditar(z); }}
                                 title="Editar manualmente (unir/reclassificar/dividir — cria uma NOVA versão)"
                                 className="p-1 rounded" style={{ background: '#241748', color: '#c4b5fd' }}><Pencil size={11} /></button>
                             )}
-                            <button onClick={e => { e.stopPropagation(); onSuavizar(z); }}
+{podeEditar && (                            <button onClick={e => { e.stopPropagation(); onSuavizar(z); }}
                               title="Suavizar limites (cria uma NOVA versão; esta fica intacta)"
-                              className="p-1 rounded" style={{ background: '#0b3a44', color: '#22d3ee' }}><Spline size={11} /></button>
-                            <button onClick={e => { e.stopPropagation(); onIncorporar(z); }}
+                              className="p-1 rounded" style={{ background: '#0b3a44', color: '#22d3ee' }}><Spline size={11} /></button>)}
+{podeEditar && (                            <button onClick={e => { e.stopPropagation(); onIncorporar(z); }}
                               title="Incorporar as divisas internas ao contorno ATUAL do talhão — estica as que não alcançam (seguindo a trajetória da linha) e corta as que passam. Cria uma NOVA versão."
-                              className="p-1 rounded" style={{ background: '#0a2a44', color: '#7dd3fc' }}><Scissors size={11} /></button>
-                            {!ultima && (
+                              className="p-1 rounded" style={{ background: '#0a2a44', color: '#7dd3fc' }}><Scissors size={11} /></button>)}
+                            {podeEditar && !ultima && (
                               <button onClick={e => { e.stopPropagation(); onRestaurar(v, l.nome); }}
                                 title="Voltar a esta versão — ela é COPIADA para o topo da linha do tempo; nada do que veio depois é apagado"
                                 className="p-1 rounded" style={{ background: '#3a2e0a', color: '#fbbf24' }}><RotateCcw size={11} /></button>
                             )}
-                            <button onClick={e => { e.stopPropagation(); onExcluir(z.id); }}
-                              title="Excluir esta versão" className="p-1 rounded ml-auto" style={{ color: '#f87171' }}><Trash2 size={11} /></button>
+{podeEditar && (                            <button onClick={e => { e.stopPropagation(); onExcluir(z.id); }}
+                              title="Excluir esta versão" className="p-1 rounded ml-auto" style={{ color: '#f87171' }}><Trash2 size={11} /></button>)}
                           </>
                         )}
                       </div>

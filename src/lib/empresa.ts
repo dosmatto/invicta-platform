@@ -299,6 +299,7 @@ const DEFAULTS_PERMISSOES: Record<string, Caps> = {
   agronomo: { ...TODAS(false), ndvi: true, recomendacoes: true, relatorios: true, ...ZONAS_EDIT },
   operador: { ...TODAS(false), amostragem: true },
   prestador: { ...TODAS(false), amostragem: true }, // prestador de coleta: só amostragem (app de campo)
+  produtor: { ...TODAS(false), ndvi: true },        // 04/09/2026: gera índices de satélite e salva; o resto só vê
   editor: TODAS(true),    // legado
   viewer: TODAS(false),   // legado
 };
