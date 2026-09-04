@@ -21,7 +21,7 @@ import {
   BarChart3, Activity, FileText, User, ArrowLeft, Loader2, Sprout,
   Ruler, LayoutGrid, FlaskConical, Map as MapIcon, ClipboardList, FileDown, Search, ChevronUp, Eye,
 } from 'lucide-react';
-import { getFazendas, getTalhoes, getSafras, getLegendasPorAtributo, type Cliente } from '@/lib/store';
+import { getClientes, getFazendas, getTalhoes, getSafras, getLegendasPorAtributo, type Cliente } from '@/lib/store';
 import { getUsuarios } from '@/lib/iam/usuarios';
 import { classeDoValor } from '@/lib/legendas';
 import { rotuloAno, anoDaSafra } from '@/lib/periodo';
@@ -71,7 +71,11 @@ export function PainelProdutor({ cliente, plano, papel, preview }: {
   const [nuvem, setNuvem] = useState<{ chave: string; dados: DadosNuvem } | null>(null);
   const [talhaoEscolhido, setTalhaoEscolhido] = useState('');
 
-  const fazendas = useMemo(() => getFazendas(cliente.id), [cliente.id]);
+  // O produtor vê TODAS as fazendas do escopo dele — inclusive a que não está
+  // no nome dele mas foi vinculada (condomínio). No preview o owner/admin
+  // enxerga tudo, então ali vale o cadastro do produtor escolhido.
+  const fazendas = useMemo(() => preview ? getFazendas(cliente.id) : getFazendas(), [cliente.id, preview]);
+  const donos = useMemo(() => new Map(getClientes().map(c => [c.id, c.nome])), []);
   const talhoes = useMemo(() => fazendas.flatMap(f => getTalhoes(f.id)), [fazendas]);
 
   // Nuvem (mapas, cenários, relatórios): chega depois e completa a tela. O
@@ -402,6 +406,11 @@ export function PainelProdutor({ cliente, plano, papel, preview }: {
                     <button type="button" onClick={() => alternar(setRecolhidas, f.id)} className="flex items-start gap-2 min-w-0 text-left" aria-expanded={!recolhida}>
                       <div className="min-w-0">
                         <h2 className="text-lg font-bold leading-tight truncate capitalize" style={{ color: COR.texto }}>{nomeLegivel(f.nome)}</h2>
+                        {f.clienteId !== cliente.id && (
+                          <span className="inline-block mt-1 text-xs font-semibold px-2 py-0.5 rounded-full capitalize" style={{ background: 'var(--status-info-bg)', color: 'var(--status-info)' }}>
+                            Acesso compartilhado · {nomeLegivel(donos.get(f.clienteId) ?? 'outro produtor')}
+                          </span>
+                        )}
                         <p className="text-sm mt-0.5" style={{ color: COR.texto2 }}>
                           {[[f.municipio, f.estado].filter(Boolean).join('/'), talhoesTxt(todos.length), `${fmtHa(area)} ha`].filter(Boolean).join(' · ')}
                           {filtrando && doLote.length !== todos.length ? ` · ${doLote.length} no filtro` : ''}

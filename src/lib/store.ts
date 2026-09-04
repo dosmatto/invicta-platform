@@ -20,6 +20,7 @@ import { lerListaLocal, gravarListaLocal, removerLocal } from './localComprimido
 import { moverNaOrdem, renumerar } from './ordemCatalogo';
 import { areaHaGeo, areaHaGeoBruta } from './areaGeo';
 import { empresaAtivaId, uidUsuario, escopoClienteIds, escopoTalhaoIds, escopoFazendaIds } from './empresa';
+import { fazendasVisiveis, clientesComFazendaMarcada } from './iam/escopoFazendas';
 import {
   listar as bibListar,
   _bibLoadRaw,
@@ -784,20 +785,23 @@ function comEmpresa<T extends object>(item: T): T {
 
 // ── Clientes ──────────────────────────────────────────────────────────────
 
-// Escopo de fazendas derivado do vínculo de clientes (consultoria) E do vínculo
-// DIRETO por fazenda (IAM): quando o usuário tem fazendas vinculadas, só elas
-// entram — mesmo que o produtor inteiro esteja liberado.
-function fazendasNoEscopo(esc: Set<string>): Set<string> {
-  const escF = escopoFazendaIds();
-  return new Set(loadFiltrado<Fazenda>('inv_fazendas')
-    .filter(f => esc.has(f.clienteId) && (!escF || escF.has(f.id)))
-    .map(f => f.id));
+// Escopo de fazendas: vínculo por produtor (consultoria) E vínculo DIRETO por
+// fazenda (IAM). A regra vive em iam/escopoFazendas.ts — fazenda marcada entra
+// mesmo que seja de outro produtor (condomínio); produtor vinculado sem fazenda
+// marcada mostra todas as dele.
+function fazendasVisiveisNoEscopo(): Fazenda[] {
+  return fazendasVisiveis(loadFiltrado<Fazenda>('inv_fazendas'), escopoClienteIds(), escopoFazendaIds());
 }
 
 export function getClientes(): Cliente[] {
   const esc = escopoClienteIds();
   let all = loadFiltrado<Cliente>('inv_clientes');
-  if (esc) all = all.filter(c => esc.has(c.id));
+  if (esc) {
+    // O dono de uma fazenda marcada explicitamente também aparece (é o
+    // condomínio que o usuário enxerga) — senão a tela não tem o nome dele.
+    const extra = clientesComFazendaMarcada(loadFiltrado<Fazenda>('inv_fazendas'), escopoFazendaIds());
+    all = all.filter(c => esc.has(c.id) || extra.has(c.id));
+  }
   return all.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
 }
 
@@ -901,11 +905,7 @@ export function excluirProdutorCascata(clienteId: string): { talhaoIds: string[]
 // ── Fazendas ──────────────────────────────────────────────────────────────
 
 export function getFazendas(clienteId?: string): Fazenda[] {
-  const esc = escopoClienteIds();
-  const escF = escopoFazendaIds();          // IAM: vínculo direto por fazenda
-  let all = loadFiltrado<Fazenda>('inv_fazendas');
-  if (esc) all = all.filter(f => esc.has(f.clienteId));
-  if (escF) all = all.filter(f => escF.has(f.id));
+  const all = [...fazendasVisiveisNoEscopo()];
   all.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));   // sempre em ordem alfabética
   return clienteId ? all.filter(f => f.clienteId === clienteId) : all;
 }
@@ -937,9 +937,12 @@ export function excluirFazendaCascata(fazendaId: string): { talhaoIds: string[] 
 // ── Talhões ───────────────────────────────────────────────────────────────
 
 export function getTalhoes(fazendaId?: string): Talhao[] {
-  const esc = escopoClienteIds();
   let all = loadFiltrado<Talhao>('inv_talhoes');
-  if (esc) { const fz = fazendasNoEscopo(esc); all = all.filter(t => fz.has(t.fazendaId)); }
+  // Mesma lista de fazendas que getFazendas — talhão de fazenda fora do escopo não entra.
+  if (escopoClienteIds() || escopoFazendaIds()) {
+    const fz = new Set(fazendasVisiveisNoEscopo().map(f => f.id));
+    all = all.filter(t => fz.has(t.fazendaId));
+  }
   const escT = escopoTalhaoIds();   // granularidade fina: restringe aos talhões vinculados
   if (escT) all = all.filter(t => escT.has(t.id));
   all.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));   // sempre em ordem alfabética

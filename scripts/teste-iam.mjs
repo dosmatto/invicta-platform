@@ -7,6 +7,7 @@ import {
 } from '../src/lib/iam/permissoes.ts';
 import { CATEGORIAS, PAPEIS, MODULOS, ACOES, chavePerm } from '../src/lib/iam/tipos.ts';
 import { clientesDoProdutor, clienteIdDoProdutor, produtorSemVinculo } from '../src/lib/iam/vinculoProdutor.ts';
+import { fazendaVisivel, fazendasVisiveis, clientesComFazendaMarcada } from '../src/lib/iam/escopoFazendas.ts';
 import { statusEfetivo, podeEntrar, precisaConfirmarNaNuvem } from '../src/lib/iam/acessoEfetivo.ts';
 
 let ok = 0, fail = 0;
@@ -187,6 +188,38 @@ t('vínculo múltiplo: o Portal mostra o primeiro, o escopo enxerga todos', () =
 
 t('id vazio no meio da lista não vira vínculo fantasma', () => {
   assert.deepEqual(clientesDoProdutor({ clientesVinculados: ['', 'cli_2'] }), ['cli_2']);
+});
+
+t('CASO RELATADO (03/09/2026): produtor com dois vínculos enxerga os dois — o antigo é só o principal', () => {
+  // A aprovação grava clienteId = clientesVinculados[0]; o antigo derrubava a lista.
+  const reg = { clienteId: 'cli_w', clientesVinculados: ['cli_w', 'cli_condominio'] };
+  assert.equal(clienteIdDoProdutor(reg), 'cli_w');
+  assert.deepEqual(clientesDoProdutor(reg), ['cli_w', 'cli_condominio']);
+  assert.deepEqual(clientesDoProdutor({ clienteId: 'cli_antigo', clientesVinculados: ['cli_novo'] }), ['cli_antigo', 'cli_novo']);
+});
+
+// ── Escopo de fazendas: marcar nunca reduz o que foi marcado ─────────────────
+const FAZ = [
+  { id: 'f_w1', clienteId: 'cli_w' }, { id: 'f_w2', clienteId: 'cli_w' },
+  { id: 'f_fig', clienteId: 'cli_condominio' }, { id: 'f_x', clienteId: 'cli_x' },
+];
+const ids = l => l.map(f => f.id);
+t('CASO RELATADO: fazenda marcada de outro cadastro (condomínio) entra no escopo do produtor', () => {
+  const esc = new Set(['cli_w']);
+  const escF = new Set(['f_fig']);
+  assert.deepEqual(ids(fazendasVisiveis(FAZ, esc, escF)), ['f_w1', 'f_w2', 'f_fig']);
+  assert.deepEqual([...clientesComFazendaMarcada(FAZ, escF)], ['cli_condominio']);
+  assert.deepEqual(ids(fazendasVisiveis(FAZ, esc, new Set(['f_w1', 'f_fig']))), ['f_w1', 'f_fig'], 'marcou uma dele: só a marcada + o condomínio');
+});
+t('fazenda marcada do próprio produtor restringe às marcadas; produtor sem marca mostra todas', () => {
+  const esc = new Set(['cli_w', 'cli_x']);
+  assert.deepEqual(ids(fazendasVisiveis(FAZ, esc, new Set(['f_w1']))), ['f_w1', 'f_x']);
+  assert.deepEqual(ids(fazendasVisiveis(FAZ, esc, null)), ['f_w1', 'f_w2', 'f_x']);
+});
+t('sem produtor vinculado e com fazendas marcadas: só as marcadas (como antes)', () => {
+  assert.deepEqual(ids(fazendasVisiveis(FAZ, null, new Set(['f_w2', 'f_x']))), ['f_w2', 'f_x']);
+  assert.equal(fazendasVisiveis(FAZ, null, null), FAZ, 'owner/admin: tudo, a mesma lista');
+  assert.equal(fazendaVisivel(FAZ[3], new Set(['cli_w']), null, new Set()), false, 'produtor fora do vínculo não entra');
 });
 
 // ── Status de acesso: a nuvem manda no acesso da própria pessoa ─────────────

@@ -14,8 +14,8 @@
 //     É o que o cartão conta em "1 prod".
 //
 // Ou seja: o administrador via o vínculo na tela, o produtor não tinha nenhum.
-// Aqui os dois viram UMA pergunta só, com o antigo tendo preferência (é o que
-// alguém escolheu explicitamente no seletor de um cliente só).
+// Aqui os dois viram UMA pergunta só: o antigo vai na frente (é o principal —
+// saudação e cabeçalho do Portal) e os demais vínculos do IAM continuam valendo.
 
 export interface RegistroComVinculo {
   clienteId?: string;
@@ -25,8 +25,11 @@ export interface RegistroComVinculo {
 /** Todos os produtores que este usuário pode ver. Vazio = nenhum vínculo. */
 export function clientesDoProdutor(reg: RegistroComVinculo | null | undefined): string[] {
   if (!reg) return [];
-  if (reg.clienteId) return [reg.clienteId];
-  return (reg.clientesVinculados ?? []).filter(Boolean);
+  // Até 03/09/2026 o antigo DERRUBAVA a lista: produtor com dois vínculos (a
+  // própria fazenda e um condomínio) só via o primeiro, porque a aprovação
+  // grava clienteId = clientesVinculados[0] (iam/usuarios.ts).
+  const todos = [reg.clienteId ?? '', ...(reg.clientesVinculados ?? [])].filter(Boolean);
+  return [...new Set(todos)];
 }
 
 /** O produtor PRINCIPAL (o Portal mostra um: saudação, nome no cabeçalho). */

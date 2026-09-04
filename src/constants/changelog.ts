@@ -1,5 +1,13 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Produtor com acesso a uma fazenda que não está no nome dele
+  '2.121.0': [
+    'PORTAL DO PRODUTOR: quem tem vínculo com a própria fazenda E com uma fazenda de outro cadastro (condomínio, arrendamento) agora vê as duas. Antes o painel mostrava só as fazendas do produtor principal, e a segunda ficava de fora mesmo com a permissão dada na Central de Acessos.',
+    'Duas causas corrigidas no escopo — valem para o app inteiro, não só para o portal: o campo antigo "Produtor (cliente)" derrubava a lista de vínculos do IAM para um produtor só (a aprovação grava os dois, e o antigo vencia) — agora ele é só o PRINCIPAL, da saudação e do cabeçalho, e os demais continuam no escopo; e o vínculo por fazenda era um filtro dentro dos produtores vinculados — agora fazenda marcada entra sempre, mesmo que o cadastro seja de outro produtor.',
+    'Regra do vínculo por fazenda, em uma frase: marcar nunca reduz o que foi marcado. Produtor vinculado com alguma fazenda dele marcada mostra só as marcadas; produtor vinculado sem fazenda marcada mostra todas as dele; sem produtor vinculado e com fazendas marcadas, só as marcadas (como antes). Talhões e a lista de produtores seguem a mesma regra.',
+    'No cartão da fazenda que não é do produtor principal aparece o selo "Acesso compartilhado · <produtor dono>". No modo "ver como o produtor vê" (owner/admin) vale o cadastro do produtor escolhido, porque ali não há vínculo de usuário para ler.',
+    'Regra pura em iam/escopoFazendas.ts, com os casos relatados em npm run teste:iam.',
+  ],
   // [S/N] Painel do produtor: o que já está pronto em cada talhão
   '2.120.0': [
     'O PORTAL DO PRODUTOR VIROU UM PAINEL. Antes era só a lista fazenda → talhão; agora a primeira tela responde "o que a Invicta já processou nos meus talhões este ano": área amostrada no ano (e quanto isso é da área total), análises de solo recebidas, mapas de fertilidade prontos, recomendações com dose para uso e arquivos de aplicação gerados.',
