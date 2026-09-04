@@ -44,6 +44,7 @@ verdadeira (fusão de talhões) chegou depois; foi preciso renumerar.
 | S/N | Link de grupo também libera o acesso na hora (sem aprovação) | 2.117.0 | Central de Acessos → Convites → "Novo link" + página pública /convite |
 | S/N | Painel do produtor: o que já está pronto em cada talhão | 2.120.0 | /portal (produtor) e /portal → "Ver como o produtor vê" (owner/admin) |
 | S/N | Produtor com acesso a uma fazenda que não está no nome dele | 2.121.0 | /portal (produtor); Central de Acessos → usuário → Vínculos → fazendas |
+| S/N | Talhão do produtor: só o que existe, e só para ver | 2.122.0 | /talhao/[id] como produtor; /portal em preview → clicar no talhão |
 
 > As pendências 1–17 foram entregues antes deste registro existir e não estão
 > catalogadas; procure pelo assunto no `changelog.ts`. Da 18 em diante, tudo

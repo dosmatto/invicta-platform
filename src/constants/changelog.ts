@@ -1,5 +1,14 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Talhão do produtor: só o que existe, e só para ver
+  '2.122.0': [
+    'PÁGINA DO TALHÃO PARA O PRODUTOR: o trilho de módulos lista SÓ o que existe neste talhão, em qualquer ano — relevo, condutividade, zonas, amostragem, fertilidade, recomendações, prescrições, arquivos, satélite, colheita, compactação, relatórios — dentro do que o plano libera. Antes ele via as seções do plano mesmo vazias, e nunca via zonas, relevo, CE, satélite e colheita, que não são seções de plano.',
+    'SOMENTE LEITURA de verdade: o papel produtor já era "ver e exportar" na matriz de permissões, mas nem todo módulo consultava. Agora a trava fica na porta da nuvem (lib/somenteLeitura.ts): nada que o produtor faça na tela vira gravação no Supabase — mapas, cenários, prescrições, zoneamentos, listas. O registro dele no IAM, convites e auditoria continuam gravando. O cache do aparelho não é travado (é hidratado da nuvem, e a nuvem manda).',
+    'Na tela: selo "Somente leitura" no cabeçalho, cultura do ano bloqueada, sem as áreas de importação (laudo e grade externa). No Painel do Produtor, os selos das outras camadas (zonas, relevo, CE, satélite, colheita) agora abrem direto na aba, porque a aba só aparece quando existe.',
+    'O QUE CADA ABA MOSTRA AO PRODUTOR: Recomendações vira a lista dos cenários do ano (nome, "para uso", data, produtos, dose média e custo) em vez do aviso "seu papel não trabalha com recomendações"; Satélite mostra as camadas salvas (índices mantidos e composições) em vez de "sem permissão para gerar"; Amostragem lista as grades salvas com exportação, sem gerador, renomear, marcar ou excluir; Prescrições lista as salvas com SHP/Excel/PDF, sem editor nem excluir. Fertilidade, Zonas, Arquivos e Relatórios já respeitavam o papel.',
+    'VER COMO O PRODUTOR VÊ também na página do talhão: do painel em preview, clicar no talhão abre a página com o mesmo trilho e o mesmo selo (?preview=1&plano=…), e o botão Portal volta ao produtor que estava sendo visto. A trava de gravação vale só para o papel produtor de verdade.',
+    'Regra "o que existe" em lib/portalProdutor.ts (abasComDados), com testes em npm run teste:portal.',
+  ],
   // [S/N] Produtor com acesso a uma fazenda que não está no nome dele
   '2.121.0': [
     'PORTAL DO PRODUTOR: quem tem vínculo com a própria fazenda E com uma fazenda de outro cadastro (condomínio, arrendamento) agora vê as duas. Antes o painel mostrava só as fazendas do produtor principal, e a segunda ficava de fora mesmo com a permissão dada na Central de Acessos.',

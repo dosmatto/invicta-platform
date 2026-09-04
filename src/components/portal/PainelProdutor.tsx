@@ -168,7 +168,9 @@ export function PainelProdutor({ cliente, plano, papel, preview }: {
 
   const liberada = useCallback((id: EtapaId) => {
     const def = etapaDef(id);
-    if (!def.secao) return false;
+    // Camada que não é seção de plano (zonas, relevo, CE, satélite, colheita):
+    // abre direto — a página do talhão só lista a aba quando ela existe.
+    if (!def.secao) return true;
     if (preview && !plano) return true;
     return !!plano?.secoes?.[def.secao];
   }, [plano, preview]);
@@ -177,9 +179,11 @@ export function PainelProdutor({ cliente, plano, papel, preview }: {
     const q = new URLSearchParams();
     if (aba) q.set('aba', aba);
     if (safra) q.set('safra', safra);
+    // Preview (owner/admin): a página do talhão também abre "como o produtor vê".
+    if (preview) { q.set('preview', '1'); if (plano) q.set('plano', plano.id); }
     const qs = q.toString();
     router.push(`/talhao/${id}${qs ? `?${qs}` : ''}`);
-  }, [router, safra]);
+  }, [router, safra, preview, plano]);
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg-app)', color: COR.texto }}>

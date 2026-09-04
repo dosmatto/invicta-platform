@@ -37,12 +37,15 @@ import { GeradorRelatorios } from '@/components/talhao/GeradorRelatorios';
 import { MeapSection } from '@/components/talhao/MeapSection';
 import { NdviSection } from '@/components/talhao/NdviSection';
 import { ProdutividadeSection } from '@/components/talhao/ProdutividadeSection';
-import { papelDoUsuario, meuRegistro, planoPorId } from '@/lib/empresa';
+import { papelDoUsuario, meuRegistro, planoPorId, ehAdmin, SECOES_PORTAL } from '@/lib/empresa';
+import { authConfigurado } from '@/lib/auth';
+import { abasComDados } from '@/lib/portalProdutor';
+import { dadosLocaisDoTalhao, dadosNuvemDosTalhoes, juntarNuvem, type DadosNuvem } from '@/lib/portalDados';
 import { tocarBackend } from '@/lib/interpUrl';
 import { APP_VERSION } from '@/constants/version';
 import {
   ChevronLeft, ChevronsLeft, ChevronsRight, X, Home, Leaf, Grid3x3, Layers, BarChart3, FileSpreadsheet,
-  Activity, Satellite, FolderOpen, FileText, Clock, Zap, Mountain, SlidersHorizontal,
+  Activity, Satellite, FolderOpen, FileText, Clock, Zap, Mountain, SlidersHorizontal, Lock,
 } from 'lucide-react';
 
 const MapView = dynamic(
@@ -73,6 +76,10 @@ const TABS: Array<{ id: TabId; label: string; curto: string; icon: React.Element
   { id: 'compactacao',   label: 'Compactação',      curto: 'Compact.',    icon: Activity,        pronto: true },
   { id: 'relatorios',    label: 'Relatórios',       curto: 'Relatórios',  icon: FileText,        pronto: true },
 ];
+
+// Seções que o PLANO de assinatura controla; as outras abas (relevo, CE, zonas,
+// prescrições, satélite, colheita) só dependem de existir dado.
+const SECOES_PLANO = new Set<string>(SECOES_PORTAL.map(s => s.id));
 
 // ── Trilho + painel ──────────────────────────────────────────────────────────
 const TRILHO_ABERTO = 64;   // ícone + rótulo (padrão)
@@ -110,6 +117,13 @@ export function TalhaoPage({ id }: { id: string }) {
   const [trilhoCompacto, setTrilhoCompacto] = useState(false);
   const [larguraPainel, setLarguraPainel] = useState(440);
   const larguraTrilho = trilhoCompacto ? TRILHO_COMPACTO : TRILHO_ABERTO;
+  // Produtor (ou owner/admin vendo como ele): página SOMENTE LEITURA e trilho
+  // com o que existe. `?preview=1&plano=…` vem do Painel do Produtor no modo
+  // "ver como o produtor vê".
+  const ehProdutor = papelDoUsuario() === 'produtor';
+  const [previewProdutor, setPreviewProdutor] = useState(false);
+  const [planoPreview, setPlanoPreview] = useState<string | null>(null);
+  const [nuvem, setNuvem] = useState<DadosNuvem | null>(null);
 
   // Carrega o talhão e a cadeia cliente/fazenda; alimenta o nav + geometria para
   // que MapView e os módulos reaproveitados funcionem como dentro do app.
@@ -126,6 +140,8 @@ export function TalhaoPage({ id }: { id: string }) {
       if (aba && TABS.some(x => x.id === aba)) setTab(aba as TabId);
       const sf = q.get('safra');
       if (sf) setSafraSel(sf);
+      if (q.get('preview') === '1') setPreviewProdutor(true);
+      setPlanoPreview(q.get('plano'));
     } catch { /* sem window (SSR) — segue no padrão */ }
     setTalhao(t); setFazenda(f); setCliente(c);
     setCarregado(true);
@@ -226,7 +242,29 @@ export function TalhaoPage({ id }: { id: string }) {
     window.addEventListener('mouseup', soltar);
   }
 
+  // Dados do talhão (aparelho + nuvem) só para decidir QUAIS ABAS EXISTEM — a
+  // regra é a mesma do Painel do Produtor (lib/portalProdutor.ts). Quem não é
+  // produtor nem preview não paga essa coleta.
+  const precisaExistencia = ehProdutor || previewProdutor;
+  const dadosLocais = useMemo(() => (talhao && precisaExistencia ? dadosLocaisDoTalhao(talhao, safraSel) : null), [talhao, safraSel, precisaExistencia]);
+  useEffect(() => {
+    if (!talhao || !precisaExistencia) return;
+    let vivo = true;
+    dadosNuvemDosTalhoes([talhao.id])
+      .then(n => { if (vivo) setNuvem(n); })
+      .catch(() => { if (vivo) setNuvem({ mapasNuvem: {}, cenarios: {}, relatorios: {} }); });
+    return () => { vivo = false; };
+  }, [talhao, precisaExistencia]);
+  const abasExistentes = useMemo(() => new Set<string>(dadosLocais ? abasComDados(juntarNuvem(dadosLocais, nuvem)) : []), [dadosLocais, nuvem]);
+
   function voltar() { router.push('/painel'); }
+  // Produtor volta ao portal dele; no preview, ao portal do produtor que estava vendo.
+  function voltarPortal() {
+    if (ehProdutor || !cliente) { router.push('/portal'); return; }
+    const q = new URLSearchParams({ cliente: cliente.id });
+    if (planoPreview) q.set('plano', planoPreview);
+    router.push(`/portal?${q.toString()}`);
+  }
 
   if (carregado && !talhao) {
     return (
@@ -239,10 +277,17 @@ export function TalhaoPage({ id }: { id: string }) {
     );
   }
 
-  // Produtor: read-only e só vê as abas que o plano de assinatura libera.
-  const ehProdutor = papelDoUsuario() === 'produtor';
-  const plano = ehProdutor ? planoPorId(meuRegistro()?.planoId) : null;
-  const tabsVisiveis = ehProdutor ? TABS.filter(t => !!plano?.secoes?.[t.id]) : TABS;
+  // Produtor: SOMENTE LEITURA, e o trilho lista só o que EXISTE neste talhão
+  // (em qualquer ano) dentro do que o plano libera. Owner/admin — e a bancada
+  // sem login — veem a mesma coisa com `?preview=1`. A trava de gravação de
+  // verdade fica na porta da nuvem (lib/somenteLeitura.ts) e vale só para o
+  // papel produtor; o preview sem plano libera todas as seções.
+  const modoProdutor = ehProdutor || (previewProdutor && (!authConfigurado || ehAdmin()));
+  const plano = ehProdutor ? planoPorId(meuRegistro()?.planoId) : modoProdutor ? planoPorId(planoPreview ?? undefined) : null;
+  const semPlano = modoProdutor && !ehProdutor && !plano;
+  const tabsVisiveis = modoProdutor
+    ? TABS.filter(t => abasExistentes.has(t.id) && (t.id === 'resumo' || semPlano || !SECOES_PLANO.has(t.id) || !!plano?.secoes?.[t.id]))
+    : TABS;
   // Painel fechado é `null`; aba lembrada que o plano não libera cai na primeira.
   const tabAtivo: TabId | null = tab === null ? null
     : (tabsVisiveis.some(t => t.id === tab) ? tab : (tabsVisiveis[0]?.id ?? null));
@@ -252,11 +297,18 @@ export function TalhaoPage({ id }: { id: string }) {
     <div className="flex flex-col h-screen overflow-hidden" style={{ background: '#061525' }}>
       {/* Barra de contexto fixa */}
       <header className="flex-shrink-0 flex items-center gap-3 px-4 py-2.5" style={{ background: 'var(--invicta-blue-dark)', borderBottom: '1px solid #1a3a6b' }}>
-        <button onClick={ehProdutor ? () => router.push('/portal') : voltar} title={ehProdutor ? 'Voltar ao portal' : 'Voltar ao mapa da fazenda'}
+        <button onClick={modoProdutor ? voltarPortal : voltar} title={modoProdutor ? 'Voltar ao portal' : 'Voltar ao mapa da fazenda'}
           className="flex items-center gap-1 px-2 py-1.5 rounded text-xs font-semibold flex-shrink-0"
           style={{ background: '#1a3a6b', color: '#93c5fd' }}>
-          <ChevronLeft size={14} /> {ehProdutor ? 'Portal' : 'Mapa'}
+          <ChevronLeft size={14} /> {modoProdutor ? 'Portal' : 'Mapa'}
         </button>
+        {modoProdutor && (
+          <span className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider flex-shrink-0"
+            title="Você vê o que a Invicta processou neste talhão. Alterações só pelo escritório."
+            style={{ background: '#0f2240', color: '#93c5fd', border: '1px solid #1a3a6b' }}>
+            <Lock size={10} /> Somente leitura
+          </span>
+        )}
 
         <div className="flex items-center gap-2 text-xs min-w-0" style={{ color: '#cbd5e1' }}>
           <Ctx label="Cliente" value={cliente?.nome ?? '—'} />
@@ -281,8 +333,8 @@ export function TalhaoPage({ id }: { id: string }) {
           <Sep />
           <span className="flex items-center gap-1 flex-shrink-0">
             <span style={{ color: '#64748b' }}>Cultura:</span>
-            <select value={cultura} onChange={e => mudarCultura(e.target.value)} disabled={!safraSel}
-              title="Cultura deste ano neste talhão"
+            <select value={cultura} onChange={e => mudarCultura(e.target.value)} disabled={!safraSel || modoProdutor}
+              title={modoProdutor ? 'Cultura do ano, definida pela Invicta' : 'Cultura deste ano neste talhão'}
               className="rounded px-1.5 py-0.5 text-xs outline-none disabled:opacity-50" style={inputStyle}>
               <option value="">—</option>
               {CULTURAS.map(c => <option key={c} value={c}>{c}</option>)}
@@ -340,10 +392,10 @@ export function TalhaoPage({ id }: { id: string }) {
           </div>
 
           <div className="flex-1 overflow-y-auto">
-            {tabAtivo === 'resumo' && talhao && <ResumoTab talhao={talhao} fazenda={fazenda} safraNome={safraSel} cultura={cultura} />}
+            {tabAtivo === 'resumo' && talhao && <ResumoTab talhao={talhao} fazenda={fazenda} safraNome={safraSel} cultura={cultura} somenteLeitura={modoProdutor} />}
             {tabAtivo === 'fertilidade' && (
               <>
-                {!ehProdutor && (
+                {!modoProdutor && (
                   <>
                     <div className="px-4 pt-3 pb-1 text-[10px] font-bold uppercase tracking-wider" style={{ color: '#a78bfa' }}>Importação de Laboratório</div>
                     <LabImportSection safraNome={safraSel} />
@@ -355,9 +407,13 @@ export function TalhaoPage({ id }: { id: string }) {
             )}
             {tabAtivo === 'amostragem' && (
               <>
-                <div className="px-4 pt-3 pb-1 text-[10px] font-bold uppercase tracking-wider" style={{ color: '#22d3ee' }}>Importar Grade externa</div>
-                <ImportarGradeSection safraNome={safraSel} />
-                <div className="px-4 pt-3 pb-1 text-[10px] font-bold uppercase tracking-wider" style={{ color: '#60a5fa', borderTop: '1px solid #1a3a6b' }}>Amostragem</div>
+                {!modoProdutor && (
+                  <>
+                    <div className="px-4 pt-3 pb-1 text-[10px] font-bold uppercase tracking-wider" style={{ color: '#22d3ee' }}>Importar Grade externa</div>
+                    <ImportarGradeSection safraNome={safraSel} />
+                    <div className="px-4 pt-3 pb-1 text-[10px] font-bold uppercase tracking-wider" style={{ color: '#60a5fa', borderTop: '1px solid #1a3a6b' }}>Amostragem</div>
+                  </>
+                )}
                 <AmostragemModulo safraNome={safraSel} />
               </>
             )}
@@ -408,7 +464,7 @@ function Ctx({ label, value, forte }: { label: string; value: string; forte?: bo
 function Sep() { return <span style={{ color: '#2e3f5c' }}>·</span>; }
 
 // ── Aba Resumo ───────────────────────────────────────────────────────────────
-function ResumoTab({ talhao, fazenda, safraNome, cultura }: { talhao: Talhao; fazenda: Fazenda | null; safraNome: string; cultura: string }) {
+function ResumoTab({ talhao, fazenda, safraNome, cultura, somenteLeitura }: { talhao: Talhao; fazenda: Fazenda | null; safraNome: string; cultura: string; somenteLeitura?: boolean }) {
   const importacoes = useMemo(() => getImportacoesLab(talhao.id, safraNome), [talhao.id, safraNome]);
   const grades = useMemo(() => getGrades(talhao.id, safraNome), [talhao.id, safraNome]);
 
@@ -440,8 +496,9 @@ function ResumoTab({ talhao, fazenda, safraNome, cultura }: { talhao: Talhao; fa
       <div className="p-3 rounded-lg flex items-start gap-2" style={{ background: '#0a1929', border: '1px solid #1a3a6b' }}>
         <Clock size={13} style={{ color: '#93c5fd' }} className="mt-0.5 flex-shrink-0" />
         <p className="text-[11px] leading-relaxed" style={{ color: '#94a3b8' }}>
-          Use as abas acima para acessar os trabalhos desta safra em <strong style={{ color: '#cbd5e1' }}>{fazenda?.nome ?? 'esta fazenda'}</strong>.
-          A safra selecionada no topo filtra os dados da página.
+          {somenteLeitura
+            ? <>O trilho ao lado lista só o que a Invicta já processou neste talhão de <strong style={{ color: '#cbd5e1' }}>{fazenda?.nome ?? 'esta fazenda'}</strong>. O ano no topo filtra o que cada aba mostra.</>
+            : <>Use as abas acima para acessar os trabalhos desta safra em <strong style={{ color: '#cbd5e1' }}>{fazenda?.nome ?? 'esta fazenda'}</strong>. A safra selecionada no topo filtra os dados da página.</>}
         </p>
       </div>
     </div>

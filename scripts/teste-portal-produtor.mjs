@@ -12,6 +12,7 @@ import {
   rankingColheita, linhaDoTempo, projetarTalhoes, anoDoRegistro, fmtDataCurta, isoDe, maxIso,
   ETAPAS, ETAPAS_CICLO, etapaDef,
 } from '../src/lib/portalProdutor.ts';
+import { abasComDados } from '../src/lib/portalProdutor.ts';
 
 let ok = 0, fail = 0;
 const t = (n, f) => { try { f(); ok++; console.log('  ✓', n); } catch (e) { fail++; console.error('  ✗', n, '—', e.message); } };
@@ -297,6 +298,20 @@ t('datas: isoDe aceita número e texto numérico; fmtDataCurta; maxIso', () => {
   assert.equal(fmtDataCurta('2026-04-03T10:00:00Z'), '03/04/26');
   assert.equal(fmtDataCurta(null), '—');
   assert.equal(maxIso(['2026-01-01', null, '2026-03-01T00:00:00Z', '2025-12-31']), '2026-03-01T00:00:00Z');
+});
+
+t('abas do talhão: só o que existe, em qualquer ano — T1 tem tudo, na ordem do trilho', () => {
+  assert.deepEqual(abasComDados(T1), ['resumo', 'altimetria', 'condutividade', 'zonas', 'amostragem', 'fertilidade', 'recomendacoes', 'prescricoes', 'arquivos', 'ndvi', 'produtividade', 'compactacao', 'relatorios']);
+});
+t('abas do talhão: T2 só grade → resumo + amostragem; T3 vazio → só resumo', () => {
+  assert.deepEqual(abasComDados(T2), ['resumo', 'amostragem']);
+  assert.deepEqual(abasComDados(T3), ['resumo']);
+});
+t('abas do talhão: laudo sem mapa já abre fertilidade; cena e colheita só na nuvem abrem satélite e produtividade; mapa de outro talhão não conta', () => {
+  assert.deepEqual(abasComDados({ talhao: T3.talhao, laudos: [{ id: 'l1', safra: '26/27', criadoEm: '2026-01-01' }] }), ['resumo', 'fertilidade']);
+  assert.deepEqual(abasComDados({ talhao: T3.talhao, mapasNuvem: [{ id: 'T3__ndvi__NDVI__2026-01-01', cena: { data: '2026-01-01' } }, { id: 'T3__prod__x' }] }), ['resumo', 'ndvi', 'produtividade']);
+  assert.deepEqual(abasComDados({ talhao: T3.talhao, mapasNuvem: [{ id: 'OUTRO__ndvi__NDVI__2026-01-01' }, { id: 'OUTRO__l1__krige__5____ph__00-20' }] }), ['resumo']);
+  assert.deepEqual(abasComDados({ talhao: T3.talhao, prescricoes: [{ nome: 'x', atualizadoEm: '2026-01-01', exportes: [{ em: '2026-01-02', formato: 'shp', arquivo: 'a.zip' }] }] }), ['resumo', 'prescricoes', 'arquivos']);
 });
 
 console.log(`\n${ok} ok, ${fail} falhas`);

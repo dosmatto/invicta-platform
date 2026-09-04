@@ -13,6 +13,7 @@
 // Interruptor SEPARADO do login: só ativa com NEXT_PUBLIC_USE_SUPABASE_DATA=true,
 // pra ligar o Auth Supabase não forçar os dados (evita tela vazia antes do import).
 
+import { escritaBloqueada } from './somenteLeitura';
 import { getSupabase, supabaseConfigurado } from './supabase';
 import { marcarGravacaoLocal, editadaDuranteBoot, chavesEditadasDuranteBoot, mesclarGravacoes, type RegistroGravacoes } from './janelaBoot';
 import { lerRawLocal, gravarRawLocal, lerListaLocal } from './localComprimido';
@@ -655,6 +656,7 @@ async function syncObj(sb: NonNullable<ReturnType<typeof getSupabase>>, key: str
 export async function pushListaSupabase(key: string, lista: unknown[]): Promise<void> {
   const sb = getSupabase();
   if (!sb) return;
+  if (escritaBloqueada(key)) return;   // produtor: somente leitura
   return enfileirar(key, { lista });
 }
 
@@ -663,6 +665,7 @@ export async function pushListaSupabase(key: string, lista: unknown[]): Promise<
 export async function pushObjSupabase(key: string, json: string): Promise<void> {
   const sb = getSupabase();
   if (!sb) return;
+  if (escritaBloqueada(key)) return;   // produtor: somente leitura
   return enfileirar(key, { json, obj: true });
 }
 
@@ -673,6 +676,7 @@ export async function pushObjSupabase(key: string, json: string): Promise<void> 
 export async function salvarMapaSupabase(id: string, dados: object, atualizadoEm?: string): Promise<void> {
   const sb = getSupabase();
   if (!sb) return;
+  if (escritaBloqueada(COL_MAPAS)) return;   // produtor: somente leitura
   const up = await sb.from('app_kv').upsert(
     { colecao: COL_MAPAS, item_id: id, dados, atualizado_em: atualizadoEm ?? new Date().toISOString() },
     { onConflict: 'colecao,item_id' },
@@ -780,6 +784,7 @@ export async function carregarMapaSupabase<T>(id: string): Promise<{ id: string;
 export async function excluirMapasPorPrefixoSupabase(prefixo: string): Promise<void> {
   const sb = getSupabase();
   if (!sb) return;
+  if (escritaBloqueada(COL_MAPAS)) return;   // produtor: somente leitura
   const r = await sb.from('app_kv').delete().eq('colecao', COL_MAPAS).like('item_id', escLike(prefixo) + '%');
   if (r.error) console.warn('[supabase] excluir mapas:', r.error.message);
 }
@@ -814,6 +819,7 @@ export async function marcarMapasMigrados(): Promise<void> {
 export async function salvarDocSupabase(colecao: string, id: string, dados: object): Promise<boolean> {
   const sb = getSupabase();
   if (!sb) return false;
+  if (escritaBloqueada(colecao)) return false;   // produtor: somente leitura
   const up = await sb.from('app_kv').upsert(
     { colecao, item_id: id, dados, atualizado_em: new Date().toISOString() },
     { onConflict: 'colecao,item_id' },
@@ -862,6 +868,7 @@ export async function carregarColecaoSupabase<T>(colecao: string): Promise<T[]> 
 export async function excluirDocSupabase(colecao: string, id: string): Promise<number> {
   const sb = getSupabase();
   if (!sb) return 0;
+  if (escritaBloqueada(colecao)) return 0;   // produtor: somente leitura
   const r = await sb.from('app_kv').delete({ count: 'exact' }).eq('colecao', colecao).eq('item_id', id);
   if (r.error) {
     console.warn(`[supabase] excluir ${colecao}:`, r.error.message);
@@ -874,6 +881,7 @@ export async function excluirDocSupabase(colecao: string, id: string): Promise<n
 export async function excluirDocsPorPrefixoSupabase(colecao: string, prefixo: string): Promise<void> {
   const sb = getSupabase();
   if (!sb) return;
+  if (escritaBloqueada(colecao)) return;   // produtor: somente leitura
   const r = await sb.from('app_kv').delete().eq('colecao', colecao).like('item_id', escLike(prefixo) + '%');
   if (r.error) console.warn(`[supabase] excluir por prefixo ${colecao}:`, r.error.message);
 }
@@ -882,6 +890,7 @@ export async function excluirDocsPorPrefixoSupabase(colecao: string, prefixo: st
 export async function excluirColecaoSupabase(colecao: string): Promise<void> {
   const sb = getSupabase();
   if (!sb) return;
+  if (escritaBloqueada(colecao)) return;   // produtor: somente leitura
   const r = await sb.from('app_kv').delete().eq('colecao', colecao);
   if (r.error) console.warn(`[supabase] excluir coleção ${colecao}:`, r.error.message);
 }

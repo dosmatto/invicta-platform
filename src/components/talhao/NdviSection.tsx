@@ -484,15 +484,16 @@ export function NdviSection({ safraNome }: { safraNome?: string } = {}) {
 
   if (!legNdvi) return <div className="px-4 py-3"><Aviso texto="Legenda oficial de NDVI não encontrada (seed do sistema)." /></div>;
 
+  // Quem não gera (produtor, leitor) vê o INVENTÁRIO do talhão: índices
+  // mantidos na nuvem e composições temporais aprovadas.
   if (!pode('ndvi')) {
     return (
-      <div className="px-4 py-6">
-        <div className="flex items-start gap-2 p-3 rounded-lg" style={{ background: '#0b1d3a', border: '1px solid #1a3a6b' }}>
-          <AlertTriangle size={14} style={{ color: '#fbbf24' }} className="flex-shrink-0 mt-0.5" />
-          <p className="text-[11px]" style={{ color: '#94a3b8' }}>
-            Seu perfil não tem permissão para gerar mapas de NDVI / satélite. Peça a um administrador para liberar a permissão <strong style={{ color: '#cbd5e1' }}>NDVI</strong>.
-          </p>
+      <div className="px-4 py-3 space-y-3">
+        <div className="flex items-center gap-2">
+          <Satellite size={14} style={{ color: '#a78bfa' }} />
+          <h3 className="text-sm font-bold" style={{ color: '#e2e8f0' }}>Satélite — camadas salvas</h3>
         </div>
+        <CamadasSalvasView talhaoId={nav.talhaoId ?? ''} />
       </div>
     );
   }

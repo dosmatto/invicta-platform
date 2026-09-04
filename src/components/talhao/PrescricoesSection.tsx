@@ -17,7 +17,7 @@ import {
   precoResolvidoDoInsumo,
 } from '@/lib/store';
 import { anoDaSafra } from '@/lib/periodo';
-import { emailUsuario } from '@/lib/empresa';
+import { emailUsuario, pode } from '@/lib/empresa';
 import { listar as bibListar, type ItemBiblioteca, type ConteudoEquacao } from '@/lib/biblioteca';
 import {
   complementarNutriente, complementarPorZona, podeComplementar, NUTRIENTES, ROTULO_NUTRIENTE, SIMBOLO_NUTRIENTE, garantiaDe,
@@ -669,6 +669,24 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
     ['historico', 'Histórico', History],
     ['comparacao', 'Planejado × Realizado', Scale],
   ];
+
+  // Quem não recomenda (produtor, leitor) vê as prescrições salvas e baixa os
+  // arquivos (SHP/Excel/PDF) — sem editor, sem excluir.
+  if (!pode('recomendacoes')) return (
+    <div className="p-4 space-y-2">
+      <div className="flex items-center gap-2">
+        <FolderOpen size={12} style={{ color: '#93c5fd' }} />
+        <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color: '#cbd5e1' }}>Prescrições salvas ({linhagens.length})</span>
+      </div>
+      {linhagens.length === 0
+        ? <Vazia texto="Nenhuma prescrição salva neste talhão." />
+        : linhagens.map(vs => (
+          <ListaVersoes key={vs[0].origemId ?? vs[0].id} versoes={vs} exportando={exportando} somenteLeitura
+            onAbrir={() => {}} onExportar={exportar} onExcluir={() => {}} />
+        ))}
+      <p className="text-[10px]" style={{ color: '#475569' }}>Os arquivos de aplicação saem daqui (SHP, Excel, PDF). A edição é feita pela Invicta.</p>
+    </div>
+  );
 
   return (
     <div>
@@ -1515,21 +1533,23 @@ function CampoTotalDisponivel({ rotulo, unidadeTotal, porHa, totalAbs, areaHa, s
 // como nas Zonas de Manejo e no NDVI.
 // Uma prescrição e TODAS as suas versões: a mais nova em destaque e as
 // anteriores logo abaixo, discretas — sempre à vista, sem botão para recolher.
-function ListaVersoes({ versoes, exportando, onAbrir, onExportar, onExcluir }: {
+function ListaVersoes({ versoes, exportando, onAbrir, onExportar, onExcluir, somenteLeitura }: {
   versoes: Prescricao[];
   exportando: string;
   onAbrir: (p: Prescricao) => void;
   onExportar: (formato: 'shp' | 'xlsx' | 'pdf', p: Prescricao) => void;
   onExcluir: (id: string) => void;
+  /** Produtor/leitor: sem "Abrir no editor" nem "Excluir" — só exportar. */
+  somenteLeitura?: boolean;
 }) {
   const [atual, ...antigas] = versoes;
   return (
     <div className="space-y-1">
-      <CartaoSalva p={atual} exportando={exportando} onAbrir={onAbrir} onExportar={onExportar} onExcluir={onExcluir} />
+      <CartaoSalva p={atual} exportando={exportando} onAbrir={onAbrir} onExportar={onExportar} onExcluir={onExcluir} somenteLeitura={somenteLeitura} />
       {antigas.length > 0 && (
         <div className="pl-3 space-y-1" style={{ borderLeft: '2px solid #1a3a6b' }}>
           {antigas.map(v => (
-            <CartaoSalva key={v.id} p={v} anterior exportando={exportando}
+            <CartaoSalva key={v.id} p={v} anterior exportando={exportando} somenteLeitura={somenteLeitura}
               onAbrir={onAbrir} onExportar={onExportar} onExcluir={onExcluir} />
           ))}
         </div>
@@ -1538,13 +1558,14 @@ function ListaVersoes({ versoes, exportando, onAbrir, onExportar, onExcluir }: {
   );
 }
 
-function CartaoSalva({ p, anterior, exportando, onAbrir, onExportar, onExcluir }: {
+function CartaoSalva({ p, anterior, exportando, onAbrir, onExportar, onExcluir, somenteLeitura }: {
   p: Prescricao;
   anterior?: boolean;          // versão antiga (fica discreta na lista)
   exportando: string;
   onAbrir: (p: Prescricao) => void;
   onExportar: (formato: 'shp' | 'xlsx' | 'pdf', p: Prescricao) => void;
   onExcluir: (id: string) => void;
+  somenteLeitura?: boolean;
 }) {
   const rs = resumoDoses(p.zonas, p.custoUnit);
   return (
@@ -1566,16 +1587,20 @@ function CartaoSalva({ p, anterior, exportando, onAbrir, onExportar, onExcluir }
         {rs.custo != null ? ` · R$ ${fmt(rs.custo, 0)}` : ''}
       </p>
       <div className="flex gap-1.5 flex-wrap">
-        <button onClick={() => onAbrir(p)} className="px-2 py-1 rounded text-[10px] font-semibold flex items-center gap-1" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
-          <Pencil size={10} /> Abrir no editor
-        </button>
+        {!somenteLeitura && (
+          <button onClick={() => onAbrir(p)} className="px-2 py-1 rounded text-[10px] font-semibold flex items-center gap-1" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
+            <Pencil size={10} /> Abrir no editor
+          </button>
+        )}
         <BotaoExport rot="SHP" icone={FileDown} pequeno ocupado={exportando === `${p.id}:shp`} onClick={() => onExportar('shp', p)} />
         <BotaoExport rot="Excel" icone={FileSpreadsheet} pequeno ocupado={exportando === `${p.id}:xlsx`} onClick={() => onExportar('xlsx', p)} />
         <BotaoExport rot="PDF" icone={FileText} pequeno ocupado={exportando === `${p.id}:pdf`} onClick={() => onExportar('pdf', p)} />
-        <button onClick={() => { if (confirm(`Excluir a prescrição "${p.nome}"?`)) onExcluir(p.id); }}
-          className="px-2 py-1 rounded text-[10px] font-semibold flex items-center gap-1" style={{ background: '#3a1a1a', color: '#fca5a5' }}>
-          <Trash2 size={10} /> Excluir
-        </button>
+        {!somenteLeitura && (
+          <button onClick={() => { if (confirm(`Excluir a prescrição "${p.nome}"?`)) onExcluir(p.id); }}
+            className="px-2 py-1 rounded text-[10px] font-semibold flex items-center gap-1" style={{ background: '#3a1a1a', color: '#fca5a5' }}>
+            <Trash2 size={10} /> Excluir
+          </button>
+        )}
       </div>
     </div>
   );

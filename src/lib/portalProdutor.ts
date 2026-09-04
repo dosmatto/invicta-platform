@@ -51,11 +51,11 @@ export const ETAPAS: EtapaDef[] = [
   { id: 'fertilidade',   rotulo: 'Mapas de fertilidade',   curto: 'Mapas',        grupo: 'ciclo',      secao: 'fertilidade',   aba: 'fertilidade',   descricao: 'Mapas interpolados por nutriente e profundidade' },
   { id: 'recomendacoes', rotulo: 'Recomendações',          curto: 'Recomendação', grupo: 'ciclo',      secao: 'recomendacoes', aba: 'recomendacoes', descricao: 'Cenários de recomendação calculados' },
   { id: 'prescricoes',   rotulo: 'Arquivos de aplicação',  curto: 'Aplicação',    grupo: 'ciclo',      secao: 'arquivos',      aba: 'arquivos',      descricao: 'Prescrições e arquivos gerados para a máquina' },
-  { id: 'zonas',         rotulo: 'Zonas de manejo',        curto: 'Zonas',        grupo: 'estrutura',  secao: null,            aba: null,            descricao: 'Zoneamento do talhão' },
-  { id: 'altimetria',    rotulo: 'Altimetria (MDE)',       curto: 'Relevo',       grupo: 'estrutura',  secao: null,            aba: null,            descricao: 'Modelo digital de elevação aprovado' },
-  { id: 'condutividade', rotulo: 'Condutividade elétrica', curto: 'CE',           grupo: 'estrutura',  secao: null,            aba: null,            descricao: 'Levantamento de condutividade do solo' },
-  { id: 'ndvi',          rotulo: 'Satélite (NDVI)',        curto: 'Satélite',     grupo: 'observacao', secao: null,            aba: null,            descricao: 'Cenas de satélite processadas no ano' },
-  { id: 'produtividade', rotulo: 'Mapa de colheita',       curto: 'Colheita',     grupo: 'observacao', secao: null,            aba: null,            descricao: 'Mapa de produtividade processado' },
+  { id: 'zonas',         rotulo: 'Zonas de manejo',        curto: 'Zonas',        grupo: 'estrutura',  secao: null,            aba: 'zonas',            descricao: 'Zoneamento do talhão' },
+  { id: 'altimetria',    rotulo: 'Altimetria (MDE)',       curto: 'Relevo',       grupo: 'estrutura',  secao: null,            aba: 'altimetria',            descricao: 'Modelo digital de elevação aprovado' },
+  { id: 'condutividade', rotulo: 'Condutividade elétrica', curto: 'CE',           grupo: 'estrutura',  secao: null,            aba: 'condutividade',            descricao: 'Levantamento de condutividade do solo' },
+  { id: 'ndvi',          rotulo: 'Satélite (NDVI)',        curto: 'Satélite',     grupo: 'observacao', secao: null,            aba: 'ndvi',            descricao: 'Cenas de satélite processadas no ano' },
+  { id: 'produtividade', rotulo: 'Mapa de colheita',       curto: 'Colheita',     grupo: 'observacao', secao: null,            aba: 'produtividade',            descricao: 'Mapa de produtividade processado' },
   { id: 'compactacao',   rotulo: 'Compactação',            curto: 'Compactação',  grupo: 'observacao', secao: 'compactacao',   aba: 'compactacao',   descricao: 'Penetrometria importada' },
   { id: 'relatorios',    rotulo: 'Relatórios',             curto: 'Relatórios',   grupo: 'entrega',    secao: 'relatorios',    aba: 'relatorios',    descricao: 'Relatórios em PDF gerados' },
 ];
@@ -369,6 +369,42 @@ export function avaliarTalhao(d: DadosTalhao, safra: string): AvaliacaoTalhao {
     ciclo: { feitas, total: ETAPAS_CICLO.length, proxima, situacao },
     atualizadoEm: maxIso(etapas.map(e => e.em)),
   };
+}
+
+// ── Abas da página do talhão ────────────────────────────────────────────────
+
+/** Ids das abas de /talhao/[id], na ordem do trilho. */
+export const ABAS_TALHAO = [
+  'resumo', 'altimetria', 'condutividade', 'zonas', 'amostragem', 'fertilidade', 'recomendacoes',
+  'prescricoes', 'arquivos', 'ndvi', 'produtividade', 'compactacao', 'relatorios',
+] as const;
+export type AbaTalhao = typeof ABAS_TALHAO[number];
+
+/** Quais abas têm ALGUM dado neste talhão, em qualquer ano — é o que o produtor
+ *  vê no trilho (o filtro de ano é de cada aba, não do trilho). Resumo sempre
+ *  entra. "Arquivos" é a exportação dos cenários, então segue os cenários (ou
+ *  uma prescrição já exportada). Mapas da nuvem contam só se são DESTE talhão. */
+export function abasComDados(d: DadosTalhao): AbaTalhao[] {
+  const t = d.talhao;
+  const tem = (l?: unknown[]) => !!l && l.length > 0;
+  const nuvem = (d.mapasNuvem ?? []).map(m => m.id.split('__')).filter(s => s[0] === t.id);
+  const idsLaudo = new Set((d.laudos ?? []).map(l => l.id));
+  const existe: Record<AbaTalhao, boolean> = {
+    resumo: true,
+    altimetria: tem(d.mdes),
+    condutividade: tem(d.condutividade),
+    zonas: tem(d.zoneamentos),
+    amostragem: tem(d.grades),
+    fertilidade: tem(d.laudos) || nuvem.some(s => s.length >= 4 && idsLaudo.has(s[1])),
+    recomendacoes: tem(d.cenarios),
+    prescricoes: tem(d.prescricoes),
+    arquivos: tem(d.cenarios) || (d.prescricoes ?? []).some(p => (p.exportes?.length ?? 0) > 0),
+    ndvi: tem(d.composicoes) || nuvem.some(s => s[1] === 'ndvi' || s[1] === 'ndvicbers'),
+    produtividade: tem(d.colheitas) || nuvem.some(s => s[1] === 'prod'),
+    compactacao: tem(d.compactacao),
+    relatorios: tem(d.relatorios),
+  };
+  return ABAS_TALHAO.filter(a => existe[a]);
 }
 
 export function estadoEtapa(av: AvaliacaoTalhao, id: EtapaId): EstadoEtapa {

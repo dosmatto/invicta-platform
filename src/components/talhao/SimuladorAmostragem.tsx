@@ -81,6 +81,8 @@ export function SimuladorAmostragem({ safraNome: safraProp }: { safraNome?: stri
   const [seedPos, setSeedPos] = useState(1);
   const [seedSel, setSeedSel] = useState(1);
   const [grades, setGrades] = useState<GradeAmostragem[]>([]);
+  // Produtor/leitor: só a lista de grades salvas, com exportação — sem gerar, renomear, marcar ou excluir.
+  const podeAmostrar = pode('amostragem');
   const [renomeando, setRenomeando] = useState<string | null>(null);
   const [nomeTemp, setNomeTemp] = useState('');
   // Edição manual: pontos "congelados" + ponto extra pendente (aguardando escolha de profundidades)
@@ -357,6 +359,7 @@ export function SimuladorAmostragem({ safraNome: safraProp }: { safraNome?: stri
         A época sai da data: 1ª = janeiro a junho · 2ª = julho a dezembro. Use a data real da coleta (pode ser retroativa).
       </p>
 
+      {podeAmostrar && (<>
       {/* Padrão de amostragem */}
       <div>
         <label className="text-[10px] font-semibold block mb-0.5" style={{ color: '#64748b' }}>Padrão de Amostragem</label>
@@ -591,6 +594,8 @@ export function SimuladorAmostragem({ safraNome: safraProp }: { safraNome?: stri
         </>
       )}
 
+      </>)}
+
       {/* Grades salvas desta safra */}
       {grades.length > 0 && (
         <div className="pt-1">
@@ -602,11 +607,15 @@ export function SimuladorAmostragem({ safraNome: safraProp }: { safraNome?: stri
               <div key={g.id} className="p-2 rounded-lg" style={{ background: '#061525', border: `1px solid ${gradeViewId === g.id ? '#22d3ee' : (g.paraProcessar ? '#166534' : '#1a3a6b')}` }}>
                 <div className="flex items-center gap-2">
                   {/* marcar para processar */}
-                  <button onClick={() => { marcarParaProcessar(g.id); recarregarGrades(); }} title="Marcar para processar">
-                    {g.paraProcessar
-                      ? <CheckCircle2 size={15} style={{ color: '#4ade80' }} />
-                      : <Circle size={15} style={{ color: '#475569' }} />}
-                  </button>
+                  {podeAmostrar ? (
+                    <button onClick={() => { marcarParaProcessar(g.id); recarregarGrades(); }} title="Marcar para processar">
+                      {g.paraProcessar
+                        ? <CheckCircle2 size={15} style={{ color: '#4ade80' }} />
+                        : <Circle size={15} style={{ color: '#475569' }} />}
+                    </button>
+                  ) : (
+                    g.paraProcessar ? <CheckCircle2 size={15} style={{ color: '#4ade80' }} /> : <Circle size={15} style={{ color: '#475569' }} />
+                  )}
                   {renomeando === g.id ? (
                     <input autoFocus value={nomeTemp} onChange={e => setNomeTemp(e.target.value)}
                       onBlur={() => confirmarRenome(g.id)} onKeyDown={e => e.key === 'Enter' && confirmarRenome(g.id)}
@@ -617,10 +626,12 @@ export function SimuladorAmostragem({ safraNome: safraProp }: { safraNome?: stri
                   {g.customizado && <span className="text-[8px] px-1 py-0.5 rounded" style={{ background: '#78350f', color: '#fde68a' }}>CUSTOM</span>}
                   <button onClick={() => setGradeViewId(id => id === g.id ? null : g.id)} title={gradeViewId === g.id ? 'Ocultar do mapa' : 'Ver no mapa'}
                     className="p-1 rounded" style={{ color: gradeViewId === g.id ? '#22d3ee' : '#93c5fd' }}><Eye size={11} /></button>
-                  <button onClick={() => { setRenomeando(g.id); setNomeTemp(g.nome); }} title="Renomear"
-                    className="p-1 rounded" style={{ color: '#93c5fd' }}><Pencil size={11} /></button>
-                  <button onClick={() => { deleteGrade(g.id); recarregarGrades(); }} title="Excluir"
-                    className="p-1 rounded" style={{ color: '#f87171' }}><Trash2 size={11} /></button>
+                  {podeAmostrar && (<>
+                    <button onClick={() => { setRenomeando(g.id); setNomeTemp(g.nome); }} title="Renomear"
+                      className="p-1 rounded" style={{ color: '#93c5fd' }}><Pencil size={11} /></button>
+                    <button onClick={() => { deleteGrade(g.id); recarregarGrades(); }} title="Excluir"
+                      className="p-1 rounded" style={{ color: '#f87171' }}><Trash2 size={11} /></button>
+                  </>)}
                 </div>
                 <p className="text-[9px] mt-1 pl-6" style={{ color: '#64748b' }}>
                   {g.pontos.length} pontos · {g.densidade} ha/pt · {g.epoca}ª época

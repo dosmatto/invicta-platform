@@ -520,8 +520,44 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
     && (modo === 'equacao' ? (!!eqSel && !!checagem?.ok) : !!recSel)
     && estado !== 'carregando';
 
+  // Quem não calcula (produtor, leitor) vê a LISTA dos cenários do ano — nome,
+  // "p/ uso", data, produtos e custo — e nada de editar. Os arquivos para
+  // aplicação saem da aba Arquivos.
   if (!pode('recomendacoes')) return (
-    <div className="px-6 py-4"><p className="text-[11px]" style={{ color: '#fbbf24' }}>Seu papel não trabalha com recomendações (somente visualização).</p></div>
+    <div className="p-4 space-y-2">
+      <div className="flex items-center gap-2">
+        <Wand2 size={14} style={{ color: '#a78bfa' }} />
+        <h3 className="text-sm font-bold" style={{ color: '#e2e8f0' }}>Recomendações do ano</h3>
+      </div>
+      {salvos.length === 0 ? (
+        <p className="text-[11px]" style={{ color: '#64748b' }}>Nenhum cenário de recomendação neste ano.</p>
+      ) : salvos.map(c => {
+        const emUso = c.doses.filter(d => d.usar);
+        return (
+          <div key={c.id} className="p-2.5 rounded-lg space-y-1" style={{ background: '#061525', border: `1px solid ${emUso.length ? 'var(--invicta-green)' : '#1a3a6b'}` }}>
+            <div className="text-[11px] font-bold flex items-center gap-1.5" style={{ color: '#e2e8f0' }}>
+              {c.nome}
+              {emUso.length > 0 && <span className="text-[8px] font-bold px-1 py-0.5 rounded" style={{ background: 'var(--invicta-green-dark)', color: '#fff' }}>para uso</span>}
+            </div>
+            <div className="text-[10px]" style={{ color: '#94a3b8' }}>
+              {new Date(c.geradoEm).toLocaleDateString('pt-BR')} · {c.doses.length} produto(s) · R$ {num(c.financeiro?.custoTotal, 2)} ({num(c.financeiro?.custoHa, 2)}/ha)
+            </div>
+            {c.doses.length > 0 && (
+              <ul className="text-[10px] space-y-0.5" style={{ color: '#cbd5e1' }}>
+                {c.doses.map((d, i) => (
+                  <li key={i} className="flex items-center gap-1.5">
+                    <span style={{ color: d.usar ? '#4ade80' : '#475569' }}>{d.usar ? '●' : '○'}</span>
+                    <span className="truncate">{d.produto}</span>
+                    <span className="ml-auto tabular-nums" style={{ color: '#94a3b8' }}>{num(d.stats?.media, 0)} {d.unidade} · {num(d.toneladas, 1)} t</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        );
+      })}
+      <p className="text-[10px]" style={{ color: '#475569' }}>Os arquivos para aplicação dos cenários marcados “para uso” estão na aba Arquivos.</p>
+    </div>
   );
 
   return (
