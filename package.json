@@ -80,7 +80,8 @@
     "teste:geometria": "PY=\"$HOME/.invicta-fert-backend/venv/bin/python\"; [ -x \"$PY\" ] || PY=python3; \"$PY\" scripts/teste-geometria-zonas.py",
     "teste:janela": "node scripts/teste-janela-boot.mjs",
     "teste:catalogo": "node scripts/teste-catalogo-variaveis.mjs",
-    "teste:custos-produtor": "node scripts/teste-custos-produtor.mjs"
+    "teste:custos-produtor": "node scripts/teste-custos-produtor.mjs",
+    "teste:portal": "node scripts/teste-portal-produtor.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",

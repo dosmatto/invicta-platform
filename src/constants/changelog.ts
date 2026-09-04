@@ -1,5 +1,17 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Painel do produtor: o que já está pronto em cada talhão
+  '2.120.0': [
+    'O PORTAL DO PRODUTOR VIROU UM PAINEL. Antes era só a lista fazenda → talhão; agora a primeira tela responde "o que a Invicta já processou nos meus talhões este ano": área amostrada no ano (e quanto isso é da área total), análises de solo recebidas, mapas de fertilidade prontos, recomendações com dose para uso e arquivos de aplicação gerados.',
+    'SEUS TALHÕES: a forma real de cada talhão, por fazenda, na cor do andamento do ciclo (amostragem → laudo → mapas → recomendação → arquivo de aplicação): verde = ciclo completo, âmbar = em andamento, cinza = sem trabalho no ano. Clicar no talhão abre a página dele.',
+    'ÁREA AMOSTRADA POR ANO em barras — cada talhão conta uma vez por ano, com a área do polígono; clicar numa barra troca o ano. O cartão ANDAMENTO DO CICLO mostra quanto do ciclo do ano já foi feito (etapas feitas sobre etapas possíveis) e os talhões e hectares em cada estado.',
+    'EVOLUÇÃO DOS NUTRIENTES do talhão escolhido: pH, P, K, MO e V% ano a ano, média das amostras da camada mais rasa do laudo, com a classe (Muito baixo → Muito alto) da legenda que os mapas usam. Colheita por talhão em sc/ha quando há mapa de colheita no ano.',
+    'POR FAZENDA, A JORNADA DE CADA TALHÃO: cinco etapas numa trilha (etapa pulada aparece tracejada), a situação em uma linha ("Aguardando laudo", "Mapas em processamento" — o detalhe fica no tooltip), selos das outras camadas (zonas, relevo, CE, satélite, colheita, compactação, relatórios) e a data da última atualização. Clicar numa etapa abre a aba certa da página do talhão, já no ano escolhido; etapa fora do plano aparece com cadeado. Para carteiras grandes: busca por talhão, filtro por situação, fazendas que recolhem e "ver os restantes" acima de 12 talhões.',
+    'ÚLTIMAS ENTREGAS: linha do tempo do que foi processado, da mais recente para a mais antiga, e o cartão do plano com as seções liberadas.',
+    'VER COMO O PRODUTOR VÊ: owner e administrador abrem /portal e escolhem um produtor (e um plano) para conferir a tela exatamente como ele a veria, antes de liberar o acesso. A bancada local, sem login, entra pelo mesmo caminho.',
+    'A regra do que está "pronto", "em andamento" ou "pendente" vive num módulo puro com 26 testes (npm run teste:portal): filtro de ano, contagem de amostras por número (duas profundidades não dobram), mapas por nutriente/profundidade (dois métodos do mesmo mapa contam um), e a projeção das formas dos talhões.',
+    'O PORTAL PASSOU A USAR A FONTE DO SISTEMA (Geist) em vez da serifa do navegador: o tema global aponta a fonte sans para ela mesma e o app inteiro cai em Times; o portal fixa a fonte enquanto isso não é corrigido no tema.',
+  ],
   // [S/N] O cadastro pelo link parava de ser recusado em silêncio pelo servidor
   '2.119.0': [
     'O CADASTRO PELO LINK VOLTOU A CHEGAR — INCLUSIVE NO CELULAR DE QUEM JÁ USA O APP. Era esse o caso que continuava falhando depois da v2.118: a conta era criada e o pedido de acesso, não.',

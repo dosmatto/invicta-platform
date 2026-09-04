@@ -117,6 +117,16 @@ export function TalhaoPage({ id }: { id: string }) {
     const t = getTalhoes().find(x => x.id === id) ?? null;
     const f = t ? getFazendas().find(x => x.id === t.fazendaId) ?? null : null;
     const c = f ? getClientes().find(x => x.id === f.clienteId) ?? null : null;
+    // Deep link do Painel do Produtor: /talhao/<id>?aba=fertilidade&safra=26/27
+    // abre direto na aba e no ano que o produtor clicou. Aba que o plano não
+    // libera cai na primeira visível (regra de `tabAtivo`, abaixo).
+    try {
+      const q = new URLSearchParams(window.location.search);
+      const aba = q.get('aba');
+      if (aba && TABS.some(x => x.id === aba)) setTab(aba as TabId);
+      const sf = q.get('safra');
+      if (sf) setSafraSel(sf);
+    } catch { /* sem window (SSR) — segue no padrão */ }
     setTalhao(t); setFazenda(f); setCliente(c);
     setCarregado(true);
 

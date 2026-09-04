@@ -42,6 +42,7 @@ verdadeira (fusão de talhões) chegou depois; foi preciso renumerar.
 | S/N | Convite individual libera o acesso na hora (sem aprovação); link de grupo mantém aprovação | 2.116.0 | Central de Acessos → Convites → "Convite para uma pessoa" + página pública /convite |
 | S/N | "Gerar link" não trava mais em silêncio (erro aparece na tela) | 2.116.0 | Central de Acessos → Convites → "Gerar link" |
 | S/N | Link de grupo também libera o acesso na hora (sem aprovação) | 2.117.0 | Central de Acessos → Convites → "Novo link" + página pública /convite |
+| S/N | Painel do produtor: o que já está pronto em cada talhão | 2.120.0 | /portal (produtor) e /portal → "Ver como o produtor vê" (owner/admin) |
 
 > As pendências 1–17 foram entregues antes deste registro existir e não estão
 > catalogadas; procure pelo assunto no `changelog.ts`. Da 18 em diante, tudo
