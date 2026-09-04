@@ -299,7 +299,7 @@ const DEFAULTS_PERMISSOES: Record<string, Caps> = {
   agronomo: { ...TODAS(false), ndvi: true, recomendacoes: true, relatorios: true, ...ZONAS_EDIT },
   operador: { ...TODAS(false), amostragem: true },
   prestador: { ...TODAS(false), amostragem: true }, // prestador de coleta: só amostragem (app de campo)
-  produtor: { ...TODAS(false), ndvi: true },        // 04/09/2026: gera índices de satélite e salva; o resto só vê
+  produtor: { ...TODAS(false), ndvi: true, relatorios: true },   // só para a tela antiga de Permissões: o que vale é MATRIZ_PADRAO.produtor (ver pode)
   editor: TODAS(true),    // legado
   viewer: TODAS(false),   // legado
 };
@@ -348,7 +348,11 @@ export function pode(cap: Capacidade, papel: PapelMembro | null = papelDoUsuario
   if (typeof excecao === 'boolean') return excecao;
   // Papel 'custom' não tem padrão: vale só o que estiver marcado no usuário.
   if ((papel as string) === 'custom') return false;
-  if ((papel as string) === 'leitor') return chave ? MATRIZ_PADRAO.leitor[chave as keyof typeof MATRIZ_PADRAO.leitor] === true : false;
+  // Leitor e PRODUTOR vêm da matriz nova do IAM (iam/permissoes.ts), não da
+  // matriz antiga por papel. 04/09/2026: o produtor caía na antiga, onde
+  // `relatorios` era falso — Arquivos e Relatórios mostravam "seu papel não
+  // acessa" e o PDF da Fertilidade sumia, mesmo com "ver/exportar" no IAM.
+  if (papel === 'leitor' || papel === 'produtor') return chave ? MATRIZ_PADRAO[papel][chave] === true : false;
   return getPermissoes()[papel]?.[cap] ?? DEFAULTS_PERMISSOES[papel]?.[cap] ?? false;
 }
 

@@ -1,5 +1,9 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Produtor: Arquivos, Relatórios e PDF da Fertilidade não abriam (permissão antiga)
+  '2.127.0': [
+    'ARQUIVOS E RELATÓRIOS do produtor mostravam "seu papel não acessa/gera" e o PDF da Fertilidade não aparecia, mesmo depois da 2.126: a checagem de capacidade (`pode`) lia a matriz ANTIGA por papel, onde o produtor não tinha "relatórios". Agora o produtor, como o leitor, é resolvido pela matriz nova do IAM — que já dizia ver/exportar em relatórios e arquivos e trabalhar em satélite. Exceções por usuário na Central de Acessos continuam vencendo.',
+  ],
   // [S/N] Produtor baixa direto: arquivos marcados, PDF da fertilidade e relatórios com "selecionar tudo"
   '2.126.0': [
     'PDF BAIXA DIRETO para o produtor: todo relatório gerado (Arquivos, Fertilidade, Relatórios, book de recomendações, satélite) vai para o computador com o nome certo, sem a aba de leitura no meio.',
