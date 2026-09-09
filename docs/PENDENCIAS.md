@@ -50,6 +50,7 @@ verdadeira (fusão de talhões) chegou depois; foi preciso renumerar.
 | S/N | Recomendações do produtor: clicar no cenário mostra os mapas | 2.125.0 | /talhao/[id] como produtor → aba Recomendações → clicar no cenário / produto |
 | S/N | Produtor baixa direto: arquivos marcados, PDF da fertilidade e relatórios com "selecionar tudo" | 2.126.0 | /talhao/[id] como produtor → abas Arquivos, Fertilidade, Relatórios |
 | S/N | Produtor: Arquivos, Relatórios e PDF da Fertilidade não abriam (permissão antiga) | 2.127.0 | /talhao/[id] como produtor → abas Arquivos, Relatórios, Fertilidade |
+| 28 | Nome do relatório: talhão, ano e "recomendações completas" | 2.132.0 | Talhão → Relatórios → "Gerar relatório" (e Abrir do histórico) |
 
 > As pendências 1–17 foram entregues antes deste registro existir e não estão
 > catalogadas; procure pelo assunto no `changelog.ts`. Da 18 em diante, tudo

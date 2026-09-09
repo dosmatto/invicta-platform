@@ -1,5 +1,19 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] A coluna "Hidrogênio + Alumínio" era importada como Alumínio
+  '2.133.0': [
+    'CORRIGIDO — A COLUNA "HIDROGÊNIO + ALUMÍNIO" DO LAUDO ERA IMPORTADA COMO ALUMÍNIO, e era por isso que a CTC efetiva saía igual à CTC pH 7,0. O casamento de cabeçalho aceita nome contido, e "Alumínio" está dentro de "Hidrogênio + Alumínio" — no layout da Fundação ABC o H+Al vem ANTES do Al na planilha, então o slot do Alumínio levava a acidez potencial e a coluna do Al trocável ficava sem dono. Como a CTCe é Ca+Mg+K+Al, a conta virava Ca+Mg+K+(H+Al), que é a definição da CTC pH 7,0: as duas passavam a mostrar o MESMO número. Num laudo real (MSKJA 01), a CTCe saía 145,4 onde o valor é 95,4, e a coluna AL da conferência mostrava 50, 81, 102, 183… quando o Alumínio de verdade era 0 e 6.',
+    'O ALUMÍNIO PASSA A RECUSAR essas colunas: "H+Al", "H/Al", "Hidrogênio + Alumínio" e "Acidez Potencial" — e também "Saturação por Alumínio" e "% Alumínio (CTC Efetiva)", que são o m% e caíam na mesma armadilha. "Al", "Al³⁺", "Alumínio" e "Alumínio Trocável" continuam casando normalmente. É a mesma trava que a 2.128.0 pôs na CTC pH 7,0 contra a coluna "CTC efetiva".',
+    'A COLUNA DE H+Al PASSA A TER DONO. Ela era invisível para a própria variável H+Al, que só reconhecia as formas curtas ("H+Al", "H/Al", "Acidez Potencial") — e visível demais para o Alumínio. Agora "Hidrogênio + Alumínio" por extenso é reconhecida: ligue o "Usar" em Biblioteca → Preferências de Análise → Variáveis de Análise para ela entrar nas próximas importações. O m% também aprendeu a grafia "Saturação por Alumínio", que ninguém reconhecia.',
+    'CONFIRA OS LAUDOS JÁ IMPORTADOS. Quem tem laudo desse layout importado antes desta versão está com o Alumínio errado gravado — e, junto dele, a CTC efetiva, o m% e todos os mapas gerados a partir deles. Dá para reconhecer na hora, na conferência da importação: se a coluna AL mostra dezenas (50, 81, 102) e a CTCe repete o número da CTC, é este defeito. O caminho é reimportar a planilha e gerar os mapas de novo.',
+    'Testes: teste:lab passou de 37 para 43, com o cabeçalho e a amostra REAIS da planilha da Fundação ABC — a CTCe calculada é conferida contra a coluna "t" que o próprio laboratório mandou (95,4 / 25,3 / 116,1).',
+  ],
+  // [28] Nome do relatório: talhão, ano e "recomendações completas"
+  '2.132.0': [
+    'PENDÊNCIA 28 — O RELATÓRIO DA ABA RELATÓRIOS BAIXA COM O NOME "JLLFL 02 2026 recomendações completas". Ele saía no código de pasta da casa (F02_BOOK_2026_EP02), que serve para ordenar o servidor do escritório e não diz nada para quem RECEBE o arquivo: não dá o nome do talhão nem o assunto. Agora o nome é o TALHÃO como está cadastrado + o ANO + "recomendações completas" — com espaço e acento, para ser lido, não decifrado.',
+    'O nome já vem preenchido nos dois caminhos: na aba de leitura (botão "Salvar PDF") e no download direto de quem só exporta. Vale também para o Abrir do histórico, que regenera o PDF. Sem o ano à mão (registro antigo, sem safra), o ano é simplesmente omitido — nunca vira "null".',
+    'Nenhum outro arquivo mudou de nome: mapas de fertilidade, zonas, NDVI, KML/SHP, arquivos de máquina e o book da aba Recomendações seguem no padrão SA03_TIPO_ANO_EPOCA (lib/nomeExport.ts).',
+  ],
   // [S/N] CTC efetiva e CTC pH 7,0 são duas variáveis, e o mapa passa a dizer isso
   '2.131.0': [
     'A CTC EFETIVA É Ca + Mg + K + Al — H+Al NÃO ENTRA NESSA CONTA. Quem soma o H+Al é a CTC pH 7,0 (SB + H+Al), que vem do laudo. São duas variáveis diferentes, medindo coisas diferentes, e a plataforma passa a tratá-las assim em todo lugar. O CÁLCULO já estava certo (a CTCe é sempre derivada de Ca+Mg+K+Al, nunca lida do arquivo); o que ainda misturava as duas era a RÉGUA do mapa.',

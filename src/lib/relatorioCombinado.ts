@@ -8,7 +8,7 @@
 
 import { renderFertilidadeNoDoc, type DadosRelatorioFert } from './relatorioFertilidade';
 import { renderBookOficialNoDoc } from './recomendacao/relatorioCenarios';
-import { abrirPdfNaAba } from './abrirPdf.ts';
+import { abrirPdfNaAba, limparNomeArquivo } from './abrirPdf.ts';
 import type { Cenario } from './recomendacao/cenarios';
 
 export interface ArgsRelatorioCombinado {
@@ -45,7 +45,12 @@ export async function gerarRelatorioCombinado(args: ArgsRelatorioCombinado): Pro
       temConteudo = true;
     }
     const paginas = doc.getNumberOfPages();
-    const nome = args.nomeArquivo.replace(/[^\w.\-]+/g, '_') + '.pdf';
+    // Tira só o que o sistema de arquivos PROÍBE (\ / : * ? " < > | e controle).
+    // A regra antiga era `[^\w.-] → _`, e ela comia espaço e acento — o nome
+    // "JLLFL 02 2026 recomendações completas" chegava como
+    // "JLLFL_02_2026_recomenda_es_completas". Este PDF vai para o produtor: o
+    // nome é para ser LIDO, não para ordenar pasta.
+    const nome = limparNomeArquivo(args.nomeArquivo) + '.pdf';
     const blob = doc.output('blob');
     abrirPdfNaAba(aba, blob, nome);
     return { paginas };

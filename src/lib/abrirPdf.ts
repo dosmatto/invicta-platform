@@ -23,6 +23,20 @@ import { somenteLeitura } from './somenteLeitura';
 const escapar = (s: string) => s.replace(/[<>&"']/g, c =>
   ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&#39;' }[c]!));
 
+/**
+ * Deixa passar um nome LEGÍVEL (espaço, acento, maiúscula) tirando só o que o
+ * sistema de arquivos proíbe: \ / : * ? " < > |, caracteres de controle e o
+ * ponto final (que o Windows recusa). Para os nomes em código de pasta —
+ * SA03_FERT_2026 — o formatador é outro: lib/nomeExport.ts.
+ */
+export function limparNomeArquivo(nome: string): string {
+  const limpo = (nome ?? '')
+    .replace(/[\\/:*?"<>|\u0000-\u001f\u007f]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/^[\s.]+|[\s.]+$/g, '');
+  return limpo || 'relatorio';
+}
+
 /** Garante a extensão sem duplicar quando o chamador já mandou com ela. */
 export function comExtensao(nome: string, ext = '.pdf'): string {
   const limpo = (nome || 'relatorio').trim();

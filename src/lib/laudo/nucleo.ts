@@ -21,7 +21,11 @@ export const ELEMENTOS_LAB: { id: string; simbolo: string; sinonimos: string[] }
   { id: 'al',  simbolo: 'Al',  sinonimos: ['al', 'aluminio'] },
   { id: 'ctc', simbolo: 'CTC', sinonimos: ['ctc', 'ctcph7', 'captrocacations', 'capacidadetrocacationica', 'capacidadedetroca'] },
   { id: 'v',   simbolo: 'V%',  sinonimos: ['v', 'v%', 'vperc', 'saturacaobases', 'satbases'] },
-  { id: 'm',   simbolo: 'm%',  sinonimos: ['m%', 'mperc', 'saturacaoaluminio', 'satal', 'aluminioctcefetiva'] },
+  // 'saturacaoporaluminio': a grafia com "por" no meio não está contida em
+  // 'saturacaoaluminio', então essa coluna não casava com o m%. Até agora ela
+  // caía no Al (contém 'aluminio'); com o anti-sinônimo do Al isso pararia e a
+  // coluna ficaria órfã — o m% precisa saber reconhecê-la.
+  { id: 'm',   simbolo: 'm%',  sinonimos: ['m%', 'mperc', 'saturacaoaluminio', 'saturacaoporaluminio', 'satal', 'aluminioctcefetiva'] },
   { id: 'mo',  simbolo: 'MO',  sinonimos: ['mo', 'mos', 'moseca', 'materiaorganica', 'morg'] },
   { id: 's',   simbolo: 'S',   sinonimos: ['s', 'enxofre', 'sso4'] },
   { id: 'b',   simbolo: 'B',   sinonimos: ['b', 'boro'] },
@@ -38,24 +42,40 @@ export const ELEMENTOS_LAB: { id: string; simbolo: string; sinonimos: string[] }
 ];
 
 // ANTI-SINÔNIMOS: cabeçalhos que a variável NÃO pode reivindicar, mesmo casando
-// pela regra do "contido". Existe um caso só, e ele é grave.
+// pela regra do "contido". São dois casos, e os dois nascem do mesmo lugar: um
+// nome curto de variável vive dentro do nome longo de OUTRA variável, e quem
+// aparece primeiro na planilha leva a coluna.
 //
-// O casamento aceita substring a partir de 3 letras (lab.ts), e 'ctc' está
-// dentro de 'ctcefetiva'. Então uma coluna "CTC efetiva" / "CTCe" / "CTC ef."
-// era entregue ao id 'ctc' (CTC pH 7,0) sempre que viesse ANTES da coluna de CTC
-// nominal — ou quando o laudo só trouxesse a efetiva. O estrago é silencioso e
-// não para na CTC: `calcularDerivados` divide K/Ca/Mg por `ctc`, então K%, Ca% e
-// Mg% saem inflados (num caso real, Ca% 73,7% no lugar de 47,5%), e CTC e CTCe
-// passam a exibir o MESMO número na tela.
+// 1. 'ctc' dentro de 'ctcefetiva'. Uma coluna "CTC efetiva" / "CTCe" / "CTC ef."
+//    era entregue ao id 'ctc' (CTC pH 7,0) sempre que viesse ANTES da coluna de
+//    CTC nominal — ou quando o laudo só trouxesse a efetiva. O estrago não para
+//    na CTC: `calcularDerivados` divide K/Ca/Mg por `ctc`, então K%, Ca% e Mg%
+//    saem inflados (num caso real, Ca% 73,7% no lugar de 47,5%), e CTC e CTCe
+//    passam a exibir o MESMO número na tela.
 //
-// A coluna de CTC efetiva fica sem mapeamento de propósito: `t` é SEMPRE
-// calculada (Ca+Mg+K+Al) e nunca lida de arquivo — ver DERIVADOS_LAB abaixo.
+// 2. 'aluminio' dentro de 'hidrogenio+aluminio'. Este é o pior dos dois, porque
+//    corrompe a CTC EFETIVA na origem. No layout da Fundação ABC as colunas vêm
+//    nesta ordem: "Hidrogênio + Alumínio" (col 6) e só depois "Alumínio" (col 7).
+//    O slot `al` casava com a primeira, a de Al trocável ficava sem dono, e
+//    `calcularDerivados` somava Ca+Mg+K+(H+Al) — que é, por definição, a CTC pH
+//    7,0. Resultado: CTCe e CTC exibindo o mesmo número (145,4 quando o valor é
+//    95,4), e a coluna AL da conferência mostrando 50, 81, 102… onde o Al
+//    trocável era 0 e 6. H+Al e Al são grandezas distintas: a acidez potencial
+//    (H+Al) fica FORA da CTC efetiva; só o Al trocável entra.
+//    'satur' e 'ctcefetiva' entram na mesma lista porque "Saturação por
+//    Alumínio" e "% Alumínio (CTC Efetiva)" também contêm 'aluminio' — são o m%,
+//    e `al` é avaliado antes de `m` na ordem do catálogo.
+//
+// A coluna de CTC efetiva do laudo fica sem mapeamento de propósito: `t` é
+// SEMPRE calculada (Ca+Mg+K+Al) e nunca lida de arquivo — ver DERIVADOS_LAB.
 //
 // Preço aceito: um cabeçalho como "CTC em mmolc/dm³" contém 'ctce' e também é
-// recusado. Preferimos isso — CTC sem coluna aparece na conferência da
-// importação — a CTC recebendo calada o número da efetiva.
+// recusado. Preferimos isso — variável sem coluna APARECE na conferência da
+// importação, com o aviso de "sem legenda/sem coluna" — a ela receber calada o
+// número de outra.
 export const ANTI_SINONIMOS: Record<string, string[]> = {
   ctc: ['efetiv', 'ctce'],
+  al:  ['h+al', 'h/al', 'hidrogenio', 'acidezpotencial', 'ctcefetiva', 'satur'],
 };
 
 // Colunas CALCULADAS na importação — a plataforma DERIVA a partir das colunas

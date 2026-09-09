@@ -15,7 +15,7 @@ import { carregarContextoRelatorio, montarPaginas, type ContextoRelatorio } from
 import { extrairPoligono } from '@/lib/fertilidade';
 import { gerarRelatorioCombinado } from '@/lib/relatorioCombinado';
 import { rotuloAno } from '@/lib/periodo';
-import { nomeExport, periodoParaNome } from '@/lib/nomeExport';
+import { periodoParaNome } from '@/lib/nomeExport';
 import { listarCenarios, descomprimirCenario, type Cenario } from '@/lib/recomendacao/cenarios';
 import { cenariosComPrecoAtual } from '@/lib/recomendacao/precoAtual';
 import { anoDaSafra } from '@/lib/periodo';
@@ -24,15 +24,21 @@ import { emailUsuario } from '@/lib/auth';
 import { pode, podeEm } from '@/lib/empresa';
 import { FileDown, Loader2, ChevronUp, ChevronDown, AlertTriangle, CheckSquare, Square, Satellite, Hash, History, Trash2, ExternalLink, Wand2, FlaskConical } from 'lucide-react';
 
-// Nome do book no padrão da casa: SA03_BOOK_2026_EP01. Sem contexto carregado
-// (relatório só de recomendação, reaberto do histórico), cai no nome do talhão
-// e no ano da safra — sem época, que só o laudo tem.
+// NOME DO ARQUIVO DESTE RELATÓRIO: "JLLFL 02 2026 recomendações completas".
+//
+// Saía no código de pasta da casa (F02_BOOK_2026_EP02): ótimo para ordenar o
+// servidor, ilegível para quem RECEBE o PDF. Este relatório não fica em pasta —
+// vai por e-mail/WhatsApp para o produtor, e lá o nome tem de dizer sozinho de
+// que talhão e de que ano ele é. O padrão de sigla continua valendo para todo o
+// resto (ver lib/nomeExport.ts).
+//
+// Sem contexto carregado (relatório só de recomendação, reaberto do histórico)
+// o ano vem da safra. Ano desconhecido é OMITIDO, nunca vira "null".
 function nomeBook(ctx: ContextoRelatorio | null, talhao: string, safra: string): string {
   const per = periodoParaNome({ ano: ctx?.ano, epoca: ctx?.epoca, safra });
-  return nomeExport({
-    fazenda: ctx?.fazenda ?? '', siglaFazenda: ctx?.siglaFazenda, talhao,
-    tipo: 'BOOK', ano: per.ano, epoca: per.epoca,
-  });
+  const nome = (talhao || '').trim() || 'Talhão';
+  const ano = per.ano != null ? ` ${per.ano}` : '';
+  return `${nome}${ano} recomendações completas`;
 }
 
 export function GeradorRelatorios({ safraNome }: { safraNome?: string } = {}) {

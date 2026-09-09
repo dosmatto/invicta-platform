@@ -63,7 +63,12 @@ export const VARIAVEIS_COMPLEMENTARES: VariavelComplementar[] = [
   { id: 'na',    sigla: 'Na',   nome: 'Sódio',                    unidade: 'cmolc/dm³', sinonimos: ['sodio'],                             usar: false },
   { id: 'sb',    sigla: 'SB',   nome: 'Soma de Bases',            unidade: 'cmolc/dm³', sinonimos: ['sb', 'somadebases', 'somabases'],    usar: false },
   { id: 'ca_mg', sigla: 'Ca+Mg', nome: 'Soma Cálcio + Magnésio',  unidade: 'cmolc/dm³', sinonimos: ['ca+mg', 'somacalciomagnesio'],       usar: false },
-  { id: 'h_al',  sigla: 'H+Al', nome: 'Hidrogênio + Alumínio',    unidade: 'cmolc/dm³', sinonimos: ['h+al', 'h/al', 'hal', 'acidezpotencial'], usar: false },
+  // 'hidrogenio+aluminio' é como o layout da Fundação ABC escreve o cabeçalho por
+  // extenso; sem ele a coluna era invisível para esta variável (e visível demais
+  // para o Alumínio, que a capturava por conter 'aluminio' — ver ANTI_SINONIMOS).
+  // Os sinônimos são a forma COMPLETA de propósito: 'hidrogenio' sozinho roubaria
+  // a coluna do H isolado, que é outra variável.
+  { id: 'h_al',  sigla: 'H+Al', nome: 'Hidrogênio + Alumínio',    unidade: 'cmolc/dm³', sinonimos: ['h+al', 'h/al', 'hal', 'acidezpotencial', 'hidrogenio+aluminio', 'hidrogenioaluminio'], usar: false },
   { id: 'h_pct', sigla: 'H%',   nome: 'Saturação de Hidrogênio',  unidade: '%',         sinonimos: ['h%', 'saturacaohidrogenio'],         usar: false },
   { id: 'h_al_pct', sigla: 'H/Al%', nome: 'Saturação de H+Al',    unidade: '%',         sinonimos: ['h/al%', 'h+al%'],                    usar: false },
   { id: 'so4',   sigla: 'SO4',  nome: 'Sulfato (SO4)',            unidade: 'meq/L',     sinonimos: ['so4', 'sulfato'],                    usar: false },

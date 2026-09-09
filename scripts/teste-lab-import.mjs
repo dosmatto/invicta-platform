@@ -18,6 +18,7 @@ import assert from 'node:assert/strict';
 import {
   autoConfig, aplicarPerfil, escolherPerfil, pontuarPerfil, normCab,
   PERFIS_BUILTIN, CONFIANCA_MINIMA, ELEMENTOS_LAB, completarPorCabecalho,
+  calcularDerivados, valorLab,
 } from '../src/lib/lab.ts';
 
 let ok = 0, fail = 0;
@@ -371,6 +372,69 @@ t('...e as formas legítimas de CTC continuam casando', () => {
     const aoa = [['id', 'prof', 'Ca', cab], ['1', '0-20', '30', '78']];
     assert.equal(autoConfig(aoa).config.elementos.ctc, 3, `"${cab}" deveria casar com CTC`);
   }
+});
+
+// ── "Hidrogênio + Alumínio" não é o Alumínio (v2.132.0) ──────────────────────
+// A mesma armadilha da CTC, e a mais cara delas: 'aluminio' é substring de
+// 'hidrogenio+aluminio'. No layout da Fundação ABC o H+Al vem ANTES do Al
+// trocável, então o slot `al` levava a acidez potencial e a CTC EFETIVA saía
+// Ca+Mg+K+(H+Al) — que é a definição da CTC pH 7,0. As duas exibiam o mesmo
+// número. Fixture = cabeçalho e amostra reais de "MSKJA 01_2026 FUNDAÇÃO ABC.xlsx".
+const ABC_HAL = [
+  ['Identificação', 'Profundidade', 'Fósforo', 'Matéria Orgânica', 'pH (CaCl2)',
+   'Hidrogênio + Alumínio', 'Alumínio', 'Potássio (Resina)', 'Cálcio', 'Magnésio',
+   'Soma de Bases (SB)', 'CTC', 'V%', 't', 'm%'],
+  ['', '', 'mg/dm³', 'g/dm³', '-', 'mmolc/dm³', 'mmolc/dm³', 'mmolc/dm³', 'mmolc/dm³',
+   'mmolc/dm³', 'mmolc/dm³', 'mmolc/dm³', '%', 'mmolc/dm³', '%'],
+  ['1', '0-20', '62', '32', '5.2', '50', '0', '2.4', '68', '25', '95.4', '145.4', '66', '95.4', '0'],
+];
+
+t('BUG QUE ISTO TRAVA: "Hidrogênio + Alumínio" antes de "Alumínio" não rouba o Al', () => {
+  const { config } = autoConfig(ABC_HAL);
+  assert.equal(config.elementos.al, 6, 'o Al trocável é a coluna 6; a 5 é a acidez potencial');
+});
+
+t('com o Al certo, a CTCe bate com o "t" que o próprio laboratório calculou', () => {
+  const { config } = autoConfig(ABC_HAL);
+  const v = {};
+  for (const [id, i] of Object.entries(config.elementos)) {
+    const n = valorLab(ABC_HAL[2][i]);
+    if (n != null) v[id] = n;
+  }
+  calcularDerivados(v);
+  assert.equal(v.t, 95.4, 'Ca 68 + Mg 25 + K 2,4 + Al 0 — o t da coluna 13 do laudo');
+  assert.equal(v.ctc, 145.4, 'a CTC pH 7,0 continua sendo a do laudo');
+  assert.notEqual(v.t, v.ctc, 'era o defeito: CTCe e CTC exibindo o mesmo número');
+});
+
+t('a acidez potencial não vira Al em nenhuma das grafias usadas pelos laudos', () => {
+  for (const cab of ['H+Al', 'H/Al', 'Hidrogênio + Alumínio', 'Acidez Potencial (H+Al)']) {
+    const aoa = [['id', 'prof', 'Ca', cab], ['1', '0-20', '30', '50']];
+    assert.equal(autoConfig(aoa).config.elementos.al, undefined, `"${cab}" não pode virar Al`);
+  }
+});
+
+t('nem a saturação por alumínio, que é o m%', () => {
+  for (const cab of ['Saturação por Alumínio', '% Alumínio (CTC Efetiva)']) {
+    const aoa = [['id', 'prof', 'Ca', cab], ['1', '0-20', '30', '12']];
+    assert.equal(autoConfig(aoa).config.elementos.al, undefined, `"${cab}" é m%, não Al`);
+    assert.equal(autoConfig(aoa).config.elementos.m, 3, `"${cab}" deveria casar com m%`);
+  }
+});
+
+t('...e as formas legítimas de Alumínio continuam casando', () => {
+  for (const cab of ['Al', 'Al³⁺', 'Alumínio', 'Alumínio Trocável']) {
+    const aoa = [['id', 'prof', 'Ca', cab], ['1', '0-20', '30', '6']];
+    assert.equal(autoConfig(aoa).config.elementos.al, 3, `"${cab}" deveria casar com Al`);
+  }
+});
+
+t('ligando H+Al no catálogo, a coluna passa a ter dono (era invisível para ela)', () => {
+  const vars = [...ELEMENTOS_LAB.map(e => ({ id: e.id, sinonimos: e.sinonimos })),
+                { id: 'h_al', sinonimos: ['h+al', 'h/al', 'hal', 'acidezpotencial', 'hidrogenio+aluminio', 'hidrogenioaluminio'] }];
+  const { config } = autoConfig(ABC_HAL, vars);
+  assert.equal(config.elementos.h_al, 5, 'a acidez potencial é a coluna 5');
+  assert.equal(config.elementos.al, 6, 'e o Al trocável continua na 6');
 });
 
 console.log(`\n${ok} passaram, ${fail} falharam\n`);
