@@ -225,11 +225,24 @@ export function mesmasFaixas(a: Pick<Legenda, 'classes'>, b: Pick<Legenda, 'clas
  *
  * Não substitui ter a legenda certa: é rede de segurança para a conta que ficou
  * sem ela. Ver `migrarLegendaCtceV1/V2` em store.ts.
+ *
+ * `faixas` existe porque emprestar a RÉGUA é o passo que faltava fechar. A CTC
+ * pH 7,0 e a CTC efetiva são grandezas DIFERENTES, por definição:
+ *
+ *     CTC pH 7,0 (id 'ctc')   = SB + H+Al   → sempre COM a acidez potencial
+ *     CTC efetiva (id 't')    = Ca+Mg+K+Al  → só cátions trocáveis; H+Al FORA
+ *
+ * Como a pH 7,0 carrega o H+Al, ela vive numa ordem de grandeza acima (50–240
+ * mmolc/dm³ contra 10–80 da efetiva). Emprestar as classes dela para pintar a
+ * CTCe classificava um solo bom como "muito baixo" e fazia o mapa afirmar, em
+ * cor, que a efetiva estaria na escala de quem soma H+Al. Quem empresta passa
+ * as faixas do PRÓPRIO atributo; só as cores e o estilo vêm da legenda base.
  */
 export function legendaEmprestada(
   base: Legenda,
   atributoId: string,
   ident: { sigla?: string; nome?: string; unidade?: string } | null | undefined,
+  faixas?: [number, number, number, number],
 ): Legenda {
   return {
     ...base,
@@ -239,7 +252,9 @@ export function legendaEmprestada(
     unidade: ident?.unidade ?? base.unidade,
     metodo: null,
     fonte: base.fonte ? `escala de ${base.simbolo} (${base.fonte})` : `escala de ${base.simbolo}`,
-    classes: base.classes.map(c => ({ ...c })),
+    classes: faixas ? classesFertilidade5(faixas, base.invertida) : base.classes.map(c => ({ ...c })),
+    // O domínio da base é o da grandeza dela; com faixas próprias ele mentiria.
+    ...(faixas ? { dominioMin: undefined, dominioMax: undefined } : {}),
   };
 }
 
@@ -314,6 +329,16 @@ export function classesFertilidade5(bordas: [number, number, number, number], in
     ordem: i + 1,
   }));
 }
+
+/** Faixas OFICIAIS da CTC EFETIVA (Fundação ABC), em mmolc/dm³.
+ *
+ *  Régua própria, e por um motivo que não é de estilo: a CTC efetiva é
+ *  Ca+Mg+K+Al — **H+Al não entra** —, enquanto a CTC pH 7,0 é SB + H+Al. A
+ *  acidez potencial é a maior parcela da pH 7,0 na maioria dos solos, então as
+ *  duas nem se sobrepõem: 50/70/140/240 na pH 7,0 contra 10/20/40/80 aqui.
+ *  Fonte única para o seed (`fabc_ctc_efetiva`), para as migrações da legenda de
+ *  CTCe (store.ts) e para o empréstimo de escala (`legendaEmprestada`). */
+export const FAIXAS_CTCE: [number, number, number, number] = [10, 20, 40, 80];
 
 // Monta 5 classes com PARES de cor explícitos — para paletas não-oficiais
 // (Textura, Altimetria, NDVI). bordas.length === 4.

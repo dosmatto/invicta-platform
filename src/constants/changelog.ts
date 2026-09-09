@@ -1,5 +1,14 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] CTC efetiva e CTC pH 7,0 são duas variáveis, e o mapa passa a dizer isso
+  '2.131.0': [
+    'A CTC EFETIVA É Ca + Mg + K + Al — H+Al NÃO ENTRA NESSA CONTA. Quem soma o H+Al é a CTC pH 7,0 (SB + H+Al), que vem do laudo. São duas variáveis diferentes, medindo coisas diferentes, e a plataforma passa a tratá-las assim em todo lugar. O CÁLCULO já estava certo (a CTCe é sempre derivada de Ca+Mg+K+Al, nunca lida do arquivo); o que ainda misturava as duas era a RÉGUA do mapa.',
+    'O MAPA DE CTCe NÃO É MAIS PINTADO NA ESCALA DA CTC pH 7,0. Quando a conta não tem legenda própria de CTC efetiva, a aba Fertilidade empresta a legenda da CTC para conseguir pintar — e até agora emprestava as faixas junto. Como o H+Al é a maior parcela da CTC pH 7,0 na maioria dos solos, as duas escalas nem se encostam (50/70/140/240 contra 10/20/40/80 mmolc/dm³): um solo com CTCe de 44,5 aparecia em VERMELHO, "muito baixo", quando é a 4ª das 5 classes. Vale para o mapa interpolado e para o processado em zona de manejo. Agora só as CORES vêm emprestadas; as faixas são as da Fundação ABC para CTC efetiva.',
+    'NA CONFERÊNCIA DA IMPORTAÇÃO, a tabela passa a dizer a conta de cada coluna calculada: passando o mouse no cabeçalho da CTCe sai "Ca + Mg + K + Al (cátions trocáveis); H+Al NÃO entra", e um aviso abaixo da tabela explica por que a CTCe sai bem menor que a CTC do laudo — a diferença entre as duas é a acidez potencial, não um erro de importação.',
+    'A CTC do laudo passa a se chamar "CTC pH 7,0 (com H+Al)" no catálogo de Variáveis de Análise (instalações novas) — "CTC" sem sobrenome fazia as duas parecerem a mesma coisa medida de dois jeitos.',
+    'Se você já gerou mapas de CTCe antes desta versão, gere de novo: o laudo se recalcula sozinho na leitura, o raster já salvo não.',
+    'Testes: teste:legendas passou de 35 para 39, com o caso do solo bom que era pintado de "muito baixo". As faixas da CTCe agora têm UMA fonte no código (eram três cópias do mesmo [10, 20, 40, 80]).',
+  ],
   // [31] Separar área e fundir talhões na mesma janela
   '2.130.0': [
     'PENDÊNCIA 31 — SEPARAR ÁREA E FUNDIR TALHÕES VIRARAM UMA JANELA SÓ, com duas abas: "Separar área" e "Fundir talhões". Antes eram duas portas distantes — a separação dentro de "Limite do Talhão", a fusão lá em cima na ficha do talhão —, e quem abria o shapefile errado precisava fechar tudo e caçar a outra ferramenta para terminar o serviço. Agora dá para separar a área e, sem sair da janela, fundir o que sobrou com o talhão vizinho.',

@@ -33,9 +33,22 @@ const COR_FLAG: Record<string, { borda: string; fundo: string }> = {
   estatistico:  { borda: '#f59e0b', fundo: '#2a2100' },
 };
 
+// A CONTA de cada coluna calculada, dita por extenso no cabeçalho. A dúvida que
+// isto encerra é sempre a mesma, e é agronômica: a CTC efetiva (t) NÃO leva H+Al
+// — só os cátions trocáveis. Quem leva é a CTC pH 7,0, que vem do laudo e é
+// SB + H+Al. As duas aparecem lado a lado nesta tabela, com números de ordens de
+// grandeza diferentes, e sem dizer a fórmula parecia erro de cálculo.
+const FORMULA_DERIVADA: Record<string, string> = {
+  t:     'CTC efetiva = Ca + Mg + K + Al (cátions trocáveis). H+Al NÃO entra — quem soma H+Al é a CTC pH 7,0, que vem do laudo.',
+  satk:  'K% = K ÷ CTC pH 7,0 × 100 (saturação na CTC nominal).',
+  satca: 'Ca% = Ca ÷ CTC pH 7,0 × 100 (saturação na CTC nominal).',
+  satmg: 'Mg% = Mg ÷ CTC pH 7,0 × 100 (saturação na CTC nominal).',
+};
+
 export function LabPreviewTable({ resultados, elementos, derivados, sigla, valorTexto, onEditar, excluidos, onToggleExcluir, outliers }: Props) {
   const ehDerivado = (elId: string) => derivados?.has(elId) ?? false;
   const nFlags = contarOutliers(outliers);
+  const temCtce = elementos.some(e => e === 't' && ehDerivado(e));
 
   return (
     <div>
@@ -58,7 +71,9 @@ export function LabPreviewTable({ resultados, elementos, derivados, sigla, valor
               <th className={th} style={{ color: '#93c5fd', textAlign: 'left' }}>Prof</th>
               {elementos.map(elId => (
                 <th key={elId} className={th} style={{ color: ehDerivado(elId) ? '#7dd3fc' : '#cbd5e1', background: '#0b1f3a', fontStyle: ehDerivado(elId) ? 'italic' : 'normal' }}
-                  title={ehDerivado(elId) ? 'Coluna calculada pela plataforma' : undefined}>{sigla(elId)}</th>
+                  title={ehDerivado(elId)
+                    ? `Coluna calculada pela plataforma. ${FORMULA_DERIVADA[elId] ?? ''}`.trim()
+                    : undefined}>{sigla(elId)}</th>
               ))}
               <th className={th} style={{ background: '#0b1f3a' }}></th>
             </tr>
@@ -118,6 +133,15 @@ export function LabPreviewTable({ resultados, elementos, derivados, sigla, valor
           <span style={{ width: 9, height: 9, borderRadius: 2, background: COR_FLAG.estatistico.fundo, border: `1px solid ${COR_FLAG.estatistico.borda}` }} /> destoa das demais
         </span>
       </div>
+
+      {/* As colunas em azul-claro/itálico são CALCULADAS. Dito aqui porque a CTCe
+          fica ao lado da CTC do laudo, com número bem menor, e a diferença entre
+          as duas é a acidez potencial — não um erro de importação. */}
+      {temCtce && (
+        <p className="text-[9px] mt-1" style={{ color: '#7dd3fc' }}>
+          <strong>CTCe</strong> (calculada) = Ca + Mg + K + Al — <strong>H+Al não entra</strong>. A <strong>CTC</strong> do laudo é a pH 7,0 (SB + H+Al): são grandezas diferentes, e é normal a CTCe sair bem menor.
+        </p>
+      )}
     </div>
   );
 }

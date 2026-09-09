@@ -8,7 +8,7 @@
 import assert from 'node:assert/strict';
 import { ordenarLegendasDoAtributo, deveSemearLegendas, respeitarPadraoHomonima, promocoesDeHomonimas,
   ordenarPorObjeto, agruparPorCategoria, chaveObjeto, categoriaSugerida, CATEGORIAS_LEGENDA,
-  legendaEmprestada, mesmasFaixas, classesFertilidade5 } from '../src/lib/legendas.ts';
+  legendaEmprestada, mesmasFaixas, classesFertilidade5, FAIXAS_CTCE } from '../src/lib/legendas.ts';
 
 let ok = 0, fail = 0;
 function t(nome, fn) {
@@ -273,11 +273,35 @@ t('legenda emprestada troca a IDENTIDADE pela do atributo pedido', () => {
   assert.equal(e.metodo, null, '"pH 7,0" é método da CTC nominal — mentiria sobre a efetiva');
 });
 
-t('legenda emprestada mantém a ESCALA (é só o que se empresta)', () => {
+t('sem faixas próprias, a escala da base é copiada (e não referenciada)', () => {
   const e = legendaEmprestada(LEG_CTC, 't', VAR_CTCE);
   assert.deepEqual(e.classes.map(c => c.valorMax), LEG_CTC.classes.map(c => c.valorMax));
   assert.notEqual(e.classes, LEG_CTC.classes, 'cópia, não a mesma referência');
   assert.match(e.fonte, /escala de CTC/, 'o PDF não pode creditar a faixa como se fosse do atributo');
+});
+
+// A RÉGUA da CTCe não pode ser a da CTC pH 7,0: pH 7,0 = SB + H+Al, efetiva =
+// Ca+Mg+K+Al. O H+Al é a maior parcela da pH 7,0 na maioria dos solos, então as
+// duas escalas nem se encostam (50–240 contra 10–80 mmolc/dm³) e classificar a
+// efetiva pela nominal joga o talhão inteiro na classe mais baixa.
+t('CTCe emprestada usa as FAIXAS DELA — nunca as 50/70/140/240 da CTC pH 7,0', () => {
+  const e = legendaEmprestada(LEG_CTC, 't', VAR_CTCE, FAIXAS_CTCE);
+  assert.deepEqual(e.classes.map(c => c.valorMax), [10, 20, 40, 80, null]);
+  assert.equal(mesmasFaixas(e, LEG_CTC), false, 'se batesse, seria a régua da pH 7,0 de novo');
+});
+
+t('CTCe emprestada herda as CORES da base, e só elas', () => {
+  const e = legendaEmprestada(LEG_CTC, 't', VAR_CTCE, FAIXAS_CTCE);
+  assert.deepEqual(e.classes.map(c => c.corInicio), LEG_CTC.classes.map(c => c.corInicio));
+  assert.equal(e.dominioMin, undefined, 'o domínio da pH 7,0 não vale para a efetiva');
+  assert.equal(e.dominioMax, undefined);
+});
+
+t('um solo bom de CTCe não é mais pintado como "muito baixo"', () => {
+  // 44,5 mmolc/dm³ = Ca 28 + Mg 12 + K 4 + Al 0,5 — CTCe alta (4ª de 5 classes).
+  const classeDe = (leg, v) => leg.classes.find(c => (c.valorMin == null || v > c.valorMin) && (c.valorMax == null || v <= c.valorMax));
+  assert.equal(classeDe(legendaEmprestada(LEG_CTC, 't', VAR_CTCE), 44.5).ordem, 1, 'era o defeito: "muito baixo"');
+  assert.equal(classeDe(legendaEmprestada(LEG_CTC, 't', VAR_CTCE, FAIXAS_CTCE), 44.5).ordem, 4);
 });
 
 t('legenda emprestada não altera a original', () => {

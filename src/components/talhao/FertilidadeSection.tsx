@@ -23,7 +23,7 @@ import { resolverGradeDoLaudo, pontosPorNumero, casarAmostrasComPontos } from '@
 import { decodeGrid, interpoladorEfetivo, MIN_PTS_MAPA, MIN_PTS_KRIGE } from '@/lib/fertilidade';
 import { rasterizarZonas, rasterizarZonasDose, centroideGeom, type ZonaValor } from '@/lib/recomendacao/zonasGrid';
 import { bindingAuto, bindingPorPontos, divisasDasZonas, valorZona as valorZonaLab } from '@/lib/meap/fertilidadePorZona';
-import { stopsParaBackend, dominioDaLegenda, paresDaClasse, respeitarPadraoHomonima, legendaEmprestada } from '@/lib/legendas';
+import { stopsParaBackend, dominioDaLegenda, paresDaClasse, respeitarPadraoHomonima, legendaEmprestada, FAIXAS_CTCE } from '@/lib/legendas';
 import type { Legenda } from '@/lib/legendas';
 import { Play, Layers, Loader2, Eraser, AlertTriangle, Activity, Settings, BookOpen, Save, FileDown, RotateCcw } from 'lucide-react';
 import { cloudSalvarMapa, cloudCarregarMapasPorPrefixo, cloudExcluirMapasPorPrefixo, cloudPodeGravar } from '@/lib/cloud';
@@ -319,14 +319,16 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
     // ordenarLegendasDoAtributo: sem escolha explícita vale a marcada como PADRÃO
     // — e nunca a "primeira que o array trouxe" (que variava a cada boot).
     const lst = ordenarLegendasDoAtributo(legendas.filter(l => l.atributoId === atributoId));
-    // CTCe sem legenda própria EMPRESTA a escala da CTC — e só a escala. Antes o
-    // objeto inteiro da legenda de CTC vinha junto, e como a legenda é a fonte da
-    // identidade do mapa (chip, rodapé, título/unidade/nome do arquivo no PDF), o
-    // usuário pedia CTCe e recebia uma página "CTC pH 7,0". Ver legendaEmprestada.
+    // CTCe sem legenda própria empresta da CTC as CORES — e só as cores. Nem a
+    // identidade (chip, rodapé, título/unidade/nome do arquivo no PDF: o usuário
+    // pedia CTCe e recebia uma página "CTC pH 7,0") nem a RÉGUA: a CTC pH 7,0 é
+    // SB + H+Al e a efetiva é Ca+Mg+K+Al, então as faixas da primeira (50/70/
+    // 140/240) classificavam a segunda (10/20/40/80) inteira como "muito baixo".
+    // As faixas vêm de FAIXAS_CTCE. Ver legendaEmprestada.
     if (lst.length === 0) {
       if (atributoId !== 't') return undefined;
       const base = ordenarLegendasDoAtributo(legendas.filter(l => l.atributoId === 'ctc'))[0];
-      return base ? legendaEmprestada(base, 't', variavelDeAnalise('t')) : undefined;
+      return base ? legendaEmprestada(base, 't', variavelDeAnalise('t'), FAIXAS_CTCE) : undefined;
     }
     const escolhida = legendaIdPorAtributo[atributoId];
     const alvo = lst.find(l => l.id === escolhida);

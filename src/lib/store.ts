@@ -4,7 +4,7 @@
 
 import type { ResultadoAmostra, PerfilLabConfig } from './lab';
 import type { Legenda } from './legendas';
-import { classesFertilidade5, ordenarLegendasDoAtributo, deveSemearLegendas, promocoesDeHomonimas, mesmasFaixas } from './legendas';
+import { classesFertilidade5, ordenarLegendasDoAtributo, deveSemearLegendas, promocoesDeHomonimas, mesmasFaixas, FAIXAS_CTCE } from './legendas';
 import { legendaRentabilidade } from '@/constants/legendasSeedOficial';
 import { deveSemearCatalogo, podeMigrarCatalogo, gemeasAExcluir } from './catalogoVariaveis';
 import { coefsParaElemento } from './nutrienteBase';
@@ -1644,7 +1644,10 @@ const VAR_SEED_INFO: Record<string, { nome: string; unidade: string }> = {
   ca: { nome: 'Cálcio', unidade: 'cmolc/dm³' },
   mg: { nome: 'Magnésio', unidade: 'cmolc/dm³' },
   al: { nome: 'Alumínio', unidade: 'cmolc/dm³' },
-  ctc: { nome: 'CTC (pH 7)', unidade: 'cmolc/dm³' },
+  // Nome explícito: a CTC do laudo é a pH 7,0 e SEMPRE inclui o H+Al (SB + H+Al).
+  // A efetiva (id 't', Ca+Mg+K+Al) é outra variável, com outra régua — 'CTC' sem
+  // sobrenome fazia as duas parecerem a mesma coisa medida de dois jeitos.
+  ctc: { nome: 'CTC pH 7,0 (com H+Al)', unidade: 'cmolc/dm³' },
   v: { nome: 'Saturação por Bases', unidade: '%' },
   m: { nome: 'Saturação por Alumínio', unidade: '%' },
   mo: { nome: 'Matéria Orgânica', unidade: 'g/dm³' },
@@ -2650,13 +2653,11 @@ export function seedLegendasSistema(seed: Legenda[]) {
   notificarLegendas();
 }
 
-// Faixas OFICIAIS da CTC efetiva (Fundação ABC) — as mesmas de `fabc_ctc_efetiva`
-// em legendasSeedABC.ts, que só chega a quem instalou com o banco vazio. Ficam
-// aqui para as migrações abaixo poderem entregá-las a quem já tinha Biblioteca.
-// Escala PRÓPRIA: a CTC nominal (pH 7,0) vai de 50 a 240 mmolc/dm³ e a efetiva de
-// 10 a 80 — usar a primeira para classificar a segunda joga o talhão inteiro na
-// classe mais baixa, que é o oposto do que o mapa deveria dizer.
-const FAIXAS_CTCE: [number, number, number, number] = [10, 20, 40, 80];
+// As faixas OFICIAIS da CTC efetiva (Fundação ABC) moram em lib/legendas.ts —
+// FAIXAS_CTCE, importado no topo. Eram três cópias do mesmo [10, 20, 40, 80]
+// (seed ABC, esta migração e o empréstimo de escala da Fertilidade); a régua da
+// CTCe é uma decisão agronômica só, e uma cópia divergir das outras significaria
+// o mesmo talhão mudando de classe conforme a tela.
 
 // Cria a legenda de CTC EFETIVA (atributoId 't', sigla CTCe) a partir da de CTC
 // — as CORES e o estilo dela, com as FAIXAS PRÓPRIAS da CTCe —, para a CTCe
