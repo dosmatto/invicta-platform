@@ -1,5 +1,15 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [36] Mapas de fertilidade voltam a entrar nas Zonas de Manejo
+  '2.137.0': [
+    'PENDÊNCIA 36 — OS MAPAS DE FERTILIDADE NÃO APARECIAM COMO CAMADA NAS ZONAS DE MANEJO. O talhão tinha 29 mapas salvos na nuvem, e a aba Zonas abria com "Camadas a usar (0/1)" — só a condutividade. Não era mapa faltando nem processamento a refazer: o zoneamento estava procurando na gaveta errada.',
+    'A CAUSA: o zoneamento pegava SEMPRE O LAUDO MAIS RECENTE do talhão, e só ele. Se o laudo mais novo ainda não tinha mapa processado — um laudo de outro ano recém-importado, por exemplo —, o zoneamento procurava os mapas DESSE laudo, não encontrava nenhum, e desistia da fertilidade inteira. Os mapas do laudo anterior continuavam salvos e visíveis na aba Fertilidade; a aba Zonas é que nunca olhava para eles. E como não havia aviso nenhum, a tela parecia estar dizendo que o talhão não tinha fertilidade.',
+    'AGORA O ZONEAMENTO PROCURA ATÉ ACHAR. Ele tenta os laudos do talhão em ordem — primeiro os do ANO selecionado no alto da tela, depois os demais, do mais novo para o mais antigo — e fica no primeiro que realmente tem mapa salvo. Na prática: escolher 2026 no seletor de Ano com os mapas processados em 2025 passa a mostrar as camadas de 2025, em vez de mostrar tela vazia.',
+    'O SELETOR DE ANO PASSA A VALER PARA AS ZONAS. Antes ele não tinha efeito nenhum nesta aba: a lista de camadas era a mesma em qualquer ano. Agora, se o ano escolhido tem laudo com mapas, são os mapas DELE que entram.',
+    'E A TELA PASSOU A DIZER DE ONDE VEIO A FERTILIDADE. Abaixo dos botões das camadas aparece "Fertilidade do laudo 2025 · 14/03/2025" — para você conferir num relance se o zoneamento está usando a análise que você acha que está. Quando nenhum laudo do talhão tem mapa processado, em vez de simplesmente não listar nada, a tela diz isso em amarelo e manda processar os atributos na aba Fertilidade.',
+    'Nada mudou na qualidade das zonas: as camadas continuam entrando na resolução mais FINA disponível (a regra de 20 m é da dose, e continua só lá) e a condutividade, o NDVI e o relevo seguem entrando como antes.',
+    'Testes: teste:laudo-zonas (novo, 7 asserções) trava a ordem de busca dos laudos, incluindo o caso exato do defeito — laudo mais novo sem mapa não pode ser o fim da fila.',
+  ],
   // [S/N] O app de Coleta pronto para a Play Store
   '2.136.0': [
     'O APP DE COLETA GANHOU O ÍCONE DA INVICTA. Até agora ele aparecia no celular com o logotipo do Capacitor — a ferramenta que empacota o app —, e a tela de abertura também. Ícone e abertura passam a usar a folha da marca, gerada a partir do mesmo desenho que a plataforma web já usa (`src/app/icon.svg`), em todas as resoluções de tela. Para refazer: `node scripts/gerar-icones-app.mjs`.',

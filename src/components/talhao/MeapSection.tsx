@@ -241,12 +241,15 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
   useEffect(() => {
     let vivo = true;
     setCarregando(true);
-    carregarCamadas(talhao.id)
+    // `safraNome` entra para o zoneamento preferir o laudo do ANO selecionado —
+    // sem ele, um laudo mais novo (de outro ano, ainda sem mapas) escondia a
+    // fertilidade inteira da lista de camadas.
+    carregarCamadas(talhao.id, safraNome)
       .then(c => { if (!vivo) return; setCarregadas(c); setChaves([]); setPesos({}); setAnalise(null); setRes(null); setNClasses(0); })
       .catch(() => { if (vivo) setCarregadas(null); })
       .finally(() => { if (vivo) setCarregando(false); });
     return () => { vivo = false; };
-  }, [talhao.id]);
+  }, [talhao.id, safraNome]);
 
   useEffect(() => { setZoneamentos(getZoneamentosMeap(talhao.id)); }, [talhao.id]);
   const recarregarZon = () => setZoneamentos(getZoneamentosMeap(talhao.id));
@@ -1019,6 +1022,18 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
                   );
                 })}
               </div>
+              {/* De ONDE veio a fertilidade — e por que ela pode não estar aqui.
+                  Sem esta linha, um laudo novo sem mapas processados fazia as
+                  camadas de fertilidade sumirem em silêncio. */}
+              {carregadas.laudoRotulo ? (
+                <p className="text-[9px] mt-1" style={{ color: '#64748b' }}>
+                  Fertilidade do laudo <strong style={{ color: '#93c5fd' }}>{carregadas.laudoRotulo}</strong>.
+                </p>
+              ) : (carregadas.laudosSemMapa ?? 0) > 0 ? (
+                <p className="text-[9px] mt-1 leading-relaxed" style={{ color: '#fbbf24' }}>
+                  Nenhuma camada de fertilidade: {carregadas.laudosSemMapa === 1 ? 'o laudo deste talhão ainda não tem' : `os ${carregadas.laudosSemMapa} laudos deste talhão ainda não têm`} mapa interpolado salvo na nuvem. Processe os atributos na aba <strong style={{ color: '#93c5fd' }}>Fertilidade</strong> (logado) e volte aqui.
+                </p>
+              ) : null}
             </div>
 
             {/* Pesos por camada (quanto cada uma pesa na separação das zonas) */}

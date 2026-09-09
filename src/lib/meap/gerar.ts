@@ -5,11 +5,12 @@
 // camadas escolhidas, empilha e manda o backend clusterizar (k-means/FCM) com
 // índices FPI/NCE para escolher o nº de zonas. Preview apenas (persistir = M3).
 
-import { getImportacoesLab, getGrades, getCondutividade, getComposicoes, getMdes, getMdeCamadasTopo } from '@/lib/store';
+import { getImportacoesLab, getGrades, getCondutividade, getComposicoes, getMdes, getMdeCamadasTopo, type ImportacaoLab } from '@/lib/store';
 import { carregarGridsTalhao } from '@/lib/recomendacao/aplicar';
 import { analisarZonas, gerarZonas, decodeGrid, descomprimirGrid, type RespAnalisarZonas, type RespGerarZonas, type Grid } from '@/lib/fertilidade';
 import { cloudCarregarMapasPorPrefixo, cloudListarMapasMeta, cloudCarregarMapa } from '@/lib/cloud';
 import { simboloElemento, type ResultadoAmostra } from '@/lib/lab';
+import { ordemLaudosParaZonas, MAX_LAUDOS_TENTADOS } from './escolhaLaudo';
 
 export interface CamadaGrid {
   chave: string;   // `nut__prof`
@@ -22,6 +23,10 @@ export interface CamadaGrid {
 
 export interface CamadasCarregadas {
   importacaoId: string;
+  /** Laudo que forneceu as camadas de fertilidade (null = nenhuma entrou). */
+  laudoRotulo?: string | null;
+  /** Quantos laudos existiam sem NENHUM mapa salvo — a tela explica o vazio. */
+  laudosSemMapa?: number;
   bounds: [number, number, number, number];
   shape: [number, number];
   camadas: CamadaGrid[];
@@ -219,28 +224,56 @@ export function rotuloEc(prof: string): string {
   return prof === 'altitude' ? 'Altimetria' : `EC ${prof.replace('_', '–')}`;
 }
 
+// Rótulo curto do laudo (ano + data de referência), para a tela dizer DE QUAL
+// laudo saíram as camadas de fertilidade.
+function rotuloLaudo(imp: ImportacaoLab): string {
+  const ano = imp.ano ?? (imp.safra || '').match(/\d{4}/)?.[0];
+  const data = imp.dataReferencia ? imp.dataReferencia.split('-').reverse().join('/') : '';
+  return [ano ? String(ano) : null, data || null].filter(Boolean).join(' · ') || imp.safra || 'laudo';
+}
+
 // Carrega as camadas já interpoladas do talhão (fertilidade) + os NDVI mantidos,
 // como camadas selecionáveis co-registradas na MESMA malha de referência.
-export async function carregarCamadas(talhaoId: string): Promise<CamadasCarregadas | null> {
-  const imp = getImportacoesLab(talhaoId)[0] ?? null;
+export async function carregarCamadas(talhaoId: string, safra?: string): Promise<CamadasCarregadas | null> {
+  // QUAL laudo alimenta a fertilidade. Era `getImportacoesLab(talhaoId)[0]`: o
+  // mais recente por `criadoEm`, e ponto. Bastava existir um laudo mais novo
+  // ainda sem mapas processados (ou de outro ano) para a fertilidade sumir da
+  // lista de camadas — os 29 mapas continuavam na nuvem, o zoneamento é que
+  // olhava para a gaveta errada e só sobravam EC/NDVI/relevo.
+  // Agora: tenta os laudos em ordem de preferência (os do ANO selecionado
+  // primeiro, depois os demais do mais novo ao mais antigo) e fica no PRIMEIRO
+  // que realmente tem mapa salvo.
+  const candidatas = ordemLaudosParaZonas(
+    getImportacoesLab(talhaoId),
+    safra ? getImportacoesLab(talhaoId, safra) : [],
+    MAX_LAUDOS_TENTADOS,
+  );
 
   let bounds: [number, number, number, number] | null = null;
   let shape: [number, number] | null = null;
   const camadas: CamadaGrid[] = [];
+  let impUsada: ImportacaoLab | null = null;
 
   // 1) Fertilidade — quando existe, define a malha de referência.
-  if (imp) {
+  for (const imp of candidatas) {
     // 'zona': o zoneamento desenha DIVISAS em cima da malha, então quer o mapa
     // mais FINO. A regra de 20 m é da dose (v2.37.0) — herdá-la aqui foi o que
     // engrossou a escadinha das zonas.
     const grids = await carregarGridsTalhao(talhaoId, imp.id, 'zona');
+    const daImp: CamadaGrid[] = [];
+    let b: [number, number, number, number] | null = null;
+    let s: [number, number] | null = null;
     for (const [chave, resp] of Object.entries(grids)) {
       if (!resp.grid?.b64) continue;
-      if (!bounds) { bounds = resp.bounds; shape = resp.grid.shape; }
-      if (resp.grid.shape[0] !== shape![0] || resp.grid.shape[1] !== shape![1]) continue;
+      if (!b) { b = resp.bounds; s = resp.grid.shape; }
+      if (resp.grid.shape[0] !== s![0] || resp.grid.shape[1] !== s![1]) continue;
       const [nut, prof] = chave.split('__');
-      camadas.push({ chave, nut, prof, simbolo: simboloElemento(nut), b64: resp.grid.b64, shape: resp.grid.shape });
+      daImp.push({ chave, nut, prof, simbolo: simboloElemento(nut), b64: resp.grid.b64, shape: resp.grid.shape });
     }
+    if (daImp.length === 0) continue;   // laudo sem mapa processado — tenta o próximo
+    bounds = b; shape = s; impUsada = imp;
+    camadas.push(...daImp);
+    break;
   }
 
   // 2) NDVI mantidos — entram reamostrados para a malha de referência (a da
@@ -307,7 +340,12 @@ export async function carregarCamadas(talhaoId: string): Promise<CamadasCarregad
 
   if (!bounds || !shape || camadas.length === 0) return null;
   camadas.sort((a, b) => a.simbolo.localeCompare(b.simbolo) || a.prof.localeCompare(b.prof));
-  return { importacaoId: imp?.id ?? 'ndvi', bounds, shape, camadas };
+  return {
+    importacaoId: impUsada?.id ?? 'ndvi',
+    laudoRotulo: impUsada ? rotuloLaudo(impUsada) : null,
+    laudosSemMapa: impUsada ? 0 : candidatas.length,
+    bounds, shape, camadas,
+  };
 }
 
 // Pontos do lab (numero→coord da grade) + resultados crus — entrada do cálculo
