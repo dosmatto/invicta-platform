@@ -7,16 +7,21 @@
 //   2. Preenche nome, e-mail, telefone, A PRÓPRIA SENHA e os aceites.
 //   3. `cadastrarComConvite` cria a conta no Supabase Auth (signUp é público) —
 //      ao fim ela está autenticada, o que permite gravar o pedido de acesso.
-//   4. O convite é validado/consumido e o registro entra como
-//      "Aguardando aprovação". Sem papel, ela ainda não acessa o sistema.
-//   5. O administrador aprova na Central de Acessos.
+//   4. O SERVIDOR aceita o convite (`inv_aceitar_convite`), monta o registro a
+//      partir do link — papel, categoria, perfil e vínculos — e a pessoa entra
+//      ATIVA. NÃO existe mais fila de aprovação para quem veio por link.
+//   5. Se aquela função ainda não existir no Supabase, o cadastro cai na fila
+//      como antes; a Central de Acessos libera sozinha quem tem convite
+//      conhecido (iam/usuarios.liberarPendentesPorConvite).
 
 import { Suspense, useMemo, useState } from 'react';
 import Image from 'next/image';
 import { useSearchParams } from 'next/navigation';
 import { cadastrarComConvite, loginEmailSenha, mensagemErroLogin } from '@/lib/auth';
-import { validarConvite, marcarConviteUsado, MOTIVO_TEXTO } from '@/lib/iam/convites';
-import { registrarPedidoDeAcesso } from '@/lib/iam/usuarios';
+import {
+  aceitarConviteNaNuvem, buscarConviteNaNuvem, validarConvite, marcarConviteUsado, MOTIVO_TEXTO,
+} from '@/lib/iam/convites';
+import { espelharUsuarioLocal, registrarPedidoDeAcesso, type UsuarioIam } from '@/lib/iam/usuarios';
 import { getPerfil } from '@/lib/iam/perfis';
 import { registrarDoc } from '@/lib/iam/auditoria';
 import type { Convite } from '@/lib/iam/tipos';
@@ -95,17 +100,41 @@ function ConviteConteudo() {
 
       // Autenticado (ou aguardando confirmação): grava o acesso.
       const agora = new Date().toISOString();
-      // LIBERAÇÃO AUTOMÁTICA: todo convite CONHECIDO (individual OU de grupo) já
-      // sai do admin com categoria, papel, perfil e vínculos definidos — então
-      // quem se cadastra por ele entra ATIVO, sem passar por aprovação. Decisão
-      // do usuário (o link de grupo também libera na hora). Um link de grupo
-      // ainda pode ser cancelado/expirado se vazar; a validade curta é a defesa.
-      // Só cai em "aguardando aprovação" quando o convite NÃO é conhecido neste
-      // aparelho (lista não sincronizada) — aí não dá para saber o que conceder.
-      const liberaAuto = !!conv;
+
+      // ── CAMINHO PRINCIPAL: o SERVIDOR aceita o convite e libera na hora ──
+      // A função `inv_aceitar_convite` (docs/seguranca-rls.sql) lê o convite,
+      // confere validade/e-mail e MONTA o registro a partir dele — papel,
+      // categoria, perfil e vínculos não passam por aqui, então não há como o
+      // navegador escolher o próprio acesso. É por isso que a liberação pode ser
+      // automática sem abrir buraco de segurança.
+      const aceite = await aceitarConviteNaNuvem(token, {
+        nome: nome.trim(), telefone: telefone.trim(),
+      });
+      if (aceite.ok) {
+        espelharUsuarioLocal(em, aceite.usuario as Partial<UsuarioIam>);
+        setLiberado(true);
+        setPronto(true);
+        return;   // o servidor já consumiu o convite e registrou a auditoria
+      }
+
+      // Recusa EXPLÍCITA do servidor (convite cancelado, vencido, e-mail que não
+      // bate): não insistir em liberar por conta própria — cai na fila.
+      const tentarLiberarAqui = aceite.indisponivel === true;
+
+      // Convite conhecido: o cache local (raro — só em navegador de admin) ou a
+      // NUVEM. Buscar na nuvem é o que faltava: no aparelho de quem foi
+      // convidado a lista `inv_convites` está vazia e todo mundo caía na fila.
+      const convite = conv ?? (tentarLiberarAqui ? await buscarConviteNaNuvem(token) : null);
+      const perfilDoConvite = convite?.perfilId ? getPerfil(convite.perfilId) : null;
+      // LIBERAÇÃO PELO PRÓPRIO APARELHO — plano B, para o Supabase que ainda não
+      // recebeu a função de aceite mas já tenha a política afrouxada. Todo
+      // convite conhecido (individual OU de grupo) sai do admin com categoria,
+      // papel, perfil e vínculos definidos, então quem se cadastra por ele entra
+      // ATIVO. Se a RLS recusar, o `if (!enviado)` abaixo põe na fila.
+      const liberaAuto = tentarLiberarAqui && !!convite;
       const vinc = {
-        clientesVinculados: conv?.clientesVinculados?.length ? conv.clientesVinculados : undefined,
-        fazendasVinculadas: conv?.fazendasVinculadas?.length ? conv.fazendasVinculadas : undefined,
+        clientesVinculados: convite?.clientesVinculados?.length ? convite.clientesVinculados : undefined,
+        fazendasVinculadas: convite?.fazendasVinculadas?.length ? convite.fazendasVinculadas : undefined,
       };
       // A gravação do pedido é o PRODUTO desta tela: sem confirmação da nuvem não
       // existe nada para o administrador aprovar. Por isso ela é ESPERADA, e é
@@ -117,24 +146,23 @@ function ConviteConteudo() {
         // Permissões: o perfil escolhido no link (se houver) vira as permissões
         // próprias; sem perfil, valem as do papel (padrão da matriz). Mesmo
         // resultado da aprovação manual, só que automático.
-        const perfil = conv?.perfilId ? getPerfil(conv.perfilId) : null;
         enviado = await registrarPedidoDeAcesso(em, {
           nome: nome.trim(), telefone: telefone.trim() || undefined,
-          papel: conv?.papel ?? 'leitor',
-          categoria: conv?.categoria,
+          papel: convite?.papel ?? 'leitor',
+          categoria: convite?.categoria,
           status: 'ativo',
           criadoEm: agora, criadoPor: em,
           aprovadoEm: agora,
-          aprovadoPor: `convite ${conv?.multiuso ? 'de grupo' : 'individual'} (liberação automática)`,
+          aprovadoPor: `convite ${convite?.multiuso ? 'de grupo' : 'individual'} (liberação automática)`,
           aceiteLgpdEm: agora, aceiteTermosEm: agora,
           conviteId: token || undefined,
-          ...(perfil ? { permissoes: perfil.permissoes } : {}),
+          ...(perfilDoConvite ? { permissoes: perfilDoConvite.permissoes } : {}),
           ...vinc,
         });
         if (enviado) {
           await registrarDoc('usuario_aprovado', {
             alvo: em,
-            detalhe: `liberado automaticamente pelo ${conv?.multiuso ? 'link de grupo' : 'link individual'}`,
+            detalhe: `liberado automaticamente pelo ${convite?.multiuso ? 'link de grupo' : 'link individual'}`,
             para: 'ativo',
           });
           setLiberado(true);
@@ -143,9 +171,11 @@ function ConviteConteudo() {
         enviado = false;
       }
 
-      // Fila de aprovação: caminho normal (convite desconhecido neste aparelho) e
-      // também a rede de segurança do ramo acima — a RLS só aceita 'ativo' de quem
-      // já é admin, e perder o cadastro é pior que ter de aprovar na mão.
+      // Fila de aprovação — REDE DE SEGURANÇA, não mais o caminho normal. Sobra
+      // para o Supabase sem a função de aceite e com a política antiga (só
+      // 'aguardando_aprovacao' passa). Perder o cadastro é pior que a fila, e a
+      // Central de Acessos varre esta fila liberando sozinha quem tem convite
+      // conhecido (iam/usuarios.liberarPendentesPorConvite).
       if (!enviado) {
         setLiberado(false);
         enviado = await registrarPedidoDeAcesso(em, {
@@ -160,6 +190,11 @@ function ConviteConteudo() {
           criadoEm: agora, criadoPor: em,
           aceiteLgpdEm: agora, aceiteTermosEm: agora,
           conviteId: token || undefined,
+          // O que o LINK propunha, gravado no pedido: sem isto o perfil de
+          // permissões do convite se perdia na aprovação (os campos existiam no
+          // tipo e ninguém os escrevia), e quem aprova tinha de adivinhar o papel.
+          ...(convite?.papel ? { papelSugerido: convite.papel } : {}),
+          ...(convite?.perfilId ? { perfilSugeridoId: convite.perfilId } : {}),
         });
         if (enviado) await registrarDoc('cadastro_solicitado', { alvo: em, detalhe: nome.trim() });
       }

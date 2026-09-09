@@ -3,7 +3,10 @@
 // IAM — convites por LINK. O administrador gera o convite, copia o link e manda
 // pelo canal que quiser (WhatsApp/e-mail próprio). A pessoa abre o link, se
 // cadastra e CRIA A PRÓPRIA SENHA — nenhuma senha provisória é exibida ou
-// trafegada. Depois fica "Aguardando aprovação".
+// trafegada. E JÁ ENTRA LIBERADA, sem passar por aprovação: o link já saiu do
+// administrador com categoria, papel, perfil e vínculos definidos. Quem libera
+// é o servidor (`aceitarConviteNaNuvem` → função `inv_aceitar_convite`), para o
+// navegador não poder escolher o próprio papel.
 //
 // Segurança do token: 32 bytes de crypto.getRandomValues (base64url). O gerador
 // anterior era 'Inv' + Math.random() de 5 dígitos (90 mil possibilidades) —
@@ -11,12 +14,14 @@
 
 import { lerListaLocal, gravarListaLocal } from '../localComprimido';
 import { cloudPushLista } from '../cloud';
+import { getSupabase } from '../supabase';
+import { carregarDocsPorCampoSupabase, usarDadosSupabase } from '../supabaseData';
 import { emailUsuario } from '../empresa';
 import { registrar } from './auditoria';
 import type { CategoriaIam, Convite, PapelIam } from './tipos';
-import { acessoDoConvite, aplicarUso, statusAoVivo } from './conviteRegras';
+import { acessoDoConvite, aplicarUso, liberacaoDoConvite, statusAoVivo } from './conviteRegras';
 
-export { acessoDoConvite, statusAoVivo };
+export { acessoDoConvite, liberacaoDoConvite, statusAoVivo };
 
 export const K_CONVITES = 'inv_convites';
 export const VALIDADE_PADRAO_DIAS = 7;
@@ -212,6 +217,69 @@ export function validarConvite(token: string): ResultadoValidacao {
   if (c.status === 'usado') return { ok: false, motivo: 'usado' };
   if (c.status === 'expirado') return { ok: false, motivo: 'expirado' };
   return { ok: true, convite: c };
+}
+
+/**
+ * O convite do TOKEN buscado na NUVEM — porque no aparelho de quem foi convidado
+ * ele NÃO existe.
+ *
+ * ESTE ERA O DEFEITO: `conviteDoToken` lê `inv_convites` do localStorage, que só
+ * está preenchido em navegador que já abriu a plataforma COMO ADMINISTRADOR. No
+ * celular de quem recebeu o link a lista está vazia, o convite virava
+ * "desconhecido" e o cadastro caía na fila de aprovação — mesmo o convite
+ * dizendo, por escrito, categoria, papel, perfil e vínculos. Ou seja: a
+ * liberação automática das v2.116/2.117 quase nunca chegava a acontecer.
+ *
+ * A leitura exige sessão (a RLS libera SELECT para autenticado), então isto só
+ * funciona DEPOIS do signUp — que é exatamente quando a decisão é tomada.
+ */
+export async function buscarConviteNaNuvem(token: string): Promise<Convite | null> {
+  if (!token || !usarDadosSupabase()) return null;
+  try {
+    const achados = await carregarDocsPorCampoSupabase<Convite>(K_CONVITES, 'id', token);
+    const c = achados.find(x => x?.id === token);
+    return c ? { ...c, status: statusAoVivo(c) } : null;
+  } catch (e) {
+    console.warn('[convites] não deu para buscar o convite na nuvem:', e);
+    return null;
+  }
+}
+
+/**
+ * ACEITE PELO SERVIDOR (função `inv_aceitar_convite`, docs/seguranca-rls.sql).
+ *
+ * POR QUE NO SERVIDOR: liberar na hora significa gravar `status:'ativo'` — e a
+ * RLS não pode simplesmente passar a aceitar 'ativo' vindo do navegador, senão
+ * qualquer convidado reescreve o próprio registro como agrônomo, com permissões
+ * à escolha e sem vínculo nenhum. A função é SECURITY DEFINER e MONTA o registro
+ * a partir do CONVITE: o cliente só manda o token, o nome e o telefone; papel,
+ * categoria, perfil e vínculos vêm da linha do convite, e o e-mail vem do JWT.
+ *
+ * `indisponivel` = a função ainda não foi criada neste Supabase (o SQL não foi
+ * rodado). Não é erro do usuário: o chamador cai no caminho antigo.
+ */
+export type ResultadoAceite =
+  | { ok: true; usuario: Record<string, unknown> }
+  | { ok: false; motivo: string; indisponivel?: boolean };
+
+export async function aceitarConviteNaNuvem(
+  token: string, dados: { nome?: string; telefone?: string },
+): Promise<ResultadoAceite> {
+  const sb = getSupabase();
+  if (!sb || !token) return { ok: false, motivo: 'sem-token', indisponivel: true };
+  const r = await sb.rpc('inv_aceitar_convite', {
+    p_token: token, p_nome: dados.nome ?? '', p_telefone: dados.telefone ?? '',
+  });
+  if (r.error) {
+    // PGRST202 = função não existe no cache de schema; 42883 = idem no Postgres.
+    const indisponivel = r.error.code === 'PGRST202' || r.error.code === '42883'
+      || /does not exist|could not find the function/i.test(r.error.message ?? '');
+    if (!indisponivel) console.warn('[convites] aceite recusado:', r.error.message);
+    return { ok: false, motivo: r.error.message ?? 'erro', indisponivel };
+  }
+  const dado = r.data as { ok?: boolean; motivo?: string; usuario?: Record<string, unknown> } | null;
+  if (!dado?.ok || !dado.usuario) return { ok: false, motivo: dado?.motivo ?? 'recusado' };
+  return { ok: true, usuario: dado.usuario };
 }
 
 export const MOTIVO_TEXTO: Record<'inexistente' | 'expirado' | 'cancelado' | 'usado', string> = {

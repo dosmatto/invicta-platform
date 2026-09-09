@@ -42,6 +42,9 @@
 // rodando os mesmos passos que o app roda.
 
 import assert from 'node:assert/strict';
+// A varredura da fila (PASSO F) usa a REGRA REAL do app, não uma cópia: se ela
+// mudar, este teste muda junto. É pura de propósito (conviteRegras.ts).
+import { liberacaoDoConvite } from '../src/lib/iam/conviteRegras.ts';
 
 let ok = 0, fail = 0;
 function t(nome, fn) {
@@ -279,7 +282,61 @@ async function pushLista(ap, key, lista) {
 
 // ── Portes do IAM ───────────────────────────────────────────────────────────
 const norm = e => e.trim().toLowerCase();
-const K_PAPEIS = 'inv_papeis', K_AUDITORIA = 'inv_auditoria';
+const K_PAPEIS = 'inv_papeis', K_AUDITORIA = 'inv_auditoria', K_CONVITES = 'inv_convites';
+
+// docs/seguranca-rls.sql — public.inv_aceitar_convite(). É SECURITY DEFINER, ou
+// seja, roda FORA da RLS: por isso ela pode gravar 'ativo' e o navegador não.
+// Mesma ordem de checagens do SQL; mudou lá, muda aqui.
+function rpcAceitarConvite(nuvem, jwtEmail, token, nome, telefone) {
+  const email = low(jwtEmail || '');
+  if (!email) return { ok: false, motivo: 'sem-sessao' };
+  const conv = nuvem.app_kv.find(r => r.colecao === K_CONVITES && r.dados?.id === token)?.dados;
+  if (!conv) return { ok: false, motivo: 'inexistente' };
+  if ((conv.status ?? 'pendente') === 'cancelado') return { ok: false, motivo: 'cancelado' };
+  if (!conv.multiuso && conv.status === 'usado' && low(conv.usadoPor) !== email)
+    return { ok: false, motivo: 'usado' };
+  if (Date.parse(conv.expiraEm) < Date.now()) return { ok: false, motivo: 'expirado' };
+  if ((conv.email ?? '') !== '' && low(conv.email) !== email)
+    return { ok: false, motivo: 'email-diferente' };
+  const papel = conv.papel ?? 'leitor';
+  if (['owner', 'admin'].includes(papel)) return { ok: false, motivo: 'papel-privilegiado' };
+  const perfil = conv.perfilId
+    ? nuvem.app_kv.find(r => r.colecao === 'inv_perfis_permissao' && r.dados?.id === conv.perfilId)?.dados
+    : null;
+  const agora = new Date().toISOString();
+  const reg = {
+    id: email, email, nome, papel, status: 'ativo',
+    criadoEm: agora, criadoPor: email, aprovadoEm: agora,
+    aprovadoPor: `convite ${conv.multiuso ? 'de grupo' : 'individual'} (liberação automática)`,
+    aceiteLgpdEm: agora, aceiteTermosEm: agora, conviteId: token,
+    ...(telefone ? { telefone } : {}),
+    ...(conv.categoria ? { categoria: conv.categoria } : {}),
+    ...(perfil ? { permissoes: perfil.permissoes } : {}),
+    ...(conv.clientesVinculados?.length ? { clientesVinculados: conv.clientesVinculados } : {}),
+    ...(conv.fazendasVinculadas?.length ? { fazendasVinculadas: conv.fazendasVinculadas } : {}),
+  };
+  const atual = nuvem.app_kv.find(r => r.colecao === K_PAPEIS && r.item_id === email);
+  if (atual) {
+    const manterPapel = ['owner', 'admin'].includes(String(atual.dados?.papel ?? ''));
+    const patch = { ...reg };
+    if (manterPapel) delete patch.papel;
+    atual.dados = { ...atual.dados, ...patch };
+    atual.atualizado_em = agora;
+  } else {
+    nuvem.app_kv.push({ colecao: K_PAPEIS, item_id: email, empresa_id: null, dados: reg, atualizado_em: agora });
+  }
+  // Consome: individual vira 'usado'; link de grupo conta o uso e segue valendo.
+  const linhaConv = nuvem.app_kv.find(r => r.colecao === K_CONVITES && r.dados?.id === token);
+  linhaConv.dados = { ...conv, usadoEm: agora, usadoPor: email,
+    ...(conv.multiuso ? { usos: (conv.usos ?? 0) + 1 } : { status: 'usado' }) };
+  linhaConv.atualizado_em = agora;
+  nuvem.app_kv.push({ colecao: K_AUDITORIA, item_id: `aud_${email}_${token}`, empresa_id: null,
+    dados: { id: `aud_${email}_${token}`, em: agora, quem: email, acao: 'usuario_aprovado',
+             alvo: email, para: 'ativo', detalhe: 'liberado automaticamente pelo link de convite' },
+    atualizado_em: agora });
+  const final = nuvem.app_kv.find(r => r.colecao === K_PAPEIS && r.item_id === email).dados;
+  return { ok: true, usuario: final };
+}
 
 // usuarios.ts:23-27 + 57-72
 async function salvarUsuario(ap, email, patch) {
@@ -602,6 +659,139 @@ t('D2 · gravando UM documento, o pedido chega mesmo com a lista dos outros no a
 t('D3 · os registros das outras pessoas não foram tocados', () => {
   assert.equal(naNuvem(nuvem, K_PAPEIS, OWNER)?.dados?.papel, 'owner');
   assert.equal(naNuvem(nuvem, K_PAPEIS, NOVO)?.dados?.status, 'aguardando_aprovacao');
+});
+linha();
+
+// ── PASSO E — QUEM VEM POR LINK ENTRA SEM APROVAÇÃO (v2.135) ────────────────
+// O aceite passou a ser do SERVIDOR: a função `inv_aceitar_convite`
+// (docs/seguranca-rls.sql) é SECURITY DEFINER, monta o registro a partir do
+// CONVITE e grava 'ativo'. O navegador manda só token/nome/telefone.
+console.log('PASSO E — aceite pelo servidor: o convidado entra ATIVO, sem fila…');
+const TOK_IND = 'tok_individual_felipe';
+const TOK_GRUPO = 'tok_grupo_produtores_v2';
+const TOK_CANCELADO = 'tok_cancelado';
+const FELIPE = 'felipe@exemplo.com';
+const PROD1 = 'produtor1@exemplo.com';
+const PROD2 = 'produtor2@exemplo.com';
+const BARRADO = 'barrado@exemplo.com';
+const daquiADias = d => new Date(Date.now() + d * 86400_000).toISOString();
+const convite = (id, extra) => ({
+  colecao: K_CONVITES, item_id: id, empresa_id: null,
+  dados: { id, email: '', criadoEm: new Date().toISOString(), criadoPor: OWNER,
+           expiraEm: daquiADias(7), status: 'pendente', ...extra },
+  atualizado_em: new Date().toISOString(),
+});
+nuvem.app_kv.push(
+  convite(TOK_IND, { email: FELIPE, nome: 'Felipe', papel: 'produtor', categoria: 'produtor',
+                     perfilId: 'perf_prod', clientesVinculados: ['cli_ouro_branco'] }),
+  convite(TOK_GRUPO, { multiuso: true, rotulo: 'Produtores', papel: 'produtor',
+                       categoria: 'produtor', usos: 0, expiraEm: daquiADias(365) }),
+  convite(TOK_CANCELADO, { email: BARRADO, papel: 'produtor', status: 'cancelado' }),
+  { colecao: 'inv_perfis_permissao', item_id: 'perf_prod', empresa_id: null,
+    dados: { id: 'perf_prod', nome: 'Produtor', permissoes: { 'talhoes.ver': true } },
+    atualizado_em: new Date().toISOString() },
+);
+
+const felipe = criarAparelho('celular do Felipe', nuvem, { email: FELIPE });
+const aceiteFelipe = rpcAceitarConvite(nuvem, FELIPE, TOK_IND, 'Felipe Henrique', '42999664402');
+
+// E1 é o pedido do usuário, em uma asserção: quem abre o link não passa por fila.
+t('E1 · o convidado nasce ATIVO na nuvem — nunca entra na fila', () => {
+  assert.equal(aceiteFelipe.ok, true, `recusado: ${aceiteFelipe.motivo}`);
+  const row = naNuvem(nuvem, K_PAPEIS, FELIPE);
+  assert.ok(row, 'o registro não foi gravado');
+  assert.equal(row.dados.status, 'ativo');
+  assert.notEqual(row.dados.status, 'aguardando_aprovacao');
+});
+
+// E2 protege o que a liberação automática vale: o acesso tem que ser o do LINK.
+// Se viesse 'leitor'/'interno' (os provisórios do fallback), a pessoa entraria
+// ativa e sem enxergar nada — pior que a fila.
+t('E2 · papel, categoria, perfil e vínculos vêm do CONVITE, não do navegador', () => {
+  const d = naNuvem(nuvem, K_PAPEIS, FELIPE).dados;
+  assert.equal(d.papel, 'produtor');
+  assert.equal(d.categoria, 'produtor');
+  assert.deepEqual(d.permissoes, { 'talhoes.ver': true }, 'o perfil do link não foi aplicado');
+  assert.deepEqual(d.clientesVinculados, ['cli_ouro_branco']);
+});
+
+t('E3 · o convite individual foi consumido pelo próprio aceite', () => {
+  const c = naNuvem(nuvem, K_CONVITES, TOK_IND).dados;
+  assert.equal(c.status, 'usado');
+  assert.equal(c.usadoPor, FELIPE);
+});
+
+// E4 é a regra que não pode inverter: link de grupo serve o grupo inteiro.
+t('E4 · o link de GRUPO libera vários e não se esgota', () => {
+  assert.equal(rpcAceitarConvite(nuvem, PROD1, TOK_GRUPO, 'Produtor 1', '').ok, true);
+  assert.equal(rpcAceitarConvite(nuvem, PROD2, TOK_GRUPO, 'Produtor 2', '').ok, true);
+  assert.equal(naNuvem(nuvem, K_PAPEIS, PROD1).dados.status, 'ativo');
+  assert.equal(naNuvem(nuvem, K_PAPEIS, PROD2).dados.status, 'ativo');
+  const c = naNuvem(nuvem, K_CONVITES, TOK_GRUPO).dados;
+  assert.equal(c.status, 'pendente', 'o link de grupo se esgotou');
+  assert.equal(c.usos, 2);
+});
+
+// E5: cancelar o link é a defesa de quem administra — tem que continuar valendo.
+t('E5 · convite CANCELADO é recusado pelo servidor (e o cadastro cai na fila)', () => {
+  const r = rpcAceitarConvite(nuvem, BARRADO, TOK_CANCELADO, 'Barrado', '');
+  assert.equal(r.ok, false);
+  assert.equal(r.motivo, 'cancelado');
+  assert.ok(!naNuvem(nuvem, K_PAPEIS, BARRADO), 'não podia ter gravado nada');
+});
+
+// E6 é o motivo de o aceite ser no SERVIDOR e não de afrouxar a política: o
+// navegador continua sem conseguir escrever o próprio 'ativo'. Se esta asserção
+// cair, qualquer convidado se promove a agrônomo pelo console.
+const GOLPISTA = 'golpista@exemplo.com';
+const golpe = criarAparelho('console do convidado', nuvem, { email: GOLPISTA });
+const tentativaGolpe = await golpe.sb.from('app_kv').upsert(
+  { colecao: K_PAPEIS, item_id: GOLPISTA,
+    dados: { id: GOLPISTA, email: GOLPISTA, papel: 'agronomo', status: 'ativo' },
+    atualizado_em: new Date().toISOString() }, { onConflict: 'colecao,item_id' });
+t('E6 · o navegador CONTINUA sem poder gravar "ativo" por conta própria', () => {
+  assert.ok(tentativaGolpe.error, 'a RLS aceitou um "ativo" escrito pelo cliente');
+  assert.ok(!naNuvem(nuvem, K_PAPEIS, GOLPISTA), 'a linha do golpista foi gravada');
+});
+linha();
+
+// ── PASSO F — a FILA ANTIGA se resolve sozinha ──────────────────────────────
+// Quem já estava preso em "aguardando aprovação" antes desta versão (e quem
+// cair na fila enquanto a função não estiver criada no Supabase) é liberado pela
+// varredura da Central de Acessos — com a REGRA REAL, importada do app.
+console.log('PASSO F — a fila antiga é liberada pela varredura do administrador…');
+const convIndividual = naNuvem(nuvem, K_CONVITES, TOK_IND).dados;
+const preso = { id: 'preso@exemplo.com', email: 'preso@exemplo.com', papel: 'leitor',
+                categoria: 'interno', status: 'aguardando_aprovacao', conviteId: TOK_IND };
+
+t('F1 · cadastro na fila com convite conhecido é liberado com o acesso do link', () => {
+  const lib = liberacaoDoConvite(preso, convIndividual);
+  assert.ok(lib, 'a varredura deixou o cadastro na fila');
+  assert.equal(lib.papel, 'produtor', 'liberou como "leitor" — o provisório do fallback');
+  assert.equal(lib.categoria, 'produtor');
+  assert.equal(lib.perfilId, 'perf_prod');
+  assert.deepEqual(lib.clientesVinculados, ['cli_ouro_branco']);
+});
+
+// F2: o convite individual já está 'usado' neste ponto (E3) — e isso NÃO pode
+// impedir a liberação, senão a fila antiga nunca esvazia.
+t('F2 · convite já USADO ou VENCIDO ainda libera quem ficou na fila', () => {
+  assert.equal(naNuvem(nuvem, K_CONVITES, TOK_IND).dados.status, 'usado');
+  assert.ok(liberacaoDoConvite(preso, convIndividual), 'convite usado barrou a liberação');
+  assert.ok(liberacaoDoConvite(preso, { ...convIndividual, status: 'pendente', expiraEm: daquiADias(-30) }),
+    'convite vencido barrou a liberação');
+});
+
+// F3 é o limite da varredura: ela não inventa acesso. Sem convite conhecido, ou
+// com o link derrubado de propósito, o pedido continua esperando decisão humana.
+t('F3 · sem convite conhecido, ou com convite CANCELADO, continua na fila', () => {
+  assert.equal(liberacaoDoConvite(preso, null), null);
+  assert.equal(liberacaoDoConvite(preso, { ...convIndividual, status: 'cancelado' }), null);
+});
+
+// F4: papel privilegiado nunca sai de um link (nem pela varredura).
+t('F4 · a varredura não promove ninguém a owner', () => {
+  assert.equal(liberacaoDoConvite(preso, { ...convIndividual, papel: 'owner' }), null);
 });
 linha();
 

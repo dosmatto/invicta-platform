@@ -51,6 +51,7 @@ verdadeira (fusão de talhões) chegou depois; foi preciso renumerar.
 | S/N | Produtor baixa direto: arquivos marcados, PDF da fertilidade e relatórios com "selecionar tudo" | 2.126.0 | /talhao/[id] como produtor → abas Arquivos, Fertilidade, Relatórios |
 | S/N | Produtor: Arquivos, Relatórios e PDF da Fertilidade não abriam (permissão antiga) | 2.127.0 | /talhao/[id] como produtor → abas Arquivos, Relatórios, Fertilidade |
 | 28 | Nome do relatório: talhão, ano e "recomendações completas" | 2.132.0 | Talhão → Relatórios → "Gerar relatório" (e Abrir do histórico) |
+| S/N | Quem entra por link de convite não passa mais por aprovação | 2.135.0 | /convite?t=… (público) e Central de Acessos → Pendentes; exige rodar `docs/seguranca-rls.sql` |
 
 > As pendências 1–17 foram entregues antes deste registro existir e não estão
 > catalogadas; procure pelo assunto no `changelog.ts`. Da 18 em diante, tudo

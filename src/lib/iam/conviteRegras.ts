@@ -7,7 +7,7 @@
 // Trocar essas duas coisas de lugar seria, respectivamente, um link que ninguém
 // consegue usar e um link que qualquer um reaproveita.
 
-import type { Convite, StatusConvite } from './tipos';
+import type { CategoriaIam, Convite, PapelIam, StatusConvite } from './tipos';
 
 // Pendente que passou da validade vira expirado na LEITURA (não precisa de job).
 export function statusAoVivo(c: Convite, agoraMs = Date.now()): StatusConvite {
@@ -33,6 +33,57 @@ export function acessoDoConvite(
   return {
     clientesVinculados: escolher(cadastro?.clientesVinculados, convite?.clientesVinculados),
     fazendasVinculadas: escolher(cadastro?.fazendasVinculadas, convite?.fazendasVinculadas),
+  };
+}
+
+// ── LIBERAÇÃO AUTOMÁTICA ────────────────────────────────────────────────────
+// O que o convite JÁ decidiu, para ser aplicado sem passar por aprovação.
+//
+// POR QUE EXISTE: o convite sai do administrador com categoria, papel, perfil e
+// vínculos escolhidos. Perguntar de novo "aprovar como?" é pedir a MESMA decisão
+// duas vezes — e, na prática, deixava gente presa na fila por dias. Quem entrou
+// por um link que este administrador criou entra liberado; ponto.
+//
+// `null` = NÃO libere sozinho (o chamador mantém a fila de aprovação):
+//   · sem convite conhecido — não dá para saber o que conceder;
+//   · convite CANCELADO — o administrador derrubou o link de propósito;
+//   · papel privilegiado ('owner') — promoção dessas nunca é automática.
+//
+// 'usado' e 'expirado' NÃO barram: o convite individual vira 'usado' no próprio
+// cadastro que estamos liberando, e a fila antiga é varrida depois da validade
+// vencer. O que importa é que o link existiu, era deste administrador e já dizia
+// o acesso — não o relógio.
+export interface LiberacaoConvite {
+  papel: PapelIam;
+  categoria?: CategoriaIam;      // ausente = deixa o chamador derivar do papel
+  perfilId?: string;             // perfil de permissões definido no link
+  clientesVinculados: string[];  // vazio = sem restrição (não sobrescrever)
+  fazendasVinculadas: string[];
+}
+
+export function liberacaoDoConvite(
+  cadastro?: {
+    papel?: PapelIam; papelSugerido?: PapelIam; categoria?: CategoriaIam;
+    perfilSugeridoId?: string;
+    clientesVinculados?: string[]; fazendasVinculadas?: string[];
+  } | null,
+  convite?: Convite | null,
+  agoraMs = Date.now(),
+): LiberacaoConvite | null {
+  if (!convite) return null;
+  if (statusAoVivo(convite, agoraMs) === 'cancelado') return null;
+  // O papel do CONVITE manda: o cadastro que caiu na fila foi gravado com
+  // 'leitor' provisório (a tela do convite não sabia o que conceder), e usar o
+  // do cadastro daria acesso menor do que o link prometia.
+  const papel = convite.papel ?? cadastro?.papelSugerido ?? cadastro?.papel ?? 'leitor';
+  if (papel === 'owner') return null;
+  return {
+    papel,
+    // Mesma ordem: 'interno' no cadastro é o valor provisório do fallback, não
+    // uma escolha — o convite é quem sabe se a pessoa é produtor ou consultor.
+    categoria: convite.categoria ?? cadastro?.categoria,
+    perfilId: convite.perfilId ?? cadastro?.perfilSugeridoId,
+    ...acessoDoConvite(cadastro, convite),
   };
 }
 

@@ -14,8 +14,8 @@ import {
 } from '@/lib/empresa';
 import { getAuditoria } from '@/lib/iam/auditoria';
 import {
-  aprovarUsuario, categoriaDe, getUsuarios, migrarIamV1, rejeitarUsuario,
-  sincronizarPendentesDaNuvem, statusDe, PAPEIS_ATRIBUIVEIS, type UsuarioIam,
+  aprovarUsuario, categoriaDe, getUsuarios, liberarPendentesPorConvite, migrarIamV1,
+  rejeitarUsuario, sincronizarPendentesDaNuvem, statusDe, PAPEIS_ATRIBUIVEIS, type UsuarioIam,
 } from '@/lib/iam/usuarios';
 import {
   acessoDoConvite, cancelarConvite, conviteDoToken, criarConvite, criarConviteTipo, getConvites,
@@ -55,21 +55,39 @@ export function CentralAcessos() {
   // a lista é só o localStorage: quem se cadastra grava no aparelho dele e o
   // pedido nunca aparecia aqui sem F5. Ver iam/usuarios.sincronizarPendentesDaNuvem.
   const [buscando, setBuscando] = useState(false);
+  // Quantos a varredura liberou nesta sessão da tela — some ao trocar de aba.
+  const [liberadosAuto, setLiberadosAuto] = useState(0);
+  // QUEM VEIO POR LINK NÃO PRECISA DE APROVAÇÃO. Depois de trazer os pendentes da
+  // nuvem, a fila é varrida: todo cadastro com convite conhecido é liberado
+  // sozinho, com o papel/perfil/vínculos do próprio link. Só sobra na tela quem
+  // este aparelho não consegue explicar (convite desconhecido ou cancelado).
+  // Ver iam/usuarios.liberarPendentesPorConvite.
+  // Devolve os números; quem chama é que mexe no estado (setState dentro do
+  // corpo de um efeito encadeia renders — a regra react-hooks reclama disso).
+  const sincronizarELiberar = useCallback(async () => {
+    const novos = await sincronizarPendentesDaNuvem().catch(() => 0);
+    const liberados = poderes.aprovar ? liberarPendentesPorConvite() : 0;
+    return { novos, liberados };
+  }, [poderes.aprovar]);
+  const aplicarBusca = useCallback((r: { novos: number; liberados: number }) => {
+    if (r.liberados) setLiberadosAuto(n => n + r.liberados);
+    if (r.novos || r.liberados) recarregar();
+  }, [recarregar]);
   const buscarPendentes = useCallback(() => {
     setBuscando(true);
-    void sincronizarPendentesDaNuvem()
-      .then(n => { if (n) recarregar(); })
+    void sincronizarELiberar()
+      .then(aplicarBusca)
       .catch(() => {})
       .finally(() => setBuscando(false));
-  }, [recarregar]);
+  }, [aplicarBusca, sincronizarELiberar]);
   // Na montagem a busca roda sem tocar em `buscando` de forma síncrona (o spinner
   // é do botão, não da abertura da tela) — setState dentro do corpo do efeito
   // encadeia renders à toa.
   useEffect(() => {
     let vivo = true;
-    void sincronizarPendentesDaNuvem().then(n => { if (vivo && n) recarregar(); }).catch(() => {});
+    void sincronizarELiberar().then(r => { if (vivo) aplicarBusca(r); }).catch(() => {});
     return () => { vivo = false; };
-  }, [recarregar]);
+  }, [aplicarBusca, sincronizarELiberar]);
   useEffect(() => {
     const h = () => recarregar();
     window.addEventListener('inv:empresa', h);
@@ -142,9 +160,19 @@ export function CentralAcessos() {
         </div>
 
         <div className="flex-1 overflow-y-auto px-3 pb-4 space-y-2">
+          {aba === 'pendentes' && liberadosAuto > 0 && (
+            <p className="rounded px-2 py-1.5 text-[10px]"
+              style={{ background: '#0f2240', color: '#93c5fd', border: `1px solid ${COR.borda}` }}>
+              <Check size={11} className="inline mr-1" />
+              {liberadosAuto === 1
+                ? '1 cadastro veio de link de convite e foi liberado automaticamente'
+                : `${liberadosAuto} cadastros vieram de link de convite e foram liberados automaticamente`}
+              {' '}— com o papel e o acesso que o link já definia. Estão nas abas por categoria.
+            </p>
+          )}
           {ehListaDeUsuarios && (
             lista.length === 0
-              ? <Vazio texto={aba === 'pendentes' ? 'Nenhum cadastro aguardando aprovação.' : 'Ninguém nesta categoria ainda.'} />
+              ? <Vazio texto={aba === 'pendentes' ? 'Nenhum cadastro aguardando aprovação — quem entra por link de convite já é liberado na hora.' : 'Ninguém nesta categoria ainda.'} />
               : lista.map(u => (
                   <CartaoUsuario key={u.email} u={u} selecionado={sel === u.email}
                     podeAprovar={poderes.aprovar} pendente={statusDe(u) === 'aguardando_aprovacao'}
@@ -252,20 +280,26 @@ function CartaoUsuario({ u, onAbrir, selecionado, pendente, podeAprovar, onMudou
   podeAprovar: boolean; onMudou: () => void;
 }) {
   const [aprovando, setAprovando] = useState(false);
-  // Cadastro vindo de um LINK POR TIPO já chega com o papel proposto — abrir a
-  // aprovação em 'leitor' obrigaria a redigitar (e a errar) o que o link definiu.
-  const [papel, setPapel] = useState<PapelIam>(u.papelSugerido ?? (u.papel as PapelIam) ?? 'leitor');
-  const perfilDoLink = u.perfilSugeridoId ? getPerfil(u.perfilSugeridoId) : null;
-  const [cat, setCat] = useState<CategoriaIam>(categoriaDe(u));
-  const nCli = u.clientesVinculados?.length ?? 0;
-  const nFaz = u.fazendasVinculadas?.length ?? 0;
-  const nTal = u.talhoesVinculados?.length ?? 0;
-
   // Acesso que o CONVITE já definia (regra pura em conviteRegras.acessoDoConvite).
+  // Quem chega aqui com convite CONHECIDO já foi liberado sozinho pela varredura
+  // (liberarPendentesPorConvite); o cartão sobra para convite desconhecido ou
+  // cancelado — mas ainda assim abre preenchido com o que o link dizia.
   const convOrigem = useMemo(
     () => (u.conviteId ? conviteDoToken(u.conviteId) : null), [u.conviteId]);
   const { clientesVinculados: cliDoConvite, fazendasVinculadas: fazDoConvite } =
     acessoDoConvite(u, convOrigem);
+  // Cadastro vindo de um link já chega com o papel proposto — abrir a aprovação
+  // em 'leitor' obrigaria a redigitar (e a errar) o que o link definiu. O papel
+  // do CONVITE vem antes do gravado: o cadastro na fila foi gravado 'leitor'
+  // provisório, e categoria 'interno' pelo mesmo motivo.
+  const [papel, setPapel] = useState<PapelIam>(
+    convOrigem?.papel ?? u.papelSugerido ?? (u.papel as PapelIam) ?? 'leitor');
+  const [cat, setCat] = useState<CategoriaIam>(convOrigem?.categoria ?? categoriaDe(u));
+  const idPerfilDoLink = convOrigem?.perfilId ?? u.perfilSugeridoId;
+  const perfilDoLink = idPerfilDoLink ? getPerfil(idPerfilDoLink) : null;
+  const nCli = u.clientesVinculados?.length ?? 0;
+  const nFaz = u.fazendasVinculadas?.length ?? 0;
+  const nTal = u.talhoesVinculados?.length ?? 0;
 
   return (
     <Cartao ativo={selecionado}>

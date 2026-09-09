@@ -5,7 +5,7 @@
 //   · link POR TIPO que se esgota no 1º cadastro → o resto do grupo fica de fora;
 //   · convite INDIVIDUAL que sobrevive ao uso → o link vira acesso reaproveitável.
 import assert from 'node:assert/strict';
-import { statusAoVivo, podeUsar, aplicarUso, acessoDoConvite } from '../src/lib/iam/conviteRegras.ts';
+import { statusAoVivo, podeUsar, aplicarUso, acessoDoConvite, liberacaoDoConvite } from '../src/lib/iam/conviteRegras.ts';
 
 let ok = 0, fail = 0;
 function t(nome, fn) {
@@ -106,6 +106,43 @@ t('sem cadastro e sem convite não quebra', () => {
 t('link por tipo carrega o acesso para todos que o usarem', () => {
   const a = acessoDoConvite(undefined, tipo({ clientesVinculados: ['p1', 'p2'] }));
   assert.deepEqual(a.clientesVinculados, ['p1', 'p2']);
+});
+
+// ── Liberação automática (quem vem por link não passa por aprovação) ────────
+t('o papel do CONVITE vence o "leitor" provisório que o cadastro trouxe', () => {
+  // O cadastro que caiu na fila foi gravado leitor/interno porque a tela do
+  // convite não sabia o que conceder. Usar o do cadastro daria à pessoa um
+  // acesso MENOR do que o link prometia — liberar assim é pior que não liberar.
+  const lib = liberacaoDoConvite(
+    { papel: 'leitor', categoria: 'interno' },
+    individual({ papel: 'produtor', categoria: 'produtor', perfilId: 'perf1' }),
+    AGORA);
+  assert.equal(lib.papel, 'produtor');
+  assert.equal(lib.categoria, 'produtor');
+  assert.equal(lib.perfilId, 'perf1');
+});
+
+t('convite CANCELADO não libera ninguém — é a defesa de quem administra', () => {
+  assert.equal(liberacaoDoConvite({}, individual({ status: 'cancelado' }), AGORA), null);
+  assert.equal(liberacaoDoConvite({}, null, AGORA), null, 'sem convite não dá para saber o que conceder');
+});
+
+t('convite USADO ou VENCIDO ainda libera quem ficou na fila', () => {
+  // O individual vira 'usado' no próprio cadastro que estamos liberando, e a
+  // fila antiga é varrida depois da validade vencer. Barrar aqui seria deixar
+  // gente presa para sempre.
+  assert.ok(liberacaoDoConvite({}, individual({ status: 'usado', papel: 'produtor' }), AGORA));
+  assert.ok(liberacaoDoConvite({}, individual({ expiraEm: emDias(-30), papel: 'produtor' }), AGORA));
+});
+
+t('papel privilegiado NUNCA sai de um link', () => {
+  assert.equal(liberacaoDoConvite({}, individual({ papel: 'owner' }), AGORA), null);
+});
+
+t('sem papel no convite, cai em leitor — nunca num acesso maior por descuido', () => {
+  const lib = liberacaoDoConvite({}, individual(), AGORA);
+  assert.equal(lib.papel, 'leitor');
+  assert.equal(lib.categoria, undefined, 'sem categoria o chamador deriva do papel');
 });
 
 console.log(`\n${ok} passaram, ${fail} falharam\n`);

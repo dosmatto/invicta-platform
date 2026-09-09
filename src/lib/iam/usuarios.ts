@@ -10,6 +10,9 @@ import { cloudPushLista } from '../cloud';
 import { usarDadosSupabase, carregarDocsPorCampoSupabase, salvarDocSupabase } from '../supabaseData';
 import { emailUsuario, type RegistroPapel } from '../empresa';
 import { registrar } from './auditoria';
+import { conviteDoToken } from './convites';
+import { liberacaoDoConvite } from './conviteRegras';
+import { getPerfil } from './perfis';
 import { MATRIZ_PADRAO, permissoesEfetivas } from './permissoes';
 import type {
   CamposIam, CategoriaIam, MapaPermissoes, PapelIam, StatusIam,
@@ -34,6 +37,23 @@ export function getUsuarios(): UsuarioIam[] {
 export function getUsuario(email: string): UsuarioIam | null {
   const e = norm(email);
   return ler().find(u => norm(u.email) === e) ?? null;
+}
+
+/**
+ * Copia para o cache LOCAL um registro que o SERVIDOR já gravou — sem tocar na
+ * nuvem. Usado pela tela do convite depois do aceite (`inv_aceitar_convite`): o
+ * documento em `inv_papeis` já está lá, montado pelo servidor; reenviá-lo daqui
+ * seria recusado pela RLS e não acrescentaria nada. Isto só evita que a pessoa
+ * entre no app e tenha de esperar o boot para saber que já tem acesso.
+ */
+export function espelharUsuarioLocal(email: string, registro: Partial<UsuarioIam>): void {
+  const e = norm(email);
+  const lista = ler();
+  const i = lista.findIndex(u => norm(u.email) === e);
+  const novo = { ...(i >= 0 ? lista[i] : {}), ...registro, id: e, email: e } as UsuarioIam;
+  if (i >= 0) lista[i] = novo; else lista.push(novo);
+  gravarListaLocal(K_PAPEIS, lista);
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('inv:empresa'));
 }
 
 /**
@@ -169,6 +189,45 @@ export function aprovarUsuario(
     alvo: email, detalhe: `${categoria} · ${papel}`,
     de: antes ? statusDe(antes) : undefined, para: 'ativo',
   });
+}
+
+/**
+ * LIBERA SOZINHO todo cadastro que está na fila e veio de um convite conhecido.
+ * Devolve quantos liberou. Roda na abertura da Central de Acessos e no botão
+ * "atualizar", depois de `sincronizarPendentesDaNuvem`.
+ *
+ * POR QUE EXISTE: quem entra por link de convite NÃO precisa mais de aprovação —
+ * o link já saiu daqui com categoria, papel, perfil e vínculos. Mas a fila
+ * continuava enchendo por dois motivos: (a) até a v2.134 a tela do convite não
+ * conhecia o convite no aparelho do convidado e caía no fallback; e (b) enquanto
+ * a função `inv_aceitar_convite` não estiver criada no Supabase, o fallback
+ * segue sendo o caminho. Esta varredura fecha os dois casos DO LADO DE CÁ, sem
+ * depender de nada no servidor: quem administra não vê mais o pedido, vê o
+ * usuário já ativo.
+ *
+ * `conviteDoToken` lê o cache local — e aqui isso basta, porque quem abre esta
+ * tela é o administrador, que tem `inv_convites` sincronizado. Convite que este
+ * aparelho não conhece continua na fila (é o único caso em que ainda não dá para
+ * saber o que conceder).
+ */
+export function liberarPendentesPorConvite(): number {
+  const pendentes = ler().filter(u => statusDe(u) === 'aguardando_aprovacao' && u.conviteId);
+  let n = 0;
+  for (const u of pendentes) {
+    const lib = liberacaoDoConvite(u, conviteDoToken(u.conviteId!));
+    if (!lib) continue;
+    const perfil = lib.perfilId ? getPerfil(lib.perfilId) : null;
+    const categoria = lib.categoria ?? categoriaDe({ ...u, categoria: undefined, papel: lib.papel });
+    aprovarUsuario(u.email, lib.papel, categoria, {
+      aprovadoPor: 'link de convite (liberação automática)',
+      ...(perfil ? { permissoes: perfil.permissoes } : {}),
+      // Lista vazia = sem restrição: nunca gravar [] por cima de um vínculo.
+      ...(lib.clientesVinculados.length ? { clientesVinculados: lib.clientesVinculados } : {}),
+      ...(lib.fazendasVinculadas.length ? { fazendasVinculadas: lib.fazendasVinculadas } : {}),
+    });
+    n++;
+  }
+  return n;
 }
 
 export function rejeitarUsuario(email: string, motivo?: string): void {

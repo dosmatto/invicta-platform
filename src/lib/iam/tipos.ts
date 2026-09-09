@@ -154,8 +154,9 @@ export interface Convite {
   perfilId?: string;       // perfil de permissão sugerido na aprovação
   usos?: number;           // quantos se cadastraram por este link (multiuso)
   /** Acesso já definido no convite: produtores/fazendas que a pessoa vai poder
-   *  ver. Vazio/ausente = sem restrição. NÃO libera nada sozinho — os vínculos
-   *  entram no cadastro e são aplicados na APROVAÇÃO, que continua manual. */
+   *  ver. Vazio/ausente = sem restrição. É o que a LIBERAÇÃO AUTOMÁTICA aplica
+   *  no cadastro (conviteRegras.liberacaoDoConvite) — o link concede sozinho, e
+   *  quem quiser cortar cancela o convite. */
   clientesVinculados?: string[];
   fazendasVinculadas?: string[];
   criadoEm: string;
