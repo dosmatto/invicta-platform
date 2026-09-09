@@ -46,6 +46,7 @@ next-env.d.ts
 .vercel
 
 # ZIP do interpolador local — gerado no prebuild (não versionar)
+public/interpolador-local.zip
 public/interpolador-local-mac.zip
 out/
 

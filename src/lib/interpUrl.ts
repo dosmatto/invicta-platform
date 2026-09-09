@@ -79,7 +79,7 @@ export function msgBackendFora(): string {
   return isLocal()
     // No modo local a falha só chega aqui depois de a nuvem TAMBÉM ter falhado
     // (postBackend cai para ela sozinho) — então o texto fala dos dois.
-    ? 'Não deu para processar: o interpolador desta máquina está desligado e o servidor da nuvem não respondeu. Verifique sua internet e tente de novo em ~1 minuto. (Para processar nesta máquina, abra o atalho "Interpolador INVICTA" na Área de Trabalho.)'
+    ? 'Não deu para processar: o interpolador desta máquina está desligado e o servidor da nuvem não respondeu. Verifique sua internet e tente de novo em ~1 minuto. (Para processar nesta máquina, ligue o interpolador: no Windows, 2 cliques em start.bat; no Mac, o atalho "Interpolador INVICTA" na Área de Trabalho.)'
     : 'Servidor de processamento indisponível no momento. Verifique sua internet e tente de novo em ~1 minuto; se persistir, avise o suporte.';
 }
 

@@ -25,10 +25,22 @@ function ehSafari(): boolean {
   return /safari/i.test(ua) && !/chrome|chromium|crios|edg|fxios|android/i.test(ua);
 }
 
+// Sistema do usuário — as instruções do interpolador são MUITO diferentes entre
+// Windows (2 cliques no start.bat) e Mac (Terminal, por causa do Gatekeeper), e
+// mostrar as duas juntas fazia a pessoa seguir a errada. O pacote é o mesmo.
+type SO = 'win' | 'mac';
+function detectarSO(): SO {
+  if (typeof navigator === 'undefined') return 'win';
+  return /Macintosh|Mac OS X|MacIntel/i.test(navigator.userAgent) ? 'mac' : 'win';
+}
+
 function ServidorProcessamento() {
   const [local, setLocal] = useState(false);
   const [safari, setSafari] = useState(false);
-  useEffect(() => { setSafari(ehSafari()); }, []);   // só no cliente (o servidor não tem navigator)
+  const [so, setSo] = useState<SO>('win');
+  // Só no cliente (o servidor não tem navigator) — e o estado inicial precisa
+  // bater com o HTML do servidor para não quebrar a hidratação.
+  useEffect(() => { setSafari(ehSafari()); setSo(detectarSO()); }, []);
   const [status, setStatus] = useState<'checando' | 'ok' | 'off'>('checando');
   const [motor, setMotor] = useState('');
   const [nonce, setNonce] = useState(0);
@@ -72,7 +84,8 @@ function ServidorProcessamento() {
       )}
       {local && status === 'off' && !safari && (
         <p className="text-[10px] leading-relaxed" style={{ color: '#fbbf24' }}>
-          Ligue o interpolador desta máquina, espere a janela do Terminal dizer “no ar” e clique em “testar”.
+          Ligue o interpolador desta máquina ({so === 'win' ? '2 cliques em start.bat' : 'start.sh no Terminal'}),
+          {' '}espere a janela dizer “no ar em 127.0.0.1:8800” e clique em “testar”.
           {' '}O interpolador precisa ser a versão <b>interp-24</b> ou mais nova (baixe de novo abaixo se for antiga).
           {' '}Para voltar à nuvem, desmarque acima.
         </p>
@@ -85,18 +98,39 @@ function ServidorProcessamento() {
           {' '}que só existem no servidor, e por isso não param quando você usa esta máquina.
         </p>
       </>)}
-      <div className="pt-1">
-        <a href="/interpolador-local-mac.zip" download
+      <div className="pt-1 space-y-1">
+        <a href="/interpolador-local.zip" download
           className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded text-[11px] font-semibold text-white transition-opacity hover:opacity-90"
           style={{ background: 'var(--invicta-blue-mid)' }}>
-          <Download size={12} /> Baixar interpolador local (Mac)
+          <Download size={12} /> Baixar interpolador local ({so === 'win' ? 'Windows' : 'Mac'})
         </a>
-        <p className="text-[10px] leading-relaxed mt-1" style={{ color: '#94a3b8' }}>
-          Para rodar em ESTA máquina (ou na do John): 1) baixe e descompacte; 2) abra o <b>Terminal</b>, digite <b>bash</b> + espaço,
-          {' '}arraste o arquivo <b>start.sh</b> para dentro e tecle Enter (evita o bloqueio do macOS); 3) espere “no ar em 127.0.0.1:8800” e deixe a janela aberta;
-          {' '}4) marque a opção acima. Precisa ter <b>Python 3</b> — o resto o script instala sozinho (~2-4 min na 1ª vez).
-          {' '}<b>Use o Chrome</b>: no Safari não funciona (ele bloqueia o site https de falar com um programa da própria máquina).
-          {' '}<span style={{ color: '#64748b' }}>(O duplo-clique em start.command também funciona; se o Mac bloquear, clique OK e vá em Ajustes → Privacidade e Segurança → “Abrir Mesmo Assim”.)</span>
+        <p className="text-[10px]" style={{ color: '#64748b' }}>
+          É o mesmo pacote para os dois sistemas — o que muda é como se abre.
+          {' '}<button onClick={() => setSo(so === 'win' ? 'mac' : 'win')} className="underline" style={{ color: '#60a5fa' }}>
+            Ver instruções do {so === 'win' ? 'Mac' : 'Windows'}
+          </button>
+        </p>
+        {so === 'win' ? (
+          <p className="text-[10px] leading-relaxed" style={{ color: '#94a3b8' }}>
+            <b>Windows:</b> 1) baixe e <b>descompacte</b> (botão direito no .zip → “Extrair tudo”) — rodar de dentro do .zip não funciona;
+            {' '}2) dê <b>2 cliques em start.bat</b> na pasta extraída; 3) espere “no ar em 127.0.0.1:8800” e deixe a janela aberta;
+            {' '}4) marque a opção acima. Precisa ter <b>Python 3</b> (python.org — marque <b>“Add python.exe to PATH”</b> no instalador);
+            {' '}o resto o script instala sozinho (~2-4 min na 1ª vez).
+            {' '}<b>Use Chrome ou Edge.</b>
+            {' '}<span style={{ color: '#64748b' }}>(Se der erro, a janela agora fica aberta com o motivo escrito — leia antes de fechar.)</span>
+          </p>
+        ) : (
+          <p className="text-[10px] leading-relaxed" style={{ color: '#94a3b8' }}>
+            <b>Mac:</b> 1) baixe e descompacte; 2) abra o <b>Terminal</b>, digite <b>bash</b> + espaço,
+            {' '}arraste o arquivo <b>start.sh</b> para dentro e tecle Enter (evita o bloqueio do macOS); 3) espere “no ar em 127.0.0.1:8800” e deixe a janela aberta;
+            {' '}4) marque a opção acima. Precisa ter <b>Python 3</b> — o resto o script instala sozinho (~2-4 min na 1ª vez).
+            {' '}<b>Use o Chrome</b>: no Safari não funciona (ele bloqueia o site https de falar com um programa da própria máquina).
+            {' '}<span style={{ color: '#64748b' }}>(O duplo-clique em start.command também funciona; se o Mac bloquear, clique OK e vá em Ajustes → Privacidade e Segurança → “Abrir Mesmo Assim”.)</span>
+          </p>
+        )}
+        <p className="text-[10px]" style={{ color: '#64748b' }}>
+          <b>Atualizando?</b> Descompacte por cima da pasta antiga. O ambiente Python já instalado é reaproveitado;
+          {' '}só as bibliotecas que mudaram são baixadas.
         </p>
       </div>
     </div>
