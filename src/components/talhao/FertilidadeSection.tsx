@@ -5,7 +5,7 @@ import { useApp } from '@/context/AppContext';
 import {
   getSafras, getGrades, getImportacoesLab, getTalhoes, getFazendas, getPlantio,
   getLaboratorios, definirLaboratorioLab, nomeLaboratorioDoLaudo, fonteDoLaboratorio,
-  getLegendas, getLegendasPorAtributo, ordenarLegendasDoAtributo, casasDecimaisVariavel,
+  getLegendas, getLegendasPorAtributo, ordenarLegendasDoAtributo, casasDecimaisVariavel, variavelDeAnalise,
   type ImportacaoLab, type GradeAmostragem,
 } from '@/lib/store';
 import { gerarRelatorioFertilidade, type ProfundidadeRel } from '@/lib/relatorioFertilidade';
@@ -22,8 +22,8 @@ import { colorirGridComLegenda, temGrid } from '@/lib/raster';
 import { resolverGradeDoLaudo, pontosPorNumero, casarAmostrasComPontos } from '@/lib/eloGrade';
 import { decodeGrid, interpoladorEfetivo, MIN_PTS_MAPA, MIN_PTS_KRIGE } from '@/lib/fertilidade';
 import { rasterizarZonas, rasterizarZonasDose, centroideGeom, type ZonaValor } from '@/lib/recomendacao/zonasGrid';
-import { bindingAuto, bindingPorPontos, divisasDasZonas } from '@/lib/meap/fertilidadePorZona';
-import { stopsParaBackend, dominioDaLegenda, paresDaClasse, respeitarPadraoHomonima } from '@/lib/legendas';
+import { bindingAuto, bindingPorPontos, divisasDasZonas, valorZona as valorZonaLab } from '@/lib/meap/fertilidadePorZona';
+import { stopsParaBackend, dominioDaLegenda, paresDaClasse, respeitarPadraoHomonima, legendaEmprestada } from '@/lib/legendas';
 import type { Legenda } from '@/lib/legendas';
 import { Play, Layers, Loader2, Eraser, AlertTriangle, Activity, Settings, BookOpen, Save, FileDown, RotateCcw } from 'lucide-react';
 import { cloudSalvarMapa, cloudCarregarMapasPorPrefixo, cloudExcluirMapasPorPrefixo, cloudPodeGravar } from '@/lib/cloud';
@@ -318,10 +318,16 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
   function legendaDe(atributoId: string): Legenda | undefined {
     // ordenarLegendasDoAtributo: sem escolha explícita vale a marcada como PADRÃO
     // — e nunca a "primeira que o array trouxe" (que variava a cada boot).
-    let lst = ordenarLegendasDoAtributo(legendas.filter(l => l.atributoId === atributoId));
-    // CTCe usa a legenda de CTC enquanto não houver uma própria.
-    if (lst.length === 0 && atributoId === 't') lst = ordenarLegendasDoAtributo(legendas.filter(l => l.atributoId === 'ctc'));
-    if (lst.length === 0) return undefined;
+    const lst = ordenarLegendasDoAtributo(legendas.filter(l => l.atributoId === atributoId));
+    // CTCe sem legenda própria EMPRESTA a escala da CTC — e só a escala. Antes o
+    // objeto inteiro da legenda de CTC vinha junto, e como a legenda é a fonte da
+    // identidade do mapa (chip, rodapé, título/unidade/nome do arquivo no PDF), o
+    // usuário pedia CTCe e recebia uma página "CTC pH 7,0". Ver legendaEmprestada.
+    if (lst.length === 0) {
+      if (atributoId !== 't') return undefined;
+      const base = ordenarLegendasDoAtributo(legendas.filter(l => l.atributoId === 'ctc'))[0];
+      return base ? legendaEmprestada(base, 't', variavelDeAnalise('t')) : undefined;
+    }
     const escolhida = legendaIdPorAtributo[atributoId];
     const alvo = lst.find(l => l.id === escolhida);
     // Perfil/escolha apontando para a gêmea não-padrão (mesmo nome) → vale a
@@ -350,7 +356,11 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
     const legPorEl: Record<string, string> = {};
     for (const n of nutrientes) {
       const l = legendaDe(n);
-      if (l) legPorEl[n] = l.id;
+      // Legenda EMPRESTADA (CTCe usando a escala da CTC) não entra no Perfil: o
+      // `id` gravado seria o da legenda de CTC, e o Perfil passaria a mandar a
+      // CTCe usar a legenda de CTC de propósito e para sempre — a contaminação
+      // deixaria de ser um fallback e viraria escolha registrada do usuário.
+      if (l && l.atributoId === n) legPorEl[n] = l.id;
     }
     const novo = bibCriar<ConteudoPerfil>('perfis', {
       nome,
@@ -386,12 +396,17 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
 
   // Modo zona: valor da zona p/ um nutriente+profundidade, via o vínculo
   // zona↔amostra; zonas com valor; e rótulos no centroide de cada zona.
+  //
+  // A leitura do laudo é a de lib/meap/fertilidadePorZona — a MESMA função que a
+  // Recomendação por zona usa (zonasComLaudo.ts). Aqui havia uma segunda cópia,
+  // e ela tinha divergido: escolhia a linha só por número+profundidade, sem
+  // exigir que a linha tivesse o nutriente pedido — enquanto a interpolação
+  // (`pontosDe`, logo acima) sempre filtrou por `valores[nut] != null`. Duas
+  // regras para o mesmo laudo é como o mapa por zona ficava sem CTCe num laudo
+  // que a interpolação lia inteiro.
   function valorZona(zonaId: string, nut: string, prof: string): number {
     if (!importacao) return NaN;
-    const num = mapaZonaNumero[zonaId];
-    const r = importacao.resultados.find(x => x.numero === num && x.profundidade === prof);
-    const v = r?.valores[nut];
-    return v != null && isFinite(v) ? v : NaN;
+    return valorZonaLab(importacao, mapaZonaNumero, zonaId, nut, prof);
   }
   function zonasComValor(nut: string, prof: string): ZonaValor[] {
     return zonas

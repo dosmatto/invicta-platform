@@ -19,7 +19,7 @@ export const ELEMENTOS_LAB: { id: string; simbolo: string; sinonimos: string[] }
   { id: 'ca',  simbolo: 'Ca',  sinonimos: ['ca', 'calcio'] },
   { id: 'mg',  simbolo: 'Mg',  sinonimos: ['mg', 'magnesio'] },
   { id: 'al',  simbolo: 'Al',  sinonimos: ['al', 'aluminio'] },
-  { id: 'ctc', simbolo: 'CTC', sinonimos: ['ctc', 'ctcph7', 'captrocacations', 'capacidadetrocacationica'] },
+  { id: 'ctc', simbolo: 'CTC', sinonimos: ['ctc', 'ctcph7', 'captrocacations', 'capacidadetrocacationica', 'capacidadedetroca'] },
   { id: 'v',   simbolo: 'V%',  sinonimos: ['v', 'v%', 'vperc', 'saturacaobases', 'satbases'] },
   { id: 'm',   simbolo: 'm%',  sinonimos: ['m%', 'mperc', 'saturacaoaluminio', 'satal', 'aluminioctcefetiva'] },
   { id: 'mo',  simbolo: 'MO',  sinonimos: ['mo', 'mos', 'moseca', 'materiaorganica', 'morg'] },
@@ -36,6 +36,27 @@ export const ELEMENTOS_LAB: { id: string; simbolo: string; sinonimos: string[] }
   { id: 'fe',  simbolo: 'Fe',  sinonimos: ['fe', 'ferro'] },
   { id: 'textura', simbolo: 'Textura', sinonimos: ['textura', 'argila', 'granulometria'] },
 ];
+
+// ANTI-SINÔNIMOS: cabeçalhos que a variável NÃO pode reivindicar, mesmo casando
+// pela regra do "contido". Existe um caso só, e ele é grave.
+//
+// O casamento aceita substring a partir de 3 letras (lab.ts), e 'ctc' está
+// dentro de 'ctcefetiva'. Então uma coluna "CTC efetiva" / "CTCe" / "CTC ef."
+// era entregue ao id 'ctc' (CTC pH 7,0) sempre que viesse ANTES da coluna de CTC
+// nominal — ou quando o laudo só trouxesse a efetiva. O estrago é silencioso e
+// não para na CTC: `calcularDerivados` divide K/Ca/Mg por `ctc`, então K%, Ca% e
+// Mg% saem inflados (num caso real, Ca% 73,7% no lugar de 47,5%), e CTC e CTCe
+// passam a exibir o MESMO número na tela.
+//
+// A coluna de CTC efetiva fica sem mapeamento de propósito: `t` é SEMPRE
+// calculada (Ca+Mg+K+Al) e nunca lida de arquivo — ver DERIVADOS_LAB abaixo.
+//
+// Preço aceito: um cabeçalho como "CTC em mmolc/dm³" contém 'ctce' e também é
+// recusado. Preferimos isso — CTC sem coluna aparece na conferência da
+// importação — a CTC recebendo calada o número da efetiva.
+export const ANTI_SINONIMOS: Record<string, string[]> = {
+  ctc: ['efetiv', 'ctce'],
+};
 
 // Colunas CALCULADAS na importação — a plataforma DERIVA a partir das colunas
 // do laudo (não vêm do arquivo). Canônico: t (CTC efetiva) em mmolc/dm³ (soma de

@@ -7,14 +7,14 @@
 // zona↔amostra por LOCALIZAÇÃO: o ponto de amostragem que cai dentro da zona é
 // o que dá o valor dela (bindingPorPontos); a ordem só entra como fallback.
 //
-// Reusa `rasterizarZonas` (mesma malha/formato do interpolador) e
-// `colorirGridComLegenda` — zero duplicação da conta de raster/cor.
+// Módulo PURO (sem DOM, sem store, sem I/O) — npm run teste:fertzona. Era só
+// "quase" puro: arrastava `raster`/`fertilidade`/`store` por causa de duas
+// funções que ninguém chamava (a aba tem a própria `fcLabelsZona`), e por isso
+// não rodava em Node — o caminho da fertilidade por zona ficava sem UM teste.
+// A rasterização/cor continua em `recomendacao/zonasGrid` e `lib/raster`.
 
-import { rasterizarZonas, centroideGeom, dentroGeom, type ZonaValor } from '../recomendacao/zonasGrid';
-import { colorirGridComLegenda } from '../raster';
-import { coordsFromBounds } from '../fertilidade';
-import { casasDecimaisVariavel, type ImportacaoLab } from '../store';
-import type { Legenda } from '../legendas';
+import { dentroGeom, type ZonaValor } from '../recomendacao/zonasGrid.ts';
+import type { ImportacaoLab } from '../store';
 
 export interface ZonaGeom { id: string; classe: string; geometry: GeoJSON.Geometry }
 
@@ -76,12 +76,27 @@ export function bindingPorPontos(
   return init;
 }
 
-/** Valor de UMA zona: o resultado do laudo no número de amostra vinculado. */
+/** Valor de UMA zona: o resultado do laudo no número de amostra vinculado.
+ *
+ *  A LINHA ESCOLHIDA É A QUE TEM O NUTRIENTE — mesma regra da interpolação
+ *  (`pontosDe`, em FertilidadeSection, filtra por `valores[nut] != null`). Antes
+ *  aqui era `find(numero && profundidade)` e pronto: a PRIMEIRA linha daquele
+ *  ponto vencia, tivesse ou não o nutriente pedido. Num laudo com mais de uma
+ *  linha por número+profundidade — macro e micro chegando em protocolos
+ *  diferentes, que é o que impede a fusão em lab.ts (a chave de fusão é o
+ *  protocolo quando ele existe) — a zona caía na linha sem Ca/Mg/K, onde
+ *  `calcularDerivados` APAGA o `t`, e a CTCe da zona virava NaN: a zona sumia do
+ *  mapa ("nenhuma zona com valor") enquanto a interpolação, olhando as mesmas
+ *  amostras, desenhava tudo. Zona de manejo NÃO interpola — ela traz o valor
+ *  absoluto da amostra —, mas de QUAL amostra ela lê tem de ser a mesma conta.
+ */
 export function valorZona(
   imp: ImportacaoLab, mapaZonaNumero: Record<string, number>, zonaId: string, nut: string, prof: string,
 ): number {
   const num = mapaZonaNumero[zonaId];
-  const r = imp.resultados.find(x => x.numero === num && x.profundidade === prof);
+  const r = imp.resultados.find(
+    x => x.numero === num && x.profundidade === prof && x.valores[nut] != null && isFinite(x.valores[nut]),
+  );
   const v = r?.valores[nut];
   return v != null && isFinite(v) ? v : NaN;
 }
@@ -93,20 +108,6 @@ export function zonasComValor(
   return zonas
     .map(z => ({ id: z.id, geometry: z.geometry, valor: valorZona(imp, mapaZonaNumero, z.id, nut, prof) }))
     .filter(z => isFinite(z.valor));
-}
-
-const casas = (nut: string) => casasDecimaisVariavel(nut) ?? ((nut === 'ph' || nut === 'k') ? 1 : 0);
-const fmtVal = (v: number, nut: string) =>
-  v.toLocaleString('pt-BR', { minimumFractionDigits: casas(nut), maximumFractionDigits: casas(nut) });
-
-/** Rótulo (valor) no centroide de cada zona com valor. */
-export function fcLabelsZona(zv: ZonaValor[], nut: string): GeoJSON.FeatureCollection {
-  const feats: GeoJSON.Feature[] = [];
-  for (const z of zv) {
-    const c = centroideGeom(z.geometry);
-    if (c) feats.push({ type: 'Feature', geometry: { type: 'Point', coordinates: c }, properties: { txt: fmtVal(z.valor, nut) } });
-  }
-  return { type: 'FeatureCollection', features: feats };
 }
 
 /** As DIVISAS das zonas como linhas — desenhadas por cima do raster para cada
@@ -123,25 +124,4 @@ export function divisasDasZonas(zonas: ZonaGeom[]): GeoJSON.Feature[] {
     }
   }
   return feats;
-}
-
-export interface OverlayPorZona {
-  url: string;
-  coordinates: [[number, number], [number, number], [number, number], [number, number]];
-  labels: GeoJSON.FeatureCollection;
-}
-
-/** Compõe o overlay do mapa: rasteriza as zonas (constante por zona), pinta pela
- *  legenda e devolve url + bounds + rótulos. `null` quando NENHUMA zona tem valor
- *  (para a tela avisar em vez de mostrar um mapa vazio). */
-export function construirOverlayPorZona(args: {
-  zonas: ZonaGeom[]; imp: ImportacaoLab; mapaZonaNumero: Record<string, number>;
-  nut: string; prof: string; legenda: Legenda; pixelM?: number;
-}): OverlayPorZona | null {
-  const zv = zonasComValor(args.zonas, args.imp, args.mapaZonaNumero, args.nut, args.prof);
-  if (zv.length === 0) return null;
-  const resp = rasterizarZonas(zv, args.pixelM ?? 20);
-  if (!resp.grid?.b64) return null;
-  const url = colorirGridComLegenda(resp.grid, args.legenda).dataUrl;
-  return { url, coordinates: coordsFromBounds(resp.bounds), labels: fcLabelsZona(zv, args.nut) };
 }

@@ -13,12 +13,12 @@ import { converterParaCanonico, casarUnidade, ehRotuloSemUnidade } from './unida
 // O núcleo puro vive em ./laudo/nucleo.ts para servir TAMBÉM ao servidor (rota
 // de ingestão da API). Re-exportado aqui: quem importa de './lab' segue igual.
 import {
-  ELEMENTOS_LAB, DERIVADOS_LAB, DERIVADOS_IDS, simboloElemento,
+  ELEMENTOS_LAB, DERIVADOS_LAB, DERIVADOS_IDS, ANTI_SINONIMOS, simboloElemento,
   calcularDerivados, norm, normCab, parseNum, valorLab,
   type ResultadoAmostra,
 } from './laudo/nucleo.ts';
 export {
-  ELEMENTOS_LAB, DERIVADOS_LAB, DERIVADOS_IDS, simboloElemento,
+  ELEMENTOS_LAB, DERIVADOS_LAB, DERIVADOS_IDS, ANTI_SINONIMOS, simboloElemento,
   calcularDerivados, norm, normCab, parseNum, valorLab,
 };
 export type { ResultadoAmostra };
@@ -176,7 +176,7 @@ export function autoConfig(
 
   const elementos: Record<string, number> = {};
   for (const el of vars) {
-    const idx = headers.findIndex((h, i) => !usados.has(i) && casaCabecalho(h, el.sinonimos));
+    const idx = headers.findIndex((h, i) => !usados.has(i) && casaCabecalho(h, el.sinonimos, el.id));
     if (idx >= 0) { elementos[el.id] = idx; usados.add(idx); }
   }
 
@@ -202,8 +202,11 @@ export function autoConfig(
 // Para estes, exige-se igualdade exata, como já se faz com os de 1-2 letras.
 const SO_EXATO = new Set(['mos', 'mo', 'sb', 'ras', 'areia']);
 
-function casaCabecalho(header: string, sinonimos: string[]): boolean {
+function casaCabecalho(header: string, sinonimos: string[], elId?: string): boolean {
   const n = normCab(header);
+  // Anti-sinônimo vence o casamento: "CTC efetiva" nunca é a CTC pH 7,0, por mais
+  // que 'ctc' esteja contido nela (ver ANTI_SINONIMOS em laudo/nucleo.ts).
+  if (elId && (ANTI_SINONIMOS[elId] ?? []).some(a => n.includes(a))) return false;
   if (sinonimos.includes(n)) return true;
   return sinonimos.some(s => s.length >= 3 && !SO_EXATO.has(s) && n.includes(s));
 }
@@ -244,7 +247,7 @@ export function completarPorCabecalho(
   const adicionados: string[] = [];
   for (const el of vars) {
     if (jaElementos.has(el.id)) continue;                       // trava 3
-    const idx = headers.findIndex((h, i) => !jaMapeadas.has(i) && casaCabecalho(h, el.sinonimos));
+    const idx = headers.findIndex((h, i) => !jaMapeadas.has(i) && casaCabecalho(h, el.sinonimos, el.id));
     if (idx < 0) continue;
     elementos[el.id] = idx;
     jaMapeadas.add(idx);
@@ -361,7 +364,7 @@ export function pontuarPerfil(
     if (sin.length === 0) continue;                 // variável derivada/sem sinônimo: não dá p/ julgar
     esperados++;
     const cab = String(headers[idx] ?? '');
-    if (casaCabecalho(cab, sin)) acertos++;
+    if (casaCabecalho(cab, sin, elId)) acertos++;
     else exemplo ??= { elId, coluna: idx, cabecalho: cab };
   }
   return { acertos, esperados, confianca: esperados === 0 ? 1 : acertos / esperados, exemplo };

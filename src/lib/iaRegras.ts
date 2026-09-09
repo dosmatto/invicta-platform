@@ -68,7 +68,11 @@ export function avaliarRegras(ctx: CtxRegras): AvaliacaoRegras {
   const ph = pega(m, 'ph', 'ph_cacl2', 'phcacl2');
   const al = pega(m, 'al', 'al_mmolc');
   const k = pega(m, 'k', 'k_mmolc');
-  const ctc = pega(m, 'ctc', 'ctc_mmolc', 't', 'ctc_ph7');
+  // SEM `'t'` na lista: 't' é a CTC EFETIVA (Ca+Mg+K+Al), outra grandeza — num
+  // laudo sem CTC pH 7,0 ela entrava aqui como se fosse, e o "K na CTC" saía
+  // calculado sobre a efetiva (denominador menor ⇒ percentual inflado) sem uma
+  // palavra na tela. Sem CTC nominal, a regra do K simplesmente não opina.
+  const ctc = pega(m, 'ctc', 'ctc_mmolc', 'ctc_ph7');
   let kCtc = pega(m, 'k_ctc', 'k_ctc_percent', 'k_percent');
   if (kCtc == null && k != null && ctc != null && ctc > 0) kCtc = (k / ctc) * 100;
 

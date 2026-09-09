@@ -339,5 +339,39 @@ t('a regra do "contido" segue valendo para os demais', () => {
   assert.equal(autoConfig(aoa).config.elementos.textura, 2);
 });
 
+// ── "CTC efetiva" não é a CTC pH 7,0 (v2.128.0) ──────────────────────────────
+// Mesma família do caso "Amostra"/MO acima: 'ctc' é substring de 'ctcefetiva'.
+// A coluna da CTC EFETIVA era entregue ao id 'ctc' sempre que viesse antes da
+// CTC nominal — ou quando o laudo só trouxesse a efetiva. Aí CTC e CTCe passam a
+// mostrar o mesmo número, e K%/Ca%/Mg% (que dividem por `ctc`) saem inflados.
+t('BUG QUE ISTO TRAVA: "CTC efetiva" antes de "CTC" não rouba a CTC pH 7,0', () => {
+  const aoa = [
+    ['id', 'prof', 'K', 'Ca', 'Mg', 'Al', 'CTC efetiva', 'CTC pH 7,0'],
+    ['1', '0-20', '3.2', '30', '12', '0', '45.2', '78'],
+  ];
+  const { config } = autoConfig(aoa);
+  assert.equal(config.elementos.ctc, 7, 'a CTC pH 7,0 é a coluna 7, não a da efetiva');
+  assert.equal(config.elementos.t, undefined, 'CTCe é sempre DERIVADA — nunca lida de coluna');
+});
+
+t('laudo só com a efetiva: a CTC pH 7,0 fica sem coluna (em vez de receber o número errado)', () => {
+  const aoa = [['id', 'prof', 'K', 'Ca', 'Mg', 'Al', 'CTC efetiva'], ['1', '0-20', '3.2', '30', '12', '0', '45.2']];
+  assert.equal(autoConfig(aoa).config.elementos.ctc, undefined);
+});
+
+t('as demais grafias da efetiva também são recusadas pela CTC', () => {
+  for (const cab of ['CTCe', 'CTC ef.', 'CTC Efetiva', 'Capacidade de Troca de Cátions Efetiva']) {
+    const aoa = [['id', 'prof', 'Ca', cab], ['1', '0-20', '30', '45.2']];
+    assert.equal(autoConfig(aoa).config.elementos.ctc, undefined, `"${cab}" não pode virar CTC pH 7,0`);
+  }
+});
+
+t('...e as formas legítimas de CTC continuam casando', () => {
+  for (const cab of ['CTC', 'CTC pH 7,0', 'CTC pH7', 'Capacidade de Troca de Cátions', 'Capacidade de Troca Catiônica']) {
+    const aoa = [['id', 'prof', 'Ca', cab], ['1', '0-20', '30', '78']];
+    assert.equal(autoConfig(aoa).config.elementos.ctc, 3, `"${cab}" deveria casar com CTC`);
+  }
+});
+
 console.log(`\n${ok} passaram, ${fail} falharam\n`);
 process.exit(fail ? 1 : 0);

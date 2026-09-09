@@ -191,6 +191,58 @@ export function respeitarPadraoHomonima<T extends Pick<Legenda, 'id' | 'nome' | 
     && l.nome.trim() === escolhida.nome.trim()) ?? escolhida;
 }
 
+/** Duas legendas têm exatamente os MESMOS limites de classe? Compara só a régua
+ *  (valorMin/valorMax, na ordem) — nome de classe e cor não entram.
+ *
+ *  Serve para reconhecer um CLONE INTOCADO: a migração da CTCe copiava as faixas
+ *  da CTC pH 7,0, e só dá para consertar isso automaticamente enquanto o usuário
+ *  não tiver mexido nelas. Faixas idênticas às da CTC = ninguém editou = pode
+ *  trocar pelas da CTCe; qualquer diferença = decisão do usuário, não se toca. */
+export function mesmasFaixas(a: Pick<Legenda, 'classes'>, b: Pick<Legenda, 'classes'>): boolean {
+  if (a.classes.length !== b.classes.length) return false;
+  return a.classes.every((c, i) => c.valorMin === b.classes[i].valorMin && c.valorMax === b.classes[i].valorMax);
+}
+
+/**
+ * Legenda EMPRESTADA de outro atributo — a ESCALA vem emprestada, a IDENTIDADE não.
+ *
+ * Existe por causa da CTC efetiva. Quando a conta não tem legenda própria de
+ * CTCe (`atributoId: 't'`), a aba Fertilidade empresta a de CTC pH 7,0 para
+ * conseguir pintar o mapa. Só que a legenda é, no app inteiro, a fonte da
+ * IDENTIDADE do mapa: o chip da variável mostra `legenda.simbolo`, a tela mostra
+ * `legenda.atributo`, e o PDF resolve título, unidade, casas decimais, item da
+ * capa e NOME DO ARQUIVO por `legenda.atributoId` (relatorioFertilidade.ts:149,
+ * 199, 241, 344, 409). Emprestar o objeto inteiro fazia o usuário pedir CTCe e
+ * receber, na tela e no PDF, "CTC pH 7,0" — com os números de CTCe desenhados
+ * dentro. Dois chips "CTC" lado a lado, e o arquivo saindo `..._CTC.pdf`.
+ *
+ * Aqui o empréstimo fica restrito ao que ele deve ser: classes, cores e estilo.
+ * Identidade (`atributoId`, `atributo`, `simbolo`, `unidade`) volta a ser a do
+ * atributo pedido, tirada do catálogo de Variáveis de Análise. `metodo` cai para
+ * null — "pH 7,0" é método da CTC nominal e mentiria sobre a efetiva — e `fonte`
+ * diz de quem é a escala, para o PDF não creditar à Fundação ABC uma faixa que
+ * ela não publicou para este atributo.
+ *
+ * Não substitui ter a legenda certa: é rede de segurança para a conta que ficou
+ * sem ela. Ver `migrarLegendaCtceV1/V2` em store.ts.
+ */
+export function legendaEmprestada(
+  base: Legenda,
+  atributoId: string,
+  ident: { sigla?: string; nome?: string; unidade?: string } | null | undefined,
+): Legenda {
+  return {
+    ...base,
+    atributoId,
+    atributo: ident?.nome || atributoId,
+    simbolo: ident?.sigla || atributoId,
+    unidade: ident?.unidade ?? base.unidade,
+    metodo: null,
+    fonte: base.fonte ? `escala de ${base.simbolo} (${base.fonte})` : `escala de ${base.simbolo}`,
+    classes: base.classes.map(c => ({ ...c })),
+  };
+}
+
 // Detecta grupos de legendas HOMÔNIMAS (mesmo atributoId + mesmo nome) onde
 // NENHUMA está marcada como padrão e devolve, por grupo, o id da que deve ser
 // promovida: a editada por último (atualizadoEm mais recente; empate por id).

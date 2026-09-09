@@ -7,7 +7,8 @@
 // Roda: `npm run teste:legendas`.
 import assert from 'node:assert/strict';
 import { ordenarLegendasDoAtributo, deveSemearLegendas, respeitarPadraoHomonima, promocoesDeHomonimas,
-  ordenarPorObjeto, agruparPorCategoria, chaveObjeto, categoriaSugerida, CATEGORIAS_LEGENDA } from '../src/lib/legendas.ts';
+  ordenarPorObjeto, agruparPorCategoria, chaveObjeto, categoriaSugerida, CATEGORIAS_LEGENDA,
+  legendaEmprestada, mesmasFaixas, classesFertilidade5 } from '../src/lib/legendas.ts';
 
 let ok = 0, fail = 0;
 function t(nome, fn) {
@@ -245,6 +246,72 @@ t('legenda nova nasce na categoria provável do atributo', () => {
   assert.equal(categoriaSugerida('produtividade'), 'produtividade-colheita');
   assert.equal(categoriaSugerida('p'), 'fertilidade', 'o resto cai em fertilidade');
   assert.equal(categoriaSugerida(''), 'fertilidade');
+});
+
+// ── CTCe vestida de CTC pH 7,0 (v2.128.0) ───────────────────────────────────
+// A legenda é, no app inteiro, a fonte da IDENTIDADE do mapa: o chip mostra
+// `simbolo`, o rodapé mostra `atributo`, e o PDF resolve título, unidade, casas
+// decimais, item da capa e NOME DO ARQUIVO por `atributoId`. Emprestar a legenda
+// de CTC para a CTCe (que é o que a aba faz quando não há legenda própria)
+// entregava ao usuário uma página "CTC pH 7,0" com números de CTCe dentro.
+const LEG_CTC = {
+  id: 'fabc_ctc_ph7', nome: 'Fundação ABC - CTC pH 7,0',
+  atributoId: 'ctc', atributo: 'CTC pH 7,0', simbolo: 'CTC',
+  unidade: 'mmolc/dm³', metodo: 'pH 7,0', fonte: 'Fundação ABC',
+  categoria: 'fertilidade', invertida: false, tipoEscala: 'gradiente',
+  classes: classesFertilidade5([50, 70, 140, 240]),
+  criadoEm: '2026-06-11T00:00:00.000Z', atualizadoEm: '2026-06-11T00:00:00.000Z',
+};
+const VAR_CTCE = { sigla: 'CTCe', nome: 'CTC efetiva', unidade: 'mmolc/dm³' };
+
+t('legenda emprestada troca a IDENTIDADE pela do atributo pedido', () => {
+  const e = legendaEmprestada(LEG_CTC, 't', VAR_CTCE);
+  assert.equal(e.atributoId, 't', 'é por aqui que o PDF resolve título e nome do arquivo');
+  assert.equal(e.simbolo, 'CTCe', 'o chip da variável não pode dizer "CTC"');
+  assert.equal(e.atributo, 'CTC efetiva');
+  assert.equal(e.unidade, 'mmolc/dm³');
+  assert.equal(e.metodo, null, '"pH 7,0" é método da CTC nominal — mentiria sobre a efetiva');
+});
+
+t('legenda emprestada mantém a ESCALA (é só o que se empresta)', () => {
+  const e = legendaEmprestada(LEG_CTC, 't', VAR_CTCE);
+  assert.deepEqual(e.classes.map(c => c.valorMax), LEG_CTC.classes.map(c => c.valorMax));
+  assert.notEqual(e.classes, LEG_CTC.classes, 'cópia, não a mesma referência');
+  assert.match(e.fonte, /escala de CTC/, 'o PDF não pode creditar a faixa como se fosse do atributo');
+});
+
+t('legenda emprestada não altera a original', () => {
+  legendaEmprestada(LEG_CTC, 't', VAR_CTCE);
+  assert.equal(LEG_CTC.atributoId, 'ctc');
+  assert.equal(LEG_CTC.simbolo, 'CTC');
+});
+
+t('sem variável no catálogo, cai no id — nunca no símbolo emprestado', () => {
+  const e = legendaEmprestada(LEG_CTC, 't', null);
+  assert.equal(e.simbolo, 't');
+  assert.notEqual(e.simbolo, 'CTC');
+});
+
+t('mesmasFaixas reconhece o CLONE INTOCADO (é o que autoriza a migração a agir)', () => {
+  const clone = { ...LEG_CTC, atributoId: 't', classes: LEG_CTC.classes.map(c => ({ ...c })) };
+  assert.equal(mesmasFaixas(clone, LEG_CTC), true);
+});
+
+t('mesmasFaixas NÃO age em legenda que o usuário já ajustou', () => {
+  const ajustada = { classes: classesFertilidade5([10, 20, 40, 80]) };
+  assert.equal(mesmasFaixas(ajustada, LEG_CTC), false);
+  const umLimiteMexido = { classes: LEG_CTC.classes.map((c, i) => (i === 1 ? { ...c, valorMax: 75 } : { ...c })) };
+  assert.equal(mesmasFaixas(umLimiteMexido, LEG_CTC), false, 'um limite mexido já é decisão do usuário');
+  assert.equal(mesmasFaixas({ classes: [] }, LEG_CTC), false);
+});
+
+t('as faixas da CTCe são outra régua — usar a da CTC joga o talhão na classe mais baixa', () => {
+  const ctce = classesFertilidade5([10, 20, 40, 80]);
+  assert.notDeepEqual(ctce.map(c => c.valorMax), LEG_CTC.classes.map(c => c.valorMax));
+  // Um CTCe de 43,4 mmolc/dm³: 3ª classe na régua certa, 1ª na régua da CTC pH 7,0.
+  const classeDe = (cls, v) => cls.findIndex(c => c.valorMax == null || v <= c.valorMax);
+  assert.equal(classeDe(ctce, 43.4), 3);
+  assert.equal(classeDe(LEG_CTC.classes, 43.4), 0);
 });
 
 console.log(`\n${ok} passaram, ${fail} falharam\n`);

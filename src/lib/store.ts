@@ -4,7 +4,7 @@
 
 import type { ResultadoAmostra, PerfilLabConfig } from './lab';
 import type { Legenda } from './legendas';
-import { classesFertilidade5, ordenarLegendasDoAtributo, deveSemearLegendas, promocoesDeHomonimas } from './legendas';
+import { classesFertilidade5, ordenarLegendasDoAtributo, deveSemearLegendas, promocoesDeHomonimas, mesmasFaixas } from './legendas';
 import { legendaRentabilidade } from '@/constants/legendasSeedOficial';
 import { deveSemearCatalogo, podeMigrarCatalogo, gemeasAExcluir } from './catalogoVariaveis';
 import { coefsParaElemento } from './nutrienteBase';
@@ -2248,9 +2248,41 @@ export function atualizarDataReferenciaLab(id: string, dataReferencia: string): 
   return i;
 }
 
+/**
+ * Exclui o laudo E TUDO QUE FOI GERADO A PARTIR DELE.
+ *
+ * A linha do laudo sempre saiu de verdade — o sync de listas apaga na nuvem os
+ * ids que sumiram da lista local (supabaseData.ts). O que NUNCA saía eram os
+ * RASTERS: os mapas de fertilidade (`<talhao>__<importacao>__…`) e o auxiliar de
+ * 20 m da dose (`dose20__<talhao>__<importacao>__…`), que vivem numa coleção
+ * própria, gravada sob demanda e fora do sync de listas. Resultado medido na
+ * base: 1.337 mapas órfãos de 92 importações já excluídas — 41% da coleção.
+ *
+ * Não era só lixo ocupando espaço: "excluí a planilha porque importei errado"
+ * não desfazia o processamento errado, e quem lê rasters por prefixo continuava
+ * enxergando o que o usuário achava que tinha apagado.
+ *
+ * A exclusão dos rasters é assíncrona e best-effort de propósito: a lista local
+ * já foi gravada e a tela já pode seguir. Se a rede cair no meio, sobra órfão —
+ * mas nunca o contrário (laudo apagado só depois dos mapas travaria a tela).
+ * `import()` tardio evita ciclo de módulos: `cloud` puxa auth/supabase.
+ */
 export function deleteImportacaoLab(id: string) {
+  const alvo = load<ImportacaoLab>('inv_lab').find(i => i.id === id);
   save('inv_lab', load<ImportacaoLab>('inv_lab').filter(i => i.id !== id));
   notificarLab();
+  if (alvo?.talhaoId) excluirMapasDaImportacao(alvo.talhaoId, id);
+}
+
+/** Apaga os rasters de UMA importação: mapas da Fertilidade + gaveta da dose. */
+export function excluirMapasDaImportacao(talhaoId: string, importacaoId: string) {
+  if (typeof window === 'undefined') return;
+  void import('./cloud')
+    .then(({ cloudExcluirMapasPorPrefixo }) => Promise.all([
+      cloudExcluirMapasPorPrefixo(`${talhaoId}__${importacaoId}__`),
+      cloudExcluirMapasPorPrefixo(`dose20__${talhaoId}__${importacaoId}__`),
+    ]))
+    .catch(e => console.warn('[lab] falha ao excluir os mapas da importação', importacaoId, e));
 }
 
 /** Patch cru numa importação (usado pelo desmembramento: mover resultados de
@@ -2618,12 +2650,27 @@ export function seedLegendasSistema(seed: Legenda[]) {
   notificarLegendas();
 }
 
-// Cria a legenda de CTC EFETIVA (atributoId 't', sigla CTCe) CLONANDO a de CTC
-// (mesma unidade/escala), para a CTCe aparecer na interpolação da Fertilidade e
-// poder ser usada nas equações. A cópia é 'empresa' (editável) — o usuário ajusta
-// as faixas depois. Idempotente: se já houver uma legenda 't' (inclusive uma que
-// o usuário apagou e não quer de volta → flag), não recria; se ainda não houver
-// nenhuma de CTC (base não hidratada / usuário não usa CTC), tenta no próximo boot.
+// Faixas OFICIAIS da CTC efetiva (Fundação ABC) — as mesmas de `fabc_ctc_efetiva`
+// em legendasSeedABC.ts, que só chega a quem instalou com o banco vazio. Ficam
+// aqui para as migrações abaixo poderem entregá-las a quem já tinha Biblioteca.
+// Escala PRÓPRIA: a CTC nominal (pH 7,0) vai de 50 a 240 mmolc/dm³ e a efetiva de
+// 10 a 80 — usar a primeira para classificar a segunda joga o talhão inteiro na
+// classe mais baixa, que é o oposto do que o mapa deveria dizer.
+const FAIXAS_CTCE: [number, number, number, number] = [10, 20, 40, 80];
+
+// Cria a legenda de CTC EFETIVA (atributoId 't', sigla CTCe) a partir da de CTC
+// — as CORES e o estilo dela, com as FAIXAS PRÓPRIAS da CTCe —, para a CTCe
+// aparecer na interpolação da Fertilidade e poder ser usada nas equações. A cópia
+// é 'empresa' (editável) — o usuário ajusta as faixas depois. Idempotente: se já
+// houver uma legenda 't' (inclusive uma que o usuário apagou e não quer de volta
+// → flag), não recria; se ainda não houver nenhuma de CTC (base não hidratada /
+// usuário não usa CTC), tenta no próximo boot.
+//
+// ANTES ELA CLONAVA A CTC INTEIRA (`classes: base.classes.map(...)`), e com isso
+// a legenda chamada "CTC efetiva (CTCe)" carregava as faixas, o domínio e o
+// método ("pH 7,0") da CTC pH 7,0 — em silêncio e para sempre. O mapa de CTCe
+// saía classificado e rotulado como CTC pH 7,0 sem que nenhum fallback estivesse
+// envolvido; ver `migrarLegendaCtceFaixasV2`, que conserta quem já passou por aqui.
 export function migrarLegendaCtceV1() {
   if (typeof window === 'undefined') return;
   if (localStorage.getItem('inv_migrado_leg_ctce_v1') === '1') return;
@@ -2643,14 +2690,56 @@ export function migrarLegendaCtceV1() {
     atributo: 'CTC efetiva',
     atributoId: 't',
     simbolo: 'CTCe',
+    metodo: null,                            // "pH 7,0" é método da CTC nominal, não da efetiva
     escopo: 'empresa',                       // editável (a de CTC pode ser 'sistema')
-    classes: base.classes.map(c => ({ ...c })),
+    classes: classesFertilidade5(FAIXAS_CTCE, base.invertida),
+    dominioMin: undefined,
+    dominioMax: undefined,                   // o domínio da CTC pH7 não vale aqui
+    observacao: undefined,
     criadoEm: agora,
     atualizadoEm: agora,
   });
   save('inv_legendas', [...todas, nova]);
   notificarLegendas();
   localStorage.setItem('inv_migrado_leg_ctce_v1', '1');
+}
+
+/**
+ * CONSERTA a legenda de CTCe que a V1 criou com as faixas da CTC pH 7,0.
+ *
+ * A V1 clonava a legenda de CTC inteira. Quem passou por ela ficou com uma
+ * legenda chamada "CTC efetiva (CTCe)" classificando pela régua da CTC nominal
+ * (50/70/140/240 mmolc/dm³) valores que vivem entre 10 e 80 — resultado: mapa de
+ * CTCe quase todo na classe mais baixa, e o método impresso no PDF dizendo
+ * "pH 7,0". Como a V1 queimou a flag, nada mais tocava nessa legenda.
+ *
+ * Age SÓ no clone intocado: as faixas da legenda de CTCe têm de ser exatamente as
+ * da legenda de CTC da conta (`mesmasFaixas`). Se o usuário já ajustou qualquer
+ * limite, a decisão é dele e a migração passa reto — ele só perderia trabalho.
+ * O método "pH 7,0" herdado é limpo junto, que é erro em qualquer caso.
+ */
+export function migrarLegendaCtceFaixasV2() {
+  if (typeof window === 'undefined') return;
+  if (localStorage.getItem('inv_migrado_leg_ctce_faixas_v2') === '1') return;
+  if (cloudAindaNaoHidratou()) return;   // mesma trava das demais: "vazio" ainda não quer dizer nada
+  const todas = load<Legenda>('inv_legendas');
+  const ctc = todas.find(l => l.atributoId === 'ctc');
+  const alvos = todas.filter(l => l.atributoId === 't' && ctc && mesmasFaixas(l, ctc));
+  if (!ctc || alvos.length === 0) {
+    // Sem CTC na base ainda? Pode ser boot parcial — não queima a flag.
+    if (ctc) localStorage.setItem('inv_migrado_leg_ctce_faixas_v2', '1');
+    return;
+  }
+  const agora = new Date().toISOString();
+  const ids = new Set(alvos.map(l => l.id));
+  const novas = todas.map(l => (ids.has(l.id)
+    ? { ...l, classes: classesFertilidade5(FAIXAS_CTCE, l.invertida), metodo: null,
+        dominioMin: undefined, dominioMax: undefined, atualizadoEm: agora }
+    : l));
+  save('inv_legendas', novas);
+  notificarLegendas();
+  localStorage.setItem('inv_migrado_leg_ctce_faixas_v2', '1');
+  console.warn('[legendas] CTCe: faixas da CTC pH 7,0 substituídas pelas da CTC efetiva em', alvos.length, 'legenda(s).');
 }
 
 /**
