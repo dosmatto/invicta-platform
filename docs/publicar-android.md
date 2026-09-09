@@ -1,195 +1,141 @@
 # Publicar o app INVICTA Coleta no Google Play
 
-Guia do caminho escolhido: **Teste interno** (equipe e clientes conhecidos, até
-100 pessoas, sem revisão demorada e sem ficha de loja completa).
+App: `br.agr.invicta.coleta` · Nome: **INVICTA Coleta**
 
-App: `br.com.invictaap.coleta` · Nome: **INVICTA Coleta**
+Guia para publicar em **Produção** (qualquer pessoa acha e baixa na loja).
+Os textos e as respostas dos formulários da loja estão prontos em
+[`loja/ficha-play-store.md`](../loja/ficha-play-store.md).
 
 ---
 
-## PASSO 1 — Criar a chave de assinatura (uma única vez)
+## Antes de tudo: o OneDrive e o Gradle
 
-> ⚠️ **O arquivo e a senha desta etapa são insubstituíveis.** Se você perder,
-> **não existe** forma de atualizar o app publicado — seria preciso publicar
-> outro app, do zero, e pedir para todo mundo reinstalar. Guarde o arquivo
-> `.jks` e a senha em pelo menos dois lugares (gerenciador de senhas + backup).
+O repositório mora dentro do OneDrive, e **o Gradle não compila a partir de
+lá**. O Android Gradle Plugin copia recursos com
+`Files.copy(..., COPY_ATTRIBUTES)`; para qualquer arquivo cuja **origem** esteja
+em `~/Library/CloudStorage/`, essa chamada volta com `Operation not permitted` —
+o provedor de arquivos da nuvem não entrega os atributos estendidos que o Java
+tenta copiar. O build morre em `:capacitor-android:packageDebugResources` com
+uma mensagem que não explica nada.
 
-No Terminal:
+Não há flag do Gradle que contorne, e mudar a pasta de saída não adianta: o
+problema é o lado de **origem**.
+
+**Como está resolvido hoje:** `npm run android:release` espelha o projeto
+Android para `~/Library/Caches/invicta-android-build`, compila lá e traz o
+`.aab` de volta (`scripts/empacotar-android.mjs`). Você não precisa fazer nada.
+
+> **Atenção:** isso vale para o comando `npm run android:release`. Compilar pelo
+> botão ▶️ do **Android Studio** com o projeto aberto na pasta do OneDrive
+> continua falhando — é a mesma limitação. Use o comando.
+
+Se um dia quiser simplificar de vez, mova o repositório para fora da nuvem
+(`~/dev/invicta-platform`) e reinstale as dependências (`npm ci`): aí o Gradle
+roda direto, o espelho fica desnecessário e somem também o `EPERM` do `.next` e
+a lentidão do `npm install`. O código continua versionado no Git e publicado
+pela Vercel — o backup de verdade é o repositório remoto.
+
+---
+
+## PASSO 1 — Criar a chave de assinatura (uma única vez na vida)
+
+> ⚠️ **O arquivo e a senha são insubstituíveis.** Sem eles não existe forma de
+> atualizar o app publicado — seria preciso publicar outro app, do zero, e pedir
+> a todos que reinstalassem.
 
 ```bash
-cd ~/dev/invicta-platform/android && "/Applications/Android Studio.app/Contents/jbr/Contents/Home/bin/keytool" -genkeypair -v -keystore invicta-coleta.jks -alias invicta -keyalg RSA -keysize 2048 -validity 10000
+bash scripts/criar-chave-android.sh
 ```
 
-Ele vai perguntar, em ordem:
+O script pede a senha sem exibi-la na tela, gera `android/invicta-coleta.jks` e
+escreve `android/keystore.properties` (os dois ficam fora do Git). No fim ele
+mostra a impressão digital SHA-256 da chave — guarde junto com o backup.
 
-| Pergunta | O que responder |
-|---|---|
-| *Enter keystore password* | **Crie uma senha forte** (anote!) |
-| *Re-enter new password* | a mesma |
-| *What is your first and last name?* | `INVICTA Consultoria em Agronegocio` |
-| *organizational unit* | `TI` |
-| *organization* | `INVICTA` |
-| *City or Locality* | sua cidade |
-| *State or Province* | `PR` |
-| *country code* | `BR` |
-| *Is CN=... correct?* | digite `sim` (ou `yes`) |
+**Faça o backup do `.jks` e da senha antes de seguir.** Gerenciador de senhas da
+empresa + uma cópia do arquivo em outro lugar.
 
-> Não use acento nessas respostas — o keytool não lida bem com eles.
+---
 
-### Guardar a senha para o build
-
-Crie o arquivo `android/keystore.properties` (ele **não** vai para o Git):
+## PASSO 2 — Gerar o pacote da loja (.aab)
 
 ```bash
-cd ~/dev/invicta-platform/android && cat > keystore.properties <<'FIM'
-storeFile=invicta-coleta.jks
-storePassword=SUA_SENHA_AQUI
-keyAlias=invicta
-keyPassword=SUA_SENHA_AQUI
-FIM
+npm run android:release
 ```
 
-Troque `SUA_SENHA_AQUI` (nas duas linhas) pela senha que você criou.
+O pacote sai em `loja/INVICTA-Coleta-<versão>.aab`.
+
+O comando faz, em ordem: build estático do app → `cap sync` → conferências
+(`scripts/preflight-android.mjs`) → Gradle → cópia do pacote para `loja/`.
+
+As conferências param o processo, com instruções, se faltar a chave de
+assinatura ou o SDK do Android — em vez de deixar sair um `.aab` sem assinatura
+que só seria recusado lá na loja.
+
+**Numeração automática.** Sai de `APP_VERSION` (`src/constants/version.ts`):
+`versionName` é a versão como ela é (`2.134.0`) e
+`versionCode = maior × 1.000.000 + menor × 1.000 + correção` (`2134000`).
+Se a loja recusar dizendo que o versionCode já existe, é porque a versão não
+subiu desde o último envio — suba `APP_VERSION` e gere de novo.
 
 ---
 
-## PASSO 2 — Gerar o arquivo do app (.aab)
+## PASSO 3 — Preencher a ficha da loja
 
-```bash
-cd ~/dev/invicta-platform && npm run android:release
-```
+No Play Console, em **Crescer → Presença na loja → Principal presença na loja**.
+Todos os textos estão em [`loja/ficha-play-store.md`](../loja/ficha-play-store.md):
 
-O arquivo sai em:
-`android/app/build/outputs/bundle/release/app-release.aab`
+- Descrição curta e descrição completa
+- Ícone: `loja/icone-512.png`
+- Imagem de destaque: `loja/destaque-1024x500.png`
+- **Capturas de tela: mínimo 2 do celular** — obrigatórias para produção
 
-> `.aab` (Android App Bundle) é o formato que a loja exige hoje — o Google gera
-> a partir dele o APK otimizado para cada aparelho.
-
-> **Java:** o Gradle precisa de um JDK, e o macOS não vem com um. O script usa o
-> `JAVA_HOME` do sistema se existir e, se não existir, cai no JDK que já vem
-> dentro do Android Studio — então não é preciso instalar Java à parte.
+Para regerar ícone e destaque: `node scripts/gerar-icones-app.mjs`.
 
 ---
 
-## PASSO 3 — Criar a conta no Google Play Console
+## PASSO 4 — Conteúdo do app
 
-1. Acesse **play.google.com/console**
-2. Entre com uma conta Google **da empresa** (não use uma pessoal que possa se perder)
-3. Escolha o tipo **Organização** (ou Pessoal, se for CNPJ individual)
-4. Pague a taxa de **US$ 25** — pagamento **único e vitalício**
-5. A verificação da conta pode levar de algumas horas a 2 dias
+Em **Política e programas → Conteúdo do app**. As respostas estão todas na
+ficha; os pontos que reprovam revisão se saírem errados:
 
----
-
-## PASSO 4 — Criar o app no Console
-
-**Criar app** → preencha:
-- Nome: `INVICTA Coleta`
-- Idioma padrão: Português (Brasil)
-- Tipo: **App**
-- Gratuito ou pago: **Gratuito**
-- Aceite as declarações
+- **Acesso ao app** — o INVICTA Coleta não abre sem conta. Crie um usuário só
+  para a revisão do Google e informe login e senha ali. Sem isso a revisão é
+  reprovada com "não conseguimos entrar no app".
+- **Segurança dos dados** — declare localização precisa, fotos, e-mail, nome e
+  telefone conforme a tabela da ficha. Declarar de menos é motivo de suspensão.
+- **Política de privacidade** — `https://invicta-platform.vercel.app/privacidade`
 
 ---
 
-## PASSO 5 — Preencher o que o Google exige
+## PASSO 5 — Enviar para Produção
 
-No menu lateral, em **Política e programas → Conteúdo do app**:
+1. **Teste → Produção → Criar nova versão**
+2. Upload do `.aab` de `loja/`
+3. Notas da versão: o texto está na ficha
+4. **Avançar → Salvar → Enviar para revisão**
 
-### 5.1 Política de privacidade
-Cole a URL:
-```
-https://invicta-platform.vercel.app/privacidade
-```
+A revisão de produção leva de alguns dias a duas semanas na primeira vez.
 
-### 5.2 Acesso ao app
-Marque: **"Todas as funcionalidades exigem acesso especial"** e informe um
-**login e senha de teste** para o revisor do Google (crie um usuário só para
-isso na Central de Acessos, com papel de Operador).
-
-### 5.3 Anúncios
-**Não**, o app não tem anúncios.
-
-### 5.4 Classificação de conteúdo
-Responda o questionário — é um app de ferramenta/produtividade, sem conteúdo
-sensível. Sai como **Livre**.
-
-### 5.5 Público-alvo
-Faixa etária: **18+** (ferramenta profissional). Não é voltado a crianças.
-
-### 5.6 Segurança dos dados (o mais importante)
-Declare exatamente o que o app coleta:
-
-| Dado | Coletado? | Compartilhado? | Finalidade | Obrigatório? |
-|---|---|---|---|---|
-| **Localização precisa** | Sim | Não | Funcionalidade do app | Sim |
-| **Fotos** | Sim | Não | Funcionalidade do app | Não |
-| **E-mail** | Sim | Não | Gerenciamento de conta | Sim |
-| **Nome** | Sim | Não | Gerenciamento de conta | Sim |
-| **Telefone** | Sim | Não | Gerenciamento de conta | Não |
-
-Marque também:
-- Dados **criptografados em trânsito**: **Sim**
-- Usuário **pode pedir exclusão** dos dados: **Sim** (a política explica como)
-
----
-
-## PASSO 6 — Enviar para o Teste interno
-
-1. Menu lateral: **Teste → Teste interno**
-2. **Criar nova versão**
-3. Faça upload do `app-release.aab`
-4. Em **Notas da versão**, escreva algo como:
-   `Primeira versão: coleta de solo em campo com GPS, funciona offline.`
-5. **Avançar** → **Salvar** → **Enviar para revisão**
-
-### Adicionar quem vai usar
-1. Ainda em **Teste interno**, aba **Testadores**
-2. **Criar lista de e-mails** → adicione os e-mails **Google (Gmail)** dos operadores
-3. Copie o **link de participação** e mande para eles
-
-> Cada pessoa precisa abrir o link, aceitar participar do teste e então instalar
-> pela Play Store normalmente. A revisão do teste interno costuma sair em
-> **poucas horas** (bem mais rápido que a produção).
+> **Conta pessoal criada depois de novembro de 2023?** O Google exige, antes da
+> produção, um **teste fechado com no mínimo 12 testadores por 14 dias
+> seguidos**. Contas do tipo Organização não passam por essa exigência. Se for o
+> seu caso, comece pelo teste fechado: é o mesmo `.aab`, só muda a trilha.
 
 ---
 
 ## Atualizar o app depois
 
-Toda vez que quiser mandar uma versão nova:
-
-1. `npm run android:release`
-2. No Console: **Teste interno → Criar nova versão** → upload do novo `.aab`
-
-A numeração é automática (`scripts/preflight-android.mjs`): sai de `APP_VERSION`
-em `src/constants/version.ts`. `versionName` = a versão como ela é
-(`2.8.11`); `versionCode` = `maior*10000 + menor*100 + correção` (`20811`) —
-sempre crescente, sem estado e sem edição manual no `build.gradle`.
-
-> Se a loja recusar dizendo que o **versionCode já existe**, é porque o
-> `APP_VERSION` não subiu desde o último envio. Suba a versão do sistema e gere
-> de novo — é o comportamento correto: duas builds diferentes não podem sair com
-> o mesmo número.
-
-O mesmo script recusa gerar o pacote se a **assinatura** não estiver
-configurada, em vez de deixar sair um `.aab` sem assinatura que só seria
-recusado lá na loja.
+1. Suba `APP_VERSION` em `src/constants/version.ts` (regra do projeto: toda
+   mudança sobe a versão e ganha entrada no changelog)
+2. `npm run android:release`
+3. Play Console → **Produção → Criar nova versão** → upload do novo `.aab`
 
 ---
 
-## Se um dia quiser abrir para o público
-
-Basta ir em **Produção** e repetir o envio, mas aí o Google exige a ficha
-completa: descrição curta e longa, **capturas de tela** (mínimo 2, do celular),
-**ícone 512×512** e uma **imagem de destaque 1024×500**. A revisão também é mais
-rigorosa e demora mais.
-
----
-
-## Resumo do que é seu para guardar
+## O que é seu para guardar
 
 | Item | Onde | Se perder |
 |---|---|---|
-| `android/invicta-coleta.jks` | seu Mac + backup | **não dá para atualizar o app** |
+| `android/invicta-coleta.jks` | backup fora desta pasta | **não dá para atualizar o app** |
 | senha do keystore | gerenciador de senhas | idem |
 | conta do Play Console | e-mail da empresa | recuperável pelo Google |

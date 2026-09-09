@@ -7,7 +7,7 @@
 // versão do iPhone é mais antiga que a do Android.
 //
 //   MARKETING_VERSION       = APP_VERSION            (o que o usuário vê)
-//   CURRENT_PROJECT_VERSION = maior*10000 + menor*100 + correção
+//   CURRENT_PROJECT_VERSION = maior*1_000_000 + menor*1_000 + correção
 //
 // O build é o mesmo número do versionCode do Android, de propósito: os dois
 // apps saem do mesmo código, e ter o mesmo número dos dois lados torna óbvio
@@ -28,11 +28,11 @@ const versao = readFileSync(join(raiz, 'src', 'constants', 'version.ts'), 'utf8'
 if (!versao) { console.error('[ios] não achei APP_VERSION em src/constants/version.ts'); process.exit(1); }
 
 const [maior, menor, correcao] = versao.split('.').map(Number);
-if ([maior, menor, correcao].some(n => !Number.isInteger(n)) || menor > 99 || correcao > 99) {
-  console.error(`[ios] versão "${versao}" fora do formato maior.menor.correção com menor/correção <= 99`);
+if ([maior, menor, correcao].some(n => !Number.isInteger(n)) || menor > 999 || correcao > 999) {
+  console.error(`[ios] versão "${versao}" fora do formato maior.menor.correção com menor/correção <= 999`);
   process.exit(1);
 }
-const build = maior * 10000 + menor * 100 + correcao;
+const build = maior * 1_000_000 + menor * 1_000 + correcao;
 
 const original = readFileSync(pbxproj, 'utf8');
 const novo = original
