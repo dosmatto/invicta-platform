@@ -5,7 +5,7 @@
 // Mostra os mapas de DOSE (clique p/ ver cada um), financeiro consolidado, e
 // SALVA o cenário na nuvem (reabrir depois → habilita o Comparador C1 da R4).
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import { getImportacoesLab, getTalhoes, getFazendas, getPlantio, type ImportacaoLab } from '@/lib/store';
 import { anoDaSafra } from '@/lib/periodo';
@@ -17,6 +17,7 @@ import type { ConteudoInsumo } from '@/lib/insumos';
 import { carregarGridsTalhao, calcularDose, calcularDosePorZona, dividirDoseEmPassadas, type DoseCalculada } from '@/lib/recomendacao/aplicar';
 import { salvarCenario, listarCenarios, descomprimirCenario, excluirCenario, hidratarRotulos, type Cenario } from '@/lib/recomendacao/cenarios';
 import { colorirDose, recortarNoPoligono } from '@/lib/raster';
+import { gravarPreferenciaLocal } from '@/lib/localComprimido';
 import { coordsFromBounds, extrairPoligono } from '@/lib/fertilidade';
 import { agruparPorRotulo } from '@/lib/recomendacao/dosePorZona';
 import { nutrientesDaEquacao } from '@/lib/recomendacao/doseZonaDireta';
@@ -30,7 +31,7 @@ import {
   lerRascunho, rascunhoDaEquacao, type RascunhoFormula,
 } from '@/lib/recomendacao/formulaAvulsa';
 import { montarBookOficial, abrirOuBaixar } from '@/lib/recomendacao/relatorioCenarios';
-import { Play, Loader2, AlertTriangle, Wand2, Save, FolderOpen, Trash2, Eye, GitCompare, FileText, Star, Calculator, Pencil, RotateCcw, ChevronDown } from 'lucide-react';
+import { Play, Loader2, AlertTriangle, Wand2, Save, Trash2, Eye, GitCompare, FileText, Star, Calculator, Pencil, RotateCcw, ChevronDown } from 'lucide-react';
 
 import { inputStyle } from '@/constants/ui';
 import { fmtDec as fmt, fmtHa } from '@/lib/formato';
@@ -96,9 +97,12 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
       && localStorage.getItem(`inv_recom_modo_${nav.talhaoId}`) === 'zona') ? 'zona' : 'interpolar');
   const setModoMapa = useCallback((m: 'interpolar' | 'zona') => {
     setModoMapaRaw(m);
-    if (typeof window !== 'undefined' && nav.talhaoId) {
-      localStorage.setItem(`inv_recom_modo_${nav.talhaoId}`, m);
-    }
+    // GRAVAR A PREFERÊNCIA NUNCA PODE DERRUBAR A AÇÃO. Este setItem era cru, e
+    // com o armazenamento local cheio ele lança QuotaExceededError — de dentro
+    // do `try` do reabrir, virava "Falha ao reabrir: The quota has been
+    // exceeded." numa tela onde o cenário TINHA sido carregado (os mapas já
+    // estavam na mão; só a lembrança do modo é que não coube).
+    if (nav.talhaoId) gravarPreferenciaLocal(`inv_recom_modo_${nav.talhaoId}`, m);
   }, [nav.talhaoId]);
 
   const [estado, setEstado] = useState<'idle' | 'carregando' | 'pronto' | 'erro'>('idle');
@@ -113,6 +117,9 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
   const [salvos, setSalvos] = useState<Cenario[]>([]);
   const [selCompara, setSelCompara] = useState<Set<string>>(new Set());
   const [comparar, setComparar] = useState<Cenario[] | null>(null);
+  // Linha (`cenarioId#indice`) cujo mapa está sendo baixado — o clique tem de
+  // dizer que foi ouvido: descomprimir os grids de um cenário leva segundos.
+  const [abrindo, setAbrindo] = useState<string | null>(null);
   const [bookSel, setBookSel] = useState<Set<string>>(new Set());
   const [bookEstado, setBookEstado] = useState<'idle' | 'carregando' | 'pronto' | 'erro'>('idle');
   const [erroBook, setErroBook] = useState('');
@@ -226,8 +233,19 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
   // mexer na fórmula invalida o mapa que está na tela.
   const assinaturaFormula = useMemo(() => (editada && rascunho) ? assinaturaRascunho(rascunho) : '', [editada, rascunho]);
 
+  // ABRIR UM CENÁRIO SALVO TAMBÉM TROCA O MODO DO MAPA (um cenário por zona tem
+  // de aparecer como "Por zona"), e trocar o modo é justamente o gesto que
+  // invalida o resultado na tela. O efeito de limpeza abaixo não distinguia os
+  // dois: abrir um cenário por zona estando em "Interpolação" punha os mapas na
+  // tela e os apagava no mesmo instante — some tudo, sem erro nenhum. Esta
+  // marca diz "esta troca de modo veio de mim", e vale para UMA passada.
+  const trocaDeModoInterna = useRef(false);
+
   // limpa resultado ao trocar contexto
-  useEffect(() => { setDoses([]); setFalhas([]); setEstado('idle'); setErro(''); setVisivel(0); setSalvoMsg(''); setCenMeta(null); }, [modo, equacaoId, recomendacaoId, importacaoId, modoMapa, assinaturaFormula]);
+  useEffect(() => {
+    if (trocaDeModoInterna.current) { trocaDeModoInterna.current = false; return; }
+    setDoses([]); setFalhas([]); setEstado('idle'); setErro(''); setVisivel(0); setSalvoMsg(''); setCenMeta(null);
+  }, [modo, equacaoId, recomendacaoId, importacaoId, modoMapa, assinaturaFormula]);
 
   // dose visível no mapa
   const doseAtiva = doses[visivel] ?? null;
@@ -398,23 +416,38 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
     return { area, custoTotal, custoHa: area ? custoTotal / area : 0, temSemCusto };
   }, [doses, talhao]);
 
-  async function reabrir(cen: Cenario, semConfirmar = false) {
-    // REABRIR SUBSTITUI o que está na tela. Enquanto ele era o único jeito de
-    // espiar o conteúdo de um cenário salvo, avisar seria atrapalhar; agora que
-    // a gaveta mostra tudo sem custo, quem clica aqui quer mesmo trocar — e
-    // trocar por engano custa o trabalho em andamento.
-    if (!semConfirmar && estado === 'pronto' && doses.length > 0 && cen.id !== cenMeta?.id
-      && !confirm(`Reabrir "${cen.nome}" substitui os ${doses.length} mapa(s) que estão na tela. Continuar?`)) return;
+  // CLICAR NUMA RECOMENDAÇÃO PÕE O MAPA DELA NA TELA. Antes só a lista do
+  // cenário já carregado fazia isso; para ver o mapa de qualquer outro cenário
+  // salvo era preciso achar o ícone de pasta ("Reabrir") e ainda responder a um
+  // "substitui os N mapas que estão na tela. Continuar?". Três passos e uma
+  // pergunta para o gesto mais natural da tela — e a pergunta protegia um
+  // trabalho que não se perde: todo cenário é auto-salvo ao aplicar.
+  // Vale igual para dose interpolada em grade e para taxa por zona: quem decide
+  // é o próprio cenário (`porZona`), não um seletor que o usuário tenha de
+  // acertar antes.
+  async function verNoMapa(cen: Cenario, indice = 0) {
+    // Cenário já carregado: é só trocar o mapa visível — sem ida à nuvem.
+    if (cenMeta?.id === cen.id && estado === 'pronto' && doses.length > 0) {
+      setVisivel(Math.min(indice, doses.length - 1));
+      return;
+    }
+    setAbrindo(`${cen.id}#${indice}`);
     setEstado('carregando'); setErro('');
     try {
       const full = await descomprimirCenario(cen);
-      setDoses(full.doses); setFalhas([]); setVisivel(0); setEstado('pronto');
+      setDoses(full.doses); setFalhas([]);
+      setVisivel(full.doses.length ? Math.min(indice, full.doses.length - 1) : 0);
+      setEstado('pronto');
       // O cenário diz em que modo foi feito: se as doses trazem taxa por zona,
       // o seletor tem de refletir isso — senão a tela mostra "Interpolação" com
       // um resultado por zona na frente, e o próximo Aplicar troca tudo.
-      setModoMapa(full.doses.some(d => d.porZona?.length) ? 'zona' : 'interpolar');
+      const modoDoCenario = full.doses.some(d => d.porZona?.length) ? 'zona' : 'interpolar';
+      if (modoDoCenario !== modoMapa) { trocaDeModoInterna.current = true; setModoMapa(modoDoCenario); }
       setCenMeta({ id: cen.id, origem: full.origem, recomendacaoId: full.recomendacaoId, nome: full.nome });
-    } catch (e) { setErro('Falha ao reabrir: ' + (e instanceof Error ? e.message : String(e))); setEstado('erro'); }
+    } catch (e) {
+      setErro('Falha ao abrir o mapa: ' + (e instanceof Error ? e.message : String(e)));
+      setEstado('erro');
+    } finally { setAbrindo(null); }
   }
   async function excluirSalvo(c: Cenario) {
     if (!confirm(`Excluir o cenário "${c.nome}"?`)) return;
@@ -542,10 +575,11 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
         // Cenário "na tela" = reaberto (doses descomprimidas) → o mapa da dose
         // visível está desenhado (efeito de doseAtiva, o mesmo de quem calcula).
         const naTela = cenMeta?.id === c.id && estado === 'pronto';
-        const verDose = (i: number) => {
-          if (naTela) { setVisivel(i); return; }
-          void reabrir(c, true).then(() => setVisivel(i));
-        };
+        // MESMO caminho de quem calcula: `verNoMapa` já resolve "já está na tela
+        // → só troca o visível" e "ainda não → baixa, descomprime e abre no
+        // índice pedido". Encadear `.then(() => setVisivel(i))` por fora era o
+        // que fazia o índice se perder quando o cenário trocava o modo do mapa.
+        const verDose = (i: number) => { void verNoMapa(c, i); };
         return (
           <div key={c.id} className="p-2.5 rounded-lg space-y-1" style={{ background: naTela ? '#0b1f3a' : '#061525', border: `1px solid ${naTela ? '#2e5fa3' : emUso.length ? 'var(--invicta-green)' : '#1a3a6b'}` }}>
             <button type="button" onClick={() => verDose(0)} className="w-full text-left" title="Ver os mapas deste cenário">
@@ -947,7 +981,7 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
               <GitCompare size={11} /> Comparar{selCompara.size ? ` (${selCompara.size})` : ''}
             </button>
           </div>
-          <div className="text-[9px] mb-1" style={{ color: '#64748b' }}>Marque 2 ou 3 cenários para comparar lado a lado.</div>
+          <div className="text-[9px] mb-1" style={{ color: '#64748b' }}>Clique num cenário para abrir o mapa dele aqui do lado; dentro, clique na recomendação que quiser ver. Marque 2 ou 3 para comparar lado a lado.</div>
           <div className="space-y-1">
             {salvos.map(c => {
               const marcado = selCompara.has(c.id);
@@ -959,21 +993,28 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
               // marca aqui, um cenário incompleto parece o mais barato — na tela
               // em que se escolhe cenário por dinheiro.
               const semCusto = c.doses.some(d => d.custoTonelada == null);
+              const abrindoEste = !!abrindo && abrindo.startsWith(`${c.id}#`);
+              const noMapa = cenMeta?.id === c.id && estado === 'pronto';
               return (
                 <div key={c.id} className="rounded-lg overflow-hidden" style={{ background: '#061525', border: marcado ? '1px solid var(--invicta-green)' : '1px solid #1a3a6b' }}>
-                  {/* A LINHA INTEIRA abre/fecha a gaveta. Caixa de comparar e os
-                      botões de ação param o clique — cada um tem seu próprio efeito. */}
-                  {/* A linha inteira abre/fecha no MOUSE, por conveniência — mas
+                  {/* CLICAR NO CENÁRIO ABRE A GAVETA **E** PÕE O MAPA NA TELA.
+                      Abrir a gaveta sem mostrar nada no mapa era meio gesto: ver
+                      a lista de produtos e ainda ter de caçar o ícone de pasta
+                      para enxergar o resultado. Fechar (clicar de novo) só fecha
+                      — não recarrega nada.
+                      A linha inteira responde ao MOUSE, por conveniência, mas
                       quem carrega o papel de botão é a seta. Pôr role="button" no
                       container faria dele o único elemento que o leitor de tela
                       enxerga (filhos de um botão são presentacionais na ARIA), e
-                      Comparar / Reabrir / Excluir sumiriam para quem navega assim. */}
+                      Comparar / Excluir sumiriam para quem navega assim. */}
                   <div className="p-2 flex items-center gap-2 cursor-pointer"
-                    onClick={() => setCenarioAberto(aberto ? null : c.id)}>
+                    onClick={() => { if (aberto) { setCenarioAberto(null); return; } setCenarioAberto(c.id); void verNoMapa(c, 0); }}>
                     <input type="checkbox" checked={marcado} onClick={e => e.stopPropagation()}
                       onChange={() => toggleCompara(c.id)} disabled={!marcado && selCompara.size >= 3} title="Comparar" />
                     <div className="flex-1 min-w-0">
                       <div className="text-[10px] font-bold truncate flex items-center gap-1" style={{ color: '#e2e8f0' }}>
+                        {abrindoEste && <Loader2 size={10} className="animate-spin flex-shrink-0" style={{ color: '#93c5fd' }} />}
+                        {noMapa && !abrindoEste && <Eye size={10} className="flex-shrink-0" style={{ color: '#4ade80' }} aria-label="No mapa" />}
                         {c.nome}
                         {nUso > 0 && <span className="text-[8px] font-bold px-1 py-0.5 rounded" style={{ background: 'var(--invicta-green-dark)', color: '#fff' }}>{nUso} p/ uso</span>}
                       </div>
@@ -981,14 +1022,13 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
                         {new Date(c.geradoEm).toLocaleDateString('pt-BR')} · {c.doses.length} produto(s) · R$ {num(c.financeiro?.custoTotal, 2)}{semCusto ? '*' : ''}
                       </div>
                     </div>
-                    <button aria-expanded={aberto} aria-label={`Ver os produtos de ${c.nome}`}
-                      onClick={e => { e.stopPropagation(); setCenarioAberto(aberto ? null : c.id); }}
-                      title={aberto ? 'Fechar' : 'Ver os produtos deste cenário'}
+                    <button aria-expanded={aberto} aria-label={`Ver os produtos e o mapa de ${c.nome}`}
+                      onClick={e => { e.stopPropagation(); if (aberto) { setCenarioAberto(null); return; } setCenarioAberto(c.id); void verNoMapa(c, 0); }}
+                      title={aberto ? 'Fechar' : 'Ver os produtos e o mapa deste cenário'}
                       className="flex items-center px-1 py-0.5 rounded flex-shrink-0"
                       style={{ background: aberto ? '#2e5fa3' : '#1a3a6b', color: aberto ? '#fff' : '#93c5fd' }}>
                       <ChevronDown size={12} style={{ transform: aberto ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }} />
                     </button>
-                    <button onClick={e => { e.stopPropagation(); reabrir(c); }} title="Reabrir — substitui os mapas que estão na tela" className="p-1 rounded hover:bg-white/10" style={{ color: '#93c5fd' }}><FolderOpen size={12} /></button>
                     <button onClick={e => { e.stopPropagation(); excluirSalvo(c); }} title="Excluir" className="p-1 rounded hover:bg-white/10" style={{ color: '#f87171' }}><Trash2 size={12} /></button>
                   </div>
 
@@ -998,6 +1038,7 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
                         <span>R$ {num(c.financeiro?.custoHa, 2)}/ha</span>
                         <span>·</span>
                         <span>{num(c.financeiro?.areaHa, 2)} ha</span>
+                        <span className="ml-auto">Clique numa recomendação para vê-la no mapa</span>
                       </div>
                       <div style={{ maxHeight: 220, overflowY: 'auto' }}>
                         {doses.map((d, i) => {
@@ -1018,12 +1059,28 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
                           const min = d.stats?.min, max = d.stats?.max;
                           const varia = typeof min === 'number' && typeof max === 'number'
                             && Number.isFinite(min) && Number.isFinite(max) && max - min > 0.5;
+                          // ESTA LINHA É O BOTÃO DO MAPA. O olho verde marca a que
+                          // está na tela — mesma linguagem da lista do cenário
+                          // carregado, logo acima.
+                          const chaveLinha = `${c.id}#${i}`;
+                          const carregando = abrindo === chaveLinha;
+                          const naTelaAgora = cenMeta?.id === c.id && estado === 'pronto' && i === visivel;
                           return (
-                            <div key={`${d.equacaoId}_${i}`} className="px-2 py-1 flex items-center gap-2"
-                              style={{ borderBottom: i < doses.length - 1 ? '1px solid #0a1c30' : undefined }}>
-                              <Star size={11} fill={d.usar ? '#fbbf24' : 'none'} className="flex-shrink-0"
-                                style={{ color: d.usar ? '#fbbf24' : '#334155' }}
-                                aria-label={d.usar ? 'Marcado para uso' : 'Não marcado'} />
+                            <button key={`${d.equacaoId}_${i}`} type="button"
+                              onClick={() => verNoMapa(c, i)}
+                              title={`Ver "${d.nomeEquacao || d.produto}" no mapa`}
+                              className="w-full text-left px-2 py-1 flex items-center gap-2 hover:bg-white/5"
+                              style={{
+                                borderBottom: i < doses.length - 1 ? '1px solid #0a1c30' : undefined,
+                                background: naTelaAgora ? '#11305a' : undefined,
+                              }}>
+                              {carregando
+                                ? <Loader2 size={11} className="animate-spin flex-shrink-0" style={{ color: '#93c5fd' }} />
+                                : naTelaAgora
+                                  ? <Eye size={11} className="flex-shrink-0" style={{ color: '#4ade80' }} aria-label="No mapa" />
+                                  : <Star size={11} fill={d.usar ? '#fbbf24' : 'none'} className="flex-shrink-0"
+                                      style={{ color: d.usar ? '#fbbf24' : '#334155' }}
+                                      aria-label={d.usar ? 'Marcado para uso' : 'Não marcado'} />}
                               <div className="flex-1 min-w-0">
                                 <div className="text-[10px] font-bold truncate" style={{ color: d.usar ? '#e2e8f0' : '#94a3b8' }}>
                                   {n != null && <span style={{ color: '#93c5fd' }}>{String(n).padStart(2, '0')} · </span>}
@@ -1045,7 +1102,7 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
                                 </div>
                                 <div className="text-[9px]" style={{ color: '#64748b' }}>R$ {num(d.custoHa, 2)}/ha</div>
                               </div>
-                            </div>
+                            </button>
                           );
                         })}
                       </div>

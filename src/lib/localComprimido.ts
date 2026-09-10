@@ -244,6 +244,28 @@ export function gravarRawLocal(key: string, json: string): void {
   }
 }
 
+// PREFERÊNCIA DE TELA (modo do mapa, legenda escolhida, painel recolhido…):
+// grava e SEGUE, aconteça o que acontecer. Vale poucos bytes de conveniência —
+// se o armazenamento estiver cheio, a preferência simplesmente não é lembrada
+// na próxima visita, e nada mais. Existe porque o contrário já custou caro: um
+// `localStorage.setItem` cru dentro do `try` de "reabrir cenário" lançava
+// QuotaExceededError e a tela dizia "Falha ao reabrir: The quota has been
+// exceeded." — sobre um cenário que TINHA sido carregado.
+// Devolve `false` quando não coube; dispara 'inv:quota-erro' na cota estourada,
+// que é o que acende o aviso de armazenamento cheio no cabeçalho (SyncBadge).
+export function gravarPreferenciaLocal(key: string, valor: string): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    localStorage.setItem(key, valor);
+    return true;
+  } catch (e) {
+    const quota = e instanceof DOMException && (e.name === 'QuotaExceededError' || e.code === 22);
+    if (quota) window.dispatchEvent(new CustomEvent('inv:quota-erro', { detail: { key } }));
+    console.warn(`[cache] preferência "${key}" não foi gravada:`, e);
+    return false;
+  }
+}
+
 // Acucar para o caso comum: lista de objetos.
 // HIT -> devolve COPIA RASA (`[...cached]`): o chamador pode dar push/splice/sort
 // no array sem corromper o cache. Os OBJETOS internos sao compartilhados (rapido);
