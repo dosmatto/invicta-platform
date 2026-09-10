@@ -22,6 +22,7 @@ import { colorirGridComLegenda, temGrid } from '@/lib/raster';
 import { resolverGradeDoLaudo, pontosPorNumero, casarAmostrasComPontos } from '@/lib/eloGrade';
 import { decodeGrid, interpoladorEfetivo, MIN_PTS_MAPA, MIN_PTS_KRIGE } from '@/lib/fertilidade';
 import { rasterizarZonas, rasterizarZonasDose, centroideGeom, type ZonaValor } from '@/lib/recomendacao/zonasGrid';
+import { pontoRotuloGeo } from '@/lib/rotulosMapa';
 import { bindingAuto, bindingPorPontos, divisasDasZonas, valorZona as valorZonaLab } from '@/lib/meap/fertilidadePorZona';
 import { stopsParaBackend, dominioDaLegenda, paresDaClasse, respeitarPadraoHomonima, legendaEmprestada, FAIXAS_CTCE } from '@/lib/legendas';
 import type { Legenda } from '@/lib/legendas';
@@ -397,7 +398,7 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
   }
 
   // Modo zona: valor da zona p/ um nutriente+profundidade, via o vínculo
-  // zona↔amostra; zonas com valor; e rótulos no centroide de cada zona.
+  // zona↔amostra; zonas com valor; e rótulos no ponto mais fundo de cada zona.
   //
   // A leitura do laudo é a de lib/meap/fertilidadePorZona — a MESMA função que a
   // Recomendação por zona usa (zonasComLaudo.ts). Aqui havia uma segunda cópia,
@@ -415,10 +416,17 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
       .map(z => ({ id: z.id, geometry: z.geometry, valor: valorZona(z.id, nut, prof) }))
       .filter(z => isFinite(z.valor));
   }
+  // O número da zona vai no PONTO MAIS FUNDO dela (pólo de inacessibilidade,
+  // lib/rotulosMapa), não no centroide de área: o centroide é o centro de MASSA
+  // e, em zona em C/L ou em faixa, cai encostado na divisa — no PDF os valores
+  // de duas zonas vizinhas saíam grudados na mesma linha, um de cada lado, e às
+  // vezes por cima do limite do talhão. O pólo é o ponto que MAIS se afasta de
+  // qualquer borda, então o número fica centrado na mancha e com folga em volta.
+  // Centroide continua como rede de segurança (geometria degenerada).
   function fcLabelsZona(nut: string, prof: string): GeoJSON.FeatureCollection {
     const feats: GeoJSON.Feature[] = [];
     for (const z of zonasComValor(nut, prof)) {
-      const c = centroideGeom(z.geometry);
+      const c = pontoRotuloGeo(z.geometry) ?? centroideGeom(z.geometry);
       // `v` cru junto do texto: a caixa de estatísticas conta o valor da zona, não o arredondado do rótulo.
       if (c) feats.push({ type: 'Feature', geometry: { type: 'Point', coordinates: c }, properties: { txt: fmtPonto(z.valor, nut), v: z.valor } });
     }

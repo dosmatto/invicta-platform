@@ -57,6 +57,7 @@ verdadeira (fusão de talhões) chegou depois; foi preciso renumerar.
 | S/N | O app parou de pedir login toda hora (sessão fora do armazenamento cheio) | 2.141.0 | Login da plataforma; selo de sincronização no alto da tela |
 | S/N | Resultado do cenário abre abaixo dele; topo recolhível e estável | 2.142.0 | Talhão → Recomendações → "Nova recomendação" e Cenários salvos |
 | 37 | Correção local entre colhedoras volta a processar mapas grandes | 2.143.0 | Talhão → Produtividade → Unificação → "+ correção local entre colhedoras (por raio)" |
+| 38 | O valor de cada zona escrito no meio dela, longe das divisas | 2.144.0 | Talhão → Fertilidade (mapa por zona) e o PDF "Layout Oficial Fertilidade" |
 
 > As pendências 1–17 foram entregues antes deste registro existir e não estão
 > catalogadas; procure pelo assunto no `changelog.ts`. Da 18 em diante, tudo

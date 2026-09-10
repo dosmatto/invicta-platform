@@ -6,7 +6,7 @@
 // o mapa vira adivinhação sobre qual dose é de qual talhão.
 import assert from 'node:assert/strict';
 import {
-  poloDeInacessibilidade, posicionarRotulos, dentroDoPoligono,
+  poloDeInacessibilidade, posicionarRotulos, dentroDoPoligono, pontoRotuloGeo,
 } from '../src/lib/rotulosMapa.ts';
 
 let ok = 0, fail = 0;
@@ -116,6 +116,145 @@ t('entrada degenerada (sem texto ou sem anel) nao quebra', () => {
   assert.equal(r.length, 3);
   for (const p of r) { assert.ok(Number.isFinite(p.x) && Number.isFinite(p.y)); }
 });
+
+// ── pontoRotuloGeo: onde o VALOR DA ZONA e escrito, em lon/lat ──────────────
+// O mapa de fertilidade por zona escrevia o numero no centroide de AREA. Em
+// zona em C/L ou em faixa o centroide encosta na divisa e, entre duas zonas
+// vizinhas, os dois numeros saem grudados na mesma linha. Aqui a ancora e o
+// polo: o ponto que MAIS se afasta de qualquer borda.
+
+const LAT = -25.1, LON = -50.1;   // Ponta Grossa - PR, a escala real do caso
+const K = Math.cos((LAT * Math.PI) / 180);
+
+// Retangulo em graus a partir de um canto (dx, dy em graus).
+const retGeo = (x, y, w, h) => [[[x, y], [x + w, y], [x + w, y + h], [x, y + h], [x, y]]];
+const poly = (rings) => ({ type: 'Polygon', coordinates: rings });
+
+// Distancia ate a borda mais proxima, no MESMO plano local da funcao (x * cos(lat)).
+function folgaAteBorda([lx, ly], rings) {
+  const seg = (px, py, a, b) => {
+    const dx = b[0] - a[0], dy = b[1] - a[1];
+    const l2 = dx * dx + dy * dy;
+    let t = l2 > 0 ? ((px - a[0]) * dx + (py - a[1]) * dy) / l2 : 0;
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    return Math.hypot(px - (a[0] + t * dx), py - (a[1] + t * dy));
+  };
+  let d = Infinity;
+  for (const r of rings) {
+    const p = r.map(([x, y]) => [x * K, y]);
+    for (let i = 0, j = p.length - 1; i < p.length; j = i++) d = Math.min(d, seg(lx * K, ly, p[j], p[i]));
+  }
+  return d;
+}
+// Centroide de AREA do anel externo — o que era usado antes (zonasGrid.centroideGeom).
+function centroideArea(ring) {
+  let cx = 0, cy = 0, a2 = 0;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const w = ring[j][0] * ring[i][1] - ring[i][0] * ring[j][1];
+    a2 += w; cx += (ring[j][0] + ring[i][0]) * w; cy += (ring[j][1] + ring[i][1]) * w;
+  }
+  return [cx / (3 * a2), cy / (3 * a2)];
+}
+const dentroGeo = (p, rings) => dentroDoPoligono(p[0] * K, p[1], rings.map(r => r.map(([x, y]) => [x * K, y])));
+
+t('zona retangular: o numero vai no centro', () => {
+  const r = retGeo(LON, LAT, 0.004, 0.002);
+  const p = pontoRotuloGeo(poly(r));
+  assert.ok(Math.abs(p[0] - (LON + 0.002)) < 4e-4, 'lon ' + p[0]);
+  assert.ok(Math.abs(p[1] - (LAT + 0.001)) < 2e-4, 'lat ' + p[1]);
+});
+
+t('O CASO DO PDF — zona em C: o polo fica DENTRO e o centroide de area nao', () => {
+  // C aberto para a direita: o centroide de area cai no vao, fora da mancha.
+  const anel = [
+    [LON, LAT], [LON + 0.006, LAT], [LON + 0.006, LAT + 0.001],
+    [LON + 0.002, LAT + 0.001], [LON + 0.002, LAT + 0.004],
+    [LON + 0.006, LAT + 0.004], [LON + 0.006, LAT + 0.005], [LON, LAT + 0.005], [LON, LAT],
+  ];
+  const p = pontoRotuloGeo(poly([anel]));
+  assert.ok(dentroGeo(p, [anel]), 'polo caiu fora da zona: ' + p);
+  assert.ok(!dentroGeo(centroideArea(anel), [anel]), 'este C precisa ter o centroide FORA (teste mal montado)');
+});
+
+t('zona em AMPULHETA: o centroide cai no gargalo, o polo vai para a mancha larga', () => {
+  // Duas manchas ligadas por um gargalo estreito — comum em zona de manejo.
+  // O centroide de area cai no MEIO do gargalo, a 0,0002 grau da borda: o
+  // numero sairia espremido entre as duas linhas. O polo vai para dentro de uma
+  // das manchas, com folga de sobra.
+  const p = (dx, dy) => [LON + dx, LAT + dy];
+  const anel = [
+    p(0, 0), p(0.003, 0), p(0.003, 0.0018), p(0.005, 0.0018), p(0.005, 0),
+    p(0.008, 0), p(0.008, 0.004), p(0.005, 0.004), p(0.005, 0.0022),
+    p(0.003, 0.0022), p(0.003, 0.004), p(0, 0.004), p(0, 0),
+  ];
+  const polo = pontoRotuloGeo(poly([anel]));
+  const centro = centroideArea(anel);
+  assert.ok(dentroGeo(polo, [anel]), 'polo fora da zona: ' + polo);
+  assert.ok(folgaAteBorda(centro, [anel]) < 0.0003, 'o centroide precisa estar no gargalo (teste mal montado)');
+  assert.ok(folgaAteBorda(polo, [anel]) > 0.001,
+    'polo com pouca folga: ' + folgaAteBorda(polo, [anel]).toFixed(6));
+});
+
+t('zona em L: a folga do polo nunca fica atras da do centroide', () => {
+  // O desempate pelo centro pode abrir mao de ate 3% de folga para centralizar
+  // o numero; alem disso, nao.
+  const anel = [
+    [LON, LAT], [LON + 0.006, LAT], [LON + 0.006, LAT + 0.0012],
+    [LON + 0.0012, LAT + 0.0012], [LON + 0.0012, LAT + 0.006], [LON, LAT + 0.006], [LON, LAT],
+  ];
+  const p = pontoRotuloGeo(poly([anel]));
+  assert.ok(dentroGeo(p, [anel]), 'polo fora da zona: ' + p);
+  const fPolo = folgaAteBorda(p, [anel]), fCentro = folgaAteBorda(centroideArea(anel), [anel]);
+  assert.ok(fPolo >= fCentro * 0.97, 'polo ' + fPolo.toFixed(6) + ' vs centroide ' + fCentro.toFixed(6));
+});
+
+t('duas zonas vizinhas: os numeros deixam de se encostar na divisa comum', () => {
+  // Faixas coladas, cada uma 0.004 x 0.0016 grau. O centroide de area de cada
+  // uma esta a 0.0008 da divisa; o polo, tambem — mas o que importa e que a
+  // ancora nunca fica MAIS PERTO da divisa que o centro da faixa.
+  const a = retGeo(LON, LAT, 0.004, 0.0016);
+  const b = retGeo(LON, LAT + 0.0016, 0.004, 0.0016);
+  const pa = pontoRotuloGeo(poly(a)), pb = pontoRotuloGeo(poly(b));
+  const divisa = LAT + 0.0016;
+  assert.ok(Math.abs(pa[1] - divisa) > 0.0006, 'zona de baixo encostou na divisa: ' + pa[1]);
+  assert.ok(Math.abs(pb[1] - divisa) > 0.0006, 'zona de cima encostou na divisa: ' + pb[1]);
+});
+
+t('multipoligono: rotula a MAIOR parte, nao a ilhota', () => {
+  const grande = retGeo(LON, LAT, 0.006, 0.004);
+  const ilhota = retGeo(LON + 0.02, LAT + 0.02, 0.0004, 0.0004);
+  const p = pontoRotuloGeo({ type: 'MultiPolygon', coordinates: [ilhota, grande] });
+  assert.ok(dentroGeo(p, grande), 'foi parar na ilhota: ' + p);
+});
+
+t('zona com FURO: o numero nao cai dentro do buraco', () => {
+  const externo = retGeo(LON, LAT, 0.006, 0.006)[0];
+  // Furo grande e centrado: o centro geometrico da zona esta DENTRO dele.
+  const furo = [
+    [LON + 0.0012, LAT + 0.0012], [LON + 0.0048, LAT + 0.0012],
+    [LON + 0.0048, LAT + 0.0048], [LON + 0.0012, LAT + 0.0048], [LON + 0.0012, LAT + 0.0012],
+  ];
+  const p = pontoRotuloGeo(poly([externo, furo]));
+  assert.ok(dentroGeo(p, [externo, furo]), 'polo caiu no furo: ' + p);
+});
+
+t('escala da longitude: em faixa QUADRADA em metros o polo nao pende para o lado', () => {
+  // Em -25 graus, 1 grau de longitude vale ~0,906 grau de latitude em metros.
+  // Sem a correcao por cos(lat) o polo de um quadrado METRICO sairia deslocado.
+  const dLat = 0.004, dLon = dLat / K;
+  const r = retGeo(LON, LAT, dLon, dLat);
+  const p = pontoRotuloGeo(poly(r));
+  assert.ok(Math.abs((p[0] - LON) / dLon - 0.5) < 0.06, 'lon relativa ' + ((p[0] - LON) / dLon));
+  assert.ok(Math.abs((p[1] - LAT) / dLat - 0.5) < 0.06, 'lat relativa ' + ((p[1] - LAT) / dLat));
+});
+
+t('geometria que nao e poligono devolve null (o chamador cai no centroide)', () => {
+  assert.equal(pontoRotuloGeo(null), null);
+  assert.equal(pontoRotuloGeo({ type: 'Point', coordinates: [LON, LAT] }), null);
+  assert.equal(pontoRotuloGeo({ type: 'Polygon', coordinates: [] }), null);
+  assert.equal(pontoRotuloGeo({ type: 'Polygon', coordinates: [[[LON, LAT], [LON, LAT]]] }), null);
+});
+
 
 console.log(`\n${ok} passaram, ${fail} falharam\n`);
 process.exit(fail ? 1 : 0);

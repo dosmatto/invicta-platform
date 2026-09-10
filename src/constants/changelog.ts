@@ -1,5 +1,15 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [38] O valor de cada zona escrito no meio dela, longe das divisas
+  '2.144.0': [
+    'PENDÊNCIA 38 — O VALOR DE CADA ZONA AGORA É ESCRITO NO MEIO DELA, e não encostado na divisa. No mapa de fertilidade por zona — o da tela e o do PDF — os números saíam colados nas linhas: dois valores de zonas vizinhas grudados na mesma divisa, um de cada lado, e em zona estreita o número atravessando a própria borda.',
+    'O QUE ESTAVA ERRADO: o número ia no CENTROIDE DE ÁREA da zona, que é o centro de MASSA — não o centro do espaço livre. Em zona em C, em L, em faixa comprida ou de gargalo estreito, o centro de massa cai justamente na parte apertada (ou fora da mancha), e não há folga nenhuma em volta do número.',
+    'AGORA O PONTO É O MAIS FUNDO DA ZONA: o que mais se afasta de QUALQUER divisa (o pólo de inacessibilidade, a mesma conta que os mapas de prescrição já usavam). Por definição é o ponto com mais espaço livre em volta, está sempre DENTRO da zona certa, nunca dentro de um furo e, em zona de várias partes, sempre na MAIOR delas — rotular a ilhota de meio hectare não ajudava ninguém.',
+    'E QUANDO HÁ EMPATE, O NÚMERO FICA NO CENTRO. Numa faixa larga a linha inteira do meio tem a mesma folga até as bordas, e a busca parava no primeiro empate que achasse — perto de uma das pontas, que é o mesmo defeito por outro caminho. Entre os pontos de folga equivalente (97% da melhor), fica o mais próximo do centro da mancha.',
+    'A DISTÂNCIA É MEDIDA EM METROS, NÃO EM GRAUS: a longitude é encolhida por cos(latitude) antes da conta. Em Ponta Grossa, 1° de longitude vale ~0,9° de latitude em metros; sem essa correção "distância até a borda" sairia esticada no sentido leste–oeste e o número, deslocado.',
+    'TELA E PDF LEEM O MESMO PONTO, calculado na hora — o relatório não diverge do mapa que você acabou de ver, e mapa por zona já processado sai corrigido sem reinterpolar nada: basta abrir a aba Fertilidade de novo.',
+    'Verificação: teste:rotulos-mapa 20/20 (9 asserções novas — zona em C, em L, em ampulheta, com furo, multipolígono, duas zonas vizinhas e a correção de escala da longitude), teste:rotulos 12/12, teste:fertzona 10/10, teste:grids 33/33, teste:zonas 12/12, npx tsc --noEmit limpo e npm run build ok. Comparativo nas 8 zonas reais do seed: o número entra na parte larga de todas elas, em 5,7 ms para as 8.',
+  ],
   // [37] Correção local entre colhedoras volta a processar mapas grandes
   '2.143.0': [
     'PENDÊNCIA 37 — MARCAR "+ CORREÇÃO LOCAL ENTRE COLHEDORAS (POR RAIO)" DAVA "FAILED TO FETCH". Não era internet, nem o arquivo, nem parâmetro errado: o servidor de processamento ficava SEM MEMÓRIA no meio da conta e era derrubado, e o navegador só via a conexão morrer. Corrigido — o talhão de 110 ha com 108 mil pontos e duas máquinas, que falhava sempre, agora processa em ~20 s.',
