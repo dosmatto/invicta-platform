@@ -22,6 +22,15 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<!-- A cada envio o App Store Connect pergunta se o app usa criptografia e
+	     trava a build em "Missing Compliance" até alguém responder pelo site.
+	     O app só fala HTTPS com o Supabase, que é o caso isento previsto pela
+	     regra de exportação dos EUA — declarar aqui responde a pergunta de uma
+	     vez e a build vai direto para o TestFlight. Se um dia entrar
+	     criptografia própria (não a do sistema), isto precisa virar true e
+	     exige documentação de exportação. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>

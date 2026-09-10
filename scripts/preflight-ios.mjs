@@ -57,3 +57,22 @@ if (cfg && noXcode && cfg !== noXcode) {
 `);
   process.exit(1);
 }
+
+// O ícone de 1024 não pode ter canal alfa. O Xcode arquiva e envia numa boa; a
+// recusa chega por e-mail MINUTOS DEPOIS do upload ("Invalid large app icon"),
+// e aí é refazer Archive e subir de novo. Barrar aqui custa nada.
+//
+// Lê o cabeçalho IHDR do PNG em vez de puxar uma biblioteca: byte 25 é o color
+// type — 4 (cinza+alfa) e 6 (RGBA) têm alfa, 0/2/3 não têm.
+const icone = join(raiz, 'ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png');
+const tipoDeCor = readFileSync(icone)[25];
+if (tipoDeCor === 4 || tipoDeCor === 6) {
+  console.error(`
+[ios] O ÍCONE TEM TRANSPARÊNCIA — a App Store recusaria o envio.
+
+  ${icone.replace(raiz + '/', '')}
+
+  Rode: node scripts/gerar-icones-app.mjs
+`);
+  process.exit(1);
+}

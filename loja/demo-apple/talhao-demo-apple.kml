@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+<Document>
+<name>DEMO CUPERTINO — DEMO 01</name>
+<Placemark>
+<name>DEMO 01</name>
+<Polygon><outerBoundaryIs><LinearRing><coordinates>
+-122.0130773,37.3376044,0 -122.0076542,37.3380536,0 -122.0048297,37.3365265,0 -122.0051687,37.3330230,0 -122.0083321,37.3313162,0 -122.0123994,37.3320349,0 -122.0134162,37.3349993,0 -122.0130773,37.3376044,0
+</coordinates></LinearRing></outerBoundaryIs></Polygon>
+</Placemark>
+</Document>
+</kml>

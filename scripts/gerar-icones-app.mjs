@@ -119,4 +119,21 @@ await gravar(
   join(loja, 'destaque-1024x500.png'),
 );
 
+// ── 4. Ícone do app iOS ──────────────────────────────────────────────────────
+// A App Store RECUSA o envio se o ícone de 1024 tiver canal alfa — o erro chega
+// por e-mail depois do upload ("Invalid large app icon ... can't be transparent
+// nor contain an alpha channel") e obriga a refazer o Archive inteiro. O
+// `flatten` mata o alfa; o fundo sólido é o mesmo do Android, para o app ter a
+// mesma cara nas duas lojas.
+//
+// Ao contrário do Android, o iOS moderno usa UM único arquivo de 1024 e o Xcode
+// deriva todos os tamanhos menores no build — não há mais conjunto de PNGs.
+console.log('Ícone do app iOS:');
+const iconeIOS = join(raiz, 'ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png');
+if (existsSync(iconeIOS)) {
+  await gravar(await sharp(await quadrado(1024, 0.66, FUNDO)).flatten({ background: FUNDO }).toBuffer(), iconeIOS);
+} else {
+  console.log('  · pulado (projeto iOS não encontrado)');
+}
+
 console.log('\nPronto. Rode `npm run android:sync` para levar os ícones ao projeto Android.');
