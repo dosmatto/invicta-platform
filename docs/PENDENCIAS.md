@@ -55,6 +55,7 @@ verdadeira (fusão de talhões) chegou depois; foi preciso renumerar.
 | 36 | Mapas de fertilidade voltam a entrar nas Zonas de Manejo | 2.137.0 | Talhão → Zonas → Gerar zonas por similaridade → "Camadas a usar" |
 | S/N | Clicar na recomendação abre o mapa dela na hora (fim do ícone de pasta) | 2.140.0 | Talhão → Recomendações → Cenários salvos (e a mesma tela como produtor) |
 | S/N | O app parou de pedir login toda hora (sessão fora do armazenamento cheio) | 2.141.0 | Login da plataforma; selo de sincronização no alto da tela |
+| S/N | Resultado do cenário abre abaixo dele; topo recolhível e estável | 2.142.0 | Talhão → Recomendações → "Nova recomendação" e Cenários salvos |
 
 > As pendências 1–17 foram entregues antes deste registro existir e não estão
 > catalogadas; procure pelo assunto no `changelog.ts`. Da 18 em diante, tudo
