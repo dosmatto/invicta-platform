@@ -1,5 +1,13 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [39] Gerar recomendação não fecha mais a janela de produção
+  '2.145.0': [
+    'PENDÊNCIA 39 — GERAR UMA RECOMENDAÇÃO NÃO FECHA MAIS A JANELA DE PRODUÇÃO. Clicar em "Aplicar e salvar" recolhia a seção "Nova recomendação" e escancarava a gaveta do cenário recém-criado. Quem produz recomendação produz VÁRIAS em sequência — e cada cálculo fechava a janela de trabalho e jogava a lista inteira de produtos na tela.',
+    'AGORA: o formulário fica exatamente como você deixou, e o cenário novo entra RECOLHIDO na lista de Cenários salvos. Quem quiser conferir o resultado clica nele — o resultado abre logo abaixo do cartão, como na versão anterior.',
+    'A CONFIRMAÇÃO CONTINUA À VISTA: o "Salvo como …" aparece logo abaixo do botão, e o mapa do primeiro produto já é desenhado — o mapa nunca dependeu de a gaveta estar aberta.',
+    'Uma gaveta que estivesse aberta de OUTRO cenário também fecha ao aplicar: depois do cálculo o cenário carregado passa a ser o novo, e aquela gaveta ficaria mostrando uma lista somente-leitura sem dizer por quê.',
+    'Isto reverte os dois automatismos que a 2.142.0 tinha introduzido; o resto dela — resultado abaixo do cartão, topo que não se mexe, seção recolhível, ★ que não reordena a lista — continua igual.',
+  ],
   // [38] O valor de cada zona escrito no meio dela, longe das divisas
   '2.144.0': [
     'PENDÊNCIA 38 — O VALOR DE CADA ZONA AGORA É ESCRITO NO MEIO DELA, e não encostado na divisa. No mapa de fertilidade por zona — o da tela e o do PDF — os números saíam colados nas linhas: dois valores de zonas vizinhas grudados na mesma divisa, um de cada lado, e em zona estreita o número atravessando a própria borda.',
