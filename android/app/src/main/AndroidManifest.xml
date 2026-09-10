@@ -48,11 +48,15 @@
     <!-- Câmera: fotos do ponto de coleta (amostra, paisagem, problema). -->
     <uses-permission android:name="android.permission.CAMERA" />
 
-    <!-- Leitura de mídia p/ anexar foto da galeria. READ_EXTERNAL_STORAGE só
-         vale até o Android 12 (API 32); do 13 em diante é READ_MEDIA_IMAGES. -->
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
-        android:maxSdkVersion="32" />
+    <!-- SEM permissão de leitura da galeria (READ_MEDIA_IMAGES /
+         READ_EXTERNAL_STORAGE), de propósito. A única entrada de imagem do app
+         é o <input type="file" accept="image/*" capture="environment"> da tela
+         de coleta, que abre a CÂMERA direto — a galeria nunca é lida. Declarar
+         acesso a toda a galeria para um app que só tira foto é justamente o que
+         a política "Usar seletores de sistema alternativos para fotos/vídeos"
+         proíbe: ela barrou o envio da 2.136.0 na verificação da Play Store.
+         Se um dia for preciso escolher uma imagem já existente, use o seletor
+         do sistema (Android Photo Picker), que também dispensa permissão. -->
 
     <!-- Estado da rede: o app mostra online/offline e dispara a sincronização
          quando a internet volta. -->

@@ -1,5 +1,12 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] A Play Store barrou o app por uma permissão que ele nunca usou
+  '2.138.0': [
+    'O ENVIO DO APP PARA A PLAY STORE FOI BARRADO por uma permissão que o app NUNCA USOU — e ela foi removida. A verificação automática da loja recusou a 2.136.0 citando a política "Usar seletores de sistema alternativos para fotos / vídeos": o app declarava READ_MEDIA_IMAGES (ler TODA a galeria do celular), e o Google só aceita isso de apps que são galeria ou gerenciador de fotos. Para quem só precisa de uma imagem de vez em quando, a exigência é usar o seletor do sistema.',
+    'O DETALHE É QUE O APP NEM PRECISAVA DELA. Existe uma única entrada de imagem em todo o código — o botão de foto da tela de coleta — e ela usa `capture="environment"`, que abre a CÂMERA direto. A galeria nunca chegou a ser lida. A permissão veio no modelo do Capacitor e ficou lá, pedindo ao usuário um acesso que o app não exercia. Saíram do AndroidManifest a READ_MEDIA_IMAGES e a READ_EXTERNAL_STORAGE; a permissão de CÂMERA continua, porque essa sim é usada.',
+    'PARA QUEM USA O APP não muda nada: o botão de foto segue abrindo a câmera como sempre. Muda para melhor na instalação — o Android deixa de listar "Fotos e vídeos" entre os acessos que o app pede.',
+    'Se um dia for preciso anexar uma imagem JÁ EXISTENTE no celular, o caminho é o Android Photo Picker (o seletor do sistema), que devolve só a foto escolhida e também dispensa permissão — nunca voltar a declarar acesso à galeria inteira.',
+  ],
   // [36] Mapas de fertilidade voltam a entrar nas Zonas de Manejo
   '2.137.0': [
     'PENDÊNCIA 36 — OS MAPAS DE FERTILIDADE NÃO APARECIAM COMO CAMADA NAS ZONAS DE MANEJO. O talhão tinha 29 mapas salvos na nuvem, e a aba Zonas abria com "Camadas a usar (0/1)" — só a condutividade. Não era mapa faltando nem processamento a refazer: o zoneamento estava procurando na gaveta errada.',
