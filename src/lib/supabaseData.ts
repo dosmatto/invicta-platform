@@ -741,6 +741,8 @@ export interface MapaMetaSupabase {
   bounds?: [number, number, number, number] | null;
   stats?: { n?: number; min?: number | null; max?: number | null; media?: number | null; nx?: number; ny?: number; pixel_m?: number; indice?: string } | null;
   cena?: { id?: string; data?: string | null; plataforma?: string | null; nuvem?: number | null } | null;
+  automatico?: boolean | null;      // pendência 40 — gravada pelo robô noturno
+  pctLimpo?: number | null;         // % do talhão limpo na cena de origem
 }
 
 export async function listarMapasMetaPorPrefixoSupabase(prefixo: string): Promise<MapaMetaSupabase[] | null> {
@@ -749,6 +751,7 @@ export async function listarMapasMetaPorPrefixoSupabase(prefixo: string): Promis
   const r = await sb.from('app_kv').select(
     'item_id, atualizado_em, indice:dados->>indice, formula:dados->>formula, bandas:dados->bandas, '
     + 'mascara:dados->mascara, usuario:dados->>usuario, criadoEm:dados->>criadoEm, salvoEm:dados->>salvoEm, '
+    + 'automatico:dados->automatico, pctLimpo:dados->pctLimpo, '
     + 'bounds:dados->resp->bounds, stats:dados->resp->stats, cena:dados->resp->cena',
   ).eq('colecao', COL_MAPAS).like('item_id', escLike(prefixo) + '%');
   if (r.error) { console.warn('[supabase] listar mapas (meta):', r.error.message); return null; }
@@ -766,6 +769,8 @@ export async function listarMapasMetaPorPrefixoSupabase(prefixo: string): Promis
       bounds: x.bounds as [number, number, number, number] | null,
       stats: x.stats as MapaMetaSupabase['stats'],
       cena: x.cena as MapaMetaSupabase['cena'],
+      automatico: (x.automatico as boolean | null) ?? null,
+      pctLimpo: (x.pctLimpo as number | null) ?? null,
     };
   });
 }
@@ -779,6 +784,24 @@ export async function carregarMapaSupabase<T>(id: string): Promise<{ id: string;
   if (r.error) { console.warn('[supabase] carregar mapa:', r.error.message); return null; }
   if (!r.data) return null;
   return { id: r.data.item_id as string, dados: r.data.dados as T, atualizadoEm: (r.data.atualizado_em as string | null) ?? null };
+}
+
+// Exclusão por LISTA de ids, em lotes (o .in() vai na URL) — espelha
+// carregarMapasPorIdsSupabase. A exclusão por prefixo não serve para "apagar só
+// as automáticas": elas dividem o prefixo com as feitas à mão.
+export async function excluirMapasPorIdsSupabase(ids: string[]): Promise<number> {
+  const sb = getSupabase();
+  if (!sb || !ids.length) return 0;
+  if (escritaBloqueada(COL_MAPAS, ids[0])) return 0;   // produtor: somente leitura (satélite passa)
+  let n = 0;
+  const LOTE = 30;
+  for (let i = 0; i < ids.length; i += LOTE) {
+    const r = await sb.from('app_kv').delete({ count: 'exact' })
+      .eq('colecao', COL_MAPAS).in('item_id', ids.slice(i, i + LOTE));
+    if (r.error) { console.warn('[supabase] excluir mapas por ids:', r.error.message); continue; }
+    n += r.count ?? 0;
+  }
+  return n;
 }
 
 export async function excluirMapasPorPrefixoSupabase(prefixo: string): Promise<void> {

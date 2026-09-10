@@ -79,6 +79,10 @@ export interface NdviCamadaMeta {
   bounds: [number, number, number, number];
   media?: number | null; nx?: number; ny?: number;
   itemId: string; atualizadoEm: string | null;
+  // Pendência 40 — gerada pelo robô noturno (e não por alguém nesta tela).
+  // É o que permite filtrar e apagar em massa só o que veio do automático.
+  automatico?: boolean;
+  pctLimpo?: number | null;
 }
 
 // Lista os índices mantidos do talhão SÓ com metadados (KBs, sem rasters).
@@ -96,6 +100,7 @@ export async function listarNdviSalvos(talhaoId: string): Promise<NdviCamadaMeta
         prof: data, data, indice, bounds: m.bounds,
         media: m.stats?.media, nx: m.stats?.nx, ny: m.stats?.ny,
         itemId: m.id, atualizadoEm: m.atualizadoEm,
+        automatico: !!m.automatico, pctLimpo: m.pctLimpo ?? null,
       });
     }
   });

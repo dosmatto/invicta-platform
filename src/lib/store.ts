@@ -341,6 +341,70 @@ export function deleteComposicao(id: string) {
   save('inv_composicoes', load<ComposicaoTemporal>('inv_composicoes').filter(c => c.id !== id));
 }
 
+// ── Monitoramento automático por satélite (pendência 40) ────────────────────
+// Marca o talhão para o robô noturno varrer sozinho (backend/agenda.py). Só a
+// CONFIGURAÇÃO mora aqui — as camadas geradas vão para inv_mapas_fert, iguais
+// às feitas à mão, com `automatico: true` para poderem ser filtradas e apagadas.
+//
+// O id é o PRÓPRIO talhaoId: um talhão tem no máximo um monitoramento, e id
+// fixo torna ligar/desligar idempotente (sem duplicata se dois aparelhos
+// marcarem o mesmo talhão).
+export interface RegrasAceiteMsr {
+  pctLimpoMin: number;       // % mín do talhão livre de nuvem/sombra
+  ndviMin: number;           // NDVI médio mín (barra solo nu / pós-colheita)
+  nuvemMaxCena: number;      // % máx de nuvem da CENA (filtro barato no catálogo)
+  intervaloMinDias: number;  // dias mín entre duas cenas guardadas
+}
+
+export interface MonitorSatelite {
+  id: string;                // === talhaoId
+  talhaoId: string;
+  fazendaId?: string;
+  ativo: boolean;
+  indices: string[];         // ['NDVI'] — do catálogo de src/lib/msr.ts
+  pixelM: number;            // 10 (Sentinel-2)
+  regras: RegrasAceiteMsr;
+  desde?: string;            // não busca cena anterior a esta data (ISO)
+  usuario?: string;
+  criadoEm: string;
+  atualizadoEm: string;
+}
+
+export function getMonitoresSatelite(talhaoId?: string): MonitorSatelite[] {
+  const lista = loadFiltrado<MonitorSatelite>('inv_msr_monitor');
+  return talhaoId ? lista.filter(m => m.talhaoId === talhaoId) : lista;
+}
+
+export function getMonitorSatelite(talhaoId: string): MonitorSatelite | undefined {
+  return getMonitoresSatelite().find(m => m.talhaoId === talhaoId);
+}
+
+/** Leitura síncrona para a UI decidir o selo sem esperar rede. */
+export function monitorAtivo(talhaoId: string): boolean {
+  return !!getMonitorSatelite(talhaoId)?.ativo;
+}
+
+/** Upsert por talhaoId — cria com os padrões se ainda não existir. */
+export function setMonitorSatelite(talhaoId: string, patch: Partial<MonitorSatelite>): MonitorSatelite {
+  const lista = load<MonitorSatelite>('inv_msr_monitor');
+  const i = lista.findIndex(m => m.talhaoId === talhaoId);
+  const agora = new Date().toISOString();
+  const base: MonitorSatelite = i >= 0 ? lista[i] : comEmpresa({
+    id: talhaoId, talhaoId, ativo: false,
+    indices: ['NDVI'], pixelM: 10,
+    regras: { pctLimpoMin: 70, ndviMin: 0.15, nuvemMaxCena: 20, intervaloMinDias: 5 },
+    criadoEm: agora, atualizadoEm: agora,
+  });
+  const novo: MonitorSatelite = { ...base, ...patch, id: talhaoId, talhaoId, atualizadoEm: agora };
+  if (i >= 0) lista[i] = novo; else lista.push(novo);
+  save('inv_msr_monitor', lista);
+  return novo;
+}
+
+export function deleteMonitorSatelite(talhaoId: string) {
+  save('inv_msr_monitor', load<MonitorSatelite>('inv_msr_monitor').filter(m => m.talhaoId !== talhaoId));
+}
+
 // ── MDE / Altimetria (Variável Fixa do Talhão) — F1 ─────────────────────────
 // Metadados das bases de MDE aprovadas (spec 20.3/21): a base APROVADA vira a
 // oficial; versões antigas ficam no histórico (nunca apagar automaticamente).

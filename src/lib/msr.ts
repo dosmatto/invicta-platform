@@ -22,12 +22,15 @@ export type CenaDisponivel = CenaNdvi;
 export type FonteNdvi = 'sentinel' | 'cbers';
 
 // Lista as cenas disponíveis no período (rápido — só metadados do STAC).
+// `limite`: o padrão do servidor é 30, que truncava 3 anos em silêncio (o
+// gráfico de seleção pede algumas centenas). Teto duro do servidor: 800.
 export async function listarCenasNdvi(params: {
   poligono: GeoJSON.Polygon | GeoJSON.MultiPolygon;
   dataIni: string;
   dataFim: string;
   nuvemMax?: number;
   fonte?: FonteNdvi;
+  limite?: number;
 }): Promise<CenaDisponivel[]> {
   const j = await postMsr<{ cenas: CenaDisponivel[] }>('/ndvi-cenas', {
     poligono: params.poligono,
@@ -35,8 +38,76 @@ export async function listarCenasNdvi(params: {
     data_fim: params.dataFim,
     nuvem_max: params.nuvemMax ?? 60,
     fonte: params.fonte ?? 'sentinel',
+    limite: params.limite ?? 30,
   });
   return j.cenas ?? [];
+}
+
+// ── Avaliação barata das cenas (pendência 40) ────────────────────────────────
+// O `nuvem` do catálogo é da CENA INTEIRA (~110 km) e engana: numa medição real
+// deste talhão, a cena de 17,6% de nuvem deixou 69% do talhão limpo, enquanto a
+// de 9,2% deixou só 58%. Quem escolhe pela nuvem da cena escolhe errado. Esta
+// rota lê a máscara de nuvem numa grade grossa e responde o que importa: quanto
+// DESTE talhão está limpo, e qual o vigor médio.
+
+export interface AvaliacaoCena {
+  id: string;
+  data: string | null;
+  fonte: FonteNdvi;
+  nuvem: number | null;        // da cena (catálogo)
+  pctLimpo: number | null;     // % do TALHÃO sem nuvem/sombra
+  ndviMedio: number | null;    // média do índice no que sobrou
+  semMascara?: boolean;        // CBERS: sem banda de qualidade — nuvem não é detectada
+  erro?: string;
+}
+
+// Teto do servidor por chamada — chame em lotes deste tamanho, com progresso.
+export const MAX_AVALIAR = 12;
+
+export async function avaliarCenas(params: {
+  poligono: GeoJSON.Polygon | GeoJSON.MultiPolygon;
+  cenas: Array<{ id: string; fonte: FonteNdvi }>;
+  indice?: string;
+  corteLimpo?: number;         // abaixo disso o servidor nem lê as bandas (7x mais rápido)
+  pixelM?: number;             // 0/ausente = o servidor escolhe pelo tamanho do talhão
+}): Promise<{ pixelM: number; cenas: AvaliacaoCena[] }> {
+  const r = await postBackend('/ndvi-avaliar', {
+    poligono: params.poligono,
+    cenas: params.cenas.map(c => ({ id: c.id, fonte: c.fonte })),
+    indice: params.indice ?? 'NDVI',
+    corte_limpo: params.corteLimpo ?? 0,
+    pixel_m: params.pixelM ?? 0,
+  });
+  if (r.status === 404) {
+    // O front (Vercel) publica em ~1 min; o backend (Render) leva vários. Nessa
+    // janela a rota ainda não existe — o mesmo tratamento de baixarImagemGeotiff.
+    throw new Error('O servidor de processamento ainda não tem a avaliação de cenas — ele deve estar sendo atualizado. Tente de novo em alguns minutos.');
+  }
+  if (!r.ok) {
+    let msg = `Backend respondeu ${r.status}`;
+    try { const j = await r.json(); if (j?.detail) msg = String(j.detail); } catch {}
+    throw new Error(msg);
+  }
+  const j = await r.json() as {
+    pixel_m?: number;
+    cenas?: Array<{
+      id: string; data?: string | null; fonte?: string; nuvem?: number | null;
+      pct_limpo?: number | null; ndvi_medio?: number | null; sem_mascara?: boolean; erro?: string;
+    }>;
+  };
+  return {
+    pixelM: j.pixel_m ?? 0,
+    cenas: (j.cenas ?? []).map(c => ({
+      id: c.id,
+      data: c.data ?? null,
+      fonte: (c.fonte === 'cbers' ? 'cbers' : 'sentinel') as FonteNdvi,
+      nuvem: c.nuvem ?? null,
+      pctLimpo: c.pct_limpo ?? null,
+      ndviMedio: c.ndvi_medio ?? null,
+      semMascara: c.sem_mascara,
+      erro: c.erro,
+    })),
+  };
 }
 
 // Imagem de satélite em cor verdadeira da cena, alinhada ao NDVI.

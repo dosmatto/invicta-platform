@@ -20,11 +20,14 @@ import { faixaPercentis } from '@/lib/quantis';
 import { rampaVisualStops, respeitarPadraoHomonima } from '@/lib/legendas';
 import {
   listarCenasNdvi, buscarImagemSatelite, buscarIndices, indicesDisponiveis,
-  buscarNdviSentinel, baixarImagemGeotiff,
-  type RespNdvi, type CenaDisponivel, type FonteNdvi,
+  buscarNdviSentinel, baixarImagemGeotiff, avaliarCenas, MAX_AVALIAR,
+  type RespNdvi, type CenaDisponivel, type FonteNdvi, type AvaliacaoCena,
 } from '@/lib/msr';
+import { GraficoCenas, type ItemGrafico } from './GraficoCenas';
+import { avaliarRegras, melhoresPorJanela, REGRAS_PADRAO } from '@/lib/msrSelecao';
 import { retanguloDe } from '@/lib/janela';
-import { cloudSalvarMapa, cloudListarMapasMeta, cloudCarregarMapa, cloudExcluirMapasPorPrefixo, cloudPodeGravar } from '@/lib/cloud';
+import { cloudSalvarMapa, cloudListarMapasMeta, cloudCarregarMapa, cloudExcluirMapasPorPrefixo, cloudExcluirMapas, cloudPodeGravar } from '@/lib/cloud';
+import { BotaoMonitorar } from './MonitorSatelite';
 import { getRejeitadasLocal, carregarRejeitadas, marcarRejeitada } from '@/lib/cenaEstados';
 import { onCaiuParaNuvem } from '@/lib/interpUrl';
 import { pode, emailUsuario } from '@/lib/empresa';
@@ -34,7 +37,7 @@ import { getComposicoes } from '@/lib/store';
 import { listarNdviSalvos, carregarGridNdvi, type NdviCamadaMeta } from '@/lib/meap/gerar';
 import {
   Satellite, Loader2, AlertTriangle, Image as ImageIcon, Contrast, Check, Star,
-  Eye, XCircle, RotateCcw, Play, X, Layers3, Download,
+  Eye, XCircle, RotateCcw, Play, X, Layers3, Download, Trash2,
 } from 'lucide-react';
 
 import { inputStyle } from '@/constants/ui';
@@ -63,6 +66,16 @@ const pixelDe = (fonte: FonteNdvi) => (fonte === 'cbers' ? 2 : 10);            /
 const PIXEL_THUMB: Record<FonteNdvi, number> = { sentinel: 24, cbers: 20 };    // miniatura do card
 const PIXEL_PREVIA: Record<FonteNdvi, number> = { sentinel: 10, cbers: 6 };    // conferência
 const NUVEM_PADRAO = 5;
+// Teto de miniaturas por busca. Cada uma é uma leitura de COG no servidor; sem
+// teto, um período de 3 anos (300+ cenas) viraria 300 chamadas de uma vez e
+// derrubaria o backend. As demais mostram o ícone até entrarem em cena.
+const MAX_THUMBS = 24;
+// Acima disso, os cartões deixam de ser navegáveis e a tela abre no gráfico.
+const CARTOES_DEMAIS = 40;
+// Período longo precisa de teto alto no catálogo (o padrão do servidor é 30, que
+// truncava 3 anos em silêncio). Curto continua barato.
+const limiteBusca = (dataIni: string, dataFim: string) =>
+  (Date.parse(dataFim) - Date.parse(dataIni)) / 86400000 > 190 ? 800 : 60;
 
 const prefixoNuvem = (talhaoId: string, fonte: FonteNdvi) => `${talhaoId}__ndvi${fonte === 'cbers' ? 'cbers' : ''}__`;
 const idNuvem = (talhaoId: string, fonte: FonteNdvi, data: string, indice = 'NDVI') =>
@@ -116,6 +129,21 @@ export function NdviSection({ safraNome }: { safraNome?: string } = {}) {
   const [imagens, setImagens] = useState<Record<string, Imagem>>({});   // cor verdadeira FINA por chave
   const [carregandoImg, setCarregandoImg] = useState(false);
   const [salvos, setSalvos] = useState<Record<string, boolean>>({});    // mantidas na nuvem, por chave
+
+  // ── Gráfico de seleção de cenas (pendência 40) ─────────────────────────────
+  // O catálogo só informa a nuvem da CENA INTEIRA (~110 km). A avaliação lê a
+  // máscara de nuvem recortada NO TALHÃO e responde o que decide a escolha.
+  const [vista, setVista] = useState<'grafico' | 'cartoes'>('cartoes');
+  const [avaliacoes, setAvaliacoes] = useState<Record<string, AvaliacaoCena>>({});  // chave de CENA
+  const [marcadas, setMarcadas] = useState<Record<string, boolean>>({});            // idem
+  const [avaliando, setAvaliando] = useState(false);
+  const [processandoLote, setProcessandoLote] = useState(false);
+  const [progresso, setProgresso] = useState<{ feitas: number; total: number } | null>(null);
+  const regras = REGRAS_PADRAO;
+  // Desligar o monitoramento não pode apagar nada sozinho: são meses de
+  // processamento. Pergunta, contando quantas camadas estão em jogo.
+  const [confirmarApagar, setConfirmarApagar] = useState<number | null>(null);
+  const [apagando, setApagando] = useState(false);
 
   // Legenda NDVI (seletor) → versão contínua.
   const legendasNdvi = useMemo(() => legendasDoModulo('ndvi'), []);
@@ -312,10 +340,15 @@ export function NdviSection({ safraNome }: { safraNome?: string } = {}) {
   }, [cenas, imagens, previas, previaDe, selKey, fonteSel, dataSel, modo, dominio, corStops, legNdvi, setFertilidadeOverlay, setFertilidadeLabels]);
 
   // Miniaturas RGB dos cards (leves, 2 por vez) — só das que ainda não têm.
+  // TETO e guarda de vista: cada miniatura é uma leitura de COG no servidor, e
+  // um período de 3 anos traz centenas de cenas. Sem isto, abrir o histórico
+  // longo dispararia centenas de chamadas simultâneas ao backend.
   useEffect(() => {
-    if (!poligono || candidatos.length === 0) return;
+    if (!poligono || candidatos.length === 0 || vista !== 'cartoes') return;
     let vivo = true;
-    const fila = candidatos.filter(c => c.data && !thumbsRef.current[chaveCena(c.fonte, c.data)]);
+    const fila = candidatos
+      .filter(c => c.data && !thumbsRef.current[chaveCena(c.fonte, c.data)])
+      .slice(0, MAX_THUMBS);
     if (fila.length === 0) return;
     setThumbs(t => ({ ...t, ...Object.fromEntries(fila.map(c => [chaveCena(c.fonte, c.data), 'loading'])) }));
     (async () => {
@@ -336,7 +369,7 @@ export function NdviSection({ safraNome }: { safraNome?: string } = {}) {
     })();
     return () => { vivo = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [candidatos, poligono]);
+  }, [candidatos, poligono, vista]);
 
   // Prévia FINA da conferência (RGB no mapa).
   useEffect(() => {
@@ -377,8 +410,11 @@ export function NdviSection({ safraNome }: { safraNome?: string } = {}) {
     setEstado('listando'); setErro(''); setSugerirNuvem(0); setPreviaDe(null);
     try {
       const fontes: FonteNdvi[] = fonteBusca === 'todos' ? ['sentinel', 'cbers'] : [fonteBusca];
+      // O limite vai INLINE de propósito: içá-lo para uma const acrescenta mais
+      // uma variável capturada por este closure e o react-hooks/immutability
+      // passa a acusar (falsamente) a deduplicação abaixo como mutação de estado.
       const resultados = await Promise.all(fontes.map(async f => {
-        const cs = await listarCenasNdvi({ poligono, dataIni, dataFim, nuvemMax: f === 'sentinel' ? nv : 100, fonte: f });
+        const cs = await listarCenasNdvi({ poligono, dataIni, dataFim, nuvemMax: f === 'sentinel' ? nv : 100, fonte: f, limite: limiteBusca(dataIni, dataFim) });
         return cs.map(c => ({ ...c, fonte: f }));
       }));
       // 1 card por fonte+data: talhão na emenda de tiles repete a mesma passagem
@@ -391,6 +427,11 @@ export function NdviSection({ safraNome }: { safraNome?: string } = {}) {
       }
       const juntas = [...porChave.values()].sort((a, b) => (b.data ?? '').localeCompare(a.data ?? ''));
       setCandidatos(juntas);
+      // Busca nova = avaliação nova (as cenas mudaram); a marcação também some,
+      // senão o usuário processaria em lote algo que não está mais na tela.
+      setAvaliacoes({}); setMarcadas({});
+      // Cartão não se navega às centenas: a partir daí a tela abre no gráfico.
+      setVista(juntas.length > CARTOES_DEMAIS ? 'grafico' : 'cartoes');
       setEstado('idle');
       if (juntas.length === 0) {
         if (fontes.includes('sentinel') && nv < 15) {
@@ -453,18 +494,194 @@ export function NdviSection({ safraNome }: { safraNome?: string } = {}) {
     }
   }
 
+  // Grava UMA camada na nuvem (grid comprimido + metadados — spec seção 13).
+  // Compartilhado entre o botão "Manter" e o processamento em lote do gráfico:
+  // as duas gravações têm que produzir exatamente o mesmo documento.
+  async function salvarNaNuvem(fonte: FonteNdvi, data: string, indice: string, m: MapaNdvi) {
+    if (!nav.talhaoId || !m.resp.grid) return;
+    const gz = await comprimirGrid(m.resp.grid);
+    cloudSalvarMapa(idNuvem(nav.talhaoId, fonte, data, indice), {
+      resp: { ...m.resp, grid: gz }, criadoEm: m.criadoEm,
+      indice, formula: m.formula, bandas: m.bandas, mascara: m.mascara,
+      usuario: m.usuario ?? emailUsuario() ?? undefined, salvoEm: new Date().toISOString(),
+    });
+  }
+
   // Manter o ÍNDICE selecionado (vira camada oficial, com metadados — spec seção 13).
   async function manterCena() {
     if (!sel || !selKey || !nav.talhaoId) return;
     if (!cloudPodeGravar()) { setErro('Faça login para manter a camada salva.'); return; }
     if (!sel.resp.grid) { setErro('Aguarde o mapa desta cena terminar de carregar.'); return; }
-    const gz = await comprimirGrid(sel.resp.grid);
-    cloudSalvarMapa(idNuvem(nav.talhaoId, fonteSel, dataSel, indSel), {
-      resp: { ...sel.resp, grid: gz }, criadoEm: sel.criadoEm,
-      indice: indSel, formula: sel.formula, bandas: sel.bandas, mascara: sel.mascara,
-      usuario: sel.usuario ?? emailUsuario() ?? undefined, salvoEm: new Date().toISOString(),
-    });
+    await salvarNaNuvem(fonteSel, dataSel, indSel, sel);
     setSalvos(s => ({ ...s, [selKey]: true }));
+  }
+
+  // ── Gráfico de seleção: avaliar, marcar e processar em lote ────────────────
+
+  // O gráfico só desenha; toda decisão e toda chamada de rede ficam aqui.
+  // `aceitaSemMascara`: o CBERS não tem banda de qualidade, então não dá para
+  // afirmar que o talhão está sem nuvem. Quem escolheu CBERS de propósito
+  // assume isso; em "Todos", ele aparece no gráfico mas não é marcado sozinho.
+  const aceitaSemMascara = fonteBusca === 'cbers';
+
+  const itensGrafico = useMemo<ItemGrafico[]>(() => candidatos
+    .filter(c => !!c.data)
+    .map(c => {
+      const chave = chaveCena(c.fonte, c.data);
+      const av = avaliacoes[chave];
+      const base = {
+        id: c.id, data: c.data as string, fonte: c.fonte,
+        nuvem: c.nuvem ?? null,
+        pctLimpo: av?.pctLimpo ?? null,
+        ndviMedio: av?.ndviMedio ?? null,
+        semMascara: av?.semMascara ?? (c.fonte === 'cbers'),
+      };
+      const v = avaliarRegras(base, regras, null, aceitaSemMascara);
+      return {
+        ...base, chave,
+        marcada: !!marcadas[chave],
+        salva: indicesDaCena(c.fonte, c.data).some(k => salvos[k]),
+        rejeitada: !!rejeitadas[idRejeicao(c)],
+        aceita: v.aceita, motivo: v.motivo,
+      };
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [candidatos, avaliacoes, marcadas, salvos, rejeitadas, cenas, aceitaSemMascara]);
+
+  // Lê a máscara de nuvem das cenas do intervalo, em lotes, com progresso.
+  // `corteLimpo` faz o servidor NÃO ler as bandas quando o talhão já reprovou no
+  // percentual — medido, é ~7x mais rápido nas cenas nubladas, que são a maioria.
+  async function avaliarIntervalo(alvos: ItemGrafico[]) {
+    if (!poligono || alvos.length === 0) return;
+    setAvaliando(true); setErro(''); setProgresso({ feitas: 0, total: alvos.length });
+    try {
+      for (let i = 0; i < alvos.length; i += MAX_AVALIAR) {
+        const lote = alvos.slice(i, i + MAX_AVALIAR);
+        const r = await avaliarCenas({
+          poligono,
+          cenas: lote.map(a => ({ id: a.id, fonte: a.fonte })),
+          corteLimpo: regras.pctLimpoMin,
+        });
+        setAvaliacoes(prev => {
+          const novo = { ...prev };
+          for (const c of r.cenas) {
+            const alvo = lote.find(a => a.id === c.id);
+            if (alvo) novo[alvo.chave] = c;
+          }
+          return novo;
+        });
+        setProgresso({ feitas: Math.min(i + lote.length, alvos.length), total: alvos.length });
+      }
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Falha ao avaliar as cenas.');
+    } finally {
+      setAvaliando(false); setProgresso(null);
+    }
+  }
+
+  function marcarMelhores(dias: number, doIntervalo: ItemGrafico[]) {
+    const ids = new Set(melhoresPorJanela(doIntervalo, dias, regras, aceitaSemMascara));
+    const novas: Record<string, boolean> = {};
+    for (const i of doIntervalo) if (ids.has(i.id)) novas[i.chave] = true;
+    setMarcadas(novas);
+    if (Object.keys(novas).length === 0) {
+      setErro('Nenhuma cena do intervalo passa nas regras — avalie o intervalo ou amplie o período.');
+    } else {
+      setErro('');
+    }
+  }
+
+  // Calcula os índices marcados de UMA cena e JÁ salva. No lote não faz sentido
+  // pedir "Manter" vinte vezes: a decisão consciente foi tomada no gráfico.
+  async function calcularESalvar(c: Cand) {
+    if (!poligono || !nav.talhaoId) return;
+    const escolhidos = indicesDisponiveis(c.fonte).ok.map(i => i.id).filter(id => selIdx[id]);
+    if (escolhidos.length === 0) throw new Error('nenhum índice selecionado');
+    const r = await buscarIndices({ poligono, cenaId: c.id, fonte: c.fonte, indices: escolhidos, pixelM: pixelDe(c.fonte) });
+    const d = r.cena.data ?? c.data ?? '';
+    const agora = new Date().toISOString();
+    const novos: Record<string, MapaNdvi> = {};
+    for (const [ind, res] of Object.entries(r.resultados)) {
+      novos[chaveDe(c.fonte, d, ind)] = {
+        resp: { bounds: r.bounds, grid: res.grid, stats: res.stats, cena: r.cena },
+        criadoEm: agora, indice: ind, formula: res.formula, bandas: res.bandas,
+        mascara: r.mascara, usuario: emailUsuario() ?? undefined,
+      };
+    }
+    setCenas(prev => ({ ...prev, ...novos }));
+    for (const [k, m] of Object.entries(novos)) {
+      await salvarNaNuvem(c.fonte, d, m.indice ?? 'NDVI', m);
+      setSalvos(s => ({ ...s, [k]: true }));
+    }
+  }
+
+  // Serial de propósito: o backend é compartilhado e cada cena lê vários COGs.
+  // Uma falha não aborta o lote — só entra na conta e é listada no fim.
+  async function processarLote() {
+    const alvos = candidatos.filter(c => marcadas[chaveCena(c.fonte, c.data)]);
+    if (alvos.length === 0) return;
+    if (!cloudPodeGravar()) { setErro('Faça login para processar e salvar em lote.'); return; }
+    setProcessandoLote(true); setErro(''); setProgresso({ feitas: 0, total: alvos.length });
+    const falhas: string[] = [];
+    for (let i = 0; i < alvos.length; i++) {
+      try {
+        await calcularESalvar(alvos[i]);
+      } catch (e) {
+        falhas.push(`${ddmmyy(alvos[i].data)} (${e instanceof Error ? e.message : 'falhou'})`);
+      }
+      setProgresso({ feitas: i + 1, total: alvos.length });
+    }
+    setProcessandoLote(false); setProgresso(null); setMarcadas({});
+    setErro(falhas.length
+      ? `${alvos.length - falhas.length} de ${alvos.length} salvas. Não deu certo em: ${falhas.slice(0, 3).join(', ')}${falhas.length > 3 ? '…' : ''}`
+      : '');
+  }
+
+  async function perguntarApagarAutomaticas() {
+    if (!nav.talhaoId) return;
+    try {
+      const metas = await listarNdviSalvos(nav.talhaoId);
+      setConfirmarApagar(metas.filter(m => m.automatico).length);
+    } catch {
+      setConfirmarApagar(0);
+    }
+  }
+
+  async function apagarAutomaticas() {
+    if (!nav.talhaoId) return;
+    setApagando(true);
+    try {
+      const metas = await listarNdviSalvos(nav.talhaoId);
+      const ids = metas.filter(m => m.automatico).map(m => m.itemId);
+      const n = await cloudExcluirMapas(ids);
+      // 0 apagadas sem erro = RLS negando. Dizer "apagado" seria mentir.
+      setErro(n === 0 && ids.length > 0
+        ? 'O servidor não confirmou a exclusão — as camadas continuam lá. Verifique suas permissões.'
+        : '');
+      // Some a estrela SÓ das que saíram. Uma data pode ter uma camada
+      // automática apagada e outra, do mesmo dia, mantida à mão.
+      const prefC = prefixoNuvem(nav.talhaoId, 'cbers');
+      const prefS = prefixoNuvem(nav.talhaoId, 'sentinel');
+      setSalvos(sv => {
+        const novo = { ...sv };
+        for (const id of ids) {
+          const cbers = id.startsWith(prefC);
+          const [ind, data] = id.slice((cbers ? prefC : prefS).length).split('__');
+          delete novo[chaveDe(cbers ? 'cbers' : 'sentinel', data ?? '', ind ?? 'NDVI')];
+        }
+        return novo;
+      });
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Falha ao apagar as camadas automáticas.');
+    } finally {
+      setApagando(false);
+      setConfirmarApagar(null);
+    }
+  }
+
+  function abrirDoGrafico(item: ItemGrafico) {
+    const c = candidatos.find(x => x.fonte === item.fonte && x.data === item.data);
+    if (c) { setVista('cartoes'); abrirCard(c); }
   }
 
   function removerCena() {
@@ -537,6 +754,34 @@ export function NdviSection({ safraNome }: { safraNome?: string } = {}) {
 
       {!poligono && <Aviso texto="Limite do talhão não carregado no mapa." />}
 
+      {/* Busca automática de madrugada (pendência 40) */}
+      {nav.talhaoId && (
+        <BotaoMonitorar talhaoId={nav.talhaoId} fazendaId={nav.fazendaId ?? undefined}
+          onDesligarComCamadas={() => void perguntarApagarAutomaticas()} />
+      )}
+      {confirmarApagar !== null && (
+        <div className="rounded-lg p-2.5 space-y-2" style={{ background: '#2d1a00', border: '1px solid #92400e' }}>
+          <p className="text-[10px]" style={{ color: '#fbbf24' }}>
+            {confirmarApagar === 0
+              ? 'Monitoramento desligado. Não há camadas automáticas guardadas neste talhão.'
+              : `Monitoramento desligado. Este talhão tem ${confirmarApagar} camada${confirmarApagar > 1 ? 's' : ''} gerada${confirmarApagar > 1 ? 's' : ''} automaticamente. O que fazer com ela${confirmarApagar > 1 ? 's' : ''}?`}
+          </p>
+          <div className="flex gap-1.5">
+            <button onClick={() => setConfirmarApagar(null)}
+              className="flex-1 py-1.5 rounded text-[10px] font-bold" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
+              {confirmarApagar === 0 ? 'Entendi' : 'Manter as camadas'}
+            </button>
+            {confirmarApagar > 0 && (
+              <button onClick={() => void apagarAutomaticas()} disabled={apagando}
+                className="flex-1 py-1.5 rounded text-[10px] font-bold text-white flex items-center justify-center gap-1"
+                style={{ background: '#7f1d1d' }}>
+                {apagando ? <><Loader2 size={11} className="animate-spin" /> Apagando…</> : <>Apagar também</>}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Fonte de imagem */}
       <div>
         <label className="text-[10px] font-semibold block mb-1" style={{ color: '#64748b' }}>Fonte de imagem</label>
@@ -555,6 +800,20 @@ export function NdviSection({ safraNome }: { safraNome?: string } = {}) {
         <p className="text-[11px] font-semibold flex items-center gap-1" style={{ color: '#93c5fd' }}>
           <Satellite size={12} /> Buscar imagens {fonteBusca === 'todos' ? '(Sentinel-2 + CBERS-4A)' : fonteBusca === 'cbers' ? 'CBERS-4A (2 m)' : 'Sentinel-2'}
         </p>
+        {/* Atalhos de período — o histórico longo é o caso de uso do gráfico */}
+        <div className="flex gap-1">
+          {([[3, '3 meses'], [12, '1 ano'], [24, '2 anos'], [36, '3 anos']] as [number, string][]).map(([m, r]) => {
+            const ini = mesesAtras(m), fim = isoDate(new Date());
+            const ativo = dataIni === ini && dataFim === fim;
+            return (
+              <button key={m} onClick={() => { setDataIni(ini); setDataFim(fim); }}
+                className="flex-1 py-1 rounded text-[9px] font-bold"
+                style={{ background: ativo ? 'var(--invicta-blue-mid)' : '#0b1d3a', border: '1px solid #1a3a6b', color: ativo ? '#fff' : '#93c5fd' }}>
+                {r}
+              </button>
+            );
+          })}
+        </div>
         <div className="flex gap-2">
           <div className="flex-1">
             <label className="text-[10px] font-semibold block mb-0.5" style={{ color: '#64748b' }}>De</label>
@@ -602,12 +861,42 @@ export function NdviSection({ safraNome }: { safraNome?: string } = {}) {
         </button>
       )}
 
+      {/* Como olhar o resultado: gráfico (visão do período) ou cartões (prévia RGB) */}
+      {candidatos.length >= 3 && (
+        <div className="flex gap-1">
+          {([['grafico', 'Gráfico do período'], ['cartoes', 'Cartões com prévia']] as ['grafico' | 'cartoes', string][]).map(([v, r]) => (
+            <button key={v} onClick={() => setVista(v)} className="flex-1 py-1.5 rounded text-[10px] font-bold"
+              style={{ background: vista === v ? 'var(--invicta-blue-mid)' : '#1a3a6b', color: vista === v ? '#fff' : '#93c5fd' }}>
+              {r}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {vista === 'grafico' && candidatos.length >= 3 && (
+        <GraficoCenas
+          itens={itensGrafico} regras={regras} janela={[dataIni, dataFim]}
+          avaliando={avaliando} processando={processandoLote} progresso={progresso}
+          onJanela={(a, b) => { setDataIni(a); setDataFim(b); }}
+          onAvaliar={alvos => void avaliarIntervalo(alvos)}
+          onMarcarMelhores={marcarMelhores}
+          onLimparMarcas={() => setMarcadas({})}
+          onAbrir={abrirDoGrafico}
+          onProcessar={() => void processarLote()}
+        />
+      )}
+
       {/* Cards das imagens candidatas (prévia RGB) */}
-      {candidatos.length > 0 && (
+      {candidatos.length > 0 && vista === 'cartoes' && (
         <div>
           <label className="text-[10px] font-semibold block mb-1" style={{ color: '#64748b' }}>
             Imagens encontradas · {candidatos.length} · toque para conferir
           </label>
+          {candidatos.length > MAX_THUMBS && (
+            <p className="text-[9px] mb-1" style={{ color: '#64748b' }}>
+              Prévia carregada só nas {MAX_THUMBS} primeiras — para um período longo, use o gráfico.
+            </p>
+          )}
           <div className="grid grid-cols-2 gap-2 max-h-[420px] overflow-y-auto pr-1">
             {candidatos.map(c => {
               const ch = chaveCena(c.fonte, c.data);
@@ -1045,6 +1334,11 @@ function GeradorPdfNdvi({ talhaoId, poligono, legNdvi, imagens, info }: {
 function CamadasSalvasView({ talhaoId }: { talhaoId: string }) {
   const [inds, setInds] = useState<NdviCamadaMeta[]>([]);
   const [carregando, setCarregando] = useState(true);
+  const [sel, setSel] = useState<Record<string, boolean>>({});
+  const [filtro, setFiltro] = useState<'todas' | 'auto' | 'manuais'>('todas');
+  const [excluindo, setExcluindo] = useState(false);
+  const [aviso, setAviso] = useState('');
+
   useEffect(() => {
     let vivo = true;
     setCarregando(true);
@@ -1054,21 +1348,82 @@ function CamadasSalvasView({ talhaoId }: { talhaoId: string }) {
   }, [talhaoId]);
   const comps = talhaoId ? getComposicoes(talhaoId) : [];
 
+  const visiveis = inds.filter(c => filtro === 'todas' || (filtro === 'auto' ? c.automatico : !c.automatico));
+  const marcadas = visiveis.filter(c => sel[c.itemId]);
+  const nAuto = inds.filter(c => c.automatico).length;
+
+  async function excluirSelecionadas() {
+    if (marcadas.length === 0) return;
+    setExcluindo(true); setAviso('');
+    try {
+      const ids = marcadas.map(c => c.itemId);
+      const n = await cloudExcluirMapas(ids);
+      // 0 sem erro = RLS negando em silêncio. Some da tela só o que saiu do banco.
+      if (n === 0) {
+        setAviso('O servidor não confirmou a exclusão — as camadas continuam lá. Verifique suas permissões.');
+      } else {
+        setInds(atual => atual.filter(c => !ids.includes(c.itemId)));
+        setSel({});
+        if (n < ids.length) setAviso(`${n} de ${ids.length} apagadas — as demais foram recusadas pelo servidor.`);
+      }
+    } catch (e) {
+      setAviso(e instanceof Error ? e.message : 'Falha ao excluir.');
+    } finally {
+      setExcluindo(false);
+    }
+  }
+
   return (
     <div className="space-y-3">
-      <div className="rounded-lg p-2.5 space-y-1" style={{ background: '#0a1a2f', border: '1px solid #1a3a6b' }}>
+      <div className="rounded-lg p-2.5 space-y-1.5" style={{ background: '#0a1a2f', border: '1px solid #1a3a6b' }}>
         <p className="text-[10px] font-bold flex items-center gap-1.5" style={{ color: '#93c5fd' }}><Star size={11} /> Índices individuais mantidos ({inds.length})</p>
+
+        {nAuto > 0 && (
+          <div className="flex gap-1">
+            {([['todas', `Todas (${inds.length})`], ['auto', `🤖 Automáticas (${nAuto})`], ['manuais', `Feitas à mão (${inds.length - nAuto})`]] as ['todas' | 'auto' | 'manuais', string][]).map(([f, r]) => (
+              <button key={f} onClick={() => { setFiltro(f); setSel({}); }}
+                className="flex-1 py-0.5 rounded text-[9px] font-bold"
+                style={{ background: filtro === f ? 'var(--invicta-blue-mid)' : '#0b1d3a', border: '1px solid #1a3a6b', color: filtro === f ? '#fff' : '#93c5fd' }}>
+                {r}
+              </button>
+            ))}
+          </div>
+        )}
+
         {carregando ? (
           <p className="text-[10px] flex items-center gap-1.5" style={{ color: '#64748b' }}><Loader2 size={11} className="animate-spin" /> Carregando…</p>
-        ) : inds.length === 0 ? (
-          <p className="text-[10px]" style={{ color: '#64748b' }}>Nenhum índice mantido — processe e mantenha na aba Imagens & índices.</p>
+        ) : visiveis.length === 0 ? (
+          <p className="text-[10px]" style={{ color: '#64748b' }}>
+            {inds.length === 0 ? 'Nenhum índice mantido — processe e mantenha na aba Imagens & índices.' : 'Nenhuma camada neste filtro.'}
+          </p>
         ) : (
-          inds.map(c => (
-            <p key={c.chave} className="text-[9px]" style={{ color: '#cbd5e1' }}>
-              <strong>{c.indice}</strong> · {new Date(c.data + 'T00:00:00').toLocaleDateString('pt-BR')} · {c.nut.startsWith('ndvi_cbers') ? 'CBERS-4A' : 'Sentinel-2'}{c.nx && c.ny ? ` · ${c.ny}×${c.nx} px` : ''}
-            </p>
-          ))
+          <>
+            <button onClick={() => setSel(marcadas.length === visiveis.length ? {} : Object.fromEntries(visiveis.map(c => [c.itemId, true])))}
+              className="text-[9px]" style={{ color: '#64748b' }}>
+              {marcadas.length === visiveis.length ? 'desmarcar todas' : 'selecionar todas'}
+            </button>
+            {visiveis.map(c => (
+              <label key={c.chave} className="flex items-start gap-1.5 cursor-pointer">
+                <input type="checkbox" checked={!!sel[c.itemId]}
+                  onChange={e => setSel(s => ({ ...s, [c.itemId]: e.target.checked }))}
+                  className="accent-green-600 flex-shrink-0" style={{ width: 12, height: 12, marginTop: 1 }} />
+                <span className="text-[9px]" style={{ color: '#cbd5e1' }}>
+                  <strong>{c.indice}</strong> · {new Date(c.data + 'T00:00:00').toLocaleDateString('pt-BR')} · {c.nut.startsWith('ndvi_cbers') ? 'CBERS-4A' : 'Sentinel-2'}{c.nx && c.ny ? ` · ${c.ny}×${c.nx} px` : ''}
+                  {c.automatico && <span title="gerada pela busca automática de madrugada"> · 🤖</span>}
+                  {c.automatico && c.pctLimpo != null && <span style={{ color: '#64748b' }}> {c.pctLimpo}% limpo</span>}
+                </span>
+              </label>
+            ))}
+            {marcadas.length > 0 && (
+              <button onClick={() => void excluirSelecionadas()} disabled={excluindo}
+                className="w-full py-1.5 rounded text-[10px] font-bold text-white flex items-center justify-center gap-1.5"
+                style={{ background: '#7f1d1d' }}>
+                {excluindo ? <><Loader2 size={11} className="animate-spin" /> Excluindo…</> : <><Trash2 size={11} /> Excluir {marcadas.length} selecionada{marcadas.length > 1 ? 's' : ''} do banco</>}
+              </button>
+            )}
+          </>
         )}
+        {aviso && <p className="text-[9px]" style={{ color: '#fbbf24' }}>{aviso}</p>}
       </div>
       <ListaComposicoes salvas={comps} />
       <p className="text-[9px] leading-relaxed" style={{ color: '#475569' }}>

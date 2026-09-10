@@ -35,7 +35,7 @@ except Exception as _e:  # pragma: no cover
 
 import msr  # reusa _clip, _png_data_url, _GDAL_ENV
 
-VERSION = "cbers-2-geotiff"
+VERSION = "cbers-3-avaliar"
 STAC_URL = "https://data.inpe.br/bdc/stac/v1"
 COLECAO = "CB4A-WPM-L4-DN-1"     # BAND0=PAN 2m, B1 azul, B2 verde, B3 red 8m, B4 nir 8m
 ASSET_PAN = ["BAND0"]
@@ -59,8 +59,10 @@ def _cli() -> "Client":
 
 
 def _itens(geom: dict, data_ini: str, data_fim: str, limite: int = 30):
+    # `limit` = tamanho de pagina; `max_items` = teto total. Ver msr._buscar_itens.
     s = _cli().search(collections=[COLECAO], intersects=geom,
-                      datetime=f"{data_ini}/{data_fim}", max_items=limite)
+                      datetime=f"{data_ini}/{data_fim}", max_items=limite,
+                      limit=min(int(limite), 100))
     its = list(s.items())
     its.sort(key=lambda it: it.datetime.isoformat() if it.datetime else "", reverse=True)
     return its
@@ -115,9 +117,9 @@ def _reproj(href: str, dst_transform, nx: int, ny: int) -> np.ndarray:
 
 
 def listar_cenas(polygon_geojson: dict, data_ini: str, data_fim: str,
-                 nuvem_max: float = 100.0) -> dict[str, Any]:
+                 nuvem_max: float = 100.0, limite: int = 30) -> dict[str, Any]:
     _erro_dep()
-    its = _itens(polygon_geojson, data_ini, data_fim)
+    its = _itens(polygon_geojson, data_ini, data_fim, limite)
     return {"cenas": [_meta(it) for it in its]}
 
 
@@ -257,6 +259,79 @@ def gerar_indices(polygon_geojson: dict, cena_id: str, indices: list[str],
         "mascara": False,
         "resultados": resultados,
     }
+
+
+def _itens_por_ids(ids: list[str]) -> dict[str, Any]:
+    """UMA busca STAC para vários ids (espelha msr._itens_por_ids)."""
+    if not ids:
+        return {}
+    its = list(_cli().search(collections=[COLECAO], ids=list(ids), max_items=len(ids)).items())
+    return {it.id: it for it in its}
+
+
+def avaliar_cenas(polygon_geojson: dict, cenas: list[str], pixel_m: float = 0.0,
+                  indice: str = "NDVI", corte_limpo: float = 0.0,
+                  workers: int = 3) -> dict[str, Any]:
+    """Avaliação barata das cenas CBERS-4A (pendência 40).
+
+    SEM máscara de nuvem: o WPM não tem banda de qualidade, então `pct_limpo`
+    aqui é só a fração do talhão com valor válido (borda/nodata) — nuvem NÃO é
+    detectada. Por isso `sem_mascara` volta True e o front avisa; o robô noturno
+    não usa esta fonte. Também sem a injeção de detalhe da PAN: numa grade
+    grossa ela não muda a média e custaria mais um COG por cena."""
+    import indices as cat
+    from concurrent.futures import ThreadPoolExecutor
+    _erro_dep()
+    if not cenas:
+        raise ValueError("Nenhuma cena para avaliar.")
+    if indice not in cat.CATALOGO:
+        raise ValueError(f"Índice desconhecido: {indice}")
+    faltam = [b for b in cat.bandas_necessarias([indice]) if b not in ASSETS_BANDA]
+    if faltam:
+        raise ValueError(f"Índice {indice} indisponível no CBERS-4A (sem {', '.join(faltam)}).")
+
+    poly = shape(polygon_geojson)
+    minx, miny, maxx, maxy = poly.bounds
+    pix_alvo = float(pixel_m) if pixel_m and pixel_m > 0 else msr._pixel_avaliacao(minx, miny, maxx, maxy)
+    nx, ny = _grid_dims(minx, miny, maxx, maxy, pix_alvo)
+    dst = from_bounds(minx, miny, maxx, maxy, nx, ny)
+    dentro, n_dentro, pix = msr._mascara_dentro(poly, minx, miny, maxx, maxy, nx, ny)
+    if n_dentro == 0:
+        raise ValueError("O talhão não cobre nenhum pixel na resolução da avaliação.")
+
+    itens = _itens_por_ids(cenas)
+    necessarias = cat.bandas_necessarias([indice])
+
+    def _uma(cena_id: str) -> dict[str, Any]:
+        item = itens.get(cena_id)
+        if item is None:
+            return {"id": cena_id, "fonte": "cbers", "erro": "cena não encontrada no catálogo"}
+        base = dict(_meta(item))
+        base["fonte"] = "cbers"
+        base["sem_mascara"] = True
+        bandas: dict[str, np.ndarray] = {}
+        try:
+            for nome in necessarias:
+                bandas[nome] = _reproj(_href(item, ASSETS_BANDA[nome]), dst, nx, ny) / DN_MAX
+            g = np.where(dentro, cat.calcular(indice, bandas), np.nan).astype("float32")
+            st = cat.stats_de(g, n_dentro)
+            base["pct_limpo"] = st["pct_validos"]
+            base["ndvi_medio"] = st["media"]
+            base["min"] = st["min"]
+            base["max"] = st["max"]
+            return base
+        except Exception as e:
+            base["erro"] = str(e)
+            base.setdefault("pct_limpo", None)
+            base.setdefault("ndvi_medio", None)
+            return base
+        finally:
+            bandas.clear()
+
+    n_workers = max(1, min(int(workers), len(cenas)))
+    with ThreadPoolExecutor(max_workers=n_workers) as ex:
+        out = list(ex.map(_uma, cenas))
+    return {"pixel_m": pix, "indice": indice, "nx": int(nx), "ny": int(ny), "cenas": out}
 
 
 def _brovey(pan, R, G, B) -> np.ndarray:

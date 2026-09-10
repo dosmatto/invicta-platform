@@ -64,6 +64,22 @@ export async function cacheGravarMapa(id: string, atualizadoEm: string | null, d
   });
 }
 
+// Exclusão de UM mapa. A exclusão em massa da aba "Camadas salvas" apaga ids
+// avulsos (as automáticas, misturadas com as manuais no mesmo prefixo); sem esta,
+// o raster apagado continuaria ocupando disco no aparelho para sempre — invisível,
+// porque o hit exige bater o atualizado_em de uma listagem que já não o traz.
+export async function cacheExcluirMapa(id: string): Promise<void> {
+  const db = await abrirDb();
+  if (!db) return;
+  await new Promise<void>(res => {
+    try {
+      const req = db.transaction(STORE, 'readwrite').objectStore(STORE).delete(id);
+      req.onsuccess = () => res();
+      req.onerror = () => res();
+    } catch { res(); }
+  });
+}
+
 export async function cacheExcluirMapasPorPrefixo(prefixo: string): Promise<void> {
   const db = await abrirDb();
   if (!db) return;

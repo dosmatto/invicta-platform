@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import inspect
 import os
+from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request, Response
@@ -22,8 +23,28 @@ import cbers
 import colheita
 import mde
 import ia
+import agenda
 
-app = FastAPI(title="INVICTA - Interpolacao de Fertilidade", version="0.1.0")
+
+@asynccontextmanager
+async def _ciclo_de_vida(_app: FastAPI):
+    """Arma o robo noturno do satelite NESTE worker (no-op sem MSR_AGENDA=1).
+
+    Cada worker do gunicorn passa por aqui; quem realmente roda a noite e
+    decidido por uma trava no banco (ver agenda.py). O shutdown sinaliza para o
+    job parar ENTRE cenas — o que ja foi gravado fica, porque cada cena e
+    commitada na hora.
+    """
+    try:
+        agenda.iniciar()
+    except Exception as e:  # pragma: no cover — nunca derruba o backend
+        print(f"[msr] agendador nao armou: {e}", flush=True)
+    yield
+    agenda.parar_tudo()
+
+
+app = FastAPI(title="INVICTA - Interpolacao de Fertilidade", version="0.1.0",
+              lifespan=_ciclo_de_vida)
 
 # Protecao anti-abuso OPT-IN (sem a env definida, nada muda: continua sem auth).
 API_KEY = os.environ.get("INVICTA_API_KEY", "")
@@ -202,6 +223,8 @@ def health():
         # ainda em uvicorn puro (deploy do backend nao propagou).
         "server": os.environ.get("SERVER_SOFTWARE", ""),
         "workers": os.environ.get("WEB_CONCURRENCY", ""),
+        # Robo noturno do satelite (pendencia 40) — diz se armou e por que nao.
+        "agenda": agenda.estado(),
     }
 
 
@@ -381,22 +404,30 @@ class ReqGerarZonas(BaseModel):
     pesos: list[float] | None = None
 
 
+MAX_CENAS_LISTA = 800             # teto duro de /ndvi-cenas (ver comentário na rota)
+
+
 class ReqCenas(BaseModel):
     poligono: dict[str, Any]          # GeoJSON Polygon/MultiPolygon do talhão
     data_ini: str                     # 'YYYY-MM-DD'
     data_fim: str                     # 'YYYY-MM-DD'
     nuvem_max: float = 60.0           # % máx de nuvem p/ entrar na lista (só Sentinel)
     fonte: str = "sentinel"           # 'sentinel' | 'cbers'
+    limite: int = 30                  # nº máx de cenas (o gráfico de seleção pede muito mais)
 
 
 @app.post("/ndvi-cenas")
 def ndvi_cenas(req: ReqCenas):
     """Lista as cenas disponíveis no período (sem ler COG) para o usuário
     escolher quais quer ver. Fonte Sentinel-2 (global) ou CBERS-4A (Brasil, 2 m)."""
+    # Teto DURO do servidor: 3 anos sem filtro de nuvem em emenda de tiles chega a
+    # ~700 cenas; a ~120 bytes de metadado cada, o JSON fica em ~85 KB. Acima disso
+    # e abuso, nao uso — a rota e publica quando INVICTA_API_KEY nao esta definida.
+    lim = max(1, min(int(req.limite), MAX_CENAS_LISTA))
     try:
         if req.fonte == "cbers":
-            return cbers.listar_cenas(req.poligono, req.data_ini, req.data_fim, req.nuvem_max)
-        return msr.listar_cenas(req.poligono, req.data_ini, req.data_fim, req.nuvem_max)
+            return cbers.listar_cenas(req.poligono, req.data_ini, req.data_fim, req.nuvem_max, lim)
+        return msr.listar_cenas(req.poligono, req.data_ini, req.data_fim, req.nuvem_max, lim)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:  # pragma: no cover
@@ -499,6 +530,72 @@ def indices_vegetativos(req: ReqIndices):
         raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:  # pragma: no cover
         raise HTTPException(status_code=500, detail=f"falha ao gerar índices: {e}")
+
+
+class ReqAvaliar(BaseModel):
+    poligono: dict[str, Any]          # GeoJSON Polygon/MultiPolygon do talhão
+    cenas: list[dict[str, Any]]       # [{id, fonte}] — 'sentinel' | 'cbers'
+    pixel_m: float = 0.0              # 0 = o servidor escolhe pelo tamanho do talhão
+    indice: str = "NDVI"
+    corte_limpo: float = 0.0          # abaixo disso nem lê as bandas (curto-circuito)
+
+
+# Teto por chamada: com 3 threads isso dá ~4-6 s de resposta. O front fatia a
+# janela escolhida em lotes e mostra progresso — preso muito tempo, o usuário
+# acha que travou, e o worker fica indisponível para os demais.
+MAX_AVALIAR = 12
+AVALIAR_WORKERS = int(os.environ.get("MSR_AVALIAR_WORKERS", "3") or 3)
+
+
+@app.post("/ndvi-avaliar")
+def ndvi_avaliar(req: ReqAvaliar):
+    """Quanto DESTE talhão está limpo em cada cena, e qual o vigor médio.
+
+    O `eo:cloud_cover` do catálogo é da cena inteira (~110 km) e engana: o talhão
+    pode estar limpo numa cena de 40% e encoberto numa de 5%. Aqui lemos a
+    máscara SCL (Sentinel) e as bandas do índice numa grade grossa, recortando no
+    polígono. É o que alimenta o gráfico de seleção de cenas."""
+    if not req.cenas:
+        raise HTTPException(status_code=422, detail="Nenhuma cena para avaliar.")
+    if len(req.cenas) > MAX_AVALIAR:
+        raise HTTPException(status_code=422,
+                            detail=f"Avalie no máximo {MAX_AVALIAR} cenas por vez (pedidas {len(req.cenas)}).")
+    s2 = [str(c.get("id")) for c in req.cenas if c.get("fonte") != "cbers" and c.get("id")]
+    cb = [str(c.get("id")) for c in req.cenas if c.get("fonte") == "cbers" and c.get("id")]
+    try:
+        saida: list[dict[str, Any]] = []
+        pixel = 0.0
+        if s2:
+            r = msr.avaliar_cenas(req.poligono, s2, req.pixel_m, req.indice, req.corte_limpo, AVALIAR_WORKERS)
+            saida += r["cenas"]
+            pixel = r["pixel_m"]
+        if cb:
+            r = cbers.avaliar_cenas(req.poligono, cb, req.pixel_m, req.indice, req.corte_limpo, AVALIAR_WORKERS)
+            saida += r["cenas"]
+            pixel = pixel or r["pixel_m"]
+        return {"pixel_m": pixel, "indice": req.indice, "cenas": saida}
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:  # pragma: no cover
+        raise HTTPException(status_code=500, detail=f"falha ao avaliar cenas: {e}")
+
+
+@app.post("/msr-agenda-rodar")
+def msr_agenda_rodar(request: Request, forcar: bool = True):
+    """Dispara o robo noturno AGORA (teste sem esperar a madrugada).
+
+    Exige X-Api-Key SEMPRE, mesmo quando INVICTA_API_KEY nao esta definida (aí a
+    rota fica indisponivel): as demais rotas so gastam CPU de quem chama, esta
+    ESCREVE no banco de todos os clientes."""
+    if not API_KEY:
+        raise HTTPException(status_code=503,
+                            detail="Gatilho manual desativado: defina INVICTA_API_KEY no servidor.")
+    if request.headers.get("X-Api-Key", "") != API_KEY:
+        raise HTTPException(status_code=401, detail="X-Api-Key invalida.")
+    try:
+        return agenda.rodar_agora(forcar)
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e))
 
 
 class ReqColheita(BaseModel):

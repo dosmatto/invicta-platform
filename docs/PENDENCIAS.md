@@ -59,6 +59,8 @@ verdadeira (fusão de talhões) chegou depois; foi preciso renumerar.
 | 37 | Correção local entre colhedoras volta a processar mapas grandes | 2.143.0 | Talhão → Produtividade → Unificação → "+ correção local entre colhedoras (por raio)" |
 | 38 | O valor de cada zona escrito no meio dela, longe das divisas | 2.144.0 | Talhão → Fertilidade (mapa por zona) e o PDF "Layout Oficial Fertilidade" |
 | 39 | Gerar recomendação não fecha mais a janela de produção | 2.145.0 | Talhão → Recomendações → "Nova recomendação" + "Aplicar e salvar" |
+| 40 | Gráfico das cenas do período e processamento em lote | 2.146.0 | Talhão → NDVI / Satélite → Imagens & índices → "Gráfico do período" |
+| 40 | Busca automática de imagens de madrugada, com regras e exclusão em massa | 2.147.0 | Talhão → NDVI → "Busca automática de madrugada" e aba "Camadas salvas"; Produtores → fazenda → Talhões → "Monitoramento por satélite" |
 
 > As pendências 1–17 foram entregues antes deste registro existir e não estão
 > catalogadas; procure pelo assunto no `changelog.ts`. Da 18 em diante, tudo

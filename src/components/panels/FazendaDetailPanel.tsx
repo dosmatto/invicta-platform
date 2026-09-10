@@ -18,6 +18,7 @@ import { getClientes } from '@/lib/store';
 import { ChevronLeft, ChevronDown, Plus, Map, AlertTriangle, Save, X, ExternalLink, MapPin, Loader2, Upload, CheckCircle2, Pencil, Trash2, Download, Layers } from 'lucide-react';
 import { PanelSection, PanelButton, StatusBadge } from './_shared';
 import { RelatoriosFazenda } from './RelatoriosFazenda';
+import { MonitorFazenda } from './MonitorFazenda';
 
 const EditorGeometria = dynamic(
   () => import('@/components/geo/EditorGeometria').then(m => ({ default: m.EditorGeometria })),
@@ -332,6 +333,10 @@ export function FazendaDetailPanel() {
                   </button>
                   {talhoes.length > 0 && pode('relatorios') && nav.fazendaId && (
                     <RelatoriosFazenda key={nav.fazendaId} fazendaId={nav.fazendaId} />
+                  )}
+                  {/* Pendência 40 — marcar vários talhões para a busca automática */}
+                  {talhoes.length > 0 && pode('ndvi') && nav.fazendaId && (
+                    <MonitorFazenda key={nav.fazendaId} fazendaId={nav.fazendaId} />
                   )}
                 </div>
 

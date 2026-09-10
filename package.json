@@ -84,7 +84,10 @@
     "teste:custos-produtor": "node scripts/teste-custos-produtor.mjs",
     "teste:portal": "node scripts/teste-portal-produtor.mjs",
     "teste:laudo-zonas": "node scripts/teste-laudo-zonas.mjs",
-    "teste:sessao": "node scripts/teste-sessao-storage.mjs"
+    "teste:sessao": "node scripts/teste-sessao-storage.mjs",
+    "teste:msr": "node scripts/teste-msr-selecao.mjs",
+    "teste:grafcenas": "node scripts/teste-grafico-cenas.mjs",
+    "teste:msr-regras": "PY=\"$HOME/.invicta-fert-backend/venv/bin/python\"; [ -x \"$PY\" ] || PY=python3; \"$PY\" scripts/teste-msr-regras.py"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",

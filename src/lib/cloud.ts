@@ -14,11 +14,12 @@ import { usuarioAtual } from './auth';
 import { usarDadosSupabase, bootSupabaseData, pushListaSupabase, pushObjSupabase,
   marcarPendenteSupabase,
   salvarMapaSupabase, carregarMapasPorPrefixoSupabase, excluirMapasPorPrefixoSupabase,
+  excluirMapasPorIdsSupabase,
   excluirDocsPorPrefixoSupabase, excluirColecaoSupabase,
   listarIdsMapasPorPrefixoSupabase, carregarMapasPorIdsSupabase,
   listarMapasMetaPorPrefixoSupabase, carregarMapaSupabase,
   type MapaMetaSupabase } from './supabaseData';
-import { cacheObterMapa, cacheGravarMapa, cacheExcluirMapasPorPrefixo } from './mapaCache';
+import { cacheObterMapa, cacheGravarMapa, cacheExcluirMapa, cacheExcluirMapasPorPrefixo } from './mapaCache';
 import { temPesadaLocal, removerLocal } from './localComprimido';
 
 export type MapaMeta = MapaMetaSupabase;
@@ -54,6 +55,14 @@ const KEYS_LISTA = [
                                        // Quem já tinha insumos locais entra por
                                        // migrarInsumosParaSyncV1 (store.ts) — leia lá antes
                                        // de mexer nesta linha.
+  'inv_msr_monitor',                   // Pendência 40 — talhões marcados para o robô de
+                                       // satélite. Entra no sync porque é leve (~250 B por
+                                       // talhão) e a tela da fazenda precisa dele para
+                                       // desenhar as caixas sem esperar rede.
+                                       // As coleções que o BACKEND escreve (inv_msr_execucoes,
+                                       // inv_msr_estado, inv_msr_lock) NÃO podem entrar aqui:
+                                       // o 1º push de um navegador poda órfãos remotos
+                                       // (podePodar em supabaseData.ts) e apagaria o log.
   'inv_estilo_presets',                // Presets de divisão de classes do estilo de dose
   'inv_lab', 'inv_legendas',
   'inv_plantios',
@@ -136,6 +145,7 @@ export async function bootCloud(): Promise<boolean> {
 const KEYS_PULAR_CAMPO = new Set<string>([
   'inv_condutividade', 'inv_produtividade', 'inv_mde', 'inv_mde_camadas',
   'inv_composicoes', 'inv_meap_ambientes', 'inv_meap_zoneamentos',
+  'inv_msr_monitor',                   // o app de campo não agenda satélite
   'inv_lab', 'inv_compactacao', 'inv_precos', 'inv_paletas', 'inv_estilo_presets',
   'inv_bib_laboratorios', 'inv_bib_labs', 'inv_bib_perfis', 'inv_bib_preferencias-analise',
   'inv_bib_equacoes', 'inv_bib_recomendacoes',
@@ -271,6 +281,16 @@ export async function cloudCarregarMapa<T>(id: string, atualizadoEm?: string | n
   if (!row) return null;
   void cacheGravarMapa(row.id, row.atualizadoEm, row.dados);
   return { id: row.id, dados: row.dados };
+}
+
+// Apaga mapas ESCOLHIDOS (não por prefixo) e limpa o cache local de cada um.
+// Devolve quantos o servidor confirmou — 0 sem erro significa RLS negando, e
+// quem chama precisa saber para não dizer "apagado" sem ter apagado.
+export async function cloudExcluirMapas(ids: string[]): Promise<number> {
+  if (!usarDadosSupabase() || ids.length === 0) return 0;
+  const n = await excluirMapasPorIdsSupabase(ids);
+  await Promise.all(ids.map(id => cacheExcluirMapa(id)));
+  return n;
 }
 
 export async function cloudExcluirMapasPorPrefixo(prefixo: string) {

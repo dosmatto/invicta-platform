@@ -26,6 +26,39 @@ no Windows; `~/.invicta-fert-backend` no macOS/Linux.)
 
 Servico em `http://127.0.0.1:8800` — `GET /health`, `POST /interpolar`.
 
+## Robo noturno do satelite (pendencia 40)
+
+Varre os talhoes marcados como monitorados (`inv_msr_monitor`), busca cenas novas
+do Sentinel-2, aplica as regras de aceite e grava as camadas em `inv_mapas_fert`
+— no MESMO formato das feitas a mao, com `automatico: true`.
+
+Roda dentro deste servico, numa thread; qual dos workers do gunicorn executa e
+decidido por uma trava em linha do banco. Cada cena e gravada assim que fica
+pronta, entao a reciclagem do worker (`--max-requests`) custa no maximo uma cena
+— o worker seguinte retoma quando a trava expira (5 min).
+
+**Nada arma sem `MSR_AGENDA=1`.** `GET /health` traz um bloco `agenda` dizendo se
+armou e por que nao.
+
+| Variavel | Padrao | Para que serve |
+|---|---|---|
+| `MSR_AGENDA` | *(vazio)* | `1` liga o robo. Sem ela, no-op. |
+| `SUPABASE_URL` | — | Obrigatoria (ja usada pelo admin de usuarios). |
+| `SUPABASE_SERVICE_ROLE_KEY` | — | Obrigatoria. Passa por cima da RLS — **nunca** vai ao front. |
+| `MSR_TZ` | `America/Sao_Paulo` | Fuso da janela de execucao. |
+| `MSR_JANELA_INI` / `MSR_JANELA_FIM` | `02:00` / `05:30` | Janela local (aceita atravessar a meia-noite). |
+| `MSR_INTERVALO_S` | `300` | De quanto em quanto tempo o laco confere se esta na janela. |
+| `MSR_MAX_CENAS_NOITE` | `60` | Teto de cenas por execucao. |
+| `MSR_MAX_CENAS_TALHAO` | `3` | Teto por talhao, por noite. |
+| `MSR_JANELA_DIAS` | `30` | Quanto olhar para tras quando o talhao nao tem cena guardada. |
+| `MSR_PAUSA_S` | `2` | Respiro entre cenas (o mesmo processo atende usuarios). |
+| `MSR_AVALIAR_WORKERS` | `3` | Paralelismo da rota `/ndvi-avaliar` (nao do robo, que e serial). |
+
+**Testar sem esperar a madrugada:** `POST /msr-agenda-rodar` dispara uma passada
+na hora. Exige `X-Api-Key` SEMPRE — mesmo quando `INVICTA_API_KEY` nao esta
+definida (ai a rota responde 503 e fica indisponivel). As demais rotas so gastam
+CPU de quem chama; esta ESCREVE no banco de todos os clientes.
+
 ## Conexao com o front
 
 O front usa `NEXT_PUBLIC_INTERP_URL` (padrao `http://127.0.0.1:8800`).

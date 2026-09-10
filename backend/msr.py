@@ -33,7 +33,7 @@ except Exception as _e:  # pragma: no cover
     _HAS_MSR = False
     _ERR_MSR = repr(_e)  # mostrado em /health p/ diagnosticar dep faltando no container
 
-VERSION = "msr-3-geotiff"
+VERSION = "msr-4-avaliar"
 
 STAC_URL = "https://earth-search.aws.element84.com/v1"
 COLECAO = "sentinel-2-l2a"
@@ -55,7 +55,11 @@ _GDAL_ENV = dict(
 
 
 def _buscar_itens(bbox, data_ini: str, data_fim: str, nuvem_max: float, limite: int = 30):
-    """Cenas Sentinel-2 L2A com nuvem < limite no período (mais recentes 1º)."""
+    """Cenas Sentinel-2 L2A com nuvem < limite no periodo (mais recentes 1o).
+
+    `limit` (tamanho de PAGINA do pystac-client) e diferente de `max_items` (teto
+    total): sem ele, um pedido de 3 anos vira dezenas de round-trips ao
+    earth-search, cada um com 10 itens. Com 100, 600 cenas saem em 6 idas."""
     cat = Client.open(STAC_URL)
     search = cat.search(
         collections=[COLECAO],
@@ -63,6 +67,7 @@ def _buscar_itens(bbox, data_ini: str, data_fim: str, nuvem_max: float, limite: 
         datetime=f"{data_ini}/{data_fim}",
         query={"eo:cloud_cover": {"lt": float(nuvem_max)}},
         max_items=limite,
+        limit=min(int(limite), 100),
     )
     itens = list(search.items())
     itens.sort(key=lambda it: it.datetime, reverse=True)
@@ -88,12 +93,16 @@ def _cena_meta(item) -> dict[str, Any]:
 
 
 def listar_cenas(polygon_geojson: dict, data_ini: str, data_fim: str,
-                 nuvem_max: float = 60.0) -> dict[str, Any]:
-    """Lista as cenas disponíveis (sem ler COG) p/ o usuário escolher quais ver."""
+                 nuvem_max: float = 60.0, limite: int = 30) -> dict[str, Any]:
+    """Lista as cenas disponiveis (sem ler COG) p/ o usuario escolher quais ver.
+
+    `limite` existe para o grafico de selecao (pendencia 40): 3 anos de Sentinel-2
+    passam de 200 cenas, e o default de 30 truncava o historico em silencio. Quem
+    nao passa nada continua recebendo 30, como antes."""
     if not _HAS_MSR:
         raise ValueError("Dependências do MSR ausentes no backend (rasterio / pystac-client).")
     poly = shape(polygon_geojson)
-    itens = _buscar_itens(poly.bounds, data_ini, data_fim, nuvem_max)
+    itens = _buscar_itens(poly.bounds, data_ini, data_fim, nuvem_max, limite)
     return {"cenas": [_cena_meta(it) for it in itens]}
 
 
@@ -158,6 +167,39 @@ def _clip(grid: np.ndarray, gx: np.ndarray, gy: np.ndarray, poly) -> np.ndarray:
     pts = shapely.points(XX.ravel(), YY.ravel())
     dentro = shapely.contains(poly, pts).reshape(XX.shape)
     return np.where(dentro, grid, np.nan)
+
+
+def _mascara_dentro(poly, minx, miny, maxx, maxy, nx: int, ny: int):
+    """Máscara booleana da grade (True = centro da célula dentro do talhão).
+
+    Extraída de gerar_indices para a avaliação de cenas usar a MESMA regra de
+    "dentro do talhão" — e, principalmente, para calculá-la UMA vez por lote: o
+    polígono não muda entre as cenas, e este é o passo caro em talhão recortado.
+    Devolve (dentro, n_dentro, pixel_m_real)."""
+    gx = minx + (np.arange(nx) + 0.5) * (maxx - minx) / nx
+    gy = maxy - (np.arange(ny) + 0.5) * (maxy - miny) / ny
+    XX, YY = np.meshgrid(gx, gy)
+    dentro = shapely.contains(poly, shapely.points(XX.ravel(), YY.ravel())).reshape(XX.shape)
+    pix_y = (maxy - miny) / ny * 111320.0
+    pix_x = (maxx - minx) / nx * 111320.0 * math.cos(math.radians((miny + maxy) / 2.0))
+    return dentro, int(dentro.sum()), round((pix_x + pix_y) / 2.0, 1)
+
+
+# Avaliação: grade GROSSA, adaptada ao tamanho do talhão. Um pixel fixo erraria
+# nas duas pontas — 40 m num talhão de 2 ha dá uma grade 4x4 (percentual sem
+# significado), e 40 m num de 1.000 ha dá 80x80 sem necessidade. Mirar ~30
+# células no lado maior mantém o custo baixo e o número confiável.
+AVAL_CELULAS_ALVO = 30
+AVAL_PIXEL_MIN = 20.0
+AVAL_PIXEL_MAX = 60.0
+
+
+def _pixel_avaliacao(minx, miny, maxx, maxy) -> float:
+    lat0 = (miny + maxy) / 2.0
+    larg_m = (maxx - minx) * 111320.0 * max(math.cos(math.radians(lat0)), 1e-6)
+    alt_m = (maxy - miny) * 111320.0
+    lado = max(larg_m, alt_m)
+    return float(min(max(lado / AVAL_CELULAS_ALVO, AVAL_PIXEL_MIN), AVAL_PIXEL_MAX))
 
 
 def gerar_ndvi(polygon_geojson: dict, data_ini: str, data_fim: str,
@@ -286,15 +328,7 @@ def gerar_indices(polygon_geojson: dict, cena_id: str, indices: list[str],
         for nome in bandas:
             bandas[nome] = np.where(boa, bandas[nome], np.nan)
 
-    gx = minx + (np.arange(nx) + 0.5) * (maxx - minx) / nx
-    gy = maxy - (np.arange(ny) + 0.5) * (maxy - miny) / ny
-    XX, YY = np.meshgrid(gx, gy)
-    dentro = shapely.contains(poly, shapely.points(XX.ravel(), YY.ravel())).reshape(XX.shape)
-    n_dentro = int(dentro.sum())
-
-    pix_y = (maxy - miny) / ny * 111320.0
-    pix_x = (maxx - minx) / nx * 111320.0 * math.cos(math.radians((miny + maxy) / 2.0))
-    pix = round((pix_x + pix_y) / 2.0, 1)
+    dentro, n_dentro, pix = _mascara_dentro(poly, minx, miny, maxx, maxy, nx, ny)
 
     resultados: dict[str, Any] = {}
     for ind in indices:
@@ -315,6 +349,94 @@ def gerar_indices(polygon_geojson: dict, cena_id: str, indices: list[str],
         "mascara": bool(boa is not None),
         "resultados": resultados,
     }
+
+
+# ---------------------------------------------------------------- avaliação barata de cenas (pendência 40)
+# O catálogo só informa `eo:cloud_cover`, que é a nuvem da CENA INTEIRA (~110 km).
+# Um talhão pode estar limpo numa cena de 40% e encoberto numa de 5%. Aqui lemos
+# a máscara SCL (e, se valer a pena, red/nir) numa grade GROSSA para responder o
+# que interessa: quanto DESTE talhão está limpo, e qual o vigor médio. Custa uma
+# fração de /indices e é o que alimenta o gráfico de seleção e o robô noturno.
+
+
+def _itens_por_ids(ids: list[str]) -> dict[str, Any]:
+    """UMA busca STAC para vários ids (em vez de uma por cena)."""
+    if not ids:
+        return {}
+    cat = Client.open(STAC_URL)
+    itens = list(cat.search(collections=[COLECAO], ids=list(ids), max_items=len(ids)).items())
+    return {it.id: it for it in itens}
+
+
+def avaliar_cenas(polygon_geojson: dict, cenas: list[str], pixel_m: float = 0.0,
+                  indice: str = "NDVI", corte_limpo: float = 0.0,
+                  workers: int = 3) -> dict[str, Any]:
+    """% de pixels limpos DENTRO do talhão + média do índice, por cena.
+
+    `corte_limpo` é um curto-circuito: abaixo dele nem lemos as bandas (a maioria
+    das cenas reprova na nuvem, e assim se evitam 2 dos 3 acessos ao COG).
+    `pixel_m=0` escolhe a resolução sozinho (ver _pixel_avaliacao)."""
+    import indices as cat
+    from concurrent.futures import ThreadPoolExecutor
+    if not _HAS_MSR:
+        raise ValueError("Dependências do MSR ausentes no backend (rasterio / pystac-client).")
+    if not cenas:
+        raise ValueError("Nenhuma cena para avaliar.")
+    if indice not in cat.CATALOGO:
+        raise ValueError(f"Índice desconhecido: {indice}")
+
+    poly = shape(polygon_geojson)
+    minx, miny, maxx, maxy = poly.bounds
+    pix_alvo = float(pixel_m) if pixel_m and pixel_m > 0 else _pixel_avaliacao(minx, miny, maxx, maxy)
+    nx, ny = _grid_dims(minx, miny, maxx, maxy, pix_alvo)
+    dst_transform = from_bounds(minx, miny, maxx, maxy, nx, ny)
+    dentro, n_dentro, pix = _mascara_dentro(poly, minx, miny, maxx, maxy, nx, ny)
+    if n_dentro == 0:
+        raise ValueError("O talhão não cobre nenhum pixel na resolução da avaliação.")
+
+    itens = _itens_por_ids(cenas)
+    necessarias = cat.bandas_necessarias([indice])
+
+    def _uma(cena_id: str) -> dict[str, Any]:
+        item = itens.get(cena_id)
+        if item is None:
+            return {"id": cena_id, "fonte": "sentinel", "erro": "cena não encontrada no catálogo"}
+        base = dict(_cena_meta(item))
+        base["fonte"] = "sentinel"
+        bandas: dict[str, np.ndarray] = {}
+        try:
+            boa = _ler_scl(item, dst_transform, nx, ny)
+            limpos = dentro if boa is None else (dentro & boa)
+            pct = round(100.0 * float(limpos.sum()) / n_dentro, 1)
+            base["pct_limpo"] = pct
+            base["sem_mascara"] = boa is None
+            if pct < float(corte_limpo):
+                base["ndvi_medio"] = None          # curto-circuito: já reprovou
+                return base
+            for nome in necessarias:
+                assets = ASSETS_BANDA.get(nome)
+                if not assets:
+                    raise ValueError(f"Sentinel-2 sem banda {nome}.")
+                href, sc, of, nd = _asset(item, assets)
+                bandas[nome] = _ler_reproj(href, sc, of, nd, dst_transform, nx, ny)
+            g = np.where(limpos, cat.calcular(indice, bandas), np.nan).astype("float32")
+            st = cat.stats_de(g, n_dentro)
+            base["ndvi_medio"] = st["media"]
+            base["min"] = st["min"]
+            base["max"] = st["max"]
+            return base
+        except Exception as e:  # uma cena ruim não derruba o lote
+            base["erro"] = str(e)
+            base.setdefault("pct_limpo", None)
+            base.setdefault("ndvi_medio", None)
+            return base
+        finally:
+            bandas.clear()
+
+    n_workers = max(1, min(int(workers), len(cenas)))
+    with ThreadPoolExecutor(max_workers=n_workers) as ex:
+        out = list(ex.map(_uma, cenas))   # map preserva a ordem de entrada
+    return {"pixel_m": pix, "indice": indice, "nx": int(nx), "ny": int(ny), "cenas": out}
 
 
 # ---------------------------------------------------------------- imagem (cor verdadeira)
