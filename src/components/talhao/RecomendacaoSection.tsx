@@ -419,14 +419,14 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
       const custoTotal = finais.reduce((s, d) => s + (d.custo ?? 0), 0);
       const nome = nomeCenario.trim() || `${recSel?.nome ?? eqAplicar?.nome ?? 'Cenário'}`;
       setCenMeta({ id: autoId, origem: modo, recomendacaoId: modo === 'recomendacao' ? recomendacaoId : undefined, nome, geradoEm: Date.now() });
-      // O resultado vive na GAVETA do cenário — então a gaveta dele abre agora.
-      // ANTES do save, de propósito: se a nuvem falhar, o cartão sintético de
-      // `lista` assume e o resultado continua tendo onde aparecer.
-      setCenarioAberto(autoId);
-      // E o formulário recolhe: o cartão novo é o primeiro da lista, logo abaixo
-      // do cabeçalho, então o resultado nasce à vista sem rolagem automática
-      // (rolar daqui mexeria no scroller da aba inteira — o defeito de origem).
-      setFormAberto(false);
+      // APLICAR NÃO TOCA NO FORMULÁRIO NEM ABRE GAVETA (pendência 39). A v2.142.0
+      // recolhia o formulário e escancarava a gaveta do cenário novo; na prática,
+      // quem gera recomendação gera VÁRIAS em sequência — e cada uma fechava a
+      // janela de trabalho e jogava 29 produtos na tela. O formulário fica como
+      // estava e o cenário novo entra RECOLHIDO na lista; quem quiser o resultado
+      // clica nele. A confirmação é o "Salvo como …" logo abaixo do botão, e o
+      // mapa do 1º produto já aparece (doseAtiva não depende de gaveta aberta).
+      setCenarioAberto(null);
       try {
         await salvarCenario({
           talhaoId: nav.talhaoId, safra, importacaoId,
