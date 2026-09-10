@@ -8,6 +8,7 @@
 // `service_role key` NUNCA entra aqui — ela só roda em script/servidor.
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { criarArmazenamentoSessao } from './sessaoStorage';
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -23,6 +24,13 @@ export function getSupabase(): SupabaseClient | null {
     client = createClient(url!, anonKey!, {
       auth: {
         persistSession: true, autoRefreshToken: true, detectSessionInUrl: false,
+        // ONDE A SESSÃO MORA — explícito de propósito. SEM este campo, o
+        // supabase-js escolhe sozinho: testa uma escrita no localStorage e, se
+        // falhar, guarda a sessão SÓ NA MEMÓRIA, calado. Com o localStorage
+        // cheio o teste falha, e aí toda recarga volta para a tela de login —
+        // era exatamente o "está cada vez pedindo login e senha". O adaptador
+        // (sessaoStorage.ts) usa localStorage e, quando ele recusa, IndexedDB.
+        storage: criarArmazenamentoSessao(),
         // O supabase-js, por padrão, usa navigator.locks p/ serializar a auth
         // ENTRE ABAS (Web Locks). Isso fazia a interpolação PARAR ao abrir uma 2ª
         // aba: a nova aba segurava o lock no boot/refresh do token e a 1ª aba

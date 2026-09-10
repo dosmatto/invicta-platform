@@ -34,6 +34,14 @@ const MARCA = '@@LZ@@';
 const PESADAS = new Set<string>([
   'inv_talhoes',          // poligonos de todas as fazendas - o maior ofensor (~7 MB)
   'inv_condutividade',    // variavel fixa por talhao (pontos/grid) - ~2 MB
+  // Estas duas eram as unicas de COLECOES_POR_TALHAO (store.ts) que ainda
+  // ficavam no localStorage, e crescem na mesma proporcao das outras: um laudo
+  // de 84 amostras x ~15 variaveis, e uma grade com os 84 pontos, POR talhao e
+  // POR ano. Enquanto ficaram aqui, comiam o pouco espaco que sobrava - e foi
+  // o localStorage cheio que derrubou a persistencia da SESSAO (ver
+  // sessaoStorage.ts) e a preferencia do modo do mapa (v2.140.0).
+  'inv_lab',              // importacoes de laudo com todos os resultados
+  'inv_grades',           // grades de amostragem com os pontos (lng/lat)
   'inv_produtividade',    // metadados/versoes de colheita
   'inv_composicoes',      // composicoes temporais de indices (IV5)
   'inv_mde',              // metadados das bases altimetricas (MDE)
