@@ -1,5 +1,14 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [37] Correção local entre colhedoras volta a processar mapas grandes
+  '2.143.0': [
+    'PENDÊNCIA 37 — MARCAR "+ CORREÇÃO LOCAL ENTRE COLHEDORAS (POR RAIO)" DAVA "FAILED TO FETCH". Não era internet, nem o arquivo, nem parâmetro errado: o servidor de processamento ficava SEM MEMÓRIA no meio da conta e era derrubado, e o navegador só via a conexão morrer. Corrigido — o talhão de 110 ha com 108 mil pontos e duas máquinas, que falhava sempre, agora processa em ~20 s.',
+    'O QUE ACONTECIA: para achar os vizinhos de cada ponto dentro do raio, o servidor montava DE UMA VEZ a lista de vizinhos de TODOS os pontos. Com o raio de 120 m dessa correção e a densidade de um mapa de colheita (~0,1 ponto por m²), cada ponto tem uns 4.000 vizinhos — 108 mil pontos viravam 430 MILHÕES de índices, algo como 15 GB de memória. O servidor tem 2 GB. Ele era morto antes de responder, e a tela mostrava o erro cru do navegador.',
+    'A CONTA AGORA É FEITA EM BLOCOS: os vizinhos são buscados de 512 pontos por vez e descartados assim que aquele bloco termina. O pico de memória cai de ~15 GB para ~200 MB e o RESULTADO É IDÊNTICO — conferido ponto a ponto contra a versão anterior, mesmo número de pontos corrigidos, mesmos valores.',
+    'A MESMA ARMADILHA ESTAVA NO MAPFILTER LOCAL, que roda em toda limpeza (com ou sem a correção por colhedora) e também na Condutividade. O raio dele é menor (30 m), então ele passava — mas passava consumindo ~1,5 GB dos 2 GB do servidor, ou seja, a um passo do mesmo fim em qualquer mapa um pouco maior. Foi para os mesmos blocos.',
+    'E QUANDO O SERVIDOR REALMENTE CAIR, A MENSAGEM PASSA A SER EM PORTUGUÊS. "Failed to fetch" é o texto que o navegador dá quando a conexão morre, e ele escapava cru na última tentativa de reenvio — agora aparece o aviso de sempre ("Servidor de processamento indisponível… tente de novo em ~1 minuto"), que ao menos diz o que fazer.',
+    'Verificação: teste de equivalência com 8.000 pontos comparando a implementação antiga e a nova nas duas funções — resultado idêntico (`np.array_equal`) na correção local e no MapFilter local; e o caso de 108.527 pontos com raio de 120 m rodando em 19,3 s sem crescimento de memória. Backend (Render) sobe sozinho no push; o mapa em si não mudou de conta nenhuma.',
+  ],
   // [S/N] O resultado do cenário abre ABAIXO dele, e o topo da tela para de se mexer
   '2.142.0': [
     'PENDÊNCIA S/N — CLICAR NUM CENÁRIO NÃO TIRA MAIS VOCÊ DO LUGAR. O resultado abre AGORA dentro da gaveta do próprio cenário, logo abaixo do cartão que você clicou. Antes ele nascia ACIMA da lista — financeiro, produtos, procedência dos mapas, legenda e "Explicar com IA", tudo de uma vez — e empurrava para fora da tela justamente o cartão que você acabou de clicar.',

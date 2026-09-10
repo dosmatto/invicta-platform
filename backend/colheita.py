@@ -26,7 +26,7 @@ from scipy.spatial import cKDTree
 
 import interp
 
-VERSION = "colheita-2-limpar"
+VERSION = "colheita-3-blocos"
 
 
 def _mediana(vals: list[float] | np.ndarray) -> float:
@@ -69,13 +69,33 @@ def _correcao_colhedora_global(val: np.ndarray, maq: np.ndarray, limite: float, 
     return out, {"med_geral": round(med_geral, 1), "maquinas_corrigidas": corrigidos}
 
 
+def _vizinhos(tree, mx, my, raio, chunk: int = 512):
+    """Vizinhos dentro do raio, um ponto por vez, EM BLOCOS.
+
+    query_ball_point sobre TODOS os pontos de uma vez devolve uma lista Python
+    por ponto — ~36 bytes por índice. Com o raio da correção por colhedora
+    (120 m) e a densidade típica de um mapa de colheita (~0,1 pt/m² → ~4.000
+    vizinhos por ponto), 108 mil pontos dariam ~430 milhões de índices ≈ 15 GB:
+    o worker era morto por falta de memória e o front via "Failed to fetch".
+    Em blocos de `chunk` pontos o pico fica em ~200 MB (medido) e o resultado é
+    idêntico — só a lista de vizinhos é descartada a cada bloco.
+    """
+    pts = np.column_stack([mx, my])
+    n = len(pts)
+    for a in range(0, n, chunk):
+        b = min(a + chunk, n)
+        viz = tree.query_ball_point(pts[a:b], r=raio, workers=-1)
+        for j, i in enumerate(range(a, b)):
+            idxs = np.asarray(viz[j], dtype=np.intp)
+            yield i, idxs[idxs != i]
+        del viz
+
+
 def _correcao_colhedora_local(mx, my, val, maq, tree, raio, limite, peso, min_same, min_other):
     fmin, fmax = 1.0 - limite, 1.0 + limite
     out = val.copy()
-    viz = tree.query_ball_point(np.column_stack([mx, my]), r=raio, workers=-1)
     corrigidos = 0
-    for i in range(len(val)):
-        idxs = np.asarray(viz[i], dtype=np.intp); idxs = idxs[idxs != i]
+    for i, idxs in _vizinhos(tree, mx, my, raio):
         if idxs.size == 0:
             continue
         same_m = maq[idxs] == maq[i]
@@ -103,9 +123,7 @@ def _mapfilter_local(mx, my, val, tree, raio, v, aniso_tol_deg, min_neighbors, a
     keep = np.ones(len(val), dtype=bool)
     cos_tol = math.cos(math.radians(aniso_tol_deg))
     dxp, dyp = math.cos(angle), math.sin(angle)
-    viz = tree.query_ball_point(np.column_stack([mx, my]), r=raio, workers=-1)
-    for i in range(len(val)):
-        idxs = np.asarray(viz[i], dtype=np.intp); idxs = idxs[idxs != i]
+    for i, idxs in _vizinhos(tree, mx, my, raio):
         if idxs.size < min_neighbors:
             continue
         dx = mx[idxs] - mx[i]; dy = my[idxs] - my[i]

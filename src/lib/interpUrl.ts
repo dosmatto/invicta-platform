@@ -213,6 +213,11 @@ export async function postBackend(rota: string, body: unknown, opts?: { signal?:
   } catch (e) {
     if (signal?.aborted) throw e;
     if (local) emitirCaiuParaNuvem(false);   // nem o resgate funcionou
+    // A ÚLTIMA tentativa (a de depois do /health voltar) escapava crua: o fetch
+    // falha com TypeError("Failed to fetch") e a tela mostrava esse texto, que
+    // não diz nada a quem usa. É o mesmo caso de "não consegui falar com o
+    // servidor" — inclusive quando ele reinicia no meio da requisição.
+    if (e instanceof TypeError) throw new BackendForaError();
     throw e instanceof Error ? e : new BackendForaError();
   } finally {
     emitirAquecendo(false);
