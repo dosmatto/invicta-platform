@@ -94,6 +94,17 @@ estava) e `ZZ DEMONSTRACAO APPLE`. O revisor da Apple entra e vê exatamente
 esses dois — a fazenda brasileira, que mostra dados de aparência real, e a de
 Cupertino, onde ele consegue coletar.
 
+> ⚠️ **O vínculo com `ZZ DEMONSTRACAO APPLE` está REMOVIDO no momento**
+> (10/09/2026). A mesma conta é usada pela revisão do **Google**, que está em
+> andamento, e não faz sentido mudar o que aquele revisor enxerga no meio da
+> análise. A conta voltou a `1 prod`.
+>
+> **Antes de enviar o app à Apple, remarque `ZZ DEMONSTRACAO APPLE`** em
+> Biblioteca → Acessos → Revisao Loja → Vínculos. Sem isso o revisor da Apple
+> não vê a área de Cupertino e cai exatamente no problema que ela existe para
+> resolver. O cadastro da fazenda, do talhão e da grade continua intacto — é só
+> o vínculo que sai e volta, com um clique.
+
 A senha já existe e foi validada num login real (veja a tabela acima). **Falta
 só transcrevê-la no App Store Connect**, no campo "Login obrigatório" — eu não
 manuseio senha.

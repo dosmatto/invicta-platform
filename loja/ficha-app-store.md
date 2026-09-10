@@ -221,6 +221,12 @@ revisão é reprovada por "não conseguimos entrar".
 lista mostrou só os dois produtores vinculados, e o caminho até a grade de
 Cupertino abriu com os 508 pontos. Detalhes em `loja/demo-apple/LEIA-ME.md`.
 
+> ⚠️ **ANTES DE ENVIAR: remarque `ZZ DEMONSTRACAO APPLE` nos vínculos dessa
+> conta.** Ele foi removido em 10/09/2026 para não alterar o que o revisor do
+> **Google** enxerga durante a análise em andamento. Enquanto estiver removido,
+> o revisor da Apple não vê a área de Cupertino — e sem ela ele não consegue
+> registrar coleta nenhuma. Biblioteca → Acessos → Revisao Loja → Vínculos.
+
 ### O problema do raio de 15 metros
 
 **Este é o risco real de reprovação, e ele não existe no Android** — o Google
