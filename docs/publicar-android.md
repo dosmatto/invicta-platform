@@ -71,11 +71,18 @@ As conferências param o processo, com instruções, se faltar a chave de
 assinatura ou o SDK do Android — em vez de deixar sair um `.aab` sem assinatura
 que só seria recusado lá na loja.
 
-**Numeração automática.** Sai de `APP_VERSION` (`src/constants/version.ts`):
-`versionName` é a versão como ela é (`2.134.0`) e
-`versionCode = maior × 1.000.000 + menor × 1.000 + correção` (`2134000`).
-Se a loja recusar dizendo que o versionCode já existe, é porque a versão não
-subiu desde o último envio — suba `APP_VERSION` e gere de novo.
+**Numeração automática.** Sai de **`APP_CAMPO_VERSION`** (`src/constants/version.ts`)
+— não da `APP_VERSION`, que é a da plataforma web. `versionName` é a versão como
+ela é (`3.0.0`) e `versionCode = maior × 1.000.000 + menor × 1.000 + correção`
+(`3000000`). Se a loja recusar dizendo que o versionCode já existe, é porque a
+versão não subiu desde o último envio — suba `APP_CAMPO_VERSION` e gere de novo.
+
+> **Por que duas versões.** A plataforma sobe de versão várias vezes por semana;
+> o app de campo quase não muda. Enquanto os dois compartilhavam a mesma
+> `APP_VERSION`, cada entrega da plataforma empurrava para as lojas um app
+> "novo" sem uma linha alterada — a 2.138.0 foi publicada sem nenhuma mudança no
+> app desde a 2.136.0. **Só suba a `APP_CAMPO_VERSION` quando o app de campo
+> mudar de verdade.**
 
 ---
 
@@ -125,7 +132,7 @@ A revisão de produção leva de alguns dias a duas semanas na primeira vez.
 
 ## Atualizar o app depois
 
-1. Suba `APP_VERSION` em `src/constants/version.ts` (regra do projeto: toda
+1. Suba `APP_CAMPO_VERSION` em `src/constants/version.ts` (regra do projeto: toda
    mudança sobe a versão e ganha entrada no changelog)
 2. `npm run android:release`
 3. Play Console → **Produção → Criar nova versão** → upload do novo `.aab`

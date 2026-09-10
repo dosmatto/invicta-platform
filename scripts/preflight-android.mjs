@@ -2,8 +2,11 @@
 //
 // 1. Sincroniza a versão: a Play Store recusa um envio cujo versionCode já
 //    exista, e aceita em silêncio um versionName errado — o app ficaria na loja
-//    dizendo "1.0" enquanto o sistema está na 2.8.x. Derivar dos dois de
-//    APP_VERSION acaba com a edição manual (e com o esquecimento dela).
+//    dizendo "1.0" enquanto o app está na 3.x. Derivar dos dois de
+//    APP_CAMPO_VERSION acaba com a edição manual (e com o esquecimento dela).
+//    ATENÇÃO: é a APP_CAMPO_VERSION, não a APP_VERSION. A plataforma web sobe
+//    de versão várias vezes por semana e não deve arrastar o app das lojas
+//    junto — quem manda aqui é a versão do app de campo.
 //    versionCode = maior*1_000_000 + menor*1_000 + correção → 2.134.0 = 2134000.
 //    É monotônico com a versão e não guarda estado; reenviar a MESMA versão dá
 //    código repetido e a loja recusa — que é o certo, ninguém deve publicar
@@ -35,8 +38,8 @@ const localProps = join(raiz, 'android', 'local.properties');
 
 // ── 1. versão ────────────────────────────────────────────────────────────────
 const versao = readFileSync(join(raiz, 'src', 'constants', 'version.ts'), 'utf8')
-  .match(/APP_VERSION\s*=\s*'([^']+)'/)?.[1];
-if (!versao) { console.error('[android] não achei APP_VERSION em src/constants/version.ts'); process.exit(1); }
+  .match(/APP_CAMPO_VERSION\s*=\s*'([^']+)'/)?.[1];
+if (!versao) { console.error('[android] não achei APP_CAMPO_VERSION em src/constants/version.ts'); process.exit(1); }
 
 const [maior, menor, correcao] = versao.split('.').map(Number);
 if ([maior, menor, correcao].some(n => !Number.isInteger(n)) || menor > 999 || correcao > 999) {

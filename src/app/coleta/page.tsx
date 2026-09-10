@@ -32,7 +32,7 @@ import type { PosOperador } from '@/components/coleta/MapaColeta';
 import { useGps } from '@/components/coleta/useGps';
 import { useTelaLigada } from '@/components/coleta/useTelaLigada';
 import { SyncBadge } from '@/components/shared/SyncBadge';
-import { APP_VERSION } from '@/constants/version';
+import { APP_CAMPO_VERSION } from '@/constants/version';
 import {
   ChevronLeft, ChevronRight, MapPin, Crosshair, Layers, List, Download,
   RefreshCw, LogOut, Settings, Camera, CheckCircle2, X, Wifi, WifiOff,
@@ -280,7 +280,7 @@ function TelaInicio({ online, pend, sincronizar, sincronizando, msgSync, instala
       </main>
 
       <p className="flex items-center justify-center gap-2 text-[10px] py-2" style={{ color: '#334155' }}>
-        {emailUsuario() || ''} · INVICTA Campo · v{APP_VERSION}
+        {emailUsuario() || ''} · INVICTA Campo · v{APP_CAMPO_VERSION}
         <SyncBadge />
       </p>
     </div>
@@ -429,7 +429,7 @@ function TelaSelecao({ sel, setSel, online, pend, sincronizar, sincronizando, ms
       )}
 
       <p className="flex items-center justify-center gap-2 text-[10px] py-2" style={{ color: '#334155' }}>
-        {emailUsuario() || ''} · INVICTA Coleta de Solo · v{APP_VERSION}
+        {emailUsuario() || ''} · INVICTA Coleta de Solo · v{APP_CAMPO_VERSION}
         <SyncBadge />
       </p>
     </div>

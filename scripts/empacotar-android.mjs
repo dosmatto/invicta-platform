@@ -28,7 +28,7 @@ const raiz = join(dirname(fileURLToPath(import.meta.url)), '..');
 const ESPELHO = join(homedir(), 'Library/Caches/invicta-android-build');
 
 const versao = readFileSync(join(raiz, 'src/constants/version.ts'), 'utf8')
-  .match(/APP_VERSION\s*=\s*'([^']+)'/)?.[1] ?? 'sem-versao';
+  .match(/APP_CAMPO_VERSION\s*=\s*'([^']+)'/)?.[1] ?? 'sem-versao';
 
 // Sem keystore.properties o Gradle compila assim mesmo e entrega um .aab SEM
 // assinatura — que parece pronto, tem o tamanho certo, e só é recusado lá na

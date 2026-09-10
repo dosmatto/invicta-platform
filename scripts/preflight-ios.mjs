@@ -1,4 +1,4 @@
-// Sincroniza a versão do projeto iOS com APP_VERSION antes de abrir o Xcode.
+// Sincroniza a versão do projeto iOS com APP_CAMPO_VERSION antes de abrir o Xcode.
 //
 // Mesma dor do Android (ver preflight-android.mjs), com um detalhe pior: a App
 // Store aceita em silêncio um MARKETING_VERSION errado. O app subiria para a
@@ -6,7 +6,7 @@
 // sistema está na 2.12.x, e ninguém percebe até um usuário perguntar por que a
 // versão do iPhone é mais antiga que a do Android.
 //
-//   MARKETING_VERSION       = APP_VERSION            (o que o usuário vê)
+//   MARKETING_VERSION       = APP_CAMPO_VERSION      (o que o usuário vê)
 //   CURRENT_PROJECT_VERSION = maior*1_000_000 + menor*1_000 + correção
 //
 // O build é o mesmo número do versionCode do Android, de propósito: os dois
@@ -24,8 +24,8 @@ const raiz = join(dirname(fileURLToPath(import.meta.url)), '..');
 const pbxproj = join(raiz, 'ios', 'App', 'App.xcodeproj', 'project.pbxproj');
 
 const versao = readFileSync(join(raiz, 'src', 'constants', 'version.ts'), 'utf8')
-  .match(/APP_VERSION\s*=\s*'([^']+)'/)?.[1];
-if (!versao) { console.error('[ios] não achei APP_VERSION em src/constants/version.ts'); process.exit(1); }
+  .match(/APP_CAMPO_VERSION\s*=\s*'([^']+)'/)?.[1];
+if (!versao) { console.error('[ios] não achei APP_CAMPO_VERSION em src/constants/version.ts'); process.exit(1); }
 
 const [maior, menor, correcao] = versao.split('.').map(Number);
 if ([maior, menor, correcao].some(n => !Number.isInteger(n)) || menor > 999 || correcao > 999) {

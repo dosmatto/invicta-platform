@@ -1,5 +1,12 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] A plataforma e o app de campo passam a ter versões separadas
+  '2.139.0': [
+    'A PLATAFORMA E O APP DE CAMPO AGORA TÊM VERSÕES SEPARADAS. Até aqui os dois dividiam o mesmo número, e como a plataforma sobe de versão várias vezes por semana, cada entrega daqui empurrava para as lojas um app "novo" — sem uma linha alterada dentro dele. A 2.138.0 foi parar na Play Store sem NENHUMA mudança no app de campo desde a 2.136.0.',
+    'O QUE MUDA NA PRÁTICA: a plataforma continua na numeração de sempre (esta é a 2.139.0). O app de campo passa a ter a sua, recomeçando na 3.0.0, e ela só sobe quando o app de campo mudar de verdade. Mexeu só na plataforma? A versão do app não se move, e nada é enviado às lojas. As próximas do app serão 3.1.0, 3.2.0… e o primeiro número só troca em mudança grande.',
+    'POR QUE 3.0.0 E NÃO 1.0.0: o número interno que as lojas usam para ordenar as atualizações precisa sempre CRESCER, e o último envio já foi com 2.138.0 (código 2.138.000). Começar em 3.0.0 dá o código 3.000.000, que supera o anterior — recomeçar do 1 faria a loja recusar a atualização.',
+    'As telas de Coleta e de Campo passam a exibir a versão DO APP no rodapé; o painel, o portal do produtor e a tela de Configurações seguem exibindo a da plataforma. Os três scripts de empacotamento (Android e iOS) passaram a ler a versão do app de campo — a regra está registrada no CLAUDE.md e em docs/publicar-android.md, para ninguém voltar a subir a versão errada.',
+  ],
   // [S/N] A Play Store barrou o app por uma permissão que ele nunca usou
   '2.138.0': [
     'O ENVIO DO APP PARA A PLAY STORE FOI BARRADO por uma permissão que o app NUNCA USOU — e ela foi removida. A verificação automática da loja recusou a 2.136.0 citando a política "Usar seletores de sistema alternativos para fotos / vídeos": o app declarava READ_MEDIA_IMAGES (ler TODA a galeria do celular), e o Google só aceita isso de apps que são galeria ou gerenciador de fotos. Para quem só precisa de uma imagem de vez em quando, a exigência é usar o seletor do sistema.',

@@ -16,7 +16,7 @@ Store recusaria o envio, e o erro dela é obscuro.
 
 ## Versão — automática
 
-O mesmo comando sincroniza a versão a partir de `APP_VERSION`:
+O mesmo comando sincroniza a versão a partir de `APP_CAMPO_VERSION` (a do app de campo, não a da plataforma):
 
 - `MARKETING_VERSION` = a versão (ex.: `2.12.3`) — é a que o usuário vê
 - `CURRENT_PROJECT_VERSION` = `maior*10000 + menor*100 + correção` (ex.: `21203`)
