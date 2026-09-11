@@ -20,6 +20,7 @@ import { carregarNdviSalvos } from './meap/gerar';
 import { municipioDaFazenda } from './geocodeMunicipio';
 import { centroideGeom } from './recomendacao/zonasGrid';
 import { zonasDoTalhao } from './zonasDoTalhao';
+import { ehComposta, celulasComoZonaTalhao, bindingDasCelulas } from './celulasDaGrade';
 import { bindingAuto, bindingPorPontos, divisasDasZonas, rotulosPorZona } from './meap/fertilidadePorZona';
 import { rotuloDoPonto } from './gradeZonas';
 import type { Epoca } from './periodo';
@@ -174,9 +175,15 @@ export async function carregarContextoRelatorio(
   // persistido, então recalcular aqui é o único jeito de o BOOK chegar ao mesmo
   // lugar que a tela. `zonasDoTalhao` é a cascata padrão > mais recente >
   // snapshot, a mesma que a aba usa.
-  const zonasTalhao = zonasDoTalhao(talhaoId);
+  //
+  // AMOSTRAGEM COMPOSTA: as áreas são as CÉLULAS da grade do laudo, e o vínculo
+  // célula↔amostra é conhecido por construção. Sem esta troca o BOOK cairia nas
+  // zonas de manejo reais do talhão (ou em nenhuma) e escreveria os valores no
+  // lugar errado — a mesma classe de defeito da pendência 38.
+  const zonasTalhao = ehComposta(grade) ? celulasComoZonaTalhao(grade) : zonasDoTalhao(talhaoId);
   const bindZonaNumero: Record<string, number> = (() => {
     if (!zonasTalhao.length || !importacao) return {};
+    if (ehComposta(grade)) return bindingDasCelulas(grade);
     const nums = [...new Set(importacao.resultados.map(r => r.numero))];
     // `numero ?? ordem + 1`: exatamente a leitura do vínculo na aba Fertilidade.
     const pts = (grade?.pontos ?? []).map(p => ({ numero: p.numero ?? p.ordem + 1, lng: p.lng, lat: p.lat }));

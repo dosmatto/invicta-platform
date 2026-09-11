@@ -7,7 +7,9 @@
 // A leitura do `zonasGeojson` precisa do `rotuloZona`, então mora aqui.
 
 import { rotuloZona } from '../meap/rotuloZona';
-import { getTalhoes, getZoneamentosMeap } from '../store';
+import { getGrades, getImportacoesLab, getTalhoes, getZoneamentosMeap } from '../store';
+import { resolverGradeDoLaudo } from '../eloGrade';
+import { ehComposta, celulasComoZonaGeom } from '../celulasDaGrade';
 import type { ZonaGeom } from './dosePorZona';
 
 function daFC(fc: GeoJSON.FeatureCollection | null | undefined): ZonaGeom[] {
@@ -44,4 +46,28 @@ export function zonasDoTalhao(talhaoId?: string | null): ZonaGeom[] {
   const t = getTalhoes().find(x => x.id === talhaoId);
   if (!t?.zonasGeojson) return [];
   try { return daFC(JSON.parse(t.zonasGeojson) as GeoJSON.FeatureCollection); } catch { return []; }
+}
+
+/**
+ * As áreas de UMA recomendação: as células da grade quando o laudo veio de uma
+ * amostragem composta, senão o zoneamento do talhão.
+ *
+ * Existe porque a geometria da composta pertence à GRADE, não ao talhão — quem
+ * só perguntasse `zonasDoTalhao(talhaoId)` casaria as taxas de uma composta com
+ * as zonas de manejo (ou com nenhuma) e escreveria o valor na área errada.
+ */
+export function zonasDaRecomendacao(
+  talhaoId: string | null | undefined,
+  safra: string,
+  importacaoId?: string | null,
+): ZonaGeom[] {
+  if (!talhaoId) return [];
+  if (importacaoId) {
+    const imp = getImportacoesLab(talhaoId, safra).find(i => i.id === importacaoId);
+    if (imp) {
+      const grade = resolverGradeDoLaudo(getGrades(talhaoId, safra), imp.gradeId);
+      if (ehComposta(grade)) return celulasComoZonaGeom(grade);
+    }
+  }
+  return zonasDoTalhao(talhaoId);
 }

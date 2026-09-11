@@ -15,6 +15,7 @@
 import { getGrades, type ImportacaoLab } from '../store';
 import { resolverGradeDoLaudo } from '../eloGrade';
 import { bindingPorPontos, bindingAuto, valorZona } from '../meap/fertilidadePorZona';
+import { ehComposta, bindingDasCelulas } from '../celulasDaGrade';
 import type { ZonaGeom } from './dosePorZona';
 import type { ValoresDaZona } from './doseZonaDireta';
 
@@ -27,6 +28,11 @@ export function bindingDasZonas(
   talhaoId: string, safraNome: string, imp: ImportacaoLab, zonas: ZonaGeom[],
 ): Record<string, number> {
   const grade = resolverGradeDoLaudo(getGrades(talhaoId, safraNome), imp.gradeId);
+  // AMOSTRAGEM COMPOSTA: a célula JÁ SABE o número do seu saco. O vínculo por
+  // localização acertaria, mas tem dois jeitos de errar que aqui não precisam
+  // existir (furo em cima da divisa; laudo faltando uma célula e deslocando o
+  // fallback por ordem).
+  if (ehComposta(grade)) return bindingDasCelulas(grade);
   const pontos = (grade?.pontos ?? []).map(p => ({ numero: p.numero ?? p.ordem + 1, lng: p.lng, lat: p.lat }));
   const nums = [...new Set(imp.resultados.map(r => r.numero))];
   // `bindingPorPontos` pede { id, classe, geometry }; só `id` e `geometry` são

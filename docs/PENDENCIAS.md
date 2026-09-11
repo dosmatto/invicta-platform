@@ -65,6 +65,7 @@ verdadeira (fusão de talhões) chegou depois; foi preciso renumerar.
 | S/N | Guardar e usar viraram coisas diferentes: a marca de fonte de análise (◎) | 2.149.0 | Talhão → NDVI → painel do índice e aba "Camadas salvas"; aviso na aba Zonas |
 | 38 | O relatório por zona não tem mais como voltar aos pontos de coleta (correção) | 2.150.0 | Talhão → Relatórios → "Gerar relatório"; Talhão → Fertilidade → "Processar em zona" (vínculo agora gravado com o mapa) |
 | S/N | Mapa preto: todo raster voltou a aparecer (correção) | 2.151.0 | Qualquer mapa do talhão — NDVI, Fertilidade, Altimetria, Condutividade, Compactação, Produtividade, Recomendação e o fundo das Zonas |
+| 41 | Amostragem composta: células quadráticas com as subamostras distribuídas dentro | 2.152.0 | Talhão → Amostragem → Composta; app de campo; Fertilidade/Recomendação por célula |
 
 > As pendências 1–17 foram entregues antes deste registro existir e não estão
 > catalogadas; procure pelo assunto no `changelog.ts`. Da 18 em diante, tudo

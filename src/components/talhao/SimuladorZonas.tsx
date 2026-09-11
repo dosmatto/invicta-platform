@@ -2,19 +2,20 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useApp } from '@/context/AppContext';
-import { getTalhoes, getFazendas, getPadroesAmostragem, getPadroesElementos, getConfigEtiqueta, getSafras, getGrades, saveGrade, updateGrade, deleteGrade, marcarParaProcessar, garantirCodigoRemessa, ProfundidadeConfig, GradeAmostragem, PontoAmostragem } from '@/lib/store';
+import { getTalhoes, getFazendas, getPadroesAmostragem, getPadroesElementos, getConfigEtiqueta, getSafras, getGrades, saveGrade, updateGrade, deleteGrade, marcarParaProcessar, garantirCodigoRemessa, ProfundidadeConfig, GradeAmostragem } from '@/lib/store';
 import { nomeExport } from '@/lib/nomeExport';
 import { rotuloAno, hojeSaoPauloISO, periodoDeData, rotuloEpoca } from '@/lib/periodo';
 import { classeZona, ORDEM_CLASSES } from '@/lib/zonas';
 import { pode } from '@/lib/empresa';
-import { gerarGrid, pontoInterno, criarValidador, ModoDistribuicao } from '@/lib/grid';
+import { gerarGrid, pontoInterno, ModoDistribuicao } from '@/lib/grid';
 import { gerarEtiquetasPDF, cabecalhoEtiqueta, EtiquetaItem, layoutPorId } from '@/lib/etiquetas';
 import { exportarKML, exportarSHP } from '@/lib/exportGrade';
 import { exportarRelatorioZonasXlsx } from '@/lib/relatorioGrade';
-import { numerarPontosZonas, renumerarPontosZonas, rotuloDoPonto, amostrasDaGrade, amostrasComProfundidade, type ZonaComPontos } from '@/lib/gradeZonas';
+import { numerarPontosZonas, rotuloDoPonto, amostrasDaGrade, amostrasComProfundidade, type ZonaComPontos } from '@/lib/gradeZonas';
 import { rotuloZona } from '@/lib/meap/rotuloZona';
-import { dentroGeom } from '@/lib/recomendacao/zonasGrid';
-import { AlertTriangle, Layers, MapPin, Printer, RotateCcw, Save, Trash2, CheckCircle2, Circle, Pencil, Download, Eye, Move, Plus, Eraser, Check, X, FileSpreadsheet } from 'lucide-react';
+import { useEdicaoPontosZona } from './useEdicaoPontosZona';
+import { EdicaoPontosBarra } from './EdicaoPontosBarra';
+import { AlertTriangle, Layers, MapPin, Printer, RotateCcw, Save, Trash2, CheckCircle2, Circle, Pencil, Download, Eye, Move, FileSpreadsheet } from 'lucide-react';
 
 interface ZonaFeat {
   id: string;          // identidade do POLÍGONO ("01", "01_2") — densidade, seleção
@@ -30,8 +31,7 @@ import { inputStyle } from '@/constants/ui';
 const COR_PONTO = '#0f172a';
 
 export function SimuladorZonas({ safraNome: safraProp }: { safraNome?: string } = {}) {
-  const { nav, setZonasManejo, setPontosSimulados, zonaEvent, setZonaEvent,
-          edicaoAtiva, setEdicaoAtiva, edicaoModo, setEdicaoModo, pontoEvent, setPontoEvent } = useApp();
+  const { nav, setZonasManejo, setPontosSimulados, zonaEvent, setZonaEvent, edicaoAtiva } = useApp();
 
   const [modelo, setModelo] = useState<'A' | 'B'>('A');
   const [dataRef, setDataRef] = useState<string>(() => hojeSaoPauloISO());
@@ -68,10 +68,6 @@ export function SimuladorZonas({ safraNome: safraProp }: { safraNome?: string } 
   const [gradeViewId, setGradeViewId] = useState<string | null>(null); // grade salva exibida no mapa
   const [renomeando, setRenomeando] = useState<string | null>(null);
   const [nomeTemp, setNomeTemp] = useState('');
-  // Edição manual de posição: as posições movidas (override do grid gerado) e a
-  // grade salva de ORIGEM (para salvar por cima, como faz a aba Grid).
-  const [pontosManuais, setPontosManuais] = useState<PontoAmostragem[] | null>(null);
-  const [gradeEditandoId, setGradeEditandoId] = useState<string | null>(null);
 
   function recarregarGrades() {
     if (nav.talhaoId && safraNome) setGrades(getGrades(nav.talhaoId, safraNome, 'zonas'));
@@ -152,119 +148,23 @@ export function SimuladorZonas({ safraNome: safraProp }: { safraNome?: string } 
     () => numerarPontosZonas(porZonaPts, modelo, profs.map(p => p.rotulo)),
     [porZonaPts, modelo, profs],
   );
-  // Posição efetiva: a edição manual (arrastar/add/remover) tem prioridade.
-  const pontosEfetivos = pontosManuais ?? pontosGrade;
+  // Edição manual dos pontos no mapa (mover/add/remover) — a regra é a MESMA da
+  // Amostragem Composta e vive em useEdicaoPontosZona.
+  const gradeVista = useMemo(
+    () => (gradeViewId ? grades.find(g => g.id === gradeViewId) ?? null : null),
+    [gradeViewId, grades],
+  );
+  const areas = useMemo(
+    () => zonas.map(z => ({ chave: z.zonaRot, geometry: z.geometry })),
+    [zonas],
+  );
+  const edicao = useEdicaoPontosZona({
+    pontosGrade, areas, distanciaBorda, modelo, profs, gradeVista, aoSalvar: recarregarGrades,
+  });
+  const { pontosManuais, pontosEfetivos, editandoPontos, gradeSemZona, gradeEditandoId } = edicao;
   // O resumo conta os pontos EFETIVOS: adicionar/remover na edição precisa
   // mudar o número na hora (senão a tela promete um total e salva outro).
   const totalPontos = pontosEfetivos.length;
-  const editandoPontos = edicaoAtiva && pontosManuais != null;
-  // Grade LEGADA (salva antes da numeração por zona): pontos sem `zona`. Add e
-  // Remover reagrupam por zona e colapsariam tudo num saco só — nela, só Mover.
-  const gradeSemZona = editandoPontos && pontosEfetivos.some(p => !p.zona);
-
-  // Geometria de cada zona pelo número que o mapa mostra — para PRENDER o ponto
-  // movido DENTRO da sua própria zona (não só do talhão). Zona multiparte junta
-  // todas as manchas: o ponto pode ir para qualquer pedaço da mesma zona.
-  const geomTalhao = useMemo<GeoJSON.Feature[]>(
-    () => zonas.map(z => ({ type: 'Feature', properties: {}, geometry: z.geometry })),
-    [zonas],
-  );
-  const geomPorZona = useMemo(() => {
-    const m = new Map<string, GeoJSON.Feature[]>();
-    for (const z of zonas) {
-      const arr = m.get(z.zonaRot) ?? [];
-      arr.push({ type: 'Feature', properties: {}, geometry: z.geometry });
-      m.set(z.zonaRot, arr);
-    }
-    return m;
-  }, [zonas]);
-
-  // Eventos de edição vindos do MapView: mover, adicionar, remover.
-  //
-  // MOVER preserva `ordem` e o número da amostra (só muda lng/lat) — protege as
-  // coletas já feitas no campo, presas por `${gradeId}__${ordem}`. O ponto fica
-  // travado DENTRO da sua zona.
-  //
-  // ADICIONAR / REMOVER mudam a contagem da zona, então o `zona-sequencial` tem
-  // de fechar sem buraco: `renumerarPontosZonas` reagrupa por zona e renumera
-  // tudo (é uma edição de DESENHO, feita antes de ir a campo — o mesmo que a
-  // aba Grid faz ao resequenciar).
-  useEffect(() => {
-    if (!pontoEvent) return;
-    const profRotulos = profs.map(p => p.rotulo);
-    setPontosManuais(prev => {
-      const base = prev ?? pontosGrade;
-      if (pontoEvent.tipo === 'mover') {
-        const orig = base.find(p => p.ordem === pontoEvent.ordem);
-        if (!orig) return base;
-        // Prende o ponto DENTRO da sua zona. Se a zona não existe mais (grade
-        // antiga / zoneamento trocado), cai para o contorno do TALHÃO — nunca
-        // solto: melhor um ponto na zona vizinha que um fora da área.
-        const feats = geomPorZona.get(orig.zona ?? '') ?? geomTalhao;
-        const destino = feats.length
-          ? criarValidador({ type: 'FeatureCollection', features: feats }, distanciaBorda)
-              .ajustar(orig.lng, orig.lat, pontoEvent.lng, pontoEvent.lat)
-          : { lng: pontoEvent.lng, lat: pontoEvent.lat };
-        return base.map(p => p.ordem === pontoEvent.ordem
-          ? { ...p, lng: destino.lng, lat: destino.lat, manual: true } : p);
-      }
-      // Add/Remover reagrupam por `zona`. Numa grade LEGADA (salva antes da
-      // numeração por zona) os pontos não têm `zona`: reagrupar jogaria as 4
-      // zonas num grupo só ('') e destruiria a grade num saco composto único.
-      // Nessa grade só o Mover é seguro — barra a mudança de estrutura.
-      if (base.some(p => !p.zona)) return base;
-      if (pontoEvent.tipo === 'remover') {
-        return renumerarPontosZonas(base.filter(p => p.ordem !== pontoEvent.ordem), modelo, profRotulos);
-      }
-      if (pontoEvent.tipo === 'add') {
-        // Em qual zona caiu o clique? O ponto novo TEM de pertencer a uma zona
-        // (é a zona que dá o prefixo e o saco). Fora de todas, ignora — não há
-        // como numerá-lo. `zonaRot` é o número que o mapa mostra, a mesma chave
-        // de agrupamento do resto.
-        const z = zonas.find(z => dentroGeom(z.geometry, pontoEvent.lng, pontoEvent.lat));
-        if (!z) return base;
-        // Profundidade do ponto novo: herda de um ponto EXISTENTE (da mesma zona,
-        // senão qualquer) — nunca vazia, senão o app de campo mostra 0 prof. O
-        // padrão selecionado é o último recurso.
-        const ref = base.find(p => p.zona === z.zonaRot) ?? base[0];
-        const prof = ref?.profundidades?.length ? ref.profundidades : profRotulos;
-        return renumerarPontosZonas(
-          [...base, { lng: pontoEvent.lng, lat: pontoEvent.lat, zona: z.zonaRot, profundidades: prof }],
-          modelo, profRotulos,
-        );
-      }
-      return base;
-    });
-    setPontoEvent(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pontoEvent]);
-
-  // Regerar o grid (mudar parâmetro/zona) descarta as posições manuais e sai da
-  // edição — como a aba Grid. Sem isto, editar depois de mexer num slider deixava
-  // as posições velhas sobre um grid novo.
-  useEffect(() => {
-    setPontosManuais(null); setGradeEditandoId(null); setEdicaoAtiva(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [porZonaPts, modelo, profs]);
-
-  function iniciarEdicaoPontos() {
-    const vista = gradeViewId ? grades.find(g => g.id === gradeViewId) : null;
-    const base = vista ? vista.pontos : pontosGrade;
-    setPontosManuais(base.map(x => ({ ...x })));
-    setGradeEditandoId(vista?.id ?? null);
-    setEdicaoModo('mover');
-    setEdicaoAtiva(true);
-  }
-  function concluirEdicaoPontos() { setEdicaoAtiva(false); }
-  function descartarEdicaoPontos() { setPontosManuais(null); setGradeEditandoId(null); setEdicaoAtiva(false); }
-  // Grava as posições movidas POR CIMA da grade de origem (como a aba Grid).
-  function salvarEdicaoPontos() {
-    if (!gradeEditandoId || pontosEfetivos.length === 0) return;
-    updateGrade(gradeEditandoId, { pontos: pontosEfetivos, customizado: true });
-    setPontosManuais(null); setGradeEditandoId(null); setEdicaoAtiva(false);
-    recarregarGrades();
-  }
-  useEffect(() => () => setEdicaoAtiva(false), [setEdicaoAtiva]);
 
   // Publica os pontos no mapa. Uma grade salva em visualização tem prioridade
   // sobre a simulação ao vivo.
@@ -644,52 +544,14 @@ export function SimuladorZonas({ safraNome: safraProp }: { safraNome?: string } 
       {/* Edição manual dos pontos no mapa (igual à aba Grid: Mover / Add / Remover) */}
       {pode('amostragem') && pontosGrade.length > 0 && (
         !edicaoAtiva ? (
-          <button onClick={iniciarEdicaoPontos}
+          <button onClick={edicao.iniciar}
             className="w-full py-2 rounded text-xs font-semibold flex items-center justify-center gap-2" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
             <Move size={13} /> Editar pontos no mapa {gradeViewId ? '(grade aberta)' : ''}
           </button>
         ) : (
-          <div className="p-2.5 rounded-lg space-y-2" style={{ background: '#0a1f33', border: '1px solid #2e5fa3' }}>
-            <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: '#93c5fd' }}>Edição manual</p>
-            <div className={`grid ${gradeSemZona ? 'grid-cols-1' : 'grid-cols-3'} gap-1`}>
-              {(gradeSemZona
-                ? [['mover', 'Mover', Move]] as const
-                : [['mover', 'Mover', Move], ['adicionar', 'Add', Plus], ['remover', 'Remover', Eraser]] as const
-              ).map(([m, lbl, Ic]) => (
-                <button key={m} onClick={() => setEdicaoModo(m)}
-                  className="py-1.5 rounded text-[10px] font-semibold flex flex-col items-center gap-0.5"
-                  style={{ background: edicaoModo === m ? 'var(--invicta-blue-mid)' : '#1a3a6b', color: edicaoModo === m ? '#fff' : '#93c5fd' }}>
-                  <Ic size={12} /> {lbl}
-                </button>
-              ))}
-            </div>
-            <p className="text-[9px]" style={{ color: '#64748b' }}>
-              {gradeSemZona
-                ? 'Grade antiga (sem numeração por zona): só dá para mover. Gere e salve a grade de novo para poder adicionar e remover pontos.'
-                : <>
-                    {edicaoModo === 'mover' && 'Arraste os pontos. Cada ponto fica preso na sua zona; o número não muda.'}
-                    {edicaoModo === 'adicionar' && 'Clique dentro de uma zona para adicionar um ponto. Ele entra como o último da zona.'}
-                    {edicaoModo === 'remover' && 'Clique num ponto para removê-lo. O sequencial da zona se fecha sem buraco.'}
-                  </>}
-            </p>
-            <div className="flex gap-2">
-              <button onClick={descartarEdicaoPontos}
-                className="flex-1 py-1.5 rounded text-[10px] font-semibold flex items-center justify-center gap-1" style={{ background: '#1a3a6b', color: '#94a3b8' }}>
-                <X size={11} /> Descartar
-              </button>
-              {gradeEditandoId ? (
-                <button onClick={salvarEdicaoPontos}
-                  className="flex-1 py-1.5 rounded text-[10px] font-bold text-white flex items-center justify-center gap-1" style={{ background: 'var(--invicta-green-dark)' }}>
-                  <Check size={11} /> Salvar alterações
-                </button>
-              ) : (
-                <button onClick={concluirEdicaoPontos}
-                  className="flex-1 py-1.5 rounded text-[10px] font-bold text-white flex items-center justify-center gap-1" style={{ background: 'var(--invicta-blue-mid)' }}>
-                  <Check size={11} /> Concluir
-                </button>
-              )}
-            </div>
-          </div>
+          <EdicaoPontosBarra
+            somenteMover={gradeSemZona} termo="zona" temGradeEmEdicao={!!gradeEditandoId}
+            aoDescartar={edicao.descartar} aoSalvar={edicao.salvar} aoConcluir={edicao.concluir} />
         )
       )}
 

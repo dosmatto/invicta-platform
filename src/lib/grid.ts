@@ -46,7 +46,10 @@ function coletarAneis(fc: GeoJSON.FeatureCollection): [number, number][][] {
 }
 
 // ── Conversão lng/lat <-> metros locais ──────────────────────────────────────
-function fatores(lat0: number) {
+// EXPORTADO para lib/gradeComposta.ts: as células quadráticas da amostragem
+// composta e os furos que caem dentro delas precisam do MESMO referencial
+// métrico local, senão a célula é recortada num frame e os pontos gerados noutro.
+export function fatores(lat0: number) {
   const mLat = 111320;
   const mLng = 111320 * Math.cos((lat0 * Math.PI) / 180);
   return { mLat, mLng };

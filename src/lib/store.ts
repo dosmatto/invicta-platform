@@ -15,6 +15,7 @@ import {
 } from './custosProdutor';
 export { ordenarLegendasDoAtributo } from './legendas';
 import type { AmbienteProdutivo } from './meap/tipos';
+import type { CelulaComposta } from './gradeComposta';
 import { cloudPushLista, cloudAindaNaoHidratou, cloudMarcarPendente } from './cloud';
 import { lerListaLocal, gravarListaLocal, removerLocal } from './localComprimido';
 import { moverNaOrdem, renumerar } from './ordemCatalogo';
@@ -782,10 +783,16 @@ export interface GradeAmostragem {
   aleatoriedade: number;
   modoSel: 'regular' | 'aleatorio' | 'equilibrado'; // 'aleatorio' = legado (grades antigas)
   variacaoSel?: number;                             // 0-100: variação da seleção equilibrada
-  metodo?: 'grid' | 'zonas';                  // default 'grid'
+  metodo?: 'grid' | 'zonas' | 'composta';     // default 'grid'
   modelo?: 'A' | 'B';                         // zonas: composta (A) / individual (B)
   modoDist?: 'grade' | 'inteligente';         // zonas: distribuição
   densidadePorZona?: Record<string, number>;  // zonas: override por zona
+  /** COMPOSTA: as células quadráticas, uma por amostra de laboratório.
+   *  A geometria mora AQUI e não no talhão (como `zonasGeojson`) porque duas
+   *  grades do mesmo talhão podem ter recortes diferentes — e porque o app de
+   *  campo já sincroniza `inv_grades`, então a divisa desce junto com a grade. */
+  celulas?: CelulaComposta[];
+  subamostrasPorCelula?: number;              // composta: furos por saco
   /** Código do lote enviado ao laboratório (INV-XXXX-XXXX). Ver lib/remessa.ts.
    *  Nasce na 1ª exportação (etiquetas/conferência) e é o que o laboratório
    *  devolve na API para dizer de qual talhão é o laudo. */
@@ -1355,7 +1362,7 @@ export function deletePadraoAmostragem(id: string) {
 // ── Grades de Amostragem ────────────────────────────────────────────────────
 // Várias grades por talhão+safra; uma marcada como "para processar".
 
-export function getGrades(talhaoId?: string, safra?: string, metodo?: 'grid' | 'zonas'): GradeAmostragem[] {
+export function getGrades(talhaoId?: string, safra?: string, metodo?: GradeAmostragem['metodo']): GradeAmostragem[] {
   let all = loadFiltrado<GradeAmostragem>('inv_grades');
   if (talhaoId) all = all.filter(g => g.talhaoId === talhaoId);
   if (safra) {
@@ -1374,9 +1381,14 @@ export function getGrades(talhaoId?: string, safra?: string, metodo?: 'grid' | '
 // Assinatura de conteúdo de uma grade: se duas grades têm a mesma assinatura,
 // são a MESMA grade (salvamento repetido). Usada pela trava do saveGrade e pela
 // migração de duplicadas.
-function assinaturaGrade(g: Pick<GradeAmostragem, 'talhaoId' | 'safra' | 'epoca' | 'metodo' | 'pontos'>): string {
+function assinaturaGrade(g: Pick<GradeAmostragem, 'talhaoId' | 'safra' | 'epoca' | 'metodo' | 'pontos' | 'celulas'>): string {
   const pts = (g.pontos ?? []).map(p => [p.ordem, p.lng, p.lat, p.numero ?? null]);
-  return `${g.talhaoId}|${g.safra}|${g.epoca}|${g.metodo ?? 'grid'}|${JSON.stringify(pts)}`;
+  // O nº de células entra porque duas compostas podem ter os MESMOS furos e
+  // recortes diferentes (a área de cada amostra muda, os volumes mudam) — só os
+  // pontos as fariam passar por "a mesma grade salva de novo". A assinatura
+  // nunca é gravada — só comparada com outras da mesma execução —, então mudar
+  // o formato não desestabiliza nada do que já está salvo.
+  return `${g.talhaoId}|${g.safra}|${g.epoca}|${g.metodo ?? 'grid'}|${(g.celulas ?? []).length}|${JSON.stringify(pts)}`;
 }
 
 /**

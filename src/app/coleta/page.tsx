@@ -15,6 +15,7 @@ import { emailUsuario, logout, modoOffline } from '@/lib/auth';
 import { rotuloAno } from '@/lib/periodo';
 import { classeZona } from '@/lib/zonas';
 import { rotuloZona } from '@/lib/meap/rotuloZona';
+import { CORES_CELULA } from '@/lib/gradeComposta';
 import { bootCloudCampo } from '@/lib/cloud';
 import {
   RegistroColeta, StatusPonto, COR_STATUS, ROTULO_STATUS,
@@ -420,7 +421,7 @@ function TelaSelecao({ sel, setSel, online, pend, sincronizar, sincronizando, ms
               <Lista titulo="Área de coleta (grade)" vazio="Nenhuma grade de amostragem deste talhão neste ano — gere a grade na plataforma e sincronize."
                 itens={grades.map(g => ({
                   id: g.id, nome: g.nome,
-                  sub: `${g.pontos.length} pontos · ${g.profundidades.map(p => p.rotulo).join(' / ')} · ${g.metodo === 'zonas' ? 'por zonas' : 'grade'}`,
+                  sub: `${g.pontos.length} pontos · ${g.profundidades.map(p => p.rotulo).join(' / ')} · ${g.metodo === 'zonas' ? 'por zonas' : g.metodo === 'composta' ? `composta (${g.celulas?.length ?? 0} células)` : 'grade'}`,
                 }))}
                 onEscolher={it => setSel({ ...sel, gradeId: it.id })} />
             )}
@@ -648,6 +649,22 @@ function TelaMapa({ sel, setSel, online, pend, reload, setReload, sincronizar, s
   // zona). A geometria vem do snapshot em talhao.zonasGeojson (já sincronizado
   // com o aparelho) e as cores saem de classeZona(), as mesmas do desktop.
   const zonasFC = useMemo<GeoJSON.FeatureCollection | null>(() => {
+    // AMOSTRAGEM COMPOSTA: as divisas são as CÉLULAS DA GRADE, que já descem no
+    // `inv_grades` junto com os pontos — não existem em `talhao.zonasGeojson`.
+    // Sem este ramo, o operador abriria a composta no campo sem divisa nenhuma
+    // e não saberia onde um saco termina e o outro começa.
+    if (grade?.metodo === 'composta') {
+      const cs = grade.celulas ?? [];
+      if (cs.length === 0) return null;
+      return {
+        type: 'FeatureCollection',
+        features: cs.map((c, i) => ({
+          type: 'Feature' as const,
+          properties: { cor: CORES_CELULA[i % CORES_CELULA.length], rotulo: c.id, classeLabel: `${c.areaHa} ha` },
+          geometry: c.geometry as GeoJSON.Geometry,
+        })),
+      };
+    }
     if (grade?.metodo !== 'zonas' || !talhao?.zonasGeojson) return null;
     try {
       const fc = JSON.parse(talhao.zonasGeojson) as GeoJSON.FeatureCollection;
@@ -671,13 +688,17 @@ function TelaMapa({ sel, setSel, online, pend, reload, setReload, sincronizar, s
   // legenda: uma entrada por classe presente, na ordem das zonas (Z01, Z02…)
   const legendaZonas = useMemo(() => {
     if (!zonasFC) return [];
+    // Na composta a "classe" é a área da célula: uma entrada por célula viraria
+    // uma legenda com 12 linhas dizendo só quantos hectares cada uma tem. A
+    // divisa colorida no mapa já conta essa história.
+    if (grade?.metodo === 'composta') return [];
     const vistas = new Map<string, string>();
     for (const f of zonasFC.features) {
       const p = f.properties as { cor: string; classeLabel: string };
       if (!vistas.has(p.classeLabel)) vistas.set(p.classeLabel, p.cor);
     }
     return [...vistas].map(([label, cor]) => ({ label, cor }));
-  }, [zonasFC]);
+  }, [zonasFC, grade?.metodo]);
 
   // bbox pra enquadrar: o do talhão, ou (fallback) o dos pontos da grade
   const bboxArea = useMemo<[number, number, number, number] | null>(() => {

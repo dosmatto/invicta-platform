@@ -88,8 +88,15 @@ function partesDe(t: Pick<Talhao, 'geojson'>): GeoJSON.Position[][][] {
   } catch { return []; }
 }
 
-/** Grades do mesmo ciclo e método — as candidatas a fundir uma na outra. */
+/** Grades do mesmo ciclo e método — as candidatas a fundir uma na outra.
+ *
+ *  AMOSTRAGEM COMPOSTA NUNCA FUNDE. O `numero` de cada ponto ali é o número da
+ *  CÉLULA (todos os furos de uma célula levam o mesmo), e fundir renumera os
+ *  pontos que colidem — o que arrebentaria o par célula↔saco e faria o laudo
+ *  cair na área errada. Ela migra inteira para o talhão que fica: duas
+ *  compostas no mesmo talhão são duas grades, e cada uma continua íntegra. */
 function candidataNoHospedeiro(hospedeiro: GradeAmostragem[], v: GradeAmostragem): GradeAmostragem | null {
+  if ((v.metodo ?? 'grid') === 'composta') return null;
   return hospedeiro.find(h => (h.metodo ?? 'grid') === (v.metodo ?? 'grid')
     && (h.ano ?? null) === (v.ano ?? null) && h.epoca === v.epoca) ?? null;
 }

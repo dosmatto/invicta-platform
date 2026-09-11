@@ -3,7 +3,7 @@
 
 // PLATAFORMA (web, /painel e /portal). Muda a cada entrega — várias por semana.
 // O histórico fica em src/constants/changelog.ts.
-export const APP_VERSION = '2.151.0';
+export const APP_VERSION = '2.152.0';
 
 // APP DE CAMPO (INVICTA Coleta, o .aab/.ipa das lojas). Só muda quando o app de
 // campo muda de verdade. Antes, ele herdava a APP_VERSION e ia parar nas lojas
@@ -18,4 +18,4 @@ export const APP_VERSION = '2.151.0';
 //
 // Quem consome: scripts/preflight-android.mjs, scripts/preflight-ios.mjs,
 // scripts/empacotar-android.mjs e as telas de /coleta.
-export const APP_CAMPO_VERSION = '3.0.0';
+export const APP_CAMPO_VERSION = '3.1.0';

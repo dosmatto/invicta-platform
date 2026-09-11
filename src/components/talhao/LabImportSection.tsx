@@ -230,7 +230,7 @@ export function LabImportSection({ safraNome: safraProp }: { safraNome?: string 
         <label className="text-[10px] font-semibold block mb-0.5" style={{ color: '#64748b' }}>Grade (campanha)</label>
         <select value={gradeId} onChange={e => setGradeId(e.target.value)} className="w-full rounded px-2 py-1.5 text-xs outline-none" style={inputStyle}>
           <option value="">Selecione a grade…</option>
-          {grades.map(g => <option key={g.id} value={g.id}>{g.nome} · {g.metodo === 'zonas' ? 'Zonas' : 'Grid'} · {g.pontos.length} pts{g.paraProcessar ? ' · a processar' : ''}</option>)}
+          {grades.map(g => <option key={g.id} value={g.id}>{g.nome} · {g.metodo === 'zonas' ? 'Zonas' : g.metodo === 'composta' ? 'Composta' : 'Grid'} · {g.pontos.length} pts{g.paraProcessar ? ' · a processar' : ''}</option>)}
         </select>
       </div>
 

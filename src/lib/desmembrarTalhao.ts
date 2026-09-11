@@ -200,6 +200,9 @@ export function planejar(talhao: Talhao, parteIndice: number, destino: Destino):
         avisos.push(`"${g.nome}": os números ${colide.slice(0, 6).join(', ')}${colide.length > 6 ? '…' : ''} já existem em "${candidata.nome}" — os pontos entram como uma GRADE SEPARADA no destino, sem renumerar.`);
       }
     }
+    if ((g.metodo ?? 'grid') === 'composta') {
+      avisos.push(`"${g.nome}" é uma amostragem composta: as células foram recortadas do talhão inteiro e não valem mais depois do desmembramento. Ela fica sem as áreas (os pontos e o laudo seguem) — gere a composta de novo nos dois talhões.`);
+    }
     plano.grades.push({
       gradeId: g.id, nome: g.nome, safra: g.safra, saem, ficam: ficamPts,
       temRemessa: !!g.codigoRemessa, temLaudo, colide, fundeCom,
@@ -358,7 +361,9 @@ export function aplicar(talhao: Talhao, plano: PlanoDesmembramento, destino: Des
     // A grade de origem fica só com os pontos que ficam — SEM RENUMERAR. Se
     // não sobrou nenhum, ela não descreve mais nada do talhão: sai.
     if (ga.ficam.length === 0) deleteGrade(ga.gradeId);
-    else updateGrade(ga.gradeId, { pontos: ga.ficam });
+    // A composta perde as células pelo mesmo motivo do clone acima: o recorte
+    // era do talhão inteiro e agora sobra área que não é mais deste talhão.
+    else updateGrade(ga.gradeId, { pontos: ga.ficam, ...(original.metodo === 'composta' ? { celulas: [] } : {}) });
   }
 
   // 3. Laudos — os resultados dos números que saem acompanham os pontos
@@ -435,9 +440,15 @@ export function aplicar(talhao: Talhao, plano: PlanoDesmembramento, destino: Des
   return res;
 }
 
-/** Config da grade sem o que é identidade do registro (id/criadoEm/talhão/pontos). */
+/** Config da grade sem o que é identidade do registro (id/criadoEm/talhão/pontos).
+ *
+ *  AS CÉLULAS DA COMPOSTA NÃO ACOMPANHAM. Elas foram recortadas do talhão
+ *  INTEIRO; na grade que nasce só com a área que saiu, cobririam terra que não é
+ *  mais dela — e a prescrição fecharia o volume sobre a área errada, calada. Sem
+ *  células, a grade deixa de ser tratada como composta até ser gerada de novo,
+ *  que é a leitura honesta. */
 function clonarConfigGrade(g: GradeAmostragem): Omit<GradeAmostragem, 'id' | 'criadoEm' | 'talhaoId' | 'pontos' | 'paraProcessar'> {
-  const { id: _id, criadoEm: _c, talhaoId: _t, pontos: _p, paraProcessar: _pp, ...resto } = g;
+  const { id: _id, criadoEm: _c, talhaoId: _t, pontos: _p, paraProcessar: _pp, celulas: _cel, ...resto } = g;
   return resto;
 }
 

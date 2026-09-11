@@ -11,7 +11,10 @@ export interface ExportInput {
   talhaoNome: string;                    // ex: "FRNFI 21"
   poligono: GeoJSON.FeatureCollection;   // geometria do talhão (ou polígonos das zonas)
   pontos: PontoAmostragem[];
-  poligonoTipo?: 'talhao' | 'zona';      // 'zona' nomeia cada polígono por id/classe
+  // 'zona' nomeia cada polígono por id/classe; 'celula' é a amostragem
+  // composta — mesma estrutura, outra palavra (o campo lê "Celula 03", que é
+  // o número do saco daquela área).
+  poligonoTipo?: 'talhao' | 'zona' | 'celula';
   // Só para o NOME DO ARQUIVO (lib/nomeExport) — opcionais: sem eles o nome sai
   // sem o segmento correspondente, nunca com "undefined".
   fazenda?: string;
@@ -35,13 +38,14 @@ const rotuloExport = (p: PontoAmostragem): string => p.rotulo ?? String(p.ordem 
 
 // ── GeoJSON combinado (polígono + pontos) — usado no Shapefile ────────────────
 function geojsonGrade(input: ExportInput): GeoJSON.FeatureCollection {
-  const ehZona = input.poligonoTipo === 'zona';
+  const ehZona = input.poligonoTipo === 'zona' || input.poligonoTipo === 'celula';
+  const termo = input.poligonoTipo === 'celula' ? 'Celula' : 'Zona';
   const polys: GeoJSON.Feature[] = input.poligono.features
     .filter(f => f.geometry && (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon'))
     .map((f, i) => {
       const pr = (f.properties ?? {}) as { id?: string | number; classe?: string };
-      const nome = ehZona ? `Zona ${pr.id ?? i + 1}` : input.talhaoNome;
-      return { type: 'Feature' as const, properties: ehZona ? { nome, classe: pr.classe ?? '', tipo: 'zona' } : { nome: input.talhaoNome, tipo: 'talhao' }, geometry: f.geometry! };
+      const nome = ehZona ? `${termo} ${pr.id ?? i + 1}` : input.talhaoNome;
+      return { type: 'Feature' as const, properties: ehZona ? { nome, classe: pr.classe ?? '', tipo: input.poligonoTipo ?? 'zona' } : { nome: input.talhaoNome, tipo: 'talhao' }, geometry: f.geometry! };
     });
   const pts: GeoJSON.Feature[] = input.pontos.map(p => ({
     type: 'Feature',
@@ -79,12 +83,13 @@ function esc(s: string) {
 }
 
 export function gerarKML(input: ExportInput): string {
-  const ehZona = input.poligonoTipo === 'zona';
+  const ehZona = input.poligonoTipo === 'zona' || input.poligonoTipo === 'celula';
+  const termo = input.poligonoTipo === 'celula' ? 'Celula' : 'Zona';
   const polys = input.poligono.features
     .filter(f => f.geometry && (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon'))
     .map((f, i) => {
       const pr = (f.properties ?? {}) as { id?: string | number };
-      const nome = ehZona ? `Zona ${pr.id ?? i + 1}` : input.talhaoNome;
+      const nome = ehZona ? `${termo} ${pr.id ?? i + 1}` : input.talhaoNome;
       return `<Placemark><name>${esc(nome)}</name><styleUrl>#talhao</styleUrl>${poligonoKML(f.geometry!)}</Placemark>`;
     })
     .join('\n');
@@ -144,7 +149,10 @@ export async function exportarSHP(input: ExportInput) {
     outputType: 'blob',
     compression: 'DEFLATE',
     prj: PRJ_WGS84,
-    types: { point: 'pontos_amostragem', polygon: input.poligonoTipo === 'zona' ? 'zonas' : 'talhao' },
+    types: {
+      point: 'pontos_amostragem',
+      polygon: input.poligonoTipo === 'celula' ? 'celulas' : input.poligonoTipo === 'zona' ? 'zonas' : 'talhao',
+    },
   });
   baixarBlob(blob, `${nomeBase(input)}_shp.zip`);
 }

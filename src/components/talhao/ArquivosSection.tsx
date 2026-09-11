@@ -18,7 +18,7 @@ import { montarBookOficial, montarPdfDistribuicaoPorParte, abrirOuBaixar } from 
 import { nPartes } from '@/lib/recomendacao/porPoligono';
 import { MONITORES, monitorPorId, gerarShapefileZip } from '@/lib/recomendacao/shapefile';
 import { agruparPorRotulo, type DoseDaZona } from '@/lib/recomendacao/dosePorZona';
-import { zonasDoTalhao } from '@/lib/recomendacao/zonasDoTalhao';
+import { zonasDaRecomendacao } from '@/lib/recomendacao/zonasDoTalhao';
 import { pode } from '@/lib/empresa';
 import { FileText, FileImage, Loader2, FolderArchive, Star, FileCode, Split } from 'lucide-react';
 import { fmtHa } from '@/lib/formato';
@@ -143,7 +143,9 @@ export function ArquivosSection({ safraNome }: { safraNome?: string }) {
             + 'Confira o laudo dessas zonas na aba Fertilidade e reaplique a recomendação.',
           );
         }
-        const geom = new Map(agruparPorRotulo(zonasDoTalhao(nav.talhaoId)).map(z => [z.rotulo, z]));
+        // Numa amostragem COMPOSTA as áreas são as células da grade do laudo,
+        // não o zoneamento do talhão — ver zonasDaRecomendacao.
+        const geom = new Map(agruparPorRotulo(zonasDaRecomendacao(nav.talhaoId, safra, c.importacaoId)).map(z => [z.rotulo, z]));
         const casadas = d.porZona.filter(z => geom.has(z.rotulo));
         if (casadas.length !== d.porZona.length) {
           throw new Error(

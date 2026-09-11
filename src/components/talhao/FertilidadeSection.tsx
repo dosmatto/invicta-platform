@@ -11,6 +11,7 @@ import {
 import { gerarRelatorioFertilidade, type ProfundidadeRel } from '@/lib/relatorioFertilidade';
 import { estatisticaDaPagina, casasDoRotulo } from '@/lib/estatisticaMapa';
 import { zonasDoTalhao } from '@/lib/zonasDoTalhao';
+import { ehComposta, celulasComoZonaTalhao, bindingDasCelulas } from '@/lib/celulasDaGrade';
 import { municipioDaFazenda } from '@/lib/geocodeMunicipio';
 import { pontoDoPoligono } from '@/lib/relatorioDados';
 import {
@@ -255,7 +256,13 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
   // recebe o valor da sua amostra composta.
   // Cascata das zonas (padrão salvo > mais recente > snapshot do talhão) vive em
   // lib/zonasDoTalhao.ts — compartilhada com o relatório de Produtividade.
-  const zonas = useMemo(() => zonasDoTalhao(nav.talhaoId), [nav.talhaoId]);
+  // AMOSTRAGEM COMPOSTA: as "zonas" são as CÉLULAS DA GRADE, não o zoneamento
+  // do talhão. Sem esta troca, o laudo de uma composta seria pintado sobre as
+  // zonas de manejo (ou sobre nenhuma), e o valor iria para a área errada.
+  const zonas = useMemo(
+    () => (ehComposta(grade) ? celulasComoZonaTalhao(grade) : zonasDoTalhao(nav.talhaoId)),
+    [nav.talhaoId, grade],
+  );
 
   // MODO DO MAPA — escolha do usuário quando o talhão tem zonas de manejo:
   //   'interpolar' → krigagem/IDW, com as ferramentas de sempre;
@@ -265,9 +272,15 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
   // abre em 'zona'; grade de pontos abre em 'interpolar'. Sem zonas no talhão
   // não há o que preencher — fica interpolação, sem seletor.
   const [modoEscolhido, setModoEscolhido] = useState<'auto' | 'interpolar' | 'zona'>('auto');
-  const modoMapa: 'interpolar' | 'zona' = zonas.length === 0
-    ? 'interpolar'
-    : modoEscolhido === 'auto' ? (grade?.metodo === 'zonas' ? 'zona' : 'interpolar') : modoEscolhido;
+  // A COMPOSTA NÃO TEM ESCOLHA: o resultado de cada célula vale para a célula
+  // inteira. Interpolar valores compostos cravados em coordenadas arbitrárias
+  // de subamostra não significa nada — e com uma amostra só é impossível
+  // (a interpolação exige 3 pontos).
+  const modoMapa: 'interpolar' | 'zona' = ehComposta(grade) && zonas.length > 0
+    ? 'zona'
+    : zonas.length === 0
+      ? 'interpolar'
+      : modoEscolhido === 'auto' ? (grade?.metodo === 'zonas' ? 'zona' : 'interpolar') : modoEscolhido;
   // Sem importação não há valor para pôr na zona — o modo zona só age com laudo.
   const ehZona = modoMapa === 'zona' && !!importacao;
 
@@ -281,6 +294,8 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
     // fallback p/ zona sem ponto dentro. A tabela continua editável por cima.
     const pontos = (grade?.pontos ?? []).map(p => ({ numero: p.numero ?? p.ordem + 1, lng: p.lng, lat: p.lat }));
     const nums = [...new Set(importacao.resultados.map(r => r.numero))];
+    // Na composta o mapa célula→amostra é conhecido por construção.
+    if (ehComposta(grade)) { setMapaZonaNumero(bindingDasCelulas(grade)); return; }
     setMapaZonaNumero(pontos.length ? bindingPorPontos(zonas, pontos, nums) : bindingAuto(zonas, nums));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ehZona, importacaoId, zonas, grade]);
@@ -1113,7 +1128,16 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
           {/* MODO DO MAPA — só aparece quando o talhão tem zonas de manejo:
               Interpolação (ferramentas de sempre) × Processar em zona (cada
               zona recebe o valor do SEU ponto de amostragem, sem interpolar). */}
-          {podeProcessar && zonas.length > 0 && (
+          {podeProcessar && zonas.length > 0 && ehComposta(grade) && (
+            <div className="p-2 rounded-lg" style={{ background: '#0b1f3a', border: '1px solid #2e5fa3' }}>
+              <p className="text-[10px] font-semibold" style={{ color: '#93c5fd' }}>Amostragem composta</p>
+              <p className="text-[9px] mt-0.5 leading-relaxed" style={{ color: '#64748b' }}>
+                O resultado de cada célula vale para a célula inteira — sem interpolação, e é assim que os
+                volumes fecham por área. Não há escolha de modo aqui.
+              </p>
+            </div>
+          )}
+          {podeProcessar && zonas.length > 0 && !ehComposta(grade) && (
             <div>
               <label className="text-[10px] font-semibold block mb-1" style={{ color: '#64748b' }}>Modo do mapa</label>
               <div className="flex gap-1">

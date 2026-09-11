@@ -7,7 +7,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useApp } from '@/context/AppContext';
-import { getImportacoesLab, getTalhoes, getFazendas, getPlantio, type ImportacaoLab } from '@/lib/store';
+import { getImportacoesLab, getTalhoes, getFazendas, getPlantio, getGrades, type ImportacaoLab } from '@/lib/store';
 import { anoDaSafra } from '@/lib/periodo';
 import { nomeExport } from '@/lib/nomeExport';
 import { ExplicadorRecomendacaoIa } from '@/components/talhao/ExplicadorRecomendacaoIa';
@@ -23,6 +23,8 @@ import { agruparPorRotulo } from '@/lib/recomendacao/dosePorZona';
 import { nutrientesDaEquacao } from '@/lib/recomendacao/doseZonaDireta';
 import { bindingDasZonas, valoresDasZonas } from '@/lib/recomendacao/zonasComLaudo';
 import { zonasDoTalhao } from '@/lib/recomendacao/zonasDoTalhao';
+import { resolverGradeDoLaudo } from '@/lib/eloGrade';
+import { ehComposta, celulasComoZonaGeom } from '@/lib/celulasDaGrade';
 import { classesVisiveis, indiceClasse } from '@/lib/recomendacao/faixas';
 import { ComparadorCenarios } from '@/components/talhao/ComparadorCenarios';
 import { ModalFormulaAvulsa } from '@/components/equacao/ModalFormulaAvulsa';
@@ -282,7 +284,20 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
   // A decisão é do próprio mapa, sem chave na tela: se a dose varia por dentro
   // (veio de interpolação), `todasChapadas` dá falso e continua o raster —
   // nunca achatamos à força uma superfície que de fato varia.
-  const zonasTalhao = useMemo(() => zonasDoTalhao(nav.talhaoId), [nav.talhaoId]);
+  // AMOSTRAGEM COMPOSTA: as áreas são as CÉLULAS da grade que gerou o laudo, e
+  // o modo é obrigatoriamente por área — cada célula tem um resultado só, que
+  // vale para ela inteira. É essa geometria que fecha os volumes.
+  const gradeDoLaudo = useMemo(() => {
+    const imp = importacoes.find(i => i.id === importacaoId) ?? null;
+    if (!imp || !nav.talhaoId) return null;
+    return resolverGradeDoLaudo(getGrades(nav.talhaoId, safra), imp.gradeId);
+  }, [importacoes, importacaoId, nav.talhaoId, safra]);
+  const compostaAtiva = ehComposta(gradeDoLaudo);
+  const zonasTalhao = useMemo(
+    () => (compostaAtiva ? celulasComoZonaGeom(gradeDoLaudo) : zonasDoTalhao(nav.talhaoId)),
+    [compostaAtiva, gradeDoLaudo, nav.talhaoId],
+  );
+  const modoEfetivo: 'interpolar' | 'zona' = compostaAtiva ? 'zona' : modoMapa;
   // A taxa por zona vem PRONTA da dose (`porZona`), calculada direto da equação
   // no momento de aplicar — aqui só casamos com a geometria para desenhar.
   const dosePorZona = useMemo(() => {
@@ -365,7 +380,7 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
     }
     setEstado('carregando');
     try {
-      const porZonaAtivo = modoMapa === 'zona' && zonasTalhao.length > 0;
+      const porZonaAtivo = modoEfetivo === 'zona' && zonasTalhao.length > 0;
       // O caminho por zona não lê mapa nenhum da nuvem.
       const grids = porZonaAtivo ? {} : await carregarGridsTalhao(nav.talhaoId, importacaoId, 'dose');
       const area = talhao?.areaHa ?? 0;
@@ -574,7 +589,7 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
       // interpolação e regravava NO MESMO id do cenário — então um clique aqui
       // desfazia a recomendação por zona já salva, e as abas Arquivos/Relatórios
       // voltavam a entregar o mapa interpolado. Silenciosamente.
-      const porZonaBook = modoMapa === 'zona' && zonasTalhao.length > 0;
+      const porZonaBook = modoEfetivo === 'zona' && zonasTalhao.length > 0;
       const impBook = importacoes.find(i => i.id === importacaoId) ?? null;
       const zonasBook = agruparPorRotulo(zonasTalhao);
       const bindBook = (porZonaBook && impBook && nav.talhaoId)
@@ -690,7 +705,7 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
           "Por zona" e o que está na tela não é por zona, o usuário tem de
           saber POR QUÊ — antes desta caixa, o mapa simplesmente voltava a
           ser o raster interpolado e ele só via "continua interpolado". */}
-      {modoMapa === 'zona' && doseAtiva && !dosePorZona && (
+      {modoEfetivo === 'zona' && doseAtiva && !dosePorZona && (
         <div className="p-2.5 rounded-lg" style={{ background: '#2d1a00', border: '1px solid #92400e' }}>
           <p className="text-[10px] font-bold" style={{ color: '#fbbf24' }}>
             Este mapa NÃO é por zona — está interpolado
@@ -906,8 +921,19 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
           </select>
         </div>
 
+        {/* Amostragem composta: sem escolha de modo — uma taxa por célula. */}
+        {compostaAtiva && zonasTalhao.length > 0 && (
+          <div className="p-2 rounded-lg" style={{ background: '#0b1f3a', border: '1px solid #2e5fa3' }}>
+            <p className="text-[10px] font-semibold" style={{ color: '#93c5fd' }}>Amostragem composta</p>
+            <p className="text-[9px] mt-0.5" style={{ color: '#64748b' }}>
+              Uma taxa por célula ({zonasTalhao.length}): a equação é aplicada ao laudo de cada célula,
+              e o volume sai da área dela. Sem interpolação e sem escolha de modo.
+            </p>
+          </div>
+        )}
+
         {/* Modo do mapa — mesmo par da aba Fertilidade. Só aparece com zoneamento. */}
-        {zonasTalhao.length > 0 && (
+        {!compostaAtiva && zonasTalhao.length > 0 && (
           <div>
             <label className="text-[10px] font-semibold block mb-1" style={{ color: '#cbd5e1' }}>Modo do mapa</label>
             <div className="grid grid-cols-2 gap-1">
