@@ -1,5 +1,15 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Mapa preto: todo raster voltou a aparecer
+  '2.151.0': [
+    'O MAPA VOLTOU A APARECER. Em vez do mapa, a tela mostrava um QUADRADO PRETO cobrindo o talhão inteiro — no NDVI, e também na Fertilidade, Altimetria, Condutividade, Compactação, Produtividade, Recomendação e no fundo das Zonas de Manejo. Todos passam pela mesma camada de desenho, então o defeito era um só.',
+    'NÃO ERA O SEU DADO, NEM O SATÉLITE. A imagem chegava perfeita no navegador: conferido pixel a pixel numa cena real do MCASH 03 — 12.892 pixels com cor, 3.492 transparentes (os cantos fora do pivô) e ZERO pixels pretos. O erro estava só na hora de pintar.',
+    'A CAUSA: uma opção de desenho chamada "pixel sólido" (raster-resampling: nearest). Ela existe desde a v2.7.5 para que, ao dar zoom, cada pixel do mapa apareça como um bloco de cor nítido em vez de borrado — e funcionou por meses. O Chrome mudou, e nas versões atuais essa mesma opção faz a camada inteira virar uma textura PRETA OPACA, sem erro nenhum no console. Reproduzido em Mac e em Windows.',
+    'COMO FOI ISOLADO: com a mesma imagem, nas mesmas coordenadas, a camada desenha certo com a pintura padrão e fica preta NO INSTANTE em que a opção é ligada. E desligá-la depois não recupera — a textura já foi perdida. Por isso recarregar a página às vezes parecia resolver e às vezes não.',
+    'O QUE MUDA NA PRÁTICA: os mapas voltam a aparecer. Em zoom muito alto, a borda entre duas classes de cor fica levemente suavizada em vez de um degrau perfeito — é a única diferença visível, e ela não altera nenhum valor, nenhuma estatística e nenhum PDF (o relatório nunca passou por esta camada). Mapa um pouco mais macio é infinitamente melhor que mapa preto.',
+    'O pixel duro pode voltar quando o Chrome se acertar: o caminho está anotado no código — desenhar, ler um pixel de volta e só manter a opção se ele não vier preto.',
+    'Verificação: reproduzido e corrigido ao vivo no navegador, com a camada renderizando o NDVI correto (laranja, cantos transparentes) assim que a opção sai. npx tsc --noEmit limpo e npm run build ok.',
+  ],
   // [38] O relatório por zona não tem mais como voltar aos pontos de coleta
   '2.150.0': [
     'PENDÊNCIA 38 — FECHADOS OS CAMINHOS POR ONDE O RELATÓRIO AINDA PODIA VOLTAR AOS PONTOS DE COLETA. A 2.148.0 fez o relatório escrever o valor no meio de cada zona, como a tela; esta versão tira as saídas silenciosas que sobravam — situações em que ele desistia das zonas e voltava a escrever os números sobre os pontos de amostragem, amontoados num canto do talhão, sem nenhum aviso.',

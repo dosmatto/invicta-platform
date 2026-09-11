@@ -599,11 +599,31 @@ export function MapView({ mostrarVisaoGeral = false }: { mostrarVisaoGeral?: boo
       : map.getLayer('pontos-circle') ? 'pontos-circle' : undefined;
     try {
       map.addSource(SRC, { type: 'image', url, coordinates });
-      // raster-resampling 'nearest': cada pixel é um bloco de cor SÓLIDO ao dar
-      // zoom (default 'linear' borra e MISTURA as cores das classes nas bordas,
-      // dando a impressão de cor "não pura"). Rótulos/pontos e a borda ficam acima.
+      // SEM `raster-resampling: 'nearest'` — e isto NÃO é esquecimento.
+      //
+      // Ele existia desde a v2.7.5 para o pixel virar um bloco de cor SÓLIDO ao
+      // dar zoom (o 'linear' borra e MISTURA as cores das classes na borda, dando
+      // a impressão de cor "não pura"). Só que no Chrome 152 essa propriedade faz
+      // a camada de IMAGEM renderizar TODA PRETA: textura opaca preta cobrindo o
+      // bbox inteiro, sem um único erro no console. Reproduzido em macOS
+      // (ANGLE/Metal) e em Windows.
+      //
+      // Medido ao vivo, uma variável por vez: o MESMO PNG, nas MESMAS coordenadas,
+      // desenha certo com a pintura padrão e fica preto no instante em que
+      // 'nearest' é ligado — e voltar para 'linear' NÃO recupera, porque a textura
+      // já foi corrompida. O PNG estava íntegro (12.892 pixels opacos, 3.492
+      // transparentes, zero pretos).
+      //
+      // Atingia TODO raster da plataforma — fertilidade, NDVI, altimetria,
+      // condutividade, compactação, produtividade, recomendação e o fundo das
+      // zonas — não só o satélite, porque todos passam por esta camada. Mapa
+      // levemente suavizado é muito melhor que mapa preto.
+      //
+      // Para reintroduzir o pixel duro um dia: desenhar, ler um pixel de volta e
+      // só manter o 'nearest' se não vier preto. Rótulos/pontos e a borda do
+      // talhão continuam acima desta camada.
       map.addLayer({ id: LYR, type: 'raster', source: SRC,
-        paint: { 'raster-opacity': opacity, 'raster-fade-duration': 0, 'raster-resampling': 'nearest' } }, beforeId);
+        paint: { 'raster-opacity': opacity, 'raster-fade-duration': 0 } }, beforeId);
     } catch (e) { console.warn('[mapa-fert] falha ao desenhar raster:', e); }
   }, [fertilidadeOverlay, mapReady]);
 
@@ -644,7 +664,9 @@ export function MapView({ mostrarVisaoGeral = false }: { mostrarVisaoGeral?: boo
     const beforeId = map.getLayer('zona-fill') ? 'zona-fill' : undefined; // SOB as zonas
     try {
       map.addSource(SRC, { type: 'image', url, coordinates });
-      map.addLayer({ id: LYR, type: 'raster', source: SRC, paint: { 'raster-opacity': opacity, 'raster-fade-duration': 0, 'raster-resampling': 'nearest' } }, beforeId);
+      // Sem 'nearest' pelo mesmo motivo da camada de cima (renderiza preto no
+      // Chrome 152) — a explicação completa está lá.
+      map.addLayer({ id: LYR, type: 'raster', source: SRC, paint: { 'raster-opacity': opacity, 'raster-fade-duration': 0 } }, beforeId);
     } catch (e) { console.warn('[meap-fundo] falha ao desenhar raster:', e); }
   }, [zonasFundo, mapReady]);
 
