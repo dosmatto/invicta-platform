@@ -21,9 +21,8 @@ import {
 import { colorirGridComLegenda, temGrid } from '@/lib/raster';
 import { resolverGradeDoLaudo, pontosPorNumero, casarAmostrasComPontos } from '@/lib/eloGrade';
 import { decodeGrid, interpoladorEfetivo, MIN_PTS_MAPA, MIN_PTS_KRIGE } from '@/lib/fertilidade';
-import { rasterizarZonas, rasterizarZonasDose, centroideGeom, type ZonaValor } from '@/lib/recomendacao/zonasGrid';
-import { pontoRotuloGeo } from '@/lib/rotulosMapa';
-import { bindingAuto, bindingPorPontos, divisasDasZonas, valorZona as valorZonaLab } from '@/lib/meap/fertilidadePorZona';
+import { rasterizarZonas, rasterizarZonasDose, type ZonaValor } from '@/lib/recomendacao/zonasGrid';
+import { bindingAuto, bindingPorPontos, divisasDasZonas, rotulosPorZona, valorZona as valorZonaLab } from '@/lib/meap/fertilidadePorZona';
 import { stopsParaBackend, dominioDaLegenda, paresDaClasse, respeitarPadraoHomonima, legendaEmprestada, FAIXAS_CTCE } from '@/lib/legendas';
 import type { Legenda } from '@/lib/legendas';
 import { Play, Layers, Loader2, Eraser, AlertTriangle, Activity, Settings, BookOpen, Save, FileDown, RotateCcw } from 'lucide-react';
@@ -52,7 +51,15 @@ const fmtPonto = (v: number, nut: string) => v.toLocaleString('pt-BR', { minimum
 const OPACIDADE = 1; // fixo 100%
 
 type Ponto = { lng: number; lat: number; valor: number };
-type MapaPronto = { resp: RespInterp; labels: GeoJSON.FeatureCollection; interpoladoEm?: string };
+// `vinculoZona` só existe no mapa POR ZONA: é o par zona ↔ nº da amostra com que
+// o raster foi pintado, INCLUINDO a correção que o usuário fez na tabela. Ele
+// era estado de tela e morria ao sair da aba — e o Gerador de Relatórios, que
+// refaz o vínculo automático, acabava escrevendo na zona o valor de outra
+// amostra quando a coleta tinha caído fora da zona e o agrônomo corrigiu à mão.
+type MapaPronto = {
+  resp: RespInterp; labels: GeoJSON.FeatureCollection; interpoladoEm?: string;
+  vinculoZona?: Record<string, number>;
+};
 
 // Arquitetura: separamos raster (interpolação cara) de renderização (cor barata).
 // A chave NÃO inclui a legenda — assim, trocar legenda/estilo apenas recolore o
@@ -416,21 +423,17 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
       .map(z => ({ id: z.id, geometry: z.geometry, valor: valorZona(z.id, nut, prof) }))
       .filter(z => isFinite(z.valor));
   }
-  // O número da zona vai no PONTO MAIS FUNDO dela (pólo de inacessibilidade,
-  // lib/rotulosMapa), não no centroide de área: o centroide é o centro de MASSA
-  // e, em zona em C/L ou em faixa, cai encostado na divisa — no PDF os valores
-  // de duas zonas vizinhas saíam grudados na mesma linha, um de cada lado, e às
-  // vezes por cima do limite do talhão. O pólo é o ponto que MAIS se afasta de
-  // qualquer borda, então o número fica centrado na mancha e com folga em volta.
-  // Centroide continua como rede de segurança (geometria degenerada).
+  // O número da zona vai no PONTO MAIS FUNDO dela (pólo de inacessibilidade), e
+  // quem decide isso é `rotulosPorZona` — a MESMA função que o Gerador de
+  // Relatórios chama. Ter a regra em dois lugares foi exatamente o que fez a
+  // tela e o BOOK divergirem: aqui o número estava no meio da zona e lá, no
+  // ponto de amostragem. Uma função só, os dois mapas iguais.
   function fcLabelsZona(nut: string, prof: string): GeoJSON.FeatureCollection {
-    const feats: GeoJSON.Feature[] = [];
-    for (const z of zonasComValor(nut, prof)) {
-      const c = pontoRotuloGeo(z.geometry) ?? centroideGeom(z.geometry);
-      // `v` cru junto do texto: a caixa de estatísticas conta o valor da zona, não o arredondado do rótulo.
-      if (c) feats.push({ type: 'Feature', geometry: { type: 'Point', coordinates: c }, properties: { txt: fmtPonto(z.valor, nut), v: z.valor } });
-    }
-    return { type: 'FeatureCollection', features: feats };
+    if (!importacao) return fcVazio();
+    return {
+      type: 'FeatureCollection',
+      features: rotulosPorZona(zonas, importacao, mapaZonaNumero, nut, prof, v => fmtPonto(v, nut)),
+    };
   }
 
   // defaults ao trocar de importação
@@ -587,10 +590,13 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
     const resp = rasterizarZonas(zv, pixelM);
     const labels = fcLabelsZona(nut, prof);
     const interpoladoEm = new Date().toISOString();
-    setCache(c => ({ ...c, [ck(nut, prof)]: { resp, labels, interpoladoEm } }));
+    // O vínculo VAI JUNTO com o mapa: é com ele que este raster foi pintado, e é
+    // ele que o relatório precisa para escrever o mesmo valor em cada zona.
+    const vinculoZona = { ...mapaZonaNumero };
+    setCache(c => ({ ...c, [ck(nut, prof)]: { resp, labels, interpoladoEm, vinculoZona } }));
     if (nav.talhaoId && importacaoId) {
       const gridGz = resp.grid ? await comprimirGrid(resp.grid) : undefined;
-      const dados = { resp: { ...resp, png: '', grid: gridGz }, labels, interpoladoEm };
+      const dados = { resp: { ...resp, png: '', grid: gridGz }, labels, interpoladoEm, vinculoZona };
       cloudSalvarMapa(idNuvem(nav.talhaoId, importacaoId, 'zona', pixelM, '', nut, prof), dados);
       // E O MAPA DA DOSE — sem isto a Recomendação continuava saindo INTERPOLADA
       // mesmo com tudo processado em zona. Ela lê a gaveta `dose20__` ANTES de

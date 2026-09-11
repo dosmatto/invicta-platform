@@ -61,7 +61,9 @@ verdadeira (fusão de talhões) chegou depois; foi preciso renumerar.
 | 39 | Gerar recomendação não fecha mais a janela de produção | 2.145.0 | Talhão → Recomendações → "Nova recomendação" + "Aplicar e salvar" |
 | 40 | Gráfico das cenas do período e processamento em lote | 2.146.0 | Talhão → NDVI / Satélite → Imagens & índices → "Gráfico do período" |
 | 40 | Busca automática de imagens de madrugada, com regras e exclusão em massa | 2.147.0 | Talhão → NDVI → "Busca automática de madrugada" e aba "Camadas salvas"; Produtores → fazenda → Talhões → "Monitoramento por satélite" |
+| 38 | O relatório escreve o valor da zona no mesmo ponto que a tela (correção) | 2.148.0 | Talhão → Relatórios → "Gerar relatório" (mapas de fertilidade por zona) |
 | S/N | Guardar e usar viraram coisas diferentes: a marca de fonte de análise (◎) | 2.149.0 | Talhão → NDVI → painel do índice e aba "Camadas salvas"; aviso na aba Zonas |
+| 38 | O relatório por zona não tem mais como voltar aos pontos de coleta (correção) | 2.150.0 | Talhão → Relatórios → "Gerar relatório"; Talhão → Fertilidade → "Processar em zona" (vínculo agora gravado com o mapa) |
 
 > As pendências 1–17 foram entregues antes deste registro existir e não estão
 > catalogadas; procure pelo assunto no `changelog.ts`. Da 18 em diante, tudo

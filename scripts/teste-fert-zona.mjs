@@ -17,7 +17,8 @@
 // Roda: npm run teste:fertzona
 
 import assert from 'node:assert/strict';
-import { bindingAuto, bindingPorPontos, valorZona, zonasComValor, divisasDasZonas, lerZonasDoTalhao } from '../src/lib/meap/fertilidadePorZona.ts';
+import { bindingAuto, bindingPorPontos, valorZona, zonasComValor, divisasDasZonas, lerZonasDoTalhao, rotulosPorZona } from '../src/lib/meap/fertilidadePorZona.ts';
+import { dentroGeom } from '../src/lib/recomendacao/zonasGrid.ts';
 import { calcularDerivados } from '../src/lib/laudo/nucleo.ts';
 
 let ok = 0, fail = 0;
@@ -143,6 +144,82 @@ t('lerZonasDoTalhao devolve as zonas ordenadas por id', () => {
   assert.deepEqual(lerZonasDoTalhao(JSON.stringify(fc)).map(z => z.id), ['01', '02', '03']);
   assert.deepEqual(lerZonasDoTalhao(undefined), []);
   assert.deepEqual(lerZonasDoTalhao('{ não é json'), []);
+});
+
+console.log('\nONDE O NÚMERO DA ZONA É ESCRITO (rotulosPorZona)');
+// O defeito que originou esta função: a aba Fertilidade e o Gerador de
+// Relatórios tinham CADA UM a sua ideia de onde pôr o número. Na tela ele saía
+// no meio da zona; no BOOK, no PONTO DE AMOSTRAGEM — que num talhão de 4 zonas
+// com 4 amostras compostas fica onde o coletor cravou, muitas vezes colado na
+// borda. As duas telas passam a chamar ESTA função.
+
+const UM = v => v.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
+t('um Point por zona COM valor, e nenhum para a zona sem', () => {
+  const semK = laudo([
+    { numero: 1, profundidade: '0-20', valores: { k: 3.2 } },
+    { numero: 2, profundidade: '0-20', valores: { ca: 45 } },   // sem K
+    { numero: 3, profundidade: '0-20', valores: { k: 1.8 } },
+  ]);
+  const rot = rotulosPorZona(ZONAS, semK, BIND, 'k', '0-20', UM);
+  assert.equal(rot.length, 2);
+  for (const f of rot) assert.equal(f.geometry.type, 'Point');
+  assert.deepEqual(rot.map(f => f.properties.txt), ['3,2', '1,8']);
+});
+
+t('o número cai DENTRO da própria zona', () => {
+  const rot = rotulosPorZona(ZONAS, LAUDO, BIND, 'ph', '0-20', UM);
+  assert.equal(rot.length, 3);
+  rot.forEach((f, i) => {
+    const [lng, lat] = f.geometry.coordinates;
+    assert.ok(dentroGeom(ZONAS[i].geometry, lng, lat), 'rótulo da zona ' + ZONAS[i].id + ' caiu fora dela');
+  });
+});
+
+t('O CASO DO BOOK: o número NÃO vai para o ponto de amostragem', () => {
+  // Coletas propositalmente encostadas na borda esquerda de cada faixa — é o
+  // que o relatório desenhava antes, e o motivo do print com os valores na
+  // divisa. O rótulo tem de ignorar a coleta e ir para o meio da zona.
+  const naBorda = [
+    { numero: 1, lng: -50.9991, lat: -24.9999 },
+    { numero: 2, lng: -50.9891, lat: -24.9999 },
+    { numero: 3, lng: -50.9791, lat: -24.9999 },
+  ];
+  const bind = bindingPorPontos(ZONAS, naBorda, [1, 2, 3]);
+  assert.deepEqual(bind, { '01': 1, '02': 2, '03': 3 });   // o vínculo continua o mesmo
+  const rot = rotulosPorZona(ZONAS, LAUDO, bind, 'ph', '0-20', UM);
+  rot.forEach((f, i) => {
+    const [lng, lat] = f.geometry.coordinates;
+    const d = Math.hypot(lng - naBorda[i].lng, lat - naBorda[i].lat);
+    assert.ok(d > 0.002, 'rótulo da zona ' + ZONAS[i].id + ' ficou em cima da coleta (dist ' + d.toFixed(5) + ')');
+    assert.ok(dentroGeom(ZONAS[i].geometry, lng, lat));
+    // faixa de 0,01 x 0,01 grau: o meio dela é o centro, longe das duas bordas
+    assert.ok(Math.abs(lat - (-24.995)) < 0.002, 'saiu da faixa central em latitude');
+  });
+});
+
+t('o texto vem do fmt do chamador; o valor cru vai junto em v', () => {
+  const [f] = rotulosPorZona(ZONAS, LAUDO, BIND, 't', '0-20', v => v + ' un');
+  assert.equal(f.properties.txt, '45.2 un');
+  assert.equal(f.properties.v, 45.2);
+});
+
+t('sem zona vinculada devolve lista vazia (o chamador decide o resto)', () => {
+  assert.deepEqual(rotulosPorZona(ZONAS, LAUDO, {}, 'ph', '0-20', UM), []);
+  assert.deepEqual(rotulosPorZona([], LAUDO, BIND, 'ph', '0-20', UM), []);
+});
+
+t('zona de geometria degenerada ainda recebe numero (rede de seguranca)', () => {
+  // `pontoRotuloGeo` devolve null quando nao ha anel com 3 vertices. A zona
+  // continua pintada no raster, entao ficar SEM numero seria pior: cai no
+  // centroide. Se todas caissem fora, o relatorio perderia os rotulos e
+  // voltaria aos pontos de amostragem — o defeito original.
+  const degenerada = [{ id: '01', classe: 'Alta', geometry: { type: 'Polygon', coordinates: [[[-51, -25], [-50.99, -25]]] } }];
+  const rot = rotulosPorZona(degenerada, LAUDO, { '01': 1 }, 'ph', '0-20', UM);
+  assert.equal(rot.length, 1);
+  assert.equal(rot[0].properties.txt, '5,2');
+  const [lng, lat] = rot[0].geometry.coordinates;
+  assert.ok(Number.isFinite(lng) && Number.isFinite(lat));
 });
 
 console.log(`\n${ok} passaram, ${fail} falharam`);

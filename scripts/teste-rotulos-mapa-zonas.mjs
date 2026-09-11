@@ -256,5 +256,38 @@ t('geometria que nao e poligono devolve null (o chamador cai no centroide)', () 
 });
 
 
+// Zona em ARCO FINO — uma bordadura/terraço seguindo curva de nível. É a forma
+// em que a varredura de 14 nós sobre a bbox não acerta NENHUM ponto dentro: a
+// bbox é o quadrado inteiro do arco e a faixa tem poucos metros. O fallback
+// antigo devolvia o vértice do meio — o número EM CIMA da divisa.
+const arco = (R, w, a0, a1, n = 60) => {
+  const fora = [], dentro = [];
+  for (let i = 0; i <= n; i++) {
+    const a = a0 + (a1 - a0) * (i / n);
+    fora.push([Math.cos(a) * (R + w / 2), Math.sin(a) * (R + w / 2)]);
+    dentro.push([Math.cos(a) * (R - w / 2), Math.sin(a) * (R - w / 2)]);
+  }
+  const anel = [...fora, ...dentro.reverse()];
+  anel.push(anel[0]);
+  return anel;
+};
+
+t('ZONA EM ARCO FINO: o polo fica DENTRO, nao num vertice da divisa', () => {
+  const anel = arco(800, 4, 0, Math.PI / 2);
+  const p = poloDeInacessibilidade([anel]);
+  assert.ok(dentroDoPoligono(p.x, p.y, [anel]), 'polo fora do arco: ' + p.x + ',' + p.y);
+  const emVertice = anel.some(([x, y]) => Math.abs(x - p.x) < 1e-9 && Math.abs(y - p.y) < 1e-9);
+  assert.ok(!emVertice, 'polo caiu num vertice do anel — numero em cima da divisa');
+  assert.ok(p.raio > 0.5, 'polo praticamente colado na borda: raio ' + p.raio);
+});
+
+t('arco fino de 2 m tambem resolve (o caso mais apertado que a grade grossa perde)', () => {
+  for (const [R, w] of [[500, 2], [800, 2], [800, 4]]) {
+    const anel = arco(R, w, 0, Math.PI / 2);
+    const p = poloDeInacessibilidade([anel]);
+    assert.ok(dentroDoPoligono(p.x, p.y, [anel]), 'R=' + R + ' w=' + w + ': polo fora');
+  }
+});
+
 console.log(`\n${ok} passaram, ${fail} falharam\n`);
 process.exit(fail ? 1 : 0);

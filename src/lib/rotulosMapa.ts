@@ -116,9 +116,17 @@ export function poloDeInacessibilidade(aneis: Ponto[][], passos = 14): Polo {
   };
 
   varrer(x0, y0, x1, y1, passos);
+  // FAIXA FINA (carreador, bordadura de 15 m num talhão de 1 km): a grade de
+  // `passos` nós sobre a bbox pode não acertar NENHUM ponto dentro. Antes isso
+  // ia direto para o vértice do meio — um ponto EM CIMA da divisa, que é o
+  // defeito que este módulo existe para evitar. Tenta de novo, denso.
+  if (melhor.raio < 0) varrer(x0, y0, x1, y1, passos * 4);
   if (melhor.raio < 0) {
-    // Polígono fininho demais para a grade acertar: usa o vértice do meio, que
-    // ao menos pertence à mancha — melhor que o centro da bbox, que pode estar fora.
+    // Nem assim. O centroide costuma estar dentro numa faixa reta; o vértice do
+    // meio é o último recurso — ao menos pertence à mancha, o que o centro da
+    // bbox não garante.
+    const c = centroideDoAnel(externo);
+    if (dentroDoPoligono(c[0], c[1], aneis)) return { x: c[0], y: c[1], raio: distanciaBorda(c[0], c[1], aneis) };
     const m = externo[Math.floor(externo.length / 2)];
     return { x: m[0], y: m[1], raio: 0 };
   }

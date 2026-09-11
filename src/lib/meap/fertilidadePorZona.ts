@@ -13,7 +13,8 @@
 // não rodava em Node — o caminho da fertilidade por zona ficava sem UM teste.
 // A rasterização/cor continua em `recomendacao/zonasGrid` e `lib/raster`.
 
-import { dentroGeom, type ZonaValor } from '../recomendacao/zonasGrid.ts';
+import { dentroGeom, centroideGeom, type ZonaValor } from '../recomendacao/zonasGrid.ts';
+import { pontoRotuloGeo } from '../rotulosMapa.ts';
 import type { ImportacaoLab } from '../store';
 
 export interface ZonaGeom { id: string; classe: string; geometry: GeoJSON.Geometry }
@@ -108,6 +109,44 @@ export function zonasComValor(
   return zonas
     .map(z => ({ id: z.id, geometry: z.geometry, valor: valorZona(imp, mapaZonaNumero, z.id, nut, prof) }))
     .filter(z => isFinite(z.valor));
+}
+
+/**
+ * OS NÚMEROS DO MAPA POR ZONA — um Point por zona com valor, no ponto mais
+ * FUNDO dela (`pontoRotuloGeo`: o que mais se afasta de qualquer divisa).
+ *
+ * Existe como função ÚNICA porque tela e PDF já divergiram por terem duas
+ * cópias da mesma ideia: a aba Fertilidade montava os rótulos por zona na mão e
+ * o Gerador de Relatórios (o BOOK) nem sabia que o modo existia — caía nos
+ * PONTOS DE AMOSTRAGEM, e num talhão de 4 zonas os 4 números saíam onde o
+ * coletor cravou o ponto, não no meio da zona. Quem desenha mapa por zona chama
+ * daqui; corrigir a regra é corrigir os dois de uma vez.
+ *
+ * Devolve só os Points: as DIVISAS (`divisasDasZonas`) entram por fora, porque
+ * elas aparecem mesmo quando os valores estão desligados no PDF.
+ *
+ * `fmt` é do chamador — as casas decimais do rótulo são preferência de análise.
+ */
+export function rotulosPorZona(
+  zonas: ZonaGeom[], imp: ImportacaoLab, mapaZonaNumero: Record<string, number>,
+  nut: string, prof: string, fmt: (v: number) => string,
+): GeoJSON.Feature[] {
+  const feats: GeoJSON.Feature[] = [];
+  for (const z of zonasComValor(zonas, imp, mapaZonaNumero, nut, prof)) {
+    // Centroide como rede de segurança: `pontoRotuloGeo` devolve null em
+    // geometria degenerada (anel com menos de 3 vértices), e zona pintada no
+    // raster que ficasse SEM número seria pior do que número em lugar mediano.
+    const c = pontoRotuloGeo(z.geometry) ?? centroideGeom(z.geometry);
+    if (!c) continue;
+    // `v` cru junto do texto: a caixa ESTATÍSTICAS conta o valor da zona, não o
+    // arredondado do rótulo — assim ela nunca discorda do que está escrito.
+    feats.push({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: c },
+      properties: { txt: fmt(z.valor), v: z.valor },
+    });
+  }
+  return feats;
 }
 
 /** As DIVISAS das zonas como linhas — desenhadas por cima do raster para cada

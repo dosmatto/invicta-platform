@@ -19,6 +19,8 @@ import { faixaDoLaudo, limitarRespAFaixa } from './faixaAmostras';
 import { carregarNdviSalvos } from './meap/gerar';
 import { municipioDaFazenda } from './geocodeMunicipio';
 import { centroideGeom } from './recomendacao/zonasGrid';
+import { zonasDoTalhao } from './zonasDoTalhao';
+import { bindingAuto, bindingPorPontos, divisasDasZonas, rotulosPorZona } from './meap/fertilidadePorZona';
 import { rotuloDoPonto } from './gradeZonas';
 import type { Epoca } from './periodo';
 import type { DadosRelatorioFert, ProfundidadeRel } from './relatorioFertilidade';
@@ -34,6 +36,10 @@ export function pontoDoPoligono(
 
 type MapaCarregado = {
   resp: RespInterp; labels: GeoJSON.FeatureCollection; interpoladoEm?: string;
+  // Mapa POR ZONA: o par zona ↔ nº da amostra com que o raster foi pintado, do
+  // jeito que estava na tela (inclusive corrigido à mão). Mapas salvos antes da
+  // v2.150.0 não têm — aí o relatório refaz o vínculo automático.
+  vinculoZona?: Record<string, number>;
   // LAUDO ALTERADO DEPOIS DESTE MAPA (desmembrar/fundir talhão troca os
   // resultados sob o mesmo id e carimba `limiteAlteradoEm`). Marcado na
   // hidratação, não vem da nuvem.
@@ -162,20 +168,67 @@ export async function carregarContextoRelatorio(
     }
   }
 
+  // ZONAS DE MANEJO + o vínculo zona↔nº da amostra, montados UMA vez para todas
+  // as páginas. É a MESMA conta da aba Fertilidade (vínculo pela LOCALIZAÇÃO do
+  // ponto que cai dentro da zona; a ordem só como reserva) — nada disso é
+  // persistido, então recalcular aqui é o único jeito de o BOOK chegar ao mesmo
+  // lugar que a tela. `zonasDoTalhao` é a cascata padrão > mais recente >
+  // snapshot, a mesma que a aba usa.
+  const zonasTalhao = zonasDoTalhao(talhaoId);
+  const bindZonaNumero: Record<string, number> = (() => {
+    if (!zonasTalhao.length || !importacao) return {};
+    const nums = [...new Set(importacao.resultados.map(r => r.numero))];
+    // `numero ?? ordem + 1`: exatamente a leitura do vínculo na aba Fertilidade.
+    const pts = (grade?.pontos ?? []).map(p => ({ numero: p.numero ?? p.ordem + 1, lng: p.lng, lat: p.lat }));
+    return pts.length ? bindingPorPontos(zonasTalhao, pts, nums) : bindingAuto(zonasTalhao, nums);
+  })();
+
   // valores da amostra por nut/prof (planilha → ponto da grade). Casamento pelo
   // nº da amostra, com fallback por ordem — o mesmo da tela (eloGrade).
   // ÚLTIMO RECURSO: os rótulos SALVOS junto com o mapa na hora da interpolação
   // (`labels`). É exatamente o que a tela faz quando o elo com a grade não
   // resolve; sem isso o PDF saía com o mapa "pelado" e a tela cheia de valores.
   function valoresDe(nut: string, prof: string): GeoJSON.FeatureCollection {
+    const casasV = casasDoRotulo(nut, casasDecimaisVariavel(nut));
+    const fmtV = (v: number) =>
+      v.toLocaleString('pt-BR', { minimumFractionDigits: casasV, maximumFractionDigits: casasV });
+
+    // MAPA POR ZONA — o BOOK não sabia dessa modalidade e caía nos pontos de
+    // amostragem: num talhão de 4 zonas com 4 amostras compostas, os 4 números
+    // saíam onde o coletor cravou o ponto (borda, canto, dentro da mancha
+    // vizinha), enquanto a tela mostrava o valor no meio de cada zona. E as
+    // DIVISAS não vinham: zonas vizinhas de mesma classe viravam uma mancha só.
+    // Agora o BOOK monta os rótulos como a aba Fertilidade: valor no ponto mais
+    // FUNDO da zona (pontoRotuloGeo) + as divisas por cima do raster.
+    const mapaZ = mapas[`${nut}__${prof}`];
+    if (mapaZ?.resp?.stats?.modelo === 'zona') {
+      // O VÍNCULO SALVO COM O MAPA ganha do recalculado: é com ele que o raster
+      // foi pintado, correções manuais incluídas. Sem ele (mapa anterior à
+      // v2.150.0), vale o automático — a mesma conta da aba.
+      const bind = mapaZ.vinculoZona ?? bindZonaNumero;
+      const feats = zonasTalhao.length && importacao
+        ? rotulosPorZona(zonasTalhao, importacao, bind, nut, prof, fmtV)
+        : [];
+      if (feats.length) return { type: 'FeatureCollection', features: [...feats, ...divisasDasZonas(zonasTalhao)] };
+      // NÃO CAI NOS PONTOS DA GRADE. Este raster é constante por zona: escrever
+      // os valores nos pontos de amostragem é o defeito antigo (os números
+      // amontoados no norte do talhão). Sem conseguir remontar os rótulos —
+      // zonas não hidratadas da nuvem, zoneamento trocado, laudo trocado — vale
+      // o que foi SALVO junto com o mapa, que é o que a tela desenhou na hora.
+      console.warn('[relatorio] mapa POR ZONA sem rótulos remontáveis —', nut, prof,
+        '| zonas:', zonasTalhao.length, '| laudo:', !!importacao, '— usando os rótulos salvos com o mapa.');
+      const salvos = mapaZ.labels?.features ?? [];
+      return { type: 'FeatureCollection', features: [...salvos, ...divisasDasZonas(zonasTalhao)] };
+    }
+
     const amostras = (importacao?.resultados ?? [])
       .filter(r => r.profundidade === prof && r.valores[nut] != null && isFinite(r.valores[nut]))
       .map(r => ({ numero: r.numero, valor: r.valores[nut] }));
     const pts = casarAmostrasComPontos(amostras, grade);
     if (!pts.length) return mapas[`${nut}__${prof}`]?.labels ?? { type: 'FeatureCollection', features: [] };
-    // Casas do rótulo do ponto: config da variável (Preferências de Análise) tem
-    // prioridade; senão pH/K = 1, demais 0 — igual ao mapa da tela (satk/satca/satmg=1).
-    const casas = casasDoRotulo(nut, casasDecimaisVariavel(nut));
+    // Casas do rótulo do ponto (`fmtV`, lá em cima): config da variável (Preferências
+    // de Análise) tem prioridade; senão pH/K = 1, demais 0 — igual ao mapa da tela
+    // (satk/satca/satmg=1).
     return {
       type: 'FeatureCollection',
       features: pts.map(p => ({
@@ -183,7 +236,7 @@ export async function carregarContextoRelatorio(
         geometry: { type: 'Point' as const, coordinates: [p.lng, p.lat] },
         // `v` = o número cru. A caixa ESTATÍSTICAS conta EXATAMENTE estes valores,
         // então ela não tem como divergir do que está escrito no mapa.
-        properties: { txt: p.valor.toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: casas }), v: p.valor },
+        properties: { txt: fmtV(p.valor), v: p.valor },
       })),
     };
   }
@@ -257,7 +310,14 @@ export async function carregarContextoRelatorio(
 export interface ConfigRelatorio { satelite: boolean; valores: boolean; logoClienteUrl?: string | null; }
 
 export function montarPaginas(ctx: ContextoRelatorio, nutsSelecionados: string[], config: ConfigRelatorio): DadosRelatorioFert[] {
-  const vazio: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
+  // "Valores" DESLIGADO tira os números — não as DIVISAS das zonas. Elas não são
+  // rótulo, são o desenho do mapa: sem elas duas zonas vizinhas de mesma classe
+  // viram uma mancha só e o mapa por zona vira um mapa interpolado mal feito.
+  const soDivisas = (fc: GeoJSON.FeatureCollection): GeoJSON.FeatureCollection => ({
+    type: 'FeatureCollection',
+    features: fc.features.filter(f =>
+      f.geometry?.type === 'LineString' || f.geometry?.type === 'MultiLineString'),
+  });
   const paginas: DadosRelatorioFert[] = [];
 
   for (const nut of nutsSelecionados) {
@@ -297,7 +357,7 @@ export function montarPaginas(ctx: ContextoRelatorio, nutsSelecionados: string[]
       if (!url) continue;
       profundidades.push({
         profundidade: prof, rasterPng: url, bounds: m.resp.bounds,
-        valores: config.valores ? rotulos : vazio, stats: st,
+        valores: config.valores ? rotulos : soDivisas(rotulos), stats: st,
       });
     }
     if (profundidades.length === 0) continue;

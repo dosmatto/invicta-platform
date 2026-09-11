@@ -1,5 +1,14 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [38] O relatório por zona não tem mais como voltar aos pontos de coleta
+  '2.150.0': [
+    'PENDÊNCIA 38 — FECHADOS OS CAMINHOS POR ONDE O RELATÓRIO AINDA PODIA VOLTAR AOS PONTOS DE COLETA. A 2.148.0 fez o relatório escrever o valor no meio de cada zona, como a tela; esta versão tira as saídas silenciosas que sobravam — situações em que ele desistia das zonas e voltava a escrever os números sobre os pontos de amostragem, amontoados num canto do talhão, sem nenhum aviso.',
+    'NUM MAPA POR ZONA, O RELATÓRIO NUNCA MAIS USA OS PONTOS DA GRADE. Se as zonas não puderem ser remontadas na hora de gerar — zoneamento que ainda não desceu da nuvem, zoneamento trocado depois do processamento, laudo diferente —, valem agora os RÓTULOS SALVOS junto com o mapa, que são exatamente o que a tela desenhou quando ele foi processado. E o motivo fica registrado no console, em vez de o PDF sair errado calado.',
+    'O VÍNCULO ZONA ↔ AMOSTRA PASSA A SER GRAVADO COM O MAPA. Ele era só estado de tela: quando o ponto de coleta caía fora da zona e você corrigia na tabela ("Z03 ↔ amostra 5"), o mapa era pintado com a correção, mas o relatório refazia o vínculo automático — e podia escrever na zona o valor de OUTRA amostra. Cor certa, número errado, e a caixa de estatísticas junto. Agora o par vai gravado no mapa e o relatório usa o mesmo que pintou o raster. Mapas processados antes desta versão não têm o par guardado e seguem com o vínculo automático; ao reprocessar, ele passa a ser gravado.',
+    'ZONA PINTADA E MUDA NÃO EXISTE MAIS. Uma geometria degenerada (anel com menos de três vértices, resto de importação) deixava a zona sem número nenhum — e, se todas caíssem nisso, o relatório voltava aos pontos de coleta. Voltou a rede de segurança: sem o ponto ideal, o número vai no centroide.',
+    'ZONA EM ARCO FINO — bordadura ou terraço acompanhando a curva de nível — PARA DE RECEBER O NÚMERO EM CIMA DA DIVISA. A busca pelo ponto mais fundo varre a zona em 14 passos; numa faixa de poucos metros dentro de uma área grande, nenhum desses passos cai dentro, e o número ia parar num vértice, ou seja, exatamente sobre a linha. Agora, quando a primeira varredura não acha nada, entra uma segunda bem mais densa e, em último caso, o centroide.',
+    'Verificação: teste:rotulos-mapa 22/22 e teste:fertzona 16/16 (3 asserções novas, com o caso do arco fino conferido dos dois lados — ele FALHA sem a correção), teste:rotulos 12/12, teste:grids 33/33, teste:zonas 12/12, npx tsc --noEmit limpo e npm run build ok.',
+  ],
   // [S/N] Guardar e usar viraram coisas diferentes: a marca de fonte de análise
   '2.149.0': [
     'AGORA VOCÊ ESCOLHE QUAIS ÍNDICES DE SATÉLITE ENTRAM NAS ANÁLISES. Cada camada mantida ganhou uma segunda marca — o alvo (◎) — ao lado da estrela. Só o que tiver o alvo ligado alimenta a geração de Zonas de Manejo, o Comparador, a Produtividade e o diagnóstico da IA.',
@@ -12,6 +21,16 @@ export const CHANGELOG: Record<string, string[]> = {
     'A MARCA VALE EM QUALQUER APARELHO: fica no talhão, na nuvem, como a rejeição de cena já ficava. E é por talhão — o mesmo NDVI de 01/08 marcado num talhão não marca sozinho nos outros 1.070.',
     'DE QUEBRA, DUAS CORREÇÕES. Carregar os índices para uma análise passou a baixar só o raster do que está marcado (antes baixava tudo e descartava depois — megabytes à toa). E o produtor, que só pode ver, parou de receber as caixas de excluir camadas que a versão anterior tinha deixado à mostra na lista dele.',
     'Verificação: teste:msr 42/42 (7 casos novos, incluindo o que garante que a marcação de um talhão não vaza para outro com a mesma data e índice), teste:grafcenas 24/24, teste:msr-regras 35/35. npx tsc --noEmit limpo, npm run build ok, ESLint sem nenhum aviso novo em 8 arquivos.',
+  ],
+  // [38] O relatório escreve o valor da zona no mesmo ponto que a tela (correção)
+  '2.148.0': [
+    'PENDÊNCIA 38 — O RELATÓRIO NÃO SEGUIA A TELA. Na aba Fertilidade o valor de cada zona já saía no meio dela; no relatório gerado em Relatórios (o "book" com todos os elementos) os mesmos números continuavam encostados nas bordas, em posições que não eram as da tela. Agora os dois desenham o mesmo mapa.',
+    'A CAUSA: o gerador de relatórios NÃO SABIA QUE EXISTE MAPA POR ZONA. Ele montava os números de um jeito só — casando cada linha do laudo com o PONTO DE AMOSTRAGEM correspondente. Num talhão de 4 zonas com 4 amostras compostas isso dá 4 números, o que parece certo, mas cada um é escrito ONDE O COLETOR CRAVOU O PONTO: no canto da zona, colado na divisa, às vezes visualmente dentro da zona vizinha. A tela, que sabe do modo zona, escrevia no meio da mancha. Dois códigos, duas respostas.',
+    'AGORA A REGRA É UMA SÓ (`rotulosPorZona`): tela e relatório chamam a MESMA função, que põe o valor no ponto mais fundo de cada zona. Não é possível corrigir um e esquecer o outro — foi exatamente o que aconteceu da última vez.',
+    'O RELATÓRIO TAMBÉM PASSOU A DESENHAR AS DIVISAS das zonas, que só existiam no PDF da própria aba Fertilidade. Sem elas, duas zonas vizinhas que caem na mesma classe da legenda viram uma mancha só e o mapa por zona fica com cara de mapa interpolado. E elas continuam aparecendo mesmo com "valores" desligado nas opções do relatório: divisa não é rótulo, é o desenho do mapa.',
+    'O VÍNCULO ZONA ↔ AMOSTRA usado pelo relatório é recalculado com a mesma conta da aba (o ponto de coleta que cai DENTRO da zona é a amostra dela; a ordem só como reserva), então o VALOR de cada zona também não tem como divergir — nem o mínimo/médio/máximo da caixa de estatísticas, que conta esses mesmos números.',
+    'Nada a reprocessar: vale para os mapas por zona já salvos, é só gerar o relatório de novo.',
+    'Verificação: teste:fertzona 15/15 (5 asserções novas, entre elas o caso exato do defeito — com a coleta encostada na borda, o rótulo ignora a coleta e vai para o meio da zona), teste:rotulos-mapa 20/20, teste:rotulos 12/12, teste:grids 33/33, teste:zonas 12/12, teste:elo 12/12, teste:relatorio-grade 18/18, npx tsc --noEmit limpo e npm run build ok.',
   ],
   // [40] Busca automática de imagens de madrugada, com regras e exclusão em massa
   '2.147.0': [
