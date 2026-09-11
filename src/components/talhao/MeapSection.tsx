@@ -19,6 +19,7 @@ import { SuavizarLimites } from './SuavizarLimites';
 import { EditorZonasManual } from './EditorZonasManual';
 import { obterOuAdotarAmbiente } from '@/lib/meap/adocao';
 import { paraZoneamentoNativo } from '@/lib/meap/nativo';
+import { listarNdviSalvos } from '@/lib/meap/gerar';
 import { ImportarZoneamento } from './ImportarZoneamento';
 import { VersoesZoneamentos } from './VersoesZoneamentos';
 import { montarLinhagens, nomeVersaoRestaurada, origemDe, type VersaoZoneamento } from '@/lib/meap/versoes';
@@ -250,6 +251,19 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
       .finally(() => { if (vivo) setCarregando(false); });
     return () => { vivo = false; };
   }, [talhao.id, safraNome]);
+
+  // Quantos índices de satélite existem GUARDADOS no talhão. Serve só para o
+  // aviso abaixo: com a marcação de fonte de análise, uma camada mantida mas não
+  // marcada não chega aqui — e sem esta contagem o satélite sumiria em silêncio
+  // da lista de camadas, que é exatamente o que a linha da fertilidade já evita.
+  const [satGuardados, setSatGuardados] = useState(0);
+  useEffect(() => {
+    let vivo = true;
+    listarNdviSalvos(talhao.id, true)
+      .then(cs => { if (vivo) setSatGuardados(cs.length); })
+      .catch(() => { if (vivo) setSatGuardados(0); });
+    return () => { vivo = false; };
+  }, [talhao.id]);
 
   useEffect(() => { setZoneamentos(getZoneamentosMeap(talhao.id)); }, [talhao.id]);
   const recarregarZon = () => setZoneamentos(getZoneamentosMeap(talhao.id));
@@ -1034,6 +1048,13 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
                   Nenhuma camada de fertilidade: {carregadas.laudosSemMapa === 1 ? 'o laudo deste talhão ainda não tem' : `os ${carregadas.laudosSemMapa} laudos deste talhão ainda não têm`} mapa interpolado salvo na nuvem. Processe os atributos na aba <strong style={{ color: '#93c5fd' }}>Fertilidade</strong> (logado) e volte aqui.
                 </p>
               ) : null}
+              {/* Mesmo motivo da linha acima, para o satélite: guardar (★) não é
+                  mais o bastante — a camada precisa estar marcada como fonte (◎). */}
+              {satGuardados > 0 && !carregadas.camadas.some(c => c.nut.startsWith('ndvi_')) && (
+                <p className="text-[9px] mt-1 leading-relaxed" style={{ color: '#fbbf24' }}>
+                  {satGuardados === 1 ? 'Há 1 índice de satélite guardado' : `Há ${satGuardados} índices de satélite guardados`} neste talhão, mas nenhum marcado como <strong style={{ color: '#93c5fd' }}>fonte de análise</strong> — por isso o satélite não aparece acima. Marque no alvo (◎) da aba <strong style={{ color: '#93c5fd' }}>NDVI / Satélite → Camadas salvas</strong>.
+                </p>
+              )}
             </div>
 
             {/* Pesos por camada (quanto cada uma pesa na separação das zonas) */}

@@ -10,6 +10,7 @@ import { carregarGridsTalhao } from '@/lib/recomendacao/aplicar';
 import { analisarZonas, gerarZonas, decodeGrid, descomprimirGrid, type RespAnalisarZonas, type RespGerarZonas, type Grid } from '@/lib/fertilidade';
 import { cloudCarregarMapasPorPrefixo, cloudListarMapasMeta, cloudCarregarMapa } from '@/lib/cloud';
 import { simboloElemento, type ResultadoAmostra } from '@/lib/lab';
+import { carregarFontes, apenasFontes } from '@/lib/ndviFontes';
 import { ordemLaudosParaZonas, MAX_LAUDOS_TENTADOS } from './escolhaLaudo';
 
 export interface CamadaGrid {
@@ -33,6 +34,15 @@ export interface CamadasCarregadas {
 }
 
 // ── NDVI mantido como camada do MEAP ────────────────────────────────────────
+// FONTE DE ANÁLISE (S/N): manter uma camada e usá-la nos cálculos passaram a ser
+// duas decisões. Estes carregadores devolvem, POR PADRÃO, só o que foi marcado
+// como fonte (lib/ndviFontes.ts) — é o que alimenta Zonas de Manejo, Comparador,
+// Produtividade, IA e relatórios de dados. Sem marcação, nada entra.
+//
+// `todas: true` desliga o filtro e é para as telas que apenas LISTAM as camadas
+// para você escolher (aba NDVI, Camadas salvas, Composição Temporal, PDF do
+// produtor, relatório de satélite da fazenda, app de campo). Filtrar ali seria
+// esconder justamente o que ainda falta marcar.
 // Reamostragem bilinear NaN-aware (mesma extensão, malhas diferentes).
 export function encodeF32(a: Float32Array): string {
   const u8 = new Uint8Array(a.buffer, a.byteOffset, a.byteLength);
@@ -86,7 +96,7 @@ export interface NdviCamadaMeta {
 }
 
 // Lista os índices mantidos do talhão SÓ com metadados (KBs, sem rasters).
-export async function listarNdviSalvos(talhaoId: string): Promise<NdviCamadaMeta[]> {
+export async function listarNdviSalvos(talhaoId: string, todas = false): Promise<NdviCamadaMeta[]> {
   const fontes: Array<['s2' | 'cbers', string]> = [['s2', `${talhaoId}__ndvi__`], ['cbers', `${talhaoId}__ndvicbers__`]];
   const listas = await Promise.all(fontes.map(([, pref]) => cloudListarMapasMeta(pref)));
   const out: NdviCamadaMeta[] = [];
@@ -105,7 +115,8 @@ export async function listarNdviSalvos(talhaoId: string): Promise<NdviCamadaMeta
     }
   });
   out.sort((a, b) => b.data.localeCompare(a.data));
-  return out;
+  if (todas) return out;
+  return apenasFontes(out, talhaoId, await carregarFontes(talhaoId));
 }
 
 // Grid (descomprimido) de UM índice mantido — rede só se o cache local não
@@ -121,26 +132,22 @@ export async function carregarGridNdvi(c: NdviCamadaMeta): Promise<Grid | null> 
 // Carrega os ÍNDICES MANTIDOS (NDVI, SAVI… — Sentinel + CBERS) do talhão.
 // IV2: o mesmo prefixo guarda vários índices (id …__INDICE__data) — a chave e o
 // rótulo agora incluem o índice (dois índices da mesma data não colidem).
-export async function carregarNdviSalvos(talhaoId: string): Promise<NdviCamada[]> {
-  const fontes: Array<['s2' | 'cbers', string]> = [['s2', `${talhaoId}__ndvi__`], ['cbers', `${talhaoId}__ndvicbers__`]];
+export async function carregarNdviSalvos(talhaoId: string, todas = false): Promise<NdviCamada[]> {
+  // Passa pela LISTAGEM LEVE de propósito: ela já aplica o filtro de fonte de
+  // análise, então o raster só é baixado do que realmente vai ser usado. Baixar
+  // tudo por prefixo (como antes) e descartar depois custaria megabytes — e com
+  // a marcação valendo, a maioria das camadas guardadas não entra.
+  const metas = await listarNdviSalvos(talhaoId, todas);
   const out: NdviCamada[] = [];
-  for (const [fonte, pref] of fontes) {
-    const docs = await cloudCarregarMapasPorPrefixo<{ indice?: string; resp: { bounds: [number, number, number, number]; grid?: Grid; cena?: { data?: string } } }>(pref);
-    for (const d of docs) {
-      const resp = d.dados?.resp;
-      let grid = resp?.grid;
-      const data = resp?.cena?.data;
-      if (!resp || !data || !grid) continue;
-      if (grid.comp === 'gz') { try { grid = await descomprimirGrid(grid); } catch { continue; } }
-      const indice = d.dados?.indice ?? d.id.slice(pref.length).split('__')[0] ?? 'NDVI';
-      out.push({
-        chave: `ndvi_${fonte}__${indice}__${data}`, nut: `ndvi_${fonte}_${indice.toLowerCase()}`,
-        prof: data, data, indice, bounds: resp.bounds, b64: grid.b64, shape: grid.shape,
-      });
-    }
+  for (const m of metas) {
+    const grid = await carregarGridNdvi(m);   // cache local por id, já descomprimido
+    if (!grid?.b64) continue;
+    out.push({
+      chave: m.chave, nut: m.nut, prof: m.prof, data: m.data, indice: m.indice,
+      bounds: m.bounds, b64: grid.b64, shape: grid.shape,
+    });
   }
-  out.sort((a, b) => b.data.localeCompare(a.data)); // mais recentes primeiro
-  return out;
+  return out;   // listarNdviSalvos já devolve com as mais recentes primeiro
 }
 
 // ── Composições Temporais de Índices (IV5) como camadas do MEAP ─────────────

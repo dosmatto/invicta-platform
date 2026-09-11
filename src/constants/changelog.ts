@@ -1,5 +1,18 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Guardar e usar viraram coisas diferentes: a marca de fonte de análise
+  '2.149.0': [
+    'AGORA VOCÊ ESCOLHE QUAIS ÍNDICES DE SATÉLITE ENTRAM NAS ANÁLISES. Cada camada mantida ganhou uma segunda marca — o alvo (◎) — ao lado da estrela. Só o que tiver o alvo ligado alimenta a geração de Zonas de Manejo, o Comparador, a Produtividade e o diagnóstico da IA.',
+    'O PROBLEMA: a estrela fazia duas coisas ao mesmo tempo. Guardar a imagem de uma data E jogá-la dentro de todo cálculo que usa satélite. Quem quisesse só arquivar a cena de uma data — para consultar depois, para um relatório, para comparar — não tinha como: ela entrava na clusterização junto com as boas e mexia nas zonas.',
+    'SÃO DUAS DECISÕES SEPARADAS, e a tela diz isso: ★ MANTER guarda a camada no talhão; ◎ FONTE DE ANÁLISE é o que a libera para os cálculos. Uma camada pode ficar guardada para sempre sem nunca entrar em conta nenhuma.',
+    'ONDE MARCAR: no painel do índice, logo abaixo da estrela, e na aba "Camadas salvas", onde cada linha tem o alvo e há atalhos "◎ todas / ◎ nenhuma" para resolver a lista inteira de uma vez.',
+    'ATENÇÃO — A REGRA É SEM EXCEÇÃO: sem marcação, NADA entra. Não há herança do comportamento anterior. Na prática, ao abrir esta versão, os talhões que já tinham índices mantidos deixam de levá-los para as análises até você marcar o alvo dos que quer usar. Foi decisão consciente, para a regra ser uma só e não depender do histórico de cada talhão.',
+    'PARA VOCÊ NÃO DESCOBRIR ISSO NO ESCURO, dois avisos novos. Na aba "Camadas salvas", uma tarja diz quantas estão marcadas — e fica âmbar quando é zero, explicando que a geração de zonas vai rodar SEM satélite. E na própria tela de Zonas de Manejo, se o talhão tem índices guardados mas nenhum marcado, aparece a linha dizendo exatamente isso e onde resolver — do mesmo jeito que a fertilidade já avisava quando o laudo não tinha mapa processado.',
+    'A MARCA NÃO ESCONDE NADA de onde a camada é só listada para você escolher: aba NDVI, Camadas salvas, Composição Temporal, PDF do produtor, relatório de satélite da fazenda e o app de campo continuam mostrando tudo o que está guardado. Filtrar ali seria esconder justamente o que falta marcar.',
+    'A MARCA VALE EM QUALQUER APARELHO: fica no talhão, na nuvem, como a rejeição de cena já ficava. E é por talhão — o mesmo NDVI de 01/08 marcado num talhão não marca sozinho nos outros 1.070.',
+    'DE QUEBRA, DUAS CORREÇÕES. Carregar os índices para uma análise passou a baixar só o raster do que está marcado (antes baixava tudo e descartava depois — megabytes à toa). E o produtor, que só pode ver, parou de receber as caixas de excluir camadas que a versão anterior tinha deixado à mostra na lista dele.',
+    'Verificação: teste:msr 42/42 (7 casos novos, incluindo o que garante que a marcação de um talhão não vaza para outro com a mesma data e índice), teste:grafcenas 24/24, teste:msr-regras 35/35. npx tsc --noEmit limpo, npm run build ok, ESLint sem nenhum aviso novo em 8 arquivos.',
+  ],
   // [40] Busca automática de imagens de madrugada, com regras e exclusão em massa
   '2.147.0': [
     'PENDÊNCIA 40 — A PLATAFORMA PASSA A BUSCAR E PROCESSAR IMAGENS SOZINHA, DE MADRUGADA. Marque os talhões e pronto: entre 2h e 5h30, quando ninguém está usando, o servidor procura as passagens novas do Sentinel-2, confere se prestam e guarda as boas já processadas. De manhã o índice está lá, sem ninguém ter aberto a tela.',

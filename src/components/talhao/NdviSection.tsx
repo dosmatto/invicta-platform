@@ -29,6 +29,7 @@ import { retanguloDe } from '@/lib/janela';
 import { cloudSalvarMapa, cloudListarMapasMeta, cloudCarregarMapa, cloudExcluirMapasPorPrefixo, cloudExcluirMapas, cloudPodeGravar } from '@/lib/cloud';
 import { BotaoMonitorar } from './MonitorSatelite';
 import { getRejeitadasLocal, carregarRejeitadas, marcarRejeitada } from '@/lib/cenaEstados';
+import { getFontesLocal, carregarFontes, marcarFonte, marcarFontes, idFonte } from '@/lib/ndviFontes';
 import { onCaiuParaNuvem } from '@/lib/interpUrl';
 import { pode, emailUsuario } from '@/lib/empresa';
 import type { Legenda } from '@/lib/legendas';
@@ -37,7 +38,7 @@ import { getComposicoes } from '@/lib/store';
 import { listarNdviSalvos, carregarGridNdvi, type NdviCamadaMeta } from '@/lib/meap/gerar';
 import {
   Satellite, Loader2, AlertTriangle, Image as ImageIcon, Contrast, Check, Star,
-  Eye, XCircle, RotateCcw, Play, X, Layers3, Download, Trash2,
+  Eye, XCircle, RotateCcw, Play, X, Layers3, Download, Trash2, Target,
 } from 'lucide-react';
 
 import { inputStyle } from '@/constants/ui';
@@ -80,6 +81,10 @@ const limiteBusca = (dataIni: string, dataFim: string) =>
 const prefixoNuvem = (talhaoId: string, fonte: FonteNdvi) => `${talhaoId}__ndvi${fonte === 'cbers' ? 'cbers' : ''}__`;
 const idNuvem = (talhaoId: string, fonte: FonteNdvi, data: string, indice = 'NDVI') =>
   `${prefixoNuvem(talhaoId, fonte)}${indice}__${data}`;
+// Chave da CAMADA salva, no formato de meap/gerar.ts — é por ela que a marcação
+// de "fonte de análise" identifica o que entra nos cálculos (lib/ndviFontes.ts).
+const chaveCamada = (fonte: FonteNdvi, data: string, indice: string) =>
+  `ndvi_${fonte === 'cbers' ? 'cbers' : 's2'}__${indice}__${data}`;
 // chave de RESULTADO (fonte:data:INDICE) e de CENA (fonte:data — thumbs/prévias)
 const chaveDe = (fonte: FonteNdvi, data: string | null, indice = 'NDVI') => `${fonte}:${data ?? ''}:${indice}`;
 const chaveCena = (fonte: FonteNdvi, data: string | null) => `${fonte}:${data ?? ''}`;
@@ -120,6 +125,9 @@ export function NdviSection({ safraNome }: { safraNome?: string } = {}) {
   const [carregandoPrevia, setCarregandoPrevia] = useState(false);
   const [vistas, setVistas] = useState<Record<string, boolean>>({});    // visualizadas (sessão)
   const [rejeitadas, setRejeitadas] = useState<Record<string, boolean>>({});
+  // Camadas marcadas como FONTE DE ANÁLISE. Manter guarda; marcar aqui é o que
+  // libera a camada para Zonas de Manejo, Comparador, Produtividade e IA.
+  const [fontes, setFontes] = useState<Record<string, boolean>>({});
 
   const [cenas, setCenas] = useState<Record<string, MapaNdvi>>({});     // NDVI calculado, chave fonte:data
   const [selKey, setSelKey] = useState('');
@@ -198,8 +206,10 @@ export function NdviSection({ safraNome }: { safraNome?: string } = {}) {
     setCenas({}); setImagens({}); setPrevias({}); setCandidatos([]); setThumbs({});
     setSelKey(''); setPreviaDe(null); setEstado('idle'); setErro(''); setSalvos({});
     setRejeitadas(getRejeitadasLocal());
+    setFontes(getFontesLocal());
     if (!nav.talhaoId) return;
     void carregarRejeitadas(nav.talhaoId).then(setRejeitadas).catch(() => {});
+    void carregarFontes(nav.talhaoId).then(setFontes).catch(() => {});
     (async () => {
       const fontes: FonteNdvi[] = ['sentinel', 'cbers'];
       const listas = await Promise.all(fontes.map(f => cloudListarMapasMeta(prefixoNuvem(nav.talhaoId!, f)).catch(() => [])));
@@ -640,7 +650,7 @@ export function NdviSection({ safraNome }: { safraNome?: string } = {}) {
   async function perguntarApagarAutomaticas() {
     if (!nav.talhaoId) return;
     try {
-      const metas = await listarNdviSalvos(nav.talhaoId);
+      const metas = await listarNdviSalvos(nav.talhaoId, true);
       setConfirmarApagar(metas.filter(m => m.automatico).length);
     } catch {
       setConfirmarApagar(0);
@@ -651,7 +661,7 @@ export function NdviSection({ safraNome }: { safraNome?: string } = {}) {
     if (!nav.talhaoId) return;
     setApagando(true);
     try {
-      const metas = await listarNdviSalvos(nav.talhaoId);
+      const metas = await listarNdviSalvos(nav.talhaoId, true);
       const ids = metas.filter(m => m.automatico).map(m => m.itemId);
       const n = await cloudExcluirMapas(ids);
       // 0 apagadas sem erro = RLS negando. Dizer "apagado" seria mentir.
@@ -688,6 +698,15 @@ export function NdviSection({ safraNome }: { safraNome?: string } = {}) {
     if (!selKey || !nav.talhaoId) return;
     cloudExcluirMapasPorPrefixo(idNuvem(nav.talhaoId, fonteSel, dataSel, indSel));
     setSalvos(s => ({ ...s, [selKey]: false }));
+  }
+
+  // Liga/desliga a camada como fonte de análise. Só faz sentido no que já está
+  // mantido — o que não foi salvo não existe para nenhum cálculo.
+  function alternarFonte(fonte: FonteNdvi, data: string, indice: string) {
+    if (!nav.talhaoId) return;
+    const ch = chaveCamada(fonte, data, indice);
+    marcarFonte(nav.talhaoId, ch, !fontes[idFonte(nav.talhaoId, ch)]);
+    setFontes(getFontesLocal());
   }
 
   function toggleRejeitada(c: Cand) {
@@ -1175,11 +1194,35 @@ export function NdviSection({ safraNome }: { safraNome?: string } = {}) {
 
           {nav.talhaoId && (
             salvos[selKey] ? (
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-[9px] flex items-center gap-1" style={{ color: '#86efac' }}>
-                  <Star size={11} fill="#86efac" /> {indSel} mantido — disponível como fonte na Zona de Manejo
-                </span>
-                <button onClick={removerCena} className="text-[10px] font-semibold" style={{ color: '#93c5fd' }}>Remover</button>
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[9px] flex items-center gap-1" style={{ color: '#86efac' }}>
+                    <Star size={11} fill="#86efac" /> {indSel} mantido — guardado neste talhão
+                  </span>
+                  <button onClick={removerCena} className="text-[10px] font-semibold" style={{ color: '#93c5fd' }}>Remover</button>
+                </div>
+                {/* Guardar e USAR são decisões diferentes: sem esta marca, a camada
+                    fica arquivada e não entra em cálculo nenhum. */}
+                {(() => {
+                  const ehFonte = !!(nav.talhaoId && fontes[idFonte(nav.talhaoId, chaveCamada(fonteSel, dataSel, indSel))]);
+                  return (
+                    <button onClick={() => alternarFonte(fonteSel, dataSel, indSel)}
+                      className="w-full py-1.5 px-2 rounded text-left flex items-start gap-1.5"
+                      style={{ background: ehFonte ? '#0b2a1a' : '#0b1d3a', border: `1px solid ${ehFonte ? '#166534' : '#1a3a6b'}` }}>
+                      <Target size={12} className="flex-shrink-0 mt-px" style={{ color: ehFonte ? '#4ade80' : '#64748b' }} />
+                      <span>
+                        <span className="text-[10px] font-bold block" style={{ color: ehFonte ? '#86efac' : '#94a3b8' }}>
+                          {ehFonte ? 'Fonte de análise — ligada' : 'Usar como fonte de análise'}
+                        </span>
+                        <span className="text-[8px] leading-snug block" style={{ color: '#64748b' }}>
+                          {ehFonte
+                            ? 'Esta camada entra nas Zonas de Manejo, no Comparador, na Produtividade e na IA.'
+                            : 'Sem esta marca a camada fica só arquivada — não entra em cálculo nenhum.'}
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })()}
               </div>
             ) : (
               <button onClick={manterCena} disabled={!cloudPodeGravar()}
@@ -1232,7 +1275,7 @@ function GeradorPdfNdvi({ talhaoId, poligono, legNdvi, imagens, info }: {
     if (!aberto || !talhaoId) return;
     let vivo = true;
     setCarregando(true);
-    listarNdviSalvos(talhaoId)   // só metadados — os rasters vêm ao gerar (com cache)
+    listarNdviSalvos(talhaoId, true)   // só metadados — os rasters vêm ao gerar (com cache)
       .then(cs => { if (vivo) setSalvosPdf(cs); })
       .catch(() => {})
       .finally(() => { if (vivo) setCarregando(false); });
@@ -1338,19 +1381,41 @@ function CamadasSalvasView({ talhaoId }: { talhaoId: string }) {
   const [filtro, setFiltro] = useState<'todas' | 'auto' | 'manuais'>('todas');
   const [excluindo, setExcluindo] = useState(false);
   const [aviso, setAviso] = useState('');
+  const [fontes, setFontes] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     let vivo = true;
     setCarregando(true);
+    setFontes(getFontesLocal());
     if (!talhaoId) { setCarregando(false); return; }
-    listarNdviSalvos(talhaoId).then(cs => { if (vivo) setInds(cs); }).catch(() => {}).finally(() => { if (vivo) setCarregando(false); });
+    listarNdviSalvos(talhaoId, true).then(cs => { if (vivo) setInds(cs); }).catch(() => {}).finally(() => { if (vivo) setCarregando(false); });
+    void carregarFontes(talhaoId).then(f => { if (vivo) setFontes(f); }).catch(() => {});
     return () => { vivo = false; };
   }, [talhaoId]);
+
   const comps = talhaoId ? getComposicoes(talhaoId) : [];
 
   const visiveis = inds.filter(c => filtro === 'todas' || (filtro === 'auto' ? c.automatico : !c.automatico));
-  const marcadas = visiveis.filter(c => sel[c.itemId]);
+  const marcadas = visiveis.filter(c => sel[c.itemId]);   // marcadas para EXCLUIR
   const nAuto = inds.filter(c => c.automatico).length;
+
+  // Fonte de análise: a marca que decide quem entra nos cálculos (◎), separada
+  // da estrela, que só guarda a camada (★).
+  const ehFonte = (c: NdviCamadaMeta) => !!fontes[idFonte(talhaoId, c.chave)];
+  const nFontes = inds.filter(ehFonte).length;
+  // Esta view é TAMBÉM o que o produtor/leitor vê (o ramo sem pode('ndvi') acima).
+  // Para ele a lista é um inventário: sem caixa de excluir e sem trocar as fontes.
+  const podeMexer = pode('ndvi');
+
+  function alternarFonteLista(c: NdviCamadaMeta) {
+    marcarFonte(talhaoId, c.chave, !ehFonte(c));
+    setFontes(getFontesLocal());
+  }
+
+  function todasAsFontes(v: boolean) {
+    marcarFontes(talhaoId, visiveis.map(c => c.chave), v);
+    setFontes(getFontesLocal());
+  }
 
   async function excluirSelecionadas() {
     if (marcadas.length === 0) return;
@@ -1378,6 +1443,20 @@ function CamadasSalvasView({ talhaoId }: { talhaoId: string }) {
       <div className="rounded-lg p-2.5 space-y-1.5" style={{ background: '#0a1a2f', border: '1px solid #1a3a6b' }}>
         <p className="text-[10px] font-bold flex items-center gap-1.5" style={{ color: '#93c5fd' }}><Star size={11} /> Índices individuais mantidos ({inds.length})</p>
 
+        {/* Guardar ≠ usar. Esta linha existe para o zero não passar despercebido:
+            sem nenhuma fonte marcada, a geração de zonas fica sem satélite. */}
+        {inds.length > 0 && podeMexer && (
+          <div className="rounded p-1.5 flex items-start gap-1.5"
+            style={{ background: nFontes ? '#0b2a1a' : '#2d1a00', border: `1px solid ${nFontes ? '#166534' : '#92400e'}` }}>
+            <Target size={11} className="flex-shrink-0 mt-px" style={{ color: nFontes ? '#4ade80' : '#fbbf24' }} />
+            <p className="text-[9px] leading-snug" style={{ color: nFontes ? '#86efac' : '#fbbf24' }}>
+              {nFontes
+                ? `${nFontes} de ${inds.length} marcada${nFontes > 1 ? 's' : ''} como fonte de análise — só ela${nFontes > 1 ? 's' : ''} entra${nFontes > 1 ? 'm' : ''} nas Zonas de Manejo, no Comparador, na Produtividade e na IA.`
+                : 'Nenhuma camada marcada como fonte de análise: a geração de Zonas de Manejo vai rodar SEM satélite. Toque no alvo (◎) das que você quer usar.'}
+            </p>
+          </div>
+        )}
+
         {nAuto > 0 && (
           <div className="flex gap-1">
             {([['todas', `Todas (${inds.length})`], ['auto', `🤖 Automáticas (${nAuto})`], ['manuais', `Feitas à mão (${inds.length - nAuto})`]] as ['todas' | 'auto' | 'manuais', string][]).map(([f, r]) => (
@@ -1398,23 +1477,41 @@ function CamadasSalvasView({ talhaoId }: { talhaoId: string }) {
           </p>
         ) : (
           <>
-            <button onClick={() => setSel(marcadas.length === visiveis.length ? {} : Object.fromEntries(visiveis.map(c => [c.itemId, true])))}
-              className="text-[9px]" style={{ color: '#64748b' }}>
-              {marcadas.length === visiveis.length ? 'desmarcar todas' : 'selecionar todas'}
-            </button>
+            {podeMexer && (
+              <div className="flex items-center justify-between text-[9px]" style={{ color: '#64748b' }}>
+                <button onClick={() => setSel(marcadas.length === visiveis.length ? {} : Object.fromEntries(visiveis.map(c => [c.itemId, true])))}>
+                  {marcadas.length === visiveis.length ? 'desmarcar todas' : 'selecionar todas'}
+                </button>
+                <span className="flex items-center gap-2">
+                  <button onClick={() => todasAsFontes(true)} style={{ color: '#4ade80' }}>◎ todas</button>
+                  <button onClick={() => todasAsFontes(false)} style={{ color: '#64748b' }}>◎ nenhuma</button>
+                </span>
+              </div>
+            )}
             {visiveis.map(c => (
-              <label key={c.chave} className="flex items-start gap-1.5 cursor-pointer">
-                <input type="checkbox" checked={!!sel[c.itemId]}
-                  onChange={e => setSel(s => ({ ...s, [c.itemId]: e.target.checked }))}
-                  className="accent-green-600 flex-shrink-0" style={{ width: 12, height: 12, marginTop: 1 }} />
-                <span className="text-[9px]" style={{ color: '#cbd5e1' }}>
+              <div key={c.chave} className="flex items-start gap-1.5">
+                {podeMexer && (
+                  <input type="checkbox" checked={!!sel[c.itemId]}
+                    onChange={e => setSel(s => ({ ...s, [c.itemId]: e.target.checked }))}
+                    title="selecionar para excluir"
+                    className="accent-green-600 flex-shrink-0 cursor-pointer" style={{ width: 12, height: 12, marginTop: 2 }} />
+                )}
+                <span className="text-[9px] flex-1 min-w-0" style={{ color: '#cbd5e1' }}>
                   <strong>{c.indice}</strong> · {new Date(c.data + 'T00:00:00').toLocaleDateString('pt-BR')} · {c.nut.startsWith('ndvi_cbers') ? 'CBERS-4A' : 'Sentinel-2'}{c.nx && c.ny ? ` · ${c.ny}×${c.nx} px` : ''}
                   {c.automatico && <span title="gerada pela busca automática de madrugada"> · 🤖</span>}
                   {c.automatico && c.pctLimpo != null && <span style={{ color: '#64748b' }}> {c.pctLimpo}% limpo</span>}
                 </span>
-              </label>
+                <button onClick={() => podeMexer && alternarFonteLista(c)} disabled={!podeMexer}
+                  className="flex-shrink-0 p-0.5 rounded"
+                  title={ehFonte(c)
+                    ? (podeMexer ? 'Fonte de análise LIGADA — clique para desligar' : 'Fonte de análise')
+                    : (podeMexer ? 'Arquivada — clique para usar nas análises' : 'Arquivada (não entra nas análises)')}
+                  style={{ background: ehFonte(c) ? '#0b2a1a' : 'transparent', border: `1px solid ${ehFonte(c) ? '#166534' : '#1a3a6b'}`, cursor: podeMexer ? 'pointer' : 'default' }}>
+                  <Target size={11} style={{ color: ehFonte(c) ? '#4ade80' : '#475569' }} />
+                </button>
+              </div>
             ))}
-            {marcadas.length > 0 && (
+            {podeMexer && marcadas.length > 0 && (
               <button onClick={() => void excluirSelecionadas()} disabled={excluindo}
                 className="w-full py-1.5 rounded text-[10px] font-bold text-white flex items-center justify-center gap-1.5"
                 style={{ background: '#7f1d1d' }}>
@@ -1427,7 +1524,7 @@ function CamadasSalvasView({ talhaoId }: { talhaoId: string }) {
       </div>
       <ListaComposicoes salvas={comps} />
       <p className="text-[9px] leading-relaxed" style={{ color: '#475569' }}>
-        <Layers3 size={9} className="inline mr-0.5" /> As camadas aprovadas (índices e composições aptas) ficam disponíveis na Zona de Manejo (Sensoriamento Remoto), no comparador e nos relatórios.
+        <Layers3 size={9} className="inline mr-0.5" /> Guardar (★) e usar (◎) são coisas diferentes: a estrela arquiva a camada no talhão; o alvo é o que a libera como fonte na Zona de Manejo (Sensoriamento Remoto), no Comparador, na Produtividade e na IA. Composições temporais seguem a própria regra (aprovada e apta).
       </p>
     </div>
   );

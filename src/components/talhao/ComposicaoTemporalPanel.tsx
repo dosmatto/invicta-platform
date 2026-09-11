@@ -80,7 +80,7 @@ export function ComposicaoTemporalPanel({ safraNome }: { safraNome?: string }) {
     let vivo = true;
     setCarregando(true); setCenas([]); setPrevia(null); setSelDatas({});
     if (!talhaoId) { setCarregando(false); return; }
-    carregarNdviSalvos(talhaoId)
+    carregarNdviSalvos(talhaoId, true)   // catálogo: você escolhe as datas aqui
       .then(cs => { if (vivo) setCenas(cs); })
       .catch(() => {})
       .finally(() => { if (vivo) setCarregando(false); });

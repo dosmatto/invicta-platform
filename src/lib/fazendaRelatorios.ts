@@ -39,7 +39,7 @@ export async function anosDeTalhoes(ids: string[]): Promise<AnoFazenda[]> {
 
   const [safras, listasNdvi] = await Promise.all([
     safrasComCenario(ids).catch(() => null),
-    Promise.all(ids.map(id => listarNdviSalvos(id).catch(() => [] as NdviCamadaMeta[]))),
+    Promise.all(ids.map(id => listarNdviSalvos(id, true).catch(() => [] as NdviCamadaMeta[]))),
   ]);
 
   const porAno = new Map<number, AnoFazenda>();
@@ -84,7 +84,7 @@ export interface SateliteFazenda {
 export async function sateliteDaFazenda(fazendaId: string, ano: number): Promise<SateliteFazenda> {
   const talhoes = talhoesDaFazenda(fazendaId);
   const listas = await Promise.all(
-    talhoes.map(t => listarNdviSalvos(t.id).catch(() => [] as NdviCamadaMeta[])),
+    talhoes.map(t => listarNdviSalvos(t.id, true).catch(() => [] as NdviCamadaMeta[])),
   );
 
   const camadas: CamadaTalhao[] = [];

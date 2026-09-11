@@ -17,6 +17,7 @@
 import assert from 'node:assert/strict';
 import {
   avaliarRegras, melhoresPorJanela, diasEntre, estimativaMbPorCena,
+  idFonte, apenasFontes,
   REGRAS_PADRAO, TEXTO_MOTIVO,
 } from '../src/lib/msrSelecao.ts';
 
@@ -251,6 +252,51 @@ t('cresce com a grade e com o nº de índices', () => {
 t('grade vazia não vira NaN nem negativo', () => {
   assert.equal(estimativaMbPorCena(0, 0, 1), 0);
   assert.equal(estimativaMbPorCena(-10, 10, 1), 0);
+});
+
+console.log('\nfonte de análise — quem entra nos cálculos');
+
+const cam = (chave) => ({ chave });
+const T = 'talhao-A';
+
+t('só as marcadas passam', () => {
+  const camadas = [cam('ndvi_s2__NDVI__2026-08-01'), cam('ndvi_s2__NDRE__2026-08-01'), cam('ndvi_cbers__NDVI__2026-07-10')];
+  const marcadas = { [idFonte(T, 'ndvi_s2__NDVI__2026-08-01')]: true };
+  assert.deepEqual(apenasFontes(camadas, T, marcadas).map(c => c.chave), ['ndvi_s2__NDVI__2026-08-01']);
+});
+
+t('SEM marcação nenhuma, não entra nada (a regra escolhida — não há herança)', () => {
+  const camadas = [cam('ndvi_s2__NDVI__2026-08-01'), cam('ndvi_s2__NDRE__2026-08-01')];
+  assert.deepEqual(apenasFontes(camadas, T, {}), []);
+});
+
+t('a marcação NÃO vaza entre talhões (mesma data e índice em vários)', () => {
+  // O caso real: o mesmo NDVI de 01/08 existe em dezenas de talhões. Se a chave
+  // não carregasse o talhão, marcar num marcaria em todos.
+  const camadas = [cam('ndvi_s2__NDVI__2026-08-01')];
+  const marcadaNoOutro = { [idFonte('talhao-B', 'ndvi_s2__NDVI__2026-08-01')]: true };
+  assert.deepEqual(apenasFontes(camadas, T, marcadaNoOutro), []);
+  assert.deepEqual(apenasFontes(camadas, 'talhao-B', marcadaNoOutro).length, 1);
+});
+
+t('desmarcar (false explícito) não conta como marcada', () => {
+  const camadas = [cam('ndvi_s2__NDVI__2026-08-01')];
+  assert.deepEqual(apenasFontes(camadas, T, { [idFonte(T, 'ndvi_s2__NDVI__2026-08-01')]: false }), []);
+});
+
+t('preserva a ordem que recebeu (as telas ordenam por data antes)', () => {
+  const chaves = ['ndvi_s2__NDVI__2026-08-01', 'ndvi_s2__NDVI__2026-07-01', 'ndvi_s2__NDVI__2026-06-01'];
+  const marcadas = Object.fromEntries(chaves.map(c => [idFonte(T, c), true]));
+  assert.deepEqual(apenasFontes(chaves.map(cam), T, marcadas).map(c => c.chave), chaves);
+});
+
+t('lista vazia não estoura', () => {
+  assert.deepEqual(apenasFontes([], T, { [idFonte(T, 'x')]: true }), []);
+});
+
+t('idFonte separa talhão de chave sem ambiguidade', () => {
+  assert.equal(idFonte('t1', 'ndvi_s2__NDVI__2026-08-01'), 't1:ndvi_s2__NDVI__2026-08-01');
+  assert.notEqual(idFonte('t1', 'a'), idFonte('t2', 'a'));
 });
 
 console.log(`\n${ok} passaram, ${fail} falharam\n`);

@@ -91,7 +91,7 @@ function IndicesTalhao({ talhaoId, talhaoNome, onAbrir }: { talhaoId: string; ta
     let vivo = true;
     setCarregando(true); setMsg('');
     if (!navigator.onLine) { setCarregando(false); setMsg('Sem internet — mostrando só as manchas já baixadas.'); return; }
-    carregarNdviSalvos(talhaoId)
+    carregarNdviSalvos(talhaoId, true)   // catálogo: a escolha é manual na tela
       .then(d => { if (vivo) setDisp(d); })
       .catch(() => { if (vivo) setMsg('Não consegui buscar os índices na nuvem.'); })
       .finally(() => { if (vivo) setCarregando(false); });

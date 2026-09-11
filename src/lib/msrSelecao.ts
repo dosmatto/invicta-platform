@@ -143,6 +143,22 @@ function melhor(a: CenaAval, b: CenaAval): boolean {
   return a.id.localeCompare(b.id) < 0;
 }
 
+// ── Fonte de análise: quais camadas GUARDADAS entram nos cálculos ────────────
+// Guardar uma camada (★) e usá-la (◎) viraram decisões separadas. A regra é uma
+// só e vale para Zonas de Manejo, Comparador, Produtividade e IA: sem marcação,
+// a camada fica arquivada e não entra em cálculo nenhum. Mora aqui, e não junto
+// da persistência (lib/ndviFontes.ts), para poder ser testada em Node.
+
+/** Identidade de uma camada na marcação: talhão + chave (ndvi_s2__NDVI__data). */
+export const idFonte = (talhaoId: string, chave: string) => `${talhaoId}:${chave}`;
+
+/** Só as camadas marcadas como fonte de análise neste talhão. */
+export function apenasFontes<T extends { chave: string }>(
+  camadas: T[], talhaoId: string, marcadas: Record<string, boolean>,
+): T[] {
+  return camadas.filter(c => marcadas[idFonte(talhaoId, c.chave)] === true);
+}
+
 /**
  * Quanto cada cena guardada ocupa no banco, em MB.
  *
