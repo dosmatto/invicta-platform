@@ -77,6 +77,26 @@ export interface PerfilLabConfig {
   // Unidade/extrator REAIS deste laboratório por variável (ex.: k -> mmolc/dm³ ·
   // Mehlich). Opcional/retrocompatível; a unidade de referência fica no catálogo.
   detalhes?: Record<string, { unidade?: string; extrator?: string }>;
+
+  // ── Campos do LAUDO FOLIAR (src/lib/foliarImportacao.ts) ──────────────────
+  // Moram aqui, e não num tipo separado, porque um perfil foliar é um
+  // `PerfilLabConfig` em tudo o mais: mesma linha de cabeçalho, mesma coluna de
+  // nº da amostra, mesmo mapa `elementos` (só que a chave é o NutrienteId
+  // 'N'|'P'|…). São todos OPCIONAIS e nenhum caminho de SOLO os lê — nem
+  // `aplicarPerfil`, nem `autoConfig`, nem `pontuarPerfil` — então os perfis de
+  // solo existentes seguem idênticos (npm run teste:lab).
+  //
+  // Não há `regex*` correspondente de propósito: o órgão e o estádio vêm de
+  // coluna própria ou do lote inteiro escolhido na tela; extrair estádio de
+  // dentro de um identificador por expressão regular seria adivinhação num
+  // campo em que errar significa comparar a amostra com a norma errada
+  // (ledger 19).
+  /** Coluna com o órgão amostrado ("3º trifólio com pecíolo", "folha bandeira"). */
+  colOrgao?: number;
+  /** Coluna com o estádio fenológico da coleta ("R1", "R1-R2", "VT"). */
+  colEstadio?: number;
+  /** Coluna com a produtividade associada à amostra, em kg/ha ou sc/ha. */
+  colProdutividade?: number;
 }
 
 
