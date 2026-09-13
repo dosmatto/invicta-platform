@@ -16,6 +16,12 @@
 //   n da norma · origem · aderência de órgão · aderência de estádio ·
 //   presença de produtividade · completude dos 11 nutrientes.
 //
+// O QUE NÃO SE SABE SAI DA CONTA (peso 0 e componente removido), nunca vira
+// nota zero: punir o desconhecido é fabricar informação. Vale para órgão,
+// estádio, n da norma E produtividade. Completude é a exceção proposital — ali
+// o desconhecido É a medida: um laudo com 3 dos 11 nutrientes é objetivamente
+// uma base mais fraca, não uma informação faltando sobre a base.
+//
 // TETO POR ÓRGÃO DIFERENTE — a decisão mais importante deste arquivo. Kurihara
 // et al. (2013) mostraram que trifólio COM e SEM pecíolo têm teores
 // significativamente diferentes de N, P, B, Fe, Mn e Zn (maiores sem pecíolo) e
@@ -132,8 +138,16 @@ export function calcularConfianca(e: EntradaConfianca): ResultadoConfianca {
     }
   }
 
-  comp.produtividade = typeof e.produtividadeKgha === 'number' && Number.isFinite(e.produtividadeKgha) ? 100 : 0;
-  pesos.produtividade = PESOS.produtividade;
+  // PRODUTIVIDADE AUSENTE SAI DA CONTA — coerente com a regra acima, que o
+  // código contrariava: produtividade não informada virava nota ZERO com peso
+  // cheio, derrubando o índice em até 10 pontos e assumindo o gargalo da tela
+  // ("presença de produtividade: 0/100"). Não saber a produtividade da amostra
+  // não piora a norma nem o laudo; apenas não acrescenta evidência.
+  const temProdutividade = typeof e.produtividadeKgha === 'number' && Number.isFinite(e.produtividadeKgha);
+  if (temProdutividade) {
+    comp.produtividade = 100;
+    pesos.produtividade = PESOS.produtividade;
+  }
 
   const presentes = nutrientesPresentes(e.teores).length;
   comp.completude = (presentes / NUTRIENTES.length) * 100;
@@ -164,7 +178,7 @@ export function calcularConfianca(e: EntradaConfianca): ResultadoConfianca {
     e.orgaoAmostra ? `órgão da amostra: ${ROTULO_ORGAO[e.orgaoAmostra]}` : 'órgão da amostra não informado',
     norma?.estadio ? `estádio da norma: ${norma.estadio}` : null,
     e.estadioAmostra ? `estádio da amostra: ${e.estadioAmostra}` : null,
-    comp.produtividade ? 'com produtividade' : 'sem produtividade',
+    temProdutividade ? 'com produtividade' : 'sem produtividade informada (fora da conta)',
     `${presentes}/${NUTRIENTES.length} nutrientes analisados`,
   ].filter(Boolean).join(' · ');
 

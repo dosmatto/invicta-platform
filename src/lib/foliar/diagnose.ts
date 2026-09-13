@@ -22,10 +22,17 @@
 //   2. norma regional × universal muda o diagnóstico;
 //   3. o método é sensível ao estádio e ao órgão amostrado.
 //
+// DUAS GUARDAS DE PROCEDÊNCIA, porque norma errada não dá erro — dá número:
+//   · CULTURA. Se `opcoes.cultura` vier e não bater com `norma.cultura`, a
+//     diagnose sai com aviso FORTE no topo. Uma norma de milho aplicada a soja
+//     produz índices, ordem de limitação e consenso perfeitamente formados.
+//   · COMPOSIÇÃO DO CND. O conjunto de nutrientes da amostra tem de ser
+//     idêntico ao da norma; o motivo nomeia o que falta (ver `cnd.ts`).
+//
 // Módulo PURO — sem DOM, sem I/O. npm run teste:foliar
 
 import { diagnosticarChance } from './chanceMatematica.ts';
-import { calcularCnd } from './cnd.ts';
+import { calcularCnd, conferirComponentesCnd } from './cnd.ts';
 import { calcularConfianca } from './confianca.ts';
 import { calcularDris } from './dris.ts';
 import { classificarPorFaixa } from './faixaSuficiencia.ts';
@@ -53,6 +60,21 @@ export interface OpcoesDiagnose {
   orgaoAmostra?: Orgao | null;
   estadioAmostra?: string | null;
   produtividadeKgha?: number | null;
+  /**
+   * Cultura da AMOSTRA. Quando informada e diferente da cultura da norma, a
+   * diagnose sai com aviso forte — ver `culturaDivergente`.
+   */
+  cultura?: string | null;
+}
+
+/** Compara culturas ignorando caixa, acento, plural simples e pontuação. */
+function mesmaCultura(a?: string | null, b?: string | null): boolean | null {
+  if (!a || !b) return null;                        // desconhecido não acusa nada
+  const k = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().replace(/[^a-z0-9]+/g, '').replace(/s$/, '');
+  const ka = k(a), kb = k(b);
+  if (!ka || !kb) return null;
+  return ka === kb;
 }
 
 function resumoDaNorma(n: NormaDris): NormaResumo {
@@ -91,8 +113,15 @@ export function diagnosticar(
   if (!norma || !norma.cnd) {
     cndMotivo = !norma ? SEM_NORMA : 'a norma não traz as estatísticas clr da população de referência';
   } else {
-    cnd = calcularCnd(teores, norma);
-    if (!cnd) cndMotivo = 'não foi possível fechar a composição da amostra (resíduo ≤ 0) ou não há nutriente com estatística clr na norma';
+    // O conjunto de componentes é conferido ANTES, para que o motivo diga QUAL
+    // nutriente falta em vez de um genérico "não foi possível" (ledger 5 e 17).
+    const incompativel = conferirComponentesCnd(teores, norma.cnd);
+    if (incompativel) {
+      cndMotivo = incompativel;
+    } else {
+      cnd = calcularCnd(teores, norma);
+      if (!cnd) cndMotivo = 'não foi possível fechar a composição da amostra (resíduo ≤ 0) ou não há nutriente com estatística clr na norma';
+    }
   }
 
   // ── Faixa de suficiência ──────────────────────────────────────────────────
@@ -154,6 +183,16 @@ export function diagnosticar(
   } else if (norma.avisos?.length) {
     avisos.push(...norma.avisos);
   }
+  // Cultura divergente: aviso FORTE e no topo da lista. A norma de milho roda
+  // sobre soja sem erro nenhum — os números saem, a ordem de limitação sai, e
+  // nada na tela denuncia que a referência é de outra espécie.
+  if (norma && mesmaCultura(opcoes.cultura, norma.cultura) === false) {
+    avisos.unshift(
+      `NORMA DE OUTRA CULTURA: a norma é de ${norma.cultura} e a amostra foi informada como ${opcoes.cultura}. `
+      + 'Teores de referência e razões duais são específicos da espécie — este diagnóstico NÃO deve ser usado para recomendação. Gere ou carregue uma norma da cultura da amostra.',
+    );
+  }
+  if (cndMotivo && norma?.cnd) avisos.push(`CND não calculado — ${cndMotivo}`);
   if (dris?.avisos.length) avisos.push(...dris.avisos);
   if (cnd?.avisos.length) avisos.push(...cnd.avisos);
   if (faixa?.avisos.length) avisos.push(...faixa.avisos);
