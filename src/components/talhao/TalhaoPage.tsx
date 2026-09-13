@@ -22,6 +22,7 @@ import {
 } from '@/lib/store';
 import { rotuloAno } from '@/lib/periodo';
 import { FertilidadeSection } from '@/components/talhao/FertilidadeSection';
+import { FoliarSection } from '@/components/talhao/FoliarSection';
 import { AmostragemModulo } from '@/components/talhao/AmostragemModulo';
 import { CompactacaoSection } from '@/components/talhao/CompactacaoSection';
 import { CondutividadeSection } from '@/components/talhao/CondutividadeSection';
@@ -45,7 +46,7 @@ import { tocarBackend } from '@/lib/interpUrl';
 import { APP_VERSION } from '@/constants/version';
 import {
   ChevronLeft, ChevronsLeft, ChevronsRight, X, Home, Leaf, Grid3x3, Layers, BarChart3, FileSpreadsheet,
-  Activity, Satellite, FolderOpen, FileText, Clock, Zap, Mountain, SlidersHorizontal, Lock,
+  Activity, Satellite, FolderOpen, FileText, Clock, Zap, Mountain, SlidersHorizontal, Lock, Salad,
 } from 'lucide-react';
 
 const MapView = dynamic(
@@ -54,7 +55,7 @@ const MapView = dynamic(
 );
 
 type TabId =
-  | 'resumo' | 'altimetria' | 'fertilidade' | 'amostragem' | 'zonas' | 'produtividade'
+  | 'resumo' | 'altimetria' | 'fertilidade' | 'foliar' | 'amostragem' | 'zonas' | 'produtividade'
   | 'recomendacoes' | 'prescricoes' | 'compactacao' | 'condutividade' | 'ndvi' | 'arquivos' | 'relatorios';
 
 // Ordem de TRABALHO do talhão (não-`pronto` = "em breve", cai no placeholder EmBreve).
@@ -68,6 +69,9 @@ const TABS: Array<{ id: TabId; label: string; curto: string; icon: React.Element
   { id: 'zonas',         label: 'Zonas de Manejo',  curto: 'Zonas',       icon: Layers,          pronto: true },
   { id: 'amostragem',    label: 'Amostragem',       curto: 'Amostrag.',   icon: Grid3x3,         pronto: true },
   { id: 'fertilidade',   label: 'Fertilidade',      curto: 'Fertilid.',   icon: Leaf,            pronto: true },
+  // Foliar vem logo DEPOIS da Fertilidade: a leitura é a mesma conversa — o
+  // solo oferece, a folha mostra o que a planta conseguiu absorver.
+  { id: 'foliar',        label: 'Foliar / Nutrição', curto: 'Foliar',     icon: Salad,           pronto: true },
   { id: 'recomendacoes', label: 'Recomendações',    curto: 'Recom.',      icon: FileSpreadsheet, pronto: true },
   { id: 'prescricoes',   label: 'Prescrições',      curto: 'Prescr.',     icon: SlidersHorizontal, pronto: true },
   { id: 'arquivos',      label: 'Arquivos',         curto: 'Arquivos',    icon: FolderOpen,      pronto: true },
@@ -408,6 +412,7 @@ export function TalhaoPage({ id }: { id: string }) {
                 <FertilidadeSection safraNome={safraSel} />
               </>
             )}
+            {tabAtivo === 'foliar' && <FoliarSection safraNome={safraSel} />}
             {tabAtivo === 'amostragem' && (
               <>
                 {!modoProdutor && (
@@ -430,7 +435,7 @@ export function TalhaoPage({ id }: { id: string }) {
             {tabAtivo === 'prescricoes' && <PrescricoesSection safraNome={safraSel} />}
             {tabAtivo === 'arquivos' && <ArquivosSection safraNome={safraSel} />}
             {tabAtivo === 'relatorios' && <GeradorRelatorios safraNome={safraSel} />}
-            {!['resumo', 'fertilidade', 'amostragem', 'zonas', 'compactacao', 'condutividade', 'altimetria', 'produtividade', 'ndvi', 'recomendacoes', 'prescricoes', 'arquivos', 'relatorios'].includes(tabAtivo) && (
+            {!['resumo', 'fertilidade', 'foliar', 'amostragem', 'zonas', 'compactacao', 'condutividade', 'altimetria', 'produtividade', 'ndvi', 'recomendacoes', 'prescricoes', 'arquivos', 'relatorios'].includes(tabAtivo) && (
               <EmBreve label={TABS.find(t => t.id === tabAtivo)?.label ?? ''} />
             )}
           </div>

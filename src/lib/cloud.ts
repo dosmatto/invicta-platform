@@ -90,6 +90,18 @@ const KEYS_LISTA = [
   'inv_auditoria',                     // IAM — trilha de auditoria (quem fez o quê)
   'inv_perfis_permissao',              // IAM — perfis de permissão salvos com nome
   'inv_prescricoes',                   // Prescrições Agronômicas (doses por zona → arquivo de aplicação)
+  'inv_foliar_amostras',               // Diagnose Foliar — laudos foliares (teores dos 11 nutrientes) por
+                                       // talhão+safra. Leve (~400 B por amostra) e é a matéria-prima do
+                                       // gerador de normas: preso num navegador só, a norma da empresa
+                                       // nunca fica boa.
+  'inv_foliar_diagnoses',              // Diagnose Foliar — resultados GRAVADOS (normaId + normaVersao).
+                                       // É histórico imutável: nasce dentro do sync, não precisa de
+                                       // migrar…ParaSyncV1 como os vizinhos antigos.
+  'inv_bib_analises-foliares',         // Diagnose Foliar — normas DRIS/CND e faixas na Biblioteca.
+                                       // Sem esta linha a semeadura de fábrica não teria sentido: o gate
+                                       // `deveSemearLegendas(…, cloudAindaNaoHidratou())` só distingue
+                                       // "vazio de verdade" de "ainda não sei" para chave sincronizada —
+                                       // e a norma editada pelo usuário ficaria presa numa máquina.
 ];
 // Configurações (objeto único por chave) — coleção 'inv_config', doc = chave
 const KEYS_OBJ = ['inv_etiqueta_cfg'];

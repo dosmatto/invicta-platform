@@ -22,9 +22,17 @@ import { moverNaOrdem, renumerar } from './ordemCatalogo';
 import { areaHaGeo, areaHaGeoBruta } from './areaGeo';
 import { empresaAtivaId, uidUsuario, escopoClienteIds, escopoTalhaoIds, escopoFazendaIds } from './empresa';
 import { fazendasVisiveis, clientesComFazendaMarcada } from './iam/escopoFazendas';
+// Diagnose Foliar — o núcleo (src/lib/foliar) é PURO: o store importa os tipos
+// e as normas de fábrica, nunca o contrário. `.ts` explícito é exigência dos
+// testes Node por type-stripping (ver tsconfig: allowImportingTsExtensions).
+import { NOMES_NORMAS_FABRICA, NORMAS_FABRICA } from './foliar/normasFabrica.ts';
+import type {
+  DiagnoseFoliar, FuncaoDris, NormaDris, Orgao, TeoresFoliares,
+} from './foliar/tipos.ts';
 import {
   listar as bibListar,
   _bibLoadRaw,
+  _bibSaveRaw,
   obter as bibObter,
   criar as bibCriar,
   atualizar as bibAtualizar,
@@ -3280,6 +3288,264 @@ export function migrarInsumosEscopoEmpresaV1() {
   const meus = load<ItemBiblioteca<unknown>>('inv_bib_insumos').filter(i => i.escopo === 'meu');
   for (const i of meus) bibCompartilhar('insumos', i.id, 'empresa');
   localStorage.setItem('inv_migrado_insumos_escopo_v1', '1');
+}
+
+// ── Diagnose Foliar (ledger 18-23) ────────────────────────────────────────
+//
+// Duas coleções e uma regra que manda nas duas: a AMOSTRA é o dado bruto do
+// laudo (muda quando o usuário corrige um teor); a DIAGNOSE é o resultado
+// CONGELADO de uma execução contra uma norma específica. Por isso a diagnose
+// guarda `normaId` + `normaVersao` E o resultado inteiro: editar a norma no ano
+// que vem NÃO pode reescrever o laudo que o cliente recebeu impresso (ledger
+// 23). É o mesmo motivo pelo qual `MapaProdutividade` guarda `stats` em vez de
+// recalcular do raster.
+//
+// ÓRGÃO É CAMPO OBRIGATÓRIO DA AMOSTRA (ledger 19). Trifólio com e sem pecíolo
+// têm teores significativamente diferentes de N, P, B, Fe, Mn, Zn e K
+// (Kurihara et al. 2013) — uma amostra sem órgão declarado não tem como ser
+// comparada honestamente a norma nenhuma, e o índice de confiança penaliza
+// forte quando órgão da amostra e órgão da norma divergem.
+
+/**
+ * Um laudo foliar. `teores` usa `null` para nutriente NÃO analisado — que é
+ * diferente de zero: zero seria uma afirmação que o laboratório não fez.
+ *
+ * O período (Ano/Época) é DERIVADO da data de coleta pelo mesmo `comPeriodo`
+ * das irmãs — o store é a autoridade, a UI não manda ano/época.
+ */
+export interface AmostraFoliar {
+  id: string;
+  empresaId?: string;
+  talhaoId: string;
+  safra: string;
+  cultura: string;
+  /** Data da COLETA da folha ('YYYY-MM-DD'). É ela que vira Data de referência. */
+  dataColeta?: string;
+  dataReferencia?: string;   // = dataColeta (autoridade do período)
+  ano?: number;              // = ano(dataReferencia)
+  epoca?: Epoca;             // '1' (jan–jun) | '2' (jul–dez)
+  /** Estádio fenológico da coleta (ex.: 'R1', 'R2', 'VT'). */
+  estadio?: string;
+  orgao: Orgao;
+  teores: TeoresFoliares;
+  /** Produtividade associada, em kg/ha — o que separa alta de baixa no gerador. */
+  produtividadeKgha?: number | null;
+  /** De onde veio a produtividade: mapa de colheita oficial ou digitação. */
+  origemProdutividade?: 'mapa' | 'manual';
+  laboratorioId?: string;
+  /** Amostragem por zona/célula — permite publicar no canal `zonasManejo`. */
+  zonaId?: string;
+  celulaId?: string;
+  /** Nº da amostra no laudo — a junção de volta com a planilha do laboratório. */
+  numeroAmostra?: number;
+  origem: 'manual' | 'planilha' | 'pdf';
+  observacao?: string;
+  criadoEm: string;
+  atualizadoEm?: string;
+}
+
+/**
+ * Uma diagnose GRAVADA. `resultado` é o objeto completo devolvido por
+ * `diagnosticar` — incluindo o `NormaResumo` e os avisos daquela execução.
+ */
+export interface DiagnoseFoliarSalva {
+  id: string;
+  empresaId?: string;
+  amostraId: string;
+  talhaoId: string;
+  safra: string;
+  /** Id do ItemBiblioteca da norma usada; `normaVersao` congela a versão dela. */
+  normaId: string;
+  normaVersao: number;
+  funcao: FuncaoDris;
+  resultado: DiagnoseFoliar;
+  criadoEm: string;
+}
+
+const K_FOLIAR_AMOSTRAS = 'inv_foliar_amostras';
+const K_FOLIAR_DIAGNOSES = 'inv_foliar_diagnoses';
+
+// Avisa as telas (aba Foliar, painel, Biblioteca) que amostras/diagnoses
+// mudaram — mesma razão de `notificarLab`: sem isso a lista só se atualizava
+// ao sair e voltar da aba.
+function notificarFoliar() {
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('inv:foliar'));
+}
+
+export function getAmostrasFoliares(talhaoId?: string, safra?: string): AmostraFoliar[] {
+  let all = loadFiltrado<AmostraFoliar>(K_FOLIAR_AMOSTRAS);
+  if (talhaoId) all = all.filter(a => a.talhaoId === talhaoId);
+  // Filtra por ANO (não pela string exata da safra), como os laudos de solo:
+  // amostra coletada em 2024 aparece sob o Ano 2024 mesmo que a safra ativa na
+  // hora do lançamento fosse outra.
+  if (safra) all = filtraPorAno(all, safra);
+  return all.sort((a, b) => b.criadoEm.localeCompare(a.criadoEm));
+}
+
+export function saveAmostraFoliar(a: Omit<AmostraFoliar, 'id' | 'criadoEm'>): AmostraFoliar {
+  const lista = load<AmostraFoliar>(K_FOLIAR_AMOSTRAS);
+  const agora = new Date().toISOString();
+  const nova: AmostraFoliar = comEmpresa(comPeriodo({
+    ...a,
+    // A data de referência do período É a data da coleta. `comPeriodo` cai em
+    // hoje-SP quando não há nenhuma das duas.
+    dataReferencia: a.dataColeta ?? a.dataReferencia,
+    id: uid(), criadoEm: agora, atualizadoEm: agora,
+  }));
+  lista.push(nova);
+  save(K_FOLIAR_AMOSTRAS, lista);
+  notificarFoliar();
+  return nova;
+}
+
+/**
+ * Patch numa amostra. RECALCULA o período quando a data de coleta muda — sem
+ * isso, corrigir a data deixaria a amostra arquivada no ano errado.
+ */
+export function updateAmostraFoliar(id: string, data: Partial<AmostraFoliar>): AmostraFoliar | null {
+  const lista = load<AmostraFoliar>(K_FOLIAR_AMOSTRAS);
+  const i = lista.findIndex(x => x.id === id);
+  if (i < 0) return null;
+  const mesclada = { ...lista[i], ...data };
+  const atualizada: AmostraFoliar = {
+    ...comPeriodo({ ...mesclada, dataReferencia: mesclada.dataColeta ?? mesclada.dataReferencia }),
+    atualizadoEm: new Date().toISOString(),
+  };
+  lista[i] = atualizada;
+  save(K_FOLIAR_AMOSTRAS, lista);
+  notificarFoliar();
+  return atualizada;
+}
+
+/**
+ * Exclui a amostra E as diagnoses geradas a partir dela.
+ *
+ * Mesmo espírito de `deleteImportacaoLab`/`excluirMapasDaImportacao`: o que o
+ * usuário quer dizer com "apaguei o laudo errado" é que o resultado errado
+ * também sumiu. Diagnose órfã continuaria aparecendo no histórico do talhão
+ * apontando para uma amostra que não existe mais — e o gráfico entre safras
+ * leria um ponto fantasma. Aqui a limpeza é SÍNCRONA (é só localStorage, não há
+ * raster na nuvem envolvido) e acontece ANTES de a amostra sair, para que uma
+ * falha de gravação não deixe o par meio apagado.
+ */
+export function deleteAmostraFoliar(id: string) {
+  const diagnoses = load<DiagnoseFoliarSalva>(K_FOLIAR_DIAGNOSES);
+  const sobram = diagnoses.filter(d => d.amostraId !== id);
+  if (sobram.length !== diagnoses.length) save(K_FOLIAR_DIAGNOSES, sobram);
+  save(K_FOLIAR_AMOSTRAS, load<AmostraFoliar>(K_FOLIAR_AMOSTRAS).filter(a => a.id !== id));
+  notificarFoliar();
+}
+
+export function getDiagnosesFoliares(talhaoId?: string, safra?: string): DiagnoseFoliarSalva[] {
+  let all = loadFiltrado<DiagnoseFoliarSalva>(K_FOLIAR_DIAGNOSES);
+  if (talhaoId) all = all.filter(d => d.talhaoId === talhaoId);
+  if (safra) all = all.filter(d => d.safra === safra);
+  return all.sort((a, b) => b.criadoEm.localeCompare(a.criadoEm));
+}
+
+export function saveDiagnoseFoliar(d: Omit<DiagnoseFoliarSalva, 'id' | 'criadoEm'>): DiagnoseFoliarSalva {
+  const lista = load<DiagnoseFoliarSalva>(K_FOLIAR_DIAGNOSES);
+  const nova: DiagnoseFoliarSalva = comEmpresa({ ...d, id: uid(), criadoEm: new Date().toISOString() });
+  lista.push(nova);
+  save(K_FOLIAR_DIAGNOSES, lista);
+  notificarFoliar();
+  return nova;
+}
+
+export function deleteDiagnoseFoliar(id: string) {
+  save(K_FOLIAR_DIAGNOSES, load<DiagnoseFoliarSalva>(K_FOLIAR_DIAGNOSES).filter(d => d.id !== id));
+  notificarFoliar();
+}
+
+/**
+ * A produtividade que a plataforma JÁ TEM para este talhão+safra+cultura, em
+ * kg/ha (ledger 20 e 34) — é ela que alimenta `origemProdutividade: 'mapa'`.
+ *
+ * Prefere o mapa marcado como OFICIAL; sem oficial, o mais recente (a lista já
+ * vem ordenada por `criadoEm` desc). Devolve `null` — nunca zero — quando não
+ * há mapa: zero seria lido como "lavoura que não produziu nada" e jogaria a
+ * amostra para a população de BAIXA produtividade do gerador de normas,
+ * envenenando a norma inteira.
+ */
+export function produtividadeDoMapa(talhaoId: string, safra: string, cultura: string): number | null {
+  const alvo = (cultura ?? '').trim().toLowerCase();
+  const mapas = getMapasProdutividade(talhaoId, safra)
+    .filter(m => (m.cultura ?? '').trim().toLowerCase() === alvo);
+  if (!mapas.length) return null;
+  const escolhido = mapas.find(m => m.oficial) ?? mapas[0];
+  const media = escolhido?.stats?.mediaKgha;
+  return typeof media === 'number' && Number.isFinite(media) && media > 0 ? media : null;
+}
+
+// ── Normas foliares na Biblioteca (ledger 21 e 22) ────────────────────────
+
+/**
+ * Semeia as normas de LITERATURA na categoria `analises-foliares`.
+ *
+ * MESMO GATE das legendas oficiais, e pelo mesmo motivo: os itens têm id FIXO,
+ * e semear grava por esses ids com espelho na nuvem — um seed indevido
+ * SOBRESCREVERIA, em todas as máquinas, a norma que o usuário editou. Lista
+ * vazia só autoriza semear quando dá para afirmar que ela está vazia de
+ * verdade: sem nuvem configurada, ou com o boot da nuvem já concluído.
+ * Enquanto o boot não confirma, "vazio" quer dizer "ainda não sei".
+ *
+ * Escrita por `_bibSaveRaw` (e não por `criar`) justamente porque `criar`
+ * geraria um id novo a cada boot — e o histórico de diagnoses aponta para o id.
+ */
+export function seedNormasFoliaresSistema() {
+  const lista = _bibLoadRaw<NormaDris>('analises-foliares');
+  if (!deveSemearLegendas(lista.length, cloudAindaNaoHidratou())) return;
+  const agora = new Date().toISOString();
+  const itens: ItemBiblioteca<NormaDris>[] = NORMAS_FABRICA.map(norma => ({
+    id: norma.id as string,
+    categoria: 'analises-foliares',
+    nome: NOMES_NORMAS_FABRICA[norma.id as string] ?? `${norma.cultura} — ${norma.estadio}`,
+    descricao: norma.fonte,
+    tags: [norma.cultura, norma.estadio],
+    escopo: 'sistema',
+    ativo: true,
+    versao: norma.versao ?? 1,
+    criadoEm: agora,
+    atualizadoEm: agora,
+    conteudo: norma,
+  }));
+  _bibSaveRaw<NormaDris>('analises-foliares', itens);
+}
+
+/**
+ * As normas foliares visíveis (sistema + empresa + minhas), opcionalmente
+ * filtradas por cultura e ÓRGÃO. O filtro de órgão não é conveniência de tela:
+ * oferecer norma de outro órgão no seletor é o caminho mais curto para um
+ * diagnóstico errado com cara de certo (ledger 19).
+ *
+ * O `id`/`versao` do item da Biblioteca são copiados PARA DENTRO da norma —
+ * é o que `saveDiagnoseFoliar` grava como `normaId`/`normaVersao`.
+ */
+export function getNormasFoliares(cultura?: string, orgao?: Orgao): ItemBiblioteca<NormaDris>[] {
+  const alvo = (cultura ?? '').trim().toLowerCase();
+  return bibListar<NormaDris>('analises-foliares')
+    .filter(i => i.ativo && !!i.conteudo)
+    .filter(i => !alvo || (i.conteudo.cultura ?? '').trim().toLowerCase() === alvo)
+    .filter(i => !orgao || i.conteudo.orgao === orgao)
+    // Próprias antes das de fábrica: quem gerou norma com os próprios laudos
+    // quer usá-la. Dentro de cada grupo, a mais recente primeiro.
+    .sort((a, b) =>
+      Number(a.escopo === 'sistema') - Number(b.escopo === 'sistema')
+      || (b.atualizadoEm ?? b.criadoEm ?? '').localeCompare(a.atualizadoEm ?? a.criadoEm ?? '')
+      || a.nome.localeCompare(b.nome, 'pt-BR'));
+}
+
+/**
+ * A norma a usar quando ninguém escolheu: a própria (empresa/usuário) mais
+ * recente; na falta dela, a de fábrica mais recente. `null` quando não há norma
+ * alguma para a combinação cultura+órgão — e aí a diagnose declara "sem norma"
+ * em vez de calcular (ledger 17).
+ */
+export function normaFoliarPadrao(cultura: string, orgao: Orgao): NormaDris | null {
+  const itens = getNormasFoliares(cultura, orgao);
+  if (!itens.length) return null;
+  const escolhido = itens[0];   // a ordenação de getNormasFoliares já é esta regra
+  return { ...escolhido.conteudo, id: escolhido.id, versao: escolhido.versao };
 }
 
 export function clearAll() {

@@ -88,6 +88,11 @@
     "teste:sessao": "node scripts/teste-sessao-storage.mjs",
     "teste:msr": "node scripts/teste-msr-selecao.mjs",
     "teste:grafcenas": "node scripts/teste-grafico-cenas.mjs",
+    "teste:foliar": "node scripts/teste-foliar.mjs",
+    "teste:foliar-normas": "node scripts/teste-foliar-normas.mjs",
+    "teste:foliar-fabrica": "node scripts/teste-foliar-fabrica.mjs",
+    "teste:foliar-graficos": "node scripts/teste-foliar-graficos.mjs",
+    "teste:foliar-importacao": "node scripts/teste-foliar-importacao.mjs",
     "teste:msr-regras": "PY=\"$HOME/.invicta-fert-backend/venv/bin/python\"; [ -x \"$PY\" ] || PY=python3; \"$PY\" scripts/teste-msr-regras.py"
   },
   "dependencies": {

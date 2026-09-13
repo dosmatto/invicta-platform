@@ -72,3 +72,6 @@ loja/*.aab
 
 # Capturas originais do celular (as versões ajustadas para a loja ficam versionadas)
 loja/screenshots/originais/
+
+# Orquestração de agentes (ledger + scratch), nunca vai para o repositório
+.workflow/
