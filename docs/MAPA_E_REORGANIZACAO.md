@@ -185,7 +185,7 @@ Um módulo único **"Biblioteca"** se torna a **fonte única** de configuraçõe
 | `safras` | Safras | atual `inv_safras` (sai do menu lateral; uso real continua nos talhões) |
 | `grades` | Grades | padrões de amostragem, modelos de grade, densidades |
 | `fertilidade` | Fertilidade | regras de interpretação, parâmetros padrão de krigagem/IDW |
-| `analises-foliares` | Análises Foliares | (novo) |
+| `analises-foliares` | Análises Foliares | implementado — normas de fábrica (Kurihara 2013, Embrapa clássica) via `ConteudoAnalisesFoliares` |
 | `altimetria` | Altimetria | (novo) |
 | `imagem-satelite` | Imagem de Satélite | (novo) |
 | `compactacao` | Compactação | (novo) |

@@ -20,10 +20,13 @@ export {
   chaveDoPar, chaveNaoOrientada, type ParNutrientes, paresDeNutrientes, razao, razoesDaAmostra,
 } from './razoes.ts';
 
-export { C_ALVAREZ_LEITE, C_JONES, K_BEAUFILS, calcularDris, funcaoF } from './dris.ts';
+export {
+  C_ALVAREZ_LEITE, C_JONES, K_BEAUFILS, calcularDris, funcaoF, parUtilizavel,
+} from './dris.ts';
 
 export {
-  COMPONENTE_RESIDUO, type Clr, MATERIA_SECA_GKG, calcularClr, calcularCnd, mahalanobis,
+  COMPONENTE_RESIDUO, type Clr, MATERIA_SECA_GKG,
+  calcularClr, calcularCnd, componentesDaNorma, conferirComponentesCnd, mahalanobis,
 } from './cnd.ts';
 
 export { classificarPorFaixa, classificarTeor } from './faixaSuficiencia.ts';
@@ -39,7 +42,7 @@ export {
 
 export {
   type AmostraNorma, N_MINIMO_NORMA, N_MINIMO_PAR, type OpcoesNorma,
-  type ResultadoGeracao, gerarNorma,
+  type ResultadoGeracao, escolherComponentes, gerarNorma,
 } from './normas.ts';
 
 export {
