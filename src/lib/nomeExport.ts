@@ -88,6 +88,7 @@ export function idTalhao(fazenda: string, talhao?: string | null, sigla?: string
 /** O que está sendo exportado — o segmento que agrupa a pasta por assunto. */
 export type TipoExport =
   | 'FERT'      // mapa de fertilidade (1 elemento)
+  | 'FOLIAR'    // diagnose foliar (DRIS/CND/Faixa/Chance) — individual ou lote
   | 'BOOK'      // book de fertilidade (vários elementos + capa)
   | 'ZONAS'     // zonas de manejo (PDF/SHP/KML)
   | 'NDVI'      // mapas de satélite
