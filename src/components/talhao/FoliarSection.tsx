@@ -31,12 +31,16 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import {
-  getSafras, getPlantio, getTalhoes, getGrades,
+  getSafras, getPlantio, getTalhoes, getGrades, getFazendas, getClientes,
   getAmostrasFoliares, saveAmostraFoliar, updateAmostraFoliar, deleteAmostraFoliar,
   getDiagnosesFoliares, saveDiagnoseFoliar, produtividadeDoMapa,
-  getNormasFoliares, normaFoliarPadrao,
+  getNormasFoliares, normaFoliarPadrao, getLaboratorios, fonteDoLaboratorio,
   type AmostraFoliar, type DiagnoseFoliarSalva,
 } from '@/lib/store';
+import {
+  gerarRelatorioFoliar, gerarRelatorioFoliarLote,
+  type EntradaRelatorioFoliar, type PontoHistoricoFoliar,
+} from '@/lib/relatorioFoliar';
 import { zonasDoTalhao } from '@/lib/zonasDoTalhao';
 import { ehComposta, celulasComoZonaTalhao } from '@/lib/celulasDaGrade';
 import { rotuloAno } from '@/lib/periodo';
@@ -54,7 +58,7 @@ import type { CelulaMatriz, DadosMatriz } from '@/lib/foliarGraficos';
 import { inputStyle } from '@/constants/ui';
 import {
   Salad, Plus, Pencil, Trash2, Save, X, ChevronDown, ChevronRight,
-  AlertTriangle, Map as MapIcon, Info, Loader2,
+  AlertTriangle, Map as MapIcon, Info, Loader2, FileDown,
 } from 'lucide-react';
 
 // ── Formatação e constantes de tela ─────────────────────────────────────────
@@ -291,6 +295,7 @@ export function FoliarSection({ safraNome: safraProp }: { safraNome?: string } =
   const talhao = useMemo(() => getTalhoes().find(t => t.id === talhaoId) ?? null, [talhaoId]);
   const cultura = useMemo(() => (talhaoId && safra ? getPlantio(talhaoId, safra) : ''), [talhaoId, safra]);
   const podeEditar = pode('importarLaudo');
+  const podeRel = pode('relatorios');
 
   // `versao` é o único estado do carregamento: o store dispara `inv:foliar` em
   // toda escrita e o contador sobe, refazendo as listas. Guardar as listas em
@@ -324,6 +329,8 @@ export function FoliarSection({ safraNome: safraProp }: { safraNome?: string } =
   const [ressalvasAbertas, setRessalvasAbertas] = useState(false);
   const [mapaLigado, setMapaLigado] = useState(true);
   const [modoCor, setModoCor] = useState<'limitante' | 'ibn'>('limitante');
+  const [gerandoPdf, setGerandoPdf] = useState<'' | 'amostra' | 'lote'>('');
+  const [erroPdf, setErroPdf] = useState('');
 
   // Seleção DERIVADA: id escolhido enquanto ele existir; senão, a amostra mais
   // recente. Corrigir a seleção num efeito faria a tela renderizar duas vezes a
@@ -518,6 +525,81 @@ export function FoliarSection({ safraNome: safraProp }: { safraNome?: string } =
     setAvisoSalvo('Diagnose gravada no histórico do talhão.');
   }
 
+  // ── Relatório PDF (ledger 36) ─────────────────────────────────────────────
+  // Quem monta o PDF é `lib/relatorioFoliar` — aqui só se junta o que esta tela
+  // já sabe. A NORMA vai inteira (e não o `NormaResumo` de dentro da diagnose)
+  // porque é ela que carrega os `avisos`: sem isso a ressalva de procedência da
+  // tabela clássica da Embrapa não chegaria ao papel (ledger 37).
+  const historicoPdf: PontoHistoricoFoliar[] = useMemo(
+    () => historico.map(h => ({
+      safra: h.safra, ibn: h.ibn, motivo: h.ibnMotivo,
+      limitante: h.limitante, classe: h.classe, funcao: h.funcao, fonteNorma: h.fonte,
+    })),
+    [historico],
+  );
+
+  function entradaDoRelatorio(a: AmostraFoliar, d: DiagnoseFoliar): EntradaRelatorioFoliar {
+    const t = getTalhoes().find(x => x.id === a.talhaoId);
+    const f = t ? getFazendas().find(x => x.id === t.fazendaId) : undefined;
+    const cli = f ? getClientes().find(x => x.id === f.clienteId) : undefined;
+    const lab = a.laboratorioId ? getLaboratorios().find(l => l.id === a.laboratorioId) : undefined;
+    return {
+      identificacao: {
+        produtor: cli?.nome ?? '', fazenda: f?.nome ?? '', talhao: t?.nome ?? '',
+        safra: a.safra, cultura: a.cultura || cultura,
+        areaHa: t?.areaHa ?? null, municipio: f?.municipio ?? null, estado: f?.estado ?? null,
+        laboratorio: lab ? fonteDoLaboratorio(lab) : null,
+        siglaFazenda: f?.sigla ?? null,
+        logoClienteUrl: (cli as { logoUrl?: string } | undefined)?.logoUrl ?? null,
+        ano: a.ano ?? null, epoca: a.epoca ?? null,
+      },
+      amostra: {
+        dataColeta: a.dataColeta ?? a.dataReferencia ?? null,
+        estadio: a.estadio ?? null,
+        orgao: a.orgao,
+        numeroAmostra: a.numeroAmostra ?? null,
+        areaRotulo: a.celulaId ? `célula ${a.celulaId}` : a.zonaId ? `zona ${a.zonaId}` : null,
+        produtividadeKgha: a.produtividadeKgha ?? null,
+        origemProdutividade: a.origemProdutividade ?? null,
+        observacao: a.observacao ?? null,
+      },
+      diagnose: d,
+      norma,
+      historico: historicoPdf,
+    };
+  }
+
+  async function gerarPdfAmostra() {
+    if (!amostraSel || !diag || gerandoPdf) return;
+    setGerandoPdf('amostra'); setErroPdf('');
+    try {
+      await gerarRelatorioFoliar(entradaDoRelatorio(amostraSel, diag));
+    } catch (e) {
+      setErroPdf(e instanceof Error ? e.message : 'Falha ao gerar o PDF.');
+    } finally {
+      setGerandoPdf('');
+    }
+  }
+
+  // Lote: TODAS as amostras do talhão/ano num PDF só. Rodam com a MESMA norma e
+  // a MESMA função da tela — dois IBN calculados por critérios diferentes na
+  // mesma tabela comparativa não seriam comparáveis.
+  async function gerarPdfLote() {
+    if (!amostras.length || gerandoPdf) return;
+    setGerandoPdf('lote'); setErroPdf('');
+    try {
+      const entradas = amostras.map(a => entradaDoRelatorio(a, diagnosticar(a.teores, norma, {
+        funcao, orgaoAmostra: a.orgao, estadioAmostra: a.estadio ?? null,
+        produtividadeKgha: a.produtividadeKgha ?? null,
+      })));
+      await gerarRelatorioFoliarLote(entradas);
+    } catch (e) {
+      setErroPdf(e instanceof Error ? e.message : 'Falha ao gerar o PDF.');
+    } finally {
+      setGerandoPdf('');
+    }
+  }
+
   // ── Dados dos gráficos ────────────────────────────────────────────────────
   const barras = useMemo(() => {
     if (!diag?.dris) return [];
@@ -585,6 +667,15 @@ export function FoliarSection({ safraNome: safraProp }: { safraNome?: string } =
         {talhao?.nome ?? 'Talhão'} · {rotuloAno(safra) || safra || 'sem ano'} · {cultura || 'cultura não informada'}
       </div>
 
+      {/* Falha do PDF fica FORA dos blocos: vale para o relatório da amostra e
+          para o de lote, e continua visível mesmo sem amostra selecionada. */}
+      {erroPdf && (
+        <div className="rounded px-2 py-1.5 flex items-start gap-1" style={{ background: '#3b1220', border: '1px solid #7f1d1d' }}>
+          <AlertTriangle size={10} style={{ color: '#fca5a5', flexShrink: 0, marginTop: 1 }} />
+          <span className="text-[9px]" style={{ color: '#fca5a5' }}>{erroPdf}</span>
+        </div>
+      )}
+
       {/* Norma em uso + função DRIS */}
       <Bloco titulo="Norma em uso" icone={<Info size={12} style={{ color: '#93c5fd' }} />}>
         {!cultura && (
@@ -637,11 +728,26 @@ export function FoliarSection({ safraNome: safraProp }: { safraNome?: string } =
       <Bloco
         titulo={`Amostras (${amostras.length})`}
         icone={<Salad size={12} style={{ color: '#4ade80' }} />}
-        direita={podeEditar && !form ? (
-          <button onClick={abrirNovo} className="px-2 py-1 rounded text-[10px] font-bold text-white flex items-center gap-1" style={{ background: 'var(--invicta-green-dark)' }}>
-            <Plus size={11} /> Nova
-          </button>
-        ) : undefined}
+        direita={(
+          <div className="flex items-center gap-1">
+            {podeRel && amostras.length > 0 && (
+              <button
+                onClick={gerarPdfLote}
+                disabled={!!gerandoPdf}
+                title="Um PDF com todas as amostras deste talhão/ano: resumo comparativo + uma seção por amostra"
+                className="px-2 py-1 rounded text-[10px] font-bold flex items-center gap-1 disabled:opacity-50"
+                style={{ background: '#1a3a6b', color: '#93c5fd' }}
+              >
+                {gerandoPdf === 'lote' ? <Loader2 size={10} className="animate-spin" /> : <FileDown size={10} />} PDF de todas
+              </button>
+            )}
+            {podeEditar && !form && (
+              <button onClick={abrirNovo} className="px-2 py-1 rounded text-[10px] font-bold text-white flex items-center gap-1" style={{ background: 'var(--invicta-green-dark)' }}>
+                <Plus size={11} /> Nova
+              </button>
+            )}
+          </div>
+        )}
       >
         {!amostras.length ? (
           <p className="text-[9px]" style={{ color: '#64748b' }}>
@@ -814,17 +920,32 @@ export function FoliarSection({ safraNome: safraProp }: { safraNome?: string } =
           <Bloco
             titulo="Diagnose multi-método"
             icone={<Salad size={12} style={{ color: '#4ade80' }} />}
-            direita={podeEditar ? (
-              <button
-                onClick={gravarDiagnose}
-                disabled={!norma?.id}
-                title={norma?.id ? 'Congela este resultado no histórico do talhão' : 'Sem norma não há o que congelar'}
-                className="px-2 py-1 rounded text-[10px] font-bold flex items-center gap-1"
-                style={{ background: '#1a3a6b', color: '#93c5fd', opacity: norma?.id ? 1 : 0.5 }}
-              >
-                <Save size={10} /> Gravar
-              </button>
-            ) : undefined}
+            direita={(
+              <div className="flex items-center gap-1">
+                {podeRel && (
+                  <button
+                    onClick={gerarPdfAmostra}
+                    disabled={!!gerandoPdf}
+                    title="Relatório oficial desta diagnose: teores, índices, concordância, confiança e as limitações do método"
+                    className="px-2 py-1 rounded text-[10px] font-bold text-white flex items-center gap-1 disabled:opacity-50"
+                    style={{ background: 'var(--invicta-blue-mid)' }}
+                  >
+                    {gerandoPdf === 'amostra' ? <Loader2 size={10} className="animate-spin" /> : <FileDown size={10} />} Relatório PDF
+                  </button>
+                )}
+                {podeEditar && (
+                  <button
+                    onClick={gravarDiagnose}
+                    disabled={!norma?.id}
+                    title={norma?.id ? 'Congela este resultado no histórico do talhão' : 'Sem norma não há o que congelar'}
+                    className="px-2 py-1 rounded text-[10px] font-bold flex items-center gap-1"
+                    style={{ background: '#1a3a6b', color: '#93c5fd', opacity: norma?.id ? 1 : 0.5 }}
+                  >
+                    <Save size={10} /> Gravar
+                  </button>
+                )}
+              </div>
+            )}
           >
             {avisoSalvo && <p className="text-[9px] mb-1.5" style={{ color: '#4ade80' }}>{avisoSalvo}</p>}
 
