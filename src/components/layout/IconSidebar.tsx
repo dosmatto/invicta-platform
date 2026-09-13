@@ -1,7 +1,7 @@
 'use client';
 
 import {
-  LayoutDashboard, Users, Settings, Library, Ruler,
+  LayoutDashboard, Users, Settings, Library, Ruler, Salad,
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { APP_VERSION } from '@/constants/version';
@@ -13,6 +13,9 @@ const MENU = [
   { id: 'produtores',      label: 'Clientes', icon: Users },
   null,
   { id: 'medicoes',        label: 'Medições', icon: Ruler },
+  null,
+  // Diagnose Foliar: visão multi-talhão, importação em lote e gerador de normas.
+  { id: 'foliar',          label: 'Foliar',   icon: Salad },
   null,
   { id: 'biblioteca',      label: 'Biblioteca', icon: Library },
   null,

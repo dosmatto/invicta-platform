@@ -13,6 +13,7 @@ import { InsumosPanel } from './InsumosPanel';
 import { ExportacaoPanel } from './ExportacaoPanel';
 import { RecomendacoesPanel } from './RecomendacoesPanel';
 import { SafrasPanel } from './SafrasPanel';
+import { ConteudoAnalisesFoliares } from './ConteudoAnalisesFoliares';
 import { CentralAcessos } from './acessos/CentralAcessos';
 import { ehAdmin } from '@/lib/empresa';
 
@@ -92,6 +93,7 @@ function CategoriaConteudo({ slug }: { slug: SlugBiblioteca }) {
   if (slug === 'safras') return <ConteudoSafras />;
   if (slug === 'grades') return <ConteudoGrades />;
   if (slug === 'preferencias-analise') return <ConteudoPreferencias />;
+  if (slug === 'analises-foliares') return <ConteudoAnalisesFoliares />;
   return <ConteudoGenerico slug={slug} />;
 }
 

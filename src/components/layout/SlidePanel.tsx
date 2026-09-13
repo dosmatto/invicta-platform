@@ -15,11 +15,15 @@ import { BibliotecaPanel } from '@/components/panels/BibliotecaPanel';
 import { ConfiguracoesPanel } from '@/components/panels/ConfiguracoesPanel';
 import { EmpresaConfig } from '@/components/panels/EmpresaConfig';
 import { MedicoesPanel } from '@/components/panels/MedicoesPanel';
+import { FoliarPanel } from '@/components/panels/FoliarPanel';
 
 const STATIC_PANELS: Record<string, { title: string; component: React.ComponentType; largura?: number }> = {
   dashboard:         { title: 'Início',          component: DashboardPanel },
   produtores:        { title: 'Clientes',        component: ProdutoresPanel },
   medicoes:          { title: 'Medições de campo', component: MedicoesPanel, largura: 340 },
+  // Mais largo que os irmãos: a visão geral é uma TABELA multi-talhão e a prévia
+  // da importação tem uma coluna por nutriente — em 300px nenhuma das duas se lê.
+  foliar:            { title: 'Diagnose Foliar', component: FoliarPanel, largura: 520 },
   empresa:           { title: 'Empresa',         component: EmpresaConfig },
   configuracoes:     { title: 'Configurações',   component: ConfiguracoesPanel },
 };
