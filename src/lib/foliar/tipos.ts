@@ -91,7 +91,22 @@ export interface ParNorma {
 
 /** Estatísticas clr da população de referência, usadas pelo CND. */
 export interface NormaCnd {
-  /** Média de zX por componente (os 11 nutrientes + 'R' de resíduo). */
+  /**
+   * Conjunto EXATO de nutrientes com que estas estatísticas clr foram geradas.
+   *
+   * NÃO É METADADO DECORATIVO: dado composicional só é comparável dentro do
+   * MESMO fechamento. O clr divide cada parte pela média geométrica de TODAS as
+   * partes — tirar um componente muda a média geométrica e desloca o vetor
+   * inteiro. Uma amostra sem S comparada a uma norma dos 11 nutrientes produz
+   * um deslocamento comum em TODOS os IZ (o mesmo viés somado a cada um), que
+   * inverte a ordem de limitação e fabrica "excessos" que não existem.
+   *
+   * Por isso `cnd.ts` exige igualdade de conjuntos e devolve `null` + motivo
+   * quando falta (ou sobra) componente. Opcional só por compatibilidade com
+   * normas antigas: nelas o conjunto é inferido das chaves de `media`.
+   */
+  componentes?: NutrienteId[];
+  /** Média de zX por componente (os nutrientes de `componentes` + 'R' de resíduo). */
   media: Record<string, number>;
   /** Desvio-padrão de zX por componente. */
   dp: Record<string, number>;
@@ -104,6 +119,8 @@ export interface NormaCnd {
   ordem?: string[];
   /** nº de amostras completas que geraram as estatísticas clr. */
   n?: number;
+  /** nº de amostras descartadas por não terem exatamente `componentes`. */
+  nExcluidas?: number;
 }
 
 /** Faixa de suficiência de um nutriente, na unidade canônica dele. */

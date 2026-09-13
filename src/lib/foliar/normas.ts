@@ -23,6 +23,12 @@
 //     (faixa definida pela subpopulação de referência) e produz faixas MUITO
 //     mais estreitas que as clássicas. Não é calibração com doses crescentes —
 //     e a `fonte` da norma diz isso, para ninguém confundir com experimento.
+//   · CLR SÓ DE AMOSTRAS COMPLETAS (ledger 10). As estatísticas do CND saem
+//     apenas das amostras que têm EXATAMENTE o conjunto de nutrientes escolhido
+//     (a composição mais frequente do banco), e esse conjunto vai gravado em
+//     `cnd.componentes`. Misturar laudos com e sem S no mesmo clr contamina
+//     média e DP, porque os dois estão em fechamentos diferentes. Quantas
+//     amostras saíram, e por quê, vai nos `avisos` da norma.
 //   · DESVIO POPULACIONAL (÷n), reusando `resumoValores` de
 //     `validacao/estatistica.ts` (ledger 12). Com n ≥ 30, a diferença para o
 //     amostral (÷n−1) é < 2% e não muda ordem de limitação nenhuma; reescrever
@@ -36,6 +42,7 @@
 import { resumoValores } from '../validacao/estatistica.ts';
 import { calcularClr, COMPONENTE_RESIDUO } from './cnd.ts';
 import { corteDeProdutividade, gerarChance, type AmostraPopulacao } from './chanceMatematica.ts';
+import { nutrientesPresentes } from './nutrientes.ts';
 import { paresDeNutrientes, razao } from './razoes.ts';
 import {
   type FaixaNutriente, NUTRIENTES, type NormaCnd, type NormaDris,
@@ -66,6 +73,11 @@ export interface OpcoesNorma {
   versao?: number;
   /** Gerar também a Chance Matemática a partir da mesma população. Padrão true. */
   comChance?: boolean;
+  /**
+   * Conjunto de nutrientes do CND. Quando omitido, o gerador usa a composição
+   * MAIS FREQUENTE na população de alta produtividade — ver `escolherComponentes`.
+   */
+  componentesCnd?: NutrienteId[];
 }
 
 export interface ResultadoGeracao {
@@ -112,19 +124,73 @@ const razoesDe = (amostras: AmostraNorma[], a: NutrienteId, b: NutrienteId): num
 };
 
 /**
+ * Composição MAIS FREQUENTE na população — o conjunto de nutrientes com que o
+ * clr da norma será gerado.
+ *
+ * POR QUE A MODA E NÃO A INTERSEÇÃO NEM A UNIÃO: a interseção puniria a
+ * população inteira por causa de três laudos sem S (a norma sairia de 10
+ * nutrientes e as 27 amostras completas ficariam de fora, por terem um
+ * componente A MAIS); a união aceitaria amostras incompletas, que é exatamente
+ * o defeito. A moda escolhe o laudo padrão do banco e descarta as exceções —
+ * poucas, nomeadas e contadas no aviso.
+ *
+ * Empate no nº de amostras: vence o conjunto MAIOR (norma mais informativa).
+ */
+export function escolherComponentes(amostras: AmostraNorma[]): NutrienteId[] {
+  const contagem = new Map<string, { ids: NutrienteId[]; n: number }>();
+  for (const am of amostras) {
+    const ids = nutrientesPresentes(am.teores);
+    if (ids.length < 2) continue;                 // com menos de 2 não há composição
+    const chave = ids.join(',');
+    const e = contagem.get(chave) ?? { ids, n: 0 };
+    e.n++;
+    contagem.set(chave, e);
+  }
+  let melhor: { ids: NutrienteId[]; n: number } | null = null;
+  for (const e of contagem.values()) {
+    if (!melhor || e.n > melhor.n || (e.n === melhor.n && e.ids.length > melhor.ids.length)) melhor = e;
+  }
+  return melhor?.ids ?? [];
+}
+
+interface GeracaoClr {
+  cnd: NormaCnd | null;
+  /** Amostras fora por terem composição diferente da escolhida. */
+  excluidasPorComposicao: number;
+  /** Amostras fora por não fecharem a composição (resíduo ≤ 0). */
+  excluidasPorFechamento: number;
+  componentes: NutrienteId[];
+}
+
+/**
  * Estatísticas clr da população de referência, para o CND.
+ *
+ * SÓ ENTRAM AMOSTRAS COMPLETAS no conjunto escolhido (ledger 10). Empilhar uma
+ * amostra sem S junto de amostras com S contamina média e DP do clr: o vetor da
+ * amostra incompleta está deslocado em bloco (o fechamento é outro), então ela
+ * não é um "ponto com um dado faltando" — é um ponto de outra geometria. A
+ * média puxada por ela desloca o centro da norma e o DP infla, e toda diagnose
+ * feita depois herda o erro sem nenhum sinal na tela.
  *
  * `covInversa` fica FORA de propósito: inverter a matriz de covariância de 12
  * componentes exige um banco grande e uma matriz não singular, e uma inversão
  * mal condicionada produz um D² numericamente lixo que parece um número.
  * Sem ela, `cnd.ts` devolve `mahalanobis: null` e diz o porquê.
  */
-function estatisticasClr(alta: AmostraNorma[]): NormaCnd | null {
+function estatisticasClr(alta: AmostraNorma[], componentes: NutrienteId[]): GeracaoClr {
+  const vazio: GeracaoClr = { cnd: null, excluidasPorComposicao: 0, excluidasPorFechamento: 0, componentes };
+  if (componentes.length < 2) return vazio;
+  const alvo = componentes.join(',');
+
   const porComponente = new Map<string, number[]>();
   let usadas = 0;
+  let excluidasPorComposicao = 0;
+  let excluidasPorFechamento = 0;
+
   for (const am of alta) {
+    if (nutrientesPresentes(am.teores).join(',') !== alvo) { excluidasPorComposicao++; continue; }
     const clr = calcularClr(am.teores);
-    if (!clr) continue;
+    if (!clr) { excluidasPorFechamento++; continue; }
     usadas++;
     for (const [k, v] of Object.entries(clr.valores)) {
       const arr = porComponente.get(k) ?? [];
@@ -132,7 +198,7 @@ function estatisticasClr(alta: AmostraNorma[]): NormaCnd | null {
       porComponente.set(k, arr);
     }
   }
-  if (usadas < 2) return null;
+  if (usadas < 2) return { ...vazio, excluidasPorComposicao, excluidasPorFechamento };
 
   const media: Record<string, number> = {};
   const dp: Record<string, number> = {};
@@ -143,8 +209,17 @@ function estatisticasClr(alta: AmostraNorma[]): NormaCnd | null {
     dp[k] = r.desvio;
   }
   const temNutriente = Object.keys(media).some(k => k !== COMPONENTE_RESIDUO);
-  if (!temNutriente) return null;
-  return { media, dp, covInversa: null, n: usadas };
+  if (!temNutriente) return { ...vazio, excluidasPorComposicao, excluidasPorFechamento };
+
+  return {
+    // `componentes` é o conjunto do FECHAMENTO, não as chaves de `media`: um
+    // componente constante sai de média/DP mas continua fechando a composição,
+    // e a amostra precisa trazê-lo para o clr bater.
+    cnd: { componentes, media, dp, covInversa: null, n: usadas, nExcluidas: excluidasPorComposicao },
+    excluidasPorComposicao,
+    excluidasPorFechamento,
+    componentes,
+  };
 }
 
 /** Faixas = média ± 1 DP da população de alta produtividade (ver cabeçalho). */
@@ -247,9 +322,29 @@ export function gerarNorma(amostras: AmostraNorma[], opcoes: OpcoesNorma): Resul
     avisos.push(`Par(es) descartados por falta de dado ou variação nula: ${paresDescartados.slice(0, 10).join(', ')}${paresDescartados.length > 10 ? '…' : ''}.`);
   }
 
-  const cnd = estatisticasClr(alta);
-  if (!cnd) avisos.push('Sem estatísticas clr: nenhuma amostra de alta produtividade fechou a composição (resíduo ≤ 0) ou não houve variação. O CND não estará disponível nesta norma.');
-  else avisos.push('A norma não traz matriz de covariância inversa: a distância de Mahalanobis (D²) ficará indisponível na diagnose.');
+  const componentesCnd = opcoes.componentesCnd?.length
+    ? NUTRIENTES.filter(id => (opcoes.componentesCnd as NutrienteId[]).includes(id))
+    : escolherComponentes(alta);
+  const geracaoClr = estatisticasClr(alta, componentesCnd);
+  const cnd = geracaoClr.cnd;
+
+  if (geracaoClr.excluidasPorComposicao) {
+    avisos.push(
+      `${geracaoClr.excluidasPorComposicao} amostra(s) de alta produtividade ficaram FORA das estatísticas clr (CND) por não terem exatamente os ${componentesCnd.length} nutrientes do conjunto escolhido (${componentesCnd.join(', ')}). `
+      + 'Teor foliar é dado composicional: uma amostra com um nutriente a menos (ou a mais) está num fechamento diferente e, misturada às demais, deslocaria a média e inflaria o desvio-padrão do clr. Os pares do DRIS e as faixas continuam usando todas as amostras.',
+    );
+  }
+  if (geracaoClr.excluidasPorFechamento) {
+    avisos.push(`${geracaoClr.excluidasPorFechamento} amostra(s) ficaram fora do clr por não fecharem a composição (soma dos teores ≥ 1000 g/kg de matéria seca) — confira a unidade desses laudos.`);
+  }
+  if (!cnd) {
+    avisos.push(
+      `Sem estatísticas clr: menos de 2 amostras de alta produtividade têm a composição completa (${componentesCnd.length ? componentesCnd.join(', ') : 'nenhum conjunto identificável'}) e fecham o resíduo, ou não houve variação. O CND não estará disponível nesta norma.`,
+    );
+  } else {
+    avisos.push(`Estatísticas clr geradas com ${cnd.n} amostra(s) de composição completa nos nutrientes ${componentesCnd.join(', ')} — o CND só aceitará laudos com exatamente esse conjunto.`);
+    avisos.push('A norma não traz matriz de covariância inversa: a distância de Mahalanobis (D²) ficará indisponível na diagnose.');
+  }
 
   const faixas = faixasDaAlta(alta);
   const chance = opcoes.comChance === false

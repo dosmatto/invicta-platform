@@ -17,6 +17,9 @@ import {
   consensoMultiMetodo, diagnosticar, funcaoF, interpretarColuna, normalizarNomeNutriente,
   normalizarTeores, razao, paresDeNutrientes, calcularConfianca, unidadeDaColuna,
 } from '../src/lib/foliar/index.ts';
+// Guardas do fechamento composicional: ficam no módulo, não na API pública —
+// a tela consome o `cndMotivo` de `diagnosticar`, não estas funções.
+import { componentesDaNorma, conferirComponentesCnd } from '../src/lib/foliar/cnd.ts';
 
 let ok = 0, fail = 0;
 function t(nome, fn) {
@@ -45,7 +48,12 @@ const PARES = paresDeNutrientes().map(p => {
 // Estatísticas clr: o centro é o clr da própria média (é o que a norma seria se
 // a população de referência fosse toda igual à média), com DP arbitrário > 0.
 const CLR_MEDIA = calcularClr(normalizarTeores(MEDIA));
-const CND_NORMA = { media: { ...CLR_MEDIA.valores }, dp: {}, covInversa: null, n: 60 };
+const CND_NORMA = {
+  // O conjunto do FECHAMENTO vai gravado: sem ele, uma amostra com outro
+  // conjunto de nutrientes seria comparada como se fosse a mesma composição.
+  componentes: Object.keys(MEDIA),
+  media: { ...CLR_MEDIA.valores }, dp: {}, covInversa: null, n: 60,
+};
 for (const k of Object.keys(CLR_MEDIA.valores)) CND_NORMA.dp[k] = 0.05;
 
 // Chance matemática mínima: classe ótima centrada na média de cada nutriente.
@@ -351,6 +359,153 @@ t('diagnose completa com K baixo: os 4 métodos rodam e concordam em K', () => {
   assert.ok(r.avisos.some(a => a.includes('somam aproximadamente zero')), 'limitações do método viajam junto');
 });
 
+console.log('\n(h) CND e o FECHAMENTO — amostra incompleta não é comparável\n');
+
+t('a matemática do defeito: tirar S desloca TODO o vetor clr pela mesma constante', () => {
+  const completo = calcularClr(normalizarTeores(MEDIA));
+  const semS = calcularClr(normalizarTeores({ ...MEDIA, S: null }));
+  const comuns = Object.keys(semS.valores).filter(k => k !== 'R');
+  const desvios = comuns.map(k => semS.valores[k] - completo.valores[k]);
+  const d0 = desvios[0];
+  for (const d of desvios) {
+    assert.ok(Math.abs(d - d0) < 1e-9, `o deslocamento não é constante (${d} vs ${d0})`);
+  }
+  assert.ok(Math.abs(d0) > 0.01, `deslocamento de ${d0} — pequeno demais para o teste provar algo`);
+  // É ESTE deslocamento comum que, dividido pelo DP da norma (0,05), virava
+  // IZ = +1,481 em todos os 11 nutrientes. Ele não se cancela contra a média
+  // da norma porque a norma foi centrada em OUTRO fechamento.
+  assert.ok(Math.abs(d0 / 0.05) > 1, `IZ espúrio de ${(d0 / 0.05).toFixed(3)} em todos os nutrientes de uma vez`);
+});
+
+t('amostra sem S: CND é null e o motivo NOMEIA o S', () => {
+  const semS = normalizarTeores({ ...MEDIA, S: null });
+  assert.equal(calcularCnd(semS, NORMA), null, 'não se calcula CND sobre subconjunto');
+  const motivo = conferirComponentesCnd(semS, CND_NORMA);
+  assert.ok(typeof motivo === 'string' && motivo.length > 20, `motivo: ${motivo}`);
+  assert.ok(motivo.includes('faltam: S'), `o motivo tem de citar o S — veio: ${motivo}`);
+  assert.ok(motivo.includes('11'), 'e dizer quantos nutrientes a norma exige');
+});
+
+t('diagnosticar sem S: cnd null com motivo na tela, e os outros métodos seguem', () => {
+  const r = diagnosticar({ ...MEDIA, S: null }, NORMA, { orgaoAmostra: 'trifolio-com-peciolo' });
+  assert.equal(r.cnd, null, 'CND não sai sobre amostra incompleta');
+  assert.ok(r.cndMotivo.includes('faltam: S'), `cndMotivo: ${r.cndMotivo}`);
+  assert.ok(r.avisos.some(a => a.includes('faltam: S')), 'e o aviso viaja com a diagnose');
+  assert.ok(r.dris, 'DRIS continua rodando — ele trata ausência ajustando o n');
+  assert.ok(r.faixa && r.chance, 'faixa e chance também');
+  const k = r.consenso.find(c => c.nutriente === 'K');
+  assert.ok(!('cnd' in k.porMetodo), 'o CND não vota no consenso quando não foi calculado');
+});
+
+t('NENHUM índice espúrio escapa: com a norma completa, sem S não sai número nenhum', () => {
+  for (const ausente of ['S', 'B', 'Cu', 'Zn']) {
+    const r = diagnosticar({ ...MEDIA, [ausente]: null }, NORMA);
+    assert.equal(r.cnd, null, `${ausente} ausente ainda produziu CND`);
+    assert.ok(r.cndMotivo.includes(`faltam: ${ausente}`), `${ausente}: ${r.cndMotivo}`);
+  }
+});
+
+t('SOBRA também invalida: norma de 10 componentes × laudo de 11', () => {
+  const normaSemS = {
+    ...NORMA,
+    cnd: { ...CND_NORMA, componentes: Object.keys(MEDIA).filter(id => id !== 'S') },
+  };
+  const r = diagnosticar(MEDIA, normaSemS);
+  assert.equal(r.cnd, null, 'acrescentar um componente muda o fechamento igual a tirar');
+  assert.ok(r.cndMotivo.includes('sobram'), `cndMotivo: ${r.cndMotivo}`);
+  assert.ok(r.cndMotivo.includes('S'), 'e nomeia o S que sobra');
+});
+
+t('norma ANTIGA sem `componentes`: o conjunto é inferido das chaves de media', () => {
+  const { componentes, ...cndSemCampo } = CND_NORMA;
+  assert.ok(componentes, 'a fixture tem o campo, para o teste fazer sentido');
+  const inferido = componentesDaNorma(cndSemCampo);
+  assert.equal(inferido.length, 11, `inferiu ${inferido.join(', ')}`);
+  assert.ok(!inferido.includes('R'), 'o resíduo não é nutriente diagnosticável');
+  const r = diagnosticar({ ...MEDIA, S: null }, { ...NORMA, cnd: cndSemCampo });
+  assert.equal(r.cnd, null, 'a guarda vale também para norma antiga');
+  assert.ok(r.cndMotivo.includes('faltam: S'), r.cndMotivo);
+  // E a norma antiga COMPLETA continua funcionando, sem invalidar o que já existe.
+  assert.ok(diagnosticar(MEDIA, { ...NORMA, cnd: cndSemCampo }).cnd, 'amostra completa ainda roda');
+});
+
+console.log('\n(i) Procedência: norma de outra cultura não passa calada\n');
+
+t('norma de milho sobre soja ⇒ aviso FORTE, em primeiro lugar', () => {
+  const r = diagnosticar(MEDIA, NORMA, { cultura: 'Milho' });
+  assert.ok(r.avisos[0].includes('NORMA DE OUTRA CULTURA'), `primeiro aviso: ${r.avisos[0]}`);
+  assert.ok(r.avisos[0].includes('Soja') && r.avisos[0].includes('Milho'), 'nomeia as duas culturas');
+  assert.ok(r.dris, 'o cálculo ainda sai — é o aviso que muda a leitura, não o número');
+});
+
+t('mesma cultura (com acento, caixa ou plural diferentes) NÃO gera aviso', () => {
+  for (const cultura of ['Soja', 'soja', 'SOJA', 'Sojas']) {
+    const r = diagnosticar(MEDIA, NORMA, { cultura });
+    assert.ok(!r.avisos.some(a => a.includes('OUTRA CULTURA')), `${cultura} acusou divergência`);
+  }
+  const semInformar = diagnosticar(MEDIA, NORMA, {});
+  assert.ok(!semInformar.avisos.some(a => a.includes('OUTRA CULTURA')), 'cultura não informada não acusa nada');
+});
+
+console.log('\n(j) Par inválido na norma — os índices continuam somando zero\n');
+
+const NORMA_PAR_RUIM = {
+  ...NORMA,
+  pares: PARES.map((p, i) => (i === 0 ? { ...p, dp: 0 } : p)),
+};
+
+t('um par com DP zero é descartado com aviso que culpa a NORMA, não o laudo', () => {
+  const d = calcularDris(normalizarTeores(K_BAIXO), NORMA_PAR_RUIM, 'alvarez-leite');
+  const aviso = d.avisos.find(a => a.includes('par(es) da NORMA'));
+  assert.ok(aviso, `avisos: ${d.avisos.join(' | ')}`);
+  assert.ok(aviso.includes(`${PARES[0].a}/${PARES[0].b}`), `o aviso nomeia o par: ${aviso}`);
+  assert.ok(d.avisos.some(a => a.includes('desbalanceado')), 'e declara o desenho desbalanceado');
+});
+
+t('a soma dos índices é ≈ 0 mesmo com o par inválido (era 0,952)', () => {
+  const d = calcularDris(normalizarTeores(K_BAIXO), NORMA_PAR_RUIM, 'alvarez-leite');
+  const soma = d.indices.reduce((s, i) => s + i.indice, 0);
+  assert.ok(Math.abs(soma) < 1e-9, `Σíndices = ${soma}`);
+  assert.equal(d.nNutrientes, 11, 'nenhum nutriente sumiu por causa de um par');
+  const n0 = d.indices.find(i => i.nutriente === PARES[0].a).nPares;
+  assert.equal(n0, 9, 'o nutriente do par inválido participa de 9 funções, e isso é reportado');
+  assert.equal(d.indices.find(i => i.nutriente === 'Fe').nPares, 10, 'os demais seguem com 10');
+});
+
+t('a norma íntegra continua somando zero e sem aviso de desbalanceamento', () => {
+  const d = calcularDris(normalizarTeores(K_BAIXO), NORMA, 'alvarez-leite');
+  const soma = d.indices.reduce((s, i) => s + i.indice, 0);
+  assert.ok(Math.abs(soma) < 1e-9, `Σíndices = ${soma}`);
+  assert.ok(!d.avisos.some(a => a.includes('desbalanceado')), `avisos: ${d.avisos.join(' | ')}`);
+  assert.ok(!d.avisos.some(a => a.includes('da NORMA')), 'e nenhum par foi descartado');
+});
+
+t('laudo sem S também soma zero — ausência não desbalanceia o desenho', () => {
+  const d = calcularDris(normalizarTeores({ ...K_BAIXO, S: null }), NORMA, 'alvarez-leite');
+  const soma = d.indices.reduce((s, i) => s + i.indice, 0);
+  assert.ok(Math.abs(soma) < 1e-9, `Σíndices = ${soma}`);
+});
+
+console.log('\n(k) Teor ZERO — o aviso tem de descrever a causa certa\n');
+
+t('S = 0 é "teor zero", NUNCA "não foi analisado"', () => {
+  const d = calcularDris(normalizarTeores({ ...MEDIA, S: 0 }), NORMA, 'alvarez-leite');
+  const zero = d.avisos.find(a => a.includes('Teor ZERO'));
+  assert.ok(zero, `avisos: ${d.avisos.join(' | ')}`);
+  assert.ok(zero.includes('S'), 'nomeia o nutriente zerado');
+  assert.ok(zero.includes('célula vazia'), 'e diz o que quase sempre está por trás');
+  assert.ok(!d.avisos.some(a => a.includes('NÃO FOI ANALISADO')),
+    `a causa errada voltou: ${d.avisos.join(' | ')}`);
+  assert.ok(!d.indices.some(i => i.nutriente === 'S'), 'S sem índice, porque a razão não admite zero');
+  assert.ok(Number.isFinite(d.ibn) && d.ibn < 1e-8, 'e o resto segue equilibrado');
+});
+
+t('ausência continua com o aviso de ausência — os dois casos não se confundem', () => {
+  const d = calcularDris(normalizarTeores({ ...MEDIA, S: null }), NORMA, 'alvarez-leite');
+  assert.ok(d.avisos.some(a => a.includes('NÃO FOI ANALISADO')), `avisos: ${d.avisos.join(' | ')}`);
+  assert.ok(!d.avisos.some(a => a.includes('Teor ZERO')), 'e não inventa um zero que não existe');
+});
+
 console.log('\nÍndice de confiança\n');
 
 t('órgão diferente derruba a confiança por TETO, não por peso', () => {
@@ -376,6 +531,24 @@ t('n da norma e completude movem o número na direção certa', () => {
   const incompleta = calcularConfianca({ ...base, teores: normalizarTeores({ N: 46, K: 18.5, P: 2.7 }) });
   assert.ok(incompleta.valor < calcularConfianca(base).valor, 'laudo com 3 nutrientes vale menos');
   assert.ok(incompleta.gargalo.id.length > 0);
+});
+
+t('produtividade não informada SAI DA CONTA — não vira nota zero nem gargalo', () => {
+  const base = { norma: NORMA, teores: normalizarTeores(MEDIA), orgaoAmostra: 'trifolio-com-peciolo', estadioAmostra: 'R2' };
+  const sem = calcularConfianca({ ...base, produtividadeKgha: null });
+  const com = calcularConfianca({ ...base, produtividadeKgha: 3900 });
+
+  assert.ok(!('produtividade' in sem.componentes), `componentes: ${Object.keys(sem.componentes).join(', ')}`);
+  assert.notEqual(sem.gargalo.id, 'produtividade', 'o desconhecido não pode ser o gargalo');
+  assert.ok(Object.values(sem.componentes).every(v => v > 0), 'nenhum componente zerado por desconhecimento');
+  assert.ok(sem.justificativa.includes('fora da conta'), `justificativa: ${sem.justificativa}`);
+  assert.equal(sem.entradas.produtividadeKgha, null);
+
+  // Informar a produtividade ainda AJUDA (é evidência a mais), mas omiti-la não
+  // custa os 10 pontos cheios do peso — que era o efeito da nota zero.
+  assert.ok(com.valor > sem.valor, `${com.valor} vs ${sem.valor}`);
+  assert.ok(com.valor - sem.valor < 5, `a omissão custou ${(com.valor - sem.valor).toFixed(1)} pontos — perto dos 10 da nota zero`);
+  assert.ok(com.componentes.produtividade === 100, 'e com produtividade o componente volta valendo 100');
 });
 
 console.log(`\n${ok} passaram, ${fail} falharam\n`);

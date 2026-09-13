@@ -256,6 +256,67 @@ t('e a mesma norma acusa K quando K cai 30% — o contraste é ordens de grandez
   assert.equal(d.cnd.ordemLimitacao[0], 'K', 'e o CND da norma gerada concorda');
 });
 
+console.log('\nCLR SÓ DE AMOSTRAS COMPLETAS — a norma não se contamina\n');
+
+// Três laudos de alta produtividade SEM enxofre, jogados na mesma população.
+// É o caso real: laboratório que não cobra S no pacote básico.
+const SEM_S = Array.from({ length: 3 }, (_, k) => {
+  const a = amostraAlta(k * 9);
+  return { teores: normalizarTeores({ ...a.teores, S: null }), produtividadeKgha: a.produtividadeKgha };
+});
+const { norma: NORMA_MISTA, avisos: AVISOS_MISTA } = gerarNorma([...POPULACAO, ...SEM_S], OPCOES);
+
+t('as 3 amostras incompletas são EXCLUÍDAS do clr, e o aviso diz quantas e por quê', () => {
+  assert.ok(NORMA_MISTA, 'a norma ainda sai');
+  assert.equal(NORMA_MISTA.cnd.n, N_ALTA, `clr usou ${NORMA_MISTA.cnd.n} amostras, deveria usar as ${N_ALTA} completas`);
+  assert.equal(NORMA_MISTA.cnd.nExcluidas, 3, `nExcluidas = ${NORMA_MISTA.cnd.nExcluidas}`);
+  const aviso = AVISOS_MISTA.find(a => a.includes('FORA das estatísticas clr'));
+  assert.ok(aviso, `avisos: ${AVISOS_MISTA.join(' | ')}`);
+  assert.ok(aviso.startsWith('3 amostra(s)'), `o aviso tem de trazer a contagem: ${aviso}`);
+  assert.ok(aviso.includes('composicional'), 'e a razão, não só o número');
+});
+
+t('`cnd.componentes` fica GRAVADO na norma, com os 11 nutrientes', () => {
+  assert.ok(Array.isArray(NORMA_MISTA.cnd.componentes), 'o campo existe');
+  assert.equal(NORMA_MISTA.cnd.componentes.length, 11, NORMA_MISTA.cnd.componentes.join(', '));
+  assert.deepEqual(NORMA_MISTA.cnd.componentes, IDS, 'na ordem canônica');
+  assert.deepEqual(NORMA.cnd.componentes, IDS, 'e também na população limpa');
+});
+
+t('a média e o DP do clr saem IDÊNTICOS aos da população limpa — zero contaminação', () => {
+  for (const k of Object.keys(NORMA.cnd.media)) {
+    assert.ok(Math.abs(NORMA_MISTA.cnd.media[k] - NORMA.cnd.media[k]) < 1e-12,
+      `média de ${k} mudou: ${NORMA_MISTA.cnd.media[k]} vs ${NORMA.cnd.media[k]}`);
+    assert.ok(Math.abs(NORMA_MISTA.cnd.dp[k] - NORMA.cnd.dp[k]) < 1e-12, `DP de ${k} mudou`);
+  }
+});
+
+t('DRIS e faixas CONTINUAM usando todas as amostras — a exclusão é só do clr', () => {
+  assert.equal(NORMA_MISTA.n, N_ALTA + 3, `n da norma = ${NORMA_MISTA.n}`);
+  assert.equal(NORMA_MISTA.pares.length, 55, 'os 55 pares seguem lá');
+  assert.ok(NORMA_MISTA.faixas.N, 'e as faixas também');
+});
+
+t('uma amostra sem S NÃO é diagnosticável pelo CND desta norma — motivo cita o S', () => {
+  const r = diagnosticar({ ...MEDIA_ALTA, S: null }, NORMA_MISTA, { cultura: 'Soja' });
+  assert.equal(r.cnd, null);
+  assert.ok(r.cndMotivo.includes('faltam: S'), `cndMotivo: ${r.cndMotivo}`);
+  assert.ok(diagnosticar(MEDIA_ALTA, NORMA_MISTA).cnd, 'e a amostra completa segue rodando');
+});
+
+t('população MAJORITARIAMENTE sem S: o conjunto escolhido vira o de 10 nutrientes', () => {
+  const semS = POPULACAO.map(a => ({
+    teores: normalizarTeores({ ...a.teores, S: null }),
+    produtividadeKgha: a.produtividadeKgha,
+  }));
+  const r = gerarNorma([...semS, ...POPULACAO.slice(0, 2)], OPCOES);
+  assert.ok(r.norma.cnd, 'o CND sai do conjunto que o banco realmente tem');
+  assert.ok(!r.norma.cnd.componentes.includes('S'), `componentes: ${r.norma.cnd.componentes.join(', ')}`);
+  assert.equal(r.norma.cnd.componentes.length, 10);
+  // E agora é a amostra COM S que fica de fora — a regra é simétrica.
+  assert.equal(diagnosticar(MEDIA_ALTA, r.norma).cnd, null, 'laudo com S a mais não é comparável');
+});
+
 t('a norma gerada alimenta os quatro métodos de uma vez', () => {
   const d = diagnosticar(MEDIA_ALTA, NORMA, { orgaoAmostra: 'trifolio-com-peciolo', estadioAmostra: 'R2', produtividadeKgha: 3900 });
   assert.ok(d.dris && d.cnd && d.faixa && d.chance, 'os quatro rodaram a partir de uma norma só');

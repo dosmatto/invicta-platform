@@ -37,6 +37,27 @@
 // par é pulado e o `n` do nutriente cai junto. Tratar ausência como zero
 // fabricaria uma deficiência absoluta que o laudo não mediu (ledger 17).
 //
+// TEOR ZERO É OUTRA COISA E TEM AVISO PRÓPRIO. Zero foi MEDIDO; ausente não foi.
+// A razão dual não admite nem zero no denominador nem razão nula, então os
+// pares daquele nutriente também saem — mas dizer "não foi analisado" seria
+// descrever a causa errada e mandar o consultor procurar um dado que está lá.
+//
+// PAR INVÁLIDO NA NORMA (DP ≤ 0, CV ≤ 0, média não finita) É DESCARTADO ANTES
+// DE OLHAR A AMOSTRA, com aviso: é defeito da NORMA, não do laudo, e tem de
+// aparecer mesmo quando o nutriente do par nem foi analisado.
+//
+// O DIVISOR É COMUM A TODOS OS NUTRIENTES — e isto vale explicação. O índice é
+// a média das f em que o nutriente participa. Quando o desenho é BALANCEADO
+// (todo par presente entre os nutrientes analisados), todos participam do mesmo
+// número de funções, e como cada f entra +f num nutriente e −f no outro, a soma
+// dos índices é exatamente zero: é o que dá sentido à leitura relativa do DRIS
+// ("excesso" é o espelho de uma deficiência). Um par inválido quebra o balanço
+// — os dois nutrientes dele passam a ter n menor — e a soma deixa de ser zero
+// (medimos 0,952 com um único par inválido), o que corrompe a comparação entre
+// índices. Por isso dividimos todos pelo n MÉDIO: ele restaura Σíndices = 0 e,
+// no caso balanceado, é idêntico ao n de cada nutriente — a fórmula clássica
+// continua valendo onde ela vale.
+//
 // IBN = Σ|índices| · IBNm = IBN / nº de nutrientes com índice.
 //
 // Módulo PURO — sem DOM, sem I/O. npm run teste:foliar
@@ -88,6 +109,24 @@ export function funcaoF(r: number, par: ParNorma, funcao: FuncaoDris = 'alvarez-
 }
 
 /**
+ * O par da norma sustenta a função f escolhida?
+ *
+ * Depende da FUNÇÃO: Alvarez&Leite e Jones dividem pelo DP; Beaufils e
+ * Elwali&Gascho, pelo CV. Um par com DP zero é inútil para as duas primeiras e
+ * perfeitamente utilizável para as outras — daí a checagem ser parametrizada em
+ * vez de uma regra única que descartaria pares bons.
+ */
+export function parUtilizavel(par: ParNorma, funcao: FuncaoDris = 'alvarez-leite'): boolean {
+  if (!par || !par.a || !par.b || par.a === par.b) return false;
+  if (!Number.isFinite(par.media) || par.media <= 0) return false;
+  if (funcao === 'alvarez-leite' || funcao === 'jones') {
+    return Number.isFinite(par.dp) && par.dp > 0;
+  }
+  if (funcao === 'elwali-gascho' && !(Number.isFinite(par.dp) && par.dp >= 0)) return false;
+  return Number.isFinite(par.cv) && par.cv > 0;
+}
+
+/**
  * Índices DRIS da amostra contra a norma.
  *
  * Devolve `null` quando a norma não tem pares utilizáveis OU quando nenhum par
@@ -102,17 +141,39 @@ export function calcularDris(
   const pares = norma?.pares ?? [];
   if (!pares.length) return null;
 
+  // Defeito da NORMA se resolve antes de olhar a amostra — ver cabeçalho.
+  const paresInvalidos: string[] = [];
+  const paresValidos: ParNorma[] = [];
+  for (const par of pares) {
+    if (parUtilizavel(par, funcao)) paresValidos.push(par);
+    else paresInvalidos.push(`${par?.a ?? '?'}/${par?.b ?? '?'}`);
+  }
+  if (!paresValidos.length) return null;
+
   const soma = new Map<NutrienteId, number>();
   const conta = new Map<NutrienteId, number>();
   const paresIgnorados: string[] = [];
+  const nutrientesZero = new Set<NutrienteId>();
   let paresSemTeor = 0;
+  let paresComZero = 0;
 
   const acumular = (id: NutrienteId, v: number) => {
     soma.set(id, (soma.get(id) ?? 0) + v);
     conta.set(id, (conta.get(id) ?? 0) + 1);
   };
 
-  for (const par of pares) {
+  const ehZero = (id: NutrienteId) => teores[id] === 0;
+
+  for (const par of paresValidos) {
+    // Zero ANTES de ausência: `razao()` colapsa os dois em `null` (ou em 0 no
+    // numerador), e sem separar aqui o aviso culparia o laudo de não ter
+    // analisado um nutriente que foi analisado e deu zero.
+    if (ehZero(par.a) || ehZero(par.b)) {
+      if (ehZero(par.a)) nutrientesZero.add(par.a);
+      if (ehZero(par.b)) nutrientesZero.add(par.b);
+      paresComZero++;
+      continue;
+    }
     const r = razao(teores, par.a, par.b);
     if (r == null) { paresSemTeor++; continue; }       // nutriente ausente: n ajustado
     const f = funcaoF(r, par, funcao);
@@ -123,9 +184,15 @@ export function calcularDris(
 
   if (!conta.size) return null;
 
+  // Divisor COMUM: mantém Σíndices = 0 mesmo com o desenho desbalanceado, e é
+  // igual ao n de cada nutriente quando o desenho é balanceado (cabeçalho).
+  const contas = [...conta.values()];
+  const nMedio = contas.reduce((s, n) => s + n, 0) / contas.length;
+  const desbalanceado = contas.some(n => n !== contas[0]);
+
   const brutos = [...conta.keys()].map(nutriente => ({
     nutriente,
-    indice: (soma.get(nutriente) as number) / (conta.get(nutriente) as number),
+    indice: (soma.get(nutriente) as number) / nMedio,
     nPares: conta.get(nutriente) as number,
   }));
 
@@ -148,11 +215,28 @@ export function calcularDris(
   });
 
   const avisos: string[] = [];
+  if (paresInvalidos.length) {
+    avisos.push(
+      `${paresInvalidos.length} par(es) da NORMA foram descartados por estatística inválida para a função ${funcao} (DP ≤ 0, CV ≤ 0 ou média não positiva): ${paresInvalidos.slice(0, 8).join(', ')}${paresInvalidos.length > 8 ? '…' : ''}. `
+      + 'É um defeito da norma, não do laudo — os índices foram divididos pelo n médio para continuarem somando zero.',
+    );
+  }
   if (paresSemTeor) {
-    avisos.push(`${paresSemTeor} par(es) da norma não entraram porque um dos nutrientes não foi analisado — o n de cada índice foi ajustado.`);
+    avisos.push(`${paresSemTeor} par(es) da norma não entraram porque um dos nutrientes NÃO FOI ANALISADO — o n de cada índice foi ajustado.`);
+  }
+  if (nutrientesZero.size) {
+    avisos.push(
+      `Teor ZERO em: ${[...nutrientesZero].join(', ')} — ${paresComZero} par(es) fora. Zero não é "não analisado": é um resultado analítico, mas a razão dual não admite zero (divisão por zero no denominador, razão nula no numerador), então esses nutrientes ficaram sem índice. `
+      + 'Confira o laudo: teor exatamente zero quase sempre é célula vazia lida como 0 — se for isso, o campo deve ficar VAZIO, não zerado.',
+    );
   }
   if (paresIgnorados.length) {
-    avisos.push(`Par(es) descartados por estatística inválida na norma (DP ou CV zero): ${paresIgnorados.slice(0, 8).join(', ')}${paresIgnorados.length > 8 ? '…' : ''}.`);
+    avisos.push(`Par(es) descartados no cálculo por razão fora do domínio da função f: ${paresIgnorados.slice(0, 8).join(', ')}${paresIgnorados.length > 8 ? '…' : ''}.`);
+  }
+  if (desbalanceado) {
+    avisos.push(
+      `Desenho de pares desbalanceado: os nutrientes participam de números diferentes de funções f (de ${Math.min(...contas)} a ${Math.max(...contas)}). Os índices foram divididos pelo n médio (${nMedio.toFixed(2)}) para que continuem somando zero — sem isso, um "excesso" deixaria de ser o espelho de uma deficiência e a comparação entre índices ficaria inválida.`,
+    );
   }
 
   return {
