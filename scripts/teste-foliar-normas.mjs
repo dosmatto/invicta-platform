@@ -17,7 +17,7 @@
 // dominaria o teste 3 e ele viraria um teste de sorte.
 
 import assert from 'node:assert/strict';
-import { calcularDris, diagnosticar, gerarNorma, normalizarTeores, razao } from '../src/lib/foliar/index.ts';
+import { calcularDris, CV_MINIMO_PAR, diagnosticar, gerarNorma, normalizarTeores, razao } from '../src/lib/foliar/index.ts';
 
 let ok = 0, fail = 0;
 function t(nome, fn) {
@@ -323,6 +323,70 @@ t('a norma gerada alimenta os quatro métodos de uma vez', () => {
   assert.equal(d.cnd.mahalanobis, null, 'D² segue null — a norma não tem covariância inversa');
   assert.ok(d.confianca.valor > 0);
   assert.equal(d.norma.origem, 'gerada');
+});
+
+// ── Par degenerado: DP praticamente nulo não entra na norma (ledger 39) ─────
+//
+// O CASO REAL QUE ISTO PROTEGE: com uma população de alta pequena, o par Fe/K
+// saiu com DP 0,000 e F = 2,04e31, e a diagnose devolveu IBN = 1,8e16. Toda
+// função f divide pela dispersão do par — "quase zero" não falha, explode.
+//
+// Aqui Fe é amarrado a K por um fator fixo, com um jitter de 1e-9 para que o DP
+// seja ~1e-9 e NÃO exatamente zero: é o caso que a checagem antiga ("variação
+// nula") deixava passar.
+const FATOR_FE_K = 3.9;
+const POP_DEGENERADA = POPULACAO.map((a, k) => ({
+  teores: normalizarTeores({ ...a.teores, Fe: a.teores.K * FATOR_FE_K * (1 + 1e-9 * Math.sin(k)) }),
+  produtividadeKgha: a.produtividadeKgha,
+}));
+const GER_DEG = gerarNorma(POP_DEGENERADA, OPCOES);
+
+const ehFeK = p => (p.a === 'Fe' && p.b === 'K') || (p.a === 'K' && p.b === 'Fe');
+
+t('o par com DP ~1e-9 na população de alta SAI da norma — nas duas orientações', () => {
+  assert.ok(GER_DEG.norma, `a norma tem de sair mesmo assim: ${GER_DEG.motivo}`);
+  const razoesAlta = POP_DEGENERADA.filter(a => a.produtividadeKgha >= 3200).map(a => razao(a.teores, 'Fe', 'K'));
+  const m = razoesAlta.reduce((s, x) => s + x, 0) / razoesAlta.length;
+  const dp = Math.sqrt(razoesAlta.reduce((s, x) => s + (x - m) ** 2, 0) / razoesAlta.length);
+  assert.ok(dp > 0 && dp < 1e-6, `o fixture tem de ter DP quase nulo e NÃO zero: ${dp}`);
+  assert.equal(GER_DEG.norma.pares.filter(ehFeK).length, 0, 'Fe/K não pode estar na norma');
+  assert.equal(GER_DEG.norma.pares.length, NORMA.pares.length - 1, 'e SÓ esse par caiu');
+});
+
+t('o aviso NOMEIA o par degenerado e diz por que ele caiu', () => {
+  const aviso = GER_DEG.avisos.find(a => a.includes('praticamente nulo'));
+  assert.ok(aviso, `nenhum aviso de par degenerado em: ${GER_DEG.avisos.join(' | ')}`);
+  assert.ok(aviso.includes('Fe/K') || aviso.includes('K/Fe'), `o aviso não nomeia o par: ${aviso}`);
+  assert.ok(aviso.includes(`${(CV_MINIMO_PAR * 100).toFixed(1)}%`), 'o aviso tem de dizer o limiar');
+  assert.ok(/DIVIDEM|explod|astronômic/i.test(aviso), `o aviso tem de dizer o PORQUÊ: ${aviso}`);
+  assert.deepEqual(GER_DEG.norma.avisos, GER_DEG.avisos, 'o aviso vai gravado na norma também');
+});
+
+t('F sai FINITO ou null em TODOS os pares que ficaram — nunca 1e31', () => {
+  for (const p of GER_DEG.norma.pares) {
+    assert.ok(p.f === null || Number.isFinite(p.f), `${p.a}/${p.b} gravou f = ${p.f}`);
+    if (p.f !== null) assert.ok(p.f < 1e6, `${p.a}/${p.b} com F absurdo: ${p.f}`);
+    assert.ok(p.dp / p.media >= CV_MINIMO_PAR, `${p.a}/${p.b} passou com CV ${p.dp / p.media}`);
+  }
+});
+
+t('a diagnose sobre a norma degenerada devolve IBN finito e razoável', () => {
+  const mediaAltaDeg = {};
+  const altaDeg = POP_DEGENERADA.filter(a => a.produtividadeKgha >= 3200);
+  for (const id of IDS) {
+    mediaAltaDeg[id] = altaDeg.reduce((s, a) => s + a.teores[id], 0) / altaDeg.length;
+  }
+  const d = calcularDris(normalizarTeores(mediaAltaDeg), GER_DEG.norma);
+  assert.ok(d, 'o DRIS tem de rodar');
+  assert.ok(Number.isFinite(d.ibn), `IBN não finito: ${d.ibn}`);
+  assert.ok(d.ibn < 10, `IBN da própria média tem de ser ~0, veio ${d.ibn}`);
+  assert.ok(d.indices.every(i => Number.isFinite(i.indice)), 'nenhum índice pode ser NaN/Infinity');
+});
+
+t('pares NORMAIS não são afetados pelo piso — a norma limpa segue com os 55', () => {
+  assert.equal(NORMA.pares.length, 55, 'o piso não pode derrubar par bom');
+  assert.ok(NORMA.pares.every(p => p.dp / p.media >= CV_MINIMO_PAR), 'todos acima do piso');
+  assert.ok(!AVISOS.some(a => a.includes('praticamente nulo')), 'e sem aviso de degenerado');
 });
 
 console.log(`\n${ok} passaram, ${fail} falharam\n`);

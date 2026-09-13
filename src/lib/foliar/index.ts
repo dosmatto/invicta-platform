@@ -21,7 +21,7 @@ export {
 } from './razoes.ts';
 
 export {
-  C_ALVAREZ_LEITE, C_JONES, K_BEAUFILS, calcularDris, funcaoF, parUtilizavel,
+  C_ALVAREZ_LEITE, C_JONES, CV_MINIMO_PAR, K_BEAUFILS, calcularDris, funcaoF, parUtilizavel,
 } from './dris.ts';
 
 export {

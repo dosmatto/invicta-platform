@@ -44,7 +44,10 @@
 //
 // PAR INVÁLIDO NA NORMA (DP ≤ 0, CV ≤ 0, média não finita) É DESCARTADO ANTES
 // DE OLHAR A AMOSTRA, com aviso: é defeito da NORMA, não do laudo, e tem de
-// aparecer mesmo quando o nutriente do par nem foi analisado.
+// aparecer mesmo quando o nutriente do par nem foi analisado. E não basta
+// exigir DP > 0: par com dispersão quase nula (dp/média abaixo de
+// `CV_MINIMO_PAR`) também sai, porque toda função f divide por ela e um DP
+// "quase zero" não falha — explode (ledger 39).
 //
 // O DIVISOR É COMUM A TODOS OS NUTRIENTES — e isto vale explicação. O índice é
 // a média das f em que o nutriente participa. Quando o desenho é BALANCEADO
@@ -74,6 +77,25 @@ export const C_ALVAREZ_LEITE = 10;
 export const C_JONES = 1;
 /** Fator k da forma assimétrica de Beaufils. */
 export const K_BEAUFILS = 10;
+
+/**
+ * Piso do coeficiente de variação de um par da norma — dp/média, ADIMENSIONAL
+ * (0,005 = 0,5%), não o `cv` em % gravado em `ParNorma`.
+ *
+ * POR QUE UM PISO, E NÃO SÓ "dp > 0" (ledger 39): todas as quatro funções f
+ * dividem pela dispersão do par — pelo DP (Alvarez&Leite, Jones) ou pelo CV
+ * (Beaufils, Elwali&Gascho). Quando a população de referência é pequena, um par
+ * pode sair com dispersão praticamente nula sem ser exatamente zero, e aí a
+ * divisão não falha: ela EXPLODE. Medido numa população de alta com n=3, o par
+ * Fe/K saiu com DP 0,000 e F = 2,04e31, e a diagnose devolveu IBN = 1,8e16 —
+ * um número absurdo com cara de resultado.
+ *
+ * O piso é deliberadamente baixo: 0,5% de CV é uma razão dual praticamente
+ * constante na população de referência, abaixo do próprio ruído analítico do
+ * laboratório. Nenhum par biologicamente informativo cai aqui — quem cai é o
+ * par degenerado, que não diagnostica nada e só serve para estourar a escala.
+ */
+export const CV_MINIMO_PAR = 0.005;
 
 /**
  * Valor da função f para UMA razão, contra UM par da norma.
@@ -112,17 +134,22 @@ export function funcaoF(r: number, par: ParNorma, funcao: FuncaoDris = 'alvarez-
  * O par da norma sustenta a função f escolhida?
  *
  * Depende da FUNÇÃO: Alvarez&Leite e Jones dividem pelo DP; Beaufils e
- * Elwali&Gascho, pelo CV. Um par com DP zero é inútil para as duas primeiras e
- * perfeitamente utilizável para as outras — daí a checagem ser parametrizada em
- * vez de uma regra única que descartaria pares bons.
+ * Elwali&Gascho, pelo CV. Daí a checagem ser parametrizada em vez de uma regra
+ * única que descartaria pares bons.
+ *
+ * O PISO DE DISPERSÃO (`CV_MINIMO_PAR`) VALE PARA AS QUATRO, e é aplicado aqui
+ * por DEFESA EM PROFUNDIDADE: `normas.ts` já descarta o par degenerado na
+ * geração, mas norma importada de fora (arquivo, banco de outro cliente, versão
+ * antiga do gerador) chega direto na diagnose sem passar por lá. Ver o
+ * comentário de `CV_MINIMO_PAR` para o porquê do número.
  */
 export function parUtilizavel(par: ParNorma, funcao: FuncaoDris = 'alvarez-leite'): boolean {
   if (!par || !par.a || !par.b || par.a === par.b) return false;
   if (!Number.isFinite(par.media) || par.media <= 0) return false;
-  if (funcao === 'alvarez-leite' || funcao === 'jones') {
-    return Number.isFinite(par.dp) && par.dp > 0;
-  }
-  if (funcao === 'elwali-gascho' && !(Number.isFinite(par.dp) && par.dp >= 0)) return false;
+  // Piso ANTES da regra por função: `Number.isFinite` primeiro, senão um DP
+  // infinito passaria pela comparação (Infinity/média não é < piso).
+  if (!Number.isFinite(par.dp) || par.dp / par.media < CV_MINIMO_PAR) return false;
+  if (funcao === 'alvarez-leite' || funcao === 'jones') return par.dp > 0;
   return Number.isFinite(par.cv) && par.cv > 0;
 }
 
@@ -217,7 +244,7 @@ export function calcularDris(
   const avisos: string[] = [];
   if (paresInvalidos.length) {
     avisos.push(
-      `${paresInvalidos.length} par(es) da NORMA foram descartados por estatística inválida para a função ${funcao} (DP ≤ 0, CV ≤ 0 ou média não positiva): ${paresInvalidos.slice(0, 8).join(', ')}${paresInvalidos.length > 8 ? '…' : ''}. `
+      `${paresInvalidos.length} par(es) da NORMA foram descartados por estatística inválida para a função ${funcao} (média não positiva, CV ≤ 0, ou dispersão praticamente nula — CV abaixo de ${(CV_MINIMO_PAR * 100).toFixed(1)}%, que faria a função f explodir): ${paresInvalidos.slice(0, 8).join(', ')}${paresInvalidos.length > 8 ? '…' : ''}. `
       + 'É um defeito da norma, não do laudo — os índices foram divididos pelo n médio para continuarem somando zero.',
     );
   }

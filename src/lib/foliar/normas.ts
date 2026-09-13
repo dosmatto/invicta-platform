@@ -29,6 +29,14 @@
 //     `cnd.componentes`. Misturar laudos com e sem S no mesmo clr contamina
 //     média e DP, porque os dois estão em fechamentos diferentes. Quantas
 //     amostras saíram, e por quê, vai nos `avisos` da norma.
+//   · PAR DEGENERADO NÃO ENTRA NA NORMA (ledger 39). Não basta exigir variação
+//     diferente de zero: um par cuja razão saia QUASE constante na população de
+//     alta (CV = dp/média abaixo de `CV_MINIMO_PAR`) é descartado, e o aviso diz
+//     qual par e por quê. Toda função f do DRIS divide por essa dispersão —
+//     "quase zero" não falha, explode. Medido com n=3 de alta: Fe/K com DP 0,000
+//     e F = 2,04e31, virando IBN 1,8e16 na diagnose. O corte acontece ANTES do
+//     teste F, senão a orientação degenerada venceria a disputa justamente por
+//     ser inútil (variância de alta ≈ 0 é o denominador de F).
 //   · DESVIO POPULACIONAL (÷n), reusando `resumoValores` de
 //     `validacao/estatistica.ts` (ledger 12). Com n ≥ 30, a diferença para o
 //     amostral (÷n−1) é < 2% e não muda ordem de limitação nenhuma; reescrever
@@ -41,6 +49,7 @@
 
 import { resumoValores } from '../validacao/estatistica.ts';
 import { calcularClr, COMPONENTE_RESIDUO } from './cnd.ts';
+import { CV_MINIMO_PAR } from './dris.ts';
 import { corteDeProdutividade, gerarChance, type AmostraPopulacao } from './chanceMatematica.ts';
 import { nutrientesPresentes } from './nutrientes.ts';
 import { paresDeNutrientes, razao } from './razoes.ts';
@@ -112,6 +121,20 @@ function estatisticaDeRazao(valores: number[]): EstatisticaRazao | null {
   // entre teores é sempre positiva e longe de zero, e Beaufils PRECISA do CV.
   const cv = r.media !== 0 ? (r.desvio / Math.abs(r.media)) * 100 : 0;
   return { media: r.media, dp: r.desvio, cv, n: r.n };
+}
+
+/**
+ * A razão varia o bastante nesta população para sustentar uma função f?
+ *
+ * O critério é o CV adimensional (dp/média) contra `CV_MINIMO_PAR` — o mesmo
+ * limiar que `parUtilizavel` aplica na diagnose. Ver o cabeçalho deste arquivo
+ * e o de `CV_MINIMO_PAR` em `dris.ts`.
+ */
+function dispersaoSuficiente(est: EstatisticaRazao | null): est is EstatisticaRazao {
+  if (!est) return false;
+  if (!Number.isFinite(est.media) || est.media <= 0) return false;
+  if (!Number.isFinite(est.dp)) return false;
+  return est.dp / est.media >= CV_MINIMO_PAR;
 }
 
 const razoesDe = (amostras: AmostraNorma[], a: NutrienteId, b: NutrienteId): number[] => {
@@ -270,13 +293,21 @@ export function gerarNorma(amostras: AmostraNorma[], opcoes: OpcoesNorma): Resul
   const pares: ParNorma[] = [];
   const paresFracos: string[] = [];
   const paresDescartados: string[] = [];
+  const paresDegenerados: string[] = [];
 
   for (const p of paresDeNutrientes(NUTRIENTES)) {
     const altaD = razoesDe(alta, p.a, p.b);
     const altaI = razoesDe(alta, p.b, p.a);
-    const estD = estatisticaDeRazao(altaD);
-    const estI = estatisticaDeRazao(altaI);
-    if (!estD && !estI) { paresDescartados.push(`${p.a}/${p.b}`); continue; }
+    const brutoD = estatisticaDeRazao(altaD);
+    const brutoI = estatisticaDeRazao(altaI);
+    if (!brutoD && !brutoI) { paresDescartados.push(`${p.a}/${p.b}`); continue; }
+
+    // GUARDA-CORPO DO PAR DEGENERADO (ledger 39), ANTES do teste F — ver
+    // cabeçalho. A orientação sem dispersão sai da disputa; o par só cai
+    // inteiro quando NENHUMA das duas ordens varia o suficiente.
+    const estD = dispersaoSuficiente(brutoD) ? brutoD : null;
+    const estI = dispersaoSuficiente(brutoI) ? brutoI : null;
+    if (!estD && !estI) { paresDegenerados.push(`${p.a}/${p.b}`); continue; }
 
     const varAltaD = estD ? estD.dp * estD.dp : null;
     const varAltaI = estI ? estI.dp * estI.dp : null;
@@ -292,16 +323,20 @@ export function gerarNorma(amostras: AmostraNorma[], opcoes: OpcoesNorma): Resul
     const usarInversa = estI != null && (estD == null || (fI != null && (fD == null || fI > fD)));
     const est = usarInversa ? (estI as EstatisticaRazao) : (estD as EstatisticaRazao | null);
     if (!est) { paresDescartados.push(`${p.a}/${p.b}`); continue; }
-    if (!(est.dp > 0)) { paresDescartados.push(`${p.a}/${p.b}`); continue; }
 
     const a = usarInversa ? p.b : p.a;
     const b = usarInversa ? p.a : p.b;
     const nBaixa = baixa.length ? razoesDe(baixa, a, b).length : 0;
 
+    // F FINITO OU `null`, nunca 1e31: com a orientação degenerada já fora, F
+    // não tem como explodir — este é o cinto de segurança que garante que a
+    // norma nunca GRAVE um número absurdo, mesmo se a conta mudar.
+    const fEscolhido = usarInversa ? fI : fD;
+
     pares.push({
       a, b,
       media: est.media, dp: est.dp, cv: est.cv,
-      f: usarInversa ? fI : fD,
+      f: fEscolhido != null && Number.isFinite(fEscolhido) ? fEscolhido : null,
       nAlta: est.n,
       nBaixa,
     });
@@ -319,7 +354,16 @@ export function gerarNorma(amostras: AmostraNorma[], opcoes: OpcoesNorma): Resul
     avisos.push(`Par(es) com menos de ${nMinimoPar} amostras de alta produtividade: ${paresFracos.slice(0, 10).join(', ')}${paresFracos.length > 10 ? '…' : ''}.`);
   }
   if (paresDescartados.length) {
-    avisos.push(`Par(es) descartados por falta de dado ou variação nula: ${paresDescartados.slice(0, 10).join(', ')}${paresDescartados.length > 10 ? '…' : ''}.`);
+    avisos.push(`Par(es) descartados por falta de dado (menos de 2 amostras de alta produtividade com a razão calculável): ${paresDescartados.slice(0, 10).join(', ')}${paresDescartados.length > 10 ? '…' : ''}.`);
+  }
+  if (paresDegenerados.length) {
+    avisos.push(
+      `Par(es) DESCARTADOS da norma por desvio-padrão praticamente nulo na população de alta produtividade — CV abaixo de ${(CV_MINIMO_PAR * 100).toFixed(1)}%: `
+      + `${paresDegenerados.slice(0, 10).join(', ')}${paresDegenerados.length > 10 ? '…' : ''}. `
+      + 'A razão saiu quase constante entre as amostras de referência, quase sempre porque a população de alta é pequena demais. '
+      + 'Todas as funções f do DRIS DIVIDEM por essa dispersão: mantido, o par produziria f e IBN astronômicos (com DP 0,000 medimos F = 2,04e31 e IBN = 1,8e16 na diagnose) — '
+      + 'um número absurdo com cara de resultado é pior que par nenhum. Aumente a população de referência para recuperar esse(s) par(es).',
+    );
   }
 
   const componentesCnd = opcoes.componentesCnd?.length

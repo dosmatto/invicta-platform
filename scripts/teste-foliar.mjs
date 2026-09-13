@@ -14,7 +14,8 @@
 import assert from 'node:assert/strict';
 import {
   calcularClr, calcularCnd, calcularDris, classificarPorFaixa, classificarTeor,
-  consensoMultiMetodo, diagnosticar, funcaoF, interpretarColuna, normalizarNomeNutriente,
+  consensoMultiMetodo, CV_MINIMO_PAR, diagnosticar, funcaoF, interpretarColuna,
+  normalizarNomeNutriente, parUtilizavel,
   normalizarTeores, razao, paresDeNutrientes, calcularConfianca, unidadeDaColuna,
   ID_NORMA_KURIHARA_2013, normaFabricaPorId, rotuloConfianca, tetoDeMetodos,
 } from '../src/lib/foliar/index.ts';
@@ -625,6 +626,58 @@ t('sem `metodosComResultado` o teto por cobertura SAI DA CONTA (não vira nota b
   const zero = calcularConfianca({ ...base, metodosComResultado: [] });
   assert.equal(zero.entradas.metodosComResultado, 0, '0 informado é diferente de não informado');
   assert.ok(zero.valor <= 25, `nenhum método com resultado: ${zero.valor}`);
+});
+
+console.log('\nPar degenerado na norma — defesa em profundidade da diagnose\n');
+
+// Norma IMPORTADA DE FORA (arquivo, banco de outro cliente, versão antiga do
+// gerador): o guarda-corpo de `normas.ts` não passou por ela, então quem tem de
+// segurar é `parUtilizavel`. Aqui Fe/K chega com DP = 1e-12 — o par que, sem
+// piso, produzia f da ordem de 1e13 e IBN de 1e16.
+const PARES_DEGENERADO = PARES.map(p => (
+  p.a === 'K' && p.b === 'Fe' ? { ...p, dp: 1e-12, cv: 1e-10, f: 2.04e31 } : p
+));
+const NORMA_DEGENERADA = { ...NORMA, pares: PARES_DEGENERADO };
+// Amostra fora do centro: com a média exata todo f é ~0 e o caso perderia a
+// graça — é justamente o desvio que faz a divisão por 1e-12 explodir.
+const AMOSTRA_DESVIADA = normalizarTeores({ ...MEDIA, K: MEDIA.K * 0.7, Fe: MEDIA.Fe * 1.2 });
+
+t('par com dp = 1e-12 é IGNORADO na diagnose, mesmo vindo pronto na norma', () => {
+  const d = calcularDris(AMOSTRA_DESVIADA, NORMA_DEGENERADA);
+  assert.ok(d, 'os outros 54 pares seguem valendo — a norma inteira não cai por um par');
+  const aviso = d.avisos.find(a => a.includes('da NORMA foram descartados'));
+  assert.ok(aviso, `nenhum aviso de par inválido: ${d.avisos.join(' | ')}`);
+  assert.ok(aviso.includes('K/Fe'), `o aviso não nomeia o par: ${aviso}`);
+  assert.ok(aviso.includes('praticamente nula'), `o aviso tem de dizer o porquê: ${aviso}`);
+  assert.equal(parUtilizavel(PARES_DEGENERADO.find(p => p.a === 'K' && p.b === 'Fe')), false);
+});
+
+t('e o IBN continua finito e razoável — não vira 1,8e16', () => {
+  const d = calcularDris(AMOSTRA_DESVIADA, NORMA_DEGENERADA);
+  assert.ok(Number.isFinite(d.ibn), `IBN não finito: ${d.ibn}`);
+  assert.ok(d.ibn < 1e4, `IBN absurdo: ${d.ibn}`);
+  assert.ok(d.indices.every(i => Number.isFinite(i.indice)), 'nenhum índice NaN/Infinity');
+  // O mesmo desvio contra a norma SÃ: a ordem de grandeza tem de ser a mesma.
+  const sa = calcularDris(AMOSTRA_DESVIADA, NORMA);
+  assert.ok(Math.abs(d.ibn - sa.ibn) / sa.ibn < 0.5, `IBN ${d.ibn} vs ${sa.ibn} na norma sã`);
+  assert.equal(d.indices.find(i => i.ordem === 1).nutriente, sa.indices.find(i => i.ordem === 1).nutriente,
+    'e o mais limitante continua sendo o mesmo');
+});
+
+t('o piso vale para as QUATRO funções f — nenhuma divide por dispersão ~0', () => {
+  const degenerado = PARES_DEGENERADO.find(p => p.a === 'K' && p.b === 'Fe');
+  for (const fn of ['alvarez-leite', 'beaufils', 'jones', 'elwali-gascho']) {
+    assert.equal(parUtilizavel(degenerado, fn), false, `${fn} aceitou o par degenerado`);
+    const d = calcularDris(AMOSTRA_DESVIADA, NORMA_DEGENERADA, fn);
+    assert.ok(Number.isFinite(d.ibn) && d.ibn < 1e4, `${fn} devolveu IBN ${d.ibn}`);
+  }
+});
+
+t('pares NORMAIS seguem utilizáveis nas quatro funções — o piso não pega bom', () => {
+  for (const fn of ['alvarez-leite', 'beaufils', 'jones', 'elwali-gascho']) {
+    assert.ok(PARES.every(p => parUtilizavel(p, fn)), `${fn} derrubou par bom (CV 10%)`);
+  }
+  assert.ok(CV_MINIMO_PAR > 0 && CV_MINIMO_PAR < 0.10, `o piso tem de ficar MUITO abaixo de um CV real: ${CV_MINIMO_PAR}`);
 });
 
 console.log(`\n${ok} passaram, ${fail} falharam\n`);
