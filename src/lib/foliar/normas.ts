@@ -29,7 +29,7 @@
 //     `cnd.componentes`. Misturar laudos com e sem S no mesmo clr contamina
 //     média e DP, porque os dois estão em fechamentos diferentes. Quantas
 //     amostras saíram, e por quê, vai nos `avisos` da norma.
-//   · PAR DEGENERADO NÃO ENTRA NA NORMA (ledger 39). Não basta exigir variação
+//   · PAR DEGENERADO NÃO ENTRA NA NORMA (ledger 10). Não basta exigir variação
 //     diferente de zero: um par cuja razão saia QUASE constante na população de
 //     alta (CV = dp/média abaixo de `CV_MINIMO_PAR`) é descartado, e o aviso diz
 //     qual par e por quê. Toda função f do DRIS divide por essa dispersão —
@@ -302,7 +302,7 @@ export function gerarNorma(amostras: AmostraNorma[], opcoes: OpcoesNorma): Resul
     const brutoI = estatisticaDeRazao(altaI);
     if (!brutoD && !brutoI) { paresDescartados.push(`${p.a}/${p.b}`); continue; }
 
-    // GUARDA-CORPO DO PAR DEGENERADO (ledger 39), ANTES do teste F — ver
+    // GUARDA-CORPO DO PAR DEGENERADO (ledger 10), ANTES do teste F — ver
     // cabeçalho. A orientação sem dispersão sai da disputa; o par só cai
     // inteiro quando NENHUMA das duas ordens varia o suficiente.
     const estD = dispersaoSuficiente(brutoD) ? brutoD : null;

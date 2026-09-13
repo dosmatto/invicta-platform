@@ -47,7 +47,7 @@
 // aparecer mesmo quando o nutriente do par nem foi analisado. E não basta
 // exigir DP > 0: par com dispersão quase nula (dp/média abaixo de
 // `CV_MINIMO_PAR`) também sai, porque toda função f divide por ela e um DP
-// "quase zero" não falha — explode (ledger 39).
+// "quase zero" não falha — explode (ledger 10).
 //
 // O DIVISOR É COMUM A TODOS OS NUTRIENTES — e isto vale explicação. O índice é
 // a média das f em que o nutriente participa. Quando o desenho é BALANCEADO
@@ -82,7 +82,7 @@ export const K_BEAUFILS = 10;
  * Piso do coeficiente de variação de um par da norma — dp/média, ADIMENSIONAL
  * (0,005 = 0,5%), não o `cv` em % gravado em `ParNorma`.
  *
- * POR QUE UM PISO, E NÃO SÓ "dp > 0" (ledger 39): todas as quatro funções f
+ * POR QUE UM PISO, E NÃO SÓ "dp > 0" (ledger 10): todas as quatro funções f
  * dividem pela dispersão do par — pelo DP (Alvarez&Leite, Jones) ou pelo CV
  * (Beaufils, Elwali&Gascho). Quando a população de referência é pequena, um par
  * pode sair com dispersão praticamente nula sem ser exatamente zero, e aí a
