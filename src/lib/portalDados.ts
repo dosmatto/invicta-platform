@@ -9,6 +9,7 @@
 import {
   getGrades, getImportacoesLab, getZoneamentosMeap, getPrescricoes, getMapasProdutividade,
   getComposicoes, getMdes, getCondutividade, getImportacoesCompactacao, getPlantio,
+  getAmostrasFoliares,
   type Talhao,
 } from './store';
 import { cloudListarMapasMeta } from './cloud';
@@ -29,6 +30,7 @@ export function dadosLocaisDoTalhao(t: Talhao, safra: string): DadosTalhao {
     mdes: getMdes(t.id),
     condutividade: getCondutividade(t.id),
     compactacao: getImportacoesCompactacao(t.id),
+    amostrasFoliares: getAmostrasFoliares(t.id),
   };
 }
 
