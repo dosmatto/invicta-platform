@@ -48,3 +48,8 @@ export {
 } from './confianca.ts';
 
 export { AVISOS_METODO, type OpcoesDiagnose, SEM_NORMA, diagnosticar } from './diagnose.ts';
+
+export {
+  AVISO_FONTE_NAO_CONFERIDA, ID_NORMA_EMBRAPA_CLASSICA, ID_NORMA_KURIHARA_2013,
+  NOMES_NORMAS_FABRICA, NORMAS_FABRICA, normaFabricaPorId,
+} from './normasFabrica.ts';

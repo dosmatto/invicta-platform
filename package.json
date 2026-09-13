@@ -90,6 +90,7 @@
     "teste:grafcenas": "node scripts/teste-grafico-cenas.mjs",
     "teste:foliar": "node scripts/teste-foliar.mjs",
     "teste:foliar-normas": "node scripts/teste-foliar-normas.mjs",
+    "teste:foliar-fabrica": "node scripts/teste-foliar-fabrica.mjs",
     "teste:msr-regras": "PY=\"$HOME/.invicta-fert-backend/venv/bin/python\"; [ -x \"$PY\" ] || PY=python3; \"$PY\" scripts/teste-msr-regras.py"
   },
   "dependencies": {
