@@ -91,6 +91,8 @@ export interface CondutividadeIn { oficial: boolean; criadoEm: string; data?: st
 export interface CompactacaoIn { safra: string; ano?: number; criadoEm: string; pontos: number | unknown[] }
 /** Projeção leve de `inv_relatorios`. */
 export interface RelatorioIn { safra: string | null; tipo: string | null; titulo: string | null; geradoEm: number | string | null }
+/** Laudo foliar, na forma mínima: o trilho só precisa saber que ele existe. */
+export interface AmostraFoliarIn { safra: string; ano?: number; criadoEm: string; dataColeta?: string }
 
 export interface DadosTalhao {
   talhao: TalhaoBase;
@@ -107,6 +109,8 @@ export interface DadosTalhao {
   condutividade?: CondutividadeIn[];
   compactacao?: CompactacaoIn[];
   relatorios?: RelatorioIn[];
+  /** Laudos FOLIARES do talhão (ledger 28). Forma mínima: só o que a aba precisa. */
+  amostrasFoliares?: AmostraFoliarIn[];
 }
 
 // ── Saídas ──────────────────────────────────────────────────────────────────
@@ -375,7 +379,7 @@ export function avaliarTalhao(d: DadosTalhao, safra: string): AvaliacaoTalhao {
 
 /** Ids das abas de /talhao/[id], na ordem do trilho. */
 export const ABAS_TALHAO = [
-  'resumo', 'altimetria', 'condutividade', 'zonas', 'amostragem', 'fertilidade', 'recomendacoes',
+  'resumo', 'altimetria', 'condutividade', 'zonas', 'amostragem', 'fertilidade', 'foliar', 'recomendacoes',
   'prescricoes', 'arquivos', 'ndvi', 'produtividade', 'compactacao', 'relatorios',
 ] as const;
 export type AbaTalhao = typeof ABAS_TALHAO[number];
@@ -396,6 +400,9 @@ export function abasComDados(d: DadosTalhao): AbaTalhao[] {
     zonas: tem(d.zoneamentos),
     amostragem: tem(d.grades),
     fertilidade: tem(d.laudos) || nuvem.some(s => s.length >= 4 && idsLaudo.has(s[1])),
+    // Foliar entra no trilho assim que existe UM laudo foliar no talhão, em
+    // qualquer ano — o filtro de ano é de dentro da aba, como nas irmãs.
+    foliar: tem(d.amostrasFoliares),
     recomendacoes: tem(d.cenarios),
     prescricoes: tem(d.prescricoes),
     arquivos: tem(d.cenarios) || (d.prescricoes ?? []).some(p => (p.exportes?.length ?? 0) > 0),

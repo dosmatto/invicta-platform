@@ -313,6 +313,15 @@ t('abas do talhão: laudo sem mapa já abre fertilidade; cena e colheita só na 
   assert.deepEqual(abasComDados({ talhao: T3.talhao, mapasNuvem: [{ id: 'OUTRO__ndvi__NDVI__2026-01-01' }, { id: 'OUTRO__l1__krige__5____ph__00-20' }] }), ['resumo']);
   assert.deepEqual(abasComDados({ talhao: T3.talhao, prescricoes: [{ nome: 'x', atualizadoEm: '2026-01-01', exportes: [{ em: '2026-01-02', formato: 'shp', arquivo: 'a.zip' }] }] }), ['resumo', 'prescricoes', 'arquivos']);
 });
+t('abas do talhão: um laudo FOLIAR abre a aba Foliar, e ela entra depois de Fertilidade', () => {
+  assert.deepEqual(abasComDados({ talhao: T3.talhao, amostrasFoliares: [{ safra: '26/27', criadoEm: '2026-01-10', dataColeta: '2026-01-08' }] }), ['resumo', 'foliar']);
+  // Sem laudo foliar a aba não aparece — nem para o talhão que tem tudo o mais.
+  assert.ok(!abasComDados(T1).includes('foliar'));
+  assert.deepEqual(
+    abasComDados({ talhao: T3.talhao, laudos: [{ id: 'l1', safra: '26/27', criadoEm: '2026-01-01' }], amostrasFoliares: [{ safra: '26/27', criadoEm: '2026-01-10' }] }),
+    ['resumo', 'fertilidade', 'foliar'],
+  );
+});
 
 console.log(`\n${ok} ok, ${fail} falhas`);
 process.exit(fail ? 1 : 0);
