@@ -39,8 +39,9 @@ import { classificarPorFaixa } from './faixaSuficiencia.ts';
 import { consensoMultiMetodo, type VotosPorMetodo } from './interpretacao.ts';
 import { normalizarTeores } from './nutrientes.ts';
 import {
-  type DiagnoseFoliar, type EstadoNutricional, type FuncaoDris, NUTRIENTES,
-  type NormaDris, type NormaResumo, type NutrienteId, type Orgao, type TeoresParciais,
+  type DiagnoseFoliar, type EstadoNutricional, type FuncaoDris, type MetodoDiagnose,
+  NUTRIENTES, type NormaDris, type NormaResumo, type NutrienteId, type Orgao,
+  type TeoresParciais,
 } from './tipos.ts';
 
 export const SEM_NORMA = 'sem norma para esta cultura/órgão';
@@ -169,12 +170,19 @@ export function diagnosticar(
   const consenso = consensoMultiMetodo(votos, NUTRIENTES);
 
   // ── Confiança ─────────────────────────────────────────────────────────────
+  // A COBERTURA DE MÉTODOS sai daqui, não de dentro de `confianca.ts`: este é o
+  // único ponto que sabe quem chegou a um resultado, e `votos` já foi montado
+  // exatamente com os métodos não-nulos — reusá-lo evita uma segunda lista para
+  // manter em dia quando um quinto método entrar. Sem esse número a nota mediria
+  // só a procedência da norma e diria "Muito alta confiabilidade" numa diagnose
+  // em que três dos quatro métodos não rodaram.
   const confianca = calcularConfianca({
     norma: norma ?? null,
     teores,
     orgaoAmostra: opcoes.orgaoAmostra ?? null,
     estadioAmostra: opcoes.estadioAmostra ?? null,
     produtividadeKgha: opcoes.produtividadeKgha ?? null,
+    metodosComResultado: Object.keys(votos) as MetodoDiagnose[],
   });
 
   // ── Avisos ────────────────────────────────────────────────────────────────

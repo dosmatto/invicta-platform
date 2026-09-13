@@ -24,7 +24,7 @@
 // ausência dela, de `produtividadeDoMapa(talhão, ano, cultura)` — o mapa de
 // colheita que a plataforma já tem (ledger 6 e 34).
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { FlaskConical, Save, CheckCircle2 } from 'lucide-react';
 import {
   getAmostrasFoliares, getTalhoes, getFazendas, getSafras, produtividadeDoMapa, CULTURAS,
@@ -61,6 +61,14 @@ export function FoliarGeradorNormas() {
   const [nome, setNome] = useState('');
   const [tornarPadrao, setTornarPadrao] = useState(true);
   const [salvo, setSalvo] = useState('');
+  // GRAVAÇÃO EM CURSO. `bibCriar` é síncrono, mas o React processa os dois
+  // cliques de um duplo clique antes de repintar o botão: sem esta trava a
+  // segunda chamada entra com o mesmo `resultado` e nasce uma norma idêntica na
+  // Biblioteca (duas versões, mesmo conteúdo). Depois de salvo o botão fica
+  // desabilitado até algum parâmetro do salvamento mudar — gerar de novo,
+  // renomear ou trocar o "tornar padrão" liberam.
+  const [salvando, setSalvando] = useState(false);
+  const travaSalvar = useRef(false);
 
   const safras = useMemo(() => getSafras(), []);
   const ufs = useMemo(
@@ -119,7 +127,7 @@ export function FoliarGeradorNormas() {
   }, [comProdutividade]);
 
   function gerar() {
-    setSalvo('');
+    liberarSalvar();
     const amostras: AmostraNorma[] = comProdutividade.map(c => ({
       teores: c.amostra.teores,
       produtividadeKgha: c.produtividadeKgha,
@@ -141,9 +149,28 @@ export function FoliarGeradorNormas() {
     }
   }
 
+  /** Libera o botão de salvar — chamada quando um parâmetro do salvamento muda. */
+  function liberarSalvar() {
+    travaSalvar.current = false;
+    setSalvo('');
+  }
+
   function salvar() {
     const norma = resultado?.norma;
-    if (!norma || !nome.trim()) return;
+    // A TRAVA É A REF, não o estado: `salvo`/`salvando` só chegam ao botão na
+    // próxima pintura, e o segundo clique de um duplo clique pode entrar antes
+    // dela — foi assim que nasceram duas normas idênticas na Biblioteca.
+    if (travaSalvar.current || !norma || !nome.trim()) return;
+    travaSalvar.current = true;
+    setSalvando(true);
+    try {
+      gravar(norma);
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  function gravar(norma: NormaDris) {
     const item = bibCriar<NormaDris>('analises-foliares', {
       nome: nome.trim(),
       descricao: norma.fonte,
@@ -347,19 +374,21 @@ export function FoliarGeradorNormas() {
           )}
 
           <Bloco titulo="Salvar na Biblioteca">
-            <input value={nome} onChange={e => setNome(e.target.value)}
+            <input value={nome} onChange={e => { setNome(e.target.value); liberarSalvar(); }}
               className="w-full rounded px-2 py-1.5 text-[11px] outline-none" style={inputStyle} />
             <label className="flex items-center gap-1.5 cursor-pointer">
-              <input type="checkbox" checked={tornarPadrao} onChange={e => setTornarPadrao(e.target.checked)} />
+              <input type="checkbox" checked={tornarPadrao}
+                onChange={e => { setTornarPadrao(e.target.checked); liberarSalvar(); }} />
               <span className="text-[9px]" style={{ color: '#94a3b8' }}>
                 Tornar padrão — inativa as outras normas PRÓPRIAS de {cultura} · {ROTULO_ORGAO[orgao]}
                 (elas ficam na Biblioteca e voltam com um clique; as de fábrica não são tocadas).
               </span>
             </label>
-            <button onClick={salvar} disabled={!nome.trim()}
-              className="w-full py-1.5 rounded text-[10px] font-bold text-white flex items-center justify-center gap-1 disabled:opacity-40"
-              style={{ background: 'var(--invicta-blue-mid)' }}>
-              <Save size={11} /> Salvar na Biblioteca
+            <button onClick={salvar} disabled={!nome.trim() || salvando || !!salvo}
+              className="w-full py-1.5 rounded text-[10px] font-bold text-white flex items-center justify-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed"
+              style={{ background: salvo ? '#166534' : 'var(--invicta-blue-mid)' }}>
+              {salvo ? <CheckCircle2 size={11} /> : <Save size={11} />}
+              {salvando ? 'Salvando…' : salvo ? 'Salva na Biblioteca' : 'Salvar na Biblioteca'}
             </button>
             {salvo && (
               <div className="flex items-start gap-1.5 p-2 rounded" style={{ background: '#052e16', border: '1px solid #166534' }}>

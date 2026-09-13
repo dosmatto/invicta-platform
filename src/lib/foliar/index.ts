@@ -47,7 +47,8 @@ export {
 
 export {
   type EntradaConfianca, ESCORE_ORIGEM, LIMIARES_CONFIANCA, TETO_ORGAO_DIFERENTE,
-  TETO_SEM_NORMA, calcularConfianca, faixaConfianca, rotuloConfianca,
+  TETO_POR_METODOS, TETO_SEM_NORMA, calcularConfianca, faixaConfianca, rotuloConfianca,
+  tetoDeMetodos,
 } from './confianca.ts';
 
 export { AVISOS_METODO, type OpcoesDiagnose, SEM_NORMA, diagnosticar } from './diagnose.ts';

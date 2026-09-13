@@ -16,6 +16,7 @@ import {
   calcularClr, calcularCnd, calcularDris, classificarPorFaixa, classificarTeor,
   consensoMultiMetodo, diagnosticar, funcaoF, interpretarColuna, normalizarNomeNutriente,
   normalizarTeores, razao, paresDeNutrientes, calcularConfianca, unidadeDaColuna,
+  ID_NORMA_KURIHARA_2013, normaFabricaPorId, rotuloConfianca, tetoDeMetodos,
 } from '../src/lib/foliar/index.ts';
 // Guardas do fechamento composicional: ficam no módulo, não na API pública —
 // a tela consome o `cndMotivo` de `diagnosticar`, não estas funções.
@@ -549,6 +550,81 @@ t('produtividade não informada SAI DA CONTA — não vira nota zero nem gargalo
   assert.ok(com.valor > sem.valor, `${com.valor} vs ${sem.valor}`);
   assert.ok(com.valor - sem.valor < 5, `a omissão custou ${(com.valor - sem.valor).toFixed(1)} pontos — perto dos 10 da nota zero`);
   assert.ok(com.componentes.produtividade === 100, 'e com produtividade o componente volta valendo 100');
+});
+
+console.log('\nTeto por cobertura de métodos\n');
+
+t('a escada é 45 / 65 / 85 / 100 — e 4 de 4 não tem teto', () => {
+  assert.equal(tetoDeMetodos(0), 25, 'nenhum método é o mesmo caso de "sem norma"');
+  assert.equal(tetoDeMetodos(1), 45);
+  assert.equal(tetoDeMetodos(2), 65);
+  assert.equal(tetoDeMetodos(3), 85);
+  assert.equal(tetoDeMetodos(4), 100);
+});
+
+t('NORMA DE FÁBRICA (só faixas): confiança ≤ 45 e rótulo coerente, por melhor que seja a procedência', () => {
+  // Este é o caso real da ressalva §3.1 da verificação: Kurihara é literatura
+  // com n=608, órgão e estádio batendo e laudo completo — fatores que davam 96 e
+  // "Muito alta confiabilidade" numa diagnose em que 3 dos 4 métodos não rodaram.
+  const kurihara = normaFabricaPorId(ID_NORMA_KURIHARA_2013);
+  assert.ok(kurihara, 'a norma de fábrica existe');
+  const r = diagnosticar(MEDIA, kurihara, {
+    cultura: 'Soja',
+    orgaoAmostra: kurihara.orgao,
+    estadioAmostra: kurihara.estadio,
+    produtividadeKgha: 3900,
+  });
+  const rodaram = ['dris', 'cnd', 'faixa', 'chance'].filter(m => r[m]);
+  assert.deepEqual(rodaram, ['faixa'], `métodos com resultado: ${rodaram.join(', ') || 'nenhum'}`);
+
+  const c = r.confianca;
+  assert.equal(c.entradas.metodosComResultado, 1);
+  assert.equal(c.entradas.teto, 45, `teto ${c.entradas.teto}`);
+  assert.ok(c.entradas.mediaSemTeto > 45, `sem o teto a nota seria ${c.entradas.mediaSemTeto} — o caso perdeu a graça`);
+  assert.ok(c.valor <= 45, `confiança ${c.valor}`);
+  assert.equal(c.rotulo, rotuloConfianca(c.valor), 'rótulo tem de ser o do valor JÁ limitado');
+  assert.ok(!c.rotulo.includes('Muito alta'), `rótulo incoerente com 1 método: ${c.rotulo}`);
+  assert.ok(c.justificativa.includes('limitado a 45'), c.justificativa);
+  assert.ok(c.justificativa.includes('só a faixa de suficiência chegou a um resultado'), c.justificativa);
+  assert.ok(c.justificativa.includes('DRIS, CND e chance matemática não rodaram'), c.justificativa);
+});
+
+t('NORMA COMPLETA (os 4 métodos): nenhum teto por cobertura', () => {
+  const r = diagnosticar(MEDIA, NORMA, {
+    cultura: 'Soja', orgaoAmostra: 'trifolio-com-peciolo', estadioAmostra: 'R1-R2', produtividadeKgha: 3900,
+  });
+  assert.ok(r.dris && r.cnd && r.faixa && r.chance, 'os quatro têm de rodar nesta norma');
+  const c = r.confianca;
+  assert.equal(c.entradas.metodosComResultado, 4);
+  assert.equal(c.entradas.teto, 100, 'sem teto');
+  assert.equal(c.valor, c.entradas.mediaSemTeto, 'o valor é a média cheia, sem corte');
+  assert.ok(!c.justificativa.includes('limitado a'), c.justificativa);
+  assert.ok(c.valor > 45, `com 4 métodos e norma boa a nota tem de subir: ${c.valor}`);
+});
+
+t('2 e 3 métodos param em 65 e 85, e o teto mais baixo é o que manda', () => {
+  const base = { norma: NORMA, teores: normalizarTeores(MEDIA), orgaoAmostra: 'trifolio-com-peciolo', estadioAmostra: 'R1-R2', produtividadeKgha: 3900 };
+  const dois = calcularConfianca({ ...base, metodosComResultado: ['dris', 'faixa'] });
+  const tres = calcularConfianca({ ...base, metodosComResultado: ['dris', 'cnd', 'faixa'] });
+  assert.equal(dois.entradas.teto, 65);
+  assert.equal(tres.entradas.teto, 85);
+  assert.ok(dois.valor <= 65 && tres.valor <= 85, `${dois.valor} / ${tres.valor}`);
+  assert.ok(dois.justificativa.includes('DRIS e faixa de suficiência chegaram a um resultado'), dois.justificativa);
+
+  // Órgão divergente (35) é mais baixo que a cobertura (85): quem explica é ele.
+  const orgaoErrado = calcularConfianca({ ...base, orgaoAmostra: 'trifolio-sem-peciolo', metodosComResultado: ['dris', 'cnd', 'faixa'] });
+  assert.equal(orgaoErrado.entradas.teto, 35);
+  assert.ok(orgaoErrado.justificativa.includes('intercambiáveis'), orgaoErrado.justificativa);
+});
+
+t('sem `metodosComResultado` o teto por cobertura SAI DA CONTA (não vira nota baixa)', () => {
+  const base = { norma: NORMA, teores: normalizarTeores(MEDIA), orgaoAmostra: 'trifolio-com-peciolo', estadioAmostra: 'R1-R2', produtividadeKgha: 3900 };
+  const semInfo = calcularConfianca(base);
+  assert.equal(semInfo.entradas.teto, 100, 'o desconhecido não pode punir');
+  assert.equal(semInfo.entradas.metodosComResultado, null, 'e fica registrado como não informado');
+  const zero = calcularConfianca({ ...base, metodosComResultado: [] });
+  assert.equal(zero.entradas.metodosComResultado, 0, '0 informado é diferente de não informado');
+  assert.ok(zero.valor <= 25, `nenhum método com resultado: ${zero.valor}`);
 });
 
 console.log(`\n${ok} passaram, ${fail} falharam\n`);
