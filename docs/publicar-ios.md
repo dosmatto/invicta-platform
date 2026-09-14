@@ -10,7 +10,7 @@ Verificado nesta máquina:
 |---|---|
 | Compila em Release | ✅ `BUILD SUCCEEDED`, zero avisos |
 | Bundle ID | ✅ `br.agr.invicta.coleta` nos três lugares |
-| Versão | ✅ 3.0.0 · build 3.000.000 |
+| Versão | ✅ sai de `APP_CAMPO_VERSION` — hoje **3.1.0 · build 3.001.000** |
 | Ícone 1024 sem alfa | ✅ corrigido (tinha transparência) |
 | iPhone-only | ✅ `TARGETED_DEVICE_FAMILY = "1"` |
 | Conformidade de exportação | ✅ declarada no `Info.plist` |
@@ -21,7 +21,7 @@ Verificado nesta máquina:
 | Apple ID corporativo | ✅ `invicta@invicta.agr.br` (exigido: e-mail no domínio da empresa) |
 | Área demo p/ o revisor | ✅ cadastrada e testada — `loja/demo-apple/LEIA-ME.md` |
 | Razão social no rodapé do site | ✅ no ar em 10/09/2026 |
-| **Apple Developer Program** | ⏳ **enviada 10/09/2026 · Enrollment ID `H67M73G9UH`** |
+| **Apple Developer Program** | ⏳ **pago 14/09/2026** · US$ 99 · processamento em até 2 dias úteis |
 
 ### A inscrição enviada — o que a Apple recebeu
 
@@ -37,10 +37,17 @@ Verificado nesta máquina:
 | Telefone | +55 42 99126-0122 |
 | Poder de assinatura | "I am the owner/founder…" |
 
-**O pagamento ainda NÃO foi feito.** A Apple verifica primeiro o poder de
-assinatura e depois envia por e-mail as instruções para concluir — é aí que
-entram os US$ 99. Espere também uma **ligação** para confirmar a existência da
-empresa; o telefone informado é o público do site, que é o que eles cruzam.
+### Linha do tempo da inscrição
+
+| Data | Etapa |
+|---|---|
+| 10/09/2026 | Inscrição enviada · `H67M73G9UH` |
+| 14/09/2026 | Apple aceitou ("enrollment request has been accepted" — poder de assinatura verificado) |
+| 14/09/2026 | Contrato aceito e **US$ 99 pagos** · processamento em até 2 dias úteis |
+| — | Assinatura ativa → criar o app no App Store Connect |
+
+Não houve ligação de verificação; a Apple aprovou só com os dados cruzados
+(razão social ↔ D-U-N-S ↔ domínio ↔ endereço).
 
 > A "SALA 06" veio do registro da Dun & Bradstreet e não confere mais. Logradouro,
 > número, cidade, estado e CEP batem, então não vale travar a inscrição por isso —
