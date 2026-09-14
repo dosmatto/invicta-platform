@@ -66,6 +66,7 @@ verdadeira (fusão de talhões) chegou depois; foi preciso renumerar.
 | 38 | O relatório por zona não tem mais como voltar aos pontos de coleta (correção) | 2.150.0 | Talhão → Relatórios → "Gerar relatório"; Talhão → Fertilidade → "Processar em zona" (vínculo agora gravado com o mapa) |
 | S/N | Mapa preto: todo raster voltou a aparecer (correção) | 2.151.0 | Qualquer mapa do talhão — NDVI, Fertilidade, Altimetria, Condutividade, Compactação, Produtividade, Recomendação e o fundo das Zonas |
 | 41 | Amostragem composta: células quadráticas com as subamostras distribuídas dentro | 2.152.0 | Talhão → Amostragem → Composta; app de campo; Fertilidade/Recomendação por célula |
+| 42 | Mapa de colheita entra como camada nas Zonas de Manejo | 2.154.0 | Talhão → Zonas → Gerar zonas por similaridade → "Camadas a usar" (botões "Produtividade <cultura> <ano>") |
 
 > As pendências 1–17 foram entregues antes deste registro existir e não estão
 > catalogadas; procure pelo assunto no `changelog.ts`. Da 18 em diante, tudo

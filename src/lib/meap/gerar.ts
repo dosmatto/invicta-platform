@@ -5,7 +5,9 @@
 // camadas escolhidas, empilha e manda o backend clusterizar (k-means/FCM) com
 // índices FPI/NCE para escolher o nº de zonas. Preview apenas (persistir = M3).
 
-import { getImportacoesLab, getGrades, getCondutividade, getComposicoes, getMdes, getMdeCamadasTopo, type ImportacaoLab } from '@/lib/store';
+import { getImportacoesLab, getGrades, getCondutividade, getComposicoes, getMdes, getMdeCamadasTopo, getMapasProdutividade, type ImportacaoLab } from '@/lib/store';
+import { anoDaSafra } from '@/lib/periodo';
+import { selecionarMapasParaZonas, rotuloMapaColheita, nutMapaColheita } from './produtividadeZonas';
 import { carregarGridsTalhao } from '@/lib/recomendacao/aplicar';
 import { analisarZonas, gerarZonas, decodeGrid, descomprimirGrid, type RespAnalisarZonas, type RespGerarZonas, type Grid } from '@/lib/fertilidade';
 import { cloudCarregarMapasPorPrefixo, cloudListarMapasMeta, cloudCarregarMapa } from '@/lib/cloud';
@@ -20,6 +22,8 @@ export interface CamadaGrid {
   simbolo: string;
   b64: string;
   shape: [number, number];
+  /** Só nas camadas de PRODUTIVIDADE: a cultura do mapa, para a prévia sair na legenda dela. */
+  cultura?: string;
 }
 
 export interface CamadasCarregadas {
@@ -28,6 +32,9 @@ export interface CamadasCarregadas {
   laudoRotulo?: string | null;
   /** Quantos laudos existiam sem NENHUM mapa salvo — a tela explica o vazio. */
   laudosSemMapa?: number;
+  /** Mapas de colheita cadastrados cujo raster não está na nuvem (pendência 42):
+   *  a tela avisa em vez de deixar a produtividade sumir em silêncio. */
+  prodSemRaster?: number;
   bounds: [number, number, number, number];
   shape: [number, number];
   camadas: CamadaGrid[];
@@ -210,6 +217,33 @@ export async function carregarMdeCamadas(talhaoId: string): Promise<TopoCamada[]
   return out;
 }
 
+// ── Mapas de COLHEITA (produtividade) como camada do MEAP (pendência 42) ─────
+// Um por contexto (cultura + ano + época): o OFICIAL; sem oficial, a versão
+// mais recente (regra em lib/meap/produtividadeZonas.ts). O raster é o mesmo
+// que a aba Produtividade grava na nuvem (`${talhaoId}__prod__${id}`), já em
+// kg/ha. O 1º token do símbolo é "Produtividade", que o backend reconhece
+// (RANK_SIMBOLOS) para ordenar o potencial das zonas: mais colheita = Alta.
+export interface ProdCamada { chave: string; nut: string; prof: string; cultura: string; bounds: [number, number, number, number]; b64: string; shape: [number, number] }
+
+export async function carregarProdutividade(talhaoId: string, safra?: string): Promise<{ camadas: ProdCamada[]; semRaster: number }> {
+  const todos = getMapasProdutividade(talhaoId);
+  if (!todos.length) return { camadas: [], semRaster: 0 };
+  const escolhidos = selecionarMapasParaZonas(todos, safra ? anoDaSafra(safra) : null);
+  const pref = `${talhaoId}__prod__`;
+  const docs = await cloudCarregarMapasPorPrefixo<{ resp?: { bounds: [number, number, number, number]; grid?: Grid } }>(pref);
+  const out: ProdCamada[] = [];
+  let semRaster = 0;
+  for (const m of escolhidos) {
+    const doc = docs.find(d => d.id === `${pref}${m.id}`);
+    const resp = doc?.dados?.resp;
+    let grid = resp?.grid;
+    if (!resp || !grid?.b64) { semRaster++; continue; }   // registro sem raster (apagado ou nunca subiu)
+    if (grid.comp === 'gz') { try { grid = await descomprimirGrid(grid); } catch { semRaster++; continue; } }
+    out.push({ chave: `prod__${m.id}`, nut: nutMapaColheita(m), prof: rotuloMapaColheita(m), cultura: m.cultura, bounds: resp.bounds, b64: grid.b64, shape: grid.shape });
+  }
+  return { camadas: out, semRaster };
+}
+
 // ── Condutividade elétrica OFICIAL como camada do MEAP (C3) ──────────────────
 export interface EcCamada { chave: string; prof: string; bounds: [number, number, number, number]; b64: string; shape: [number, number] }
 
@@ -321,6 +355,21 @@ export async function carregarCamadas(talhaoId: string, safra?: string): Promise
     }
   }
 
+  // 2.7) Produtividade (pendência 42) — o mapa de colheita oficial de cada
+  //      cultura/ano entra como camada, reamostrado para a malha de referência.
+  const prod = await carregarProdutividade(talhaoId, safra);
+  if (!bounds && prod.camadas.length) {
+    const ref = prod.camadas.reduce((a, b) => (b.shape[0] * b.shape[1] > a.shape[0] * a.shape[1] ? b : a));
+    bounds = ref.bounds;
+    shape = capShape(ref.shape, 160);
+  }
+  if (bounds && shape) {
+    for (const p of prod.camadas) {
+      const b64 = (p.shape[0] === shape[0] && p.shape[1] === shape[1]) ? p.b64 : reamostrarB64(p.b64, p.shape, shape);
+      camadas.push({ chave: p.chave, nut: p.nut, prof: p.prof, simbolo: 'Produtividade', cultura: p.cultura, b64, shape });
+    }
+  }
+
   // 3) Condutividade elétrica OFICIAL (variável fixa do talhão) — C3: a EC
   //    entra como fonte do zoneamento, reamostrada pra malha de referência.
   const ec = await carregarEcOficial(talhaoId);
@@ -351,11 +400,22 @@ export async function carregarCamadas(talhaoId: string, safra?: string): Promise
   }
 
   if (!bounds || !shape || camadas.length === 0) return null;
-  camadas.sort((a, b) => a.simbolo.localeCompare(b.simbolo) || a.prof.localeCompare(b.prof));
+  // Produtividade PRIMEIRO na lista (é a camada-resultado, a que mais pesa na
+  // decisão de zonear); as demais seguem em ordem alfabética, como antes. Entre
+  // os mapas de colheita a ordem já veio pronta (ano selecionado, depois o
+  // mais recente) — não reordenar pelo rótulo.
+  const ehProd = (c: CamadaGrid) => c.chave.startsWith('prod__');
+  const ordemProd = new Map(camadas.filter(ehProd).map((c, i) => [c.chave, i]));
+  camadas.sort((a, b) => {
+    if (ehProd(a) !== ehProd(b)) return ehProd(a) ? -1 : 1;
+    if (ehProd(a)) return (ordemProd.get(a.chave) ?? 0) - (ordemProd.get(b.chave) ?? 0);
+    return a.simbolo.localeCompare(b.simbolo) || a.prof.localeCompare(b.prof);
+  });
   return {
     importacaoId: impUsada?.id ?? 'ndvi',
     laudoRotulo: impUsada ? rotuloLaudo(impUsada) : null,
     laudosSemMapa: impUsada ? 0 : candidatas.length,
+    prodSemRaster: prod.semRaster,
     bounds, shape, camadas,
   };
 }

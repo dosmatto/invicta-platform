@@ -24,6 +24,7 @@ import { ImportarZoneamento } from './ImportarZoneamento';
 import { VersoesZoneamentos } from './VersoesZoneamentos';
 import { montarLinhagens, nomeVersaoRestaurada, origemDe, type VersaoZoneamento } from '@/lib/meap/versoes';
 import { legendaDesignada, PREF_LEGENDA } from '@/lib/legendaDesignada';
+import { legendaDaCultura } from '@/lib/produtividade';
 import { carregarCamadas, analisarMulti, gerarMulti, dadosLabCV, type CamadasCarregadas } from '@/lib/meap/gerar';
 import { calcularCVZonas } from '@/lib/meap/cv';
 import { unirFeatures, limparZona } from '@/lib/meap/fundir';
@@ -149,10 +150,15 @@ const RAMPA_PREVIEW: Array<[number, [number, number, number]]> = [
 
 // Coloriza o grid de uma camada para a prévia no mapa: NDVI -> legenda NDVI
 // (contínua); fertilidade -> legenda do atributo; senão rampa genérica (min–máx).
-function corDaCamadaPreview(c: { nut: string; b64: string; shape: [number, number] }): string | null {
+function corDaCamadaPreview(c: { nut: string; b64: string; shape: [number, number]; cultura?: string }): string | null {
   const grid = { b64: c.b64, shape: c.shape };
   try {
-    if (c.nut.startsWith('ndvi')) {
+    if (c.nut.startsWith('prod_')) {
+      // Mapa de colheita (pendência 42): a legenda DESIGNADA na aba
+      // Produtividade; sem escolha, a da cultura — as mesmas cores de lá.
+      const leg = legendaDesignada('produtividade', PREF_LEGENDA.produtividade, legendaDaCultura(c.cultura ?? ''));
+      if (leg) return colorirGridComLegenda(grid, leg).dataUrl;
+    } else if (c.nut.startsWith('ndvi')) {
       // Legenda DESIGNADA na aba NDVI (o seletor "Legenda do mapa").
       const leg = legendaDesignada('ndvi', PREF_LEGENDA.ndvi);
       if (leg) return colorirGrid(grid, [0, 1], rampaVisualStops({ ...leg, estilo: 'continuo' })).dataUrl;
@@ -1048,6 +1054,14 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
                   Nenhuma camada de fertilidade: {carregadas.laudosSemMapa === 1 ? 'o laudo deste talhão ainda não tem' : `os ${carregadas.laudosSemMapa} laudos deste talhão ainda não têm`} mapa interpolado salvo na nuvem. Processe os atributos na aba <strong style={{ color: '#93c5fd' }}>Fertilidade</strong> (logado) e volte aqui.
                 </p>
               ) : null}
+              {/* Pendência 42 — produtividade: o registro existe, mas o raster não
+                  está na nuvem (salvo deslogado ou apagado). Sem esta linha a
+                  colheita sumiria da lista sem explicação. */}
+              {(carregadas.prodSemRaster ?? 0) > 0 && (
+                <p className="text-[9px] mt-1 leading-relaxed" style={{ color: '#fbbf24' }}>
+                  {carregadas.prodSemRaster === 1 ? 'Há 1 mapa de colheita cadastrado' : `Há ${carregadas.prodSemRaster} mapas de colheita cadastrados`} neste talhão sem raster salvo na nuvem — por isso não {carregadas.prodSemRaster === 1 ? 'aparece' : 'aparecem'} acima. Reprocesse na aba <strong style={{ color: '#93c5fd' }}>Produtividade</strong> (logado) e volte aqui.
+                </p>
+              )}
               {/* Mesmo motivo da linha acima, para o satélite: guardar (★) não é
                   mais o bastante — a camada precisa estar marcada como fonte (◎). */}
               {satGuardados > 0 && !carregadas.camadas.some(c => c.nut.startsWith('ndvi_')) && (
@@ -1161,7 +1175,9 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
                 {/* Resumo do processamento (confirmação antes de gerar) */}
                 <div className="p-2 rounded text-[10px] leading-relaxed" style={{ background: '#061525', border: '1px solid #1a3a6b', color: '#94a3b8' }}>
                   <p style={{ color: '#cbd5e1' }} className="font-semibold mb-0.5">Resumo</p>
-                  <p>Camadas: {carregadas.camadas.filter(c => chaves.includes(c.chave)).map(c => `${c.simbolo}${(pesos[c.chave] ?? 1) !== 1 ? ` (${pesos[c.chave] ?? 1}×)` : ''}`).join(', ')}</p>
+                  {/* Produtividade leva o rótulo (cultura + ano): dois mapas de colheita
+                      só se distinguem por ele — "Produtividade, Produtividade" não diz nada. */}
+                  <p>Camadas: {carregadas.camadas.filter(c => chaves.includes(c.chave)).map(c => `${c.chave.startsWith('prod__') ? `${c.simbolo} ${c.prof}` : c.simbolo}${(pesos[c.chave] ?? 1) !== 1 ? ` (${pesos[c.chave] ?? 1}×)` : ''}`).join(', ')}</p>
                   <p>Método: {algoritmo === 'fcm' ? 'fuzzy c-means' : algoritmo === 'kmeans' ? 'k-means' : `quantis (${nClasses} classes de ~${Math.round(100 / Math.max(2, nClasses))}% da área cada)`} · Zonas: <strong style={{ color: '#e2e8f0' }}>{nClasses}</strong> · Área mín.: {areaMin > 0 ? `${areaMin} ha` : '—'}</p>
                 </div>
 

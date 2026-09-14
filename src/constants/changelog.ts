@@ -1,5 +1,16 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [42] Mapa de colheita entra como camada nas Zonas de Manejo
+  '2.154.0': [
+    'PENDÊNCIA 42 — A PRODUTIVIDADE PASSA A ENTRAR NA GERAÇÃO DAS ZONAS DE MANEJO. Em Talhão → Zonas → "Gerar zonas por similaridade", a lista "Camadas a usar" ganha os mapas de colheita do talhão, ao lado da fertilidade, da condutividade, do satélite e do relevo. Marcou, entrou: a produtividade passa pelo mesmo agrupamento (Fuzzy, K-means ou Quantis), com peso ajustável como qualquer outra camada, e alimenta a curva FPI × NCE e a sugestão do número de zonas.',
+    'POR QUE ISSO IMPORTA: a colheita é o RESULTADO que as outras camadas tentam explicar. Zonear pela produtividade de dois ou três anos é o jeito mais direto de separar o que o talhão produz de fato — e até aqui ela só aparecia no Editor Manual, como fundo e para sugerir a classe de uma zona já desenhada. O gerador simplesmente não a conhecia.',
+    'QUAL MAPA ENTRA: UM POR CULTURA E ANO — o marcado como OFICIAL na aba Produtividade; se nenhuma versão está marcada, a mais recente. Cinco reprocessamentos da mesma soja de 2025 não viram cinco botões: é um mapa por contexto, rotulado "Produtividade Soja 2025", "Produtividade Milho 2025 safrinha". Os do ANO selecionado no alto da tela vêm primeiro, depois os demais do mais novo ao mais antigo — o mesmo critério que a fertilidade já segue desde a 36.',
+    'O POTENCIAL DAS ZONAS SAI CERTO: mais colheita = zona Alta. O backend já reconhecia "Produtividade" como variável de potencial (junto de NDVI, MO e CTC) — só nunca a recebia. Quando a produtividade está entre as camadas, é ela que ordena as zonas de Alta a Baixa.',
+    'CLICAR NO BOTÃO MOSTRA A PRÉVIA DO MAPA nas mesmas cores da aba Produtividade (a legenda que você designou lá; sem escolha, a da cultura) — e não numa rampa genérica que não bate com nada.',
+    'E SE A COLHEITA NÃO APARECER, A TELA DIZ POR QUÊ: um mapa cadastrado cujo raster não está na nuvem (processado deslogado, ou apagado) gera o aviso em amarelo "Há 1 mapa de colheita cadastrado neste talhão sem raster salvo na nuvem" — em vez de sumir em silêncio, que foi exatamente o defeito da fertilidade na pendência 36.',
+    'Nada mudou para quem não marcar a produtividade: as camadas de antes entram como antes, na mesma malha e na mesma ordem.',
+    'Testes: teste:prod-zonas (novo, 10 asserções) trava a regra de escolha — oficial ganha da versão mais nova, um mapa por cultura/ano/época, ano selecionado primeiro, rótulo e chave da legenda. teste:laudo-zonas 7/7. npx tsc --noEmit limpo e npm run build ok.',
+  ],
   // [S/N] Diagnose Foliar (DRIS): soja, multi-método, normas próprias
   '2.153.0': [
     'NASCE O MÓDULO DE DIAGNOSE FOLIAR. Ele lê o laudo de análise de folha e diz, nutriente por nutriente, o que está baixo, adequado ou alto — e em que ORDEM corrigir. Chega pronto para SOJA, com a estrutura já preparada para milho, trigo e cevada entrarem depois sem reescrever o núcleo: cada cultura só precisa da sua própria norma.',
