@@ -17,6 +17,14 @@
 -- seguida (o app segue funcionando: as políticas liberam leitura/escrita para
 -- usuários autenticados, exceto nas coleções de ACESSO, que passam a exigir
 -- que o autor seja owner/admin).
+--
+-- ⚠ ORDEM OBRIGATÓRIA A PARTIR DA v2.155.0 (seção 3b): PUBLIQUE a plataforma
+-- 2.155.0 (ou mais nova) ANTES de rodar este arquivo. A seção 3b exige o
+-- cabeçalho `x-invicta-versao` para escrever nos catálogos da Biblioteca, e a
+-- plataforma só passou a enviá-lo na 2.155.0 — rodar antes deixaria TODO MUNDO
+-- sem conseguir salvar na Biblioteca até a publicação. Abas abertas na versão
+-- anterior voltam a gravar depois de recarregar (a fila de sync guarda a
+-- pendência local e reenvia).
 -- =====================================================================
 
 -- 1) Liga a RLS (se ainda não estiver ligada)
@@ -52,10 +60,95 @@ as $$
   );
 $$;
 
+-- 3b) CLIENTE DESATUALIZADO NÃO ESCREVE NOS CATÁLOGOS DA BIBLIOTECA
+--     (pendência 43, v2.155.0)
+--
+-- O QUE ACONTECEU (13/09/2026 17:41Z, visto nos logs de borda): um aparelho
+-- Android com um build ANTIGO do app de campo (anterior à v2.80.0, de 27/08)
+-- bootou em modo campo, semeou do zero o catálogo de variáveis
+-- (inv_bib_preferencias-analise, 64 linhas) e, no primeiro push, PODOU na
+-- nuvem tudo que não estava no seed:
+--   DELETE app_kv?colecao=eq.inv_bib_preferencias-analise&item_id=not.in.(…) → 204
+-- As casas decimais dos micronutrientes e a ordem dos elementos configuradas
+-- pelo usuário sumiram para toda a empresa. A v2.80.0 corrigiu o app — mas um
+-- aparelho que nunca atualizou continua com o defeito, e nada no cliente novo
+-- pode impedir o cliente velho. Só o banco pode.
+--
+-- A REGRA: toda requisição da plataforma/app traz `x-invicta-versao` (ver
+-- src/lib/supabase.ts). Escrever (insert/update/delete) nas coleções de
+-- CATÁLOGO abaixo exige que o cabeçalho exista e seja >= a versão mínima.
+-- Build velho não manda cabeçalho: o INSERT do seed dele é recusado (42501,
+-- o `with check`), o push falha e a poda nem chega a ser enviada (syncLista
+-- só apaga depois do upsert dar certo). E mesmo um DELETE/UPDATE avulso não
+-- apaga nada: na RLS as linhas ficam INVISÍVEIS para quem não se identifica
+-- (afeta 0 linhas, sem erro). O que o aparelho velho perde é só a própria
+-- fila de sync, que fica em erro nele.
+--
+-- QUAIS COLEÇÕES: exatamente as que o app de campo NUNCA escreve (a lista
+-- KEYS_PULAR_CAMPO em src/lib/cloud.ts + os padrões de amostragem/elementos).
+-- inv_legendas, inv_bib_grades, inv_bib_safras e inv_bib_analises-foliares
+-- ficam FORA de propósito: o app de campo publicado hoje (sem o cabeçalho)
+-- grava nelas nas migrações/seeds do boot, e bloqueá-las deixaria o campo com
+-- o selo de sync em erro.
+--
+-- QUAL VERSÃO VAI NO CABEÇALHO: sempre a APP_VERSION da PLATAFORMA (2.x),
+-- também no app de campo — ele é cortado do mesmo commit e carrega o mesmo
+-- valor. A APP_CAMPO_VERSION (3.x, das lojas) NÃO entra aqui: gravar '3.0.0'
+-- como mínima travaria a plataforma inteira.
+--
+-- PARA SUBIR A RÉGUA depois (ex.: outra correção que um build velho não tem):
+--   create or replace function public.inv_versao_minima_biblioteca()
+--     returns text language sql stable as $$ select '2.170.0' $$;
+-- (só depois de publicar essa versão — mesma ordem do aviso no cabeçalho).
+create or replace function public.inv_versao_minima_biblioteca()
+returns text
+language sql
+stable
+as $$
+  select '2.155.0'
+$$;
+
+create or replace function public.inv_colecao_catalogo(p_colecao text)
+returns boolean
+language sql
+immutable
+as $$
+  select p_colecao in (
+    'inv_bib_preferencias-analise',   -- variáveis de análise (o caso de 13/09)
+    'inv_bib_laboratorios', 'inv_bib_labs', 'inv_bib_perfis',
+    'inv_bib_equacoes', 'inv_bib_recomendacoes',
+    'inv_bib_insumos', 'inv_bib_exportacao',
+    'inv_bib_propositos', 'inv_bib_cultivares',
+    'inv_padroes_elem', 'inv_padroes_amos'
+  )
+$$;
+
+-- Lê o cabeçalho da requisição (o PostgREST expõe todos em request.headers,
+-- em minúsculas). Sem cabeçalho, ou fora do formato X.Y.Z, é cliente velho.
+-- A comparação é numérica por parte (int[]): em texto "2.155.0" < "2.9.0";
+-- aqui 2.155.0 >= 2.9.0, como deve ser.
+create or replace function public.inv_cliente_atualizado()
+returns boolean
+language plpgsql
+stable
+as $$
+declare
+  v_versao text;
+begin
+  v_versao := coalesce(current_setting('request.headers', true), '{}')::json ->> 'x-invicta-versao';
+  if v_versao is null or v_versao !~ '^\d+\.\d+\.\d+$' then
+    return false;
+  end if;
+  return string_to_array(v_versao, '.')::int[]
+      >= string_to_array(public.inv_versao_minima_biblioteca(), '.')::int[];
+end;
+$$;
+
 -- 4) Coleções de ACESSO: só owner/admin escrevem; qualquer autenticado lê
 --    (o app precisa ler o próprio papel no boot).
 --    OBS: a leitura ampla é aceitável porque estes registros não têm segredo;
 --    o que não pode é ESCRITA por quem não é admin.
+--    E, desde a 3b, as coleções de CATÁLOGO só aceitam cliente atualizado.
 create policy app_kv_select_autenticado on public.app_kv
   for select to authenticated
   using (true);
@@ -63,26 +156,30 @@ create policy app_kv_select_autenticado on public.app_kv
 create policy app_kv_insert_autenticado on public.app_kv
   for insert to authenticated
   with check (
-    colecao not in ('inv_papeis', 'inv_permissoes', 'inv_planos', 'inv_convites', 'inv_auditoria')
-    or public.inv_eh_admin()
+    (colecao not in ('inv_papeis', 'inv_permissoes', 'inv_planos', 'inv_convites', 'inv_auditoria')
+      or public.inv_eh_admin())
+    and (not public.inv_colecao_catalogo(colecao) or public.inv_cliente_atualizado())
   );
 
 create policy app_kv_update_autenticado on public.app_kv
   for update to authenticated
   using (
-    colecao not in ('inv_papeis', 'inv_permissoes', 'inv_planos', 'inv_convites', 'inv_auditoria')
-    or public.inv_eh_admin()
+    (colecao not in ('inv_papeis', 'inv_permissoes', 'inv_planos', 'inv_convites', 'inv_auditoria')
+      or public.inv_eh_admin())
+    and (not public.inv_colecao_catalogo(colecao) or public.inv_cliente_atualizado())
   )
   with check (
-    colecao not in ('inv_papeis', 'inv_permissoes', 'inv_planos', 'inv_convites', 'inv_auditoria')
-    or public.inv_eh_admin()
+    (colecao not in ('inv_papeis', 'inv_permissoes', 'inv_planos', 'inv_convites', 'inv_auditoria')
+      or public.inv_eh_admin())
+    and (not public.inv_colecao_catalogo(colecao) or public.inv_cliente_atualizado())
   );
 
 create policy app_kv_delete_autenticado on public.app_kv
   for delete to authenticated
   using (
-    colecao not in ('inv_papeis', 'inv_permissoes', 'inv_planos', 'inv_convites', 'inv_auditoria')
-    or public.inv_eh_admin()
+    (colecao not in ('inv_papeis', 'inv_permissoes', 'inv_planos', 'inv_convites', 'inv_auditoria')
+      or public.inv_eh_admin())
+    and (not public.inv_colecao_catalogo(colecao) or public.inv_cliente_atualizado())
   );
 
 -- 5) Tabela relacional de talhões: mesma regra geral (autenticado opera).
@@ -312,8 +409,9 @@ grant execute on function public.inv_aceitar_convite(text, text, text) to authen
 -- =====================================================================
 -- CONFERÊNCIA (rode depois de aplicar)
 -- =====================================================================
--- a) Políticas ativas:
---    select policyname, cmd from pg_policies where tablename = 'app_kv';
+-- a) Políticas ativas (com a expressão: uma política criada pelo painel do
+--    Supabase, fora deste arquivo, somaria por OU e contornaria a régua da 3b):
+--    select policyname, cmd, qual, with_check from pg_policies where tablename = 'app_kv';
 --
 -- a2) A função de aceite existe e está visível para o app:
 --    select proname from pg_proc where proname = 'inv_aceitar_convite';
@@ -330,6 +428,17 @@ grant execute on function public.inv_aceitar_convite(text, text, text) to authen
 --    await window.__sb.from('app_kv').update({dados:{papel:'owner'}})
 --      .eq('colecao','inv_papeis').eq('item_id','<seu-email>')
 --    → deve falhar/afetar 0 linhas. Se promover, a RLS não está valendo.
+--
+-- c) Régua de versão (seção 3b) — no SQL Editor (sem cabeçalho, deve dar false):
+--    select public.inv_cliente_atualizado(), public.inv_versao_minima_biblioteca();
+--    → false | 2.155.0
+--    E no app publicado (>= 2.155.0), editar uma variável em Biblioteca →
+--    Preferências de Análise tem que salvar normalmente e o selo de sync ficar
+--    verde. Se ficar em erro, a plataforma no ar ainda não manda o cabeçalho:
+--    publique primeiro (aviso no topo deste arquivo). Numa aba ainda na
+--    versão antiga, EXCLUIR um item de catálogo parece dar certo (a RLS só
+--    esconde a linha: 0 afetadas, sem erro) e o item volta no próximo boot —
+--    recarregar a aba resolve.
 --
 -- LIMITE CONHECIDO: a leitura continua ampla (qualquer autenticado lê todas as
 -- coleções). Restringir a LEITURA por vínculo (produtor/fazenda/talhão) exige
