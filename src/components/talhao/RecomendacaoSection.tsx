@@ -20,6 +20,7 @@ import { colorirDose, recortarNoPoligono } from '@/lib/raster';
 import { gravarPreferenciaLocal } from '@/lib/localComprimido';
 import { coordsFromBounds, extrairPoligono } from '@/lib/fertilidade';
 import { agruparPorRotulo } from '@/lib/recomendacao/dosePorZona';
+import { volumesPorZona } from '@/lib/recomendacao/volumesPorZona';
 import { nutrientesDaEquacao } from '@/lib/recomendacao/doseZonaDireta';
 import { bindingDasZonas, valoresDasZonas } from '@/lib/recomendacao/zonasComLaudo';
 import { zonasDoTalhao } from '@/lib/recomendacao/zonasDoTalhao';
@@ -314,6 +315,29 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
     () => (doseAtiva?.porZona ?? []).filter(z => !Number.isFinite(z.dose)),
     [doseAtiva],
   );
+  // PRÉVIA DE VOLUMES POR ZONA — taxa, hectares e toneladas de cada zona, para
+  // QUALQUER cenário com zoneamento. Por zona ("laudo") a taxa é a exata da
+  // equação; em interpolação ("mapa") é a média dos pixels do mapa da dose que
+  // caem na zona. Antes só o cenário por zona ganhava uma lista, e ela trazia
+  // só a taxa: quem tinha a Fertilidade processada em zona e aplicava no modo
+  // padrão via o mapa chapado por zona e NENHUM número por zona — a pendência 44.
+  const volZona = useMemo(() => {
+    if (!doseAtiva) return null;
+    const zonas = agruparPorRotulo(zonasTalhao);
+    if (!zonas.length) return null;
+    try {
+      return volumesPorZona({
+        zonas, areaTalhaoHa: talhao?.areaHa ?? 0, unidade: doseAtiva.unidade || 'kg/ha',
+        porZona: doseAtiva.porZona?.length ? doseAtiva.porZona : null,
+        grid: doseAtiva.grid, bounds: doseAtiva.bounds, poligono,
+      });
+    } catch (e) { console.warn('[recomendacao] volumes por zona falhou', e); return null; }
+  }, [doseAtiva, zonasTalhao, talhao, poligono]);
+  // Os mapas de fertilidade que alimentaram esta dose foram TODOS processados
+  // por zona? Então o mapa interpolado já é chapado por zona, e a diferença
+  // para o modo "Por zona" é só a origem do número (média do mapa × equação
+  // direta no laudo) — a tela diz isso em vez de deixar o usuário adivinhar.
+  const fontesPorZona = !!doseAtiva?.fontes?.length && doseAtiva.fontes.every(f => f.metodo === 'zona');
 
   // Zonas coloridas pela faixa da dose + rótulo com a taxa (o número que vai
   // para a máquina). Mesma classificação do raster e da legenda (faixas.ts).
@@ -683,7 +707,94 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
 
       {/* Recomendação POR ZONA: o usuário precisa saber, porque muda o que
           ele vê no mapa E o arquivo que a máquina vai receber. */}
-      {dosePorZona && (
+      {volZona && doseAtiva ? (() => {
+        // A TABELA DE VOLUMES POR ZONA: taxa · ha · t, uma linha por zona, e o
+        // total no rodapé. Verde quando a taxa é a exata do laudo (modo por
+        // zona); azul quando é lida do mapa — a cor é o aviso de origem.
+        const exata = volZona.origem === 'laudo';
+        const un = doseAtiva.unidade || 'kg/ha';
+        const emT = /t\/ha|ton/i.test(un);
+        // Em t/ha o arredondamento a zero casas apagaria a taxa (0,4 → "0"),
+        // mesma regra da lista de doses.
+        const casasDose = (v: number) => (emT ? 2 : Math.abs(v) >= 100 ? 0 : 1);
+        const cel = 'text-[9px] tabular-nums';
+        // Composta: as "zonas" são as células da grade — o nome tem de ser o
+        // que a aba Amostragem usa, e a lista pode passar de dezenas de linhas.
+        const unidadeArea = compostaAtiva ? 'Célula' : 'Zona';
+        // A tonelagem do cenário (linha do produto) é calculada pixel a pixel;
+        // aqui é taxa × hectare fatiado. Diferem em décimos — e quando passam
+        // de 1% a tabela avisa, em vez de deixar dois totais discordando calados.
+        const tonCenario = doseAtiva.toneladas;
+        const desvioPct = (Number.isFinite(tonCenario) && tonCenario > 0 && volZona.semDose.length === 0)
+          ? ((volZona.totalToneladas - tonCenario) / tonCenario) * 100 : 0;
+        return (
+          <div className="p-2 rounded-lg" style={{ background: exata ? '#0f2a1a' : '#0b1f3a', border: `1px solid ${exata ? '#166534' : '#2e5fa3'}` }}>
+            <p className="text-[10px] font-bold" style={{ color: exata ? '#86efac' : '#93c5fd' }}>
+              {exata ? 'Recomendação por zona' : 'Volumes por zona (prévia lida do mapa)'}
+            </p>
+            <p className="text-[9px] mt-0.5" style={{ color: '#94a3b8' }}>
+              {exata
+                ? 'A taxa de cada zona é a equação aplicada ao laudo daquela zona — sem interpolar e sem média. O Shapefile de taxa variável sai com um polígono por zona (aba Arquivos).'
+                : fontesPorZona
+                  ? 'Os mapas de fertilidade deste cenário foram processados por zona, então a dose já sai chapada dentro de cada uma: a taxa abaixo é a lida do mapa. Para a taxa calculada direto da equação no laudo da zona (e o Shapefile com um polígono por zona), escolha "Por zona de manejo" e aplique de novo.'
+                  : 'Taxa média dos pixels do mapa da dose dentro de cada zona, e o volume que ela dá na área da zona. Onde a dose varia por dentro, a faixa (mín–máx) aparece ao lado. Para uma taxa única por zona, calculada direto do laudo, escolha "Por zona de manejo" e aplique de novo.'}
+            </p>
+            <div className="mt-1.5" style={{ maxHeight: 'min(40vh, 320px)', overflowY: 'auto', overscrollBehavior: 'contain' }}>
+            <table className="w-full" style={{ borderCollapse: 'collapse' }}>
+              <thead>
+                <tr className="text-[8px] uppercase" style={{ color: '#64748b' }}>
+                  <th className="text-left font-semibold pb-0.5">{unidadeArea}</th>
+                  <th className="text-right font-semibold pb-0.5">{un}</th>
+                  <th className="text-right font-semibold pb-0.5">ha</th>
+                  <th className="text-right font-semibold pb-0.5">t</th>
+                </tr>
+              </thead>
+              <tbody>
+                {volZona.zonas.map(z => (
+                  <tr key={z.rotulo} style={{ color: '#cbd5e1', borderTop: '1px solid #13294a' }}>
+                    <td className={`${cel} font-bold py-0.5`} style={{ color: '#e2e8f0' }}>{unidadeArea} {z.rotulo}</td>
+                    <td className={`${cel} text-right py-0.5`} style={{ color: z.dose == null ? '#fbbf24' : undefined }}>
+                      {z.dose == null ? 'sem taxa' : fmt(z.dose, casasDose(z.dose))}
+                      {z.varia && z.min != null && z.max != null && (
+                        <span className="ml-1" style={{ color: '#64748b' }}>({fmt(z.min, casasDose(z.min))}–{fmt(z.max, casasDose(z.max))})</span>
+                      )}
+                    </td>
+                    <td className={`${cel} text-right py-0.5`}>{fmtHa(z.areaHa)}</td>
+                    <td className={`${cel} text-right py-0.5 font-semibold`} style={{ color: exata ? '#86efac' : '#93c5fd' }}>
+                      {z.toneladas == null ? '—' : fmt(z.toneladas, 1)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="font-bold" style={{ color: '#e2e8f0', borderTop: '1px solid #2e5fa3' }}>
+                  <td className={`${cel} py-0.5`}>Total</td>
+                  <td className={`${cel} text-right py-0.5`} style={{ color: '#64748b' }}>
+                    {volZona.totalAreaHa > 0 && volZona.semDose.length === 0
+                      ? (() => { const m = volZona.totalToneladas * (emT ? 1 : 1000) / volZona.totalAreaHa; return `méd ${fmt(m, casasDose(m))}`; })()
+                      : ''}
+                  </td>
+                  <td className={`${cel} text-right py-0.5`}>{fmtHa(volZona.totalAreaHa)}</td>
+                  <td className={`${cel} text-right py-0.5`} style={{ color: exata ? '#86efac' : '#93c5fd' }}>{fmt(volZona.totalToneladas, 1)}</td>
+                </tr>
+              </tfoot>
+            </table>
+            </div>
+            {volZona.semDose.length > 0 && (
+              <p className="text-[9px] mt-1" style={{ color: '#fbbf24' }}>
+                {exata
+                  ? `O cenário não tem taxa para ${volZona.semDose.length > 1 ? 'as zonas' : 'a zona'} ${volZona.semDose.join(', ')} do zoneamento atual — faltou laudo, ou o zoneamento mudou depois do cálculo. Fica fora da soma; clique em "Aplicar e salvar" para recalcular.`
+                  : `Sem pixel do mapa dentro ${volZona.semDose.length > 1 ? 'das zonas' : 'da zona'} ${volZona.semDose.join(', ')} — o zoneamento pode ter mudado depois do cálculo. Fica fora da soma.`}
+              </p>
+            )}
+            {Math.abs(desvioPct) > 1 && (
+              <p className="text-[9px] mt-1" style={{ color: '#94a3b8' }}>
+                A soma das {compostaAtiva ? 'células' : 'zonas'} fica {desvioPct > 0 ? '+' : ''}{fmt(desvioPct, 1)}% em relação à tonelagem do produto ({fmt(tonCenario, 1)} t), que é calculada pixel a pixel sobre o talhão inteiro; aqui é taxa × hectare da {compostaAtiva ? 'célula' : 'zona'}.
+              </p>
+            )}
+          </div>
+        );
+      })() : dosePorZona && (
         <div className="p-2 rounded-lg" style={{ background: '#0f2a1a', border: '1px solid #166534' }}>
           <p className="text-[10px] font-bold" style={{ color: '#86efac' }}>Recomendação por zona</p>
           <p className="text-[9px] mt-0.5" style={{ color: '#94a3b8' }}>

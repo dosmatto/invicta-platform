@@ -68,6 +68,7 @@ verdadeira (fusão de talhões) chegou depois; foi preciso renumerar.
 | 41 | Amostragem composta: células quadráticas com as subamostras distribuídas dentro | 2.152.0 | Talhão → Amostragem → Composta; app de campo; Fertilidade/Recomendação por célula |
 | 42 | Mapa de colheita entra como camada nas Zonas de Manejo | 2.154.0 | Talhão → Zonas → Gerar zonas por similaridade → "Camadas a usar" (botões "Produtividade <cultura> <ano>") |
 | 43 | Catálogo de variáveis protegido contra apps de campo desatualizados | 2.155.0 | Biblioteca → Preferências de Análise (casas decimais/ordem apagadas em 13/09 por um app de campo antigo); banco: rodar `docs/seguranca-rls.sql` DEPOIS de publicar a 2.155.0 |
+| 44 | Volumes por zona (taxa, ha e t) em todo cenário com zoneamento | 2.156.0 | Talhão → Recomendações → cenário aberto → tabela "Volumes por zona" / "Recomendação por zona" (abaixo da lista de produtos) |
 
 > As pendências 1–17 foram entregues antes deste registro existir e não estão
 > catalogadas; procure pelo assunto no `changelog.ts`. Da 18 em diante, tudo
