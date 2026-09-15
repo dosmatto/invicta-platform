@@ -78,7 +78,7 @@ export async function gerarRelatorioZonas(d: DadosExportZonas, opts: OpcoesRelat
   // ── CABEÇALHO (desenho compartilhado com o relatório de Fertilidade) ──
   desenharCabecalhoOficial(doc, {
     logoCliente: logos.cli,
-    fazenda: san(d.fazenda),
+    fazenda: san(d.fazenda), siglaFazenda: d.siglaFazenda, talhao: d.talhao,
     esquerda: [
       `Produtor: ${san(d.produtor) || '—'}`,
       `Talhão: ${san(d.talhao) || '—'}${d.ano ? '   |   Ano: ' + san(d.ano) : ''}`,

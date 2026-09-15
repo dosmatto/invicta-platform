@@ -40,7 +40,7 @@ function desenhar(opts) {
 const logoFalsa = (wPx, hPx) => ({ naturalWidth: wPx, naturalHeight: hPx });
 const BASE = {
   logoCliente: null,
-  fazenda: 'Estância JM',
+  fazenda: 'Estância JM', siglaFazenda: 'JM', talhao: 'Talhão 03',
   esquerda: ['Produtor: JONATHAN VALLE MARIANO', 'Ano: 2026   |   Data: 08/2026'],
   titulo: 'Ca%', subtitulo: 'Saturação por Cálcio (%)',
   info: ['Área Total: 33,70 ha', 'Município: Ponta Grossa - PR', `Datum: ${DATUM}`],
@@ -149,11 +149,29 @@ t('título e subtítulo CENTRALIZADOS na página, entre os blocos laterais', () 
   assert.ok(titulo.x + titulo.largura / 2 < Math.min(...infoDe(textos).map(l => l.x - l.largura)));
 });
 
-t('nome comprido de fazenda não invade o título (corta com "…")', () => {
-  const { textos } = desenhar({ ...BASE, fazenda: 'Fazenda Nossa Senhora Aparecida do Alto Rio Grande do Norte e Arredores' });
+// ── Pedido de 15/09/2026: sigla completa do talhão no lugar do nome da fazenda ──
+
+t('a linha grande da esquerda é a SIGLA COMPLETA DO TALHÃO, não o nome da fazenda', () => {
+  const { textos } = desenhar(BASE);
+  assert.equal(textos.find(t => t.corpo === 12).txt, 'JM03');
+  assert.ok(!textos.some(t => /Est[âa]ncia JM/i.test(t.txt)), 'o nome da fazenda continua no cabeçalho');
+});
+
+t('fazenda sem sigla cadastrada: iniciais do nome + número do talhão (mesma regra do arquivo)', () => {
+  const faz = desenhar({ ...BASE, fazenda: 'Fazenda Boa Vista', siglaFazenda: null, talhao: 'T-7' }).textos.find(t => t.corpo === 12);
+  assert.equal(faz.txt, 'BV07');
+});
+
+t('relatório de fazenda inteira (sem talhão) mostra só a sigla da fazenda', () => {
+  const faz = desenhar({ ...BASE, talhao: null }).textos.find(t => t.corpo === 12);
+  assert.equal(faz.txt, 'JM');
+});
+
+t('a sigla nunca invade o título, mesmo com nomes compridos de fazenda e talhão', () => {
+  const { textos } = desenhar({ ...BASE, fazenda: 'Fazenda Nossa Senhora Aparecida do Alto Rio Grande do Norte e Arredores', siglaFazenda: 'FNSA', talhao: 'Talhão sem número e com nome comprido' });
   const faz = textos.find(t => t.corpo === 12);
-  assert.ok(faz.txt.endsWith('…'));
-  assert.ok(M + faz.largura < W / 2 - TITULO_MAXW / 2, 'a fazenda entra na caixa do título');
+  assert.ok(!faz.txt.endsWith('…'), 'a sigla saiu cortada');
+  assert.ok(M + faz.largura < W / 2 - TITULO_MAXW / 2, 'a sigla entra na caixa do título');
 });
 
 t('a marca INVICTA fica no pé da área branca, sem tocar a barra do rodapé', () => {

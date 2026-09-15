@@ -1,7 +1,7 @@
 'use client';
 
 // CABEÇALHO OFICIAL dos relatórios A4 paisagem, em UM lugar só:
-//   fazenda/produtor (canto sup. esquerdo) | título central | INFORMAÇÕES DA ÁREA
+//   SIGLA DO TALHÃO/produtor (canto sup. esquerdo) | título central | INFORMAÇÕES DA ÁREA
 //   (canto sup. direito) | logo do cliente
 // Fertilidade e Zonas de Manejo chamam a MESMA função — a regra do usuário é
 // "em todos os layouts exatamente igual", e isso só é garantia se houver um
@@ -10,6 +10,7 @@
 // área branca, acima da barra do rodapé — ver marcaInvicta().
 
 import type { jsPDF as JsPDF } from 'jspdf';
+import { idTalhao } from './nomeExport.ts';
 
 type RGB = [number, number, number];
 const NAVY: RGB = [13, 33, 64];
@@ -67,7 +68,13 @@ export function marcaInvicta(doc: JsPDF, logo: HTMLImageElement | null, lado: 'e
 
 export interface CabecalhoOficial {
   logoCliente: HTMLImageElement | null;
-  fazenda: string;      // linha grande à esquerda (sai em maiúsculas)
+  // A linha grande à esquerda é a SIGLA COMPLETA DO TALHÃO ("IPE03"): sigla da
+  // fazenda + número do talhão, a MESMA regra do nome do arquivo (lib/nomeExport).
+  // Pedido de 15/09/2026: o nome da fazenda saiu daqui — quem lê o mapa
+  // identifica a área pela sigla, não pelo nome por extenso.
+  fazenda: string;               // nome da fazenda — só para DERIVAR a sigla quando não há uma cadastrada
+  siglaFazenda?: string | null;  // sigla cadastrada; sem ela, iniciais do nome
+  talhao?: string | null;        // nome do talhão; sem ele (relatório de fazenda) sai só a sigla
   esquerda: string[];   // até 2 linhas cinza sob a fazenda (produtor, ano…)
   titulo: string;       // linha grande central — sai LITERAL, sem maiúsculas
   subtitulo: string;    // linha cinza sob o título
@@ -80,7 +87,8 @@ export function desenharCabecalhoOficial(doc: JsPDF, o: CabecalhoOficial): void 
 
   // ── Bloco esquerdo: encostado na MARGEM (a logo saiu daqui) ──
   doc.setTextColor(...NAVY); doc.setFont('helvetica', 'bold'); doc.setFontSize(12);
-  doc.text(clip(o.fazenda.toUpperCase(), LATERAL_MAXW), M, 9);
+  // idTalhao já devolve maiúsculas ("IPE03"); nunca o nome da fazenda por extenso.
+  doc.text(clip(idTalhao(o.fazenda, o.talhao, o.siglaFazenda), LATERAL_MAXW), M, 9);
   doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(...GRAY);
   o.esquerda.slice(0, 2).forEach((t, i) => doc.text(clip(t, LATERAL_MAXW), M, 14 + i * 4.5));
 

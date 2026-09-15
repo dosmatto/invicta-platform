@@ -193,7 +193,7 @@ async function desenharPagina(doc: JsPDF, d: DadosRelatorioCondutividade, logos:
   const pct = q.faixas.length ? 100 / q.faixas.length : 20;
   desenharCabecalhoOficial(doc, {
     logoCliente: logos.cli,
-    fazenda: san(d.fazenda),
+    fazenda: san(d.fazenda), siglaFazenda: d.siglaFazenda, talhao: d.talhao,
     esquerda: [
       `Produtor: ${san(d.produtor) || '—'}`,
       `Talhao: ${san(d.talhao) || '—'}   |   Camada: ${san(d.camada)}`,

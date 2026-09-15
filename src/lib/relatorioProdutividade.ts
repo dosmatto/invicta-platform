@@ -280,7 +280,7 @@ function linhaDatas(d: DadosRelatorioProd): string {
 function cabecalho(doc: JsPDF, d: DadosRelatorioProd, logos: Logos, titulo: string, subtitulo: string, infoExtra?: string[]): void {
   desenharCabecalhoOficial(doc, {
     logoCliente: logos.cli,
-    fazenda: san(d.fazenda),
+    fazenda: san(d.fazenda), siglaFazenda: d.siglaFazenda, talhao: d.talhao,
     esquerda: [
       `Produtor: ${san(d.produtor) || '—'}`,
       `Talhao: ${san(d.talhao) || '—'}   |   Ano: ${rotuloAno(d.safra)}`,

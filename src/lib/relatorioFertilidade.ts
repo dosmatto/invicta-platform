@@ -151,7 +151,7 @@ async function desenharPaginaMapa(doc: JsPDF, d: DadosRelatorioFert, logos: Logo
   const nomeVar = san(varAn?.nome || d.atributo);
   desenharCabecalhoOficial(doc, {
     logoCliente: logos.cli,
-    fazenda: d.fazenda,
+    fazenda: d.fazenda, siglaFazenda: d.siglaFazenda, talhao: d.talhao,
     esquerda: [
       `Produtor: ${d.produtor || '—'}`,
       `Ano: ${rotuloAno(d.safra)}   |   Data: ${d.dataInterpolacao}`,

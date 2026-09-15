@@ -1,5 +1,12 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // Sigla completa do talhão no cabeçalho dos relatórios
+  '2.157.0': [
+    'O CABEÇALHO DOS RELATÓRIOS PASSA A IDENTIFICAR A ÁREA PELA SIGLA COMPLETA DO TALHÃO, NÃO PELO NOME DA FAZENDA. A linha grande do canto superior esquerdo — que dizia "IPE", "ESTÂNCIA JM" — agora traz "IPE03", "JM07": a sigla cadastrada da fazenda colada ao número do talhão, exatamente a mesma regra que já nomeia o arquivo exportado (lib/nomeExport). Quem abre o PDF lê a mesma identificação que vê no nome do arquivo e nas etiquetas.',
+    'VALE PARA TODOS OS LAYOUTS QUE USAM O CABEÇALHO OFICIAL — Fertilidade, Foliar, Produtividade, Condutividade e Zonas de Manejo — porque a mudança foi feita no único desenho compartilhado (lib/pdfCabecalho), e não relatório por relatório. Fazenda sem sigla cadastrada segue a regra de reserva do nome do arquivo (iniciais das palavras que distinguem: "Fazenda Boa Vista" → BV); relatório de fazenda inteira, sem talhão, mostra só a sigla.',
+    'ZONAS DE MANEJO AGORA CARREGA A SIGLA CADASTRADA: era o único relatório que não passava a sigla da fazenda adiante, então tanto o cabeçalho quanto o nome do arquivo derivavam a sigla das iniciais do nome mesmo quando havia uma cadastrada. Passou a usar a cadastrada, como os outros.',
+    'Verificação: teste:cabecalho (18 → 21 testes; o teste antigo do nome comprido de fazenda foi substituído por quatro sobre a sigla: sigla+número, fazenda sem sigla, relatório sem talhão, sigla nunca invade o título), teste:zonas 12/12, npx tsc --noEmit limpo e npm run build de produção.',
+  ],
   // [44] Volumes por zona (taxa, ha e t) em todo cenário com zoneamento
   '2.156.0': [
     'PENDÊNCIA 44 — A PRÉVIA DE VOLUMES POR ZONA VOLTOU A APARECER NA ABA RECOMENDAÇÕES, E AGORA TRAZ O VOLUME DE VERDADE. Abrindo um cenário num talhão com zoneamento, abaixo da lista de produtos aparece a tabela de cada zona: taxa, hectares e TONELADAS — o número que a logística precisa e que a tela só dava para o talhão inteiro. O rodapé soma as zonas.',

@@ -264,7 +264,7 @@ function moldura(
   ];
   desenharCabecalhoOficial(doc, {
     logoCliente: logos.cli,
-    fazenda: id.fazenda || 'Fazenda',
+    fazenda: id.fazenda || 'Fazenda', siglaFazenda: id.siglaFazenda, talhao: id.talhao,
     esquerda: [
       `Produtor: ${san(id.produtor) || '—'}`,
       `Talhão: ${san(id.talhao) || '—'}   |   Ano: ${rotuloAno(id.safra) || san(id.safra) || '—'}`,

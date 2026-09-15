@@ -50,7 +50,7 @@ export function ExportarZonas({ talhao, zoneamentos, safraNome }: {
     try { externo = talhao.geojson ? extrairPoligono(JSON.parse(talhao.geojson)) : null; } catch { externo = null; }
     const ident: IdentEntrada = {
       idMapa: z.id, nomeMapa: z.nome,
-      produtor: cliente?.nome ?? '', fazenda: fazenda?.nome ?? '', talhao: talhao.nome,
+      produtor: cliente?.nome ?? '', fazenda: fazenda?.nome ?? '', siglaFazenda: fazenda?.sigla ?? null, talhao: talhao.nome,
       municipio: fazenda?.municipio ?? '', estado: fazenda?.estado ?? '',
       ano: rotuloAno(safraNome), responsavel: usuarioAtual()?.email ?? '',
       dataMapa: z.criadoEm, externo,

@@ -62,6 +62,7 @@ export interface DadosExportZonas {
   nomeMapa: string;
   produtor: string;
   fazenda: string;
+  siglaFazenda: string | null;  // sigla cadastrada — cabeçalho do PDF e nome do arquivo
   talhao: string;
   municipio: string;
   estado: string;
@@ -185,6 +186,7 @@ export interface IdentEntrada {
   nomeMapa: string;
   produtor: string;
   fazenda: string;
+  siglaFazenda?: string | null;
   talhao: string;
   municipio?: string;
   estado?: string;
@@ -225,6 +227,7 @@ export function montarDadosZonas(fc: GeoJSON.FeatureCollection, ident: IdentEntr
     nomeMapa: ident.nomeMapa,
     produtor: ident.produtor,
     fazenda: ident.fazenda,
+    siglaFazenda: ident.siglaFazenda ?? null,
     talhao: ident.talhao,
     municipio: ident.municipio ?? '',
     estado: ident.estado ?? '',
@@ -436,7 +439,7 @@ export async function shpFiles(fc: GeoJSON.FeatureCollection, tipo: 'polygon' | 
 export const nomeArquivoBase = (d: DadosExportZonas): string => {
   const per = periodoParaNome({ data: d.dataMapa, safra: d.ano });
   return nomeExport({
-    fazenda: d.fazenda, talhao: d.talhao, tipo: 'ZONAS', ano: per.ano, epoca: per.epoca,
+    fazenda: d.fazenda, siglaFazenda: d.siglaFazenda, talhao: d.talhao, tipo: 'ZONAS', ano: per.ano, epoca: per.epoca,
   });
 };
 
