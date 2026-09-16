@@ -1,5 +1,13 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [44] A taxa e as toneladas de cada zona escritas no mapa (correção)
+  '2.158.0': [
+    'PENDÊNCIA 44 — OS VALORES POR ZONA AGORA TAMBÉM SAEM NO MAPA, não só na tabela da gaveta. Ao abrir um cenário num talhão com zoneamento, cada zona recebe, escrito no meio dela, a taxa (na unidade da dose) e, na linha de baixo, as toneladas — o mesmo número da tabela "Volumes por zona". É o mesmo jeito que a aba Fertilidade mostra o mapa por zona.',
+    'NO CENÁRIO INTERPOLADO o raster continua sendo o mapa; por cima dele entram os números e as DIVISAS das zonas — sem elas, duas zonas vizinhas da mesma classe viravam uma mancha só e não dava para ver onde acaba uma e começa a outra. O número fica no ponto mais fundo da zona (o mesmo pólo de inacessibilidade da pendência 38), longe das divisas, e vai pela mesma camada de rótulos da Fertilidade, que fica acima do raster.',
+    'NO CENÁRIO POR ZONA o rótulo que já existia ("Zona 3 / 3.437 kg/ha") ganha a linha das toneladas ("32,6 t"). Zona sem taxa não recebe número — o aviso na gaveta continua dizendo qual.',
+    'Talhão sem zoneamento não muda: o mapa fica só o raster, como antes.',
+    'Verificação: npx tsc --noEmit limpo em src/ e npm run build de produção passou; teste:volzona 9/9.',
+  ],
   // Sigla completa do talhão no cabeçalho dos relatórios
   '2.157.0': [
     'O CABEÇALHO DOS RELATÓRIOS PASSA A IDENTIFICAR A ÁREA PELA SIGLA COMPLETA DO TALHÃO, NÃO PELO NOME DA FAZENDA. A linha grande do canto superior esquerdo — que dizia "IPE", "ESTÂNCIA JM" — agora traz "IPE03", "JM07": a sigla cadastrada da fazenda colada ao número do talhão, exatamente a mesma regra que já nomeia o arquivo exportado (lib/nomeExport). Quem abre o PDF lê a mesma identificação que vê no nome do arquivo e nas etiquetas.',

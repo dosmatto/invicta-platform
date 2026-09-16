@@ -21,6 +21,9 @@ import { gravarPreferenciaLocal } from '@/lib/localComprimido';
 import { coordsFromBounds, extrairPoligono } from '@/lib/fertilidade';
 import { agruparPorRotulo } from '@/lib/recomendacao/dosePorZona';
 import { volumesPorZona } from '@/lib/recomendacao/volumesPorZona';
+import { pontoRotuloGeo } from '@/lib/rotulosMapa';
+import { centroideGeom } from '@/lib/recomendacao/zonasGrid';
+import { divisasDasZonas } from '@/lib/meap/fertilidadePorZona';
 import { nutrientesDaEquacao } from '@/lib/recomendacao/doseZonaDireta';
 import { bindingDasZonas, valoresDasZonas } from '@/lib/recomendacao/zonasComLaudo';
 import { zonasDoTalhao } from '@/lib/recomendacao/zonasDoTalhao';
@@ -338,6 +341,46 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
   // para o modo "Por zona" é só a origem do número (média do mapa × equação
   // direta no laudo) — a tela diz isso em vez de deixar o usuário adivinhar.
   const fontesPorZona = !!doseAtiva?.fontes?.length && doseAtiva.fontes.every(f => f.metodo === 'zona');
+  // Toneladas por rótulo, para o mapa escrever o volume junto da taxa.
+  const tonPorRotulo = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const z of volZona?.zonas ?? []) if (z.toneladas != null) m.set(z.rotulo, z.toneladas);
+    return m;
+  }, [volZona]);
+
+  // OS VALORES POR ZONA TAMBÉM VÃO PARA O MAPA (pedido junto da pendência 44):
+  // a tabela na gaveta não substitui o número escrito em cima da zona, que é
+  // como a aba Fertilidade mostra o mapa por zona. No cenário INTERPOLADO o
+  // raster continua sendo o mapa; por cima dele entram a taxa e as toneladas
+  // no ponto mais fundo de cada zona (pólo de inacessibilidade — a mesma regra
+  // da pendência 38, longe das divisas) e as DIVISAS das zonas, senão duas
+  // zonas vizinhas da mesma classe viram uma mancha só. Vai pela MESMA fonte
+  // de rótulos que a Fertilidade usa (`fert-labels`), que fica acima do raster.
+  // No cenário POR ZONA o mapa já é o polígono da zona com o rótulo dentro
+  // (`zonasMapa`), e lá o rótulo ganha a linha das toneladas.
+  const rotulosMapa = useMemo<GeoJSON.FeatureCollection | null>(() => {
+    if (!volZona || volZona.origem !== 'mapa' || !doseAtiva) return null;
+    const zonas = agruparPorRotulo(zonasTalhao);
+    const geomPorRotulo = new Map(zonas.map(z => [z.rotulo, z.geometry]));
+    const un = doseAtiva.unidade || 'kg/ha';
+    const emT = /t\/ha|ton/i.test(un);
+    const pontos: GeoJSON.Feature[] = [];
+    for (const z of volZona.zonas) {
+      const g = geomPorRotulo.get(z.rotulo);
+      if (!g || z.dose == null) continue;
+      const c = pontoRotuloGeo(g) ?? centroideGeom(g);
+      if (!c) continue;
+      const taxa = fmt(z.dose, emT ? 2 : Math.abs(z.dose) >= 100 ? 0 : 1);
+      const ton = z.toneladas == null ? '' : `\n${fmt(z.toneladas, 1)} t`;
+      pontos.push({
+        type: 'Feature', geometry: { type: 'Point', coordinates: c },
+        properties: { txt: `${taxa} ${un}${ton}`, v: z.dose },
+      });
+    }
+    if (!pontos.length) return null;
+    const divisas = divisasDasZonas(zonas.map(z => ({ id: z.id, classe: '', geometry: z.geometry })));
+    return { type: 'FeatureCollection', features: [...pontos, ...divisas] };
+  }, [volZona, doseAtiva, zonasTalhao]);
 
   // Zonas coloridas pela faixa da dose + rótulo com a taxa (o número que vai
   // para a máquina). Mesma classificação do raster e da legenda (faixas.ts).
@@ -353,15 +396,17 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
         type: 'Feature' as const,
         properties: {
           cor: classes[indiceClasse(z.dose, lims)].cor,
-          // dose grande vira inteiro; pequena (t/ha) mantém casa decimal
-          rotulo: `Zona ${z.rotulo}\n${fmt(z.dose, Math.abs(z.dose) >= 100 ? 0 : 1)} ${un}`,
+          // dose grande vira inteiro; pequena (t/ha) mantém casa decimal; e a
+          // linha das toneladas da zona, o mesmo número da tabela na gaveta
+          rotulo: `Zona ${z.rotulo}\n${fmt(z.dose, Math.abs(z.dose) >= 100 ? 0 : 1)} ${un}`
+            + (tonPorRotulo.has(z.rotulo) ? `\n${fmt(tonPorRotulo.get(z.rotulo)!, 1)} t` : ''),
           classeLabel: '',
           selecionada: false,
         },
         geometry: z.geometry,
       })),
     };
-  }, [dosePorZona, doseAtiva]);
+  }, [dosePorZona, doseAtiva, tonPorRotulo]);
 
   useEffect(() => { setZonasManejo(zonasMapa); return () => setZonasManejo(null); }, [zonasMapa, setZonasManejo]);
 
@@ -382,11 +427,13 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
           : png;
         if (cancelado) return;
         setFertilidadeOverlay({ url: recortado.dataUrl, coordinates: coordsFromBounds(doseAtiva.bounds), opacity: 1 });
-        setFertilidadeLabels(null);
+        // Taxa e toneladas escritas em cada zona, por cima do raster (null
+        // quando o talhão não tem zoneamento — aí o mapa fica só o raster).
+        setFertilidadeLabels(rotulosMapa);
       } catch (e) { console.warn('[recomendacao] colorir falhou', e); }
     })();
     return () => { cancelado = true; };
-  }, [doseAtiva, poligono, zonasMapa, setFertilidadeOverlay, setFertilidadeLabels]);
+  }, [doseAtiva, poligono, zonasMapa, rotulosMapa, setFertilidadeOverlay, setFertilidadeLabels]);
   useEffect(() => () => { setFertilidadeOverlay(null); setFertilidadeLabels(null); }, [setFertilidadeOverlay, setFertilidadeLabels]);
 
   async function aplicar() {
