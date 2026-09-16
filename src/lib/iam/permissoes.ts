@@ -28,7 +28,7 @@ const TRABALHAR = ['visualizar', 'criar', 'editar', 'exportar'] as AcaoIam[];
 
 // Módulos "de análise" — o que um agrônomo opera no dia a dia.
 const ANALISE: ModuloIam[] = [
-  'fertilidade', 'zonas', 'satelite', 'recomendacoes',
+  'fertilidade', 'zonas', 'satelite', 'recomendacoes', 'prescricao',
   'compactacao', 'produtividade', 'relatorios',
 ];
 
@@ -52,6 +52,7 @@ export const MATRIZ_PADRAO: Record<PapelIam, MapaPermissoes> = {
   agronomo: (() => {
     const m = conceder(nada(), ANALISE, TRABALHAR);
     conceder(m, ['zonas'], ['excluir']);                 // editor de zonas mexe/apaga
+    conceder(m, ['prescricao'], ['excluir']);            // já apagava prescrição salva (antes seguia 'recomendacoes')
     conceder(m, ['cadastro', 'amostragem', 'laboratorio', 'biblioteca', 'arquivos'], VER_EXP);
     return m;
   })(),
@@ -60,6 +61,8 @@ export const MATRIZ_PADRAO: Record<PapelIam, MapaPermissoes> = {
   operador: (() => {
     const m = conceder(nada(), ['amostragem'], TRABALHAR);
     conceder(m, ['compactacao'], ['visualizar', 'criar', 'editar']);
+    // Já via as prescrições salvas e baixava os arquivos (antes da 2.161.0).
+    conceder(m, ['prescricao'], VER_EXP);
     conceder(m, ['cadastro', 'fertilidade', 'zonas', 'satelite'], VER);
     return m;
   })(),
@@ -69,7 +72,7 @@ export const MATRIZ_PADRAO: Record<PapelIam, MapaPermissoes> = {
   // se quiser, salva. Relevo, CE, zonas, colheita e compactação: só ver.
   produtor: (() => {
     const m = conceder(nada(),
-      ['cadastro', 'fertilidade', 'zonas', 'recomendacoes', 'compactacao', 'produtividade', 'relatorios', 'arquivos'], VER_EXP);
+      ['cadastro', 'fertilidade', 'zonas', 'recomendacoes', 'prescricao', 'compactacao', 'produtividade', 'relatorios', 'arquivos'], VER_EXP);
     conceder(m, ['satelite'], TRABALHAR);
     return m;
   })(),
@@ -78,6 +81,7 @@ export const MATRIZ_PADRAO: Record<PapelIam, MapaPermissoes> = {
   prestador: (() => {
     const m = conceder(nada(), ['amostragem'], TRABALHAR);
     conceder(m, ['cadastro'], VER);
+    conceder(m, ['prescricao'], VER_EXP);            // idem operador: via e baixava as salvas
     return m;
   })(),
 

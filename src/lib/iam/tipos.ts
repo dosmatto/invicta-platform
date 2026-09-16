@@ -50,7 +50,7 @@ export const PAPEIS: Array<{ id: PapelIam; nome: string; dica: string }> = [
 // ── Módulos e ações (permissão granular) ────────────────────────────────────
 export type ModuloIam =
   | 'cadastro' | 'amostragem' | 'laboratorio' | 'fertilidade' | 'zonas'
-  | 'satelite' | 'recomendacoes' | 'compactacao' | 'produtividade'
+  | 'satelite' | 'recomendacoes' | 'prescricao' | 'compactacao' | 'produtividade'
   | 'relatorios' | 'biblioteca' | 'arquivos' | 'usuarios';
 
 export const MODULOS: Array<{ id: ModuloIam; nome: string }> = [
@@ -61,6 +61,7 @@ export const MODULOS: Array<{ id: ModuloIam; nome: string }> = [
   { id: 'zonas',         nome: 'Zonas de manejo' },
   { id: 'satelite',      nome: 'Satélite (NDVI/índices)' },
   { id: 'recomendacoes', nome: 'Recomendações e doses' },
+  { id: 'prescricao',    nome: 'Prescrições (taxa variável)' },
   { id: 'compactacao',   nome: 'Compactação' },
   { id: 'produtividade', nome: 'Produtividade/colheita' },
   { id: 'relatorios',    nome: 'Relatórios' },

@@ -17,7 +17,7 @@ import {
   precoResolvidoDoInsumo,
 } from '@/lib/store';
 import { anoDaSafra } from '@/lib/periodo';
-import { emailUsuario, pode } from '@/lib/empresa';
+import { emailUsuario, podePrescricao } from '@/lib/empresa';
 import { listar as bibListar, type ItemBiblioteca, type ConteudoEquacao } from '@/lib/biblioteca';
 import {
   complementarNutriente, complementarPorZona, podeComplementar, NUTRIENTES, ROTULO_NUTRIENTE, SIMBOLO_NUTRIENTE, garantiaDe,
@@ -670,9 +670,18 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
     ['comparacao', 'Planejado × Realizado', Scale],
   ];
 
-  // Quem não recomenda (produtor, leitor) vê as prescrições salvas e baixa os
+  // [46] Prescrições têm linha própria na matriz de permissões.
+  const podeVer = podePrescricao('visualizar');
+  const podeExportar = podePrescricao('exportar');
+  const podeExcluir = podePrescricao('excluir');
+
+  // Quem não cria prescrição (produtor, leitor) vê as salvas e baixa os
   // arquivos (SHP/Excel/PDF) — sem editor, sem excluir.
-  if (!pode('recomendacoes')) return (
+  if (!podePrescricao('criar')) return !podeVer ? (
+    <div className="p-4">
+      <Vazia texto="Seu acesso não inclui Prescrições. Peça ao administrador para liberar em Usuários e permissões." />
+    </div>
+  ) : (
     <div className="p-4 space-y-2">
       <div className="flex items-center gap-2">
         <FolderOpen size={12} style={{ color: '#93c5fd' }} />
@@ -682,7 +691,7 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
         ? <Vazia texto="Nenhuma prescrição salva neste talhão." />
         : linhagens.map(vs => (
           <ListaVersoes key={vs[0].origemId ?? vs[0].id} versoes={vs} exportando={exportando} somenteLeitura
-            onAbrir={() => {}} onExportar={exportar} onExcluir={() => {}} />
+            podeExportar={podeExportar} onAbrir={() => {}} onExportar={exportar} onExcluir={() => {}} />
         ))}
       <p className="text-[10px]" style={{ color: '#475569' }}>Os arquivos de aplicação saem daqui (SHP, Excel, PDF). A edição é feita pela Invicta.</p>
     </div>
@@ -1379,9 +1388,11 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
                   <button onClick={salvar} className="px-3 py-2 rounded text-[11px] font-bold text-white flex items-center gap-1.5" style={{ background: 'var(--invicta-green-dark)' }}>
                     <Save size={12} /> {r.editandoId ? 'Salvar alterações (nova versão)' : 'Salvar prescrição'}
                   </button>
+                  {podeExportar && <>
                   <BotaoExport rot="SHP" icone={FileDown} ocupado={exportando.endsWith(':shp')} onClick={() => exportar('shp')} />
                   <BotaoExport rot="Excel" icone={FileSpreadsheet} ocupado={exportando.endsWith(':xlsx')} onClick={() => exportar('xlsx')} />
                   <BotaoExport rot="PDF" icone={FileText} ocupado={exportando.endsWith(':pdf')} onClick={() => exportar('pdf')} />
+                  </>}
                   {r.editandoId && (
                     <button onClick={() => { setR(RASCUNHO_VAZIO); setAvisosCalc([]); setErro(''); setOkMsg(''); }}
                       className="px-2.5 py-2 rounded text-[10px] font-semibold" style={{ background: '#0f2240', color: '#93c5fd' }}>
@@ -1423,6 +1434,7 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
             ? <Vazia texto="Nenhuma prescrição salva neste talhão ainda." />
             : linhagens.map(vs => (
               <ListaVersoes key={vs[0].origemId ?? vs[0].id} versoes={vs} exportando={exportando}
+                podeExportar={podeExportar} podeExcluir={podeExcluir}
                 onAbrir={abrirSalva} onExportar={exportar}
                 onExcluir={id => { deletePrescricao(id); setTick(t => t + 1); }} />
             ))
@@ -1441,8 +1453,8 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
                   <p style={{ color: '#64748b' }}>{e.presc.nome} · v{e.presc.versao} · {dataBR(e.em)} · {e.por}</p>
                 </div>
                 <span className="px-1.5 py-0.5 rounded font-bold uppercase" style={{ background: '#0f2240', color: '#93c5fd' }}>{e.formato}</span>
-                <button onClick={() => exportar(e.formato as 'shp' | 'xlsx' | 'pdf', e.presc)}
-                  className="px-2 py-1 rounded font-semibold" style={{ background: '#1a3a6b', color: '#93c5fd' }}>Gerar de novo</button>
+                {podeExportar && <button onClick={() => exportar(e.formato as 'shp' | 'xlsx' | 'pdf', e.presc)}
+                  className="px-2 py-1 rounded font-semibold" style={{ background: '#1a3a6b', color: '#93c5fd' }}>Gerar de novo</button>}
               </div>
             ));
         })()}
@@ -1533,23 +1545,26 @@ function CampoTotalDisponivel({ rotulo, unidadeTotal, porHa, totalAbs, areaHa, s
 // como nas Zonas de Manejo e no NDVI.
 // Uma prescrição e TODAS as suas versões: a mais nova em destaque e as
 // anteriores logo abaixo, discretas — sempre à vista, sem botão para recolher.
-function ListaVersoes({ versoes, exportando, onAbrir, onExportar, onExcluir, somenteLeitura }: {
+function ListaVersoes({ versoes, exportando, onAbrir, onExportar, onExcluir, somenteLeitura, podeExportar = true, podeExcluir = true }: {
   versoes: Prescricao[];
   exportando: string;
   onAbrir: (p: Prescricao) => void;
   onExportar: (formato: 'shp' | 'xlsx' | 'pdf', p: Prescricao) => void;
   onExcluir: (id: string) => void;
   /** Produtor/leitor: sem "Abrir no editor" nem "Excluir" — só exportar. */
+  podeExportar?: boolean;
+  podeExcluir?: boolean;
   somenteLeitura?: boolean;
 }) {
   const [atual, ...antigas] = versoes;
   return (
     <div className="space-y-1">
-      <CartaoSalva p={atual} exportando={exportando} onAbrir={onAbrir} onExportar={onExportar} onExcluir={onExcluir} somenteLeitura={somenteLeitura} />
+      <CartaoSalva p={atual} exportando={exportando} onAbrir={onAbrir} onExportar={onExportar} onExcluir={onExcluir} somenteLeitura={somenteLeitura} podeExportar={podeExportar} podeExcluir={podeExcluir} />
       {antigas.length > 0 && (
         <div className="pl-3 space-y-1" style={{ borderLeft: '2px solid #1a3a6b' }}>
           {antigas.map(v => (
             <CartaoSalva key={v.id} p={v} anterior exportando={exportando} somenteLeitura={somenteLeitura}
+              podeExportar={podeExportar} podeExcluir={podeExcluir}
               onAbrir={onAbrir} onExportar={onExportar} onExcluir={onExcluir} />
           ))}
         </div>
@@ -1558,7 +1573,7 @@ function ListaVersoes({ versoes, exportando, onAbrir, onExportar, onExcluir, som
   );
 }
 
-function CartaoSalva({ p, anterior, exportando, onAbrir, onExportar, onExcluir, somenteLeitura }: {
+function CartaoSalva({ p, anterior, exportando, onAbrir, onExportar, onExcluir, somenteLeitura, podeExportar = true, podeExcluir = true }: {
   p: Prescricao;
   anterior?: boolean;          // versão antiga (fica discreta na lista)
   exportando: string;
@@ -1566,6 +1581,8 @@ function CartaoSalva({ p, anterior, exportando, onAbrir, onExportar, onExcluir, 
   onExportar: (formato: 'shp' | 'xlsx' | 'pdf', p: Prescricao) => void;
   onExcluir: (id: string) => void;
   somenteLeitura?: boolean;
+  podeExportar?: boolean;
+  podeExcluir?: boolean;
 }) {
   const rs = resumoDoses(p.zonas, p.custoUnit);
   return (
@@ -1592,10 +1609,12 @@ function CartaoSalva({ p, anterior, exportando, onAbrir, onExportar, onExcluir, 
             <Pencil size={10} /> Abrir no editor
           </button>
         )}
+        {podeExportar && <>
         <BotaoExport rot="SHP" icone={FileDown} pequeno ocupado={exportando === `${p.id}:shp`} onClick={() => onExportar('shp', p)} />
         <BotaoExport rot="Excel" icone={FileSpreadsheet} pequeno ocupado={exportando === `${p.id}:xlsx`} onClick={() => onExportar('xlsx', p)} />
         <BotaoExport rot="PDF" icone={FileText} pequeno ocupado={exportando === `${p.id}:pdf`} onClick={() => onExportar('pdf', p)} />
-        {!somenteLeitura && (
+        </>}
+        {!somenteLeitura && podeExcluir && (
           <button onClick={() => { if (confirm(`Excluir a prescrição "${p.nome}"?`)) onExcluir(p.id); }}
             className="px-2 py-1 rounded text-[10px] font-semibold flex items-center gap-1" style={{ background: '#3a1a1a', color: '#fca5a5' }}>
             <Trash2 size={10} /> Excluir

@@ -1,5 +1,12 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [46] Prescrições com linha própria nas permissões de acesso
+  '2.161.0': [
+    'PENDÊNCIA 46 — PRESCRIÇÕES GANHAM LINHA PRÓPRIA NA MATRIZ DE PERMISSÕES ("Prescrições (taxa variável)", logo abaixo de Recomendações). Antes a aba Prescrições não aparecia na matriz e seguia, inteira, a permissão de Recomendações — não dava para liberar recomendação sem liberar prescrição, nem o contrário.',
+    'O QUE CADA MARCAÇÃO FAZ NA ABA PRESCRIÇÕES: Ver mostra as prescrições salvas; Criar abre o editor (nova prescrição e "Abrir no editor"); Excluir mostra o botão Excluir; Export libera os botões SHP/Excel/PDF e o "Gerar de novo" dos arquivos de aplicação. Quem não tem nem Ver recebe um aviso no lugar da lista.',
+    'NINGUÉM PERDE NEM GANHA ACESSO NA TROCA. Os padrões dos papéis repetem o que cada um já fazia: Owner, Admin e Agrônomo trabalham e excluem; Produtor, Somente leitura, Operador e Prestador veem e baixam. Quem não tem ajuste próprio na linha nova continua seguindo o que tem em Recomendações, inclusive papel Personalizado e a matriz antiga já editada. Um ajuste próprio (fundo amarelo) na linha Prescrições passa a valer sozinho.',
+    'Verificação: teste:iam 33/33 (caso novo para a linha de Prescrições em cada papel), npx tsc --noEmit limpo e npm run build de produção.',
+  ],
   // Saneamento do limite no import: distância em metros estava dividida por 57,3
   '2.160.0': [
     'CORREÇÃO NO SANEAMENTO DO LIMITE DO TALHÃO (import de KML/SHP/GeoJSON). A função que mede a distância entre dois vértices convertia o delta em graus para radianos E multiplicava por 111.320 m/grau — o resultado saía 57,3 vezes menor. Na prática a tolerância de "vértice duplicado" de 0,10 m valia 5,73 m, e a perna máxima da espícula de 12 m valia 688 m: todo vértice a menos de 5,73 m do anterior era apagado no import, cortando cantos reais do contorno.',

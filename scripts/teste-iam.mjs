@@ -50,6 +50,22 @@ t('operador coleta mas não mexe em recomendação', () => {
   assert.equal(o['cadastro.visualizar'], true, 'precisa ver o cadastro para navegar');
 });
 
+t('[46] Prescrições têm linha própria na matriz', () => {
+  assert.ok(MODULOS.some(m => m.id === 'prescricao'), 'módulo prescricao existe');
+  const ag = MATRIZ_PADRAO.agronomo;
+  for (const a of ['visualizar', 'criar', 'editar', 'excluir', 'exportar']) {
+    assert.equal(ag[`prescricao.${a}`], true, `agrônomo: ${a}`);
+  }
+  for (const p of ['produtor', 'leitor', 'operador', 'prestador']) {
+    const m = MATRIZ_PADRAO[p];
+    assert.equal(m['prescricao.visualizar'], true, `${p} vê as salvas`);
+    assert.equal(m['prescricao.exportar'], true, `${p} baixa os arquivos`);
+    assert.ok(!m['prescricao.criar'] && !m['prescricao.excluir'], `${p} não cria nem exclui`);
+  }
+  assert.equal(MATRIZ_PADRAO.admin['prescricao.excluir'], true);
+  assert.equal(contarPermissoes(MATRIZ_PADRAO.custom), 0, 'custom continua vazio');
+});
+
 t('papel custom nasce sem nenhuma permissão', () => {
   assert.equal(contarPermissoes(MATRIZ_PADRAO.custom), 0);
 });

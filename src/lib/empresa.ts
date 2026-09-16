@@ -371,6 +371,24 @@ export function podeEm(modulo: string, acao: string): boolean {
   return base?.[chave] === true;
 }
 
+// [46] Prescrições viraram módulo próprio na matriz (antes a tela inteira seguia
+// a capacidade 'recomendacoes'). Quem tem um ajuste PRÓPRIO em prescricao.* é
+// avaliado por ele. Sem ajuste, criar/editar/excluir continuam seguindo
+// 'recomendacoes' — assim ninguém perde nem ganha acesso na troca (inclusive
+// papéis 'custom' e a matriz antiga que o Owner já tenha editado).
+export function podePrescricao(acao: 'visualizar' | 'criar' | 'editar' | 'excluir' | 'exportar'): boolean {
+  if (!authConfigurado) return true;
+  const papel = papelDoUsuario();
+  if (!papel) return false;
+  const reg = meuRegistro() as (RegistroPapel & { status?: string; permissoes?: Record<string, boolean> }) | null;
+  if (reg?.status && reg.status !== 'ativo') return false;
+  if (papel === 'owner') return true;
+  const excecao = reg?.permissoes?.[`prescricao.${acao}`];
+  if (typeof excecao === 'boolean') return excecao;
+  if (acao === 'visualizar' || acao === 'exportar') return podeEm('prescricao', acao) || pode('recomendacoes');
+  return pode('recomendacoes');
+}
+
 // ── Planos de assinatura do Produtor (U3.B — editáveis pelo Owner) ───────────
 // Cada plano (nome editável) libera um conjunto de SEÇÕES do portal (= abas da
 // página do talhão que têm dado pronto). O produtor é read-only.
