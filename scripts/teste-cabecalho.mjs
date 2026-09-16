@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict';
 import { jsPDF } from 'jspdf';
 import {
-  desenharCabecalhoOficial, marcaInvicta, TITULO_PT, TITULO_MAXW, DATUM,
+  desenharCabecalhoOficial, marcaInvicta, nomeTalhaoPadrao, TITULO_PT, TITULO_MAXW, DATUM,
   larguraLogoCliente, bordaInfoArea, MARCA_H, MARCA_Y, PE_Y,
 } from '../src/lib/pdfCabecalho.ts';
 
@@ -40,7 +40,7 @@ function desenhar(opts) {
 const logoFalsa = (wPx, hPx) => ({ naturalWidth: wPx, naturalHeight: hPx });
 const BASE = {
   logoCliente: null,
-  fazenda: 'Estância JM', siglaFazenda: 'JM', talhao: 'Talhão 03',
+  fazenda: 'Estância JM', siglaFazenda: 'JM', talhao: 'JMGBV 04',
   esquerda: ['Produtor: JONATHAN VALLE MARIANO', 'Ano: 2026   |   Data: 08/2026'],
   titulo: 'Ca%', subtitulo: 'Saturação por Cálcio (%)',
   info: ['Área Total: 33,70 ha', 'Município: Ponta Grossa - PR', `Datum: ${DATUM}`],
@@ -149,29 +149,32 @@ t('título e subtítulo CENTRALIZADOS na página, entre os blocos laterais', () 
   assert.ok(titulo.x + titulo.largura / 2 < Math.min(...infoDe(textos).map(l => l.x - l.largura)));
 });
 
-// ── Pedido de 15/09/2026: sigla completa do talhão no lugar do nome da fazenda ──
+// ── 15/09/2026: nome do talhão no lugar do nome da fazenda. 16/09/2026: é o NOME
+// CADASTRADO ("JMGBV 04"), não uma sigla derivada ("BV04" não batia com o cadastro). ──
 
-t('a linha grande da esquerda é a SIGLA COMPLETA DO TALHÃO, não o nome da fazenda', () => {
+t('a linha grande da esquerda é o NOME CADASTRADO DO TALHÃO, não o nome da fazenda', () => {
   const { textos } = desenhar(BASE);
-  assert.equal(textos.find(t => t.corpo === 12).txt, 'JM03');
+  assert.equal(textos.find(t => t.corpo === 12).txt, 'JMGBV 04');
   assert.ok(!textos.some(t => /Est[âa]ncia JM/i.test(t.txt)), 'o nome da fazenda continua no cabeçalho');
 });
 
-t('fazenda sem sigla cadastrada: iniciais do nome + número do talhão (mesma regra do arquivo)', () => {
-  const faz = desenhar({ ...BASE, fazenda: 'Fazenda Boa Vista', siglaFazenda: null, talhao: 'T-7' }).textos.find(t => t.corpo === 12);
-  assert.equal(faz.txt, 'BV07');
+t('o nome do talhão sai PADRONIZADO: maiúsculas e um espaço só — nunca uma sigla inventada', () => {
+  const faz = desenhar({ ...BASE, fazenda: 'Fazenda Boa Vista', siglaFazenda: 'BV', talhao: '  jmgbv   04 ' }).textos.find(t => t.corpo === 12);
+  assert.equal(faz.txt, 'JMGBV 04');
+  assert.equal(nomeTalhaoPadrao('T-7'), 'T-7', 'o nome cadastrado não pode ser reescrito');
 });
 
 t('relatório de fazenda inteira (sem talhão) mostra só a sigla da fazenda', () => {
   const faz = desenhar({ ...BASE, talhao: null }).textos.find(t => t.corpo === 12);
   assert.equal(faz.txt, 'JM');
+  assert.equal(desenhar({ ...BASE, talhao: '   ' }).textos.find(t => t.corpo === 12).txt, 'JM', 'talhão em branco vale como ausente');
 });
 
-t('a sigla nunca invade o título, mesmo com nomes compridos de fazenda e talhão', () => {
-  const { textos } = desenhar({ ...BASE, fazenda: 'Fazenda Nossa Senhora Aparecida do Alto Rio Grande do Norte e Arredores', siglaFazenda: 'FNSA', talhao: 'Talhão sem número e com nome comprido' });
+t('nome comprido de talhão não invade o título (corta com "…")', () => {
+  const { textos } = desenhar({ ...BASE, talhao: 'Talhão da Sede Nova do Alto Rio Grande do Norte e Arredores' });
   const faz = textos.find(t => t.corpo === 12);
-  assert.ok(!faz.txt.endsWith('…'), 'a sigla saiu cortada');
-  assert.ok(M + faz.largura < W / 2 - TITULO_MAXW / 2, 'a sigla entra na caixa do título');
+  assert.ok(faz.txt.endsWith('…'), 'o nome comprido não foi cortado');
+  assert.ok(M + faz.largura < W / 2 - TITULO_MAXW / 2, 'o nome entra na caixa do título');
 });
 
 t('a marca INVICTA fica no pé da área branca, sem tocar a barra do rodapé', () => {

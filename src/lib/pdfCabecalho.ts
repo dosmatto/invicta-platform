@@ -66,15 +66,24 @@ export function marcaInvicta(doc: JsPDF, logo: HTMLImageElement | null, lado: 'e
   doc.addImage(logo, 'PNG', lado === 'direita' ? W - M - w : M, MARCA_Y, w, MARCA_H);
 }
 
+// Padroniza o nome cadastrado do talhão para o cabeçalho: espaços colapsados e
+// MAIÚSCULAS ("jmgbv  04" → "JMGBV 04"). Não inventa sigla nem número — o que
+// está no cadastro é o padrão. Vazio quando não há talhão.
+export function nomeTalhaoPadrao(talhao: string | null | undefined): string {
+  return (talhao ?? '').replace(/\s+/g, ' ').trim().toUpperCase();
+}
+
 export interface CabecalhoOficial {
   logoCliente: HTMLImageElement | null;
-  // A linha grande à esquerda é a SIGLA COMPLETA DO TALHÃO ("IPE03"): sigla da
-  // fazenda + número do talhão, a MESMA regra do nome do arquivo (lib/nomeExport).
-  // Pedido de 15/09/2026: o nome da fazenda saiu daqui — quem lê o mapa
-  // identifica a área pela sigla, não pelo nome por extenso.
-  fazenda: string;               // nome da fazenda — só para DERIVAR a sigla quando não há uma cadastrada
-  siglaFazenda?: string | null;  // sigla cadastrada; sem ela, iniciais do nome
-  talhao?: string | null;        // nome do talhão; sem ele (relatório de fazenda) sai só a sigla
+  // A linha grande à esquerda é o NOME DO TALHÃO COMO CADASTRADO ("JMGBV 04"),
+  // padronizado por nomeTalhaoPadrao — o cadastro já segue o padrão sigla + número,
+  // e é ESSE nome que o usuário reconhece. Pedido de 15/09/2026 (nome da fazenda
+  // saiu daqui) e correção de 16/09/2026: a sigla derivada ("BV04", "JGIP04") não
+  // batia com o cadastro ("JMGBV 04"). Sem talhão (relatório de fazenda inteira)
+  // sai a sigla da fazenda (lib/nomeExport), nunca o nome por extenso.
+  fazenda: string;               // nome da fazenda — só para derivar a sigla do relatório SEM talhão
+  siglaFazenda?: string | null;  // sigla cadastrada da fazenda (reserva do relatório sem talhão)
+  talhao?: string | null;        // nome cadastrado do talhão — é o que sai na linha grande
   esquerda: string[];   // até 2 linhas cinza sob a fazenda (produtor, ano…)
   titulo: string;       // linha grande central — sai LITERAL, sem maiúsculas
   subtitulo: string;    // linha cinza sob o título
@@ -87,8 +96,9 @@ export function desenharCabecalhoOficial(doc: JsPDF, o: CabecalhoOficial): void 
 
   // ── Bloco esquerdo: encostado na MARGEM (a logo saiu daqui) ──
   doc.setTextColor(...NAVY); doc.setFont('helvetica', 'bold'); doc.setFontSize(12);
-  // idTalhao já devolve maiúsculas ("IPE03"); nunca o nome da fazenda por extenso.
-  doc.text(clip(idTalhao(o.fazenda, o.talhao, o.siglaFazenda), LATERAL_MAXW), M, 9);
+  // Nome cadastrado do talhão, padronizado; sem talhão, a sigla da fazenda.
+  const linhaGrande = nomeTalhaoPadrao(o.talhao) || idTalhao(o.fazenda, null, o.siglaFazenda);
+  doc.text(clip(linhaGrande, LATERAL_MAXW), M, 9);
   doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(...GRAY);
   o.esquerda.slice(0, 2).forEach((t, i) => doc.text(clip(t, LATERAL_MAXW), M, 14 + i * 4.5));
 

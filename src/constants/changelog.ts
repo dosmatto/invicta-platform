@@ -1,5 +1,11 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // Cabeçalho dos relatórios: o NOME CADASTRADO do talhão, não uma sigla derivada
+  '2.159.0': [
+    'CORREÇÃO DA 2.157.0 — A LINHA GRANDE DO CABEÇALHO É O NOME DO TALHÃO EXATAMENTE COMO ESTÁ NO CADASTRO. A 2.157.0 montava uma sigla por conta própria (sigla da fazenda + número: "BV04", "JGIP04") e ela não batia com o que o usuário vê na lista de talhões ("JMGBV 04"). O cadastro JÁ segue o padrão sigla + número — então o cabeçalho passa a mostrar esse nome, padronizado (maiúsculas, um espaço só), sem reescrever nada.',
+    'Vale para os mesmos cinco layouts (Fertilidade, Foliar, Produtividade, Condutividade e Zonas de Manejo), porque a regra vive no desenho compartilhado (lib/pdfCabecalho). Relatório de fazenda inteira, sem talhão, continua mostrando a sigla da fazenda. O NOME DO ARQUIVO exportado não mudou — segue a regra própria de lib/nomeExport.',
+    'Verificação: teste:cabecalho 21/21 (os quatro testes da sigla foram reescritos para o nome cadastrado: nome exato, padronização de maiúsculas/espaços, relatório sem talhão, nome comprido cortado com reticências sem invadir o título), npx tsc --noEmit limpo e npm run build de produção.',
+  ],
   // [44] A taxa e as toneladas de cada zona escritas no mapa (correção)
   '2.158.0': [
     'PENDÊNCIA 44 — OS VALORES POR ZONA AGORA TAMBÉM SAEM NO MAPA, não só na tabela da gaveta. Ao abrir um cenário num talhão com zoneamento, cada zona recebe, escrito no meio dela, a taxa (na unidade da dose) e, na linha de baixo, as toneladas — o mesmo número da tabela "Volumes por zona". É o mesmo jeito que a aba Fertilidade mostra o mapa por zona.',
