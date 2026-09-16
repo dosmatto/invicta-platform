@@ -1,5 +1,12 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // Saneamento do limite no import: distância em metros estava dividida por 57,3
+  '2.160.0': [
+    'CORREÇÃO NO SANEAMENTO DO LIMITE DO TALHÃO (import de KML/SHP/GeoJSON). A função que mede a distância entre dois vértices convertia o delta em graus para radianos E multiplicava por 111.320 m/grau — o resultado saía 57,3 vezes menor. Na prática a tolerância de "vértice duplicado" de 0,10 m valia 5,73 m, e a perna máxima da espícula de 12 m valia 688 m: todo vértice a menos de 5,73 m do anterior era apagado no import, cortando cantos reais do contorno.',
+    'É a origem das diferenças de ±0,01 a ±0,03 ha entre a área do talhão aqui e a área do mesmo KML medida no fito ou no QGIS (o método de cálculo geodésico é o mesmo e concorda a 5 casas; o que mudava era o contorno desbastado). Sinal misto por talhão, porque o corte entra ou sai conforme a curva.',
+    'TALHÕES JÁ CADASTRADOS NÃO MUDAM SOZINHOS: os vértices apagados não existem mais no contorno gravado, então recalcular a área não os devolve. Para recuperar a área exata é preciso reimportar o KML original do talhão (Fazenda → talhão → substituir limite). Impressão digital de um contorno desbastado: o menor segmento entre vértices é exatamente 5,73 m.',
+    'Verificação: npx tsc --noEmit limpo, npm run build de produção e conferência sobre o KML real de AFSSA 08 (663 vértices): antes 82 vértices removidos e o contorno deslocado; agora 2 (só duplicados reais, a menos de 10 cm) e área idêntica à do arquivo cru.',
+  ],
   // Cabeçalho dos relatórios: o NOME CADASTRADO do talhão, não uma sigla derivada
   '2.159.0': [
     'CORREÇÃO DA 2.157.0 — A LINHA GRANDE DO CABEÇALHO É O NOME DO TALHÃO EXATAMENTE COMO ESTÁ NO CADASTRO. A 2.157.0 montava uma sigla por conta própria (sigla da fazenda + número: "BV04", "JGIP04") e ela não batia com o que o usuário vê na lista de talhões ("JMGBV 04"). O cadastro JÁ segue o padrão sigla + número — então o cabeçalho passa a mostrar esse nome, padronizado (maiúsculas, um espaço só), sem reescrever nada.',

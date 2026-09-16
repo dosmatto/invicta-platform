@@ -163,11 +163,14 @@ const TOL_DUP_M = 0.10;      // vértices a < 10 cm = mesma coordenada (duplicad
 const COS_ESPICULA = 0.985;  // arestas quase paralelas (ângulo < ~10°) = agulha
 const PERNA_ESPICULA_M = 12; // só remove agulha se a perna curta for pequena
 
-// distância aproximada em metros (equiretangular — suficiente p/ épsilons locais)
+// distância aproximada em metros (equiretangular — suficiente p/ épsilons locais).
+// 111320 já é metros POR GRAU: o delta fica em graus, `rad` só entra no cosseno.
+// (Multiplicar o delta por `rad` também dividia a distância por 57,3 e fazia
+// TOL_DUP_M valer 5,73 m na prática — apagava vértices reais no import.)
 function dM(a: Pos, b: Pos): number {
   const rad = Math.PI / 180;
-  const x = (b[0] - a[0]) * rad * 111320 * Math.cos(((a[1] + b[1]) / 2) * rad);
-  const y = (b[1] - a[1]) * rad * 111320;
+  const x = (b[0] - a[0]) * 111320 * Math.cos(((a[1] + b[1]) / 2) * rad);
+  const y = (b[1] - a[1]) * 111320;
   return Math.sqrt(x * x + y * y);
 }
 
