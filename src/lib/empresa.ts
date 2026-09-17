@@ -371,42 +371,41 @@ export function podeEm(modulo: string, acao: string): boolean {
   return base?.[chave] === true;
 }
 
-// [46] Prescrições viraram módulo próprio na matriz (antes a tela inteira seguia
-// a capacidade 'recomendacoes'). Quem tem um ajuste PRÓPRIO em prescricao.* é
-// avaliado por ele. Sem ajuste, criar/editar/excluir continuam seguindo
-// 'recomendacoes' — assim ninguém perde nem ganha acesso na troca (inclusive
-// papéis 'custom' e a matriz antiga que o Owner já tenha editado).
-export function podePrescricao(acao: 'visualizar' | 'criar' | 'editar' | 'excluir' | 'exportar'): boolean {
+// [46] Linhas próprias na matriz para abas que antes seguiam outra permissão
+// (Prescrições seguia 'recomendacoes'; Altimetria e Condutividade seguiam
+// zonas.criar e não tinham trava para ver e baixar). Regra única:
+// 1. ajuste PRÓPRIO do usuário em <modulo>.<acao> vence;
+// 2. sem ajuste, criar/editar/excluir seguem a regra ANTIGA da aba;
+// 3. ver/baixar valem pela linha nova OU pelo que já davam antes.
+// Assim ninguém perde nem ganha acesso na troca (inclusive papéis 'custom' e a
+// matriz antiga que o Owner já tenha editado).
+type AcaoAba = 'visualizar' | 'criar' | 'editar' | 'excluir' | 'exportar';
+
+function podeAbaDerivada(modulo: string, acao: AcaoAba, antiga: () => boolean, antigaVer: () => boolean): boolean {
   if (!authConfigurado) return true;
   const papel = papelDoUsuario();
   if (!papel) return false;
   const reg = meuRegistro() as (RegistroPapel & { status?: string; permissoes?: Record<string, boolean> }) | null;
   if (reg?.status && reg.status !== 'ativo') return false;
   if (papel === 'owner') return true;
-  const excecao = reg?.permissoes?.[`prescricao.${acao}`];
+  const excecao = reg?.permissoes?.[`${modulo}.${acao}`];
   if (typeof excecao === 'boolean') return excecao;
-  if (acao === 'visualizar' || acao === 'exportar') return podeEm('prescricao', acao) || pode('recomendacoes');
-  return pode('recomendacoes');
+  if (acao === 'visualizar' || acao === 'exportar') return podeEm(modulo, acao) || antigaVer() || antiga();
+  return antiga();
 }
 
-// [46] Altimetria também ganhou linha própria (antes: buscar base, gerar
-// análise e mexer nas versões seguiam zonas.criar; ver e baixar não tinham
-// trava). Mesma regra da prescrição: ajuste PRÓPRIO em altimetria.* vence;
-// sem ajuste, criar/editar/excluir seguem zonas.criar, e ver/baixar seguem a
-// linha nova OU o que a pessoa já tem em Zonas de manejo.
-export function podeAltimetria(acao: 'visualizar' | 'criar' | 'editar' | 'excluir' | 'exportar'): boolean {
-  if (!authConfigurado) return true;
-  const papel = papelDoUsuario();
-  if (!papel) return false;
-  const reg = meuRegistro() as (RegistroPapel & { status?: string; permissoes?: Record<string, boolean> }) | null;
-  if (reg?.status && reg.status !== 'ativo') return false;
-  if (papel === 'owner') return true;
-  const excecao = reg?.permissoes?.[`altimetria.${acao}`];
-  if (typeof excecao === 'boolean') return excecao;
-  if (acao === 'visualizar' || acao === 'exportar') {
-    return podeEm('altimetria', acao) || podeEm('zonas', acao) || podeEm('zonas', 'criar');
-  }
-  return podeEm('zonas', 'criar');
+export function podePrescricao(acao: AcaoAba): boolean {
+  return podeAbaDerivada('prescricao', acao, () => pode('recomendacoes'), () => false);
+}
+
+export function podeAltimetria(acao: AcaoAba): boolean {
+  return podeAbaDerivada('altimetria', acao, () => podeEm('zonas', 'criar'),
+    () => podeEm('zonas', acao === 'exportar' ? 'exportar' : 'visualizar'));
+}
+
+export function podeCondutividade(acao: AcaoAba): boolean {
+  return podeAbaDerivada('condutividade', acao, () => podeEm('zonas', 'criar'),
+    () => podeEm('zonas', acao === 'exportar' ? 'exportar' : 'visualizar'));
 }
 
 // ── Planos de assinatura do Produtor (U3.B — editáveis pelo Owner) ───────────

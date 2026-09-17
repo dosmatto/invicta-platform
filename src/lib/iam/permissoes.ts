@@ -28,7 +28,7 @@ const TRABALHAR = ['visualizar', 'criar', 'editar', 'exportar'] as AcaoIam[];
 
 // Módulos "de análise" — o que um agrônomo opera no dia a dia.
 const ANALISE: ModuloIam[] = [
-  'fertilidade', 'zonas', 'altimetria', 'satelite', 'recomendacoes', 'prescricao',
+  'fertilidade', 'zonas', 'altimetria', 'condutividade', 'satelite', 'recomendacoes', 'prescricao',
   'compactacao', 'produtividade', 'relatorios',
 ];
 
@@ -52,7 +52,7 @@ export const MATRIZ_PADRAO: Record<PapelIam, MapaPermissoes> = {
   agronomo: (() => {
     const m = conceder(nada(), ANALISE, TRABALHAR);
     conceder(m, ['zonas'], ['excluir']);                 // editor de zonas mexe/apaga
-    conceder(m, ['altimetria'], ['excluir']);            // já apagava versão de MDE (antes seguia 'zonas')
+    conceder(m, ['altimetria', 'condutividade'], ['excluir']); // já apagava versões de MDE e CE (antes seguiam 'zonas')
     conceder(m, ['prescricao'], ['excluir']);            // já apagava prescrição salva (antes seguia 'recomendacoes')
     conceder(m, ['cadastro', 'amostragem', 'laboratorio', 'biblioteca', 'arquivos'], VER_EXP);
     return m;
@@ -63,7 +63,7 @@ export const MATRIZ_PADRAO: Record<PapelIam, MapaPermissoes> = {
     const m = conceder(nada(), ['amostragem'], TRABALHAR);
     conceder(m, ['compactacao'], ['visualizar', 'criar', 'editar']);
     // Já via e baixava prescrições salvas e o relevo (antes das linhas próprias).
-    conceder(m, ['prescricao', 'altimetria'], VER_EXP);
+    conceder(m, ['prescricao', 'altimetria', 'condutividade'], VER_EXP);
     conceder(m, ['cadastro', 'fertilidade', 'zonas', 'satelite'], VER);
     return m;
   })(),
@@ -73,7 +73,7 @@ export const MATRIZ_PADRAO: Record<PapelIam, MapaPermissoes> = {
   // se quiser, salva. Relevo, CE, zonas, colheita e compactação: só ver.
   produtor: (() => {
     const m = conceder(nada(),
-      ['cadastro', 'fertilidade', 'zonas', 'altimetria', 'recomendacoes', 'prescricao', 'compactacao', 'produtividade', 'relatorios', 'arquivos'], VER_EXP);
+      ['cadastro', 'fertilidade', 'zonas', 'altimetria', 'condutividade', 'recomendacoes', 'prescricao', 'compactacao', 'produtividade', 'relatorios', 'arquivos'], VER_EXP);
     conceder(m, ['satelite'], TRABALHAR);
     return m;
   })(),
@@ -82,7 +82,7 @@ export const MATRIZ_PADRAO: Record<PapelIam, MapaPermissoes> = {
   prestador: (() => {
     const m = conceder(nada(), ['amostragem'], TRABALHAR);
     conceder(m, ['cadastro'], VER);
-    conceder(m, ['prescricao', 'altimetria'], VER_EXP); // idem operador: via e baixava
+    conceder(m, ['prescricao', 'altimetria', 'condutividade'], VER_EXP); // idem operador: via e baixava
     return m;
   })(),
 

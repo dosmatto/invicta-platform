@@ -66,19 +66,19 @@ t('[46] Prescrições têm linha própria na matriz', () => {
   assert.equal(contarPermissoes(MATRIZ_PADRAO.custom), 0, 'custom continua vazio');
 });
 
-t('[46] Altimetria tem linha própria na matriz', () => {
-  assert.ok(MODULOS.some(m => m.id === 'altimetria'), 'módulo altimetria existe');
+for (const mod of ['altimetria', 'condutividade']) t(`[46] ${mod} tem linha própria na matriz`, () => {
+  assert.ok(MODULOS.some(m => m.id === mod), `módulo ${mod} existe`);
   const ag = MATRIZ_PADRAO.agronomo;
   for (const a of ['visualizar', 'criar', 'editar', 'excluir', 'exportar']) {
-    assert.equal(ag[`altimetria.${a}`], true, `agrônomo: ${a}`);
+    assert.equal(ag[`${mod}.${a}`], true, `agrônomo: ${a}`);
   }
   for (const p of ['produtor', 'leitor', 'operador', 'prestador']) {
     const m = MATRIZ_PADRAO[p];
-    assert.equal(m['altimetria.visualizar'], true, `${p} vê o relevo`);
-    assert.equal(m['altimetria.exportar'], true, `${p} baixa o relevo`);
-    assert.ok(!m['altimetria.criar'] && !m['altimetria.excluir'], `${p} não gera nem exclui`);
+    assert.equal(m[`${mod}.visualizar`], true, `${p} vê`);
+    assert.equal(m[`${mod}.exportar`], true, `${p} baixa`);
+    assert.ok(!m[`${mod}.criar`] && !m[`${mod}.excluir`], `${p} não gera nem exclui`);
   }
-  assert.equal(MATRIZ_PADRAO.admin['altimetria.excluir'], true);
+  assert.equal(MATRIZ_PADRAO.admin[`${mod}.excluir`], true);
 });
 
 t('papel custom nasce sem nenhuma permissão', () => {

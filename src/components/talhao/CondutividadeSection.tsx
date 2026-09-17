@@ -31,11 +31,14 @@ import { parseArquivoPontos, pontosCondutividade, avaliarQualidade, CORES_QUALID
 import { ordenarLegendasDoAtributo, respeitarPadraoHomonima } from '@/lib/legendas';
 import type { Legenda } from '@/lib/legendas';
 import { Upload, Loader2, Zap, Eraser, AlertTriangle, Save, Trash2, Play, Plus, Layers, Star, Gauge, Mountain, SlidersHorizontal, ChevronDown, ChevronUp, RotateCcw, Download, History, FileDown } from 'lucide-react';
-import { podeEm } from '@/lib/empresa';
+import { podeCondutividade } from '@/lib/empresa';
 
 // Quem NÃO processa CE (produtor, leitor) só troca versão/camada/vista e exporta
 // (PDF, GeoTIFF) — sem nova versão, limpar, interpolar, apagar ou oficializar.
-const podeProcessar = () => podeEm('zonas', 'criar');
+// [46] Cada ação segue a linha "Condutividade" da matriz de permissões.
+const podeProcessar = () => podeCondutividade('criar');
+const podeExcluirCe = () => podeCondutividade('excluir');
+const podeBaixar = () => podeCondutividade('exportar');
 
 import { inputStyle } from '@/constants/ui';
 import { fmtMax2 as fmt } from '@/lib/formato';
@@ -475,6 +478,15 @@ export function CondutividadeSection() {
     }
   }
 
+  if (!podeCondutividade('visualizar')) return (
+    <div className="px-4 py-3">
+      <div className="flex items-start gap-2 p-3 rounded-lg" style={{ background: '#2d1a00', border: '1px solid #92400e' }}>
+        <AlertTriangle size={14} style={{ color: '#fbbf24' }} className="flex-shrink-0 mt-0.5" />
+        <p className="text-[10px]" style={{ color: '#fbbf24' }}>Seu acesso não inclui Condutividade. Peça ao administrador para liberar em Usuários e permissões.</p>
+      </div>
+    </div>
+  );
+
   return (
     <div className="px-4 py-3 space-y-3">
       {/* Cabeçalho — variável fixa */}
@@ -497,7 +509,7 @@ export function CondutividadeSection() {
               className="px-2 py-1.5 rounded text-[10px] font-bold flex items-center gap-1" style={{ background: 'var(--invicta-green-dark)', color: '#fff' }}>
               <Plus size={11} />
             </button>)}
-            {podeProcessar() && lev && (
+            {podeExcluirCe() && lev && (
               <button onClick={excluirLevantamento} title="Excluir versão"
                 className="px-2 py-1.5 rounded text-[10px]" style={{ background: '#1a3a6b', color: '#f87171' }}>
                 <Trash2 size={12} />
@@ -839,17 +851,17 @@ export function CondutividadeSection() {
                   <Zap size={12} /> {cache[profundidade].resp.stats.modelo}{binMsg[profundidade] ? ` · ${binMsg[profundidade]}` : ` · ${cache[profundidade].resp.stats.n} pts`}
                 </div>
                 <div className="flex items-center gap-3">
-                  {cache[profundidade].resp.grid && (
+                  {cache[profundidade].resp.grid && podeBaixar() && (
                     <button onClick={gerarPdf} disabled={gerandoPdf} title="Relatório PDF do mapa, no layout oficial, com a escala por quintil" className="flex items-center gap-1 text-[10px] disabled:opacity-50" style={{ color: '#fca5a5' }}>
                       {gerandoPdf ? <Loader2 size={11} className="animate-spin" /> : <FileDown size={11} />} PDF
                     </button>
                   )}
-                  {cache[profundidade].resp.grid && (
+                  {cache[profundidade].resp.grid && podeBaixar() && (
                     <button onClick={baixarGeotiff} disabled={exportando} title="Baixar o mapa como GeoTIFF (EPSG:4326) — abre em QGIS/máquina" className="flex items-center gap-1 text-[10px] disabled:opacity-50" style={{ color: '#86efac' }}>
                       {exportando ? <Loader2 size={11} className="animate-spin" /> : <Download size={11} />} GeoTIFF
                     </button>
                   )}
-{podeProcessar() && (                  <button onClick={() => limparProf(profundidade)} title="Apagar o mapa interpolado" className="flex items-center gap-1 text-[10px]" style={{ color: '#93c5fd' }}>
+{podeExcluirCe() && (                  <button onClick={() => limparProf(profundidade)} title="Apagar o mapa interpolado" className="flex items-center gap-1 text-[10px]" style={{ color: '#93c5fd' }}>
                     <Trash2 size={11} /> Apagar
                   </button>)}
                 </div>

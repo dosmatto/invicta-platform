@@ -1,5 +1,13 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [46] Condutividade com linha própria nas permissões de acesso
+  '2.163.0': [
+    'PENDÊNCIA 46 — CONDUTIVIDADE TAMBÉM GANHA LINHA PRÓPRIA NA MATRIZ DE PERMISSÕES ("Condutividade elétrica (CE)", logo abaixo de Altimetria). Antes a aba seguia a permissão de Zonas de manejo para processar e não tinha trava nenhuma para ver e baixar.',
+    'O QUE CADA MARCAÇÃO FAZ NA ABA CONDUTIVIDADE: Ver mostra as versões e os mapas; Criar libera nova versão, limpar pontos, interpolar, reusar parâmetros e tornar oficial; Excluir mostra a lixeira da versão e o "Apagar" do mapa interpolado; Export libera o PDF e o GeoTIFF do mapa. Quem não tem nem Ver recebe um aviso no lugar da aba.',
+    'NINGUÉM PERDE NEM GANHA ACESSO NA TROCA. Owner, Admin e Agrônomo processam e excluem; Produtor, Somente leitura, Operador e Prestador veem e baixam. Sem ajuste próprio na linha nova, processar e excluir continuam seguindo "Zonas de manejo → Criar", e ver/baixar seguem também o que a pessoa tem em Zonas de manejo. Um ajuste próprio (fundo amarelo) na linha Condutividade passa a valer sozinho.',
+    'Por dentro: Prescrições, Altimetria e Condutividade passam a usar a mesma regra de compatibilidade, escrita uma vez só (lib/empresa).',
+    'Verificação: teste:iam 35/35 (a checagem de Altimetria vale agora também para Condutividade), npx tsc --noEmit limpo em src/ e npm run build de produção.',
+  ],
   // [46] Altimetria com linha própria nas permissões de acesso
   '2.162.0': [
     'PENDÊNCIA 46 — ALTIMETRIA TAMBÉM GANHA LINHA PRÓPRIA NA MATRIZ DE PERMISSÕES ("Altimetria (MDE/relevo)", logo abaixo de Zonas de manejo). Antes a aba seguia a permissão de Zonas de manejo para buscar base e gerar análise, e não tinha trava nenhuma para ver e baixar.',
