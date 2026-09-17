@@ -1,5 +1,16 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Zona de manejo volta a aparecer no app de campo (a zona viaja dentro da grade)
+  '2.170.0': [
+    'O APP DE CAMPO VOLTA A MOSTRAR AS ZONAS DE MANEJO NA COLETA. O operador abria a grade por zona e via só os pontos ("1-1", "2-6", "3-8") sobre o satélite, sem nenhuma divisa dizendo onde uma zona termina e a outra começa — e é a divisa que define de qual zona é cada furo e, no modelo A, em qual saco ele entra.',
+    'A ZONA AGORA VIAJA DENTRO DA GRADE, como as células da composta já faziam. Até aqui as divisas vinham de uma cópia única guardada no talhão, reescrita a cada "Tornar padrão" e apagada por "remover adoção": some a cópia, somem as divisas de todas as grades daquele talhão, inclusive as já coletadas — e no celular não havia nem de onde tirar outra, porque o app de campo não baixa os zoneamentos salvos. Grades novas gravam a zona certa junto com os pontos e não dependem mais de nada disso.',
+    'AS GRADES POR ZONA JÁ SALVAS SÃO CONSERTADAS SOZINHAS: basta abrir o talhão em Amostragem → Zona de Manejo que elas recebem a geometria das zonas e sincronizam para os aparelhos. O conserto só aceita um zoneamento que BATE com os pontos da grade (todas as zonas que os pontos citam têm polígono nele) — divisa errada no campo seria pior que divisa nenhuma, com o furo indo para o saco errado.',
+    'E a cópia do talhão passa a ser preenchida quando está VAZIA e existe zoneamento marcado com a estrela — é o que devolve as zonas a quem está em campo com a versão do app já instalada. Nunca por cima de uma cópia existente (fusão e desmembramento de talhão gravam a delas) e nunca sem estrela marcada (seria desfazer sozinho um "remover adoção" feito de propósito).',
+    'No app de campo o número da zona no mapa agora é o MESMO prefixo dos pontos dela: a zona dos pontos "1-1, 1-2" aparece como "1". Antes o polígono teria vindo rotulado "01".',
+    'EXPORTAR KML/SHP DA GRADE POR ZONA VOLTA A FUNCIONAR nesses casos: antes, se a cópia do talhão tinha sumido, o botão simplesmente não gerava arquivo nenhum e não avisava.',
+    'App de campo 3.2.0 (precisa de versão nova nas lojas para ler a zona gravada na grade; o preenchimento da cópia acima já ajuda a versão instalada).',
+    'Verificação: teste:zonascongeladas 17/17 (módulo novo — rótulo, arredondamento e a trava que só aceita o zoneamento cujos pontos caem dentro das zonas), teste:gradezonas, teste:zona-e2e, teste:desmembrar e teste:fundir verdes, npx tsc --noEmit limpo em src/, npm run build de produção e duas revisões independentes.',
+  ],
   // [46] Fertilidade e Zonas de Manejo obedecem todas as colunas da matriz
   '2.169.0': [
     'PENDÊNCIA 46 — FERTILIDADE E ZONAS DE MANEJO PASSAM A OBEDECER TODAS AS COLUNAS DA LINHA DELAS. Eram as duas últimas abas em que parte das colunas não fazia efeito: Ver e Excluir não tinham trava, e o PDF da Fertilidade seguia a permissão de Relatórios.',

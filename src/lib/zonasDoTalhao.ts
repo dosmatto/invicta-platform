@@ -18,20 +18,26 @@ export interface ZonaTalhao {
   geometry: GeoJSON.Polygon | GeoJSON.MultiPolygon;
 }
 
-export function zonasDoTalhao(talhaoId: string | null | undefined): ZonaTalhao[] {
-  if (!talhaoId) return [];
-  let fc: GeoJSON.FeatureCollection | null = null;
-
+/** A cascata em si, devolvendo o GeoJSON cru. Separada só para deixar a leitura
+ *  do snapshot à prova de lixo: um `zonasGeojson` gravado como "null" ou como
+ *  objeto sem `features` fazia o `.features.filter` abaixo estourar. */
+function fcDoTalhao(talhaoId: string | null | undefined): GeoJSON.FeatureCollection | null {
+  if (!talhaoId) return null;
   const zs = getZoneamentosMeap(talhaoId);
   const salvo = zs.find(z => z.padrao)
     ?? [...zs].sort((a, b) => (b.criadoEm ?? '').localeCompare(a.criadoEm ?? ''))[0];
-  if (salvo?.fc?.features?.length) {
-    fc = salvo.fc;
-  } else {
-    const t = getTalhoes().find(x => x.id === talhaoId);
-    if (!t?.zonasGeojson) return [];
-    try { fc = JSON.parse(t.zonasGeojson) as GeoJSON.FeatureCollection; } catch { return []; }
-  }
+  if (salvo?.fc?.features?.length) return salvo.fc;
+  const t = getTalhoes().find(x => x.id === talhaoId);
+  if (!t?.zonasGeojson) return null;
+  try {
+    const fc = JSON.parse(t.zonasGeojson) as GeoJSON.FeatureCollection;
+    return fc?.features?.length ? fc : null;
+  } catch { return null; }
+}
+
+export function zonasDoTalhao(talhaoId: string | null | undefined): ZonaTalhao[] {
+  const fc = fcDoTalhao(talhaoId);
+  if (!fc) return [];
 
   return fc.features
     .filter(f => f.geometry && (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon'))

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useApp } from '@/context/AppContext';
-import { getTalhoes, getFazendas, getPadroesAmostragem, getPadroesElementos, getConfigEtiqueta, getSafras, getGrades, saveGrade, updateGrade, deleteGrade, marcarParaProcessar, garantirCodigoRemessa, ProfundidadeConfig, GradeAmostragem } from '@/lib/store';
+import { getTalhoes, getFazendas, getPadroesAmostragem, getPadroesElementos, getConfigEtiqueta, getSafras, getGrades, saveGrade, updateGrade, deleteGrade, marcarParaProcessar, garantirCodigoRemessa, ProfundidadeConfig, GradeAmostragem, ZonaGrade } from '@/lib/store';
 import { nomeExport } from '@/lib/nomeExport';
 import { rotuloAno, hojeSaoPauloISO, periodoDeData, rotuloEpoca } from '@/lib/periodo';
 import { classeZona, ORDEM_CLASSES } from '@/lib/zonas';
@@ -13,6 +13,8 @@ import { exportarKML, exportarSHP } from '@/lib/exportGrade';
 import { exportarRelatorioZonasXlsx } from '@/lib/relatorioGrade';
 import { numerarPontosZonas, rotuloDoPonto, amostrasDaGrade, amostrasComProfundidade, type ZonaComPontos } from '@/lib/gradeZonas';
 import { rotuloZona } from '@/lib/meap/rotuloZona';
+import { congelarZonas, prefixosDosPontos } from '@/lib/zonasCongeladas';
+import { preencherSnapshotZonas, repararZonasDasGrades, zonasDaGrade } from '@/lib/zonasDaGrade';
 import { useEdicaoPontosZona } from './useEdicaoPontosZona';
 import { EdicaoPontosBarra } from './EdicaoPontosBarra';
 import { AlertTriangle, Layers, MapPin, Printer, RotateCcw, Save, Trash2, CheckCircle2, Circle, Pencil, Download, Eye, Move, FileSpreadsheet } from 'lucide-react';
@@ -21,10 +23,11 @@ interface ZonaFeat {
   id: string;          // identidade do POLÍGONO ("01", "01_2") — densidade, seleção
   zonaRot: string;     // o número que o MAPA mostra (lib/meap/rotuloZona): id numérico
                        // puro é ele mesmo; sufixado ("01_2") rotula pelo `zona` oficial
+  classe: string;      // classe CRUA do polígono — é ela que viaja na grade (ver zonasGeo)
   classeLabel: string;
   cor: string;
   areaHa: number;
-  geometry: GeoJSON.Geometry;
+  geometry: GeoJSON.Polygon | GeoJSON.MultiPolygon;
 }
 
 import { inputStyle } from '@/constants/ui';
@@ -59,7 +62,24 @@ export function SimuladorZonas({ safraNome: safraProp }: { safraNome?: string } 
   const padrao = padroes.find(p => p.id === padraoId) ?? null;
   const nomeElem = (id: string) => padroesElem.find(p => p.id === id)?.nome ?? '—';
 
-  const talhao = useMemo(() => getTalhoes().find(t => t.id === nav.talhaoId) ?? null, [nav.talhaoId]);
+  // REPARO DAS ZONAS DA GRADE (ver lib/zonasDaGrade), ao abrir a aba do talhão.
+  // Duas coisas, ambas idempotentes — na segunda passada não fazem nada:
+  //   • preenche `talhao.zonasGeojson` quando ele está VAZIO e há zoneamento
+  //     marcado padrão. É o que o app de campo JÁ INSTALADO lê, então devolve as
+  //     divisas a quem está no campo hoje, sem esperar versão nova nas lojas.
+  //   • congela as zonas dentro das grades por zona salvas antes da v2.170.0,
+  //     que desciam para o aparelho sem geometria nenhuma.
+  // O contador força o `talhao`/`grades` a relerem o que o reparo acabou de
+  // gravar — senão a tela só mostraria as zonas na próxima visita.
+  const [reparo, setReparo] = useState(0);
+  useEffect(() => {
+    if (!nav.talhaoId) return;
+    const snap = preencherSnapshotZonas(nav.talhaoId);
+    const grds = repararZonasDasGrades(nav.talhaoId);
+    if (snap || grds > 0) setReparo(x => x + 1);
+  }, [nav.talhaoId]);
+
+  const talhao = useMemo(() => getTalhoes().find(t => t.id === nav.talhaoId) ?? null, [nav.talhaoId, reparo]);
 
   const safraAtiva = useMemo(() => getSafras().find(s => s.ativa) ?? null, []);
   // safraProp (Página do Talhão) tem prioridade; sem ela, usa a ativa global.
@@ -72,7 +92,7 @@ export function SimuladorZonas({ safraNome: safraProp }: { safraNome?: string } 
   function recarregarGrades() {
     if (nav.talhaoId && safraNome) setGrades(getGrades(nav.talhaoId, safraNome, 'zonas'));
   }
-  useEffect(() => { recarregarGrades(); /* eslint-disable-next-line */ }, [nav.talhaoId, safraNome]);
+  useEffect(() => { recarregarGrades(); /* eslint-disable-next-line */ }, [nav.talhaoId, safraNome, reparo]);
 
   // Ao escolher um padrão, herda as profundidades
   useEffect(() => {
@@ -92,7 +112,9 @@ export function SimuladorZonas({ safraNome: safraProp }: { safraNome?: string } 
           return {
             id: String(p.id ?? '?'),
             zonaRot: rotuloZona(p),
-            classeLabel: cz.label, cor: cz.cor, areaHa: Number(p.areaHa ?? 0), geometry: f.geometry!,
+            classe: String(p.classe ?? ''),
+            classeLabel: cz.label, cor: cz.cor, areaHa: Number(p.areaHa ?? 0),
+            geometry: f.geometry as GeoJSON.Polygon | GeoJSON.MultiPolygon,
           };
         })
         .sort((a, b) => a.id.localeCompare(b.id));
@@ -193,6 +215,70 @@ export function SimuladorZonas({ safraNome: safraProp }: { safraNome?: string } 
   // Ao mudar a simulação ao vivo (parâmetros/zonas), sai da visualização da grade salva.
   useEffect(() => { setGradeViewId(null); }, [pontosGrade]);
 
+  // Lista das grades por zona JÁ SALVAS. Função (e não JSX inline) porque ela
+  // aparece nos DOIS caminhos da tela: com zonas e sem. Talhão que perdeu a
+  // adoção do zoneamento caía no aviso lá em cima e levava junto a lista —
+  // sem como exportar KML/SHP nem reimprimir etiqueta de uma grade já
+  // coletada. Todo botão daqui recebe a grade `g` e não depende de nada que
+  // só exista no caminho com zonas.
+  function listaGradesSalvas() {
+    if (grades.length === 0) return null;
+    return (
+          <div className="pt-1">
+            <p className="text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: '#475569' }}>
+              Grades de zonas — Ano {rotuloAno(safraNome)}
+            </p>
+            <div className="space-y-1.5">
+              {grades.map(g => (
+                <div key={g.id} className="p-2 rounded-lg" style={{ background: '#061525', border: `1px solid ${gradeViewId === g.id ? '#22d3ee' : (g.paraProcessar ? '#166534' : '#1a3a6b')}` }}>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => { marcarParaProcessar(g.id); recarregarGrades(); }} title="Marcar para processar">
+                      {g.paraProcessar ? <CheckCircle2 size={15} style={{ color: '#4ade80' }} /> : <Circle size={15} style={{ color: '#475569' }} />}
+                    </button>
+                    {renomeando === g.id ? (
+                      <input autoFocus value={nomeTemp} onChange={e => setNomeTemp(e.target.value)}
+                        onBlur={() => confirmarRenome(g.id)} onKeyDown={e => e.key === 'Enter' && confirmarRenome(g.id)}
+                        className="flex-1 rounded px-1.5 py-0.5 text-xs outline-none" style={inputStyle} />
+                    ) : (
+                      <span className="text-xs font-bold flex-1" style={{ color: '#e2e8f0' }}>{g.nome}</span>
+                    )}
+                    <span className="text-[8px] px-1 py-0.5 rounded" style={{ background: '#0f2a1a', color: '#86efac' }}>{g.modelo === 'A' ? 'Composta' : 'Individual'}</span>
+                    <button onClick={() => setGradeViewId(id => id === g.id ? null : g.id)} title={gradeViewId === g.id ? 'Ocultar do mapa' : 'Ver no mapa'}
+                      className="p-1 rounded" style={{ color: gradeViewId === g.id ? '#22d3ee' : '#93c5fd' }}><Eye size={11} /></button>
+                    <button onClick={() => { setRenomeando(g.id); setNomeTemp(g.nome); }} title="Renomear" className="p-1 rounded" style={{ color: '#93c5fd' }}><Pencil size={11} /></button>
+                    <button onClick={() => { deleteGrade(g.id); recarregarGrades(); }} title="Excluir" className="p-1 rounded" style={{ color: '#f87171' }}><Trash2 size={11} /></button>
+                  </div>
+                  <p className="text-[9px] mt-1 pl-6" style={{ color: '#64748b' }}>
+                    {g.pontos.length} pontos · {g.modoDist === 'grade' ? 'grade' : 'inteligente'}
+                    {g.paraProcessar && <span style={{ color: '#86efac' }}> · a processar</span>}
+                  </p>
+                  <div className="flex items-center gap-1.5 mt-2 pl-6">
+                    <span className="text-[9px]" style={{ color: '#475569' }}>Exportar:</span>
+                    <button onClick={() => exportar(g, 'kml')} className="flex items-center gap-1 text-[9px] px-2 py-0.5 rounded font-semibold" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
+                      <Download size={9} /> KML
+                    </button>
+                    <button onClick={() => exportar(g, 'shp')} className="flex items-center gap-1 text-[9px] px-2 py-0.5 rounded font-semibold" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
+                      <Download size={9} /> SHP
+                    </button>
+                    {/* Etiquetas da grade SALVA — como na aba Grid. Sem isto, salvar
+                        a grade tirava a única forma de reimprimir os sacos. */}
+                    <button onClick={() => gerarEtiquetasZonas(g)} title="Etiquetas (PDF)"
+                      className="flex items-center gap-1 text-[9px] px-2 py-0.5 rounded font-semibold" style={{ background: '#065f46', color: '#a7f3d0' }}>
+                      <Printer size={9} /> Etiquetas
+                    </button>
+                    <button onClick={() => exportarCartaZonas(g)}
+                      title="Carta para o laboratório (Excel) — uma linha por amostra × profundidade, com as análises de cada uma"
+                      className="flex items-center gap-1 text-[9px] px-2 py-0.5 rounded font-semibold" style={{ background: '#1e3a2f', color: '#86efac' }}>
+                      <FileSpreadsheet size={9} /> Carta
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+    );
+  }
+
   if (!talhao?.zonasGeojson || zonas.length === 0) {
     return (
       <div className="p-4">
@@ -203,6 +289,10 @@ export function SimuladorZonas({ safraNome: safraProp }: { safraNome?: string } 
             <p className="text-[10px] mt-1" style={{ color: '#78350f' }}>Carregue o arquivo de zonas (KML/Shapefile) na seção Zonas de Manejo do talhão.</p>
           </div>
         </div>
+        {/* As grades já salvas continuam à mão: sem elas aqui, um talhão que
+            perdeu a adoção do zoneamento não deixava nem exportar nem
+            reimprimir etiqueta de uma amostragem já coletada. */}
+        <div className="mt-3">{listaGradesSalvas()}</div>
       </div>
     );
   }
@@ -301,9 +391,25 @@ export function SimuladorZonas({ safraNome: safraProp }: { safraNome?: string } 
   function salvarGradeZonas() {
     if (!padrao || !safraNome || pontosEfetivos.length === 0 || !nav.talhaoId) return;
     const lista = getGrades(nav.talhaoId, safraNome, 'zonas');
+    // O congelamento passa pelas MESMAS funções puras que o reparo das grades
+    // antigas usa (lib/zonasCongeladas, com teste próprio) e lê o MESMO GeoJSON
+    // de que as zonas acima saíram. Escrever isto à mão aqui faria a gravação
+    // do dia a dia correr por um caminho sem teste, e qualquer correção futura
+    // numa das metades não alcançaria a outra.
+    const prefixoDaZona = prefixosDosPontos(pontosEfetivos);
+    let zonasGeo: ZonaGrade[] = [];
+    try {
+      const fc = JSON.parse(talhao?.zonasGeojson ?? '') as GeoJSON.FeatureCollection;
+      zonasGeo = congelarZonas(fc, r => prefixoDaZona.get(r));
+    } catch { /* sem zonas legíveis não se chega aqui: `zonas` estaria vazio */ }
     saveGrade({
       talhaoId: nav.talhaoId, safra: safraNome, epoca: periodoZonas?.epoca ?? '1', dataReferencia: dataRef, nome: `Zonas ${lista.length + 1}`, metodo: 'zonas',
       modelo, modoDist, densidadePorZona,
+      // A zona VIAJA COM A GRADE (ver lib/zonasDaGrade): estas são exatamente as
+      // que geraram os pontos acima. É o que o app de campo desenha como divisa
+      // e o que a exportação usa — nada disso depende mais do snapshot do
+      // talhão, que qualquer troca de zoneamento padrão reescreve.
+      zonasGeo,
       padraoAmostragemId: padrao.id, padraoNome: padrao.nome,
       customizado: nZonasCustom > 0 || densidade !== padrao.densidadeHaPonto || pontosManuais !== null,
       densidade, distanciaBorda, rotacao: 0, aleatoriedade, modoSel: 'regular',
@@ -319,9 +425,25 @@ export function SimuladorZonas({ safraNome: safraProp }: { safraNome?: string } 
   }
 
   function exportar(g: GradeAmostragem, formato: 'kml' | 'shp') {
-    if (!talhao?.zonasGeojson) return;
+    if (!talhao) return;
+    // As zonas congeladas na grade mandam: são as que geraram estes pontos. O
+    // snapshot do talhão é retaguarda das grades antigas — e enquanto ele era a
+    // ÚNICA fonte, exportar uma grade cujo talhão perdeu a adoção não gerava
+    // arquivo nenhum e nem avisava.
+    const congeladas = zonasDaGrade(g);
     let poligono: GeoJSON.FeatureCollection;
-    try { poligono = JSON.parse(talhao.zonasGeojson) as GeoJSON.FeatureCollection; } catch { return; }
+    if (congeladas.length) {
+      poligono = {
+        type: 'FeatureCollection',
+        features: congeladas.map(z => ({
+          type: 'Feature' as const,
+          properties: { id: z.id, zona: z.rotulo, classe: z.classe, areaHa: z.areaHa },
+          geometry: z.geometry,
+        })),
+      };
+    } else if (talhao.zonasGeojson) {
+      try { poligono = JSON.parse(talhao.zonasGeojson) as GeoJSON.FeatureCollection; } catch { return; }
+    } else { return; }
     const faz = getFazendas().find(f => f.id === talhao.fazendaId);
     const input = {
       talhaoNome: talhao.nome || 'Talhao', poligono, pontos: g.pontos, poligonoTipo: 'zona' as const,
@@ -566,61 +688,7 @@ export function SimuladorZonas({ safraNome: safraProp }: { safraNome?: string } 
         </button>
       )}
 
-      {/* Grades de zonas salvas */}
-      {grades.length > 0 && (
-        <div className="pt-1">
-          <p className="text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: '#475569' }}>
-            Grades de zonas — Ano {rotuloAno(safraNome)}
-          </p>
-          <div className="space-y-1.5">
-            {grades.map(g => (
-              <div key={g.id} className="p-2 rounded-lg" style={{ background: '#061525', border: `1px solid ${gradeViewId === g.id ? '#22d3ee' : (g.paraProcessar ? '#166534' : '#1a3a6b')}` }}>
-                <div className="flex items-center gap-2">
-                  <button onClick={() => { marcarParaProcessar(g.id); recarregarGrades(); }} title="Marcar para processar">
-                    {g.paraProcessar ? <CheckCircle2 size={15} style={{ color: '#4ade80' }} /> : <Circle size={15} style={{ color: '#475569' }} />}
-                  </button>
-                  {renomeando === g.id ? (
-                    <input autoFocus value={nomeTemp} onChange={e => setNomeTemp(e.target.value)}
-                      onBlur={() => confirmarRenome(g.id)} onKeyDown={e => e.key === 'Enter' && confirmarRenome(g.id)}
-                      className="flex-1 rounded px-1.5 py-0.5 text-xs outline-none" style={inputStyle} />
-                  ) : (
-                    <span className="text-xs font-bold flex-1" style={{ color: '#e2e8f0' }}>{g.nome}</span>
-                  )}
-                  <span className="text-[8px] px-1 py-0.5 rounded" style={{ background: '#0f2a1a', color: '#86efac' }}>{g.modelo === 'A' ? 'Composta' : 'Individual'}</span>
-                  <button onClick={() => setGradeViewId(id => id === g.id ? null : g.id)} title={gradeViewId === g.id ? 'Ocultar do mapa' : 'Ver no mapa'}
-                    className="p-1 rounded" style={{ color: gradeViewId === g.id ? '#22d3ee' : '#93c5fd' }}><Eye size={11} /></button>
-                  <button onClick={() => { setRenomeando(g.id); setNomeTemp(g.nome); }} title="Renomear" className="p-1 rounded" style={{ color: '#93c5fd' }}><Pencil size={11} /></button>
-                  <button onClick={() => { deleteGrade(g.id); recarregarGrades(); }} title="Excluir" className="p-1 rounded" style={{ color: '#f87171' }}><Trash2 size={11} /></button>
-                </div>
-                <p className="text-[9px] mt-1 pl-6" style={{ color: '#64748b' }}>
-                  {g.pontos.length} pontos · {g.modoDist === 'grade' ? 'grade' : 'inteligente'}
-                  {g.paraProcessar && <span style={{ color: '#86efac' }}> · a processar</span>}
-                </p>
-                <div className="flex items-center gap-1.5 mt-2 pl-6">
-                  <span className="text-[9px]" style={{ color: '#475569' }}>Exportar:</span>
-                  <button onClick={() => exportar(g, 'kml')} className="flex items-center gap-1 text-[9px] px-2 py-0.5 rounded font-semibold" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
-                    <Download size={9} /> KML
-                  </button>
-                  <button onClick={() => exportar(g, 'shp')} className="flex items-center gap-1 text-[9px] px-2 py-0.5 rounded font-semibold" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
-                    <Download size={9} /> SHP
-                  </button>
-                  {/* Etiquetas da grade SALVA — como na aba Grid. Sem isto, salvar
-                      a grade tirava a única forma de reimprimir os sacos. */}
-                  <button onClick={() => gerarEtiquetasZonas(g)} title="Etiquetas (PDF)"
-                    className="flex items-center gap-1 text-[9px] px-2 py-0.5 rounded font-semibold" style={{ background: '#065f46', color: '#a7f3d0' }}>
-                    <Printer size={9} /> Etiquetas
-                  </button>
-                  <button onClick={() => exportarCartaZonas(g)}
-                    title="Carta para o laboratório (Excel) — uma linha por amostra × profundidade, com as análises de cada uma"
-                    className="flex items-center gap-1 text-[9px] px-2 py-0.5 rounded font-semibold" style={{ background: '#1e3a2f', color: '#86efac' }}>
-                    <FileSpreadsheet size={9} /> Carta
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      {listaGradesSalvas()}
     </div>
   );
 }

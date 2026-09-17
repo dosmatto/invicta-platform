@@ -448,7 +448,11 @@ export function aplicar(talhao: Talhao, plano: PlanoDesmembramento, destino: Des
  *  células, a grade deixa de ser tratada como composta até ser gerada de novo,
  *  que é a leitura honesta. */
 function clonarConfigGrade(g: GradeAmostragem): Omit<GradeAmostragem, 'id' | 'criadoEm' | 'talhaoId' | 'pontos' | 'paraProcessar'> {
-  const { id: _id, criadoEm: _c, talhaoId: _t, pontos: _p, paraProcessar: _pp, celulas: _cel, ...resto } = g;
+  // `celulas` e `zonasGeo` ficam de fora pela MESMA razão: são a geometria da
+  // área do talhão ORIGINAL. Levadas para o talhão separado, o operador veria
+  // no campo divisas cobrindo terreno que não é mais dele, e zonas sem ponto
+  // nenhum. Quem precisar delas no destino gera de novo a partir das zonas de lá.
+  const { id: _id, criadoEm: _c, talhaoId: _t, pontos: _p, paraProcessar: _pp, celulas: _cel, zonasGeo: _zg, ...resto } = g;
   return resto;
 }
 

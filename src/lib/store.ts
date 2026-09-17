@@ -774,6 +774,22 @@ export interface PontoAmostragem {
   manual?: boolean;       // movido/adicionado manualmente
 }
 
+/** Uma zona de manejo CONGELADA dentro da grade — ver `GradeAmostragem.zonasGeo`. */
+export interface ZonaGrade {
+  /** Identidade do polígono no zoneamento ("01", e "01_2" quando a zona tem
+   *  mais de uma mancha). Não é o que se mostra: para isso existe `rotulo`. */
+  id: string;
+  /** O número que o CAMPO vê ("1"), pela regra única de `lib/meap/rotuloZona`.
+   *  Congelado junto porque é o prefixo dos pontos ("1-3"): se o polígono fosse
+   *  rotulado de novo mais tarde, mapa e pontos discordariam na mesma tela. */
+  rotulo: string;
+  /** Classe CRUA ("Alta", "MEDIA_BAIXA"…). Guardamos o texto, não a cor, para a
+   *  cor sair de `classeZona()` — a mesma função dos dois lados. */
+  classe: string;
+  areaHa?: number;
+  geometry: GeoJSON.Polygon | GeoJSON.MultiPolygon;
+}
+
 export interface GradeAmostragem {
   id: string;
   talhaoId: string;
@@ -795,6 +811,20 @@ export interface GradeAmostragem {
   modelo?: 'A' | 'B';                         // zonas: composta (A) / individual (B)
   modoDist?: 'grade' | 'inteligente';         // zonas: distribuição
   densidadePorZona?: Record<string, number>;  // zonas: override por zona
+  /** ZONAS: as zonas de manejo que GERARAM esta grade, congeladas aqui.
+   *
+   *  Mesma razão das `celulas` da composta, logo abaixo: `talhao.zonasGeojson`
+   *  é um snapshot único do talhão, reescrito a cada "Tornar padrão" e APAGADO
+   *  por "remover adoção" — some ele, somem as divisas de todas as grades por
+   *  zona, inclusive as já coletadas. E o app de campo não baixa
+   *  `inv_meap_zoneamentos` (coleção pesada, pulada no boot de campo), então lá
+   *  não havia de onde tirar a geometria: o operador via os pontos "1-1, 2-6"
+   *  sem nenhuma divisa dizendo onde uma zona termina e a outra começa.
+   *  `inv_grades` DESCE para o aparelho — a zona viaja junto com a grade.
+   *
+   *  Ausente nas grades salvas antes da v2.170.0; `lib/zonasDaGrade` preenche
+   *  quando a aba Zona de Manejo do talhão é aberta. */
+  zonasGeo?: ZonaGrade[];
   /** COMPOSTA: as células quadráticas, uma por amostra de laboratório.
    *  A geometria mora AQUI e não no talhão (como `zonasGeojson`) porque duas
    *  grades do mesmo talhão podem ter recortes diferentes — e porque o app de
@@ -1436,7 +1466,18 @@ export function saveGrade(g: Omit<GradeAmostragem, 'id' | 'criadoEm'>): GradeAmo
   // (protege contra duplo clique/re-execução — caso real: 5x "JCASA 01").
   const k = assinaturaGrade(gp);
   const igual = lista.find(x => assinaturaGrade(x) === k);
-  if (igual) return igual;
+  if (igual) {
+    // A assinatura olha talhão/safra/época/método/pontos, não a geometria das
+    // zonas: uma grade por zona salva antes da v2.170.0 bate com a que está
+    // sendo salva agora e voltaria daqui SEM `zonasGeo` — o agrônomo aperta
+    // "Salvar" de novo justamente para consertá-la e nada acontece. Preenche a
+    // lacuna e devolve a existente (nunca sobrescreve uma já congelada).
+    if (gp.zonasGeo?.length && !igual.zonasGeo?.length) {
+      igual.zonasGeo = gp.zonasGeo;
+      save('inv_grades', lista);
+    }
+    return igual;
+  }
   const nova: GradeAmostragem = comEmpresa({ ...gp, id: uid(), criadoEm: new Date().toISOString() });
   lista.push(nova);
   save('inv_grades', lista);

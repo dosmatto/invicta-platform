@@ -665,6 +665,25 @@ function TelaMapa({ sel, setSel, online, pend, reload, setReload, sincronizar, s
         })),
       };
     }
+    // ZONAS: a geometria CONGELADA na própria grade é a fonte preferida — são as
+    // zonas que geraram estes pontos, com o mesmo rótulo do prefixo deles, e
+    // descem no `inv_grades` junto com a grade. O snapshot do talhão abaixo é só
+    // retaguarda das grades salvas antes da v2.170.0: ele é reescrito a cada
+    // "Tornar padrão" e apagado por "remover adoção" — e quando sumia, o campo
+    // ficava exatamente como o operador relatou, pontos sem divisa nenhuma.
+    if (grade?.metodo === 'zonas' && grade.zonasGeo?.length) {
+      return {
+        type: 'FeatureCollection',
+        features: grade.zonasGeo.map(z => {
+          const cz = classeZona(z.classe ?? '');
+          return {
+            type: 'Feature' as const,
+            properties: { cor: cz.cor, rotulo: z.rotulo, classeLabel: cz.label },
+            geometry: z.geometry as GeoJSON.Geometry,
+          };
+        }),
+      };
+    }
     if (grade?.metodo !== 'zonas' || !talhao?.zonasGeojson) return null;
     try {
       const fc = JSON.parse(talhao.zonasGeojson) as GeoJSON.FeatureCollection;
