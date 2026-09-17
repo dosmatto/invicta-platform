@@ -21,7 +21,7 @@ Verificado nesta máquina:
 | Apple ID corporativo | ✅ `invicta@invicta.agr.br` (exigido: e-mail no domínio da empresa) |
 | Área demo p/ o revisor | ✅ cadastrada e testada — `loja/demo-apple/LEIA-ME.md` |
 | Razão social no rodapé do site | ✅ no ar em 10/09/2026 |
-| **Apple Developer Program** | ⏳ **pago 14/09/2026** · US$ 99 · processamento em até 2 dias úteis |
+| **Apple Developer Program** | ✅ **ATIVO desde 15/09/2026** · App Store Connect liberado |
 
 ### A inscrição enviada — o que a Apple recebeu
 
@@ -43,8 +43,23 @@ Verificado nesta máquina:
 |---|---|
 | 10/09/2026 | Inscrição enviada · `H67M73G9UH` |
 | 14/09/2026 | Apple aceitou ("enrollment request has been accepted" — poder de assinatura verificado) |
-| 14/09/2026 | Contrato aceito e **US$ 99 pagos** · processamento em até 2 dias úteis |
-| — | Assinatura ativa → criar o app no App Store Connect |
+| 14/09/2026 | Contrato aceito e compra enviada · Order `D005231267` |
+| 14/09/2026 | ❌ **Pagamento recusado** — "We're having a problem with your payment" |
+| 15/09/2026 | ✅ Pagamento refeito e **assinatura ATIVA** (boas-vindas do App Store Connect) |
+
+> **O primeiro pagamento falhou, e isso é o normal para cartão brasileiro.**
+> Cobrança da Apple em dólar cai no antifraude com frequência. A inscrição
+> **não** se perde: o pedido fica 7 dias em aberto e o botão "Continue to
+> payment" reaparece em developer.apple.com/account → "Adquira a assinatura".
+>
+> Antes de tentar de novo, resolva a causa em vez de repetir o cartão: compra
+> internacional desativada (a mais comum em cartão empresarial), antifraude a
+> barrar a transação — ligue autorizando uma compra da Apple Inc. de US$ 99 —,
+> limite disponível (US$ 99 com IOF passa de R$ 600) ou cartão de débito/pré-pago,
+> que a Apple costuma recusar.
+>
+> **Vale na renovação anual.** A mesma recusa tende a se repetir daqui a um ano,
+> e aí com a assinatura vencendo.
 
 Não houve ligação de verificação; a Apple aprovou só com os dados cruzados
 (razão social ↔ D-U-N-S ↔ domínio ↔ endereço).
