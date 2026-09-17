@@ -21,7 +21,7 @@ Verificado nesta máquina:
 | Apple ID corporativo | ✅ `invicta@invicta.agr.br` (exigido: e-mail no domínio da empresa) |
 | Área demo p/ o revisor | ✅ cadastrada e testada — `loja/demo-apple/LEIA-ME.md` |
 | Razão social no rodapé do site | ✅ no ar em 10/09/2026 |
-| **Apple Developer Program** | ✅ **ATIVO desde 15/09/2026** · App Store Connect liberado |
+| **Apple Developer Program** | ✅ **ATIVO** · time `ANQMNT4RTB` · renova 15/09/2027 |
 
 ### A inscrição enviada — o que a Apple recebeu
 
@@ -45,7 +45,20 @@ Verificado nesta máquina:
 | 14/09/2026 | Apple aceitou ("enrollment request has been accepted" — poder de assinatura verificado) |
 | 14/09/2026 | Contrato aceito e compra enviada · Order `D005231267` |
 | 14/09/2026 | ❌ **Pagamento recusado** — "We're having a problem with your payment" |
-| 15/09/2026 | ✅ Pagamento refeito e **assinatura ATIVA** (boas-vindas do App Store Connect) |
+| 15/09/2026 | ✅ Pagamento refeito com sucesso — **assinatura ATIVA** (renovação em 15/09/2027) |
+| 17/09/2026 | Apple repete "problem with your payment" — **é o pedido ANTIGO**, não um novo problema |
+
+> **Os lembretes de cobrança do pedido que falhou continuam chegando.** O
+> `D005231267` de 14/09 nunca foi cancelado explicitamente: a Apple segue o
+> cronograma de 7 dias dele ("4 dias", "3 dias"…) até expirar sozinho em 21/09.
+> O pagamento bem-sucedido de 15/09 gerou outro pedido. Ignore os lembretes do
+> antigo — mas confira a fatura: deve haver **uma única cobrança de US$ 99**.
+>
+> **Não confie em e-mail para saber o estado da assinatura**, em nenhuma
+> direção. O "Welcome to App Store Connect" chega quando a inscrição é aceita e
+> não prova pagamento; os lembretes de cobrança podem ser de um pedido morto. A
+> fonte da verdade é **developer.apple.com/account → Informações da
+> assinatura**: se mostra time, programa e data de renovação, está ativo.
 
 > **O primeiro pagamento falhou, e isso é o normal para cartão brasileiro.**
 > Cobrança da Apple em dólar cai no antifraude com frequência. A inscrição

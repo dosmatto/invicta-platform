@@ -3,6 +3,34 @@
 Textos e respostas prontos para copiar no App Store Connect. Cada bloco diz onde
 ele entra. Os limites de caracteres são os que a loja impõe.
 
+## Estado no App Store Connect (17/09/2026)
+
+```
+Apple ID do app   6813176446
+Bundle ID         br.agr.invicta.coleta
+Time              ANQMNT4RTB (WR CONSULTORIA AGRICOLA SS)
+Versão            3.1.0 · Preparar para envio
+```
+
+| Já preenchido por lá | Falta |
+|---|---|
+| Texto promocional | **Capturas de tela** (arrastar em Gerenciador de mídia → 6,9 pol.) |
+| Descrição | **Senha da conta de revisão** (Informações para iniciar sessão) |
+| Palavras-chave | **Privacidade do app** (Nutrition Labels — tabela abaixo) |
+| URL de suporte e de marketing | **Classificação etária** |
+| Versão (3.1.0) e Copyright | **Preços e disponibilidade** |
+| — | **Compilação** (Archive + upload pelo Xcode) |
+
+> **O slot certo das capturas é "Tela de 6,9 pol."**, que aceita 1290 × 2796 —
+> o tamanho dos arquivos em `loja/screenshots-ios/`. A página da versão abre o
+> slot de 6,5" por padrão (1242 × 2688 / 1284 × 2778) e recusa os nossos; use
+> **Visualizar todos os tamanhos no Gerenciador de mídia** e escolha o de 6,9".
+> O de 6,5" passa a mostrar "Usando Tela de 6,9 pol." — a Apple deriva os
+> tamanhos menores sozinha, não é preciso gerar outro conjunto.
+>
+> **A ordem importa**: suba `01-mapa-com-os-pontos` primeiro. As três primeiras
+> aparecem na busca, e o mapa com os pontos é a que explica o app sozinha.
+
 O equivalente do Google está em `ficha-play-store.md` — os textos são parecidos
 de propósito, mas **não são intercambiáveis**: a Apple tem campos que o Google
 não tem (subtítulo, palavras-chave, texto promocional) e recusa capturas de tela
