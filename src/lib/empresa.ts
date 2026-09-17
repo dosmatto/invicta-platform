@@ -370,6 +370,14 @@ function valorPapelSemAjuste(papel: string, chave: string): boolean {
   const base = (MATRIZ_PADRAO[papel as keyof typeof MATRIZ_PADRAO] ?? {}) as Record<string, boolean>;
   if (papel === 'custom') return base[chave] === true;
   const [modulo, acao] = chave.split('.');
+  if (modulo === 'compactacao' || modulo === 'produtividade') {
+    // Antes só "Criar" era checado; excluir/editar seguiam o criar, e ver/baixar
+    // não tinham trava. A própria célula "Criar" é o padrão do papel.
+    if (acao === 'criar') return base[chave] === true;
+    const antiga = matrizDoPapel(papel)[`${modulo}.criar`] === true;
+    if (acao !== 'visualizar' && acao !== 'exportar') return antiga;
+    return base[chave] === true || antiga;
+  }
   if (modulo === 'prescricao' || modulo === 'altimetria' || modulo === 'condutividade') {
     const antiga = modulo === 'prescricao'
       ? valorPapel(papel, 'recomendacoes.criar')
@@ -502,6 +510,15 @@ export function podePrescricao(acao: AcaoAba): boolean {
 export function podeAltimetria(acao: AcaoAba): boolean {
   return podeAbaDerivada('altimetria', acao, () => podeEm('zonas', 'criar'),
     () => podeEm('zonas', acao === 'exportar' ? 'exportar' : 'visualizar'));
+}
+
+// Compactação e Produtividade já tinham linha, mas as abas só olhavam "Criar".
+export function podeCompactacao(acao: AcaoAba): boolean {
+  return podeAbaDerivada('compactacao', acao, () => podeEm('compactacao', 'criar'), () => false);
+}
+
+export function podeProdutividade(acao: AcaoAba): boolean {
+  return podeAbaDerivada('produtividade', acao, () => podeEm('produtividade', 'criar'), () => false);
 }
 
 export function podeCondutividade(acao: AcaoAba): boolean {

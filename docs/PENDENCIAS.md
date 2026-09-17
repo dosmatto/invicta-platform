@@ -74,6 +74,7 @@ verdadeira (fusão de talhões) chegou depois; foi preciso renumerar.
 | 46 | Altimetria com linha própria nas permissões de acesso | 2.162.0 | Configurações → Usuários e permissões → pessoa → matriz (linha "Altimetria (MDE/relevo)"); Talhão → Altimetria |
 | 46 | Condutividade com linha própria nas permissões de acesso | 2.163.0 | Configurações → Usuários e permissões → pessoa → matriz (linha "Condutividade elétrica (CE)"); Talhão → Condutividade |
 | S/N | Matriz padrão dos papéis marcável (vale para todos do papel) | 2.164.0 | Central de Acessos → Permissões → "Padrão do papel" |
+| 46 | Compactação e Produtividade obedecem todas as colunas da matriz | 2.165.0 | Central de Acessos → Permissões (linhas "Compactação" e "Produtividade/colheita"); Talhão → Compactação e Produtividade |
 
 > As pendências 1–17 foram entregues antes deste registro existir e não estão
 > catalogadas; procure pelo assunto no `changelog.ts`. Da 18 em diante, tudo

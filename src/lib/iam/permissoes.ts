@@ -61,7 +61,8 @@ export const MATRIZ_PADRAO: Record<PapelIam, MapaPermissoes> = {
   // Operador de campo: coleta. Vê o cadastro para navegar; não altera análise.
   operador: (() => {
     const m = conceder(nada(), ['amostragem'], TRABALHAR);
-    conceder(m, ['compactacao'], ['visualizar', 'criar', 'editar']);
+    conceder(m, ['compactacao'], ['visualizar', 'criar', 'editar', 'exportar']);
+    conceder(m, ['produtividade'], VER_EXP);
     // Já via e baixava prescrições salvas e o relevo (antes das linhas próprias).
     conceder(m, ['prescricao', 'altimetria', 'condutividade'], VER_EXP);
     conceder(m, ['cadastro', 'fertilidade', 'zonas', 'satelite'], VER);
@@ -82,7 +83,7 @@ export const MATRIZ_PADRAO: Record<PapelIam, MapaPermissoes> = {
   prestador: (() => {
     const m = conceder(nada(), ['amostragem'], TRABALHAR);
     conceder(m, ['cadastro'], VER);
-    conceder(m, ['prescricao', 'altimetria', 'condutividade'], VER_EXP); // idem operador: via e baixava
+    conceder(m, ['prescricao', 'altimetria', 'condutividade', 'compactacao', 'produtividade'], VER_EXP); // idem operador: via e baixava
     return m;
   })(),
 

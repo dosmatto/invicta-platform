@@ -81,6 +81,18 @@ for (const mod of ['altimetria', 'condutividade']) t(`[46] ${mod} tem linha pró
   assert.equal(MATRIZ_PADRAO.admin[`${mod}.excluir`], true);
 });
 
+t('[46] compactação e produtividade: quem já via e baixava continua', () => {
+  for (const mod of ['compactacao', 'produtividade']) {
+    for (const p of ['produtor', 'leitor', 'operador', 'prestador', 'agronomo', 'admin']) {
+      assert.equal(MATRIZ_PADRAO[p][`${mod}.visualizar`], true, `${p} vê ${mod}`);
+      assert.equal(MATRIZ_PADRAO[p][`${mod}.exportar`], true, `${p} baixa ${mod}`);
+    }
+  }
+  assert.equal(MATRIZ_PADRAO.operador['compactacao.criar'], true, 'operador segue processando compactação');
+  assert.ok(!MATRIZ_PADRAO.operador['produtividade.criar'], 'operador não processa colheita');
+  assert.ok(!MATRIZ_PADRAO.prestador['compactacao.criar'], 'prestador não processa');
+});
+
 t('papel custom nasce sem nenhuma permissão', () => {
   assert.equal(contarPermissoes(MATRIZ_PADRAO.custom), 0);
 });

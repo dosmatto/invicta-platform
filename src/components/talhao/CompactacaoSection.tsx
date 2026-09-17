@@ -26,11 +26,13 @@ import { cloudSalvarMapa, cloudCarregarMapasPorPrefixo, cloudExcluirMapasPorPref
 import { parseArquivoPontos, pontosCompactacao, type ArquivoPontos } from '@/lib/compactacao';
 import type { Legenda } from '@/lib/legendas';
 import { Upload, Loader2, Activity, Eraser, AlertTriangle, Save, Trash2, Play, Plus, Layers, Grid3x3, RefreshCw, MapPin, ChevronDown, ChevronUp } from 'lucide-react';
-import { podeEm } from '@/lib/empresa';
+import { podeCompactacao } from '@/lib/empresa';
 
 // Quem NÃO processa compactação (produtor, leitor) só troca importação/profundidade
 // e vê o mapa — sem importar, criar grade, interpolar, limpar ou excluir.
-const podeProcessar = () => podeEm('compactacao', 'criar');
+// Cada ação segue a linha "Compactação" da matriz de permissões.
+const podeProcessar = () => podeCompactacao('criar');
+const podeExcluir = () => podeCompactacao('excluir');
 
 import { inputStyle } from '@/constants/ui';
 import { hojeSaoPauloISO, periodoDeData, rotuloEpoca } from '@/lib/periodo';
@@ -235,6 +237,15 @@ export function CompactacaoSection({ safraNome }: { safraNome?: string } = {}) {
   const processando = estado === 'processando';
   const mapasSalvos = Object.keys(cache).length;
 
+  if (!podeCompactacao('visualizar')) return (
+    <div className="px-4 py-3">
+      <div className="flex items-start gap-2 p-3 rounded-lg" style={{ background: '#2d1a00', border: '1px solid #92400e' }}>
+        <AlertTriangle size={14} style={{ color: '#fbbf24' }} className="flex-shrink-0 mt-0.5" />
+        <p className="text-[10px]" style={{ color: '#fbbf24' }}>Seu acesso não inclui Compactação. Peça ao administrador para liberar em Usuários e permissões.</p>
+      </div>
+    </div>
+  );
+
   return (
     <div className="px-4 py-3 space-y-3">
       {/* Seletor de importação + nova */}
@@ -249,7 +260,7 @@ export function CompactacaoSection({ safraNome }: { safraNome?: string } = {}) {
               className="px-2 py-1.5 rounded text-[10px] font-bold flex items-center gap-1" style={{ background: 'var(--invicta-green-dark)', color: '#fff' }}>
               <Plus size={11} />
             </button>)}
-            {podeProcessar() && importacao && (
+            {podeExcluir() && importacao && (
               <button onClick={excluirImportacao} title="Excluir importação"
                 className="px-2 py-1.5 rounded text-[10px]" style={{ background: '#1a3a6b', color: '#f87171' }}>
                 <Trash2 size={12} />
@@ -366,7 +377,7 @@ export function CompactacaoSection({ safraNome }: { safraNome?: string } = {}) {
                 <div className="flex items-center gap-1.5 text-[10px]" style={{ color: '#86efac' }}>
                   <Activity size={12} /> {cache[profundidade].resp.stats.modelo} · {cache[profundidade].resp.stats.n} pts
                 </div>
-{podeProcessar() && (                <button onClick={() => limparProf(profundidade)}
+{podeExcluir() && (                <button onClick={() => limparProf(profundidade)}
                   className="flex items-center gap-1 text-[10px]" style={{ color: '#93c5fd' }}>
                   <Eraser size={11} /> Limpar
                 </button>)}
@@ -492,7 +503,7 @@ function GradeCampo({ talhaoId, safra, poligono, onVerPontos, onLevantamentoCria
                 <div className="flex items-center gap-2">
                   <span className="text-[11px] font-bold flex-1 truncate" style={{ color: '#e2e8f0' }}>{g.nome}</span>
                   <button onClick={() => verPontos(g)} title="Ver os pontos no mapa" className="p-1 rounded" style={{ color: '#93c5fd' }}><MapPin size={12} /></button>
-                  <button onClick={() => excluirGrade(g)} title="Excluir grade" className="p-1 rounded" style={{ color: '#f87171' }}><Trash2 size={12} /></button>
+                  {podeExcluir() && <button onClick={() => excluirGrade(g)} title="Excluir grade" className="p-1 rounded" style={{ color: '#f87171' }}><Trash2 size={12} /></button>}
                 </div>
                 <p className="text-[9px]" style={{ color: '#64748b' }}>
                   {g.pontos.length} pontos · {g.densidade} ha/ponto · prof.: {g.profundidades.join(' · ')} ({g.unidade})

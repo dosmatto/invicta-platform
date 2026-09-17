@@ -49,12 +49,16 @@ import { SeletorLegenda, legendasDoModulo, usePrefLegenda } from './SeletorLegen
 import { respeitarPadraoHomonima, rampaVisualStops, corCheiaDaClasse } from '@/lib/legendas';
 import type { Legenda } from '@/lib/legendas';
 import { Upload, Loader2, AlertTriangle, Save, Star, Trash2, Eye, Wand2, FileSpreadsheet, Plus, Layers, ChevronDown, ChevronUp, FileDown, Pencil } from 'lucide-react';
-import { podeEm } from '@/lib/empresa';
+import { podeProdutividade } from '@/lib/empresa';
 
 // Quem NÃO processa colheita (produtor, leitor) só vê os mapas salvos, compara
 // com NDVI e gera relatórios — sem importar, unificar, limpar, interpolar,
 // salvar, editar, oficializar ou excluir.
-const podeProcessar = () => podeEm('produtividade', 'criar');
+// Cada ação segue a linha "Produtividade/colheita" da matriz de permissões.
+const podeProcessar = () => podeProdutividade('criar');
+const podeEditar = () => podeProdutividade('editar');
+const podeExcluir = () => podeProdutividade('excluir');
+const podeBaixar = () => podeProdutividade('exportar');
 
 import { inputStyle } from '@/constants/ui';
 import { fmtMoeda, lerMoeda, arredMoeda } from '@/lib/formato';
@@ -610,6 +614,15 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
   const u = (kgha: number) => fmt(emUnidade(kgha, unidade), unidade === 't/ha' ? 2 : unidade === 'sc/ha' ? 1 : 0);
   const varias = maqs.length > 1;
 
+  if (!podeProdutividade('visualizar')) return (
+    <div className="px-4 py-3">
+      <div className="flex items-start gap-2 p-3 rounded-lg" style={{ background: '#2d1a00', border: '1px solid #92400e' }}>
+        <AlertTriangle size={14} style={{ color: '#fbbf24' }} className="flex-shrink-0 mt-0.5" />
+        <p className="text-[10px]" style={{ color: '#fbbf24' }}>Seu acesso não inclui Produtividade. Peça ao administrador para liberar em Usuários e permissões.</p>
+      </div>
+    </div>
+  );
+
   return (
     <div className="px-4 py-3 space-y-3">
       {!cloudPodeGravar() && (
@@ -877,13 +890,13 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
             />
           </div>
 
-          <button onClick={() => exportarPdf()} disabled={gerandoPdf !== ''}
+          {podeBaixar() && <button onClick={() => exportarPdf()} disabled={gerandoPdf !== ''}
             className="w-full py-2 rounded text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-50"
             style={{ background: '#1a3a6b', color: '#93c5fd' }}>
             {gerandoPdf === 'atual'
               ? <><Loader2 size={13} className="animate-spin" /> Gerando PDF…</>
               : <><FileDown size={13} /> Relatório de produtividade (PDF)</>}
-          </button>
+          </button>}
           {erroPdf && <p className="text-[10px]" style={{ color: '#f87171' }}>{erroPdf}</p>}
         </div>
       )}
@@ -905,12 +918,12 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
                   </p>
                 </div>
                 <button onClick={() => verVersao(v)} title="Ver no mapa" style={{ color: '#93c5fd' }}><Eye size={14} /></button>
-                {podeProcessar() && <button onClick={() => setEditando(v)} title="Editar identificação" style={{ color: '#cbd5e1' }}><Pencil size={13} /></button>}
-                <button onClick={() => exportarPdf(v)} disabled={gerandoPdf !== ''} title="Relatório PDF" className="disabled:opacity-40" style={{ color: '#86efac' }}>
+                {podeEditar() && <button onClick={() => setEditando(v)} title="Editar identificação" style={{ color: '#cbd5e1' }}><Pencil size={13} /></button>}
+                {podeBaixar() && <button onClick={() => exportarPdf(v)} disabled={gerandoPdf !== ''} title="Relatório PDF" className="disabled:opacity-40" style={{ color: '#86efac' }}>
                   {gerandoPdf === v.id ? <Loader2 size={13} className="animate-spin" /> : <FileDown size={13} />}
-                </button>
-                {podeProcessar() && !v.oficial && <button onClick={() => tornarOficial(v.id)} title="Tornar oficial" style={{ color: '#fbbf24' }}><Star size={14} /></button>}
-                {podeProcessar() && <button onClick={() => excluir(v)} title="Excluir" style={{ color: '#f87171' }}><Trash2 size={13} /></button>}
+                </button>}
+                {podeEditar() && !v.oficial && <button onClick={() => tornarOficial(v.id)} title="Tornar oficial" style={{ color: '#fbbf24' }}><Star size={14} /></button>}
+                {podeExcluir() && <button onClick={() => excluir(v)} title="Excluir" style={{ color: '#f87171' }}><Trash2 size={13} /></button>}
               </div>
             ))}
           </div>

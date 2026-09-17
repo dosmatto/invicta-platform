@@ -1,5 +1,13 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [46] Compactação e Produtividade obedecem todas as colunas da matriz
+  '2.165.0': [
+    'PENDÊNCIA 46 — COMPACTAÇÃO E PRODUTIVIDADE PASSAM A OBEDECER TODAS AS COLUNAS DA LINHA DELAS NA MATRIZ DE PERMISSÕES. As linhas já existiam, mas as abas só olhavam "Criar": desmarcar Ver, Excluir ou Export não mudava nada.',
+    'COMPACTAÇÃO: Ver mostra a aba; Criar libera nova importação, grade de campo e interpolar; Excluir mostra a lixeira da importação, da grade e o "Limpar" do mapa. A aba não tem arquivo para baixar, então Export não muda nada nela.',
+    'PRODUTIVIDADE: Ver mostra a aba; Criar libera importar e processar; Editar libera editar a identificação e tornar oficial; Excluir mostra a lixeira dos mapas salvos; Export libera os Relatórios PDF. Quem não tem Ver recebe um aviso no lugar da aba.',
+    'NINGUÉM PERDE NEM GANHA ACESSO NA TROCA. Operador e Prestador passam a ter Ver e Export marcados nas duas linhas (já viam as abas). Sem ajuste, Editar e Excluir continuam acompanhando Criar, como antes — por isso a célula aparece marcada para quem pode Criar, até ser desmarcada à parte. Papel Personalizado sem nada marcado nessas linhas deixa de ver as duas abas.',
+    'Verificação: teste:iam 36/36 (caso novo para os padrões das duas linhas), npx tsc --noEmit limpo em src/ e npm run build de produção.',
+  ],
   // [S/N] Matriz padrão dos papéis marcável (vale para todos do papel)
   '2.164.0': [
     'A MATRIZ PADRÃO DOS PAPÉIS AGORA SE MARCA, COMO OS PLANOS DA ABA EMPRESAS. Em Central de Acessos → Permissões, escolha o papel (Agrônomo, Operador, Produtor…) e marque ou desmarque cada célula. Antes a tela só mostrava pontos, e mudar o acesso de um papel inteiro exigia ajustar pessoa por pessoa.',
