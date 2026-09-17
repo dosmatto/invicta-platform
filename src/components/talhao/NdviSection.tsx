@@ -31,7 +31,7 @@ import { BotaoMonitorar } from './MonitorSatelite';
 import { getRejeitadasLocal, carregarRejeitadas, marcarRejeitada } from '@/lib/cenaEstados';
 import { getFontesLocal, carregarFontes, marcarFonte, marcarFontes, idFonte } from '@/lib/ndviFontes';
 import { onCaiuParaNuvem } from '@/lib/interpUrl';
-import { pode, emailUsuario } from '@/lib/empresa';
+import { podeSatelite, emailUsuario } from '@/lib/empresa';
 import type { Legenda } from '@/lib/legendas';
 import { ComposicaoTemporalPanel, ListaComposicoes } from './ComposicaoTemporalPanel';
 import { getComposicoes } from '@/lib/store';
@@ -720,9 +720,12 @@ export function NdviSection({ safraNome }: { safraNome?: string } = {}) {
 
   if (!legNdvi) return <div className="px-4 py-3"><Aviso texto="Legenda oficial de NDVI não encontrada (seed do sistema)." /></div>;
 
+  // [46] A aba segue a linha "Satélite (NDVI/índices)" da matriz.
+  if (!podeSatelite('visualizar')) return <div className="px-4 py-3"><Aviso texto="Seu acesso não inclui Satélite (NDVI). Peça ao administrador para liberar em Usuários e permissões." /></div>;
+
   // Quem não gera (produtor, leitor) vê o INVENTÁRIO do talhão: índices
   // mantidos na nuvem e composições temporais aprovadas.
-  if (!pode('ndvi')) {
+  if (!podeSatelite('criar')) {
     return (
       <div className="px-4 py-3 space-y-3">
         <div className="flex items-center gap-2">
@@ -754,7 +757,7 @@ export function NdviSection({ safraNome }: { safraNome?: string } = {}) {
       </div>
 
       {/* PDF rápido p/ produtor: escolhe os mapas (índices mantidos + RGB da sessão) */}
-      {poligono && (
+      {poligono && podeSatelite('exportar') && (
         <GeradorPdfNdvi talhaoId={nav.talhaoId ?? ''} poligono={poligono} legNdvi={legNdvi}
           imagens={imagens} info={{ produtor: nav.produtor, fazenda: nav.fazenda, talhao: nav.talhao, safra: safraNome ?? nav.safra, areaHa: nav.area }} />
       )}
@@ -1103,7 +1106,7 @@ export function NdviSection({ safraNome }: { safraNome?: string } = {}) {
               clicava em "Talhão" achando que levava a foto e recebia o índice de 1
               banda — que abre cinza no QGIS. Escolher no próprio lugar do download
               acaba com a confusão. */}
-          <div className="rounded p-2 space-y-2" style={{ background: '#0b1f38', border: '1px solid #1a3a6b' }}>
+          {podeSatelite('exportar') && <div className="rounded p-2 space-y-2" style={{ background: '#0b1f38', border: '1px solid #1a3a6b' }}>
             <p className="text-[10px] font-semibold" style={{ color: '#93c5fd' }}>Baixar GeoTIFF</p>
 
             {([
@@ -1140,7 +1143,7 @@ export function NdviSection({ safraNome }: { safraNome?: string } = {}) {
               {' '}pixel para a malha caber. Tudo em EPSG:4326.
             </p>
             {erroTiff && <p className="text-[10px]" style={{ color: '#f87171' }}>{erroTiff}</p>}
-          </div>
+          </div>}
 
           {modo === 'ndvi' ? (
             <>
@@ -1199,7 +1202,7 @@ export function NdviSection({ safraNome }: { safraNome?: string } = {}) {
                   <span className="text-[9px] flex items-center gap-1" style={{ color: '#86efac' }}>
                     <Star size={11} fill="#86efac" /> {indSel} mantido — guardado neste talhão
                   </span>
-                  <button onClick={removerCena} className="text-[10px] font-semibold" style={{ color: '#93c5fd' }}>Remover</button>
+                  {podeSatelite('excluir') && <button onClick={removerCena} className="text-[10px] font-semibold" style={{ color: '#93c5fd' }}>Remover</button>}
                 </div>
                 {/* Guardar e USAR são decisões diferentes: sem esta marca, a camada
                     fica arquivada e não entra em cálculo nenhum. */}
@@ -1403,9 +1406,10 @@ function CamadasSalvasView({ talhaoId }: { talhaoId: string }) {
   // da estrela, que só guarda a camada (★).
   const ehFonte = (c: NdviCamadaMeta) => !!fontes[idFonte(talhaoId, c.chave)];
   const nFontes = inds.filter(ehFonte).length;
-  // Esta view é TAMBÉM o que o produtor/leitor vê (o ramo sem pode('ndvi') acima).
-  // Para ele a lista é um inventário: sem caixa de excluir e sem trocar as fontes.
-  const podeMexer = pode('ndvi');
+  // Esta view é TAMBÉM o que o produtor/leitor vê (o ramo sem "Criar" acima).
+  // Excluir segue a coluna Excluir; trocar a fonte de análise, a coluna Editar.
+  const podeMexer = podeSatelite('editar');
+  const podeApagar = podeSatelite('excluir');
 
   function alternarFonteLista(c: NdviCamadaMeta) {
     marcarFonte(talhaoId, c.chave, !ehFonte(c));
@@ -1477,20 +1481,20 @@ function CamadasSalvasView({ talhaoId }: { talhaoId: string }) {
           </p>
         ) : (
           <>
-            {podeMexer && (
+            {(podeMexer || podeApagar) && (
               <div className="flex items-center justify-between text-[9px]" style={{ color: '#64748b' }}>
-                <button onClick={() => setSel(marcadas.length === visiveis.length ? {} : Object.fromEntries(visiveis.map(c => [c.itemId, true])))}>
+                {podeApagar ? <button onClick={() => setSel(marcadas.length === visiveis.length ? {} : Object.fromEntries(visiveis.map(c => [c.itemId, true])))}>
                   {marcadas.length === visiveis.length ? 'desmarcar todas' : 'selecionar todas'}
-                </button>
-                <span className="flex items-center gap-2">
+                </button> : <span />}
+                {podeMexer && <span className="flex items-center gap-2">
                   <button onClick={() => todasAsFontes(true)} style={{ color: '#4ade80' }}>◎ todas</button>
                   <button onClick={() => todasAsFontes(false)} style={{ color: '#64748b' }}>◎ nenhuma</button>
-                </span>
+                </span>}
               </div>
             )}
             {visiveis.map(c => (
               <div key={c.chave} className="flex items-start gap-1.5">
-                {podeMexer && (
+                {podeApagar && (
                   <input type="checkbox" checked={!!sel[c.itemId]}
                     onChange={e => setSel(s => ({ ...s, [c.itemId]: e.target.checked }))}
                     title="selecionar para excluir"
@@ -1511,7 +1515,7 @@ function CamadasSalvasView({ talhaoId }: { talhaoId: string }) {
                 </button>
               </div>
             ))}
-            {podeMexer && marcadas.length > 0 && (
+            {podeApagar && marcadas.length > 0 && (
               <button onClick={() => void excluirSelecionadas()} disabled={excluindo}
                 className="w-full py-1.5 rounded text-[10px] font-bold text-white flex items-center justify-center gap-1.5"
                 style={{ background: '#7f1d1d' }}>

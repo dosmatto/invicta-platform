@@ -31,7 +31,7 @@ export type GrupoEtapa = 'ciclo' | 'estrutura' | 'observacao' | 'entrega';
 export type Situacao = 'pronto' | 'andamento' | 'pendente';
 
 /** Seções do plano de assinatura — os MESMOS ids de SECOES_PORTAL (lib/empresa). */
-export type SecaoPlano = 'resumo' | 'fertilidade' | 'amostragem' | 'recomendacoes' | 'compactacao' | 'relatorios' | 'arquivos';
+export type SecaoPlano = 'resumo' | 'fertilidade' | 'amostragem' | 'recomendacoes' | 'compactacao' | 'ndvi' | 'produtividade' | 'relatorios' | 'arquivos';
 
 export interface EtapaDef {
   id: EtapaId;
@@ -54,8 +54,8 @@ export const ETAPAS: EtapaDef[] = [
   { id: 'zonas',         rotulo: 'Zonas de manejo',        curto: 'Zonas',        grupo: 'estrutura',  secao: null,            aba: 'zonas',            descricao: 'Zoneamento do talhão' },
   { id: 'altimetria',    rotulo: 'Altimetria (MDE)',       curto: 'Relevo',       grupo: 'estrutura',  secao: null,            aba: 'altimetria',            descricao: 'Modelo digital de elevação aprovado' },
   { id: 'condutividade', rotulo: 'Condutividade elétrica', curto: 'CE',           grupo: 'estrutura',  secao: null,            aba: 'condutividade',            descricao: 'Levantamento de condutividade do solo' },
-  { id: 'ndvi',          rotulo: 'Satélite (NDVI)',        curto: 'Satélite',     grupo: 'observacao', secao: null,            aba: 'ndvi',            descricao: 'Cenas de satélite processadas no ano' },
-  { id: 'produtividade', rotulo: 'Mapa de colheita',       curto: 'Colheita',     grupo: 'observacao', secao: null,            aba: 'produtividade',            descricao: 'Mapa de produtividade processado' },
+  { id: 'ndvi',          rotulo: 'Satélite (NDVI)',        curto: 'Satélite',     grupo: 'observacao', secao: 'ndvi',          aba: 'ndvi',            descricao: 'Cenas de satélite processadas no ano' },
+  { id: 'produtividade', rotulo: 'Mapa de colheita',       curto: 'Colheita',     grupo: 'observacao', secao: 'produtividade', aba: 'produtividade',            descricao: 'Mapa de produtividade processado' },
   { id: 'compactacao',   rotulo: 'Compactação',            curto: 'Compactação',  grupo: 'observacao', secao: 'compactacao',   aba: 'compactacao',   descricao: 'Penetrometria importada' },
   { id: 'relatorios',    rotulo: 'Relatórios',             curto: 'Relatórios',   grupo: 'entrega',    secao: 'relatorios',    aba: 'relatorios',    descricao: 'Relatórios em PDF gerados' },
 ];

@@ -38,7 +38,7 @@ import { GeradorRelatorios } from '@/components/talhao/GeradorRelatorios';
 import { MeapSection } from '@/components/talhao/MeapSection';
 import { NdviSection } from '@/components/talhao/NdviSection';
 import { ProdutividadeSection } from '@/components/talhao/ProdutividadeSection';
-import { papelDoUsuario, meuRegistro, planoPorId, ehAdmin, SECOES_PORTAL } from '@/lib/empresa';
+import { papelDoUsuario, meuRegistro, planoPorId, ehAdmin, SECOES_PORTAL, secaoLiberada } from '@/lib/empresa';
 import { authConfigurado } from '@/lib/auth';
 import { abasComDados } from '@/lib/portalProdutor';
 import { dadosLocaisDoTalhao, dadosNuvemDosTalhoes, juntarNuvem, type DadosNuvem } from '@/lib/portalDados';
@@ -293,7 +293,7 @@ export function TalhaoPage({ id }: { id: string }) {
   // só as abas que não são seção de plano — fertilidade e amostragem sumiam.
   const semPlano = modoProdutor && !plano;
   const tabsVisiveis = modoProdutor
-    ? TABS.filter(t => abasExistentes.has(t.id) && (t.id === 'resumo' || semPlano || !SECOES_PLANO.has(t.id) || !!plano?.secoes?.[t.id]))
+    ? TABS.filter(t => abasExistentes.has(t.id) && (t.id === 'resumo' || semPlano || !SECOES_PLANO.has(t.id) || secaoLiberada(plano, t.id)))
     : TABS;
   // Painel fechado é `null`; aba lembrada que o plano não libera cai na primeira.
   const tabAtivo: TabId | null = tab === null ? null

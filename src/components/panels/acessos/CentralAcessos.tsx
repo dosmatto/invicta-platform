@@ -11,7 +11,7 @@ import { getClientes, getFazendas } from '@/lib/store';
 import {
   ehOwner, emailUsuario, getPlanos, podeEm, salvarPlano, excluirPlano, toggleSecaoPlano,
   atualizarPlano, SECOES_PORTAL, empresaAtiva, updateEmpresa,
-  matrizEfetivaDoPapel, ajustesDoPapel, definirPermissaoPapel, restaurarMatrizPapel, PAPEIS_MATRIZ_FIXA,
+  secaoLiberada, matrizEfetivaDoPapel, ajustesDoPapel, definirPermissaoPapel, restaurarMatrizPapel, PAPEIS_MATRIZ_FIXA,
 } from '@/lib/empresa';
 import { getAuditoria, registrar } from '@/lib/iam/auditoria';
 import {
@@ -841,7 +841,7 @@ function AbaEmpresas({ souOwner, onMudou }: { souOwner: boolean; onMudou: () => 
                   <td className="px-1.5 py-1" style={{ color: COR.txt }}>{s.label}</td>
                   {planos.map(p => (
                     <td key={p.id} className="text-center px-1 py-1">
-                      <input type="checkbox" checked={!!p.secoes?.[s.id]} disabled={!souOwner}
+                      <input type="checkbox" checked={secaoLiberada(p, s.id)} disabled={!souOwner}
                         onChange={e => { toggleSecaoPlano(p.id, s.id, e.target.checked); onMudou(); }} />
                     </td>
                   ))}

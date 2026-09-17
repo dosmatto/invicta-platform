@@ -370,6 +370,13 @@ function valorPapelSemAjuste(papel: string, chave: string): boolean {
   const base = (MATRIZ_PADRAO[papel as keyof typeof MATRIZ_PADRAO] ?? {}) as Record<string, boolean>;
   if (papel === 'custom') return base[chave] === true;
   const [modulo, acao] = chave.split('.');
+  if (modulo === 'satelite' && acao !== 'criar') {
+    // Antes só "Criar" (capacidade antiga ndvi) era checado; excluir e trocar
+    // fonte seguiam o criar, e ver/baixar não tinham trava.
+    const antiga = valorPapel(papel, 'satelite.criar');
+    if (acao !== 'visualizar' && acao !== 'exportar') return antiga;
+    return base[chave] === true || antiga;
+  }
   if (modulo === 'compactacao' || modulo === 'produtividade') {
     // Antes só "Criar" era checado; excluir/editar seguiam o criar, e ver/baixar
     // não tinham trava. A própria célula "Criar" é o padrão do papel.
@@ -512,6 +519,12 @@ export function podeAltimetria(acao: AcaoAba): boolean {
     () => podeEm('zonas', acao === 'exportar' ? 'exportar' : 'visualizar'));
 }
 
+// Satélite: "Criar" continua sendo a capacidade antiga ndvi (pode('ndvi')).
+export function podeSatelite(acao: AcaoAba): boolean {
+  if (acao === 'criar') return pode('ndvi');
+  return podeAbaDerivada('satelite', acao, () => pode('ndvi'), () => false);
+}
+
 // Compactação e Produtividade já tinham linha, mas as abas só olhavam "Criar".
 export function podeCompactacao(acao: AcaoAba): boolean {
   return podeAbaDerivada('compactacao', acao, () => podeEm('compactacao', 'criar'), () => false);
@@ -531,24 +544,36 @@ export function podeCondutividade(acao: AcaoAba): boolean {
 // página do talhão que têm dado pronto). O produtor é read-only.
 const K_PLANOS = 'inv_planos';
 
-export type SecaoPortal = 'resumo' | 'fertilidade' | 'amostragem' | 'recomendacoes' | 'compactacao' | 'relatorios' | 'arquivos';
+export type SecaoPortal = 'resumo' | 'fertilidade' | 'amostragem' | 'recomendacoes' | 'compactacao' | 'ndvi' | 'produtividade' | 'relatorios' | 'arquivos';
 export const SECOES_PORTAL: Array<{ id: SecaoPortal; label: string }> = [
   { id: 'resumo', label: 'Resumo' },
   { id: 'fertilidade', label: 'Fertilidade (mapas)' },
   { id: 'amostragem', label: 'Amostragem' },
   { id: 'recomendacoes', label: 'Recomendações' },
   { id: 'compactacao', label: 'Compactação' },
+  { id: 'ndvi', label: 'Satélite (NDVI)' },
+  { id: 'produtividade', label: 'Produtividade (colheita)' },
   { id: 'relatorios', label: 'Relatórios' },
   { id: 'arquivos', label: 'Arquivos' },
 ];
 export interface PlanoAssinatura { id: string; nome: string; secoes: Record<string, boolean>; }
 
+// Seções que entraram DEPOIS dos planos existentes. Até então apareciam para
+// todo produtor; plano gravado sem a chave continua liberando — só um
+// desmarcar explícito (false) esconde.
+const SECOES_NOVAS_LIBERADAS = new Set<string>(['ndvi', 'produtividade']);
+export function secaoLiberada(plano: PlanoAssinatura | null | undefined, secao: string): boolean {
+  if (!plano) return true;   // sem plano = nenhuma restrição
+  const v = plano.secoes?.[secao];
+  return SECOES_NOVAS_LIBERADAS.has(secao) ? v !== false : v === true;
+}
+
 const secoesDe = (ids: SecaoPortal[]): Record<string, boolean> =>
   Object.fromEntries(SECOES_PORTAL.map(s => [s.id, ids.includes(s.id)]));
 const PLANOS_SEED: PlanoAssinatura[] = [
-  { id: 'basico', nome: 'Básico', secoes: secoesDe(['resumo', 'fertilidade']) },
-  { id: 'intermediario', nome: 'Intermediário', secoes: secoesDe(['resumo', 'fertilidade', 'recomendacoes', 'compactacao']) },
-  { id: 'completo', nome: 'Completo', secoes: secoesDe(['resumo', 'fertilidade', 'amostragem', 'recomendacoes', 'compactacao', 'relatorios', 'arquivos']) },
+  { id: 'basico', nome: 'Básico', secoes: secoesDe(['resumo', 'fertilidade', 'ndvi', 'produtividade']) },
+  { id: 'intermediario', nome: 'Intermediário', secoes: secoesDe(['resumo', 'fertilidade', 'recomendacoes', 'compactacao', 'ndvi', 'produtividade']) },
+  { id: 'completo', nome: 'Completo', secoes: secoesDe(['resumo', 'fertilidade', 'amostragem', 'recomendacoes', 'compactacao', 'ndvi', 'produtividade', 'relatorios', 'arquivos']) },
 ];
 
 export function getPlanos(): PlanoAssinatura[] { return load<PlanoAssinatura>(K_PLANOS); }
@@ -566,7 +591,7 @@ export function seedPlanos() {
 }
 export function salvarPlano(p: { nome: string; secoes?: Record<string, boolean> }): PlanoAssinatura {
   const lista = load<PlanoAssinatura>(K_PLANOS);
-  const novo: PlanoAssinatura = { id: 'plano-' + uid(), nome: p.nome.trim() || 'Plano', secoes: p.secoes ?? secoesDe(['resumo']) };
+  const novo: PlanoAssinatura = { id: 'plano-' + uid(), nome: p.nome.trim() || 'Plano', secoes: p.secoes ?? secoesDe(['resumo', 'ndvi', 'produtividade']) };
   lista.push(novo);
   save(K_PLANOS, lista);
   return novo;

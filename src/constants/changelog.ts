@@ -1,5 +1,12 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [46] Satélite (NDVI) obedece a matriz; NDVI e Produtividade entram nos planos do portal
+  '2.167.0': [
+    'PENDÊNCIA 46 — A ABA NDVI / SATÉLITE PASSA A OBEDECER TODAS AS COLUNAS DA LINHA "SATÉLITE (NDVI/ÍNDICES)". Antes só "Criar" valia. Agora: Ver mostra a aba (sem ele, um aviso); Criar abre a busca e o processamento de cenas (sem ele, a pessoa vê só as camadas salvas); Editar liga e desliga a fonte de análise (◎); Excluir libera o "Remover" da cena e a exclusão das camadas salvas; Export libera os GeoTIFF e o "Gerar PDF para o produtor".',
+    'NINGUÉM PERDE NEM GANHA ACESSO NA TROCA. Operador e Prestador passam a ter Ver e Export marcados (já viam as camadas salvas). Sem ajuste, Editar e Excluir acompanham Criar, como antes.',
+    'PLANOS DO PORTAL DO PRODUTOR: NDVI e PRODUTIVIDADE ENTRAM NA TABELA de Central de Acessos → Empresas. Até agora as duas abas apareciam para todo produtor, sem como tirar. Os planos já gravados continuam liberando as duas (vêm marcadas); desmarcar esconde a aba do talhão e o cartão do painel do produtor. Planos novos já nascem com as duas marcadas.',
+    'Verificação: teste:iam 36/36, teste:portal 30/30, npx tsc --noEmit limpo em src/ e npm run build de produção.',
+  ],
   // [S/N] Prescrição usa só o zoneamento padrão (estrela)
   '2.166.0': [
     'A PRESCRIÇÃO PASSA A OFERECER SÓ O ZONEAMENTO PADRÃO — a versão marcada com estrela em Zonas de Manejo, que é a mesma que a Amostragem e o mapa usam. Antes o seletor listava todas as versões, e dava para gerar a prescrição sobre um zoneamento diferente do que foi amostrado.',

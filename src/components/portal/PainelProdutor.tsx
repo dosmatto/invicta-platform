@@ -27,7 +27,7 @@ import { classeDoValor } from '@/lib/legendas';
 import { rotuloAno, anoDaSafra } from '@/lib/periodo';
 import { fmtHa } from '@/lib/formato';
 import { logout, emailUsuario } from '@/lib/auth';
-import { ROTULO_PAPEL, SECOES_PORTAL, type PlanoAssinatura, type PapelMembro } from '@/lib/empresa';
+import { ROTULO_PAPEL, SECOES_PORTAL, secaoLiberada, type PlanoAssinatura, type PapelMembro } from '@/lib/empresa';
 import { usarDadosSupabase } from '@/lib/supabaseData';
 import { APP_VERSION } from '@/constants/version';
 import { dadosLocaisDoTalhao, dadosNuvemDosTalhoes, juntarNuvem, type DadosNuvem } from '@/lib/portalDados';
@@ -171,8 +171,7 @@ export function PainelProdutor({ cliente, plano, papel, preview }: {
     // Camada que não é seção de plano (zonas, relevo, CE, satélite, colheita):
     // abre direto — a página do talhão só lista a aba quando ela existe.
     if (!def.secao) return true;
-    if (!plano) return true;   // sem plano atribuído = nenhuma restrição
-    return !!plano?.secoes?.[def.secao];
+    return secaoLiberada(plano, def.secao);   // sem plano atribuído = nenhuma restrição
   }, [plano]);
 
   const abrir = useCallback((id: string, aba?: string | null) => {
@@ -486,7 +485,7 @@ export function PainelProdutor({ cliente, plano, papel, preview }: {
               <Cartao className="lg:col-span-4" titulo="Seu plano" sub={plano?.nome ?? 'Todas as seções liberadas'}>
                 <ul className="space-y-1.5">
                   {SECOES_PORTAL.map(s => {
-                    const ok = !plano ? true : !!plano.secoes?.[s.id];
+                    const ok = secaoLiberada(plano, s.id);
                     return (
                       <li key={s.id} className="flex items-center gap-2 text-sm" style={{ color: ok ? COR.texto : COR.texto2 }}>
                         {ok ? <Check size={14} style={{ color: COR.verde }} /> : <Lock size={13} style={{ color: COR.texto2 }} />}
