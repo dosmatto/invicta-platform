@@ -174,6 +174,20 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
   const patch = (p: Partial<Rascunho>) => setR(x => ({ ...x, ...p }));
   const patchParams = (p: Partial<ParamsCalculo>) => setR(x => ({ ...x, params: { ...x.params, ...p } }));
 
+  // O seletor oferece SÓ a versão marcada com estrela (padrão) em Zonas de
+  // Manejo — é ela que a Amostragem e o mapa usam, então a prescrição segue a
+  // mesma. Uma prescrição antiga salva sobre outra versão continua abrindo:
+  // essa versão entra na lista só enquanto estiver selecionada.
+  const zoneamentoPadrao = useMemo(() => zoneamentos.find(z => z.padrao) ?? null, [zoneamentos]);
+  const zoneamentosOferecidos = useMemo(() => {
+    const lista = zoneamentoPadrao ? [zoneamentoPadrao] : [];
+    if (r.zoneamentoId && !lista.some(z => z.id === r.zoneamentoId)) {
+      const atual = zoneamentos.find(z => z.id === r.zoneamentoId);
+      if (atual) lista.push(atual);
+    }
+    return lista;
+  }, [zoneamentos, zoneamentoPadrao, r.zoneamentoId]);
+
   const [avisosCalc, setAvisosCalc] = useState<string[]>([]);
   const [erro, setErro] = useState('');
   const [okMsg, setOkMsg] = useState('');
@@ -777,11 +791,16 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
               <select value={r.zoneamentoId} onChange={e => escolherZoneamento(e.target.value)}
                 className="w-full rounded px-2 py-1.5 text-xs outline-none" style={inputStyle}>
                 <option value="">Selecione o zoneamento…</option>
-                {zoneamentos.map(z => <option key={z.id} value={z.id}>{z.nome} · {z.meta.nZonas} zonas{z.padrao ? ' · padrão' : ''}</option>)}
+                {zoneamentosOferecidos.map(z => <option key={z.id} value={z.id}>{z.nome} · {z.meta.nZonas} zonas{z.padrao ? ' · padrão' : ' · versão antiga'}</option>)}
               </select>
               {zoneamentos.length === 0 && (
                 <p className="text-[10px] mt-1" style={{ color: '#fbbf24' }}>
                   Este talhão ainda não tem zoneamento salvo. Crie um na aba <b>Zonas de Manejo</b> primeiro.
+                </p>
+              )}
+              {zoneamentos.length > 0 && !zoneamentoPadrao && (
+                <p className="text-[10px] mt-1" style={{ color: '#fbbf24' }}>
+                  Nenhuma versão está marcada como <b>padrão</b> (estrela) em <b>Zonas de Manejo</b>. Marque uma para usá-la aqui.
                 </p>
               )}
             </Campo>

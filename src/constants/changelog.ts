@@ -1,5 +1,12 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Prescrição usa só o zoneamento padrão (estrela)
+  '2.166.0': [
+    'A PRESCRIÇÃO PASSA A OFERECER SÓ O ZONEAMENTO PADRÃO — a versão marcada com estrela em Zonas de Manejo, que é a mesma que a Amostragem e o mapa usam. Antes o seletor listava todas as versões, e dava para gerar a prescrição sobre um zoneamento diferente do que foi amostrado.',
+    'Prescrição antiga salva sobre outra versão continua abrindo: essa versão aparece no seletor só enquanto está selecionada, marcada como "versão antiga".',
+    'Se o talhão tem zoneamentos mas nenhum está marcado como padrão, um aviso pede para marcar a estrela em Zonas de Manejo.',
+    'Verificação: npx tsc --noEmit limpo em src/ e npm run build de produção.',
+  ],
   // [46] Compactação e Produtividade obedecem todas as colunas da matriz
   '2.165.0': [
     'PENDÊNCIA 46 — COMPACTAÇÃO E PRODUTIVIDADE PASSAM A OBEDECER TODAS AS COLUNAS DA LINHA DELAS NA MATRIZ DE PERMISSÕES. As linhas já existiam, mas as abas só olhavam "Criar": desmarcar Ver, Excluir ou Export não mudava nada.',
