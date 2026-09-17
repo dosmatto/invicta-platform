@@ -370,6 +370,16 @@ function valorPapelSemAjuste(papel: string, chave: string): boolean {
   const base = (MATRIZ_PADRAO[papel as keyof typeof MATRIZ_PADRAO] ?? {}) as Record<string, boolean>;
   if (papel === 'custom') return base[chave] === true;
   const [modulo, acao] = chave.split('.');
+  if ((modulo === 'fertilidade' || modulo === 'zonas') && acao !== 'criar' && acao !== 'editar') {
+    // Antes só Criar (e, em Zonas, Editar) eram checados: excluir seguia o
+    // criar e ver/baixar não tinham trava. O PDF da Fertilidade seguia a
+    // capacidade antiga de relatórios.
+    const antiga = valorPapel(papel, `${modulo}.criar`);
+    const antigaVer = modulo === 'fertilidade' && acao === 'exportar'
+      ? valorPapel(papel, 'relatorios.exportar') : false;
+    if (acao !== 'visualizar' && acao !== 'exportar') return antiga;
+    return base[chave] === true || antigaVer || antiga;
+  }
   if (modulo === 'satelite' && acao !== 'criar') {
     // Antes só "Criar" (capacidade antiga ndvi) era checado; excluir e trocar
     // fonte seguiam o criar, e ver/baixar não tinham trava.
@@ -517,6 +527,22 @@ export function podePrescricao(acao: AcaoAba): boolean {
 export function podeAltimetria(acao: AcaoAba): boolean {
   return podeAbaDerivada('altimetria', acao, () => podeEm('zonas', 'criar'),
     () => podeEm('zonas', acao === 'exportar' ? 'exportar' : 'visualizar'));
+}
+
+// Fertilidade: "Criar"/"Editar" seguem a capacidade antiga; o PDF, que seguia
+// a de Relatórios, passa a valer também pela coluna Export desta linha.
+export function podeFertilidade(acao: AcaoAba): boolean {
+  if (acao === 'criar' || acao === 'editar') return pode('fertilidade');
+  return podeAbaDerivada('fertilidade', acao, () => pode('fertilidade'),
+    () => acao === 'exportar' && pode('relatorios'));
+}
+
+// Zonas de manejo: "Criar" = salvar versão; "Editar" = unificar/reclassificar/
+// dividir (as três capacidades granulares do editor manual, intocadas).
+export function podeZonas(acao: AcaoAba): boolean {
+  if (acao === 'criar') return pode('zonasSalvar');
+  if (acao === 'editar') return pode('zonasUnificar') || pode('zonasReclassificar') || pode('zonasDividir');
+  return podeAbaDerivada('zonas', acao, () => pode('zonasSalvar'), () => false);
 }
 
 // Satélite: "Criar" continua sendo a capacidade antiga ndvi (pode('ndvi')).

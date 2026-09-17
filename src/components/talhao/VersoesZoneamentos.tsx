@@ -23,6 +23,8 @@ interface Props {
   zoneamentos: ZoneamentoMeap[];
   vendoId: string | null;
   podeEditar: boolean;
+  /** Coluna Excluir da matriz; sem ela, a lixeira some (padrão: segue podeEditar). */
+  podeExcluir?: boolean;
   onVer: (id: string | null) => void;
   onTornarPadrao: (id: string) => void;
   onEditar: (z: ZoneamentoMeap) => void;
@@ -48,7 +50,7 @@ function dataCurta(iso: string): string {
 }
 
 export function VersoesZoneamentos({
-  zoneamentos, vendoId, podeEditar,
+  zoneamentos, vendoId, podeEditar, podeExcluir = podeEditar,
   onVer, onTornarPadrao, onEditar, onSuavizar, onIncorporar, onExcluir, onRenomear, onRestaurar, onComparar,
 }: Props) {
   const linhagens = useMemo(() => montarLinhagens(zoneamentos), [zoneamentos]);
@@ -177,7 +179,7 @@ export function VersoesZoneamentos({
                                 title="Voltar a esta versão — ela é COPIADA para o topo da linha do tempo; nada do que veio depois é apagado"
                                 className="p-1 rounded" style={{ background: '#3a2e0a', color: '#fbbf24' }}><RotateCcw size={11} /></button>
                             )}
-{podeEditar && (                            <button onClick={e => { e.stopPropagation(); onExcluir(z.id); }}
+{podeExcluir && (                            <button onClick={e => { e.stopPropagation(); onExcluir(z.id); }}
                               title="Excluir esta versão" className="p-1 rounded ml-auto" style={{ color: '#f87171' }}><Trash2 size={11} /></button>)}
                           </>
                         )}

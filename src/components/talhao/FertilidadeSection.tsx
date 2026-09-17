@@ -29,7 +29,7 @@ import type { Legenda } from '@/lib/legendas';
 import { Play, Layers, Loader2, Eraser, AlertTriangle, Activity, Settings, BookOpen, Save, FileDown, RotateCcw } from 'lucide-react';
 import { cloudSalvarMapa, cloudCarregarMapasPorPrefixo, cloudExcluirMapasPorPrefixo, cloudPodeGravar } from '@/lib/cloud';
 import { ehBackendFora, msgBackendFora, onBackendAquecendo, tocarBackend } from '@/lib/interpUrl';
-import { pode } from '@/lib/empresa';
+import { pode, podeFertilidade } from '@/lib/empresa';
 import { listar as bibListar, criar as bibCriar, type ConteudoPerfil, type ItemBiblioteca } from '@/lib/biblioteca';
 
 import { inputStyle } from '@/constants/ui';
@@ -974,8 +974,10 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
   if (importacoes.length === 0) return <div className="px-6 py-4"><Aviso texto="Importe resultados de laboratório (seção acima) — o mapa de fertilidade é gerado a partir deles." /></div>;
 
   const processando = estado === 'processando';
-  const podeProcessar = pode('fertilidade');
-  const podeRel = pode('relatorios');
+  // [46] Cada ação segue a linha "Fertilidade (interpolação)" da matriz.
+  const podeProcessar = podeFertilidade('criar');
+  const podeRel = podeFertilidade('exportar');
+  const podeApagar = podeFertilidade('excluir');
   const mapasSalvos = Object.keys(cache).length;
   // Etapa 3: os mapas em tela são de uma importação mais antiga que a disponível
   // → podem estar desatualizados (o usuário reimportou laudo depois).
@@ -993,6 +995,15 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
 
   // legendas disponíveis pro atributo atual (pra o dropdown)
   const legendasDoAtributo = nutriente ? getLegendasPorAtributo(nutriente) : [];
+
+  if (!podeFertilidade('visualizar')) return (
+    <div className="px-4 py-3">
+      <div className="flex items-start gap-2 p-3 rounded-lg" style={{ background: '#2d1a00', border: '1px solid #92400e' }}>
+        <AlertTriangle size={14} style={{ color: '#fbbf24' }} className="flex-shrink-0 mt-0.5" />
+        <p className="text-[10px]" style={{ color: '#fbbf24' }}>Seu acesso não inclui Fertilidade. Peça ao administrador para liberar em Usuários e permissões.</p>
+      </div>
+    </div>
+  );
 
   return (
     <div className="px-4 py-3 space-y-3">
@@ -1383,7 +1394,7 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
                     : stats.modelo === 'idw' ? `IDW · ${stats.n} pts`
                       : `Krigagem${stats.variograma?.manual ? ' fixa' : ''} · ${stats.modelo} · ${stats.n} pts`}
                 </div>
-                {podeProcessar && (
+                {podeApagar && (
                   <button onClick={limpar} title="Limpar mapas" className="flex items-center gap-1 text-[10px]" style={{ color: '#93c5fd' }}>
                     <Eraser size={11} /> Limpar
                   </button>

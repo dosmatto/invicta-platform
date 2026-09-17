@@ -1,5 +1,13 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [46] Fertilidade e Zonas de Manejo obedecem todas as colunas da matriz
+  '2.169.0': [
+    'PENDÊNCIA 46 — FERTILIDADE E ZONAS DE MANEJO PASSAM A OBEDECER TODAS AS COLUNAS DA LINHA DELAS. Eram as duas últimas abas em que parte das colunas não fazia efeito: Ver e Excluir não tinham trava, e o PDF da Fertilidade seguia a permissão de Relatórios.',
+    'FERTILIDADE: Ver mostra a aba; Criar libera interpolar, reprocessar e as demais ações de processamento; Excluir mostra o "Limpar mapas"; Export libera o "Gerar PDF (Fertilidade)" — quem já tinha Relatórios → Export continua com o PDF, sem precisar marcar nada.',
+    'ZONAS DE MANEJO: Ver mostra a aba; Criar libera salvar versão, converter, adotar e o Laboratório de cenários; Editar segue as três operações do editor manual (unificar, reclassificar, dividir) e libera renomear, suavizar, incorporar e tornar padrão; Excluir mostra a lixeira das versões e o "Remover" das zonas adotadas; Export libera o botão Exportar. Quem não tem Ver recebe um aviso no lugar da aba.',
+    'NINGUÉM PERDE NEM GANHA ACESSO NA TROCA. Operador e Prestador aparecem com Ver e Export marcados nas duas linhas (já viam as abas), e o Operador ganha Export no Satélite pelo mesmo motivo. Sem ajuste, Excluir continua acompanhando Criar. Com isso, todas as abas do talhão passam a responder à matriz de permissões.',
+    'Verificação: teste:iam 37/37 (caso novo cobrindo ver/baixar em todas as oito abas com linha própria), npx tsc --noEmit limpo em src/ e npm run build de produção.',
+  ],
   // [46] Satélite (NDVI) obedece a matriz; NDVI e Produtividade entram nos planos do portal
   '2.167.0': [
     'PENDÊNCIA 46 — A ABA NDVI / SATÉLITE PASSA A OBEDECER TODAS AS COLUNAS DA LINHA "SATÉLITE (NDVI/ÍNDICES)". Antes só "Criar" valia. Agora: Ver mostra a aba (sem ele, um aviso); Criar abre a busca e o processamento de cenas (sem ele, a pessoa vê só as camadas salvas); Editar liga e desliga a fonte de análise (◎); Excluir libera o "Remover" da cena e a exclusão das camadas salvas; Export libera os GeoTIFF e o "Gerar PDF para o produtor".',

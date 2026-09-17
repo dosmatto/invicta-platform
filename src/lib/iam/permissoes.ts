@@ -65,8 +65,8 @@ export const MATRIZ_PADRAO: Record<PapelIam, MapaPermissoes> = {
     conceder(m, ['produtividade'], VER_EXP);
     // Já via e baixava prescrições salvas e o relevo (antes das linhas próprias).
     conceder(m, ['prescricao', 'altimetria', 'condutividade'], VER_EXP);
-    conceder(m, ['cadastro', 'fertilidade', 'zonas', 'satelite'], VER);
-    conceder(m, ['satelite'], ['exportar']);
+    conceder(m, ['cadastro'], VER);
+    conceder(m, ['fertilidade', 'zonas', 'satelite'], VER_EXP);
     return m;
   })(),
 
@@ -84,7 +84,7 @@ export const MATRIZ_PADRAO: Record<PapelIam, MapaPermissoes> = {
   prestador: (() => {
     const m = conceder(nada(), ['amostragem'], TRABALHAR);
     conceder(m, ['cadastro'], VER);
-    conceder(m, ['prescricao', 'altimetria', 'condutividade', 'compactacao', 'produtividade', 'satelite'], VER_EXP); // idem operador: via e baixava
+    conceder(m, ['prescricao', 'altimetria', 'condutividade', 'compactacao', 'produtividade', 'satelite', 'fertilidade', 'zonas'], VER_EXP); // idem operador: via e baixava
     return m;
   })(),
 

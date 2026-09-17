@@ -12,7 +12,7 @@ import dynamic from 'next/dynamic';
 import { useApp } from '@/context/AppContext';
 import { getZoneamentosMeap, saveZoneamentoMeap, deleteZoneamentoMeap, renameZoneamentoMeap, setZoneamentoPadraoMeap, removerAdocaoMeap, getTalhoes, getLegendasPorAtributo, type Talhao, type ZoneamentoMeap, type SuavizacaoMeta, type EdicaoManualMeta, type OperacaoEdicaoZona } from '@/lib/store';
 import { usuarioAtual } from '@/lib/auth';
-import { pode } from '@/lib/empresa';
+import { pode, podeZonas } from '@/lib/empresa';
 import type { RespSuavizarZonas, RespIncorporarDivisas } from '@/lib/fertilidade';
 import { IncorporarDivisas } from '@/components/talhao/IncorporarDivisas';
 import { SuavizarLimites } from './SuavizarLimites';
@@ -940,6 +940,16 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
   const limiteFrag = res?.stats.area_min_ha && res.stats.area_min_ha > 0 ? res.stats.area_min_ha : 0.5;
   const nFrag = featsEdit.length > 1 ? zonas.filter(z => z.areaHa > 0 && z.areaHa < limiteFrag).length : 0;
 
+  // [46] Cada ação segue a linha "Zonas de manejo" da matriz.
+  if (!podeZonas('visualizar')) return (
+    <div className="p-3">
+      <div className="flex items-start gap-2 p-3 rounded-lg" style={{ background: '#2d1a00', border: '1px solid #92400e' }}>
+        <AlertTriangle size={14} style={{ color: '#fbbf24' }} className="flex-shrink-0 mt-0.5" />
+        <p className="text-[10px]" style={{ color: '#fbbf24' }}>Seu acesso não inclui Zonas de Manejo. Peça ao administrador para liberar em Usuários e permissões.</p>
+      </div>
+    </div>
+  );
+
   return (
     <div className="p-3 space-y-3">
       {/* ── Zonas adotadas (M1) ── */}
@@ -952,7 +962,7 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
             </div>
             <div className="flex items-center gap-1.5">
               <span className="text-[9px] px-1.5 py-0.5 rounded font-semibold" style={{ background: '#0b1f3a', color: '#93c5fd', border: '1px solid #1e3a8a' }}>{ESTADO[amb!.estado]}</span>
-{pode('zonasSalvar') && (              <button onClick={removerAdocao} title="Remover as zonas adotadas (desadotar)"
+{podeZonas('excluir') && (              <button onClick={removerAdocao} title="Remover as zonas adotadas (desadotar)"
                 className="flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded font-semibold" style={{ background: '#2a0f12', color: '#f87171', border: '1px solid #7f1d1d' }}>
                 <Trash2 size={10} /> Remover
               </button>)}
@@ -1373,7 +1383,7 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
             <Star size={12} style={{ color: '#fbbf24' }} />
             <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color: '#cbd5e1' }}>Zoneamentos e versões ({zoneamentos.length})</span>
             <div className="ml-auto flex items-center gap-2">
-              <ExportarZonas talhao={talhao} zoneamentos={zoneamentos} safraNome={safraNome} />
+              {podeZonas('exportar') && <ExportarZonas talhao={talhao} zoneamentos={zoneamentos} safraNome={safraNome} />}
 {pode('zonasSalvar') && (              <button onClick={() => { setLabPar(null); setLabAberto(true); }} title="Comparar os cenários de zona (métricas + concordância)" className="flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded" style={{ background: '#1e3a5f', color: '#93c5fd' }}>
                 <FlaskConical size={11} /> Laboratório
               </button>)}
@@ -1381,7 +1391,8 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
           </div>
           <VersoesZoneamentos
             zoneamentos={zoneamentos} vendoId={vendoId}
-            podeEditar={pode('zonasUnificar') || pode('zonasReclassificar') || pode('zonasDividir')}
+            podeEditar={podeZonas('editar')}
+            podeExcluir={podeZonas('excluir')}
             onVer={setVendoId}
             onTornarPadrao={tornarPadrao}
             onEditar={z => { setEditorZona({ id: z.id, nome: z.nome, fc: z.fc }); setSuav(null); setSuavMapFc(null); }}

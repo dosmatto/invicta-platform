@@ -93,6 +93,19 @@ t('[46] compactação e produtividade: quem já via e baixava continua', () => {
   assert.ok(!MATRIZ_PADRAO.prestador['compactacao.criar'], 'prestador não processa');
 });
 
+t('[46] toda aba com linha própria: quem via e baixava continua', () => {
+  const abas = ['fertilidade', 'zonas', 'altimetria', 'condutividade', 'satelite',
+    'prescricao', 'compactacao', 'produtividade'];
+  for (const mod of abas) {
+    for (const p of ['produtor', 'leitor', 'operador', 'prestador', 'agronomo', 'admin']) {
+      assert.equal(MATRIZ_PADRAO[p][`${mod}.visualizar`], true, `${p} vê ${mod}`);
+      assert.equal(MATRIZ_PADRAO[p][`${mod}.exportar`], true, `${p} baixa ${mod}`);
+    }
+  }
+  assert.ok(!MATRIZ_PADRAO.operador['fertilidade.criar'], 'operador não processa fertilidade');
+  assert.ok(!MATRIZ_PADRAO.produtor['zonas.criar'], 'produtor não cria zonas');
+});
+
 t('papel custom nasce sem nenhuma permissão', () => {
   assert.equal(contarPermissoes(MATRIZ_PADRAO.custom), 0);
 });
