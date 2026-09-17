@@ -1,5 +1,12 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [46] Altimetria com linha própria nas permissões de acesso
+  '2.162.0': [
+    'PENDÊNCIA 46 — ALTIMETRIA TAMBÉM GANHA LINHA PRÓPRIA NA MATRIZ DE PERMISSÕES ("Altimetria (MDE/relevo)", logo abaixo de Zonas de manejo). Antes a aba seguia a permissão de Zonas de manejo para buscar base e gerar análise, e não tinha trava nenhuma para ver e baixar.',
+    'O QUE CADA MARCAÇÃO FAZ NA ABA ALTIMETRIA: Ver mostra a base oficial e as camadas; Criar libera buscar base nova, aprovar, gerar a análise topográfica, enviar o relevo às Zonas e tornar oficial uma versão antiga; Excluir mostra a lixeira das versões; Export libera os GeoTIFF (altitude, declividade e camadas da análise) e o Relatório PDF do relevo. Quem não tem nem Ver recebe um aviso no lugar da aba.',
+    'NINGUÉM PERDE NEM GANHA ACESSO NA TROCA. Owner, Admin e Agrônomo geram e excluem; Produtor, Somente leitura, Operador e Prestador veem e baixam. Sem ajuste próprio na linha nova, gerar e excluir continuam seguindo "Zonas de manejo → Criar", e ver/baixar seguem também o que a pessoa tem em Zonas de manejo. Um ajuste próprio (fundo amarelo) na linha Altimetria passa a valer sozinho.',
+    'Verificação: teste:iam 34/34 (caso novo para a linha de Altimetria em cada papel), npx tsc --noEmit limpo em src/ e npm run build de produção.',
+  ],
   // [46] Prescrições com linha própria nas permissões de acesso
   '2.161.0': [
     'PENDÊNCIA 46 — PRESCRIÇÕES GANHAM LINHA PRÓPRIA NA MATRIZ DE PERMISSÕES ("Prescrições (taxa variável)", logo abaixo de Recomendações). Antes a aba Prescrições não aparecia na matriz e seguia, inteira, a permissão de Recomendações — não dava para liberar recomendação sem liberar prescrição, nem o contrário.',

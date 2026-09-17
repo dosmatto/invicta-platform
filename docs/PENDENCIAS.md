@@ -71,6 +71,7 @@ verdadeira (fusão de talhões) chegou depois; foi preciso renumerar.
 | 44 | Volumes por zona (taxa, ha e t) em todo cenário com zoneamento | 2.156.0 | Talhão → Recomendações → cenário aberto → tabela "Volumes por zona" / "Recomendação por zona" (abaixo da lista de produtos) |
 | 44 | A taxa e as toneladas de cada zona escritas no mapa (correção) | 2.158.0 | Talhão → Recomendações → cenário aberto → mapa (valor no meio de cada zona, com as divisas) |
 | 46 | Prescrições com linha própria nas permissões de acesso | 2.161.0 | Configurações → Usuários e permissões → pessoa → matriz (linha "Prescrições (taxa variável)"); Talhão → Prescrições |
+| 46 | Altimetria com linha própria nas permissões de acesso | 2.162.0 | Configurações → Usuários e permissões → pessoa → matriz (linha "Altimetria (MDE/relevo)"); Talhão → Altimetria |
 
 > As pendências 1–17 foram entregues antes deste registro existir e não estão
 > catalogadas; procure pelo assunto no `changelog.ts`. Da 18 em diante, tudo

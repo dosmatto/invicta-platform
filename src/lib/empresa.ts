@@ -389,6 +389,26 @@ export function podePrescricao(acao: 'visualizar' | 'criar' | 'editar' | 'exclui
   return pode('recomendacoes');
 }
 
+// [46] Altimetria também ganhou linha própria (antes: buscar base, gerar
+// análise e mexer nas versões seguiam zonas.criar; ver e baixar não tinham
+// trava). Mesma regra da prescrição: ajuste PRÓPRIO em altimetria.* vence;
+// sem ajuste, criar/editar/excluir seguem zonas.criar, e ver/baixar seguem a
+// linha nova OU o que a pessoa já tem em Zonas de manejo.
+export function podeAltimetria(acao: 'visualizar' | 'criar' | 'editar' | 'excluir' | 'exportar'): boolean {
+  if (!authConfigurado) return true;
+  const papel = papelDoUsuario();
+  if (!papel) return false;
+  const reg = meuRegistro() as (RegistroPapel & { status?: string; permissoes?: Record<string, boolean> }) | null;
+  if (reg?.status && reg.status !== 'ativo') return false;
+  if (papel === 'owner') return true;
+  const excecao = reg?.permissoes?.[`altimetria.${acao}`];
+  if (typeof excecao === 'boolean') return excecao;
+  if (acao === 'visualizar' || acao === 'exportar') {
+    return podeEm('altimetria', acao) || podeEm('zonas', acao) || podeEm('zonas', 'criar');
+  }
+  return podeEm('zonas', 'criar');
+}
+
 // ── Planos de assinatura do Produtor (U3.B — editáveis pelo Owner) ───────────
 // Cada plano (nome editável) libera um conjunto de SEÇÕES do portal (= abas da
 // página do talhão que têm dado pronto). O produtor é read-only.

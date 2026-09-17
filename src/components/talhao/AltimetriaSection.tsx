@@ -26,11 +26,14 @@ import { ordenarLegendasDoAtributo } from '@/lib/legendas';
 import type { Legenda } from '@/lib/legendas';
 import { CruzamentoRelevo } from '@/components/talhao/CruzamentoRelevo';
 import { Mountain, Loader2, Search, CheckCircle2, AlertTriangle, Trash2, Download, Star, Layers, Play, Waves, FileText, Upload } from 'lucide-react';
-import { podeEm } from '@/lib/empresa';
+import { podeAltimetria } from '@/lib/empresa';
 
 // Quem NÃO gera relevo (produtor, leitor) só vê a base oficial, as camadas e os
 // downloads — sem buscar base nova, aprovar, gerar análise ou mexer nas versões.
-const podeGerar = () => podeEm('zonas', 'criar');
+// [46] Cada ação segue a linha "Altimetria" da matriz de permissões.
+const podeGerar = () => podeAltimetria('criar');
+const podeExcluirMde = () => podeAltimetria('excluir');
+const podeBaixar = () => podeAltimetria('exportar');
 
 import { inputStyle } from '@/constants/ui';
 import { fmtMax1 as fmt } from '@/lib/formato';
@@ -376,6 +379,12 @@ export function AltimetriaSection() {
   const stats = previa?.stats ?? null;
   const temDados = !!(previa || oficialDados);
 
+  if (!podeAltimetria('visualizar')) return (
+    <div className="px-4 py-3">
+      <Aviso texto="Seu acesso não inclui Altimetria. Peça ao administrador para liberar em Usuários e permissões." />
+    </div>
+  );
+
   return (
     <div className="px-4 py-3 space-y-3">
       {/* Base oficial (quando existe e não há prévia em andamento) */}
@@ -465,14 +474,14 @@ export function AltimetriaSection() {
             <p className="text-[10px] font-bold" style={{ color: previa ? '#fbbf24' : '#86efac' }}>
               {previa ? `PRÉVIA · ${previa.rotulo}` : 'Camadas da base oficial'}
             </p>
-            <div className="flex gap-2">
+            {podeBaixar() && <div className="flex gap-2">
               <button onClick={() => void baixarGeotiff('alt')} disabled={!!exportando} title="Baixar a altitude como GeoTIFF (EPSG:4326)" className="flex items-center gap-1 text-[9px] disabled:opacity-50" style={{ color: '#86efac' }}>
                 {exportando === 'alt' ? <Loader2 size={10} className="animate-spin" /> : <Download size={10} />} Altitude
               </button>
               <button onClick={() => void baixarGeotiff('decl')} disabled={!!exportando} title="Baixar a declividade como GeoTIFF (EPSG:4326)" className="flex items-center gap-1 text-[9px] disabled:opacity-50" style={{ color: '#86efac' }}>
                 {exportando === 'decl' ? <Loader2 size={10} className="animate-spin" /> : <Download size={10} />} Declividade
               </button>
-            </div>
+            </div>}
           </div>
 
           {/* Alternador de camada */}
@@ -620,11 +629,11 @@ export function AltimetriaSection() {
               <CruzamentoRelevo analise={analise} talhaoId={nav.talhaoId!} />
 
               {/* F4.c — Relatório PDF do MDE (§17) */}
-              <button onClick={() => void baixarPdf()} disabled={gerandoPdf}
+              {podeBaixar() && <button onClick={() => void baixarPdf()} disabled={gerandoPdf}
                 className="w-full py-1.5 rounded text-[10px] font-bold flex items-center justify-center gap-1.5 disabled:opacity-50"
                 style={{ background: '#1a3a6b', color: '#93c5fd', border: '1px solid #2e5fa3' }}>
                 {gerandoPdf ? <><Loader2 size={11} className="animate-spin" /> Gerando PDF…</> : <><FileText size={11} /> Relatório PDF do relevo</>}
-              </button>
+              </button>}
 
               {/* Legenda/contexto da camada ativa da análise */}
               {camada.startsWith('a:') && (() => {
@@ -662,7 +671,7 @@ export function AltimetriaSection() {
                         ))}
                       </div>
                     )}
-                    {def.tipo === 'grid' && (
+                    {def.tipo === 'grid' && podeBaixar() && (
                       <button onClick={() => void baixarGeotiffAnalise(key)} disabled={!!exportando}
                         className="flex items-center gap-1 text-[9px] disabled:opacity-50" style={{ color: '#86efac' }}>
                         {exportando === key ? <Loader2 size={10} className="animate-spin" /> : <Download size={10} />} GeoTIFF desta camada
@@ -691,7 +700,7 @@ export function AltimetriaSection() {
                   <Star size={10} /> Tornar oficial
                 </button>
               )}
-              {podeGerar() && <button onClick={() => excluirVersao(m)} title="Excluir versão" style={{ color: '#f87171' }}><Trash2 size={10} /></button>}
+              {podeExcluirMde() && <button onClick={() => excluirVersao(m)} title="Excluir versão" style={{ color: '#f87171' }}><Trash2 size={10} /></button>}
             </div>
           ))}
         </div>
