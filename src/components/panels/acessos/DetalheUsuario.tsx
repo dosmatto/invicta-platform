@@ -6,7 +6,7 @@
 
 import { useMemo, useState } from 'react';
 import { getClientes, getFazendas, getTalhoes } from '@/lib/store';
-import { getPlanos, renovarValidade, diasRestantes } from '@/lib/empresa';
+import { getPlanos, renovarValidade, diasRestantes, permissoesEfetivasDe, matrizEfetivaDoPapel } from '@/lib/empresa';
 import { resetarSenhaAdmin } from '@/lib/authAdmin';
 import { auditoriaDe } from '@/lib/iam/auditoria';
 import { registrar } from '@/lib/iam/auditoria';
@@ -16,7 +16,6 @@ import {
   limparExcecoes, removerUsuario, salvarUsuario, statusDe, PAPEIS_ATRIBUIVEIS,
   type UsuarioIam,
 } from '@/lib/iam/usuarios';
-import { permissoesEfetivas, MATRIZ_PADRAO } from '@/lib/iam/permissoes';
 import { clienteIdDoProdutor, produtorSemVinculo } from '@/lib/iam/vinculoProdutor';
 import { getPerfis, getPerfil, salvarPerfil } from '@/lib/iam/perfis';
 import {
@@ -46,7 +45,7 @@ export function DetalheUsuario({ email, onFechar, onMudou, podeEditar, podeExclu
 
   if (!u) return null;
   const papel = (u.papel ?? 'leitor') as PapelIam;
-  const efetivas = permissoesEfetivas(papel, u.permissoes);
+  const efetivas = permissoesEfetivasDe(papel, u.permissoes as Record<string, boolean> | undefined);
   const bloqueado = statusDe(u) === 'bloqueado';
 
   function atualizar(fn: () => void) { fn(); onMudou(); }
@@ -357,7 +356,7 @@ function SecaoPermissoes({ u, papel, efetivas, podeEditar, onMudou }: {
   const [nomePerfil, setNomePerfil] = useState('');
   const outros = useMemo(() => getUsuarios().filter(x => x.email !== u.email), [u.email]);
   const perfis = useMemo(() => getPerfis(), [u.email, u.permissoes]); // eslint-disable-line react-hooks/exhaustive-deps
-  const padraoPapel = MATRIZ_PADRAO[papel] ?? {};
+  const padraoPapel = matrizEfetivaDoPapel(papel);
   const nExcecoes = Object.keys(u.permissoes ?? {}).length;
 
   // Marca/desmarca uma LINHA inteira (todas as ações do módulo) de uma vez.

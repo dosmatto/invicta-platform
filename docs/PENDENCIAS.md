@@ -73,6 +73,7 @@ verdadeira (fusão de talhões) chegou depois; foi preciso renumerar.
 | 46 | Prescrições com linha própria nas permissões de acesso | 2.161.0 | Configurações → Usuários e permissões → pessoa → matriz (linha "Prescrições (taxa variável)"); Talhão → Prescrições |
 | 46 | Altimetria com linha própria nas permissões de acesso | 2.162.0 | Configurações → Usuários e permissões → pessoa → matriz (linha "Altimetria (MDE/relevo)"); Talhão → Altimetria |
 | 46 | Condutividade com linha própria nas permissões de acesso | 2.163.0 | Configurações → Usuários e permissões → pessoa → matriz (linha "Condutividade elétrica (CE)"); Talhão → Condutividade |
+| S/N | Matriz padrão dos papéis marcável (vale para todos do papel) | 2.164.0 | Central de Acessos → Permissões → "Padrão do papel" |
 
 > As pendências 1–17 foram entregues antes deste registro existir e não estão
 > catalogadas; procure pelo assunto no `changelog.ts`. Da 18 em diante, tudo

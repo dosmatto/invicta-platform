@@ -11,8 +11,9 @@ import { getClientes, getFazendas } from '@/lib/store';
 import {
   ehOwner, emailUsuario, getPlanos, podeEm, salvarPlano, excluirPlano, toggleSecaoPlano,
   atualizarPlano, SECOES_PORTAL, empresaAtiva, updateEmpresa,
+  matrizEfetivaDoPapel, ajustesDoPapel, definirPermissaoPapel, restaurarMatrizPapel, PAPEIS_MATRIZ_FIXA,
 } from '@/lib/empresa';
-import { getAuditoria } from '@/lib/iam/auditoria';
+import { getAuditoria, registrar } from '@/lib/iam/auditoria';
 import {
   aprovarUsuario, categoriaDe, getUsuarios, liberarPendentesPorConvite, migrarIamV1,
   rejeitarUsuario, sincronizarPendentesDaNuvem, statusDe, PAPEIS_ATRIBUIVEIS, type UsuarioIam,
@@ -21,7 +22,7 @@ import {
   acessoDoConvite, cancelarConvite, conviteDoToken, criarConvite, criarConviteTipo, getConvites,
   linkDoConvite, reenviarConvite, VALIDADE_TIPO_DIAS,
 } from '@/lib/iam/convites';
-import { MATRIZ_PADRAO, poderesDeAcesso, poderesSobreUsuario } from '@/lib/iam/permissoes';
+import { poderesDeAcesso, poderesSobreUsuario } from '@/lib/iam/permissoes';
 import { getPerfil, getPerfis, salvarPerfil, excluirPerfil, renomearPerfil, permissoesDoPapel } from '@/lib/iam/perfis';
 import {
   ACOES, CATEGORIAS, MODULOS, PAPEIS, ROTULO_ACAO, chavePerm,
@@ -180,9 +181,9 @@ export function CentralAcessos() {
                 ))
           )}
           {aba === 'convites'   && <AbaConvites convites={convites} podeConvidar={poderes.convidar} onMudou={recarregar} />}
-          {aba === 'papeis'     && <AbaPapeis />}
+          {aba === 'papeis'     && <AbaPapeis tick={tick} />}
           {aba === 'perfis'     && <AbaPerfis souOwner={poderes.administrar} onMudou={recarregar} tick={tick} />}
-          {aba === 'permissoes' && <AbaPermissoes />}
+          {aba === 'permissoes' && <AbaPermissoes souOwner={poderes.administrar} onMudou={recarregar} tick={tick} />}
           {aba === 'empresas'   && <AbaEmpresas souOwner={poderes.administrar} onMudou={recarregar} />}
           {aba === 'auditoria'  && <AbaAuditoria tick={tick} />}
         </div>
@@ -667,14 +668,15 @@ function AbaConvites({ convites, podeConvidar, onMudou }: {
 }
 
 // ── Aba Papéis (referência) ─────────────────────────────────────────────────
-function AbaPapeis() {
+function AbaPapeis({ tick }: { tick: number }) {
+  void tick; // re-render ao mudar a matriz
   return (
     <div className="space-y-2">
       <p className="text-[10px]" style={{ color: COR.fraco }}>
         O papel define o padrão de permissões. Cada usuário pode ter exceções (aba Permissões do painel lateral).
       </p>
       {PAPEIS.map(p => {
-        const perms = MATRIZ_PADRAO[p.id] ?? {};
+        const perms = matrizEfetivaDoPapel(p.id);
         const n = Object.values(perms).filter(Boolean).length;
         return (
           <Cartao key={p.id}>
@@ -691,9 +693,31 @@ function AbaPapeis() {
 }
 
 // ── Aba Permissões (matriz padrão por papel) ────────────────────────────────
-function AbaPermissoes() {
+// Marcável como os planos da aba Empresas: o Owner liga/desliga cada célula e
+// vale para TODOS daquele papel. O que difere do padrão do sistema fica com
+// fundo amarelo. Ajuste próprio de uma pessoa (painel lateral) continua
+// vencendo o do papel.
+function AbaPermissoes({ souOwner, onMudou, tick }: { souOwner: boolean; onMudou: () => void; tick: number }) {
   const [papel, setPapel] = useState<PapelIam>('agronomo');
-  const perms = MATRIZ_PADRAO[papel] ?? {};
+  void tick; // re-render ao mudar a matriz
+  const perms = matrizEfetivaDoPapel(papel);
+  const ajustes = ajustesDoPapel(papel);
+  const nAjustes = Object.keys(ajustes).length;
+  const fixa = PAPEIS_MATRIZ_FIXA.includes(papel);
+  const editavel = souOwner && !fixa;
+  const nomePapel = PAPEIS.find(p => p.id === papel)?.nome ?? papel;
+
+  function marcar(chave: string, valor: boolean) {
+    definirPermissaoPapel(papel, chave, valor);
+    registrar('permissao_alterada', { detalhe: `papel ${nomePapel}: ${chave}`, para: String(valor) });
+    onMudou();
+  }
+  function linhaToda(modulo: string, valor: boolean) {
+    for (const a of ACOES) definirPermissaoPapel(papel, chavePerm(modulo as never, a.id), valor);
+    registrar('permissao_alterada', { detalhe: `papel ${nomePapel}: linha ${modulo}`, para: String(valor) });
+    onMudou();
+  }
+
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2">
@@ -702,10 +726,24 @@ function AbaPermissoes() {
           onChange={e => setPapel(e.target.value as PapelIam)}>
           {PAPEIS.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
         </select>
+        {editavel && nAjustes > 0 && (
+          <Botao pequeno onClick={() => {
+            if (!confirm(`Voltar o papel "${nomePapel}" ao padrão do sistema? (${nAjustes} ajuste(s) serão descartados)`)) return;
+            restaurarMatrizPapel(papel);
+            registrar('permissao_alterada', { detalhe: `papel ${nomePapel}: matriz restaurada ao padrão` });
+            onMudou();
+          }}>Restaurar padrão</Botao>
+        )}
       </div>
       <p className="text-[10px]" style={{ color: COR.fraco }}>
-        Esta é a matriz PADRÃO do papel (referência). Para dar ou tirar permissão de alguém específico,
-        abra o usuário e use a aba <b>Permissões</b> do painel lateral.
+        {papel === 'owner'
+          ? <>O Owner sempre pode tudo — esta matriz não se edita.</>
+          : papel === 'custom'
+            ? <>Personalizado não tem padrão: vale só o que for marcado em cada pessoa (aba <b>Permissões</b> do painel lateral).</>
+            : editavel
+              ? <><b style={{ color: COR.ok }}>✔ Marcado = PODE.</b> O que você marcar aqui vale para <b>todos</b> com o papel {nomePapel}. Para uma pessoa só, abra o usuário e use a aba <b>Permissões</b> do painel lateral — o ajuste dela vence o do papel.</>
+              : <>Só o Owner altera a matriz padrão dos papéis. Para dar ou tirar permissão de alguém específico, abra o usuário e use a aba <b>Permissões</b> do painel lateral.</>}
+        {nAjustes > 0 && <> <b style={{ color: COR.alerta }}>{nAjustes} ajuste(s)</b> em relação ao padrão do sistema.</>}
       </p>
       <div className="rounded overflow-x-auto" style={{ border: `1px solid ${COR.borda}` }}>
         <table className="w-full text-[9px]" style={{ borderCollapse: 'collapse' }}>
@@ -713,23 +751,44 @@ function AbaPermissoes() {
             <tr style={{ background: '#0f2240' }}>
               <th className="text-left px-1.5 py-1" style={{ color: COR.sub }}>Módulo</th>
               {ACOES.map(a => <th key={a.id} className="px-1 py-1" style={{ color: COR.sub }} title={a.nome}>{a.curto}</th>)}
+              {editavel && <th className="px-1 py-1" style={{ color: COR.sub }} title="marcar/desmarcar a linha toda">tudo</th>}
             </tr>
           </thead>
           <tbody>
-            {MODULOS.map(m => (
-              <tr key={m.id} style={{ borderTop: `1px solid ${COR.borda}` }}>
-                <td className="px-1.5 py-1 truncate" style={{ color: COR.txt, maxWidth: 130 }}>{m.nome}</td>
-                {ACOES.map(a => (
-                  <td key={a.id} className="text-center px-1 py-1"
-                    style={{ color: perms[chavePerm(m.id, a.id)] ? COR.ok : '#334155' }}>
-                    {perms[chavePerm(m.id, a.id)] ? '●' : '·'}
-                  </td>
-                ))}
-              </tr>
-            ))}
+            {MODULOS.map(m => {
+              const nOn = ACOES.filter(a => perms[chavePerm(m.id, a.id)] === true).length;
+              return (
+                <tr key={m.id} style={{ borderTop: `1px solid ${COR.borda}` }}>
+                  <td className="px-1.5 py-1 truncate" style={{ color: nOn ? COR.txt : COR.fraco, maxWidth: 130 }} title={m.nome}>{m.nome}</td>
+                  {ACOES.map(a => {
+                    const ch = chavePerm(m.id, a.id);
+                    const on = papel === 'owner' || perms[ch] === true;
+                    const ajustado = ajustes[ch] !== undefined;
+                    return (
+                      <td key={a.id} className="text-center px-1 py-1"
+                        style={ajustado ? { background: 'rgba(251,191,36,0.16)' } : undefined}
+                        title={ajustado ? `Ajustado (o padrão do sistema ${on ? 'não dá' : 'dá'} esta permissão)` : 'Padrão do sistema'}>
+                        <input type="checkbox" checked={on} disabled={!editavel}
+                          onChange={e => marcar(ch, e.target.checked)} />
+                      </td>
+                    );
+                  })}
+                  {editavel && (
+                    <td className="text-center px-1 py-1">
+                      <button onClick={() => linhaToda(m.id, nOn < ACOES.length)}
+                        className="px-1 rounded text-[9px]" style={{ background: COR.borda, color: COR.azul }}
+                        title={nOn < ACOES.length ? 'marcar tudo desta linha' : 'desmarcar tudo desta linha'}>
+                        {nOn < ACOES.length ? '✔' : '✕'}
+                      </button>
+                    </td>
+                  )}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
+      {editavel && <p className="text-[9px]" style={{ color: COR.fraco }}>Fundo amarelo = diferente do padrão do sistema.</p>}
     </div>
   );
 }

@@ -8,12 +8,12 @@
 import { lerListaLocal, gravarListaLocal } from '../localComprimido';
 import { cloudPushLista } from '../cloud';
 import { usarDadosSupabase, carregarDocsPorCampoSupabase, salvarDocSupabase } from '../supabaseData';
-import { emailUsuario, type RegistroPapel } from '../empresa';
+import { emailUsuario, permissoesEfetivasDe, type RegistroPapel } from '../empresa';
 import { registrar } from './auditoria';
 import { conviteDoToken } from './convites';
 import { liberacaoDoConvite } from './conviteRegras';
 import { getPerfil } from './perfis';
-import { MATRIZ_PADRAO, permissoesEfetivas } from './permissoes';
+import { MATRIZ_PADRAO } from './permissoes';
 import type {
   CamposIam, CategoriaIam, MapaPermissoes, PapelIam, StatusIam,
 } from './tipos';
@@ -294,7 +294,7 @@ export function definirPermissaoUsuario(
 export function clonarPermissoes(deEmail: string, paraEmail: string): boolean {
   const de = getUsuario(deEmail);
   if (!de) return false;
-  const efetivas = permissoesEfetivas(de.papel as PapelIam, de.permissoes);
+  const efetivas = permissoesEfetivasDe(de.papel, de.permissoes as Record<string, boolean> | undefined);
   salvarUsuario(paraEmail, { permissoes: { ...efetivas } });
   registrar('permissao_alterada', {
     alvo: paraEmail, detalhe: `permissões clonadas de ${norm(deEmail)}`,

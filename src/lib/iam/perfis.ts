@@ -11,9 +11,8 @@
 
 import { lerListaLocal, gravarListaLocal } from '../localComprimido';
 import { cloudPushLista } from '../cloud';
-import { emailUsuario } from '../empresa';
+import { emailUsuario, permissoesEfetivasDe } from '../empresa';
 import { registrar } from './auditoria';
-import { permissoesEfetivas } from './permissoes';
 import type { MapaPermissoes, PapelIam } from './tipos';
 
 export const K_PERFIS = 'inv_perfis_permissao';
@@ -88,5 +87,5 @@ export function excluirPerfil(id: string): void {
 // Monta o conjunto a partir de um papel (o padrão dele) — atalho para criar um
 // perfil "parecido com Agrônomo, mas com X a mais".
 export function permissoesDoPapel(papel: PapelIam): MapaPermissoes {
-  return { ...permissoesEfetivas(papel) };
+  return { ...permissoesEfetivasDe(papel) } as MapaPermissoes;
 }

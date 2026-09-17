@@ -1,5 +1,14 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Matriz padrão dos papéis marcável (vale para todos do papel)
+  '2.164.0': [
+    'A MATRIZ PADRÃO DOS PAPÉIS AGORA SE MARCA, COMO OS PLANOS DA ABA EMPRESAS. Em Central de Acessos → Permissões, escolha o papel (Agrônomo, Operador, Produtor…) e marque ou desmarque cada célula. Antes a tela só mostrava pontos, e mudar o acesso de um papel inteiro exigia ajustar pessoa por pessoa.',
+    'O QUE VOCÊ MARCA VALE PARA TODOS COM AQUELE PAPEL, na hora e em todos os aparelhos (a marcação vai para a nuvem junto com as demais permissões). Cada linha tem o botão "tudo" para marcar ou desmarcar a linha inteira. Célula com fundo amarelo = diferente do padrão do sistema; "Restaurar padrão" descarta os ajustes daquele papel.',
+    'O AJUSTE DE UMA PESSOA CONTINUA VENCENDO O DO PAPEL: quem tem marcação própria no painel lateral (fundo amarelo lá) não é afetado naquela célula. O painel lateral e os perfis salvos passam a partir da matriz em vigor do papel.',
+    'A MATRIZ PASSA A MOSTRAR O QUE REALMENTE VALE. Parte das permissões ainda é decidida pelas regras antigas por papel, e a tela antes mostrava só o padrão novo — por isso o Agrônomo aparecia com Fertilidade → Criar marcado sem conseguir processar. Agora essa célula aparece desmarcada; marcá-la libera de verdade. Nas linhas de Prescrições, Altimetria e Condutividade, a célula acompanha a permissão de que ela depende (Recomendações ou Zonas de manejo) até ser marcada à parte.',
+    'Só o Owner edita. Owner (sempre pode tudo) e Personalizado (vale só o que se marca na pessoa) ficam fixos. Cada marcação entra na Auditoria. Sem nenhum ajuste, ninguém muda de acesso.',
+    'Verificação: npx tsc --noEmit limpo em src/, teste:iam e npm run build de produção; revisão independente das checagens de acesso.',
+  ],
   // [46] Condutividade com linha própria nas permissões de acesso
   '2.163.0': [
     'PENDÊNCIA 46 — CONDUTIVIDADE TAMBÉM GANHA LINHA PRÓPRIA NA MATRIZ DE PERMISSÕES ("Condutividade elétrica (CE)", logo abaixo de Altimetria). Antes a aba seguia a permissão de Zonas de manejo para processar e não tinha trava nenhuma para ver e baixar.',

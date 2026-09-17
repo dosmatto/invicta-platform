@@ -11,6 +11,7 @@ import { usuarioAtual, authConfigurado } from './auth';
 import { cloudPushLista } from './cloud';
 import { lerListaLocal } from './localComprimido';
 import { CAP_PARA_PERM, MATRIZ_PADRAO } from './iam/permissoes';
+import { ACOES, MODULOS } from './iam/tipos';
 import { clientesDoProdutor } from './iam/vinculoProdutor';
 
 // 'leitor' (somente leitura) e 'custom' (permissões definidas uma a uma) vieram
@@ -304,7 +305,11 @@ const DEFAULTS_PERMISSOES: Record<string, Caps> = {
   viewer: TODAS(false),   // legado
 };
 
-export interface RegistroPermissao { id: string; caps: Caps; } // id = papel
+// id = papel. `matriz` guarda os AJUSTES que o Owner marcou na aba Permissões
+// da Central de Acessos (módulo.ação → valor), só o que difere de MATRIZ_PADRAO.
+// Vive nesta coleção porque ela já é sincronizada e protegida no banco (só
+// owner/admin gravam — docs/seguranca-rls.sql).
+export interface RegistroPermissao { id: string; caps: Caps; matriz?: Record<string, boolean>; }
 
 // Config efetiva (defaults sobrescritos pelo que o Owner salvou).
 export function getPermissoes(): Record<string, Caps> {
@@ -331,6 +336,97 @@ export function definirPermissao(papel: PapelMembro, cap: Capacidade, valor: boo
   save(K_PERMISSOES, lista);
 }
 
+// ── Matriz padrão EDITÁVEL por papel (aba Permissões da Central de Acessos) ─
+// Owner tem tudo por definição e Personalizado vale só o que se marca na
+// pessoa — as duas matrizes ficam fixas na tela.
+export const PAPEIS_MATRIZ_FIXA: readonly string[] = ['owner', 'custom'];
+
+export function ajustesDoPapel(papel: string): Record<string, boolean> {
+  return load<RegistroPermissao>(K_PERMISSOES).find(r => r.id === papel)?.matriz ?? {};
+}
+
+// Matriz em vigor do papel: padrão do código + ajustes do Owner.
+export function matrizDoPapel(papel: string): Record<string, boolean> {
+  const base = (MATRIZ_PADRAO[papel as keyof typeof MATRIZ_PADRAO] ?? {}) as Record<string, boolean>;
+  return { ...base, ...ajustesDoPapel(papel) };
+}
+
+// O que REALMENTE vale para o papel numa célula quando não há ajuste do Owner
+// nela. Não é sempre MATRIZ_PADRAO: as capacidades antigas (pode()) ainda
+// decidem para admin/agrônomo/operador/prestador, e Prescrições/Altimetria/
+// Condutividade seguem a regra antiga da aba (podeAbaDerivada). A tela mostra
+// este valor — senão marcava uma coisa e valia outra.
+let capsDaChave: Record<string, Capacidade[]> | null = null;
+function capsQueChecam(chave: string): Capacidade[] | undefined {
+  if (!capsDaChave) {
+    capsDaChave = {};
+    for (const [cap, ch] of Object.entries(CAP_PARA_PERM)) (capsDaChave[ch] ??= []).push(cap as Capacidade);
+  }
+  return capsDaChave[chave];
+}
+
+function valorPapelSemAjuste(papel: string, chave: string): boolean {
+  if (papel === 'owner') return true;
+  const base = (MATRIZ_PADRAO[papel as keyof typeof MATRIZ_PADRAO] ?? {}) as Record<string, boolean>;
+  if (papel === 'custom') return base[chave] === true;
+  const [modulo, acao] = chave.split('.');
+  if (modulo === 'prescricao' || modulo === 'altimetria' || modulo === 'condutividade') {
+    const antiga = modulo === 'prescricao'
+      ? valorPapel(papel, 'recomendacoes.criar')
+      : matrizDoPapel(papel)['zonas.criar'] === true;           // = podeEm('zonas','criar')
+    if (acao !== 'visualizar' && acao !== 'exportar') return antiga;
+    const antigaVer = modulo === 'prescricao' ? false : matrizDoPapel(papel)[`zonas.${acao}`] === true;
+    return base[chave] === true || antigaVer || antiga;
+  }
+  const caps = capsQueChecam(chave);
+  if (caps && papel !== 'leitor' && papel !== 'produtor') {
+    const tab = getPermissoes()[papel] ?? DEFAULTS_PERMISSOES[papel];
+    return caps.some(c => tab?.[c] === true);
+  }
+  return base[chave] === true;
+}
+
+// Valor em vigor do papel numa célula (ajuste do Owner ou, sem ele, a regra acima).
+export function valorPapel(papel: string, chave: string): boolean {
+  const aj = ajustesDoPapel(papel)[chave];
+  return typeof aj === 'boolean' ? aj : valorPapelSemAjuste(papel, chave);
+}
+
+// Matriz completa em vigor do papel, célula a célula — o que as telas mostram.
+export function matrizEfetivaDoPapel(papel: string): Record<string, boolean> {
+  const out: Record<string, boolean> = {};
+  for (const m of MODULOS) for (const a of ACOES) out[`${m.id}.${a.id}`] = valorPapel(papel, `${m.id}.${a.id}`);
+  return out;
+}
+
+// Permissões efetivas de uma pessoa: matriz em vigor do papel + ajustes dela.
+export function permissoesEfetivasDe(papel: string | null | undefined, excecoes?: Record<string, boolean>): Record<string, boolean> {
+  return { ...(papel ? matrizEfetivaDoPapel(papel) : {}), ...(excecoes ?? {}) };
+}
+
+// Marca/desmarca uma célula da matriz do papel. Voltar ao valor que já valia
+// sem ajuste apaga o ajuste (a célula deixa de ficar amarela).
+export function definirPermissaoPapel(papel: string, chave: string, valor: boolean) {
+  if (PAPEIS_MATRIZ_FIXA.includes(papel)) return;
+  const lista = load<RegistroPermissao>(K_PERMISSOES);
+  const idx = lista.findIndex(r => r.id === papel);
+  const semAjuste = valorPapelSemAjuste(papel, chave);
+  const matriz = { ...(idx >= 0 ? lista[idx].matriz ?? {} : {}) };
+  if (valor === semAjuste) delete matriz[chave]; else matriz[chave] = valor;
+  if (idx >= 0) lista[idx] = { ...lista[idx], matriz };
+  else lista.push({ id: papel, caps: { ...(DEFAULTS_PERMISSOES[papel] ?? TODAS(false)) }, matriz });
+  save(K_PERMISSOES, lista);
+}
+
+export function restaurarMatrizPapel(papel: string) {
+  const lista = load<RegistroPermissao>(K_PERMISSOES);
+  const idx = lista.findIndex(r => r.id === papel);
+  if (idx < 0 || !lista[idx].matriz) return;
+  const { matriz: _descartada, ...resto } = lista[idx]; // eslint-disable-line @typescript-eslint/no-unused-vars
+  lista[idx] = resto;
+  save(K_PERMISSOES, lista);
+}
+
 // O usuário logado tem a capacidade? Owner sempre sim; sem papel (bloqueado) = não.
 // Modo LOCAL (sem auth configurado, ex.: demo) não tem papéis — libera tudo.
 export function pode(cap: Capacidade, papel: PapelMembro | null = papelDoUsuario()): boolean {
@@ -348,6 +444,10 @@ export function pode(cap: Capacidade, papel: PapelMembro | null = papelDoUsuario
   if (typeof excecao === 'boolean') return excecao;
   // Papel 'custom' não tem padrão: vale só o que estiver marcado no usuário.
   if ((papel as string) === 'custom') return false;
+  // Ajuste que o Owner marcou na matriz do papel (aba Permissões) vale para
+  // todos daquele papel. Sem ajuste, segue a regra de antes.
+  const ajuste = chave ? ajustesDoPapel(papel)[chave] : undefined;
+  if (typeof ajuste === 'boolean') return ajuste;
   // Leitor e PRODUTOR vêm da matriz nova do IAM (iam/permissoes.ts), não da
   // matriz antiga por papel. 04/09/2026: o produtor caía na antiga, onde
   // `relatorios` era falso — Arquivos e Relatórios mostravam "seu papel não
@@ -367,8 +467,7 @@ export function podeEm(modulo: string, acao: string): boolean {
   const chave = `${modulo}.${acao}`;
   const excecao = reg?.permissoes?.[chave];
   if (typeof excecao === 'boolean') return excecao;
-  const base = MATRIZ_PADRAO[papel as keyof typeof MATRIZ_PADRAO] as Record<string, boolean> | undefined;
-  return base?.[chave] === true;
+  return matrizDoPapel(papel)[chave] === true;
 }
 
 // [46] Linhas próprias na matriz para abas que antes seguiam outra permissão
@@ -390,6 +489,8 @@ function podeAbaDerivada(modulo: string, acao: AcaoAba, antiga: () => boolean, a
   if (papel === 'owner') return true;
   const excecao = reg?.permissoes?.[`${modulo}.${acao}`];
   if (typeof excecao === 'boolean') return excecao;
+  const ajuste = ajustesDoPapel(papel)[`${modulo}.${acao}`];
+  if (typeof ajuste === 'boolean') return ajuste;
   if (acao === 'visualizar' || acao === 'exportar') return podeEm(modulo, acao) || antigaVer() || antiga();
   return antiga();
 }
