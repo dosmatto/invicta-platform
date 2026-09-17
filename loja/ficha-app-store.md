@@ -14,22 +14,12 @@ Versão            3.1.0 · Preparar para envio
 
 | Já preenchido por lá | Falta |
 |---|---|
-| Texto promocional | **Capturas de tela** (arrastar em Gerenciador de mídia → 6,9 pol.) |
-| Descrição | **Senha da conta de revisão** (Informações para iniciar sessão) |
-| Palavras-chave | **Privacidade do app** (Nutrition Labels — tabela abaixo) |
-| URL de suporte e de marketing | **Classificação etária** |
-| Versão (3.1.0) e Copyright | **Preços e disponibilidade** |
-| — | **Compilação** (Archive + upload pelo Xcode) |
-
-> **O slot certo das capturas é "Tela de 6,9 pol."**, que aceita 1290 × 2796 —
-> o tamanho dos arquivos em `loja/screenshots-ios/`. A página da versão abre o
-> slot de 6,5" por padrão (1242 × 2688 / 1284 × 2778) e recusa os nossos; use
-> **Visualizar todos os tamanhos no Gerenciador de mídia** e escolha o de 6,9".
-> O de 6,5" passa a mostrar "Usando Tela de 6,9 pol." — a Apple deriva os
-> tamanhos menores sozinha, não é preciso gerar outro conjunto.
->
-> **A ordem importa**: suba `01-mapa-com-os-pontos` primeiro. As três primeiras
-> aparecem na busca, e o mapa com os pontos é a que explica o app sozinha.
+| Texto promocional | **Senha da conta de revisão** (Informações para iniciar sessão) |
+| Descrição | **Privacidade do app** (Nutrition Labels — tabela abaixo) |
+| Palavras-chave | **Classificação etária** |
+| URL de suporte e de marketing | **Preços e disponibilidade** |
+| Versão (3.1.0) e Copyright | **Compilação** (Archive + upload pelo Xcode) |
+| **4 capturas de tela** (6,9 pol.) | **Remarcar o vínculo da fazenda demo** |
 
 O equivalente do Google está em `ficha-play-store.md` — os textos são parecidos
 de propósito, mas **não são intercambiáveis**: a Apple tem campos que o Google
@@ -157,29 +147,33 @@ Primeira versão publicada na App Store.
 
 ## Capturas de tela
 
-A Apple exige a resolução **exata** de um aparelho de referência — ao contrário
-do Google, que aceita qualquer coisa entre 320 e 3840 px. As capturas de
-`loja/screenshots/` foram recortadas para caber no limite de 2:1 do Google e
-**nenhuma delas serve aqui**.
+✅ **Enviadas em 17/09/2026**, nesta ordem (`loja/screenshots-ios/`):
 
-Use as de `loja/screenshots-ios/`, já em **1290 × 2796** (iPhone 6.9"):
+| # | Arquivo | Tela |
+|---|---|---|
+| 1 | `01-grade-de-coleta.png` | Grade com os pontos numerados, 22/22 coletados |
+| 2 | `02-ndvi-mancha.png` | NDVI com a mancha colorida e distância até ela |
+| 3 | `03-modulos-de-campo.png` | Os quatro módulos |
+| 4 | `04-medicao-gps.png` | Medição por GPS sobre o satélite |
 
-1. `01-mapa-com-os-pontos.png`
-2. `02-modulos-de-campo.png`
-3. `03-medicao-gps.png`
+São prints **nativos de iPhone**, 1290 × 2796, sem recorte nem montagem.
+Substituíram as versões anteriores, que vinham das capturas do Google (recortadas
+para o limite de 2:1 de lá) e precisavam ter a altura completada artificialmente.
+O `scripts/gerar-capturas-app-store.mjs` continua existindo para o caso de
+alguém voltar a mandar capturas recortadas — mas o certo é printar no iPhone sem
+recortar, que a tela já sai no tamanho exato.
 
-Mínimo 3, máximo 10. O 6.9" é o único conjunto obrigatório — a Apple reduz
-sozinha para as telas menores. Como o app é iPhone-only, não há conjunto de iPad
-a preencher.
+### A armadilha do slot
 
-Para regerar depois de trocar as capturas originais:
-`node scripts/gerar-capturas-app-store.mjs`
+O App Store Connect abre o slot de **6,5 pol.** por padrão, que aceita
+1242 × 2688 / 1284 × 2778 e **recusa 1290 × 2796**. O slot certo é o de
+**6,9 pol.**, em *Visualizar todos os tamanhos no Gerenciador de mídia*. Depois
+de preenchido, o de 6,5" passa a exibir "Usando Tela de 6,9 pol." — a Apple
+deriva os menores sozinha, e não há conjunto de iPad porque o app é iPhone-only.
 
-> As três foram completadas em altura repetindo a linha de pixels da borda
-> chapada (barra de status / rodapé), o que é invisível. Se um dia uma captura
-> nova terminar em imagem de satélite nas duas bordas, o script avisa e pula o
-> arquivo em vez de entregar um borrão — nesse caso é só refazer o print no
-> iPhone **sem recortar**, que a tela já sai 1290 × 2796.
+**Suba uma de cada vez.** Mandando as quatro juntas, a ordem chega embaralhada,
+e reordenar depois só funciona arrastando. As três primeiras são as que aparecem
+na busca.
 
 ## Ícone
 
