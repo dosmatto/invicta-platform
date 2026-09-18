@@ -3,6 +3,14 @@
 Textos e respostas prontos para copiar no Google Play Console. Cada bloco diz
 onde ele entra. Os limites de caracteres são os que a loja impõe.
 
+> **Estado em 18/09/2026.** Produção: **2.138.0 (2138000) em análise desde
+> 10/09** — primeira revisão do app. A **3.2.0 (3002000)** já está enviada ao
+> Play Console como **rascunho** na faixa de Produção, com notas pt-BR.
+> **Decisão:** só enviá-la depois que a 2.138.0 for aprovada — mandar antes
+> substituiria a versão na fila e reiniciaria a primeira revisão. Quando a
+> aprovação chegar: Produção → editar o rascunho 3.2.0 → Avançar → Enviar para
+> revisão. O `.aab` é `loja/INVICTA-Coleta-3.2.0.aab` (fora do Git).
+
 - **Nome do app** (30): `INVICTA Coleta`
 - **Package** (imutável): `br.agr.invicta.coleta`
 - **Categoria**: Empresas *(alternativa: Ferramentas)*
