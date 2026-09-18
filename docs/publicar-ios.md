@@ -275,6 +275,39 @@ Dois pontos merecem atenção antes de enviar:
 
 ---
 
+## Enviar a build pelo terminal (sem clicar no Xcode)
+
+Primeira build enviada assim em **18/09/2026** — 3.2.0 (3002000).
+
+Pré-requisito único: a conta **invicta@invicta.agr.br** cadastrada em Xcode →
+Settings → Apple Accounts (é ela que dá acesso ao time ANQMNT4RTB; a
+dosmatto@gmail.com só enxerga o Personal Team antigo). O projeto já aponta
+`DEVELOPMENT_TEAM = ANQMNT4RTB`.
+
+```bash
+npm run ios:sync
+cd ios/App
+xcodebuild -project App.xcodeproj -scheme App -configuration Release \
+  -destination 'generic/platform=iOS' -archivePath /tmp/inv-ios/App.xcarchive \
+  CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" archive
+xcodebuild -exportArchive -archivePath /tmp/inv-ios/App.xcarchive \
+  -exportOptionsPlist ../../scripts/ios/ExportOptions-appstore.plist \
+  -exportPath /tmp/inv-ios/export -allowProvisioningUpdates
+```
+
+**Por que o archive é sem assinatura.** O `archive` com assinatura automática
+tenta criar um perfil de *desenvolvimento*, e o time da empresa não tem nenhum
+iPhone cadastrado: falha com *"Your team has no devices from which to generate a
+provisioning profile"*. O perfil de *distribuição* da App Store não depende de
+dispositivo — então o archive sai sem assinar e quem assina é o
+`-exportArchive` (método `app-store-connect`, destino `upload`), que já envia.
+Em uns 10–30 min a build aparece no App Store Connect para ser selecionada.
+
+A versão da build (`MARKETING_VERSION`) tem que ser **igual** à versão aberta no
+App Store Connect, senão ela não aparece para seleção.
+
+---
+
 ## Comparativo rápido
 
 | | Android | iOS |
