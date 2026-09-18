@@ -19,7 +19,7 @@ todo o resto passou na validação da Apple.
 |---|---|
 | Texto promocional, descrição, palavras-chave | **Compilação** (Archive + upload pelo Xcode) |
 | URL de suporte e de marketing | **Remarcar o vínculo da fazenda demo** (antes do envio) |
-| Versão (3.1.0) e Copyright | Selecionar a build e **Adicionar para revisão** |
+| Versão (3.2.0) e Copyright | Selecionar a build e **Adicionar para revisão** |
 | **4 capturas de tela** (6,9 pol., sem alfa) | |
 | Informações de revisão (login + senha da conta revisão) | |
 | Privacidade do app (publicada) | |
