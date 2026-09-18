@@ -9,17 +9,17 @@ ele entra. Os limites de caracteres são os que a loja impõe.
 Apple ID do app   6813176446
 Bundle ID         br.agr.invicta.coleta
 Time              ANQMNT4RTB (WR CONSULTORIA AGRICOLA SS)
-Versão            3.2.0 · Preparar para envio (era 3.1.0; o app de campo subiu em c791467)
+Versão            3.2.0 · build 3002000 · ENVIADA PARA REVISÃO em 18/09/2026 14:43
 ```
 
-O "Adicionar para revisão" em 18/09 recusou **só** por falta de compilação —
-todo o resto passou na validação da Apple.
+Enviada para revisão em 18/09/2026 às 14:43 (a Apple fala em até 48 h). A build
+foi gerada e enviada pelo terminal — receita em `docs/publicar-ios.md`.
 
 | Já preenchido por lá | Falta |
 |---|---|
-| Texto promocional, descrição, palavras-chave | **Compilação** (Archive + upload pelo Xcode) |
-| URL de suporte e de marketing | **Remarcar o vínculo da fazenda demo** (antes do envio) |
-| Versão (3.2.0) e Copyright | Selecionar a build e **Adicionar para revisão** |
+| Texto promocional, descrição, palavras-chave | Aguardar o resultado da revisão |
+| URL de suporte e de marketing | |
+| Versão (3.2.0), Copyright e build 3002000 | |
 | **4 capturas de tela** (6,9 pol., sem alfa) | |
 | Informações de revisão (login + senha da conta revisão) | |
 | Privacidade do app (publicada) | |
@@ -27,6 +27,7 @@ todo o resto passou na validação da Apple.
 | Classificação etária **4+** (tudo "não/nenhum") | |
 | Direitos de conteúdo: **sim**, usa conteúdo de terceiros com direitos (imagens de satélite / NDVI) | |
 | Preço **gratuito**, disponível **só no Brasil** | |
+| Vínculo da fazenda demo remarcado na conta revisão (2 produtores) | |
 
 > **Por que só Brasil:** fora da UE não se aplica o Regulamento dos Serviços
 > Digitais (DSA), que pediria dados de "comerciante" publicados. Ampliar países
