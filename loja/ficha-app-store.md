@@ -3,7 +3,7 @@
 Textos e respostas prontos para copiar no App Store Connect. Cada bloco diz onde
 ele entra. Os limites de caracteres são os que a loja impõe.
 
-## Estado no App Store Connect (17/09/2026)
+## Estado no App Store Connect (18/09/2026)
 
 ```
 Apple ID do app   6813176446
@@ -12,14 +12,36 @@ Time              ANQMNT4RTB (WR CONSULTORIA AGRICOLA SS)
 Versão            3.1.0 · Preparar para envio
 ```
 
+O "Adicionar para revisão" em 18/09 recusou **só** por falta de compilação —
+todo o resto passou na validação da Apple.
+
 | Já preenchido por lá | Falta |
 |---|---|
-| Texto promocional | **Senha da conta de revisão** (Informações para iniciar sessão) |
-| Descrição | **Privacidade do app** (Nutrition Labels — tabela abaixo) |
-| Palavras-chave | **Classificação etária** |
-| URL de suporte e de marketing | **Preços e disponibilidade** |
-| Versão (3.1.0) e Copyright | **Compilação** (Archive + upload pelo Xcode) |
-| **4 capturas de tela** (6,9 pol.) | **Remarcar o vínculo da fazenda demo** |
+| Texto promocional, descrição, palavras-chave | **Compilação** (Archive + upload pelo Xcode) |
+| URL de suporte e de marketing | **Remarcar o vínculo da fazenda demo** (antes do envio) |
+| Versão (3.1.0) e Copyright | Selecionar a build e **Adicionar para revisão** |
+| **4 capturas de tela** (6,9 pol., sem alfa) | |
+| Informações de revisão (login + senha da conta revisão) | |
+| Privacidade do app (publicada) | |
+| Subtítulo, categorias Negócios / Utilidades | |
+| Classificação etária **4+** (tudo "não/nenhum") | |
+| Direitos de conteúdo: **sim**, usa conteúdo de terceiros com direitos (imagens de satélite / NDVI) | |
+| Preço **gratuito**, disponível **só no Brasil** | |
+
+> **Por que só Brasil:** fora da UE não se aplica o Regulamento dos Serviços
+> Digitais (DSA), que pediria dados de "comerciante" publicados. Ampliar países
+> depois é um clique em Preços e disponibilidade.
+>
+> **Sem pendência de pagamento:** app gratuito não exige o contrato de apps
+> pagos nem dados bancários/fiscais. A assinatura do programa está ativa até
+> 15/09/2027.
+
+> **Armadilha das capturas — canal alfa.** Os prints do iPhone saíram como PNG
+> RGBA e a Apple os aceitou no upload, mas depois marcou os quatro com erro
+> ("As imagens não podem incluir canais alfa ou transparências") e o envio
+> travava com "ainda há carregamentos de capturas em andamento". Foram
+> achatados para RGB (sharp `flatten().removeAlpha()`) e reenviados. Conferir
+> com `sips -g hasAlpha arquivo.png` antes de subir.
 
 O equivalente do Google está em `ficha-play-store.md` — os textos são parecidos
 de propósito, mas **não são intercambiáveis**: a Apple tem campos que o Google
