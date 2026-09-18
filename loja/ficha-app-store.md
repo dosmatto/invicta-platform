@@ -9,7 +9,7 @@ ele entra. Os limites de caracteres são os que a loja impõe.
 Apple ID do app   6813176446
 Bundle ID         br.agr.invicta.coleta
 Time              ANQMNT4RTB (WR CONSULTORIA AGRICOLA SS)
-Versão            3.1.0 · Preparar para envio
+Versão            3.2.0 · Preparar para envio (era 3.1.0; o app de campo subiu em c791467)
 ```
 
 O "Adicionar para revisão" em 18/09 recusou **só** por falta de compilação —
