@@ -1,5 +1,13 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Gerar um APK para instalar nos testadores sem passar pela loja
+  '2.172.0': [
+    'AGORA DÁ PARA GERAR UM APK E INSTALAR O APP DIRETO NO CELULAR DOS TESTADORES, sem esperar a loja. O comando é `npm run android:apk` e o arquivo sai em `apk/INVICTA-Coleta-<versão>.apk`. Serve para colocar o app na mão da equipe enquanto a revisão do Google não sai, e para qualquer teste rápido em campo.',
+    'POR QUE NÃO DAVA ANTES: o que o projeto gerava era o `.aab`, o formato que a Play Store exige — e ele NÃO instala em telefone nenhum. O `.aab` é um pacote que a própria loja abre para montar o app sob medida para cada aparelho. Para passar o app por AirDrop, link ou cabo, o arquivo tem que ser `.apk`.',
+    'O APK SAI ASSINADO COM A MESMA CHAVE do app da loja — conferido no arquivo gerado (impressão digital 07AA:8E:F3…48:C2, a mesma do INVICTA Coleta na Play Store). Isso importa: quem instalar pela mão hoje vai RECEBER as atualizações da Play Store por cima, sem precisar desinstalar. Com outra chave, o Android trataria como um app diferente e recusaria a atualização.',
+    'No telefone, o testador autoriza UMA vez a instalação de fora da loja (o Android pergunta sozinho ao abrir o arquivo). A pasta `apk/` não é versionada: é build de circulação interna, refeito quando precisar.',
+    'Por dentro, o empacotador que já existia passou a aceitar o modo APK em vez de ganhar um script paralelo — os dois modos dividem o mesmo caminho de compilação fora do OneDrive, que é a parte delicada e já testada.',
+  ],
   // [S/N] App de campo volta a abrir no iPhone (ciclo de vida por cena, exigido pelo iOS 26)
   '2.171.0': [
     'O APP DE CAMPO NO IPHONE ABRIA E FECHAVA NA HORA. A tela piscava e voltava para a tela de início, sem mensagem nenhuma. Acontecia em qualquer iPhone com iOS 26 ou mais novo, e a versão 3.2.0 que já estava na Apple tinha o mesmo defeito — o revisor cairia nele.',

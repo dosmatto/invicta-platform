@@ -38,6 +38,7 @@
     "ios:sync": "npm run build:mobile && npx cap sync ios && node scripts/preflight-ios.mjs",
     "ios:open": "npx cap open ios",
     "android:release": "npm run build:mobile && npx cap sync android && node scripts/preflight-android.mjs && node scripts/empacotar-android.mjs",
+    "android:apk": "npm run build:mobile && npx cap sync android && node scripts/preflight-android.mjs && node scripts/empacotar-android.mjs apk",
     "interp:atalho": "node scripts/criar-atalho-interp.mjs",
     "teste:legendas": "node scripts/teste-legendas-ordem.mjs",
     "teste:convite-regras": "node scripts/teste-convite-regras.mjs",

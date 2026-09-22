@@ -75,3 +75,6 @@ loja/screenshots/originais/
 
 # Orquestração de agentes (ledger + scratch), nunca vai para o repositório
 .workflow/
+
+# APK de circulação interna (gerado por npm run android:apk)
+apk/
