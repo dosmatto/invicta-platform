@@ -1,0 +1,40 @@
+ANSWERS TO THE GUIDELINE 2.1 INFORMATION REQUEST
+
+1. SCREEN RECORDING — attached to our reply in App Store Connect. Captured on a physical iPhone on the latest iOS, starting at app launch: sign-in, choosing producer/farm/field/season, the sampling map, walking to a point, recording a sample inside the allowed radius, attaching a photo, offline use and sync. There is no account creation, no user-generated content feed, no in-app purchase and no paid content.
+
+2. PURPOSE AND AUDIENCE
+INVICTA Coleta is the field companion of the INVICTA platform, used by agronomists and soil-sampling crews in Brazil. Soil sampling drives fertiliser prescriptions, and a sample taken in the wrong spot produces a wrong prescription for that part of the field. The office plans a numbered grid of sampling points per field; this app carries that plan to the operator's phone, guides them point to point by GPS and records a sample only when the operator is physically at the planned point. It works with no cellular signal, the normal condition in these areas, and syncs when signal returns. Audience: professional operators of companies that already use the platform. It is not a consumer app.
+
+3. SETUP AND ACCESS TO THE MAIN FEATURES
+No sign-up exists: accounts are created by the contracting company. Demo credentials are in the "Sign-in required" fields of App Review Information (user revisao.lojas@invicta.agr.br).
+
+Because collection unlocks only inside the radius of a planned point, the demo account holds a fictitious farm over Apple Park (37.33464, -122.00901) with 508 points, so the feature can be exercised without leaving your office.
+
+1. Sign in with the credentials above.
+2. Tap the gear icon (Settings) and set "Raio permitido para coletar" (allowed collection radius) to 50 m. Indoors the iPhone falls back to Wi-Fi positioning, with an error of a few dozen metres; outdoors the 15 m default is enough.
+3. Open "Amostragem de Solo" and choose producer ZZ DEMONSTRACAO APPLE, farm DEMO CUPERTINO, field DEMO 01, year 2026.
+4. The map shows your position among the points. Tap the nearest point: "Iniciar coleta" turns green and recording is unlocked.
+
+No sample files are needed. The other modules (area measurement, vegetation index, compaction and patch records) open from the same home screen.
+
+4. EXTERNAL SERVICES
+- Supabase: authentication and data storage. No third-party sign-in providers.
+- Esri ArcGIS World Imagery (server.arcgisonline.com): satellite basemap tiles, used under Esri's terms and credited on the map.
+- OpenStreetMap Nominatim: occasional reverse geocoding of a coordinate.
+- Our own service on Render (invicta-fertilidade-backend.onrender.com): computes fertility and vegetation-index layers from the client's agronomic data.
+- No advertising networks, no analytics SDKs, no payment processors, no AI services.
+
+5. REGIONAL DIFFERENCES
+None. Behaviour is identical everywhere, the only language is Brazilian Portuguese and distribution is limited to Brazil. Nothing is gated by region.
+
+6. REGULATED INDUSTRY / THIRD-PARTY MATERIAL
+Not a regulated industry: it is a private agronomic tool for our clients, with no health, financial or government service. The third-party material shown is Esri's public World Imagery basemap and OpenStreetMap data, both within their published terms and credited on the map. All agronomic data belongs to the companies that contract the platform.
+
+PERMISSIONS
+- Location (while in use): places the operator on the map and unlocks collection inside the point radius; without it the app cannot do its job.
+- Camera and photos: only when the user attaches an image to a point.
+
+ACCOUNT DELETION
+The app allows no account creation, so there is no in-app deletion. Users request deletion from the company that registered them, or via the e-mail at https://invicta-platform.vercel.app/privacidade
+
+SUPPORT: https://invicta-platform.vercel.app/suporte - invicta@invicta.agr.br - +55 42 99126-0122

@@ -3,21 +3,35 @@
 Textos e respostas prontos para copiar no App Store Connect. Cada bloco diz onde
 ele entra. Os limites de caracteres são os que a loja impõe.
 
-## Estado no App Store Connect (18/09/2026)
+## Estado no App Store Connect (22/09/2026)
 
 ```
 Apple ID do app   6813176446
 Bundle ID         br.agr.invicta.coleta
 Time              ANQMNT4RTB (WR CONSULTORIA AGRICOLA SS)
-Versão            3.2.0 · build 3002000 · ENVIADA PARA REVISÃO em 18/09/2026 14:43
+Versão            3.2.0 · build 3002000 · REJEITADA em 18/09/2026 21:13
 ```
 
-Enviada para revisão em 18/09/2026 às 14:43 (a Apple fala em até 48 h). A build
-foi gerada e enviada pelo terminal — receita em `docs/publicar-ios.md`.
+Enviada em 18/09 às 14:43 e **rejeitada** no mesmo dia às 21:13, em
+**Guideline 2.1 — Information Needed, New App Submission**. Não é defeito do
+app nem da ficha: é o pedido padrão de informações que a Apple faz a
+desenvolvedor **sem histórico de revisão**. A build continua válida e **não
+precisa ser reenviada** — basta responder na página de Revisão de apps.
+
+A Apple pediu seis coisas; as cinco escritas já estão respondidas (ver
+`loja/notas-revisao-apple.txt`), gravadas em **Notas** das Informações de
+revisão e num **rascunho de resposta** ao revisor (22/09, 09:32). **Falta só o
+item 1: um vídeo de tela gravado num iPhone de verdade**, começando na abertura
+do app e mostrando o fluxo típico. O app não tem cadastro, conteúdo de usuário
+nem compra, então esses trechos não se aplicam.
+
+> Quando o vídeo existir: Revisão de apps → envio → *Responda à equipe de
+> revisão de apps* → o rascunho já está lá → *Anexar arquivo* → Responder.
+> O campo aceita 4000 caracteres e um anexo.
 
 | Já preenchido por lá | Falta |
 |---|---|
-| Texto promocional, descrição, palavras-chave | Aguardar o resultado da revisão |
+| Texto promocional, descrição, palavras-chave | **Vídeo de tela gravado no iPhone** + enviar a resposta |
 | URL de suporte e de marketing | |
 | Versão (3.2.0), Copyright e build 3002000 | |
 | **4 capturas de tela** (6,9 pol., sem alfa) | |
