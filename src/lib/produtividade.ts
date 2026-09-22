@@ -61,6 +61,34 @@ export function pontosDeCsv(p: CsvParsed, mapa: { lat: string; lng: string; valo
   return out;
 }
 
+// ── Unidade do arquivo ────────────────────────────────────────────────────────
+// Monitores exportam a produtividade em kg/ha, t/ha ou sc/ha (ex.: VRYIELDMAS
+// da John Deere costuma vir em t/ha). O motor trabalha SEMPRE em kg/ha, então
+// cada máquina é convertida na importação. 'auto' decide pela mediana dos
+// valores positivos — as faixas não se sobrepõem para grãos:
+//   t/ha  → soja ~3–5, milho ~8–14 (nunca > 25)
+//   sc/ha → soja ~40–80, milho ~120–250
+//   kg/ha → mesmo uma lavoura péssima fica acima de ~400
+export type UnidadeArquivo = 'auto' | Unidade;
+
+export function detectarUnidade(valores: number[]): Unidade {
+  const v = valores.filter(x => x > 0).sort((a, b) => a - b);
+  if (!v.length) return 'kg/ha';
+  const med = v[Math.floor(v.length / 2)];
+  return med <= 25 ? 't/ha' : med <= 400 ? 'sc/ha' : 'kg/ha';
+}
+
+export function fatorParaKgha(u: Unidade): number {
+  return u === 't/ha' ? 1000 : u === 'sc/ha' ? SACA_KG : 1;
+}
+
+// Converte os pontos de uma máquina para kg/ha e diz qual unidade foi usada.
+export function pontosEmKgha(pontos: PontoColheita[], u: UnidadeArquivo): { pontos: PontoColheita[]; unidade: Unidade } {
+  const unidade = u === 'auto' ? detectarUnidade(pontos.map(p => p.valor)) : u;
+  const f = fatorParaKgha(unidade);
+  return { pontos: f === 1 ? pontos : pontos.map(p => ({ lng: p.lng, lat: p.lat, valor: p.valor * f })), unidade };
+}
+
 // ── SHP (zip) → pontos ────────────────────────────────────────────────────────
 export async function lerShapefilePontos(file: File): Promise<{ colunas: string[]; fc: GeoJSON.FeatureCollection }> {
   const r = await parseShapefile(file);

@@ -1,5 +1,12 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Produtividade importada em t/ha ou sc/ha é convertida para kg/ha
+  '2.173.0': [
+    'O MAPA DE COLHEITA DEIXA DE SAIR EM TONELADAS. Monitores como o da John Deere (coluna VRYIELDMAS) exportam a produtividade em t/ha — a soja vinha como 3,8 em vez de 3.800 — e a plataforma lia o número como se fosse kg/ha. O resultado era um mapa inteiro na faixa mais baixa da legenda, a limpeza sugerindo "Excluir > 22 kg/ha" e a produção total mil vezes menor.',
+    'AGORA CADA MÁQUINA TEM A UNIDADE DO ARQUIVO, detectada sozinha pela mediana dos valores: até 25 é t/ha, até 400 é sc/ha, acima disso kg/ha (as faixas não se misturam para grão). O valor é convertido para kg/ha logo na importação — limpeza, interpolação, legenda, estatísticas e relatório passam a ver o número certo.',
+    'Se a detecção errar, dá para escolher na mão: ao lado de cada máquina, em "Importar máquinas", há o seletor "auto (t/ha) · kg/ha · t/ha · sc/ha". Trocar a unidade refaz a sugestão dos limites da limpeza na escala nova.',
+    'Mapas de colheita JÁ PROCESSADOS com o valor em toneladas continuam errados: reprocesse o talhão na aba Produtividade para gravar a versão em kg/ha (é ela que alimenta as Zonas de Manejo e os relatórios).',
+  ],
   // [S/N] Gerar um APK para instalar nos testadores sem passar pela loja
   '2.172.0': [
     'AGORA DÁ PARA GERAR UM APK E INSTALAR O APP DIRETO NO CELULAR DOS TESTADORES, sem esperar a loja. O comando é `npm run android:apk` e o arquivo sai em `apk/INVICTA-Coleta-<versão>.apk`. Serve para colocar o app na mão da equipe enquanto a revisão do Google não sai, e para qualquer teste rápido em campo.',

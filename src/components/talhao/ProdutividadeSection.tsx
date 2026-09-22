@@ -28,10 +28,10 @@ import {
 import { rasterizarCobertura } from '@/lib/coberturaRender';
 import { pontoEmGeometria } from '@/lib/meap/cv';
 import {
-  parseCsvTexto, autoColunas, pontosDeCsv, lerShapefilePontos, pontosDeGeojson,
+  parseCsvTexto, autoColunas, pontosDeCsv, lerShapefilePontos, pontosDeGeojson, pontosEmKgha,
   processarColheita, statsDoGrid, legendaDaCultura, emUnidade, rotuloUnidade, sugerirFiltroBruto, quantisDaProdutividade,
   SACA_KG, PARAMS_COLHEITA_PADRAO, f32ParaB64,
-  type PontoColheita, type Unidade, type StatsProd, type CsvParsed, type ParamsColheita, type RelatorioColheita,
+  type PontoColheita, type Unidade, type UnidadeArquivo, type StatsProd, type CsvParsed, type ParamsColheita, type RelatorioColheita,
 } from '@/lib/produtividade';
 import { cloudSalvarMapa, cloudCarregarMapasPorPrefixo, cloudPodeGravar } from '@/lib/cloud';
 import { carregarNdviSalvos, type NdviCamada } from '@/lib/meap/gerar';
@@ -86,7 +86,7 @@ const pixelMDoGrid = (b: [number, number, number, number], shape: [number, numbe
   return larguraM / cols;
 };
 
-type MaqRaw = { id: string; nome: string; arquivo: string; csv?: CsvParsed; fc?: GeoJSON.FeatureCollection };
+type MaqRaw = { id: string; nome: string; arquivo: string; unidadeArq: UnidadeArquivo; csv?: CsvParsed; fc?: GeoJSON.FeatureCollection };
 
 export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: string } = {}) {
   const { nav, uploadedGeo, setFertilidadeOverlay, setFertilidadeLabels } = useApp();
@@ -245,12 +245,12 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
       const nome = `Máquina ${maqs.length + 1}`;
       if (ext === 'zip') {
         const { colunas: cols, fc } = await lerShapefilePontos(file);
-        setMaqs(m => [...m, { id, nome, arquivo: file.name, fc }]);
+        setMaqs(m => [...m, { id, nome, arquivo: file.name, unidadeArq: 'auto', fc }]);
         if (colunas.length === 0) { setColunas(cols); setTemCsv(false); setColVal(cols.find(c => /prod|rend|yield|colh|massa|kg/i.test(c)) ?? cols[0] ?? ''); }
       } else {
         const texto = await file.text();
         const p = parseCsvTexto(texto);
-        setMaqs(m => [...m, { id, nome, arquivo: file.name, csv: p }]);
+        setMaqs(m => [...m, { id, nome, arquivo: file.name, unidadeArq: 'auto', csv: p }]);
         if (colunas.length === 0) {
           setColunas(p.colunas); setTemCsv(true);
           const a = autoColunas(p.colunas); setColLat(a.lat); setColLng(a.lng); setColVal(a.valor);
@@ -262,10 +262,17 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
     setMaqs(m => { const r = m.filter(x => x.id !== id); if (r.length === 0) { setColunas([]); } return r; });
   }
 
-  const pontosPorMaq = useMemo(() => maqs.map(m => ({
-    id: m.id, nome: m.nome, arquivo: m.arquivo,
-    pontos: m.csv ? pontosDeCsv(m.csv, { lat: colLat, lng: colLng, valor: colVal }) : m.fc ? pontosDeGeojson(m.fc, colVal) : [] as PontoColheita[],
-  })), [maqs, colLat, colLng, colVal]);
+  // Pontos de cada máquina JÁ em kg/ha — a unidade do arquivo (t/ha, sc/ha)
+  // é detectada ou escolhida por máquina e convertida aqui, antes de tudo.
+  const pontosPorMaq = useMemo(() => maqs.map(m => {
+    const brutos = m.csv ? pontosDeCsv(m.csv, { lat: colLat, lng: colLng, valor: colVal }) : m.fc ? pontosDeGeojson(m.fc, colVal) : [] as PontoColheita[];
+    const { pontos, unidade: unidadeArq } = pontosEmKgha(brutos, m.unidadeArq);
+    return { id: m.id, nome: m.nome, arquivo: m.arquivo, escolhaUnidade: m.unidadeArq, unidadeArq, pontos };
+  }), [maqs, colLat, colLng, colVal]);
+  function setUnidadeMaq(id: string, u: UnidadeArquivo) {
+    setMaqs(ms => ms.map(x => x.id === id ? { ...x, unidadeArq: u } : x));
+    setBrutoTocado(false); setRes(null); setFresco(false);   // limites do filtro bruto voltam a ser sugeridos na nova escala
+  }
   const nPontosTotal = useMemo(() => pontosPorMaq.reduce((s, m) => s + m.pontos.length, 0), [pontosPorMaq]);
   const pontosBrutos = useMemo(() => pontosPorMaq.flatMap(m => m.pontos), [pontosPorMaq]);
 
@@ -656,6 +663,12 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
             <FileSpreadsheet size={11} style={{ color: '#86efac' }} />
             <span className="font-semibold">{m.nome}</span>
             <span className="flex-1 truncate" style={{ color: '#64748b' }}>{m.arquivo} · {fmt(m.pontos.length)} pts</span>
+            <select value={m.escolhaUnidade} onChange={e => setUnidadeMaq(m.id, e.target.value as UnidadeArquivo)}
+              title="Unidade dos valores no arquivo — convertidos para kg/ha"
+              className="rounded px-1 py-0.5 text-[10px] outline-none" style={inputStyle}>
+              <option value="auto">auto ({m.unidadeArq})</option>
+              {(['kg/ha', 't/ha', 'sc/ha'] as Unidade[]).map(uu => <option key={uu} value={uu}>{uu}</option>)}
+            </select>
             <button onClick={() => removerMaquina(m.id)} style={{ color: '#f87171' }}><Trash2 size={12} /></button>
           </div>
         ))}
