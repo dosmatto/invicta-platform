@@ -9,31 +9,32 @@ ele entra. Os limites de caracteres são os que a loja impõe.
 Apple ID do app   6813176446
 Bundle ID         br.agr.invicta.coleta
 Time              ANQMNT4RTB (WR CONSULTORIA AGRICOLA SS)
-Versão            3.2.0 · build 3002000 · REJEITADA em 18/09/2026 21:13
+Versão            3.2.1 · build 3002001 · AGUARDANDO REVISÃO desde 22/09/2026 10:27
 ```
 
-Enviada em 18/09 às 14:43 e **rejeitada** no mesmo dia às 21:13, em
-**Guideline 2.1 — Information Needed, New App Submission**. Não é defeito do
-app nem da ficha: é o pedido padrão de informações que a Apple faz a
-desenvolvedor **sem histórico de revisão**. A build continua válida e **não
-precisa ser reenviada** — basta responder na página de Revisão de apps.
+Linha do tempo: enviada 3.2.0 em 18/09 às 14:43, **rejeitada** às 21:13 em
+**Guideline 2.1 — Information Needed, New App Submission** (pedido padrão de
+informações a desenvolvedor **sem histórico de revisão**, não defeito da
+ficha); respondida e **reenviada em 22/09 às 10:27** já com a **3.2.1**.
 
-A Apple pediu seis coisas; as cinco escritas já estão respondidas (ver
-`loja/notas-revisao-apple.txt`), gravadas em **Notas** das Informações de
-revisão e num **rascunho de resposta** ao revisor (22/09, 09:32). **Falta só o
-item 1: um vídeo de tela gravado num iPhone de verdade**, começando na abertura
-do app e mostrando o fluxo típico. O app não tem cadastro, conteúdo de usuário
-nem compra, então esses trechos não se aplicam.
+Os seis itens pedidos foram respondidos (texto em
+`loja/notas-revisao-apple.txt`), gravados no campo **Notas** das Informações de
+revisão e enviados como mensagem ao revisor, **com o vídeo de tela anexado**
+(`ScreenRecording` do iPhone, recomprimido para 3,9 MB em H.264: o original de
+135 MB não caberia no anexo).
 
-> Quando o vídeo existir: Revisão de apps → envio → *Responda à equipe de
-> revisão de apps* → o rascunho já está lá → *Anexar arquivo* → Responder.
-> O campo aceita 4000 caracteres e um anexo.
+> **A 3.2.0 não abria no iPhone.** Ao instalar a build no aparelho para gravar
+> o vídeo, o app morria no lançamento em qualquer iOS 26+. Causa: o ciclo de
+> vida por cena (UIScene) passou a ser obrigatório para quem compila com o
+> Xcode novo. Corrigido na 3.2.1 (v2.171.0 da plataforma) e avisado ao revisor
+> na própria mensagem. Se a 3.2.0 tivesse sido aceita na triagem, teria sido
+> recusada por travar.
 
 | Já preenchido por lá | Falta |
 |---|---|
-| Texto promocional, descrição, palavras-chave | **Vídeo de tela gravado no iPhone** + enviar a resposta |
+| Texto promocional, descrição, palavras-chave | Aguardar o resultado da revisão |
 | URL de suporte e de marketing | |
-| Versão (3.2.0), Copyright e build 3002000 | |
+| Versão (3.2.1), Copyright e build 3002001 | |
 | **4 capturas de tela** (6,9 pol., sem alfa) | |
 | Informações de revisão (login + senha da conta revisão) | |
 | Privacidade do app (publicada) | |

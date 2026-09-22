@@ -308,6 +308,50 @@ App Store Connect, senão ela não aparece para seleção.
 
 ---
 
+## Instalar no iPhone pelo cabo (para testar e gravar vídeo)
+
+Feito em 22/09/2026 com um iPhone 14 Pro Max. Serve para qualquer teste em
+aparelho — inclusive o vídeo que a Apple pede na Guideline 2.1.
+
+```bash
+xcrun devicectl list devices                     # pega o UDID do aparelho
+cd ios/App
+xcodebuild -project App.xcodeproj -scheme App -configuration Debug \
+  -destination 'id=<UDID>' -derivedDataPath /tmp/inv-dbg \
+  -allowProvisioningUpdates build
+xcrun devicectl device install app --device <UDID> \
+  /tmp/inv-dbg/Build/Products/Debug-iphoneos/App.app
+xcrun devicectl device process launch --device <UDID> --console br.agr.invicta.coleta
+```
+
+Três tropeços que aparecem sempre:
+
+1. **"Device isn't registered in your developer account".** O time da empresa
+   não tinha nenhum aparelho. Registrar em developer.apple.com → Devices →
+   *Register a New Device*, com o UDID que o `devicectl list devices` mostra.
+2. **"application-identifier ... does not match installed application".** O
+   iPhone tinha o app assinado pelo time ANTIGO (UQT598R5J3). O iOS não troca a
+   assinatura por cima: é preciso apagar o app do aparelho
+   (`xcrun devicectl device uninstall app --device <UDID> br.agr.invicta.coleta`
+   ou pela tela de início) — **os dados locais do app vão junto**, então
+   sincronize antes.
+3. **"Unable to launch ... device was not unlocked".** Tela bloqueada; desbloqueie
+   e repita o `process launch`.
+
+**Diagnosticar um crash de lançamento.** O `--console` só diz "signal 5". O
+relatório de verdade vem do simulador: instale a mesma build lá
+(`xcrun simctl install booted ...`, `xcrun simctl launch --console-pty booted`)
+e leia o `.ips` mais recente em `~/Library/Logs/DiagnosticReports/`, que traz a
+pilha do thread que morreu. Foi assim que apareceu
+`_UIApplicationEvaluateRuntimeIssueForNoSceneLifecycleAdoption` — o iOS 26
+exige o ciclo de vida por cena (UIScene) de todo app compilado com o Xcode
+novo, e o projeto Capacitor antigo não adotava. Correção na v2.171.0:
+Capacitor 8.5.2, `SceneDelegate.swift`, `UIApplicationSceneManifest` no
+Info.plist e `configurationForConnecting` no AppDelegate
+(https://capacitorjs.com/docs/updating/8-5).
+
+---
+
 ## Comparativo rápido
 
 | | Android | iOS |
