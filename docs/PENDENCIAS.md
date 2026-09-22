@@ -79,6 +79,7 @@ verdadeira (fusão de talhões) chegou depois; foi preciso renumerar.
 | 46 | Satélite (NDVI) obedece a matriz; NDVI e Produtividade entram nos planos do portal | 2.167.0 | Central de Acessos → Permissões (linha "Satélite (NDVI/índices)") e → Empresas → Planos do portal; Talhão → NDVI / Satélite |
 | 46 | Fertilidade e Zonas de Manejo obedecem todas as colunas da matriz | 2.169.0 | Central de Acessos → Permissões (linhas "Fertilidade (interpolação)" e "Zonas de manejo"); Talhão → Fertilidade e Zonas de Manejo |
 | S/N | Produtividade importada em t/ha ou sc/ha é convertida para kg/ha | 2.173.0 | Talhão → Produtividade → 1 Importar máquinas (seletor de unidade ao lado de cada máquina) |
+| 54 | Produtividade na Zona de Manejo com prévia em quantil | 2.174.0 | Talhão → Zonas de Manejo → 1 Configurar (clicar na camada de produtividade) e → Camada de fundo |
 
 > As pendências 1–17 foram entregues antes deste registro existir e não estão
 > catalogadas; procure pelo assunto no `changelog.ts`. Da 18 em diante, tudo

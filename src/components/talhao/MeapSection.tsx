@@ -24,14 +24,15 @@ import { ImportarZoneamento } from './ImportarZoneamento';
 import { VersoesZoneamentos } from './VersoesZoneamentos';
 import { montarLinhagens, nomeVersaoRestaurada, origemDe, type VersaoZoneamento } from '@/lib/meap/versoes';
 import { legendaDesignada, PREF_LEGENDA } from '@/lib/legendaDesignada';
-import { legendaDaCultura } from '@/lib/produtividade';
+import { legendaDaCultura, quantisDoGridProd, SACA_KG } from '@/lib/produtividade';
+import type { ClassificacaoQuantis } from '@/lib/quantis';
 import { carregarCamadas, analisarMulti, gerarMulti, dadosLabCV, type CamadasCarregadas } from '@/lib/meap/gerar';
 import { calcularCVZonas } from '@/lib/meap/cv';
 import { unirFeatures, limparZona } from '@/lib/meap/fundir';
 import { extrairPoligono, coordsFromBounds, decodeGrid, type RespGerarZonas, type RespAnalisarZonas } from '@/lib/fertilidade';
 import { extrairEditavel, paraFeature, areaHaDe } from '@/lib/geoEditor';
 import booleanIntersects from '@turf/boolean-intersects';
-import { colorirGrid, colorirGridComLegenda } from '@/lib/raster';
+import { colorirGrid, colorirGridComLegenda, colorirGridPorQuantis } from '@/lib/raster';
 import { rampaVisualStops } from '@/lib/legendas';
 import { classeZona, classeReconhecida, corZonaPorPosicao, ORDEM_CLASSES } from '@/lib/zonas';
 import { rotuloZona } from '@/lib/meap/rotuloZona';
@@ -143,17 +144,83 @@ function EtapaHdr({ n, t }: { n: number; t: string }) {
   );
 }
 
+// [54] Legenda da prévia de produtividade: seletor Quantil/Absoluta + as faixas
+// (kg/ha e sc/ha, % da área) quando está em quantil.
+function PrevProdQuantil({ q, modo, onModo }: { q: ClassificacaoQuantis | null; modo: ModoPrevProd; onModo: (m: ModoPrevProd) => void }) {
+  const kg = (v: number) => Math.round(v).toLocaleString('pt-BR');
+  const sc = (v: number) => (v / SACA_KG).toLocaleString('pt-BR', { maximumFractionDigits: 1 });
+  const n = q?.faixas.length ?? 0;
+  return (
+    <div className="mt-1.5 p-1.5 rounded space-y-1" style={{ background: '#0b1f3a', border: '1px solid #1e3a8a' }}>
+      <div className="flex items-center gap-1">
+        <span className="text-[9px] font-semibold flex-1" style={{ color: '#64748b' }}>Produtividade no mapa</span>
+        {([['quantil', `Quantil (${q ? n : 5} faixas)`], ['absoluta', 'Absoluta']] as const).map(([v, l]) => (
+          <button key={v} onClick={() => onModo(v)} disabled={v === 'quantil' && !q}
+            className="px-1.5 py-0.5 rounded text-[9px] font-semibold disabled:opacity-40"
+            style={{ background: modo === v ? 'var(--invicta-blue-mid)' : '#1a3a6b', color: modo === v ? '#fff' : '#93c5fd' }}>{l}</button>
+        ))}
+      </div>
+      {modo === 'quantil' && q ? (
+        <div className="space-y-0.5">
+          {q.faixas.map((f, i) => (
+            <div key={f.ordem} className="flex items-center gap-1.5 text-[9px]" style={{ color: '#cbd5e1' }}>
+              <span className="inline-block w-3 h-3 rounded-sm flex-shrink-0" style={{ background: f.cor }} />
+              <span className="flex-1 tabular-nums">
+                {i === 0 ? `≤ ${kg(f.max)}` : i === n - 1 ? `> ${kg(f.min)}` : `${kg(f.min)} – ${kg(f.max)}`} kg/ha
+                <span style={{ color: '#64748b' }}> ({i === 0 ? `≤ ${sc(f.max)}` : i === n - 1 ? `> ${sc(f.min)}` : `${sc(f.min)} – ${sc(f.max)}`} sc)</span>
+              </span>
+              <span className="w-9 text-right tabular-nums" style={{ color: '#64748b' }}>{f.pctArea.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%</span>
+            </div>
+          ))}
+          <p className="text-[8px]" style={{ color: '#475569' }}>Cortes calculados deste mapa · cada faixa ≈ {(100 / Math.max(1, n)).toFixed(0)}% da área</p>
+          {q.colapsadas > 0 && (
+            <p className="text-[8px]" style={{ color: '#fbbf24' }}>{q.colapsadas} faixa{q.colapsadas > 1 ? 's' : ''} unida{q.colapsadas > 1 ? 's' : ''}: há valores repetidos neste mapa.</p>
+          )}
+        </div>
+      ) : (
+        <p className="text-[8px]" style={{ color: '#475569' }}>Escala absoluta da legenda de produtividade da cultura.</p>
+      )}
+    </div>
+  );
+}
+
 // Rampa genérica (viridis-like) p/ a prévia de uma camada sem legenda própria.
 const RAMPA_PREVIEW: Array<[number, [number, number, number]]> = [
   [0, [68, 1, 84]], [0.25, [59, 82, 139]], [0.5, [33, 145, 140]], [0.75, [94, 201, 98]], [1, [253, 231, 37]],
 ];
 
-// Coloriza o grid de uma camada para a prévia no mapa: NDVI -> legenda NDVI
-// (contínua); fertilidade -> legenda do atributo; senão rampa genérica (min–máx).
-function corDaCamadaPreview(c: { nut: string; b64: string; shape: [number, number]; cultura?: string }): string | null {
+// Pendência 54 — a produtividade na Zona de Manejo sai por QUANTIL (5 faixas
+// de área igual) por padrão: o que interessa para zonear é onde, DENTRO do
+// talhão, está o melhor e o pior — na escala absoluta da cultura um talhão
+// uniforme sai quase de uma cor só e não mostra divisa nenhuma.
+export type ModoPrevProd = 'quantil' | 'absoluta';
+type CamadaPrev = { nut: string; b64: string; shape: [number, number]; cultura?: string };
+const ehProd = (c: { nut: string }) => c.nut.startsWith('prod_');
+
+// Tamanho do pixel (m) a partir do bbox — só entra na área (ha) das faixas.
+function pixelMDoBbox(b: [number, number, number, number], shape: [number, number]): number {
+  const [w, s, e, n] = b;
+  if (!shape[1]) return 10;
+  return (Math.abs(e - w) * 111320 * Math.cos((((s + n) / 2) * Math.PI) / 180)) / shape[1];
+}
+
+function quantisDaCamadaProd(c: CamadaPrev, bounds: [number, number, number, number]): ClassificacaoQuantis | null {
+  try {
+    const leg = legendaDesignada('produtividade', PREF_LEGENDA.produtividade, legendaDaCultura(c.cultura ?? ''));
+    return quantisDoGridProd({ b64: c.b64, shape: c.shape }, leg, pixelMDoBbox(bounds, c.shape), 5);
+  } catch (e) { console.warn('[meap] quantis da produtividade falharam:', e); return null; }
+}
+
+// Coloriza o grid de uma camada para a prévia no mapa: produtividade -> quantil
+// (ou legenda da cultura); NDVI -> legenda NDVI (contínua); fertilidade ->
+// legenda do atributo; senão rampa genérica (min–máx).
+function corDaCamadaPreview(c: CamadaPrev, prod?: { modo: ModoPrevProd; q: ClassificacaoQuantis | null }): string | null {
   const grid = { b64: c.b64, shape: c.shape };
   try {
-    if (c.nut.startsWith('prod_')) {
+    if (ehProd(c) && prod?.modo === 'quantil' && prod.q) {
+      return colorirGridPorQuantis(grid, prod.q.breaks, prod.q.faixas.map(f => f.cor)).dataUrl;
+    }
+    if (ehProd(c)) {
       // Mapa de colheita (pendência 42): a legenda DESIGNADA na aba
       // Produtividade; sem escolha, a da cultura — as mesmas cores de lá.
       const leg = legendaDesignada('produtividade', PREF_LEGENDA.produtividade, legendaDaCultura(c.cultura ?? ''));
@@ -228,6 +295,16 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
   const [refreshAmb, setRefreshAmb] = useState(0);  // força re-derivar o ambiente adotado (após remover)
   const [importFc, setImportFc] = useState<GeoJSON.FeatureCollection | null>(null);  // prévia do assistente de importação
   const [fundoCh, setFundoCh] = useState<string | null>(null);  // camada de FUNDO sob as zonas (Avaliar)
+  const [modoProd, setModoProd] = useState<ModoPrevProd>('quantil');  // [54] prévia da produtividade
+  // Quantis das camadas de produtividade em prévia / fundo (calculados uma vez por camada).
+  const quantisPrev = useMemo(() => {
+    const c = carregadas?.camadas.find(x => x.chave === previewCh);
+    return c && carregadas && ehProd(c) ? quantisDaCamadaProd(c, carregadas.bounds) : null;
+  }, [carregadas, previewCh]);
+  const quantisFundo = useMemo(() => {
+    const c = carregadas?.camadas.find(x => x.chave === fundoCh);
+    return c && carregadas && ehProd(c) ? quantisDaCamadaProd(c, carregadas.bounds) : null;
+  }, [carregadas, fundoCh]);
 
   const poligono = useMemo(() => {
     if (!talhao.geojson) return null;
@@ -417,11 +494,11 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
     // baixo das zonas junto com o dele — dois rasters empilhados.
     if (!previewCh || !carregadas || res || vendoFc || editorMapFc) { setFertilidadeOverlay(null); setFertilidadeLabels(null); return; }
     const c = carregadas.camadas.find(x => x.chave === previewCh);
-    const url = c ? corDaCamadaPreview(c) : null;
+    const url = c ? corDaCamadaPreview(c, { modo: modoProd, q: quantisPrev }) : null;
     if (!url) { setFertilidadeOverlay(null); return; }
     setFertilidadeOverlay({ url, coordinates: coordsFromBounds(carregadas.bounds), opacity: 0.82 });
     setFertilidadeLabels(null);
-  }, [previewCh, carregadas, res, vendoFc, editorMapFc, setFertilidadeOverlay, setFertilidadeLabels]);
+  }, [previewCh, carregadas, res, vendoFc, editorMapFc, modoProd, quantisPrev, setFertilidadeOverlay, setFertilidadeLabels]);
   useEffect(() => () => { setFertilidadeOverlay(null); setFertilidadeLabels(null); }, [setFertilidadeOverlay, setFertilidadeLabels]);
 
   // MEAP — camada de FUNDO sob as zonas (etapa Avaliar / vendo um zoneamento):
@@ -433,10 +510,10 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
     if (editorMapFc) return;
     if (!fundoCh || !carregadas || !(res || vendoFc)) { setZonasFundo(null); return; }
     const c = carregadas.camadas.find(x => x.chave === fundoCh);
-    const url = c ? corDaCamadaPreview(c) : null;
+    const url = c ? corDaCamadaPreview(c, { modo: modoProd, q: quantisFundo }) : null;
     if (!url) { setZonasFundo(null); return; }
     setZonasFundo({ url, coordinates: coordsFromBounds(carregadas.bounds), opacity: 1 });
-  }, [fundoCh, carregadas, res, vendoFc, editorMapFc, setZonasFundo]);
+  }, [fundoCh, carregadas, res, vendoFc, editorMapFc, modoProd, quantisFundo, setZonasFundo]);
   useEffect(() => () => { setZonasFundo(null); setZonasOpacidade(0.5); }, [setZonasFundo, setZonasOpacidade]);
 
   // Mudar camadas/pesos/método invalida a análise (a curva FPI/NCE muda) e o preview.
@@ -1052,6 +1129,9 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
                   );
                 })}
               </div>
+              {previewCh && !res && !vendoFc && carregadas.camadas.some(c => c.chave === previewCh && ehProd(c)) && (
+                <PrevProdQuantil q={quantisPrev} modo={modoProd} onModo={setModoProd} />
+              )}
               {/* De ONDE veio a fertilidade — e por que ela pode não estar aqui.
                   Sem esta linha, um laudo novo sem mapas processados fazia as
                   camadas de fertilidade sumirem em silêncio. */}
@@ -1259,6 +1339,9 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
                         );
                       })}
                     </div>
+                    {fundoCh && carregadas.camadas.some(c => c.chave === fundoCh && ehProd(c)) && (
+                      <PrevProdQuantil q={quantisFundo} modo={modoProd} onModo={setModoProd} />
+                    )}
                     <div>
                       <div className="flex justify-between mb-0.5">
                         <span className="text-[9px]" style={{ color: '#64748b' }}>Opacidade das zonas <span style={{ color: '#475569' }}>(↓ mostra mais a camada de fundo)</span></span>

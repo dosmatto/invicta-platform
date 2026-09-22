@@ -1,5 +1,12 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [54] Produtividade na Zona de Manejo com prévia em quantil
+  '2.174.0': [
+    'PENDÊNCIA 54 — A CAMADA DE PRODUTIVIDADE NA ZONA DE MANEJO AGORA APARECE EM QUANTIL: 5 faixas de área igual (cada uma ≈ 20% do talhão), com os cortes calculados do próprio mapa. Na escala absoluta da cultura um talhão uniforme saía quase de uma cor só; em quantil aparece onde, DENTRO do talhão, está o melhor e o pior — que é o que interessa para desenhar a zona.',
+    'Vale nos dois lugares em que a produtividade é vista nas Zonas de Manejo: a prévia ao clicar na camada em "1 · Configurar" e a "Camada de fundo" sob as zonas geradas ou salvas.',
+    'Abaixo da camada aparece a legenda das faixas: intervalo em kg/ha (e em sacas), cor e % da área. Um seletor "Quantil · Absoluta" volta para a escala da legenda da cultura quando for preciso comparar com outro talhão.',
+    'As cores e os nomes das faixas são os mesmos do modo Quantil da aba Produtividade — o mesmo mapa não muda de cara ao trocar de aba.',
+  ],
   // [S/N] Produtividade importada em t/ha ou sc/ha é convertida para kg/ha
   '2.173.0': [
     'O MAPA DE COLHEITA DEIXA DE SAIR EM TONELADAS. Monitores como o da John Deere (coluna VRYIELDMAS) exportam a produtividade em t/ha — a soja vinha como 3,8 em vez de 3.800 — e a plataforma lia o número como se fosse kg/ha. O resultado era um mapa inteiro na faixa mais baixa da legenda, a limpeza sugerindo "Excluir > 22 kg/ha" e a produção total mil vezes menor.',

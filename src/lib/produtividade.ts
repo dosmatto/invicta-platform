@@ -187,9 +187,14 @@ export function statsDoGrid(resp: RespInterp, nUsados: number): StatsProd | null
 // oficial — melhor a paleta da casa que faixa sem cor.
 export function quantisDaProdutividade(resp: RespInterp, leg: Legenda, k = 5): ClassificacaoQuantis | null {
   if (!resp.grid) return null;
-  const { valores } = decodeGrid(resp.grid);
-  const pixelM = resp.stats?.pixel_m ?? 10;
-  const casa = leg.classes.length === k;
+  return quantisDoGridProd(resp.grid, leg, resp.stats?.pixel_m ?? 10, k);
+}
+
+// Mesma classificação a partir de um grid salvo (b64 + shape) — é o que as
+// Zonas de Manejo têm na mão, sem a resposta do backend.
+export function quantisDoGridProd(grid: { b64: string; shape: [number, number] }, leg: Legenda | null | undefined, pixelM: number, k = 5): ClassificacaoQuantis | null {
+  const { valores } = decodeGrid(grid);
+  const casa = !!leg && leg.classes.length === k;
   const cores = casa ? leg.classes.map(corCheiaDaClasse) : PARES_PROD.map(p => corCheiaDaClasse({ nome: '', valorMin: null, valorMax: null, corInicio: p.inicio, corFim: p.fim, larguraVisual: 0, ordem: 0 }));
   const nomes = casa ? leg.classes.map(c => c.nome) : NOMES_PROD;
   return classesQuantis(valores, { k, pixelM, cores, nomes });
