@@ -1,5 +1,12 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] App de campo volta a abrir no iPhone (ciclo de vida por cena, exigido pelo iOS 26)
+  '2.171.0': [
+    'O APP DE CAMPO NO IPHONE ABRIA E FECHAVA NA HORA. A tela piscava e voltava para a tela de início, sem mensagem nenhuma. Acontecia em qualquer iPhone com iOS 26 ou mais novo, e a versão 3.2.0 que já estava na Apple tinha o mesmo defeito — o revisor cairia nele.',
+    'CAUSA: o iOS 26 passou a EXIGIR o ciclo de vida por cena (UIScene) de todo app compilado com o Xcode novo. Quem não adota é morto no lançamento pelo próprio sistema. O projeto iOS vinha do modelo antigo do Capacitor, só com AppDelegate e uma janela, e a build foi a primeira gerada com o Xcode 27 — por isso o defeito apareceu agora, sem nada ter mudado no código do app.',
+    'CORREÇÃO, pelo caminho oficial: Capacitor 8.4.2 → 8.5.2 (versão que traz o SceneDelegateProxy), novo SceneDelegate.swift, a cena declarada no Info.plist e o repasse das aberturas por URL e links universais. O Android não muda de comportamento.',
+    'App de campo 3.2.1 (build 3002001). Verificado no aparelho: instalado por cabo num iPhone 14 Pro Max, o app abre e fica de pé — antes o mesmo teste morria com SIGTRAP no lançamento.',
+  ],
   // [S/N] Zona de manejo volta a aparecer no app de campo (a zona viaja dentro da grade)
   '2.170.0': [
     'O APP DE CAMPO VOLTA A MOSTRAR AS ZONAS DE MANEJO NA COLETA. O operador abria a grade por zona e via só os pontos ("1-1", "2-6", "3-8") sobre o satélite, sem nenhuma divisa dizendo onde uma zona termina e a outra começa — e é a divisa que define de qual zona é cada furo e, no modelo A, em qual saco ele entra.',
