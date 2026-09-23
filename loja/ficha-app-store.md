@@ -3,19 +3,39 @@
 Textos e respostas prontos para copiar no App Store Connect. Cada bloco diz onde
 ele entra. Os limites de caracteres são os que a loja impõe.
 
-## Estado no App Store Connect (22/09/2026)
+## Estado no App Store Connect (23/09/2026)
 
 ```
 Apple ID do app   6813176446
 Bundle ID         br.agr.invicta.coleta
 Time              ANQMNT4RTB (WR CONSULTORIA AGRICOLA SS)
-Versão            3.2.1 · build 3002001 · AGUARDANDO REVISÃO desde 22/09/2026 10:27
+Versão            3.2.1 · build 3002001 · EM REVISÃO — respondida a 2ª pergunta em 23/09
 ```
 
 Linha do tempo: enviada 3.2.0 em 18/09 às 14:43, **rejeitada** às 21:13 em
 **Guideline 2.1 — Information Needed, New App Submission** (pedido padrão de
 informações a desenvolvedor **sem histórico de revisão**, não defeito da
-ficha); respondida e **reenviada em 22/09 às 10:27** já com a **3.2.1**.
+ficha); respondida e **reenviada em 22/09 às 10:27** já com a **3.2.1**; em
+23/09 às 15:30 a Apple abriu a revisão de verdade (iPad Air 11" M3) e mandou a
+**segunda pergunta**, esta de modelo de negócio.
+
+> **Guideline 2.1(b) — modelo de negócio (respondida em 23/09).** Cinco
+> perguntas: quem usa as assinaturas, onde se compra, o que vem de compra
+> anterior, que conteúdo pago é liberado sem compra no app, e se é vendido a
+> pessoa física, consumidor ou família.
+>
+> **A resposta que vale**, conferida com o usuário: *ninguém paga pelo app nem
+> pela plataforma*. O cliente contrata **serviço agronômico executado no mundo
+> físico** — a equipe vai à fazenda, coleta, manda ao laboratório, e daí saem
+> os mapas e as recomendações. O app é ferramenta complementar: a equipe
+> registra a coleta e o produtor consulta o resultado do trabalho feito na
+> terra dele. A venda pode ser a **empresa ou a produtor pessoa física**, sempre
+> como trabalho agrícola profissional, nunca como assinatura digital de
+> consumidor. Serviço físico fora do app não exige compra no app — é esse o
+> argumento central da resposta.
+>
+> Não houve reenvio: nesta etapa a Apple pede resposta **na própria mensagem**,
+> e o botão "Reenviar para Revisão do app" fica desativado de propósito.
 
 Os seis itens pedidos foram respondidos (texto em
 `loja/notas-revisao-apple.txt`), gravados no campo **Notas** das Informações de
