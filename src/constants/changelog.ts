@@ -1,5 +1,11 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Trilho do talhão no portal obedece a coluna "Ver" da matriz de permissões
+  '2.178.0': [
+    'AS ABAS DO TALHÃO QUE O PRODUTOR VÊ PASSAM A OBEDECER A MATRIZ DE PERMISSÕES (Central de Acessos → Permissões → papel Produtor, coluna "Ver"). Antes o trilho só olhava se havia dado no talhão e o plano do portal — "Amostragem" aparecia para o produtor mesmo com a linha "Amostragem e coleta" desmarcada.',
+    'Regra: a aba entra quando há dado no talhão E a linha correspondente da matriz está com "Ver" marcada E o plano libera a seção. Um ajuste feito só naquele usuário (painel lateral → Permissões) vence o padrão do papel. No preview "ver como o produtor vê" (owner/admin) vale a matriz do papel Produtor, a mesma que a tela mostra.',
+    'Correspondência aba → linha: Altimetria, Condutividade, Zonas, Amostragem, Fertilidade, Recomendações, Prescrições, Arquivos, NDVI → Satélite, Produtividade, Compactação, Relatórios. Resumo sempre aparece; Foliar não tem linha na matriz e continua aparecendo quando há laudo foliar no talhão.',
+  ],
   // [S/N] Aba Arquivos mostra o nome da equação de cada mapa, não só o produto
   '2.177.0': [
     'A ABA ARQUIVOS PASSA A DIZER QUAL MAPA FOI MARCADO PARA USO. Cada linha mostrava só o PRODUTO ("Gesso", "Calcário"), e numa recomendação de gessagem com cinco variantes — "Gessagem", "min 500", "min 1000 limitada"… — todas têm o mesmo produto: a linha "Gesso" não dizia qual delas tinha ganhado a estrela. Agora a linha traz o nº do cadastro e o NOME DA EQUAÇÃO ("03 · Gessagem min 1000 limitada"), com o produto embaixo em letra menor, os selos "zona" e "fórmula editada" quando valem — o mesmo rótulo da aba Recomendações e do PDF.',

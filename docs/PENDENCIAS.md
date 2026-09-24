@@ -81,6 +81,7 @@ verdadeira (fusão de talhões) chegou depois; foi preciso renumerar.
 | S/N | Produtividade importada em t/ha ou sc/ha é convertida para kg/ha | 2.173.0 | Talhão → Produtividade → 1 Importar máquinas (seletor de unidade ao lado de cada máquina) |
 | 54 | Produtividade na Zona de Manejo com prévia em quantil | 2.174.0 | Talhão → Zonas de Manejo → 1 Configurar (clicar na camada de produtividade) e → Camada de fundo |
 | S/N | Book e relatórios em PDF não caem mais por causa do logo (jsPDF sem pedido de rede síncrono) | 2.176.0 | Talhão → Recomendações → Gerar book PDF (portal do produtor) e todos os relatórios em PDF |
+| S/N | Trilho do talhão no portal obedece a coluna "Ver" da matriz de permissões | 2.178.0 | Talhão (modo produtor / preview) → trilho de abas; Central de Acessos → Permissões → Produtor |
 | S/N | Catálogo de variáveis se cura sozinho depois de um app antigo apagá-lo | 2.175.0 | Biblioteca → Preferências de Análise (Fe ligado, 2 casas nos micros, ordem padrão) e Console: "[catálogo] seed de app de campo antigo detectado" |
 
 > As pendências 1–17 foram entregues antes deste registro existir e não estão

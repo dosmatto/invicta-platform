@@ -38,7 +38,7 @@ import { GeradorRelatorios } from '@/components/talhao/GeradorRelatorios';
 import { MeapSection } from '@/components/talhao/MeapSection';
 import { NdviSection } from '@/components/talhao/NdviSection';
 import { ProdutividadeSection } from '@/components/talhao/ProdutividadeSection';
-import { papelDoUsuario, meuRegistro, planoPorId, ehAdmin, SECOES_PORTAL, secaoLiberada } from '@/lib/empresa';
+import { papelDoUsuario, meuRegistro, planoPorId, ehAdmin, SECOES_PORTAL, secaoLiberada, podeEm, matrizDoPapel } from '@/lib/empresa';
 import { authConfigurado } from '@/lib/auth';
 import { abasComDados } from '@/lib/portalProdutor';
 import { dadosLocaisDoTalhao, dadosNuvemDosTalhoes, juntarNuvem, type DadosNuvem } from '@/lib/portalDados';
@@ -84,6 +84,16 @@ const TABS: Array<{ id: TabId; label: string; curto: string; icon: React.Element
 // Seções que o PLANO de assinatura controla; as outras abas (relevo, CE, zonas,
 // prescrições, satélite, colheita) só dependem de existir dado.
 const SECOES_PLANO = new Set<string>(SECOES_PORTAL.map(s => s.id));
+
+// Linha da matriz de permissões (iam/tipos.ts → MODULOS) que governa cada aba
+// no trilho do PRODUTOR. Resumo e Foliar não têm linha: Resumo sempre entra;
+// Foliar aparece quando há laudo foliar (não há linha "Foliar" na matriz).
+const MODULO_DA_ABA: Partial<Record<TabId, string>> = {
+  altimetria: 'altimetria', condutividade: 'condutividade', zonas: 'zonas',
+  amostragem: 'amostragem', fertilidade: 'fertilidade', recomendacoes: 'recomendacoes',
+  prescricoes: 'prescricao', arquivos: 'arquivos', ndvi: 'satelite',
+  produtividade: 'produtividade', compactacao: 'compactacao', relatorios: 'relatorios',
+};
 
 // ── Trilho + painel ──────────────────────────────────────────────────────────
 const TRILHO_ABERTO = 64;   // ícone + rótulo (padrão)
@@ -292,8 +302,20 @@ export function TalhaoPage({ id }: { id: string }) {
   // plano é um filtro opcional, não uma chave. Antes o produtor sem plano via
   // só as abas que não são seção de plano — fertilidade e amostragem sumiam.
   const semPlano = modoProdutor && !plano;
+  // 24/09/2026: o trilho também obedece a coluna "Ver" da matriz de permissões
+  // (Central de Acessos → Permissões → papel Produtor). Antes só olhava
+  // existência de dado + plano — "Amostragem" aparecia para o produtor com a
+  // linha "Amostragem e coleta" desmarcada. Produtor de verdade: `podeEm`
+  // (exceção do próprio usuário > ajuste do papel > padrão). Preview do
+  // owner/admin: a matriz do papel Produtor, exatamente o que a tela mostra.
+  // Foliar não tem linha na matriz e segue só a existência de laudo foliar.
+  const podeVerAba = (id: TabId): boolean => {
+    const modulo = MODULO_DA_ABA[id];
+    if (!modulo || !authConfigurado) return true;
+    return ehProdutor ? podeEm(modulo, 'visualizar') : matrizDoPapel('produtor')[`${modulo}.visualizar`] === true;
+  };
   const tabsVisiveis = modoProdutor
-    ? TABS.filter(t => abasExistentes.has(t.id) && (t.id === 'resumo' || semPlano || !SECOES_PLANO.has(t.id) || secaoLiberada(plano, t.id)))
+    ? TABS.filter(t => abasExistentes.has(t.id) && podeVerAba(t.id) && (t.id === 'resumo' || semPlano || !SECOES_PLANO.has(t.id) || secaoLiberada(plano, t.id)))
     : TABS;
   // Painel fechado é `null`; aba lembrada que o plano não libera cai na primeira.
   const tabAtivo: TabId | null = tab === null ? null
