@@ -80,6 +80,7 @@ verdadeira (fusão de talhões) chegou depois; foi preciso renumerar.
 | 46 | Fertilidade e Zonas de Manejo obedecem todas as colunas da matriz | 2.169.0 | Central de Acessos → Permissões (linhas "Fertilidade (interpolação)" e "Zonas de manejo"); Talhão → Fertilidade e Zonas de Manejo |
 | S/N | Produtividade importada em t/ha ou sc/ha é convertida para kg/ha | 2.173.0 | Talhão → Produtividade → 1 Importar máquinas (seletor de unidade ao lado de cada máquina) |
 | 54 | Produtividade na Zona de Manejo com prévia em quantil | 2.174.0 | Talhão → Zonas de Manejo → 1 Configurar (clicar na camada de produtividade) e → Camada de fundo |
+| S/N | Catálogo de variáveis se cura sozinho depois de um app antigo apagá-lo | 2.175.0 | Biblioteca → Preferências de Análise (Fe ligado, 2 casas nos micros, ordem padrão) e Console: "[catálogo] seed de app de campo antigo detectado" |
 
 > As pendências 1–17 foram entregues antes deste registro existir e não estão
 > catalogadas; procure pelo assunto no `changelog.ts`. Da 18 em diante, tudo

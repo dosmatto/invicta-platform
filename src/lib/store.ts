@@ -6,7 +6,7 @@ import type { ResultadoAmostra, PerfilLabConfig } from './lab';
 import type { Legenda } from './legendas';
 import { classesFertilidade5, ordenarLegendasDoAtributo, deveSemearLegendas, promocoesDeHomonimas, mesmasFaixas, FAIXAS_CTCE } from './legendas';
 import { legendaRentabilidade } from '@/constants/legendasSeedOficial';
-import { deveSemearCatalogo, podeMigrarCatalogo, gemeasAExcluir } from './catalogoVariaveis';
+import { deveSemearCatalogo, gemeasAExcluir, curaSeedAntigo, ordemDeFabrica, casasDeFabrica, ORDEM_PADRAO_FERT } from './catalogoVariaveis';
 import { coefsParaElemento } from './nutrienteBase';
 import { precoNaUnidade, type ConteudoInsumo } from './insumos';
 import {
@@ -1787,7 +1787,7 @@ export const VARIAVEIS_SEED: VariavelAnalise[] = ELEMENTOS_LAB.map((el, i) => ({
   id: el.id, sigla: el.simbolo,
   nome: VAR_SEED_INFO[el.id]?.nome ?? el.simbolo,
   unidade: VAR_SEED_INFO[el.id]?.unidade ?? '',
-  sinonimos: [...el.sinonimos], usar: true, ordem: i,
+  sinonimos: [...el.sinonimos], usar: true, ordem: ordemDeFabrica(el.id, i), casasDecimais: casasDeFabrica(el.id),
 }));
 const VAR_SEED_IDS = new Set(VARIAVEIS_SEED.map(v => v.id));
 
@@ -1803,16 +1803,18 @@ function _deConteudo(c: ConteudoVariavel): VariavelAnalise {
 // legendas (id fixo, que seriam sobrescritas), variável tem id aleatório e o
 // varId mora dentro do conteúdo — semear cedo demais não sobrescreve, DUPLICA.
 // Ver lib/catalogoVariaveis.ts — npm run teste:catalogo.
-export function garantirVariaveisAnalise() {
-  if (typeof window === 'undefined') return;
-  if (!deveSemearCatalogo(_itensVariaveis().length, cloudAindaNaoHidratou())) return;
+export function garantirVariaveisAnalise(): boolean {
+  if (typeof window === 'undefined') return false;
+  if (!deveSemearCatalogo(_itensVariaveis().length, cloudAindaNaoHidratou())) return false;
+  // Nasce na ORDEM PADRÃO (ordemDeFabrica) — não depende mais de migração.
   for (const v of VARIAVEIS_SEED) {
     bibCriar<ConteudoVariavel>('preferencias-analise', {
       nome: `Variável: ${v.sigla}`,
-      conteudo: { tipo: 'variavel', varId: v.id, sigla: v.sigla, nome: v.nome, unidade: v.unidade, sinonimos: v.sinonimos, usar: true, ordem: v.ordem },
+      conteudo: { tipo: 'variavel', varId: v.id, sigla: v.sigla, nome: v.nome, unidade: v.unidade, sinonimos: v.sinonimos, usar: true, ordem: v.ordem, casasDecimais: casasDeFabrica(v.id) },
       escopo: empresaAtivaId() ? 'empresa' : 'meu',
     });
   }
+  return true;
 }
 
 // Semeia as variáveis COMPLEMENTARES (lista InCeres — src/constants/
@@ -1827,7 +1829,7 @@ export function garantirVariaveisComplementares() {
   // inútil a guarda de baixo — ele acabava de encher o catálogo, então
   // `itens.length === 0` nunca era verdade.
   if (cloudAindaNaoHidratou()) return;
-  garantirVariaveisAnalise();
+  const contaNova = garantirVariaveisAnalise();
   const itens = _itensVariaveis();
   if (itens.length === 0) return;   // catálogo ainda não hidratado — tenta no próximo boot
   const existentes = new Set(itens.map(i => i.conteudo.varId));
@@ -1835,8 +1837,12 @@ export function garantirVariaveisComplementares() {
   let prox = Math.max(99, ...itens.map(i => i.conteudo.ordem ?? 0)) + 1;
   for (const v of VARIAVEIS_COMPLEMENTARES) {
     if (existentes.has(v.id)) continue;
+    // Conta nova (o básico acabou de nascer): quem está na ordem padrão (K%, Ca%,
+    // Mg%, CTCe) entra na posição dela. Catálogo existente: logo após a vizinha,
+    // para não brigar com a ordem que o usuário arrumou nas setas.
+    const padrao = ORDEM_PADRAO_FERT.indexOf(v.id);
     const base = v.aposId != null ? ordemDe(v.aposId) : undefined;
-    const ordem = base != null ? base + 0.5 : prox++;
+    const ordem = contaNova && padrao >= 0 ? padrao : base != null ? base + 0.5 : prox++;
     bibCriar<ConteudoVariavel>('preferencias-analise', {
       nome: `Variável: ${v.sigla}`,
       conteudo: { tipo: 'variavel', varId: v.id, sigla: v.sigla, nome: v.nome, unidade: v.unidade, sinonimos: v.sinonimos, usar: v.usar, ordem, casasDecimais: v.casasDecimais },
@@ -1871,40 +1877,11 @@ export function migrarSinonimosSeedV1() {
   localStorage.setItem('inv_migrado_sinonimos_seed_v1', '1');
 }
 
-// O Fe MUDOU DE CATEGORIA (v2.78.0): era variável COMPLEMENTAR — cadastrada e
-// DESLIGADA por padrão — e virou elemento BASE (entrou em ELEMENTOS_LAB, onde
-// todos são `usar: true`). Só que os catálogos já materializados não voltam:
-// `garantirVariaveisAnalise` só semeia quando o catálogo está VAZIO e
-// `garantirVariaveisComplementares` pula os ids que já existem. Resultado: quem
-// já usava o app continuava com o Fe desligado — e a importação, que filtra por
-// `getVariaveisAtivas()`, seguia descartando a coluna Fe do laudo em silêncio,
-// mesmo depois de o Fe entrar no catálogo de elementos.
-//
-// Liga SÓ o Fe, uma vez. Não mexe em nenhuma outra variável: desligar algo é uma
-// escolha legítima do usuário, e o Fe nunca foi escolha — nasceu desligado antes
-// de ser básico.
-export function migrarFeAtivoV1() {
-  if (typeof window === 'undefined') return;
-  if (localStorage.getItem('inv_migrado_fe_ativo_v1') === '1') return;
-  const itens = _itensVariaveis();
-  if (itens.length === 0) return;   // catálogo ainda não hidratado — tenta no próximo boot
-  const it = itens.find(i => i.conteudo.varId === 'fe');
-  if (it) {
-    // Dois consertos: LIGAR e dar os sinônimos do elemento base. O catálogo antigo
-    // guardou só ['ferro'] (era o seed complementar), e o casamento por cabeçalho
-    // é pelos SINÔNIMOS — então uma coluna escrita "Fe" não casava nem com o Fe
-    // ligado. Só por extenso, "Ferro", funcionava.
-    const base = ELEMENTOS_LAB.find(e => e.id === 'fe')?.sinonimos ?? [];
-    const atuais = it.conteudo.sinonimos ?? [];
-    const sinonimos = [...atuais, ...base.filter(x => !atuais.includes(x))];
-    if (it.conteudo.usar === false || sinonimos.length !== atuais.length) {
-      bibAtualizar<ConteudoVariavel>('preferencias-analise', it.id, {
-        conteudo: { ...it.conteudo, usar: true, sinonimos },
-      });
-    }
-  }
-  localStorage.setItem('inv_migrado_fe_ativo_v1', '1');
-}
+// O Fe MUDOU DE CATEGORIA na v2.78.0 (complementar desligado → elemento base).
+// A migração que o ligava (migrarFeAtivoV1) SAIU na v2.175.0: a flag dela era
+// por navegador e o catálogo é global, então todo navegador novo religava um Fe
+// que o usuário tinha desligado. O caso legítimo — catálogo do seed antigo, com
+// o Fe desligado e sem o sinônimo 'fe' — é da curarCatalogoSeedAntigoV1.
 
 // Catálogo completo (fallback = seed em memória, p/ quem nunca abriu o painel).
 export function getVariaveisAnalise(): VariavelAnalise[] {
@@ -1951,13 +1928,8 @@ export function saveVariavelAnalise(v: VariavelAnalise) {
   else for (const i of itens) bibAtualizar<ConteudoVariavel>('preferencias-analise', i.id, { nome: `Variável: ${v.sigla}`, conteudo });
 }
 
-// Ordem PADRÃO dos elementos de fertilidade (pedido do usuário 23/07/2026) — vira
-// a ordem do catálogo, que comanda o Perfil e o relatório. As demais variáveis
-// (micros extras, variantes, relações…) entram depois, preservando a ordem relativa.
-const ORDEM_PADRAO_FERT: string[] = [
-  'mo', 'ph', 'm', 'v', 'ctc', 'p', 'k', 'satk', 'ca', 'mg', 'satca', 'satmg', 't',
-  's', 'b', 'zn', 'cu', 'mn', 'fe', 'al', 'textura',
-];
+// A ORDEM_PADRAO_FERT (ordem padrão dos elementos de fertilidade) mora em
+// lib/catalogoVariaveis.ts — a cura do seed antigo e o teste usam a mesma lista.
 
 // EXPORTAÇÃO/EXTRAÇÃO passaram a ser cadastradas em ELEMENTO (P, K) — decisão
 // do usuário em 27/08/2026, para acompanhar a literatura de absorção. O que já
@@ -2017,27 +1989,57 @@ export function migrarVariaveisGemeasV1() {
   console.info(`[catálogo] ${fora.length} variável(is) duplicada(s) removida(s) — sobrou a editada por último.`);
 }
 
-// Aplica a ORDEM_PADRAO_FERT ao catálogo UMA VEZ (flag). Depois disso o usuário
-// reordena com as setas (Perfil) e essas mudanças NÃO são sobrescritas.
-export function migrarOrdemPadraoFertV1() {
+// CURA o catálogo RECRIADO por um app de campo antigo (build anterior à v2.78.0).
+// Esse app apaga a coleção local, as migrações dele veem "vazio", semeiam o
+// catálogo de fábrica da época e o primeiro envio PODA a nuvem: somem as casas
+// decimais dos micros, a ordem dos elementos volta à antiga e o Fe volta
+// desligado e sem o sinônimo 'fe' (a coluna "Fe" do laudo deixa de ser lida).
+// Aconteceu em 13/09 (pendência 43) e de novo em 24/09/2026.
+//
+// As antigas migrarFeAtivoV1 e migrarOrdemPadraoFertV1 (removidas na v2.175.0)
+// não resolviam: a flag delas era por navegador e o dado é global — quem já
+// queimou a flag nunca mais olhava, e navegador novo desfazia escolhas. Esta
+// roda SEM FLAG, como migrarVariaveisGemeasV1: é barata e só age quando reconhece
+// a ASSINATURA do seed antigo (ver lib/catalogoVariaveis.curaSeedAntigo); num
+// catálogo saudável não grava nada. Escolhas do usuário fora da assinatura
+// (variável desligada, casas decimais definidas, ordem das setas) ficam.
+export function curarCatalogoSeedAntigoV1() {
   if (typeof window === 'undefined') return;
-  if (localStorage.getItem('inv_migrado_ordem_fert_v1') === '1') return;
-  // A guarda antiga (`getVariaveisAnalise().length === 0`) NUNCA era verdadeira:
-  // aquela função cai num seed em memória quando não há nada gravado. A migração
-  // rodava contra o seed, gravava a ordem de fábrica por cima do que o usuário
-  // tinha arrumado nas setinhas e ainda queimava a flag — uma vez por aparelho,
-  // em cima de um dado que é global. Agora exige catálogo MATERIALIZADO e nuvem
-  // respondida, e a flag só é gravada se a migração realmente rodou.
-  if (!podeMigrarCatalogo(_itensVariaveis().length, cloudAindaNaoHidratou())) return;
-  const vars = getVariaveisAnalise();
-  const idx = new Map(ORDEM_PADRAO_FERT.map((id, i) => [id, i]));
-  const rest = vars.filter(v => !idx.has(v.id)).sort((a, b) => a.ordem - b.ordem);
-  for (const v of vars) {
-    const nova = idx.has(v.id) ? idx.get(v.id)! : ORDEM_PADRAO_FERT.length + rest.findIndex(r => r.id === v.id);
-    if (v.ordem !== nova) saveVariavelAnalise({ ...v, ordem: nova });
+  if (cloudAindaNaoHidratou()) return;         // sem a nuvem, o catálogo pode estar pela metade
+  const itens = _itensVariaveis();
+  if (itens.length === 0) return;
+  const curas = curaSeedAntigo(itens.map(i => ({
+    id: i.id, varId: i.conteudo.varId, sigla: i.conteudo.sigla, usar: i.conteudo.usar,
+    ordem: i.conteudo.ordem, sinonimos: i.conteudo.sinonimos, casasDecimais: i.conteudo.casasDecimais,
+  })));
+  if (curas.length === 0) return;
+  const porId = new Map(itens.map(i => [i.id, i]));
+  for (const c of curas) {
+    const it = porId.get(c.id);
+    if (!it) continue;
+    const conteudo: ConteudoVariavel = { ...it.conteudo };
+    if (c.usar) conteudo.usar = true;
+    if (c.sinonimos) conteudo.sinonimos = c.sinonimos;
+    if (c.ordem != null) conteudo.ordem = c.ordem;
+    if (c.casasDecimais != null) conteudo.casasDecimais = c.casasDecimais;
+    bibAtualizar<ConteudoVariavel>('preferencias-analise', it.id, { conteudo });
   }
-  localStorage.setItem('inv_migrado_ordem_fert_v1', '1');
+  // A CTC efetiva (t) é sintetizada na leitura quando não está gravada, com ordem
+  // "logo após a CTC" — que, na ordem padrão, cairia entre CTC e P. Com a ordem
+  // restaurada, grava-a na posição dela, como migrarOrdemPadraoFertV1 fazia.
+  if (curas.some(c => c.ordem != null) && !itens.some(i => i.conteudo.varId === 't')) {
+    const t = getVariaveisAnalise().find(v => v.id === 't');
+    const pos = ORDEM_PADRAO_FERT.indexOf('t');
+    if (t && pos >= 0) saveVariavelAnalise({ ...t, ordem: pos });
+  }
+  const resumo = curas.map(c => `${c.varId}(${Object.keys(c).filter(k => k !== 'id' && k !== 'varId').join('+')})`);
+  console.info(`[catálogo] seed de app de campo antigo detectado — ${curas.length} variável(is) curada(s): ${resumo.join(', ')}`);
 }
+
+// migrarOrdemPadraoFertV1 SAIU na v2.175.0: a flag dela era por navegador e o
+// catálogo é global, então todo navegador novo (ou cache limpo) regravava a
+// ordem de fábrica por cima das setas do usuário. A ordem padrão agora nasce no
+// SEED (conta nova) e é restaurada pela curarCatalogoSeedAntigoV1 (seed antigo).
 
 // Move uma variável ATIVA uma posição para cima (-1) ou baixo (+1) na ordem do
 // catálogo, trocando a `ordem` com a vizinha ativa. Essa ordem é o padrão da
