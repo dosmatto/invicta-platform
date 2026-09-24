@@ -6,6 +6,7 @@ export const CHANGELOG: Record<string, string[]> = {
     'O nome vem da equação ATUAL da Biblioteca (legenda viva), como nas outras abas: renomear a equação atualiza o cartão daqui também.',
     'O arquivo JPG passa a levar o nome da equação em vez do produto: cinco mapas de gesso saíam como cinco "…_Gesso.jpg" e se sobrescreviam na pasta de download.',
     'O texto de abertura da aba dizia que o Shapefile "entra em breve" desde que ele existe — corrigido.',
+  ],
   // [S/N] Book e relatórios em PDF não caem mais por causa do logo
   '2.176.0': [
     'O BOOK DE RECOMENDAÇÕES QUEBRAVA NO PORTAL DO PRODUTOR com a mensagem "undefined is not an object (evaluating \'t.data\')" ao clicar em "Gerar book PDF". O PDF nem começava a ser montado.',
