@@ -1,5 +1,12 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Book e relatórios em PDF não caem mais por causa do logo
+  '2.176.0': [
+    'O BOOK DE RECOMENDAÇÕES QUEBRAVA NO PORTAL DO PRODUTOR com a mensagem "undefined is not an object (evaluating \'t.data\')" ao clicar em "Gerar book PDF". O PDF nem começava a ser montado.',
+    'CAUSA: o logo da INVICTA entrava no PDF como a própria imagem da página (o <img> de /images/logo-branca.png). Nesse formato o gerador de PDF (jsPDF) ignora os pixels já carregados e REFAZ O DOWNLOAD do arquivo com um pedido de rede SÍNCRONO — um recurso antigo do navegador que o Safari e as visualizações web dos apps recusam em várias situações. Quando esse pedido falha, o gerador segue sem dado nenhum e cai logo no passo seguinte; a mensagem era essa queda, não um problema do talhão ou da recomendação.',
+    'AGORA O LOGO É CONVERTIDO ANTES de entrar no PDF (os pixels viram um dataURL em PNG), e o gerador decodifica direto, sem ir à rede. Vale para TODOS os relatórios em PDF da plataforma: book e resumo de recomendações, fertilidade, zonas, produtividade, condutividade, campo, foliar, MDE, prescrição e validação — todos passavam o logo do mesmo jeito.',
+    'Se o produtor ainda vir a mensagem, o que falta é a versão: recarregue o portal (o rodapé precisa mostrar v2.176.0 ou mais nova).',
+  ],
   // [S/N] Catálogo de variáveis se cura sozinho depois de um app antigo apagá-lo
   '2.175.0': [
     'O FERRO SUMIU E AS CASAS DECIMAIS VOLTARAM PORQUE UM APP DE CAMPO ANTIGO RECRIOU O CATÁLOGO DE VARIÁVEIS DO ZERO — a mesma coisa da pendência 43. Hoje, 24/09 às 08:33 (Brasília), um celular com a conta de um operador de campo abriu um build do app de campo de entre 05/08 e 27/08 (anterior à v2.78.0), semeou o catálogo de fábrica daquela época e, no primeiro envio, podou na nuvem o catálogo real: as 69 linhas atuais nasceram nesse instante. Nesse seed o Fe ainda era complementar (desligado, ordem 119, só o sinônimo "ferro"), os micronutrientes não tinham casas decimais e a ordem dos elementos era a antiga (pH primeiro). A régua do banco da pendência 43 (docs/seguranca-rls.sql, seção 3b), que recusaria esse envio, NUNCA foi aplicada no Supabase e continua pendente até haver acesso ao banco para aplicá-la; até lá, o aparelho antigo pode repetir o estrago a cada abertura. O catálogo já foi restaurado no banco.',

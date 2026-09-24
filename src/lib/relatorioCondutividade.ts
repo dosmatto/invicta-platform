@@ -90,7 +90,7 @@ async function carregarLogos(cliUrl?: string | null): Promise<Logos> {
   const cli = cliUrl ? await carregarImg(cliUrl).catch(() => null) : null;
   return {
     inv: inv ? await reduzirLogo(inv) : null,
-    branca: await carregarImg('/images/logo-branca.png').catch(() => null),
+    branca: await carregarImg('/images/logo-branca.png').then(reduzirLogo).catch(() => null),
     cli: cli ? await reduzirLogo(cli) : null,
   };
 }

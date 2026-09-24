@@ -13,7 +13,7 @@ import { colorirGrid } from './raster';
 import { extrairPoligono, decodeGrid, type Grid } from './fertilidade';
 import { getTalhoes, getFazendas, getClientes, getPlantio, type MdeTalhao } from './store';
 import { abrirOuBaixar } from './recomendacao/relatorioCenarios';
-import { imagemParaPdf } from './pdfImagem';
+import { imagemParaPdf, reduzirLogo } from './pdfImagem';
 import type { RespMdeAnalise } from './mde';
 import { nomeExport } from './nomeExport';
 
@@ -126,7 +126,7 @@ export async function gerarPdfMde(params: {
 
     const decls = areasDeclividade(declividade, baseBounds);
     const obs = observacoes(analise, oficial, decls);
-    const logo = await carregarImg('/images/logo-branca.png').catch(() => null);
+    const logo = await carregarImg('/images/logo-branca.png').then(reduzirLogo).catch(() => null);
 
     const { jsPDF } = await import('jspdf');
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4', compress: true });

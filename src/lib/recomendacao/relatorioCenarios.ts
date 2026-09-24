@@ -8,7 +8,7 @@
 
 import type { jsPDF as JsPDF } from 'jspdf';
 import { capturarMapaFertilidade, capturarMapaZonas } from '../capturaMapa';
-import { imagemParaPdf } from '../pdfImagem';
+import { imagemParaPdf, reduzirLogo } from '../pdfImagem';
 import { colorirDose } from '../raster';
 import { hexToRgb } from '../legendas';
 import { rotuloAno } from '../periodo';
@@ -86,7 +86,7 @@ export async function montarPdfComparador(cenarios: Cenario[]): Promise<Blob> {
   for (const c of cenarios) for (const d of c.doses) { const k = chaveProduto(d); if (!produtos.includes(k)) produtos.push(k); }
   if (produtos.length === 0) throw new Error('Os cenários não têm doses para comparar.');
 
-  const logoBranca = await carregarImg('/images/logo-branca.png').catch(() => null);
+  const logoBranca = await carregarImg('/images/logo-branca.png').then(reduzirLogo).catch(() => null);
   const { jsPDF } = await import('jspdf');
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4', compress: true });
   let primeira = true;
@@ -619,7 +619,7 @@ export async function renderBookOficialNoDoc(
   const tId = cenarios[0].talhaoId, safra = cenarios[0].safra;
   const ctx = ctxDoTalhao(tId, safra);
   if (!ctx) throw new Error('Talhão não encontrado para gerar a recomendação.');
-  const logo = await carregarImg('/images/logo-branca.png').catch(() => null);
+  const logo = await carregarImg('/images/logo-branca.png').then(reduzirLogo).catch(() => null);
   const numDe = construirNumDe();
   const itens = achatarDoses(cenarios, numDe, !!opts?.somenteUsar);
   if (itens.length === 0) throw new Error(opts?.somenteUsar
@@ -656,7 +656,7 @@ export async function montarPdfDistribuicaoPorParte(cenarios: Cenario[]): Promis
   if (itens.length === 0) {
     throw new Error('Nenhuma dose marcada com ★ (estrela). Na aba Recomendações, marque as doses que serão utilizadas.');
   }
-  const logo = await carregarImg('/images/logo-branca.png').catch(() => null);
+  const logo = await carregarImg('/images/logo-branca.png').then(reduzirLogo).catch(() => null);
   const { jsPDF } = await import('jspdf');
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4', compress: true });
   const saiu = await desenharDistribuicaoPorParte(doc, ctx, itens, logo);
@@ -784,7 +784,7 @@ export async function montarRelatorioRecomendacaoFazenda(fazendaId: string, safr
   if (!faz) throw new Error('Fazenda não encontrada.');
   if (grupos.length === 0) throw new Error('Nenhuma recomendação marcada com ★ nesta fazenda/safra. Marque as doses (★) na aba Recomendações dos talhões.');
 
-  const logo = await carregarImg('/images/logo-branca.png').catch(() => null);
+  const logo = await carregarImg('/images/logo-branca.png').then(reduzirLogo).catch(() => null);
   const { jsPDF } = await import('jspdf');
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4', compress: true });
   desenharCapaFazenda(doc, faz.nome, cli?.nome ?? '', safra, grupos, logo);

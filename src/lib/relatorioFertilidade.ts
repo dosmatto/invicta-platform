@@ -84,7 +84,7 @@ async function carregarLogos(cliUrl?: string | null): Promise<Logos> {
   // livre, pode ser enorme) são exageradas p/ ~50 mm impressos → reduz p/ ~480px.
   return {
     inv: inv ? await reduzirLogo(inv) : null,
-    branca: await carregarImg('/images/logo-branca.png').catch(() => null),
+    branca: await carregarImg('/images/logo-branca.png').then(reduzirLogo).catch(() => null),
     cli: cli ? await reduzirLogo(cli) : null,
   };
 }

@@ -66,8 +66,8 @@ export async function gerarRelatorioValidacao(d: DadosRelatorioValidacao): Promi
   const W = 297, H = 210, M = 6;
   const { rel, sugestao, ident } = d;
 
-  const inv = await carregarImg('/images/logo-colorida.png').catch(() => null);
-  const branca = await carregarImg('/images/logo-branca.png').catch(() => null);
+  const inv = await carregarImg('/images/logo-colorida.png').then(reduzirLogo).catch(() => null);
+  const branca = await carregarImg('/images/logo-branca.png').then(reduzirLogo).catch(() => null);
   const cliRaw = ident.logoClienteUrl ? await carregarImg(ident.logoClienteUrl).catch(() => null) : null;
   const cli = cliRaw ? await reduzirLogo(cliRaw) : null;
 

@@ -57,23 +57,55 @@ export async function imagemParaPdf(
   return { data: cv.toDataURL('image/jpeg', 0.88), formato: 'JPEG' };
 }
 
+// Blob → dataURL (FileReader): caminho de reserva quando o canvas não serve.
+function blobParaDataUrl(blob: Blob): Promise<string> {
+  return new Promise((res, rej) => {
+    const fr = new FileReader();
+    fr.onload = () => res(String(fr.result));
+    fr.onerror = () => rej(new Error('falha ao ler a imagem'));
+    fr.readAsDataURL(blob);
+  });
+}
+
 /**
- * Reduz um <img> (logo) para no máx. `maxLarguraPx`, preservando o alfa (PNG) e
- * o aspecto. Devolve um novo HTMLImageElement (mesmas APIs naturalWidth/Height,
- * para o cálculo de aspecto continuar valendo). Em qualquer falha (ex.: canvas
- * "tainted" por CORS), devolve o elemento original — nunca quebra o relatório.
+ * Prepara um <img> (logo) para o `doc.addImage` do jsPDF: reduz para no máx.
+ * `maxLarguraPx`, preservando o alfa (PNG) e o aspecto, e — o essencial —
+ * devolve SEMPRE um elemento cujo `src` é um dataURL.
+ *
+ * POR QUÊ (24/09/2026, book de recomendações do produtor): quando o <img> tem um
+ * `src` de URL comum (`/images/logo-branca.png`), o jsPDF ignora os pixels já
+ * carregados e REFAZ O DOWNLOAD do arquivo com um XMLHttpRequest SÍNCRONO
+ * (`loadFile(src, true)`). Onde esse pedido síncrono falha, a função dele
+ * devolve `undefined` e o passo seguinte faz `.data` em cima disso — é o
+ * "undefined is not an object (evaluating 't.data')" que derrubou o book no
+ * portal. Com o `src` em dataURL o jsPDF decodifica o base64 direto, sem rede.
+ * Por isso aqui NÃO existe mais o atalho "já é pequeno → devolve o original":
+ * o original é justamente o que faz o jsPDF ir à rede.
+ *
+ * Ordem de tentativas: dataURL já pronto → canvas (reduz/re-encoda PNG) → fetch
+ * do próprio arquivo lido como dataURL (quando o canvas fica "tainted" por
+ * CORS) → em último caso o elemento original, como antes.
  */
 export async function reduzirLogo(el: HTMLImageElement, maxLarguraPx = 480): Promise<HTMLImageElement> {
+  const src = el.src ?? '';
+  if (/^data:/i.test(src)) return el;   // já está no formato que o jsPDF lê sem rede
   try {
     const w = el.naturalWidth, h = el.naturalHeight;
-    if (!w || !h || w <= maxLarguraPx) return el; // já pequeno → mantém
-    const outW = maxLarguraPx, outH = Math.max(1, Math.round(h * (maxLarguraPx / w)));
-    const cv = document.createElement('canvas'); cv.width = outW; cv.height = outH;
-    const ctx = cv.getContext('2d')!;
-    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
-    ctx.drawImage(el, 0, 0, outW, outH);
-    const url = cv.toDataURL('image/png'); // preserva transparência (logo branca etc.)
-    const out = await carregar(url);
-    return out;
-  } catch { return el; }
+    if (w && h) {
+      const outW = Math.min(w, maxLarguraPx), outH = Math.max(1, Math.round(h * (outW / w)));
+      const cv = document.createElement('canvas'); cv.width = outW; cv.height = outH;
+      const ctx = cv.getContext('2d')!;
+      ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(el, 0, 0, outW, outH);
+      const url = cv.toDataURL('image/png'); // preserva transparência (logo branca etc.)
+      return await carregar(url);
+    }
+  } catch { /* canvas "tainted" (CORS) ou sem dimensões → tenta pelo arquivo */ }
+  try {
+    if (src) {
+      const r = await fetch(src);
+      if (r.ok) return await carregar(await blobParaDataUrl(await r.blob()));
+    }
+  } catch { /* sem rede/CORS: cai no original */ }
+  return el;
 }

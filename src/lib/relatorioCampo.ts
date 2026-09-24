@@ -80,7 +80,7 @@ export async function gerarCadernoCampo(d: DadosRelatorioCampo): Promise<void> {
   const cliRaw = d.logoClienteUrl ? await carregarImg(d.logoClienteUrl).catch(() => null) : null;
   const logos = {
     inv: invRaw ? await reduzirLogo(invRaw) : null,
-    branca: await carregarImg('/images/logo-branca.png').catch(() => null),
+    branca: await carregarImg('/images/logo-branca.png').then(reduzirLogo).catch(() => null),
     cli: cliRaw ? await reduzirLogo(cliRaw) : null,
   };
 
