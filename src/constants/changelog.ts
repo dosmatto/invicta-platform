@@ -1,5 +1,11 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Aba Arquivos mostra o nome da equação de cada mapa, não só o produto
+  '2.177.0': [
+    'A ABA ARQUIVOS PASSA A DIZER QUAL MAPA FOI MARCADO PARA USO. Cada linha mostrava só o PRODUTO ("Gesso", "Calcário"), e numa recomendação de gessagem com cinco variantes — "Gessagem", "min 500", "min 1000 limitada"… — todas têm o mesmo produto: a linha "Gesso" não dizia qual delas tinha ganhado a estrela. Agora a linha traz o nº do cadastro e o NOME DA EQUAÇÃO ("03 · Gessagem min 1000 limitada"), com o produto embaixo em letra menor, os selos "zona" e "fórmula editada" quando valem — o mesmo rótulo da aba Recomendações e do PDF.',
+    'O nome vem da equação ATUAL da Biblioteca (legenda viva), como nas outras abas: renomear a equação atualiza o cartão daqui também.',
+    'O arquivo JPG passa a levar o nome da equação em vez do produto: cinco mapas de gesso saíam como cinco "…_Gesso.jpg" e se sobrescreviam na pasta de download.',
+    'O texto de abertura da aba dizia que o Shapefile "entra em breve" desde que ele existe — corrigido.',
   // [S/N] Book e relatórios em PDF não caem mais por causa do logo
   '2.176.0': [
     'O BOOK DE RECOMENDAÇÕES QUEBRAVA NO PORTAL DO PRODUTOR com a mensagem "undefined is not an object (evaluating \'t.data\')" ao clicar em "Gerar book PDF". O PDF nem começava a ser montado.',

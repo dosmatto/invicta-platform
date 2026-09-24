@@ -13,8 +13,8 @@ import { nomeExport } from '@/lib/nomeExport';
 import { extrairPoligono } from '@/lib/fertilidade';
 import { colorirDose } from '@/lib/raster';
 import { capturarMapaFertilidade } from '@/lib/capturaMapa';
-import { listarCenarios, descomprimirCenario, type Cenario } from '@/lib/recomendacao/cenarios';
-import { montarBookOficial, montarPdfDistribuicaoPorParte, abrirOuBaixar } from '@/lib/recomendacao/relatorioCenarios';
+import { listarCenarios, descomprimirCenario, hidratarRotulos, rotulosAtuaisDasEquacoes, type Cenario } from '@/lib/recomendacao/cenarios';
+import { montarBookOficial, montarPdfDistribuicaoPorParte, abrirOuBaixar, construirNumDe } from '@/lib/recomendacao/relatorioCenarios';
 import { nPartes } from '@/lib/recomendacao/porPoligono';
 import { MONITORES, monitorPorId, gerarShapefileZip } from '@/lib/recomendacao/shapefile';
 import { agruparPorRotulo, type DoseDaZona } from '@/lib/recomendacao/dosePorZona';
@@ -57,8 +57,21 @@ export function ArquivosSection({ safraNome }: { safraNome?: string }) {
   useEffect(() => {
     if (!nav.talhaoId || !safra) return;
     setCarregando(true);
-    listarCenarios(nav.talhaoId, safra).then(cs => setCens(cs.filter(c => c.doses.some(d => d.usar)))).finally(() => setCarregando(false));
+    // Re-hidrata nome/produto de cada dose a partir da equação ATUAL da
+    // Biblioteca (legenda viva) — o mesmo que a aba Recomendações faz. Sem isso,
+    // renomear a equação deixava o cartão daqui com o nome de quando foi salva.
+    listarCenarios(nav.talhaoId, safra)
+      .then(cs => { const rot = rotulosAtuaisDasEquacoes(); setCens(cs.filter(c => c.doses.some(d => d.usar)).map(c => hidratarRotulos(c, rot))); })
+      .finally(() => setCarregando(false));
   }, [nav.talhaoId, safra]);
+
+  // nº do cadastro da equação (01, 02…), na frente de cada mapa — o mesmo
+  // número que aparece na aba Recomendações e no PDF, para cruzar sem adivinhar.
+  const numDe = useMemo(() => construirNumDe(), []);
+  // NOME DO MAPA = nome da EQUAÇÃO, não o produto. Numa recomendação de gessagem
+  // com cinco variantes ("Gessagem", "min 500", "min 1000 limitada"…) todas
+  // têm produto "Gesso" — cinco linhas iguais não dizem qual foi a escolhida.
+  const nomeDoMapa = (d: Cenario['doses'][number]) => d.nomeEquacao || d.produto || 'mapa';
 
   const poligono = useMemo(() => {
     const t = getTalhoes().find(x => x.id === nav.talhaoId);
@@ -113,7 +126,9 @@ export function ArquivosSection({ safraNome }: { safraNome?: string }) {
       const d = full.doses.find(x => x.equacaoId === eqId); if (!d) return;
       const png = colorirDose(d.grid, d.estilo, d.doseMinima).dataUrl;
       const comp = await capturarMapaFertilidade({ rasterPng: png, bounds: d.bounds, poligono, valores: VAZIO, satelite: true, corLimite: '#ffffff', larguraPx: 1600, alturaPx: 1120 });
-      baixar(await pngParaJpeg(comp), `${nomeRecom(c, d.produto || d.nomeEquacao)}.jpg`);
+      // Nome da equação no arquivo: com o produto, cinco mapas de gesso viravam
+      // cinco "…_Gesso.jpg" que se sobrescreviam na pasta de download.
+      baixar(await pngParaJpeg(comp), `${nomeRecom(c, nomeDoMapa(d))}.jpg`);
     } catch (e) { alert('Falha ao gerar a imagem: ' + (e instanceof Error ? e.message : String(e))); }
     finally { setBusy(''); }
   }
@@ -175,7 +190,7 @@ export function ArquivosSection({ safraNome }: { safraNome?: string }) {
         <h3 className="text-sm font-bold" style={{ color: '#e2e8f0' }}>Arquivos da recomendação</h3>
       </div>
       <p className="text-[10px]" style={{ color: '#64748b' }}>
-        Cenários marcados <strong>“Para uso”</strong> (estrela) na aba Recomendações. Gere o mapa final (PDF / imagem). Os arquivos de taxa variável (Shapefile) entram em breve.
+        Cenários marcados <strong>“Para uso”</strong> (estrela) na aba Recomendações. Gere o mapa final (PDF / imagem) e o arquivo de taxa variável (Shapefile) de cada mapa.
       </p>
 
       {carregando ? (
@@ -210,9 +225,20 @@ export function ArquivosSection({ safraNome }: { safraNome?: string }) {
                 </button>
               </div>
               <div className="space-y-1">
-                {c.doses.filter(d => d.usar).map(d => (
+                {c.doses.filter(d => d.usar).map(d => {
+                  const n = numDe(d.equacaoId);
+                  const mostraProduto = !!d.produto && d.produto !== d.nomeEquacao;
+                  return (
                   <div key={d.equacaoId} className="flex items-center gap-1.5">
-                    <span className="flex-1 truncate text-[9px]" style={{ color: '#cbd5e1' }}>{d.produto || d.nomeEquacao}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="truncate text-[10px] font-semibold" style={{ color: '#e2e8f0' }}>
+                        {n != null && <span style={{ color: '#93c5fd' }}>{String(n).padStart(2, '0')} · </span>}
+                        {nomeDoMapa(d)}
+                        {d.porZona?.length ? <span className="ml-1 text-[8px] px-1 rounded" style={{ background: '#1a3a6b', color: '#93c5fd' }}>zona</span> : null}
+                        {d.formulaEditada ? <span className="ml-1 text-[8px] px-1 rounded" style={{ background: '#422006', color: '#fbbf24' }}>fórmula editada</span> : null}
+                      </div>
+                      {mostraProduto && <div className="truncate text-[9px]" style={{ color: '#64748b' }}>{d.produto}</div>}
+                    </div>
                     <button onClick={() => jpgDose(c, d.equacaoId)} disabled={!!busy} title="Imagem JPG (satélite + dose)"
                       className="px-1.5 py-1 rounded text-[9px] font-semibold flex items-center gap-1" style={{ background: '#1a3a6b', color: '#93c5fd', opacity: busy ? 0.6 : 1 }}>
                       {busy === `jpg-${c.id}-${d.equacaoId}` ? <Loader2 size={10} className="animate-spin" /> : <FileImage size={10} />} JPG
@@ -222,7 +248,8 @@ export function ArquivosSection({ safraNome }: { safraNome?: string }) {
                       {busy === `shp-${c.id}-${d.equacaoId}` ? <Loader2 size={10} className="animate-spin" /> : <FileCode size={10} />} SHP
                     </button>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           ))}
