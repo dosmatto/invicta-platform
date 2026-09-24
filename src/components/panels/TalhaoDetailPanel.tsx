@@ -17,6 +17,7 @@ import {
   getGrades, getImportacoesLab, getImportacoesCompactacao, getCondutividade, getLegendas, Talhao, Safra,
 } from '@/lib/store';
 import { rotuloAno } from '@/lib/periodo';
+import { somenteLeitura } from '@/lib/somenteLeitura';
 import { ordenarLegendasDoAtributo } from '@/lib/legendas';
 import type { Legenda } from '@/lib/legendas';
 import { parseLimiteTalhao } from '@/lib/geo';
@@ -56,6 +57,9 @@ const SepararArea = dynamic(
 // ── seção de limite geográfico (atualizar polígono) ──────────────────────────
 function GeoSection({ talhao, onUploaded }: { talhao: Talhao | null; onUploaded: (areaHa: number) => void }) {
   const { setUploadedGeo, setUploadedBbox } = useApp();
+  // Produtor no mapa (somente leitura): só "Mostrar no mapa" — sem carregar,
+  // editar ou separar o limite.
+  const leitura = somenteLeitura();
   const inputRef = useRef<HTMLInputElement>(null);
   const [estado, setEstado] = useState<'idle' | 'loading' | 'ok' | 'erro' | 'conflito'>('idle');
   const [erroMsg, setErroMsg] = useState('');
@@ -164,7 +168,7 @@ function GeoSection({ talhao, onUploaded }: { talhao: Talhao | null; onUploaded:
       </div>
 
       <div className="p-3">
-        <div onDragOver={e => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={onDrop} onClick={() => inputRef.current?.click()}
+        {!leitura && <div onDragOver={e => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={onDrop} onClick={() => inputRef.current?.click()}
           className="border-2 border-dashed rounded-lg py-5 text-center cursor-pointer transition-colors"
           style={{ borderColor: dragging ? '#60a5fa' : estado === 'ok' ? '#4ade80' : '#1e3a5f', background: dragging ? '#0f2240' : 'transparent' }}>
           {estado === 'loading' ? (
@@ -177,7 +181,7 @@ function GeoSection({ talhao, onUploaded }: { talhao: Talhao | null; onUploaded:
               <p className="text-[9px]" style={{ color: '#475569' }}>Arraste ou clique · .kml · .zip (shapefile) · .geojson</p>
             </div>
           )}
-        </div>
+        </div>}
         {estado === 'erro' && <p className="mt-2 text-[10px] text-center" style={{ color: '#f87171' }}>{erroMsg}</p>}
         {avisos.map((a, i) => (
           <p key={i} className="mt-1.5 text-[10px]" style={{ color: '#fbbf24' }}>⚠ {a}</p>
@@ -197,22 +201,24 @@ function GeoSection({ talhao, onUploaded }: { talhao: Talhao | null; onUploaded:
           </div>
         )}
         {temGeo && estado !== 'loading' && estado !== 'conflito' && (
-          <div className="mt-2 grid grid-cols-2 gap-1.5">
+          <div className={`${leitura ? '' : 'mt-2 '}grid ${leitura ? 'grid-cols-1' : 'grid-cols-2'} gap-1.5`}>
             <button onClick={() => { try { setUploadedGeo(JSON.parse(talhao!.geojson!) as GeoJSON.FeatureCollection); setUploadedBbox(talhao!.bbox!); } catch {} }}
               className="py-1.5 rounded text-[10px] font-semibold transition-opacity hover:opacity-80" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
               Mostrar no mapa
             </button>
-            <button onClick={() => setEditando(true)}
-              className="flex items-center justify-center gap-1 py-1.5 rounded text-[10px] font-semibold transition-opacity hover:opacity-80" style={{ background: '#5b21b6', color: '#ddd6fe' }}>
-              <Pencil size={11} /> Editar traçado
-            </button>
+            {!leitura && (
+              <button onClick={() => setEditando(true)}
+                className="flex items-center justify-center gap-1 py-1.5 rounded text-[10px] font-semibold transition-opacity hover:opacity-80" style={{ background: '#5b21b6', color: '#ddd6fe' }}>
+                <Pencil size={11} /> Editar traçado
+              </button>
+            )}
           </div>
         )}
         {/* TALHÃO EM VÁRIAS ÁREAS: separar uma delas (desmembrar / anexar /
             excluir). Fica FORA do editor de traçado de propósito — o editor
             substitui o polígono inteiro e é bloqueado quando o ciclo tem dados;
             esta operação é cirúrgica e leva a amostragem junto. */}
-        {temGeo && nPartes > 1 && estado !== 'loading' && estado !== 'conflito' && (
+        {!leitura && temGeo && nPartes > 1 && estado !== 'loading' && estado !== 'conflito' && (
           <button onClick={() => setSeparando(true)}
             className="mt-1.5 w-full flex items-center justify-center gap-1 py-1.5 rounded text-[10px] font-semibold transition-opacity hover:opacity-80"
             style={{ background: '#422006', color: '#fbbf24' }}>
@@ -451,6 +457,9 @@ function DefRow({ icon: Icon, cor, label, estado, carregando, onVer, onUpload }:
 // ── painel principal ─────────────────────────────────────────────────────────
 export function TalhaoDetailPanel() {
   const { setActivePanel, nav, setNav, setMapMode, setUploadedGeo, setUploadedBbox, setZonasManejo } = useApp();
+  // Produtor no mapa (somente leitura): sem renomear, fundir, apagar nem
+  // cadastrar ano. A trava de verdade é na nuvem (lib/somenteLeitura.ts).
+  const leitura = somenteLeitura();
 
   const [talhao, setTalhao] = useState<Talhao | null>(null);
   const [safras, setSafras] = useState<Safra[]>([]);
@@ -565,7 +574,7 @@ export function TalhaoDetailPanel() {
               ) : (
                 <p className="text-base font-bold flex items-center gap-1.5" style={{ color: '#fff' }}>
                   {nav.talhao}
-                  <button onClick={() => { setNomeTemp(nav.talhao); setRenomeando(true); }} title="Renomear talhão" className="p-0.5" style={{ color: '#64748b' }}><Pencil size={12} /></button>
+                  {!leitura && <button onClick={() => { setNomeTemp(nav.talhao); setRenomeando(true); }} title="Renomear talhão" className="p-0.5" style={{ color: '#64748b' }}><Pencil size={12} /></button>}
                 </p>
               )}
               <p className="text-xs mt-0.5" style={{ color: '#93c5fd' }}>{nav.fazenda}</p>
@@ -588,11 +597,13 @@ export function TalhaoDetailPanel() {
             <Share2 size={13} /> Link do prestador (só o mapa)
           </button>
 
-          <button onClick={() => setFundindo({})} disabled={!talhao?.geojson}
-            className="mt-2 w-full flex items-center justify-center gap-1.5 py-1.5 rounded text-[11px] font-semibold disabled:opacity-40"
-            style={{ background: '#2e1065', color: '#ddd6fe' }}>
-            <Combine size={12} /> Fundir com outro talhão
-          </button>
+          {!leitura && (
+            <button onClick={() => setFundindo({})} disabled={!talhao?.geojson}
+              className="mt-2 w-full flex items-center justify-center gap-1.5 py-1.5 rounded text-[11px] font-semibold disabled:opacity-40"
+              style={{ background: '#2e1065', color: '#ddd6fe' }}>
+              <Combine size={12} /> Fundir com outro talhão
+            </button>
+          )}
 
           {avisoFusao && <p className="mt-2 text-[10px] leading-snug" style={{ color: '#a78bfa' }}>✓ {avisoFusao}</p>}
 
@@ -612,11 +623,13 @@ export function TalhaoDetailPanel() {
             </div>
           )}
 
-          <button onClick={apagarTalhao}
-            className="mt-2 w-full flex items-center justify-center gap-1.5 py-1.5 rounded text-[11px] font-semibold"
-            style={{ background: numDependencias > 0 ? '#1a3a6b' : '#7f1d1d', color: numDependencias > 0 ? '#475569' : '#fca5a5' }}>
-            <Trash2 size={12} /> {numDependencias > 0 ? `Exclusão bloqueada (${numDependencias} item${numDependencias > 1 ? 'ns' : ''})` : 'Apagar talhão'}
-          </button>
+          {!leitura && (
+            <button onClick={apagarTalhao}
+              className="mt-2 w-full flex items-center justify-center gap-1.5 py-1.5 rounded text-[11px] font-semibold"
+              style={{ background: numDependencias > 0 ? '#1a3a6b' : '#7f1d1d', color: numDependencias > 0 ? '#475569' : '#fca5a5' }}>
+              <Trash2 size={12} /> {numDependencias > 0 ? `Exclusão bloqueada (${numDependencias} item${numDependencias > 1 ? 'ns' : ''})` : 'Apagar talhão'}
+            </button>
+          )}
         </div>
 
         {/* Seletor de Ano (interno segue a safra) */}
@@ -630,11 +643,13 @@ export function TalhaoDetailPanel() {
                 {rotuloAno(s.nome)}
               </button>
             ))}
-            <button onClick={() => setMostraFormSafra(v => !v)} title="Cadastrar ano"
-              className="px-1.5 py-1 rounded text-xs font-bold flex items-center gap-0.5 transition-colors"
-              style={{ background: mostraFormSafra ? '#374151' : 'var(--invicta-green-dark)', color: '#fff' }}>
-              {mostraFormSafra ? <X size={12} /> : <Plus size={12} />}
-            </button>
+            {!leitura && (
+              <button onClick={() => setMostraFormSafra(v => !v)} title="Cadastrar ano"
+                className="px-1.5 py-1 rounded text-xs font-bold flex items-center gap-0.5 transition-colors"
+                style={{ background: mostraFormSafra ? '#374151' : 'var(--invicta-green-dark)', color: '#fff' }}>
+                {mostraFormSafra ? <X size={12} /> : <Plus size={12} />}
+              </button>
+            )}
           </div>
 
           {mostraFormSafra && (

@@ -8,6 +8,7 @@ import { getUsuarios, statusDe, categoriaDe } from '@/lib/iam/usuarios';
 import { ChevronLeft, Plus, Building2, Phone, Mail, Edit2, Save, X, Trash2, Pencil, UserCog } from 'lucide-react';
 import { PanelSection, PanelButton, MockIndicator } from './_shared';
 import { ResumoGeralRecomendacoes } from './ResumoGeralRecomendacoes';
+import { somenteLeitura } from '@/lib/somenteLeitura';
 
 const ESTADOS_BR = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'];
 const editInput = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' } as const;
@@ -24,6 +25,9 @@ function FieldEdit({ label, value, onChange }: { label: string; value: string; o
 
 export function ProdutorDetailPanel() {
   const { nav, setNav, setActivePanel } = useApp();
+  // Produtor no mapa (somente leitura): nenhum botão de criar/editar/apagar.
+  // A trava de verdade é na nuvem (lib/somenteLeitura.ts); aqui é só a tela.
+  const leitura = somenteLeitura();
   const [tab, setTab] = useState<'fazendas' | 'relatorios' | 'dados'>('fazendas');
   const [cliente, setCliente] = useState<Cliente | null>(null);
   const [fazendas, setFazendas] = useState<Fazenda[]>([]);
@@ -139,7 +143,7 @@ export function ProdutorDetailPanel() {
             ) : (
               <p className="text-base font-bold flex items-center gap-1.5 min-w-0" style={{ color: '#fff' }}>
                 <span className="truncate">{cliente.nome}</span>
-                <button onClick={() => { setNomeTemp(cliente.nome); setRenomeando(true); }} title="Renomear cliente" className="p-0.5 flex-shrink-0" style={{ color: '#64748b' }}><Pencil size={12} /></button>
+                {!leitura && <button onClick={() => { setNomeTemp(cliente.nome); setRenomeando(true); }} title="Renomear cliente" className="p-0.5 flex-shrink-0" style={{ color: '#64748b' }}><Pencil size={12} /></button>}
               </p>
             )}
             <p className="text-xs mt-0.5" style={{ color: '#64748b' }}>
@@ -239,13 +243,15 @@ export function ProdutorDetailPanel() {
               </div>
             ) : (
               <>
-                <div className="p-3">
-                  <button onClick={() => setMostraForm(true)}
-                    className="w-full flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-semibold text-white"
-                    style={{ background: 'var(--invicta-green-dark)' }}>
-                    <Plus size={12} /> Nova Fazenda
-                  </button>
-                </div>
+                {!leitura && (
+                  <div className="p-3">
+                    <button onClick={() => setMostraForm(true)}
+                      className="w-full flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-semibold text-white"
+                      style={{ background: 'var(--invicta-green-dark)' }}>
+                      <Plus size={12} /> Nova Fazenda
+                    </button>
+                  </div>
+                )}
 
                 {fazendas.length === 0 ? (
                   <div className="px-4 py-8 text-center">
@@ -334,9 +340,11 @@ export function ProdutorDetailPanel() {
           </div>
         ) : (
           <>
-            <div className="p-3 flex justify-end">
-              <button onClick={iniciarEdicaoCliente} className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold" style={{ background: '#1a3a6b', color: '#93c5fd' }}><Edit2 size={12} /> Editar</button>
-            </div>
+            {!leitura && (
+              <div className="p-3 flex justify-end">
+                <button onClick={iniciarEdicaoCliente} className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold" style={{ background: '#1a3a6b', color: '#93c5fd' }}><Edit2 size={12} /> Editar</button>
+              </div>
+            )}
             <PanelSection>
               {[
                 { label: 'Nome', value: cliente.nome },
@@ -365,18 +373,21 @@ export function ProdutorDetailPanel() {
             {/* Custos que sobrepõem a Biblioteca para ESTE produtor no ano da
                 navegação. Fica na aba Dados de propósito: é cadastro do cliente,
                 não configuração da casa. */}
-            <div style={{ borderTop: '1px solid #0f2240' }}>
-              <CustosProdutorEditor clienteId={cliente.id} />
-            </div>
+            {/* Produtor (somente leitura): sem editor de custos e sem apagar. */}
+            {!leitura && (
+              <div style={{ borderTop: '1px solid #0f2240' }}>
+                <CustosProdutorEditor clienteId={cliente.id} />
+              </div>
+            )}
 
-            <div className="p-4">
+            {!leitura && <div className="p-4">
               <button onClick={apagarCliente}
                 className="w-full flex items-center justify-center gap-1.5 py-2 rounded text-xs font-semibold"
                 style={{ background: fazendas.length > 0 ? '#1a3a6b' : '#7f1d1d', color: fazendas.length > 0 ? '#475569' : '#fca5a5' }}>
                 <Trash2 size={12} /> {fazendas.length > 0 ? `Exclusão bloqueada (${fazendas.length} fazenda${fazendas.length > 1 ? 's' : ''})` : 'Apagar cliente'}
               </button>
               {fazendas.length > 0 && <p className="text-[9px] text-center mt-1" style={{ color: '#475569' }}>Apague as fazendas primeiro para excluir o cliente.</p>}
-            </div>
+            </div>}
           </>
         ))}
       </div>

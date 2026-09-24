@@ -15,6 +15,7 @@ import { seedLegendasSistema, seedNormasFoliaresSistema, migrarLegendaCtceV1, mi
 import { LEGENDAS_OFICIAIS } from '@/constants/legendasSeedOficial';
 import { authConfigurado, observarAuth, logout, type User } from '@/lib/auth';
 import { hidratarCachePesado } from '@/lib/localComprimido';
+import { modoProdutorMapaAtivo } from '@/lib/modoProdutorMapa';
 import { LoginScreen } from '@/components/auth/LoginScreen';
 
 export type MapMode = 'street' | 'satellite';
@@ -352,10 +353,12 @@ export function AppProvider({ children, redirectProdutorParaPortal, modoCampo }:
     console.info('[invicta] Owner: fazendas órfãs — PREVIEW:  await invRemoverFazendasOrfas()  · APLICAR:  await invRemoverFazendasOrfas(true)');
   }, [dadosProntos]);
 
-  // Produtor não usa o app do mapa — vai direto pro portal (read-only).
+  // Produtor entra pelo portal (read-only). Exceção: o modo "mapa do produtor",
+  // ligado pelo botão "Mapa da fazenda" do portal — aí ele fica no /painel,
+  // em somente leitura (lib/modoProdutorMapa.ts).
   useEffect(() => {
     if (!dadosProntos || !redirectProdutorParaPortal) return;
-    if (papelDoUsuario() === 'produtor') router.replace('/portal');
+    if (papelDoUsuario() === 'produtor' && !modoProdutorMapaAtivo()) router.replace('/portal');
   }, [dadosProntos]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [activeModule, setActiveModule] = useState<string | null>(null);

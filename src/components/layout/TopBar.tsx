@@ -2,15 +2,25 @@
 
 import Image from 'next/image';
 import { useEffect, useState } from 'react';
-import { ChevronRight, Wifi, User, LogOut } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { ChevronRight, Wifi, User, LogOut, Lock, ArrowLeft } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { getSafras, getTalhoes } from '@/lib/store';
 import { rotuloAno } from '@/lib/periodo';
 import { EmpresaSwitcher } from './EmpresaSwitcher';
 import { logout, emailUsuario, authConfigurado } from '@/lib/auth';
+import { modoProdutorMapaAtivo, desligarModoProdutorMapa } from '@/lib/modoProdutorMapa';
 
 export function TopBar() {
   const { nav: context } = useApp();
+  const router = useRouter();
+  // Produtor no mapa (botão "Mapa da fazenda" do portal): selo de somente
+  // leitura + botão de volta ao portal. Demais papéis: topo como sempre.
+  const modoProdutor = modoProdutorMapaAtivo();
+  function voltarPortal() {
+    desligarModoProdutorMapa();
+    router.push('/portal');
+  }
 
   // ÁREA = a do POLÍGONO do talhão, lida do cadastro a cada render. `nav.area` é
   // só uma cópia feita na navegação e não acompanha a troca de limite (o caso
@@ -41,6 +51,21 @@ export function TopBar() {
         <Image src="/images/logo-branca.png" alt="Invicta" width={90} height={28} priority style={{ objectFit: 'contain', height: 28, width: 'auto' }} />
       </div>
 
+      {modoProdutor && (
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <button onClick={voltarPortal} title="Voltar ao portal"
+            className="flex items-center gap-1 px-2 py-1.5 rounded text-xs font-semibold"
+            style={{ background: '#1a3a6b', color: '#93c5fd' }}>
+            <ArrowLeft size={14} /> Portal
+          </button>
+          <span className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider"
+            title="Você vê o que a Invicta processou nos seus talhões. Alterações só pelo escritório."
+            style={{ background: '#0f2240', color: '#93c5fd', border: '1px solid #1a3a6b' }}>
+            <Lock size={10} /> Somente leitura
+          </span>
+        </div>
+      )}
+
       {/* Breadcrumb contextual */}
       <div className="flex items-center gap-1.5 text-xs flex-1 min-w-0">
         {[
@@ -68,7 +93,8 @@ export function TopBar() {
 
       {/* Right actions */}
       <div className="flex items-center gap-3 flex-shrink-0">
-        <EmpresaSwitcher />
+        {/* Produtor no mapa: sem troca de empresa ("Nova empresa"/"Gerenciar" são escrita). */}
+        {!modoProdutor && <EmpresaSwitcher />}
         <Wifi size={16} style={{ color: '#86efac' }} />
         <div className="flex items-center gap-2 pl-3 border-l border-white/20">
           {authConfigurado && emailUsuario() && (

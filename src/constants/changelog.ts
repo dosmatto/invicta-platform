@@ -1,5 +1,13 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Portal do produtor ganha o botão "Mapa da fazenda" (mapa em somente leitura)
+  '2.179.0': [
+    'O PORTAL DO PRODUTOR GANHOU O BOTÃO "MAPA DA FAZENDA", no topo, ao lado do sair. Ele abre a página normal do mapa (a mesma que a equipe usa), só com a(s) fazenda(s) do produtor e em SOMENTE LEITURA: o produtor navega por Clientes → fazenda → talhão, vê os talhões no mapa e abre a página de cada talhão, mas não cria, edita, importa nem apaga nada.',
+    'No topo do mapa aparece o selo "SOMENTE LEITURA" (o mesmo da página do talhão) e o botão "Portal", que volta ao portal. A barra lateral mostra só o que a matriz de permissões libera para ver (Central de Acessos → Permissões → papel Produtor, coluna "Ver"): Início e Clientes sempre; Medições com "Amostragem e coleta", Foliar com "Laboratório", Biblioteca com "Biblioteca" e Config. com "Usuários e permissões". No padrão do papel Produtor ficam Início e Clientes.',
+    'Somem para o produtor, no mapa: Nova Fazenda, renomear/editar/apagar cliente, custos do produtor e da fazenda, Novo Talhão, importar talhões em massa, monitor de satélite da fazenda, carregar/editar/separar o limite do talhão, renomear/fundir/apagar talhão, cadastrar ano, a troca de empresa e a planilha de conferência do cadastro. Os botões que já obedeciam à permissão de cadastro continuam escondidos. A trava de verdade continua na nuvem: nada que o produtor faça vira gravação.',
+    'A página do talhão aberta a partir do mapa volta ao MAPA (o botão passa a dizer "Mapa"); aberta a partir do portal, continua voltando ao portal. O modo vale até o produtor clicar em "Portal" ou fechar a aba.',
+    'No "ver como o produtor vê" (owner/admin) o botão também aparece, mas leva ao mapa normal, com o papel de quem está vendo. Nenhum outro papel muda.',
+  ],
   // [S/N] Trilho do talhão no portal obedece a coluna "Ver" da matriz de permissões
   '2.178.0': [
     'AS ABAS DO TALHÃO QUE O PRODUTOR VÊ PASSAM A OBEDECER A MATRIZ DE PERMISSÕES (Central de Acessos → Permissões → papel Produtor, coluna "Ver"). Antes o trilho só olhava se havia dado no talhão e o plano do portal — "Amostragem" aparecia para o produtor mesmo com a linha "Amostragem e coleta" desmarcada.',

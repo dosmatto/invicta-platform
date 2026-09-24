@@ -132,6 +132,10 @@ export async function loginEmailSenha(email: string, senha: string): Promise<voi
 }
 
 export async function logout(): Promise<void> {
+  // Sair também apaga o modo "mapa do produtor" (lib/modoProdutorMapa.ts): a
+  // chave fica na sessionStorage da aba, e outro produtor que entrasse na mesma
+  // aba cairia no mapa em vez do portal. Sem importar o módulo (evita ciclo).
+  try { sessionStorage.removeItem('inv_produtor_mapa'); } catch { /* aba sem storage */ }
   if (usuarioOffline) {
     usuarioOffline = null;
     notificarObs?.(null);

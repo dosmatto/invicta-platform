@@ -40,6 +40,7 @@ import { NdviSection } from '@/components/talhao/NdviSection';
 import { ProdutividadeSection } from '@/components/talhao/ProdutividadeSection';
 import { papelDoUsuario, meuRegistro, planoPorId, ehAdmin, SECOES_PORTAL, secaoLiberada, podeEm, matrizDoPapel } from '@/lib/empresa';
 import { authConfigurado } from '@/lib/auth';
+import { modoProdutorMapaAtivo } from '@/lib/modoProdutorMapa';
 import { abasComDados } from '@/lib/portalProdutor';
 import { dadosLocaisDoTalhao, dadosNuvemDosTalhoes, juntarNuvem, type DadosNuvem } from '@/lib/portalDados';
 import { tocarBackend } from '@/lib/interpUrl';
@@ -273,7 +274,10 @@ export function TalhaoPage({ id }: { id: string }) {
 
   function voltar() { router.push('/painel'); }
   // Produtor volta ao portal dele; no preview, ao portal do produtor que estava vendo.
+  // Produtor que veio do MAPA (modo ligado pelo botão "Mapa da fazenda") volta ao mapa.
+  const voltaAoMapa = ehProdutor && modoProdutorMapaAtivo();
   function voltarPortal() {
+    if (voltaAoMapa) { router.push('/painel'); return; }
     if (ehProdutor || !cliente) { router.push('/portal'); return; }
     const q = new URLSearchParams({ cliente: cliente.id });
     if (planoPreview) q.set('plano', planoPreview);
@@ -326,10 +330,10 @@ export function TalhaoPage({ id }: { id: string }) {
     <div className="flex flex-col h-screen overflow-hidden" style={{ background: '#061525' }}>
       {/* Barra de contexto fixa */}
       <header className="flex-shrink-0 flex items-center gap-3 px-4 py-2.5" style={{ background: 'var(--invicta-blue-dark)', borderBottom: '1px solid #1a3a6b' }}>
-        <button onClick={modoProdutor ? voltarPortal : voltar} title={modoProdutor ? 'Voltar ao portal' : 'Voltar ao mapa da fazenda'}
+        <button onClick={modoProdutor ? voltarPortal : voltar} title={modoProdutor && !voltaAoMapa ? 'Voltar ao portal' : 'Voltar ao mapa da fazenda'}
           className="flex items-center gap-1 px-2 py-1.5 rounded text-xs font-semibold flex-shrink-0"
           style={{ background: '#1a3a6b', color: '#93c5fd' }}>
-          <ChevronLeft size={14} /> {modoProdutor ? 'Portal' : 'Mapa'}
+          <ChevronLeft size={14} /> {modoProdutor && !voltaAoMapa ? 'Portal' : 'Mapa'}
         </button>
         {modoProdutor && (
           <span className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider flex-shrink-0"

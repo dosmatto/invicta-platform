@@ -7,6 +7,7 @@ import { CustosProdutorEditor } from './CustosProdutorEditor';
 import { getFazendas, getTalhoes, saveTalhao, importarTalhoesLote, updateFazenda, excluirFazendaCascata, Fazenda, Talhao } from '@/lib/store';
 import { cloudExcluirMapasPorPrefixo, cloudExcluirPorPrefixo } from '@/lib/cloud';
 import { pode } from '@/lib/empresa';
+import { somenteLeitura } from '@/lib/somenteLeitura';
 import { getUsuarios, statusDe, categoriaDe } from '@/lib/iam/usuarios';
 import { detectarMunicipiosFazenda } from '@/lib/geocode';
 import { prepararTalhoesEmMassa, CandidatoTalhao } from '@/lib/geo';
@@ -45,6 +46,9 @@ export function FazendaDetailPanel() {
   const [txtConfirma, setTxtConfirma] = useState('');
   const [excluindo, setExcluindo] = useState(false);
   const podeExcluir = pode('excluirProdutor');   // mesma capacidade da exclusão de produtor
+  // Produtor no mapa (somente leitura): some o que cria/importa/configura e
+  // não tinha trava de pode(). A trava de verdade é na nuvem (lib/somenteLeitura.ts).
+  const leitura = somenteLeitura();
 
   async function detectarMunicipio() {
     if (!nav.fazendaId || detectando) return;
@@ -321,21 +325,27 @@ export function FazendaDetailPanel() {
             ) : (
               <>
                 <div className="p-3 space-y-2">
-                  <button onClick={() => setMostraForm(true)}
-                    className="w-full flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-semibold text-white"
-                    style={{ background: 'var(--invicta-green-dark)' }}>
-                    <Plus size={12} /> Novo Talhão
-                  </button>
-                  <button onClick={() => setMostraImport(true)}
-                    className="w-full flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-semibold"
-                    style={{ background: '#1a3a6b', color: '#93c5fd' }}>
-                    <Upload size={12} /> Importar em massa (KML / SHP)
-                  </button>
+                  {!leitura && (
+                    <>
+                      <button onClick={() => setMostraForm(true)}
+                        className="w-full flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-semibold text-white"
+                        style={{ background: 'var(--invicta-green-dark)' }}>
+                        <Plus size={12} /> Novo Talhão
+                      </button>
+                      <button onClick={() => setMostraImport(true)}
+                        className="w-full flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-semibold"
+                        style={{ background: '#1a3a6b', color: '#93c5fd' }}>
+                        <Upload size={12} /> Importar em massa (KML / SHP)
+                      </button>
+                    </>
+                  )}
                   {talhoes.length > 0 && pode('relatorios') && nav.fazendaId && (
                     <RelatoriosFazenda key={nav.fazendaId} fazendaId={nav.fazendaId} />
                   )}
                   {/* Pendência 40 — marcar vários talhões para a busca automática */}
-                  {talhoes.length > 0 && pode('ndvi') && nav.fazendaId && (
+                  {/* Produtor: pode('ndvi') é verdadeiro (satélite é onde ele trabalha),
+                      mas o monitor grava regras que a nuvem não aceita dele. */}
+                  {talhoes.length > 0 && pode('ndvi') && !leitura && nav.fazendaId && (
                     <MonitorFazenda key={nav.fazendaId} fazendaId={nav.fazendaId} />
                   )}
                 </div>
@@ -546,9 +556,11 @@ export function FazendaDetailPanel() {
 
             {/* Custos DESTA fazenda: vencem os do produtor, que vencem a
                 Biblioteca. Em branco, herda do nível de cima. */}
-            <div style={{ borderTop: '1px solid #0f2240' }}>
-              <CustosProdutorEditor clienteId={fazenda.clienteId} fazendaId={fazenda.id} />
-            </div>
+            {!leitura && (
+              <div style={{ borderTop: '1px solid #0f2240' }}>
+                <CustosProdutorEditor clienteId={fazenda.clienteId} fazendaId={fazenda.id} />
+              </div>
+            )}
           </PanelSection>
         )}
       </div>

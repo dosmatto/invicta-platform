@@ -29,6 +29,7 @@ import { fmtHa } from '@/lib/formato';
 import { logout, emailUsuario } from '@/lib/auth';
 import { ROTULO_PAPEL, SECOES_PORTAL, secaoLiberada, type PlanoAssinatura, type PapelMembro } from '@/lib/empresa';
 import { usarDadosSupabase } from '@/lib/supabaseData';
+import { ligarModoProdutorMapa, desligarModoProdutorMapa } from '@/lib/modoProdutorMapa';
 import { APP_VERSION } from '@/constants/version';
 import { dadosLocaisDoTalhao, dadosNuvemDosTalhoes, juntarNuvem, type DadosNuvem } from '@/lib/portalDados';
 import {
@@ -184,6 +185,15 @@ export function PainelProdutor({ cliente, plano, papel, preview }: {
     router.push(`/talhao/${id}${qs ? `?${qs}` : ''}`);
   }, [router, safra, preview, plano]);
 
+  // Estar no portal = fora do modo mapa. Sem isto, quem chegasse aqui por outro
+  // caminho (URL digitada) com o modo ainda ligado voltaria do talhão ao mapa.
+  useEffect(() => { desligarModoProdutorMapa(); }, []);
+  // ligarModoProdutorMapa() só vale para o produtor logado; no preview não faz nada.
+  const abrirMapa = useCallback(() => {
+    ligarModoProdutorMapa();
+    router.push('/painel');
+  }, [router]);
+
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg-app)', color: COR.texto }}>
       {/* Cabeçalho — a barra azul da marca, como no resto da plataforma */}
@@ -201,6 +211,14 @@ export function PainelProdutor({ cliente, plano, papel, preview }: {
               </p>
             </div>
           )}
+          {/* Mapa da fazenda: a página normal do mapa (/painel), em somente
+              leitura e só com os clientes dele. No preview (owner/admin) o modo
+              não liga — é o /painel normal, com o papel de quem está vendo. */}
+          <button onClick={abrirMapa} title="Abrir o mapa da fazenda (somente leitura)"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-bold"
+            style={{ background: 'var(--invicta-green-dark)', color: '#fff' }}>
+            <MapIcon size={14} /> Mapa da fazenda
+          </button>
           {preview ? (
             <button onClick={() => router.push('/painel')} title="Voltar ao painel" className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-bold"
               style={{ background: 'var(--bg-surface)', color: 'var(--invicta-blue)' }}>

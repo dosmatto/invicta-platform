@@ -6,6 +6,8 @@ import {
 import { useApp } from '@/context/AppContext';
 import { APP_VERSION } from '@/constants/version';
 import { SyncBadge } from '@/components/shared/SyncBadge';
+import { somenteLeitura } from '@/lib/somenteLeitura';
+import { podeEm } from '@/lib/empresa';
 
 const MENU = [
   { id: 'dashboard',       label: 'Início',   icon: LayoutDashboard },
@@ -22,8 +24,32 @@ const MENU = [
   { id: 'configuracoes',   label: 'Config.',  icon: Settings },
 ];
 
+// Produtor (somente leitura) no mapa: Início e Clientes sempre; o resto só com
+// a coluna "Ver" da matriz de permissões (Central de Acessos → Permissões).
+// Com o padrão do papel Produtor, sobram Início e Clientes.
+const MODULO_DO_ITEM: Record<string, string> = {
+  medicoes: 'amostragem',
+  foliar: 'laboratorio',
+  biblioteca: 'biblioteca',
+  configuracoes: 'usuarios',
+};
+
+type ItemMenu = NonNullable<(typeof MENU)[number]>;
+
+/** MENU com os divisores; para o produtor, sem os itens que a matriz não libera. */
+function menuVisivel(): Array<ItemMenu | null> {
+  if (!somenteLeitura()) return MENU;
+  const itens = MENU.filter((i): i is ItemMenu => {
+    if (!i) return false;
+    const modulo = MODULO_DO_ITEM[i.id];
+    return !modulo || podeEm(modulo, 'visualizar');
+  });
+  return itens.flatMap((i, k) => (k === 0 ? [i] : [null, i]));
+}
+
 export function IconSidebar() {
   const { activePanel, setActivePanel } = useApp();
+  const menu = menuVisivel();
 
   function handleClick(id: string) {
     setActivePanel(activePanel === id ? null : id);
@@ -34,7 +60,7 @@ export function IconSidebar() {
       className="flex flex-col items-center py-2 gap-0.5 overflow-y-auto z-40 flex-shrink-0"
       style={{ width: '64px', background: 'var(--invicta-blue-dark)', borderRight: '1px solid #1a3a6b' }}
     >
-      {MENU.map((item, i) => {
+      {menu.map((item, i) => {
         if (!item) return <div key={`d-${i}`} className="w-8 my-1" style={{ height: '1px', background: '#1a3a6b' }} />;
         const Icon = item.icon;
         const isActive = activePanel === item.id

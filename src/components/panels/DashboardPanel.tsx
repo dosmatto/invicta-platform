@@ -9,11 +9,13 @@ import { PanelSection, PanelKpi } from './_shared';
 import { getClientes, getFazendas, getTalhoes, getSafras, analisarTalhoesDuplicados, aplicarDedupTalhoesExatos, analisarFazendasOrfas, aplicarRemocaoFazendasOrfas } from '@/lib/store';
 import { cloudExcluirMapasPorPrefixo, cloudExcluirPorPrefixo } from '@/lib/cloud';
 import { pode } from '@/lib/empresa';
+import { somenteLeitura } from '@/lib/somenteLeitura';
 import { rotuloAno } from '@/lib/periodo';
 import { gerarConferenciaExcel } from '@/lib/relatorioConferencia';
 import { fmtHa } from '@/lib/formato';
 
 export function DashboardPanel() {
+  const leitura = somenteLeitura();
   const [gerando, setGerando] = useState(false);
   const [msgExcel, setMsgExcel] = useState('');
 
@@ -101,8 +103,10 @@ export function DashboardPanel() {
       </PanelSection>
 
       {/* Conferência do cadastro (Excel) — talhões, áreas e somas por
-          fazenda/produtor/geral + aba de possíveis problemas (duplicidades). */}
-      <PanelSection>
+          fazenda/produtor/geral + aba de possíveis problemas (duplicidades).
+          Produtor (somente leitura) não vê: é ferramenta do escritório, e a aba
+          de problemas conta a base INTEIRA (auditoriaCadastro não tem escopo). */}
+      {!leitura && <PanelSection>
         <div className="px-4 py-3">
           <button onClick={() => void baixarConferencia()} disabled={gerando}
             className="w-full py-2 rounded text-xs font-bold text-white flex items-center justify-center gap-2 disabled:opacity-50"
@@ -116,7 +120,7 @@ export function DashboardPanel() {
           </p>
           {msgExcel && <p className="text-[10px] mt-1" style={{ color: msgExcel.startsWith('✓') ? '#86efac' : '#f87171' }}>{msgExcel}</p>}
         </div>
-      </PanelSection>
+      </PanelSection>}
 
       {/* Limpeza do cadastro — remover duplicados/órfãos (owner/admin). */}
       {pode('excluirProdutor') && (limpeza.dupRemover > 0 || limpeza.orfas > 0 || limpeza.dupRevisar > 0) && (
