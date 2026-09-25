@@ -71,7 +71,7 @@ AMPLITUDE_MIN = 0.30
 NUGGET_MAX = 0.02
 # Versao do motor de interpolacao (conferir em GET /health para saber se o
 # backend foi reiniciado com o codigo novo).
-VERSION = "interp-29-honra-amostras"
+VERSION = "interp-30-idw-2-pontos"
 
 
 # ============================================================ instrumentacao
@@ -477,8 +477,12 @@ def gerar_grid(points: list[dict], polygon_geojson: dict, pixel_m: float = 20.0,
     ok = np.isfinite(x) & np.isfinite(y) & np.isfinite(z)
     x, y, z = x[ok], y[ok], z[ok]
     x, y, z = _dedup(x, y, z)
-    if len(z) < 3:
-        raise ValueError("minimo de 3 pontos validos para interpolar")
+    # IDW roda com 2 pontos (e exato e convexo: o mapa e a transicao entre os
+    # dois valores). A krigagem continua pedindo 3 aqui — o front ja manda
+    # para IDW qualquer mapa com menos de 4 (interpoladorEfetivo).
+    minimo = 2 if metodo == "idw" else 3
+    if len(z) < minimo:
+        raise ValueError(f"minimo de {minimo} pontos validos para interpolar")
 
     minx, miny, maxx, maxy = poly.bounds
     lon0, lat0 = (minx + maxx) / 2.0, (miny + maxy) / 2.0

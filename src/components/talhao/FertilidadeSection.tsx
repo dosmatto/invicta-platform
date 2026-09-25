@@ -21,7 +21,7 @@ import {
 } from '@/lib/fertilidade';
 import { colorirGridComLegenda, temGrid } from '@/lib/raster';
 import { resolverGradeDoLaudo, pontosPorNumero, casarAmostrasComPontos } from '@/lib/eloGrade';
-import { decodeGrid, interpoladorEfetivo, MIN_PTS_MAPA, MIN_PTS_KRIGE } from '@/lib/fertilidade';
+import { decodeGrid, interpoladorEfetivo, MIN_PTS_MAPA, MIN_PTS_CONFIAVEL, MIN_PTS_KRIGE } from '@/lib/fertilidade';
 import { rasterizarZonas, rasterizarZonasDose, type ZonaValor } from '@/lib/recomendacao/zonasGrid';
 import { bindingAuto, bindingPorPontos, divisasDasZonas, rotulosPorZona, valorZona as valorZonaLab } from '@/lib/meap/fertilidadePorZona';
 import { stopsParaBackend, dominioDaLegenda, paresDaClasse, respeitarPadraoHomonima, legendaEmprestada, FAIXAS_CTCE } from '@/lib/legendas';
@@ -562,7 +562,12 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
     let porNum = 0;
     for (const r of amostras) if (pontoPorNumero.get(r.numero)) porNum++;
     const nPontos = grade?.pontos?.length ?? 0;
-    const modo: 'numero' | 'ordem' | 'nenhum' = porNum >= 3 ? 'numero' : (amostras.length >= 3 && nPontos >= amostras.length ? 'ordem' : 'nenhum');
+    // Mesma sequência de casarAmostrasComPontos (eloGrade): número com ≥3, senão
+    // ordem, senão o que casou por número. Sem o último degrau, 2 amostras que
+    // casavam direitinho eram acusadas de "não casaram com a grade".
+    const modo: 'numero' | 'ordem' | 'nenhum' = porNum >= 3 ? 'numero'
+      : (amostras.length >= 3 && nPontos >= amostras.length ? 'ordem'
+        : (porNum >= MIN_PTS_MAPA ? 'numero' : 'nenhum'));
     return { amostras: amostras.length, nPontos, porNum, modo };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [importacao, nutriente, profundidade, pontoPorNumero, grade, ehZona]);
@@ -658,7 +663,7 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
         ? `o laudo tem ${nasProf} linha(s) em ${prof}, mas nenhuma com valor desta variável`
         : `o laudo não tem nenhuma linha em ${prof}`;
     }
-    if (comValor < 3) return `só ${comValor} amostra(s) com valor em ${prof} (o mínimo é 3)`;
+    if (comValor < MIN_PTS_MAPA) return `só ${comValor} amostra(s) com valor em ${prof} (o mínimo é ${MIN_PTS_MAPA})`;
     if (nPontos === 0) return 'o talhão não tem grade de amostragem com pontos';
     if (nPontos < comValor) return `${comValor} amostras para ${nPontos} pontos na grade — sobram amostras sem lugar`;
     return `os números do laudo não batem com os da grade (${comValor} amostras, ${nPontos} pontos)`;
@@ -1330,9 +1335,16 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
               <p className="text-[10px] mt-1" style={{ color: '#94a3b8' }}>
                 {ehZona
                   ? <><strong style={{ color: '#86efac' }}>{zonas.length}</strong> zonas</>
-                  : <><strong style={{ color: pontosInterp.length >= 3 ? '#86efac' : '#fbbf24' }}>{pontosInterp.length}</strong> pontos</>}
+                  : <><strong style={{ color: pontosInterp.length >= MIN_PTS_CONFIAVEL ? '#86efac' : '#fbbf24' }}>{pontosInterp.length}</strong> pontos</>}
                 {legAtual ? ` · ${legAtual.atributo} (${legAtual.unidade})` : ''}
               </p>
+              {!ehZona && pontosInterp.length >= MIN_PTS_MAPA && pontosInterp.length < MIN_PTS_CONFIAVEL && (
+                <p className="text-[10px] mt-0.5 leading-relaxed" style={{ color: '#fbbf24' }}>
+                  ⚠ MAPA COM SÓ {pontosInterp.length} PONTOS em {profundidade} — sai por <b>IDW</b> e é apenas a transição entre
+                  {' '}os valores medidos, espalhada pelo talhão inteiro. Baixa confiabilidade: use com cautela e, se possível,
+                  {' '}peça ao laboratório a {profundidade} dos demais pontos.
+                </p>
+              )}
               {diagCasamento?.modo === 'ordem' && (
                 <p className="text-[10px] mt-0.5" style={{ color: '#fbbf24' }}>
                   ⚠ Casando por ORDEM: os números do laudo ({diagCasamento.amostras} amostras) não batem com os da grade ({diagCasamento.nPontos} pontos). Confira a numeração na aba Amostragem.

@@ -11,16 +11,18 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { interpoladorEfetivo, MIN_PTS_MAPA, MIN_PTS_KRIGE } from '../src/lib/fertilidade.ts';
+import { interpoladorEfetivo, MIN_PTS_MAPA, MIN_PTS_CONFIAVEL, MIN_PTS_KRIGE } from '../src/lib/fertilidade.ts';
 
-test('os mínimos são 3 para o mapa e 4 para a krigagem', () => {
-  assert.equal(MIN_PTS_MAPA, 3);
+test('os mínimos são 2 para o mapa (IDW), 3 sem aviso e 4 para a krigagem', () => {
+  assert.equal(MIN_PTS_MAPA, 2);
+  assert.equal(MIN_PTS_CONFIAVEL, 3);
   assert.equal(MIN_PTS_KRIGE, 4);
   assert.ok(MIN_PTS_KRIGE > MIN_PTS_MAPA, 'IDW tem de aceitar um caso que a krigagem recusa');
+  assert.ok(MIN_PTS_CONFIAVEL > MIN_PTS_MAPA, 'o mapa de 2 pontos tem de sair COM aviso');
 });
 
 test('krigagem com menos de 4 pontos cai para IDW e sinaliza', () => {
-  for (const n of [3]) {
+  for (const n of [2, 3]) {
     const r = interpoladorEfetivo('krige', n);
     assert.equal(r.metodo, 'idw', `${n} pontos deviam cair para IDW`);
     assert.equal(r.caiuParaIdw, true);

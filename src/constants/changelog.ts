@@ -1,5 +1,12 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Fertilidade gera mapa por IDW com só 2 pontos (com aviso de baixa confiabilidade)
+  '2.180.0': [
+    'A FERTILIDADE PASSA A GERAR MAPA COM SÓ 2 PONTOS. Antes o mínimo era 3, na tela E no servidor de interpolação: um laudo com a 20-40 em só 2 dos 6 pontos (caso do RCGSA 02) ficava sem mapa nenhum nessa profundidade, com "só 2 amostra(s) com valor em 20-40 (o mínimo é 3)". Agora o mapa sai por IDW — a krigagem continua exigindo 4 pontos e, abaixo disso, o mapa cai para IDW sozinho, como já acontecia com 3.',
+    'AVISO NA TELA: com menos de 3 pontos aparece "MAPA COM SÓ 2 PONTOS" logo abaixo da contagem de pontos. O mapa é só a transição entre os dois valores medidos, espalhada pelo talhão inteiro — baixa confiabilidade, use com cautela e, se possível, peça ao laboratório a profundidade dos demais pontos.',
+    'CORRIGIDO UM AVISO FALSO: com 2 amostras a tela dizia "As 2 amostras não casaram com a grade" mesmo quando os números batiam (pontos 1 e 6 do laudo = pontos 1 e 6 da grade). O diagnóstico só reconhecia o casamento a partir de 3 amostras; agora segue a mesma regra do casamento de verdade.',
+    'A Compactação usa o mesmo mínimo e também passa a aceitar 2 pontos (por IDW). O servidor de interpolação sobe para interp-30-idw-2-pontos (confira em /health).',
+  ],
   // [S/N] Portal do produtor ganha o botão "Mapa da fazenda" (mapa em somente leitura)
   '2.179.0': [
     'O PORTAL DO PRODUTOR GANHOU O BOTÃO "MAPA DA FAZENDA", no topo, ao lado do sair. Ele abre a página normal do mapa (a mesma que a equipe usa), só com a(s) fazenda(s) do produtor e em SOMENTE LEITURA: o produtor navega por Clientes → fazenda → talhão, vê os talhões no mapa e abre a página de cada talhão, mas não cria, edita, importa nem apaga nada.',

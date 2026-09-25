@@ -83,6 +83,7 @@ verdadeira (fusão de talhões) chegou depois; foi preciso renumerar.
 | S/N | Book e relatórios em PDF não caem mais por causa do logo (jsPDF sem pedido de rede síncrono) | 2.176.0 | Talhão → Recomendações → Gerar book PDF (portal do produtor) e todos os relatórios em PDF |
 | S/N | Trilho do talhão no portal obedece a coluna "Ver" da matriz de permissões | 2.178.0 | Talhão (modo produtor / preview) → trilho de abas; Central de Acessos → Permissões → Produtor |
 | S/N | Portal do produtor ganha o botão "Mapa da fazenda" (mapa em somente leitura) | 2.179.0 | Portal do produtor → "Mapa da fazenda"; /painel em modo produtor (topo, barra lateral, painéis de cliente/fazenda/talhão) |
+| S/N | Fertilidade gera mapa por IDW com só 2 pontos (com aviso de baixa confiabilidade) | 2.180.0 | Talhão → Fertilidade → profundidade com 2 amostras (aviso "MAPA COM SÓ 2 PONTOS"); backend interp-30-idw-2-pontos |
 | S/N | Catálogo de variáveis se cura sozinho depois de um app antigo apagá-lo | 2.175.0 | Biblioteca → Preferências de Análise (Fe ligado, 2 casas nos micros, ordem padrão) e Console: "[catálogo] seed de app de campo antigo detectado" |
 
 > As pendências 1–17 foram entregues antes deste registro existir e não estão

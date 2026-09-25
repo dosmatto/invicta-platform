@@ -13,11 +13,16 @@ import { faixaDosPontos, limitarRespAFaixa } from './faixaAmostras.ts';
 export type Stop = [number, [number, number, number]];
 
 // ── Mínimo de pontos por interpolador ───────────────────────────────────────
-// Abaixo de 3 pontos não sai mapa nenhum. A KRIGAGEM precisa de 4: com 3 o
+// Abaixo de 2 pontos não sai mapa nenhum. A KRIGAGEM precisa de 4: com 3 o
 // ajuste do variograma nunca converge (medido no backend: 0/5 com 3 pontos,
 // 5/5 a partir de 4) e o servidor devolve "nao convergiu
-// (colineares/insuficientes?)". O IDW é exato e roda com 3.
-export const MIN_PTS_MAPA = 3;
+// (colineares/insuficientes?)". O IDW é exato e roda com 2 — caso real: laudo
+// com a 20-40 só em 2 dos 6 pontos, que antes ficava sem mapa nenhum.
+//
+// Com menos de MIN_PTS_CONFIAVEL o mapa sai, mas é só a transição entre os
+// poucos valores medidos; a tela avisa (baixa confiabilidade).
+export const MIN_PTS_MAPA = 2;
+export const MIN_PTS_CONFIAVEL = 3;
 export const MIN_PTS_KRIGE = 4;
 
 /**
