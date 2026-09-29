@@ -90,6 +90,7 @@ verdadeira (fusão de talhões) chegou depois; foi preciso renumerar.
 | S/N | App de campo marca ponto medido nas grades Falker e a plataforma importa o arquivo da grade | 2.183.0 (app 3.3.0) | /coleta → Compactação → grade com selo Falker → no ponto, "Marcar como medido"; Talhão → Compactação → Grade de compactação → "Buscar leituras do campo" (x/y marcados) e "Importar arquivo da Falker desta grade" |
 | S/N | Relatório PDF de compactação: resumo das camadas, uma página por camada e tabela de pontos | 2.184.0 | Talhão → Compactação → (todas as camadas interpoladas) "Gerar relatório (PDF)"; Talhão → Relatórios → histórico (tipo Compactação) → Abrir |
 | S/N | Compactação não mistura mapas entre importações e divide o mapa entre cobertura e grade | 2.185.0 | Talhão → Compactação → "Interpolar todas as camadas" (seletor de importação travado); importação Falker → "Ver no mapa (verde/vermelho)" × Grade de compactação → 📍; nova grade → nome com o próximo número livre |
+| S/N | Banco só aceita do produtor compactação e satélite dos talhões dele | 2.186.0 | Supabase → SQL Editor → seção 6 de docs/seguranca-rls.sql; Talhão → Compactação (produtor) → excluir importação/grade/camada |
 
 > As pendências 1–17 foram entregues antes deste registro existir e não estão
 > catalogadas; procure pelo assunto no `changelog.ts`. Da 18 em diante, tudo

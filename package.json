@@ -29,6 +29,7 @@
     "teste:rota": "node scripts/teste-rota-local.mjs",
     "teste:grids": "node scripts/teste-grids-recomendacao.mjs",
     "teste:iam": "node scripts/teste-iam.mjs",
+    "teste:escritaprodutor": "node scripts/teste-escritaprodutor.mjs",
     "teste:etiquetas": "node scripts/teste-etiquetas.mjs",
     "teste:interpolador": "node scripts/teste-interpolador.mjs",
     "teste:laudo-api": "node scripts/teste-laudo-api.mjs",

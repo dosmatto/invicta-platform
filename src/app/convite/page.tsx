@@ -111,6 +111,15 @@ function ConviteConteudo() {
         nome: nome.trim(), telefone: telefone.trim(),
       });
       if (aceite.ok) {
+        // Quem JÁ tinha cadastro volta com o que tinha (v2.186.0: o link não
+        // reescreve acesso existente). Bloqueado/rejeitado/inativo não é
+        // "liberado" — quem reativa é o administrador.
+        const st = (aceite.usuario as { status?: string }).status;
+        if (st && st !== 'ativo') {
+          setErro('Você já tem um cadastro nesta plataforma, mas ele não está ativo. Fale com o administrador para reativar o seu acesso.');
+          setEnviando(false);
+          return;
+        }
         espelharUsuarioLocal(em, aceite.usuario as Partial<UsuarioIam>);
         setLiberado(true);
         setPronto(true);

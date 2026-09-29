@@ -195,11 +195,22 @@ create policy talhoes_autenticado on public.talhoes
 -- pedido em inv_papeis (status 'aguardando_aprovacao'). A política abaixo
 -- permite EXATAMENTE isso: inserir/atualizar o registro do PRÓPRIO e-mail,
 -- desde que o papel não seja privilegiado e o status seja o de espera.
+--
+-- ⚠ v2.186.0 — DUAS AMARRAS NOVAS, sem elas a seção 6 não vale nada:
+--   · item_id = e-mail (a linha CANÔNICA; o app grava id = e-mail normalizado).
+--     Antes dava para inserir uma 2ª linha do próprio e-mail, com outro item_id,
+--     papel/vínculos à escolha — e quem lesse "a linha do e-mail" com limit 1
+--     podia ler justamente a forjada.
+--   · o UPDATE só vale para quem AINDA está em espera (a linha atual, `using`).
+--     Antes, um usuário ATIVO (ex.: produtor) reescrevia o próprio registro
+--     como papel 'agronomo' + status 'aguardando_aprovacao' e, na requisição
+--     seguinte, deixava de ser produtor para o banco.
 drop policy if exists app_kv_insert_autocadastro on public.app_kv;
 create policy app_kv_insert_autocadastro on public.app_kv
   for insert to authenticated
   with check (
     colecao = 'inv_papeis'
+    and item_id = lower(coalesce(auth.jwt()->>'email', ''))
     and lower(dados->>'email') = lower(coalesce(auth.jwt()->>'email', ''))
     and coalesce(dados->>'papel', '') not in ('owner', 'admin')
     and coalesce(dados->>'status', '') = 'aguardando_aprovacao'
@@ -210,10 +221,13 @@ create policy app_kv_update_autocadastro on public.app_kv
   for update to authenticated
   using (
     colecao = 'inv_papeis'
+    and item_id = lower(coalesce(auth.jwt()->>'email', ''))
     and lower(dados->>'email') = lower(coalesce(auth.jwt()->>'email', ''))
+    and coalesce(dados->>'status', '') = 'aguardando_aprovacao'
   )
   with check (
     colecao = 'inv_papeis'
+    and item_id = lower(coalesce(auth.jwt()->>'email', ''))
     and lower(dados->>'email') = lower(coalesce(auth.jwt()->>'email', ''))
     and coalesce(dados->>'papel', '') not in ('owner', 'admin')
     and coalesce(dados->>'status', '') = 'aguardando_aprovacao'
@@ -237,6 +251,50 @@ create policy app_kv_update_convite_uso on public.app_kv
     and lower(dados->>'usadoPor') = lower(coalesce(auth.jwt()->>'email', ''))
     and coalesce(dados->>'status', '') in ('pendente', 'usado')
   );
+
+-- ⚠ v2.186.0 — A POLÍTICA ACIMA NÃO BASTAVA. O `with check` só olha a linha
+-- NOVA: um autenticado reescrevia um convite qualquer com papel 'editor',
+-- email '', multiuso, sem validade, status 'pendente' e usadoPor = ele — e
+-- depois chamava inv_aceitar_convite(token) e virava editor. Política não
+-- enxerga a linha antiga; trigger enxerga. Para quem chega pela API (papel
+-- `authenticated`) e não é admin, o UPDATE de convite só pode mexer no que o
+-- CONSUMO mexe (usadoEm, usadoPor, status → 'usado', usos + 1). O resto do
+-- documento tem que continuar idêntico. inv_aceitar_convite roda como dono da
+-- função (SECURITY DEFINER), não como `authenticated`, e só consome — passa.
+create or replace function public.inv_convite_so_consumo()
+returns trigger
+language plpgsql
+as $$
+declare
+  v_campos text[] := array['usadoEm', 'usadoPor', 'status', 'usos'];
+begin
+  if new.colecao <> 'inv_convites' and old.colecao <> 'inv_convites' then return new; end if;
+  if current_user <> 'authenticated' or public.inv_eh_admin() then return new; end if;
+  -- Convite INDIVIDUAL já consumido é imutável: trocar o usadoPor dele pelo
+  -- próprio e-mail o tornava reutilizável (inv_aceitar_convite aceita "usado"
+  -- quando o usadoPor é quem chama).
+  if not coalesce((old.dados->>'multiuso')::boolean, false)
+     and (coalesce(old.dados->>'status', '') = 'usado' or coalesce(old.dados->>'usadoPor', '') <> '')
+     and new.dados is distinct from old.dados then
+    raise exception 'convite: convite individual já usado não muda' using errcode = '42501';
+  end if;
+  if new.colecao <> old.colecao or new.item_id <> old.item_id
+     or (new.dados - v_campos) is distinct from (old.dados - v_campos)
+     or coalesce(new.dados->>'status', '') not in (coalesce(old.dados->>'status', ''), 'usado')
+     or coalesce((new.dados->>'usos')::int, 0) not in
+        (coalesce((old.dados->>'usos')::int, 0), coalesce((old.dados->>'usos')::int, 0) + 1)
+  then
+    raise exception 'convite: só o consumo (usado/usos) pode ser gravado por quem não é admin'
+      using errcode = '42501';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists app_kv_convite_so_consumo on public.app_kv;
+create trigger app_kv_convite_so_consumo
+  before update on public.app_kv
+  for each row execute function public.inv_convite_so_consumo();
 
 -- =====================================================================
 -- EXCEÇÃO 3 — AUDITORIA É APPEND-ONLY PARA TODOS
@@ -337,6 +395,24 @@ begin
     return jsonb_build_object('ok', false, 'motivo', 'papel-privilegiado');
   end if;
 
+  -- ⚠ v2.186.0 — QUEM JÁ TEM ACESSO NÃO É REESCRITO POR LINK. Os tokens ficam
+  -- legíveis a qualquer autenticado (a leitura de app_kv é ampla), então um
+  -- usuário ATIVO (ex.: produtor) abria um link aberto/de grupo e o merge
+  -- abaixo trocava o papel e os vínculos dele pelos do convite — saía da trava
+  -- do produtor ou ampliava o próprio escopo. Agora: existe QUALQUER registro
+  -- do e-mail fora da fila → devolve o que ele já tem, sem mexer em nada e sem
+  -- consumir o convite. Mudar papel/vínculos de quem já entrou é na Central de
+  -- Acessos, com admin.
+  select k.dados into v_reg from public.app_kv k
+   where k.colecao = 'inv_papeis'
+     and lower(k.dados->>'email') = v_email
+     and coalesce(k.dados->>'status', '') <> 'aguardando_aprovacao'
+   order by (k.item_id = v_email) desc
+   limit 1;
+  if v_reg is not null then
+    return jsonb_build_object('ok', true, 'usuario', v_reg, 'motivo', 'ja-cadastrado');
+  end if;
+
   if coalesce(v_conv->>'perfilId', '') <> '' then
     select k.dados->'permissoes' into v_perm
       from public.app_kv k
@@ -407,6 +483,227 @@ revoke all on function public.inv_aceitar_convite(text, text, text) from public;
 grant execute on function public.inv_aceitar_convite(text, text, text) to authenticated;
 
 -- =====================================================================
+-- 6) PRODUTOR: SÓ GRAVA COMPACTAÇÃO E SATÉLITE, E SÓ NOS TALHÕES DELE (v2.186.0)
+-- =====================================================================
+-- O BURACO QUE ISTO FECHA
+-- O papel produtor é "somente leitura" desde a v2.1xx — mas só no CLIENTE
+-- (src/lib/somenteLeitura.ts). As políticas acima não conhecem o produtor: para
+-- o banco ele é um autenticado como qualquer outro. E o boot baixa a base
+-- INTEIRA para todo mundo, então a cópia local dele tem talhões de todos os
+-- clientes. Pelo console do navegador, um produtor gravava/apagava na nuvem
+-- qualquer coisa: fertilidade, cadastro, talhões, compactação de outro cliente.
+--
+-- A REGRA (decisão de 29/09/2026)
+--   · compactação — inv_compactacao, inv_grades_compact e mapas
+--     `compactacao__<talhão>__…` em inv_mapas_fert;
+--   · satélite — inv_composicoes, inv_cenas_estado e mapas
+--     `composicao__<talhão>__…`, `<talhão>__ndvi__…`, `<talhão>__ndvicbers__…`;
+--   → criar, alterar e APAGAR, desde que o talhão seja do escopo dele;
+--   · inv_papeis, inv_convites, inv_auditoria → seguem as políticas das seções
+--     4 e das exceções (este bloco não as afrouxa nem as aperta);
+--   · todo o resto (e a tabela `talhoes`) → nada. Só leitura.
+--
+-- POR QUE `AS RESTRICTIVE`
+-- Políticas permissivas se somam por OU; restritivas entram por E em cima delas.
+-- Assim este bloco só TIRA poder do produtor — não toca no que owner/admin/
+-- agrônomo/operador fazem hoje, e não depende de reescrever as políticas acima.
+-- Para quem não é produtor a condição é `not false or …` = verdadeira.
+--
+-- "ESCOPO DELE" é a mesma conta do app (store.ts getTalhoes):
+--   produtores = clienteId + clientesVinculados (iam/vinculoProdutor.ts);
+--   fazendas   = regra de iam/escopoFazendas.ts — fazenda marcada entra sempre;
+--                produtor com alguma fazenda marcada fica só com as marcadas;
+--                sem marcação, todas as dele;
+--   talhões    = se talhoesVinculados tiver algo, só esses.
+-- O talhão de cada linha sai de inv_talhao_do_registro — espelho de
+-- src/lib/iam/escritaProdutor.ts (npm run teste:escritaprodutor). Mudou lá?
+-- Mude aqui, e vice-versa.
+--
+-- UPDATE confere as DUAS pontas: a linha como está (`using`) e como vai ficar
+-- (`with check`). Sem o `using`, bastava um upsert com o id de um registro
+-- alheio e `talhaoId` do próprio talhão para "sequestrar" o registro.
+--
+-- ORDEM: publique a plataforma 2.186.0 (ou mais nova) ANTES de rodar este
+-- bloco. É ela que filtra o push do produtor por talhão; um cliente antigo que
+-- mandar um lote misto (um registro alheio no meio) tem o lote inteiro recusado
+-- e o selo de sync fica em erro até recarregar.
+
+-- Lista de texto de um campo jsonb; qualquer coisa que não seja array vira {}.
+-- (jsonb_array_elements_text em null/objeto levanta erro e derrubaria a gravação.)
+create or replace function public.inv_textos(p jsonb)
+returns text[]
+language sql
+immutable
+as $$
+  select case when jsonb_typeof(p) = 'array'
+              then array(select jsonb_array_elements_text(p))
+              else '{}'::text[] end
+$$;
+
+-- O e-mail logado tem papel produtor em inv_papeis? (SECURITY DEFINER pelo
+-- mesmo motivo de inv_eh_admin: ler inv_papeis sem cair na própria RLS.)
+-- Falha FECHADA: QUALQUER linha do e-mail com papel produtor basta — um
+-- registro antigo com outro item_id não pode servir de saída. Quem não é
+-- produtor e cair aqui por uma linha duplicada velha: o admin apaga a duplicata.
+create or replace function public.inv_eh_produtor()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.app_kv k
+    where k.colecao = 'inv_papeis'
+      and lower(k.dados->>'email') = lower(coalesce(auth.jwt()->>'email', ''))
+      and k.dados->>'papel' = 'produtor'
+  );
+$$;
+
+-- O talhão está no escopo do produtor logado? (regras no cabeçalho da seção)
+create or replace function public.inv_produtor_pode_talhao(p_talhao text)
+returns boolean
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  v_reg   jsonb;
+  v_clis  text[];
+  v_fazs  text[];
+  v_tals  text[];
+  v_faz   text;
+  v_cli   text;
+begin
+  if coalesce(p_talhao, '') = '' then return false; end if;
+
+  -- Os vínculos vêm SÓ de uma linha com papel produtor (a mesma que fez
+  -- inv_eh_produtor dizer sim) — uma linha de autocadastro "em espera" com
+  -- vínculos à escolha não pode ampliar o escopo. Entre elas, a CANÔNICA
+  -- (item_id = e-mail) primeiro, depois a mais recente.
+  select k.dados into v_reg from public.app_kv k
+   where k.colecao = 'inv_papeis'
+     and lower(k.dados->>'email') = lower(coalesce(auth.jwt()->>'email', ''))
+     and k.dados->>'papel' = 'produtor'
+   order by (k.item_id = lower(coalesce(auth.jwt()->>'email', ''))) desc, k.atualizado_em desc nulls last
+   limit 1;
+  if v_reg is null then return false; end if;
+
+  v_clis := array_remove(
+    array_append(public.inv_textos(v_reg->'clientesVinculados'), nullif(v_reg->>'clienteId', '')), null);
+  v_fazs := public.inv_textos(v_reg->'fazendasVinculadas');
+  v_tals := public.inv_textos(v_reg->'talhoesVinculados');
+
+  -- Vínculo por talhão é o mais fino: com ele, só os talhões marcados.
+  if cardinality(v_tals) > 0 and not (p_talhao = any(v_tals)) then return false; end if;
+
+  select coalesce(t.fazenda_id::text, t.dados->>'fazendaId') into v_faz
+    from public.talhoes t where t.id::text = p_talhao;
+  if coalesce(v_faz, '') = '' then return false; end if;
+
+  -- 1. Fazenda marcada entra sempre (mesmo de outro produtor — condomínio).
+  if v_faz = any(v_fazs) then return true; end if;
+
+  select k.dados->>'clienteId' into v_cli from public.app_kv k
+   where k.colecao = 'inv_fazendas' and k.item_id = v_faz;
+  if coalesce(v_cli, '') = '' then return false; end if;
+
+  -- 2. Produtor com alguma fazenda marcada: só as marcadas (esta não é).
+  if cardinality(v_fazs) > 0 and exists (
+    select 1 from public.app_kv k
+     where k.colecao = 'inv_fazendas' and k.item_id = any(v_fazs)
+       and k.dados->>'clienteId' = v_cli
+  ) then return false; end if;
+
+  -- 3. Sem fazenda marcada daquele produtor: todas as dele.
+  return v_cli = any(v_clis);
+end;
+$$;
+
+-- De qual talhão é a linha — só para as coleções que o produtor pode gravar;
+-- null = coleção de consulta (o produtor não grava).
+create or replace function public.inv_talhao_do_registro(p_colecao text, p_item text, p_dados jsonb)
+returns text
+language sql
+immutable
+as $$
+  select case
+    when p_colecao = 'inv_mapas_fert' then
+      case
+        when split_part(p_item, '__', 1) in ('compactacao', 'composicao')
+          then nullif(split_part(p_item, '__', 2), '')
+        when split_part(p_item, '__', 2) in ('ndvi', 'ndvicbers')
+          then nullif(split_part(p_item, '__', 1), '')
+      end
+    -- Cenas: o item_id É o talhão; o talhaoId do doc, se houver, tem que bater.
+    when p_colecao = 'inv_cenas_estado' then
+      case when coalesce(p_dados->>'talhaoId', p_item) = p_item then nullif(p_item, '') end
+    when p_colecao in ('inv_compactacao', 'inv_grades_compact', 'inv_composicoes') then
+      nullif(p_dados->>'talhaoId', '')
+  end
+$$;
+
+-- A linha pode ser gravada/apagada pelo produtor logado?
+create or replace function public.inv_produtor_pode_gravar(p_colecao text, p_item text, p_dados jsonb)
+returns boolean
+language sql
+stable
+as $$
+  select p_colecao in ('inv_papeis', 'inv_convites', 'inv_auditoria')
+      or coalesce(public.inv_produtor_pode_talhao(
+           public.inv_talhao_do_registro(p_colecao, p_item, p_dados)), false)
+$$;
+
+-- As funções que leem inv_papeis como dono não precisam ficar abertas no /rpc
+-- para anônimo (não vazam nada — a leitura de app_kv já é ampla —, mas é
+-- higiene). `authenticated` precisa de EXECUTE: as políticas rodam como ele.
+revoke all on function public.inv_eh_produtor() from public, anon;
+revoke all on function public.inv_produtor_pode_talhao(text) from public, anon;
+revoke all on function public.inv_produtor_pode_gravar(text, text, jsonb) from public, anon;
+grant execute on function public.inv_eh_produtor() to authenticated;
+grant execute on function public.inv_produtor_pode_talhao(text) to authenticated;
+grant execute on function public.inv_produtor_pode_gravar(text, text, jsonb) to authenticated;
+
+drop policy if exists app_kv_produtor_insert on public.app_kv;
+create policy app_kv_produtor_insert on public.app_kv
+  as restrictive for insert to authenticated
+  with check (not (select public.inv_eh_produtor())
+              or public.inv_produtor_pode_gravar(colecao, item_id, dados));
+
+drop policy if exists app_kv_produtor_update on public.app_kv;
+create policy app_kv_produtor_update on public.app_kv
+  as restrictive for update to authenticated
+  using      (not (select public.inv_eh_produtor())
+              or public.inv_produtor_pode_gravar(colecao, item_id, dados))
+  with check (not (select public.inv_eh_produtor())
+              or public.inv_produtor_pode_gravar(colecao, item_id, dados));
+
+drop policy if exists app_kv_produtor_delete on public.app_kv;
+create policy app_kv_produtor_delete on public.app_kv
+  as restrictive for delete to authenticated
+  using (not (select public.inv_eh_produtor())
+         or public.inv_produtor_pode_gravar(colecao, item_id, dados));
+
+-- Tabela `talhoes`: o produtor não grava nunca. Três políticas (e não `for all`)
+-- porque uma restritiva `for all` também cortaria a LEITURA dele.
+drop policy if exists talhoes_produtor_insert on public.talhoes;
+create policy talhoes_produtor_insert on public.talhoes
+  as restrictive for insert to authenticated
+  with check (not (select public.inv_eh_produtor()));
+
+drop policy if exists talhoes_produtor_update on public.talhoes;
+create policy talhoes_produtor_update on public.talhoes
+  as restrictive for update to authenticated
+  using (not (select public.inv_eh_produtor()))
+  with check (not (select public.inv_eh_produtor()));
+
+drop policy if exists talhoes_produtor_delete on public.talhoes;
+create policy talhoes_produtor_delete on public.talhoes
+  as restrictive for delete to authenticated
+  using (not (select public.inv_eh_produtor()));
+
+-- =====================================================================
 -- CONFERÊNCIA (rode depois de aplicar)
 -- =====================================================================
 -- a) Políticas ativas (com a expressão: uma política criada pelo painel do
@@ -439,6 +736,24 @@ grant execute on function public.inv_aceitar_convite(text, text, text) to authen
 --    versão antiga, EXCLUIR um item de catálogo parece dar certo (a RLS só
 --    esconde a linha: 0 afetadas, sem erro) e o item volta no próximo boot —
 --    recarregar a aba resolve.
+--
+-- d) Produtor (seção 6) — as 6 políticas restritivas existem:
+--    select policyname, permissive, cmd from pg_policies
+--     where policyname like '%produtor%' order by 1;
+--    → 6 linhas, todas com permissive = 'RESTRICTIVE'.
+--    E, logado como PRODUTOR no app publicado (>= 2.186.0), no console:
+--    await window.__sb.from('app_kv').update({dados:{x:1}}).eq('colecao','inv_clientes')
+--      .select()   → [] (0 linhas: cadastro é só consulta)
+--    Importar um arquivo da Falker num talhão DELE tem que salvar normalmente
+--    (selo de sync verde); num talhão de outro cliente, o banco recusa (42501).
+--
+-- LIMITE CONHECIDO (v2.186.0): a trava da seção 6 é POR PAPEL, não por conta.
+-- O banco não exige registro em inv_papeis (nem status 'ativo') para gravar:
+-- uma conta sem registro ou ainda na fila grava como qualquer autenticado. Um
+-- produtor que criar OUTRA conta (o signUp é aberto — a página de convite usa)
+-- ou trocar o e-mail no Supabase Auth deixa de ser produtor para o banco.
+-- Fechar isso = inverter a lógica (só grava quem tem registro 'ativo' com papel
+-- de escrita), o que mexe em todos os papéis — próximo passo de segurança.
 --
 -- LIMITE CONHECIDO: a leitura continua ampla (qualquer autenticado lê todas as
 -- coleções). Restringir a LEITURA por vínculo (produtor/fazenda/talhão) exige

@@ -10,44 +10,58 @@
 // O cache do aparelho (localStorage/IndexedDB) NÃO é travado: ele é hidratado a
 // partir da nuvem, e travá-lo quebraria a própria leitura. Uma alteração local
 // do produtor some no próximo boot, porque a nuvem manda.
+//
+// Exceções — onde o produtor TRABALHA, e só nos talhões DELE (v2.186.0):
+//   · satélite (04/09/2026): índices `<talhão>__ndvi__…` / `__ndvicbers__…`,
+//     composições (`composicao__<talhão>__…` e a lista inv_composicoes) e as
+//     cenas rejeitadas (inv_cenas_estado);
+//   · compactação (v2.181.0): importações (inv_compactacao), grades
+//     (inv_grades_compact) e mapas `compactacao__<talhão>__…`.
+// Esta trava é só educação do cliente: quem GARANTE é a RLS (políticas
+// app_kv_produtor_* em docs/seguranca-rls.sql). A regra por registro mora em
+// iam/escritaProdutor.ts, espelho da função SQL inv_talhao_do_registro.
 
 import { papelDoUsuario } from './empresa';
 import { authConfigurado } from './auth';
-
-/** Coleções que o PRÓPRIO produtor precisa gravar: o registro dele no IAM
- *  (status, último acesso, confirmação na nuvem), convites e a auditoria. */
-const LIVRES = new Set(['inv_papeis', 'inv_convites', 'inv_auditoria']);
-
-/** Satélite é onde o produtor TRABALHA (04/09/2026): índices mantidos
- *  (`<talhão>__ndvi__…` / `__ndvicbers__…`), composições temporais
- *  (`composicao__<talhão>__…` e a lista inv_composicoes) e as cenas rejeitadas. */
-const COL_MAPAS = 'inv_mapas_fert';
-const LIVRES_SATELITE = new Set(['inv_composicoes', 'inv_cenas_estado']);
-function mapaDoSatelite(id: string): boolean {
-  const s = id.split('__');
-  return s[0] === 'composicao' || s[1] === 'ndvi' || s[1] === 'ndvicbers';
-}
-
-/** Compactação também é onde o produtor TRABALHA (v2.181.0): importa o arquivo
- *  do penetrômetro (inv_compactacao), cria grade (inv_grades_compact) e grava os
- *  mapas interpolados (`compactacao__<talhão>__<importação>__<camada>`). Excluir
- *  continua fora do papel — a tela esconde o botão. */
-const LIVRES_COMPACTACAO = new Set(['inv_compactacao', 'inv_grades_compact']);
-const mapaDaCompactacao = (id: string) => id.startsWith('compactacao__');
+import { getTalhoes } from './store';
+import { colecaoGravavelProdutor, produtorPodeGravar } from './iam/escritaProdutor';
 
 export function somenteLeitura(): boolean {
   return authConfigurado && papelDoUsuario() === 'produtor';
 }
 
+// Talhões do escopo do produtor (mesma conta de getTalhoes: produtor → fazendas
+// marcadas → talhões vinculados). Memo curto: um push de lista pergunta por
+// registro, e montar o conjunto a cada um seria desperdício.
+let memo: { em: number; talhoes: Set<string> } | null = null;
+function talhoesDoEscopo(): Set<string> {
+  const agora = Date.now();
+  if (!memo || agora - memo.em > 5_000) memo = { em: agora, talhoes: new Set(getTalhoes().map(t => t.id)) };
+  return memo.talhoes;
+}
+
 let avisadoEm = 0;
-/** true = gravação bloqueada (avisa no console no máximo uma vez por minuto). */
-export function escritaBloqueada(chave: string, id?: string): boolean {
-  if (LIVRES.has(chave) || LIVRES_SATELITE.has(chave) || LIVRES_COMPACTACAO.has(chave) || !somenteLeitura()) return false;
-  if (chave === COL_MAPAS && id && (mapaDoSatelite(id) || mapaDaCompactacao(id))) return false;
+function avisar(chave: string, motivo: string): true {
   const agora = Date.now();
   if (agora - avisadoEm > 60_000) {
     avisadoEm = agora;
-    console.warn(`[somente-leitura] gravação em "${chave}" ignorada: o produtor só visualiza.`);
+    console.warn(`[somente-leitura] gravação em "${chave}" ignorada: ${motivo}`);
   }
   return true;
+}
+
+/** Porta da COLEÇÃO: true = nada desta coleção sobe (avisa no console no
+ *  máximo uma vez por minuto). Coleção com exceção passa — quem chama decide
+ *  registro a registro com `registroBloqueado`. */
+export function escritaBloqueada(chave: string): boolean {
+  if (!somenteLeitura() || colecaoGravavelProdutor(chave)) return false;
+  return avisar(chave, 'o produtor só visualiza.');
+}
+
+/** Porta do REGISTRO: true = este registro (ou prefixo de mapa) não é de um
+ *  talhão do produtor. `dados` é o documento (para achar o `talhaoId`). */
+export function registroBloqueado(chave: string, id: string, dados?: unknown): boolean {
+  if (!somenteLeitura()) return false;
+  if (produtorPodeGravar(chave, id, dados, talhoesDoEscopo())) return false;
+  return avisar(chave, 'o produtor só grava compactação e satélite dos talhões dele.');
 }

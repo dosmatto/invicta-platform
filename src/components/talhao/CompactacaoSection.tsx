@@ -31,7 +31,7 @@ import { camadasFaltando } from '@/lib/relatorioCompactacaoCalc';
 import { salvarRelatorio, TIPO_REL_COMPACTACAO } from '@/lib/relatoriosArquivo';
 import { emailUsuario } from '@/lib/auth';
 
-// Quem NÃO processa compactação (produtor, leitor) só troca importação/profundidade
+// Quem NÃO processa compactação (leitor, prestador) só troca importação/profundidade
 // e vê o mapa — sem importar, criar grade, interpolar, limpar ou excluir.
 // Cada ação segue a linha "Compactação" da matriz de permissões.
 const podeProcessar = () => podeCompactacao('criar');

@@ -74,12 +74,14 @@ export const MATRIZ_PADRAO: Record<PapelIam, MapaPermissoes> = {
   // seções). Decisão de 04/09/2026: no SATÉLITE ele trabalha — gera índices e,
   // se quiser, salva. Relevo, CE, zonas e colheita: só ver.
   // Decisão da v2.181.0: na COMPACTAÇÃO ele também trabalha — importa o arquivo
-  // do penetrômetro (Falker), cria grade e interpola as camadas; excluir, não.
+  // do penetrômetro (Falker), cria grade e interpola as camadas.
+  // Decisão da v2.186.0: e também EXCLUI o que é dele — o banco (RLS) só aceita
+  // a gravação/exclusão do produtor nos talhões do escopo dele.
   produtor: (() => {
     const m = conceder(nada(),
       ['cadastro', 'fertilidade', 'zonas', 'altimetria', 'condutividade', 'recomendacoes', 'prescricao', 'compactacao', 'produtividade', 'relatorios', 'arquivos'], VER_EXP);
     conceder(m, ['satelite'], TRABALHAR);
-    conceder(m, ['compactacao'], ['visualizar', 'criar', 'editar', 'exportar']);
+    conceder(m, ['compactacao'], ['visualizar', 'criar', 'editar', 'excluir', 'exportar']);
     return m;
   })(),
 

@@ -13,7 +13,7 @@
 // Interruptor SEPARADO do login: só ativa com NEXT_PUBLIC_USE_SUPABASE_DATA=true,
 // pra ligar o Auth Supabase não forçar os dados (evita tela vazia antes do import).
 
-import { escritaBloqueada } from './somenteLeitura';
+import { escritaBloqueada, registroBloqueado, somenteLeitura } from './somenteLeitura';
 import { getSupabase, supabaseConfigurado } from './supabase';
 import { marcarGravacaoLocal, editadaDuranteBoot, chavesEditadasDuranteBoot, mesclarGravacoes, type RegistroGravacoes } from './janelaBoot';
 import { lerRawLocal, gravarRawLocal, lerListaLocal } from './localComprimido';
@@ -577,7 +577,7 @@ async function syncLista(sb: NonNullable<ReturnType<typeof getSupabase>>, key: s
   // a poda rodaria contra a lista velha (a que este push começou a subir) e
   // apagaria da nuvem o que o boot acabou de trazer. Ver o teste de auto-cadastro
   // (npm run teste:autocadastro), passo B.
-  const podePodar = primeira && bootCompleto && chavesHidratadas.has(key);
+  let podePodar = primeira && bootCompleto && chavesHidratadas.has(key);
 
   // Ids a fazer upsert (novos/alterados) e a deletar (saíram).
   let idsUpsert: string[];
@@ -593,6 +593,19 @@ async function syncLista(sb: NonNullable<ReturnType<typeof getSupabase>>, key: s
 
   const recPorId = new Map<string, Rec>();
   for (const r of recs) recPorId.set(String(r.id), r);
+
+  // Produtor: só sobe o que é de talhão DELE (a RLS recusaria o lote inteiro por
+  // um registro alheio). O que fica de fora é alteração local em dado de outro
+  // talhão — some no próximo boot, porque a nuvem manda. Poda, nunca.
+  if (somenteLeitura()) {
+    idsUpsert = idsUpsert.filter(id => !registroBloqueado(key, id, recPorId.get(id)));
+    idsDelete = idsDelete.filter(id => {
+      let antes: unknown;
+      try { antes = JSON.parse(prev?.get(id) ?? 'null'); } catch { antes = null; }
+      return !registroBloqueado(key, id, antes);
+    });
+    podePodar = false;
+  }
 
   if (talhoes) {
     if (idsUpsert.length) {
@@ -676,7 +689,7 @@ export async function pushObjSupabase(key: string, json: string): Promise<void> 
 export async function salvarMapaSupabase(id: string, dados: object, atualizadoEm?: string): Promise<void> {
   const sb = getSupabase();
   if (!sb) return;
-  if (escritaBloqueada(COL_MAPAS, id)) return;   // produtor: somente leitura (satélite passa)
+  if (escritaBloqueada(COL_MAPAS) || registroBloqueado(COL_MAPAS, id)) return;   // produtor: só satélite/compactação dos talhões dele
   const up = await sb.from('app_kv').upsert(
     { colecao: COL_MAPAS, item_id: id, dados, atualizado_em: atualizadoEm ?? new Date().toISOString() },
     { onConflict: 'colecao,item_id' },
@@ -792,7 +805,8 @@ export async function carregarMapaSupabase<T>(id: string): Promise<{ id: string;
 export async function excluirMapasPorIdsSupabase(ids: string[]): Promise<number> {
   const sb = getSupabase();
   if (!sb || !ids.length) return 0;
-  if (escritaBloqueada(COL_MAPAS, ids[0])) return 0;   // produtor: somente leitura (satélite passa)
+  if (escritaBloqueada(COL_MAPAS)) return 0;
+  ids = ids.filter(id => !registroBloqueado(COL_MAPAS, id));   // produtor: só satélite/compactação dos talhões dele
   let n = 0;
   const LOTE = 30;
   for (let i = 0; i < ids.length; i += LOTE) {
@@ -807,7 +821,7 @@ export async function excluirMapasPorIdsSupabase(ids: string[]): Promise<number>
 export async function excluirMapasPorPrefixoSupabase(prefixo: string): Promise<void> {
   const sb = getSupabase();
   if (!sb) return;
-  if (escritaBloqueada(COL_MAPAS, prefixo)) return;   // produtor: somente leitura (satélite passa)
+  if (escritaBloqueada(COL_MAPAS) || registroBloqueado(COL_MAPAS, prefixo)) return;   // produtor: só satélite/compactação dos talhões dele
   const r = await sb.from('app_kv').delete().eq('colecao', COL_MAPAS).like('item_id', escLike(prefixo) + '%');
   if (r.error) console.warn('[supabase] excluir mapas:', r.error.message);
 }
@@ -842,7 +856,7 @@ export async function marcarMapasMigrados(): Promise<void> {
 export async function salvarDocSupabase(colecao: string, id: string, dados: object): Promise<boolean> {
   const sb = getSupabase();
   if (!sb) return false;
-  if (escritaBloqueada(colecao)) return false;   // produtor: somente leitura
+  if (escritaBloqueada(colecao) || registroBloqueado(colecao, id, dados)) return false;   // produtor: só nos talhões dele
   const up = await sb.from('app_kv').upsert(
     { colecao, item_id: id, dados, atualizado_em: new Date().toISOString() },
     { onConflict: 'colecao,item_id' },
@@ -891,7 +905,7 @@ export async function carregarColecaoSupabase<T>(colecao: string): Promise<T[]> 
 export async function excluirDocSupabase(colecao: string, id: string): Promise<number> {
   const sb = getSupabase();
   if (!sb) return 0;
-  if (escritaBloqueada(colecao)) return 0;   // produtor: somente leitura
+  if (escritaBloqueada(colecao) || registroBloqueado(colecao, id)) return 0;   // produtor: só nos talhões dele
   const r = await sb.from('app_kv').delete({ count: 'exact' }).eq('colecao', colecao).eq('item_id', id);
   if (r.error) {
     console.warn(`[supabase] excluir ${colecao}:`, r.error.message);
@@ -904,7 +918,9 @@ export async function excluirDocSupabase(colecao: string, id: string): Promise<n
 export async function excluirDocsPorPrefixoSupabase(colecao: string, prefixo: string): Promise<void> {
   const sb = getSupabase();
   if (!sb) return;
-  if (escritaBloqueada(colecao)) return;   // produtor: somente leitura
+  // Produtor: exclusão em massa (por prefixo ou da coleção inteira) não tem um
+  // talhão para conferir — só passa nas coleções do IAM (id vazio = sem talhão).
+  if (escritaBloqueada(colecao) || registroBloqueado(colecao, '')) return;
   const r = await sb.from('app_kv').delete().eq('colecao', colecao).like('item_id', escLike(prefixo) + '%');
   if (r.error) console.warn(`[supabase] excluir por prefixo ${colecao}:`, r.error.message);
 }
@@ -913,7 +929,7 @@ export async function excluirDocsPorPrefixoSupabase(colecao: string, prefixo: st
 export async function excluirColecaoSupabase(colecao: string): Promise<void> {
   const sb = getSupabase();
   if (!sb) return;
-  if (escritaBloqueada(colecao)) return;   // produtor: somente leitura
+  if (escritaBloqueada(colecao) || registroBloqueado(colecao, '')) return;   // produtor: idem prefixo
   const r = await sb.from('app_kv').delete().eq('colecao', colecao);
   if (r.error) console.warn(`[supabase] excluir coleção ${colecao}:`, r.error.message);
 }
