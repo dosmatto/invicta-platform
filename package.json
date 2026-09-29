@@ -98,6 +98,7 @@
     "teste:foliar-graficos": "node scripts/teste-foliar-graficos.mjs",
     "teste:foliar-importacao": "node scripts/teste-foliar-importacao.mjs",
     "teste:compactacaofalker": "node scripts/teste-compactacaofalker.mjs",
+    "teste:relatoriocompactacao": "node scripts/teste-relatoriocompactacao.mjs",
     "teste:msr-regras": "PY=\"$HOME/.invicta-fert-backend/venv/bin/python\"; [ -x \"$PY\" ] || PY=python3; \"$PY\" scripts/teste-msr-regras.py"
   },
   "dependencies": {

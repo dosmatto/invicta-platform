@@ -19,7 +19,8 @@ import { periodoParaNome } from '@/lib/nomeExport';
 import { listarCenarios, descomprimirCenario, type Cenario } from '@/lib/recomendacao/cenarios';
 import { cenariosComPrecoAtual } from '@/lib/recomendacao/precoAtual';
 import { anoDaSafra } from '@/lib/periodo';
-import { salvarRelatorio, listarRelatorios, excluirRelatorio, type RegistroRelatorio } from '@/lib/relatoriosArquivo';
+import { salvarRelatorio, listarRelatorios, excluirRelatorio, TIPO_REL_COMPACTACAO, type RegistroRelatorio } from '@/lib/relatoriosArquivo';
+import { regenerarRelatorioCompactacao } from '@/lib/relatorioCompactacao';
 import { emailUsuario } from '@/lib/auth';
 import { pode, podeEm } from '@/lib/empresa';
 import { FileDown, Loader2, ChevronUp, ChevronDown, AlertTriangle, CheckSquare, Square, Satellite, Hash, History, Trash2, ExternalLink, Wand2, FlaskConical } from 'lucide-react';
@@ -188,6 +189,8 @@ export function GeradorRelatorios({ safraNome }: { safraNome?: string } = {}) {
   async function abrirRelatorio(reg: RegistroRelatorio) {
     setErro('');
     try {
+      // Compactação: gerado na aba Compactação; regenera da importação + mapas da nuvem.
+      if (reg.tipo === TIPO_REL_COMPACTACAO) { await regenerarRelatorioCompactacao(reg.talhaoId, reg.importacaoId); return; }
       const mesmoCtx = reg.talhaoId === nav.talhaoId && reg.safra === safra;
       // Fertilidade
       let paginasFert: ReturnType<typeof montarPaginas> = [];

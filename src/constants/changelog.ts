@@ -1,5 +1,13 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Relatório PDF de compactação: resumo das camadas, uma página por camada e tabela de pontos
+  '2.184.0': [
+    'NOVO: RELATÓRIO PDF DA COMPACTAÇÃO (Talhão → Compactação → "Gerar relatório (PDF)"). Layout oficial, A4 paisagem, com o mesmo cabeçalho, marca e rodapé dos relatórios de Fertilidade e Condutividade (produtor, talhão, área, município, data de referência e método).',
+    'PÁGINA DE RESUMO: todas as camadas (0-10 … 50-60) em miniatura lado a lado, cada uma o mapa interpolado colorido pela legenda oficial de Compactação com o contorno do talhão; ao lado, uma barra por profundidade com o % da ÁREA do talhão em cada uma das 5 classes, a média (MPa) de cada camada e a legenda das classes com as faixas.',
+    'UMA PÁGINA POR CAMADA: mapa grande (satélite + mapa + valor de cada ponto), a tira das 5 classes com as faixas em MPa, a tabela de classes com % da área e hectares, e o quadro da camada — média, mínimo e máximo dos pontos, média do mapa, nº de pontos, método (Krigagem com o modelo do variograma, ou IDW) e o tamanho do pixel.',
+    'TABELA DE PONTOS × CAMADAS: nº do ponto e da medição no penetrômetro, o valor em MPa de cada camada com a célula pintada na cor da classe e a linha de MÉDIA no fim; quebra de página quando passa de 22 pontos.',
+    'O botão só libera com TODAS as camadas da importação interpoladas — faltando alguma, a tela diz quais e sugere "Interpolar todas as camadas". Aparece para quem pode exportar na Compactação. Quem cria relatórios tem a geração registrada no histórico da aba Relatórios (tipo "Compactação") e no portal; "Abrir" no histórico refaz o PDF a partir dos mapas salvos na nuvem.',
+  ],
   // [S/N] App de campo marca ponto medido nas grades Falker e a plataforma importa o arquivo da grade
   '2.183.0': [
     'NO APP DE CAMPO, A GRADE DE COMPACTAÇÃO FALKER VIRA SÓ NAVEGAÇÃO E MARCAÇÃO. Com a grade em modo Falker, ao chegar no ponto (dentro do raio de 15 m) o botão passa a ser "Marcar como medido" — sem formulário de profundidades: as leituras vêm do arquivo do penetrômetro. O app grava o ponto como coletado com o GPS real (posição, precisão, distância ao alvo, horário e operador); "Pular ponto" continua disponível. Na lista de grades do app aparece o selo "Falker". Grades Manual seguem exatamente como antes (formulário por profundidade), e uma grade sem nenhuma profundidade nunca abre formulário vazio.',

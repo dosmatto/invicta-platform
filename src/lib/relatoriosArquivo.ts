@@ -11,7 +11,7 @@ export interface RegistroRelatorio {
   id: string;
   talhaoId: string;
   safra: string;
-  tipo: string;          // 'Fertilidade' | 'Recomendação' | 'Recomendação + Fertilidade'
+  tipo: string;          // 'Fertilidade' | 'Recomendação' | 'Recomendação + Fertilidade' | 'Compactação'
   titulo: string;        // ex.: "Relatório completo" / "Relatório (3 mapas)"
   nuts: string[];        // elementos (ids) da seção Fertilidade p/ regenerar, na ordem
   elementos: string[];   // símbolos (exibição)
@@ -23,7 +23,13 @@ export interface RegistroRelatorio {
   // Combinado (opcional; ausente em registros antigos = só Fertilidade):
   cenarioIds?: string[]; // ids dos cenários da seção Recomendação p/ regenerar
   cenarioNomes?: string[]; // nomes das recomendações (exibição)
+  // Compactação (tipo 'Compactação'): a importação de penetrometria cujos mapas
+  // (salvos na nuvem, prefixo compactacao__) regeneram o PDF.
+  importacaoId?: string;
 }
+
+/** Tipo do registro gerado pela aba Compactação. */
+export const TIPO_REL_COMPACTACAO = 'Compactação';
 
 const COL = 'inv_relatorios';
 type MetaEntrada = Omit<RegistroRelatorio, 'id' | 'geradoEm'>;

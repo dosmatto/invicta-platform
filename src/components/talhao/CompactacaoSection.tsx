@@ -24,8 +24,12 @@ import { parseArquivoPontos, pontosCompactacao, type ArquivoPontos } from '@/lib
 import { estatisticaCamada, casarComGrade } from '@/lib/compactacaoFalker';
 import { GradeCompactacaoEditor } from './GradeCompactacaoEditor';
 import type { Legenda } from '@/lib/legendas';
-import { Upload, Loader2, Activity, Eraser, AlertTriangle, Save, Trash2, Play, Plus, Layers, MapPin } from 'lucide-react';
-import { podeCompactacao } from '@/lib/empresa';
+import { Upload, Loader2, Activity, Eraser, AlertTriangle, Save, Trash2, Play, Plus, Layers, MapPin, FileDown } from 'lucide-react';
+import { podeCompactacao, podeEm } from '@/lib/empresa';
+import { gerarRelatorioCompactacao, montarDadosCompactacao, prefixoNuvemCompactacao } from '@/lib/relatorioCompactacao';
+import { camadasFaltando } from '@/lib/relatorioCompactacaoCalc';
+import { salvarRelatorio, TIPO_REL_COMPACTACAO } from '@/lib/relatoriosArquivo';
+import { emailUsuario } from '@/lib/auth';
 
 // Quem NÃO processa compactação (produtor, leitor) só troca importação/profundidade
 // e vê o mapa — sem importar, criar grade, interpolar, limpar ou excluir.
@@ -47,7 +51,7 @@ type MapaPronto = { resp: RespInterp; labels: GeoJSON.FeatureCollection };
 
 // Persistência na nuvem (coleção inv_mapas_fert, compartilhada): namespace
 // próprio para não colidir com os mapas de fertilidade.
-const prefixoNuvem = (talhaoId: string, importacaoId: string) => `compactacao__${talhaoId}__${importacaoId}__`;
+const prefixoNuvem = prefixoNuvemCompactacao;
 const idNuvem = (talhaoId: string, importacaoId: string, prof: string) => `${prefixoNuvem(talhaoId, importacaoId)}${prof}`;
 
 export function CompactacaoSection({ safraNome }: { safraNome?: string } = {}) {
@@ -120,6 +124,9 @@ export function CompactacaoSection({ safraNome }: { safraNome?: string } = {}) {
   const [metodoSel, setMetodoSel] = useState<'krige' | 'idw'>('krige');
   // "Interpolar todas as camadas": progresso n/total da rodada sequencial.
   const [progresso, setProgresso] = useState<{ n: number; total: number } | null>(null);
+  // Relatório PDF
+  const [gerandoPdf, setGerandoPdf] = useState(false);
+  const [pdfMsg, setPdfMsg] = useState<{ erro: boolean; txt: string } | null>(null);
 
   function recarregar() {
     if (nav.talhaoId && safra) {
@@ -314,6 +321,37 @@ export function CompactacaoSection({ safraNome }: { safraNome?: string } = {}) {
     deleteImportacaoCompactacao(importacaoId);
     setImportacaoId('');
     recarregar();
+  }
+
+  // Relatório PDF (resumo + 1 página por camada + tabela). Exige TODAS as camadas
+  // da importação interpoladas; arquiva a configuração no histórico de relatórios
+  // (aba Relatórios / portal) para quem cria relatórios.
+  async function gerarPdf() {
+    if (!importacao || !legenda || !nav.talhaoId || gerandoPdf) return;
+    const mapas: Record<string, RespInterp> = {};
+    for (const [p, c] of Object.entries(cache)) if (temGrid(c.resp)) mapas[p] = c.resp;
+    const dados = montarDadosCompactacao({ talhaoId: nav.talhaoId, importacao, mapas, legenda, poligono });
+    if ('erro' in dados) { setPdfMsg({ erro: true, txt: dados.erro }); return; }
+    setGerandoPdf(true); setPdfMsg(null);
+    try {
+      const { paginas } = await gerarRelatorioCompactacao(dados);
+      if (podeEm('relatorios', 'criar')) {
+        try {
+          await salvarRelatorio({
+            talhaoId: nav.talhaoId, safra, tipo: TIPO_REL_COMPACTACAO,
+            titulo: `${importacao.nome} (${importacao.profundidades.length} camadas)`,
+            nuts: [], elementos: importacao.profundidades,
+            satelite: dados.satelite, valores: true, paginas,
+            importacaoId: importacao.id,
+            geradoPor: emailUsuario() ?? '—',
+          });
+        } catch (e) {
+          setPdfMsg({ erro: false, txt: 'PDF gerado, mas não foi registrado no histórico de relatórios. ' + (e instanceof Error ? e.message : '') });
+        }
+      }
+    } catch (e) {
+      setPdfMsg({ erro: true, txt: e instanceof Error ? e.message : 'Falha ao gerar o PDF.' });
+    } finally { setGerandoPdf(false); }
   }
 
   if (!safra) return <div className="px-6 py-4"><Aviso texto="Defina um Ano (no topo do talhão) para a compactação." /></div>;
@@ -573,6 +611,28 @@ export function CompactacaoSection({ safraNome }: { safraNome?: string } = {}) {
               <p className="text-[9px]" style={{ color: '#64748b' }}>{legenda.atributo} · {legenda.unidade} ({legenda.metodo})</p>
             </div>
           )}
+
+          {/* Relatório PDF: todas as camadas interpoladas */}
+          {podeCompactacao('exportar') && (() => {
+            const falta = camadasFaltando(importacao.profundidades, Object.keys(cache).filter(p => temGrid(cache[p].resp)));
+            const pronto = falta.length === 0 && !!poligono;
+            return (
+              <div className="space-y-1">
+                <button onClick={() => void gerarPdf()} disabled={!pronto || gerandoPdf || processando}
+                  className="w-full py-2 rounded text-xs font-bold text-white flex items-center justify-center gap-1.5 disabled:opacity-50"
+                  style={{ background: pronto ? 'var(--invicta-blue-mid)' : '#1a3a6b' }}>
+                  {gerandoPdf ? <><Loader2 size={13} className="animate-spin" /> Gerando PDF…</> : <><FileDown size={13} /> Gerar relatório (PDF)</>}
+                </button>
+                {!pronto && (
+                  <p className="text-[9px]" style={{ color: '#fbbf24' }}>
+                    {!poligono ? 'Limite do talhão não encontrado — abra o talhão no mapa.'
+                      : `Faltam ${falta.length} de ${importacao.profundidades.length} camadas (${falta.join(', ')}) — use "Interpolar todas as camadas".`}
+                  </p>
+                )}
+                {pdfMsg && <p className="text-[10px]" style={{ color: pdfMsg.erro ? '#f87171' : '#fbbf24' }}>{pdfMsg.txt}</p>}
+              </div>
+            );
+          })()}
         </>
       )}
     </div>

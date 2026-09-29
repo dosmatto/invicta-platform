@@ -88,6 +88,7 @@ verdadeira (fusão de talhões) chegou depois; foi preciso renumerar.
 | S/N | Compactação lê o arquivo da Falker e interpola todas as camadas (Krigagem ou IDW) | 2.181.0 | Talhão → Compactação → Importar (arquivo da Falker), Método, "Interpolar todas as camadas", estatística da camada; papel Produtor (portal) processa |
 | S/N | Grade de compactação com pré-visualização, edição no mapa, KML/SHP e conferência do arquivo da Falker | 2.182.0 | Talhão → Compactação → Grade de compactação (Nova grade: parâmetros, pontos ao vivo no mapa, Editar pontos, Salvar; KML/SHP na grade salva); Importar arquivo da Falker → "Conferir contra a grade planejada" |
 | S/N | App de campo marca ponto medido nas grades Falker e a plataforma importa o arquivo da grade | 2.183.0 (app 3.3.0) | /coleta → Compactação → grade com selo Falker → no ponto, "Marcar como medido"; Talhão → Compactação → Grade de compactação → "Buscar leituras do campo" (x/y marcados) e "Importar arquivo da Falker desta grade" |
+| S/N | Relatório PDF de compactação: resumo das camadas, uma página por camada e tabela de pontos | 2.184.0 | Talhão → Compactação → (todas as camadas interpoladas) "Gerar relatório (PDF)"; Talhão → Relatórios → histórico (tipo Compactação) → Abrir |
 
 > As pendências 1–17 foram entregues antes deste registro existir e não estão
 > catalogadas; procure pelo assunto no `changelog.ts`. Da 18 em diante, tudo
