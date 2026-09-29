@@ -25,7 +25,7 @@ import { periodoParaNome } from '@/lib/nomeExport';
 import { inputStyle } from '@/constants/ui';
 import {
   Loader2, Save, Trash2, Plus, Grid3x3, RefreshCw, MapPin, ChevronDown, ChevronUp,
-  Move, Eraser, Check, X, Download, Pencil,
+  Move, Eraser, Check, X, Download, Pencil, Upload,
 } from 'lucide-react';
 
 const PROFS_PADRAO = '0-10, 10-20, 20-30, 30-40';
@@ -49,13 +49,15 @@ function fcGrade(pts: PontoGradeCompact[]): GeoJSON.FeatureCollection {
   };
 }
 
-export function GradeCompactacaoEditor({ talhaoId, safra, poligono, podeExcluir, onLevantamentoCriado, onGradesMudaram }: {
+export function GradeCompactacaoEditor({ talhaoId, safra, poligono, podeExcluir, onLevantamentoCriado, onGradesMudaram, onImportarFalker }: {
   talhaoId: string;
   safra: string;
   poligono: GeoJSON.Polygon | GeoJSON.MultiPolygon | null;
   podeExcluir: boolean;
   onLevantamentoCriado: (importacaoId: string) => void;
   onGradesMudaram?: () => void;
+  // Grade 'falker': abre a importação do arquivo da Falker já conferindo a cobertura contra esta grade.
+  onImportarFalker?: (gradeId: string) => void;
 }) {
   const { nav, setPontosSimulados, edicaoAtiva, setEdicaoAtiva, edicaoModo, setEdicaoModo, pontoEvent, setPontoEvent } = useApp();
 
@@ -235,7 +237,9 @@ export function GradeCompactacaoEditor({ talhaoId, safra, poligono, podeExcluir,
     const ls = getLeiturasCompact(g.id);
     const coletadas = ls.filter(l => l.status === 'coletado').length;
     setLeituras(prev => ({ ...prev, [g.id]: { coletadas, total: g.pontos.length } }));
-    if (coletadas === 0) setMsg('Nenhuma leitura coletada ainda para esta grade (o app de campo precisa sincronizar).');
+    if (coletadas === 0) setMsg(g.modoRegistro === 'falker'
+      ? 'Nenhum ponto marcado como medido ainda (o app de campo precisa sincronizar).'
+      : 'Nenhuma leitura coletada ainda para esta grade (o app de campo precisa sincronizar).');
     setBuscando(null);
   }
 
@@ -278,13 +282,24 @@ export function GradeCompactacaoEditor({ talhaoId, safra, poligono, podeExcluir,
                 </div>
                 <p className="text-[9px]" style={{ color: '#64748b' }}>
                   {g.pontos.length} pontos · {g.densidade} ha/ponto · {falker ? 'Falker (camadas do arquivo)' : `manual · prof.: ${g.profundidades.join(' · ')} (${g.unidade})`}
-                  {info && <span style={{ color: info.coletadas > 0 ? '#86efac' : '#fbbf24' }}> · {info.coletadas}/{info.total} coletados</span>}
+                  {info && <span style={{ color: info.coletadas > 0 ? '#86efac' : '#fbbf24' }}> · {info.coletadas}/{info.total} {falker ? 'marcados como medidos' : 'coletados'}</span>}
                 </p>
+                {falker && info && (
+                  <div className="h-1 rounded overflow-hidden" style={{ background: '#1a3a6b' }} title={`${info.coletadas}/${info.total} marcados como medidos no app de campo`}>
+                    <div className="h-full" style={{ width: `${info.total ? Math.round(100 * info.coletadas / info.total) : 0}%`, background: '#22c55e' }} />
+                  </div>
+                )}
                 <div className="flex gap-1">
                   <button onClick={() => void buscarLeituras(g)} disabled={buscando === g.id}
                     className="flex-1 py-1 rounded text-[10px] font-semibold flex items-center justify-center gap-1 disabled:opacity-50" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
                     {buscando === g.id ? <Loader2 size={11} className="animate-spin" /> : <RefreshCw size={11} />} Buscar leituras do campo
                   </button>
+                  {falker && onImportarFalker && (
+                    <button onClick={() => onImportarFalker(g.id)} title="Abre a importação do arquivo da Falker já conferindo a cobertura contra esta grade"
+                      className="flex-1 py-1 rounded text-[10px] font-bold text-white flex items-center justify-center gap-1" style={{ background: 'var(--invicta-green-dark)' }}>
+                      <Upload size={11} /> Importar arquivo da Falker desta grade
+                    </button>
+                  )}
                   {!falker && info && info.coletadas > 0 && (
                     <button onClick={() => virarLevantamento(g)}
                       className="flex-1 py-1 rounded text-[10px] font-bold text-white flex items-center justify-center gap-1" style={{ background: 'var(--invicta-green-dark)' }}>

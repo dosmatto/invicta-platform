@@ -5,6 +5,8 @@
 // cada ponto e registra as leituras do PENETRÔMETRO por profundidade (offline).
 // As leituras sincronizam como docs (inv_leituras_compact) e, na plataforma,
 // viram um levantamento para interpolar. Segue o padrão da Amostragem/Mancha.
+// Grade 'falker' (app 3.3.0): sem formulário — "Marcar como medido" grava só o
+// GPS real e o status; as camadas chegam pelo arquivo da Falker na plataforma.
 
 import { useState, useMemo, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
@@ -21,6 +23,11 @@ const MapaColeta = dynamic(() => import('@/components/coleta/MapaColeta').then(m
 
 const AZUL_ESC = '#061525', AZUL = '#0a1929', BORDA = '#1a3a6b', TXT = '#e2e8f0', SUB = '#64748b';
 const RAIO_M = 15;  // raio para liberar o registro (GPS de celular; penetrômetro não exige o rigor do trado)
+
+// Grade 'falker': as camadas vêm do arquivo do penetrômetro, importado na
+// plataforma — aqui o operador só marca o ponto como visitado. Grade sem
+// profundidade nenhuma também cai aqui: nunca abrir um formulário vazio.
+const semFormulario = (g: GradeCompactacao) => g.modoRegistro === 'falker' || g.profundidades.length === 0;
 
 function talhaoComoFC(t: Talhao | null): GeoJSON.FeatureCollection | null {
   if (!t?.geojson) return null;
@@ -78,6 +85,9 @@ export function CompactacaoScreen({ onVoltar }: { onVoltar: () => void }) {
           <Lista titulo="Grade de compactação" vazio="Nenhuma grade sincronizada para este talhão." itens={grades.map(g => {
             const ls = getLeiturasCompact(g.id);
             const feitos = ls.filter(l => l.status !== 'pendente').length;
+            if (g.modoRegistro === 'falker') {
+              return { id: g.id, nome: g.nome, selo: 'Falker', sub: `${g.pontos.length} pontos · leituras pelo arquivo do penetrômetro${feitos ? ` · ${feitos} feitos` : ''}` };
+            }
             return { id: g.id, nome: g.nome, sub: `${g.pontos.length} pontos · prof.: ${g.profundidades.join(' · ')} (${g.unidade})${feitos ? ` · ${feitos} feitos` : ''}` };
           })} onEscolher={id => setGrade(grades.find(g => g.id === id) ?? null)} />
         )}
@@ -129,6 +139,7 @@ function CampoCompactacao({ grade, talhao, onVoltar }: { grade: GradeCompactacao
   const dist = userPos && sel ? distanciaM(userPos.lng, userPos.lat, sel.lng, sel.lat) : null;
   const dentroRaio = dist != null && dist <= RAIO_M;
   const feitos = leituras.filter(l => l.status !== 'pendente').length;
+  const soMarcar = semFormulario(grade);
 
   // vibra ao ENTRAR no raio do ponto selecionado (transição fora→dentro)
   useEffect(() => {
@@ -205,20 +216,38 @@ function CampoCompactacao({ grade, talhao, onVoltar }: { grade: GradeCompactacao
               <span className="text-sm font-bold" style={{ color: TXT }}>C-{sel.ordem + 1}</span>
               {statusDe(sel.ordem) !== 'pendente' && (
                 <span className="flex items-center gap-1 text-[10px] font-bold" style={{ color: COR_STATUS[statusDe(sel.ordem)] }}>
-                  <CheckCircle2 size={12} /> {statusDe(sel.ordem) === 'coletado' ? 'já registrado (registrar de novo substitui)' : 'pulado'}
+                  <CheckCircle2 size={12} /> {statusDe(sel.ordem) === 'coletado'
+                    ? (soMarcar ? 'já marcado como medido (marcar de novo substitui)' : 'já registrado (registrar de novo substitui)')
+                    : 'pulado'}
                 </span>
               )}
               <button onClick={() => setSelOrdem(null)} className="ml-auto p-1 rounded" style={{ color: SUB }}><X size={14} /></button>
             </div>
-            <button onClick={() => setFormAberto(true)} disabled={!dentroRaio}
-              className="w-full py-3 rounded-xl text-sm font-bold text-white disabled:opacity-50" style={{ background: dentroRaio ? '#15803d' : '#1a3a6b' }}>
-              {dentroRaio ? '● Registrar leituras' : dist != null ? `Aproxime-se (${formatarDist(dist)})` : 'Aguardando GPS…'}
-            </button>
+            {soMarcar ? (
+              <>
+                <div className="flex gap-2">
+                  <button onClick={() => registrar('pulado', {}, '')} disabled={!dentroRaio}
+                    className="px-4 py-3 rounded-xl text-xs font-bold disabled:opacity-50" style={{ background: BORDA, color: '#cbd5e1' }}>
+                    Pular ponto
+                  </button>
+                  <button onClick={() => registrar('coletado', {}, '')} disabled={!dentroRaio}
+                    className="flex-1 py-3 rounded-xl text-sm font-bold text-white disabled:opacity-50" style={{ background: dentroRaio ? '#15803d' : '#1a3a6b' }}>
+                    {dentroRaio ? '● Marcar como medido' : dist != null ? `Aproxime-se (${formatarDist(dist)})` : 'Aguardando GPS…'}
+                  </button>
+                </div>
+                <p className="text-[10px]" style={{ color: SUB }}>As leituras vêm do arquivo do penetrômetro (Falker); aqui só marca o ponto visitado.</p>
+              </>
+            ) : (
+              <button onClick={() => setFormAberto(true)} disabled={!dentroRaio}
+                className="w-full py-3 rounded-xl text-sm font-bold text-white disabled:opacity-50" style={{ background: dentroRaio ? '#15803d' : '#1a3a6b' }}>
+                {dentroRaio ? '● Registrar leituras' : dist != null ? `Aproxime-se (${formatarDist(dist)})` : 'Aguardando GPS…'}
+              </button>
+            )}
           </div>
         </div>
       )}
 
-      {formAberto && sel && (
+      {formAberto && sel && !soMarcar && (
         <FormLeituras grade={grade} codigo={`C-${sel.ordem + 1}`}
           onCancelar={() => setFormAberto(false)}
           onSalvar={(valores, obs) => registrar('coletado', valores, obs)}
@@ -285,7 +314,7 @@ function FormLeituras({ grade, codigo, onSalvar, onPular, onCancelar }: {
   );
 }
 
-function Lista({ titulo, itens, vazio, onEscolher }: { titulo: string; vazio: string; itens: { id: string; nome: string; sub?: string }[]; onEscolher: (id: string) => void }) {
+function Lista({ titulo, itens, vazio, onEscolher }: { titulo: string; vazio: string; itens: { id: string; nome: string; sub?: string; selo?: string }[]; onEscolher: (id: string) => void }) {
   return (
     <div>
       <p className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: '#93c5fd' }}>{titulo}</p>
@@ -294,7 +323,7 @@ function Lista({ titulo, itens, vazio, onEscolher }: { titulo: string; vazio: st
           {itens.map(it => (
             <button key={it.id} onClick={() => onEscolher(it.id)} className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-left active:opacity-70" style={{ background: '#0b1d3a', border: `1px solid ${BORDA}` }}>
               <MapPin size={16} style={{ color: '#fbbf24' }} className="flex-shrink-0" />
-              <div className="flex-1 min-w-0"><p className="text-sm font-semibold truncate" style={{ color: TXT }}>{it.nome}</p>{it.sub && <p className="text-[10px] mt-0.5" style={{ color: SUB }}>{it.sub}</p>}</div>
+              <div className="flex-1 min-w-0"><p className="text-sm font-semibold truncate flex items-center gap-1.5" style={{ color: TXT }}><span className="truncate">{it.nome}</span>{it.selo && <span className="flex-shrink-0 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase" style={{ background: '#78350f', color: '#fde68a' }}>{it.selo}</span>}</p>{it.sub && <p className="text-[10px] mt-0.5" style={{ color: SUB }}>{it.sub}</p>}</div>
               <ChevronRight size={16} style={{ color: SUB }} className="flex-shrink-0" />
             </button>
           ))}

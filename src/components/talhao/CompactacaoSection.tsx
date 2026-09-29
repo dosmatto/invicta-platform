@@ -193,6 +193,21 @@ export function CompactacaoSection({ safraNome }: { safraNome?: string } = {}) {
     }
   }
 
+  // Vindo da grade 'falker' ("Importar arquivo da Falker desta grade"): abre a
+  // importação já com essa grade escolhida para conferir a cobertura.
+  const uploadRef = useRef<HTMLDivElement>(null);
+  function importarFalkerDaGrade(gradeId: string) {
+    if (!nav.talhaoId) return;
+    setGradesTalhao(getGradesCompactacao(nav.talhaoId, safra));
+    setGradeCobId(gradeId);
+    setVerFaltantes(false);
+    setModoUpload(true);
+    if (arq?.falker) { uploadRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); return; }
+    // Já montado: abre o seletor ainda dentro do clique. Senão, no próximo quadro.
+    if (inputRef.current) inputRef.current.click();
+    else setTimeout(() => { inputRef.current?.click(); uploadRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }, 0);
+  }
+
   function toggleCol(c: string) {
     setColsSel(prev => prev.includes(c) ? prev.filter(x => x !== c) : [...prev, c]);
   }
@@ -351,12 +366,13 @@ export function CompactacaoSection({ safraNome }: { safraNome?: string } = {}) {
         <GradeCompactacaoEditor talhaoId={nav.talhaoId} safra={safra} poligono={poligono}
           podeExcluir={podeExcluir()}
           onGradesMudaram={() => setGradesTalhao(getGradesCompactacao(nav.talhaoId ?? '', safra))}
-          onLevantamentoCriado={id => { recarregar(); setImportacaoId(id); setModoUpload(false); }} />
+          onLevantamentoCriado={id => { recarregar(); setImportacaoId(id); setModoUpload(false); }}
+          onImportarFalker={importarFalkerDaGrade} />
       )}
 
       {/* Upload + mapeamento de colunas */}
       {podeProcessar() && mostrarUpload && (
-        <div className="rounded-lg p-3 space-y-2" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
+        <div ref={uploadRef} className="rounded-lg p-3 space-y-2" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
           <p className="text-[11px] font-semibold" style={{ color: '#93c5fd' }}>Importar pontos do penetrômetro</p>
           <button onClick={() => inputRef.current?.click()}
             className="w-full flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-semibold"
@@ -365,6 +381,9 @@ export function CompactacaoSection({ safraNome }: { safraNome?: string } = {}) {
           </button>
           <input ref={inputRef} type="file" accept=".zip,.kml,.geojson,.json,.csv,.txt,.xls,.xlsx" className="hidden" onChange={onFile} />
           {parseErro && <p className="text-[10px]" style={{ color: '#f87171' }}>{parseErro}</p>}
+          {!arq && gradeCob && (
+            <p className="text-[9px]" style={{ color: '#94a3b8' }}>Escolha o arquivo da Falker — a cobertura será conferida contra a <strong>{gradeCob.nome}</strong> ({gradeCob.pontos.length} pontos).</p>
+          )}
 
           {arq?.falker && (
             // Falker: sem mapeamento de colunas — mostra o que foi lido.

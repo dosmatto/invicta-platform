@@ -1,5 +1,11 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] App de campo marca ponto medido nas grades Falker e a plataforma importa o arquivo da grade
+  '2.183.0': [
+    'NO APP DE CAMPO, A GRADE DE COMPACTAÇÃO FALKER VIRA SÓ NAVEGAÇÃO E MARCAÇÃO. Com a grade em modo Falker, ao chegar no ponto (dentro do raio de 15 m) o botão passa a ser "Marcar como medido" — sem formulário de profundidades: as leituras vêm do arquivo do penetrômetro. O app grava o ponto como coletado com o GPS real (posição, precisão, distância ao alvo, horário e operador); "Pular ponto" continua disponível. Na lista de grades do app aparece o selo "Falker". Grades Manual seguem exatamente como antes (formulário por profundidade), e uma grade sem nenhuma profundidade nunca abre formulário vazio.',
+    'NA PLATAFORMA, a grade Falker mostra em "Buscar leituras do campo" o progresso "x/y marcados como medidos" com uma barra, e o botão "Virar levantamento" dá lugar a "Importar arquivo da Falker desta grade": ele abre a importação já com essa grade escolhida para conferir a cobertura (medidos/faltantes). As marcações do app não viram levantamento sozinhas — sem valores, são ignoradas; os valores entram pelo arquivo.',
+    'App de campo 3.3.0 (precisa de versão nova nas lojas para o modo Falker; a versão instalada continua abrindo o formulário, que nas grades Falker vem sem profundidades).',
+  ],
   // [S/N] Grade de compactação com pré-visualização, edição no mapa, KML/SHP e conferência do arquivo da Falker
   '2.182.0': [
     'A GRADE DE COMPACTAÇÃO GANHA FERRAMENTA PRÓPRIA (Talhão → Compactação → Grade de compactação). Parâmetros: densidade (ha por ponto), distância da borda, rotação automática (pela maior dimensão do talhão) ou manual em graus, distribuição Inteligente ou Grade alinhada, e o MODO DE REGISTRO — Falker (padrão: as camadas vêm do arquivo do penetrômetro, não há profundidade para digitar) ou Manual (profundidades e unidade digitadas no app de campo, como antes).',
