@@ -1,5 +1,9 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [57] Zona de manejo nunca apaga uma gleba do talhão menor que a área mínima
+  '2.187.0': [
+    'PENDÊNCIA 57 — CORRIGIDO: GERAR ZONAS COM "ÁREA MÍNIMA" NÃO APAGA MAIS PARTE DO TALHÃO. Num talhão com duas glebas (ex.: a principal e uma pequena separada), a gleba menor que a área mínima sumia do zoneamento — a limpeza descartava qualquer zona ou pedaço de zona abaixo do limite. Agora nenhum pedaço do talhão é apagado: a gleba pequena, sem vizinha para fundir, vira zona própria; a área mínima só funde manchas com a zona vizinha e preenche buracos pequenos. Vale também para "Fundir zonas", "Absorver fragmentos", o editor manual e o zoneamento importado.',
+  ],
   // [S/N] Banco só aceita do produtor compactação e satélite dos talhões dele
   '2.186.0': [
     'SEGURANÇA: O "SOMENTE LEITURA" DO PRODUTOR AGORA VALE NO BANCO, NÃO SÓ NA TELA. Até aqui a trava era só do navegador — pelo console, um produtor conseguia gravar ou apagar na nuvem dados de qualquer talhão que tivesse na cópia local, inclusive de outros clientes. Com as novas regras do banco (seção 6 de docs/seguranca-rls.sql, a aplicar no Supabase), o produtor só cria, altera e apaga na COMPACTAÇÃO (importações, grades e mapas) e no SATÉLITE (índices, composições e cenas rejeitadas), e só nos talhões do escopo dele — os mesmos que ele vê no portal (produtores e fazendas vinculados e, se houver, os talhões vinculados). Cadastro, talhões, fertilidade e todo o resto ficam só para consulta. Nada muda para owner, admin, agrônomo e operador.',

@@ -28,7 +28,8 @@ import { legendaDaCultura, quantisDoGridProd, SACA_KG } from '@/lib/produtividad
 import type { ClassificacaoQuantis } from '@/lib/quantis';
 import { carregarCamadas, analisarMulti, gerarMulti, dadosLabCV, type CamadasCarregadas } from '@/lib/meap/gerar';
 import { calcularCVZonas } from '@/lib/meap/cv';
-import { unirFeatures, limparZona } from '@/lib/meap/fundir';
+import { unirFeatures, limparZona, PARTE_DEGENERADA_M2 } from '@/lib/meap/fundir';
+import turfArea from '@turf/area';
 import { extrairPoligono, coordsFromBounds, decodeGrid, type RespGerarZonas, type RespAnalisarZonas } from '@/lib/fertilidade';
 import { extrairEditavel, paraFeature, areaHaDe } from '@/lib/geoEditor';
 import booleanIntersects from '@turf/boolean-intersects';
@@ -356,8 +357,10 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
   useEffect(() => { setOrdemRanks(res ? Array.from({ length: res.stats.n_classes }, (_, i) => i) : []); }, [res]);
 
   // Espelha as features geradas numa cópia EDITÁVEL (a fusão manual mexe nela,
-  // não no res original), LIMPA resquícios (buracos/slivers < área mínima) e zera
-  // a seleção a cada nova geração.
+  // não no res original), LIMPA resquícios (buracos < área mínima) e zera
+  // a seleção a cada nova geração. Zona pequena NUNCA é descartada (pendência 57):
+  // uma gleba do talhão menor que a área mínima, sem vizinha para fundir, vira
+  // zona própria — apagá-la some com um pedaço do talhão.
   useEffect(() => {
     if (!res) { setFeatsEdit([]); setSelZonas(new Set()); return; }
     const minM2 = Math.max((res.stats.area_min_ha || 0) * 10000, 1000);  // piso ~0,1 ha p/ ruído de vetorização
@@ -365,7 +368,7 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
     for (const f of res.features) {
       if (!f.geometry) continue;
       const { geometry, areaHa } = limparZona(f.geometry as GeoJSON.Geometry, minM2);
-      if (areaHa * 10000 < minM2) continue;  // zona inteira virou sliver → descarta
+      if (turfArea({ type: 'Feature', geometry, properties: {} }) < PARTE_DEGENERADA_M2) continue;  // só anel degenerado
       limpas.push({ ...f, geometry, properties: { ...(f.properties ?? {}), areaHa } });
     }
     setFeatsEdit(limpas);

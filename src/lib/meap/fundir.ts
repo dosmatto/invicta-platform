@@ -23,17 +23,24 @@ function combinar(polys: Poligonal[]): GeoJSON.MultiPolygon {
   return { type: 'MultiPolygon', coordinates: coords };
 }
 
-// Remove buracos (anéis internos) e partes (polígonos) menores que minM2 — os
-// "resquícios" que poluem o talhão. Buracos/partes ≥ minM2 são preservados (zonas
-// reais encravadas). Se TUDO ficar abaixo do limite, devolve a geometria original
-// (segurança: não zera a zona).
+// Parte menor que isto é anel degenerado (resíduo numérico do union), não área
+// de verdade. É o ÚNICO critério para descartar uma parte.
+export const PARTE_DEGENERADA_M2 = 1;
+
+// Preenche buracos (anéis internos) menores que minM2 — os "resquícios" da
+// vetorização/fusão. Buracos ≥ minM2 são preservados (zonas reais encravadas).
+// PARTES (polígonos) NUNCA são descartadas por área mínima: as zonas são uma
+// partição do talhão, e jogar fora uma parte abre um vazio no talhão — um
+// talhão com duas glebas perdia a gleba pequena inteira (pendência 57). Parte
+// pequena se resolve fundindo com a vizinha, nunca apagando. Só sai anel
+// degenerado (< PARTE_DEGENERADA_M2). Se tudo sair, devolve a original.
 export function limparGeometria(geom: GeoJSON.Geometry, minM2: number): GeoJSON.Geometry {
   if (minM2 <= 0 || (geom.type !== 'Polygon' && geom.type !== 'MultiPolygon')) return geom;
   const polys: GeoJSON.Position[][][] = geom.type === 'Polygon' ? [geom.coordinates] : geom.coordinates;
   const out: GeoJSON.Position[][][] = [];
   for (const rings of polys) {
     if (!rings.length) continue;
-    if (areaM2(rings[0]) < minM2) continue;                          // descarta parte-sliver
+    if (areaM2(rings[0]) < PARTE_DEGENERADA_M2) continue;            // só anel degenerado
     const buracos = rings.slice(1).filter(h => areaM2(h) >= minM2);  // preenche buracos pequenos
     out.push([rings[0], ...buracos]);
   }
