@@ -8,7 +8,9 @@
 // digita as leituras por profundidade e aqui elas viram um levantamento.
 //
 // Canal do mapa: usa `pontosSimulados` (o mesmo da Amostragem) SÓ enquanto está
-// gerando uma grade ou mostrando uma salva — e limpa ao sair. Grava só em
+// gerando uma grade ou mostrando uma salva — e limpa ao sair. Na aba Compactação
+// divide o canal com a conferência de cobertura: um dono por vez (coberturaNoMapa
+// / onUsarMapa), e cada um só limpa o que ele mesmo publicou. Grava só em
 // inv_grades_compact (saveGradeCompactacao): nada de saveGrade/paraProcessar.
 
 import { useEffect, useMemo, useState } from 'react';
@@ -49,7 +51,16 @@ function fcGrade(pts: PontoGradeCompact[]): GeoJSON.FeatureCollection {
   };
 }
 
-export function GradeCompactacaoEditor({ talhaoId, safra, poligono, podeExcluir, onLevantamentoCriado, onGradesMudaram, onImportarFalker }: {
+// Próximo "Grade compactação N" livre: depois de excluir uma grade, o número
+// não se repete (o export usa o número no nome do arquivo: GRADE<n>).
+function proximoNomeGrade(grades: GradeCompactacao[]): string {
+  const usados = new Set(grades.map(g => g.nome.match(/^Grade compactação (\d+)$/)?.[1]).filter(Boolean).map(Number));
+  let n = 1;
+  while (usados.has(n)) n++;
+  return `Grade compactação ${n}`;
+}
+
+export function GradeCompactacaoEditor({ talhaoId, safra, poligono, podeExcluir, onLevantamentoCriado, onGradesMudaram, onImportarFalker, coberturaNoMapa = false, onUsarMapa }: {
   talhaoId: string;
   safra: string;
   poligono: GeoJSON.Polygon | GeoJSON.MultiPolygon | null;
@@ -58,6 +69,12 @@ export function GradeCompactacaoEditor({ talhaoId, safra, poligono, podeExcluir,
   onGradesMudaram?: () => void;
   // Grade 'falker': abre a importação do arquivo da Falker já conferindo a cobertura contra esta grade.
   onImportarFalker?: (gradeId: string) => void;
+  // Posse do canal pontosSimulados na aba Compactação: um dono por vez.
+  // coberturaNoMapa = a conferência (verde/vermelho) está no mapa → este editor
+  // solta o canal (tira a grade vista e não publica). onUsarMapa = este editor
+  // vai publicar → a cobertura sai do mapa.
+  coberturaNoMapa?: boolean;
+  onUsarMapa?: () => void;
 }) {
   const { nav, setPontosSimulados, edicaoAtiva, setEdicaoAtiva, edicaoModo, setEdicaoModo, pontoEvent, setPontoEvent } = useApp();
 
@@ -107,13 +124,24 @@ export function GradeCompactacaoEditor({ talhaoId, safra, poligono, podeExcluir,
   const pontosEfetivos = pontosManuais ?? gerados;
   const gradeVista = gradeVistaId ? grades.find(g => g.id === gradeVistaId) ?? null : null;
 
-  // Publica no mapa SÓ enquanto este editor está ativo; limpa ao sair.
+  // Publica no mapa SÓ enquanto este editor está ativo e é o dono do canal; ao
+  // sair, limpa só se o que está no mapa ainda for o que ele publicou.
   useEffect(() => {
+    if (coberturaNoMapa) return;
     const pts = criando ? pontosEfetivos : gradeVista?.pontos ?? null;
     if (!pts) return;
-    setPontosSimulados(pts.length ? fcGrade(pts) : null);
-    return () => setPontosSimulados(null);
-  }, [criando, pontosEfetivos, gradeVista, setPontosSimulados]);
+    const publicado = pts.length ? fcGrade(pts) : null;
+    setPontosSimulados(publicado);
+    return () => setPontosSimulados(cur => (cur === publicado ? null : cur));
+  }, [coberturaNoMapa, criando, pontosEfetivos, gradeVista, setPontosSimulados]);
+
+  // A cobertura tomou o mapa: a grade vista sai (o ícone reflete) e a edição
+  // no mapa para — os cliques cairiam nos pontos da cobertura.
+  useEffect(() => {
+    if (!coberturaNoMapa) return;
+    setGradeVistaId(null);
+    setEdicaoAtiva(false);
+  }, [coberturaNoMapa, setEdicaoAtiva]);
 
   // Encerra a edição ao desmontar
   useEffect(() => () => setEdicaoAtiva(false), [setEdicaoAtiva]);
@@ -155,6 +183,7 @@ export function GradeCompactacaoEditor({ talhaoId, safra, poligono, podeExcluir,
     setPontosManuais(null);
     setCriando(true);
     setMsg('');
+    onUsarMapa?.();
   }
   function fecharCriacao() {
     setCriando(false);
@@ -167,6 +196,7 @@ export function GradeCompactacaoEditor({ talhaoId, safra, poligono, podeExcluir,
   }
 
   function iniciarEdicao() {
+    onUsarMapa?.();
     setPontosManuais(pontosEfetivos.map(p => ({ ...p })));
     setEdicaoModo('mover');
     setEdicaoAtiva(true);
@@ -180,7 +210,7 @@ export function GradeCompactacaoEditor({ talhaoId, safra, poligono, podeExcluir,
     if (modoRegistro === 'manual' && profundidades.length === 0) { setMsg('Informe ao menos uma profundidade.'); return; }
     if (pontosEfetivos.length === 0) { setMsg('Nenhum ponto coube no talhão com esses parâmetros.'); return; }
     const nova = saveGradeCompactacao({
-      talhaoId, safra, nome: `Grade compactação ${grades.length + 1}`,
+      talhaoId, safra, nome: proximoNomeGrade(getGradesCompactacao(talhaoId, safra)),
       profundidades, unidade: modoRegistro === 'falker' ? 'MPa' : unidade,
       densidade: dens, distanciaBorda: bordaM,
       pontos: resequenciar(pontosEfetivos).map(p => ({ ordem: p.ordem, lng: p.lng, lat: p.lat })),
@@ -190,6 +220,7 @@ export function GradeCompactacaoEditor({ talhaoId, safra, poligono, podeExcluir,
     setMsg(`✓ Grade criada com ${nova.pontos.length} pontos — sincronize o app de campo para coletar.`);
     recarregarGrades();
     setGradeVistaId(nova.id);
+    onUsarMapa?.();
     onGradesMudaram?.();
   }
 
@@ -213,6 +244,7 @@ export function GradeCompactacaoEditor({ talhaoId, safra, poligono, podeExcluir,
 
   function alternarVista(g: GradeCompactacao) {
     if (criando) return;
+    if (gradeVistaId !== g.id) onUsarMapa?.();
     setGradeVistaId(id => id === g.id ? null : g.id);
   }
 

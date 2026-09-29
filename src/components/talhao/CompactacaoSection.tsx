@@ -97,10 +97,13 @@ export function CompactacaoSection({ safraNome }: { safraNome?: string } = {}) {
     [arq, gradeCob],
   );
   // Destaque no mapa: medidos em verde, faltantes em vermelho (canal pontosSimulados,
-  // só enquanto ligado — limpa ao desligar/sair).
+  // só enquanto ligado). O canal é dividido com o editor de grade — um dono por
+  // vez: ligar aqui tira a grade vista de lá (coberturaNoMapa), e o editor, ao
+  // publicar, desliga este (onUsarMapa). Ao sair, só limpa se ainda for o dono.
+  const coberturaNoMapa = verFaltantes && !!cobertura && !!gradeCob;
   useEffect(() => {
     if (!verFaltantes || !cobertura || !gradeCob) return;
-    setPontosSimulados({
+    const publicado: GeoJSON.FeatureCollection = {
       type: 'FeatureCollection',
       features: gradeCob.pontos.map(p => {
         const falta = !cobertura.porPonto[p.ordem];
@@ -109,8 +112,9 @@ export function CompactacaoSection({ safraNome }: { safraNome?: string } = {}) {
           properties: { ordem: p.ordem, label: `C-${p.ordem + 1}`, profs: 1, cor: falta ? '#ef4444' : '#22c55e' },
         };
       }),
-    });
-    return () => setPontosSimulados(null);
+    };
+    setPontosSimulados(publicado);
+    return () => setPontosSimulados(cur => (cur === publicado ? null : cur));
   }, [verFaltantes, cobertura, gradeCob, setPontosSimulados]);
 
   // interpolação
@@ -118,7 +122,12 @@ export function CompactacaoSection({ safraNome }: { safraNome?: string } = {}) {
   const [erro, setErro] = useState('');
   // Camada que teve de sair por IDW (poucos pontos). Aviso da rodada, não estado.
   const [quedaIdw, setQuedaIdw] = useState('');
-  const [cache, setCache] = useState<Record<string, MapaPronto>>({});
+  // Mapas prontos, SEMPRE marcados com a importação a que pertencem: um
+  // resultado que chega depois da troca de importação (interpolação ou autoload
+  // ainda em voo) é descartado em vez de entrar no cache — e no PDF — da outra.
+  const [cacheSt, setCacheSt] = useState<{ imp: string; mapas: Record<string, MapaPronto> }>({ imp: '', mapas: {} });
+  // Importação exibida agora (lida depois dos awaits, fora do closure).
+  const importacaoAtualRef = useRef('');
   const [pixelM, setPixelM] = useState(PIXEL_COMP_PADRAO);
   // Método de interpolação escolhido (Krigagem é o padrão; IDW é opção).
   const [metodoSel, setMetodoSel] = useState<'krige' | 'idw'>('krige');
@@ -139,14 +148,20 @@ export function CompactacaoSection({ safraNome }: { safraNome?: string } = {}) {
   useEffect(recarregar, [nav.talhaoId, safra]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const importacao = importacoes.find(i => i.id === importacaoId) ?? null;
+  useEffect(() => { importacaoAtualRef.current = importacaoId; }, [importacaoId]);
+  const cache = useMemo(() => (cacheSt.imp === importacaoId ? cacheSt.mapas : {}), [cacheSt, importacaoId]);
+  // Grava mapas só se o cache ainda for da importação `imp`.
+  const gravarNoCache = (imp: string, f: (m: Record<string, MapaPronto>) => Record<string, MapaPronto>) =>
+    setCacheSt(c => (c.imp === imp ? { imp, mapas: f(c.mapas) } : c));
 
   useEffect(() => { setProfundidade(importacao?.profundidades[0] ?? ''); }, [importacaoId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Autoload: hidrata da nuvem os rasters já interpolados desta importação.
   useEffect(() => {
-    setCache({}); setEstado('idle'); setErro(''); setQuedaIdw('');
+    setCacheSt({ imp: importacaoId, mapas: {} }); setEstado('idle'); setErro(''); setQuedaIdw(''); setProgresso(null);
     if (!nav.talhaoId || !importacaoId) return;
-    const prefixo = prefixoNuvem(nav.talhaoId, importacaoId);
+    const imp = importacaoId;
+    const prefixo = prefixoNuvem(nav.talhaoId, imp);
     (async () => {
       const carregados = await cloudCarregarMapasPorPrefixo<MapaPronto>(prefixo);
       if (carregados.length === 0) return;
@@ -160,7 +175,8 @@ export function CompactacaoSection({ safraNome }: { safraNome?: string } = {}) {
         }
         novo[prof] = dados;
       }
-      setCache(novo);
+      // Mantém o que já foi interpolado nesta sessão (mais novo que a nuvem).
+      gravarNoCache(imp, m => ({ ...novo, ...m }));
     })();
   }, [importacaoId, nav.talhaoId]);
 
@@ -256,7 +272,9 @@ export function CompactacaoSection({ safraNome }: { safraNome?: string } = {}) {
 
   // Interpola UMA camada e persiste. Não mexe no estado da tela — devolve o
   // erro/aviso para quem chamou (uma camada ou a rodada "todas as camadas").
-  async function interpolarCamada(prof: string): Promise<{ erro?: string; aviso?: string }> {
+  // `imp` = importação em que a rodada começou: o resultado só entra no cache
+  // se ela ainda for a exibida; a nuvem grava sempre no id de `imp` (correto).
+  async function interpolarCamada(prof: string, imp: string): Promise<{ erro?: string; aviso?: string }> {
     if (!legenda) return { erro: 'Legenda de compactação não encontrada.' };
     if (!poligono) return { erro: 'Limite do talhão não encontrado — abra o talhão no mapa.' };
     const pts = pontosDe(prof);
@@ -270,12 +288,12 @@ export function CompactacaoSection({ safraNome }: { safraNome?: string } = {}) {
       const aviso = caiuParaIdw ? `${prof}: só ${pts.length} pontos — mapa por IDW (a krigagem precisa de ${MIN_PTS_KRIGE}).` : undefined;
       const resp = await interpolar({ pontos: pts, poligono, dominio, stops, metodo, pixelM, modeloFixo: null });
       const labels = fcLabels(pts);
-      setCache(c => ({ ...c, [prof]: { resp, labels } }));
+      gravarNoCache(imp, m => ({ ...m, [prof]: { resp, labels } }));
       // Persiste na nuvem (grid comprimido; sem PNG — colorimos local).
-      if (nav.talhaoId && importacaoId) {
+      if (nav.talhaoId && imp) {
         const gridGz = resp.grid ? await comprimirGrid(resp.grid) : undefined;
         const dados: MapaPronto = { resp: { ...resp, png: '', grid: gridGz }, labels };
-        cloudSalvarMapa(idNuvem(nav.talhaoId, importacaoId, prof), dados);
+        cloudSalvarMapa(idNuvem(nav.talhaoId, imp, prof), dados);
       }
       return { aviso };
     } catch (e) {
@@ -284,8 +302,10 @@ export function CompactacaoSection({ safraNome }: { safraNome?: string } = {}) {
   }
 
   async function processar(prof: string) {
+    const imp = importacaoId;
     setEstado('processando'); setErro(''); setQuedaIdw('');
-    const r = await interpolarCamada(prof);
+    const r = await interpolarCamada(prof, imp);
+    if (importacaoAtualRef.current !== imp) return;   // trocou de importação: a tela já é de outra
     if (r.aviso) setQuedaIdw(r.aviso);
     if (r.erro) { setErro(r.erro); setEstado('erro'); } else setEstado('pronto');
   }
@@ -294,23 +314,28 @@ export function CompactacaoSection({ safraNome }: { safraNome?: string } = {}) {
   // camada que falha não interrompe as demais — os erros aparecem juntos no fim.
   async function processarTodas() {
     if (!importacao) return;
+    const imp = importacao.id;
     const profs = importacao.profundidades;
     setEstado('processando'); setErro(''); setQuedaIdw('');
     const erros: string[] = [], avisos: string[] = [];
     for (let i = 0; i < profs.length; i++) {
+      // Trocou de importação no meio da rodada (o seletor fica travado, mas criar
+      // levantamento/salvar importação também trocam): para aqui, sem tocar na tela.
+      if (importacaoAtualRef.current !== imp) return;
       setProgresso({ n: i + 1, total: profs.length });
       setProfundidade(profs[i]);
-      const r = await interpolarCamada(profs[i]);
+      const r = await interpolarCamada(profs[i], imp);
       if (r.erro) erros.push(r.erro);
       if (r.aviso) avisos.push(r.aviso);
     }
+    if (importacaoAtualRef.current !== imp) return;
     setProgresso(null);
     if (avisos.length) setQuedaIdw(avisos.join(' · '));
     if (erros.length) { setErro(erros.join(' · ')); setEstado('erro'); } else setEstado('pronto');
   }
 
   function limparProf(prof: string) {
-    setCache(c => { const n = { ...c }; delete n[prof]; return n; });
+    gravarNoCache(importacaoId, m => { const n = { ...m }; delete n[prof]; return n; });
     if (nav.talhaoId && importacaoId) cloudExcluirMapasPorPrefixo(idNuvem(nav.talhaoId, importacaoId, prof));
   }
 
@@ -377,7 +402,10 @@ export function CompactacaoSection({ safraNome }: { safraNome?: string } = {}) {
         <div>
           <label className="text-[10px] font-semibold block mb-0.5" style={{ color: '#64748b' }}>Importação de penetrometria</label>
           <div className="flex gap-1">
-            <select value={importacaoId} onChange={e => setImportacaoId(e.target.value)} className="flex-1 rounded px-2 py-1.5 text-xs outline-none" style={inputStyle}>
+            {/* Travado enquanto interpola ou gera o PDF: os mapas da rodada são desta importação. */}
+            <select value={importacaoId} onChange={e => setImportacaoId(e.target.value)} disabled={processando || gerandoPdf}
+              title={processando || gerandoPdf ? 'Aguarde terminar a interpolação / o PDF para trocar de importação' : undefined}
+              className="flex-1 rounded px-2 py-1.5 text-xs outline-none disabled:opacity-60" style={inputStyle}>
               {importacoes.map(i => <option key={i.id} value={i.id}>{i.nome} · {i.pontos.length} pts · {i.profundidades.length} prof.</option>)}
             </select>
 {podeProcessar() && (            <button onClick={() => setModoUpload(v => !v)} title="Nova importação"
@@ -385,8 +413,8 @@ export function CompactacaoSection({ safraNome }: { safraNome?: string } = {}) {
               <Plus size={11} />
             </button>)}
             {podeExcluir() && importacao && (
-              <button onClick={excluirImportacao} title="Excluir importação"
-                className="px-2 py-1.5 rounded text-[10px]" style={{ background: '#1a3a6b', color: '#f87171' }}>
+              <button onClick={excluirImportacao} title="Excluir importação" disabled={processando || gerandoPdf}
+                className="px-2 py-1.5 rounded text-[10px] disabled:opacity-40" style={{ background: '#1a3a6b', color: '#f87171' }}>
                 <Trash2 size={12} />
               </button>
             )}
@@ -405,7 +433,8 @@ export function CompactacaoSection({ safraNome }: { safraNome?: string } = {}) {
           podeExcluir={podeExcluir()}
           onGradesMudaram={() => setGradesTalhao(getGradesCompactacao(nav.talhaoId ?? '', safra))}
           onLevantamentoCriado={id => { recarregar(); setImportacaoId(id); setModoUpload(false); }}
-          onImportarFalker={importarFalkerDaGrade} />
+          onImportarFalker={importarFalkerDaGrade}
+          coberturaNoMapa={coberturaNoMapa} onUsarMapa={() => setVerFaltantes(false)} />
       )}
 
       {/* Upload + mapeamento de colunas */}

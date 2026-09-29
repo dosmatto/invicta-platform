@@ -1,5 +1,11 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Compactação não mistura mapas entre importações e divide o mapa entre cobertura e grade
+  '2.185.0': [
+    'CORRIGIDO: "INTERPOLAR TODAS AS CAMADAS" NÃO MISTURA MAIS IMPORTAÇÕES. Trocar de importação no meio da rodada fazia as camadas seguintes da importação anterior entrarem com ✓ na nova — e o PDF podia sair com mapas de outro levantamento. Agora o seletor de importação (e o excluir) fica travado enquanto interpola ou gera o PDF, e cada mapa pronto fica marcado com a importação a que pertence: resultado que chega depois de uma troca é descartado da tela (na nuvem ele continua salvo no levantamento certo).',
+    'CORRIGIDO: A CONFERÊNCIA DE COBERTURA E A GRADE DE COMPACTAÇÃO NÃO SE APAGAM MAIS NO MAPA. Com uma grade salva visível (📍) e "Ver no mapa (verde/vermelho)" ligado, desligar a cobertura apagava também a grade, e o ícone dela seguia marcado. Agora o mapa tem um dono por vez: ligar a cobertura tira a grade (o ícone desmarca) e mostrar/criar uma grade desliga a cobertura; cada um só limpa o que ele mesmo pôs no mapa.',
+    'CORRIGIDO: o nome padrão da grade nova ("Grade compactação N") usa o próximo número livre — depois de excluir uma grade não repete mais o nome de outra (nem o GRADE<n> do arquivo exportado).',
+  ],
   // [S/N] Relatório PDF de compactação: resumo das camadas, uma página por camada e tabela de pontos
   '2.184.0': [
     'NOVO: RELATÓRIO PDF DA COMPACTAÇÃO (Talhão → Compactação → "Gerar relatório (PDF)"). Layout oficial, A4 paisagem, com o mesmo cabeçalho, marca e rodapé dos relatórios de Fertilidade e Condutividade (produtor, talhão, área, município, data de referência e método).',

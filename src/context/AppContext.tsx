@@ -59,7 +59,9 @@ interface AppContextType {
   uploadedBbox: [number, number, number, number] | null;
   setUploadedBbox: (bb: [number, number, number, number] | null) => void;
   pontosSimulados: GeoJSON.FeatureCollection | null;
-  setPontosSimulados: (fc: GeoJSON.FeatureCollection | null) => void;
+  // Aceita atualização funcional: quem divide o canal (Compactação: cobertura ×
+  // grade) só limpa se o que está no mapa ainda for o que ele publicou.
+  setPontosSimulados: Dispatch<SetStateAction<GeoJSON.FeatureCollection | null>>;
   // Polígonos dos talhões da fazenda aberta (clicáveis no mapa)
   talhoesFazenda: GeoJSON.FeatureCollection | null;
   setTalhoesFazenda: (fc: GeoJSON.FeatureCollection | null) => void;
