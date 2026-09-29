@@ -1,5 +1,13 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Grade de compactação com pré-visualização, edição no mapa, KML/SHP e conferência do arquivo da Falker
+  '2.182.0': [
+    'A GRADE DE COMPACTAÇÃO GANHA FERRAMENTA PRÓPRIA (Talhão → Compactação → Grade de compactação). Parâmetros: densidade (ha por ponto), distância da borda, rotação automática (pela maior dimensão do talhão) ou manual em graus, distribuição Inteligente ou Grade alinhada, e o MODO DE REGISTRO — Falker (padrão: as camadas vêm do arquivo do penetrômetro, não há profundidade para digitar) ou Manual (profundidades e unidade digitadas no app de campo, como antes).',
+    'PRÉ-VISUALIZAÇÃO AO VIVO: enquanto a grade é montada, os pontos (C-1, C-2…) aparecem no mapa e a contagem de pontos acompanha cada ajuste. "Editar pontos no mapa" permite mover (o ponto não sai do talhão nem da borda), adicionar e remover — a numeração se fecha sem buraco. Mudar um parâmetro com edições não salvas pede confirmação.',
+    'NOVO: exportar a grade em KML ou Shapefile (.zip) — pontos "C-n" + contorno do talhão, para levar ao GPS da Falker ou ao celular. O arquivo sai com o nome padrão da casa (ex.: SA03_COMPACT_2026_EP01_GRADE1).',
+    'NOVO: ao importar o arquivo da Falker, dá para escolher a grade planejada e conferir a cobertura — "x/y pontos da grade medidos", a lista dos pontos que ficaram sem medição e, no mapa, os medidos em verde e os faltantes em vermelho. Cada medição conta para o ponto da grade mais próximo, até 30 m dele.',
+    'A grade de compactação continua separada da Amostragem (não entra nas grades de amostragem nem em "a processar"). Grades antigas seguem como Manual; "Virar levantamento" continua para elas. O app de campo não muda nesta versão.',
+  ],
   // [S/N] Compactação lê o arquivo da Falker e interpola todas as camadas (Krigagem ou IDW)
   '2.181.0': [
     'A COMPACTAÇÃO PASSA A LER O ARQUIVO DO PENETRÔMETRO FALKER (CSV ou XLSX, do jeito que sai do aparelho). Não há mais mapeamento de colunas: a tela reconhece o arquivo, mostra quantos pontos e camadas leu e já preenche o nome (a "Pasta" do aparelho, ex.: BV-5) e a data de referência (coluna Data).',

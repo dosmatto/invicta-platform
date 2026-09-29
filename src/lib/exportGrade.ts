@@ -5,7 +5,7 @@
 
 import type { PontoAmostragem } from './store';
 import type { Epoca } from './periodo';
-import { nomeExport } from './nomeExport';
+import { nomeExport, type TipoExport } from './nomeExport';
 
 export interface ExportInput {
   talhaoNome: string;                    // ex: "FRNFI 21"
@@ -21,6 +21,21 @@ export interface ExportInput {
   siglaFazenda?: string | null;
   ano?: number | null;
   epoca?: Epoca | null;
+  // Opcionais para reusar o export em outras grades (ex.: compactação). Sem
+  // eles, o arquivo sai IDÊNTICO ao da Amostragem.
+  tipoArquivo?: TipoExport;              // segmento do nome (padrão 'GRADE')
+  detalheArquivo?: string;               // último segmento do nome (ex.: 'GRADE1')
+  titulo?: string;                       // nome do documento KML (padrão 'Amostragem')
+  pastaPontos?: string;                  // pasta dos pontos no KML
+  semZona?: boolean;                     // pontos com rótulo, mas sem coluna/campo "zona"
+}
+
+// Adaptador da grade de COMPACTAÇÃO ({ordem,lng,lat}) para o formato do export:
+// o ponto sai como "C-n" (o mesmo rótulo do mapa e do app de campo).
+export function pontosDeGradeCompactacao(
+  pontos: { ordem: number; lng: number; lat: number }[], nProfs = 0,
+): PontoAmostragem[] {
+  return pontos.map(p => ({ ordem: p.ordem, numero: p.ordem + 1, rotulo: `C-${p.ordem + 1}`, lng: p.lng, lat: p.lat, profs: nProfs }));
 }
 
 const PRJ_WGS84 =
@@ -55,7 +70,7 @@ function geojsonGrade(input: ExportInput): GeoJSON.FeatureCollection {
       profs: p.profs,
       // Só a grade de ZONAS ganha colunas novas — a grade comum sai idêntica ao
       // que sempre saiu, para não mexer no .dbf de quem já usa o arquivo.
-      ...(p.rotulo ? { amostra: p.numero ?? p.ordem + 1, rotulo: p.rotulo, zona: p.zona ?? '' } : {}),
+      ...(p.rotulo ? { amostra: p.numero ?? p.ordem + 1, rotulo: p.rotulo, ...(input.semZona ? {} : { zona: p.zona ?? '' }) } : {}),
     },
     geometry: { type: 'Point', coordinates: [p.lng, p.lat] },
   }));
@@ -97,7 +112,7 @@ export function gerarKML(input: ExportInput): string {
   const pontos = input.pontos.map(p =>
     `<Placemark><name>${esc(rotuloExport(p))}</name><styleUrl>#ponto</styleUrl>` +
     `<ExtendedData><Data name="id"><value>${esc(idPonto(input.talhaoNome, p.rotulo ?? p.ordem + 1))}</value></Data>` +
-    (p.rotulo ? `<Data name="zona"><value>${esc(p.zona ?? '')}</value></Data>` : '') +
+    (p.rotulo && !input.semZona ? `<Data name="zona"><value>${esc(p.zona ?? '')}</value></Data>` : '') +
     `<Data name="profundidades"><value>${p.profs}</value></Data></ExtendedData>` +
     `<Point><coordinates>${p.lng},${p.lat},0</coordinates></Point></Placemark>`
   ).join('\n');
@@ -105,11 +120,11 @@ export function gerarKML(input: ExportInput): string {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2">
 <Document>
-<name>${esc(input.talhaoNome)} — Amostragem</name>
+<name>${esc(input.talhaoNome)} — ${esc(input.titulo ?? 'Amostragem')}</name>
 <Style id="talhao"><LineStyle><color>ff0ba5f5</color><width>2</width></LineStyle><PolyStyle><fill>0</fill></PolyStyle></Style>
 <Style id="ponto"><IconStyle><scale>0.9</scale><Icon><href>http://maps.google.com/mapfiles/kml/paddle/wht-blank.png</href></Icon></IconStyle></Style>
 ${polys}
-<Folder><name>Pontos de amostragem</name>
+<Folder><name>${esc(input.pastaPontos ?? 'Pontos de amostragem')}</name>
 ${pontos}
 </Folder>
 </Document>
@@ -134,7 +149,7 @@ function baixarBlob(blob: Blob, nomeArquivo: string) {
 const nomeBase = (input: ExportInput) =>
   nomeExport({
     fazenda: input.fazenda ?? '', siglaFazenda: input.siglaFazenda, talhao: input.talhaoNome,
-    tipo: 'GRADE', ano: input.ano, epoca: input.epoca,
+    tipo: input.tipoArquivo ?? 'GRADE', ano: input.ano, epoca: input.epoca, detalhe: input.detalheArquivo,
   });
 
 export function exportarKML(input: ExportInput) {
@@ -150,7 +165,7 @@ export async function exportarSHP(input: ExportInput) {
     compression: 'DEFLATE',
     prj: PRJ_WGS84,
     types: {
-      point: 'pontos_amostragem',
+      point: input.tipoArquivo === 'COMPACT' ? 'pontos_compactacao' : 'pontos_amostragem',
       polygon: input.poligonoTipo === 'celula' ? 'celulas' : input.poligonoTipo === 'zona' ? 'zonas' : 'talhao',
     },
   });

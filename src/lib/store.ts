@@ -290,6 +290,13 @@ export interface GradeCompactacao {
   densidade: number;              // ha por ponto
   distanciaBorda: number;         // m
   pontos: PontoGradeCompact[];
+  // Como o campo registra a leitura. 'falker' = o penetrômetro grava tudo e o
+  // operador só navega/marca o ponto (camadas vêm do arquivo da Falker, e
+  // `profundidades` fica vazio); 'manual' = digita por profundidade no app.
+  // AUSENTE = 'manual' (grades criadas antes da v2.182.0).
+  modoRegistro?: 'falker' | 'manual';
+  rotacaoGraus?: number;          // rotação efetiva usada no gerarGrid
+  modo?: 'grade' | 'inteligente'; // distribuição do gerarGrid
   dataReferencia?: string;
   ano?: number;
   criadoEm: string;

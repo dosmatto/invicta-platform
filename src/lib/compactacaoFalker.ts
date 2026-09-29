@@ -272,3 +272,40 @@ export function estatisticaCamada(pontos: PontoCompactacao[], prof: string):
     max: Math.max(...vs),
   };
 }
+
+// ── cobertura: medições do arquivo × pontos planejados da grade ─────────────
+// Cada medição vai para o ponto da grade MAIS PRÓXIMO; só conta se estiver a
+// até `raioM` metros dele (o operador para "no" ponto, mas o GPS e a manobra
+// deixam alguns metros de folga). Medição mais longe que isso de qualquer ponto
+// é "fora da grade" — foi feita em outro lugar e não cobre ninguém.
+export interface CoberturaGrade {
+  medidos: number;            // pontos da grade com ≥ 1 medição dentro do raio
+  total: number;              // pontos da grade
+  faltando: number[];         // `ordem` (0-based) dos pontos sem medição, em ordem
+  foraDaGrade: number;        // medições sem ponto da grade dentro do raio
+  porPonto: Record<number, { n: number; distM: number }>; // por `ordem`: nº de medições e a menor distância
+}
+
+export function casarComGrade(
+  medicoes: { lng: number; lat: number }[],
+  grade: { ordem: number; lng: number; lat: number }[],
+  raioM = 30,
+): CoberturaGrade {
+  const porPonto: CoberturaGrade['porPonto'] = {};
+  let foraDaGrade = 0;
+  for (const m of medicoes) {
+    let melhor = -1, dMin = Infinity;
+    for (let i = 0; i < grade.length; i++) {
+      const d = distanciaM(m, grade[i]);
+      if (d < dMin) { dMin = d; melhor = i; }
+    }
+    if (melhor < 0 || dMin > raioM) { foraDaGrade++; continue; }
+    const ordem = grade[melhor].ordem;
+    const atual = porPonto[ordem];
+    porPonto[ordem] = atual
+      ? { n: atual.n + 1, distM: Math.min(atual.distM, dMin) }
+      : { n: 1, distM: dMin };
+  }
+  const faltando = grade.map(g => g.ordem).filter(o => !porPonto[o]).sort((a, b) => a - b);
+  return { medidos: grade.length - faltando.length, total: grade.length, faltando, foraDaGrade, porPonto };
+}

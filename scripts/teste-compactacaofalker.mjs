@@ -12,7 +12,7 @@
 
 import assert from 'node:assert/strict';
 import {
-  detectarFalker, lerFalker, numeroFalker, dataFalkerISO, distanciaM, estatisticaCamada,
+  detectarFalker, lerFalker, numeroFalker, dataFalkerISO, distanciaM, estatisticaCamada, casarComGrade,
 } from '../src/lib/compactacaoFalker.ts';
 
 let ok = 0, fail = 0;
@@ -159,6 +159,49 @@ t('média/mín/máx/n só dos pontos com leitura', () => {
   assert.equal(e.max, 3.5);
   assert.equal(e.media, 3.25);
   assert.equal(estatisticaCamada(R.pontos, '90-100'), null);
+});
+
+console.log('\ncobertura da grade (casarComGrade)');
+// Grade de 4 pontos ~100 m apart (0,0009° de lat ≈ 100 m).
+const GRADE = [
+  { ordem: 0, lng: -49.95, lat: -25.2000 },
+  { ordem: 1, lng: -49.95, lat: -25.2009 },
+  { ordem: 2, lng: -49.95, lat: -25.2018 },
+  { ordem: 3, lng: -49.95, lat: -25.2027 },
+];
+t('casa cada medição com o ponto mais próximo dentro do raio', () => {
+  const med = [
+    { lng: -49.95, lat: -25.20005 },   // ~5,6 m do C-1
+    { lng: -49.95, lat: -25.20010 },   // ~11 m do C-1 (2ª medição no mesmo ponto)
+    { lng: -49.95, lat: -25.20190 },   // ~11 m do C-3
+    { lng: -49.95, lat: -25.2045 },    // ~200 m do C-4 → fora da grade
+  ];
+  const c = casarComGrade(med, GRADE, 30);
+  assert.equal(c.total, 4);
+  assert.equal(c.medidos, 2);
+  assert.deepEqual(c.faltando, [1, 3]);
+  assert.equal(c.foraDaGrade, 1);
+  assert.equal(c.porPonto[0].n, 2);
+  assert.ok(c.porPonto[0].distM > 5 && c.porPonto[0].distM < 6);
+  assert.equal(c.porPonto[2].n, 1);
+});
+t('raio menor exclui a medição mais distante', () => {
+  const c = casarComGrade([{ lng: -49.95, lat: -25.2001 }], GRADE, 5);   // ~11 m
+  assert.equal(c.medidos, 0);
+  assert.equal(c.foraDaGrade, 1);
+  assert.deepEqual(c.faltando, [0, 1, 2, 3]);
+});
+t('grade vazia: toda medição fica fora; sem medições: tudo faltando', () => {
+  assert.deepEqual(casarComGrade([{ lng: 0, lat: 0 }], [], 30), { medidos: 0, total: 0, faltando: [], foraDaGrade: 1, porPonto: {} });
+  const c = casarComGrade([], GRADE);
+  assert.equal(c.medidos, 0);
+  assert.equal(c.faltando.length, 4);
+});
+t('pontos da fixture Falker contra uma grade sobre eles', () => {
+  const g = R.pontos.map((p, i) => ({ ordem: i, lng: p.lng, lat: p.lat }));
+  const c = casarComGrade(R.pontos, g);
+  assert.equal(c.medidos, R.pontos.length);
+  assert.equal(c.foraDaGrade, 0);
 });
 
 console.log(`\n${ok} ok, ${fail} falha(s)`);
