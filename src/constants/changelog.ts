@@ -1,5 +1,14 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Compactação lê o arquivo da Falker e interpola todas as camadas (Krigagem ou IDW)
+  '2.181.0': [
+    'A COMPACTAÇÃO PASSA A LER O ARQUIVO DO PENETRÔMETRO FALKER (CSV ou XLSX, do jeito que sai do aparelho). Não há mais mapeamento de colunas: a tela reconhece o arquivo, mostra quantos pontos e camadas leu e já preenche o nome (a "Pasta" do aparelho, ex.: BV-5) e a data de referência (coluna Data).',
+    'Regras da leitura, as mesmas do DataFarm: cada camada de 10 cm (0-10, 10-20 … até a profundidade máxima do arquivo) recebe o MAIOR valor medido naquela faixa; leitura 0 é o cone sem contato e é ignorada; camada sem nenhuma leitura fica sem valor naquele ponto (não vira zero); kPa é convertido para MPa (÷ 1000), a unidade da legenda oficial; medições a menos de 3 m uma da outra viram um ponto só, com a média de cada camada; a linha "Média" do arquivo e as linhas sem coordenada ficam de fora. Medições marcadas como incompletas aparecem no resumo.',
+    'NOVO: seletor de método — Krigagem (padrão) ou IDW. Com menos de 4 pontos numa camada a krigagem continua caindo para IDW sozinha, com aviso.',
+    'NOVO: botão "Interpolar todas as camadas", que gera os mapas de todas as profundidades em sequência (mostra "camada 3/6…") e salva cada um na nuvem como já acontecia com uma camada. Uma camada que falhar não interrompe as outras; os erros aparecem juntos no fim.',
+    'NOVO: estatística da camada exibida — média, mínimo, máximo e nº de pontos medidos.',
+    'O PRODUTOR PASSA A TRABALHAR NA COMPACTAÇÃO (padrão do papel Produtor: ver, criar, editar e exportar; excluir continua fora). No portal ele importa o arquivo da Falker, cria grade e interpola; a trava de somente leitura na nuvem libera só as gravações da compactação.',
+  ],
   // [S/N] Fertilidade gera mapa por IDW com só 2 pontos (com aviso de baixa confiabilidade)
   '2.180.0': [
     'A FERTILIDADE PASSA A GERAR MAPA COM SÓ 2 PONTOS. Antes o mínimo era 3, na tela E no servidor de interpolação: um laudo com a 20-40 em só 2 dos 6 pontos (caso do RCGSA 02) ficava sem mapa nenhum nessa profundidade, com "só 2 amostra(s) com valor em 20-40 (o mínimo é 3)". Agora o mapa sai por IDW — a krigagem continua exigindo 4 pontos e, abaixo disso, o mapa cai para IDW sozinho, como já acontecia com 3.',

@@ -154,6 +154,12 @@ t('produtor (portal) só visualiza/exporta', () => {
   assert.ok(!p['cadastro.editar'], 'produtor não edita cadastro');
 });
 
+t('v2.181.0: produtor processa compactação (importa, interpola), mas não exclui', () => {
+  const p = MATRIZ_PADRAO.produtor;
+  for (const a of ['visualizar', 'criar', 'editar', 'exportar']) assert.equal(p[`compactacao.${a}`], true, `produtor: ${a}`);
+  assert.ok(!p['compactacao.excluir'], 'produtor não exclui compactação');
+});
+
 t('nenhum papel comum administra usuários', () => {
   for (const papel of ['agronomo', 'operador', 'produtor', 'prestador', 'leitor', 'custom']) {
     assert.ok(!MATRIZ_PADRAO[papel]['usuarios.administrar'], `${papel} não administra usuários`);

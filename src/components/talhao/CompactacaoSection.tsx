@@ -24,6 +24,7 @@ import {
 import { colorirGridComLegenda, temGrid } from '@/lib/raster';
 import { cloudSalvarMapa, cloudCarregarMapasPorPrefixo, cloudExcluirMapasPorPrefixo } from '@/lib/cloud';
 import { parseArquivoPontos, pontosCompactacao, type ArquivoPontos } from '@/lib/compactacao';
+import { estatisticaCamada } from '@/lib/compactacaoFalker';
 import type { Legenda } from '@/lib/legendas';
 import { Upload, Loader2, Activity, Eraser, AlertTriangle, Save, Trash2, Play, Plus, Layers, Grid3x3, RefreshCw, MapPin, ChevronDown, ChevronUp } from 'lucide-react';
 import { podeCompactacao } from '@/lib/empresa';
@@ -87,6 +88,10 @@ export function CompactacaoSection({ safraNome }: { safraNome?: string } = {}) {
   const [quedaIdw, setQuedaIdw] = useState('');
   const [cache, setCache] = useState<Record<string, MapaPronto>>({});
   const [pixelM, setPixelM] = useState(PIXEL_COMP_PADRAO);
+  // Método de interpolação escolhido (Krigagem é o padrão; IDW é opção).
+  const [metodoSel, setMetodoSel] = useState<'krige' | 'idw'>('krige');
+  // "Interpolar todas as camadas": progresso n/total da rodada sequencial.
+  const [progresso, setProgresso] = useState<{ n: number; total: number } | null>(null);
 
   function recarregar() {
     if (nav.talhaoId && safra) {
@@ -146,8 +151,15 @@ export function CompactacaoSection({ safraNome }: { safraNome?: string } = {}) {
     try {
       const r = await parseArquivoPontos(file);
       setArq(r);
-      setColsSel(r.colunasNumericas);
-      setNome(file.name.replace(/\.[^.]+$/, ''));
+      if (r.falker) {
+        // Falker: camadas já prontas; nome = "Pasta:", data = coluna Data.
+        setColsSel(r.falker.profundidades);
+        setNome(r.falker.nome || file.name.replace(/\.[^.]+$/, ''));
+        setDataRef(r.falker.dataReferencia ?? hojeSaoPauloISO());
+      } else {
+        setColsSel(r.colunasNumericas);
+        setNome(file.name.replace(/\.[^.]+$/, ''));
+      }
     } catch (err) {
       setParseErro(err instanceof Error ? err.message : 'Falha ao ler o arquivo.');
     }
@@ -159,7 +171,11 @@ export function CompactacaoSection({ safraNome }: { safraNome?: string } = {}) {
 
   function salvarImportacao() {
     if (!arq || !nav.talhaoId || !safra || colsSel.length === 0) return;
-    const nova = saveImportacaoCompactacao({
+    const nova = saveImportacaoCompactacao(arq.falker ? {
+      talhaoId: nav.talhaoId, safra, nome: nome.trim() || 'Penetrometria Falker',
+      profundidades: arq.falker.profundidades, dataReferencia: dataRef,
+      pontos: arq.falker.pontos,
+    } : {
       talhaoId: nav.talhaoId, safra, nome: nome.trim() || 'Penetrometria',
       profundidades: colsSel, dataReferencia: dataRef,
       pontos: pontosCompactacao(arq.pontos, colsSel),
@@ -188,32 +204,59 @@ export function CompactacaoSection({ safraNome }: { safraNome?: string } = {}) {
     };
   }
 
-  async function processar(prof: string) {
-    if (!legenda) { setErro('Legenda de compactação não encontrada.'); setEstado('erro'); return; }
-    if (!poligono) { setErro('Limite do talhão não encontrado — abra o talhão no mapa.'); setEstado('erro'); return; }
+  // Interpola UMA camada e persiste. Não mexe no estado da tela — devolve o
+  // erro/aviso para quem chamou (uma camada ou a rodada "todas as camadas").
+  async function interpolarCamada(prof: string): Promise<{ erro?: string; aviso?: string }> {
+    if (!legenda) return { erro: 'Legenda de compactação não encontrada.' };
+    if (!poligono) return { erro: 'Limite do talhão não encontrado — abra o talhão no mapa.' };
     const pts = pontosDe(prof);
-    if (pts.length < MIN_PTS_MAPA) { setErro(`${prof}: menos de ${MIN_PTS_MAPA} pontos válidos.`); setEstado('erro'); return; }
-    setEstado('processando'); setErro(''); setQuedaIdw('');
+    if (pts.length < MIN_PTS_MAPA) return { erro: `${prof}: menos de ${MIN_PTS_MAPA} pontos válidos.` };
     try {
       const { dominio, stops } = rampaDaLegenda(legenda);
       // Mesma regra da Fertilidade: com menos de 4 pontos a krigagem não ajusta
       // o variograma e o backend devolve "nao convergiu". Na penetrometria isso
       // aparece na camada mais funda, medida em menos pontos que as de cima.
-      const { metodo, caiuParaIdw } = interpoladorEfetivo('krige', pts.length);
-      if (caiuParaIdw) setQuedaIdw(`${prof}: só ${pts.length} pontos — mapa por IDW (a krigagem precisa de ${MIN_PTS_KRIGE}).`);
+      const { metodo, caiuParaIdw } = interpoladorEfetivo(metodoSel, pts.length);
+      const aviso = caiuParaIdw ? `${prof}: só ${pts.length} pontos — mapa por IDW (a krigagem precisa de ${MIN_PTS_KRIGE}).` : undefined;
       const resp = await interpolar({ pontos: pts, poligono, dominio, stops, metodo, pixelM, modeloFixo: null });
       const labels = fcLabels(pts);
       setCache(c => ({ ...c, [prof]: { resp, labels } }));
-      setEstado('pronto');
       // Persiste na nuvem (grid comprimido; sem PNG — colorimos local).
       if (nav.talhaoId && importacaoId) {
         const gridGz = resp.grid ? await comprimirGrid(resp.grid) : undefined;
         const dados: MapaPronto = { resp: { ...resp, png: '', grid: gridGz }, labels };
         cloudSalvarMapa(idNuvem(nav.talhaoId, importacaoId, prof), dados);
       }
+      return { aviso };
     } catch (e) {
-      setEstado('erro'); setErro(e instanceof Error ? e.message : 'Falha ao interpolar.');
+      return { erro: `${prof}: ${e instanceof Error ? e.message : 'Falha ao interpolar.'}` };
     }
+  }
+
+  async function processar(prof: string) {
+    setEstado('processando'); setErro(''); setQuedaIdw('');
+    const r = await interpolarCamada(prof);
+    if (r.aviso) setQuedaIdw(r.aviso);
+    if (r.erro) { setErro(r.erro); setEstado('erro'); } else setEstado('pronto');
+  }
+
+  // Todas as camadas, uma por vez (o backend interpola uma de cada vez); uma
+  // camada que falha não interrompe as demais — os erros aparecem juntos no fim.
+  async function processarTodas() {
+    if (!importacao) return;
+    const profs = importacao.profundidades;
+    setEstado('processando'); setErro(''); setQuedaIdw('');
+    const erros: string[] = [], avisos: string[] = [];
+    for (let i = 0; i < profs.length; i++) {
+      setProgresso({ n: i + 1, total: profs.length });
+      setProfundidade(profs[i]);
+      const r = await interpolarCamada(profs[i]);
+      if (r.erro) erros.push(r.erro);
+      if (r.aviso) avisos.push(r.aviso);
+    }
+    setProgresso(null);
+    if (avisos.length) setQuedaIdw(avisos.join(' · '));
+    if (erros.length) { setErro(erros.join(' · ')); setEstado('erro'); } else setEstado('pronto');
   }
 
   function limparProf(prof: string) {
@@ -294,8 +337,31 @@ export function CompactacaoSection({ safraNome }: { safraNome?: string } = {}) {
           <input ref={inputRef} type="file" accept=".zip,.kml,.geojson,.json,.csv,.txt,.xls,.xlsx" className="hidden" onChange={onFile} />
           {parseErro && <p className="text-[10px]" style={{ color: '#f87171' }}>{parseErro}</p>}
 
+          {arq?.falker && (
+            // Falker: sem mapeamento de colunas — mostra o que foi lido.
+            <div className="rounded px-2 py-1.5 space-y-0.5" style={{ background: '#0a1a2f', border: '1px solid #1a3a6b' }}>
+              <p className="text-[10px] font-semibold" style={{ color: '#86efac' }}>
+                Arquivo da Falker reconhecido — {arq.falker.resumo.nPontos} pontos · {arq.falker.resumo.camadas} camadas
+              </p>
+              <p className="text-[9px]" style={{ color: '#94a3b8' }}>
+                Camadas: {arq.falker.profundidades.join(' · ')} cm (máximo de cada faixa de 10 cm, em MPa; leitura 0 ignorada).
+              </p>
+              <p className="text-[9px]" style={{ color: '#94a3b8' }}>
+                {arq.falker.resumo.nLidos} medições lidas
+                {arq.falker.resumo.agrupados > 0 && <> · {arq.falker.resumo.agrupados} agrupada(s) com outra a menos de 3 m (média)</>}
+                {arq.falker.resumo.descartados > 0 && <> · {arq.falker.resumo.descartados} sem leitura válida (descartada)</>}
+              </p>
+              {arq.falker.resumo.incompletos > 0 && (
+                <p className="text-[9px]" style={{ color: '#fbbf24' }}>
+                  {arq.falker.resumo.incompletos} medição(ões) incompleta(s) — o cone não chegou ao fundo; as camadas sem leitura ficam de fora desses pontos.
+                </p>
+              )}
+            </div>
+          )}
+
           {arq && (
             <>
+              {!arq.falker && <>
               <p className="text-[10px]" style={{ color: '#86efac' }}>{arq.pontos.length} pontos lidos.</p>
               <div>
                 <label className="text-[10px] font-semibold block mb-1" style={{ color: '#64748b' }}>
@@ -315,6 +381,7 @@ export function CompactacaoSection({ safraNome }: { safraNome?: string } = {}) {
                   })}
                 </div>
               </div>
+              </>}
               <div>
                 <label className="text-[10px] font-semibold block mb-0.5" style={{ color: '#64748b' }}>Nome da importação</label>
                 <input value={nome} onChange={e => setNome(e.target.value)} className="w-full rounded px-2 py-1.5 text-xs outline-none" style={inputStyle} />
@@ -353,19 +420,58 @@ export function CompactacaoSection({ safraNome }: { safraNome?: string } = {}) {
             </div>
           </div>
 
-          <div>
-            <label className="text-[10px] font-semibold block mb-1" style={{ color: '#64748b' }}>Pixel</label>
-            <select value={pixelM} onChange={e => setPixelM(Number(e.target.value))}
-              className="w-full rounded px-2 py-1 text-[11px] outline-none" style={inputStyle}>
-              {PIXEIS_COMP.map(p => <option key={p} value={p}>{p} × {p} m{p === PIXEL_COMP_PADRAO ? ' (padrão)' : ''}</option>)}
-            </select>
+          {/* Estatística da camada exibida (pontos do arquivo, antes da interpolação) */}
+          {(() => {
+            const est = estatisticaCamada(importacao.pontos, profundidade);
+            if (!est) return <p className="text-[10px]" style={{ color: '#fbbf24' }}>{profundidade}: nenhum ponto com leitura nesta camada.</p>;
+            const u = legenda.unidade || 'MPa';
+            return (
+              <div className="grid grid-cols-4 gap-1">
+                {[['Média', fmt(est.media)], ['Mín.', fmt(est.min)], ['Máx.', fmt(est.max)], ['Pontos', String(est.n)]].map(([r, v]) => (
+                  <div key={r} className="rounded px-1.5 py-1 text-center" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
+                    <p className="text-[8px] uppercase" style={{ color: '#64748b' }}>{r}</p>
+                    <p className="text-[11px] font-bold" style={{ color: '#e2e8f0' }}>{v}</p>
+                  </div>
+                ))}
+                <p className="col-span-4 text-[8px]" style={{ color: '#64748b' }}>Camada {profundidade} cm · valores em {u}, dos pontos medidos.</p>
+              </div>
+            );
+          })()}
+
+          <div className="grid grid-cols-2 gap-1.5">
+            <div>
+              <label className="text-[10px] font-semibold block mb-1" style={{ color: '#64748b' }}>Método</label>
+              <select value={metodoSel} onChange={e => setMetodoSel(e.target.value as 'krige' | 'idw')} disabled={processando}
+                className="w-full rounded px-2 py-1 text-[11px] outline-none" style={inputStyle}>
+                <option value="krige">Krigagem (padrão)</option>
+                <option value="idw">IDW</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-[10px] font-semibold block mb-1" style={{ color: '#64748b' }}>Pixel</label>
+              <select value={pixelM} onChange={e => setPixelM(Number(e.target.value))} disabled={processando}
+                className="w-full rounded px-2 py-1 text-[11px] outline-none" style={inputStyle}>
+                {PIXEIS_COMP.map(p => <option key={p} value={p}>{p} × {p} m{p === PIXEL_COMP_PADRAO ? ' (padrão)' : ''}</option>)}
+              </select>
+            </div>
           </div>
 
-{podeProcessar() && (          <button onClick={() => processar(profundidade)} disabled={processando || !poligono || !profundidade}
+{podeProcessar() && (<>
+          <button onClick={() => processar(profundidade)} disabled={processando || !poligono || !profundidade}
             className="w-full py-2 rounded text-xs font-bold text-white flex items-center justify-center gap-1.5"
             style={{ background: (processando || !poligono) ? '#1a3a6b' : 'var(--invicta-green-dark)' }}>
-            {processando ? <><Loader2 size={13} className="animate-spin" /> Interpolando…</> : <><Play size={13} /> Interpolar {profundidade}</>}
-          </button>)}
+            {processando && !progresso ? <><Loader2 size={13} className="animate-spin" /> Interpolando…</> : <><Play size={13} /> Interpolar {profundidade}</>}
+          </button>
+          {importacao.profundidades.length > 1 && (
+            <button onClick={() => void processarTodas()} disabled={processando || !poligono}
+              className="w-full py-2 rounded text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-60"
+              style={{ background: '#1a3a6b', color: '#93c5fd', border: '1px solid #2e5fa3' }}>
+              {progresso
+                ? <><Loader2 size={13} className="animate-spin" /> Interpolando camada {progresso.n}/{progresso.total}…</>
+                : <><Layers size={13} /> Interpolar todas as camadas ({importacao.profundidades.length})</>}
+            </button>
+          )}
+</>)}
 
           {estado === 'erro' && <p className="text-[10px]" style={{ color: '#f87171' }}>{erro}</p>}
           {quedaIdw && <p className="text-[10px]" style={{ color: '#fbbf24' }}>{quedaIdw}</p>}

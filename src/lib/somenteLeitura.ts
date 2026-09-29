@@ -28,6 +28,13 @@ function mapaDoSatelite(id: string): boolean {
   return s[0] === 'composicao' || s[1] === 'ndvi' || s[1] === 'ndvicbers';
 }
 
+/** Compactação também é onde o produtor TRABALHA (v2.181.0): importa o arquivo
+ *  do penetrômetro (inv_compactacao), cria grade (inv_grades_compact) e grava os
+ *  mapas interpolados (`compactacao__<talhão>__<importação>__<camada>`). Excluir
+ *  continua fora do papel — a tela esconde o botão. */
+const LIVRES_COMPACTACAO = new Set(['inv_compactacao', 'inv_grades_compact']);
+const mapaDaCompactacao = (id: string) => id.startsWith('compactacao__');
+
 export function somenteLeitura(): boolean {
   return authConfigurado && papelDoUsuario() === 'produtor';
 }
@@ -35,8 +42,8 @@ export function somenteLeitura(): boolean {
 let avisadoEm = 0;
 /** true = gravação bloqueada (avisa no console no máximo uma vez por minuto). */
 export function escritaBloqueada(chave: string, id?: string): boolean {
-  if (LIVRES.has(chave) || LIVRES_SATELITE.has(chave) || !somenteLeitura()) return false;
-  if (chave === COL_MAPAS && id && mapaDoSatelite(id)) return false;
+  if (LIVRES.has(chave) || LIVRES_SATELITE.has(chave) || LIVRES_COMPACTACAO.has(chave) || !somenteLeitura()) return false;
+  if (chave === COL_MAPAS && id && (mapaDoSatelite(id) || mapaDaCompactacao(id))) return false;
   const agora = Date.now();
   if (agora - avisadoEm > 60_000) {
     avisadoEm = agora;

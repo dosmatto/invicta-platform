@@ -5,12 +5,16 @@
 
 import { parseGeoFile } from './geo';
 import { lerArquivo } from './lab';
+import { detectarFalker, lerFalker, type ResultadoFalker } from './compactacaoFalker';
 
 export interface PontoBruto { lng: number; lat: number; props: Record<string, string | number>; }
 export interface ArquivoPontos {
   pontos: PontoBruto[];
   colunas: string[];          // todas as propriedades/colunas disponíveis
   colunasNumericas: string[]; // colunas majoritariamente numéricas (candidatas a resistência)
+  // Arquivo da Falker (PenetroLOG): já vem em camadas de 10 cm, em MPa — a UI
+  // pula o mapeamento de colunas e salva direto (pontos/colunas ficam vazios).
+  falker?: ResultadoFalker;
 }
 
 const norm = (s: string) =>
@@ -40,6 +44,12 @@ export async function parseArquivoPontos(file: File): Promise<ArquivoPontos> {
 
   if (['csv', 'txt', 'xls', 'xlsx'].includes(ext)) {
     const aoa = await lerArquivo(file);
+    // Falker primeiro: cabeçalho na 3ª linha, uma coluna por cm, linha "Média".
+    if (detectarFalker(aoa)) {
+      const falker = lerFalker(aoa, { passoCm: 10, agregacao: 'max', unidadeOrigem: 'kPa' });
+      if (falker.pontos.length === 0) throw new Error('Arquivo da Falker sem medições com coordenada e leitura válida.');
+      return { pontos: [], colunas: [], colunasNumericas: [], falker };
+    }
     if (aoa.length < 2) throw new Error('Arquivo tabular sem dados (esperado cabeçalho + linhas).');
     const header = aoa[0].map(h => String(h ?? '').trim());
     const idxLng = header.findIndex(h => LNG_KEYS.includes(norm(h)));

@@ -220,7 +220,14 @@ export function migrarPlantiosV1() {
 // ── Compactação (penetrometria) ───────────────────────────────────────────
 // Cada ponto do penetrômetro já vem georreferenciado com a resistência (MPa)
 // por profundidade — não precisa juntar com grade como na fertilidade.
-export interface PontoCompactacao { lng: number; lat: number; valores: Record<string, number>; }
+export interface PontoCompactacao {
+  lng: number; lat: number; valores: Record<string, number>;
+  // Opcionais — só no arquivo da Falker (lib/compactacaoFalker.ts):
+  medicao?: string;     // nº da medição no penetrômetro ("3", ou "3+4" quando agrupadas)
+  data?: string;        // 'YYYY-MM-DD' da medição
+  completa?: boolean;   // coluna "Medição completa" (false = cone não chegou ao fundo)
+  agrupados?: number;   // quantas medições (< 3 m entre si) viraram este ponto
+}
 // ── Helpers de PERÍODO p/ registros classificados por Ano (compactação,
 // produtividade, condutividade). Store é a autoridade do Ano; a Época sai da
 // data quando preciso (não é persistida). Ver src/lib/periodo.ts.

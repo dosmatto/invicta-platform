@@ -72,11 +72,14 @@ export const MATRIZ_PADRAO: Record<PapelIam, MapaPermissoes> = {
 
   // Produtor: portal — enxerga e exporta (o plano de assinatura ainda filtra
   // seções). Decisão de 04/09/2026: no SATÉLITE ele trabalha — gera índices e,
-  // se quiser, salva. Relevo, CE, zonas, colheita e compactação: só ver.
+  // se quiser, salva. Relevo, CE, zonas e colheita: só ver.
+  // Decisão da v2.181.0: na COMPACTAÇÃO ele também trabalha — importa o arquivo
+  // do penetrômetro (Falker), cria grade e interpola as camadas; excluir, não.
   produtor: (() => {
     const m = conceder(nada(),
       ['cadastro', 'fertilidade', 'zonas', 'altimetria', 'condutividade', 'recomendacoes', 'prescricao', 'compactacao', 'produtividade', 'relatorios', 'arquivos'], VER_EXP);
     conceder(m, ['satelite'], TRABALHAR);
+    conceder(m, ['compactacao'], ['visualizar', 'criar', 'editar', 'exportar']);
     return m;
   })(),
 
