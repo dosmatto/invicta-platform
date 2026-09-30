@@ -419,6 +419,23 @@ export interface ResultadoCondicao {
 
 export const AREA_MIN_PADRAO_HA = 0.5;
 
+/**
+ * A dose de cada zona de condição (`f1..fN`) é SEMPRE a da faixa nos
+ * parâmetros. Editar limiares (tirar um, pôr outro) reordena as faixas sem
+ * regerar a geometria; se a zona guardasse a dose por conta própria, a tabela
+ * mostraria uma dose e o total/SHP usariam outra. Zona sem faixa correspondente
+ * fica com a dose que tem (não inventa número).
+ */
+export function dosesDasFaixas<Z extends { idZona: string; dose: number }>(
+  zonas: Z[], faixas: Array<{ dose: number }>,
+): Z[] {
+  return zonas.map(z => {
+    const m = /^f(\d+)$/.exec(z.idZona);
+    const f = m ? faixas[Number(m[1]) - 1] : undefined;
+    return f && f.dose !== z.dose ? { ...z, dose: f.dose } : z;
+  });
+}
+
 export function prescreverPorCondicao(e: EntradaCondicao): ResultadoCondicao {
   const erro = validarLimiares(e.limiares);
   if (erro) throw new Error(erro);

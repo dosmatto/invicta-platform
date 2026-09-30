@@ -20,7 +20,7 @@ import { decodeGrid, extrairPoligono } from '@/lib/fertilidade';
 import { carregarGridsTalhao, type GridRecomendacao } from '@/lib/recomendacao/aplicar';
 import { ATRIBUTOS_EQUACAO } from '@/lib/recomendacao/motor';
 import {
-  prescreverPorCondicao, validarLimiares, rotuloFaixa, corDaFaixa, AREA_MIN_PADRAO_HA,
+  prescreverPorCondicao, validarLimiares, rotuloFaixa, corDaFaixa, AREA_MIN_PADRAO_HA, dosesDasFaixas,
 } from '@/lib/prescricao/condicao';
 import { anoDaSafra } from '@/lib/periodo';
 import { emailUsuario, podePrescricao } from '@/lib/empresa';
@@ -570,7 +570,12 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
     limiares: [40], faixas: [{ dose: 0 }, { dose: 0 }], areaMinHa: AREA_MIN_PADRAO_HA,
   });
   function patchCond(pc: Partial<ParamsCondicao>) {
-    setR(x => ({ ...x, params: { ...x.params, condicao: { ...(x.params.condicao ?? CONDICAO_VAZIA()), ...pc } } }));
+    setR(x => {
+      const condicao = { ...(x.params.condicao ?? CONDICAO_VAZIA()), ...pc };
+      // a dose da zona nunca diverge da faixa (ver dosesDasFaixas)
+      const zonas = x.modo === 'condicao' ? dosesDasFaixas(x.zonas, condicao.faixas) : x.zonas;
+      return { ...x, zonas, params: { ...x.params, condicao } };
+    });
   }
 
   /** Troca de modo. Entrar ou sair de 'condicao' troca a FONTE das áreas
@@ -598,7 +603,7 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
       return {
         ...x,
         params: { ...x.params, condicao: { ...c, faixas } },
-        zonas: x.zonas.map(z => (z.idZona === `f${i + 1}` ? { ...z, dose } : z)),
+        zonas: dosesDasFaixas(x.zonas, faixas),
       };
     });
   }
@@ -734,7 +739,10 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
       talhaoId, ano: safraNome || undefined, nome: r.nome.trim(), tipo: r.tipo,
       produto: r.produto.trim(), insumoId: r.insumoId || undefined, unidade: r.unidade, custoUnit: custoNum,
       zoneamentoId: r.zoneamentoId, zoneamentoNome: r.zoneamentoNome,
-      modo: r.modo, params: r.params, zonas: r.zonas, fc: r.fc,
+      modo: r.modo, params: r.params, fc: r.fc,
+      // Por condição, o que vai para o arquivo é a dose da FAIXA — ressincroniza
+      // aqui também, para nenhum caminho de edição salvar zona e faixa divergentes.
+      zonas: r.modo === 'condicao' && r.params.condicao ? dosesDasFaixas(r.zonas, r.params.condicao.faixas) : r.zonas,
       criadoPor: emailUsuario() ?? 'sistema',
       ...(r.modo === 'equacao' && eqSel
         ? { equacaoId: eqSel.id, equacaoNome: eqSel.nome, valoresEquacao: r.valoresEquacao }

@@ -1,5 +1,9 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Prescrição por condição: dose da área sempre igual à da faixa
+  '2.188.1': [
+    'CORRIGIDO: PRESCRIÇÃO POR CONDIÇÃO — A DOSE DE CADA ÁREA É SEMPRE A DA FAIXA. Depois de gerar as áreas, tirar um limiar e acrescentar outro (sem gerar de novo) podia deixar uma área com a dose antiga: a tabela de faixas mostrava uma dose e o total, o Excel e o SHP usavam outra. Agora qualquer mudança nas faixas atualiza a dose das áreas na hora, e o salvar confere de novo antes de gravar.',
+  ],
   // [S/N] Prescrição por condição no mapa de fertilidade
   '2.188.0': [
     'NOVO: PRESCRIÇÃO "POR CONDIÇÃO NO MAPA DE FERTILIDADE". Na aba Prescrições, o novo modo varia a dose conforme o teor do mapa, sem precisar de zoneamento — ex.: "P ≥ 40 mg/dm³ → 100 kg/ha de 00-30-10; abaixo de 40 → 150 kg/ha". Escolha o laudo e o mapa já processado (nutriente e profundidade, o mesmo mapa de 20 m da Recomendação), digite os limiares (um limiar = duas faixas; quantos quiser) e a dose de cada faixa. O valor do limiar pertence à faixa de cima (≥), sem lacuna nem sobreposição entre faixas.',

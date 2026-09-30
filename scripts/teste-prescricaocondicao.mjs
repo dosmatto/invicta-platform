@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 import turfArea from '@turf/area';
 import {
   validarLimiares, faixaDoValor, rotuloFaixa, absorverManchas, tracarAneis, vetorizarClasse,
-  prescreverPorCondicao, classificarGrid,
+  prescreverPorCondicao, classificarGrid, dosesDasFaixas,
 } from '../src/lib/prescricao/condicao.ts';
 import { casarZonas } from '../src/lib/prescricao/casar.ts';
 
@@ -219,6 +219,18 @@ t('fio de NaN na divisa do talhão herda a faixa vizinha (sem área sem dose)', 
   const res = prescreverPorCondicao({ grid: g, limiares: [40], doses: [150, 100], talhao, sigla: 'P' });
   const soma = res.zonas.reduce((s, z) => s + z.areaHa, 0);
   assert.ok(Math.abs(soma - areaTalhaoHa) / areaTalhaoHa < 0.005);
+});
+t('dose da zona sempre = dose da faixa (tirar limiar, pôr outro, sem regerar)', () => {
+  // gerado com [20, 40] e doses [200, 150, 100]
+  const res = prescreverPorCondicao({ grid: gradiente, limiares: [20, 40], doses: [200, 150, 100], talhao, sigla: 'P' });
+  assert.deepEqual(res.zonas.map(z => z.dose), [200, 150, 100]);
+  // remove o 40 → faixas [200, 150]; "+ limiar" → [200, 150, 150]; edita 30→40
+  const faixas = [{ dose: 200 }, { dose: 150 }, { dose: 150 }];
+  const zonas = dosesDasFaixas(res.zonas, faixas);
+  assert.deepEqual(zonas.map(z => z.dose), [200, 150, 150], 'f3 segue a faixa, não a dose antiga');
+  assert.equal(zonas[0], res.zonas[0], 'zona sem mudança não é recriada');
+  // zona sem faixa correspondente mantém a dose
+  assert.equal(dosesDasFaixas([{ idZona: 'f9', dose: 7 }], faixas)[0].dose, 7);
 });
 t('mapa todo NaN: erro claro', () => {
   const g = gradeP(() => NaN);

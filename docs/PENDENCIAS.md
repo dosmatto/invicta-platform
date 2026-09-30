@@ -93,6 +93,7 @@ verdadeira (fusão de talhões) chegou depois; foi preciso renumerar.
 | S/N | Banco só aceita do produtor compactação e satélite dos talhões dele | 2.186.0 | Supabase → SQL Editor → seção 6 de docs/seguranca-rls.sql; Talhão → Compactação (produtor) → excluir importação/grade/camada |
 | 57 | Zona de manejo nunca apaga uma gleba do talhão menor que a área mínima | 2.187.0 | Talhão com duas glebas → Zonas de Manejo → Área mínima maior que a gleba pequena → Gerar (a gleba segue como zona) |
 | S/N | Prescrição por condição no mapa de fertilidade | 2.188.0 | Talhão → Prescrições → Nova → "Por condição no mapa de fertilidade" → laudo + mapa + limiares/doses → "Gerar áreas de aplicação" |
+| S/N | Prescrição por condição: dose da área sempre igual à da faixa (correção) | 2.188.1 | Talhão → Prescrições → "Por condição no mapa de fertilidade" → tirar/pôr limiar → tabela, total e SHP com a mesma dose |
 
 > As pendências 1–17 foram entregues antes deste registro existir e não estão
 > catalogadas; procure pelo assunto no `changelog.ts`. Da 18 em diante, tudo
