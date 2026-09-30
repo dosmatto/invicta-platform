@@ -485,19 +485,28 @@ export function dosesDaCondicao(
   const informadas: Record<string, number> = {};
   for (const z of dosesDasFaixas(zonas, faixas)) informadas[z.idZona] = z.dose;
   const travado = op.cenario === 'total';
+  // Faixa com a dose APAGADA (vazia/NaN) não é "não aplica" — isso é o 0
+  // digitado. Tratá-la como peso 0 mandava o volume dela para as outras em
+  // silêncio. Aqui a zona fica sem dose (NaN) nos dois cenários: a validação
+  // (dose inválida) bloqueia salvar e exportar, e o aviso diz qual faixa é.
+  const semDose = zonas.filter(z => !Number.isFinite(informadas[z.idZona]) || informadas[z.idZona] < 0);
+  const avisoSemDose = semDose.length
+    ? [`Faixa(s) sem dose: ${semDose.map(z => z.idZona.replace(/^f/, 'faixa ')).join(', ')} — informe a dose (0 = não aplica). Sem ela não dá para salvar nem exportar.`]
+    : [];
   if (!travado) {
     const usado = zonas.reduce((s, z) => s + (Number.isFinite(informadas[z.idZona]) ? informadas[z.idZona] * z.areaHa : 0), 0) * fatorBase;
-    return { doses: { ...informadas }, informadas, travado, usado, sobra: 0, falta: 0, avisos: [] };
+    return { doses: { ...informadas }, informadas, travado, usado, sobra: 0, falta: 0, avisos: avisoSemDose };
   }
   const doses: Record<string, number> = Object.fromEntries(zonas.map(z => [z.idZona, 0]));
+  for (const z of semDose) doses[z.idZona] = NaN;
   const peso = (id: string) => (Number.isFinite(informadas[id]) && informadas[id] > 0 ? informadas[id] : 0);
   const ativas = zonas.filter(z => peso(z.idZona) > 0 && z.areaHa > 0);
   const total = op.totalDisponivel ?? 0;
   if (!(total > 0)) {
-    return { doses, informadas, travado, usado: 0, sobra: 0, falta: 0, avisos: ['Informe o volume total (kg/ha médio ou total fechado).'] };
+    return { doses, informadas, travado, usado: 0, sobra: 0, falta: 0, avisos: [...avisoSemDose, 'Informe o volume total (kg/ha médio ou total fechado).'] };
   }
   if (!ativas.length) {
-    return { doses, informadas, travado, usado: 0, sobra: total, falta: 0, avisos: ['Todas as faixas estão com dose 0 — informe a dose de ao menos uma faixa (ela vira o peso da redistribuição).'] };
+    return { doses, informadas, travado, usado: 0, sobra: total, falta: 0, avisos: [...avisoSemDose, 'Todas as faixas estão com dose 0 — informe a dose de ao menos uma faixa (ela vira o peso da redistribuição).'] };
   }
   const ref = Math.max(...ativas.map(z => peso(z.idZona)));
   const res = distribuirPorAjuste(
@@ -509,7 +518,7 @@ export function dosesDaCondicao(
     },
   );
   for (const z of ativas) doses[z.idZona] = res.doses[z.idZona] ?? 0;
-  return { doses, informadas, travado, usado: res.usado, sobra: res.sobra, falta: res.falta, avisos: res.avisos };
+  return { doses, informadas, travado, usado: res.usado, sobra: res.sobra, falta: res.falta, avisos: [...avisoSemDose, ...res.avisos] };
 }
 
 export function prescreverPorCondicao(e: EntradaCondicao): ResultadoCondicao {

@@ -69,11 +69,19 @@ export function validarPrescricao(p: Prescricao): ValidacaoPrescricao {
   if (p.unidade === 'sementes/m' && !(p.params.sementes?.espacamentoM)) {
     erros.push('Dose em sementes/m sem o espaçamento entre linhas — sem ele o total não fecha.');
   }
-  const min = p.params.doseMin, max = p.params.doseMax;
-  const fora = p.zonas.filter(z => (min != null && z.dose < min - 1e-9) || (max != null && z.dose > max + 1e-9));
+  // Por condição, os limites só existem no volume travado (em "doses livres"
+  // os campos são sobra de outro cenário e não valem), e dose 0 é "não aplica"
+  // — a redistribuição deixa a faixa em 0 de propósito, abaixo do piso. Nos
+  // demais modos 0 NÃO tem esse sentido: o cálculo (estoque, ajuste) sobe
+  // qualquer zona para o piso, então 0 abaixo do mínimo é mesmo divergência.
+  const cond = p.modo === 'condicao';
+  const comLimite = !cond || p.params.condicao?.cenario === 'total';
+  const min = comLimite ? p.params.doseMin : undefined, max = comLimite ? p.params.doseMax : undefined;
+  const fora = p.zonas.filter(z => !(cond && z.dose === 0)
+    && ((min != null && z.dose < min - 1e-9) || (max != null && z.dose > max + 1e-9)));
   if (fora.length) avisos.push(`Dose fora dos limites definidos em: ${fora.map(z => `${z.nomeZona} (${fmt(z.dose, 2)})`).join(', ')}.`);
   const r = resumoDoses(p.zonas, undefined, fatorDe(p));
-  if (p.params.totalDisponivel != null && r.usado > p.params.totalDisponivel + 1e-6) {
+  if (comLimite && p.params.totalDisponivel != null && r.usado > p.params.totalDisponivel + 1e-6) {
     const falta = r.usado - p.params.totalDisponivel;
     const un0 = UNIDADE_TOTAL[p.unidade];
     // Total informado POR HECTARE é uma META agronômica (80.000/ha), não um

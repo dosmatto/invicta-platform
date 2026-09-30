@@ -299,6 +299,20 @@ t('travado sem total ou com todas as faixas 0: aviso, sem inventar dose', () => 
   assert.ok(z.avisos.length && z.doses.f1 === 0);
 });
 
+t('faixa com dose apagada (NaN) ≠ 0: fica sem dose e avisa, nos dois cenários', () => {
+  const fNaN = [{ dose: 200 }, { dose: NaN }, { dose: 100 }];
+  const tr = dosesDaCondicao(zV, fNaN, { cenario: 'total', totalDisponivel: 15000 });
+  assert.ok(Number.isNaN(tr.doses.f2), 'f2 sem dose (bloqueia salvar/exportar), não 0');
+  assert.ok(tr.avisos.some(a => /sem dose/.test(a) && /faixa 2/.test(a)), tr.avisos.join(' | '));
+  const lv = dosesDaCondicao(zV, fNaN, { cenario: 'livre' });
+  assert.ok(Number.isNaN(lv.doses.f2));
+  assert.ok(lv.avisos.some(a => /sem dose/.test(a)));
+  // 0 digitado continua "não aplica", sem aviso de dose faltando
+  const zero = dosesDaCondicao(zV, [{ dose: 200 }, { dose: 0 }, { dose: 100 }], { cenario: 'total', totalDisponivel: 15000 });
+  assert.equal(zero.doses.f2, 0);
+  assert.ok(!zero.avisos.some(a => /sem dose/.test(a)));
+});
+
 t('mapa todo NaN: erro claro', () => {
   const g = gradeP(() => NaN);
   assert.throws(() => prescreverPorCondicao({ grid: g, limiares: [40], doses: [1, 2], talhao, sigla: 'P' }), /não tem valores/);

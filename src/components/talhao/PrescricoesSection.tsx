@@ -768,6 +768,11 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
       if (condCalculada !== assinaturaCondicao(r.params.condicao)) {
         setErro('O mapa, os limiares ou a área mínima mudaram depois de gerar as áreas — clique em "Gerar áreas de aplicação" de novo.'); return null;
       }
+      // Dose apagada numa faixa ≠ 0 ("não aplica"): sem ela a prescrição
+      // sairia com área sem dose (livre) ou com o volume dela nas outras (travado).
+      if (r.params.condicao.faixas.some(f => !Number.isFinite(f.dose) || f.dose < 0)) {
+        setErro('Informe a dose de todas as faixas (0 = não aplica) antes de salvar ou exportar.'); return null;
+      }
     } else if (!r.fc || !r.zonas.length) { setErro('Escolha um zoneamento (Zonas de Manejo) primeiro.'); return null; }
     if (!r.nome.trim()) { setErro('Dê um nome à prescrição (ex.: "Calcário 2026").'); return null; }
     if (!r.produto.trim()) { setErro('Informe o produto.'); return null; }
@@ -1180,9 +1185,9 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
                               (ex.: 150 kg/ha de média no talhão). A proporção entre as faixas se mantém; faixa com dose 0 não aplica.
                               Mín/máx/incremento são opcionais — se impedirem fechar o total, o aviso diz quanto sobrou ou passou.
                             </p>
-                            {condCalculada && volCond && volCond.avisos.map((a, i) => <Aviso key={i} tom="atencao" texto={a} />)}
                           </>
                         )}
+                        {condCalculada && volCond && volCond.avisos.map((a, i) => <Aviso key={i} tom="atencao" texto={a} />)}
                       </div>
                       {condCalculada && condCalculada !== assinaturaCondicao(cond) && (
                         <p className="text-[10px]" style={{ color: '#fbbf24' }}>

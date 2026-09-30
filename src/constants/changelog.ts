@@ -1,5 +1,10 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Prescrição por condição: faixa sem dose bloqueia e dose 0 não é "fora do limite"
+  '2.189.1': [
+    'CORRIGIDO: PRESCRIÇÃO POR CONDIÇÃO — FAIXA COM A DOSE APAGADA NÃO SOME MAIS EM SILÊNCIO. No volume travado, apagar a dose de uma faixa fazia o volume dela ir inteiro para as outras (ex.: 200 / vazio / 100 com 15.000 kg virava 375 / 0 / 187,5). Agora a faixa sem dose aparece em aviso e salvar/exportar fica bloqueado até ela ser preenchida, nos dois cenários. Digitar 0 continua valendo "não aplica nesta faixa".',
+    'CORRIGIDO: na validação da exportação, faixa com dose 0 (não aplica) não é mais apontada como "Dose fora dos limites" quando há dose mínima; e em "Doses livres" os limites e o total de outro cenário não geram mais aviso nem ressalva de estoque.',
+  ],
   // [S/N] Prescrição por condição com volume travado
   '2.189.0': [
     'NOVO: PRESCRIÇÃO POR CONDIÇÃO COM "VOLUME TRAVADO". No modo "Por condição no mapa de fertilidade", escolha entre "Doses livres" (como era: a dose digitada é a aplicada e o total é consequência) e "Volume travado": informe o volume — em média por hectare (ex.: 150 kg/ha) ou o total fechado, com a mesma chave do modo ajuste — e as doses digitadas nas faixas viram PESOS. A dose aplicada é a digitada × um fator comum que fecha exatamente o volume, mantendo a proporção entre as faixas (ex.: 200/150/100 com 150 kg/ha de média → cada faixa sobe ou desce na mesma proporção). Faixa com dose 0 continua sem aplicar.',
