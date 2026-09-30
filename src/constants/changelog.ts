@@ -1,5 +1,11 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Prescrição por condição no mapa de fertilidade
+  '2.188.0': [
+    'NOVO: PRESCRIÇÃO "POR CONDIÇÃO NO MAPA DE FERTILIDADE". Na aba Prescrições, o novo modo varia a dose conforme o teor do mapa, sem precisar de zoneamento — ex.: "P ≥ 40 mg/dm³ → 100 kg/ha de 00-30-10; abaixo de 40 → 150 kg/ha". Escolha o laudo e o mapa já processado (nutriente e profundidade, o mesmo mapa de 20 m da Recomendação), digite os limiares (um limiar = duas faixas; quantos quiser) e a dose de cada faixa. O valor do limiar pertence à faixa de cima (≥), sem lacuna nem sobreposição entre faixas.',
+    'Cada faixa vira um polígono recortado no contorno do talhão, com a área real e a dose — aparece no mapa com a condição e a dose escritas, e a tabela mostra área e total de produto por faixa, além do total e da dose média. Manchas menores que a "Área mínima de mancha" (padrão 0,5 ha) entram na faixa vizinha de maior contato; gleba isolada nunca é apagada. Faixa que não ocorre no talhão gera aviso e fica fora; laudo sem mapa processado orienta a processar na aba Fertilidade.',
+    'A prescrição guarda o laudo, o mapa, os limiares, as doses e a área mínima usados, e exporta em SHP, Excel e PDF como as demais. Mudar só a dose não exige gerar de novo; mudar mapa, limiar ou área mínima pede gerar as áreas antes de salvar. Os botões de modo agora aparecem antes da escolha do zoneamento.',
+  ],
   // [57] Zona de manejo nunca apaga uma gleba do talhão menor que a área mínima
   '2.187.0': [
     'PENDÊNCIA 57 — CORRIGIDO: GERAR ZONAS COM "ÁREA MÍNIMA" NÃO APAGA MAIS PARTE DO TALHÃO. Num talhão com duas glebas (ex.: a principal e uma pequena separada), a gleba menor que a área mínima sumia do zoneamento — a limpeza descartava qualquer zona ou pedaço de zona abaixo do limite. Agora nenhum pedaço do talhão é apagado: a gleba pequena, sem vizinha para fundir, vira zona própria; a área mínima só funde manchas com a zona vizinha e preenche buracos pequenos. Vale também para "Fundir zonas", "Absorver fragmentos", o editor manual e o zoneamento importado.',

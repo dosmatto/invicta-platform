@@ -14,8 +14,14 @@ import {
   getZoneamentosMeap, getPrescricoes, savePrescricao, salvarVersaoPrescricao,
   deletePrescricao, registrarExportePrescricao, getTalhoes, getFazendas, getClientes,
   type ZoneamentoMeap,
-  precoResolvidoDoInsumo,
+  precoResolvidoDoInsumo, getImportacoesLab,
 } from '@/lib/store';
+import { decodeGrid, extrairPoligono } from '@/lib/fertilidade';
+import { carregarGridsTalhao, type GridRecomendacao } from '@/lib/recomendacao/aplicar';
+import { ATRIBUTOS_EQUACAO } from '@/lib/recomendacao/motor';
+import {
+  prescreverPorCondicao, validarLimiares, rotuloFaixa, corDaFaixa, AREA_MIN_PADRAO_HA,
+} from '@/lib/prescricao/condicao';
 import { anoDaSafra } from '@/lib/periodo';
 import { emailUsuario, podePrescricao } from '@/lib/empresa';
 import { listar as bibListar, type ItemBiblioteca, type ConteudoEquacao } from '@/lib/biblioteca';
@@ -40,7 +46,7 @@ import { fatiarArea } from '@/lib/areaGeo';
 import {
   ROTULO_TIPO, ROTULO_MODO, UNIDADE_TOTAL, ehUnidadeSemente,
   type Prescricao, type TipoPrescricao, type ModoCalculo, type UnidadeDose,
-  type ZonaDose, type ParamsCalculo, type ParamsSementes,
+  type ZonaDose, type ParamsCalculo, type ParamsSementes, type ParamsCondicao,
 } from '@/lib/prescricao/tipos';
 import {
   Plus, Save, Trash2, FileDown, FileSpreadsheet, FileText, Loader2, AlertTriangle,
@@ -83,7 +89,17 @@ interface Rascunho {
 // só o de estoque acrescentava (informar o disponível em sacos/kg/milhões)
 // virou um botão dentro do ajuste. Prescrições salvas nesses modos continuam
 // abrindo e exportando: o botão do modo legado reaparece para elas.
-const MODOS_VISIVEIS: ModoCalculo[] = ['manual', 'ajuste', 'equacao', 'complemento'];
+// 'condicao' não usa zoneamento: as áreas saem do mapa de fertilidade recortado
+// nos limiares ("P ≥ 40 → 100 kg; abaixo → 150 kg").
+const MODOS_VISIVEIS: ModoCalculo[] = ['manual', 'ajuste', 'equacao', 'complemento', 'condicao'];
+
+// Assinatura do que DESENHA as faixas (a dose fica de fora: mudar a dose não
+// muda a geometria). Salvar exige que as faixas no mapa sejam as destes
+// parâmetros — senão a prescrição guardaria limiares que não geraram o fc.
+const assinaturaCondicao = (c?: ParamsCondicao) =>
+  c ? JSON.stringify([c.importacaoId, c.nut, c.prof, c.limiares, c.areaMinHa]) : '';
+
+const rotuloProf = (prof: string) => (/^\d+\s*-\s*\d+$/.test(prof) ? `${prof} cm` : prof);
 
 // Que categorias da Biblioteca de Insumos servem a cada tipo de prescrição.
 const CATEGORIA_DO_TIPO: Record<TipoPrescricao, CategoriaInsumo[]> = {
@@ -137,7 +153,7 @@ function zonasDoZoneamento(z: ZoneamentoMeap, areaTalhaoHa = 0): ZonaDose[] {
 }
 
 export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
-  const { nav, setZonasManejo } = useApp();
+  const { nav, setZonasManejo, uploadedGeo } = useApp();
   const talhaoId = nav.talhaoId ?? '';
   const [aba, setAba] = useState<AbaId>('nova');
   const [tick, setTick] = useState(0);
@@ -224,9 +240,12 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
       modo: p.modo, params: p.params, zonas: p.zonas.map(z => ({ ...z })), fc: p.fc,
       equacaoId: p.equacaoId ?? '', valoresEquacao: p.valoresEquacao ?? {},
     });
+    // Prescrição por condição salva: as faixas no fc SÃO as dos parâmetros.
+    setCondCalculada(p.modo === 'condicao' ? assinaturaCondicao(p.params.condicao) : '');
     setAvisosCalc([]); setErro(''); setOkMsg('');
     setAba('nova');
   }
+
 
   // Equações salvas na Biblioteca (mesmas da Recomendação) — fonte do modo 'equacao'.
   const equacoes = useMemo(() => bibListar<ConteudoEquacao>('equacoes').filter(e => e.ativo), [tick]);
@@ -500,6 +519,125 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
     } catch (e) { setErro(e instanceof Error ? e.message : String(e)); }
   }
 
+  // ── Modo CONDIÇÃO: faixas de valor de um mapa de fertilidade → dose ─────
+  // A fonte das áreas é o mapa interpolado (grid de 20 m, o mesmo da
+  // Recomendação), não um zoneamento. O recorte é feito pelo módulo puro
+  // lib/prescricao/condicao.ts; aqui é só escolher o mapa e as faixas.
+  const [condCalculada, setCondCalculada] = useState('');
+  const importacoesLab = useMemo(
+    () => (talhaoId ? [...getImportacoesLab(talhaoId)].sort((a, b) => (b.dataReferencia ?? b.criadoEm ?? '').localeCompare(a.dataReferencia ?? a.criadoEm ?? '')) : []),
+    [talhaoId, tick],   // eslint-disable-line react-hooks/exhaustive-deps
+  );
+  const nomeImportacao = (id: string) => {
+    const i = importacoesLab.find(x => x.id === id);
+    return i ? `${i.laboratorio || 'Laudo'} · ${(i.dataReferencia ?? i.criadoEm ?? '').slice(0, 10)}` : '';
+  };
+  const cond = r.params.condicao;
+  const condImpId = r.modo === 'condicao' ? cond?.importacaoId ?? '' : '';
+  const [gridsCond, setGridsCond] = useState<{ impId: string; grids: Record<string, GridRecomendacao> | null; erro?: string }>({ impId: '', grids: null });
+  useEffect(() => {
+    if (!talhaoId || !condImpId) return;
+    let vivo = true;
+    // "carregando" = o resultado em mãos é de outro laudo (ver gridsDoLaudo)
+    carregarGridsTalhao(talhaoId, condImpId, 'dose')
+      .then(g => { if (vivo) setGridsCond({ impId: condImpId, grids: g }); })
+      .catch(e => { if (vivo) setGridsCond({ impId: condImpId, grids: {}, erro: e instanceof Error ? e.message : String(e) }); });
+    return () => { vivo = false; };
+  }, [talhaoId, condImpId]);
+  const gridsDoLaudo = gridsCond.impId === condImpId ? gridsCond.grids : null;
+  const carregandoMapas = !!condImpId && gridsDoLaudo == null;
+  /** Mapas processados do laudo, com rótulo legível (nutriente + profundidade). */
+  const mapasCond = useMemo(() => {
+    if (!gridsDoLaudo) return [];
+    return Object.entries(gridsDoLaudo)
+      .filter(([, g]) => !!g?.grid?.b64)
+      .map(([chave, g]) => {
+        const [nut, prof = ''] = chave.split('__');
+        const at = ATRIBUTOS_EQUACAO.find(a => a.nut === nut);
+        return {
+          chave, nut, prof, sigla: at?.token ?? nut.toUpperCase(), unidade: at?.unidade ?? '',
+          rotulo: `${at?.rotulo ?? nut.toUpperCase()}${at ? ` (${at.token})` : ''} · ${rotuloProf(prof)}`,
+          min: g.stats?.min ?? null, max: g.stats?.max ?? null,
+        };
+      })
+      .sort((a, b) => a.rotulo.localeCompare(b.rotulo, 'pt-BR'));
+  }, [gridsDoLaudo]);
+  const mapaCondSel = cond ? mapasCond.find(m => m.nut === cond.nut && m.prof === cond.prof) ?? null : null;
+
+  const CONDICAO_VAZIA = (): ParamsCondicao => ({
+    importacaoId: importacoesLab[0]?.id ?? '', importacaoNome: importacoesLab[0] ? nomeImportacao(importacoesLab[0].id) : undefined,
+    nut: '', prof: '', sigla: '', rotuloMapa: '',
+    limiares: [40], faixas: [{ dose: 0 }, { dose: 0 }], areaMinHa: AREA_MIN_PADRAO_HA,
+  });
+  function patchCond(pc: Partial<ParamsCondicao>) {
+    setR(x => ({ ...x, params: { ...x.params, condicao: { ...(x.params.condicao ?? CONDICAO_VAZIA()), ...pc } } }));
+  }
+
+  /** Troca de modo. Entrar ou sair de 'condicao' troca a FONTE das áreas
+   *  (zoneamento ↔ mapa de fertilidade): as zonas do rascunho não servem mais. */
+  function trocarModo(id: ModoCalculo) {
+    const mudaFonte = (r.modo === 'condicao') !== (id === 'condicao');
+    patch(mudaFonte ? { modo: id, zonas: [], fc: null, zoneamentoId: '', zoneamentoNome: '' } : { modo: id });
+    if (mudaFonte) setCondCalculada('');
+    if (id === 'condicao' && !r.params.condicao) patchParams({ condicao: CONDICAO_VAZIA() });
+    setAvisosCalc([]); setErro('');
+    if (id === 'complemento') {
+      const it = insumos.find(x => x.id === r.insumoId);
+      const nut = r.params.complemento?.nutriente ?? 'n';
+      if (it) patchComp({ compInsumoId: it.id, compNome: it.nome, compGarantiaPct: garantiaDe(it.conteudo, nut) });
+      else patchComp({ nutriente: nut });
+    }
+  }
+
+  /** Dose de UMA faixa: vale no parâmetro e, se a faixa já está no mapa, na zona. */
+  function setDoseFaixa(i: number, dose: number) {
+    setR(x => {
+      const c = x.params.condicao;
+      if (!c) return x;
+      const faixas = c.faixas.map((f, k) => (k === i ? { ...f, dose } : f));
+      return {
+        ...x,
+        params: { ...x.params, condicao: { ...c, faixas } },
+        zonas: x.zonas.map(z => (z.idZona === `f${i + 1}` ? { ...z, dose } : z)),
+      };
+    });
+  }
+
+  function calcularCondicao() {
+    setErro(''); setOkMsg('');
+    const c = r.params.condicao;
+    if (!c?.importacaoId) { setErro('Escolha o laudo (importação de laboratório).'); return; }
+    if (!c.nut) { setErro('Escolha o mapa de fertilidade (nutriente e profundidade).'); return; }
+    const errLim = validarLimiares(c.limiares);
+    if (errLim) { setErro(errLim); return; }
+    if (c.faixas.some(f => !Number.isFinite(f.dose) || f.dose < 0)) { setErro('Informe a dose de todas as faixas (0 = não aplica).'); return; }
+    const g = gridsDoLaudo?.[`${c.nut}__${c.prof}`];
+    if (!g?.grid?.b64) { setErro('O mapa escolhido não está processado. Processe-o na aba Fertilidade.'); return; }
+    const talhao = getTalhoes().find(t => t.id === talhaoId);
+    let poligono = extrairPoligono(uploadedGeo);
+    if (!poligono && talhao?.geojson) { try { poligono = extrairPoligono(JSON.parse(talhao.geojson)); } catch { poligono = null; } }
+    if (!poligono) { setErro('Talhão sem contorno cadastrado — não há como recortar as faixas.'); return; }
+    try {
+      const { valores, rows, cols } = decodeGrid(g.grid);
+      const res = prescreverPorCondicao({
+        grid: { valores, rows, cols, bounds: g.bounds },
+        limiares: c.limiares, doses: c.faixas.map(f => f.dose),
+        talhao: poligono, areaMinHa: c.areaMinHa, sigla: c.sigla || c.nut.toUpperCase(),
+      });
+      if (!res.zonas.length) { setErro('Nenhuma faixa ocorre dentro do talhão.'); return; }
+      patch({ zonas: res.zonas, fc: res.fc, zoneamentoId: '', zoneamentoNome: `Condição · ${c.rotuloMapa}` });
+      setCondCalculada(assinaturaCondicao(c));
+      const un = c.unidadeValor ? ` ${c.unidadeValor}` : '';
+      setAvisosCalc([
+        ...res.avisos,
+        ...(res.valorMin != null && res.valorMax != null
+          ? [`No talhão, ${c.sigla} vai de ${fmt(res.valorMin, 1)} a ${fmt(res.valorMax, 1)}${un}.`] : []),
+        ...(res.manchasAbsorvidas
+          ? [`${res.manchasAbsorvidas} mancha(s) menor(es) que ${fmt(c.areaMinHa, 2)} ha absorvida(s) pela faixa vizinha.`] : []),
+      ]);
+    } catch (e) { setErro(e instanceof Error ? e.message : String(e)); }
+  }
+
   // ── Resumo ao vivo (editor) ───────────────────────────────────────────────
   // A dose digitada é população e há fator de campo para compensar? Então a
   // tabela mostra as duas colunas: o que foi pedido e o que vai no arquivo.
@@ -551,6 +689,12 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
         const p = (f.properties ?? {}) as { id?: string; zona?: string | number; classe?: string; cor?: string };
         const z = porId.get(String(p.id ?? `z${i}`));
         const nome = z?.nomeZona ?? String(p.zona ?? i + 1);
+        // Por condição, a "zona" é a faixa de valor: o rótulo é a própria
+        // condição ("P ≥ 40"), não "Zona P >= 40".
+        const iFaixa = r.modo === 'condicao' && r.params.condicao && z ? Number(z.idZona.slice(1)) - 1 : -1;
+        const titulo = iFaixa >= 0 && r.params.condicao
+          ? rotuloFaixa(iFaixa, r.params.condicao.limiares, r.params.condicao.sigla || r.params.condicao.nut.toUpperCase())
+          : `Zona ${nome}`;
         const dose = z?.dose;
         const linhaDose = temDose && dose != null && Number.isFinite(dose)
           ? `\n${casas ? fmt(dose, 1) : fmt0(dose)} ${r.unidade}`
@@ -559,7 +703,7 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
           type: 'Feature' as const,
           properties: {
             cor: z?.cor ?? p.cor ?? '#94a3b8',
-            rotulo: `Zona ${nome}${linhaDose}`,
+            rotulo: `${titulo}${linhaDose}`,
             classeLabel: z?.classe ?? p.classe ?? '',
             selecionada: false,
           },
@@ -567,14 +711,20 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
         };
       }),
     };
-  }, [r.fc, r.zonas, r.unidade]);
+  }, [r.fc, r.zonas, r.unidade, r.modo, r.params.condicao]);
 
   // Sincroniza o mapa (sistema externo) com o rascunho; some ao sair da aba.
   useEffect(() => { setZonasManejo(zonasMapa); return () => setZonasManejo(null); }, [zonasMapa, setZonasManejo]);
 
   // ── Salvar / exportar ─────────────────────────────────────────────────────
   function montarPrescricao(): Omit<Prescricao, 'id' | 'versao' | 'criadoEm' | 'atualizadoEm' | 'historico' | 'exportes'> | null {
-    if (!r.fc || !r.zonas.length) { setErro('Escolha um zoneamento (Zonas de Manejo) primeiro.'); return null; }
+    if (r.modo === 'condicao') {
+      // Sem zoneamento: a fonte é o mapa de fertilidade recortado nas faixas.
+      if (!r.fc || !r.zonas.length || !r.params.condicao) { setErro('Gere as áreas de aplicação a partir do mapa de fertilidade primeiro.'); return null; }
+      if (condCalculada !== assinaturaCondicao(r.params.condicao)) {
+        setErro('O mapa, os limiares ou a área mínima mudaram depois de gerar as áreas — clique em "Gerar áreas de aplicação" de novo.'); return null;
+      }
+    } else if (!r.fc || !r.zonas.length) { setErro('Escolha um zoneamento (Zonas de Manejo) primeiro.'); return null; }
     if (!r.nome.trim()) { setErro('Dê um nome à prescrição (ex.: "Calcário 2026").'); return null; }
     if (!r.produto.trim()) { setErro('Informe o produto.'); return null; }
     if (r.unidade === 'sementes/m' && fatorBase == null) {
@@ -786,7 +936,175 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
               </div>
             </div>
 
+            {/* ── Modo de cálculo ──
+                Fica ANTES da fonte das zonas: o modo "Por condição" não usa
+                zoneamento, e escondê-lo até existir um impedia justamente o
+                talhão sem zoneamento de prescrever pelo mapa de fertilidade. */}
+            <div className="flex gap-1 flex-wrap">
+              {(Object.entries(ROTULO_MODO) as Array<[ModoCalculo, string]>)
+                .filter(([id]) => MODOS_VISIVEIS.includes(id) || r.modo === id)
+                .map(([id, rot]) => (
+                <button key={id} onClick={() => trocarModo(id)}
+                  className="px-2 py-1.5 rounded text-[10px] font-semibold"
+                  style={{ background: r.modo === id ? 'var(--invicta-green-dark)' : '#0f2240', color: r.modo === id ? '#fff' : '#93c5fd' }}>
+                  {rot}
+                </button>
+              ))}
+            </div>
+
+            {/* ── Fonte: mapa de fertilidade + faixas (modo condição) ── */}
+            {r.modo === 'condicao' && cond && (
+              <div className="p-2.5 rounded-lg space-y-2" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
+                <div className="grid grid-cols-2 gap-2">
+                  <Campo rotulo="Laudo (importação de laboratório) *">
+                    <select value={cond.importacaoId}
+                      onChange={e => patchCond({ importacaoId: e.target.value, importacaoNome: nomeImportacao(e.target.value), nut: '', prof: '', sigla: '', rotuloMapa: '' })}
+                      className="w-full rounded px-2 py-1.5 text-xs outline-none" style={inputStyle}>
+                      <option value="">Selecione o laudo…</option>
+                      {importacoesLab.map(i => <option key={i.id} value={i.id}>{nomeImportacao(i.id)}</option>)}
+                    </select>
+                  </Campo>
+                  <Campo rotulo="Mapa de fertilidade (nutriente · profundidade) *">
+                    <select value={mapaCondSel?.chave ?? ''} disabled={!mapasCond.length}
+                      onChange={e => {
+                        const m = mapasCond.find(x => x.chave === e.target.value);
+                        if (!m) return;
+                        patchCond({
+                          nut: m.nut, prof: m.prof, sigla: m.sigla, unidadeValor: m.unidade || undefined,
+                          rotuloMapa: `${m.rotulo} · ${nomeImportacao(cond.importacaoId)}`,
+                        });
+                      }}
+                      className="w-full rounded px-2 py-1.5 text-xs outline-none disabled:opacity-50" style={inputStyle}>
+                      <option value="">{carregandoMapas ? 'Carregando mapas…' : 'Selecione o mapa…'}</option>
+                      {mapasCond.map(m => <option key={m.chave} value={m.chave}>{m.rotulo}</option>)}
+                      {/* prescrição salva cujo mapa não está mais disponível */}
+                      {cond.nut && !mapaCondSel && !carregandoMapas && <option value="">{cond.rotuloMapa || cond.nut} (não encontrado)</option>}
+                    </select>
+                  </Campo>
+                </div>
+                {importacoesLab.length === 0 && (
+                  <p className="text-[10px]" style={{ color: '#fbbf24' }}>
+                    Este talhão não tem laudo importado. Importe o laudo e processe os mapas na aba <b>Fertilidade</b>.
+                  </p>
+                )}
+                {cond.importacaoId && carregandoMapas && (
+                  <p className="text-[10px] flex items-center gap-1" style={{ color: '#94a3b8' }}><Loader2 size={10} className="animate-spin" /> Carregando os mapas processados deste laudo…</p>
+                )}
+                {cond.importacaoId && !carregandoMapas && mapasCond.length === 0 && (
+                  <p className="text-[10px]" style={{ color: '#fbbf24' }}>
+                    {gridsCond.erro ? `Não foi possível carregar os mapas (${gridsCond.erro}). ` : 'Este laudo ainda não tem mapa de fertilidade processado. '}
+                    Processe os mapas na aba <b>Fertilidade</b> e volte aqui.
+                  </p>
+                )}
+
+                {cond.nut && (() => {
+                  const sig = cond.sigla || cond.nut.toUpperCase();
+                  const uV = cond.unidadeValor ? ` ${cond.unidadeValor}` : '';
+                  const errLim = validarLimiares(cond.limiares);
+                  const nF = cond.limiares.length + 1;
+                  const setLimiar = (j: number, v: number | undefined) =>
+                    patchCond({ limiares: cond.limiares.map((l, k) => (k === j ? (v ?? NaN) : l)) });
+                  const addLimiar = () => {
+                    const ult = cond.limiares[cond.limiares.length - 1];
+                    const novo = Number.isFinite(ult) ? ult + 10 : 10;
+                    patchCond({ limiares: [...cond.limiares, novo], faixas: [...cond.faixas, { dose: cond.faixas[cond.faixas.length - 1]?.dose ?? 0 }] });
+                  };
+                  // Tirar o limiar j junta as faixas j e j+1 (fica a dose da de baixo).
+                  const remLimiar = (j: number) => patchCond({
+                    limiares: cond.limiares.filter((_, k) => k !== j),
+                    faixas: cond.faixas.filter((_, k) => k !== j + 1),
+                  });
+                  return (
+                    <>
+                      {mapaCondSel && mapaCondSel.min != null && mapaCondSel.max != null && (
+                        <p className="text-[10px]" style={{ color: '#94a3b8' }}>
+                          No mapa: {sig} de <b>{fmt(mapaCondSel.min, 1)}</b> a <b>{fmt(mapaCondSel.max, 1)}</b>{uV}.
+                        </p>
+                      )}
+                      <div>
+                        <p className="text-[10px] font-semibold mb-1" style={{ color: '#93c5fd' }}>
+                          Limiares de {sig}{uV ? ` (${cond.unidadeValor})` : ''} — cada limiar abre uma faixa nova (o valor do limiar já é da faixa de cima)
+                        </p>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {cond.limiares.map((l, j) => (
+                            <div key={j} className="flex items-center gap-1 px-1.5 py-1 rounded" style={{ background: '#0f2240' }}>
+                              <span className="text-[9px]" style={{ color: '#64748b' }}>L{j + 1}</span>
+                              <div className="w-16"><InputNum valor={Number.isFinite(l) ? l : undefined} onMudou={v => setLimiar(j, v)} /></div>
+                              {cond.limiares.length > 1 && (
+                                <button onClick={() => remLimiar(j)} title="Remover limiar (junta as duas faixas)" className="text-[10px] px-1" style={{ color: '#f87171' }}>×</button>
+                              )}
+                            </div>
+                          ))}
+                          <button onClick={addLimiar} className="text-[10px] px-2 py-1 rounded font-semibold flex items-center gap-1" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
+                            <Plus size={10} /> limiar
+                          </button>
+                        </div>
+                        {errLim && <p className="text-[9px] mt-1" style={{ color: '#fbbf24' }}>{errLim}</p>}
+                      </div>
+
+                      <div className="rounded overflow-hidden" style={{ border: '1px solid #1a3a6b' }}>
+                        <table className="w-full text-[10px]" style={{ color: '#cbd5e1' }}>
+                          <thead>
+                            <tr style={{ background: '#0f2240', color: '#93c5fd' }}>
+                              <th className="text-left px-2 py-1">Faixa</th>
+                              <th className="text-right px-2 py-1">Dose ({r.unidade})</th>
+                              <th className="text-right px-2 py-1">Área (ha)</th>
+                              <th className="text-right px-2 py-1">Total ({UNIDADE_TOTAL[r.unidade]})</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {Array.from({ length: nF }, (_, i) => {
+                              const z = condCalculada ? r.zonas.find(x => x.idZona === `f${i + 1}`) : undefined;
+                              const dose = cond.faixas[i]?.dose;
+                              return (
+                                <tr key={i} style={{ borderTop: '1px solid #0f2240' }}>
+                                  <td className="px-2 py-1">
+                                    <span className="inline-block w-2 h-2 rounded-full mr-1.5" style={{ background: corDaFaixa(i, nF) }} />
+                                    {errLim ? `Faixa ${i + 1}` : rotuloFaixa(i, cond.limiares, sig)}{uV}
+                                  </td>
+                                  <td className="px-2 py-1 text-right">
+                                    <div className="w-20 ml-auto"><InputNum valor={dose} onMudou={v => setDoseFaixa(i, v ?? NaN)} /></div>
+                                  </td>
+                                  <td className="px-2 py-1 text-right">{z ? fmtHa(z.areaHa) : condCalculada ? '— (não ocorre)' : '…'}</td>
+                                  <td className="px-2 py-1 text-right">
+                                    {z && Number.isFinite(z.dose) ? (ehUnidadeSemente(r.unidade) ? fmt0(z.dose * z.areaHa * (fatorBase ?? 1)) : fmt(z.dose * z.areaHa * (fatorBase ?? 1), 1)) : '—'}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      <div className="flex items-end gap-2 flex-wrap">
+                        <div className="w-40">
+                          <Campo rotulo="Área mínima de mancha (ha)">
+                            <InputNum valor={cond.areaMinHa} onMudou={v => patchCond({ areaMinHa: v ?? 0 })} />
+                          </Campo>
+                        </div>
+                        <button onClick={calcularCondicao} className="px-3 py-1.5 rounded text-[10px] font-bold text-white flex items-center gap-1.5" style={{ background: 'var(--invicta-green-dark)' }}>
+                          <RefreshCw size={11} /> Gerar áreas de aplicação
+                        </button>
+                      </div>
+                      <p className="text-[9px] leading-relaxed" style={{ color: '#64748b' }}>
+                        O mapa interpolado (20 m) é recortado nos limiares; manchas menores que a área mínima entram na faixa vizinha
+                        de maior contato, e cada faixa vira um polígono com a sua dose, recortado no contorno do talhão.
+                        Mudar só a dose não precisa gerar de novo.
+                      </p>
+                      {condCalculada && condCalculada !== assinaturaCondicao(cond) && (
+                        <p className="text-[10px]" style={{ color: '#fbbf24' }}>
+                          <AlertTriangle size={10} className="inline mr-1" />
+                          Mapa, limiares ou área mínima mudaram — gere as áreas de novo antes de salvar.
+                        </p>
+                      )}
+                    </>
+                  );
+                })()}
+              </div>
+            )}
+
             {/* ── Fonte das zonas ── */}
+            {r.modo !== 'condicao' && (
             <Campo rotulo="Zonas de manejo (mapa-base) *">
               <select value={r.zoneamentoId} onChange={e => escolherZoneamento(e.target.value)}
                 className="w-full rounded px-2 py-1.5 text-xs outline-none" style={inputStyle}>
@@ -804,6 +1122,7 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
                 </p>
               )}
             </Campo>
+            )}
 
             {/* Espaçamento é obrigatório p/ converter sementes/m em total. */}
             {r.unidade === 'sementes/m' && (
@@ -823,27 +1142,6 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
 
             {r.zonas.length > 0 && (
               <>
-                {/* ── Modo de cálculo ── */}
-                <div className="flex gap-1 flex-wrap">
-                  {(Object.entries(ROTULO_MODO) as Array<[ModoCalculo, string]>)
-                    .filter(([id]) => MODOS_VISIVEIS.includes(id) || r.modo === id)
-                    .map(([id, rot]) => (
-                    <button key={id} onClick={() => {
-                        patch({ modo: id }); setAvisosCalc([]);
-                        if (id === 'complemento') {
-                          const it = insumos.find(x => x.id === r.insumoId);
-                          const nut = r.params.complemento?.nutriente ?? 'n';
-                          if (it) patchComp({ compInsumoId: it.id, compNome: it.nome, compGarantiaPct: garantiaDe(it.conteudo, nut) });
-                          else patchComp({ nutriente: nut });
-                        }
-                      }}
-                      className="px-2 py-1.5 rounded text-[10px] font-semibold"
-                      style={{ background: r.modo === id ? 'var(--invicta-green-dark)' : '#0f2240', color: r.modo === id ? '#fff' : '#93c5fd' }}>
-                      {rot}
-                    </button>
-                  ))}
-                </div>
-
                 {/* ── Parâmetros por modo ── */}
                 {r.modo === 'manual' && (
                   <p className="text-[10px]" style={{ color: '#94a3b8' }}>
@@ -1310,6 +1608,9 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
                               value={Number.isFinite(z.dose) ? String(z.dose) : ''}
                               onChange={e => {
                                 const v = Number(e.target.value.replace(',', '.'));
+                                // Por condição, a dose é da FAIXA: a tabela e o editor
+                                // de faixas são a mesma coisa em dois lugares.
+                                if (r.modo === 'condicao' && /^f\d+$/.test(z.idZona)) { setDoseFaixa(Number(z.idZona.slice(1)) - 1, Number.isFinite(v) ? v : 0); return; }
                                 patch({ zonas: r.zonas.map(x => x.idZona === z.idZona ? { ...x, dose: Number.isFinite(v) ? v : 0 } : x) });
                               }}
                               placeholder={Number.isFinite(z.dose) ? undefined : 'erro'}

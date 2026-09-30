@@ -92,6 +92,7 @@ verdadeira (fusão de talhões) chegou depois; foi preciso renumerar.
 | S/N | Compactação não mistura mapas entre importações e divide o mapa entre cobertura e grade | 2.185.0 | Talhão → Compactação → "Interpolar todas as camadas" (seletor de importação travado); importação Falker → "Ver no mapa (verde/vermelho)" × Grade de compactação → 📍; nova grade → nome com o próximo número livre |
 | S/N | Banco só aceita do produtor compactação e satélite dos talhões dele | 2.186.0 | Supabase → SQL Editor → seção 6 de docs/seguranca-rls.sql; Talhão → Compactação (produtor) → excluir importação/grade/camada |
 | 57 | Zona de manejo nunca apaga uma gleba do talhão menor que a área mínima | 2.187.0 | Talhão com duas glebas → Zonas de Manejo → Área mínima maior que a gleba pequena → Gerar (a gleba segue como zona) |
+| S/N | Prescrição por condição no mapa de fertilidade | 2.188.0 | Talhão → Prescrições → Nova → "Por condição no mapa de fertilidade" → laudo + mapa + limiares/doses → "Gerar áreas de aplicação" |
 
 > As pendências 1–17 foram entregues antes deste registro existir e não estão
 > catalogadas; procure pelo assunto no `changelog.ts`. Da 18 em diante, tudo

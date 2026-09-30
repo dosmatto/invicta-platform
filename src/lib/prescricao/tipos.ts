@@ -16,7 +16,7 @@ export const ROTULO_TIPO: Record<TipoPrescricao, string> = {
   personalizado: 'Produto personalizado',
 };
 
-export type ModoCalculo = 'manual' | 'estoque' | 'proporcional' | 'equacao' | 'ajuste' | 'complemento';
+export type ModoCalculo = 'manual' | 'estoque' | 'proporcional' | 'equacao' | 'ajuste' | 'complemento' | 'condicao';
 
 export const ROTULO_MODO: Record<ModoCalculo, string> = {
   manual: 'Dose manual por zona',
@@ -25,7 +25,31 @@ export const ROTULO_MODO: Record<ModoCalculo, string> = {
   equacao: 'Por equação salva',
   ajuste: 'Dose base + ajuste % por zona',
   complemento: 'Complementação por nutriente',
+  condicao: 'Por condição no mapa de fertilidade',
 };
+
+/** Modo 'condicao': as áreas de aplicação saem do MAPA INTERPOLADO de um
+ *  nutriente recortado nos limiares (não de um zoneamento). Guarda tudo o que
+ *  reproduz o recorte — o mapa pode ser reprocessado depois, mas o que foi para
+ *  a máquina fica no `fc` da prescrição. Ver lib/prescricao/condicao.ts. */
+export interface ParamsCondicao {
+  importacaoId: string;
+  /** "Laboratório · data" do laudo, para ler sem abrir a importação. */
+  importacaoNome?: string;
+  nut: string;                 // chave do nutriente no mapa (ex.: 'p')
+  prof: string;                // profundidade (ex.: '0-20')
+  sigla: string;               // 'P', 'K', 'V'…
+  unidadeValor?: string;       // 'mg/dm³', '%'…
+  /** Rótulo do mapa: "Fósforo (P) · 0-20 cm · Lab X 2026-03-01". */
+  rotuloMapa: string;
+  /** Limiares crescentes. Faixa i = [L(i-1), L(i)); a primeira é < L0 e a
+   *  última é ≥ o último limiar. */
+  limiares: number[];
+  /** Dose por faixa (limiares.length + 1), na UnidadeDose da prescrição. */
+  faixas: Array<{ dose: number }>;
+  /** Manchas menores que isto são absorvidas pela faixa vizinha (padrão 0,5). */
+  areaMinHa: number;
+}
 
 // Unidade da DOSE (por hectare). O total usa a unidade-base correspondente
 // (kg/ha→kg, t/ha→t, sementes/ha→sementes, L/ha→L).
@@ -102,6 +126,8 @@ export interface ParamsCalculo {
    *  Guarda as garantias USADAS no cálculo — o cadastro do insumo pode mudar
    *  depois, e o que foi para a máquina tem de continuar reproduzível. */
   complemento?: ParamsComplemento;
+  /** modo 'condicao': faixas de valor de um mapa de fertilidade → dose. */
+  condicao?: ParamsCondicao;
   // fluxos específicos
   sementes?: ParamsSementes;
   organico?: AnaliseOrganico;
