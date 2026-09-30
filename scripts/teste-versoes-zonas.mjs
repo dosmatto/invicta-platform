@@ -10,7 +10,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { montarLinhagens, tipoDaVersao, nomeBase, nomeCurto, resumoDaVersao, nomeVersaoRestaurada } from '../src/lib/meap/versoes.ts';
+import { montarLinhagens, tipoDaVersao, nomeBase, nomeCurto, resumoDaVersao, nomeVersaoRestaurada, padraoVigente, padroesExcedentes } from '../src/lib/meap/versoes.ts';
 
 const META = { camadas: [], algoritmo: 'fcm', nPotenciais: 3, areaMinHa: 0, nZonas: 3 };
 // t = minuto de criação, só para ordenar de forma legível nos testes
@@ -129,4 +129,29 @@ test('nome da restauração nunca sobrescreve outro', () => {
   const usados = ['X — Restaurada da V2'];
   assert.equal(nomeVersaoRestaurada('X', 2, usados), 'X — Restaurada da V2 (2)');
   assert.equal(nomeVersaoRestaurada('X', 3, usados), 'X — Restaurada da V3');
+});
+
+// Dois padrões: a sincronização registro a registro re-subiu a V1 marcada e a
+// Fertilidade pintava a V1 com a V6 marcada na tela (set/2026, MCASH 06).
+test('dois padrões sem carimbo: vale a versão mais nova, não a V1', () => {
+  const v1 = z('v1', 'Z', 0); v1.padrao = true;
+  const v6 = z('v6', 'Z', 50); v6.padrao = true;
+  assert.equal(padraoVigente([v1, v6]).id, 'v6');
+  assert.equal(padraoVigente([v6, v1]).id, 'v6', 'não depende da ordem da lista');
+  assert.deepEqual(padroesExcedentes([v1, v6]), ['v1']);
+});
+
+test('carimbo padraoEm vence a data de criação (voltar a usar a V1 vale)', () => {
+  const v1 = z('v1', 'Z', 0); v1.padrao = true; v1.padraoEm = '2026-09-30T12:00:00.000Z';
+  const v6 = z('v6', 'Z', 50); v6.padrao = true;
+  assert.equal(padraoVigente([v1, v6]).id, 'v1');
+  assert.deepEqual(padroesExcedentes([v1, v6]), ['v6']);
+});
+
+test('um padrão só, ou nenhum: nada a desmarcar', () => {
+  const a = z('a', 'A', 0); const b = z('b', 'B', 5); b.padrao = true;
+  assert.equal(padraoVigente([a, b]).id, 'b');
+  assert.deepEqual(padroesExcedentes([a, b]), []);
+  assert.equal(padraoVigente([a]), null);
+  assert.deepEqual(padroesExcedentes([a]), []);
 });

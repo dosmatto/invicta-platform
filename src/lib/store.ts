@@ -15,6 +15,7 @@ import {
 } from './custosProdutor';
 export { ordenarLegendasDoAtributo } from './legendas';
 import type { AmbienteProdutivo } from './meap/tipos';
+import { padraoVigente, padroesExcedentes } from './meap/versoes';
 import type { CelulaComposta } from './gradeComposta';
 import { cloudPushLista, cloudAindaNaoHidratou, cloudMarcarPendente } from './cloud';
 import { lerListaLocal, gravarListaLocal, removerLocal } from './localComprimido';
@@ -2486,6 +2487,9 @@ export interface ZoneamentoMeap {
   talhaoId: string;
   nome: string;
   padrao: boolean;
+  /** Quando virou padrão (ISO). Desempata quando a sincronização deixa dois
+   *  marcados — ver `padraoVigente` em lib/meap/versoes. */
+  padraoEm?: string;
   fc: GeoJSON.FeatureCollection;   // polígonos {id, zona, classe, areaHa, potencialRank}
   meta: { camadas: string[]; algoritmo: string; nPotenciais: number; areaMinHa: number; nZonas: number; nPoligonos?: number; cvMedio?: number | null; pesos?: Record<string, number>; chaves?: string[]; suavizacao?: SuavizacaoMeta; edicaoManual?: EdicaoManualMeta; importacao?: ImportacaoMeta; restauracao?: RestauracaoMeta; incorporacao?: IncorporacaoMeta };
   criadoEm: string;
@@ -2588,9 +2592,25 @@ export interface SuavizacaoMeta {
 }
 
 export function getZoneamentosMeap(talhaoId: string): ZoneamentoMeap[] {
-  return loadFiltrado<ZoneamentoMeap>('inv_meap_zoneamentos')
+  const zs = loadFiltrado<ZoneamentoMeap>('inv_meap_zoneamentos')
     .filter(z => z.talhaoId === talhaoId)
     .sort((a, b) => a.criadoEm.localeCompare(b.criadoEm));
+  // DOIS PADRÕES (sincronização registro a registro entre aparelhos — ver
+  // padraoVigente): fica só o vigente, e o reparo SOBE para a nuvem, senão o
+  // próximo aparelho a abrir o talhão continua lendo a V1.
+  const excedentes = padroesExcedentes(zs);
+  if (excedentes.length) {
+    const vigente = padraoVigente(zs)!;
+    const tira = new Set(excedentes);
+    const lista = load<ZoneamentoMeap>('inv_meap_zoneamentos');
+    lista.forEach(z => { if (tira.has(z.id)) z.padrao = false; });
+    save('inv_meap_zoneamentos', lista);
+    // O snapshot da Amostragem acompanha o vigente.
+    const snap = JSON.stringify(vigente.fc);
+    if (getTalhoes().find(t => t.id === talhaoId)?.zonasGeojson !== snap) updateTalhao(talhaoId, { zonasGeojson: snap });
+    return zs.map(z => (tira.has(z.id) ? { ...z, padrao: false } : z));
+  }
+  return zs;
 }
 
 export function saveZoneamentoMeap(z: Omit<ZoneamentoMeap, 'id' | 'criadoEm'>): ZoneamentoMeap {
@@ -2618,7 +2638,12 @@ export function deleteZoneamentoMeap(id: string): void {
 // zonas dele em talhao.zonasGeojson — é o que a Amostragem (modo Zonas) usa.
 export function setZoneamentoPadraoMeap(talhaoId: string, id: string): void {
   const lista = load<ZoneamentoMeap>('inv_meap_zoneamentos');
-  lista.forEach(z => { if (z.talhaoId === talhaoId) z.padrao = z.id === id; });
+  const agora = new Date().toISOString();
+  lista.forEach(z => {
+    if (z.talhaoId !== talhaoId) return;
+    z.padrao = z.id === id;
+    if (z.padrao) z.padraoEm = agora;
+  });
   save('inv_meap_zoneamentos', lista);
   const padrao = lista.find(z => z.id === id && z.talhaoId === talhaoId);
   if (padrao) updateTalhao(talhaoId, { zonasGeojson: JSON.stringify(padrao.fc) });

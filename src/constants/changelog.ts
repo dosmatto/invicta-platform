@@ -1,5 +1,9 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Zoneamento padrão: só um marcado, e vale o último escolhido
+  '2.188.2': [
+    'CORRIGIDO: A FERTILIDADE (E PRESCRIÇÕES, AMOSTRAGEM E PRODUTIVIDADE) USA O ZONEAMENTO MARCADO COMO PADRÃO. Com mais de um usuário ou aparelho trabalhando no mesmo talhão, a sincronização podia devolver a primeira versão (V1) ainda marcada como padrão junto com a escolhida — o talhão ficava com DOIS padrões, a V1 não desmarcava e a Fertilidade seguia pintando as zonas dela. Agora vale sempre o padrão escolhido por último (nos registros antigos, a versão mais nova); os demais são desmarcados sozinhos ao abrir o talhão, o reparo sobe para a nuvem e o zoneamento da Amostragem acompanha.',
+  ],
   // [S/N] Prescrição por condição: dose da área sempre igual à da faixa
   '2.188.1': [
     'CORRIGIDO: PRESCRIÇÃO POR CONDIÇÃO — A DOSE DE CADA ÁREA É SEMPRE A DA FAIXA. Depois de gerar as áreas, tirar um limiar e acrescentar outro (sem gerar de novo) podia deixar uma área com a dose antiga: a tabela de faixas mostrava uma dose e o total, o Excel e o SHP usavam outra. Agora qualquer mudança nas faixas atualiza a dose das áreas na hora, e o salvar confere de novo antes de gravar.',

@@ -225,3 +225,37 @@ export function nomeVersaoRestaurada(base: string, numeroOrigem: number, usados:
   while (set.has(`${desejado} (${n})`)) n++;
   return `${desejado} (${n})`;
 }
+
+/**
+ * O PADRÃO VIGENTE de um talhão quando a lista traz MAIS DE UM marcado.
+ *
+ * "Tornar padrão" desmarca os outros no aparelho, mas a nuvem sincroniza
+ * REGISTRO A REGISTRO (o último a gravar vence cada um). Com mais de um usuário
+ * ou aparelho, uma cópia antiga re-sobe a V1 ainda marcada e o talhão fica com
+ * dois padrões — e quem lia `find(z => z.padrao)` na ordem de criação pegava
+ * sempre o MAIS ANTIGO: a Fertilidade pintava a V1 com a V6 marcada na tela.
+ *
+ * Regra: vence o marcado mais recentemente (`padraoEm`; nos registros de antes
+ * do carimbo, a data de criação — a versão mais nova). Empate: id, para o
+ * resultado não depender da ordem da lista.
+ */
+export function padraoVigente<T extends { id: string; padrao?: boolean; padraoEm?: string; criadoEm?: string }>(
+  zs: readonly T[],
+): T | null {
+  let melhor: T | null = null;
+  let chaveMelhor = '';
+  for (const z of zs) {
+    if (!z.padrao) continue;
+    const chave = `${z.padraoEm ?? z.criadoEm ?? ''}|${z.id}`;
+    if (!melhor || chave > chaveMelhor) { melhor = z; chaveMelhor = chave; }
+  }
+  return melhor;
+}
+
+/** Ids que estão marcados como padrão e NÃO são o vigente — os a desmarcar. */
+export function padroesExcedentes<T extends { id: string; padrao?: boolean; padraoEm?: string; criadoEm?: string }>(
+  zs: readonly T[],
+): string[] {
+  const v = padraoVigente(zs);
+  return v ? zs.filter(z => z.padrao && z.id !== v.id).map(z => z.id) : [];
+}
