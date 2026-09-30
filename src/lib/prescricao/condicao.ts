@@ -35,6 +35,7 @@ import { featureCollection, feature as turfFeature } from '@turf/helpers';
 import { coberturaDoGrid } from '../recomendacao/cobertura.ts';
 import { limparGeometria, PARTE_DEGENERADA_M2 } from '../meap/fundir.ts';
 import type { ZonaDose } from './tipos.ts';
+import { distribuirPorAjuste } from './calculo.ts';
 
 type Pt = [number, number];
 type Poligonal = GeoJSON.Polygon | GeoJSON.MultiPolygon;
@@ -434,6 +435,81 @@ export function dosesDasFaixas<Z extends { idZona: string; dose: number }>(
     const f = m ? faixas[Number(m[1]) - 1] : undefined;
     return f && f.dose !== z.dose ? { ...z, dose: f.dose } : z;
   });
+}
+
+// ── Volume travado ──────────────────────────────────────────────────────────
+//
+// "Tenho 150 kg/ha, redistribui": no cenário 'total' as doses digitadas nas
+// faixas deixam de ser a dose final e passam a ser PESOS. A dose aplicada é
+//     dose_final(faixa) = k × dose_digitada(faixa)
+// com k tal que Σ dose_final × área × fatorBase = total disponível — a
+// proporção entre as faixas é a que o agrônomo digitou. É exatamente o cenário
+// 'total' do modo ajuste (base_ef = total / (fatorBase · Σ área·fator)), com o
+// fator de cada faixa = dose_digitada / referência; por isso reusa
+// distribuirPorAjuste, com limites, passo da máquina e avisos de sobra/falta.
+// Faixa com dose digitada 0 é "não aplica aqui": fica fora do rateio e em 0,
+// mesmo com dose mínima (o piso vale para quem aplica).
+
+export type CenarioCondicao = 'livre' | 'total';
+
+export interface OpcoesVolumeCondicao {
+  /** 'livre' (padrão): dose final = digitada. 'total': crava o total. */
+  cenario?: CenarioCondicao;
+  /** Na unidade-base (kg, t, sementes, L). Exigido no cenário 'total'. */
+  totalDisponivel?: number;
+  /** Conversão dose×ha → unidade-base (ver fatorBaseDose). Default 1. */
+  fatorBase?: number;
+  doseMin?: number;
+  doseMax?: number;
+  incremento?: number;
+}
+
+export interface DosesCondicao {
+  /** idZona → dose APLICADA (a que vai para a zona, o mapa e o arquivo). */
+  doses: Record<string, number>;
+  /** idZona → dose DIGITADA na faixa (no cenário 'total', o peso). */
+  informadas: Record<string, number>;
+  travado: boolean;
+  usado: number;               // unidade-base
+  sobra: number;
+  falta: number;
+  avisos: string[];
+}
+
+export function dosesDaCondicao(
+  zonas: Array<{ idZona: string; areaHa: number; dose: number }>,
+  faixas: Array<{ dose: number }>,
+  op: OpcoesVolumeCondicao = {},
+): DosesCondicao {
+  const fatorBase = op.fatorBase && op.fatorBase > 0 ? op.fatorBase : 1;
+  const informadas: Record<string, number> = {};
+  for (const z of dosesDasFaixas(zonas, faixas)) informadas[z.idZona] = z.dose;
+  const travado = op.cenario === 'total';
+  if (!travado) {
+    const usado = zonas.reduce((s, z) => s + (Number.isFinite(informadas[z.idZona]) ? informadas[z.idZona] * z.areaHa : 0), 0) * fatorBase;
+    return { doses: { ...informadas }, informadas, travado, usado, sobra: 0, falta: 0, avisos: [] };
+  }
+  const doses: Record<string, number> = Object.fromEntries(zonas.map(z => [z.idZona, 0]));
+  const peso = (id: string) => (Number.isFinite(informadas[id]) && informadas[id] > 0 ? informadas[id] : 0);
+  const ativas = zonas.filter(z => peso(z.idZona) > 0 && z.areaHa > 0);
+  const total = op.totalDisponivel ?? 0;
+  if (!(total > 0)) {
+    return { doses, informadas, travado, usado: 0, sobra: 0, falta: 0, avisos: ['Informe o volume total (kg/ha médio ou total fechado).'] };
+  }
+  if (!ativas.length) {
+    return { doses, informadas, travado, usado: 0, sobra: total, falta: 0, avisos: ['Todas as faixas estão com dose 0 — informe a dose de ao menos uma faixa (ela vira o peso da redistribuição).'] };
+  }
+  const ref = Math.max(...ativas.map(z => peso(z.idZona)));
+  const res = distribuirPorAjuste(
+    ativas.map(z => ({ id: z.idZona, areaHa: z.areaHa })),
+    {
+      doseBase: ref, cenario: 'total', totalDisponivel: total, fatorBase,
+      ajustePct: Object.fromEntries(ativas.map(z => [z.idZona, (peso(z.idZona) / ref - 1) * 100])),
+      doseMin: op.doseMin, doseMax: op.doseMax, incremento: op.incremento,
+    },
+  );
+  for (const z of ativas) doses[z.idZona] = res.doses[z.idZona] ?? 0;
+  return { doses, informadas, travado, usado: res.usado, sobra: res.sobra, falta: res.falta, avisos: res.avisos };
 }
 
 export function prescreverPorCondicao(e: EntradaCondicao): ResultadoCondicao {

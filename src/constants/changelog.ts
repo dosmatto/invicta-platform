@@ -1,5 +1,10 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Prescrição por condição com volume travado
+  '2.189.0': [
+    'NOVO: PRESCRIÇÃO POR CONDIÇÃO COM "VOLUME TRAVADO". No modo "Por condição no mapa de fertilidade", escolha entre "Doses livres" (como era: a dose digitada é a aplicada e o total é consequência) e "Volume travado": informe o volume — em média por hectare (ex.: 150 kg/ha) ou o total fechado, com a mesma chave do modo ajuste — e as doses digitadas nas faixas viram PESOS. A dose aplicada é a digitada × um fator comum que fecha exatamente o volume, mantendo a proporção entre as faixas (ex.: 200/150/100 com 150 kg/ha de média → cada faixa sobe ou desce na mesma proporção). Faixa com dose 0 continua sem aplicar.',
+    'Dose mínima, máxima e incremento (opcionais) valem no volume travado; se impedirem fechar o total, aparece quanto sobrou ou passou. As tabelas mostram a "Dose informada" e a "Dose aplicada" lado a lado; mapa, total, SHP, Excel e PDF usam a aplicada. Tudo fica salvo na prescrição e volta ao reabrir; prescrições por condição já salvas abrem em "Doses livres". Na semente, o estoque (sacos, kg…) também alimenta o volume travado.',
+  ],
   // [S/N] Zoneamento padrão: só um marcado, e vale o último escolhido
   '2.188.2': [
     'CORRIGIDO: A FERTILIDADE (E PRESCRIÇÕES, AMOSTRAGEM E PRODUTIVIDADE) USA O ZONEAMENTO MARCADO COMO PADRÃO. Com mais de um usuário ou aparelho trabalhando no mesmo talhão, a sincronização podia devolver a primeira versão (V1) ainda marcada como padrão junto com a escolhida — o talhão ficava com DOIS padrões, a V1 não desmarcava e a Fertilidade seguia pintando as zonas dela. Agora vale sempre o padrão escolhido por último (nos registros antigos, a versão mais nova); os demais são desmarcados sozinhos ao abrir o talhão, o reparo sobe para a nuvem e o zoneamento da Amostragem acompanha.',

@@ -95,6 +95,7 @@ verdadeira (fusão de talhões) chegou depois; foi preciso renumerar.
 | S/N | Prescrição por condição no mapa de fertilidade | 2.188.0 | Talhão → Prescrições → Nova → "Por condição no mapa de fertilidade" → laudo + mapa + limiares/doses → "Gerar áreas de aplicação" |
 | S/N | Prescrição por condição: dose da área sempre igual à da faixa (correção) | 2.188.1 | Talhão → Prescrições → "Por condição no mapa de fertilidade" → tirar/pôr limiar → tabela, total e SHP com a mesma dose |
 | S/N | Zoneamento padrão: só um marcado, e vale o último escolhido (correção) | 2.188.2 | Talhão → Zonas → versões: só uma com "Padrão"; Fertilidade/Prescrições usam essa |
+| S/N | Prescrição por condição com volume travado | 2.189.0 | Talhão → Prescrições → "Por condição no mapa de fertilidade" → Gerar áreas → "Volume travado" → 150 kg/ha (ou total) → doses informada × aplicada; Usado = volume |
 
 > As pendências 1–17 foram entregues antes deste registro existir e não estão
 > catalogadas; procure pelo assunto no `changelog.ts`. Da 18 em diante, tudo

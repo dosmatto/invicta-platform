@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 import turfArea from '@turf/area';
 import {
   validarLimiares, faixaDoValor, rotuloFaixa, absorverManchas, tracarAneis, vetorizarClasse,
-  prescreverPorCondicao, classificarGrid, dosesDasFaixas,
+  prescreverPorCondicao, classificarGrid, dosesDasFaixas, dosesDaCondicao,
 } from '../src/lib/prescricao/condicao.ts';
 import { casarZonas } from '../src/lib/prescricao/casar.ts';
 
@@ -232,6 +232,73 @@ t('dose da zona sempre = dose da faixa (tirar limiar, pôr outro, sem regerar)',
   // zona sem faixa correspondente mantém a dose
   assert.equal(dosesDasFaixas([{ idZona: 'f9', dose: 7 }], faixas)[0].dose, 7);
 });
+console.log('\nVolume travado (doses viram pesos)\n');
+
+// 3 faixas: 10 ha, 30 ha, 60 ha; doses digitadas 200 / 150 / 100 (pesos).
+const zV = [
+  { idZona: 'f1', areaHa: 10, dose: 0 }, { idZona: 'f2', areaHa: 30, dose: 0 }, { idZona: 'f3', areaHa: 60, dose: 0 },
+];
+const fV = [{ dose: 200 }, { dose: 150 }, { dose: 100 }];
+const usadoDe = (r, fb = 1) => zV.reduce((s, z) => s + r.doses[z.idZona] * z.areaHa, 0) * fb;
+
+t('livre (ou sem cenário, prescrição antiga): aplicada = digitada', () => {
+  for (const cen of [undefined, 'livre']) {
+    const r = dosesDaCondicao(zV, fV, { cenario: cen, totalDisponivel: 99999, doseMin: 180 });
+    assert.equal(r.travado, false);
+    assert.deepEqual([r.doses.f1, r.doses.f2, r.doses.f3], [200, 150, 100]);
+    assert.deepEqual(r.avisos, []);
+  }
+});
+t('travado sem limites: o total fecha exato', () => {
+  const r = dosesDaCondicao(zV, fV, { cenario: 'total', totalDisponivel: 15000 });
+  assert.ok(Math.abs(usadoDe(r) - 15000) < 1e-6, `usado ${usadoDe(r)}`);
+  assert.ok(Math.abs(r.usado - 15000) < 1e-6);
+  assert.deepEqual(r.avisos, []);
+  assert.deepEqual([r.informadas.f1, r.informadas.f2, r.informadas.f3], [200, 150, 100], 'digitadas preservadas à parte');
+});
+t('travado: proporção entre as faixas preservada (k comum)', () => {
+  const r = dosesDaCondicao(zV, fV, { cenario: 'total', totalDisponivel: 15000 });
+  const k = r.doses.f1 / 200;
+  assert.ok(Math.abs(r.doses.f2 / 150 - k) < 1e-9 && Math.abs(r.doses.f3 / 100 - k) < 1e-9);
+  // 200·10 + 150·30 + 100·60 = 12.500 → k = 15.000 / 12.500 = 1,2
+  assert.ok(Math.abs(k - 1.2) < 1e-9, `k ${k}`);
+});
+t('kg/ha médio × área = total (150 kg/ha em 100 ha = 15.000 kg)', () => {
+  const area = zV.reduce((s, z) => s + z.areaHa, 0);
+  const r = dosesDaCondicao(zV, fV, { cenario: 'total', totalDisponivel: 150 * area });
+  const media = usadoDe(r) / area;
+  assert.ok(Math.abs(media - 150) < 1e-9, `média ${media}`);
+});
+t('travado com fatorBase (sementes/m): Σ dose·área·fator = total', () => {
+  const fb = 10_000 / 0.5;
+  const r = dosesDaCondicao(zV, fV, { cenario: 'total', totalDisponivel: 60_000_000, fatorBase: fb });
+  assert.ok(Math.abs(usadoDe(r, fb) - 60_000_000) < 1e-3);
+});
+t('travado com limites: dose máx corta e avisa quanto sobrou', () => {
+  const r = dosesDaCondicao(zV, fV, { cenario: 'total', totalDisponivel: 15000, doseMax: 200 });
+  assert.equal(r.doses.f1, 200);   // 240 → 200
+  assert.ok(r.sobra > 0 && r.avisos.some(a => /sobrar/.test(a)), r.avisos.join(' | '));
+});
+t('travado com limites: dose mín eleva e avisa quanto passou', () => {
+  const r = dosesDaCondicao(zV, fV, { cenario: 'total', totalDisponivel: 15000, doseMin: 150 });
+  assert.equal(r.doses.f3, 150);   // 120 → 150
+  assert.ok(r.falta > 0 && r.avisos.some(a => /ultrapassar/.test(a)), r.avisos.join(' | '));
+});
+t('travado: incremento põe na grade do passo', () => {
+  const r = dosesDaCondicao(zV, fV, { cenario: 'total', totalDisponivel: 15100, incremento: 10 });
+  for (const id of ['f1', 'f2', 'f3']) assert.equal(r.doses[id] % 10, 0);
+});
+t('travado: faixa com dose 0 fica em 0 (não aplica) e o total vai às demais', () => {
+  const r = dosesDaCondicao(zV, [{ dose: 200 }, { dose: 0 }, { dose: 100 }], { cenario: 'total', totalDisponivel: 16000, doseMin: 50 });
+  assert.equal(r.doses.f2, 0);
+  assert.ok(Math.abs(usadoDe(r) - 16000) < 1e-6);
+});
+t('travado sem total ou com todas as faixas 0: aviso, sem inventar dose', () => {
+  assert.ok(dosesDaCondicao(zV, fV, { cenario: 'total' }).avisos.length);
+  const z = dosesDaCondicao(zV, [{ dose: 0 }, { dose: 0 }, { dose: 0 }], { cenario: 'total', totalDisponivel: 100 });
+  assert.ok(z.avisos.length && z.doses.f1 === 0);
+});
+
 t('mapa todo NaN: erro claro', () => {
   const g = gradeP(() => NaN);
   assert.throws(() => prescreverPorCondicao({ grid: g, limiares: [40], doses: [1, 2], talhao, sigla: 'P' }), /não tem valores/);

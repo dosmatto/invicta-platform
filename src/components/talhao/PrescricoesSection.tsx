@@ -20,7 +20,8 @@ import { decodeGrid, extrairPoligono } from '@/lib/fertilidade';
 import { carregarGridsTalhao, type GridRecomendacao } from '@/lib/recomendacao/aplicar';
 import { ATRIBUTOS_EQUACAO } from '@/lib/recomendacao/motor';
 import {
-  prescreverPorCondicao, validarLimiares, rotuloFaixa, corDaFaixa, AREA_MIN_PADRAO_HA, dosesDasFaixas,
+  prescreverPorCondicao, validarLimiares, rotuloFaixa, corDaFaixa, AREA_MIN_PADRAO_HA, dosesDaCondicao,
+  type DosesCondicao,
 } from '@/lib/prescricao/condicao';
 import { anoDaSafra } from '@/lib/periodo';
 import { emailUsuario, podePrescricao } from '@/lib/empresa';
@@ -152,6 +153,41 @@ function zonasDoZoneamento(z: ZoneamentoMeap, areaTalhaoHa = 0): ZonaDose[] {
   });
 }
 
+// ── Modo condição: dose APLICADA de cada área ─────────────────────────────
+// Livre: a da faixa. Volume travado: a da faixa vira peso e a aplicada é
+// redistribuída para fechar o total (lib/prescricao/condicao.ts →
+// dosesDaCondicao). É calculada do rascunho a cada mudança — faixa, total,
+// limites, unidade — e de novo ao salvar: zona, mapa, total e arquivo nunca
+// divergem da tabela, e a dose digitada nunca sobrescreve a aplicada.
+function fatorBaseDoRascunho(x: Rascunho): number | null {
+  if (x.unidade !== 'sementes/m') return 1;
+  const e = x.params.sementes?.espacamentoM;
+  return e && e > 0 ? 10_000 / e : null;
+}
+function volumeCondicao(x: Rascunho): DosesCondicao | null {
+  const c = x.params.condicao;
+  if (x.modo !== 'condicao' || !c) return null;
+  const p = x.params;
+  return dosesDaCondicao(x.zonas, c.faixas, {
+    cenario: c.cenario ?? 'livre', totalDisponivel: p.totalDisponivel, fatorBase: fatorBaseDoRascunho(x) ?? 1,
+    doseMin: p.doseMin, doseMax: p.doseMax, incremento: p.incremento,
+  });
+}
+function sincronizarCondicao(x: Rascunho): Rascunho {
+  const v = volumeCondicao(x);
+  if (!v) return x;
+  let mudou = false;
+  const zonas = x.zonas.map(z => {
+    const d = v.doses[z.idZona];
+    if (d == null) return z;
+    const nd = v.travado ? arredondarDose(d) : d;
+    if (Object.is(nd, z.dose)) return z;
+    mudou = true;
+    return { ...z, dose: nd };
+  });
+  return mudou ? { ...x, zonas } : x;
+}
+
 export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
   const { nav, setZonasManejo, uploadedGeo } = useApp();
   const talhaoId = nav.talhaoId ?? '';
@@ -187,8 +223,10 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
   }, [prescricoes]);
 
   const [r, setR] = useState<Rascunho>(RASCUNHO_VAZIO);
-  const patch = (p: Partial<Rascunho>) => setR(x => ({ ...x, ...p }));
-  const patchParams = (p: Partial<ParamsCalculo>) => setR(x => ({ ...x, params: { ...x.params, ...p } }));
+  // No modo condição, toda mudança do rascunho ressincroniza a dose aplicada
+  // (total, limites, unidade e espaçamento mudam o volume travado).
+  const patch = (p: Partial<Rascunho>) => setR(x => sincronizarCondicao({ ...x, ...p }));
+  const patchParams = (p: Partial<ParamsCalculo>) => setR(x => sincronizarCondicao({ ...x, params: { ...x.params, ...p } }));
 
   // O seletor oferece SÓ a versão marcada com estrela (padrão) em Zonas de
   // Manejo — é ela que a Amostragem e o mapa usam, então a prescrição segue a
@@ -510,11 +548,14 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
       const total = estoqueTotalSementes({ [estSem.modo]: v } as EstoqueSementes, ps, areaTot);
       const margem = Math.min(50, Math.max(0, ps.margemPct ?? 0)) / 100;
       const disponivel = total * (1 - margem);
-      patchParams({ totalDisponivel: disponivel, totalPorHa: false, cenarioAjuste: 'total' });
+      const ehCond = r.modo === 'condicao' && !!r.params.condicao;
+      patchParams(ehCond
+        ? { totalDisponivel: disponivel, totalPorHa: false, condicao: { ...r.params.condicao!, cenario: 'total' } }
+        : { totalDisponivel: disponivel, totalPorHa: false, cenarioAjuste: 'total' });
       setAvisosCalc([
         `Total disponível: ${fmt0(disponivel)} sementes` +
         (margem > 0 ? ` (margem de ${fmt(margem * 100, 0)}% já descontada de ${fmt0(total)}).` : '.') +
-        ' Ajuste os % por zona e clique em "Calcular doses por ajuste".',
+        (ehCond ? ' As doses das faixas já foram redistribuídas para fechar esse total.' : ' Ajuste os % por zona e clique em "Calcular doses por ajuste".'),
       ]);
     } catch (e) { setErro(e instanceof Error ? e.message : String(e)); }
   }
@@ -572,9 +613,8 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
   function patchCond(pc: Partial<ParamsCondicao>) {
     setR(x => {
       const condicao = { ...(x.params.condicao ?? CONDICAO_VAZIA()), ...pc };
-      // a dose da zona nunca diverge da faixa (ver dosesDasFaixas)
-      const zonas = x.modo === 'condicao' ? dosesDasFaixas(x.zonas, condicao.faixas) : x.zonas;
-      return { ...x, zonas, params: { ...x.params, condicao } };
+      // a dose da zona nunca diverge da faixa (ver sincronizarCondicao)
+      return sincronizarCondicao({ ...x, params: { ...x.params, condicao } });
     });
   }
 
@@ -600,11 +640,7 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
       const c = x.params.condicao;
       if (!c) return x;
       const faixas = c.faixas.map((f, k) => (k === i ? { ...f, dose } : f));
-      return {
-        ...x,
-        params: { ...x.params, condicao: { ...c, faixas } },
-        zonas: dosesDasFaixas(x.zonas, faixas),
-      };
+      return sincronizarCondicao({ ...x, params: { ...x.params, condicao: { ...c, faixas } } });
     });
   }
 
@@ -653,6 +689,9 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
   // existe: com compensação, a meta é dada em população e o arquivo sai em
   // sementes. O consumo real de sementes vai separado, logo abaixo.
   const resumo = useMemo(() => resumoDoses(r.zonas, custoNum, fatorBase ?? 1), [r.zonas, custoNum, fatorBase]);
+  // Condição com volume travado: doses digitadas (pesos) × aplicadas + avisos.
+  const volCond = useMemo(() => volumeCondicao(r), [r]);
+  const condTravado = !!volCond?.travado;
   const totalArquivo = useMemo(
     () => (compensa ? r.zonas.reduce((s, z) => s + doseCompensada(z.dose, r.params.sementes, true) * z.areaHa * (fatorBase ?? 1), 0) : null),
     [compensa, r.zonas, r.params.sementes, fatorBase],
@@ -740,9 +779,10 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
       produto: r.produto.trim(), insumoId: r.insumoId || undefined, unidade: r.unidade, custoUnit: custoNum,
       zoneamentoId: r.zoneamentoId, zoneamentoNome: r.zoneamentoNome,
       modo: r.modo, params: r.params, fc: r.fc,
-      // Por condição, o que vai para o arquivo é a dose da FAIXA — ressincroniza
-      // aqui também, para nenhum caminho de edição salvar zona e faixa divergentes.
-      zonas: r.modo === 'condicao' && r.params.condicao ? dosesDasFaixas(r.zonas, r.params.condicao.faixas) : r.zonas,
+      // Por condição, o que vai para o arquivo é a dose APLICADA (a da faixa, ou
+      // a redistribuída no volume travado) — ressincroniza aqui também, para
+      // nenhum caminho de edição salvar zona e faixa divergentes.
+      zonas: sincronizarCondicao(r).zonas,
       criadoPor: emailUsuario() ?? 'sistema',
       ...(r.modo === 'equacao' && eqSel
         ? { equacaoId: eqSel.id, equacaoNome: eqSel.nome, valoresEquacao: r.valoresEquacao }
@@ -1055,7 +1095,8 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
                           <thead>
                             <tr style={{ background: '#0f2240', color: '#93c5fd' }}>
                               <th className="text-left px-2 py-1">Faixa</th>
-                              <th className="text-right px-2 py-1">Dose ({r.unidade})</th>
+                              <th className="text-right px-2 py-1">{condTravado ? `Dose informada (${r.unidade})` : `Dose (${r.unidade})`}</th>
+                              {condTravado && <th className="text-right px-2 py-1" style={{ color: '#86efac' }}>Dose aplicada ({r.unidade})</th>}
                               <th className="text-right px-2 py-1">Área (ha)</th>
                               <th className="text-right px-2 py-1">Total ({UNIDADE_TOTAL[r.unidade]})</th>
                             </tr>
@@ -1073,6 +1114,11 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
                                   <td className="px-2 py-1 text-right">
                                     <div className="w-20 ml-auto"><InputNum valor={dose} onMudou={v => setDoseFaixa(i, v ?? NaN)} /></div>
                                   </td>
+                                  {condTravado && (
+                                    <td className="px-2 py-1 text-right font-semibold" style={{ color: '#86efac' }}>
+                                      {z && Number.isFinite(z.dose) ? (ehUnidadeSemente(r.unidade) ? fmt0(z.dose) : fmt(z.dose, 2)) : '—'}
+                                    </td>
+                                  )}
                                   <td className="px-2 py-1 text-right">{z ? fmtHa(z.areaHa) : condCalculada ? '— (não ocorre)' : '…'}</td>
                                   <td className="px-2 py-1 text-right">
                                     {z && Number.isFinite(z.dose) ? (ehUnidadeSemente(r.unidade) ? fmt0(z.dose * z.areaHa * (fatorBase ?? 1)) : fmt(z.dose * z.areaHa * (fatorBase ?? 1), 1)) : '—'}
@@ -1099,6 +1145,45 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
                         de maior contato, e cada faixa vira um polígono com a sua dose, recortado no contorno do talhão.
                         Mudar só a dose não precisa gerar de novo.
                       </p>
+
+                      {/* Volume travado: as doses digitadas viram PESOS e a
+                          aplicada fecha o total — os mesmos campos do modo ajuste. */}
+                      <div className="pt-2 space-y-2" style={{ borderTop: '1px solid #1a3a6b' }}>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {([['livre', 'Doses livres — total é consequência'], ['total', 'Volume travado — redistribui o total']] as const).map(([id, rot]) => (
+                            <button key={id} onClick={() => patchCond({ cenario: id })}
+                              className="px-2 py-1 rounded text-[10px] font-semibold"
+                              style={{ background: (cond.cenario ?? 'livre') === id ? 'var(--invicta-blue-mid)' : '#0f2240', color: (cond.cenario ?? 'livre') === id ? '#fff' : '#93c5fd' }}>
+                              {rot}
+                            </button>
+                          ))}
+                        </div>
+                        {(cond.cenario ?? 'livre') === 'total' && (
+                          <>
+                            <div className="grid grid-cols-4 gap-2">
+                              <CampoTotalDisponivel rotulo="Volume" unidadeTotal={UNIDADE_TOTAL[r.unidade]}
+                                porHa={!!r.params.totalPorHa} totalAbs={r.params.totalDisponivel}
+                                areaHa={resumo.areaHa > 0 ? resumo.areaHa : areaTalhaoHa} semente={ehUnidadeSemente(r.unidade)}
+                                onMudou={patchParams} />
+                              <Campo rotulo={`Dose mín (${r.unidade})`}>
+                                <InputNum valor={r.params.doseMin} onMudou={v => patchParams({ doseMin: v })} />
+                              </Campo>
+                              <Campo rotulo={`Dose máx (${r.unidade})`}>
+                                <InputNum valor={r.params.doseMax} onMudou={v => patchParams({ doseMax: v })} />
+                              </Campo>
+                              <Campo rotulo={`Incremento (${r.unidade})`}>
+                                <InputNum valor={r.params.incremento} onMudou={v => patchParams({ incremento: v })} />
+                              </Campo>
+                            </div>
+                            <p className="text-[9px] leading-relaxed" style={{ color: '#64748b' }}>
+                              A dose informada de cada faixa vira peso: a aplicada é a informada × um fator comum, que fecha o volume
+                              (ex.: 150 kg/ha de média no talhão). A proporção entre as faixas se mantém; faixa com dose 0 não aplica.
+                              Mín/máx/incremento são opcionais — se impedirem fechar o total, o aviso diz quanto sobrou ou passou.
+                            </p>
+                            {condCalculada && volCond && volCond.avisos.map((a, i) => <Aviso key={i} tom="atencao" texto={a} />)}
+                          </>
+                        )}
+                      </div>
                       {condCalculada && condCalculada !== assinaturaCondicao(cond) && (
                         <p className="text-[10px]" style={{ color: '#fbbf24' }}>
                           <AlertTriangle size={10} className="inline mr-1" />
@@ -1508,7 +1593,7 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
                 {r.tipo === 'sementes' && (
                   <SementesCampos r={r} patchParams={patchParams} estSem={estSem} setEstSem={setEstSem}
                     usarComoTotal={usarEstoqueComoTotal}
-                    mostrarEstoque={r.modo === 'ajuste' && (r.params.cenarioAjuste ?? 'livre') === 'total'} />
+                    mostrarEstoque={(r.modo === 'ajuste' && (r.params.cenarioAjuste ?? 'livre') === 'total') || condTravado} />
                 )}
 
                 {/* ── Modo EQUAÇÃO: usa uma equação salva, calcula por zona ── */}
@@ -1575,7 +1660,8 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
                         <th className="text-left px-2 py-1.5">Classe</th>
                         <th className="text-right px-2 py-1.5">Área (ha)</th>
                         {r.modo === 'equacao' && varsEq.map(v => <th key={v} className="text-right px-2 py-1.5 uppercase">{v}</th>)}
-                        <th className="text-right px-2 py-1.5">{compensa ? `População (${r.unidade})` : `Dose (${r.unidade})`}</th>
+                        <th className="text-right px-2 py-1.5">{compensa ? `População (${r.unidade})` : condTravado ? `Dose informada (${r.unidade})` : `Dose (${r.unidade})`}</th>
+                        {condTravado && <th className="text-right px-2 py-1.5" style={{ color: '#86efac' }}>Dose aplicada ({r.unidade})</th>}
                         {saida !== r.unidade && (
                           <th className="text-right px-2 py-1.5" style={{ color: '#c4b5fd' }}
                             title={`Mesma dose na régua escolhida para exportar${reguas?.espacamentoM ? ` — espaçamento ${fmt(reguas.espacamentoM, 2)} m` : ''}`}>
@@ -1613,7 +1699,10 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
                           ))}
                           <td className="px-2 py-1 text-right">
                             <input
-                              value={Number.isFinite(z.dose) ? String(z.dose) : ''}
+                              // volume travado: aqui se edita o PESO (dose informada da faixa)
+                              value={condTravado
+                                ? (Number.isFinite(volCond?.informadas[z.idZona]) ? String(volCond!.informadas[z.idZona]) : '')
+                                : Number.isFinite(z.dose) ? String(z.dose) : ''}
                               onChange={e => {
                                 const v = Number(e.target.value.replace(',', '.'));
                                 // Por condição, a dose é da FAIXA: a tabela e o editor
@@ -1624,6 +1713,11 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
                               placeholder={Number.isFinite(z.dose) ? undefined : 'erro'}
                               className="w-20 rounded px-1.5 py-0.5 text-right text-[10px] outline-none" style={inputStyle} />
                           </td>
+                          {condTravado && (
+                            <td className="px-2 py-1 text-right font-semibold" style={{ color: '#86efac' }}>
+                              {Number.isFinite(z.dose) ? (ehUnidadeSemente(r.unidade) ? fmt0(z.dose) : fmt(z.dose, 2)) : '—'}
+                            </td>
+                          )}
                           {saida !== r.unidade && (
                             <td className="px-2 py-1 text-right" style={{ color: '#c4b5fd' }}>
                               {Number.isFinite(z.dose)
@@ -1659,7 +1753,8 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
                     sub={resumo.areaHa > 0 && resumo.usado > 0
                       ? `${ehUnidadeSemente(r.unidade) ? fmt0(resumo.usado / resumo.areaHa) : fmt(resumo.usado / resumo.areaHa, 1)} ${UNIDADE_TOTAL[r.unidade]}/ha`
                       : undefined} />
-                  {r.params.totalDisponivel != null
+                  {/* Por condição, o total só é meta no volume travado. */}
+                  {r.params.totalDisponivel != null && (r.modo !== 'condicao' || condTravado)
                     ? <Kpi rot="Restante" val={ehUnidadeSemente(r.unidade) ? fmt0(r.params.totalDisponivel - resumo.usado) : fmt(r.params.totalDisponivel - resumo.usado, 1)}
                         cor={r.params.totalDisponivel - resumo.usado < -1e-6 ? '#f87171' : '#4ade80'} />
                     : <Kpi rot="Dose média" val={fmt(resumo.doseMedia, 1)} />}

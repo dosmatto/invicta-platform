@@ -49,6 +49,13 @@ export interface ParamsCondicao {
   faixas: Array<{ dose: number }>;
   /** Manchas menores que isto são absorvidas pela faixa vizinha (padrão 0,5). */
   areaMinHa: number;
+  /** 'livre' (ausente = livre, prescrições anteriores): a dose da faixa é a
+   *  aplicada. 'total' (volume travado): as doses das faixas viram PESOS e a
+   *  aplicada é redistribuída para fechar ParamsCalculo.totalDisponivel (com
+   *  totalPorHa, doseMin/doseMax/incremento de ParamsCalculo). Ver
+   *  dosesDaCondicao. Não usa `cenarioAjuste`: o rascunho novo nasce com ele em
+   *  'total' para o modo ajuste, e isso não pode travar a condição sozinho. */
+  cenario?: 'livre' | 'total';
 }
 
 // Unidade da DOSE (por hectare). O total usa a unidade-base correspondente
