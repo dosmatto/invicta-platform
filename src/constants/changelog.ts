@@ -1,5 +1,10 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Complementação por nutriente sobre prescrição por condição
+  '2.190.0': [
+    'NOVO: COMPLEMENTAÇÃO POR NUTRIENTE TAMBÉM SOBRE A PRESCRIÇÃO POR CONDIÇÃO. No modo "Complementação por nutriente", a lista de prescrições base agora mostra as prescrições por condição do talhão (ex.: 00-30-10 com 150 kg onde P < 40 e 100 kg onde P ≥ 40) — mesmo em talhão sem zoneamento. Escolhida uma delas, as áreas da prescrição de complemento passam a ser as FAIXAS da base (mesmos polígonos, copiados) e cada faixa recebe a dose do complemento para fechar a meta do nutriente, descontando o que a base entregou ali. A conta é a mesma da complementação por zona.',
+    'A base fica congelada na prescrição de complemento: se a prescrição por condição ganhar versão nova depois, a de complemento salva não muda. Mapa, PDF e Excel dizem que a base é por condição e mostram as faixas; o SHP sai com as faixas da base. Faixa onde a base não aplica (dose 0) gera aviso — ali o complemento cobre a meta inteira.',
+  ],
   // [S/N] Arquivo da máquina só com a coluna TAXA
   '2.189.3': [
     'AJUSTE: O SHAPEFILE DE TAXA VARIÁVEL DA RECOMENDAÇÃO (o que vai para a máquina) SAI SÓ COM A COLUNA TAXA. As colunas CLASSE, PRODUTO e UNID saíram do arquivo — atrapalhavam na importação do monitor. Produto, unidade e classes continuam no PDF e no Excel. A prescrição por zona já saía só com a dose.',

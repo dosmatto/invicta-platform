@@ -239,6 +239,34 @@ export async function exportarXlsxPrescricao(p: Prescricao, ident?: IdentArquivo
         metaKgHa: c.metaKgHa ?? 0, baseGarantiaPct: c.baseGarantiaPct ?? 0,
         baseDoseKgHa: c.baseDoseKgHa ?? 0, compGarantiaPct: c.compGarantiaPct ?? 0,
       });
+      // Base POR CONDIÇÃO: a dose do base varia por faixa — a planilha mostra
+      // o intervalo e de onde vieram as áreas, não um "0" que ninguém aplicou.
+      const dz = c.baseDosePorZona;
+      if (c.baseCondicao && dz) {
+        const rz = p.zonas.map(z => complementarNutriente({
+          metaKgHa: c.metaKgHa ?? 0, baseGarantiaPct: c.baseGarantiaPct ?? 0,
+          baseDoseKgHa: dz[z.idZona] ?? 0, compGarantiaPct: c.compGarantiaPct ?? 0,
+        }));
+        const faixa = (v: number[]) => {
+          if (!v.length) return '—';
+          const mn = Math.min(...v), mx = Math.max(...v);
+          return Math.abs(mx - mn) < 0.005 ? fmt(mn, 2) : `${fmt(mn, 2)} a ${fmt(mx, 2)}`;
+        };
+        return [
+          { Item: 'Nutriente de referência', Valor: sim },
+          { Item: `Meta de ${sim} (kg/ha)`, Valor: Number((c.metaKgHa ?? 0).toFixed(2)) },
+          { Item: 'Prescrição base (por condição)', Valor: `${c.basePrescricaoNome ?? '—'}${c.baseCondicao.rotuloMapa ? ` · ${c.baseCondicao.rotuloMapa}` : ''}` },
+          { Item: 'Áreas de aplicação', Valor: `as ${p.zonas.length} faixas da prescrição base` },
+          { Item: 'Produto base', Valor: c.baseNome ?? '(nenhum)' },
+          { Item: `Garantia do base (% ${sim})`, Valor: Number((c.baseGarantiaPct ?? 0).toFixed(2)) },
+          { Item: 'Dose do base por faixa (kg/ha)', Valor: faixa(p.zonas.map(z => dz[z.idZona] ?? 0)) },
+          { Item: `${sim} fornecido pelo base (kg/ha)`, Valor: faixa(rz.map(x => x.fornecidoKgHa)) },
+          { Item: `${sim} faltante (kg/ha)`, Valor: faixa(rz.map(x => x.faltanteKgHa)) },
+          { Item: 'Produto complementar', Valor: c.compNome ?? p.produto },
+          { Item: `Garantia do complementar (% ${sim})`, Valor: Number((c.compGarantiaPct ?? 0).toFixed(2)) },
+          { Item: 'Dose calculada do complementar, faixa a faixa (kg/ha)', Valor: faixa(rz.map(x => x.doseCompKgHa)) },
+        ];
+      }
       return [
         { Item: 'Nutriente de referência', Valor: sim },
         { Item: `Meta de ${sim} (kg/ha)`, Valor: Number((c.metaKgHa ?? 0).toFixed(2)) },

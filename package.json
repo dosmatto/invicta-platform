@@ -45,6 +45,7 @@
     "teste:convite-regras": "node scripts/teste-convite-regras.mjs",
     "teste:prescricao": "node scripts/teste-prescricao.mjs",
     "teste:prescricaocondicao": "node scripts/teste-prescricaocondicao.mjs",
+    "teste:prescricaocomplemento": "node scripts/teste-prescricaocomplemento.mjs",
     "teste:resumo-geral": "node scripts/teste-resumo-geral.mjs",
     "teste:porpoligono": "node scripts/teste-por-poligono.mjs",
     "teste:rotulos-mapa": "node scripts/teste-rotulos-mapa-zonas.mjs",

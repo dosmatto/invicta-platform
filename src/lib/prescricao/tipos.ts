@@ -157,6 +157,10 @@ export interface ParamsComplemento {
   /** SNAPSHOT idZona → dose do base. A prescrição base pode ganhar versão nova
    *  depois; o que foi calculado aqui não pode mudar sozinho. */
   baseDosePorZona?: Record<string, number>;
+  /** Presente quando a base é uma prescrição POR CONDIÇÃO: as áreas desta
+   *  prescrição são as faixas da base (fc + zonas copiados, ids f1..fN), sem
+   *  zoneamento. Guarda o que rotula as faixas no mapa e no relatório. */
+  baseCondicao?: { rotuloMapa: string; sigla: string; limiares: number[] };
   // produto COMPLEMENTAR (o que a prescrição vai calcular)
   compInsumoId?: string;
   compNome?: string;
