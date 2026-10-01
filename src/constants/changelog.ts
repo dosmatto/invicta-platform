@@ -1,5 +1,9 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Complemento: aviso de zona sem dose do produto base volta a aparecer
+  '2.190.2': [
+    'CORRIGIDO: COMPLEMENTAÇÃO POR NUTRIENTE — zona ou faixa em que a prescrição base não tem dose volta a ser avisada ("Sem dose do produto base… o complemento cobre a meta inteira"). A conversão de unidade da 2.190.1 transformava a dose ausente em 0 e o aviso sumia; a dose calculada não muda.',
+  ],
   // [S/N] Complemento: base por condição sem zoneamento e base em t/ha
   '2.190.1': [
     'CORRIGIDO: COMPLEMENTAÇÃO POR NUTRIENTE — O PAINEL APARECE ANTES DE ESCOLHER O ZONEAMENTO. Em talhão sem zoneamento não havia como chegar ao campo "Prescrição já salva como base", e com zoneamento era preciso escolher um que depois seria descartado. Agora nutriente, meta, base e produto complementar aparecem logo no modo complemento; escolhida uma base por condição, as faixas dela viram as áreas da prescrição.',

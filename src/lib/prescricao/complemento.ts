@@ -39,7 +39,9 @@ export function dosesDaBaseEmKgHa(base: Pick<Prescricao, 'unidade' | 'zonas'>): 
   const f = fatorParaKgHa(base.unidade);
   if (f == null) return null;
   const out: Record<string, number> = {};
-  base.zonas.forEach(z => { out[z.idZona] = z.dose * f; });
+  // Dose ausente fica AUSENTE (não vira 0): é o que dispara o aviso "Sem dose
+  // do produto base" lá na frente — null × fator daria 0 e calaria o aviso.
+  base.zonas.forEach(z => { if (z.dose != null && Number.isFinite(z.dose)) out[z.idZona] = z.dose * f; });
   return out;
 }
 
