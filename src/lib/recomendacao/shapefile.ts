@@ -129,8 +129,9 @@ function dosePolygons(dose: DoseCalculada, poligono: GeoJSON.Polygon | GeoJSON.M
       if (!(dentro(cx, cy) || dentro(lonL, latT) || dentro(lonR, latT) || dentro(lonR, latB) || dentro(lonL, latB))) continue;
       const v = doseAt(cx, cy); if (!isFinite(v)) continue;
       const k = classeDe(v); if (ehTransp(k)) continue;
-      // 1ª faixa começa na dose mínima (não em 0) — igual ao mapa/tabela.
-      const props = { TAXA: Math.round(v), CLASSE: `${k === 0 ? minDose : lims[k - 1]}-${lims[k]}`, PRODUTO: dose.produto || dose.nomeEquacao, UNID: dose.unidade || 'kg/ha' };
+      // SÓ A TAXA no arquivo da máquina: CLASSE, PRODUTO e UNID atrapalhavam no
+      // monitor (coluna a mais, texto acentuado no DBF) — ver nota em zonaPolygons.
+      const props = { TAXA: Math.round(v) };
       if (clip) {
         const celula: Pt[] = [[lonL, latB], [lonR, latB], [lonR, latT], [lonL, latT]]; // CCW
         for (const anel of aneis) { const cl = clipPorCelula(anel, celula); if (cl.length >= 3) feats.push({ type: 'Feature', properties: props, geometry: { type: 'Polygon', coordinates: [fechar(cl)] } }); }

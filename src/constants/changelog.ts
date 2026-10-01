@@ -1,5 +1,9 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Arquivo da máquina só com a coluna TAXA
+  '2.189.3': [
+    'AJUSTE: O SHAPEFILE DE TAXA VARIÁVEL DA RECOMENDAÇÃO (o que vai para a máquina) SAI SÓ COM A COLUNA TAXA. As colunas CLASSE, PRODUTO e UNID saíram do arquivo — atrapalhavam na importação do monitor. Produto, unidade e classes continuam no PDF e no Excel. A prescrição por zona já saía só com a dose.',
+  ],
   // [S/N] PDF oficial não imprime mais a fórmula editada
   '2.189.2': [
     'AJUSTE: O PDF OFICIAL DA RECOMENDAÇÃO NÃO MOSTRA MAIS A FÓRMULA. Quando a fórmula foi editada no talhão, o relatório traz só a linha "Fórmula editada manualmente neste talhão." — o bloco "Fórmula usada (editada neste talhão)" com a conta saiu do documento.',
