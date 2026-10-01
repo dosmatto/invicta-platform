@@ -1,5 +1,9 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] PDF oficial não imprime mais a fórmula editada
+  '2.189.2': [
+    'AJUSTE: O PDF OFICIAL DA RECOMENDAÇÃO NÃO MOSTRA MAIS A FÓRMULA. Quando a fórmula foi editada no talhão, o relatório traz só a linha "Fórmula editada manualmente neste talhão." — o bloco "Fórmula usada (editada neste talhão)" com a conta saiu do documento.',
+  ],
   // [S/N] Prescrição por condição: faixa sem dose bloqueia e dose 0 não é "fora do limite"
   '2.189.1': [
     'CORRIGIDO: PRESCRIÇÃO POR CONDIÇÃO — FAIXA COM A DOSE APAGADA NÃO SOME MAIS EM SILÊNCIO. No volume travado, apagar a dose de uma faixa fazia o volume dela ir inteiro para as outras (ex.: 200 / vazio / 100 com 15.000 kg virava 375 / 0 / 187,5). Agora a faixa sem dose aparece em aviso e salvar/exportar fica bloqueado até ela ser preenchida, nos dois cenários. Digitar 0 continua valendo "não aplica nesta faixa".',

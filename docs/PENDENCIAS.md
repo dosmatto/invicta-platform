@@ -97,6 +97,7 @@ verdadeira (fusão de talhões) chegou depois; foi preciso renumerar.
 | S/N | Zoneamento padrão: só um marcado, e vale o último escolhido (correção) | 2.188.2 | Talhão → Zonas → versões: só uma com "Padrão"; Fertilidade/Prescrições usam essa |
 | S/N | Prescrição por condição com volume travado | 2.189.0 | Talhão → Prescrições → "Por condição no mapa de fertilidade" → Gerar áreas → "Volume travado" → 150 kg/ha (ou total) → doses informada × aplicada; Usado = volume |
 | S/N | Prescrição por condição: faixa sem dose bloqueia e dose 0 não é "fora do limite" (correção) | 2.189.1 | Talhão → Prescrições → "Por condição…" → apagar a dose de uma faixa → aviso + salvar bloqueado; faixa 0 com dose mín → exportar sem "fora dos limites" |
+| S/N | PDF oficial não imprime mais a fórmula editada (só o aviso) | 2.189.2 | Talhão → Recomendações → cenário com fórmula editada → PDF oficial → só "Fórmula editada manualmente neste talhão." |
 
 > As pendências 1–17 foram entregues antes deste registro existir e não estão
 > catalogadas; procure pelo assunto no `changelog.ts`. Da 18 em diante, tudo

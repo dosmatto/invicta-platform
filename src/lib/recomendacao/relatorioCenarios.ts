@@ -358,24 +358,13 @@ async function desenharPaginaOficial(doc: JsPDF, dose: DoseCalculada, cenNome: s
   y = kv(doc, SX, SW, y, 'Custo estimado total', `R$ ${fmt((dose.custoProdutoHa ?? 0) * ctx.areaHa, 2)}`);
 
   // FÓRMULA EDITADA — o mapa NÃO saiu da equação como ela está na Biblioteca.
-  // Quem recebe o PDF tem de conseguir ver a conta que gerou aquelas doses; sem
-  // isto o documento passa por recomendação oficial padrão e ninguém desconfia.
+  // O PDF só avisa que houve edição; a conta em si não vai para o documento
+  // (pedido do usuário — a fórmula é interna).
   if (dose.formulaEditada) {
-    y += 3;
-    y = secaoH(doc, SX, y, 'Fórmula usada (editada neste talhão)');
-    doc.setFontSize(6.8); doc.setTextColor(40, 48, 58); doc.setFont('courier', 'normal');
-    const todas = san(dose.scriptUsado ?? '')
-      .split('\n').map(l => l.trim()).filter(Boolean)
-      .flatMap(l => doc.splitTextToSize(l, SW) as string[]);
-    // Teto de linhas: a coluna da esquerda termina no rodapé, e uma fórmula
-    // longa empurraria o texto para cima dele. Truncar é preferível a invadir.
-    const MAX = 8;
-    const linhas = todas.length > MAX ? [...todas.slice(0, MAX), '…'] : todas;
-    for (const l of (linhas.length ? linhas : ['—'])) { doc.text(l, SX, y); y += 3.1; }
+    y += 4;
+    doc.setFont('helvetica', 'italic'); doc.setFontSize(7); doc.setTextColor(...GRAY);
+    doc.text('Fórmula editada manualmente neste talhão.', SX, y, { maxWidth: SW });
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(6.2); doc.setTextColor(...GRAY);
-    y += 1.2;
-    doc.text('Alterada na aplicação deste talhão — a equação da Biblioteca continua como estava.', SX, y, { maxWidth: SW });
   }
 
   const mx = M + 86, my = 20, mw = W - mx - M, mh = H - my - 11;
