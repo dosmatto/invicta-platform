@@ -35,7 +35,7 @@ import {
   redistribuirPorEstoque, distribuirProporcional, distribuirPorAjuste, resumoDoses, nutrientesPorZona, pesoDoRank, arredondarDose,
 } from '@/lib/prescricao/calculo';
 import { dosesPorEquacao, variaveisDaEquacao } from '@/lib/prescricao/equacao';
-import { areasDaBaseCondicao, baseTemAreasProprias, dosesDoComplemento } from '@/lib/prescricao/complemento';
+import { areasDaBaseCondicao, baseTemAreasProprias, dosesDoComplemento, dosesDaBaseEmKgHa, erroUnidadeBase } from '@/lib/prescricao/complemento';
 import {
   estoqueTotalSementes, metricasSementes, doseCompensada, fatorCampo,
   type EstoqueSementes,
@@ -376,6 +376,10 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
     }
     const base = prescricoesBase.find(p => p.id === id);
     if (!base) return;
+    // A garantia é % de MASSA: dose do base em L/ha ou sementes não entra na
+    // conta; t/ha é convertida para kg/ha (dosesDaBaseEmKgHa).
+    const erroUn = erroUnidadeBase(base);
+    if (erroUn) { setErro(erroUn); return; }
     // Base POR CONDIÇÃO: as áreas desta prescrição passam a ser as faixas da
     // base (snapshot do fc e das zonas) — não há zoneamento a casar.
     const areas = baseTemAreasProprias(base) ? areasDaBaseCondicao(base) : null;
@@ -386,8 +390,8 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
     // pelo NOME do produto recupera a garantia em vez de deixar o campo vazio.
     const ins = insumos.find(i => i.id === base.insumoId)
       ?? insumos.find(i => i.nome.trim().toLowerCase() === (base.produto ?? '').trim().toLowerCase());
-    const dosePorZona: Record<string, number> = {};
-    base.zonas.forEach(z => { dosePorZona[z.idZona] = z.dose; });
+    const dosePorZona = dosesDaBaseEmKgHa(base) ?? {};
+    const avisoTon = base.unidade === 't/ha' ? [`A base está em t/ha — convertida para kg/ha (×1000) na conta.`] : [];
     patchComp({
       basePrescricaoId: base.id,
       basePrescricaoNome: `${base.nome} (v${base.versao})`,
@@ -398,22 +402,24 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
       baseDoseKgHa: undefined,
       baseCondicao: areas ? areas.baseCondicao : undefined,
     });
+    setErro('');
     if (areas) {
-      setErro(''); setOkMsg('');
+      setOkMsg('');
       const semDose = base.zonas.filter(z => !Number.isFinite(z.dose)).map(z => z.nomeZona);
       const zero = base.zonas.filter(z => z.dose === 0).map(z => z.nomeZona);
       setAvisosCalc([
         `As áreas desta prescrição são as ${areas.zonas.length} faixas de "${base.nome}" (por condição) — uma dose de complemento por faixa.`,
         ...(semDose.length ? [`A base não tem dose válida na(s) faixa(s) ${semDose.join(', ')} — ali o complemento cobre a meta inteira.`] : []),
         ...(zero.length ? [`A base não aplica (dose 0) na(s) faixa(s) ${zero.join(', ')} — ali o complemento cobre a meta inteira.`] : []),
+        ...avisoTon,
       ]);
       return;
     }
-    if (tinhaAreasDaBase) setAvisosCalc([]);
+    if (tinhaAreasDaBase || avisoTon.length) setAvisosCalc(avisoTon);
     // Zoneamento diferente = as zonas não casam; melhor dizer agora do que
     // deixar metade das zonas sem base na hora de aplicar.
     if (r.zoneamentoId && base.zoneamentoId && base.zoneamentoId !== r.zoneamentoId) {
-      setAvisosCalc([`A prescrição base usa outro zoneamento ("${base.zoneamentoNome}"). As zonas que não casarem ficam sem desconto do produto base.`]);
+      setAvisosCalc([`A prescrição base usa outro zoneamento ("${base.zoneamentoNome}"). As zonas que não casarem ficam sem desconto do produto base.`, ...avisoTon]);
     }
   }
 
@@ -427,9 +433,11 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
     setErro(''); setOkMsg('');
     const c = r.params.complemento;
     if (!c) { setErro('Configure a complementação primeiro.'); return; }
+    // O painel do complemento aparece antes das áreas existirem (para dar
+    // para escolher uma base por condição em talhão sem zoneamento).
+    if (!r.zonas.length) { setErro('Escolha o zoneamento ou uma prescrição base por condição — ainda não há áreas para aplicar a dose.'); return; }
 
     if (c.baseDosePorZona) {
-      if (c.baseCondicao && !r.zonas.length) { setErro('Escolha de novo a prescrição base — as áreas dela não estão no rascunho.'); return; }
       const { porZona, doses, semBase, baseZero } = dosesDoComplemento(
         r.zonas, c.baseDosePorZona,
         { metaKgHa: c.metaKgHa ?? 0, baseGarantiaPct: c.baseGarantiaPct ?? 0, compGarantiaPct: c.compGarantiaPct ?? 0 },
@@ -1294,7 +1302,9 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
               </div>
             )}
 
-            {r.zonas.length > 0 && (
+            {/* No complemento, o painel aparece ANTES das áreas: é escolhendo a
+                base por condição que elas surgem (talhão sem zoneamento). */}
+            {(r.zonas.length > 0 || r.modo === 'complemento') && (
               <>
                 {/* ── Parâmetros por modo ── */}
                 {r.modo === 'manual' && (
@@ -1718,6 +1728,7 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
                   <div className="space-y-1">{avisosCalc.map((a, i) => <Aviso key={i} tom="atencao" texto={a} />)}</div>
                 )}
 
+                {r.zonas.length > 0 && (<>
                 {/* ── Editor: tabela de doses ── */}
                 <div className="rounded-lg overflow-hidden" style={{ border: '1px solid #1a3a6b' }}>
                   <table className="w-full text-[10px]" style={{ color: '#cbd5e1' }}>
@@ -1890,6 +1901,7 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
                     </button>
                   )}
                 </div>
+                </>)}
 
                 {/* O retorno do clique aparece AQUI, ao lado do botão. Ele
                     também sai no topo da aba, que fica fora da vista quando se

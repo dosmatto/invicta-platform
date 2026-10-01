@@ -16,7 +16,32 @@
 
 import { complementarPorZona, type EntradaComplemento, type ResultadoZonaComplemento } from '../insumos.ts';
 import { arredondarDose } from './calculo.ts';
-import type { ParamsComplemento, Prescricao, ZonaDose } from './tipos.ts';
+import type { ParamsComplemento, Prescricao, UnidadeDose, ZonaDose } from './tipos.ts';
+
+/** Fator unidade da prescrição base → kg/ha. A garantia (%) é de MASSA, então
+ *  só dose em massa por hectare entra na conta: t/ha vira kg/ha (×1000); L/ha
+ *  e sementes não têm conversão (null) — a base é recusada. */
+export function fatorParaKgHa(u: UnidadeDose | undefined): number | null {
+  if (u == null || u === 'kg/ha') return 1;
+  if (u === 't/ha') return 1000;
+  return null;
+}
+
+/** Mensagem para base em unidade que não é massa/ha (null = aceita). */
+export function erroUnidadeBase(base: Pick<Prescricao, 'nome' | 'unidade'>): string | null {
+  return fatorParaKgHa(base.unidade) == null
+    ? `A prescrição "${base.nome}" está em ${base.unidade} — a complementação só usa base em massa por hectare (kg/ha ou t/ha), porque a garantia do adubo é em % de massa.`
+    : null;
+}
+
+/** SNAPSHOT idZona → dose do base em kg/ha (null se a unidade não converte). */
+export function dosesDaBaseEmKgHa(base: Pick<Prescricao, 'unidade' | 'zonas'>): Record<string, number> | null {
+  const f = fatorParaKgHa(base.unidade);
+  if (f == null) return null;
+  const out: Record<string, number> = {};
+  base.zonas.forEach(z => { out[z.idZona] = z.dose * f; });
+  return out;
+}
 
 /** A base traz as PRÓPRIAS áreas (não usa zoneamento)? Hoje: só 'condicao'. */
 export const baseTemAreasProprias = (base: Pick<Prescricao, 'modo'>): boolean => base.modo === 'condicao';
@@ -38,8 +63,8 @@ export interface AreasDaBase {
 export function areasDaBaseCondicao(base: Prescricao): AreasDaBase | null {
   if (!baseTemAreasProprias(base) || !base.fc?.features?.length || !base.zonas.length) return null;
   const c = base.params.condicao;
-  const baseDosePorZona: Record<string, number> = {};
-  base.zonas.forEach(z => { baseDosePorZona[z.idZona] = z.dose; });
+  const baseDosePorZona = dosesDaBaseEmKgHa(base);
+  if (!baseDosePorZona) return null;
   return {
     zonas: base.zonas.map(z => ({ ...z, dose: 0 })),
     fc: JSON.parse(JSON.stringify(base.fc)) as GeoJSON.FeatureCollection,

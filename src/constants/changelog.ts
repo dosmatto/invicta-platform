@@ -1,5 +1,10 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Complemento: base por condição sem zoneamento e base em t/ha
+  '2.190.1': [
+    'CORRIGIDO: COMPLEMENTAÇÃO POR NUTRIENTE — O PAINEL APARECE ANTES DE ESCOLHER O ZONEAMENTO. Em talhão sem zoneamento não havia como chegar ao campo "Prescrição já salva como base", e com zoneamento era preciso escolher um que depois seria descartado. Agora nutriente, meta, base e produto complementar aparecem logo no modo complemento; escolhida uma base por condição, as faixas dela viram as áreas da prescrição.',
+    'CORRIGIDO: a dose da prescrição base passa a respeitar a unidade dela — base em t/ha é convertida para kg/ha (×1000) antes da conta, e base em L/ha ou em sementes é recusada com aviso (a garantia do adubo é em % de massa). Vale para base por zoneamento e por condição.',
+  ],
   // [S/N] Complementação por nutriente sobre prescrição por condição
   '2.190.0': [
     'NOVO: COMPLEMENTAÇÃO POR NUTRIENTE TAMBÉM SOBRE A PRESCRIÇÃO POR CONDIÇÃO. No modo "Complementação por nutriente", a lista de prescrições base agora mostra as prescrições por condição do talhão (ex.: 00-30-10 com 150 kg onde P < 40 e 100 kg onde P ≥ 40) — mesmo em talhão sem zoneamento. Escolhida uma delas, as áreas da prescrição de complemento passam a ser as FAIXAS da base (mesmos polígonos, copiados) e cada faixa recebe a dose do complemento para fechar a meta do nutriente, descontando o que a base entregou ali. A conta é a mesma da complementação por zona.',

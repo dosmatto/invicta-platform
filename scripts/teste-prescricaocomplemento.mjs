@@ -7,7 +7,7 @@
 // max(0, meta − doseBase × garantiaBase) ÷ garantiaComp, com o mesmo
 // arredondamento do fluxo por zoneamento — que não pode mudar.
 import assert from 'node:assert/strict';
-import { areasDaBaseCondicao, baseTemAreasProprias, dosesDoComplemento } from '../src/lib/prescricao/complemento.ts';
+import { areasDaBaseCondicao, baseTemAreasProprias, dosesDoComplemento, fatorParaKgHa, erroUnidadeBase, dosesDaBaseEmKgHa } from '../src/lib/prescricao/complemento.ts';
 import { complementarPorZona } from '../src/lib/insumos.ts';
 import { arredondarDose } from '../src/lib/prescricao/calculo.ts';
 import { casarZonas } from '../src/lib/prescricao/casar.ts';
@@ -124,6 +124,35 @@ t('regressão: com zoneamento, o resultado é o de complementarPorZona + arredon
   const antigo = complementarPorZona(zonas.map(z => ({ idZona: z.idZona, baseDoseKgHa: dz[z.idZona] ?? 0 })), ENTRADA);
   for (const x of antigo) assert.equal(r.doses[x.idZona], arredondarDose(x.doseCompKgHa));
   assert.deepEqual(r.porZona, antigo);
+});
+
+console.log('\nUnidade da dose da base\n');
+
+t('kg/ha passa direto; t/ha vira kg/ha (×1000); L/ha e sementes são recusadas', () => {
+  assert.equal(fatorParaKgHa('kg/ha'), 1);
+  assert.equal(fatorParaKgHa('t/ha'), 1000);
+  for (const u of ['L/ha', 'sementes/ha', 'sementes/m', 'sementes/m2']) assert.equal(fatorParaKgHa(u), null, u);
+  assert.equal(erroUnidadeBase({ nome: 'X', unidade: 'kg/ha' }), null);
+  assert.equal(erroUnidadeBase({ nome: 'X', unidade: 't/ha' }), null);
+  assert.match(erroUnidadeBase({ nome: 'X', unidade: 'L/ha' }), /massa por hectare/);
+});
+
+t('base por ZONEAMENTO em t/ha: snapshot em kg/ha e a conta fecha a meta certo', () => {
+  const base = { unidade: 't/ha', zonas: [{ idZona: 'z1', dose: 0.15 }, { idZona: 'z2', dose: 0.1 }] };
+  const dz = dosesDaBaseEmKgHa(base);
+  assert.deepEqual(dz, { z1: 150, z2: 100 });
+  const r = dosesDoComplemento([{ idZona: 'z1', nomeZona: '1' }, { idZona: 'z2', nomeZona: '2' }], dz, ENTRADA);
+  assert.equal(r.doses.z1, 75);
+  assert.equal(r.doses.z2, 83.33);
+  assert.equal(dosesDaBaseEmKgHa({ unidade: 'L/ha', zonas: base.zonas }), null);
+});
+
+t('base por CONDIÇÃO em t/ha converte; em L/ha não gera áreas', () => {
+  const b = baseCondicao();
+  b.unidade = 't/ha';
+  b.zonas = b.zonas.map(z => ({ ...z, dose: z.dose / 1000 }));
+  assert.deepEqual(areasDaBaseCondicao(b).baseDosePorZona, { f1: 150, f2: 100 });
+  assert.equal(areasDaBaseCondicao({ ...baseCondicao(), unidade: 'L/ha' }), null);
 });
 
 console.log('\nRelatório (PDF)\n');

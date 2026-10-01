@@ -100,6 +100,7 @@ verdadeira (fusão de talhões) chegou depois; foi preciso renumerar.
 | S/N | PDF oficial não imprime mais a fórmula editada (só o aviso) | 2.189.2 | Talhão → Recomendações → cenário com fórmula editada → PDF oficial → só "Fórmula editada manualmente neste talhão." |
 | S/N | Arquivo da máquina só com a coluna TAXA | 2.189.3 | Talhão → Arquivos → gerar SHP de um mapa de dose → abrir o .dbf (QGIS) → só a coluna TAXA |
 | S/N | Complementação por nutriente sobre prescrição por condição | 2.190.0 | Talhão → Prescrições → "Complementação por nutriente" → Prescrição base = uma "por condição" → áreas = faixas da base → meta + KCl → Aplicar → dose por faixa; PDF/Excel citam a base por condição |
+| S/N | Complemento: base por condição sem zoneamento e base em t/ha (correção) | 2.190.1 | Talhão sem zoneamento → Prescrições → "Complementação por nutriente" → painel já aparece → base por condição → faixas surgem; base em t/ha → conta em kg/ha; base em L/ha → aviso |
 
 > As pendências 1–17 foram entregues antes deste registro existir e não estão
 > catalogadas; procure pelo assunto no `changelog.ts`. Da 18 em diante, tudo
