@@ -12,6 +12,14 @@ Time              ANQMNT4RTB (WR CONSULTORIA AGRICOLA SS)
 Versão            3.2.1 · build 3002001 · EM REVISÃO — respondida a 2ª pergunta em 23/09
 ```
 
+> **Decisão do usuário (02/10/2026): as duas lojas passam a andar juntas.** A
+> próxima subida do app de campo é a **3.5.0**, enviada ao mesmo tempo ao Play
+> e à App Store, e daí em diante Android e iOS ficam sempre na mesma versão.
+> Até lá, acumular as mudanças sem publicar. O Play aprovou a 2.138.0 em
+> 02/10 — ver `loja/ficha-play-store.md`. Fica pendente para a 3.5.0 o modo
+> Falker da grade de compactação (app de campo 3.3.0, v2.183.0), que só
+> funciona com versão nova nas lojas.
+
 Linha do tempo: enviada 3.2.0 em 18/09 às 14:43, **rejeitada** às 21:13 em
 **Guideline 2.1 — Information Needed, New App Submission** (pedido padrão de
 informações a desenvolvedor **sem histórico de revisão**, não defeito da

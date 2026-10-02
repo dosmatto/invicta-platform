@@ -3,13 +3,26 @@
 Textos e respostas prontos para copiar no Google Play Console. Cada bloco diz
 onde ele entra. Os limites de caracteres são os que a loja impõe.
 
-> **Estado em 18/09/2026.** Produção: **2.138.0 (2138000) em análise desde
-> 10/09** — primeira revisão do app. A **3.2.0 (3002000)** já está enviada ao
-> Play Console como **rascunho** na faixa de Produção, com notas pt-BR.
-> **Decisão:** só enviá-la depois que a 2.138.0 for aprovada — mandar antes
-> substituiria a versão na fila e reiniciaria a primeira revisão. Quando a
-> aprovação chegar: Produção → editar o rascunho 3.2.0 → Avançar → Enviar para
-> revisão. O `.aab` é `loja/INVICTA-Coleta-3.2.0.aab` (fora do Git).
+> **Estado em 02/10/2026. NO AR.** Produção: **2.138.0 (2138000) PUBLICADA**.
+> A primeira revisão saiu em 02/10, 22 dias depois do envio de 10/09 — foi
+> acelerada pelo chamado **2-9385000041964**, que o suporte respondeu em 26/09
+> com "we've expedited your app to the Google Play Review Team". A ficha
+> pública está em
+> https://play.google.com/store/apps/details?id=br.agr.invicta.coleta
+>
+> ⚠️ **O rascunho 3.2.0 na faixa de Produção ficou OBSOLETO — não envie.** Ele
+> foi criado quando a 3.2.0 era a versão nova do app de campo; hoje o
+> repositório já está em 3.3.0. Mandá-lo publicaria uma versão velha. O mesmo
+> vale para o `loja/INVICTA-Coleta-3.2.0.aab`.
+>
+> **Decisão do usuário (02/10):** a próxima subida será a **3.5.0**, nas DUAS
+> lojas ao mesmo tempo, e daí em diante Android e iOS andam sempre na mesma
+> versão. Até lá, acumular as mudanças do app de campo sem publicar. O lado da
+> Apple está em `loja/ficha-app-store.md`.
+>
+> **Pendente nessa 3.5.0:** o app de campo 3.3.0 trouxe o modo Falker da grade
+> de compactação (v2.183.0), que **só funciona com versão nova nas lojas** — a
+> 2.138.0 que está publicada abre o formulário antigo.
 
 - **Nome do app** (30): `INVICTA Coleta`
 - **Package** (imutável): `br.agr.invicta.coleta`
