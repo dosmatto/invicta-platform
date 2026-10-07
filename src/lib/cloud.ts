@@ -17,7 +17,7 @@ import { usarDadosSupabase, bootSupabaseData, pushListaSupabase, pushObjSupabase
   excluirMapasPorIdsSupabase,
   excluirDocsPorPrefixoSupabase, excluirColecaoSupabase,
   listarIdsMapasPorPrefixoSupabase, carregarMapasPorIdsSupabase,
-  listarMapasMetaPorPrefixoSupabase, carregarMapaSupabase,
+  listarMapasMetaPorPrefixoSupabase, carregarMapaSupabase, aguardarFilaSupabase,
   type MapaMetaSupabase } from './supabaseData';
 import { cacheObterMapa, cacheGravarMapa, cacheExcluirMapa, cacheExcluirMapasPorPrefixo } from './mapaCache';
 import { temPesadaLocal, removerLocal } from './localComprimido';
@@ -231,6 +231,13 @@ export function cloudPushLista(key: string, lista: unknown[]) {
   void pushListaSupabase(key, lista);
 }
 
+// Gravação em LOTE: espera o envio destas listas terminar antes do próximo lote
+// (ver aguardarFilaSupabase). No-op sem nuvem.
+export async function cloudAguardarEnvio(keys: string[]): Promise<void> {
+  if (!usarDadosSupabase()) return;
+  await aguardarFilaSupabase(keys);
+}
+
 // Espelha uma configuração (objeto único) no Supabase.
 export function cloudPushObj(key: string, json: string) {
   if (!KEYS_OBJ.includes(key)) return;
@@ -247,6 +254,16 @@ export function cloudSalvarMapa(id: string, dados: object) {
   const em = new Date().toISOString();
   void salvarMapaSupabase(id, dados, em);
   void cacheGravarMapa(id, em, dados);
+}
+
+// Mesma gravação, AGUARDADA: true só com o servidor confirmando. Para a fila de
+// interpolação da migração, que não pode dar um laudo por "ok" antes disso.
+export async function cloudSalvarMapaConfirmado(id: string, dados: object): Promise<boolean> {
+  if (!cloudPodeGravar()) return false;
+  const em = new Date().toISOString();
+  const ok = await salvarMapaSupabase(id, dados, em);
+  if (ok) void cacheGravarMapa(id, em, dados);
+  return ok;
 }
 
 // Por prefixo, com CACHE LOCAL (IndexedDB): a rede só carrega a listagem leve

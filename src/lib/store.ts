@@ -99,6 +99,19 @@ export interface Talhao {
   geoVersao?: number;             // versão do limite atual (ausente = 1)
   geoVersoes?: VersaoPoligono[];  // versões anteriores arquivadas (histórico)
   fusoes?: FusaoRegistro[];       // talhões absorvidos por este (ver desmembrar/fundir)
+  /** Talhão criado/alimentado pelo Importador de migração. `safraLimite` = a
+   *  safra cujo polígono é o limite atual — só um limite que veio da migração
+   *  pode ser trocado por outra migração (ver lib/migracaoInceres). */
+  origemExterna?: OrigemExterna;
+}
+
+/** De onde veio um registro migrado de outro sistema (Importador de migração).
+ *  `id` = identidade no sistema de origem (InCeres: o `car_id` da grade) — é a
+ *  chave de idempotência: reimportar a mesma pasta não duplica. */
+export interface OrigemExterna {
+  fonte: 'inceres';
+  id?: string;
+  safraLimite?: string;
 }
 
 // FUSÃO de dois talhões (lib/fundirTalhoes.ts): o talhão absorvido sai do
@@ -854,6 +867,8 @@ export interface GradeAmostragem {
   pontos: PontoAmostragem[];
   paraProcessar: boolean;
   criadoEm: string;
+  /** Grade migrada de outro sistema (Importador de migração) — ver OrigemExterna. */
+  origemExterna?: OrigemExterna;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────
@@ -2139,6 +2154,8 @@ export interface ImportacaoLab {
    *  mapas processados ANTES desta data foram krigados com o limite antigo — a
    *  aba Fertilidade avisa e pede reprocessamento. Ver lib/desmembrarTalhao.ts. */
   limiteAlteradoEm?: string;
+  /** Laudo migrado de outro sistema (Importador de migração) — ver OrigemExterna. */
+  origemExterna?: OrigemExterna;
 }
 
 // Wrappers de retrocompat (Fase 3): perfis de laboratório agora vivem dentro
@@ -2359,6 +2376,106 @@ export function saveImportacaoLab(i: Omit<ImportacaoLab, 'id' | 'criadoEm'>): Im
   save('inv_lab', lista);
   notificarLab();
   return nova;
+}
+
+// ── Gravação em LOTE do Importador de migração ──────────────────────────────
+// Mesma razão do importarTalhoesLote: item a item, centenas de grades/laudos
+// gravariam a LISTA INTEIRA no IndexedDB e disparariam um push por item. Aqui
+// é 1 load + 1 save (+1 push com só as linhas novas) por lote. As regras de
+// cada save individual (nome em caixa alta, empresa, período derivado da Data
+// de referência) são as mesmas — só a gravação é agrupada.
+
+export function salvarClientesLote(novos: Omit<Cliente, 'id' | 'criadoEm'>[]): Cliente[] {
+  if (!novos.length) return [];
+  const lista = load<Cliente>('inv_clientes');
+  const agora = new Date().toISOString();
+  const criados = novos.map(c => comEmpresa(comNome({ ...c, id: uid(), criadoEm: agora })) as Cliente);
+  save('inv_clientes', [...lista, ...criados]);
+  return criados;
+}
+
+export function salvarFazendasLote(novas: Omit<Fazenda, 'id' | 'criadoEm'>[]): Fazenda[] {
+  if (!novas.length) return [];
+  const lista = load<Fazenda>('inv_fazendas');
+  const agora = new Date().toISOString();
+  const criadas = novas.map(f => comEmpresa(comNome({ ...f, id: uid(), criadoEm: agora })) as Fazenda);
+  save('inv_fazendas', [...lista, ...criadas]);
+  return criadas;
+}
+
+/**
+ * Talhões da migração: cria e atualiza numa gravação só.
+ *
+ * NÃO passa por `comVersaoDeLimite` de propósito: o importador já entrega
+ * `geoVersoes`/`geoVersao` montados por safra (lib/migracaoInceres →
+ * planejarLimites), cada versão com AS SAFRAS DELA. O arquivamento automático
+ * anotaria a versão antiga com "todas as safras que têm dado no talhão" e
+ * duplicaria a versão que o planejador já arquivou.
+ */
+export function gravarTalhoesMigracaoLote(
+  novos: Omit<Talhao, 'id' | 'criadoEm'>[],
+  atualizacoes: { id: string; data: Partial<Talhao> }[],
+): Talhao[] {
+  if (!novos.length && !atualizacoes.length) return [];
+  const talhoes = load<Talhao>('inv_talhoes');
+  for (const a of atualizacoes) {
+    const idx = talhoes.findIndex(t => t.id === a.id);
+    if (idx >= 0) talhoes[idx] = comNome({ ...talhoes[idx], ...a.data });
+  }
+  const agora = new Date().toISOString();
+  const criados = novos.map(n => comEmpresa(comNome({ ...n, id: uid(), criadoEm: agora })) as Talhao);
+  save('inv_talhoes', [...talhoes, ...criados]);
+  return criados;
+}
+
+/** Grades da migração. Idempotente pela `origemExterna.id`: a que já existe
+ *  volta como está (não duplica nem sobrescreve). */
+export function salvarGradesLote(novas: Omit<GradeAmostragem, 'id' | 'criadoEm'>[]): GradeAmostragem[] {
+  if (!novas.length) return [];
+  const lista = load<GradeAmostragem>('inv_grades');
+  const porOrigem = new Map(lista.filter(g => g.origemExterna?.id).map(g => [`${g.origemExterna!.fonte}:${g.origemExterna!.id}`, g]));
+  const agora = new Date().toISOString();
+  const out: GradeAmostragem[] = [];
+  let mudou = false;
+  for (const g of novas) {
+    const k = g.origemExterna?.id ? `${g.origemExterna.fonte}:${g.origemExterna.id}` : null;
+    const existente = k ? porOrigem.get(k) : undefined;
+    if (existente) { out.push(existente); continue; }
+    // Período derivado da Data de referência — a mesma regra do saveGrade.
+    const dataRef = g.dataReferencia && dataValida(g.dataReferencia) ? g.dataReferencia : hojeSaoPauloISO();
+    const per = periodoDeData(dataRef);
+    const nova: GradeAmostragem = comEmpresa({
+      ...g, dataReferencia: dataRef, ano: per?.ano, epoca: per?.epoca ?? g.epoca, id: uid(), criadoEm: agora,
+    });
+    lista.push(nova);
+    if (k) porOrigem.set(k, nova);
+    out.push(nova);
+    mudou = true;
+  }
+  if (mudou) save('inv_grades', lista);
+  return out;
+}
+
+/** Laudos da migração. Idempotente pela `origemExterna.id`. */
+export function salvarImportacoesLabLote(novas: Omit<ImportacaoLab, 'id' | 'criadoEm'>[]): ImportacaoLab[] {
+  if (!novas.length) return [];
+  const lista = load<ImportacaoLab>('inv_lab');
+  const porOrigem = new Map(lista.filter(i => i.origemExterna?.id).map(i => [`${i.origemExterna!.fonte}:${i.origemExterna!.id}`, i]));
+  const agora = new Date().toISOString();
+  const out: ImportacaoLab[] = [];
+  let mudou = false;
+  for (const i of novas) {
+    const k = i.origemExterna?.id ? `${i.origemExterna.fonte}:${i.origemExterna.id}` : null;
+    const existente = k ? porOrigem.get(k) : undefined;
+    if (existente) { out.push(existente); continue; }
+    const nova: ImportacaoLab = comEmpresa(comPeriodo({ ...i, id: uid(), criadoEm: agora, atualizadoEm: agora }));
+    lista.push(nova);
+    if (k) porOrigem.set(k, nova);
+    out.push(nova);
+    mudou = true;
+  }
+  if (mudou) { save('inv_lab', lista); notificarLab(); }
+  return out;
 }
 
 /**

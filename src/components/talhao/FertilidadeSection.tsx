@@ -5,11 +5,11 @@ import { useApp } from '@/context/AppContext';
 import {
   getSafras, getGrades, getImportacoesLab, getTalhoes, getFazendas, getPlantio,
   getLaboratorios, definirLaboratorioLab, nomeLaboratorioDoLaudo, fonteDoLaboratorio,
-  getLegendas, getLegendasPorAtributo, ordenarLegendasDoAtributo, casasDecimaisVariavel, variavelDeAnalise,
+  getLegendas, getLegendasPorAtributo, ordenarLegendasDoAtributo,
   type ImportacaoLab, type GradeAmostragem,
 } from '@/lib/store';
 import { gerarRelatorioFertilidade, type ProfundidadeRel } from '@/lib/relatorioFertilidade';
-import { estatisticaDaPagina, casasDoRotulo } from '@/lib/estatisticaMapa';
+import { estatisticaDaPagina } from '@/lib/estatisticaMapa';
 import { zonasDoTalhao } from '@/lib/zonasDoTalhao';
 import { ehComposta, celulasComoZonaTalhao, bindingDasCelulas } from '@/lib/celulasDaGrade';
 import { municipioDaFazenda } from '@/lib/geocodeMunicipio';
@@ -24,7 +24,7 @@ import { resolverGradeDoLaudo, pontosPorNumero, casarAmostrasComPontos } from '@
 import { decodeGrid, interpoladorEfetivo, MIN_PTS_MAPA, MIN_PTS_CONFIAVEL, MIN_PTS_KRIGE } from '@/lib/fertilidade';
 import { rasterizarZonas, rasterizarZonasDose, type ZonaValor } from '@/lib/recomendacao/zonasGrid';
 import { bindingAuto, bindingPorPontos, divisasDasZonas, rotulosPorZona, valorZona as valorZonaLab } from '@/lib/meap/fertilidadePorZona';
-import { stopsParaBackend, dominioDaLegenda, paresDaClasse, respeitarPadraoHomonima, legendaEmprestada, FAIXAS_CTCE } from '@/lib/legendas';
+import { stopsParaBackend, dominioDaLegenda, paresDaClasse, respeitarPadraoHomonima } from '@/lib/legendas';
 import type { Legenda } from '@/lib/legendas';
 import { Play, Layers, Loader2, Eraser, AlertTriangle, Activity, Settings, BookOpen, Save, FileDown, RotateCcw } from 'lucide-react';
 import { cloudSalvarMapa, cloudCarregarMapasPorPrefixo, cloudExcluirMapasPorPrefixo, cloudPodeGravar } from '@/lib/cloud';
@@ -42,13 +42,15 @@ import {
   PIXEL_RECOMENDACAO_M as PIXEL_RECOMENDACAO,
   idDose20, prefixoDose20, ehAuxiliar20mPerdido,
 } from '@/lib/recomendacao/escolhaMapa';
+// Peças divididas com a fila de interpolação do Importador de migração
+// (lib/processarFertilidade): chave da nuvem, rótulo do ponto (casas da
+// variável; senão pH/K = 1, demais = 0), legenda padrão e salvaguarda de
+// tamanho. Uma fonte só — a fila grava o MESMO mapa que esta aba.
+import {
+  idMapaFert as idNuvem, fmtPontoMapa as fmtPonto,
+  legendaPadraoDe, dadosMapaParaNuvem,
+} from '@/lib/processarFertilidade';
 const fmt = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits: 1 });
-// Rótulo do valor no ponto do mapa: pH e K com 1 casa decimal; os demais inteiros.
-// Casas decimais do rótulo do ponto no mapa: config da variável (Preferências de
-// Análise) tem prioridade; senão pH/K = 1, demais = 0. Faz K%/Ca%/Mg% (satk…=1)
-// saírem com 1 casa, como pedido.
-const casasPonto = (nut: string) => casasDoRotulo(nut, casasDecimaisVariavel(nut));
-const fmtPonto = (v: number, nut: string) => v.toLocaleString('pt-BR', { minimumFractionDigits: casasPonto(nut), maximumFractionDigits: casasPonto(nut) });
 const OPACIDADE = 1; // fixo 100%
 
 type Ponto = { lng: number; lat: number; valor: number };
@@ -68,10 +70,7 @@ type MapaPronto = {
 // Sufixo é `nut__prof`. Mapas anteriores (v0.21.0-0.22.x) usavam `legId__nut__prof`
 // no mesmo prefixo — leitura tolera ambos (legacy = qualquer legenda salva com grid).
 const ck = (nut: string, prof: string) => `${nut}__${prof}`;
-const prefixoNuvem = (talhaoId: string, importacaoId: string, metodo: string, pixelM: number, modeloFixo: string) =>
-  `${talhaoId}__${importacaoId}__${metodo}__${pixelM}__${modeloFixo || 'auto'}__`;
-const idNuvem = (talhaoId: string, importacaoId: string, metodo: string, pixelM: number, modeloFixo: string, nut: string, prof: string) =>
-  `${prefixoNuvem(talhaoId, importacaoId, metodo, pixelM, modeloFixo)}${nut}__${prof}`;
+// idNuvem: importado de lib/processarFertilidade (acima).
 
 // CONTRATO DA CHAVE: os DOIS ÚLTIMOS campos do id são sempre `nut__prof` — é por
 // eles que a hidratação abaixo, o relatório (lib/relatorioDados) e a Recomendação
@@ -348,17 +347,15 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
     // SB + H+Al e a efetiva é Ca+Mg+K+Al, então as faixas da primeira (50/70/
     // 140/240) classificavam a segunda (10/20/40/80) inteira como "muito baixo".
     // As faixas vêm de FAIXAS_CTCE. Ver legendaEmprestada.
-    if (lst.length === 0) {
-      if (atributoId !== 't') return undefined;
-      const base = ordenarLegendasDoAtributo(legendas.filter(l => l.atributoId === 'ctc'))[0];
-      return base ? legendaEmprestada(base, 't', variavelDeAnalise('t'), FAIXAS_CTCE) : undefined;
-    }
+    // Sem escolha (ou sem legenda própria) vale a PADRÃO — a mesma regra que a
+    // fila de interpolação da migração usa (lib/processarFertilidade).
+    if (lst.length === 0) return legendaPadraoDe(legendas, atributoId);
     const escolhida = legendaIdPorAtributo[atributoId];
     const alvo = lst.find(l => l.id === escolhida);
     // Perfil/escolha apontando para a gêmea não-padrão (mesmo nome) → vale a
     // padrão: é a que o usuário edita na Biblioteca e não dá pra distinguir as
     // duas no dropdown.
-    return alvo ? respeitarPadraoHomonima(lst, alvo) : lst[0];
+    return alvo ? respeitarPadraoHomonima(lst, alvo) : legendaPadraoDe(legendas, atributoId);
   }
 
   // Aplica um perfil da Biblioteca: pré-preenche legendaIdPorAtributo com o
@@ -709,18 +706,9 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
       // caber no limite de tamanho por registro da nuvem). SEM grid (backend antigo que
       // não devolve grid): MANTÉM o PNG do backend como fallback — senão o mapa
       // não renderiza (era a causa de "interpolado mas não aparece").
-      const gridGz = resp.grid ? await comprimirGrid(resp.grid) : undefined;
-      let dados: { resp: RespInterp; labels: GeoJSON.FeatureCollection; interpoladoEm: string } =
-        { resp: { ...resp, png: gridGz ? '' : (resp.png ?? ''), grid: gridGz }, labels, interpoladoEm };
-      // Salvaguarda de tamanho: se estourar mesmo com gzip, tenta manter só o PNG
-      // (ainda renderiza); se nem assim couber, salva só metadados.
-      if (JSON.stringify(dados).length > 950_000) {
-        const soPng = { resp: { ...resp, grid: undefined }, labels, interpoladoEm }; // mantém resp.png
-        dados = JSON.stringify(soPng).length <= 950_000
-          ? soPng
-          : { resp: { ...resp, png: '', grid: undefined }, labels, interpoladoEm };
-        console.warn(`[fertilidade] mapa grande p/ a nuvem — salvando ${dados.resp.png ? 'só PNG' : 'só metadados'} de ${nut} ${prof}.`);
-      }
+      // Salvaguarda de tamanho (grid gzipado → só PNG → só metadados) em
+      // lib/processarFertilidade, dividida com a fila da migração.
+      const dados = await dadosMapaParaNuvem(resp, labels, interpoladoEm, `${nut} ${prof}`);
       cloudSalvarMapa(idNuvem(nav.talhaoId, importacaoId, chaveUsada, pixelM, modeloUsado, nut, prof), dados);
     }
     enfileirar20m(nut, prof);

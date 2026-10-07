@@ -1,5 +1,11 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Importador de migração (InCeres)
+  '2.191.0': [
+    'NOVO: CONFIGURAÇÕES › IMPORTAR MIGRAÇÃO (só administrador). Escolha a pasta do export da InCeres (inteira ou a de um produtor) e a plataforma sobe, em lote, produtores, fazendas, talhões, grades de amostragem (grid e zona de manejo) e laudos de fertilidade, cada um na sua safra. Antes de gravar, uma prévia por produtor mostra o que será criado e sugere o produtor/fazenda já cadastrado com o mesmo nome — você escolhe juntar ou criar novo.',
+    'O talhão é identificado pelo CÓDIGO da grade ("FCDSR 05 - 2024" → talhão FCDSR 05). O polígono da safra mais nova vira o limite atual; polígonos diferentes de safras antigas ficam como versões anteriores do limite, ligadas àquelas safras. Grade e laudo entram com a data de referência no ano da safra (aparecem no Ano certo). O laudo é lido pelo perfil InCeres (unidades cmolc/mmolc convertidas) e liga à grade pelo número da amostra; na zona de manejo, cada zona leva o número do laudo.',
+    'Pastas sem laudo, sem pontos, com nome fora do padrão "CÓDIGO - AAAA" ou com o mesmo código e polígonos diferentes na mesma safra são puladas e listadas com o motivo. Reimportar a mesma pasta não duplica nada. Os mapas de fertilidade NÃO são gerados na importação: a "Fila de interpolação", na mesma seção, processa os próximos N laudos com o mesmo processamento da aba Fertilidade (krigagem no grid, valor constante por zona), mostra falhas e pode ser retomada a qualquer momento.',
+  ],
   // [S/N] Zonas de manejo: descontos do talhão não somem mais
   '2.190.3': [
     'CORRIGIDO: ZONAS DE MANEJO — OS DESCONTOS DO TALHÃO (mata, açude, sede, estrada) NÃO SOMEM MAIS DAS ZONAS. Furo do talhão que caía inteiro dentro de UMA zona e era menor que a área mínima (piso de 0,1 ha) era tratado como resquício de vetorização e preenchido — a zona passava por cima da mata. Só sobreviviam os furos que caíam na divisa entre duas zonas. Agora todo furo que fica fora do talhão é mantido, seja qual for o tamanho; os resquícios internos continuam sendo limpos.',

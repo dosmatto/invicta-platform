@@ -7,7 +7,9 @@ import { CHANGELOG } from '@/constants/changelog';
 import { EtiquetaLayoutPicker } from '../talhao/EtiquetaLayoutPicker';
 import { getConfigEtiqueta, saveConfigEtiqueta, getTalhoes, getFazendas, getClientes, saveFazenda, importarTalhoesLote, type Fazenda, type Cliente } from '@/lib/store';
 import { INTERP_URL_LOCAL, usarLocal, setUsarLocal, backendVivo, headersBackend, INTERP_URL } from '@/lib/interpUrl';
-import { ehOwner } from '@/lib/empresa';
+import { ehOwner, ehAdmin } from '@/lib/empresa';
+import { authConfigurado } from '@/lib/auth';
+import { ImportarMigracaoSection } from './ImportarMigracaoSection';
 import { exportarBackup, restaurarBackup } from '@/lib/backup';
 import { ChevronDown, ChevronRight, CheckCircle2, XCircle, Loader2, Download, AlertTriangle } from 'lucide-react';
 
@@ -375,6 +377,10 @@ export function ConfiguracoesPanel() {
   const [etq, setEtq] = useState(() => getConfigEtiqueta());
   const [owner, setOwner] = useState(false);
   useEffect(() => { setOwner(ehOwner()); }, []); // só no cliente (evita hydration mismatch)
+  // Importar migração: só administrador. Na bancada sem login (sem auth) não há
+  // papel nenhum — libera, como o portal faz (`!authConfigurado || ehAdmin()`).
+  const [admin, setAdmin] = useState(false);
+  useEffect(() => { setAdmin(!authConfigurado || ehAdmin()); }, []);
 
   function atualizarEtq(patch: Partial<typeof etq>) {
     const novo = { ...etq, ...patch };
@@ -405,6 +411,7 @@ export function ConfiguracoesPanel() {
 
       {owner && <BackupSection />}
       {owner && <ReligarTalhoesSection />}
+      {admin && <ImportarMigracaoSection />}
 
       <PanelSection title="Changelog">
         {/* Última versão — sempre visível */}

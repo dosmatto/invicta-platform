@@ -557,6 +557,25 @@ async function drenar(
   } else { errosSb[key] = carga; emitirSync(key, 'erro'); }
 }
 
+/**
+ * Espera a fila de envio destas chaves esvaziar (push em voo + pendente).
+ *
+ * Para gravações em LOTE (Importador de migração): sem esperar, o coalescing
+ * juntaria vários lotes num push só — o diff carregaria as linhas de todos
+ * eles num POST único e o tamanho do lote deixaria de ser o limite do envio.
+ * Esperando entre um lote e outro, cada POST leva só as linhas daquele lote.
+ * Falha de envio não lança: a chave fica marcada como suja e o retry de
+ * sempre (online/foco/45 s) reenvia.
+ */
+export async function aguardarFilaSupabase(keys: string[]): Promise<void> {
+  for (let volta = 0; volta < 10; volta++) {
+    const emVoo = keys.map(k => filaSb[k]).filter((p): p is Promise<void> => !!p);
+    if (emVoo.length === 0) return;
+    await Promise.all(emVoo.map(p => p.catch(() => {})));
+    if (keys.every(k => !pendenteSb[k])) return;
+  }
+}
+
 // Diff+sync de uma LISTA. Retorna true se gravou tudo sem erro.
 // 1º push da chave (espelho ausente): sync completo (upsert de tudo + delete
 // not-in — poda órfãos remotos). Seguintes: upsert só do que mudou, delete só
@@ -686,15 +705,18 @@ export async function pushObjSupabase(key: string, json: string): Promise<void> 
 // Ficam no app_kv na coleção COL_MAPAS, com o id encodando o contexto inteiro
 // (talhao__importacao__metodo__…). Carregados SOB DEMANDA por prefixo (LIKE),
 // fora do boot. Mesma API do cloud.ts (Firestore).
-export async function salvarMapaSupabase(id: string, dados: object, atualizadoEm?: string): Promise<void> {
+// Devolve true só quando o servidor confirmou a gravação (a fila de
+// interpolação da migração precisa saber; a aba Fertilidade ignora).
+export async function salvarMapaSupabase(id: string, dados: object, atualizadoEm?: string): Promise<boolean> {
   const sb = getSupabase();
-  if (!sb) return;
-  if (escritaBloqueada(COL_MAPAS) || registroBloqueado(COL_MAPAS, id)) return;   // produtor: só satélite/compactação dos talhões dele
+  if (!sb) return false;
+  if (escritaBloqueada(COL_MAPAS) || registroBloqueado(COL_MAPAS, id)) return false;   // produtor: só satélite/compactação dos talhões dele
   const up = await sb.from('app_kv').upsert(
     { colecao: COL_MAPAS, item_id: id, dados, atualizado_em: atualizadoEm ?? new Date().toISOString() },
     { onConflict: 'colecao,item_id' },
   );
-  if (up.error) console.warn('[supabase] salvar mapa:', up.error.message);
+  if (up.error) { console.warn('[supabase] salvar mapa:', up.error.message); return false; }
+  return true;
 }
 
 export async function carregarMapasPorPrefixoSupabase<T>(prefixo: string): Promise<Array<{ id: string; dados: T }>> {
