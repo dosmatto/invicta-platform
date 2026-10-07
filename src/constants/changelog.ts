@@ -1,5 +1,9 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Importar migração: produtor importado sai da lista
+  '2.191.1': [
+    'IMPORTAR MIGRAÇÃO — O PRODUTOR JÁ IMPORTADO SAI DA LISTA. Depois de importar, o produtor com todas as grades já gravadas some da prévia e da seleção; a lista mostra só o que falta e o contador "N já importado(s)" abre a relação dos concluídos.',
+  ],
   // [S/N] Importador de migração (InCeres)
   '2.191.0': [
     'NOVO: CONFIGURAÇÕES › IMPORTAR MIGRAÇÃO (só administrador). Escolha a pasta do export da InCeres (inteira ou a de um produtor) e a plataforma sobe, em lote, produtores, fazendas, talhões, grades de amostragem (grid e zona de manejo) e laudos de fertilidade, cada um na sua safra. Antes de gravar, uma prévia por produtor mostra o que será criado e sugere o produtor/fazenda já cadastrado com o mesmo nome — você escolhe juntar ou criar novo.',

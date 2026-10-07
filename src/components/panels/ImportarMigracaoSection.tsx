@@ -73,6 +73,18 @@ export function ImportarMigracaoSection() {
     return { grades: ids(getGrades()), laudos: ids(getImportacoesLab()) };
   }, [plano, versaoDados]);
 
+  // Produtores com TODAS as grades já importadas saem da lista (e da seleção):
+  // assim a lista vai encolhendo conforme a migração avança.
+  const completos = useMemo(() => {
+    const s = new Set<string>();
+    for (const prod of plano?.produtores ?? []) {
+      const gs = prod.fazendas.flatMap(f => f.talhoes.flatMap(t => t.grades));
+      if (gs.length && gs.every(g => ja.grades.has(g.carId) && ja.laudos.has(g.carId))) s.add(prod.nome);
+    }
+    return s;
+  }, [plano, ja]);
+  const [verCompletos, setVerCompletos] = useState(false);
+
   const clientes = useMemo(() => (plano ? getClientes() : []), [plano, versaoDados]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function aoEscolherPasta(ev: React.ChangeEvent<HTMLInputElement>) {
@@ -144,7 +156,7 @@ export function ImportarMigracaoSection() {
 
   async function importar() {
     if (!plano) return;
-    const sel = plano.produtores.filter(p => escolhas[p.nome]?.incluir);
+    const sel = plano.produtores.filter(p => escolhas[p.nome]?.incluir && !completos.has(p.nome));
     if (!sel.length) return;
     const nGrades = sel.reduce((s, p) => s + p.nGrades, 0);
     if (!confirm(`Importar ${sel.length} produtor(es), ${nGrades} grade(s)? Os mapas NÃO são gerados agora (use a fila de interpolação).`)) return;
@@ -282,7 +294,8 @@ export function ImportarMigracaoSection() {
     c.laudos += getImportacoesLab().length - antesL;
   }
 
-  const sel = plano?.produtores.filter(p => escolhas[p.nome]?.incluir) ?? [];
+  const sel = plano?.produtores.filter(p => escolhas[p.nome]?.incluir && !completos.has(p.nome)) ?? [];
+  const pendentes = plano?.produtores.filter(p => !completos.has(p.nome)) ?? [];
   const motivos = useMemo(() => {
     const m = new Map<string, number>();
     for (const p of plano?.puladas ?? []) {
@@ -311,7 +324,8 @@ export function ImportarMigracaoSection() {
         {plano && (
           <div className="space-y-2">
             <p className="text-[11px]" style={{ color: '#e2e8f0' }}>
-              {plano.produtores.length} produtor(es) · {plano.produtores.reduce((s, p) => s + p.nGrades, 0)} grade(s) com laudo
+              {pendentes.length} produtor(es) a importar · {pendentes.reduce((s, p) => s + p.nGrades, 0)} grade(s) com laudo
+              {completos.size > 0 && <> · <button className="underline" style={{ color: '#4ade80' }} onClick={() => setVerCompletos(v => !v)}>{completos.size} já importado(s)</button></>}
               · <button className="underline" style={{ color: '#fbbf24' }} onClick={() => setVerPuladas(v => !v)}>{plano.puladas.length} pulada(s)</button>
             </p>
             {verPuladas && (
@@ -325,13 +339,19 @@ export function ImportarMigracaoSection() {
               </div>
             )}
 
+            {verCompletos && completos.size > 0 && (
+              <div className="rounded p-2 space-y-0.5 max-h-40 overflow-y-auto text-[10px]" style={{ ...cardStyle, color: '#4ade80' }}>
+                {[...completos].map(nome => <p key={nome}>✓ {nome}</p>)}
+              </div>
+            )}
+
             <div className="flex gap-2 text-[10px]">
               <button className="underline" style={{ color: '#94a3b8' }} onClick={() => setEscolhas(e => Object.fromEntries(Object.entries(e).map(([k, v]) => [k, { ...v, incluir: true }])))}>marcar todos</button>
               <button className="underline" style={{ color: '#94a3b8' }} onClick={() => setEscolhas(e => Object.fromEntries(Object.entries(e).map(([k, v]) => [k, { ...v, incluir: false }])))}>desmarcar todos</button>
             </div>
 
             <div className="space-y-2 max-h-[28rem] overflow-y-auto pr-1">
-              {plano.produtores.map(prod => {
+              {pendentes.map(prod => {
                 const esc = escolhas[prod.nome];
                 if (!esc) return null;
                 const fazsCli = esc.clienteId === NOVO ? [] : getFazendas(esc.clienteId);
