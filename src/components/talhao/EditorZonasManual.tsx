@@ -63,6 +63,7 @@ export interface EditorZonasManualProps {
   nomeZoneamento: string;
   fcOriginal: GeoJSON.FeatureCollection;   // zoneamento salvo (não é alterado)
   areaMinHa?: number;                       // piso p/ divisão (spec §4)
+  poligono?: GeoJSON.Polygon | GeoJSON.MultiPolygon | null;   // talhão: seus furos (descontos) nunca são preenchidos
   camadasStats?: CamadaStats[];             // camadas p/ valor médio/mín/máx/desvio
   boundsStats?: [number, number, number, number];
   onMapFc: (fc: GeoJSON.FeatureCollection | null) => void;   // prévia p/ o mapa
@@ -91,7 +92,7 @@ function pngDaCamada(c: CamadaValidacao): string | null {
   return null;
 }
 
-export function EditorZonasManual({ talhaoId, nomeZoneamento, fcOriginal, areaMinHa = 0, camadasStats, boundsStats, onMapFc, onSalvarVersao, onClose }: EditorZonasManualProps) {
+export function EditorZonasManual({ talhaoId, nomeZoneamento, fcOriginal, areaMinHa = 0, poligono, camadasStats, boundsStats, onMapFc, onSalvarVersao, onClose }: EditorZonasManualProps) {
   const { zonaEvent, setZonaEvent, setCorteAtivo, corteLinha, setCorteLinha,
           setZonasFundo, zonasOpacidade, setZonasOpacidade } = useApp();
   // Permissões granulares do editor (spec §9). Modo local (bancada) libera tudo.
@@ -292,7 +293,7 @@ export function EditorZonasManual({ talhaoId, nomeZoneamento, fcOriginal, areaMi
     if (!alvo) return;
     empurrar();
     const base = selFeats.find(f => rankDe(f) === rankFinal) ?? selFeats.reduce((a, b) => (areaDe(b) > areaDe(a) ? b : a));
-    const { geometry, areaHa } = unirFeatures(selFeats, minM2);
+    const { geometry, areaHa } = unirFeatures(selFeats, minM2, poligono);
     const novo: Feat = {
       type: 'Feature', geometry,
       properties: { ...(base.properties ?? {}), id: idDe(base), potencialRank: rankFinal, classe: alvo.label, cor: alvo.cor, areaHa },

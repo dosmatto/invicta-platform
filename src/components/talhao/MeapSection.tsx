@@ -367,14 +367,14 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
     const limpas: GeoJSON.Feature[] = [];
     for (const f of res.features) {
       if (!f.geometry) continue;
-      const { geometry, areaHa } = limparZona(f.geometry as GeoJSON.Geometry, minM2);
+      const { geometry, areaHa } = limparZona(f.geometry as GeoJSON.Geometry, minM2, poligono);
       if (turfArea({ type: 'Feature', geometry, properties: {} }) < PARTE_DEGENERADA_M2) continue;  // só anel degenerado
       limpas.push({ ...f, geometry, properties: { ...(f.properties ?? {}), areaHa } });
     }
     setFeatsEdit(limpas);
     setSelZonas(new Set());
     setHistEdit([]); setRedoEdit([]);   // nova geração zera o histórico de edições
-  }, [res]);
+  }, [res, poligono]);
 
   // Potencial (rótulo + cor) por rank, conforme a ordem atual (posição = potencial).
   const potDeRank = useMemo(() => {
@@ -628,7 +628,7 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
     const maior = sel.reduce((a, b) => (areaDe(b) > areaDe(a) ? b : a));
     const mp = (maior.properties ?? {}) as { id?: string; potencialRank?: number; classe?: string };
     const minM2 = Math.max((res?.stats.area_min_ha || 0) * 10000, 1000);
-    const { geometry, areaHa } = unirFeatures(sel, minM2);
+    const { geometry, areaHa } = unirFeatures(sel, minM2, poligono);
     const novo: GeoJSON.Feature = {
       type: 'Feature', geometry,
       properties: { id: String(mp.id ?? '?'), potencialRank: Number(mp.potencialRank ?? 0), classe: mp.classe, areaHa },
@@ -670,7 +670,7 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
         if (!vizinhos.length) continue;
         vizinhos.sort((a, b) => Math.abs(rankDe(a) - fr) - Math.abs(rankDe(b) - fr) || areaDe(b) - areaDe(a));
         const n = vizinhos[0];
-        const { geometry, areaHa } = unirFeatures([n, f], minM2);
+        const { geometry, areaHa } = unirFeatures([n, f], minM2, poligono);
         const merged: GeoJSON.Feature = { type: 'Feature', geometry, properties: { ...(n.properties ?? {}), areaHa } };
         feats = feats.filter(x => idDaFeat(x) !== fId && idDaFeat(x) !== idDaFeat(n));
         feats.push(merged);
@@ -1509,7 +1509,7 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
               // o título mudava para a versão nova e as zonas continuavam as da
               // anterior, prontas para serem salvas no lugar errado.
               <EditorZonasManual key={editorZona.id} talhaoId={talhao.id} nomeZoneamento={editorZona.nome} fcOriginal={editorZona.fc}
-                areaMinHa={zEd?.meta.areaMinHa ?? 0}
+                areaMinHa={zEd?.meta.areaMinHa ?? 0} poligono={poligono}
                 camadasStats={camadasStatsEd} boundsStats={carregadas?.bounds}
                 onMapFc={setEditorMapFc}
                 onSalvarVersao={salvarVersaoEditada}

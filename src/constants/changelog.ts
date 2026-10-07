@@ -1,5 +1,10 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Zonas de manejo: descontos do talhão não somem mais
+  '2.190.3': [
+    'CORRIGIDO: ZONAS DE MANEJO — OS DESCONTOS DO TALHÃO (mata, açude, sede, estrada) NÃO SOMEM MAIS DAS ZONAS. Furo do talhão que caía inteiro dentro de UMA zona e era menor que a área mínima (piso de 0,1 ha) era tratado como resquício de vetorização e preenchido — a zona passava por cima da mata. Só sobreviviam os furos que caíam na divisa entre duas zonas. Agora todo furo que fica fora do talhão é mantido, seja qual for o tamanho; os resquícios internos continuam sendo limpos.',
+    'Vale ao gerar o zoneamento, ao unir zonas selecionadas, ao absorver fragmentos e no editor manual (unificar). Zoneamentos já salvos com o furo preenchido precisam ser gerados de novo (ou unidos de novo no editor) para recuperar o desconto.',
+  ],
   // [S/N] Complemento: aviso de zona sem dose do produto base volta a aparecer
   '2.190.2': [
     'CORRIGIDO: COMPLEMENTAÇÃO POR NUTRIENTE — zona ou faixa em que a prescrição base não tem dose volta a ser avisada ("Sem dose do produto base… o complemento cobre a meta inteira"). A conversão de unidade da 2.190.1 transformava a dose ausente em 0 e o aviso sumia; a dose calculada não muda.',

@@ -53,5 +53,52 @@ t('anel degenerado (área ~0) é descartado', () => {
   assert.equal(r.type, 'Polygon');
 });
 
+// DESCONTOS: furo do TALHÃO (mata, açude) que cai inteiro numa zona vira anel
+// interno dela. Menor que a área mínima, era preenchido como se fosse resquício
+// — a zona engolia a mata. Só sobreviviam os furos na divisa entre zonas.
+const MATA = anel(LNG + 0.01, LAT + 0.005, 0.0005, 0.0005);           // ~0,3 ha
+const ESTRADA = [                                                    // furo em "C": centroide fora
+  [LNG + 0.003, LAT + 0.003], [LNG + 0.006, LAT + 0.003], [LNG + 0.006, LAT + 0.0034],
+  [LNG + 0.0034, LAT + 0.0034], [LNG + 0.0034, LAT + 0.0056], [LNG + 0.006, LAT + 0.0056],
+  [LNG + 0.006, LAT + 0.006], [LNG + 0.003, LAT + 0.006], [LNG + 0.003, LAT + 0.003],
+];
+const TALHAO = { type: 'Polygon', coordinates: [GRANDE, MATA.slice().reverse(), ESTRADA.slice().reverse()] };
+
+t('desconto do talhão dentro de uma zona NÃO é preenchido', () => {
+  const g = { type: 'Polygon', coordinates: [GRANDE, MATA.slice().reverse()] };
+  const r = limparGeometria(g, MIN_5HA, TALHAO);
+  assert.equal(r.coordinates.length, 2);
+});
+
+t('desconto em "C" (centroide fora do furo) também fica', () => {
+  const g = { type: 'Polygon', coordinates: [GRANDE, ESTRADA.slice().reverse()] };
+  const r = limparGeometria(g, MIN_5HA, TALHAO);
+  assert.equal(r.coordinates.length, 2);
+});
+
+t('resquício (furo DENTRO do talhão) continua preenchido com o talhão informado', () => {
+  const resto = anel(LNG + 0.015, LAT + 0.01, 0.0005, 0.0005);
+  const g = { type: 'Polygon', coordinates: [GRANDE, resto.slice().reverse()] };
+  const r = limparGeometria(g, MIN_5HA, TALHAO);
+  assert.equal(r.coordinates.length, 1);
+});
+
+t('fundir duas zonas em volta da mata mantém a mata de fora', () => {
+  // metade oeste e leste do talhão, a divisa passando no meio da mata
+  const meio = LNG + 0.01025;
+  const tal = { type: 'Polygon', coordinates: [GRANDE, MATA.slice().reverse()] };
+  // as zonas já vêm recortadas pelo talhão: a mata é um "dente" em cada uma
+  const zonaO = { type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [[
+    [LNG, LAT], [meio, LAT], [meio, LAT + 0.005], [LNG + 0.01, LAT + 0.005], [LNG + 0.01, LAT + 0.0055],
+    [meio, LAT + 0.0055], [meio, LAT + 0.015], [LNG, LAT + 0.015], [LNG, LAT]]] } };
+  const zonaL = { type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [[
+    [meio, LAT], [LNG + 0.02, LAT], [LNG + 0.02, LAT + 0.015], [meio, LAT + 0.015], [meio, LAT + 0.0055],
+    [LNG + 0.0105, LAT + 0.0055], [LNG + 0.0105, LAT + 0.005], [meio, LAT + 0.005], [meio, LAT]]] } };
+  const { geometry } = unirFeatures([zonaO, zonaL], MIN_5HA, tal);
+  assert.ok(Math.abs(area(geometry) - area(tal)) < 5, `área ${area(geometry)} × talhão ${area(tal)}`);
+  const sem = unirFeatures([zonaO, zonaL], MIN_5HA).geometry;   // sem o talhão: comportamento antigo
+  assert.ok(area(sem) > area(tal) + 1000);
+});
+
 console.log(`\n${ok} ok, ${fail} falha(s)`);
 if (fail) process.exit(1);
