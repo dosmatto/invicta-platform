@@ -31,6 +31,7 @@ import { DiagnosticoIaCard } from '@/components/talhao/DiagnosticoIaCard';
 import { ChatTalhaoCard } from '@/components/talhao/ChatTalhaoCard';
 import { RecomendacaoSection } from '@/components/talhao/RecomendacaoSection';
 import { PrescricoesSection } from '@/components/talhao/PrescricoesSection';
+import { SeloLiberacaoLavra } from '@/components/talhao/SeloLiberacaoLavra';
 import { ArquivosSection } from '@/components/talhao/ArquivosSection';
 import { LabImportSection } from '@/components/talhao/LabImportSection';
 import { ImportarGradeSection } from '@/components/talhao/ImportarGradeSection';
@@ -348,6 +349,7 @@ export function TalhaoPage({ id }: { id: string }) {
           <Sep /> <Ctx label="Fazenda" value={fazenda?.nome ?? '—'} />
           <Sep /> <Ctx label="Talhão" value={talhao?.nome ?? '—'} forte />
           <Sep /> <Ctx label="Área" value={talhao ? `${talhao.areaHa.toLocaleString('pt-BR')} ha` : '—'} />
+          {talhao && <SeloLiberacaoLavra key={talhao.id} talhaoId={talhao.id} />}
           <Sep />
           {/* Ano ANTES da Cultura: é ele que manda: trocar o ano recarrega a
               cultura daquele ano (ver o efeito acima). Lado a lado e nesta

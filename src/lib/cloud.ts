@@ -18,6 +18,7 @@ import { usarDadosSupabase, bootSupabaseData, pushListaSupabase, pushObjSupabase
   excluirDocsPorPrefixoSupabase, excluirColecaoSupabase,
   listarIdsMapasPorPrefixoSupabase, carregarMapasPorIdsSupabase,
   listarMapasMetaPorPrefixoSupabase, carregarMapaSupabase, aguardarFilaSupabase,
+  incorporarNovosDaNuvem,
   type MapaMetaSupabase } from './supabaseData';
 import { cacheObterMapa, cacheGravarMapa, cacheExcluirMapa, cacheExcluirMapasPorPrefixo } from './mapaCache';
 import { temPesadaLocal, removerLocal } from './localComprimido';
@@ -229,6 +230,13 @@ export function cloudPushLista(key: string, lista: unknown[]) {
   }
   if (!usarDadosSupabase()) return;
   void pushListaSupabase(key, lista);
+}
+
+// Traz da nuvem registros que o SERVIDOR criou (API da Lavra) e este navegador
+// ainda não tem — só acrescenta, nunca sobrescreve. Ver incorporarNovosDaNuvem.
+export async function cloudIncorporarNovos(key: string, campo: string, valor: string): Promise<number> {
+  if (!ativo || !KEYS_LISTA.includes(key) || modoCampoLigado) return 0;
+  try { return await incorporarNovosDaNuvem(key, campo, valor); } catch { return 0; }
 }
 
 // Gravação em LOTE: espera o envio destas listas terminar antes do próximo lote

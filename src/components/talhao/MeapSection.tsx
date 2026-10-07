@@ -10,7 +10,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useApp } from '@/context/AppContext';
-import { getZoneamentosMeap, saveZoneamentoMeap, deleteZoneamentoMeap, renameZoneamentoMeap, setZoneamentoPadraoMeap, removerAdocaoMeap, getTalhoes, getLegendasPorAtributo, type Talhao, type ZoneamentoMeap, type SuavizacaoMeta, type EdicaoManualMeta, type OperacaoEdicaoZona } from '@/lib/store';
+import { getZoneamentosMeap, saveZoneamentoMeap, deleteZoneamentoMeap, renameZoneamentoMeap, setZoneamentoPadraoMeap, removerAdocaoMeap, getTalhoes, liberarZoneamentoProgramacao, desliberarZoneamentoProgramacao, prescricoesLavraDoZoneamento, getLegendasPorAtributo, type Talhao, type ZoneamentoMeap, type SuavizacaoMeta, type EdicaoManualMeta, type OperacaoEdicaoZona } from '@/lib/store';
 import { usuarioAtual } from '@/lib/auth';
 import { pode, podeZonas } from '@/lib/empresa';
 import type { RespSuavizarZonas, RespIncorporarDivisas } from '@/lib/fertilidade';
@@ -351,6 +351,13 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
 
   useEffect(() => { setZoneamentos(getZoneamentosMeap(talhao.id)); }, [talhao.id]);
   const recarregarZon = () => setZoneamentos(getZoneamentosMeap(talhao.id));
+  // Versão liberada para a Lavra. Lida do talhão GRAVADO (o `talhao` da prop é
+  // o da abertura do painel) e refeita a cada recarregarZon — toda operação de
+  // versão passa por ele.
+  const liberadoId = useMemo(
+    () => getTalhoes().find(t => t.id === talhao.id)?.zoneamentoLiberadoId ?? null,
+    [talhao.id, zoneamentos],   // eslint-disable-line react-hooks/exhaustive-deps
+  );
   const vendoFc = useMemo(() => (vendoId ? (zoneamentos.find(z => z.id === vendoId)?.fc ?? null) : null), [vendoId, zoneamentos]);
 
   // Ao gerar, inicializa a ordem dos potenciais com a sugestão do backend.
@@ -923,6 +930,47 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
     setAmb(obterOuAdotarAmbiente(talhao.id));
   }
 
+  // ── Liberação para programação na Lavra ────────────────────────────────
+  // Quantas LINHAS da programação (semente, adubo de base…) a Lavra já gravou
+  // sobre esta versão — conta a linha, não as versões dela.
+  function linhasLavra(id: string): number {
+    return new Set(prescricoesLavraDoZoneamento(id).map(p => p.origemLavra?.chave)).size;
+  }
+
+  function liberar(id: string) {
+    if (liberadoId && liberadoId !== id) {
+      const atual = zoneamentos.find(z => z.id === liberadoId);
+      const n = linhasLavra(liberadoId);
+      const impacto = n
+        ? `\n\nA Lavra já programou ${n} item(ns) da safra sobre "${atual?.nome ?? 'a versão atual'}". Essas prescrições continuam salvas aqui, mas reenvios sobre a versão antiga passam a ser recusados: o agrônomo terá de programar de novo sobre esta versão.`
+        : '';
+      if (!confirm(`Trocar a versão liberada para a Lavra?${impacto}`)) return;
+    }
+    liberarZoneamentoProgramacao(talhao.id, id, usuarioAtual()?.email ?? undefined);
+    recarregarZon();
+  }
+
+  function desliberar(id: string) {
+    const z = zoneamentos.find(x => x.id === id);
+    const n = linhasLavra(id);
+    const impacto = n
+      ? `\n\nA Lavra já programou ${n} item(ns) da safra sobre esta versão. As prescrições continuam salvas aqui, mas novos envios da Lavra serão recusados até uma versão ser liberada de novo.`
+      : '';
+    if (!confirm(`Tirar a liberação de "${z?.nome ?? 'esta versão'}"? A Lavra deixa de ver as zonas deste talhão.${impacto}`)) return;
+    desliberarZoneamentoProgramacao(talhao.id);
+    recarregarZon();
+  }
+
+  // Editar/suavizar/incorporar NÃO mexem na versão liberada (criam outra), mas
+  // a nova não nasce liberada — quem edita esperando que a Lavra "veja" a
+  // edição precisa saber disso antes.
+  function confirmarEdicaoLiberada(z: ZoneamentoMeap): boolean {
+    if (z.id !== liberadoId) return true;
+    const n = linhasLavra(z.id);
+    if (!n) return true;
+    return confirm(`"${z.nome}" está liberada para a Lavra e já tem ${n} item(ns) da safra programado(s) sobre ela.\n\nEditar cria uma versão NOVA, que NÃO fica liberada sozinha: a Lavra continua sobre esta até você liberar a nova — e aí terá de programar de novo. Continuar?`);
+  }
+
   function renomearVersao(id: string, nome: string) {
     renameZoneamentoMeap(id, nome);
     recarregarZon();
@@ -965,7 +1013,12 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
       ? `\n\n${filhas} versão(ões) derivada(s) dela continuam salvas, mas ficam sem a origem na linha do tempo.`
       : '';
     const oficial = alvo.padrao ? '\n\nEsta é a versão PADRÃO — a Amostragem e as Prescrições ficam sem zoneamento oficial até você marcar outra.' : '';
-    if (!confirm(`Excluir "${alvo.nome}"? Não dá para desfazer.${aviso}${oficial}`)) return;
+    const nLavra = id === liberadoId ? linhasLavra(id) : 0;
+    const lavra = id !== liberadoId ? ''
+      : nLavra
+        ? `\n\nEsta versão está LIBERADA para a Lavra, que já programou ${nLavra} item(ns) da safra sobre ela. As prescrições continuam salvas (com o desenho das zonas copiado), mas a Lavra não consegue mais reenviar até outra versão ser liberada.`
+        : '\n\nEsta versão está LIBERADA para a Lavra — ela deixa de ver as zonas deste talhão.';
+    if (!confirm(`Excluir "${alvo.nome}"? Não dá para desfazer.${aviso}${oficial}${lavra}`)) return;
     deleteZoneamentoMeap(id);
     if (vendoId === id) setVendoId(null);
     recarregarZon();
@@ -1481,9 +1534,10 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
             podeExcluir={podeZonas('excluir')}
             onVer={setVendoId}
             onTornarPadrao={tornarPadrao}
-            onEditar={z => { setEditorZona({ id: z.id, nome: z.nome, fc: z.fc }); setSuav(null); setSuavMapFc(null); }}
-            onSuavizar={z => { setSuav({ origem: { id: z.id, nome: z.nome }, fc: z.fc }); setEditorZona(null); setEditorMapFc(null); }}
+            onEditar={z => { if (!confirmarEdicaoLiberada(z)) return; setEditorZona({ id: z.id, nome: z.nome, fc: z.fc }); setSuav(null); setSuavMapFc(null); }}
+            onSuavizar={z => { if (!confirmarEdicaoLiberada(z)) return; setSuav({ origem: { id: z.id, nome: z.nome }, fc: z.fc }); setEditorZona(null); setEditorMapFc(null); }}
             onIncorporar={z => {
+              if (!confirmarEdicaoLiberada(z)) return;
               // Um painel de cada vez: dois desenhando no mapa ao mesmo tempo
               // deixaria o usuário sem saber qual prévia está vendo.
               setIncorp({ id: z.id, nome: z.nome, fc: z.fc });
@@ -1492,7 +1546,10 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
             onExcluir={excluir}
             onRenomear={renomearVersao}
             onRestaurar={restaurarVersao}
-            onComparar={(a, b) => { setLabPar({ a, b }); setLabAberto(true); }} />
+            onComparar={(a, b) => { setLabPar({ a, b }); setLabAberto(true); }}
+            liberadoId={liberadoId}
+            onLiberar={liberar}
+            onDesliberar={desliberar} />
           {editorZona && (() => {
             const zEd = zoneamentos.find(z => z.id === editorZona.id);
             const chavesEd = zEd?.meta.chaves ?? [];

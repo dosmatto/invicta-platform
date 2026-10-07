@@ -1,5 +1,12 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Liberar zonas de manejo para programação na Lavra
+  '2.192.0': [
+    'PENDÊNCIA S/N — ZONAS DE MANEJO LIBERADAS PARA A LAVRA. Em Talhão → Zonas → versões, o botão "Liberar p/ Lavra" (ao lado de "Tornar padrão") libera UMA versão do zoneamento por talhão para a plataforma fitotécnica (Lavra) programar as doses da safra por zona. Liberar outra versão troca a liberação. A versão liberada ganha o selo "Liberado p/ Lavra" (clique para tirar) e o cabeçalho do talhão mostra "Zonas liberadas p/ Lavra".',
+    'Apagar, editar, suavizar ou trocar/tirar a liberação de uma versão sobre a qual a Lavra já programou pede confirmação dizendo o impacto: as prescrições continuam salvas, mas a Lavra só consegue reenviar sobre a versão liberada.',
+    'NOVO: a Lavra devolve as doses programadas (semente com cultivar e população, adubo de base, coberturas 1 e 2, calcário e gesso) e a plataforma cria as PRESCRIÇÕES por zona sozinha, prontas para SHP/Excel/PDF. Elas aparecem em Talhão → Prescrições com o selo "Programado na Lavra (agrônomo, data)". Se a Lavra reenviar, entra uma versão nova por cima (a anterior continua salva); editar aqui cria uma versão só da plataforma, que o próximo reenvio substitui. Item que a Lavra retirar da programação fica salvo como histórico ("Retirada da programação na Lavra") e NÃO gera arquivo SHP/Excel/PDF.',
+    'Para ligar: rodar docs/integracao-lavra.sql no Supabase e emitir a chave com scripts/gerar-chave-integracao.mjs. Contrato para a Lavra em docs/integracao-lavra.md.',
+  ],
   // [S/N] Importar migração: grades sem código no nome entram pelo talhão ligado
   '2.191.3': [
     'IMPORTAR MIGRAÇÃO — GRADES SEM CÓDIGO NO NOME ("Amostragem Geral", "Grade 1638…") AGORA ENTRAM. Quando a pasta exportada traz o talhão ligado pela sobreposição do polígono (campo talhao_codigo no meta.json), a grade é importada nesse talhão, na safra dela, com o nome original. Sem essa ligação, continua pulada e listada como antes; o código no nome da grade sempre tem prioridade.',

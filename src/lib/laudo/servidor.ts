@@ -59,7 +59,9 @@ export async function autenticar(sb: SupabaseClient, auth: string | null): Promi
   if (error || !data?.length) return null;
   const r = data[0];
   // Best-effort: falhar em registrar o uso não pode derrubar a ingestão.
-  void sb.from('lab_chaves').update({ ultimo_uso_em: new Date().toISOString() }).eq('id', r.id);
+  // O builder do postgrest-js é preguiçoso: sem await/then a UPDATE nem sai.
+  // Aguarda (em função serverless, promessa solta pode morrer com a resposta).
+  try { await sb.from('lab_chaves').update({ ultimo_uso_em: new Date().toISOString() }).eq('id', r.id); } catch { /* best-effort */ }
   return {
     chaveId: String(r.id),
     laboratorioId: String(r.laboratorio_id ?? ''),

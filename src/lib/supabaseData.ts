@@ -701,6 +701,44 @@ export async function pushObjSupabase(key: string, json: string): Promise<void> 
   return enfileirar(key, { json, obj: true });
 }
 
+// ── Registros criados PELO SERVIDOR (API da Lavra) ───────────────────────────
+//
+// POST /api/v1/programacao grava prescrições direto no app_kv. O boot já as
+// traz (completo: a nuvem manda; incremental: entram pelo delta ou, se o
+// relógio enganar a marca d'água, pela divergência de counts que força o
+// completo; com pendência local: mesclarPorId soma as duas). O que o boot NÃO
+// faz é trazê-las com o app já aberto — e o agrônomo programa na Lavra e abre a
+// AP em seguida. Isto preenche essa lacuna, sob demanda, para UM recorte
+// (ex.: as prescrições de um talhão).
+//
+// Só ACRESCENTA ids que este navegador não tem; nunca reescreve um registro
+// local. É seguro porque o servidor só cria registros novos (cada versão tem id
+// próprio) — não há edição do servidor a perder nem a sobrescrever.
+//
+// Não roda com a chave suja ou com push pendente: a carga enfileirada é um
+// retrato SEM os registros novos, e o diff dela (espelho com eles × lista sem
+// eles) os apagaria da nuvem. Também pula ids que já estão no espelho mas não
+// no local — é exclusão local ainda subindo, e trazê-los de volta a desfaria.
+export async function incorporarNovosDaNuvem(key: string, campo: string, valor: string): Promise<number> {
+  const sb = getSupabase();
+  if (!sb || !usarDadosSupabase() || !chavesHidratadas.has(key)) return 0;
+  const r = await sb.from('app_kv').select('item_id, dados').eq('colecao', key).eq(`dados->>${campo}`, valor);
+  if (r.error || !r.data?.length) return 0;
+  // Conferido DEPOIS do await: uma gravação pode ter entrado enquanto a consulta rodava.
+  if (lerSujos()[key] || pendenteSb[key] || errosSb[key]) return 0;
+  const esp = espelhoSb[key];
+  if (!esp) return 0;
+  const local = lerLocalLista(key);
+  const ids = new Set(local.map(x => String((x as Rec).id)));
+  const novos = (r.data as { item_id: string; dados: unknown }[])
+    .filter(x => !ids.has(x.item_id) && !esp.has(x.item_id) && String((x.dados as Rec)?.id) === x.item_id);
+  if (!novos.length) return 0;
+  gravarRawLocal(key, JSON.stringify([...local, ...novos.map(x => x.dados)]));
+  // Espelho = "a nuvem já tem": o próximo diff não reenvia nem apaga estes.
+  for (const x of novos) esp.set(x.item_id, JSON.stringify(x.dados));
+  return novos.length;
+}
+
 // ── Mapas (rasters) — D1.3 ────────────────────────────────────────────────────
 // Ficam no app_kv na coleção COL_MAPAS, com o id encodando o contexto inteiro
 // (talhao__importacao__metodo__…). Carregados SOB DEMANDA por prefixo (LIKE),

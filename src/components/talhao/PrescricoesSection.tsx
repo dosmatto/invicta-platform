@@ -12,7 +12,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import {
   getZoneamentosMeap, getPrescricoes, savePrescricao, salvarVersaoPrescricao,
-  deletePrescricao, registrarExportePrescricao, getTalhoes, getFazendas, getClientes,
+  deletePrescricao, registrarExportePrescricao, getTalhoes, getFazendas, getClientes, atualizarPrescricoesDaNuvem,
   type ZoneamentoMeap,
   precoResolvidoDoInsumo, getImportacoesLab,
 } from '@/lib/store';
@@ -223,7 +223,16 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
       .sort((a, b) => b[0].atualizadoEm.localeCompare(a[0].atualizadoEm));
   }, [prescricoes]);
 
+  // Prescrições que a Lavra gravou pela API depois que esta aba abriu: o boot
+  // não as traria até recarregar a página. Só acrescenta (ver
+  // atualizarPrescricoesDaNuvem); o evento 'inv:prescricoes' redesenha a lista.
+  useEffect(() => { if (talhaoId) void atualizarPrescricoesDaNuvem(talhaoId); }, [talhaoId]);
+
   const [r, setR] = useState<Rascunho>(RASCUNHO_VAZIO);
+  const editandoLavra = useMemo(
+    () => (r.editandoId ? prescricoes.find(p => p.id === r.editandoId)?.origemLavra ?? null : null),
+    [r.editandoId, prescricoes],
+  );
   // No modo condição, toda mudança do rascunho ressincroniza a dose aplicada
   // (total, limites, unidade e espaçamento mudam o volume travado).
   const patch = (p: Partial<Rascunho>) => setR(x => sincronizarCondicao({ ...x, ...p }));
@@ -886,6 +895,10 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
       p = getPrescricoes(talhaoId).find(x => x.id === id);
     }
     if (!p) { setErro('Prescrição não encontrada.'); return; }
+    // Versão que a Lavra tirou da programação é histórico, não ordem de
+    // aplicação: não vira arquivo de máquina (os botões já somem; isto fecha
+    // os outros caminhos, como o editor aberto nela).
+    if (p.origemLavra?.removida) { setErro(MSG_REMOVIDA_NAO_EXPORTA); return; }
     // Unidade de saída: o arquivo sai na régua escolhida (população ou
     // sementes/m). A prescrição SALVA não muda — a conversão é exata e
     // reversível, então ela acontece só na saída.
@@ -1885,15 +1898,23 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
                 )}
 
                 {/* ── Ações ── */}
+                {editandoLavra && (
+                  <p className="text-[10px] px-2 py-1.5 rounded leading-snug" style={{ background: '#2a1a05', color: '#fde68a', border: '1px solid #b45309' }}>
+                    Esta prescrição foi <strong>programada na Lavra</strong>{editandoLavra.agronomo ? ` (${editandoLavra.agronomo})` : ''}. Salvar aqui cria uma versão nova só na AP — se a Lavra reenviar este item, a versão dela passa por cima desta. Para a mudança valer de vez, altere também na Lavra.
+                  </p>
+                )}
                 <div className="flex gap-1.5 flex-wrap">
                   <button onClick={salvar} className="px-3 py-2 rounded text-[11px] font-bold text-white flex items-center gap-1.5" style={{ background: 'var(--invicta-green-dark)' }}>
                     <Save size={12} /> {r.editandoId ? 'Salvar alterações (nova versão)' : 'Salvar prescrição'}
                   </button>
-                  {podeExportar && <>
+                  {podeExportar && !editandoLavra?.removida && <>
                   <BotaoExport rot="SHP" icone={FileDown} ocupado={exportando.endsWith(':shp')} onClick={() => exportar('shp')} />
                   <BotaoExport rot="Excel" icone={FileSpreadsheet} ocupado={exportando.endsWith(':xlsx')} onClick={() => exportar('xlsx')} />
                   <BotaoExport rot="PDF" icone={FileText} ocupado={exportando.endsWith(':pdf')} onClick={() => exportar('pdf')} />
                   </>}
+                  {podeExportar && editandoLavra?.removida && (
+                    <span className="px-2 py-2 text-[10px] leading-snug" style={{ color: '#fca5a5' }}>{MSG_REMOVIDA_NAO_EXPORTA}</span>
+                  )}
                   {r.editandoId && (
                     <button onClick={() => { setR(RASCUNHO_VAZIO); setAvisosCalc([]); setErro(''); setOkMsg(''); }}
                       className="px-2.5 py-2 rounded text-[10px] font-semibold" style={{ background: '#0f2240', color: '#93c5fd' }}>
@@ -2098,6 +2119,7 @@ function CartaoSalva({ p, anterior, exportando, onAbrir, onExportar, onExcluir, 
           <p className="text-[10px]" style={{ color: '#94a3b8' }}>
             {p.produto} · {ROTULO_TIPO[p.tipo]} · v{p.versao} · {dataBR(p.atualizadoEm)} · {p.criadoPor}
           </p>
+          {p.origemLavra && <SeloLavra p={p} />}
         </div>
       </div>
       <p className="text-[10px]" style={{ color: '#cbd5e1' }}>
@@ -2111,7 +2133,10 @@ function CartaoSalva({ p, anterior, exportando, onAbrir, onExportar, onExcluir, 
             <Pencil size={10} /> Abrir no editor
           </button>
         )}
-        {podeExportar && <>
+        {podeExportar && p.origemLavra?.removida && (
+          <span className="px-1 py-1 text-[10px]" style={{ color: '#fca5a5' }}>Sem exportação: retirada da programação na Lavra.</span>
+        )}
+        {podeExportar && !p.origemLavra?.removida && <>
         <BotaoExport rot="SHP" icone={FileDown} pequeno ocupado={exportando === `${p.id}:shp`} onClick={() => onExportar('shp', p)} />
         <BotaoExport rot="Excel" icone={FileSpreadsheet} pequeno ocupado={exportando === `${p.id}:xlsx`} onClick={() => onExportar('xlsx', p)} />
         <BotaoExport rot="PDF" icone={FileText} pequeno ocupado={exportando === `${p.id}:pdf`} onClick={() => onExportar('pdf', p)} />
@@ -2123,6 +2148,39 @@ function CartaoSalva({ p, anterior, exportando, onAbrir, onExportar, onExcluir, 
           </button>
         )}
       </div>
+    </div>
+  );
+}
+
+// Prescrição que veio da Lavra (POST /api/v1/programacao). Três estados:
+//  • a versão que a Lavra mandou — "Programado na Lavra (agrônomo, data)";
+//  • uma versão salva AQUI a partir dela — diz que foi alterada na AP;
+//  • a Lavra tirou o item da programação — não vale mais, mas fica salva.
+// Em todos: reenviar da Lavra cria versão nova por cima (o aviso diz isso).
+const MSG_REMOVIDA_NAO_EXPORTA = 'Esta versão foi retirada da programação na Lavra e não gera arquivo de aplicação (SHP/Excel/PDF). Se ela ainda vale, a Lavra precisa reenviar o item.';
+
+function SeloLavra({ p }: { p: Prescricao }) {
+  const o = p.origemLavra!;
+  const alteradaAqui = o.idRegistro !== p.id;
+  const quem = o.agronomo ? `${o.agronomo}, ` : '';
+  const quando = new Date(o.atualizadoEm).toLocaleDateString('pt-BR');
+  const safra = `${o.anoSafra}${o.tempo === 'SAFRINHA' ? ' safrinha' : ''}${o.subdivisao ? ` · ${o.subdivisao}` : ''}`;
+  if (o.removida) {
+    return (
+      <p className="text-[10px] mt-1 px-1.5 py-1 rounded leading-snug" style={{ background: '#2a0f0f', color: '#fca5a5', border: '1px solid #7f1d1d' }}>
+        <strong>Retirada da programação na Lavra</strong> ({quem}{quando}) — não vale mais para a safra {safra}. Fica salva só como histórico.
+      </p>
+    );
+  }
+  return (
+    <div className="text-[10px] mt-1 px-1.5 py-1 rounded leading-snug space-y-0.5" style={{ background: '#052e2b', color: '#99f6e4', border: '1px solid #0f766e' }}>
+      <p>
+        <strong style={{ color: '#5eead4' }}>Programado na Lavra</strong> ({quem}{quando}) · safra {safra}
+        {alteradaAqui && <span style={{ color: '#fde68a' }}> · alterado na AP depois</span>}
+      </p>
+      <p style={{ color: '#5eaaa0' }}>
+        Se a Lavra reenviar este item, ele vira uma versão nova por cima desta{alteradaAqui ? ' — e as alterações feitas aqui deixam de ser a versão vigente' : ''}. Para mudar a dose de vez, mude na Lavra.
+      </p>
     </div>
   );
 }

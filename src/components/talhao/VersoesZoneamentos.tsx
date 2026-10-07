@@ -17,7 +17,7 @@
 import { useMemo, useState } from 'react';
 import type { ZoneamentoMeap } from '@/lib/store';
 import { montarLinhagens, nomeCurto, type VersaoZoneamento } from '@/lib/meap/versoes';
-import { Star, Trash2, Eye, Pencil, Spline, Scissors, GitCompare, RotateCcw, Tag, Check, X, AlertTriangle } from 'lucide-react';
+import { Star, Trash2, Eye, Pencil, Spline, Scissors, GitCompare, RotateCcw, Tag, Check, X, AlertTriangle, Send } from 'lucide-react';
 
 interface Props {
   zoneamentos: ZoneamentoMeap[];
@@ -35,6 +35,11 @@ interface Props {
   onRenomear: (id: string, nome: string) => void;
   onRestaurar: (v: VersaoZoneamento, nomeBase: string) => void;
   onComparar: (aId: string, bId: string) => void;
+  /** Versão liberada para programação na Lavra (talhao.zoneamentoLiberadoId). */
+  liberadoId?: string | null;
+  /** Liga/desliga a liberação. Ausente = sem o botão (ex.: produtor). */
+  onLiberar?: (id: string) => void;
+  onDesliberar?: (id: string) => void;
 }
 
 const COR_TIPO: Record<string, string> = {
@@ -52,6 +57,7 @@ function dataCurta(iso: string): string {
 export function VersoesZoneamentos({
   zoneamentos, vendoId, podeEditar, podeExcluir = podeEditar,
   onVer, onTornarPadrao, onEditar, onSuavizar, onIncorporar, onExcluir, onRenomear, onRestaurar, onComparar,
+  liberadoId = null, onLiberar, onDesliberar,
 }: Props) {
   const linhagens = useMemo(() => montarLinhagens(zoneamentos), [zoneamentos]);
   const [sel, setSel] = useState<string[]>([]);          // ids marcados p/ comparar
@@ -127,6 +133,18 @@ export function VersoesZoneamentos({
                           ? <span className="text-[9px] px-1.5 py-0.5 rounded font-bold flex items-center gap-1 flex-shrink-0" style={{ background: '#3a2e0a', color: '#fbbf24' }}><Star size={8} /> Padrão</span>
                           : !podeEditar ? null : <button onClick={e => { e.stopPropagation(); onTornarPadrao(z.id); }} title="Usar esta versão na Amostragem e nas Prescrições"
                               className="text-[9px] px-1.5 py-0.5 rounded font-semibold flex-shrink-0" style={{ background: '#1a3a6b', color: '#93c5fd' }}>Tornar padrão</button>}
+                        {liberadoId === z.id ? (
+                          <button onClick={e => { e.stopPropagation(); if (podeEditar && onDesliberar) onDesliberar(z.id); }}
+                            disabled={!podeEditar || !onDesliberar}
+                            title={`Liberado para a Lavra programar doses por zona${z.liberadoProgramacao ? ` — ${dataCurta(z.liberadoProgramacao.em)}${z.liberadoProgramacao.por ? ` · ${z.liberadoProgramacao.por}` : ''}` : ''}.${podeEditar && onDesliberar ? ' Clique para tirar a liberação.' : ''}`}
+                            className="text-[9px] px-1.5 py-0.5 rounded font-bold flex items-center gap-1 flex-shrink-0" style={{ background: '#052e2b', color: '#5eead4', border: '1px solid #0f766e' }}>
+                            <Send size={8} /> Liberado p/ Lavra
+                          </button>
+                        ) : podeEditar && onLiberar ? (
+                          <button onClick={e => { e.stopPropagation(); onLiberar(z.id); }}
+                            title="Liberar esta versão para a Lavra programar as doses da safra por zona (só uma versão por talhão; liberar esta tira a liberação da outra)"
+                            className="text-[9px] px-1.5 py-0.5 rounded font-semibold flex-shrink-0" style={{ background: '#0b2a2a', color: '#5eead4' }}>Liberar p/ Lavra</button>
+                        ) : null}
                       </div>
 
                       {/* o que esta versão é e o que ela fez */}
@@ -202,7 +220,7 @@ export function VersoesZoneamentos({
         </p>
       )}
       <p className="text-[9px] leading-relaxed" style={{ color: '#6d8bbe' }}>
-        Cada operação cria uma versão nova — a anterior nunca é sobrescrita. <strong style={{ color: '#fbbf24' }}>Padrão</strong> é a versão que a Amostragem e as Prescrições usam. Marque duas <strong style={{ color: '#22d3ee' }}>V</strong> da mesma linhagem para comparar.
+        Cada operação cria uma versão nova — a anterior nunca é sobrescrita. <strong style={{ color: '#fbbf24' }}>Padrão</strong> é a versão que a Amostragem e as Prescrições usam. Marque duas <strong style={{ color: '#22d3ee' }}>V</strong> da mesma linhagem para comparar. <strong style={{ color: '#5eead4' }}>Liberado p/ Lavra</strong> é a versão (uma por talhão) sobre a qual a Lavra programa as doses da safra por zona.
       </p>
     </div>
   );

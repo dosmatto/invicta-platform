@@ -216,6 +216,40 @@ export interface Prescricao {
   historico: HistoricoPrescricao[];
   exportes: RegistroExporte[];
   empresaId?: string;
+  /** Presente quando a prescrição foi PROGRAMADA NA LAVRA (plataforma
+   *  fitotécnica) e chegou por POST /api/v1/programacao. Ausente nas feitas na
+   *  própria AP. Uma versão salva na AP a partir de uma da Lavra herda este
+   *  campo (o `...anterior` de salvarVersaoPrescricao) — `idRegistro` diz se o
+   *  registro é o que a Lavra mandou ou um derivado editado aqui. */
+  origemLavra?: OrigemLavra;
+}
+
+/** Item da programação de safra da Lavra (um por produto da safra). */
+export type ChaveProgramacao =
+  | 'semente' | 'adubo_base' | 'cobertura_1' | 'cobertura_2' | 'corretivo_calcario' | 'corretivo_gesso';
+
+export interface OrigemLavra {
+  sistema: 'lavra';
+  /** Chave de idempotência: `lavra:<talhaoId>:<cultivoId>:<chave>`. Todas as versões da
+   *  mesma linha da programação compartilham esta chave. */
+  chave: string;
+  item: ChaveProgramacao;
+  cultivoId: string;
+  planoId?: string;
+  subdivisao?: string;
+  agronomo?: string;
+  anoSafra: string;            // "2026/2027"
+  tempo: 'NORMAL' | 'SAFRINHA';
+  /** Quando a programação foi alterada NA LAVRA (o que ela informou). */
+  atualizadoEm: string;
+  /** Quando a AP recebeu (relógio do servidor). */
+  recebidoEm: string;
+  /** id do registro que o SERVIDOR gravou. Diferente de `Prescricao.id` ⇒ esta
+   *  é uma versão editada na AP depois do que veio da Lavra. */
+  idRegistro: string;
+  /** A Lavra tirou este item da programação (`remover`). A versão continua
+   *  salva — prescrição é documento — mas a tela avisa que não vale mais. */
+  removida?: boolean;
 }
 
 // Fator unidade-base → rótulo do TOTAL (para resumos e validações).

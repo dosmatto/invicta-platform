@@ -17,7 +17,7 @@ export { ordenarLegendasDoAtributo } from './legendas';
 import type { AmbienteProdutivo } from './meap/tipos';
 import { padraoVigente, padroesExcedentes } from './meap/versoes';
 import type { CelulaComposta } from './gradeComposta';
-import { cloudPushLista, cloudAindaNaoHidratou, cloudMarcarPendente } from './cloud';
+import { cloudPushLista, cloudAindaNaoHidratou, cloudMarcarPendente, cloudIncorporarNovos } from './cloud';
 import { lerListaLocal, gravarListaLocal, removerLocal } from './localComprimido';
 import { moverNaOrdem, renumerar } from './ordemCatalogo';
 import { areaHaGeo, areaHaGeoBruta } from './areaGeo';
@@ -103,6 +103,13 @@ export interface Talhao {
    *  safra cujo polígono é o limite atual — só um limite que veio da migração
    *  pode ser trocado por outra migração (ver lib/migracaoInceres). */
   origemExterna?: OrigemExterna;
+  /** ESPELHO do zoneamento liberado para programação na Lavra (plataforma
+   *  fitotécnica). A Lavra lê a tabela `talhoes` com um papel somente-leitura e
+   *  filtra por `dados->>'zoneamentoLiberadoId'` — sem este espelho ela teria de
+   *  varrer todos os zoneamentos do app_kv. Fonte da verdade da liberação: é
+   *  contra ELE que POST /api/v1/programacao confere o zoneamento recebido.
+   *  Escrito só por liberarZoneamentoProgramacao / desliberar / excluir. */
+  zoneamentoLiberadoId?: string;
 }
 
 /** De onde veio um registro migrado de outro sistema (Importador de migração).
@@ -2607,6 +2614,10 @@ export interface ZoneamentoMeap {
   /** Quando virou padrão (ISO). Desempata quando a sincronização deixa dois
    *  marcados — ver `padraoVigente` em lib/meap/versoes. */
   padraoEm?: string;
+  /** Liberado para a Lavra programar doses por zona. No máximo UM por talhão;
+   *  o espelho `talhao.zoneamentoLiberadoId` é o que vale (ver Talhao). Isto
+   *  guarda quem liberou e quando, para o selo da tela de versões. */
+  liberadoProgramacao?: { em: string; por?: string };
   fc: GeoJSON.FeatureCollection;   // polígonos {id, zona, classe, areaHa, potencialRank}
   meta: { camadas: string[]; algoritmo: string; nPotenciais: number; areaMinHa: number; nZonas: number; nPoligonos?: number; cvMedio?: number | null; pesos?: Record<string, number>; chaves?: string[]; suavizacao?: SuavizacaoMeta; edicaoManual?: EdicaoManualMeta; importacao?: ImportacaoMeta; restauracao?: RestauracaoMeta; incorporacao?: IncorporacaoMeta };
   criadoEm: string;
@@ -2748,7 +2759,56 @@ export function renameZoneamentoMeap(id: string, nome: string): void {
 }
 
 export function deleteZoneamentoMeap(id: string): void {
-  save('inv_meap_zoneamentos', load<ZoneamentoMeap>('inv_meap_zoneamentos').filter(z => z.id !== id));
+  const lista = load<ZoneamentoMeap>('inv_meap_zoneamentos');
+  const alvo = lista.find(z => z.id === id);
+  save('inv_meap_zoneamentos', lista.filter(z => z.id !== id));
+  // Apagou a versão liberada: o espelho do talhão não pode seguir apontando
+  // para um zoneamento que não existe — a Lavra continuaria oferecendo zonas
+  // que a API recusaria com 409.
+  if (alvo && getTalhoes().find(t => t.id === alvo.talhaoId)?.zoneamentoLiberadoId === id) {
+    updateTalhao(alvo.talhaoId, { zoneamentoLiberadoId: undefined });
+    avisarLiberacao();
+  }
+}
+
+// ── Liberação para programação na Lavra ──────────────────────────────────────
+// Uma versão por talhão. Liberar outra TROCA (desliga a anterior). O espelho no
+// talhão é gravado junto — é por ele que a Lavra acha o que pode programar.
+
+// Avisa o selo do cabeçalho do talhão (SeloLiberacaoLavra).
+function avisarLiberacao() {
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('inv:liberacao-lavra'));
+}
+
+/** Libera `id` para programação (e desliga qualquer outra versão do talhão). */
+export function liberarZoneamentoProgramacao(talhaoId: string, id: string, por?: string): void {
+  const lista = load<ZoneamentoMeap>('inv_meap_zoneamentos');
+  if (!lista.some(z => z.id === id && z.talhaoId === talhaoId)) return;
+  const em = new Date().toISOString();
+  let mudou = false;
+  lista.forEach(z => {
+    if (z.talhaoId !== talhaoId) return;
+    if (z.id === id) { z.liberadoProgramacao = { em, ...(por ? { por } : {}) }; mudou = true; }
+    else if (z.liberadoProgramacao) { delete z.liberadoProgramacao; mudou = true; }
+  });
+  if (mudou) save('inv_meap_zoneamentos', lista);
+  updateTalhao(talhaoId, { zoneamentoLiberadoId: id });
+  avisarLiberacao();
+}
+
+/** Tira a liberação do talhão (nenhuma versão fica disponível para a Lavra). */
+export function desliberarZoneamentoProgramacao(talhaoId: string): void {
+  const lista = load<ZoneamentoMeap>('inv_meap_zoneamentos');
+  let mudou = false;
+  lista.forEach(z => { if (z.talhaoId === talhaoId && z.liberadoProgramacao) { delete z.liberadoProgramacao; mudou = true; } });
+  if (mudou) save('inv_meap_zoneamentos', lista);
+  updateTalhao(talhaoId, { zoneamentoLiberadoId: undefined });
+  avisarLiberacao();
+}
+
+/** Prescrições que a Lavra já gravou sobre este zoneamento (todas as versões). */
+export function prescricoesLavraDoZoneamento(zoneamentoId: string): Prescricao[] {
+  return loadFiltrado<Prescricao>(K_PRESC).filter(p => p.zoneamentoId === zoneamentoId && !!p.origemLavra);
 }
 
 // Marca um zoneamento como padrão (desmarca os outros do talhão) e grava as
@@ -3243,6 +3303,14 @@ export function registrarExportePrescricao(id: string, formato: Prescricao['expo
   p.exportes = [...p.exportes, { em: new Date().toISOString(), por, formato, arquivo }];
   save(K_PRESC, lista);
   notificarPrescricoes();
+}
+
+/** Traz as prescrições que a Lavra gravou pela API (servidor) depois que este
+ *  navegador abriu. Só acrescenta; nunca mexe no que já está aqui. */
+export async function atualizarPrescricoesDaNuvem(talhaoId: string): Promise<number> {
+  const n = await cloudIncorporarNovos(K_PRESC, 'talhaoId', talhaoId);
+  if (n) notificarPrescricoes();
+  return n;
 }
 
 export function deletePrescricao(id: string): void {
