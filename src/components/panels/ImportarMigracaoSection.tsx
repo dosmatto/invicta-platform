@@ -114,20 +114,34 @@ export function ImportarMigracaoSection() {
     const laudos = new Map<string, File>();
     const texto = async (arqs: Map<string, number>, nome: string) => (arqs.has(nome) ? files[arqs.get(nome)!].text() : undefined);
     let i = 0;
+    let ilegiveis = 0;
     setLendo({ atual: 0, total: pastas.size });
-    for (const [pasta, arqs] of pastas) {
-      const temLaudo = arqs.has('laudo.xlsx');
-      // Sem laudo a pasta é pulada: basta o meta.json para dizer de quem é.
-      resultados.push(prepararPasta({
-        caminho: pasta, temLaudo,
-        meta: await texto(arqs, 'meta.json'),
-        contorno: temLaudo ? await texto(arqs, 'contorno.geojson') : undefined,
-        pontos: temLaudo ? await texto(arqs, 'pontos.geojson') : undefined,
-        zonas: temLaudo ? await texto(arqs, 'zonas.geojson') : undefined,
-      }));
-      if (temLaudo) laudos.set(pasta, files[arqs.get('laudo.xlsx')!]);
-      if (++i % 25 === 0) { setLendo({ atual: i, total: pastas.size }); await ceder(); }
+    try {
+      for (const [pasta, arqs] of pastas) {
+        const temLaudo = arqs.has('laudo.xlsx');
+        try {
+          // Sem laudo a pasta é pulada: basta o meta.json para dizer de quem é.
+          resultados.push(prepararPasta({
+            caminho: pasta, temLaudo,
+            meta: await texto(arqs, 'meta.json'),
+            contorno: temLaudo ? await texto(arqs, 'contorno.geojson') : undefined,
+            pontos: temLaudo ? await texto(arqs, 'pontos.geojson') : undefined,
+            zonas: temLaudo ? await texto(arqs, 'zonas.geojson') : undefined,
+          }));
+          if (temLaudo) laudos.set(pasta, files[arqs.get('laudo.xlsx')!]);
+        } catch {
+          // O navegador recusa ler arquivo que mudou ou sumiu depois de escolhida a
+          // pasta (ex.: download ainda gravando o export). A pasta é pulada e listada.
+          ilegiveis++;
+          const [produtor = '', fazenda = '', talhaoPasta = '', grade = ''] = pasta.split('/').slice(-4);
+          resultados.push({ pulada: { caminho: pasta, produtor, fazenda, talhaoPasta, grade, safra: '', motivo: 'arquivo mudou ou sumiu durante a leitura — escolha a pasta de novo' } });
+        }
+        if (++i % 25 === 0) { setLendo({ atual: i, total: pastas.size }); await ceder(); }
+      }
+    } finally {
+      setLendo(null);
     }
+    if (ilegiveis) alert(`${ilegiveis} pasta(s) mudaram durante a leitura e foram puladas. Se o export ainda está sendo atualizado, espere terminar e escolha a pasta de novo.`);
     laudosRef.current = laudos;
     const p = montarPlano(resultados);
     // Sugestões: produtor e fazenda existentes pelo nome normalizado.

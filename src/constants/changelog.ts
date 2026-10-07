@@ -1,5 +1,9 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Importar migração: leitura da pasta não trava mais
+  '2.192.1': [
+    'CORRIGIDO: IMPORTAR MIGRAÇÃO — A LEITURA DA PASTA NÃO FICA MAIS PARADA EM "Lendo pastas…". Quando um arquivo do export muda ou some depois de escolhida a pasta (ex.: o download ainda está gravando), o navegador recusa lê-lo e a leitura inteira parava ali. Agora essa pasta é pulada e listada ("arquivo mudou ou sumiu durante a leitura"), um aviso pede para escolher a pasta de novo e o restante segue normalmente.',
+  ],
   // [S/N] Liberar zonas de manejo para programação na Lavra
   '2.192.0': [
     'PENDÊNCIA S/N — ZONAS DE MANEJO LIBERADAS PARA A LAVRA. Em Talhão → Zonas → versões, o botão "Liberar p/ Lavra" (ao lado de "Tornar padrão") libera UMA versão do zoneamento por talhão para a plataforma fitotécnica (Lavra) programar as doses da safra por zona. Liberar outra versão troca a liberação. A versão liberada ganha o selo "Liberado p/ Lavra" (clique para tirar) e o cabeçalho do talhão mostra "Zonas liberadas p/ Lavra".',
