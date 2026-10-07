@@ -1,5 +1,9 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Importar migração: opção "Não importar" por produtor
+  '2.191.2': [
+    'IMPORTAR MIGRAÇÃO — BOTÃO "NÃO IMPORTAR" EM CADA PRODUTOR. O produtor marcado sai da lista principal e da seleção e não volta ao reler a pasta (a escolha fica guardada neste navegador). O contador "N não importar" abre a relação, com "voltar para a lista" para desfazer.',
+  ],
   // [S/N] Importar migração: produtor importado sai da lista
   '2.191.1': [
     'IMPORTAR MIGRAÇÃO — O PRODUTOR JÁ IMPORTADO SAI DA LISTA. Depois de importar, o produtor com todas as grades já gravadas some da prévia e da seleção; a lista mostra só o que falta e o contador "N já importado(s)" abre a relação dos concluídos.',

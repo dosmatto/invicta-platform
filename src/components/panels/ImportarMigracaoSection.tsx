@@ -85,6 +85,22 @@ export function ImportarMigracaoSection() {
   }, [plano, ja]);
   const [verCompletos, setVerCompletos] = useState(false);
 
+  // Produtores que o usuário decidiu NÃO importar: saem da lista principal e da
+  // seleção. Fica neste navegador (como o estado da fila), pois a pasta é relida
+  // a cada sessão e a decisão precisa sobreviver a isso.
+  const [ignorados, setIgnorados] = useState<Set<string>>(() => {
+    try { return new Set(JSON.parse(localStorage.getItem(K_IGNORADOS) ?? '[]') as string[]); } catch { return new Set(); }
+  });
+  const [verIgnorados, setVerIgnorados] = useState(false);
+  function alternarIgnorado(nome: string, ignorar: boolean) {
+    setIgnorados(prev => {
+      const s = new Set(prev);
+      if (ignorar) s.add(nome); else s.delete(nome);
+      try { localStorage.setItem(K_IGNORADOS, JSON.stringify([...s])); } catch { /* sem espaço: segue só em memória */ }
+      return s;
+    });
+  }
+
   const clientes = useMemo(() => (plano ? getClientes() : []), [plano, versaoDados]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function aoEscolherPasta(ev: React.ChangeEvent<HTMLInputElement>) {
@@ -156,7 +172,7 @@ export function ImportarMigracaoSection() {
 
   async function importar() {
     if (!plano) return;
-    const sel = plano.produtores.filter(p => escolhas[p.nome]?.incluir && !completos.has(p.nome));
+    const sel = plano.produtores.filter(p => escolhas[p.nome]?.incluir && !completos.has(p.nome) && !ignorados.has(p.nome));
     if (!sel.length) return;
     const nGrades = sel.reduce((s, p) => s + p.nGrades, 0);
     if (!confirm(`Importar ${sel.length} produtor(es), ${nGrades} grade(s)? Os mapas NÃO são gerados agora (use a fila de interpolação).`)) return;
@@ -294,8 +310,10 @@ export function ImportarMigracaoSection() {
     c.laudos += getImportacoesLab().length - antesL;
   }
 
-  const sel = plano?.produtores.filter(p => escolhas[p.nome]?.incluir && !completos.has(p.nome)) ?? [];
-  const pendentes = plano?.produtores.filter(p => !completos.has(p.nome)) ?? [];
+  const sel = plano?.produtores.filter(p => escolhas[p.nome]?.incluir && !completos.has(p.nome) && !ignorados.has(p.nome)) ?? [];
+  const pendentes = plano?.produtores.filter(p => !completos.has(p.nome) && !ignorados.has(p.nome)) ?? [];
+  // Só os ignorados presentes nesta pasta (um produtor de outra pasta não conta aqui).
+  const nIgnorados = plano?.produtores.filter(p => ignorados.has(p.nome) && !completos.has(p.nome)).map(p => p.nome) ?? [];
   const motivos = useMemo(() => {
     const m = new Map<string, number>();
     for (const p of plano?.puladas ?? []) {
@@ -326,6 +344,7 @@ export function ImportarMigracaoSection() {
             <p className="text-[11px]" style={{ color: '#e2e8f0' }}>
               {pendentes.length} produtor(es) a importar · {pendentes.reduce((s, p) => s + p.nGrades, 0)} grade(s) com laudo
               {completos.size > 0 && <> · <button className="underline" style={{ color: '#4ade80' }} onClick={() => setVerCompletos(v => !v)}>{completos.size} já importado(s)</button></>}
+              {nIgnorados.length > 0 && <> · <button className="underline" style={{ color: '#94a3b8' }} onClick={() => setVerIgnorados(v => !v)}>{nIgnorados.length} não importar</button></>}
               · <button className="underline" style={{ color: '#fbbf24' }} onClick={() => setVerPuladas(v => !v)}>{plano.puladas.length} pulada(s)</button>
             </p>
             {verPuladas && (
@@ -345,6 +364,18 @@ export function ImportarMigracaoSection() {
               </div>
             )}
 
+            {verIgnorados && nIgnorados.length > 0 && (
+              <div className="rounded p-2 space-y-0.5 max-h-40 overflow-y-auto text-[10px]" style={{ ...cardStyle, color: '#94a3b8' }}>
+                {nIgnorados.map(nome => (
+                  <p key={nome} className="flex items-center justify-between gap-2">
+                    <span className="truncate">✕ {nome}</span>
+                    <button className="underline shrink-0" style={{ color: '#60a5fa' }} disabled={rodando}
+                      onClick={() => alternarIgnorado(nome, false)}>voltar para a lista</button>
+                  </p>
+                ))}
+              </div>
+            )}
+
             <div className="flex gap-2 text-[10px]">
               <button className="underline" style={{ color: '#94a3b8' }} onClick={() => setEscolhas(e => Object.fromEntries(Object.entries(e).map(([k, v]) => [k, { ...v, incluir: true }])))}>marcar todos</button>
               <button className="underline" style={{ color: '#94a3b8' }} onClick={() => setEscolhas(e => Object.fromEntries(Object.entries(e).map(([k, v]) => [k, { ...v, incluir: false }])))}>desmarcar todos</button>
@@ -360,11 +391,16 @@ export function ImportarMigracaoSection() {
                 const nZona = grades.filter(g => g.tipo === 'zona').length;
                 return (
                   <div key={prod.nome} className="rounded p-2 space-y-1.5" style={cardStyle}>
-                    <label className="flex items-center gap-2 text-[11px] font-semibold" style={{ color: '#e2e8f0' }}>
-                      <input type="checkbox" checked={esc.incluir} disabled={rodando}
-                        onChange={ev => setEscolhas(e => ({ ...e, [prod.nome]: { ...e[prod.nome], incluir: ev.target.checked } }))} />
-                      {prod.nome}
-                    </label>
+                    <div className="flex items-center gap-2">
+                      <label className="flex-1 min-w-0 flex items-center gap-2 text-[11px] font-semibold" style={{ color: '#e2e8f0' }}>
+                        <input type="checkbox" checked={esc.incluir} disabled={rodando}
+                          onChange={ev => setEscolhas(e => ({ ...e, [prod.nome]: { ...e[prod.nome], incluir: ev.target.checked } }))} />
+                        <span className="truncate">{prod.nome}</span>
+                      </label>
+                      <button className="shrink-0 text-[10px] underline" style={{ color: '#94a3b8' }} disabled={rodando}
+                        title="Tira este produtor da lista; dá para trazer de volta em “não importar”"
+                        onClick={() => alternarIgnorado(prod.nome, true)}>Não importar</button>
+                    </div>
                     <p className="text-[10px]" style={{ color: '#94a3b8' }}>
                       {prod.fazendas.length} fazenda(s) · {prod.fazendas.reduce((s, f) => s + f.talhoes.length, 0)} talhão(ões) ·
                       {' '}{grades.length} grade(s){nZona ? ` (${nZona} zona)` : ''} + laudos · safras {prod.safras.join(', ')}
@@ -444,6 +480,7 @@ export function ImportarMigracaoSection() {
 // o resto não sai por falta de dado (`semDado`); `falha` = volta na próxima.
 
 const K_FILA = 'inv_migracao_fila';
+const K_IGNORADOS = 'inv_migracao_ignorados';
 type EstadoFila = Record<string, { st: 'ok' | 'parcial' | 'falha'; msg?: string; semDado?: string[]; em: string }>;
 function lerFila(): EstadoFila {
   try { return JSON.parse(localStorage.getItem(K_FILA) ?? '{}') as EstadoFila; } catch { return {}; }
