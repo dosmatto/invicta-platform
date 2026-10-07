@@ -96,6 +96,17 @@ t('pulos com motivo', () => {
   assert.match(prepararPasta(pasta({ pontos: null })).pulada.motivo, /sem pontos/);
   assert.match(prepararPasta(pasta({ grade: 'Amostragem Geral' })).pulada.motivo, /fora do padrão/);
 });
+t('nome sem código usa o talhao_codigo do meta (ligação pelo polígono)', () => {
+  const p = pasta({ grade: 'Amostragem Geral' });
+  p.meta = p.meta.replace('"car_id"', '"talhao_codigo":" jmgal  03 ","car_id"');
+  const r = prepararPasta(p);
+  assert.equal(r.ok.codigo, 'JMGAL 03');
+  assert.equal(r.ok.nomeGrade, 'Amostragem Geral');
+  // o código do nome da grade continua tendo prioridade
+  const q = pasta({ grade: 'PXFA 01 - 2024' });
+  q.meta = q.meta.replace('"car_id"', '"talhao_codigo":"OUTRO 99","car_id"');
+  assert.equal(prepararPasta(q).ok.codigo, 'PXFA 01');
+});
 const zonasFC = {
   type: 'FeatureCollection',
   features: [
@@ -221,7 +232,9 @@ if (fs.existsSync(RAIZ)) {
   t('todas as 1700 pastas lidas; puladas = sem laudo + sem pontos + fora do padrão + conflito', () => {
     assert.equal(todas.length + plano.puladas.length, pastas.size);
     assert.ok(todas.length > 1000);
-    assert.equal(motivos['sem laudo (laudo.xlsx)'], 557);
+    // o export muda conforme laudos são rebaixados: confere contra as pastas de fato sem laudo.xlsx
+    const semLaudo = [...pastas.values()].filter(arqs => !arqs.has('laudo.xlsx')).length;
+    assert.equal(motivos['sem laudo (laudo.xlsx)'] ?? 0, semLaudo);
   });
   t('Foppe / Santa Rosa: 7 talhões FCDSR 01..07, multi-safra, mesmo polígono', () => {
     const p = plano.produtores.find(x => x.nome.startsWith('Foppe'));

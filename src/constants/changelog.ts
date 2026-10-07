@@ -1,5 +1,9 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Importar migração: grades sem código no nome entram pelo talhão ligado
+  '2.191.3': [
+    'IMPORTAR MIGRAÇÃO — GRADES SEM CÓDIGO NO NOME ("Amostragem Geral", "Grade 1638…") AGORA ENTRAM. Quando a pasta exportada traz o talhão ligado pela sobreposição do polígono (campo talhao_codigo no meta.json), a grade é importada nesse talhão, na safra dela, com o nome original. Sem essa ligação, continua pulada e listada como antes; o código no nome da grade sempre tem prioridade.',
+  ],
   // [S/N] Importar migração: opção "Não importar" por produtor
   '2.191.2': [
     'IMPORTAR MIGRAÇÃO — BOTÃO "NÃO IMPORTAR" EM CADA PRODUTOR. O produtor marcado sai da lista principal e da seleção e não volta ao reler a pasta (a escolha fica guardada neste navegador). O contador "N não importar" abre a relação, com "voltar para a lista" para desfazer.',

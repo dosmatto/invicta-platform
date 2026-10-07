@@ -176,6 +176,9 @@ interface MetaInceres {
   grade_nome?: string; car_id?: number | string; tipo_grade?: string;
   unidade?: string; profundidades?: string[];
   car?: { dateOfManufacture?: string | null } | null;
+  /** Código do talhão definido fora do nome da grade: grade "Amostragem Geral"
+   *  ligada ao talhão pela sobreposição do polígono, na preparação da migração. */
+  talhao_codigo?: string | null;
 }
 
 export interface GradePreparada {
@@ -258,7 +261,9 @@ export function prepararPasta(p: PastaLida): ResultadoPreparo {
   if (!p.contorno) return pula('sem contorno (contorno.geojson)', ctx);
   const carId = meta.car_id != null ? String(meta.car_id) : '';
   if (!carId) return pula('meta.json sem car_id', ctx);
-  const codigo = codigoDaGrade(ctx.grade!);
+  // Nome sem código ("Amostragem Geral"): vale o código ligado pelo polígono, se houver.
+  const codigoMeta = String(meta.talhao_codigo ?? '').replace(/\s+/g, ' ').trim().toUpperCase();
+  const codigo = codigoDaGrade(ctx.grade!) ?? (codigoMeta || null);
   if (!codigo) return pula('nome da grade fora do padrão "CÓDIGO - AAAA"', ctx);
   const safra = safraDaInceres(ctx.safra!);
   if (!safra) return pula(`safra ilegível ("${ctx.safra}")`, ctx);
