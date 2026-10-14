@@ -2207,13 +2207,22 @@ function Campo({ rotulo, children }: { rotulo: string; children: React.ReactNode
  * `visto` guarda o último valor que ESTE campo produziu; quando o pai manda
  * algo diferente disso, a mudança veio de fora e o texto é sincronizado. É o
  * padrão de ajustar estado durante o render, sem effect.
+ *
+ * Campo apagado: o pai pode guardar `undefined` OU `NaN` (dose e limiar da
+ * condição usam NaN = "sem valor"). Os dois são o mesmo vazio aqui. Comparar
+ * com `!==` derrubava a página: NaN !== NaN é sempre verdade, então o
+ * setVisto rodava em todo render — loop infinito ("Too many re-renders").
  */
+const ehVazio = (v: number | undefined) => v == null || Number.isNaN(v);
+const mesmoValor = (a: number | undefined, b: number | undefined) =>
+  (ehVazio(a) && ehVazio(b)) || a === b;
+const textoDoValor = (v: number | undefined) => (ehVazio(v) ? '' : String(v));
 function InputNum({ valor, onMudou }: { valor: number | undefined; onMudou: (v: number | undefined) => void }) {
-  const [txt, setTxt] = useState(valor != null ? String(valor) : '');
+  const [txt, setTxt] = useState(textoDoValor(valor));
   const [visto, setVisto] = useState(valor);
-  if (valor !== visto) {
+  if (!mesmoValor(valor, visto)) {
     setVisto(valor);
-    setTxt(valor != null ? String(valor) : '');
+    setTxt(textoDoValor(valor));
   }
   return (
     <input value={txt}

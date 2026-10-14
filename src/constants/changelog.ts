@@ -1,5 +1,9 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [58] Prescrição por condição: apagar a dose ou o limiar não derruba mais a página
+  '2.194.1': [
+    'PENDÊNCIA 58 — CORRIGIDO: PRESCRIÇÃO POR CONDIÇÃO — APAGAR A DOSE DE UMA FAIXA NÃO DERRUBA MAIS A PÁGINA. Ao apagar o "0" (ou qualquer número) da dose de uma faixa, a tela caía em "This page couldn\'t load". O mesmo valia para apagar o valor de um limiar (L1, L2…). Agora o campo fica vazio, como esperado, e dá para digitar a nova dose; enquanto alguma faixa estiver sem dose, "Gerar áreas de aplicação", salvar e exportar seguem bloqueados com o aviso "Informe a dose de todas as faixas (0 = não aplica)".',
+  ],
   // [S/N] Produtor gera e salva amostragem composta (só essa ferramenta)
   '2.194.0': [
     'AMOSTRAGEM COMPOSTA LIBERADA PARA O PRODUTOR: na aba Amostragem ele usa a ferramenta Composta como o escritório — escolhe padrão, células, furos, edita no mapa e SALVA; depois renomeia, marca para processar e exporta (KML, SHP, etiquetas, carta). Grid e Zona de Manejo continuam só para ver. A aba já abre em Composta para quem não gera grid, e entra no trilho mesmo sem grade salva.',
