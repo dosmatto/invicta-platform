@@ -104,6 +104,7 @@ verdadeira (fusão de talhões) chegou depois; foi preciso renumerar.
 | S/N | Complemento: aviso de zona sem dose do produto base volta a aparecer (correção) | 2.190.2 | Complemento com base que tem zona sem dose → aviso "Sem dose do produto base" aparece |
 | S/N | Liberar zonas de manejo para programação na Lavra | 2.192.0 | Talhão → Zonas → versões → "Liberar p/ Lavra" (selo na versão e no cabeçalho do talhão); Talhão → Prescrições → selo "Programado na Lavra"; API POST /api/v1/programacao (docs/integracao-lavra.md; exige rodar docs/integracao-lavra.sql) |
 | S/N | Produtor: zonas só a padrão, compactação e prescrições no trilho, prescrições liberadas | 2.193.0 | /talhao/[id] como produtor → Zonas (só a padrão), trilho (Compactação/NDVI/Prescrições sempre), Prescrições (criar); banco: docs/seguranca-rls.sql seções 6 e 7 |
+| S/N | Produtor gera e salva amostragem composta (só essa ferramenta) | 2.194.0 | /talhao/[id] como produtor → Amostragem → Composta (gerar, salvar, exportar); Central de Acessos → Permissões → linha "Amostragem composta"; banco: docs/seguranca-rls.sql seção 6 |
 
 > As pendências 1–17 foram entregues antes deste registro existir e não estão
 > catalogadas; procure pelo assunto no `changelog.ts`. Da 18 em diante, tudo

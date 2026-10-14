@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { pode, podeComposta } from '@/lib/empresa';
 import { Grid3x3, Layers, ClipboardList, LayoutGrid } from 'lucide-react';
 import { SimuladorAmostragem } from './SimuladorAmostragem';
 import { SimuladorZonas } from './SimuladorZonas';
@@ -12,7 +13,8 @@ import { RegistrosCampoSection } from './RegistrosCampoSection';
 type Metodo = 'grid' | 'zona' | 'composta' | 'campo';
 
 export function AmostragemModulo({ safraNome }: { safraNome?: string } = {}) {
-  const [metodo, setMetodo] = useState<Metodo>('grid');
+  // Quem só gera a composta (produtor) já abre nela — o Grid, para ele, é só lista.
+  const [metodo, setMetodo] = useState<Metodo>(() => (!pode('amostragem') && podeComposta('criar')) ? 'composta' : 'grid');
 
   return (
     <div>

@@ -49,7 +49,7 @@ t('cenas rejeitadas: o item_id é o talhão (exclusão chega sem dados)', () => 
 });
 
 t('coleções de consulta não são graváveis pelo produtor', () => {
-  for (const c of ['inv_talhoes', 'inv_clientes', 'inv_fazendas', 'inv_lab', 'inv_grades',
+  for (const c of ['inv_talhoes', 'inv_clientes', 'inv_fazendas', 'inv_lab',
     'inv_condutividade', 'inv_bib_equacoes', 'inv_permissoes', 'inv_planos', 'inv_etiqueta_cfg', '__meta__']) {
     assert.equal(colecaoGravavelProdutor(c), false, c);
     assert.equal(produtorPodeGravar(c, 'x', { talhaoId: 'tA' }, MEUS), false, c);
@@ -72,6 +72,16 @@ t('prescrições (v2.193.0): o produtor grava a prescrição do talhão dele, n�
   assert.equal(produtorPodeGravar('inv_prescricoes', 'p1', { talhaoId: 'tA' }, MEUS), true);
   assert.equal(produtorPodeGravar('inv_prescricoes', 'p2', { talhaoId: 'tX' }, MEUS), false);
   assert.equal(produtorPodeGravar('inv_prescricoes', 'p3', {}, MEUS), false, 'sem talhaoId não passa');
+});
+
+t('amostragem (v2.194.0): o produtor grava SÓ a grade composta do talhão dele', () => {
+  assert.equal(colecaoGravavelProdutor('inv_grades'), true);
+  assert.equal(talhaoDoRegistro('inv_grades', 'g1', { talhaoId: 'tA', metodo: 'composta' }), 'tA');
+  assert.equal(talhaoDoRegistro('inv_grades', 'g2', { talhaoId: 'tA', metodo: 'grid' }), null, 'grid é do escritório');
+  assert.equal(talhaoDoRegistro('inv_grades', 'g3', { talhaoId: 'tA' }), null, 'sem metodo = grid antigo');
+  assert.equal(produtorPodeGravar('inv_grades', 'g1', { talhaoId: 'tA', metodo: 'composta' }, MEUS), true);
+  assert.equal(produtorPodeGravar('inv_grades', 'g4', { talhaoId: 'tX', metodo: 'composta' }, MEUS), false, 'talhão alheio');
+  assert.equal(produtorPodeGravar('inv_grades', 'g2', { talhaoId: 'tA', metodo: 'zonas' }, MEUS), false);
 });
 
 t('produtor sem talhão no escopo não grava nada por talhão', () => {

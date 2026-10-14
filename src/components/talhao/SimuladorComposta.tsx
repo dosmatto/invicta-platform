@@ -18,7 +18,7 @@ import { useApp } from '@/context/AppContext';
 import { getTalhoes, getFazendas, getPadroesAmostragem, getPadroesElementos, getConfigEtiqueta, getSafras, getGrades, saveGrade, updateGrade, deleteGrade, marcarParaProcessar, garantirCodigoRemessa, ProfundidadeConfig, GradeAmostragem } from '@/lib/store';
 import { nomeExport } from '@/lib/nomeExport';
 import { rotuloAno, hojeSaoPauloISO, periodoDeData, rotuloEpoca } from '@/lib/periodo';
-import { pode } from '@/lib/empresa';
+import { podeComposta } from '@/lib/empresa';
 import { areaHaGeo } from '@/lib/areaGeo';
 import { anguloMaiorDimensao, ModoDistribuicao } from '@/lib/grid';
 import { gerarCelulasCompostas, pontosDaCelula, nMaximoCelulas, CORES_CELULA, DIST_BORDA_COMPOSTA, SUBAMOSTRAS_PADRAO, type CelulaComposta } from '@/lib/gradeComposta';
@@ -73,7 +73,11 @@ export function SimuladorComposta({ safraNome: safraProp }: { safraNome?: string
   const [renomeando, setRenomeando] = useState<string | null>(null);
   const [nomeTemp, setNomeTemp] = useState('');
 
-  const podeAmostrar = pode('amostragem');
+  // 14/10/2026: linha própria 'composta' — o produtor gera e salva; renomear/
+  // marcar para processar = editar; excluir fica com quem tem a coluna.
+  const podeAmostrar = podeComposta('criar');
+  const podeEditarGrade = podeComposta('editar');
+  const podeExcluirGrade = podeComposta('excluir');
   const padroes = useMemo(() => getPadroesAmostragem(), []);
   const padroesElem = useMemo(() => getPadroesElementos(), []);
   const padrao = padroes.find(p => p.id === padraoId) ?? null;
@@ -530,7 +534,7 @@ export function SimuladorComposta({ safraNome: safraProp }: { safraNome?: string
             {grades.map(g => (
               <div key={g.id} className="p-2 rounded-lg" style={{ background: '#061525', border: `1px solid ${gradeViewId === g.id ? '#22d3ee' : (g.paraProcessar ? '#166534' : '#1a3a6b')}` }}>
                 <div className="flex items-center gap-2">
-                  {podeAmostrar && (
+                  {podeEditarGrade && (
                     <button onClick={() => { marcarParaProcessar(g.id); recarregarGrades(); }} title="Marcar para processar">
                       {g.paraProcessar ? <CheckCircle2 size={15} style={{ color: '#4ade80' }} /> : <Circle size={15} style={{ color: '#475569' }} />}
                     </button>
@@ -545,8 +549,8 @@ export function SimuladorComposta({ safraNome: safraProp }: { safraNome?: string
                   <span className="text-[8px] px-1 py-0.5 rounded" style={{ background: '#0f2a1a', color: '#86efac' }}>Composta</span>
                   <button onClick={() => setGradeViewId(id => id === g.id ? null : g.id)} title={gradeViewId === g.id ? 'Ocultar do mapa' : 'Ver no mapa'}
                     className="p-1 rounded" style={{ color: gradeViewId === g.id ? '#22d3ee' : '#93c5fd' }}><Eye size={11} /></button>
-                  {podeAmostrar && <button onClick={() => { setRenomeando(g.id); setNomeTemp(g.nome); }} title="Renomear" className="p-1 rounded" style={{ color: '#93c5fd' }}><Pencil size={11} /></button>}
-                  {podeAmostrar && <button onClick={() => { deleteGrade(g.id); recarregarGrades(); }} title="Excluir" className="p-1 rounded" style={{ color: '#f87171' }}><Trash2 size={11} /></button>}
+                  {podeEditarGrade && <button onClick={() => { setRenomeando(g.id); setNomeTemp(g.nome); }} title="Renomear" className="p-1 rounded" style={{ color: '#93c5fd' }}><Pencil size={11} /></button>}
+                  {podeExcluirGrade && <button onClick={() => { deleteGrade(g.id); recarregarGrades(); }} title="Excluir" className="p-1 rounded" style={{ color: '#f87171' }}><Trash2 size={11} /></button>}
                 </div>
                 <p className="text-[9px] mt-1 pl-6" style={{ color: '#64748b' }}>
                   {(g.celulas?.length ?? 0)} células · {g.pontos.length} furos

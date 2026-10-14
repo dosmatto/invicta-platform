@@ -99,7 +99,7 @@ t('[46] compactação e produtividade: quem já via e baixava continua', () => {
 
 t('[46] toda aba com linha própria: quem via e baixava continua', () => {
   const abas = ['fertilidade', 'zonas', 'altimetria', 'condutividade', 'satelite',
-    'prescricao', 'compactacao', 'produtividade'];
+    'prescricao', 'compactacao', 'produtividade', 'composta'];
   for (const mod of abas) {
     for (const p of ['produtor', 'leitor', 'operador', 'prestador', 'agronomo', 'admin']) {
       assert.equal(MATRIZ_PADRAO[p][`${mod}.visualizar`], true, `${p} vê ${mod}`);
@@ -108,6 +108,17 @@ t('[46] toda aba com linha própria: quem via e baixava continua', () => {
   }
   assert.ok(!MATRIZ_PADRAO.operador['fertilidade.criar'], 'operador não processa fertilidade');
   assert.ok(!MATRIZ_PADRAO.produtor['zonas.criar'], 'produtor não cria zonas');
+});
+
+t('composta (14/10/2026): o produtor gera e salva a amostragem composta, mas não o grid', () => {
+  assert.ok(MODULOS.some(m => m.id === 'composta'), 'módulo composta existe');
+  const p = MATRIZ_PADRAO.produtor;
+  for (const a of ['visualizar', 'criar', 'editar', 'exportar']) assert.equal(p[`composta.${a}`], true, `produtor composta.${a}`);
+  assert.ok(!p['composta.excluir'], 'produtor não exclui composta');
+  assert.equal(p['amostragem.visualizar'], true, 'produtor vê a aba Amostragem');
+  assert.ok(!p['amostragem.criar'], 'produtor não gera grid');
+  for (const r of ['operador', 'prestador']) assert.equal(MATRIZ_PADRAO[r]['composta.criar'], true, `${r} gera composta`);
+  assert.ok(!MATRIZ_PADRAO.leitor['composta.criar'], 'leitor só vê');
 });
 
 t('papel custom nasce sem nenhuma permissão', () => {

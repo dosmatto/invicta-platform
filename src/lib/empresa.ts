@@ -395,6 +395,12 @@ function valorPapelSemAjuste(papel: string, chave: string): boolean {
     if (acao !== 'visualizar' && acao !== 'exportar') return antiga;
     return base[chave] === true || antiga;
   }
+  if (modulo === 'composta') {
+    // Composta: linha própria OU a capacidade antiga de amostragem (podeComposta).
+    const antiga = valorPapel(papel, 'amostragem.criar');
+    if (acao !== 'visualizar' && acao !== 'exportar') return antiga || base[chave] === true;
+    return base[chave] === true || matrizDoPapel(papel)[`amostragem.${acao}`] === true || antiga;
+  }
   if (modulo === 'prescricao' || modulo === 'altimetria' || modulo === 'condutividade') {
     const antiga = modulo === 'prescricao'
       ? valorPapel(papel, 'recomendacoes.criar')
@@ -558,6 +564,14 @@ export function podeSatelite(acao: AcaoAba): boolean {
 // Compactação e Produtividade já tinham linha, mas as abas só olhavam "Criar".
 export function podeCompactacao(acao: AcaoAba): boolean {
   return podeAbaDerivada('compactacao', acao, () => podeEm('compactacao', 'criar'), () => false);
+}
+
+// Amostragem COMPOSTA (14/10/2026): linha própria. Criar/editar/excluir valem
+// pela linha `composta.<acao>` OU pela capacidade antiga de amostragem (quem
+// gera grid gera composta); ver/baixar valem também pela linha de amostragem.
+export function podeComposta(acao: AcaoAba): boolean {
+  return podeAbaDerivada('composta', acao, () => podeEm('composta', acao) || pode('amostragem'),
+    () => podeEm('amostragem', acao === 'exportar' ? 'exportar' : 'visualizar'));
 }
 
 export function podeProdutividade(acao: AcaoAba): boolean {

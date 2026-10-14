@@ -49,13 +49,16 @@ export const PAPEIS: Array<{ id: PapelIam; nome: string; dica: string }> = [
 
 // ── Módulos e ações (permissão granular) ────────────────────────────────────
 export type ModuloIam =
-  | 'cadastro' | 'amostragem' | 'laboratorio' | 'fertilidade' | 'zonas'
+  | 'cadastro' | 'amostragem' | 'composta' | 'laboratorio' | 'fertilidade' | 'zonas'
   | 'altimetria' | 'condutividade' | 'satelite' | 'recomendacoes' | 'prescricao' | 'compactacao' | 'produtividade'
   | 'relatorios' | 'biblioteca' | 'arquivos' | 'usuarios';
 
 export const MODULOS: Array<{ id: ModuloIam; nome: string }> = [
   { id: 'cadastro',      nome: 'Cadastro (produtores/fazendas/talhões)' },
   { id: 'amostragem',    nome: 'Amostragem e coleta' },
+  // 14/10/2026: a ferramenta "Composta" da aba Amostragem tem linha própria —
+  // o produtor gera e salva amostragem composta sem ganhar o Grid nem a Zona.
+  { id: 'composta',      nome: 'Amostragem composta (ferramenta Composta)' },
   { id: 'laboratorio',   nome: 'Laboratório (laudos)' },
   { id: 'fertilidade',   nome: 'Fertilidade (interpolação)' },
   { id: 'zonas',         nome: 'Zonas de manejo' },

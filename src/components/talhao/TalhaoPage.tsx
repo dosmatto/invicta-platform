@@ -96,6 +96,9 @@ const MODULO_DA_ABA: Partial<Record<TabId, string>> = {
   prescricoes: 'prescricao', arquivos: 'arquivos', ndvi: 'satelite',
   produtividade: 'produtividade', compactacao: 'compactacao', relatorios: 'relatorios',
 };
+// Linhas EXTRAS da matriz que também abrem a aba (14/10/2026: a ferramenta
+// Composta tem linha própria e vive dentro de Amostragem).
+const MODULOS_EXTRA_DA_ABA: Partial<Record<TabId, string[]>> = { amostragem: ['composta'] };
 // Abas cuja existência depende de uma consulta à nuvem (ver abasComDados).
 const CONSULTA_DA_ABA: Partial<Record<TabId, FalhaNuvem>> = { recomendacoes: 'cenarios', arquivos: 'cenarios', relatorios: 'relatorios' };
 
@@ -316,18 +319,22 @@ export function TalhaoPage({ id }: { id: string }) {
   // (exceção do próprio usuário > ajuste do papel > padrão). Preview do
   // owner/admin: a matriz do papel Produtor, exatamente o que a tela mostra.
   // Foliar não tem linha na matriz e segue só a existência de laudo foliar.
-  const podeVerAba = (id: TabId): boolean => {
+  const modulosDaAba = (id: TabId): string[] => {
     const modulo = MODULO_DA_ABA[id];
-    if (!modulo || !authConfigurado) return true;
-    return ehProdutor ? podeEm(modulo, 'visualizar') : matrizDoPapel('produtor')[`${modulo}.visualizar`] === true;
+    return modulo ? [modulo, ...(MODULOS_EXTRA_DA_ABA[id] ?? [])] : [];
+  };
+  const podeNaAba = (id: TabId, acao: 'visualizar' | 'criar'): boolean =>
+    modulosDaAba(id).some(m => (ehProdutor ? podeEm(m, acao) : matrizDoPapel('produtor')[`${m}.${acao}`] === true));
+  const podeVerAba = (id: TabId): boolean => {
+    if (!MODULO_DA_ABA[id] || !authConfigurado) return true;
+    return podeNaAba(id, 'visualizar');
   };
   // 14/10/2026: aba em que o produtor TRABALHA (coluna "Criar": compactação,
   // satélite, prescrições) entra no trilho mesmo sem dado — senão ele nunca
   // importava a primeira penetrometria nem criava a primeira prescrição.
   const podeCriarAba = (id: TabId): boolean => {
-    const modulo = MODULO_DA_ABA[id];
-    if (!modulo || !authConfigurado) return false;
-    return ehProdutor ? podeEm(modulo, 'criar') : matrizDoPapel('produtor')[`${modulo}.criar`] === true;
+    if (!MODULO_DA_ABA[id] || !authConfigurado) return false;
+    return podeNaAba(id, 'criar');
   };
   // Consulta da nuvem que FALHOU não é "sem dado": a aba fica, e o módulo
   // dentro dela consulta de novo e mostra o próprio erro.

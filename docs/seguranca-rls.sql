@@ -483,8 +483,9 @@ revoke all on function public.inv_aceitar_convite(text, text, text) from public;
 grant execute on function public.inv_aceitar_convite(text, text, text) to authenticated;
 
 -- =====================================================================
--- 6) PRODUTOR: SÓ GRAVA COMPACTAÇÃO, SATÉLITE E PRESCRIÇÕES, E SÓ NOS TALHÕES DELE
---    (v2.186.0; prescrições entraram na v2.193.0 — rode a seção de novo)
+-- 6) PRODUTOR: SÓ GRAVA COMPACTAÇÃO, SATÉLITE, PRESCRIÇÕES E AMOSTRAGEM COMPOSTA,
+--    E SÓ NOS TALHÕES DELE (v2.186.0; prescrições na v2.193.0; composta na
+--    v2.194.0 — rode a seção de novo)
 -- =====================================================================
 -- O BURACO QUE ISTO FECHA
 -- O papel produtor é "somente leitura" desde a v2.1xx — mas só no CLIENTE
@@ -501,6 +502,8 @@ grant execute on function public.inv_aceitar_convite(text, text, text) to authen
 --     `composicao__<talhão>__…`, `<talhão>__ndvi__…`, `<talhão>__ndvicbers__…`;
 --   · prescrições (v2.193.0) — inv_prescricoes (talhaoId no documento); o app
 --     só mostra excluir ao escritório, mas a função abaixo é por coleção;
+--   · amostragem composta (v2.194.0) — inv_grades SÓ com metodo = 'composta'
+--     (grade de Grid/Zona, ou antiga sem metodo, continua só do escritório);
 --   → criar, alterar e APAGAR, desde que o talhão seja do escopo dele;
 --   · inv_papeis, inv_convites, inv_auditoria → seguem as políticas das seções
 --     4 e das exceções (este bloco não as afrouxa nem as aperta);
@@ -643,6 +646,10 @@ as $$
     when p_colecao = 'inv_cenas_estado' then
       case when coalesce(p_dados->>'talhaoId', p_item) = p_item then nullif(p_item, '') end
     when p_colecao in ('inv_compactacao', 'inv_grades_compact', 'inv_composicoes', 'inv_prescricoes') then
+      nullif(p_dados->>'talhaoId', '')
+    -- Grades: só a amostragem composta (UPDATE confere as duas pontas, então
+    -- o produtor não transforma uma grade dele em grid nem o contrário).
+    when p_colecao = 'inv_grades' and p_dados->>'metodo' = 'composta' then
       nullif(p_dados->>'talhaoId', '')
   end
 $$;

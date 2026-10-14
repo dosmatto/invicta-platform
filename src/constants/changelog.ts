@@ -1,5 +1,11 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Produtor gera e salva amostragem composta (só essa ferramenta)
+  '2.194.0': [
+    'AMOSTRAGEM COMPOSTA LIBERADA PARA O PRODUTOR: na aba Amostragem ele usa a ferramenta Composta como o escritório — escolhe padrão, células, furos, edita no mapa e SALVA; depois renomeia, marca para processar e exporta (KML, SHP, etiquetas, carta). Grid e Zona de Manejo continuam só para ver. A aba já abre em Composta para quem não gera grid, e entra no trilho mesmo sem grade salva.',
+    'A ferramenta ganhou linha própria na matriz de permissões: "Amostragem composta (ferramenta Composta)". Padrão: produtor ver/criar/editar/exportar; operador e prestador como já geravam grid; agrônomo, leitor e demais como na linha de Amostragem. Quem gera grid continua gerando composta. O Owner ajusta por papel ou por usuário na Central de Acessos.',
+    'NUVEM E BANCO: o navegador do produtor só sobe grades com metodo composta dos talhões dele; grade de Grid/Zona (ou antiga, sem metodo) não sobe. ATENÇÃO, BANCO: rodar de novo a seção 6 de docs/seguranca-rls.sql (a função inv_talhao_do_registro ganhou inv_grades com metodo composta) — sem isso a grade salva na tela, o banco recusa e ela some no próximo boot. UPDATE confere as duas pontas: o produtor não converte grade em grid nem grid em composta.',
+  ],
   // [S/N] Produtor: zonas só a padrão, compactação e prescrições no trilho, prescrições liberadas
   '2.193.0': [
     'ZONAS DE MANEJO, PARA O PRODUTOR: o cartão de versões mostra SÓ a versão marcada como padrão (a que a Amostragem e as Prescrições usam) e vira "Zoneamento padrão". As outras versões (gerada, ajustes manuais, suavizações) são história de trabalho do escritório e saem da tela dele; exportar continua.',

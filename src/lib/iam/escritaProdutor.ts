@@ -18,6 +18,7 @@ export const COLECOES_POR_TALHAO = new Set([
   'inv_compactacao', 'inv_grades_compact',     // compactação (v2.181.0)
   'inv_composicoes', 'inv_cenas_estado',       // satélite (04/09/2026)
   'inv_prescricoes',                           // prescrições (v2.193.0): o produtor cria as dos talhões dele
+  'inv_grades',                                // amostragem (v2.194.0): SÓ grades com metodo 'composta' (ver talhaoDoRegistro)
 ]);
 
 /** Coleção dos rasters: o talhão vem do id do mapa. */
@@ -49,6 +50,9 @@ export function talhaoDoRegistro(colecao: string, id: string, dados?: unknown): 
   // dados). Com dados, os dois têm que bater — senão um doc "do meu talhão"
   // ocuparia o item_id do talhão de outro.
   if (colecao === 'inv_cenas_estado') return id && (t == null || t === id) ? id : null;
+  // Grades: o produtor só grava a amostragem COMPOSTA (Grid e Zona são do
+  // escritório). O metodo vem no próprio documento; grade antiga sem metodo é grid.
+  if (colecao === 'inv_grades' && (dados as { metodo?: unknown } | null | undefined)?.metodo !== 'composta') return null;
   return typeof t === 'string' && t ? t : null;
 }
 

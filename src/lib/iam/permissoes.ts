@@ -54,13 +54,13 @@ export const MATRIZ_PADRAO: Record<PapelIam, MapaPermissoes> = {
     conceder(m, ['zonas'], ['excluir']);                 // editor de zonas mexe/apaga
     conceder(m, ['altimetria', 'condutividade'], ['excluir']); // já apagava versões de MDE e CE (antes seguiam 'zonas')
     conceder(m, ['prescricao'], ['excluir']);            // já apagava prescrição salva (antes seguia 'recomendacoes')
-    conceder(m, ['cadastro', 'amostragem', 'laboratorio', 'biblioteca', 'arquivos'], VER_EXP);
+    conceder(m, ['cadastro', 'amostragem', 'composta', 'laboratorio', 'biblioteca', 'arquivos'], VER_EXP);
     return m;
   })(),
 
   // Operador de campo: coleta. Vê o cadastro para navegar; não altera análise.
   operador: (() => {
-    const m = conceder(nada(), ['amostragem'], TRABALHAR);
+    const m = conceder(nada(), ['amostragem', 'composta'], TRABALHAR);
     conceder(m, ['compactacao'], ['visualizar', 'criar', 'editar', 'exportar']);
     conceder(m, ['produtividade'], VER_EXP);
     // Já via e baixava prescrições salvas e o relevo (antes das linhas próprias).
@@ -85,12 +85,16 @@ export const MATRIZ_PADRAO: Record<PapelIam, MapaPermissoes> = {
     // Decisão de 14/10/2026: PRESCRIÇÕES ele cria — ver, criar, editar e
     // exportar (SHP/Excel/PDF); excluir fica com o escritório.
     conceder(m, ['prescricao'], TRABALHAR);
+    // Decisão de 14/10/2026: AMOSTRAGEM COMPOSTA ele gera e salva (ver, criar,
+    // editar, exportar) — só essa ferramenta; Grid e Zona de Manejo ele só vê.
+    conceder(m, ['amostragem'], VER_EXP);
+    conceder(m, ['composta'], TRABALHAR);
     return m;
   })(),
 
   // Prestador: serviço temporário — mesmo desenho do operador (com validade).
   prestador: (() => {
-    const m = conceder(nada(), ['amostragem'], TRABALHAR);
+    const m = conceder(nada(), ['amostragem', 'composta'], TRABALHAR);
     conceder(m, ['cadastro'], VER);
     conceder(m, ['prescricao', 'altimetria', 'condutividade', 'compactacao', 'produtividade', 'satelite', 'fertilidade', 'zonas'], VER_EXP); // idem operador: via e baixava
     return m;
