@@ -34,10 +34,15 @@ export function dadosLocaisDoTalhao(t: Talhao, safra: string): DadosTalhao {
   };
 }
 
+export type FalhaNuvem = 'mapas' | 'cenarios' | 'relatorios';
+
 export interface DadosNuvem {
   mapasNuvem: Record<string, MapaNuvemIn[]>;
   cenarios: Record<string, CenarioIn[]>;
   relatorios: Record<string, RelatorioIn[]>;
+  /** Consultas que FALHARAM (erro da nuvem — não "vieram vazias"). Quem lê
+   *  decide: o trilho do talhão não esconde a aba por causa disso. */
+  falhas?: FalhaNuvem[];
 }
 
 const NUVEM_VAZIA = (): DadosNuvem => ({ mapasNuvem: {}, cenarios: {}, relatorios: {} });
@@ -48,12 +53,17 @@ const NUVEM_VAZIA = (): DadosNuvem => ({ mapasNuvem: {}, cenarios: {}, relatorio
 export async function dadosNuvemDosTalhoes(ids: string[]): Promise<DadosNuvem> {
   const out = NUVEM_VAZIA();
   if (!usarDadosSupabase() || ids.length === 0) return out;
+  const falhas = new Set<FalhaNuvem>();
   const [mapas, cens, rels] = await Promise.all([
-    Promise.all(ids.map(id => cloudListarMapasMeta(`${id}__`).catch(() => [] as MapaNuvemIn[]))),
+    Promise.all(ids.map(id => cloudListarMapasMeta(`${id}__`).catch(() => { falhas.add('mapas'); return [] as MapaNuvemIn[]; }))),
     projetarDocsPorCampoSupabase('inv_cenarios', 'talhaoId', ids, ['safra', 'nome', 'geradoEm', 'oficial']).catch(() => null),
     projetarDocsPorCampoSupabase('inv_relatorios', 'talhaoId', ids, ['safra', 'tipo', 'titulo', 'geradoEm']).catch(() => null),
   ]);
   ids.forEach((id, i) => { out.mapasNuvem[id] = mapas[i]; });
+  // projetarDocsPorCampoSupabase devolve null quando o banco recusa a consulta.
+  if (cens === null) falhas.add('cenarios');
+  if (rels === null) falhas.add('relatorios');
+  if (falhas.size) { out.falhas = [...falhas]; console.warn('[portal] nuvem falhou em: ' + out.falhas.join(', ')); }
   for (const r of cens ?? []) {
     const id = r.talhaoId;
     if (!id) continue;

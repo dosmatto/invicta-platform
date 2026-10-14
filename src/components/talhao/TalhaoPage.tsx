@@ -43,7 +43,7 @@ import { papelDoUsuario, meuRegistro, planoPorId, ehAdmin, SECOES_PORTAL, secaoL
 import { authConfigurado } from '@/lib/auth';
 import { modoProdutorMapaAtivo } from '@/lib/modoProdutorMapa';
 import { abasComDados } from '@/lib/portalProdutor';
-import { dadosLocaisDoTalhao, dadosNuvemDosTalhoes, juntarNuvem, type DadosNuvem } from '@/lib/portalDados';
+import { dadosLocaisDoTalhao, dadosNuvemDosTalhoes, juntarNuvem, type DadosNuvem, type FalhaNuvem } from '@/lib/portalDados';
 import { tocarBackend } from '@/lib/interpUrl';
 import { APP_VERSION } from '@/constants/version';
 import {
@@ -96,6 +96,8 @@ const MODULO_DA_ABA: Partial<Record<TabId, string>> = {
   prescricoes: 'prescricao', arquivos: 'arquivos', ndvi: 'satelite',
   produtividade: 'produtividade', compactacao: 'compactacao', relatorios: 'relatorios',
 };
+// Abas cuja existência depende de uma consulta à nuvem (ver abasComDados).
+const CONSULTA_DA_ABA: Partial<Record<TabId, FalhaNuvem>> = { recomendacoes: 'cenarios', arquivos: 'cenarios', relatorios: 'relatorios' };
 
 // ── Trilho + painel ──────────────────────────────────────────────────────────
 const TRILHO_ABERTO = 64;   // ícone + rótulo (padrão)
@@ -268,7 +270,7 @@ export function TalhaoPage({ id }: { id: string }) {
     let vivo = true;
     dadosNuvemDosTalhoes([talhao.id])
       .then(n => { if (vivo) setNuvem(n); })
-      .catch(() => { if (vivo) setNuvem({ mapasNuvem: {}, cenarios: {}, relatorios: {} }); });
+      .catch(() => { if (vivo) setNuvem({ mapasNuvem: {}, cenarios: {}, relatorios: {}, falhas: ['mapas', 'cenarios', 'relatorios'] }); });
     return () => { vivo = false; };
   }, [talhao, precisaExistencia]);
   const abasExistentes = useMemo(() => new Set<string>(dadosLocais ? abasComDados(juntarNuvem(dadosLocais, nuvem)) : []), [dadosLocais, nuvem]);
@@ -319,8 +321,24 @@ export function TalhaoPage({ id }: { id: string }) {
     if (!modulo || !authConfigurado) return true;
     return ehProdutor ? podeEm(modulo, 'visualizar') : matrizDoPapel('produtor')[`${modulo}.visualizar`] === true;
   };
+  // 14/10/2026: aba em que o produtor TRABALHA (coluna "Criar": compactação,
+  // satélite, prescrições) entra no trilho mesmo sem dado — senão ele nunca
+  // importava a primeira penetrometria nem criava a primeira prescrição.
+  const podeCriarAba = (id: TabId): boolean => {
+    const modulo = MODULO_DA_ABA[id];
+    if (!modulo || !authConfigurado) return false;
+    return ehProdutor ? podeEm(modulo, 'criar') : matrizDoPapel('produtor')[`${modulo}.criar`] === true;
+  };
+  // Consulta da nuvem que FALHOU não é "sem dado": a aba fica, e o módulo
+  // dentro dela consulta de novo e mostra o próprio erro.
+  const nuvemFalhou = new Set<FalhaNuvem>(nuvem?.falhas ?? []);
+  const abaDisponivel = (id: TabId): boolean => {
+    if (abasExistentes.has(id) || podeCriarAba(id)) return true;
+    const consulta = CONSULTA_DA_ABA[id];
+    return !!consulta && nuvemFalhou.has(consulta);
+  };
   const tabsVisiveis = modoProdutor
-    ? TABS.filter(t => abasExistentes.has(t.id) && podeVerAba(t.id) && (t.id === 'resumo' || semPlano || !SECOES_PLANO.has(t.id) || secaoLiberada(plano, t.id)))
+    ? TABS.filter(t => abaDisponivel(t.id) && podeVerAba(t.id) && (t.id === 'resumo' || semPlano || !SECOES_PLANO.has(t.id) || secaoLiberada(plano, t.id)))
     : TABS;
   // Painel fechado é `null`; aba lembrada que o plano não libera cai na primeira.
   const tabAtivo: TabId | null = tab === null ? null

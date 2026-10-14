@@ -82,6 +82,9 @@ export const MATRIZ_PADRAO: Record<PapelIam, MapaPermissoes> = {
       ['cadastro', 'fertilidade', 'zonas', 'altimetria', 'condutividade', 'recomendacoes', 'prescricao', 'compactacao', 'produtividade', 'relatorios', 'arquivos'], VER_EXP);
     conceder(m, ['satelite'], TRABALHAR);
     conceder(m, ['compactacao'], ['visualizar', 'criar', 'editar', 'excluir', 'exportar']);
+    // Decisão de 14/10/2026: PRESCRIÇÕES ele cria — ver, criar, editar e
+    // exportar (SHP/Excel/PDF); excluir fica com o escritório.
+    conceder(m, ['prescricao'], TRABALHAR);
     return m;
   })(),
 

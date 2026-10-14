@@ -50,7 +50,7 @@ t('cenas rejeitadas: o item_id é o talhão (exclusão chega sem dados)', () => 
 
 t('coleções de consulta não são graváveis pelo produtor', () => {
   for (const c of ['inv_talhoes', 'inv_clientes', 'inv_fazendas', 'inv_lab', 'inv_grades',
-    'inv_condutividade', 'inv_prescricoes', 'inv_bib_equacoes', 'inv_permissoes', 'inv_planos', 'inv_etiqueta_cfg', '__meta__']) {
+    'inv_condutividade', 'inv_bib_equacoes', 'inv_permissoes', 'inv_planos', 'inv_etiqueta_cfg', '__meta__']) {
     assert.equal(colecaoGravavelProdutor(c), false, c);
     assert.equal(produtorPodeGravar(c, 'x', { talhaoId: 'tA' }, MEUS), false, c);
   }
@@ -64,6 +64,14 @@ t('compactação e satélite: só nos talhões dele', () => {
   assert.equal(produtorPodeGravar('inv_mapas_fert', 'tX__ndvi__d', null, MEUS), false);
   assert.equal(produtorPodeGravar('inv_mapas_fert', 'tA__pH', null, MEUS), false, 'fertilidade é consulta');
   assert.equal(produtorPodeGravar('inv_cenas_estado', 'tX', null, MEUS), false);
+});
+
+t('prescrições (v2.193.0): o produtor grava a prescrição do talhão dele, não a de outro', () => {
+  assert.equal(colecaoGravavelProdutor('inv_prescricoes'), true);
+  assert.equal(talhaoDoRegistro('inv_prescricoes', 'p1', { talhaoId: 'tA' }), 'tA');
+  assert.equal(produtorPodeGravar('inv_prescricoes', 'p1', { talhaoId: 'tA' }, MEUS), true);
+  assert.equal(produtorPodeGravar('inv_prescricoes', 'p2', { talhaoId: 'tX' }, MEUS), false);
+  assert.equal(produtorPodeGravar('inv_prescricoes', 'p3', {}, MEUS), false, 'sem talhaoId não passa');
 });
 
 t('produtor sem talhão no escopo não grava nada por talhão', () => {

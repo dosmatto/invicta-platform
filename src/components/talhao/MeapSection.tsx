@@ -280,6 +280,10 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
 
   // Zoneamentos salvos (vários por talhão; um é o "padrão" usado pela Amostragem)
   const [zoneamentos, setZoneamentos] = useState<ZoneamentoMeap[]>([]);
+  // 14/10/2026: quem não trabalha nas zonas (produtor) vê SÓ a versão padrão —
+  // a que a Amostragem e as Prescrições usam. As outras versões (gerada,
+  // ajustes, suavizações) são história de trabalho do escritório.
+  const zoneamentosVisiveis = pode('zonasSalvar') ? zoneamentos : zoneamentos.filter(z => z.padrao);
   const [vendoId, setVendoId] = useState<string | null>(null);  // zoneamento salvo em visualização no mapa
   // Suavizar limites (S1): alvo (preview em edição OU zoneamento salvo) + prévia p/ o mapa.
   const [suav, setSuav] = useState<{ origem: 'preview' | { id: string; nome: string }; fc: GeoJSON.FeatureCollection } | null>(null);
@@ -1516,20 +1520,20 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
       </>)}
 
       {/* ── Zoneamentos salvos (1 padrão → Amostragem) ── */}
-      {zoneamentos.length > 0 && (
+      {zoneamentosVisiveis.length > 0 && (
         <div className="rounded-lg p-2.5 space-y-1.5" style={{ background: '#0a1929', border: '1px solid #1a3a6b' }}>
           <div className="flex items-center gap-2">
             <Star size={12} style={{ color: '#fbbf24' }} />
-            <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color: '#cbd5e1' }}>Zoneamentos e versões ({zoneamentos.length})</span>
+            <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color: '#cbd5e1' }}>{pode('zonasSalvar') ? `Zoneamentos e versões (${zoneamentosVisiveis.length})` : 'Zoneamento padrão'}</span>
             <div className="ml-auto flex items-center gap-2">
-              {podeZonas('exportar') && <ExportarZonas talhao={talhao} zoneamentos={zoneamentos} safraNome={safraNome} />}
+              {podeZonas('exportar') && <ExportarZonas talhao={talhao} zoneamentos={zoneamentosVisiveis} safraNome={safraNome} />}
 {pode('zonasSalvar') && (              <button onClick={() => { setLabPar(null); setLabAberto(true); }} title="Comparar os cenários de zona (métricas + concordância)" className="flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded" style={{ background: '#1e3a5f', color: '#93c5fd' }}>
                 <FlaskConical size={11} /> Laboratório
               </button>)}
             </div>
           </div>
           <VersoesZoneamentos
-            zoneamentos={zoneamentos} vendoId={vendoId}
+            zoneamentos={zoneamentosVisiveis} vendoId={vendoId}
             podeEditar={podeZonas('editar')}
             podeExcluir={podeZonas('excluir')}
             onVer={setVendoId}

@@ -60,8 +60,12 @@ t('[46] Prescrições têm linha própria na matriz', () => {
     const m = MATRIZ_PADRAO[p];
     assert.equal(m['prescricao.visualizar'], true, `${p} vê as salvas`);
     assert.equal(m['prescricao.exportar'], true, `${p} baixa os arquivos`);
-    assert.ok(!m['prescricao.criar'] && !m['prescricao.excluir'], `${p} não cria nem exclui`);
+    assert.ok(!m['prescricao.excluir'], `${p} não exclui`);
   }
+  for (const p of ['leitor', 'operador', 'prestador']) assert.ok(!MATRIZ_PADRAO[p]['prescricao.criar'], `${p} não cria`);
+  // 14/10/2026: o produtor CRIA e EDITA prescrições nos talhões dele (excluir fica com o escritório).
+  assert.equal(MATRIZ_PADRAO.produtor['prescricao.criar'], true, 'produtor cria prescrição');
+  assert.equal(MATRIZ_PADRAO.produtor['prescricao.editar'], true, 'produtor edita prescrição');
   assert.equal(MATRIZ_PADRAO.admin['prescricao.excluir'], true);
   assert.equal(contarPermissoes(MATRIZ_PADRAO.custom), 0, 'custom continua vazio');
 });

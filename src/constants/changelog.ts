@@ -1,5 +1,12 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Produtor: zonas só a padrão, compactação e prescrições no trilho, prescrições liberadas
+  '2.193.0': [
+    'ZONAS DE MANEJO, PARA O PRODUTOR: o cartão de versões mostra SÓ a versão marcada como padrão (a que a Amostragem e as Prescrições usam) e vira "Zoneamento padrão". As outras versões (gerada, ajustes manuais, suavizações) são história de trabalho do escritório e saem da tela dele; exportar continua.',
+    'O TRILHO DO TALHÃO NÃO ESCONDE MAIS A ABA EM QUE O PRODUTOR TRABALHA: Compactação, Satélite e Prescrições aparecem mesmo sem dado. Antes a aba só entrava quando já existia alguma importação — e ele nunca conseguia fazer a primeira. Na Compactação ele já trabalhava por completo desde a 2.181/2.186 (importa o arquivo da Falker, cria grade, interpola e exclui o que é dele).',
+    'PRESCRIÇÕES LIBERADAS PARA O PRODUTOR: ver, criar, editar e exportar (SHP/Excel/PDF) nos talhões dele; excluir fica com o escritório. A trava de gravação na nuvem abre a coleção inv_prescricoes só para os talhões do escopo dele. ATENÇÃO, BANCO: rodar de novo a seção 6 de docs/seguranca-rls.sql no Supabase (a função inv_talhao_do_registro ganhou inv_prescricoes) — sem isso a prescrição salva na tela, o banco recusa e ela some no próximo boot.',
+    'RECOMENDAÇÕES QUE NÃO APARECIAM: quando a consulta de cenários/relatórios à nuvem FALHA (e não "vem vazia"), o trilho não esconde mais Recomendações, Arquivos e Relatórios — a aba fica e o módulo consulta de novo. O console avisa "[portal] nuvem falhou em: …". Para a causa provável (consulta por talhão varrendo a coleção inteira e estourando o tempo do banco), a seção 7 de docs/seguranca-rls.sql cria o índice app_kv (colecao, dados->>talhaoId). Se a aba seguir sem aparecer num talhão com cenários, conferir o plano do produtor (Central de Acessos → Dados → Plano) e a coluna "Ver" da linha Recomendações do papel Produtor.',
+  ],
   // [S/N] Importar migração: leitura da pasta não trava mais
   '2.192.1': [
     'CORRIGIDO: IMPORTAR MIGRAÇÃO — A LEITURA DA PASTA NÃO FICA MAIS PARADA EM "Lendo pastas…". Quando um arquivo do export muda ou some depois de escolhida a pasta (ex.: o download ainda está gravando), o navegador recusa lê-lo e a leitura inteira parava ali. Agora essa pasta é pulada e listada ("arquivo mudou ou sumiu durante a leitura"), um aviso pede para escolher a pasta de novo e o restante segue normalmente.',

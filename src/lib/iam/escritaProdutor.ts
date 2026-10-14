@@ -17,6 +17,7 @@
 export const COLECOES_POR_TALHAO = new Set([
   'inv_compactacao', 'inv_grades_compact',     // compactação (v2.181.0)
   'inv_composicoes', 'inv_cenas_estado',       // satélite (04/09/2026)
+  'inv_prescricoes',                           // prescrições (v2.193.0): o produtor cria as dos talhões dele
 ]);
 
 /** Coleção dos rasters: o talhão vem do id do mapa. */

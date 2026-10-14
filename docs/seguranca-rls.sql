@@ -483,7 +483,8 @@ revoke all on function public.inv_aceitar_convite(text, text, text) from public;
 grant execute on function public.inv_aceitar_convite(text, text, text) to authenticated;
 
 -- =====================================================================
--- 6) PRODUTOR: SÓ GRAVA COMPACTAÇÃO E SATÉLITE, E SÓ NOS TALHÕES DELE (v2.186.0)
+-- 6) PRODUTOR: SÓ GRAVA COMPACTAÇÃO, SATÉLITE E PRESCRIÇÕES, E SÓ NOS TALHÕES DELE
+--    (v2.186.0; prescrições entraram na v2.193.0 — rode a seção de novo)
 -- =====================================================================
 -- O BURACO QUE ISTO FECHA
 -- O papel produtor é "somente leitura" desde a v2.1xx — mas só no CLIENTE
@@ -498,6 +499,8 @@ grant execute on function public.inv_aceitar_convite(text, text, text) to authen
 --     `compactacao__<talhão>__…` em inv_mapas_fert;
 --   · satélite — inv_composicoes, inv_cenas_estado e mapas
 --     `composicao__<talhão>__…`, `<talhão>__ndvi__…`, `<talhão>__ndvicbers__…`;
+--   · prescrições (v2.193.0) — inv_prescricoes (talhaoId no documento); o app
+--     só mostra excluir ao escritório, mas a função abaixo é por coleção;
 --   → criar, alterar e APAGAR, desde que o talhão seja do escopo dele;
 --   · inv_papeis, inv_convites, inv_auditoria → seguem as políticas das seções
 --     4 e das exceções (este bloco não as afrouxa nem as aperta);
@@ -639,7 +642,7 @@ as $$
     -- Cenas: o item_id É o talhão; o talhaoId do doc, se houver, tem que bater.
     when p_colecao = 'inv_cenas_estado' then
       case when coalesce(p_dados->>'talhaoId', p_item) = p_item then nullif(p_item, '') end
-    when p_colecao in ('inv_compactacao', 'inv_grades_compact', 'inv_composicoes') then
+    when p_colecao in ('inv_compactacao', 'inv_grades_compact', 'inv_composicoes', 'inv_prescricoes') then
       nullif(p_dados->>'talhaoId', '')
   end
 $$;
@@ -759,3 +762,18 @@ create policy talhoes_produtor_delete on public.talhoes
 -- coleções). Restringir a LEITURA por vínculo (produtor/fazenda/talhão) exige
 -- reescrever o boot, que hoje baixa a base inteira antes de saber quem é o
 -- usuário. Fica registrado como próximo passo de segurança.
+
+-- =====================================================================
+-- 7) ÍNDICE POR TALHÃO DENTRO DE CADA COLEÇÃO (v2.193.0)
+-- =====================================================================
+-- O app lê quase tudo "por talhão": cenários, relatórios, prescrições,
+-- compactação, composições — `… from app_kv where colecao = X and
+-- dados->>'talhaoId' = Y` (supabaseData.ts: carregarDocsPorCampoSupabase,
+-- projetarDocsPorCampoSupabase, cloudIncorporarNovos). Sem índice na expressão,
+-- cada consulta varre a coleção inteira — e os cenários carregam grids de MBs.
+-- Consulta lenta demais é recusada pelo banco (statement_timeout) e o app a
+-- tratava como "sem dado": é uma causa provável de a aba Recomendações não
+-- aparecer para o produtor num talhão que tem cenários. Composto: a coleção
+-- primeiro, o talhão do JSON depois. Idempotente.
+create index if not exists app_kv_colecao_talhao_idx
+  on public.app_kv (colecao, (dados->>'talhaoId'));

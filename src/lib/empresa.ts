@@ -399,7 +399,8 @@ function valorPapelSemAjuste(papel: string, chave: string): boolean {
     const antiga = modulo === 'prescricao'
       ? valorPapel(papel, 'recomendacoes.criar')
       : matrizDoPapel(papel)['zonas.criar'] === true;           // = podeEm('zonas','criar')
-    if (acao !== 'visualizar' && acao !== 'exportar') return antiga;
+    // Prescrições: a linha própria também concede criar/editar/excluir (podePrescricao).
+    if (acao !== 'visualizar' && acao !== 'exportar') return antiga || (modulo === 'prescricao' && base[chave] === true);
     const antigaVer = modulo === 'prescricao' ? false : matrizDoPapel(papel)[`zonas.${acao}`] === true;
     return base[chave] === true || antigaVer || antiga;
   }
@@ -521,7 +522,10 @@ function podeAbaDerivada(modulo: string, acao: AcaoAba, antiga: () => boolean, a
 }
 
 export function podePrescricao(acao: AcaoAba): boolean {
-  return podeAbaDerivada('prescricao', acao, () => pode('recomendacoes'), () => false);
+  // 14/10/2026: a linha própria `prescricao.<acao>` da matriz também CONCEDE
+  // criar/editar (é por ela que o produtor cria prescrições); a regra antiga
+  // (quem calcula recomendação prescreve) continua valendo por cima.
+  return podeAbaDerivada('prescricao', acao, () => podeEm('prescricao', acao) || pode('recomendacoes'), () => false);
 }
 
 export function podeAltimetria(acao: AcaoAba): boolean {
