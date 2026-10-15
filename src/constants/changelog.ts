@@ -1,5 +1,9 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Painel do produtor: colheita em largura cheia (correção de layout)
+  '2.198.1': [
+    'CORRIGIDO: sobrava um buraco embaixo de "Evolução dos nutrientes" porque a coluna da direita (área amostrada + colheita, empilhadas) era bem mais alta. Agora "Área amostrada por ano" fica ao lado da evolução e "Colheita" ocupa a largura inteira logo abaixo.',
+  ],
   // [S/N] Painel do produtor enxuto: saem mosaico, lista por fazenda, entregas e plano; matriz só com mapa pronto
   '2.198.0': [
     'PAINEL DO PRODUTOR MAIS ENXUTO: saem o mosaico "Seus talhões", a lista "Talhões por fazenda" (jornada por etapa), "Últimas entregas" e "Seu plano". Fica o que responde rápido: indicadores, andamento do ciclo, a matriz ano a ano, evolução dos nutrientes, área amostrada por ano e colheita (os dois últimos agora empilhados à direita dos nutrientes).',

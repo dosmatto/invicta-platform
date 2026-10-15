@@ -303,8 +303,7 @@ export function PainelProdutor({ cliente, plano, papel, preview }: {
                   </>
                 )}
               </Cartao>
-              <div className="lg:col-span-4 flex flex-col gap-6">
-              <Cartao titulo="Área amostrada por ano" sub="Hectares com grade de amostragem em cada ano." faixa
+              <Cartao className="lg:col-span-4" titulo="Área amostrada por ano" sub="Hectares com grade de amostragem em cada ano." faixa
                 rodape={(
                   <dl className="grid grid-cols-3 text-center">
                     {[['Área total', `${fmtInt(resumo.areaTotal)} ha`], ['Talhões', `${porEtapa.amostragem.prontos} de ${resumo.nTalhoes}`], ['Cobertura', `${resumo.pctAmostrada}%`]].map(([k, v], i) => (
@@ -321,7 +320,10 @@ export function PainelProdutor({ cliente, plano, papel, preview }: {
                 </p>
                 <BarrasAno serie={serieAnos} anoSel={anoSel} onAno={ano => { const s = safras.find(x => anoDaSafra(x.nome) === ano); if (s) setSafra(s.nome); }} />
               </Cartao>
-              <Cartao titulo={`Colheita ${rotuloAno(safra)}`}
+            </div>
+
+            {/* Colheita em largura cheia: a lista de talhões respira e não sobra buraco ao lado. */}
+            <Cartao titulo={`Colheita ${rotuloAno(safra)}`}
                 sub={`Média do mapa de colheita${culturaUnica ? ` · ${culturaUnica}` : ''}, em sacas por hectare.`}>
                 {ranking.length === 0 ? (
                   <p className="text-sm py-8 text-center" style={{ color: COR.texto2 }}>Sem mapa de colheita processado neste ano.</p>
@@ -335,9 +337,7 @@ export function PainelProdutor({ cliente, plano, papel, preview }: {
                       itens={ranking.map(r => ({ id: r.talhaoId, rotulo: r.nome, sub: culturaUnica ? undefined : (r.cultura || undefined), valor: r.mediaScHa }))} />
                   </>
                 )}
-              </Cartao>
-              </div>
-            </div>
+            </Cartao>
 
             <p className="text-center text-xs pt-1" style={{ color: COR.texto2 }}>INVICTA Platform · v{APP_VERSION}</p>
           </>
