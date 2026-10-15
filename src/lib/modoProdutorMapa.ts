@@ -13,16 +13,32 @@
 import { somenteLeitura } from './somenteLeitura';
 
 const CHAVE = 'inv_produtor_mapa';
+// 15/10/2026: o botão "Acessar a plataforma" também diz QUAL produtor abrir —
+// o /painel cai direto no cadastro dele, com as áreas no mapa, em vez da
+// lista de clientes. Consumido uma vez (AppContext) e apagado.
+const CHAVE_ABRIR = 'inv_produtor_mapa_abrir';
 
 /** Liga o modo (só tem efeito para o produtor em somente leitura). */
-export function ligarModoProdutorMapa(): void {
+export function ligarModoProdutorMapa(clienteId?: string): void {
   if (!somenteLeitura()) return;
-  try { sessionStorage.setItem(CHAVE, '1'); } catch { /* aba privada/bloqueada: segue sem o modo */ }
+  try {
+    sessionStorage.setItem(CHAVE, '1');
+    if (clienteId) sessionStorage.setItem(CHAVE_ABRIR, clienteId);
+  } catch { /* aba privada/bloqueada: segue sem o modo */ }
+}
+
+/** Produtor (cliente) que o /painel deve abrir ao carregar — uma vez só. */
+export function consumirProdutorParaAbrir(): string | null {
+  try {
+    const id = sessionStorage.getItem(CHAVE_ABRIR);
+    if (id) sessionStorage.removeItem(CHAVE_ABRIR);
+    return id;
+  } catch { return null; }
 }
 
 /** Desliga o modo (volta a valer o redirecionamento para o portal). */
 export function desligarModoProdutorMapa(): void {
-  try { sessionStorage.removeItem(CHAVE); } catch { /* nada a limpar */ }
+  try { sessionStorage.removeItem(CHAVE); sessionStorage.removeItem(CHAVE_ABRIR); } catch { /* nada a limpar */ }
 }
 
 /** true = produtor em somente leitura navegando pelo mapa (/painel). */

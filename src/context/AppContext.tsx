@@ -15,7 +15,9 @@ import { seedLegendasSistema, seedNormasFoliaresSistema, migrarLegendaCtceV1, mi
 import { LEGENDAS_OFICIAIS } from '@/constants/legendasSeedOficial';
 import { authConfigurado, observarAuth, logout, type User } from '@/lib/auth';
 import { hidratarCachePesado } from '@/lib/localComprimido';
-import { modoProdutorMapaAtivo } from '@/lib/modoProdutorMapa';
+import { modoProdutorMapaAtivo, consumirProdutorParaAbrir } from '@/lib/modoProdutorMapa';
+import { featuresDosTalhoes } from '@/lib/talhoesParaMapa';
+import { getClientes, getFazendas, getTalhoes } from '@/lib/store';
 import { LoginScreen } from '@/components/auth/LoginScreen';
 
 export type MapMode = 'street' | 'satellite';
@@ -393,6 +395,25 @@ export function AppProvider({ children, redirectProdutorParaPortal, modoCampo }:
   const setNav = useCallback((partial: Partial<NavContext>) => {
     setNavState(prev => ({ ...prev, ...partial }));
   }, []);
+
+  // "Acessar a plataforma" do portal (15/10/2026): o produtor cai DIRETO no
+  // cadastro dele, com todas as áreas no mapa — não na lista de clientes.
+  // O id vem do sessionStorage (lib/modoProdutorMapa.ts) e é consumido uma vez.
+  useEffect(() => {
+    if (!dadosProntos || !modoProdutorMapaAtivo()) return;
+    const id = consumirProdutorParaAbrir();
+    if (!id) return;
+    const c = getClientes().find(x => x.id === id);
+    if (!c) return;
+    // Um tick depois: o painel inicial já montou e o mapa recebe a camada pronta.
+    const t = setTimeout(() => {
+      setNav({ produtorId: c.id, produtor: c.nome, fazendaId: null, fazenda: '', talhaoId: null, talhao: '', area: 0 });
+      setActivePanel(`produtor-${c.id}`);
+      setMapMode('satellite');
+      setTalhoesFazenda(featuresDosTalhoes(getFazendas(c.id).flatMap(f => getTalhoes(f.id))));
+    }, 0);
+    return () => clearTimeout(t);
+  }, [dadosProntos]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <AppContext.Provider value={{

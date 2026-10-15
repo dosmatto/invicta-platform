@@ -110,6 +110,7 @@ verdadeira (fusão de talhões) chegou depois; foi preciso renumerar.
 | S/N | Painel do produtor: a matriz por ano marca satélite, colheita, compactação e recomendações | 2.196.0 | /portal → cartão "Seus talhões ano a ano" (abaixo dos indicadores) → marcadores na célula + legenda no rodapé |
 | S/N | Painel do produtor: filtro de fazenda no cabeçalho | 2.197.0 | /portal → cabeçalho → seletor "Todas as fazendas" (aparece com 2+ fazendas) |
 | S/N | Painel do produtor enxuto: saem mosaico, lista por fazenda, entregas e plano; matriz só com mapa pronto | 2.198.0 | /portal → página inteira; matriz "Seus talhões ano a ano" só com data onde há mapa |
+| S/N | Portal do produtor: "Acessar a plataforma" abre direto nas áreas dele | 2.199.0 | /portal → faixa "Acesse a plataforma com as suas áreas" → /painel já no produtor, com os talhões no mapa |
 
 > As pendências 1–17 foram entregues antes deste registro existir e não estão
 > catalogadas; procure pelo assunto no `changelog.ts`. Da 18 em diante, tudo

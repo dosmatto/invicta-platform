@@ -150,10 +150,12 @@ export function PainelProdutor({ cliente, plano, papel, preview }: {
   // caminho (URL digitada) com o modo ainda ligado voltaria do talhão ao mapa.
   useEffect(() => { desligarModoProdutorMapa(); }, []);
   // ligarModoProdutorMapa() só vale para o produtor logado; no preview não faz nada.
-  const abrirMapa = useCallback(() => {
-    ligarModoProdutorMapa();
+  // Abre o /painel (o mapa da equipe) em somente leitura, direto no cadastro
+  // deste produtor com as áreas dele (AppContext lê o id ao carregar).
+  const abrirPlataforma = useCallback(() => {
+    ligarModoProdutorMapa(cliente.id);
     router.push('/painel');
-  }, [router]);
+  }, [router, cliente.id]);
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg-app)', color: COR.texto }}>
@@ -172,14 +174,6 @@ export function PainelProdutor({ cliente, plano, papel, preview }: {
               </p>
             </div>
           )}
-          {/* Mapa da fazenda: a página normal do mapa (/painel), em somente
-              leitura e só com os clientes dele. No preview (owner/admin) o modo
-              não liga — é o /painel normal, com o papel de quem está vendo. */}
-          <button onClick={abrirMapa} title="Abrir o mapa da fazenda (somente leitura)"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-bold"
-            style={{ background: 'var(--invicta-green-dark)', color: '#fff' }}>
-            <MapIcon size={14} /> Mapa da fazenda
-          </button>
           {preview ? (
             <button onClick={() => router.push('/painel')} title="Voltar ao painel" className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-bold"
               style={{ background: 'var(--bg-surface)', color: 'var(--invicta-blue)' }}>
@@ -221,6 +215,21 @@ export function PainelProdutor({ cliente, plano, papel, preview }: {
             )}
           </div>
         </div>
+
+        {/* Acesso à plataforma (15/10/2026): em faixa, logo sob a saudação —
+            o botão discreto do cabeçalho passava despercebido. No preview
+            (owner/admin) o modo não liga: é o /painel normal. */}
+        <section className="rounded-2xl px-5 py-4 flex flex-wrap items-center justify-between gap-3" style={{ background: 'var(--status-active-bg)', border: '1px solid var(--invicta-green-light)' }}>
+          <div className="min-w-0">
+            <p className="text-base font-bold" style={{ color: COR.texto }}>Acesse a plataforma com as suas áreas</p>
+            <p className="text-sm mt-0.5" style={{ color: COR.texto2 }}>O mesmo mapa que a equipe da Invicta usa, aberto direto nos seus talhões, em somente leitura.</p>
+          </div>
+          <button onClick={abrirPlataforma} title="Abrir a plataforma nas suas áreas (somente leitura)"
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-white flex-shrink-0"
+            style={{ background: 'var(--invicta-green-dark)' }}>
+            <MapIcon size={16} /> Acessar a plataforma
+          </button>
+        </section>
 
         {fazendas.length === 0 ? (
           <Vazio titulo="Nenhuma fazenda cadastrada ainda." texto="Assim que a Invicta cadastrar suas fazendas e talhões, eles aparecem aqui." />

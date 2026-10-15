@@ -1,5 +1,10 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Portal do produtor: "Acessar a plataforma" abre direto nas áreas dele
+  '2.199.0': [
+    'O BOTÃO "MAPA DA FAZENDA" VIROU "ACESSAR A PLATAFORMA" e saiu do cabeçalho para uma faixa verde logo abaixo da saudação, onde se vê. Ao clicar, o mapa da equipe abre DIRETO no cadastro do produtor — nome, fazendas e todas as áreas dele desenhadas no mapa, já enquadradas — em vez de cair em Início e ter de passar por Clientes. Continua em somente leitura, com o botão Portal no topo para voltar.',
+    'Por dentro: o portal guarda qual produtor abrir (sessionStorage, consumido uma vez) e o mapa, assim que os dados carregam, seleciona o cadastro e publica os talhões de todas as fazendas dele na camada do mapa (lib/talhoesParaMapa.ts, a mesma extração de geometria da fazenda).',
+  ],
   // [S/N] Painel do produtor: colheita em largura cheia (correção de layout)
   '2.198.1': [
     'CORRIGIDO: sobrava um buraco embaixo de "Evolução dos nutrientes" porque a coluna da direita (área amostrada + colheita, empilhadas) era bem mais alta. Agora "Área amostrada por ano" fica ao lado da evolução e "Colheita" ocupa a largura inteira logo abaixo.',
