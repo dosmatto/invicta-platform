@@ -76,7 +76,12 @@ export function PainelProdutor({ cliente, plano, papel, preview }: {
   // O produtor vê TODAS as fazendas do escopo dele — inclusive a que não está
   // no nome dele mas foi vinculada (condomínio). No preview o owner/admin
   // enxerga tudo, então ali vale o cadastro do produtor escolhido.
-  const fazendas = useMemo(() => preview ? getFazendas(cliente.id) : getFazendas(), [cliente.id, preview]);
+  const fazendasTodas = useMemo(() => preview ? getFazendas(cliente.id) : getFazendas(), [cliente.id, preview]);
+  // Filtro de fazenda (15/10/2026): '' = todas. Tudo abaixo — indicadores,
+  // gráficos, matriz, lista, entregas — deriva de `fazendas`, então o filtro
+  // vale para o painel inteiro.
+  const [fazendaSel, setFazendaSel] = useState('');
+  const fazendas = useMemo(() => (fazendaSel ? fazendasTodas.filter(f => f.id === fazendaSel) : fazendasTodas), [fazendasTodas, fazendaSel]);
   const donos = useMemo(() => new Map(getClientes().map(c => [c.id, c.nome])), []);
   const talhoes = useMemo(() => fazendas.flatMap(f => getTalhoes(f.id)), [fazendas]);
 
@@ -268,6 +273,10 @@ export function PainelProdutor({ cliente, plano, papel, preview }: {
             </span>
             {safras.length > 0 && (
               <Seletor valor={safra} onChange={setSafra} opcoes={safras.map(s => ({ valor: s.nome, rotulo: `Ano ${rotuloAno(s.nome)}` }))} />
+            )}
+            {fazendasTodas.length > 1 && (
+              <Seletor valor={fazendaSel} onChange={setFazendaSel}
+                opcoes={[{ valor: '', rotulo: 'Todas as fazendas' }, ...fazendasTodas.map(f => ({ valor: f.id, rotulo: f.nome }))]} />
             )}
           </div>
         </div>

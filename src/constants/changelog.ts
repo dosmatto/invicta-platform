@@ -1,5 +1,9 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Painel do produtor: filtro de fazenda no cabeçalho
+  '2.197.0': [
+    'PAINEL DO PRODUTOR GANHA O FILTRO DE FAZENDA, ao lado do ano: "Todas as fazendas" ou uma específica. Vale para o painel inteiro — indicadores, andamento do ciclo, matriz ano a ano, mapa dos talhões, gráficos, lista por fazenda e últimas entregas. Só aparece quando o produtor tem mais de uma fazenda.',
+  ],
   // [S/N] Painel do produtor: a matriz por ano marca satélite, colheita, compactação e recomendações
   '2.196.0': [
     'A MATRIZ "SEUS TALHÕES ANO A ANO" DO PAINEL DO PRODUTOR subiu para logo abaixo dos indicadores e agora marca, em cada célula, o que mais existe no ano além da coleta de solo: satélite (cenas e composições), mapa de colheita, compactação e recomendações — um marcador por camada, com a quantidade quando há mais de uma, e cada marcador abre o talhão em nova aba já naquela aba e naquele ano. Talhão que só tem colheita num ano também entra (e o ano vira coluna).',

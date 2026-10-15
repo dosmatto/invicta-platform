@@ -108,6 +108,7 @@ verdadeira (fusão de talhões) chegou depois; foi preciso renumerar.
 | 58 | Prescrição por condição: apagar a dose ou o limiar não derruba mais a página | 2.194.1 | Talhão → Prescrições → "Por condição no mapa de fertilidade" → apagar o 0 da dose de uma faixa (ou o valor do limiar) → campo fica vazio, a página segue de pé |
 | S/N | Painel do produtor: matriz talhão × ano abre o talhão em nova aba na fertilidade | 2.195.0 | /portal (produtor ou preview) → cartão "Amostragem e fertilidade por ano" → clicar numa data |
 | S/N | Painel do produtor: a matriz por ano marca satélite, colheita, compactação e recomendações | 2.196.0 | /portal → cartão "Seus talhões ano a ano" (abaixo dos indicadores) → marcadores na célula + legenda no rodapé |
+| S/N | Painel do produtor: filtro de fazenda no cabeçalho | 2.197.0 | /portal → cabeçalho → seletor "Todas as fazendas" (aparece com 2+ fazendas) |
 
 > As pendências 1–17 foram entregues antes deste registro existir e não estão
 > catalogadas; procure pelo assunto no `changelog.ts`. Da 18 em diante, tudo
