@@ -336,7 +336,18 @@ t('matriz: T1 tem mapas em 2026 e só laudo em 2025; T2 amostrado em 2026; T3 nu
   assert.equal(m[0].ultimoAno, 2026);
   const c2 = Object.fromEntries(m[1].celulas.map(c => [c.ano, c]));
   assert.equal(c2[2026].situacao, 'amostrado'); assert.equal(c2[2026].data, '2026-02-12T12:00:00Z');
-  assert.equal(m[2].ultimoAno, null); assert.ok(m[2].celulas.every(c => c.situacao === 'vazio'));
+  assert.equal(m[2].ultimoAno, null); assert.ok(m[2].celulas.every(c => c.situacao === 'vazio')); assert.equal(m[2].temAlgo, false);
+  // Outras camadas do ano: satélite (cena de 10/03/26), colheita, compactação e os 2 cenários de 26/27.
+  assert.deepEqual(c1[2026].camadas, { ndvi: 1, colheita: 1, compactacao: 1, recomendacoes: 2 });
+  assert.deepEqual(c1[2025].camadas, { ndvi: 1, colheita: 0, compactacao: 0, recomendacoes: 1 });
+  assert.deepEqual(c1[2027].camadas, { ndvi: 0, colheita: 0, compactacao: 0, recomendacoes: 0 });
+});
+t('matriz: talhão só com colheita em 2023 entra nas colunas e na célula, sem coleta', () => {
+  const d = { talhao: T3.talhao, colheitas: [{ safra: '23/24', ano: 2023, oficial: true, cultura: 'Milho', criadoEm: '2023-09-01T00:00:00Z', stats: { mediaKgha: 8000 } }] };
+  assert.deepEqual(anosDaMatriz([d], [2025]), [2023, 2024, 2025]);
+  const l = matrizAmostragem([d], [2023])[0];
+  assert.equal(l.celulas[0].situacao, 'vazio'); assert.equal(l.celulas[0].camadas.colheita, 1);
+  assert.equal(l.ultimoAno, null); assert.equal(l.temAlgo, true);
 });
 t('matriz: a data da coleta (referência) vence a data de importação', () => {
   const d = { talhao: T3.talhao, grades: [{ safra: '26/27', ano: 2026, criadoEm: '2026-03-01T00:00:00Z', dataReferencia: '2026-02-05', pontos: 10 }] };

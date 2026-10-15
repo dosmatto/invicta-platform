@@ -19,7 +19,7 @@ import type { LucideIcon } from 'lucide-react';
 import {
   LogOut, ChevronRight, ChevronDown, Check, Clock, Lock, Layers, Mountain, Zap, Satellite,
   BarChart3, Activity, FileText, User, ArrowLeft, Loader2, Sprout,
-  Ruler, LayoutGrid, FlaskConical, Map as MapIcon, ClipboardList, FileDown, Search, ChevronUp, Eye, ExternalLink,
+  Ruler, LayoutGrid, FlaskConical, Map as MapIcon, ClipboardList, FileDown, Search, ChevronUp, Eye, ExternalLink, FileSpreadsheet,
 } from 'lucide-react';
 import { getClientes, getFazendas, getTalhoes, getSafras, getLegendasPorAtributo, type Cliente } from '@/lib/store';
 import { getUsuarios } from '@/lib/iam/usuarios';
@@ -35,7 +35,7 @@ import { dadosLocaisDoTalhao, dadosNuvemDosTalhoes, juntarNuvem, type DadosNuvem
 import {
   avaliarTalhao, resumirPortal, areaAmostradaPorAno, evolucaoNutrientes, rankingColheita, linhaDoTempo,
   projetarTalhoes, estadoEtapa, etapaDef, fmtDataCurta, ETAPAS_CICLO, NUTRIENTES_EVOLUCAO,
-  anosDaMatriz, matrizAmostragem, idadeColeta, type LinhaMatriz, type CelulaMatriz,
+  anosDaMatriz, matrizAmostragem, idadeColeta, CAMADAS_ANO, type LinhaMatriz, type CelulaMatriz, type CamadaAno,
   type AvaliacaoTalhao, type EtapaId, type Situacao, type SituacaoCiclo,
 } from '@/lib/portalProdutor';
 import { MosaicoTalhoes, BarrasAno, Rosca, LinhaEvolucao, PontosEixo, COR, COR_CICLO } from './GraficosPortal';
@@ -309,6 +309,10 @@ export function PainelProdutor({ cliente, plano, papel, preview }: {
               </Cartao>
             </div>
 
+            {/* Matriz talhão × ano: logo abaixo dos indicadores (15/10/2026) — é o
+                atalho de navegação; os gráficos vêm depois. */}
+            <MatrizAmostragem linhas={matriz} anos={anosMatriz} anoAtual={anoAtual} fazendas={fazendas} abrir={abrirNovaAba} />
+
             {/* Mapa · área por ano */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:items-start">
               <Cartao className="lg:col-span-8" titulo="Seus talhões" sub="A forma de cada talhão, na cor do andamento do ciclo neste ano."
@@ -402,10 +406,6 @@ export function PainelProdutor({ cliente, plano, papel, preview }: {
                 )}
               </Cartao>
             </div>
-
-            {/* Amostragem × ano: a data da coleta de cada talhão em cada ano; a
-                célula abre o talhão em nova aba nos mapas de fertilidade daquele ano. */}
-            <MatrizAmostragem linhas={matriz} anos={anosMatriz} anoAtual={anoAtual} fazendas={fazendas} abrir={abrirNovaAba} />
 
             {/* Fazendas → talhões */}
             <Cartao titulo="Talhões por fazenda" sub="A jornada do ano de cada talhão. Clique numa etapa para abrir a aba certa."
@@ -612,52 +612,33 @@ function Seletor({ valor, onChange, opcoes, rotulo }: { valor: string; onChange:
   );
 }
 
-// ── Matriz amostragem × ano ───────────────────────────────────────────────
-// Cor pela IDADE da coleta (ano atual → verde, 1 ano → amarelo, 2 anos → âmbar,
-// 3 ou mais → vermelho). O amarelo não tem token no tema; os outros usam os
-// tokens de status.
+// ── Matriz talhão × ano ────────────────────────────────────────────────────
+// A DATA é a coleta de solo, colorida pela idade (ano atual → verde, 1 ano →
+// amarelo, 2 anos → âmbar, 3 ou mais → vermelho; o amarelo não tem token no
+// tema). Os MARCADORES embaixo são o que mais existe no ano — satélite,
+// colheita, compactação, recomendações — e cada um abre a própria aba.
 type Idade = 0 | 1 | 2 | 3;
 const TOM_IDADE: Record<Idade, { rotulo: string; bg: string; cor: string; borda: string }> = {
-  0: { rotulo: 'Ano atual', bg: 'var(--status-active-bg)', cor: 'var(--invicta-green-dark)', borda: 'var(--invicta-green-light)' },
+  0: { rotulo: 'ano atual', bg: 'var(--status-active-bg)', cor: 'var(--invicta-green-dark)', borda: 'var(--invicta-green-light)' },
   1: { rotulo: '1 ano', bg: '#fef9c3', cor: '#854d0e', borda: '#fde047' },
   2: { rotulo: '2 anos', bg: 'var(--status-warning-bg)', cor: 'var(--status-warning)', borda: '#fdba74' },
   3: { rotulo: '3 anos ou mais', bg: 'var(--status-error-bg)', cor: 'var(--status-error)', borda: '#fca5a5' },
 };
 const TOM_AMOSTRADO = { bg: 'var(--status-info-bg)', cor: 'var(--status-info)', borda: 'var(--invicta-blue-light)' };
+const ICONE_CAMADA: Record<CamadaAno, LucideIcon> = { ndvi: Satellite, colheita: BarChart3, compactacao: Activity, recomendacoes: FileSpreadsheet };
 
 function MatrizAmostragem({ linhas, anos, anoAtual, fazendas, abrir }: {
   linhas: LinhaMatriz[]; anos: number[]; anoAtual: number;
   fazendas: Array<{ id: string; nome: string }>;
   abrir: (talhaoId: string, aba: string, ano: number) => void;
 }) {
-  const [filtro, setFiltro] = useState<'todos' | Idade>('todos');
-  const contagem = useMemo(() => {
-    const c: Record<'todos' | Idade, number> = { todos: linhas.length, 0: 0, 1: 0, 2: 0, 3: 0 };
-    for (const l of linhas) { const i = idadeColeta(l.ultimoAno, anoAtual); if (i != null) c[i]++; }
-    return c;
-  }, [linhas, anoAtual]);
-  const visiveis = filtro === 'todos' ? linhas : linhas.filter(l => idadeColeta(l.ultimoAno, anoAtual) === filtro);
-  const grupos = fazendas.map(f => ({ f, itens: visiveis.filter(l => l.fazendaId === f.id) })).filter(g => g.itens.length > 0);
-  const semNada = !anos.length || linhas.every(l => l.ultimoAno == null);
-  const chips: Array<['todos' | Idade, string, number]> = [['todos', 'Todos', contagem.todos], [0, TOM_IDADE[0].rotulo, contagem[0]], [1, TOM_IDADE[1].rotulo, contagem[1]], [2, TOM_IDADE[2].rotulo, contagem[2]], [3, TOM_IDADE[3].rotulo, contagem[3]]];
+  const grupos = fazendas.map(f => ({ f, itens: linhas.filter(l => l.fazendaId === f.id) })).filter(g => g.itens.length > 0);
+  const semNada = !anos.length || linhas.every(l => !l.temAlgo);
   return (
-    <Cartao titulo="Amostragem e fertilidade por ano" sub="A data da coleta de cada talhão em cada ano. Clique na data para abrir o talhão em nova aba, já nos mapas de fertilidade daquele ano."
-      acao={semNada ? undefined : (
-        <div className="flex items-center gap-1 rounded-lg p-1 flex-wrap" style={{ background: 'var(--bg-surface-hover)', border: '1px solid var(--border-color)' }}>
-          {chips.map(([id, rotulo, n]) => (
-            <button key={String(id)} type="button" onClick={() => setFiltro(id)} title="Filtrar pela situação da última coleta"
-              className="h-7 px-3 rounded-md text-xs font-medium whitespace-nowrap flex items-center gap-1.5"
-              style={filtro === id ? { background: 'var(--bg-surface)', color: COR.texto, boxShadow: '0 1px 2px var(--border-color)' } : { color: COR.texto2 }}>
-              {id !== 'todos' && <span className="w-2 h-2 rounded-full" style={{ background: TOM_IDADE[id].cor }} />}
-              {rotulo} <span className="tabular-nums" style={{ opacity: 0.75 }}>{n}</span>
-            </button>
-          ))}
-        </div>
-      )}>
+    <Cartao titulo="Seus talhões ano a ano" sub="A data da coleta de solo de cada talhão em cada ano, e o que mais já existe no ano. Clique para abrir o talhão em nova aba, já na aba e no ano certos."
+      rodape={semNada ? undefined : <LegendaMatriz />}>
       {semNada ? (
-        <p className="text-sm" style={{ color: COR.texto2 }}>Nenhuma amostragem registrada ainda nos seus talhões.</p>
-      ) : grupos.length === 0 ? (
-        <p className="text-sm py-2" style={{ color: COR.texto2 }}>Nenhum talhão nessa situação.</p>
+        <p className="text-sm" style={{ color: COR.texto2 }}>Nada processado ainda nos seus talhões.</p>
       ) : (
         <div className="overflow-x-auto -mx-5 sm:-mx-6 px-5 sm:px-6">
           <table className="w-full text-sm" style={{ borderCollapse: 'separate', borderSpacing: 0, minWidth: 320 + anos.length * 112 }}>
@@ -682,11 +663,11 @@ function MatrizAmostragem({ linhas, anos, anoAtual, fazendas, abrir }: {
                     </tr>
                     {g.itens.map(l => (
                       <tr key={l.talhaoId}>
-                        <td className="py-1 pr-3 font-semibold sticky left-0 z-10" style={{ color: COR.texto, background: 'var(--bg-surface)', borderTop: '1px solid var(--border-color)' }}>{l.nome}</td>
-                        <td className="py-1 pr-4 text-right tabular-nums whitespace-nowrap" style={{ color: COR.texto2, borderTop: '1px solid var(--border-color)' }}>{fmtHa(l.areaHa)} ha</td>
+                        <td className="py-1.5 pr-3 font-semibold sticky left-0 z-10 align-top" style={{ color: COR.texto, background: 'var(--bg-surface)', borderTop: '1px solid var(--border-color)' }}>{l.nome}</td>
+                        <td className="py-1.5 pr-4 text-right tabular-nums whitespace-nowrap align-top" style={{ color: COR.texto2, borderTop: '1px solid var(--border-color)' }}>{fmtHa(l.areaHa)} ha</td>
                         {l.celulas.map(c => (
-                          <td key={c.ano} className="py-1 px-1" style={{ borderTop: '1px solid var(--border-color)' }}>
-                            <CelulaAno c={c} anoAtual={anoAtual} onAbrir={() => abrir(l.talhaoId, c.situacao === 'amostrado' ? 'amostragem' : 'fertilidade', c.ano)} />
+                          <td key={c.ano} className="py-1.5 px-1 align-top" style={{ borderTop: '1px solid var(--border-color)' }}>
+                            <CelulaAno c={c} anoAtual={anoAtual} abrir={aba => abrir(l.talhaoId, aba, c.ano)} />
                           </td>
                         ))}
                       </tr>
@@ -702,22 +683,60 @@ function MatrizAmostragem({ linhas, anos, anoAtual, fazendas, abrir }: {
   );
 }
 
-function CelulaAno({ c, anoAtual, onAbrir }: { c: CelulaMatriz; anoAtual: number; onAbrir: () => void }) {
-  if (c.situacao === 'vazio') return <span className="block w-full py-1.5 text-center text-xs" style={{ color: COR.mudo }}>—</span>;
+function CelulaAno({ c, anoAtual, abrir }: { c: CelulaMatriz; anoAtual: number; abrir: (aba: string) => void }) {
+  const extras = CAMADAS_ANO.filter(k => c.camadas[k.id] > 0);
+  if (c.situacao === 'vazio' && extras.length === 0) return <span className="block w-full py-1.5 text-center text-xs" style={{ color: COR.mudo }}>—</span>;
   const tom = c.situacao === 'amostrado' ? TOM_AMOSTRADO : TOM_IDADE[idadeColeta(c.ano, anoAtual) ?? 3];
   const titulo = c.situacao === 'mapas'
     ? `${c.mapas} ${c.mapas === 1 ? 'mapa' : 'mapas'} de fertilidade · ${c.amostras} amostras — abre em nova aba`
     : c.situacao === 'laudo' ? `Laudo recebido (${c.amostras} amostras) — mapas em processamento` : 'Amostrado — aguardando o laudo';
   return (
-    <button type="button" onClick={onAbrir} title={titulo} aria-label={`${l(c)} em ${c.ano}: ${fmtDataCurta(c.data)}`}
-      className="w-full py-1.5 px-1 rounded-md text-xs font-semibold tabular-nums inline-flex items-center justify-center gap-1 whitespace-nowrap"
-      style={{ background: tom.bg, color: tom.cor, border: `1px ${c.situacao === 'laudo' ? 'dashed' : 'solid'} ${tom.borda}` }}>
-      {fmtDataCurta(c.data)}
-      {c.situacao === 'amostrado' && <span className="font-normal">· amostrado</span>}
-      <ExternalLink size={11} style={{ opacity: 0.8 }} />
-    </button>
+    <div className="flex flex-col items-stretch gap-1">
+      {c.situacao !== 'vazio' && (
+        <button type="button" onClick={() => abrir(c.situacao === 'amostrado' ? 'amostragem' : 'fertilidade')} title={titulo}
+          className="w-full py-1.5 px-1 rounded-md text-xs font-semibold tabular-nums inline-flex items-center justify-center gap-1 whitespace-nowrap"
+          style={{ background: tom.bg, color: tom.cor, border: `1px ${c.situacao === 'laudo' ? 'dashed' : 'solid'} ${tom.borda}` }}>
+          {fmtDataCurta(c.data)}
+          {c.situacao === 'amostrado' && <span className="font-normal">· amostrado</span>}
+          <ExternalLink size={11} style={{ opacity: 0.8 }} />
+        </button>
+      )}
+      {extras.length > 0 && (
+        <div className="flex items-center justify-center gap-1">
+          {extras.map(k => {
+            const Icone = ICONE_CAMADA[k.id];
+            const n = c.camadas[k.id];
+            return (
+              <button key={k.id} type="button" onClick={() => abrir(k.aba)} title={`${k.rotulo}: ${n} — abre em nova aba`} aria-label={`${k.rotulo} em ${c.ano}`}
+                className="h-6 px-1.5 rounded-md inline-flex items-center gap-1 text-[11px] tabular-nums"
+                style={{ background: 'var(--bg-surface-hover)', color: COR.texto2, border: '1px solid var(--border-color)' }}>
+                <Icone size={12} />{n > 1 ? n : null}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
-  function l(x: CelulaMatriz) { return x.situacao === 'mapas' ? 'Mapas de fertilidade' : x.situacao === 'laudo' ? 'Laudo' : 'Amostragem'; }
+}
+
+function AmostraLegenda({ bg, borda, tracejado }: { bg?: string; borda: string; tracejado?: boolean }) {
+  return <span className="inline-block w-3.5 h-3.5 rounded-sm flex-shrink-0" style={{ background: bg ?? 'transparent', border: `1px ${tracejado ? 'dashed' : 'solid'} ${borda}` }} />;
+}
+
+function LegendaMatriz() {
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs" style={{ color: COR.texto2 }}>
+      <span className="font-semibold" style={{ color: COR.texto }}>Data = coleta de solo</span>
+      {([0, 1, 2, 3] as Idade[]).map(i => (
+        <span key={i} className="inline-flex items-center gap-1.5"><AmostraLegenda bg={TOM_IDADE[i].bg} borda={TOM_IDADE[i].borda} />{TOM_IDADE[i].rotulo}</span>
+      ))}
+      <span className="inline-flex items-center gap-1.5"><AmostraLegenda bg={TOM_AMOSTRADO.bg} borda={TOM_AMOSTRADO.borda} />amostrado, laudo a caminho</span>
+      <span className="inline-flex items-center gap-1.5"><AmostraLegenda borda={COR.texto2} tracejado />laudo recebido, mapas a caminho</span>
+      <span className="font-semibold" style={{ color: COR.texto }}>Também no ano</span>
+      {CAMADAS_ANO.map(k => { const Icone = ICONE_CAMADA[k.id]; return <span key={k.id} className="inline-flex items-center gap-1.5"><Icone size={13} />{k.rotulo}</span>; })}
+    </div>
+  );
 }
 
 function Vazio({ titulo, texto }: { titulo: string; texto: string }) {

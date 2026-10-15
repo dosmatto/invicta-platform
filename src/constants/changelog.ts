@@ -1,5 +1,10 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Painel do produtor: a matriz por ano marca satélite, colheita, compactação e recomendações
+  '2.196.0': [
+    'A MATRIZ "SEUS TALHÕES ANO A ANO" DO PAINEL DO PRODUTOR subiu para logo abaixo dos indicadores e agora marca, em cada célula, o que mais existe no ano além da coleta de solo: satélite (cenas e composições), mapa de colheita, compactação e recomendações — um marcador por camada, com a quantidade quando há mais de uma, e cada marcador abre o talhão em nova aba já naquela aba e naquele ano. Talhão que só tem colheita num ano também entra (e o ano vira coluna).',
+    'Saíram os chips de filtro por idade da coleta ("Ano atual · 1 ano · 2 anos · 3 ou mais"); no lugar, uma legenda no rodapé explica as cores da data, o azul "amostrado", o tracejado "laudo sem mapas" e os marcadores das outras camadas.',
+  ],
   // [S/N] Painel do produtor: matriz talhão × ano abre o talhão em nova aba na fertilidade
   '2.195.0': [
     'PAINEL DO PRODUTOR GANHA A MATRIZ "AMOSTRAGEM E FERTILIDADE POR ANO": uma linha por talhão (agrupado por fazenda, com a área), uma coluna por ano, e na célula a data da coleta — verde no ano atual, amarelo com 1 ano, âmbar com 2 e vermelho com 3 ou mais; "amostrado" em azul quando só a grade existe (aguardando o laudo); tracejado quando o laudo chegou e os mapas ainda não. Clicar na data abre o talhão em NOVA ABA, já na Fertilidade (ou na Amostragem) daquele ano.',

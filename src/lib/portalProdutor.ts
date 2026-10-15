@@ -503,35 +503,58 @@ export function areaAmostradaPorAno(dados: DadosTalhao[], anos: number[] = []): 
   return Array.from(porAno.values()).map(a => ({ ...a, areaHa: Math.round(a.areaHa * 100) / 100 })).sort((a, b) => a.ano - b.ano);
 }
 
-// ── Matriz amostragem × ano (painel do produtor) ─────────────────────────────
-// Uma linha por talhão, uma coluna por ano: o que existe de amostragem/
-// fertilidade naquele ano e a data da coleta. É o atalho do produtor para
-// "abrir o talhão de 2024 nos mapas de fertilidade".
+// ── Matriz talhão × ano (painel do produtor) ─────────────────────────────────
+// Uma linha por talhão, uma coluna por ano: a coleta de solo daquele ano (data,
+// laudo, mapas) e o que MAIS existe no ano (satélite, colheita, compactação,
+// recomendações). É o atalho do produtor para "abrir o talhão de 2024 nos mapas
+// de fertilidade" — ou na colheita, no satélite…
 
 export type SituacaoCelula = 'mapas' | 'laudo' | 'amostrado' | 'vazio';
+export type CamadaAno = 'ndvi' | 'colheita' | 'compactacao' | 'recomendacoes';
+/** Outras camadas que a célula marca, com a aba da página do talhão que abre. */
+export const CAMADAS_ANO: Array<{ id: CamadaAno; rotulo: string; aba: string }> = [
+  { id: 'ndvi',          rotulo: 'Satélite (NDVI)',   aba: 'ndvi' },
+  { id: 'colheita',      rotulo: 'Mapa de colheita',  aba: 'produtividade' },
+  { id: 'compactacao',   rotulo: 'Compactação',       aba: 'compactacao' },
+  { id: 'recomendacoes', rotulo: 'Recomendações',     aba: 'recomendacoes' },
+];
 export interface CelulaMatriz {
   ano: number;
   /** mapas = mapas de fertilidade prontos; laudo = laudo recebido, sem mapa;
-   *  amostrado = só a grade (coleta feita/enviada); vazio = nada no ano. */
+   *  amostrado = só a grade (coleta feita/enviada); vazio = sem coleta no ano. */
   situacao: SituacaoCelula;
   /** Data da COLETA (referência da grade/laudo); sem ela, a do registro. */
   data: string | null;
   mapas: number;
   amostras: number;
+  /** Quantidade de cada outra camada no ano (cenas, mapas, importações, cenários). */
+  camadas: Record<CamadaAno, number>;
 }
 export interface LinhaMatriz {
   talhaoId: string; fazendaId: string; nome: string; areaHa: number;
   celulas: CelulaMatriz[];
-  /** Ano da última coleta (laudo ou grade); null = nunca amostrado. */
+  /** Ano da última coleta de solo (laudo ou grade); null = nunca amostrado. */
   ultimoAno: number | null;
+  /** Alguma célula tem coleta OU outra camada. */
+  temAlgo: boolean;
 }
 
-/** Colunas: do menor ao maior ano entre os pedidos e os com dado, sem buracos. */
+/** Colunas: do menor ao maior ano entre os pedidos e os com dado (coleta ou
+ *  outra camada), sem buracos. */
 export function anosDaMatriz(dados: DadosTalhao[], anosBase: number[] = []): number[] {
   const anos = new Set<number>(anosBase);
+  const add = (a: number | null) => { if (a != null) anos.add(a); };
   for (const d of dados) {
-    for (const g of d.grades ?? []) { const a = anoDoRegistro(g); if (a != null) anos.add(a); }
-    for (const l of d.laudos ?? []) { const a = anoDoRegistro(l); if (a != null) anos.add(a); }
+    for (const g of d.grades ?? []) add(anoDoRegistro(g));
+    for (const l of d.laudos ?? []) add(anoDoRegistro(l));
+    for (const c of d.colheitas ?? []) add(anoDoRegistro(c));
+    for (const c of d.compactacao ?? []) add(anoDoRegistro(c));
+    for (const c of d.cenarios ?? []) add(anoDoRegistro(c));
+    for (const c of d.composicoes ?? []) add(anoDoRegistro(c));
+    for (const m of d.mapasNuvem ?? []) {
+      const s = m.id.split('__');
+      if (s[0] === d.talhao.id && (s[1] === 'ndvi' || s[1] === 'ndvicbers') && m.cena?.data) add(anoDeData(m.cena.data));
+    }
   }
   if (!anos.size) return [];
   const min = Math.min(...anos), max = Math.max(...anos);
@@ -544,17 +567,28 @@ export function matrizAmostragem(dados: DadosTalhao[], anos: number[]): LinhaMat
     // Mapas de fertilidade por laudo: ids `${talhaoId}__${laudoId}__…__${nut}__${prof}`
     // (mesmo contrato de avaliarTalhao — dois métodos do mesmo nut/prof contam um).
     const mapasPorLaudo = new Map<string, Set<string>>();
+    // Cenas de satélite por ano (datas distintas), como em avaliarTalhao.
+    const cenasPorAno = new Map<number, Set<string>>();
     for (const m of d.mapasNuvem ?? []) {
       const s = m.id.split('__');
-      if (s.length < 4 || s[0] !== t.id) continue;
+      if (s[0] !== t.id) continue;
+      if ((s[1] === 'ndvi' || s[1] === 'ndvicbers') && m.cena?.data) {
+        const a = anoDeData(m.cena.data);
+        if (a != null) { let set = cenasPorAno.get(a); if (!set) { set = new Set(); cenasPorAno.set(a, set); } set.add(m.cena.data); }
+        continue;
+      }
+      if (s.length < 4) continue;
       let set = mapasPorLaudo.get(s[1]);
       if (!set) { set = new Set(); mapasPorLaudo.set(s[1], set); }
       set.add(s.slice(-2).join('__'));
     }
+    const doAno = <T extends { ano?: number | null; safra?: string | null; data?: string | null; dataReferencia?: string | null }>(lista: T[] | undefined, ano: number): T[] =>
+      (lista ?? []).filter(x => anoDoRegistro(x) === ano);
     let ultimoAno: number | null = null;
+    let temAlgo = false;
     const celulas = anos.map(ano => {
-      const laudos = (d.laudos ?? []).filter(l => anoDoRegistro(l) === ano);
-      const grades = (d.grades ?? []).filter(g => anoDoRegistro(g) === ano);
+      const laudos = doAno(d.laudos, ano);
+      const grades = doAno(d.grades, ano);
       const mapas = new Set<string>();
       for (const l of laudos) for (const k of mapasPorLaudo.get(l.id) ?? []) mapas.add(k);
       const amostras = laudos.reduce((s, l) => {
@@ -565,10 +599,17 @@ export function matrizAmostragem(dados: DadosTalhao[], anos: number[]): LinhaMat
       const situacao: SituacaoCelula = mapas.size ? 'mapas' : laudos.length ? 'laudo' : grades.length ? 'amostrado' : 'vazio';
       const data = maxIso([...laudos.map(l => l.dataReferencia), ...grades.map(g => g.dataReferencia)])
         ?? maxIso([...laudos.map(l => l.criadoEm), ...grades.map(g => g.criadoEm)]);
+      const camadas: Record<CamadaAno, number> = {
+        ndvi: (cenasPorAno.get(ano)?.size ?? 0) + doAno(d.composicoes, ano).length,
+        colheita: doAno(d.colheitas, ano).length,
+        compactacao: doAno(d.compactacao, ano).length,
+        recomendacoes: doAno(d.cenarios, ano).length,
+      };
       if (situacao !== 'vazio' && (ultimoAno == null || ano > ultimoAno)) ultimoAno = ano;
-      return { ano, situacao, data, mapas: mapas.size, amostras };
+      if (situacao !== 'vazio' || Object.values(camadas).some(n => n > 0)) temAlgo = true;
+      return { ano, situacao, data, mapas: mapas.size, amostras, camadas };
     });
-    return { talhaoId: t.id, fazendaId: t.fazendaId, nome: t.nome, areaHa: Number.isFinite(t.areaHa) ? t.areaHa : 0, celulas, ultimoAno };
+    return { talhaoId: t.id, fazendaId: t.fazendaId, nome: t.nome, areaHa: Number.isFinite(t.areaHa) ? t.areaHa : 0, celulas, ultimoAno, temAlgo };
   });
 }
 
