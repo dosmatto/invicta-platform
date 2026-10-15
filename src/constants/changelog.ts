@@ -1,5 +1,11 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Portal do produtor: página própria de evolução dos nutrientes, todos os talhões de uma vez
+  '2.200.0': [
+    'NOVA PÁGINA /portal/nutrientes — "EVOLUÇÃO DOS NUTRIENTES" COM TODOS OS TALHÕES: o cartão do painel mostra os cinco nutrientes de um talhão; a página inverte — um nutriente por vez (pH, P, K, MO, V%) e todos os talhões numa tabela por ano, cada valor com a cor da classe dos seus mapas, mais a tendência (linha ano a ano) e a variação entre a primeira e a última análise. Grupo por fazenda, filtro de fazenda e ordenação por talhão, maior valor, menor valor ou maior variação. No topo, o panorama: quantos talhões estão em cada classe na última análise. Clicar no talhão abre os mapas de fertilidade em nova aba, no último ano analisado.',
+    'O cartão "Evolução dos nutrientes" do painel ganhou o botão "Todos os talhões", que leva à página. No "ver como o produtor vê" a página mantém o produtor escolhido.',
+    'Por dentro: quem é o produtor da página virou um hook (components/portal/useClientePortal.ts), usado pelo /portal e pela página nova; regra pura em lib/portalProdutor.ts (evolucaoPorTalhao, anosDaEvolucao, tendencia) com teste em npm run teste:portal.',
+  ],
   // [S/N] Portal do produtor: "Acessar a plataforma" abre direto nas áreas dele
   '2.199.0': [
     'O BOTÃO "MAPA DA FAZENDA" VIROU "ACESSAR A PLATAFORMA" e saiu do cabeçalho para uma faixa verde logo abaixo da saudação, onde se vê. Ao clicar, o mapa da equipe abre DIRETO no cadastro do produtor — nome, fazendas e todas as áreas dele desenhadas no mapa, já enquadradas — em vez de cair em Início e ter de passar por Clientes. Continua em somente leitura, com o botão Portal no topo para voltar.',

@@ -668,6 +668,42 @@ export function evolucaoNutrientes(laudos: LaudoIn[], nutrientes: string[] = NUT
   return { profundidade: profRef, nutrientes, pontos };
 }
 
+// ── Evolução por talhão (página /portal/nutrientes) ──────────────────────────
+
+export interface LinhaEvolucaoTalhao {
+  talhaoId: string; fazendaId: string; nome: string; areaHa: number;
+  /** Camada usada (a mais rasa do laudo do talhão); null sem laudo. */
+  profundidade: string | null;
+  pontos: PontoEvolucao[];
+}
+
+/** A evolução de TODOS os talhões, uma linha por talhão (mesma regra de evolucaoNutrientes). */
+export function evolucaoPorTalhao(dados: DadosTalhao[], nutrientes: string[] = NUTRIENTES_EVOLUCAO.map(n => n.id)): LinhaEvolucaoTalhao[] {
+  return dados.map(d => {
+    const e = evolucaoNutrientes(d.laudos ?? [], nutrientes);
+    const t = d.talhao;
+    return { talhaoId: t.id, fazendaId: t.fazendaId, nome: t.nome, areaHa: Number.isFinite(t.areaHa) ? t.areaHa : 0, profundidade: e.profundidade, pontos: e.pontos };
+  });
+}
+
+/** Anos com análise em qualquer talhão, em ordem. */
+export function anosDaEvolucao(linhas: LinhaEvolucaoTalhao[]): number[] {
+  return Array.from(new Set(linhas.flatMap(l => l.pontos.map(p => p.ano)))).sort((a, b) => a - b);
+}
+
+export interface Tendencia { primeiro: number | null; ultimo: number | null; anoUltimo: number | null; variacao: number | null }
+
+/** Primeiro e último valor de um nutriente e a variação (último − primeiro);
+ *  null onde não há valor, e variação só com dois anos ou mais. */
+export function tendencia(pontos: PontoEvolucao[], nut: string): Tendencia {
+  const com = pontos.filter(p => p.valores[nut] != null);
+  if (!com.length) return { primeiro: null, ultimo: null, anoUltimo: null, variacao: null };
+  const primeiro = com[0].valores[nut] as number;
+  const fim = com[com.length - 1];
+  const ultimo = fim.valores[nut] as number;
+  return { primeiro, ultimo, anoUltimo: fim.ano, variacao: com.length >= 2 ? Math.round((ultimo - primeiro) * 100) / 100 : null };
+}
+
 export interface ItemColheita { talhaoId: string; nome: string; cultura: string; mediaScHa: number; cv: number }
 
 /** Talhões com mapa de colheita no ano, do mais produtivo ao menos. */

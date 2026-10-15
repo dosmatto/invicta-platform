@@ -12,7 +12,7 @@ import {
   rankingColheita, linhaDoTempo, projetarTalhoes, anoDoRegistro, fmtDataCurta, isoDe, maxIso,
   ETAPAS, ETAPAS_CICLO, etapaDef,
 } from '../src/lib/portalProdutor.ts';
-import { abasComDados, anosDaMatriz, matrizAmostragem, idadeColeta } from '../src/lib/portalProdutor.ts';
+import { abasComDados, anosDaMatriz, matrizAmostragem, idadeColeta, evolucaoPorTalhao, anosDaEvolucao, tendencia } from '../src/lib/portalProdutor.ts';
 
 let ok = 0, fail = 0;
 const t = (n, f) => { try { f(); ok++; console.log('  ✓', n); } catch (e) { fail++; console.error('  ✗', n, '—', e.message); } };
@@ -360,6 +360,19 @@ t('idade da coleta: 0 = ano atual (ou futuro), 1, 2, 3 = três ou mais, null = n
   assert.equal(idadeColeta(2026, 2026), 0); assert.equal(idadeColeta(2027, 2026), 0);
   assert.equal(idadeColeta(2025, 2026), 1); assert.equal(idadeColeta(2024, 2026), 2);
   assert.equal(idadeColeta(2021, 2026), 3); assert.equal(idadeColeta(null, 2026), null);
+});
+
+t('evolução por talhão: uma linha por talhão, anos em ordem, tendência = último − primeiro', () => {
+  const ls = evolucaoPorTalhao([T1, T2, T3]);
+  assert.equal(ls.length, 3);
+  assert.deepEqual(ls[0].pontos.map(p => p.ano), [2025, 2026]);
+  assert.equal(ls[0].profundidade, '00-20');
+  assert.deepEqual(ls[2].pontos, []); assert.equal(ls[2].profundidade, null);
+  assert.deepEqual(anosDaEvolucao(ls), [2025, 2026]);
+  // P: 2025 média de 9..48 = 28,5 · 2026 (camada 00-20) média de 12..53 = 32,5
+  assert.deepEqual(tendencia(ls[0].pontos, 'p'), { primeiro: 28.5, ultimo: 32.5, anoUltimo: 2026, variacao: 4 });
+  assert.deepEqual(tendencia(ls[2].pontos, 'p'), { primeiro: null, ultimo: null, anoUltimo: null, variacao: null });
+  assert.equal(tendencia([{ ano: 2026, n: 1, valores: { p: 10 } }], 'p').variacao, null, 'um ano só não tem variação');
 });
 
 console.log(`\n${ok} ok, ${fail} falhas`);

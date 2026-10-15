@@ -10,40 +10,20 @@
 // /portal e escolhem um produtor (ou passam ?cliente=<id>&plano=<id>). É a
 // forma de conferir a tela ANTES de liberar o acesso a alguém.
 
-import { useMemo, useState, useSyncExternalStore } from 'react';
+import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { meuRegistro, papelDoUsuario, planoPorId, ehAdmin, getPlanos, ROTULO_PAPEL } from '@/lib/empresa';
-import { clienteIdDoProdutor } from '@/lib/iam/vinculoProdutor';
+import { getPlanos, ROTULO_PAPEL } from '@/lib/empresa';
 import { getClientes, getFazendas } from '@/lib/store';
-import { logout, authConfigurado } from '@/lib/auth';
+import { logout } from '@/lib/auth';
 import { PainelProdutor } from '@/components/portal/PainelProdutor';
+import { useClientePortal } from '@/components/portal/useClientePortal';
 import { AlertTriangle, Eye, ChevronRight, ArrowLeft } from 'lucide-react';
-
-// "Já está no navegador?" sem setState em efeito: no servidor é false, no
-// cliente vira true depois da hidratação — e só então lemos a URL e o registro.
-const semAssinatura = () => () => {};
 
 export default function PortalPage() {
   const router = useRouter();
-  const pronto = useSyncExternalStore(semAssinatura, () => true, () => false);
-  const params = useMemo(() => (pronto ? new URLSearchParams(window.location.search) : null), [pronto]);
-  const clienteParam = params?.get('cliente') ?? null;
-  const planoParam = params?.get('plano') ?? null;
-
-  const reg = useMemo(() => (pronto ? meuRegistro() : null), [pronto]);
-  const papel = papelDoUsuario();
-  // Quem pode ver como o produtor vê: owner/admin, ou a bancada sem login.
-  const podePrever = !authConfigurado || ehAdmin();
-  const preview = papel !== 'produtor' && podePrever && !!clienteParam;
-
-  // O vínculo do produtor vem do campo antigo (Dados) OU do IAM (Vínculos /
-  // convite / aprovação) — ver lib/iam/vinculoProdutor.ts.
-  const cliente = useMemo(() => {
-    if (!pronto) return null;
-    const id = preview ? clienteParam : clienteIdDoProdutor(reg);
-    return id ? getClientes().find(c => c.id === id) ?? null : null;
-  }, [pronto, preview, clienteParam, reg]);
-  const plano = useMemo(() => planoPorId(preview ? (planoParam ?? undefined) : reg?.planoId), [preview, planoParam, reg]);
+  // Quem é o produtor desta página (produtor logado ou preview ?cliente=): hook
+  // compartilhado com as páginas irmãs do portal (ex.: /portal/nutrientes).
+  const { pronto, papel, podePrever, preview, cliente, plano } = useClientePortal();
 
   if (!pronto) return null;
 

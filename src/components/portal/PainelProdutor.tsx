@@ -276,8 +276,15 @@ export function PainelProdutor({ cliente, plano, papel, preview }: {
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:items-start">
               <Cartao className="lg:col-span-8" titulo="Evolução dos nutrientes"
                 sub={`Camada ${evolucao.profundidade ?? '—'} cm · média das amostras de cada ano, com a classe dos seus mapas.`}
-                acao={talhoes.length > 0 && (
-                  <Seletor valor={talhaoSel} onChange={setTalhaoEscolhido} opcoes={talhoes.map(t => ({ valor: t.id, rotulo: t.nome }))} />
+                acao={(
+                  <div className="flex flex-wrap items-center gap-2 justify-end">
+                    {talhoes.length > 0 && <Seletor valor={talhaoSel} onChange={setTalhaoEscolhido} opcoes={talhoes.map(t => ({ valor: t.id, rotulo: t.nome }))} />}
+                    {/* Página própria (15/10/2026): todos os talhões, um nutriente por vez. */}
+                    <button type="button" onClick={() => router.push(`/portal/nutrientes${preview ? `?cliente=${encodeURIComponent(cliente.id)}${plano ? `&plano=${encodeURIComponent(plano.id)}` : ''}` : ''}`)}
+                      className="h-9 px-3 rounded-lg text-sm font-bold whitespace-nowrap" style={{ background: 'var(--invicta-blue-mid)', color: '#fff' }}>
+                      Todos os talhões
+                    </button>
+                  </div>
                 )}>
                 {evolucao.pontos.length === 0 ? (
                   <p className="text-sm py-8 text-center" style={{ color: COR.texto2 }}>Este talhão ainda não tem análise de solo importada.</p>
