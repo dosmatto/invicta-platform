@@ -1,5 +1,10 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Painel do produtor enxuto: saem mosaico, lista por fazenda, entregas e plano; matriz só com mapa pronto
+  '2.198.0': [
+    'PAINEL DO PRODUTOR MAIS ENXUTO: saem o mosaico "Seus talhões", a lista "Talhões por fazenda" (jornada por etapa), "Últimas entregas" e "Seu plano". Fica o que responde rápido: indicadores, andamento do ciclo, a matriz ano a ano, evolução dos nutrientes, área amostrada por ano e colheita (os dois últimos agora empilhados à direita dos nutrientes).',
+    'NA MATRIZ ANO A ANO SÓ ENTRA O QUE TEM MAPA PROCESSADO: a data aparece apenas quando o laudo daquele ano já tem mapa de fertilidade na nuvem. Laudo sem mapa e grade sem laudo não aparecem (nem viram coluna). Os marcadores de satélite, colheita, compactação e recomendações continuam. A legenda perdeu os itens "amostrado" e "laudo sem mapas".',
+  ],
   // [S/N] Painel do produtor: filtro de fazenda no cabeçalho
   '2.197.0': [
     'PAINEL DO PRODUTOR GANHA O FILTRO DE FAZENDA, ao lado do ano: "Todas as fazendas" ou uma específica. Vale para o painel inteiro — indicadores, andamento do ciclo, matriz ano a ano, mapa dos talhões, gráficos, lista por fazenda e últimas entregas. Só aparece quando o produtor tem mais de uma fazenda.',

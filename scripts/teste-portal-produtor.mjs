@@ -326,6 +326,8 @@ t('abas do talhão: um laudo FOLIAR abre a aba Foliar, e ela entra depois de Fer
 t('matriz amostragem × ano: colunas contínuas entre o menor e o maior ano (safras + dados)', () => {
   assert.deepEqual(anosDaMatriz([T1, T2, T3], [2027]), [2025, 2026, 2027]);
   assert.deepEqual(anosDaMatriz([T3]), []);
+  assert.deepEqual(anosDaMatriz([T2]), [], 'grade sem laudo não vira coluna');
+  assert.deepEqual(anosDaMatriz([{ talhao: T3.talhao, laudos: [{ id: 'l1', safra: '24/25', ano: 2024, criadoEm: '2024-01-01T00:00:00Z' }] }]), [], 'laudo sem mapa não vira coluna');
 });
 t('matriz: T1 tem mapas em 2026 e só laudo em 2025; T2 amostrado em 2026; T3 nunca', () => {
   const m = matrizAmostragem([T1, T2, T3], [2025, 2026, 2027]);
@@ -336,6 +338,7 @@ t('matriz: T1 tem mapas em 2026 e só laudo em 2025; T2 amostrado em 2026; T3 nu
   assert.equal(m[0].ultimoAno, 2026);
   const c2 = Object.fromEntries(m[1].celulas.map(c => [c.ano, c]));
   assert.equal(c2[2026].situacao, 'amostrado'); assert.equal(c2[2026].data, '2026-02-12T12:00:00Z');
+  assert.equal(m[1].temAlgo, false, 'só grade não conta como algo processado');
   assert.equal(m[2].ultimoAno, null); assert.ok(m[2].celulas.every(c => c.situacao === 'vazio')); assert.equal(m[2].temAlgo, false);
   // Outras camadas do ano: satélite (cena de 10/03/26), colheita, compactação e os 2 cenários de 26/27.
   assert.deepEqual(c1[2026].camadas, { ndvi: 1, colheita: 1, compactacao: 1, recomendacoes: 2 });

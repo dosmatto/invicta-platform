@@ -539,14 +539,20 @@ export interface LinhaMatriz {
   temAlgo: boolean;
 }
 
-/** Colunas: do menor ao maior ano entre os pedidos e os com dado (coleta ou
- *  outra camada), sem buracos. */
+/** Colunas: do menor ao maior ano entre os pedidos e os com dado (mapa de
+ *  fertilidade pronto ou outra camada), sem buracos. */
 export function anosDaMatriz(dados: DadosTalhao[], anosBase: number[] = []): number[] {
   const anos = new Set<number>(anosBase);
   const add = (a: number | null) => { if (a != null) anos.add(a); };
   for (const d of dados) {
-    for (const g of d.grades ?? []) add(anoDoRegistro(g));
-    for (const l of d.laudos ?? []) add(anoDoRegistro(l));
+    // Coleta sem mapa não vira coluna (15/10/2026): só o laudo que já tem
+    // mapa de fertilidade na nuvem conta — é o que a célula mostra.
+    const comMapa = new Set<string>();
+    for (const m of d.mapasNuvem ?? []) {
+      const s = m.id.split('__');
+      if (s[0] === d.talhao.id && s.length >= 4 && s[1] !== 'ndvi' && s[1] !== 'ndvicbers') comMapa.add(s[1]);
+    }
+    for (const l of d.laudos ?? []) if (comMapa.has(l.id)) add(anoDoRegistro(l));
     for (const c of d.colheitas ?? []) add(anoDoRegistro(c));
     for (const c of d.compactacao ?? []) add(anoDoRegistro(c));
     for (const c of d.cenarios ?? []) add(anoDoRegistro(c));
@@ -606,7 +612,7 @@ export function matrizAmostragem(dados: DadosTalhao[], anos: number[]): LinhaMat
         recomendacoes: doAno(d.cenarios, ano).length,
       };
       if (situacao !== 'vazio' && (ultimoAno == null || ano > ultimoAno)) ultimoAno = ano;
-      if (situacao !== 'vazio' || Object.values(camadas).some(n => n > 0)) temAlgo = true;
+      if (situacao === 'mapas' || Object.values(camadas).some(n => n > 0)) temAlgo = true;
       return { ano, situacao, data, mapas: mapas.size, amostras, camadas };
     });
     return { talhaoId: t.id, fazendaId: t.fazendaId, nome: t.nome, areaHa: Number.isFinite(t.areaHa) ? t.areaHa : 0, celulas, ultimoAno, temAlgo };
