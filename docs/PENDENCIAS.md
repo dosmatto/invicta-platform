@@ -115,6 +115,7 @@ verdadeira (fusão de talhões) chegou depois; foi preciso renumerar.
 | S/N | Recomendação por zona: trocar o modo abre o cenário daquele modo (e o cartão diz o modo) | 2.201.0 | Talhão → Recomendações → Modo do mapa "Por zona de manejo" / "Interpolação" + selo nos cenários salvos |
 | S/N | Recomendação: em "Por zona de manejo" não aparece nada interpolado (lista separada por modo) | 2.202.0 | Talhão → Recomendações → Modo do mapa → lista "Cenários salvos" filtrada pelo modo |
 | S/N | Recomendação interpolada: o mapa não desenha mais as zonas de manejo por cima | 2.203.0 | Talhão → Recomendações → cenário interpolado no mapa (amostragem em grade) |
+| 60 | Comparação com o mapa de colheita sempre por quintil | 2.204.0 | Talhão → Produtividade → "Comparação completa" com uma Produtividade num lado (os dois mapas em 5 faixas de ~20%) e o quadro "Comparar com NDVI"; Exportar PDF / Relatório lado a lado |
 
 > As pendências 1–17 foram entregues antes deste registro existir e não estão
 > catalogadas; procure pelo assunto no `changelog.ts`. Da 18 em diante, tudo

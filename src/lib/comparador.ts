@@ -12,7 +12,8 @@ import { cloudCarregarMapasPorPrefixo } from '@/lib/cloud';
 import { decodeGrid, descomprimirGrid, type Grid } from '@/lib/fertilidade';
 import { correlacaoGrids } from '@/lib/correlacaoGrid';
 import { legendaDaCultura } from '@/lib/produtividade';
-import type { Legenda } from '@/lib/legendas';
+import { corCheiaDaClasse, type Legenda } from '@/lib/legendas';
+import { legendaPorQuintil } from '@/lib/quantis';
 
 export interface CamadaComparavel {
   id: string;
@@ -135,6 +136,27 @@ export function insightFatores(alvoNome: string, fatores: Fator[]): string {
   if (neg.length) partes.push(`cai onde sobe ${neg.map(p => `${p.nome} (r=${f(p.r)})`).join(' e ')}`);
   return `Neste talhão, ${alvoNome.toLowerCase()} ${partes.join('; e ')}.`;
 }
+
+// ── [60] Comparação com o mapa de colheita = classificação por QUINTIL ───────
+// Quando um dos lados é Produtividade, OS DOIS lados saem em 5 faixas de área
+// igual, com cortes do próprio mapa (a mesma decisão do relatório de
+// produtividade). Cores da legenda de cada camada, para não confundir grandezas.
+export interface VistaQuintil { legenda: Legenda; breaks: number[]; cores: string[]; }
+
+const NOMES_QUINTIL = ['Muito Baixo', 'Baixo', 'Médio', 'Alto', 'Muito Alto'];
+
+export function emQuintil(grid: Grid, base: Legenda): VistaQuintil | null {
+  const { valores } = decodeGrid(grid);
+  const cores = base.classes.map(corCheiaDaClasse);
+  const nomes = base.classes.length === 5 ? base.classes.map(c => c.nome) : NOMES_QUINTIL;
+  // Paleta de N≠5 classes: reamostra para 5 preservando as pontas.
+  const cores5 = cores.length === 5 ? cores
+    : Array.from({ length: 5 }, (_, i) => cores[Math.round((i / 4) * (cores.length - 1))] ?? '#888888');
+  return legendaPorQuintil(valores, base, cores5, nomes, 5);
+}
+
+export const comparaComColheita = (...cs: Array<{ grupo: string } | null | undefined>) =>
+  cs.some(c => c?.grupo === 'Produtividade');
 
 // % de área por classe da legenda (rótulo + cor de cada classe).
 export function areaPorClasse(grid: Grid, leg: Legenda): ClasseArea[] {

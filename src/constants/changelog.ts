@@ -1,5 +1,10 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [60] Comparação com o mapa de colheita sempre por quintil
+  '2.204.0': [
+    'PENDÊNCIA 60 — COMPARAÇÃO COM O MAPA DE COLHEITA SEMPRE POR QUINTIL: na Comparação de Camadas, quando um dos lados é Produtividade, os DOIS mapas saem em 5 faixas de ~20% da área cada, com os cortes calculados do próprio mapa (a mesma classificação do relatório de produtividade). Antes a colheita saía na escala absoluta da cultura e o índice na escala dele — a soja pintava quase tudo de laranja e o NDRE quase tudo de verde, e não dava para ver onde um acompanha o outro. A legenda mostra os cortes reais (kg/ha inteiro, índice com 3 casas), a distribuição de área por classe e o PDF seguem a mesma classificação, e uma linha acima dos mapas avisa que a comparação está por quintil. Cada lado mantém as cores da sua legenda.',
+    'O quadro "Comparar com NDVI" da aba Produtividade (miniaturas e "Relatório lado a lado") segue a mesma regra. Comparações sem produtividade (ex.: NDVI × Fertilidade) continuam com a legenda normal.',
+  ],
   // [S/N] Recomendação interpolada: o mapa não desenha mais as zonas de manejo por cima
   '2.203.0': [
     'CORRIGIDO: A RECOMENDAÇÃO INTERPOLADA APARECIA "SOBREPOSTA COM AS ZONAS". Em talhão com amostragem em grade e mapas interpolados, mas com zoneamento cadastrado, o mapa da dose ganhava por cima as divisas das zonas de manejo e a taxa média/toneladas de cada uma — uma zona que não faz parte daquela recomendação. Agora as divisas e os números por zona só entram no mapa interpolado quando os mapas de fertilidade que geraram a dose foram processados POR ZONA. A tabela de volumes por zona continua na gaveta do cenário.',

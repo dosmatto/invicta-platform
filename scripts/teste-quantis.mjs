@@ -10,7 +10,7 @@
 //      fronteira.
 
 import assert from 'node:assert/strict';
-import { breaksQuantis, indiceFaixa, classesQuantis, faixaPercentis } from '../src/lib/quantis.ts';
+import { breaksQuantis, indiceFaixa, classesQuantis, faixaPercentis, legendaPorQuintil } from '../src/lib/quantis.ts';
 
 let ok = 0, fail = 0;
 function t(nome, fn) {
@@ -215,6 +215,58 @@ t('quase constante: cai para o mín–máx antes de abrir o intervalo mínimo', 
   const v = [...Array(98).fill(0.5), 0.2, 0.9];
   const [lo, hi] = faixaPercentis(v, 2, 98);
   assert.equal(lo, 0.2); assert.equal(hi, 0.9);
+});
+
+console.log('\nlegendaPorQuintil (pendência 60)');
+
+const BASE = { id: 'leg', nome: 'Soja', atributoId: 'produtividade', atributo: 'Produtividade', simbolo: 'Prod', unidade: 'kg/ha', metodo: null, fonte: '', categoria: 'produtividade-colheita', invertida: true, tipoEscala: 'gradiente', escalaRelativa: 'minmax', classes: [] };
+
+t('5 faixas discretas de cor chapada, limites reais nas pontas', () => {
+  const kg = Array.from({ length: 1000 }, (_, i) => 3000 + i * 3); // 3000..5997
+  const q = legendaPorQuintil(kg, BASE, CORES, NOMES);
+  assert.equal(q.legenda.classes.length, 5);
+  assert.equal(q.breaks.length, 4);
+  assert.equal(q.legenda.classes[0].valorMin, 3000);
+  assert.equal(q.legenda.classes[4].valorMax, 5997);
+  q.legenda.classes.forEach((c, i) => {
+    assert.equal(c.corInicio, CORES[i]); assert.equal(c.corFim, CORES[i]);
+    assert.equal(c.nome, NOMES[i]);
+  });
+  assert.equal(q.legenda.tipoEscala, 'discreta');
+  assert.equal(q.legenda.escalaRelativa, undefined);
+  assert.equal(q.legenda.invertida, false);
+});
+
+t('kg/ha: cortes inteiros; e as classes da legenda são os mesmos cortes', () => {
+  const kg = Array.from({ length: 1000 }, (_, i) => 3000.37 + i * 3.11);
+  const q = legendaPorQuintil(kg, BASE, CORES, NOMES);
+  q.breaks.forEach((b, i) => {
+    assert.equal(b, Math.round(b));
+    assert.equal(q.legenda.classes[i].valorMax, b);
+    assert.equal(q.legenda.classes[i + 1].valorMin, b);
+  });
+});
+
+t('NDVI: cortes com 3 casas e ~20% da área em cada faixa', () => {
+  const nd = Array.from({ length: 1000 }, (_, i) => 0.55 + (i / 999) * 0.3);
+  const q = legendaPorQuintil(nd, BASE, CORES, NOMES);
+  q.breaks.forEach(b => assert.equal(b, Math.round(b * 1000) / 1000));
+  const cont = [0, 0, 0, 0, 0];
+  nd.forEach(v => cont[indiceFaixa(v, q.breaks)]++);
+  cont.forEach(c => assert.ok(Math.abs(c - 200) <= 5, `faixa com ${c} px`));
+});
+
+t('mapa quase constante: faixas colapsam sem intervalo vazio e mantêm as cores das pontas', () => {
+  const v = [...Array(70).fill(4000), ...Array.from({ length: 30 }, (_, i) => 4100 + i * 10)];
+  const q = legendaPorQuintil(v, BASE, CORES, NOMES);
+  assert.ok(q.legenda.classes.length < 5);
+  assert.equal(q.cores[0], CORES[0]);
+  assert.equal(q.cores[q.cores.length - 1], CORES[4]);
+  q.legenda.classes.forEach(c => assert.ok(c.valorMax > c.valorMin, `${c.valorMin}–${c.valorMax}`));
+});
+
+t('menos valores que faixas: null (o comparador cai na legenda normal)', () => {
+  assert.equal(legendaPorQuintil([1, 2], BASE, CORES, NOMES), null);
 });
 
 console.log(`\n${ok} ok, ${fail} falhas\n`);

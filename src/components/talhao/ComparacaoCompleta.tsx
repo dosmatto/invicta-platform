@@ -9,11 +9,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import { getTalhoes } from '@/lib/store';
 import { extrairPoligono, type Grid } from '@/lib/fertilidade';
-import { colorirGridComLegenda } from '@/lib/raster';
+import { colorirGridComLegenda, colorirGridPorQuantis } from '@/lib/raster';
 import { capturarMapaFertilidade } from '@/lib/capturaMapa';
 import {
-  listarCamadas, statsCamada, correlacao, areaPorClasse,
-  type CamadaComparavel, type ClasseArea,
+  listarCamadas, statsCamada, correlacao, areaPorClasse, emQuintil, comparaComColheita,
+  type CamadaComparavel, type ClasseArea, type VistaQuintil,
 } from '@/lib/comparador';
 import { gerarRelatorioComparacao, type LadoComparacao } from '@/lib/relatorioComparacao';
 import type { Legenda } from '@/lib/legendas';
@@ -30,15 +30,33 @@ function areaHa(grid: Grid, bounds: [number, number, number, number], nFinitos: 
   return (nFinitos * Math.max(0, dx) * Math.max(0, dy)) / 1e4;
 }
 
-function rangeLabel(c: { valorMin?: number | null; valorMax?: number | null }): string {
-  if (c.valorMax == null) return `> ${fmt(c.valorMin)}`;
-  if (c.valorMin == null) return `< ${fmt(c.valorMax)}`;
-  return `${fmt(c.valorMin)} – ${fmt(c.valorMax)}`;
+function rangeLabel(c: { valorMin?: number | null; valorMax?: number | null }, exato = false): string {
+  // Cortes de quintil já vêm arredondados na casa certa (NDVI com 3 casas):
+  // mostrar como estão, em vez de cortar para inteiro.
+  const f = (v: number | null | undefined) => (exato && v != null ? v.toLocaleString('pt-BR', { maximumFractionDigits: 3 }) : fmt(v));
+  if (c.valorMax == null) return `> ${f(c.valorMin)}`;
+  if (c.valorMin == null) return `< ${f(c.valorMax)}`;
+  return `${f(c.valorMin)} – ${f(c.valorMax)}`;
 }
 
-async function comporMapa(cam: CamadaComparavel, poligono: GeoJSON.Polygon | GeoJSON.MultiPolygon | null): Promise<string> {
+type Vista = CamadaComparavel & { quintil?: VistaQuintil };
+
+function vista(cam: CamadaComparavel | null, quintil: boolean): Vista | null {
+  if (!cam || !quintil) return cam;
+  const q = emQuintil(cam.grid, cam.legenda);
+  return q ? { ...cam, legenda: q.legenda, quintil: q } : cam;
+}
+
+// Quintil pinta faixa CHAPADA pelos cortes; senão, a rampa da legenda.
+function pngDe(cam: Vista): string {
+  return cam.quintil
+    ? colorirGridPorQuantis(cam.grid, cam.quintil.breaks, cam.quintil.cores).dataUrl
+    : colorirGridComLegenda(cam.grid, cam.legenda).dataUrl;
+}
+
+async function comporMapa(cam: Vista, poligono: GeoJSON.Polygon | GeoJSON.MultiPolygon | null): Promise<string> {
   let png = '';
-  try { png = colorirGridComLegenda(cam.grid, cam.legenda).dataUrl; } catch { return ''; }
+  try { png = pngDe(cam); } catch { return ''; }
   if (!poligono) return png;
   try {
     return await capturarMapaFertilidade({
@@ -76,8 +94,14 @@ export function ComparacaoCompleta({ safraNome, onClose }: { safraNome: string; 
     return () => { vivo = false; };
   }, [nav.talhaoId, safraNome]);
 
-  const camA = useMemo(() => camadas.find(c => c.id === idA) ?? null, [camadas, idA]);
-  const camB = useMemo(() => camadas.find(c => c.id === idB) ?? null, [camadas, idB]);
+  const brutaA = useMemo(() => camadas.find(c => c.id === idA) ?? null, [camadas, idA]);
+  const brutaB = useMemo(() => camadas.find(c => c.id === idB) ?? null, [camadas, idB]);
+  // [60] Com o mapa de colheita num dos lados, os DOIS lados saem por quintil:
+  // a legenda da camada é trocada pela de quintil e o resto (mapa, legenda,
+  // distribuição, PDF) segue a mesma rota.
+  const quintil = comparaComColheita(brutaA, brutaB);
+  const camA = useMemo(() => vista(brutaA, quintil), [brutaA, quintil]);
+  const camB = useMemo(() => vista(brutaB, quintil), [brutaB, quintil]);
 
   useEffect(() => {
     let vivo = true;
@@ -106,10 +130,10 @@ export function ComparacaoCompleta({ safraNome, onClose }: { safraNome: string; 
     if (!camA || !camB || !stA || !stB || !poligono) return;
     setGerando(true);
     try {
-      const lado = (cam: CamadaComparavel, st: NonNullable<typeof stA>, area: number): LadoComparacao => ({
+      const lado = (cam: Vista, st: NonNullable<typeof stA>, area: number): LadoComparacao => ({
         titulo: `${cam.grupo} — ${cam.nome}`,
-        subtitulo: `Média ${fmt(st.media, cam.grupo === 'NDVI' ? 2 : 0)} ${cam.unidade} · ${fmtHa(area)} ha · CV ${fmt(st.cv, 1)}%`,
-        rasterPng: colorirGridComLegenda(cam.grid, cam.legenda).dataUrl,
+        subtitulo: `Média ${fmt(st.media, cam.grupo === 'NDVI' ? 2 : 0)} ${cam.unidade} · ${fmtHa(area)} ha · CV ${fmt(st.cv, 1)}%${cam.quintil ? ' · quintil' : ''}`,
+        rasterPng: pngDe(cam),
         bounds: cam.bounds, legenda: cam.legenda, rotulos: rotulosLegenda(cam.legenda),
       });
       await gerarRelatorioComparacao({
@@ -157,6 +181,11 @@ export function ComparacaoCompleta({ safraNome, onClose }: { safraNome: string; 
               Diferenças de resolução, data, bandas e calibração podem alterar os valores. Use como apoio visual e agronômico, não como equivalência absoluta.
             </div>
           )}
+          {quintil && (
+            <p className="text-[10px]" style={{ color: '#94a3b8' }}>
+              Classificação por <strong style={{ color: '#e2e8f0' }}>quintil</strong>: com o mapa de colheita na comparação, cada mapa é dividido em 5 faixas de ~20% da área, com os cortes do próprio mapa.
+            </p>
+          )}
           {/* Dois mapas */}
           <div className="grid grid-cols-2 gap-4">
             {[{ cam: camA, img: imgA, st: stA, area: areaA, set: setIdA, id: idA }, { cam: camB, img: imgB, st: stB, area: areaB, set: setIdB, id: idB }].map((lado, i) => (
@@ -176,7 +205,7 @@ export function ComparacaoCompleta({ safraNome, onClose }: { safraNome: string; 
                         {[...lado.cam.legenda.classes].reverse().map((c, k) => (
                           <div key={k} className="flex items-center gap-1.5 text-[9px]" style={{ color: '#cbd5e1' }}>
                             <span style={{ width: 12, height: 9, background: c.corInicio, display: 'inline-block', borderRadius: 1 }} />
-                            {rangeLabel(c)}
+                            {rangeLabel(c, !!lado.cam?.quintil)}
                           </div>
                         ))}
                       </div>

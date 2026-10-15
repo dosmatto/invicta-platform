@@ -10,8 +10,8 @@ import { getMapasProdutividade, getLegendasPorAtributo, getTalhoes, type MapaPro
 import { carregarNdviSalvos, type NdviCamada } from '@/lib/meap/gerar';
 import { extrairPoligono, decodeGrid, descomprimirGrid, type Grid } from '@/lib/fertilidade';
 import { cloudCarregarMapasPorPrefixo } from '@/lib/cloud';
-import { colorirGrid, colorirGridComLegenda } from '@/lib/raster';
-import { correlacao } from '@/lib/comparador';
+import { colorirGrid, colorirGridComLegenda, colorirGridPorQuantis } from '@/lib/raster';
+import { correlacao, emQuintil } from '@/lib/comparador';
 import { rampaVisualStops, type Legenda } from '@/lib/legendas';
 import { legendaDaCultura, emUnidade, type Unidade } from '@/lib/produtividade';
 import { rotulosLegenda, fmtMinMax0 as fmt, fmtHa } from '@/lib/formato';
@@ -71,14 +71,23 @@ export function ComparadorProdNdvi({ safraNome }: { safraNome: string }) {
     if (!prod || !ndvi || !ndviLeg) return null;
     const ndviGrid: Grid = { b64: ndvi.b64, shape: ndvi.shape };
     let prodUrl = '', ndviUrl = '';
-    try { prodUrl = colorirGridComLegenda(prod.grid, prod.legenda).dataUrl; } catch {}
-    try { ndviUrl = colorirGrid(ndviGrid, [0, 1], rampaVisualStops({ ...ndviLeg, estilo: 'continuo' })).dataUrl; } catch {}
+    // [60] Comparação com o mapa de colheita é sempre por quintil, nos dois lados.
+    const qProd = emQuintil(prod.grid, prod.legenda);
+    const qNdvi = emQuintil(ndviGrid, ndviLeg);
+    try {
+      prodUrl = qProd ? colorirGridPorQuantis(prod.grid, qProd.breaks, qProd.cores).dataUrl
+        : colorirGridComLegenda(prod.grid, prod.legenda).dataUrl;
+    } catch {}
+    try {
+      ndviUrl = qNdvi ? colorirGridPorQuantis(ndviGrid, qNdvi.breaks, qNdvi.cores).dataUrl
+        : colorirGrid(ndviGrid, [0, 1], rampaVisualStops({ ...ndviLeg, estilo: 'continuo' })).dataUrl;
+    } catch {}
     // média NDVI
     const { valores } = decodeGrid(ndviGrid);
     let n = 0, soma = 0; for (let i = 0; i < valores.length; i++) { const v = valores[i]; if (isFinite(v)) { n++; soma += v; } }
     const ndviMedia = n ? soma / n : 0;
     const { r } = correlacao(prod.grid, ndviGrid);
-    return { prodUrl, ndviUrl, ndviGrid, ndviMedia, r };
+    return { prodUrl, ndviUrl, ndviGrid, ndviMedia, r, qProd, qNdvi };
   }, [prod, ndvi, ndviLeg]);
 
   if (carregando) return <p className="text-[10px] flex items-center gap-1.5 px-1" style={{ color: '#64748b' }}><Loader2 size={11} className="animate-spin" /> Carregando comparação…</p>;
@@ -109,16 +118,18 @@ export function ComparadorProdNdvi({ safraNome }: { safraNome: string }) {
     if (!poly) { setErro('Limite do talhão não encontrado.'); return; }
     setGerando(true); setErro('');
     try {
+      const legProd = view.qProd?.legenda ?? prod.legenda;
+      const legNdvi = view.qNdvi?.legenda ?? { ...ndviLeg, estilo: 'continuo' as const };
       const esquerda: LadoComparacao = {
         titulo: `Produtividade — ${prod.rec.cultura[0].toUpperCase() + prod.rec.cultura.slice(1)}`,
-        subtitulo: `Média ${prodMedia} ${u} · ${fmtHa(prod.rec.stats.areaHa)} ha · v${prod.rec.versao}`,
-        rasterPng: view.prodUrl, bounds: prod.bounds, legenda: prod.legenda, rotulos: rotulosLegenda(prod.legenda),
+        subtitulo: `Média ${prodMedia} ${u} · ${fmtHa(prod.rec.stats.areaHa)} ha · v${prod.rec.versao}${view.qProd ? ' · quintil' : ''}`,
+        rasterPng: view.prodUrl, bounds: prod.bounds, legenda: legProd, rotulos: rotulosLegenda(legProd),
       };
       const fonte = ndvi.nut.startsWith('ndvi_cbers') ? 'CBERS-4A' : 'Sentinel-2';
       const direita: LadoComparacao = {
         titulo: `${ndvi.indice || 'NDVI'} — ${fonte}`,
-        subtitulo: `${new Date(ndvi.data + 'T00:00:00').toLocaleDateString('pt-BR')} · ${ndvi.indice || 'NDVI'} médio ${fmt(view.ndviMedia, 2)}`,
-        rasterPng: view.ndviUrl, bounds: ndvi.bounds, legenda: { ...ndviLeg, estilo: 'continuo' }, rotulos: rotulosLegenda(ndviLeg),
+        subtitulo: `${new Date(ndvi.data + 'T00:00:00').toLocaleDateString('pt-BR')} · ${ndvi.indice || 'NDVI'} médio ${fmt(view.ndviMedia, 2)}${view.qNdvi ? ' · quintil' : ''}`,
+        rasterPng: view.ndviUrl, bounds: ndvi.bounds, legenda: legNdvi, rotulos: rotulosLegenda(view.qNdvi ? legNdvi : ndviLeg),
       };
       await gerarRelatorioComparacao({
         cliente: nav.produtor, fazenda: nav.fazenda, talhao: nav.talhao, safra: safraNome, areaHa: nav.area,

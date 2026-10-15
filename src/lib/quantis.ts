@@ -15,6 +15,7 @@
 // decodificados). npm run teste:quantis
 
 import { quantil } from './validacao/estatistica.ts';
+import type { Legenda, ClasseLegenda } from './legendas.ts';
 
 export interface BreaksQuantis {
   /** k-1 cortes internos, ESTRITAMENTE crescentes (empates já removidos). */
@@ -201,4 +202,72 @@ export function faixaPercentis(valores: ArrayLike<number>, pLo = 2, pHi = 98): [
   if (hi - lo < 1e-4) { lo = arr[0]; hi = arr[arr.length - 1]; }
   if (hi - lo < 1e-4) hi = lo + 1e-4;
   return [lo, hi];
+}
+
+// Casas decimais dos cortes pela amplitude do mapa: kg/ha sai inteiro, NDVI com
+// três casas. Arredondar ANTES de usar faz mapa, legenda e % de área usarem o
+// MESMO número que o leitor vê — corte "4.523,718" na legenda não ajuda ninguém.
+function casasDaAmplitude(amp: number): number {
+  if (amp >= 50) return 0;
+  if (amp >= 5) return 1;
+  if (amp >= 0.5) return 2;
+  return 3;
+}
+
+/**
+ * Legenda de QUINTIL de um mapa, no formato `Legenda` — pendência 60: toda
+ * comparação com o mapa de colheita usa a classificação por quintil.
+ *
+ * Devolver uma `Legenda` (e não só os cortes) deixa o resto do comparador —
+ * legenda na tela, % de área por classe, barra do PDF — funcionando sem uma
+ * segunda rota: as classes são as faixas, com a cor CHAPADA (início = fim) e
+ * os limites REAIS (1ª faixa no mínimo do mapa, última no máximo).
+ * `cores`/`nomes` vêm na ordem crescente de valor; com faixa colapsada por
+ * empate são reamostrados preservando as pontas, como em `classesDeBreaks`.
+ */
+export function legendaPorQuintil(
+  valores: ArrayLike<number>,
+  base: Legenda,
+  cores: string[],
+  nomes: string[],
+  k = 5,
+): { legenda: Legenda; breaks: number[]; cores: string[] } | null {
+  const b = breaksQuantis(valores, k);
+  if (!b) return null;
+  const casas = casasDaAmplitude(b.max - b.min);
+  const f = 10 ** casas;
+  const arred = (v: number) => Math.round(v * f) / f;
+  const breaks: number[] = [];
+  for (const c of b.breaks) {
+    const r = arred(c);
+    if (r > (breaks.length ? breaks[breaks.length - 1] : b.min) && r < b.max) breaks.push(r);
+  }
+  const n = breaks.length + 1;
+  const coresF: string[] = [];
+  const classes: ClasseLegenda[] = [];
+  for (let i = 0; i < n; i++) {
+    const cor = cores[posicaoNaPaleta(i, n, cores.length)] ?? '#888888';
+    coresF.push(cor);
+    classes.push({
+      nome: nomes[posicaoNaPaleta(i, n, nomes.length)] ?? `Faixa ${i + 1}`,
+      valorMin: i === 0 ? arred(b.min) : breaks[i - 1],
+      valorMax: i === n - 1 ? arred(b.max) : breaks[i],
+      corInicio: cor, corFim: cor,
+      larguraVisual: 100 / n,
+      ordem: i + 1,
+    });
+  }
+  const legenda: Legenda = {
+    ...base,
+    id: `${base.id}__quintil`,
+    nome: `${base.nome} · quintil`,
+    tipoEscala: 'discreta',
+    estilo: 'segmentado',
+    escalaRelativa: undefined,
+    invertida: false,             // a inversão já está na ordem das cores recebidas
+    dominioMin: b.min,
+    dominioMax: b.max,
+    classes,
+  };
+  return { legenda, breaks, cores: coresF };
 }
