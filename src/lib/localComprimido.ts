@@ -52,6 +52,7 @@ const PESADAS = new Set<string>([
   'inv_grades_compact',   // grades de compactacao
   'inv_plantios',         // cultura por talhao+safra (legado; migrado p/ inv_cultivos)
   'inv_cultivos',         // registro fitotecnico por talhao+safra+epoca+parte
+  'inv_prescricoes',      // prescricoes: cada versao guarda o snapshot das zonas (fc)
 ]);
 
 // ── Cache de leitura em memoria ─────────────────────────────────────────────

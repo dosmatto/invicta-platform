@@ -1,5 +1,9 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Fim do aviso "Armazenamento local cheio" ao salvar prescrições
+  '2.202.1': [
+    'CORRIGIDO: O AVISO "ARMAZENAMENTO LOCAL CHEIO" NÃO APARECE MAIS A CADA ABERTURA. As prescrições guardam o desenho das zonas em cada versão e ainda ficavam no armazenamento pequeno do navegador (~5 MB), que lotava. Agora vão para o mesmo cache grande dos talhões e grades; na primeira abertura depois da atualização elas são transferidas e o espaço é liberado sozinho. Nada é perdido — a nuvem continua com tudo.',
+  ],
   // [S/N] Recomendação: em "Por zona de manejo" não aparece nada interpolado (lista separada por modo)
   '2.202.0': [
     'NO MODO "POR ZONA DE MANEJO" NÃO APARECE NADA INTERPOLADO: a lista de cenários salvos passa a seguir o modo do mapa — em "Por zona de manejo" só os cenários por zona, em "Interpolação" só os interpolados. Antes o cenário interpolado continuava na lista e, clicado, punha o mapa interpolado de volta. Uma linha acima da lista diz quantos cenários do outro modo estão ocultos e onde vê-los; sem nenhum cenário no modo, aparece "Nenhum cenário por zona de manejo salvo neste talhão".',
