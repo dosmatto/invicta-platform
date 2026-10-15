@@ -1,5 +1,11 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Painel do produtor: matriz talhão × ano abre o talhão em nova aba na fertilidade
+  '2.195.0': [
+    'PAINEL DO PRODUTOR GANHA A MATRIZ "AMOSTRAGEM E FERTILIDADE POR ANO": uma linha por talhão (agrupado por fazenda, com a área), uma coluna por ano, e na célula a data da coleta — verde no ano atual, amarelo com 1 ano, âmbar com 2 e vermelho com 3 ou mais; "amostrado" em azul quando só a grade existe (aguardando o laudo); tracejado quando o laudo chegou e os mapas ainda não. Clicar na data abre o talhão em NOVA ABA, já na Fertilidade (ou na Amostragem) daquele ano.',
+    'Chips "Todos · Ano atual · 1 ano · 2 anos · 3 anos ou mais" filtram os talhões pela situação da última coleta, com a contagem de cada um. As colunas vão do menor ao maior ano entre as safras cadastradas e os anos com dado, sem buracos.',
+    'Regra pura em lib/portalProdutor.ts (anosDaMatriz, matrizAmostragem, idadeColeta), com testes em npm run teste:portal.',
+  ],
   // [58] Prescrição por condição: apagar a dose ou o limiar não derruba mais a página
   '2.194.1': [
     'PENDÊNCIA 58 — CORRIGIDO: PRESCRIÇÃO POR CONDIÇÃO — APAGAR A DOSE DE UMA FAIXA NÃO DERRUBA MAIS A PÁGINA. Ao apagar o "0" (ou qualquer número) da dose de uma faixa, a tela caía em "This page couldn\'t load". O mesmo valia para apagar o valor de um limiar (L1, L2…). Agora o campo fica vazio, como esperado, e dá para digitar a nova dose; enquanto alguma faixa estiver sem dose, "Gerar áreas de aplicação", salvar e exportar seguem bloqueados com o aviso "Informe a dose de todas as faixas (0 = não aplica)".',

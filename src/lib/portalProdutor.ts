@@ -503,6 +503,82 @@ export function areaAmostradaPorAno(dados: DadosTalhao[], anos: number[] = []): 
   return Array.from(porAno.values()).map(a => ({ ...a, areaHa: Math.round(a.areaHa * 100) / 100 })).sort((a, b) => a.ano - b.ano);
 }
 
+// ── Matriz amostragem × ano (painel do produtor) ─────────────────────────────
+// Uma linha por talhão, uma coluna por ano: o que existe de amostragem/
+// fertilidade naquele ano e a data da coleta. É o atalho do produtor para
+// "abrir o talhão de 2024 nos mapas de fertilidade".
+
+export type SituacaoCelula = 'mapas' | 'laudo' | 'amostrado' | 'vazio';
+export interface CelulaMatriz {
+  ano: number;
+  /** mapas = mapas de fertilidade prontos; laudo = laudo recebido, sem mapa;
+   *  amostrado = só a grade (coleta feita/enviada); vazio = nada no ano. */
+  situacao: SituacaoCelula;
+  /** Data da COLETA (referência da grade/laudo); sem ela, a do registro. */
+  data: string | null;
+  mapas: number;
+  amostras: number;
+}
+export interface LinhaMatriz {
+  talhaoId: string; fazendaId: string; nome: string; areaHa: number;
+  celulas: CelulaMatriz[];
+  /** Ano da última coleta (laudo ou grade); null = nunca amostrado. */
+  ultimoAno: number | null;
+}
+
+/** Colunas: do menor ao maior ano entre os pedidos e os com dado, sem buracos. */
+export function anosDaMatriz(dados: DadosTalhao[], anosBase: number[] = []): number[] {
+  const anos = new Set<number>(anosBase);
+  for (const d of dados) {
+    for (const g of d.grades ?? []) { const a = anoDoRegistro(g); if (a != null) anos.add(a); }
+    for (const l of d.laudos ?? []) { const a = anoDoRegistro(l); if (a != null) anos.add(a); }
+  }
+  if (!anos.size) return [];
+  const min = Math.min(...anos), max = Math.max(...anos);
+  return Array.from({ length: max - min + 1 }, (_, i) => min + i);
+}
+
+export function matrizAmostragem(dados: DadosTalhao[], anos: number[]): LinhaMatriz[] {
+  return dados.map(d => {
+    const t = d.talhao;
+    // Mapas de fertilidade por laudo: ids `${talhaoId}__${laudoId}__…__${nut}__${prof}`
+    // (mesmo contrato de avaliarTalhao — dois métodos do mesmo nut/prof contam um).
+    const mapasPorLaudo = new Map<string, Set<string>>();
+    for (const m of d.mapasNuvem ?? []) {
+      const s = m.id.split('__');
+      if (s.length < 4 || s[0] !== t.id) continue;
+      let set = mapasPorLaudo.get(s[1]);
+      if (!set) { set = new Set(); mapasPorLaudo.set(s[1], set); }
+      set.add(s.slice(-2).join('__'));
+    }
+    let ultimoAno: number | null = null;
+    const celulas = anos.map(ano => {
+      const laudos = (d.laudos ?? []).filter(l => anoDoRegistro(l) === ano);
+      const grades = (d.grades ?? []).filter(g => anoDoRegistro(g) === ano);
+      const mapas = new Set<string>();
+      for (const l of laudos) for (const k of mapasPorLaudo.get(l.id) ?? []) mapas.add(k);
+      const amostras = laudos.reduce((s, l) => {
+        const rs = l.resultados ?? [];
+        const nums = new Set(rs.map(r => r.numero).filter((x): x is number => typeof x === 'number'));
+        return s + (nums.size || rs.length);
+      }, 0);
+      const situacao: SituacaoCelula = mapas.size ? 'mapas' : laudos.length ? 'laudo' : grades.length ? 'amostrado' : 'vazio';
+      const data = maxIso([...laudos.map(l => l.dataReferencia), ...grades.map(g => g.dataReferencia)])
+        ?? maxIso([...laudos.map(l => l.criadoEm), ...grades.map(g => g.criadoEm)]);
+      if (situacao !== 'vazio' && (ultimoAno == null || ano > ultimoAno)) ultimoAno = ano;
+      return { ano, situacao, data, mapas: mapas.size, amostras };
+    });
+    return { talhaoId: t.id, fazendaId: t.fazendaId, nome: t.nome, areaHa: Number.isFinite(t.areaHa) ? t.areaHa : 0, celulas, ultimoAno };
+  });
+}
+
+/** Idade da coleta em anos cheios, com teto 3 ("3 anos ou mais"); null = nunca. */
+export function idadeColeta(ano: number | null, anoAtual: number): 0 | 1 | 2 | 3 | null {
+  if (ano == null) return null;
+  const d = anoAtual - ano;
+  return d <= 0 ? 0 : d === 1 ? 1 : d === 2 ? 2 : 3;
+}
+
 /** Nutrientes que o produtor acompanha no gráfico de evolução (ids do laudo). */
 export const NUTRIENTES_EVOLUCAO: Array<{ id: string; rotulo: string; unidade: string }> = [
   { id: 'ph', rotulo: 'pH', unidade: '' },

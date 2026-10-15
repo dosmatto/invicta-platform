@@ -12,7 +12,7 @@ import {
   rankingColheita, linhaDoTempo, projetarTalhoes, anoDoRegistro, fmtDataCurta, isoDe, maxIso,
   ETAPAS, ETAPAS_CICLO, etapaDef,
 } from '../src/lib/portalProdutor.ts';
-import { abasComDados } from '../src/lib/portalProdutor.ts';
+import { abasComDados, anosDaMatriz, matrizAmostragem, idadeColeta } from '../src/lib/portalProdutor.ts';
 
 let ok = 0, fail = 0;
 const t = (n, f) => { try { f(); ok++; console.log('  ✓', n); } catch (e) { fail++; console.error('  ✗', n, '—', e.message); } };
@@ -321,6 +321,31 @@ t('abas do talhão: um laudo FOLIAR abre a aba Foliar, e ela entra depois de Fer
     abasComDados({ talhao: T3.talhao, laudos: [{ id: 'l1', safra: '26/27', criadoEm: '2026-01-01' }], amostrasFoliares: [{ safra: '26/27', criadoEm: '2026-01-10' }] }),
     ['resumo', 'fertilidade', 'foliar'],
   );
+});
+
+t('matriz amostragem × ano: colunas contínuas entre o menor e o maior ano (safras + dados)', () => {
+  assert.deepEqual(anosDaMatriz([T1, T2, T3], [2027]), [2025, 2026, 2027]);
+  assert.deepEqual(anosDaMatriz([T3]), []);
+});
+t('matriz: T1 tem mapas em 2026 e só laudo em 2025; T2 amostrado em 2026; T3 nunca', () => {
+  const m = matrizAmostragem([T1, T2, T3], [2025, 2026, 2027]);
+  const c1 = Object.fromEntries(m[0].celulas.map(c => [c.ano, c]));
+  assert.equal(c1[2026].situacao, 'mapas'); assert.equal(c1[2026].mapas, 2); assert.equal(c1[2026].amostras, 42);
+  assert.equal(c1[2025].situacao, 'laudo', 'laudo de 2025 sem mapa na nuvem');
+  assert.equal(c1[2027].situacao, 'vazio'); assert.equal(c1[2027].data, null);
+  assert.equal(m[0].ultimoAno, 2026);
+  const c2 = Object.fromEntries(m[1].celulas.map(c => [c.ano, c]));
+  assert.equal(c2[2026].situacao, 'amostrado'); assert.equal(c2[2026].data, '2026-02-12T12:00:00Z');
+  assert.equal(m[2].ultimoAno, null); assert.ok(m[2].celulas.every(c => c.situacao === 'vazio'));
+});
+t('matriz: a data da coleta (referência) vence a data de importação', () => {
+  const d = { talhao: T3.talhao, grades: [{ safra: '26/27', ano: 2026, criadoEm: '2026-03-01T00:00:00Z', dataReferencia: '2026-02-05', pontos: 10 }] };
+  assert.equal(matrizAmostragem([d], [2026])[0].celulas[0].data, '2026-02-05');
+});
+t('idade da coleta: 0 = ano atual (ou futuro), 1, 2, 3 = três ou mais, null = nunca', () => {
+  assert.equal(idadeColeta(2026, 2026), 0); assert.equal(idadeColeta(2027, 2026), 0);
+  assert.equal(idadeColeta(2025, 2026), 1); assert.equal(idadeColeta(2024, 2026), 2);
+  assert.equal(idadeColeta(2021, 2026), 3); assert.equal(idadeColeta(null, 2026), null);
 });
 
 console.log(`\n${ok} ok, ${fail} falhas`);

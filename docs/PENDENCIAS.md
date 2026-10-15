@@ -106,6 +106,7 @@ verdadeira (fusão de talhões) chegou depois; foi preciso renumerar.
 | S/N | Produtor: zonas só a padrão, compactação e prescrições no trilho, prescrições liberadas | 2.193.0 | /talhao/[id] como produtor → Zonas (só a padrão), trilho (Compactação/NDVI/Prescrições sempre), Prescrições (criar); banco: docs/seguranca-rls.sql seções 6 e 7 |
 | S/N | Produtor gera e salva amostragem composta (só essa ferramenta) | 2.194.0 | /talhao/[id] como produtor → Amostragem → Composta (gerar, salvar, exportar); Central de Acessos → Permissões → linha "Amostragem composta"; banco: docs/seguranca-rls.sql seção 6 |
 | 58 | Prescrição por condição: apagar a dose ou o limiar não derruba mais a página | 2.194.1 | Talhão → Prescrições → "Por condição no mapa de fertilidade" → apagar o 0 da dose de uma faixa (ou o valor do limiar) → campo fica vazio, a página segue de pé |
+| S/N | Painel do produtor: matriz talhão × ano abre o talhão em nova aba na fertilidade | 2.195.0 | /portal (produtor ou preview) → cartão "Amostragem e fertilidade por ano" → clicar numa data |
 
 > As pendências 1–17 foram entregues antes deste registro existir e não estão
 > catalogadas; procure pelo assunto no `changelog.ts`. Da 18 em diante, tudo
