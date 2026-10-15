@@ -362,7 +362,12 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
   // No cenário POR ZONA o mapa já é o polígono da zona com o rótulo dentro
   // (`zonasMapa`), e lá o rótulo ganha a linha das toneladas.
   const rotulosMapa = useMemo<GeoJSON.FeatureCollection | null>(() => {
-    if (!volZona || volZona.origem !== 'mapa' || !doseAtiva) return null;
+    // SÓ QUANDO A FERTILIDADE FOI PROCESSADA POR ZONA. Com amostragem em grade
+    // e mapas interpolados, o zoneamento do talhão não tem nada a ver com essa
+    // dose: desenhar as divisas e a taxa média de cada zona por cima do raster
+    // fazia o mapa parecer "sobreposto com uma zona" que não existe nesta
+    // recomendação. A tabela de volumes por zona continua na gaveta.
+    if (!volZona || volZona.origem !== 'mapa' || !doseAtiva || !fontesPorZona) return null;
     const zonas = agruparPorRotulo(zonasTalhao);
     const geomPorRotulo = new Map(zonas.map(z => [z.rotulo, z.geometry]));
     const un = doseAtiva.unidade || 'kg/ha';
@@ -383,7 +388,7 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
     if (!pontos.length) return null;
     const divisas = divisasDasZonas(zonas.map(z => ({ id: z.id, classe: '', geometry: z.geometry })));
     return { type: 'FeatureCollection', features: [...pontos, ...divisas] };
-  }, [volZona, doseAtiva, zonasTalhao]);
+  }, [volZona, doseAtiva, zonasTalhao, fontesPorZona]);
 
   // Zonas coloridas pela faixa da dose + rótulo com a taxa (o número que vai
   // para a máquina). Mesma classificação do raster e da legenda (faixas.ts).

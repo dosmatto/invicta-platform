@@ -1,5 +1,9 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Recomendação interpolada: o mapa não desenha mais as zonas de manejo por cima
+  '2.203.0': [
+    'CORRIGIDO: A RECOMENDAÇÃO INTERPOLADA APARECIA "SOBREPOSTA COM AS ZONAS". Em talhão com amostragem em grade e mapas interpolados, mas com zoneamento cadastrado, o mapa da dose ganhava por cima as divisas das zonas de manejo e a taxa média/toneladas de cada uma — uma zona que não faz parte daquela recomendação. Agora as divisas e os números por zona só entram no mapa interpolado quando os mapas de fertilidade que geraram a dose foram processados POR ZONA. A tabela de volumes por zona continua na gaveta do cenário.',
+  ],
   // [S/N] Fim do aviso "Armazenamento local cheio" ao salvar prescrições
   '2.202.1': [
     'CORRIGIDO: O AVISO "ARMAZENAMENTO LOCAL CHEIO" NÃO APARECE MAIS A CADA ABERTURA. As prescrições guardam o desenho das zonas em cada versão e ainda ficavam no armazenamento pequeno do navegador (~5 MB), que lotava. Agora vão para o mesmo cache grande dos talhões e grades; na primeira abertura depois da atualização elas são transferidas e o espaço é liberado sozinho. Nada é perdido — a nuvem continua com tudo.',
