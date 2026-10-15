@@ -113,6 +113,7 @@ verdadeira (fusão de talhões) chegou depois; foi preciso renumerar.
 | S/N | Portal do produtor: "Acessar a plataforma" abre direto nas áreas dele | 2.199.0 | /portal → faixa "Acesse a plataforma com as suas áreas" → /painel já no produtor, com os talhões no mapa |
 | S/N | Portal do produtor: página própria de evolução dos nutrientes, todos os talhões de uma vez | 2.200.0 | /portal → cartão "Evolução dos nutrientes" → "Todos os talhões" → /portal/nutrientes |
 | S/N | Recomendação por zona: trocar o modo abre o cenário daquele modo (e o cartão diz o modo) | 2.201.0 | Talhão → Recomendações → Modo do mapa "Por zona de manejo" / "Interpolação" + selo nos cenários salvos |
+| S/N | Recomendação: em "Por zona de manejo" não aparece nada interpolado (lista separada por modo) | 2.202.0 | Talhão → Recomendações → Modo do mapa → lista "Cenários salvos" filtrada pelo modo |
 
 > As pendências 1–17 foram entregues antes deste registro existir e não estão
 > catalogadas; procure pelo assunto no `changelog.ts`. Da 18 em diante, tudo

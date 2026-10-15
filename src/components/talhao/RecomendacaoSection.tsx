@@ -551,6 +551,16 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
       geradoEm: cenMeta.geradoEm, geradoPor: '',
     }, ...salvos];
   }, [salvos, cenMeta, doses, fin, nav.talhaoId, safra, importacaoId]);
+  // A LISTA SEGUE O MODO DO MAPA. Em "Por zona de manejo" não aparece nada
+  // interpolado — nem no mapa, nem na lista: o cartão interpolado ali era um
+  // convite a clicar e receber o mapa interpolado de volta. Sem zoneamento (ou
+  // em amostragem composta, que é sempre por área) não há o que separar.
+  const separaPorModo = !compostaAtiva && zonasTalhao.length > 0;
+  const listaDoModo = useMemo(
+    () => (separaPorModo ? lista.filter(c => c.doses.some(d => d.porZona?.length) === (modoMapa === 'zona')) : lista),
+    [lista, separaPorModo, modoMapa],
+  );
+  const ocultosOutroModo = lista.length - listaDoModo.length;
 
   // Valor efetivo do formulário recolhível: a escolha do usuário manda; sem
   // escolha, talhão sem cenário nenhum abre (o formulário é o único conteúdo) e
@@ -1147,7 +1157,7 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
             </p>
             {semCenarioNoModo && !doses.length && estado !== 'carregando' && (
               <p className="text-[10px] mt-1 px-2 py-1 rounded" style={{ background: '#422006', color: '#fbbf24' }}>
-                Ainda não há cenário {modoMapa === 'zona' ? 'por zona de manejo' : 'interpolado'} desta seleção. Clique em <strong>Aplicar e salvar</strong> para calcular. Na lista abaixo, o selo de cada cenário diz em que modo ele foi feito.
+                Ainda não há cenário {modoMapa === 'zona' ? 'por zona de manejo' : 'interpolado'} desta seleção. Clique em <strong>Aplicar e salvar</strong> para calcular.
               </p>
             )}
           </div>
@@ -1297,8 +1307,20 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
             </button>
           </div>
           <div className="text-[9px] mb-1" style={{ color: '#64748b' }}>Clique num cenário para abrir o resultado dele logo abaixo, sem sair do lugar; dentro, clique no produto que quiser ver no mapa. Marque 2 ou 3 para comparar lado a lado.</div>
+          {ocultosOutroModo > 0 && (
+            <div className="text-[9px] mb-1" style={{ color: '#64748b' }}>
+              {modoMapa === 'zona'
+                ? `Mostrando só cenários por zona de manejo — ${ocultosOutroModo} interpolado(s) aparece(m) em "Interpolação".`
+                : `Mostrando só cenários interpolados — ${ocultosOutroModo} por zona aparece(m) em "Por zona de manejo".`}
+            </div>
+          )}
+          {listaDoModo.length === 0 && (
+            <div className="text-[10px] px-2 py-1.5 rounded" style={{ background: '#061525', border: '1px solid #1a3a6b', color: '#94a3b8' }}>
+              Nenhum cenário {modoMapa === 'zona' ? 'por zona de manejo' : 'interpolado'} salvo neste talhão.
+            </div>
+          )}
           <div className="space-y-1">
-            {lista.map(c => {
+            {listaDoModo.map(c => {
               const marcado = selCompara.has(c.id);
               const aberto = cenarioAberto === c.id;
               // NUNCA chame isto de `doses`: dentro deste map o nome esconderia o

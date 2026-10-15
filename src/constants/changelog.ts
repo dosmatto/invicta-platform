@@ -1,5 +1,9 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Recomendação: em "Por zona de manejo" não aparece nada interpolado (lista separada por modo)
+  '2.202.0': [
+    'NO MODO "POR ZONA DE MANEJO" NÃO APARECE NADA INTERPOLADO: a lista de cenários salvos passa a seguir o modo do mapa — em "Por zona de manejo" só os cenários por zona, em "Interpolação" só os interpolados. Antes o cenário interpolado continuava na lista e, clicado, punha o mapa interpolado de volta. Uma linha acima da lista diz quantos cenários do outro modo estão ocultos e onde vê-los; sem nenhum cenário no modo, aparece "Nenhum cenário por zona de manejo salvo neste talhão".',
+  ],
   // [S/N] Recomendação por zona: trocar o modo abre o cenário daquele modo (e o cartão diz o modo)
   '2.201.0': [
     'CORRIGIDO: CLICAR EM "POR ZONA DE MANEJO" FAZIA O MAPA SUMIR, e clicar de novo no cenário salvo trazia o mapa interpolado de volta (e o seletor voltava para "Interpolação"). Parecia que o modo zona não funcionava — na verdade o cenário por zona ainda não existia e a tela não dizia. Agora, ao trocar o modo, se já houver o cenário daquela recomendação no modo escolhido ele abre no mapa na hora; se não houver, aparece o aviso "Ainda não há cenário por zona de manejo desta seleção. Clique em Aplicar e salvar".',
