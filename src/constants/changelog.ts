@@ -1,5 +1,10 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Recomendação por zona: trocar o modo abre o cenário daquele modo (e o cartão diz o modo)
+  '2.201.0': [
+    'CORRIGIDO: CLICAR EM "POR ZONA DE MANEJO" FAZIA O MAPA SUMIR, e clicar de novo no cenário salvo trazia o mapa interpolado de volta (e o seletor voltava para "Interpolação"). Parecia que o modo zona não funcionava — na verdade o cenário por zona ainda não existia e a tela não dizia. Agora, ao trocar o modo, se já houver o cenário daquela recomendação no modo escolhido ele abre no mapa na hora; se não houver, aparece o aviso "Ainda não há cenário por zona de manejo desta seleção. Clique em Aplicar e salvar".',
+    'CADA CENÁRIO SALVO GANHOU UM SELO "por zona" ou "interpolado" ao lado do nome (em talhões com zoneamento). Os dois cenários da mesma recomendação têm o mesmo nome, e antes não havia como saber qual era qual.',
+  ],
   // [S/N] Portal do produtor: página própria de evolução dos nutrientes, todos os talhões de uma vez
   '2.200.0': [
     'NOVA PÁGINA /portal/nutrientes — "EVOLUÇÃO DOS NUTRIENTES" COM TODOS OS TALHÕES: o cartão do painel mostra os cinco nutrientes de um talhão; a página inverte — um nutriente por vez (pH, P, K, MO, V%) e todos os talhões numa tabela por ano, cada valor com a cor da classe dos seus mapas, mais a tendência (linha ano a ano) e a variação entre a primeira e a última análise. Grupo por fazenda, filtro de fazenda e ordenação por talhão, maior valor, menor valor ou maior variação. No topo, o panorama: quantos talhões estão em cada classe na última análise. Clicar no talhão abre os mapas de fertilidade em nova aba, no último ano analisado.',

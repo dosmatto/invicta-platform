@@ -120,6 +120,9 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
   const [cenMeta, setCenMeta] = useState<{ id: string; origem: 'equacao' | 'recomendacao'; recomendacaoId?: string; nome: string; geradoEm: number } | null>(null);
   const [nomeCenario, setNomeCenario] = useState('');
   const [salvoMsg, setSalvoMsg] = useState('');
+  // Trocou o modo e ainda não existe cenário salvo naquele modo: o mapa some
+  // (era do outro modo) e a tela tem de dizer o que fazer, senão parece defeito.
+  const [semCenarioNoModo, setSemCenarioNoModo] = useState(false);
   const [salvos, setSalvos] = useState<Cenario[]>([]);
   const [selCompara, setSelCompara] = useState<Set<string>>(new Set());
   const [comparar, setComparar] = useState<Cenario[] | null>(null);
@@ -437,7 +440,7 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
   useEffect(() => () => { setFertilidadeOverlay(null); setFertilidadeLabels(null); }, [setFertilidadeOverlay, setFertilidadeLabels]);
 
   async function aplicar() {
-    setErro(''); setDoses([]); setFalhas([]); setVisivel(0); setSalvoMsg(''); setErroAbrir(null);
+    setErro(''); setDoses([]); setFalhas([]); setVisivel(0); setSalvoMsg(''); setErroAbrir(null); setSemCenarioNoModo(false);
     if (!nav.talhaoId || !importacaoId) { setErro('Selecione uma importação de laboratório.'); setEstado('erro'); return; }
     let itens: ItemBiblioteca<ConteudoEquacao>[] = [];
     if (modo === 'equacao') {
@@ -569,7 +572,36 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
   // Vale igual para dose interpolada em grade e para taxa por zona: quem decide
   // é o próprio cenário (`porZona`), não um seletor que o usuário tenha de
   // acertar antes.
-  async function verNoMapa(cen: Cenario, indice = 0) {
+  // TROCAR O MODO NA MÃO ABRE O CENÁRIO DAQUELE MODO. Antes, clicar em "Por
+  // zona de manejo" com o cenário interpolado na tela só limpava o mapa (o
+  // resultado era do outro modo) — e o único cartão da lista era o interpolado,
+  // que ao ser clicado devolvia o seletor para "Interpolação". Parecia que o
+  // modo zona não funcionava. Agora: se já existe o cenário desta mesma
+  // recomendação/equação no modo pedido, ele entra no mapa; se não, a tela
+  // diz para aplicar.
+  function trocarModoMapa(m: 'interpolar' | 'zona') {
+    if (m === modoMapa) return;
+    const ref = modo === 'recomendacao' ? recomendacaoId : equacaoId;
+    const idPar = `cen_${nav.talhaoId}_${importacaoId}_${modo}_${ref}${m === 'zona' ? '_zona' : ''}${assinaturaFormula ? `_f${assinaturaFormula}` : ''}`;
+    const par = ref ? lista.find(c => c.id === idPar) : undefined;
+    if (par) {
+      // O efeito de limpeza não pode apagar o que verNoMapa está pondo na tela.
+      trocaDeModoInterna.current = true;
+      setModoMapa(m);
+      setCenarioAberto(par.id);
+      void verNoMapa(par, 0, m);
+    } else {
+      setModoMapa(m);
+      setSemCenarioNoModo(true);
+    }
+  }
+
+  // `modoAtual`: quem chama acabou de pedir a troca de modo (trocarModoMapa) e o
+  // `modoMapa` desta closure ainda é o antigo — compará-lo dispararia uma
+  // segunda troca, e a marca `trocaDeModoInterna` sobraria armada, engolindo a
+  // próxima limpeza legítima.
+  async function verNoMapa(cen: Cenario, indice = 0, modoAtual: 'interpolar' | 'zona' = modoMapa) {
+    setSemCenarioNoModo(false);
     // Cenário já carregado: é só trocar o mapa visível — sem ida à nuvem.
     if (carregado(cen.id)) {
       setVisivel(Math.min(indice, doses.length - 1));
@@ -592,7 +624,7 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
       // o seletor tem de refletir isso — senão a tela mostra "Interpolação" com
       // um resultado por zona na frente, e o próximo Aplicar troca tudo.
       const modoDoCenario = full.doses.some(d => d.porZona?.length) ? 'zona' : 'interpolar';
-      if (modoDoCenario !== modoMapa) { trocaDeModoInterna.current = true; setModoMapa(modoDoCenario); }
+      if (modoDoCenario !== modoAtual) { trocaDeModoInterna.current = true; setModoMapa(modoDoCenario); }
       setCenMeta({ id: cen.id, origem: full.origem, recomendacaoId: full.recomendacaoId, nome: full.nome, geradoEm: full.geradoEm });
     } catch (e) {
       setErroAbrir({ cenarioId: cen.id, msg: 'Falha ao abrir o mapa: ' + (e instanceof Error ? e.message : String(e)) });
@@ -1096,7 +1128,7 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
             <label className="text-[10px] font-semibold block mb-1" style={{ color: '#cbd5e1' }}>Modo do mapa</label>
             <div className="grid grid-cols-2 gap-1">
               {([['interpolar', 'Interpolação'], ['zona', 'Por zona de manejo']] as const).map(([m, t]) => (
-                <button key={m} onClick={() => setModoMapa(m)}
+                <button key={m} onClick={() => trocarModoMapa(m)}
                   className="py-1.5 px-2 rounded text-[11px] font-semibold"
                   style={{ background: modoMapa === m ? 'var(--invicta-blue-mid)' : '#1a3a6b', color: modoMapa === m ? '#fff' : '#93c5fd' }}>
                   {t}
@@ -1113,6 +1145,11 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
                 ? `Uma taxa por zona (${agruparPorRotulo(zonasTalhao).length} zonas): a equação é aplicada ao laudo de cada zona, sem interpolar e sem média. Não depende de como a Fertilidade foi processada.`
                 : 'Dose contínua, calculada nos mapas interpolados de fertilidade.'}
             </p>
+            {semCenarioNoModo && !doses.length && estado !== 'carregando' && (
+              <p className="text-[10px] mt-1 px-2 py-1 rounded" style={{ background: '#422006', color: '#fbbf24' }}>
+                Ainda não há cenário {modoMapa === 'zona' ? 'por zona de manejo' : 'interpolado'} desta seleção. Clique em <strong>Aplicar e salvar</strong> para calcular. Na lista abaixo, o selo de cada cenário diz em que modo ele foi feito.
+              </p>
+            )}
           </div>
         )}
 
@@ -1307,6 +1344,12 @@ export function RecomendacaoSection({ safraNome }: { safraNome?: string }) {
                         {abrindoEste && <Loader2 size={10} className="animate-spin flex-shrink-0" style={{ color: '#93c5fd' }} />}
                         {carregadoAqui && !abrindoEste && <Eye size={10} className="flex-shrink-0" style={{ color: '#4ade80' }} aria-label="No mapa" />}
                         {c.nome}
+                        {/* O modo vai no cartão: os dois cenários da mesma
+                            recomendação têm o mesmo nome, e sem o selo não dá
+                            para saber qual é o por zona. */}
+                        {!compostaAtiva && zonasTalhao.length > 0 && (c.doses.some(d => d.porZona?.length)
+                          ? <span className="text-[8px] font-bold px-1 py-0.5 rounded flex-shrink-0" style={{ background: '#1e3a8a', color: '#bfdbfe' }}>por zona</span>
+                          : <span className="text-[8px] font-bold px-1 py-0.5 rounded flex-shrink-0" style={{ background: '#1a3a6b', color: '#93c5fd' }}>interpolado</span>)}
                         {!naNuvem && <span className="text-[8px] font-bold px-1 py-0.5 rounded" style={{ background: '#422006', color: '#fbbf24' }}>não salvo</span>}
                         {nUso > 0 && <span className="text-[8px] font-bold px-1 py-0.5 rounded" style={{ background: 'var(--invicta-green-dark)', color: '#fff' }}>{nUso} p/ uso</span>}
                       </div>
