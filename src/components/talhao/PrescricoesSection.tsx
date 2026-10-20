@@ -53,6 +53,7 @@ import {
 import {
   Plus, Save, Trash2, FileDown, FileSpreadsheet, FileText, Loader2, AlertTriangle,
   CheckCircle2, History, FolderOpen, Scale, Sprout, Pencil, RefreshCw,
+  ChevronDown, ChevronRight,
 } from 'lucide-react';
 import { inputStyle } from '@/constants/ui';
 import { resumoInsumo } from '@/components/panels/InsumosPanel';
@@ -971,10 +972,8 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
       </div>
       {linhagens.length === 0
         ? <Vazia texto="Nenhuma prescrição salva neste talhão." />
-        : linhagens.map(vs => (
-          <ListaVersoes key={vs[0].origemId ?? vs[0].id} versoes={vs} exportando={exportando} somenteLeitura
-            podeExportar={podeExportar} onAbrir={() => {}} onExportar={exportar} onExcluir={() => {}} />
-        ))}
+        : <SalvasAgrupadas linhagens={linhagens} anoAtual={safraNome} exportando={exportando} somenteLeitura
+            podeExportar={podeExportar} onAbrir={() => {}} onExportar={exportar} onExcluir={() => {}} />}
       <p className="text-[10px]" style={{ color: '#475569' }}>Os arquivos de aplicação saem daqui (SHP, Excel, PDF). A edição é feita pela Invicta.</p>
     </div>
   );
@@ -1942,11 +1941,9 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
                     Prescrições salvas ({linhagens.length})
                   </span>
                 </div>
-                {linhagens.map(vs => (
-                  <ListaVersoes key={vs[0].origemId ?? vs[0].id} versoes={vs} exportando={exportando}
-                    onAbrir={abrirSalva} onExportar={exportar}
-                    onExcluir={id => { deletePrescricao(id); setTick(t => t + 1); }} />
-                ))}
+                <SalvasAgrupadas linhagens={linhagens} anoAtual={safraNome} exportando={exportando}
+                  onAbrir={abrirSalva} onExportar={exportar}
+                  onExcluir={id => { deletePrescricao(id); setTick(t => t + 1); }} />
               </div>
             )}
           </>
@@ -1955,12 +1952,10 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
         {aba === 'salvas' && (
           prescricoes.length === 0
             ? <Vazia texto="Nenhuma prescrição salva neste talhão ainda." />
-            : linhagens.map(vs => (
-              <ListaVersoes key={vs[0].origemId ?? vs[0].id} versoes={vs} exportando={exportando}
+            : <SalvasAgrupadas linhagens={linhagens} anoAtual={safraNome} exportando={exportando}
                 podeExportar={podeExportar} podeExcluir={podeExcluir}
                 onAbrir={abrirSalva} onExportar={exportar}
                 onExcluir={id => { deletePrescricao(id); setTick(t => t + 1); }} />
-            ))
         )}
 
         {aba === 'arquivos' && (() => {
@@ -2061,15 +2056,14 @@ function CampoTotalDisponivel({ rotulo, unidadeTotal, porHa, totalAbs, areaHa, s
   );
 }
 
-// Cartão de uma prescrição salva — o MESMO na aba "Salvas" e no rodapé da aba
-// "Nova". Salvar e não ver nada acontecer é o que fazia parecer que o botão não
-// funcionava: a confirmação aparecia no topo do formulário, longe do botão, que
-// fica no fim de uma tela longa. Agora o resultado do trabalho aparece embaixo,
-// como nas Zonas de Manejo e no NDVI.
-// Uma prescrição e TODAS as suas versões: a mais nova em destaque e as
-// anteriores logo abaixo, discretas — sempre à vista, sem botão para recolher.
-function ListaVersoes({ versoes, exportando, onAbrir, onExportar, onExcluir, somenteLeitura, podeExportar = true, podeExcluir = true }: {
-  versoes: Prescricao[];
+// Ano em que a prescrição entra no agrupamento: o rótulo do Ano/ciclo gravado
+// ao salvar; nas da Lavra sem esse rótulo, a safra de lá; nas mais antigas,
+// que não guardavam nenhum dos dois, o ano em que foi criada.
+function anoDaPrescricao(p: Prescricao): string {
+  return p.ano || p.origemLavra?.anoSafra || p.criadoEm.slice(0, 4);
+}
+
+type PropsLista = {
   exportando: string;
   onAbrir: (p: Prescricao) => void;
   onExportar: (formato: 'shp' | 'xlsx' | 'pdf', p: Prescricao) => void;
@@ -2078,76 +2072,184 @@ function ListaVersoes({ versoes, exportando, onAbrir, onExportar, onExcluir, som
   podeExportar?: boolean;
   podeExcluir?: boolean;
   somenteLeitura?: boolean;
+};
+
+// Prescrições salvas — o MESMO bloco na aba "Salvas", no rodapé da aba "Nova"
+// (salvar e ver o resultado logo embaixo do botão) e na visão do produtor.
+// Agrupadas por ANO e, dentro dele, por TIPO, cada grupo abre e fecha. Abre
+// sozinho só o ano selecionado no topo (ou o mais recente, se ele não tiver
+// prescrição); os outros anos ficam fechados, com a contagem à vista.
+function SalvasAgrupadas({ linhagens, anoAtual, ...props }: PropsLista & {
+  linhagens: Prescricao[][];
+  anoAtual?: string;
 }) {
+  const anos = useMemo(() => {
+    const porAno = new Map<string, Map<TipoPrescricao, Prescricao[][]>>();
+    for (const vs of linhagens) {
+      const ano = anoDaPrescricao(vs[0]);
+      const porTipo = porAno.get(ano) ?? new Map<TipoPrescricao, Prescricao[][]>();
+      porAno.set(ano, porTipo);
+      const arr = porTipo.get(vs[0].tipo);
+      if (arr) arr.push(vs); else porTipo.set(vs[0].tipo, [vs]);
+    }
+    // `linhagens` já vem da mais recente para a mais antiga — a ordem dentro
+    // de cada tipo é preservada.
+    return [...porAno.entries()]
+      .sort((a, b) => b[0].localeCompare(a[0], 'pt-BR', { numeric: true }))
+      .map(([ano, porTipo]) => ({
+        ano,
+        n: [...porTipo.values()].reduce((s, l) => s + l.length, 0),
+        tipos: [...porTipo.entries()].sort((a, b) => ROTULO_TIPO[a[0]].localeCompare(ROTULO_TIPO[b[0]], 'pt-BR')),
+      }));
+  }, [linhagens]);
+  const anoAberto = anos.some(g => g.ano === anoAtual) ? anoAtual : anos[0]?.ano;
+
+  // Guarda só os grupos que a pessoa INVERTEU em relação ao padrão — trocar o
+  // Ano no topo muda o padrão sem brigar com o que ela abriu ou fechou.
+  const [invertidos, setInvertidos] = useState<Set<string>>(() => new Set());
+  const aberto = (chave: string, padrao: boolean) => (invertidos.has(chave) ? !padrao : padrao);
+  const alternar = (chave: string) => setInvertidos(s => {
+    const n = new Set(s);
+    if (n.has(chave)) n.delete(chave); else n.add(chave);
+    return n;
+  });
+
+  return (
+    <div className="space-y-1.5">
+      {anos.map(g => {
+        const chaveAno = `ano:${g.ano}`;
+        const anoAbertoAqui = aberto(chaveAno, g.ano === anoAberto);
+        return (
+          <div key={g.ano} className="rounded-lg" style={{ border: '1px solid #1a3a6b' }}>
+            <CabecalhoGrupo aberto={anoAbertoAqui} onClick={() => alternar(chaveAno)}
+              rotulo={g.ano} n={g.n} destaque />
+            {anoAbertoAqui && (
+              <div className="px-1.5 pb-1.5 space-y-1">
+                {g.tipos.map(([tipo, ls]) => {
+                  const chaveTipo = `tipo:${g.ano}:${tipo}`;
+                  const tipoAberto = aberto(chaveTipo, true);
+                  return (
+                    <div key={tipo}>
+                      <CabecalhoGrupo aberto={tipoAberto} onClick={() => alternar(chaveTipo)}
+                        rotulo={ROTULO_TIPO[tipo]} n={ls.length} />
+                      {tipoAberto && (
+                        <div className="space-y-1">
+                          {ls.map(vs => <ListaVersoes key={vs[0].origemId ?? vs[0].id} versoes={vs} {...props} />)}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function CabecalhoGrupo({ aberto, onClick, rotulo, n, destaque }: {
+  aberto: boolean; onClick: () => void; rotulo: string; n: number; destaque?: boolean;
+}) {
+  const Ic = aberto ? ChevronDown : ChevronRight;
+  return (
+    <button onClick={onClick} className={`w-full flex items-center gap-1.5 text-left ${destaque ? 'px-2 py-1.5' : 'px-1 py-1'}`}>
+      <Ic size={destaque ? 13 : 11} style={{ color: '#93c5fd' }} />
+      <span className={destaque ? 'text-xs font-bold' : 'text-[10px] font-bold uppercase tracking-wider'}
+        style={{ color: destaque ? '#e2e8f0' : '#94a3b8' }}>
+        {rotulo}
+      </span>
+      <span className="text-[9px] px-1.5 rounded-full" style={{ background: '#0f2240', color: '#93c5fd' }}>{n}</span>
+    </button>
+  );
+}
+
+// Uma prescrição e as suas versões: a mais nova à vista; as anteriores ficam
+// atrás de "+N versões anteriores" — continuam salvas, cada uma com os
+// arquivos que gerou, só não ocupam a lista.
+function ListaVersoes({ versoes, ...props }: PropsLista & { versoes: Prescricao[] }) {
+  const [verAntigas, setVerAntigas] = useState(false);
   const [atual, ...antigas] = versoes;
   return (
     <div className="space-y-1">
-      <CartaoSalva p={atual} exportando={exportando} onAbrir={onAbrir} onExportar={onExportar} onExcluir={onExcluir} somenteLeitura={somenteLeitura} podeExportar={podeExportar} podeExcluir={podeExcluir} />
+      <CartaoSalva p={atual} {...props} />
       {antigas.length > 0 && (
+        <button onClick={() => setVerAntigas(v => !v)} className="text-[10px] font-semibold flex items-center gap-1 pl-2"
+          style={{ color: '#64748b' }}>
+          {verAntigas ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
+          {verAntigas
+            ? 'Ocultar versões anteriores'
+            : `+${antigas.length} ${antigas.length === 1 ? 'versão anterior' : 'versões anteriores'}`}
+        </button>
+      )}
+      {verAntigas && antigas.length > 0 && (
         <div className="pl-3 space-y-1" style={{ borderLeft: '2px solid #1a3a6b' }}>
-          {antigas.map(v => (
-            <CartaoSalva key={v.id} p={v} anterior exportando={exportando} somenteLeitura={somenteLeitura}
-              podeExportar={podeExportar} podeExcluir={podeExcluir}
-              onAbrir={onAbrir} onExportar={onExportar} onExcluir={onExcluir} />
-          ))}
+          {antigas.map(v => <CartaoSalva key={v.id} p={v} anterior {...props} />)}
         </div>
       )}
     </div>
   );
 }
 
-function CartaoSalva({ p, anterior, exportando, onAbrir, onExportar, onExcluir, somenteLeitura, podeExportar = true, podeExcluir = true }: {
+// Cartão compacto: nome e ações na primeira linha, o resumo na segunda. A
+// faixa de dose e o custo completos ficam no balão (title) do resumo. Os três
+// formatos de arquivo abrem numa linha embaixo ao clicar em "Exportar" — um
+// menu flutuante seria cortado pela rolagem do painel.
+function CartaoSalva({ p, anterior, exportando, onAbrir, onExportar, onExcluir, somenteLeitura, podeExportar = true, podeExcluir = true }: PropsLista & {
   p: Prescricao;
   anterior?: boolean;          // versão antiga (fica discreta na lista)
-  exportando: string;
-  onAbrir: (p: Prescricao) => void;
-  onExportar: (formato: 'shp' | 'xlsx' | 'pdf', p: Prescricao) => void;
-  onExcluir: (id: string) => void;
-  somenteLeitura?: boolean;
-  podeExportar?: boolean;
-  podeExcluir?: boolean;
 }) {
+  const [exportAberto, setExportAberto] = useState(false);
   const rs = resumoDoses(p.zonas, p.custoUnit);
+  const total = `${p.unidade === 'sementes/ha' ? fmt0(rs.usado) : fmt(rs.usado, 1)} ${UNIDADE_TOTAL[p.unidade]}`;
+  // Dose e total primeiro: no painel estreito a linha trunca, e é isso que se
+  // procura de relance. O resto fica no balão.
+  const resumo = `média ${fmt(rs.doseMedia, 1)} ${p.unidade} · ${total} · ${p.produto} · ${rs.nZonas} zonas · ${fmtHa(rs.areaHa)} ha`;
+  const detalhe = `${ROTULO_TIPO[p.tipo]} · dose ${fmt(rs.doseMin, 1)}–${fmt(rs.doseMax, 1)} (média ${fmt(rs.doseMedia, 1)}) ${p.unidade} · usa ${total}`
+    + `${rs.custo != null ? ` · R$ ${fmt(rs.custo, 0)}` : ''} · ${dataBR(p.atualizadoEm)} · ${p.criadoPor}`;
+  const removida = !!p.origemLavra?.removida;
   return (
-    <div className="p-2.5 rounded-lg space-y-1.5" style={{ background: anterior ? '#050f1c' : '#061525', border: `1px solid ${anterior ? '#132f52' : '#1a3a6b'}`, opacity: anterior ? 0.85 : 1 }}>
-      <div className="flex items-start gap-2">
+    <div className="px-2.5 py-2 rounded-lg" style={{ background: anterior ? '#050f1c' : '#061525', border: `1px solid ${anterior ? '#132f52' : '#1a3a6b'}`, opacity: anterior ? 0.85 : 1 }}>
+      <div className="flex items-center gap-2">
         <div className="flex-1 min-w-0">
-          <p className="text-xs font-bold truncate" style={{ color: anterior ? '#94a3b8' : '#e2e8f0' }}>
+          <p className="text-xs font-bold truncate" style={{ color: anterior ? '#94a3b8' : '#e2e8f0' }} title={p.nome}>
             <span className="text-[9px] px-1 py-0.5 rounded mr-1.5" style={{ background: anterior ? '#0f2240' : '#1e3a5f', color: '#93c5fd' }}>v{p.versao}</span>
             {p.nome}
           </p>
-          <p className="text-[10px]" style={{ color: '#94a3b8' }}>
-            {p.produto} · {ROTULO_TIPO[p.tipo]} · v{p.versao} · {dataBR(p.atualizadoEm)} · {p.criadoPor}
+          <p className="text-[10px] truncate" style={{ color: '#94a3b8' }} title={detalhe}>
+            {resumo} · {dataBR(p.atualizadoEm)}
           </p>
-          {p.origemLavra && <SeloLavra p={p} />}
         </div>
-      </div>
-      <p className="text-[10px]" style={{ color: '#cbd5e1' }}>
-        {rs.nZonas} zonas · {fmtHa(rs.areaHa)} ha · dose {fmt(rs.doseMin, 1)}–{fmt(rs.doseMax, 1)} (média {fmt(rs.doseMedia, 1)}) {p.unidade}
-        {' '}· usa {p.unidade === 'sementes/ha' ? fmt0(rs.usado) : fmt(rs.usado, 1)} {UNIDADE_TOTAL[p.unidade]}
-        {rs.custo != null ? ` · R$ ${fmt(rs.custo, 0)}` : ''}
-      </p>
-      <div className="flex gap-1.5 flex-wrap">
+        {podeExportar && (
+          <button onClick={() => !removida && setExportAberto(v => !v)} disabled={removida}
+            title={removida ? MSG_REMOVIDA_NAO_EXPORTA : 'Baixar SHP, Excel ou PDF'}
+            className="px-2 py-1 rounded text-[10px] font-semibold flex items-center gap-1 shrink-0"
+            style={{ background: '#1a3a6b', color: '#93c5fd', opacity: removida ? 0.4 : 1 }}>
+            <FileDown size={10} /> Exportar {exportAberto ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
+          </button>
+        )}
         {!somenteLeitura && (
-          <button onClick={() => onAbrir(p)} className="px-2 py-1 rounded text-[10px] font-semibold flex items-center gap-1" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
-            <Pencil size={10} /> Abrir no editor
+          <button onClick={() => onAbrir(p)} title="Abrir no editor" aria-label="Abrir no editor"
+            className="p-1.5 rounded shrink-0" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
+            <Pencil size={11} />
           </button>
         )}
-        {podeExportar && p.origemLavra?.removida && (
-          <span className="px-1 py-1 text-[10px]" style={{ color: '#fca5a5' }}>Sem exportação: retirada da programação na Lavra.</span>
-        )}
-        {podeExportar && !p.origemLavra?.removida && <>
-        <BotaoExport rot="SHP" icone={FileDown} pequeno ocupado={exportando === `${p.id}:shp`} onClick={() => onExportar('shp', p)} />
-        <BotaoExport rot="Excel" icone={FileSpreadsheet} pequeno ocupado={exportando === `${p.id}:xlsx`} onClick={() => onExportar('xlsx', p)} />
-        <BotaoExport rot="PDF" icone={FileText} pequeno ocupado={exportando === `${p.id}:pdf`} onClick={() => onExportar('pdf', p)} />
-        </>}
         {!somenteLeitura && podeExcluir && (
-          <button onClick={() => { if (confirm(`Excluir a prescrição "${p.nome}"?`)) onExcluir(p.id); }}
-            className="px-2 py-1 rounded text-[10px] font-semibold flex items-center gap-1" style={{ background: '#3a1a1a', color: '#fca5a5' }}>
-            <Trash2 size={10} /> Excluir
+          <button onClick={() => { if (confirm(`Excluir a prescrição "${p.nome}" (v${p.versao})?`)) onExcluir(p.id); }}
+            title="Excluir" aria-label="Excluir" className="p-1.5 rounded shrink-0" style={{ background: '#3a1a1a', color: '#fca5a5' }}>
+            <Trash2 size={11} />
           </button>
         )}
       </div>
+      {exportAberto && podeExportar && !removida && (
+        <div className="flex gap-1.5 flex-wrap mt-1.5">
+          <BotaoExport rot="SHP" icone={FileDown} pequeno ocupado={exportando === `${p.id}:shp`} onClick={() => onExportar('shp', p)} />
+          <BotaoExport rot="Excel" icone={FileSpreadsheet} pequeno ocupado={exportando === `${p.id}:xlsx`} onClick={() => onExportar('xlsx', p)} />
+          <BotaoExport rot="PDF" icone={FileText} pequeno ocupado={exportando === `${p.id}:pdf`} onClick={() => onExportar('pdf', p)} />
+        </div>
+      )}
+      {p.origemLavra && <SeloLavra p={p} />}
     </div>
   );
 }

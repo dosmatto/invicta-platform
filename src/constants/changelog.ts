@@ -1,5 +1,11 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Prescrições salvas agrupadas por ano e tipo
+  '2.205.0': [
+    'PRESCRIÇÕES SALVAS AGRUPADAS POR ANO E TIPO: a lista deixou de ser uma fila única. Agora vem um bloco por ano (2026, 2025…) e, dentro dele, um por tipo (Fertilizante, Corretivo, População de sementes…), cada um com a contagem e abrindo/fechando com um clique. Abre sozinho só o ano selecionado no topo; os outros anos ficam fechados. Vale para a aba Salvas, para a lista embaixo da aba Nova e para a visão do produtor.',
+    'VERSÕES ANTERIORES RECOLHIDAS: de cada prescrição aparece só a versão mais nova, com "+N versões anteriores" para ver as outras. Nenhuma versão foi apagada; cada uma continua com os arquivos que gerou.',
+    'CARTÃO MAIS COMPACTO: nome e ações na primeira linha, dose média, total, produto, zonas e área na segunda (passando o mouse aparecem a faixa de dose, o custo, a data e quem salvou). SHP, Excel e PDF ficam dentro do botão "Exportar"; "Abrir no editor" e "Excluir" viraram ícones.',
+  ],
   // [60] Comparação com o mapa de colheita sempre por quintil
   '2.204.0': [
     'PENDÊNCIA 60 — COMPARAÇÃO COM O MAPA DE COLHEITA SEMPRE POR QUINTIL: na Comparação de Camadas, quando um dos lados é Produtividade, os DOIS mapas saem em 5 faixas de ~20% da área cada, com os cortes calculados do próprio mapa (a mesma classificação do relatório de produtividade). Antes a colheita saía na escala absoluta da cultura e o índice na escala dele — a soja pintava quase tudo de laranja e o NDRE quase tudo de verde, e não dava para ver onde um acompanha o outro. A legenda mostra os cortes reais (kg/ha inteiro, índice com 3 casas), a distribuição de área por classe e o PDF seguem a mesma classificação, e uma linha acima dos mapas avisa que a comparação está por quintil. Cada lado mantém as cores da sua legenda.',
