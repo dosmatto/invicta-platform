@@ -35,7 +35,7 @@ import { featureCollection, feature as turfFeature } from '@turf/helpers';
 import { coberturaDoGrid } from '../recomendacao/cobertura.ts';
 import { limparGeometria, PARTE_DEGENERADA_M2 } from '../meap/fundir.ts';
 import type { ZonaDose } from './tipos.ts';
-import { distribuirPorAjuste } from './calculo.ts';
+import { distribuirPorAjuste, arredondarDose } from './calculo.ts';
 
 type Pt = [number, number];
 type Poligonal = GeoJSON.Polygon | GeoJSON.MultiPolygon;
@@ -450,10 +450,19 @@ export function dosesDasFaixas<Z extends { idZona: string; dose: number }>(
 // Faixa com dose digitada 0 é "não aplica aqui": fica fora do rateio e em 0,
 // mesmo com dose mínima (o piso vale para quem aplica).
 
-export type CenarioCondicao = 'livre' | 'total';
+// ── Volume travado com sobra ────────────────────────────────────────────────
+//
+// "Tenho o volume comprado, mas não quero espalhar à força": no cenário
+// 'sobra' a dose aplicada é a DIGITADA (só ajustada ao passo da máquina e aos
+// limites mín/máx, se houver) — nada é redistribuído. O volume disponível vira
+// régua: o que não for usado é SOBRA, que pode ir para outro talhão. Se as
+// doses pedirem mais que o disponível, só avisa (a decisão é do agrônomo).
+
+export type CenarioCondicao = 'livre' | 'total' | 'sobra';
 
 export interface OpcoesVolumeCondicao {
-  /** 'livre' (padrão): dose final = digitada. 'total': crava o total. */
+  /** 'livre' (padrão): dose final = digitada. 'total': crava o total.
+   *  'sobra': dose = digitada (passo/limites), o volume só mede a sobra. */
   cenario?: CenarioCondicao;
   /** Na unidade-base (kg, t, sementes, L). Exigido no cenário 'total'. */
   totalDisponivel?: number;
@@ -484,7 +493,9 @@ export function dosesDaCondicao(
   const fatorBase = op.fatorBase && op.fatorBase > 0 ? op.fatorBase : 1;
   const informadas: Record<string, number> = {};
   for (const z of dosesDasFaixas(zonas, faixas)) informadas[z.idZona] = z.dose;
-  const travado = op.cenario === 'total';
+  // 'sobra' também conta como travado: há volume de referência e a aplicada
+  // pode diferir da digitada (passo/limites) — a tela mostra as duas colunas.
+  const travado = op.cenario === 'total' || op.cenario === 'sobra';
   // Faixa com a dose APAGADA (vazia/NaN) não é "não aplica" — isso é o 0
   // digitado. Tratá-la como peso 0 mandava o volume dela para as outras em
   // silêncio. Aqui a zona fica sem dose (NaN) nos dois cenários: a validação
@@ -496,6 +507,32 @@ export function dosesDaCondicao(
   if (!travado) {
     const usado = zonas.reduce((s, z) => s + (Number.isFinite(informadas[z.idZona]) ? informadas[z.idZona] * z.areaHa : 0), 0) * fatorBase;
     return { doses: { ...informadas }, informadas, travado, usado, sobra: 0, falta: 0, avisos: avisoSemDose };
+  }
+  if (op.cenario === 'sobra') {
+    const inc = op.incremento && op.incremento > 0 ? op.incremento : 0;
+    const doses: Record<string, number> = {};
+    for (const z of zonas) {
+      const inf = informadas[z.idZona];
+      if (!Number.isFinite(inf) || inf < 0) { doses[z.idZona] = NaN; continue; }
+      if (inf === 0) { doses[z.idZona] = 0; continue; }   // 0 = não aplica, abaixo do piso de propósito
+      let d = inf;
+      // Passo da máquina; dose > 0 nunca vira 0 ("não aplica") só pelo arredondamento.
+      if (inc > 0) d = Math.max(inc, Math.round(d / inc) * inc);
+      if (op.doseMin != null && d < op.doseMin) d = op.doseMin;
+      if (op.doseMax != null && d > op.doseMax) d = op.doseMax;
+      doses[z.idZona] = d;
+    }
+    const usado = zonas.reduce((s, z) => s + (Number.isFinite(doses[z.idZona]) ? doses[z.idZona] * z.areaHa : 0), 0) * fatorBase;
+    const total = op.totalDisponivel ?? 0;
+    if (!(total > 0)) {
+      return { doses, informadas, travado, usado, sobra: 0, falta: 0, avisos: [...avisoSemDose, 'Informe o volume disponível (kg/ha médio ou total fechado) para saber quanto sobra.'] };
+    }
+    const sobra = Math.max(0, total - usado), falta = Math.max(0, usado - total);
+    const avisos = [...avisoSemDose];
+    if (falta > 1e-6) {
+      avisos.push(`As doses informadas usam ${arredondarDose(falta)} a mais que o volume disponível (${arredondarDose(total)}) — vai faltar produto. Reduza as doses ou aumente o volume.`);
+    }
+    return { doses, informadas, travado, usado, sobra, falta, avisos };
   }
   const doses: Record<string, number> = Object.fromEntries(zonas.map(z => [z.idZona, 0]));
   for (const z of semDose) doses[z.idZona] = NaN;

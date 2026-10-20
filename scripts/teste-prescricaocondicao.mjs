@@ -314,6 +314,51 @@ t('faixa com dose apagada (NaN) ≠ 0: fica sem dose e avisa, nos dois cenários
   assert.ok(!zero.avisos.some(a => /sem dose/.test(a)));
 });
 
+console.log('\nVolume travado com sobra (não redistribui)\n');
+
+t('sobra: aplicada = digitada, sobra = disponível − usado (12.500 de 15.000 → 2.500)', () => {
+  const r = dosesDaCondicao(zV, fV, { cenario: 'sobra', totalDisponivel: 15000 });
+  assert.deepEqual(r.doses, { f1: 200, f2: 150, f3: 100 });
+  assert.equal(r.usado, 12500);
+  assert.equal(r.sobra, 2500);
+  assert.equal(r.falta, 0);
+  assert.ok(r.travado, 'mostra dose informada × aplicada');
+  assert.equal(r.avisos.length, 0, r.avisos.join(' | '));
+});
+t('sobra: doses pedem mais que o disponível → NÃO reduz, só avisa a falta', () => {
+  const r = dosesDaCondicao(zV, fV, { cenario: 'sobra', totalDisponivel: 10000 });
+  assert.deepEqual(r.doses, { f1: 200, f2: 150, f3: 100 });
+  assert.equal(r.falta, 2500);
+  assert.equal(r.sobra, 0);
+  assert.ok(r.avisos.some(a => /faltar/.test(a)), r.avisos.join(' | '));
+});
+t('sobra: incremento e limites ajustam a dose; 0 continua "não aplica"', () => {
+  const r = dosesDaCondicao(zV, [{ dose: 213 }, { dose: 0 }, { dose: 40 }], {
+    cenario: 'sobra', totalDisponivel: 20000, incremento: 25, doseMin: 60, doseMax: 200,
+  });
+  assert.equal(r.doses.f1, 200);   // 213 → 225 (passo) → 200 (máx)
+  assert.equal(r.doses.f2, 0);
+  assert.equal(r.doses.f3, 60);    // 40 → 50 (passo) → 60 (mín)
+  assert.equal(r.usado, 200 * 10 + 60 * 60);
+});
+t('sobra: dose pequena não some no arredondamento (2 com passo 5 → 5, não 0)', () => {
+  const r = dosesDaCondicao(zV, [{ dose: 2 }, { dose: 0 }, { dose: 100 }], { cenario: 'sobra', totalDisponivel: 20000, incremento: 5 });
+  assert.equal(r.doses.f1, 5);
+  assert.equal(r.doses.f2, 0);
+});
+t('sobra: sem volume informado avisa; dose apagada fica sem dose (NaN)', () => {
+  const r = dosesDaCondicao(zV, [{ dose: 200 }, { dose: NaN }, { dose: 100 }], { cenario: 'sobra' });
+  assert.ok(Number.isNaN(r.doses.f2));
+  assert.ok(r.avisos.some(a => /volume disponível/.test(a)));
+  assert.ok(r.avisos.some(a => /sem dose/.test(a)));
+});
+t('sobra × total: mesmo volume, o travado redistribui e o com sobra não', () => {
+  const tot = dosesDaCondicao(zV, fV, { cenario: 'total', totalDisponivel: 15000 });
+  const sob = dosesDaCondicao(zV, fV, { cenario: 'sobra', totalDisponivel: 15000 });
+  assert.ok(Math.abs(usadoDe(tot) - 15000) < 1e-6);
+  assert.equal(usadoDe(sob), 12500);
+});
+
 t('mapa todo NaN: erro claro', () => {
   const g = gradeP(() => NaN);
   assert.throws(() => prescreverPorCondicao({ grid: g, limiares: [40], doses: [1, 2], talhao, sigla: 'P' }), /não tem valores/);

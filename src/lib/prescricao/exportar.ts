@@ -16,14 +16,14 @@ import { capturarMapaZonas } from '../capturaMapa';
 import { imagemParaPdf, reduzirLogo } from '../pdfImagem';
 import { resumoDoses, nutrientesPorZona, fatorBaseDose } from './calculo.ts';
 import { doseCompensada } from './sementes.ts';
-import { doseArquivo, temCompensacao, totalDoArquivo, kgDeSementes, montarResumoPdf, fmtRel, arredRel, corDaDose, reguasDoRelatorio, doseFinalEm } from './resumo.ts';
+import { usadoNoVolume, doseArquivo, temCompensacao, totalDoArquivo, kgDeSementes, montarResumoPdf, fmtRel, arredRel, corDaDose, reguasDoRelatorio, doseFinalEm } from './resumo.ts';
 import { ROTULO_CURTO } from './unidade.ts';
 // A rampa de cor mora no módulo puro (testável em node); segue exportada daqui
 // porque a tela de Prescrições já a importa deste arquivo.
 export { corDaDose };
 import { complementarNutriente, SIMBOLO_NUTRIENTE } from '../insumos';
 import { fmtHa, arredHa, formatarColunaXlsx, formatarLinhaXlsx } from '../formato';
-import { UNIDADE_TOTAL, ehUnidadeSemente, ehPorFaixas, type Prescricao } from './tipos.ts';
+import { UNIDADE_TOTAL, ehUnidadeSemente, ehPorFaixas, comSobra, type Prescricao } from './tipos.ts';
 import { casarZonas } from './casar.ts';
 import { nomeArquivoPrescricao } from './nomeArquivo.ts';
 
@@ -75,21 +75,27 @@ export function validarPrescricao(p: Prescricao): ValidacaoPrescricao {
   // demais modos 0 NÃO tem esse sentido: o cálculo (estoque, ajuste) sobe
   // qualquer zona para o piso, então 0 abaixo do mínimo é mesmo divergência.
   const cond = ehPorFaixas(p.modo);
-  const comLimite = !cond || p.params.condicao?.cenario === 'total';
+  const comLimite = !cond || p.params.condicao?.cenario === 'total' || p.params.condicao?.cenario === 'sobra';
   const min = comLimite ? p.params.doseMin : undefined, max = comLimite ? p.params.doseMax : undefined;
   const fora = p.zonas.filter(z => !(cond && z.dose === 0)
     && ((min != null && z.dose < min - 1e-9) || (max != null && z.dose > max + 1e-9)));
   if (fora.length) avisos.push(`Dose fora dos limites definidos em: ${fora.map(z => `${z.nomeZona} (${fmt(z.dose, 2)})`).join(', ')}.`);
   const r = resumoDoses(p.zonas, undefined, fatorDe(p));
-  if (comLimite && p.params.totalDisponivel != null && r.usado > p.params.totalDisponivel + 1e-6) {
-    const falta = r.usado - p.params.totalDisponivel;
+  // Com sobra, a régua é o consumo físico (sementes compensadas pela germinação).
+  const usadoVol = comSobra(p) ? usadoNoVolume(p, r.usado, fatorDe(p)) : r.usado;
+  if (comLimite && p.params.totalDisponivel != null && usadoVol > p.params.totalDisponivel + 1e-6) {
+    const falta = usadoVol - p.params.totalDisponivel;
     const un0 = UNIDADE_TOTAL[p.unidade];
     // Total informado POR HECTARE é uma META agronômica (80.000/ha), não um
     // estoque comprado: os limites de dose mín/máx quase sempre a fazem sobrar
     // ou faltar um pouco, e travar a exportação por isso impede o trabalho.
     // Estoque FÍSICO continua bloqueando — dali não se tira o que não existe.
-    const msg = `a prescrição usa ${fmt(r.usado, 1)} ${un0} e o disponível é ${fmt(p.params.totalDisponivel, 1)} (${fmt(falta, 1)} a mais).`;
-    if (p.params.totalPorHa) avisos.push(`Acima da meta: ${msg} Os limites de dose mín/máx não deixaram fechar exato.`);
+    const msg = `a prescrição usa ${fmt(usadoVol, 1)} ${un0} e o disponível é ${fmt(p.params.totalDisponivel, 1)} (${fmt(falta, 1)} a mais).`;
+    if (p.params.totalPorHa) {
+      avisos.push(comSobra(p)
+        ? `Acima do volume: ${msg} As doses informadas pedem mais do que o volume (com sobra, nada é redistribuído).`
+        : `Acima da meta: ${msg} Os limites de dose mín/máx não deixaram fechar exato.`);
+    }
     else ressalvas.push(`Estoque insuficiente: ${msg} Confira antes de mandar para o campo — pode faltar produto.`);
   }
   // COBERTURA DO MAPA: cada polígono precisa achar a sua zona. Sem isto o
@@ -197,9 +203,18 @@ export async function exportarXlsxPrescricao(p: Prescricao, ident?: IdentArquivo
     { Item: 'Tipo', Valor: p.tipo },
     { Item: 'Área total (ha)', Valor: arredHa(r.areaHa) },
     { Item: `Quantidade usada (${un})`, Valor: arredRel(r.usado) },
+    // Com sobra e estoque físico de semente, a sobra sai do consumo compensado:
+    // a linha mostra esse consumo para usada + sobra fechar o disponível.
+    ...(comSobra(p) && usadoNoVolume(p, r.usado, fator) !== r.usado
+      ? [{ Item: `Quantidade usada com germinação (${un})`, Valor: arredRel(usadoNoVolume(p, r.usado, fator)) }]
+      : []),
     ...(p.params.totalDisponivel != null ? [
       { Item: `Disponível (${un})`, Valor: arredRel(p.params.totalDisponivel) },
-      { Item: `Restante (${un})`, Valor: arredRel(p.params.totalDisponivel - r.usado) },
+      comSobra(p)
+        ? (p.params.totalDisponivel - usadoNoVolume(p, r.usado, fator) >= 0
+          ? { Item: `Sobra para outro talhão (${un})`, Valor: arredRel(p.params.totalDisponivel - usadoNoVolume(p, r.usado, fator)) }
+          : { Item: `Falta (${un})`, Valor: arredRel(usadoNoVolume(p, r.usado, fator) - p.params.totalDisponivel) })
+        : { Item: `Restante (${un})`, Valor: arredRel(p.params.totalDisponivel - r.usado) },
     ] : []),
     { Item: `Dose mínima (${p.unidade})`, Valor: arredRel(r.doseMin) },
     { Item: `Dose máxima (${p.unidade})`, Valor: arredRel(r.doseMax) },

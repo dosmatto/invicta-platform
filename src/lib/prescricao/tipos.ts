@@ -35,6 +35,10 @@ export const ROTULO_MODO: Record<ModoCalculo, string> = {
  *  ParamsCalculo.condicao e usam o mesmo motor (lib/prescricao/condicao.ts). */
 export const ehPorFaixas = (modo: ModoCalculo): boolean => modo === 'condicao' || modo === 'indice';
 
+/** Prescrição por faixas no cenário "volume travado com sobra". */
+export const comSobra = (p: { modo: ModoCalculo; params: { condicao?: { cenario?: string } } }): boolean =>
+  ehPorFaixas(p.modo) && p.params.condicao?.cenario === 'sobra';
+
 /** Modo 'indice': a imagem de índice de vegetação escolhida (uma das camadas
  *  mantidas e marcadas como fonte de análise na aba NDVI). */
 export interface ImagemIndice {
@@ -74,8 +78,11 @@ export interface ParamsCondicao {
    *  aplicada é redistribuída para fechar ParamsCalculo.totalDisponivel (com
    *  totalPorHa, doseMin/doseMax/incremento de ParamsCalculo). Ver
    *  dosesDaCondicao. Não usa `cenarioAjuste`: o rascunho novo nasce com ele em
-   *  'total' para o modo ajuste, e isso não pode travar a condição sozinho. */
-  cenario?: 'livre' | 'total';
+   *  'total' para o modo ajuste, e isso não pode travar a condição sozinho.
+   *  'sobra' (volume travado com sobra): a aplicada é a dose da faixa (só
+   *  passo/limites), SEM redistribuir; o totalDisponivel mede quanto sobra
+   *  para levar a outro talhão (ou avisa se faltar). */
+  cenario?: 'livre' | 'total' | 'sobra';
   /** Só no modo 'indice': a imagem de onde saem as faixas. Nesse modo
    *  importacaoId e prof ficam vazios e `nut` é o índice em minúsculas. */
   imagem?: ImagemIndice;

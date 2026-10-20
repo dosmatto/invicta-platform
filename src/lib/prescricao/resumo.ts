@@ -8,7 +8,7 @@
 
 import { doseCompensada } from './sementes.ts';
 import { reguasEquivalentes, converterDose, ROTULO_CURTO } from './unidade.ts';
-import { UNIDADE_TOTAL, ehUnidadeSemente, type Prescricao, type UnidadeDose } from './tipos.ts';
+import { UNIDADE_TOTAL, ehUnidadeSemente, comSobra, type Prescricao, type UnidadeDose } from './tipos.ts';
 import { complementarNutriente, SIMBOLO_NUTRIENTE } from '../insumos.ts';
 import { fmtHa } from '../formato.ts';
 
@@ -261,7 +261,14 @@ export function montarResumoPdf(
     }
   }
 
-  if (p.params.totalDisponivel != null) {
+  if (p.params.totalDisponivel != null && comSobra(p)) {
+    // Volume travado com sobra: o que não foi usado aqui pode ir para outro talhão.
+    const usado = usadoNoVolume(p, r.usado, fator);
+    const sobra = p.params.totalDisponivel - usado;
+    linhas.push(sobra >= 0
+      ? { txt: `Volume travado com sobra: disponível ${nTot(p.params.totalDisponivel)} ${un} · usado ${nTot(usado)} ${un} · SOBRA ${nTot(sobra)} ${un}${comKg(sobra)} (pode ir para outro talhão)`, destaque: true }
+      : { txt: `Volume travado com sobra: disponível ${nTot(p.params.totalDisponivel)} ${un} · usado ${nTot(usado)} ${un} · FALTA ${nTot(-sobra)} ${un}${comKg(-sobra)}`, destaque: true });
+  } else if (p.params.totalDisponivel != null) {
     const sobra = p.params.totalDisponivel - r.usado;
     linhas.push({ txt: `Disponível informado: ${nTot(p.params.totalDisponivel)} ${un} · ${sobra >= 0 ? 'restante' : 'falta'}: ${nTot(Math.abs(sobra))} ${un}` });
   }
@@ -278,6 +285,18 @@ export function montarResumoPdf(
 // número que o comprador precisa é este.
 export function totalDoArquivo(p: Prescricao, fator: number): number {
   return p.zonas.reduce((s, z) => s + doseArquivo(p, z.dose) * z.areaHa * fator, 0);
+}
+
+/**
+ * Quanto do volume a prescrição CONSOME, na régua do volume disponível — base
+ * da sobra/falta do "volume travado com sobra". Estoque físico de sementes
+ * (sacos/kg, não "por hectare") é semente, e o arquivo sai compensado pela
+ * germinação: contar em população superestimava a sobra (80.000/ha a 90% de
+ * germinação gasta 88.889 sementes/ha, não 80.000). Meta por hectare é dada
+ * em população e segue a dose digitada.
+ */
+export function usadoNoVolume(p: Prescricao, usadoDigitado: number, fator: number): number {
+  return temCompensacao(p) && !p.params.totalPorHa ? totalDoArquivo(p, fator) : usadoDigitado;
 }
 
 // ── Cor da dose ─────────────────────────────────────────────────────────────

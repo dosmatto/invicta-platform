@@ -1,5 +1,12 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Volume travado com sobra (prescrição por condição / por índice)
+  '2.207.0': [
+    'NOVA OPÇÃO "VOLUME TRAVADO COM SOBRA — NÃO REDISTRIBUI" nas prescrições por condição (mapa de fertilidade) e por imagem de índice, ao lado de "Doses livres" e "Volume travado". Você informa o volume que já tem (kg/ha médio ou total) e a dose de cada faixa; a dose aplicada é a informada — só ajustada ao incremento da máquina e aos limites mín/máx, se houver — e NADA é redistribuído. Onde a fertilidade é alta e a dose cai, o que não for usado vira SOBRA, que pode ir para outro talhão.',
+    'Um quadro mostra Disponível · Usado neste talhão · Sobra para outro talhão (com quantos hectares ela cobre no consumo médio daqui). Se as doses pedirem mais que o volume, aparece "Falta" e um aviso — não bloqueia salvar nem exportar. O PDF traz a linha "Volume travado com sobra" e o Excel a "Sobra para outro talhão".',
+    'Sementes: com estoque físico (sacos/kg) e dose em população, a sobra conta o que o arquivo realmente gasta, já compensado pela germinação.',
+    'CORRIGIDO: em sementes/m², a tela calculava totais 10.000 vezes menores que o PDF/Excel (faltava converter m² para hectare) — usado, restante, total por zona/faixa, população final e o rateio do volume travado. Agora tela e arquivos batem. Prescrições em sementes/m² no "Volume travado" salvas antes podem mudar de dose ao serem reabertas: a conta antiga estava errada.',
+  ],
   // [S/N] Prescrição por imagem de índice (NDVI, NDRE…)
   '2.206.0': [
     'NOVA FERRAMENTA NA PRESCRIÇÃO — "POR IMAGEM DE ÍNDICE (NDVI, NDRE…)": escolha uma imagem de índice já processada do talhão (as marcadas como fonte de análise na aba NDVI — Sentinel-2 10 m ou CBERS-4A 2 m, qualquer índice: NDVI, NDRE, GNDVI, SAVI…) e a prescrição sai em faixas de valor do índice, com a dose de cada faixa. Ao escolher a imagem, os limiares já vêm por quintil (5 faixas de área parecida); dá para editar, somar ou tirar limiar e refazer os quintis no botão "quintis".',

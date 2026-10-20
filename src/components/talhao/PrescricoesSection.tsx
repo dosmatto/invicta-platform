@@ -165,6 +165,7 @@ function zonasDoZoneamento(z: ZoneamentoMeap, areaTalhaoHa = 0): ZonaDose[] {
 // limites, unidade — e de novo ao salvar: zona, mapa, total e arquivo nunca
 // divergem da tabela, e a dose digitada nunca sobrescreve a aplicada.
 function fatorBaseDoRascunho(x: Rascunho): number | null {
+  if (x.unidade === 'sementes/m2') return 10_000;   // 1 ha = 10.000 m² (= fatorBaseDose)
   if (x.unidade !== 'sementes/m') return 1;
   const e = x.params.sementes?.espacamentoM;
   return e && e > 0 ? 10_000 / e : null;
@@ -173,8 +174,13 @@ function volumeCondicao(x: Rascunho): DosesCondicao | null {
   const c = x.params.condicao;
   if (!ehPorFaixas(x.modo) || !c) return null;
   const p = x.params;
+  // Com sobra e estoque FÍSICO de semente, o consumo é o do arquivo (compensado
+  // pela germinação) — ver usadoNoVolume em lib/prescricao/resumo.ts.
+  const fisico = c.cenario === 'sobra' && ehUnidadeSemente(x.unidade) && !!p.doseEhPopulacao && !p.totalPorHa;
+  const fc = fisico ? fatorCampo(p.sementes ?? { germinacaoPct: 100 }) : 1;
   return dosesDaCondicao(x.zonas, c.faixas, {
-    cenario: c.cenario ?? 'livre', totalDisponivel: p.totalDisponivel, fatorBase: fatorBaseDoRascunho(x) ?? 1,
+    cenario: c.cenario ?? 'livre', totalDisponivel: p.totalDisponivel,
+    fatorBase: (fatorBaseDoRascunho(x) ?? 1) / (fc > 0 ? fc : 1),
     doseMin: p.doseMin, doseMax: p.doseMax, incremento: p.incremento,
   });
 }
@@ -493,6 +499,7 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
   // aqui direto (fatorBaseDose só lança nesse caso).
   const espac = r.params.sementes?.espacamentoM;
   const fatorBase = useMemo<number | null>(() => {
+    if (r.unidade === 'sementes/m2') return 10_000;   // 1 ha = 10.000 m² (= fatorBaseDose)
     if (r.unidade !== 'sementes/m') return 1;
     return espac && espac > 0 ? 10_000 / espac : null;
   }, [r.unidade, espac]);
@@ -602,13 +609,16 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
       const margem = Math.min(50, Math.max(0, ps.margemPct ?? 0)) / 100;
       const disponivel = total * (1 - margem);
       const ehCond = ehPorFaixas(r.modo) && !!r.params.condicao;
+      // Com sobra, o estoque vira a régua da sobra — não liga a redistribuição.
+      const comSobraCond = ehCond && r.params.condicao!.cenario === 'sobra';
       patchParams(ehCond
-        ? { totalDisponivel: disponivel, totalPorHa: false, condicao: { ...r.params.condicao!, cenario: 'total' } }
+        ? { totalDisponivel: disponivel, totalPorHa: false, condicao: { ...r.params.condicao!, cenario: comSobraCond ? 'sobra' : 'total' } }
         : { totalDisponivel: disponivel, totalPorHa: false, cenarioAjuste: 'total' });
       setAvisosCalc([
         `Total disponível: ${fmt0(disponivel)} sementes` +
         (margem > 0 ? ` (margem de ${fmt(margem * 100, 0)}% já descontada de ${fmt0(total)}).` : '.') +
-        (ehCond ? ' As doses das faixas já foram redistribuídas para fechar esse total.' : ' Ajuste os % por zona e clique em "Calcular doses por ajuste".'),
+        (comSobraCond ? ' As doses das faixas não mudam: o quadro mostra quanto sobra (ou falta).'
+          : ehCond ? ' As doses das faixas já foram redistribuídas para fechar esse total.' : ' Ajuste os % por zona e clique em "Calcular doses por ajuste".'),
       ]);
     } catch (e) { setErro(e instanceof Error ? e.message : String(e)); }
   }
@@ -880,6 +890,11 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
     () => (compensa ? r.zonas.reduce((s, z) => s + doseCompensada(z.dose, r.params.sementes, true) * z.areaHa * (fatorBase ?? 1), 0) : null),
     [compensa, r.zonas, r.params.sementes, fatorBase],
   );
+  // Régua do "volume travado com sobra" (= usadoNoVolume do PDF/Excel): com
+  // estoque FÍSICO de semente, o consumo é o do arquivo (compensado pela
+  // germinação); nos demais casos, o usado da tabela.
+  const sobraFisica = ehPorFaixas(r.modo) && r.params.condicao?.cenario === 'sobra';
+  const usadoVolume = sobraFisica && compensa && !r.params.totalPorHa && totalArquivo != null ? totalArquivo : resumo.usado;
   const nutri = useMemo(() => (
     r.tipo === 'organico' && r.params.organico
       ? nutrientesPorZona(r.zonas.map(z => ({ id: z.idZona, areaHa: z.areaHa, dose: z.dose })), r.params.organico)
@@ -893,7 +908,7 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
     // Com compensação, a taxa é a dose compensada — senão a "população final"
     // sai descontada duas vezes e aparece 72.000 onde o alvo é 80.000.
     const base = doseCompensada(resumo.doseMedia, r.params.sementes, compensa);
-    const doseHa = base * (r.unidade === 'sementes/m' ? (fatorBase ?? 1) : 1);
+    const doseHa = base * (fatorBase ?? 1);   // m e m² → sementes/ha (ha: fator 1)
     try { return metricasSementes(doseHa, resumo.areaHa, r.params.sementes); } catch { return null; }
   }, [r.unidade, r.params.sementes, resumo, fatorBase, compensa]);
 
@@ -1407,7 +1422,7 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
                           aplicada fecha o total — os mesmos campos do modo ajuste. */}
                       <div className="pt-2 space-y-2" style={{ borderTop: '1px solid #1a3a6b' }}>
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          {([['livre', 'Doses livres — total é consequência'], ['total', 'Volume travado — redistribui o total']] as const).map(([id, rot]) => (
+                          {([['livre', 'Doses livres — total é consequência'], ['total', 'Volume travado — redistribui o total'], ['sobra', 'Volume travado com sobra — não redistribui']] as const).map(([id, rot]) => (
                             <button key={id} onClick={() => patchCond({ cenario: id })}
                               className="px-2 py-1 rounded text-[10px] font-semibold"
                               style={{ background: (cond.cenario ?? 'livre') === id ? 'var(--invicta-blue-mid)' : '#0f2240', color: (cond.cenario ?? 'livre') === id ? '#fff' : '#93c5fd' }}>
@@ -1415,7 +1430,7 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
                             </button>
                           ))}
                         </div>
-                        {(cond.cenario ?? 'livre') === 'total' && (
+                        {((cond.cenario ?? 'livre') === 'total' || cond.cenario === 'sobra') && (
                           <>
                             <div className="grid grid-cols-4 gap-2">
                               <CampoTotalDisponivel rotulo="Volume" unidadeTotal={UNIDADE_TOTAL[r.unidade]}
@@ -1432,11 +1447,47 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
                                 <InputNum valor={r.params.incremento} onMudou={v => patchParams({ incremento: v })} />
                               </Campo>
                             </div>
-                            <p className="text-[9px] leading-relaxed" style={{ color: '#64748b' }}>
-                              A dose informada de cada faixa vira peso: a aplicada é a informada × um fator comum, que fecha o volume
-                              (ex.: 150 kg/ha de média no talhão). A proporção entre as faixas se mantém; faixa com dose 0 não aplica.
-                              Mín/máx/incremento são opcionais — se impedirem fechar o total, o aviso diz quanto sobrou ou passou.
-                            </p>
+                            {cond.cenario === 'sobra' ? (
+                              <p className="text-[9px] leading-relaxed" style={{ color: '#64748b' }}>
+                                A dose aplicada é a informada em cada faixa — nada é redistribuído (só ajustada ao incremento e aos
+                                limites mín/máx, se informados; faixa com dose 0 não aplica). O volume é o que você tem: onde a fertilidade
+                                é alta e a dose cai, o que não for usado aqui SOBRA e pode ir para outro talhão.
+                              </p>
+                            ) : (
+                              <p className="text-[9px] leading-relaxed" style={{ color: '#64748b' }}>
+                                A dose informada de cada faixa vira peso: a aplicada é a informada × um fator comum, que fecha o volume
+                                (ex.: 150 kg/ha de média no talhão). A proporção entre as faixas se mantém; faixa com dose 0 não aplica.
+                                Mín/máx/incremento são opcionais — se impedirem fechar o total, o aviso diz quanto sobrou ou passou.
+                              </p>
+                            )}
+                            {cond.cenario === 'sobra' && condCalculada && volCond && (r.params.totalDisponivel ?? 0) > 0 && (() => {
+                              const unT = UNIDADE_TOTAL[r.unidade];
+                              const nT = (v: number) => (ehUnidadeSemente(r.unidade) ? fmt0(v) : fmt(v, 1));
+                              const disp = r.params.totalDisponivel ?? 0;
+                              // Mesma conta do PDF/Excel (usadoNoVolume): doses já arredondadas e,
+                              // com estoque físico de semente, o consumo compensado pela germinação.
+                              const usado = usadoVolume;
+                              const saldo = disp - usado;
+                              const falta = saldo < -1e-6;
+                              // quantos ha a sobra cobriria no consumo médio por ha daqui
+                              const porHa = resumo.areaHa > 0 ? usado / resumo.areaHa : 0;
+                              const haEq = !falta && porHa > 0 ? saldo / porHa : 0;
+                              return (
+                                <div className="grid grid-cols-3 gap-2 p-2 rounded" style={{ background: '#0b1f3a', border: `1px solid ${falta ? '#92400e' : '#166534'}` }}>
+                                  <div><p className="text-[9px]" style={{ color: '#64748b' }}>Disponível</p><p className="text-xs font-semibold" style={{ color: '#e2e8f0' }}>{nT(disp)} {unT}</p></div>
+                                  <div><p className="text-[9px]" style={{ color: '#64748b' }}>Usado neste talhão</p><p className="text-xs font-semibold" style={{ color: '#e2e8f0' }}>{nT(usado)} {unT}</p></div>
+                                  {falta ? (
+                                    <div><p className="text-[9px]" style={{ color: '#fbbf24' }}>Falta</p><p className="text-xs font-bold" style={{ color: '#fbbf24' }}>{nT(-saldo)} {unT}</p></div>
+                                  ) : (
+                                    <div>
+                                      <p className="text-[9px]" style={{ color: '#86efac' }}>Sobra para outro talhão</p>
+                                      <p className="text-xs font-bold" style={{ color: '#86efac' }}>{nT(Math.max(0, saldo))} {unT}</p>
+                                      {haEq > 0 && <p className="text-[9px]" style={{ color: '#64748b' }}>≈ {fmt(haEq, 1)} ha no consumo médio daqui</p>}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()}
                           </>
                         )}
                         {condCalculada && volCond && volCond.avisos.map((a, i) => <Aviso key={i} tom="atencao" texto={a} />)}
@@ -2033,8 +2084,8 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
                       : undefined} />
                   {/* Por condição, o total só é meta no volume travado. */}
                   {r.params.totalDisponivel != null && (!ehPorFaixas(r.modo) || condTravado)
-                    ? <Kpi rot="Restante" val={ehUnidadeSemente(r.unidade) ? fmt0(r.params.totalDisponivel - resumo.usado) : fmt(r.params.totalDisponivel - resumo.usado, 1)}
-                        cor={r.params.totalDisponivel - resumo.usado < -1e-6 ? '#f87171' : '#4ade80'} />
+                    ? <Kpi rot={sobraFisica ? 'Sobra' : 'Restante'} val={ehUnidadeSemente(r.unidade) ? fmt0(r.params.totalDisponivel - usadoVolume) : fmt(r.params.totalDisponivel - usadoVolume, 1)}
+                        cor={r.params.totalDisponivel - usadoVolume < -1e-6 ? '#f87171' : '#4ade80'} />
                     : <Kpi rot="Dose média" val={fmt(resumo.doseMedia, 1)} />}
                   <Kpi rot="Custo" val={resumo.custo != null ? `R$ ${fmt(resumo.custo, 0)}` : '—'} />
                 </div>
