@@ -23,7 +23,7 @@ import { ROTULO_CURTO } from './unidade.ts';
 export { corDaDose };
 import { complementarNutriente, SIMBOLO_NUTRIENTE } from '../insumos';
 import { fmtHa, arredHa, formatarColunaXlsx, formatarLinhaXlsx } from '../formato';
-import { UNIDADE_TOTAL, ehUnidadeSemente, type Prescricao } from './tipos.ts';
+import { UNIDADE_TOTAL, ehUnidadeSemente, ehPorFaixas, type Prescricao } from './tipos.ts';
 import { casarZonas } from './casar.ts';
 import { nomeArquivoPrescricao } from './nomeArquivo.ts';
 
@@ -74,7 +74,7 @@ export function validarPrescricao(p: Prescricao): ValidacaoPrescricao {
   // — a redistribuição deixa a faixa em 0 de propósito, abaixo do piso. Nos
   // demais modos 0 NÃO tem esse sentido: o cálculo (estoque, ajuste) sobe
   // qualquer zona para o piso, então 0 abaixo do mínimo é mesmo divergência.
-  const cond = p.modo === 'condicao';
+  const cond = ehPorFaixas(p.modo);
   const comLimite = !cond || p.params.condicao?.cenario === 'total';
   const min = comLimite ? p.params.doseMin : undefined, max = comLimite ? p.params.doseMax : undefined;
   const fora = p.zonas.filter(z => !(cond && z.dose === 0)
@@ -255,7 +255,7 @@ export async function exportarXlsxPrescricao(p: Prescricao, ident?: IdentArquivo
         return [
           { Item: 'Nutriente de referência', Valor: sim },
           { Item: `Meta de ${sim} (kg/ha)`, Valor: Number((c.metaKgHa ?? 0).toFixed(2)) },
-          { Item: 'Prescrição base (por condição)', Valor: `${c.basePrescricaoNome ?? '—'}${c.baseCondicao.rotuloMapa ? ` · ${c.baseCondicao.rotuloMapa}` : ''}` },
+          { Item: c.baseCondicao.fonte === 'indice' ? 'Prescrição base (por imagem de índice)' : 'Prescrição base (por condição)', Valor: `${c.basePrescricaoNome ?? '—'}${c.baseCondicao.rotuloMapa ? ` · ${c.baseCondicao.rotuloMapa}` : ''}` },
           { Item: 'Áreas de aplicação', Valor: `as ${p.zonas.length} faixas da prescrição base` },
           { Item: 'Produto base', Valor: c.baseNome ?? '(nenhum)' },
           { Item: `Garantia do base (% ${sim})`, Valor: Number((c.baseGarantiaPct ?? 0).toFixed(2)) },

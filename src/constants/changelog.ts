@@ -1,5 +1,11 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Prescrição por imagem de índice (NDVI, NDRE…)
+  '2.206.0': [
+    'NOVA FERRAMENTA NA PRESCRIÇÃO — "POR IMAGEM DE ÍNDICE (NDVI, NDRE…)": escolha uma imagem de índice já processada do talhão (as marcadas como fonte de análise na aba NDVI — Sentinel-2 10 m ou CBERS-4A 2 m, qualquer índice: NDVI, NDRE, GNDVI, SAVI…) e a prescrição sai em faixas de valor do índice, com a dose de cada faixa. Ao escolher a imagem, os limiares já vêm por quintil (5 faixas de área parecida); dá para editar, somar ou tirar limiar e refazer os quintis no botão "quintis".',
+    'Funciona como "Por condição no mapa de fertilidade": manchas menores que a área mínima entram na faixa vizinha, cada faixa vira um polígono recortado no talhão, há "Doses livres" ou "Volume travado", e sai em SHP, Excel e PDF. A prescrição por índice também serve de base para a Complementação por nutriente (o relatório diz "POR IMAGEM DE ÍNDICE").',
+    'Por dentro: a imagem é reduzida a no máximo 400 pontos por lado pela média dos pixels (CBERS de 2 m vira ~5 m) antes do recorte, e a grade é alinhada pelo centro dos pixels — as faixas coincidem com a imagem desenhada no mapa.',
+  ],
   // [S/N] Prescrições salvas agrupadas por ano e tipo
   '2.205.0': [
     'PRESCRIÇÕES SALVAS AGRUPADAS POR ANO E TIPO: a lista deixou de ser uma fila única. Agora vem um bloco por ano (2026, 2025…) e, dentro dele, um por tipo (Fertilizante, Corretivo, População de sementes…), cada um com a contagem e abrindo/fechando com um clique. Abre sozinho só o ano selecionado no topo; os outros anos ficam fechados. Vale para a aba Salvas, para a lista embaixo da aba Nova e para a visão do produtor.',

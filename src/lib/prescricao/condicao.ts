@@ -527,7 +527,7 @@ export function prescreverPorCondicao(e: EntradaCondicao): ResultadoCondicao {
   const nF = e.limiares.length + 1;
   if (e.doses.length !== nF) throw new Error(`Informe a dose das ${nF} faixas.`);
   const { rows, cols } = e.grid;
-  if (!(rows > 0 && cols > 0) || e.grid.valores.length < rows * cols) throw new Error('Mapa de fertilidade sem grade de valores.');
+  if (!(rows > 0 && cols > 0) || e.grid.valores.length < rows * cols) throw new Error('O mapa escolhido não tem grade de valores.');
 
   const avisos: string[] = [];
   const { classes, areaHa, valorMin, valorMax } = classificarGrid(e.grid, e.limiares, e.talhao);
@@ -583,4 +583,89 @@ export function prescreverPorCondicao(e: EntradaCondicao): ResultadoCondicao {
     valorMin: temValor ? valorMin : null, valorMax: temValor ? valorMax : null,
     manchasAbsorvidas,
   };
+}
+
+// ── Modo 'indice': imagem NDVI/NDRE… como raster de entrada ──────────────────
+// A imagem de satélite chega em 10 m (Sentinel-2) ou 2 m (CBERS-4A), bem mais
+// densa que o mapa de fertilidade (20 m). Classificar e vetorizar 2 m num
+// talhão grande custa dezenas de vezes mais e não muda nada na máquina — que
+// aplica em faixas de 10–30 m. Por isso a grade é reduzida antes do recorte.
+
+/**
+ * A imagem de índice guarda os bounds na BORDA dos pixels (o backend monta a
+ * grade com from_bounds e o PNG é desenhado nesses cantos); este módulo lê os
+ * bounds como extensão dos NÓS (centros, ver geoDe). Traz meio pixel para
+ * dentro de cada lado — sem isso as faixas saem esticadas até 5 m (S2).
+ */
+export function nosDaBorda(
+  bounds: [number, number, number, number], rows: number, cols: number,
+): [number, number, number, number] {
+  const [w, s, e, n] = bounds;
+  const px = (e - w) / cols, py = (n - s) / rows;
+  return [w + px / 2, s + py / 2, e - px / 2, n - py / 2];
+}
+
+/** Maior lado aceito antes de reduzir (nós). 400 nós em 2 km = 5 m. */
+export const LADO_MAX_INDICE = 400;
+
+/**
+ * Reduz o grid para que o maior lado tenha no máximo `ladoMax` nós, pela MÉDIA
+ * dos nós de origem na janela de cada nó novo (NaN ignorado) — amostrar um
+ * ponto só pegaria 1 em cada ~6 pixels do CBERS e deixaria faixas e quintis
+ * ruidosos. Mantém os bounds (extensão dos nós). Grid que já cabe volta o
+ * mesmo objeto.
+ */
+export function reduzirGrid(g: GridValores, ladoMax = LADO_MAX_INDICE): GridValores {
+  const m = Math.max(g.rows, g.cols);
+  if (m <= ladoMax) return g;
+  const k = ladoMax / m;
+  const dr = Math.max(2, Math.round(g.rows * k)), dc = Math.max(2, Math.round(g.cols * k));
+  const sr = g.rows, sc = g.cols, v = g.valores;
+  const passoY = (sr - 1) / (dr - 1), passoX = (sc - 1) / (dc - 1);
+  // Janela [centro − passo/2, centro + passo/2] em nós de origem.
+  const janela = (centro: number, passo: number, max: number): [number, number] =>
+    [Math.max(0, Math.ceil(centro - passo / 2 - 1e-9)), Math.min(max - 1, Math.floor(centro + passo / 2 + 1e-9))];
+  const out = new Float32Array(dr * dc);
+  for (let j = 0; j < dr; j++) {
+    const [r0, r1] = janela(j * passoY, passoY, sr);
+    for (let i = 0; i < dc; i++) {
+      const [c0, c1] = janela(i * passoX, passoX, sc);
+      let soma = 0, n = 0;
+      for (let r = r0; r <= r1; r++) {
+        for (let c = c0; c <= c1; c++) {
+          const val = v[r * sc + c];
+          if (Number.isFinite(val)) { soma += val; n++; }
+        }
+      }
+      out[j * dc + i] = n > 0 ? soma / n : NaN;
+    }
+  }
+  return { valores: out, rows: dr, cols: dc, bounds: g.bounds };
+}
+
+/**
+ * Limiares iniciais por QUANTIL dos valores (k faixas de área parecida),
+ * arredondados para um número legível na escala do dado (NDVI → 0,01).
+ * Cortes que empatam depois de arredondar são descartados — o resultado pode
+ * ter menos de k−1 limiares num talhão muito uniforme. Vazio = sem variação.
+ */
+export function limiaresPorQuantis(valores: ArrayLike<number>, k = 5): number[] {
+  const ord: number[] = [];
+  for (let i = 0; i < valores.length; i++) { const x = valores[i]; if (Number.isFinite(x)) ord.push(x); }
+  if (ord.length < k || k < 2) return [];
+  ord.sort((a, b) => a - b);
+  const min = ord[0], max = ord[ord.length - 1];
+  const amp = max - min;
+  if (!(amp > 0)) return [];
+  const casas = Math.max(0, Math.min(6, 1 - Math.floor(Math.log10(amp))));
+  const f = 10 ** casas;
+  const out: number[] = [];
+  for (let i = 1; i < k; i++) {
+    const pos = (i / k) * (ord.length - 1);
+    const lo = Math.floor(pos), hi = Math.ceil(pos);
+    const q = ord[lo] + (ord[hi] - ord[lo]) * (pos - lo);
+    const r = Math.round(q * f) / f;
+    if (r > min && r <= max && (!out.length || r > out[out.length - 1])) out.push(r);
+  }
+  return out;
 }

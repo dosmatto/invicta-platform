@@ -7,7 +7,8 @@
 //
 //   • base sobre ZONEAMENTO: as zonas da prescrição de complemento são as do
 //     zoneamento escolhido; a dose do base é casada por idZona.
-//   • base POR CONDIÇÃO (faixas de um mapa de fertilidade, ids f1..fN): não há
+//   • base POR FAIXAS (modo 'condicao' — mapa de fertilidade — ou 'indice' —
+//     imagem NDVI/NDRE…; ids f1..fN): não há
 //     zoneamento para escolher — as áreas da prescrição de complemento SÃO as
 //     faixas da base (snapshot do fc e das zonas). Uma dose de complemento por
 //     faixa, sem cruzar mapas.
@@ -16,7 +17,7 @@
 
 import { complementarPorZona, type EntradaComplemento, type ResultadoZonaComplemento } from '../insumos.ts';
 import { arredondarDose } from './calculo.ts';
-import type { ParamsComplemento, Prescricao, UnidadeDose, ZonaDose } from './tipos.ts';
+import { ehPorFaixas, type ParamsComplemento, type Prescricao, type UnidadeDose, type ZonaDose } from './tipos.ts';
 
 /** Fator unidade da prescrição base → kg/ha. A garantia (%) é de MASSA, então
  *  só dose em massa por hectare entra na conta: t/ha vira kg/ha (×1000); L/ha
@@ -45,8 +46,8 @@ export function dosesDaBaseEmKgHa(base: Pick<Prescricao, 'unidade' | 'zonas'>): 
   return out;
 }
 
-/** A base traz as PRÓPRIAS áreas (não usa zoneamento)? Hoje: só 'condicao'. */
-export const baseTemAreasProprias = (base: Pick<Prescricao, 'modo'>): boolean => base.modo === 'condicao';
+/** A base traz as PRÓPRIAS áreas (não usa zoneamento)? As por faixas de raster: 'condicao' e 'indice'. */
+export const baseTemAreasProprias = (base: Pick<Prescricao, 'modo'>): boolean => ehPorFaixas(base.modo);
 
 export interface AreasDaBase {
   zonas: ZonaDose[];
@@ -76,6 +77,7 @@ export function areasDaBaseCondicao(base: Prescricao): AreasDaBase | null {
       rotuloMapa: c?.rotuloMapa ?? '',
       sigla: c?.sigla || (c?.nut ?? '').toUpperCase(),
       limiares: [...(c?.limiares ?? [])],
+      ...(base.modo === 'indice' ? { fonte: 'indice' as const } : {}),
     },
   };
 }

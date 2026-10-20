@@ -16,7 +16,7 @@ export const ROTULO_TIPO: Record<TipoPrescricao, string> = {
   personalizado: 'Produto personalizado',
 };
 
-export type ModoCalculo = 'manual' | 'estoque' | 'proporcional' | 'equacao' | 'ajuste' | 'complemento' | 'condicao';
+export type ModoCalculo = 'manual' | 'estoque' | 'proporcional' | 'equacao' | 'ajuste' | 'complemento' | 'condicao' | 'indice';
 
 export const ROTULO_MODO: Record<ModoCalculo, string> = {
   manual: 'Dose manual por zona',
@@ -26,7 +26,27 @@ export const ROTULO_MODO: Record<ModoCalculo, string> = {
   ajuste: 'Dose base + ajuste % por zona',
   complemento: 'Complementação por nutriente',
   condicao: 'Por condição no mapa de fertilidade',
+  indice: 'Por imagem de índice (NDVI, NDRE…)',
 };
+
+/** Modos cujas áreas de aplicação são FAIXAS de valor de um raster (ids
+ *  f1..fN, sem zoneamento): 'condicao' (mapa de fertilidade) e 'indice'
+ *  (imagem NDVI/NDRE… já processada). Os dois guardam os parâmetros em
+ *  ParamsCalculo.condicao e usam o mesmo motor (lib/prescricao/condicao.ts). */
+export const ehPorFaixas = (modo: ModoCalculo): boolean => modo === 'condicao' || modo === 'indice';
+
+/** Modo 'indice': a imagem de índice de vegetação escolhida (uma das camadas
+ *  mantidas e marcadas como fonte de análise na aba NDVI). */
+export interface ImagemIndice {
+  /** id do mapa na nuvem (`${talhaoId}__ndvi__INDICE__data`, ou __ndvicbers__). */
+  itemId: string;
+  indice: string;              // 'NDVI', 'NDRE'…
+  data: string;                // data da cena (AAAA-MM-DD)
+  fonte: 's2' | 'cbers';       // Sentinel-2 (10 m) ou CBERS-4A (2 m)
+  /** [oeste, sul, leste, norte] da grade — para regerar mesmo que a imagem
+   *  saia da lista de fontes marcadas. */
+  bounds: [number, number, number, number];
+}
 
 /** Modo 'condicao': as áreas de aplicação saem do MAPA INTERPOLADO de um
  *  nutriente recortado nos limiares (não de um zoneamento). Guarda tudo o que
@@ -56,6 +76,9 @@ export interface ParamsCondicao {
    *  dosesDaCondicao. Não usa `cenarioAjuste`: o rascunho novo nasce com ele em
    *  'total' para o modo ajuste, e isso não pode travar a condição sozinho. */
   cenario?: 'livre' | 'total';
+  /** Só no modo 'indice': a imagem de onde saem as faixas. Nesse modo
+   *  importacaoId e prof ficam vazios e `nut` é o índice em minúsculas. */
+  imagem?: ImagemIndice;
 }
 
 // Unidade da DOSE (por hectare). O total usa a unidade-base correspondente
@@ -133,7 +156,8 @@ export interface ParamsCalculo {
    *  Guarda as garantias USADAS no cálculo — o cadastro do insumo pode mudar
    *  depois, e o que foi para a máquina tem de continuar reproduzível. */
   complemento?: ParamsComplemento;
-  /** modo 'condicao': faixas de valor de um mapa de fertilidade → dose. */
+  /** modos 'condicao' e 'indice': faixas de valor de um raster (mapa de
+   *  fertilidade ou imagem de índice) → dose. */
   condicao?: ParamsCondicao;
   // fluxos específicos
   sementes?: ParamsSementes;
@@ -160,7 +184,12 @@ export interface ParamsComplemento {
   /** Presente quando a base é uma prescrição POR CONDIÇÃO: as áreas desta
    *  prescrição são as faixas da base (fc + zonas copiados, ids f1..fN), sem
    *  zoneamento. Guarda o que rotula as faixas no mapa e no relatório. */
-  baseCondicao?: { rotuloMapa: string; sigla: string; limiares: number[] };
+  baseCondicao?: {
+    rotuloMapa: string; sigla: string; limiares: number[];
+    /** 'indice' quando a base é por imagem de índice; ausente = por condição
+     *  no mapa de fertilidade (todas as anteriores). */
+    fonte?: 'indice';
+  };
   // produto COMPLEMENTAR (o que a prescrição vai calcular)
   compInsumoId?: string;
   compNome?: string;

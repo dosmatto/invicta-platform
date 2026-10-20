@@ -11,6 +11,7 @@ import turfArea from '@turf/area';
 import {
   validarLimiares, faixaDoValor, rotuloFaixa, absorverManchas, tracarAneis, vetorizarClasse,
   prescreverPorCondicao, classificarGrid, dosesDasFaixas, dosesDaCondicao,
+  reduzirGrid, limiaresPorQuantis, nosDaBorda,
 } from '../src/lib/prescricao/condicao.ts';
 import { casarZonas } from '../src/lib/prescricao/casar.ts';
 
@@ -319,6 +320,71 @@ t('mapa todo NaN: erro claro', () => {
 });
 t('doses faltando para alguma faixa: erro claro', () => {
   assert.throws(() => prescreverPorCondicao({ grid: gradiente, limiares: [15, 40], doses: [1, 2], talhao, sigla: 'P' }), /3 faixas/);
+});
+
+console.log('\nModo índice (imagem NDVI/NDRE… como raster)\n');
+
+// Imagem densa sobre o mesmo talhão: 1201×1201 nós (como um CBERS de 2 m).
+function gradeDensa(n, fn) {
+  const w = LON0 - dLon, nn = LAT0 + ladoLat + dLat, e = w + 52 * dLon, s = nn - 52 * dLat;
+  const valores = new Float32Array(n * n);
+  for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) valores[r * n + c] = fn(r, c, n);
+  return { valores, rows: n, cols: n, bounds: [w, s, e, nn] };
+}
+
+t('nosDaBorda: borda de pixel → centro dos pixels das pontas (meio pixel para dentro)', () => {
+  // 10 colunas × 4 linhas de 10 unidades: centros em 5…95 e 5…35
+  assert.deepEqual(nosDaBorda([0, 0, 100, 40], 4, 10), [5, 5, 95, 35]);
+});
+t('reduzirGrid: grade que cabe volta a mesma; densa cai para ≤ 400 por lado, mesmos bounds', () => {
+  assert.equal(reduzirGrid(gradiente), gradiente);
+  const d = gradeDensa(1201, (r, c, n) => 0.2 + 0.6 * (c / (n - 1)));
+  const red = reduzirGrid(d);
+  assert.ok(red.rows <= 400 && red.cols <= 400 && red.rows >= 2, `${red.rows}×${red.cols}`);
+  assert.deepEqual(red.bounds, d.bounds);
+  // média na janela: pontas ficam a menos de meia janela do valor original
+  assert.ok(Math.abs(red.valores[0] - 0.2) < 0.005 && Math.abs(red.valores[red.cols - 1] - 0.8) < 0.005,
+    `${red.valores[0]} / ${red.valores[red.cols - 1]}`);
+  // média de verdade: ruído xadrez (0,3/0,9) vira ~0,6, não um dos dois
+  const xadrez = reduzirGrid(gradeDensa(1201, (r, c) => ((r + c) % 2 ? 0.9 : 0.3)));
+  const meio = xadrez.valores[200 * xadrez.cols + 200];
+  assert.ok(Math.abs(meio - 0.6) < 0.1, `xadrez → ${meio}`);
+});
+t('reduzirGrid: NaN não contamina o vizinho válido; tudo NaN continua NaN', () => {
+  const d = gradeDensa(801, (r, c) => (c < 400 ? NaN : 0.7));
+  const red = reduzirGrid(d);
+  for (let i = 0; i < red.valores.length; i++) {
+    const v = red.valores[i];
+    assert.ok(Number.isNaN(v) || Math.abs(v - 0.7) < 1e-6, `valor ${v}`);
+  }
+  const nan = reduzirGrid(gradeDensa(801, () => NaN));
+  assert.ok([...nan.valores].every(Number.isNaN));
+});
+t('limiaresPorQuantis: NDVI uniforme 0,2–0,8 → 4 cortes ~0,32/0,44/0,56/0,68 em 2 casas', () => {
+  const v = Array.from({ length: 1001 }, (_, i) => 0.2 + 0.6 * (i / 1000));
+  const lim = limiaresPorQuantis(v, 5);
+  assert.deepEqual(lim, [0.32, 0.44, 0.56, 0.68]);
+});
+t('limiaresPorQuantis: ignora NaN; sem variação ou poucos pontos → vazio; empate colapsa', () => {
+  assert.deepEqual(limiaresPorQuantis([NaN, 0.5, 0.5, 0.5, 0.5, 0.5, NaN]), []);
+  assert.deepEqual(limiaresPorQuantis([0.1, 0.9]), []);
+  const muitoIgual = [...Array(90).fill(0.5), ...Array.from({ length: 10 }, (_, i) => 0.6 + i * 0.01)];
+  const lim = limiaresPorQuantis(muitoIgual, 5);
+  assert.ok(lim.length < 4 && lim.every((x, i) => i === 0 || x > lim[i - 1]), lim.join(','));
+});
+t('imagem densa → reduzida → prescrição: 5 faixas de área parecida que somam o talhão, em tempo aceitável', () => {
+  const d = gradeDensa(1201, (r, c, n) => 0.2 + 0.6 * (c / (n - 1)));
+  const t0 = Date.now();
+  const g = reduzirGrid(d);
+  const lim = limiaresPorQuantis(g.valores, 5);
+  const res = prescreverPorCondicao({ grid: g, limiares: lim, doses: [200, 180, 160, 140, 120], talhao, sigla: 'NDVI' });
+  const ms = Date.now() - t0;
+  assert.equal(res.zonas.length, 5);
+  const soma = res.zonas.reduce((s, z) => s + z.areaHa, 0);
+  assert.ok(Math.abs(soma - areaTalhaoHa) / areaTalhaoHa < 0.01, `${soma} vs ${areaTalhaoHa}`);
+  for (const z of res.zonas) assert.ok(z.areaHa > areaTalhaoHa * 0.12 && z.areaHa < areaTalhaoHa * 0.28, `${z.nomeZona}: ${z.areaHa}`);
+  assert.ok(ms < 8000, `${ms} ms`);
+  console.log(`    (1201² → ${g.rows}² e 5 faixas em ${ms} ms)`);
 });
 
 console.log(`\n${ok} ok, ${fail} falha(s)\n`);

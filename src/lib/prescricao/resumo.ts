@@ -235,7 +235,7 @@ export function montarResumoPdf(
       if (bc) {
         linhas.push(
           { txt: `Complementação por nutriente - referência: ${sim}, meta ${fmtRel(c.metaKgHa ?? 0)} kg/ha`, destaque: true },
-          { txt: `Produto base: ${c.baseNome ?? '(nenhum)'} aplicado POR CONDIÇÃO no mapa de fertilidade (${c.basePrescricaoNome ?? 'prescrição anterior'}${bc.rotuloMapa ? ` - ${bc.rotuloMapa}` : ''}), ${faixa(doses)} kg/ha · garantia ${fmtRel(c.baseGarantiaPct ?? 0)}% de ${sim}` },
+          { txt: `Produto base: ${c.baseNome ?? '(nenhum)'} aplicado ${bc.fonte === 'indice' ? 'POR IMAGEM DE ÍNDICE' : 'POR CONDIÇÃO no mapa de fertilidade'} (${c.basePrescricaoNome ?? 'prescrição anterior'}${bc.rotuloMapa ? ` - ${bc.rotuloMapa}` : ''}), ${faixa(doses)} kg/ha · garantia ${fmtRel(c.baseGarantiaPct ?? 0)}% de ${sim}` },
           { txt: `Áreas de aplicação: as ${p.zonas.length} faixas da prescrição base (mesmos polígonos)` },
           { txt: `Já fornecido pelo base: ${faixa(rz.map(x => x.fornecidoKgHa))} kg/ha de ${sim} · faltando para a meta: ${faixa(rz.map(x => x.faltanteKgHa))} kg/ha` },
           { txt: `Produto complementar: ${c.compNome ?? p.produto} · garantia ${fmtRel(gComp)}% de ${sim} · dose calculada FAIXA A FAIXA para fechar a meta: ${faixa(rz.map(x => x.doseCompKgHa))} kg/ha`, destaque: true },
