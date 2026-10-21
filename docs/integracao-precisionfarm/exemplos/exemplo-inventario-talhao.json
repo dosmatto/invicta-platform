@@ -1,0 +1,182 @@
+{
+  "example_only": true,
+  "shared_field_id": "22222222-2222-4222-8222-222222222222",
+  "field_name": "IGEFI05",
+  "note": "Dados fictícios; disponibilidade real a confirmar no piloto. Cada origem responde somente por seu inventário autorizado.",
+  "inventories": [
+    {
+      "source_system": "invicta",
+      "inventory_revision": 1,
+      "checked_at": "2026-10-21T18:00:00Z",
+      "completeness": "complete_for_authorized_scope",
+      "categories": [
+        {
+          "resource_type": "harvest",
+          "support": "supported",
+          "query_status": "complete"
+        },
+        {
+          "resource_type": "management_zones",
+          "support": "supported",
+          "query_status": "complete"
+        },
+        {
+          "resource_type": "application",
+          "support": "supported",
+          "query_status": "complete"
+        }
+      ],
+      "resources": [
+        {
+          "resource_id": "de2a3424-fb2e-5886-ab2b-1bb5bb5dc51f",
+          "resource_type": "harvest",
+          "integration_name": "mapas_colheita",
+          "season": "2025/2026",
+          "status": "published",
+          "availability": "available",
+          "revision": 1,
+          "boundary_revision": 3,
+          "updated_at": "2026-10-21T18:00:00Z",
+          "formats": [
+            "application/geo+json"
+          ],
+          "resource_path": "/integration/v1/resources/de2a3424-fb2e-5886-ab2b-1bb5bb5dc51f/revisions/1"
+        },
+        {
+          "resource_id": "594273b1-cb11-55b5-a88d-153e4ba842f7",
+          "resource_type": "management_zones",
+          "integration_name": "zonas_manejo",
+          "season": null,
+          "status": "consolidated",
+          "availability": "available",
+          "revision": 1,
+          "boundary_revision": 3,
+          "updated_at": "2026-10-21T18:00:00Z",
+          "formats": [
+            "application/geo+json"
+          ],
+          "resource_path": "/integration/v1/resources/594273b1-cb11-55b5-a88d-153e4ba842f7/revisions/1"
+        },
+        {
+          "resource_id": "959143b7-0c94-5b6b-8c87-655466191208",
+          "resource_type": "application",
+          "integration_name": "aplicacao",
+          "season": "2026/2027",
+          "status": "published",
+          "availability": "available",
+          "revision": 1,
+          "boundary_revision": 3,
+          "updated_at": "2026-10-21T18:00:00Z",
+          "formats": [
+            "application/zip"
+          ],
+          "operation_category": "spraying",
+          "resource_path": "/integration/v1/resources/959143b7-0c94-5b6b-8c87-655466191208/revisions/1"
+        }
+      ],
+      "next_cursor": null,
+      "has_more": false
+    },
+    {
+      "source_system": "precisionfarm",
+      "inventory_revision": 1,
+      "checked_at": "2026-10-21T18:00:00Z",
+      "completeness": "complete_for_authorized_scope",
+      "categories": [
+        {
+          "resource_type": "boundary",
+          "support": "supported",
+          "query_status": "complete"
+        },
+        {
+          "resource_type": "guidance",
+          "support": "supported",
+          "query_status": "complete"
+        }
+      ],
+      "resources": [
+        {
+          "resource_id": "8f0ef20a-ad96-5f22-8d83-5f9a45e1064e",
+          "resource_type": "boundary",
+          "integration_name": "limite",
+          "season": null,
+          "status": "published",
+          "availability": "available",
+          "revision": 1,
+          "boundary_revision": 3,
+          "updated_at": "2026-10-21T18:00:00Z",
+          "formats": [
+            "application/geo+json"
+          ],
+          "resource_path": "/integration/v1/resources/8f0ef20a-ad96-5f22-8d83-5f9a45e1064e/revisions/1"
+        },
+        {
+          "resource_id": "f6158001-a2a6-55ac-9034-40ad883902c5",
+          "resource_type": "guidance",
+          "integration_name": "linhas_verao",
+          "season": "2026/2027",
+          "status": "published",
+          "availability": "available",
+          "revision": 1,
+          "boundary_revision": 3,
+          "updated_at": "2026-10-21T18:00:00Z",
+          "formats": [
+            "application/geo+json"
+          ],
+          "operation_category": "planting",
+          "resource_path": "/integration/v1/resources/f6158001-a2a6-55ac-9034-40ad883902c5/revisions/1"
+        },
+        {
+          "resource_id": "2645f669-cf03-535c-ad4a-17c9ac5c6124",
+          "resource_type": "guidance",
+          "integration_name": "linhas_inverno",
+          "season": "2026",
+          "status": "published",
+          "availability": "available",
+          "revision": 1,
+          "boundary_revision": 3,
+          "updated_at": "2026-10-21T18:00:00Z",
+          "formats": [
+            "application/geo+json"
+          ],
+          "operation_category": "planting",
+          "resource_path": "/integration/v1/resources/2645f669-cf03-535c-ad4a-17c9ac5c6124/revisions/1"
+        },
+        {
+          "resource_id": "541679ec-2d37-54c9-8efb-e3d5fa4b449e",
+          "resource_type": "guidance",
+          "integration_name": "pulverizacao",
+          "season": "2026/2027",
+          "status": "published",
+          "availability": "available",
+          "revision": 1,
+          "boundary_revision": 3,
+          "updated_at": "2026-10-21T18:00:00Z",
+          "formats": [
+            "application/geo+json"
+          ],
+          "operation_category": "spraying",
+          "resource_path": "/integration/v1/resources/541679ec-2d37-54c9-8efb-e3d5fa4b449e/revisions/1"
+        },
+        {
+          "resource_id": "ad3cd780-be3d-5183-aafd-9621e04874ee",
+          "resource_type": "guidance",
+          "integration_name": "linhas_colheita",
+          "season": "2026/2027",
+          "status": "published",
+          "availability": "available",
+          "revision": 1,
+          "boundary_revision": 3,
+          "updated_at": "2026-10-21T18:00:00Z",
+          "formats": [
+            "application/geo+json"
+          ],
+          "operation_category": "harvesting",
+          "resource_path": "/integration/v1/resources/ad3cd780-be3d-5183-aafd-9621e04874ee/revisions/1"
+        }
+      ],
+      "next_cursor": null,
+      "has_more": false
+    }
+  ]
+}

@@ -1,5 +1,9 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Documentação da integração com a PrecisionFarm
+  '2.209.1': [
+    'DOCUMENTAÇÃO DA INTEGRAÇÃO COM A PRECISIONFARM (proposta, ainda não implementada): contrato de troca de dados, exemplos e análise do lado da Invicta em docs/integracao-precisionfarm/. Nada muda na plataforma por enquanto.',
+  ],
   // [S/N] Tesoura das zonas: ajustar ao polígono atual pela zona mais próxima
   '2.209.0': [
     'TESOURA DAS ZONAS AGORA AJUSTA AO POLÍGONO ATUAL PELA ZONA MAIS PRÓXIMA: em Zonas → Zoneamentos e versões → ícone da tesoura, o zoneamento antigo é encaixado no contorno atual do talhão assim: o que passa do limite é CORTADO, e cada trecho do talhão que ficou sem zona vai para a ZONA MAIS PRÓXIMA (antes as divisas internas eram esticadas seguindo a trajetória da linha). Sem sobreposição entre zonas, 100% do talhão coberto, área de cada polígono recalculada (elipsoidal, casa com o QGIS).',

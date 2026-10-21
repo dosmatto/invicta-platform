@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:precisionfarm:integration:proposal:0.1:envelope",
+  "title": "Envelope proposto - integração externa (não implementado)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "event_id",
+    "source_system",
+    "shared_producer_id",
+    "shared_field_id",
+    "resource_id",
+    "resource_type",
+    "resource_revision",
+    "base_revision",
+    "boundary_revision",
+    "occurred_at",
+    "operation",
+    "payload"
+  ],
+  "properties": {
+    "contract_version": {
+      "const": "0.1-draft"
+    },
+    "event_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "source_system": {
+      "enum": [
+        "precisionfarm",
+        "invicta"
+      ]
+    },
+    "shared_producer_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "shared_field_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "resource_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "resource_type": {
+      "enum": [
+        "boundary",
+        "guidance",
+        "harvest",
+        "management_zones",
+        "application"
+      ]
+    },
+    "resource_revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "base_revision": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "boundary_revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "occurred_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "operation": {
+      "enum": [
+        "upsert",
+        "archive"
+      ]
+    },
+    "payload": {
+      "type": "object"
+    }
+  }
+}

@@ -1,0 +1,79 @@
+{
+  "contract_version": "0.1-draft",
+  "event_id": "33333333-3333-4333-8333-333333333333",
+  "source_system": "precisionfarm",
+  "shared_producer_id": "11111111-1111-4111-8111-111111111111",
+  "shared_field_id": "22222222-2222-4222-8222-222222222222",
+  "resource_id": "44444444-4444-4444-8444-444444444444",
+  "resource_type": "guidance",
+  "resource_revision": 2,
+  "base_revision": 1,
+  "boundary_revision": 3,
+  "occurred_at": "2026-10-21T18:00:00Z",
+  "operation": "upsert",
+  "payload": {
+    "name": "linhas_verao",
+    "integration_name": "linhas_verao",
+    "season": "2026/2027",
+    "cropping_cycle": "summer",
+    "operation_category": "planting",
+    "spacing_m": 7.8,
+    "purpose": "visualization",
+    "status": "published",
+    "geometry": {
+      "type": "FeatureCollection",
+      "features": [
+        {
+          "type": "Feature",
+          "id": "55555555-5555-4555-8555-555555555555",
+          "properties": {
+            "kind": "guidance",
+            "sequence": 1
+          },
+          "geometry": {
+            "type": "LineString",
+            "coordinates": [
+              [
+                -50.0,
+                -24.0
+              ],
+              [
+                -49.9999,
+                -24.0005
+              ],
+              [
+                -49.9998,
+                -24.001
+              ]
+            ]
+          }
+        },
+        {
+          "type": "Feature",
+          "id": "66666666-6666-4666-8666-666666666666",
+          "properties": {
+            "kind": "headland",
+            "sequence": 1
+          },
+          "geometry": {
+            "type": "LineString",
+            "coordinates": [
+              [
+                -50.0002,
+                -24.0
+              ],
+              [
+                -50.0001,
+                -24.0004
+              ],
+              [
+                -50.0,
+                -24.0008
+              ]
+            ]
+          }
+        }
+      ]
+    }
+  }
+}
