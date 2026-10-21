@@ -119,6 +119,7 @@ verdadeira (fusão de talhões) chegou depois; foi preciso renumerar.
 | S/N | Prescrições salvas agrupadas por ano e tipo, versões antigas recolhidas, cartão compacto | 2.205.0 | Talhão → Prescrições → aba Salvas e rodapé da aba Nova (e visão do produtor) |
 | S/N | Prescrição por imagem de índice (NDVI, NDRE…) | 2.206.0 | Talhão → Prescrições → Nova → "Por imagem de índice (NDVI, NDRE…)" |
 | S/N | Volume travado com sobra (não redistribui; sobra para outro talhão) | 2.207.0 | Talhão → Prescrições → Nova → "Por condição…" ou "Por imagem de índice…" → "Volume travado com sobra" |
+| S/N | Mapa da prescrição em sementes/m com uma casa decimal | 2.207.1 | Talhão → Prescrições → prescrição de sementes em sementes/m → rótulos das zonas no mapa ("14,6 sementes/m") |
 
 > As pendências 1–17 foram entregues antes deste registro existir e não estão
 > catalogadas; procure pelo assunto no `changelog.ts`. Da 18 em diante, tudo

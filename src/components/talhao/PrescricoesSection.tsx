@@ -926,7 +926,8 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
     // Depois de calcular, o 0 de uma zona é decisão ("não aplica aqui") e tem
     // que aparecer.
     const temDose = r.zonas.some(z => Number.isFinite(z.dose) && z.dose > 0);
-    const casas = ehUnidadeSemente(r.unidade) ? 0 : 1;
+    // sementes/m é número pequeno (14,1): inteiro esconde a diferença entre zonas.
+    const casas = r.unidade === 'sementes/m' || !ehUnidadeSemente(r.unidade) ? 1 : 0;
     return {
       type: 'FeatureCollection',
       features: feats.map((f, i) => {

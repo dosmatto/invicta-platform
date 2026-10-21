@@ -1,5 +1,9 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Mapa da prescrição em sementes/m com uma casa decimal
+  '2.207.1': [
+    'MAPA DA PRESCRIÇÃO EM SEMENTES/M COM UMA CASA DECIMAL: o rótulo de cada zona no mapa mostrava a dose arredondada para inteiro ("15 sementes/m"), e zonas com 14,57 e 14,85 apareciam iguais. Agora sai "14,6 sementes/m" / "14,9 sementes/m". População (sementes/ha) continua inteira.',
+  ],
   // [S/N] Volume travado com sobra (prescrição por condição / por índice)
   '2.207.0': [
     'NOVA OPÇÃO "VOLUME TRAVADO COM SOBRA — NÃO REDISTRIBUI" nas prescrições por condição (mapa de fertilidade) e por imagem de índice, ao lado de "Doses livres" e "Volume travado". Você informa o volume que já tem (kg/ha médio ou total) e a dose de cada faixa; a dose aplicada é a informada — só ajustada ao incremento da máquina e aos limites mín/máx, se houver — e NADA é redistribuído. Onde a fertilidade é alta e a dose cai, o que não for usado vira SOBRA, que pode ir para outro talhão.',
