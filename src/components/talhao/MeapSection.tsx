@@ -13,7 +13,8 @@ import { useApp } from '@/context/AppContext';
 import { getZoneamentosMeap, saveZoneamentoMeap, deleteZoneamentoMeap, renameZoneamentoMeap, setZoneamentoPadraoMeap, removerAdocaoMeap, getTalhoes, liberarZoneamentoProgramacao, desliberarZoneamentoProgramacao, prescricoesLavraDoZoneamento, getLegendasPorAtributo, type Talhao, type ZoneamentoMeap, type SuavizacaoMeta, type EdicaoManualMeta, type OperacaoEdicaoZona } from '@/lib/store';
 import { usuarioAtual } from '@/lib/auth';
 import { pode, podeZonas } from '@/lib/empresa';
-import type { RespSuavizarZonas, RespIncorporarDivisas } from '@/lib/fertilidade';
+import type { RespSuavizarZonas } from '@/lib/fertilidade';
+import type { RespAjusteLimite } from '@/lib/meap/ajustarAoLimite';
 import { IncorporarDivisas } from '@/components/talhao/IncorporarDivisas';
 import { SuavizarLimites } from './SuavizarLimites';
 import { EditorZonasManual } from './EditorZonasManual';
@@ -458,7 +459,7 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
     } else if (editorMapFc) {
       fc = editorMapFc;   // já vem pronto (cor + rotulo=id + selecionada)
     } else if (incorpMapFc) {
-      fc = incorpMapFc;   // já vem pronto (resultado + diff em amarelo)
+      fc = incorpMapFc;   // já vem pronto (resultado + diff: ganho verde, perdido vermelho)
     } else if (suavMapFc) {
       fc = featuresParaMapa(suavMapFc);
     } else if (vendoFc) {
@@ -804,9 +805,9 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
     setSuav(null); setSuavMapFc(null);
   }
 
-  // ── Incorporar divisas: salvar como NOVA versão (o original é preservado) ──
+  // ── Ajustar ao limite atual: salvar como NOVA versão (o original é preservado) ──
   function nomeVersaoIncorporada(base: string): string {
-    const desejado = `${base} — Divisas incorporadas`;
+    const desejado = `${base} — Ajustada ao limite`;
     const nomes = new Set(getZoneamentosMeap(talhao.id).map(z => z.nome));
     if (!nomes.has(desejado)) return desejado;
     let n = 2;
@@ -814,7 +815,7 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
     return `${desejado} (${n})`;
   }
 
-  function salvarVersaoIncorporada(fcNovo: GeoJSON.FeatureCollection, resp: RespIncorporarDivisas) {
+  function salvarVersaoIncorporada(fcNovo: GeoJSON.FeatureCollection, resp: RespAjusteLimite) {
     if (!incorp) return;
     const r = resp.resumo;
     const orig = zoneamentos.find(z => z.id === incorp.id) ?? null;
@@ -823,10 +824,8 @@ export function MeapSection({ talhao, safraNome }: { talhao: Talhao; safraNome?:
       nPoligonos: fcNovo.features.length,
       nZonas: r.nZonas,
       incorporacao: {
-        nDivisas: r.nDivisas, mDivisas: r.mDivisas,
-        nEsticadas: r.nEsticadas, mEsticado: r.mEsticado,
-        nCortadas: r.nCortadas, mCortado: r.mCortado,
-        nDescartadas: r.nDescartadas,
+        metodo: 'zona-proxima',
+        nPoligonosVazios: r.poligonosVazios,
         areaGanhaHa: r.areaGanhaHa, areaPerdidaHa: r.areaPerdidaHa,
         coberturaPct: r.coberturaPct, avisos: resp.avisos,
         origemId: orig?.id, origemNome: orig?.nome,

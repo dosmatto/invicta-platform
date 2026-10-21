@@ -105,6 +105,7 @@
     "teste:compactacaofalker": "node scripts/teste-compactacaofalker.mjs",
     "teste:relatoriocompactacao": "node scripts/teste-relatoriocompactacao.mjs",
     "teste:limpezazonas": "node scripts/teste-limpezazonas.mjs",
+    "teste:ajustar-limite": "node scripts/teste-ajustar-limite.mjs",
     "teste:msr-regras": "PY=\"$HOME/.invicta-fert-backend/venv/bin/python\"; [ -x \"$PY\" ] || PY=python3; \"$PY\" scripts/teste-msr-regras.py"
   },
   "dependencies": {
@@ -118,10 +119,13 @@
     "@supabase/supabase-js": "^2.108.2",
     "@tmcw/togeojson": "^7.1.2",
     "@turf/area": "^7.3.5",
+    "@turf/bbox": "^7.3.5",
     "@turf/boolean-intersects": "^7.3.5",
+    "@turf/difference": "^7.3.5",
     "@turf/helpers": "^7.3.5",
     "@turf/intersect": "^7.3.5",
     "@turf/union": "^7.3.5",
+    "@turf/voronoi": "^7.3.5",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "jspdf": "^4.2.1",

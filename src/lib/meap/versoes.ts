@@ -23,7 +23,7 @@ export const ROTULO_TIPO: Record<TipoVersao, string> = {
   suavizada: 'Suavizada',
   'ajuste-manual': 'Ajuste manual',
   restaurada: 'Restaurada',
-  incorporada: 'Divisas incorporadas',
+  incorporada: 'Ajustada ao limite',
 };
 
 export interface VersaoZoneamento {
@@ -79,6 +79,15 @@ export function resumoDaVersao(z: ZoneamentoMeap): string {
   }
   if (m.incorporacao) {
     const c = m.incorporacao;
+    if (c.metodo === 'zona-proxima') {
+      const perdeu = N1(c.areaPerdidaHa), ganhou = N1(c.areaGanhaHa);
+      return [
+        perdeu || ganhou ? '' : 'já estava no limite atual',
+        perdeu ? `${perdeu} ha cortados fora do limite atual` : '',
+        ganhou ? `${ganhou} ha preenchidos pela zona mais próxima` : '',
+        polis,
+      ].filter(Boolean).join(' · ');
+    }
     const partes = [
       `${c.nDivisas} divisa(s) interna(s) aproveitada(s)`,
       c.nEsticadas ? `${c.nEsticadas} esticada(s) até o limite atual` : '',
@@ -121,7 +130,7 @@ export function usuarioDaVersao(z: ZoneamentoMeap): string | undefined {
 
 // Sufixos que as derivações penduram no nome. Tirados para o cabeçalho da
 // linhagem mostrar o nome do zoneamento, não a pilha de operações.
-const SUFIXOS = /\s+—\s+(Suavização|Ajuste manual|V\d+\s|Restaurada|Divisas incorporadas).*$/i;
+const SUFIXOS = /\s+—\s+(Suavização|Ajuste manual|V\d+\s|Restaurada|Divisas incorporadas|Ajustada ao limite).*$/i;
 
 export function nomeBase(nome: string): string {
   let n = nome;

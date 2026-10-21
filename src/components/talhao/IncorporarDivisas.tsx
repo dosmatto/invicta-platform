@@ -1,24 +1,22 @@
 'use client';
 
-// INCORPORAR DIVISAS INTERNAS AO POLÍGONO ATUAL — painel de prévia.
+// AJUSTAR ZONAS AO POLÍGONO ATUAL — painel de prévia (a "tesoura" das versões).
 //
 // Pedido do agrônomo: o zoneamento é antigo e o contorno do talhão mudou depois.
 // Partes das zonas ultrapassam o limite novo, outras não alcançam. Esta
-// ferramenta descarta o contorno externo antigo, aproveita as DIVISAS INTERNAS
-// (o trabalho agronômico de verdade), ESTICA as que morrem antes do limite
-// SEGUINDO A TRAJETÓRIA da linha — não a menor distância — e CORTA as que passam.
+// ferramenta CORTA o que ficou fora e dá cada vão sem zona à ZONA MAIS PRÓXIMA.
+// O cálculo roda no navegador (lib/meap/ajustarAoLimite) — substituiu o
+// "Incorporar divisas" do backend, que esticava as divisas pela trajetória.
 //
 // Segue o MESMO contrato do painel "Suavizar limites": prévia no mapa, resumo
 // antes de decidir, e só então "Salvar como nova versão". O original nunca é
 // tocado — vira uma versão nova na mesma linhagem.
 //
-// SEM PARÂMETROS de propósito. A suavização tem níveis porque o usuário escolhe
-// quanto arredondar; aqui não há escolha a fazer: ou a divisa alcança o limite,
-// ou não. O que o usuário decide é ACEITAR ou não o resultado — e para isso ele
-// precisa dos avisos, não de botões.
+// SEM PARÂMETROS de propósito: não há escolha a fazer. O que o usuário decide é
+// ACEITAR ou não o resultado — e para isso ele precisa dos avisos, não de botões.
 
 import { useEffect, useRef, useState } from 'react';
-import { incorporarDivisas, type RespIncorporarDivisas } from '@/lib/fertilidade';
+import { ajustarZonasAoLimite, type RespAjusteLimite } from '@/lib/meap/ajustarAoLimite';
 import { AlertTriangle, Check, Loader2, Save, X, Scissors } from 'lucide-react';
 import { fmtDec as fmt, fmtHa } from '@/lib/formato';
 
@@ -27,14 +25,16 @@ export interface IncorporarDivisasProps {
   fcOriginal: GeoJSON.FeatureCollection;
   poligono: GeoJSON.Polygon | GeoJSON.MultiPolygon | null;
   onPreview: (fc: GeoJSON.FeatureCollection | null) => void;
-  onSalvarVersao: (fc: GeoJSON.FeatureCollection, resp: RespIncorporarDivisas) => void;
+  onSalvarVersao: (fc: GeoJSON.FeatureCollection, resp: RespAjusteLimite) => void;
   onClose: () => void;
 }
+
+const COR_DIFF: Record<string, string> = { ganho: '#86efac', perdido: '#f87171' };
 
 export function IncorporarDivisas({
   titulo, fcOriginal, poligono, onPreview, onSalvarVersao, onClose,
 }: IncorporarDivisasProps) {
-  const [resp, setResp] = useState<RespIncorporarDivisas | null>(null);
+  const [resp, setResp] = useState<RespAjusteLimite | null>(null);
   const [processando, setProcessando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [verOriginal, setVerOriginal] = useState(false);
@@ -45,30 +45,33 @@ export function IncorporarDivisas({
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // O cálculo roda dentro do timer (mesmo padrão do painel de suavização): sem
-  // isso o `setState` sairia síncrono dentro do efeito, e o cálculo dispararia
-  // antes de a tela mostrar o "Reajustando…".
+  // isso o `setState` sairia síncrono dentro do efeito, e o cálculo — síncrono e
+  // pesado em talhão grande — travaria a tela antes de ela mostrar o "Ajustando…".
+  // Dois tiques: o primeiro pinta o "Ajustando…", o segundo calcula.
   useEffect(() => {
     if (timer.current) clearTimeout(timer.current);
     const g = ++geracao.current;
-    timer.current = setTimeout(async () => {
+    timer.current = setTimeout(() => {
       if (!poligono) {
-        setErro('O talhão não tem contorno salvo — sem ele não há como reajustar as divisas.');
+        setErro('O talhão não tem contorno salvo — sem ele não há como ajustar as zonas.');
         return;
       }
       setProcessando(true); setErro(null);
-      try {
-        const r = await incorporarDivisas({ fc: fcOriginal, poligono });
-        if (g === geracao.current) setResp(r);
-      } catch (e) {
-        if (g === geracao.current) { setResp(null); setErro(e instanceof Error ? e.message : 'Falha ao incorporar as divisas.'); }
-      } finally {
-        if (g === geracao.current) setProcessando(false);
-      }
-    }, 30);
+      timer.current = setTimeout(() => {
+        if (g !== geracao.current) return;
+        try {
+          setResp(ajustarZonasAoLimite(fcOriginal, poligono));
+        } catch (e) {
+          setResp(null); setErro(e instanceof Error ? e.message : 'Falha ao ajustar as zonas ao limite.');
+        } finally {
+          setProcessando(false);
+        }
+      }, 30);
+    }, 0);
     return () => { if (timer.current) clearTimeout(timer.current); };
   }, [fcOriginal, poligono]);
 
-  // Prévia no mapa: o resultado, com o diff (ganhou/perdeu) em amarelo por cima.
+  // Prévia no mapa: o resultado, com o diff (ganhou verde / perdeu vermelho) por cima.
   useEffect(() => {
     if (!resp) { onPreview(null); return; }
     const base = verOriginal ? fcOriginal : resp.fc;
@@ -78,7 +81,7 @@ export function IncorporarDivisas({
     });
     if (mostrarDiff && !verOriginal) {
       feats.push(...resp.diff.features.map(f => ({
-        ...f, properties: { ...(f.properties ?? {}), cor: '#fde047', rotulo: '', classeLabel: '' },
+        ...f, properties: { cor: COR_DIFF[String(f.properties?.tipo)] ?? '#fde047', rotulo: '', classeLabel: '' },
       })));
     }
     onPreview({ type: 'FeatureCollection', features: feats });
@@ -88,10 +91,9 @@ export function IncorporarDivisas({
   useEffect(() => () => onPreview(null), []);
 
   const r = resp?.resumo;
-  // Avisos que pedem decisão humana (classe sumiu, empate, herança fraca) —
-  // separados do relato operacional para o usuário não ter de garimpar.
-  const graves = (resp?.avisos ?? []).filter(a =>
-    /DESAPARECEU|EMPATE|DESCARTADA|sem zona antiga|conferir/i.test(a));
+  // Avisos que pedem decisão humana (uma zona inteira sumiu, parte do talhão
+  // ficou sem zona) — separados do relato operacional para não ter de garimpar.
+  const graves = (resp?.avisos ?? []).filter(a => /DESAPARECEU|SEM ZONA/.test(a));
   const outros = (resp?.avisos ?? []).filter(a => !graves.includes(a));
   const podeSalvar = !!resp && !processando && (graves.length === 0 || confirmo);
 
@@ -100,19 +102,18 @@ export function IncorporarDivisas({
       <div className="flex items-center gap-1.5">
         <Scissors size={12} style={{ color: '#93c5fd' }} />
         <p className="text-[10px] font-bold uppercase tracking-wider flex-1" style={{ color: '#93c5fd' }}>
-          Incorporar divisas ao polígono atual
+          Ajustar zonas ao polígono atual
         </p>
         <button onClick={onClose} className="p-0.5 rounded" style={{ color: '#64748b' }}><X size={12} /></button>
       </div>
       <p className="text-[9px]" style={{ color: '#64748b' }}>
-        {titulo} — o limite externo antigo é descartado. As divisas internas que não alcançam o
-        contorno atual são <strong style={{ color: '#93c5fd' }}>esticadas seguindo a trajetória da linha</strong>;
-        as que ultrapassam são cortadas.
+        {titulo} — o que passa do contorno atual é <strong style={{ color: '#93c5fd' }}>cortado</strong>;
+        o que ficou sem zona é <strong style={{ color: '#93c5fd' }}>preenchido pela zona mais próxima</strong>.
       </p>
 
       {processando && (
         <p className="text-[10px] flex items-center gap-1.5" style={{ color: '#93c5fd' }}>
-          <Loader2 size={12} className="animate-spin" /> Reajustando as divisas…
+          <Loader2 size={12} className="animate-spin" /> Ajustando as zonas…
         </p>
       )}
 
@@ -139,19 +140,11 @@ export function IncorporarDivisas({
           </div>
 
           <div className="p-2 rounded space-y-0.5 text-[9px]" style={{ background: '#061525', border: '1px solid #1a3a6b', color: '#cbd5e1' }}>
-            <p><strong style={{ color: '#e2e8f0' }}>{r.nZonas}</strong> zonas cobrindo <strong style={{ color: '#e2e8f0' }}>{fmtHa(r.areaTalhaoHa)}</strong> ha
+            <p><strong style={{ color: '#e2e8f0' }}>{r.nZonas}</strong> zonas ({r.nPoligonos} polígonos) cobrindo <strong style={{ color: '#e2e8f0' }}>{fmtHa(r.areaTalhaoHa)}</strong> ha
               {' · '}cobertura <strong style={{ color: r.coberturaPct >= 99.99 ? '#86efac' : '#fbbf24' }}>{fmt(r.coberturaPct, 2)}%</strong></p>
             <p style={{ color: '#94a3b8' }}>
-              {r.nDivisas} divisa(s) interna(s) aproveitada(s) · {fmt(r.mDivisas, 0)} m
-            </p>
-            <p style={{ color: '#94a3b8' }}>
-              esticadas: <strong style={{ color: '#93c5fd' }}>{r.nEsticadas}</strong> ({fmt(r.mEsticado, 0)} m)
-              {' · '}cortadas: <strong style={{ color: '#93c5fd' }}>{r.nCortadas}</strong> ({fmt(r.mCortado, 0)} m)
-              {r.nDescartadas > 0 && <> · <span style={{ color: '#fbbf24' }}>descartadas: {r.nDescartadas}</span></>}
-            </p>
-            <p style={{ color: '#94a3b8' }}>
-              o talhão <strong style={{ color: '#86efac' }}>ganhou {fmtHa(r.areaGanhaHa)} ha</strong> e
-              {' '}<strong style={{ color: '#fca5a5' }}>perdeu {fmtHa(r.areaPerdidaHa)} ha</strong> em relação ao zoneamento antigo
+              <strong style={{ color: '#86efac' }}>preenchido {fmtHa(r.areaGanhaHa)} ha</strong> pela zona mais próxima
+              {' · '}<strong style={{ color: '#fca5a5' }}>cortado {fmtHa(r.areaPerdidaHa)} ha</strong> fora do contorno atual
             </p>
           </div>
 
@@ -168,7 +161,7 @@ export function IncorporarDivisas({
 
           {outros.length > 0 && (
             <details className="text-[9px]" style={{ color: '#64748b' }}>
-              <summary className="cursor-pointer">O que foi ajustado no arquivo antigo ({outros.length})</summary>
+              <summary className="cursor-pointer">O que foi ajustado ({outros.length})</summary>
               <div className="mt-1 space-y-0.5">
                 {outros.map((a, i) => <p key={i}>• {a}</p>)}
               </div>

@@ -190,7 +190,7 @@ export function VersoesZoneamentos({
                               title="Suavizar limites (cria uma NOVA versão; esta fica intacta)"
                               className="p-1 rounded" style={{ background: '#0b3a44', color: '#22d3ee' }}><Spline size={11} /></button>)}
 {podeEditar && (                            <button onClick={e => { e.stopPropagation(); onIncorporar(z); }}
-                              title="Incorporar as divisas internas ao contorno ATUAL do talhão — estica as que não alcançam (seguindo a trajetória da linha) e corta as que passam. Cria uma NOVA versão."
+                              title="Ajustar as zonas ao contorno ATUAL do talhão — corta o que passou do limite e preenche o que ficou sem zona com a zona mais próxima. Cria uma NOVA versão."
                               className="p-1 rounded" style={{ background: '#0a2a44', color: '#7dd3fc' }}><Scissors size={11} /></button>)}
                             {podeEditar && !ultima && (
                               <button onClick={e => { e.stopPropagation(); onRestaurar(v, l.nome); }}

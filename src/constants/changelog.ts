@@ -1,5 +1,11 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Tesoura das zonas: ajustar ao polígono atual pela zona mais próxima
+  '2.209.0': [
+    'TESOURA DAS ZONAS AGORA AJUSTA AO POLÍGONO ATUAL PELA ZONA MAIS PRÓXIMA: em Zonas → Zoneamentos e versões → ícone da tesoura, o zoneamento antigo é encaixado no contorno atual do talhão assim: o que passa do limite é CORTADO, e cada trecho do talhão que ficou sem zona vai para a ZONA MAIS PRÓXIMA (antes as divisas internas eram esticadas seguindo a trajetória da linha). Sem sobreposição entre zonas, 100% do talhão coberto, área de cada polígono recalculada (elipsoidal, casa com o QGIS).',
+    'A prévia pinta em VERDE o que foi preenchido e em VERMELHO o que foi cortado, e o resumo mostra os hectares de cada um. Se uma zona inteira ficar fora do contorno atual, aparece "Precisa da sua decisão" antes de salvar. O resultado continua saindo como NOVA versão ("— Ajustada ao limite"); o original fica intacto.',
+    'O cálculo agora é feito no próprio navegador — não depende mais do interpolador (local ou nuvem). Versões salvas antes com "Divisas incorporadas" continuam com o resumo de antes.',
+  ],
   // [S/N] Arquivo exportado leva o nome do talhão como cadastrado
   '2.208.0': [
     'ARQUIVO EXPORTADO LEVA O NOME DO TALHÃO COMO CADASTRADO: o nome do PDF/SHP/KML/Excel começava pela sigla da fazenda colada só ao número do fim do talhão — "OHNAZ 10" saía "OHNA10_…", um talhão "OHNAZ 10B" perdia o B e ficava com o mesmo nome do "OHNAZ 10", e "3,5" virava "35". Agora sai o nome do cadastro, com espaço e vírgula trocados por "_": OHNAZ_10_FERT_2025_EP01_SATK, OHNAZ_10B_…, OHNAZ_3_5_…. Relatório da fazenda inteira (sem talhão) continua com a sigla da fazenda.',

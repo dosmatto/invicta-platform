@@ -2677,18 +2677,23 @@ export interface EdicaoManualMeta {
   usuario?: string;
 }
 
-// Registro de uma INCORPORAÇÃO DE DIVISAS ao polígono atual (versão derivada).
-// O zoneamento era antigo e o contorno do talhão mudou depois: o limite externo
-// velho foi descartado e as divisas internas foram esticadas/cortadas até fechar
-// com o contorno atual. Guarda o que foi feito para a versão contar a história.
+// Registro de um AJUSTE DAS ZONAS AO POLÍGONO ATUAL (versão derivada).
+// O zoneamento era antigo e o contorno do talhão mudou depois. Dois métodos já
+// gravaram este registro:
+//   • 'zona-proxima' (atual, no navegador): corta o que ficou fora e dá cada vão
+//     à zona mais próxima;
+//   • sem `metodo` (versões antigas, backend): as divisas internas foram
+//     esticadas/cortadas até fechar com o contorno — só elas têm os campos n*/m*.
 export interface IncorporacaoMeta {
-  nDivisas: number;              // divisas internas aproveitadas
-  mDivisas: number;
-  nEsticadas: number;            // quantas não alcançavam o limite
-  mEsticado: number;             // metros acrescentados seguindo a trajetória
-  nCortadas: number;             // quantas ultrapassavam
-  mCortado: number;
-  nDescartadas: number;          // não alcançaram nada e saíram (com aviso)
+  metodo?: 'zona-proxima';
+  nPoligonosVazios?: number;     // polígonos que ficaram inteiros fora e saíram
+  nDivisas?: number;             // divisas internas aproveitadas
+  mDivisas?: number;
+  nEsticadas?: number;           // quantas não alcançavam o limite
+  mEsticado?: number;            // metros acrescentados seguindo a trajetória
+  nCortadas?: number;            // quantas ultrapassavam
+  mCortado?: number;
+  nDescartadas?: number;         // não alcançaram nada e saíram (com aviso)
   areaGanhaHa: number;           // o que o talhão ganhou em relação ao antigo
   areaPerdidaHa: number;
   coberturaPct: number;
