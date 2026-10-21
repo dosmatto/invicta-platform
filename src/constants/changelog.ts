@@ -1,5 +1,11 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Arquivo exportado leva o nome do talhão como cadastrado
+  '2.208.0': [
+    'ARQUIVO EXPORTADO LEVA O NOME DO TALHÃO COMO CADASTRADO: o nome do PDF/SHP/KML/Excel começava pela sigla da fazenda colada só ao número do fim do talhão — "OHNAZ 10" saía "OHNA10_…", um talhão "OHNAZ 10B" perdia o B e ficava com o mesmo nome do "OHNAZ 10", e "3,5" virava "35". Agora sai o nome do cadastro, com espaço e vírgula trocados por "_": OHNAZ_10_FERT_2025_EP01_SATK, OHNAZ_10B_…, OHNAZ_3_5_…. Relatório da fazenda inteira (sem talhão) continua com a sigla da fazenda.',
+    'DECIMAL NO RESTO DO NOME TAMBÉM VIRA "_": o cenário "KCl para 3,5 na CTC" sai KCLPARA3_5NACTC (antes KCLPARA35NACTC). O trecho final do nome passou de 14 para 20 caracteres, para caber.',
+    'Arquivo de prescrição para o monitor mantém o formato de campo (sigla + número, ex.: SA03_TX_MILHO), mas agora também guarda a letra e o decimal do talhão: "OHNAZ 10B" → OHNA10B_TX_…, sem colidir com o 10.',
+  ],
   // [S/N] Mapa da prescrição em sementes/m com uma casa decimal
   '2.207.1': [
     'MAPA DA PRESCRIÇÃO EM SEMENTES/M COM UMA CASA DECIMAL: o rótulo de cada zona no mapa mostrava a dose arredondada para inteiro ("15 sementes/m"), e zonas com 14,57 e 14,85 apareciam iguais. Agora sai "14,6 sementes/m" / "14,9 sementes/m". População (sementes/ha) continua inteira.',

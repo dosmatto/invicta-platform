@@ -1,12 +1,19 @@
 // NOME DOS ARQUIVOS EXPORTADOS — um padrão só para a casa inteira.
 //
-//     SA03_FERT_2026_EP01_CA
-//     │    │    │    │    └── detalhe (elemento, camada, produto…) — opcional
-//     │    │    │    └─────── época: EP01 = 1ª (jan–jun), EP02 = 2ª (jul–dez)
-//     │    │    └──────────── ano
-//     │    └───────────────── tipo do artefato
-//     └────────────────────── sigla da fazenda + nº do talhão
-//                             ("SERRA AZUL" + "JCASA 03" → SA03)
+//     JCASA_03_FERT_2026_EP01_CA
+//     │        │    │    │    └── detalhe (elemento, camada, produto…) — opcional
+//     │        │    │    │        decimal vira "_": "KCl para 3,5" → KCLPARA3_5
+//     │        │    │    └─────── época: EP01 = 1ª (jan–jun), EP02 = 2ª (jul–dez)
+//     │        │    └──────────── ano
+//     │        └───────────────── tipo do artefato
+//     └────────────────────────── NOME DO TALHÃO COMO CADASTRADO, espaço → "_"
+//                                 ("JCASA 03" → JCASA_03, "OHNAZ 10B" → OHNAZ_10B,
+//                                 "OHNAZ 3,5" → OHNAZ_3_5)
+//
+// Correção de 21/10/2026: antes o talhão virava sigla da FAZENDA + só o número
+// do fim ("OHNAZ 10" → OHNA10, "10B" perdia o B e colidia com o "10", "3,5"
+// virava "35"). É a mesma correção que o cabeçalho do PDF recebeu em 16/09
+// (pdfCabecalho.ts): o nome que o usuário reconhece é o do cadastro.
 //
 // A ORDEM é talhão → tipo → ano → época de propósito: ordenar a pasta por nome
 // agrupa tudo de um talhão e, dentro dele, junta os mapas do mesmo tipo — dá
@@ -33,6 +40,22 @@ export const semAcento = (s: string): string =>
   (s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase();
 
 export const soLetrasNum = (s: string): string => semAcento(s).replace(/[^A-Z0-9]/g, '');
+
+/** Vírgula/ponto ENTRE dígitos vira "_" — "3,5" não pode virar "35". */
+const decimalComUnderline = (s: string): string => s.replace(/(\d)[.,](?=\d)/g, '$1_');
+
+/** Como soLetrasNum, mas preserva o decimal como "_" ("KCl para 3,5" → KCLPARA3_5). */
+export const soLetrasNumDecimal = (s: string): string =>
+  decimalComUnderline(semAcento(s)).replace(/[^A-Z0-9_]/g, '');
+
+/**
+ * Nome do talhão como cadastrado, pronto para nome de arquivo: maiúsculo, sem
+ * acento, e qualquer separador (espaço, hífen, vírgula, ponto, barra) vira UM "_".
+ * "OHNAZ 10" → OHNAZ_10 · "OHNAZ 10b" → OHNAZ_10B · "OHNAZ 3,5" → OHNAZ_3_5.
+ */
+export function nomeTalhaoArquivo(nome: string): string {
+  return semAcento(nome).replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+}
 
 /**
  * Saneamento de nome livre (o que o usuário digitou) para virar nome de arquivo.
@@ -63,26 +86,31 @@ export function siglaFazenda(nome: string, sigla?: string | null): string {
 }
 
 /**
- * Número do talhão: o NÚMERO no fim do nome ("JCASA 03" → 03, "T-7" → 07).
- * Sem número, usa o nome enxugado — melhor um nome feio que dois arquivos
- * diferentes com o mesmo nome.
+ * Número do talhão: o NÚMERO no fim do nome ("JCASA 03" → 03, "T-7" → 07),
+ * com a LETRA de sufixo ("10B" → 10B — é outro talhão, não o 10) e o decimal
+ * como "_" ("3,5" → 03_5). Sem número, usa o nome enxugado — melhor um nome
+ * feio que dois arquivos diferentes com o mesmo nome.
+ *
+ * Usado pela PRESCRIÇÃO (formato de monitor, sigla + número). Os demais
+ * exportados usam o nome inteiro do talhão — ver idTalhao.
  */
 export function numeroTalhao(nome: string): string {
-  const m = semAcento(nome).match(/(\d+)\s*$/);
-  if (m) return m[1].padStart(2, '0');
+  const m = semAcento(nome).match(/(\d+)(?:\s*[.,]\s*(\d+))?\s*([A-Z]{0,2})\s*$/);
+  if (m) return m[1].padStart(2, '0') + (m[2] ? `_${m[2]}` : '') + m[3];
   return soLetrasNum(nome).slice(0, 6) || 'T';
 }
 
 /**
- * "SA03" — sigla da fazenda colada ao número do talhão, sem separador.
+ * Identificador do talhão no nome do arquivo: o NOME CADASTRADO ("OHNAZ 10" →
+ * OHNAZ_10). O cadastro já segue o padrão sigla + número, e é esse nome que o
+ * usuário procura na pasta.
  *
- * Sem talhão devolve só a sigla ("SA"): é o caso dos relatórios de FAZENDA, que
- * cobrem todos os talhões e não têm um número para citar.
+ * Sem talhão devolve só a sigla da fazenda ("SA"): é o caso dos relatórios de
+ * FAZENDA, que cobrem todos os talhões e não têm um nome para citar.
  */
 export function idTalhao(fazenda: string, talhao?: string | null, sigla?: string | null): string {
   const sig = siglaFazenda(fazenda || '', sigla);
-  const t = (talhao ?? '').trim();
-  return t ? `${sig}${numeroTalhao(t)}` : sig;
+  return nomeTalhaoArquivo(talhao ?? '') || sig;
 }
 
 /** O que está sendo exportado — o segmento que agrupa a pasta por assunto. */
@@ -128,7 +156,7 @@ export function nomeExport(d: DadosNomeExport): string {
   const partes: string[] = [idTalhao(d.fazenda ?? '', d.talhao, d.siglaFazenda), d.tipo];
   if (d.ano != null && Number.isFinite(d.ano)) partes.push(String(Math.trunc(d.ano)));
   if (d.epoca === '1' || d.epoca === '2') partes.push(`EP0${d.epoca}`);
-  const det = soLetrasNum(d.detalhe ?? '').slice(0, 14);
+  const det = soLetrasNumDecimal(d.detalhe ?? '').slice(0, 20).replace(/_+$/, '');
   if (det) partes.push(det);
   return partes.join('_');
 }

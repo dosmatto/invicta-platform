@@ -28,12 +28,12 @@ console.log('\nPadrão de nome dos arquivos exportados\n');
 // ── A ordem pedida: talhão · tipo · ano · época ──────────────────────────────
 
 t('CASO PEDIDO: talhão, tipo, ano e época na ordem', () => {
-  assert.equal(nomeExport({ ...JM, tipo: 'FERT', ano: 2026, epoca: '1' }), 'SA03_FERT_2026_EP01');
-  assert.equal(nomeExport({ ...JM, tipo: 'FERT', ano: 2026, epoca: '2' }), 'SA03_FERT_2026_EP02');
+  assert.equal(nomeExport({ ...JM, tipo: 'FERT', ano: 2026, epoca: '1' }), 'JCASA_03_FERT_2026_EP01');
+  assert.equal(nomeExport({ ...JM, tipo: 'FERT', ano: 2026, epoca: '2' }), 'JCASA_03_FERT_2026_EP02');
 });
 
 t('o detalhe entra por ÚLTIMO', () => {
-  assert.equal(nomeExport({ ...JM, tipo: 'FERT', ano: 2026, epoca: '1', detalhe: 'satca' }), 'SA03_FERT_2026_EP01_SATCA');
+  assert.equal(nomeExport({ ...JM, tipo: 'FERT', ano: 2026, epoca: '1', detalhe: 'satca' }), 'JCASA_03_FERT_2026_EP01_SATCA');
 });
 
 t('ordenar a pasta agrupa por talhão e depois por tipo', () => {
@@ -42,17 +42,17 @@ t('ordenar a pasta agrupa por talhão e depois por tipo', () => {
     nomeExport({ ...JM, tipo: 'FERT', ano: 2025, epoca: '2' }),
     nomeExport({ ...JM, tipo: 'FERT', ano: 2026, epoca: '1' }),
   ].sort();
-  assert.deepEqual(nomes, ['SA03_FERT_2025_EP02', 'SA03_FERT_2026_EP01', 'SA03_NDVI_2026']);
+  assert.deepEqual(nomes, ['JCASA_03_FERT_2025_EP02', 'JCASA_03_FERT_2026_EP01', 'JCASA_03_NDVI_2026']);
 });
 
 // ── O que falta é OMITIDO, nunca vira placeholder ────────────────────────────
 
 t('sem época, o nome simplesmente não leva época', () => {
-  assert.equal(nomeExport({ ...JM, tipo: 'RECOM', ano: 2026 }), 'SA03_RECOM_2026');
+  assert.equal(nomeExport({ ...JM, tipo: 'RECOM', ano: 2026 }), 'JCASA_03_RECOM_2026');
 });
 
 t('sem ano nem época, sobra talhão e tipo', () => {
-  assert.equal(nomeExport({ ...JM, tipo: 'MDE', detalhe: 'altitude' }), 'SA03_MDE_ALTITUDE');
+  assert.equal(nomeExport({ ...JM, tipo: 'MDE', detalhe: 'altitude' }), 'JCASA_03_MDE_ALTITUDE');
 });
 
 t('nada de "—", "null" ou "undefined" no nome', () => {
@@ -62,8 +62,8 @@ t('nada de "—", "null" ou "undefined" no nome', () => {
 });
 
 t('ano inválido não entra', () => {
-  assert.equal(nomeExport({ ...JM, tipo: 'FERT', ano: NaN }), 'SA03_FERT');
-  assert.equal(nomeExport({ ...JM, tipo: 'FERT', ano: 2026.7 }), 'SA03_FERT_2026');
+  assert.equal(nomeExport({ ...JM, tipo: 'FERT', ano: NaN }), 'JCASA_03_FERT');
+  assert.equal(nomeExport({ ...JM, tipo: 'FERT', ano: 2026.7 }), 'JCASA_03_FERT_2026');
 });
 
 // ── Charset: o guarda-corpo ──────────────────────────────────────────────────
@@ -76,17 +76,44 @@ t('CHARSET: acento, espaço, barra e % não sobrevivem', () => {
   assert.match(n, /^[A-Z0-9_]+$/, `nome com caractere que quebra o download: ${n}`);
 });
 
-t('detalhe comprido é cortado em 14', () => {
+t('detalhe comprido é cortado em 20', () => {
   const n = nomeExport({ ...JM, tipo: 'COND', detalhe: 'condutividadeeletricaprofunda' });
-  assert.equal(n, 'SA03_COND_CONDUTIVIDADEE'.slice(0, 'SA03_COND_'.length + 14));
+  assert.equal(n, 'JCASA_03_COND_CONDUTIVIDADEELETRIC');
   assert.match(n, /^[A-Z0-9_]+$/);
+});
+
+t('CASO PEDIDO 21/10: decimal no detalhe vira "_" ("3,5" não vira "35")', () => {
+  assert.equal(
+    nomeExport({ fazenda: 'ZIOLA', siglaFazenda: 'OHNAZ', talhao: 'OHNAZ 10', tipo: 'RECOM', ano: 2025, detalhe: 'KCl para 3,5 na CTC' }),
+    'OHNAZ_10_RECOM_2025_KCLPARA3_5NACTC',
+  );
+  assert.equal(nomeExport({ ...JM, tipo: 'RECOM', detalhe: 'dose 2.5' }), 'JCASA_03_RECOM_DOSE2_5');
 });
 
 // ── Identificador do talhão ──────────────────────────────────────────────────
 
-t('idTalhao cola sigla e número, sem separador', () => {
-  assert.equal(idTalhao('SERRA AZUL', 'JCASA 03'), 'SA03');
-  assert.equal(idTalhao('Fazenda São João', 'T-7', 'FSJ'), 'FSJ07');
+t('CASO PEDIDO 21/10: idTalhao é o NOME CADASTRADO do talhão', () => {
+  assert.equal(idTalhao('ZIOLA', 'OHNAZ 10', 'OHNAZ'), 'OHNAZ_10');
+  assert.equal(idTalhao('SERRA AZUL', 'JCASA 03'), 'JCASA_03');
+  assert.equal(idTalhao('Fazenda São João', 'T-7', 'FSJ'), 'T_7');
+  assert.equal(idTalhao('X', '  Talhão  São  1 '), 'TALHAO_SAO_1');
+});
+
+t('CASO PEDIDO 21/10: final "b" é OUTRO talhão — não pode colidir', () => {
+  assert.equal(idTalhao('ZIOLA', 'OHNAZ 10b'), 'OHNAZ_10B');
+  assert.notEqual(idTalhao('ZIOLA', 'OHNAZ 10b'), idTalhao('ZIOLA', 'OHNAZ 10'));
+});
+
+t('CASO PEDIDO 21/10: talhão "3,5" vira 3_5', () => {
+  assert.equal(idTalhao('ZIOLA', 'OHNAZ 3,5'), 'OHNAZ_3_5');
+  assert.notEqual(idTalhao('ZIOLA', 'OHNAZ 3,5'), idTalhao('ZIOLA', 'OHNAZ 35'));
+});
+
+t('prescrição: número do talhão leva a letra e o decimal', () => {
+  assert.equal(numeroTalhao('OHNAZ 10B'), '10B');
+  assert.equal(numeroTalhao('OHNAZ 10 b'), '10B');
+  assert.equal(numeroTalhao('OHNAZ 3,5'), '03_5');
+  assert.equal(nomeArquivoPrescricao({ fazenda: 'ZIOLA', siglaFazenda: 'OHNA', talhao: 'OHNAZ 10B', produto: 'Milho' }), 'OHNA10B_TX_MILHO');
 });
 
 t('relatório de FAZENDA (sem talhão) leva só a sigla', () => {
@@ -152,14 +179,14 @@ t('PRESCRIÇÃO INTACTA: SA03_TX_MILHO byte a byte', () => {
 t('produtividade sai como <talhão>_PROD_<ano>_EP0n_<cultura>', () => {
   assert.equal(
     nomeExport({ fazenda: 'Figueira', siglaFazenda: 'FRNFI', talhao: 'FRNFI 21', tipo: 'PROD', ano: 2026, epoca: '1', detalhe: 'soja' }),
-    'FRNF21_PROD_2026_EP01_SOJA',   // a sigla cadastrada é truncada em 4 letras
+    'FRNFI_21_PROD_2026_EP01_SOJA',   // nome do talhão como cadastrado
   );
 });
 
 t('produtividade sem época não inventa segmento', () => {
   assert.equal(
     nomeExport({ fazenda: 'Barrinha', talhao: 'JRABA 01', tipo: 'PROD', ano: 2026, detalhe: 'milho' }),
-    'B01_PROD_2026_MILHO',
+    'JRABA_01_PROD_2026_MILHO',
   );
 });
 console.log(`\n${ok} passaram, ${fail} falharam\n`);
