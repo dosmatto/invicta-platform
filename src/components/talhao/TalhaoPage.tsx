@@ -46,6 +46,7 @@ import { abasComDados } from '@/lib/portalProdutor';
 import { dadosLocaisDoTalhao, dadosNuvemDosTalhoes, juntarNuvem, type DadosNuvem, type FalhaNuvem } from '@/lib/portalDados';
 import { tocarBackend } from '@/lib/interpUrl';
 import { APP_VERSION } from '@/constants/version';
+import IntegracaoPrecisionFarm from '@/components/talhao/IntegracaoPrecisionFarm';
 import {
   ChevronLeft, ChevronsLeft, ChevronsRight, X, Home, Leaf, Grid3x3, Layers, BarChart3, FileSpreadsheet,
   Activity, Satellite, FolderOpen, FileText, Clock, Zap, Mountain, SlidersHorizontal, Lock, Salad,
@@ -453,6 +454,8 @@ export function TalhaoPage({ id }: { id: string }) {
 
           <div className="flex-1 overflow-y-auto">
             {tabAtivo === 'resumo' && talhao && <ResumoTab talhao={talhao} fazenda={fazenda} safraNome={safraSel} cultura={cultura} somenteLeitura={modoProdutor} />}
+            {/* Integração PrecisionFarm — só owner/admin (o componente some para os demais). */}
+            {tabAtivo === 'resumo' && talhao && !modoProdutor && <IntegracaoPrecisionFarm talhao={talhao} />}
             {tabAtivo === 'fertilidade' && (
               <>
                 {!modoProdutor && (

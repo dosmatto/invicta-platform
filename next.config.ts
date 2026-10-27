@@ -7,6 +7,15 @@ import type { NextConfig } from "next";
 const mobile = process.env.BUILD_MOBILE === '1';
 
 const plataforma: NextConfig = {
+  // Integração PrecisionFarm (docs/integracao-precisionfarm.md): o contrato 0.2.0
+  // exige a base terminando em /integration/v1 e NÃO aceita redirecionamento —
+  // por isso REWRITE (o servidor responde no mesmo endereço) para as rotas que
+  // vivem em /api/integration/v1 (a pasta api/ é o que o build móvel já tira).
+  async rewrites() {
+    return [
+      { source: '/integration/v1/:path*', destination: '/api/integration/v1/:path*' },
+    ];
+  },
   async headers() {
     return [
       {

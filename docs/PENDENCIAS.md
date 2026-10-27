@@ -121,6 +121,7 @@ verdadeira (fusão de talhões) chegou depois; foi preciso renumerar.
 | S/N | Volume travado com sobra (não redistribui; sobra para outro talhão) | 2.207.0 | Talhão → Prescrições → Nova → "Por condição…" ou "Por imagem de índice…" → "Volume travado com sobra" |
 | S/N | Mapa da prescrição em sementes/m com uma casa decimal | 2.207.1 | Talhão → Prescrições → prescrição de sementes em sementes/m → rótulos das zonas no mapa ("14,6 sementes/m") |
 | S/N | Arquivo exportado leva o nome do talhão como cadastrado | 2.208.0 | Todo export (PDF/SHP/KML/Excel) — nome do arquivo baixado |
+| S/N | Integração com a PrecisionFarm — fase 1 (vínculo e publicação) | 2.210.0 | Talhão → painel lateral / aba Resumo → Integração PrecisionFarm (owner/admin) |
 
 > As pendências 1–17 foram entregues antes deste registro existir e não estão
 > catalogadas; procure pelo assunto no `changelog.ts`. Da 18 em diante, tudo

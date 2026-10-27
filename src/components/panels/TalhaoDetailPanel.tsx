@@ -32,6 +32,7 @@ import { cloudCarregarMapasPorPrefixo } from '@/lib/cloud';
 import { lerChaveMapa } from '@/lib/recomendacao/escolhaMapa';
 import { descomprimirGrid, coordsFromBounds, type RespInterp } from '@/lib/fertilidade';
 import { colorirGridComLegenda, temGrid } from '@/lib/raster';
+import IntegracaoPrecisionFarm from '@/components/talhao/IntegracaoPrecisionFarm';
 import {
   ChevronLeft, Layers, Upload, MapPin, CheckCircle2, AlertTriangle, Plus, X, Save,
   ExternalLink, Trash2, Pencil, Grid3x3, TestTube, Leaf, Activity, Mountain, BarChart3, Zap, Eye, Loader2, Share2, Combine,
@@ -692,6 +693,8 @@ export function TalhaoDetailPanel() {
         )}
         <ResumoSafra talhaoId={nav.talhaoId ?? ''} safra={safra} />
         <MapasDefinitivos talhao={talhao} safra={safra} />
+        {/* Só owner/admin — o próprio componente some para os demais. */}
+        <IntegracaoPrecisionFarm talhao={talhao} />
       </div>
     </div>
   );

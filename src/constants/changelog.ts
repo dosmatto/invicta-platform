@@ -1,5 +1,12 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Integração com a PrecisionFarm — fase 1 (vínculo e publicação)
+  '2.210.0': [
+    'INTEGRAÇÃO COM A PRECISIONFARM — FASE 1: no talhão (painel lateral e aba Resumo), a seção "Integração PrecisionFarm" — só para owner e admin — gera os identificadores compartilhados do talhão (produtor e fazenda reaproveitados de outros talhões já vinculados), guarda o ID do talhão do lado da PrecisionFarm e confirma ou suspende o vínculo.',
+    'PUBLICAR PARA A PRECISIONFARM: botões "Publicar zoneamento" (o zoneamento padrão) e "Publicar colheita" (o mapa OFICIAL de cada safra/época, em kg/ha). Cada publicação com conteúdo novo vira uma revisão que não muda mais; publicar de novo sem mudança não cria revisão. A lista mostra o que está publicado (revisão, data, quem publicou, checksum). Só o que foi publicado, de talhões com vínculo confirmado, aparece para a PrecisionFarm.',
+    'Época de cultivo obrigatória para publicar colheita (Verão, Safrinha ou Inverno). Colheita acima de ~4 MB é recusada com a orientação de reprocessar com pixel maior.',
+    'Para a PrecisionFarm: API de leitura em /integration/v1 (capabilities, catálogo, inventário, revisão) com chave própria, contrato 0.2.0. Detalhes em docs/integracao-precisionfarm.md.',
+  ],
   // [S/N] Documentação da integração com a PrecisionFarm
   '2.209.1': [
     'DOCUMENTAÇÃO DA INTEGRAÇÃO COM A PRECISIONFARM (proposta, ainda não implementada): contrato de troca de dados, exemplos e análise do lado da Invicta em docs/integracao-precisionfarm/. Nada muda na plataforma por enquanto.',

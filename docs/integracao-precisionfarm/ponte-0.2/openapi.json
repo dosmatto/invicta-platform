@@ -1,0 +1,378 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "PrecisionFarm - integração Invicta",
+    "version": "0.2.0",
+    "description": "Contrato implementado do lado PrecisionFarm. Ativação e credenciais do piloto são acordadas entre as equipes."
+  },
+  "servers": [
+    {
+      "url": "https://precisionfarm.com.br/integration/v1"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "serviceKey": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    }
+  },
+  "paths": {
+    "/capabilities": {
+      "get": {
+        "summary": "Capacidades e ambiente",
+        "security": [
+          {
+            "serviceKey": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sucesso"
+          },
+          "401": {
+            "description": "Chave ou HMAC inválido"
+          },
+          "404": {
+            "description": "Fora do vínculo"
+          },
+          "409": {
+            "description": "Conflito"
+          },
+          "422": {
+            "description": "Contrato inválido"
+          },
+          "503": {
+            "description": "Integração desabilitada"
+          }
+        }
+      }
+    },
+    "/catalog": {
+      "get": {
+        "summary": "Talhões confirmados",
+        "security": [
+          {
+            "serviceKey": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sucesso"
+          },
+          "401": {
+            "description": "Chave ou HMAC inválido"
+          },
+          "404": {
+            "description": "Fora do vínculo"
+          },
+          "409": {
+            "description": "Conflito"
+          },
+          "422": {
+            "description": "Contrato inválido"
+          },
+          "503": {
+            "description": "Integração desabilitada"
+          }
+        },
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string",
+              "default": "0"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 100
+            }
+          }
+        ]
+      }
+    },
+    "/fields/{shared_field_id}/inventory": {
+      "get": {
+        "summary": "Recursos publicados por talhão",
+        "security": [
+          {
+            "serviceKey": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sucesso"
+          },
+          "401": {
+            "description": "Chave ou HMAC inválido"
+          },
+          "404": {
+            "description": "Fora do vínculo"
+          },
+          "409": {
+            "description": "Conflito"
+          },
+          "422": {
+            "description": "Contrato inválido"
+          },
+          "503": {
+            "description": "Integração desabilitada"
+          }
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "shared_field_id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string",
+              "default": "0"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 100
+            }
+          }
+        ]
+      }
+    },
+    "/resources/{id}/revisions/{n}": {
+      "get": {
+        "summary": "Snapshot imutável",
+        "security": [
+          {
+            "serviceKey": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sucesso"
+          },
+          "401": {
+            "description": "Chave ou HMAC inválido"
+          },
+          "404": {
+            "description": "Fora do vínculo"
+          },
+          "409": {
+            "description": "Conflito"
+          },
+          "422": {
+            "description": "Contrato inválido"
+          },
+          "503": {
+            "description": "Integração desabilitada"
+          }
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "path",
+            "name": "n",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ]
+      }
+    },
+    "/changes": {
+      "get": {
+        "summary": "Recuperação por cursor",
+        "security": [
+          {
+            "serviceKey": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sucesso"
+          },
+          "401": {
+            "description": "Chave ou HMAC inválido"
+          },
+          "404": {
+            "description": "Fora do vínculo"
+          },
+          "409": {
+            "description": "Conflito"
+          },
+          "422": {
+            "description": "Contrato inválido"
+          },
+          "503": {
+            "description": "Integração desabilitada"
+          }
+        },
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string",
+              "default": "0"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 100
+            }
+          }
+        ]
+      }
+    },
+    "/notifications": {
+      "post": {
+        "summary": "Aviso de revisão, corpo sem geometria e com checksum",
+        "security": [
+          {
+            "serviceKey": []
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Sucesso"
+          },
+          "401": {
+            "description": "Chave ou HMAC inválido"
+          },
+          "404": {
+            "description": "Fora do vínculo"
+          },
+          "409": {
+            "description": "Conflito"
+          },
+          "422": {
+            "description": "Contrato inválido"
+          },
+          "503": {
+            "description": "Integração desabilitada"
+          }
+        },
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-PF-Timestamp",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-PF-Signature",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/receipts": {
+      "post": {
+        "summary": "Resultado do recebimento",
+        "security": [
+          {
+            "serviceKey": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sucesso"
+          },
+          "401": {
+            "description": "Chave ou HMAC inválido"
+          },
+          "404": {
+            "description": "Fora do vínculo"
+          },
+          "409": {
+            "description": "Conflito"
+          },
+          "422": {
+            "description": "Contrato inválido"
+          },
+          "503": {
+            "description": "Integração desabilitada"
+          }
+        },
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-PF-Timestamp",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-PF-Signature",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

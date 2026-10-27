@@ -1,0 +1,62 @@
+{
+  "contract_version": "0.2.0",
+  "event_id": "00000008-1111-4111-8111-000000000008",
+  "source_system": "invicta",
+  "shared_producer_id": "00000002-1111-4111-8111-000000000002",
+  "shared_farm_id": "00000003-1111-4111-8111-000000000003",
+  "shared_field_id": "00000004-1111-4111-8111-000000000004",
+  "resource_id": "00000009-1111-4111-8111-000000000009",
+  "resource_type": "harvest",
+  "resource_revision": 1,
+  "base_revision": 0,
+  "boundary_revision": 1,
+  "occurred_at": "2026-10-22T15:00:00Z",
+  "operation": "upsert",
+  "payload": {
+    "name": "Colheita oficial",
+    "status": "available",
+    "season": "2025/2026",
+    "season_period": "main",
+    "quantity": "grain_yield",
+    "value_unit": "kg/ha",
+    "geometry": {
+      "type": "FeatureCollection",
+      "features": [
+        {
+          "type": "Feature",
+          "id": "cell-1",
+          "properties": {
+            "value": 3500
+          },
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  -50,
+                  -24
+                ],
+                [
+                  -49.999,
+                  -24
+                ],
+                [
+                  -49.999,
+                  -23.999
+                ],
+                [
+                  -50,
+                  -23.999
+                ],
+                [
+                  -50,
+                  -24
+                ]
+              ]
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

@@ -34,6 +34,7 @@
     "teste:interpolador": "node scripts/teste-interpolador.mjs",
     "teste:laudo-api": "node scripts/teste-laudo-api.mjs",
     "teste:programacao": "node scripts/teste-programacao-api.mjs",
+    "teste:precisionfarm": "node scripts/teste-precisionfarm.mjs",
     "build:mobile": "node scripts/mobile-build.mjs",
     "android:sync": "npm run build:mobile && npx cap sync android",
     "android:open": "npx cap open android",

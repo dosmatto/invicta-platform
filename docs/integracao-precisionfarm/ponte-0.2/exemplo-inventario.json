@@ -1,0 +1,34 @@
+{
+  "items": [
+    {
+      "resource_id": "00000005-1111-4111-8111-000000000005",
+      "resource_type": "guidance",
+      "resource_revision": 1,
+      "boundary_revision": 1,
+      "status": "published",
+      "name": "linhas_verao",
+      "operation_category": "planting",
+      "cropping_cycle": "summer",
+      "spacing_m": 7.8,
+      "checksum": "3a2572c77dbecaa2f1a7e880c8631c9855f58da9240df9025a3b8606bd051601",
+      "event": {
+        "contract_version": "0.2.0",
+        "event_id": "00000001-1111-4111-8111-000000000001",
+        "source_system": "precisionfarm",
+        "shared_producer_id": "00000002-1111-4111-8111-000000000002",
+        "shared_farm_id": "00000003-1111-4111-8111-000000000003",
+        "shared_field_id": "00000004-1111-4111-8111-000000000004",
+        "resource_id": "00000005-1111-4111-8111-000000000005",
+        "resource_type": "guidance",
+        "resource_revision": 1,
+        "base_revision": 0,
+        "boundary_revision": 1,
+        "occurred_at": "2026-10-22T15:00:00Z",
+        "operation": "upsert",
+        "checksum": "3a2572c77dbecaa2f1a7e880c8631c9855f58da9240df9025a3b8606bd051601"
+      }
+    }
+  ],
+  "next_cursor": "1",
+  "has_more": false
+}

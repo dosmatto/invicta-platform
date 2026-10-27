@@ -1,0 +1,63 @@
+{
+  "contract_version": "0.2.0",
+  "event_id": "00000006-1111-4111-8111-000000000006",
+  "source_system": "invicta",
+  "shared_producer_id": "00000002-1111-4111-8111-000000000002",
+  "shared_farm_id": "00000003-1111-4111-8111-000000000003",
+  "shared_field_id": "00000004-1111-4111-8111-000000000004",
+  "resource_id": "00000007-1111-4111-8111-000000000007",
+  "resource_type": "management_zones",
+  "resource_revision": 1,
+  "base_revision": 0,
+  "boundary_revision": 1,
+  "occurred_at": "2026-10-22T15:00:00Z",
+  "operation": "upsert",
+  "payload": {
+    "name": "Zonas consolidadas",
+    "status": "consolidated",
+    "season": null,
+    "semantic": "productivity_class",
+    "value_unit": "class",
+    "geometry": {
+      "type": "FeatureCollection",
+      "features": [
+        {
+          "type": "Feature",
+          "id": "01",
+          "properties": {
+            "zone_id": "01",
+            "class_name": "Alta",
+            "potential_rank": 1
+          },
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  -50,
+                  -24
+                ],
+                [
+                  -49.999,
+                  -24
+                ],
+                [
+                  -49.999,
+                  -23.999
+                ],
+                [
+                  -50,
+                  -23.999
+                ],
+                [
+                  -50,
+                  -24
+                ]
+              ]
+            ]
+          }
+        }
+      ]
+    }
+  }
+}
