@@ -315,6 +315,9 @@ t('abas do talhão: laudo sem mapa já abre fertilidade; cena e colheita só na 
 });
 t('abas do talhão: um laudo FOLIAR abre a aba Foliar, e ela entra depois de Fertilidade', () => {
   assert.deepEqual(abasComDados({ talhao: T3.talhao, amostrasFoliares: [{ safra: '26/27', criadoEm: '2026-01-10', dataColeta: '2026-01-08' }] }), ['resumo', 'foliar']);
+  // Linhas recebidas da PrecisionFarm (fase 2): aba só com camada de linhas.
+  assert.deepEqual(abasComDados({ talhao: T3.talhao, linhasPF: [{ resourceId: 'r1' }] }), ['resumo', 'linhas']);
+  assert.deepEqual(abasComDados({ talhao: T3.talhao, linhasPF: [] }), ['resumo']);
   // Sem laudo foliar a aba não aparece — nem para o talhão que tem tudo o mais.
   assert.ok(!abasComDados(T1).includes('foliar'));
   assert.deepEqual(

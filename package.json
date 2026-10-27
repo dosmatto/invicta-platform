@@ -35,6 +35,7 @@
     "teste:laudo-api": "node scripts/teste-laudo-api.mjs",
     "teste:programacao": "node scripts/teste-programacao-api.mjs",
     "teste:precisionfarm": "node scripts/teste-precisionfarm.mjs",
+    "teste:precisionfarm-e2e": "node scripts/teste-precisionfarm-e2e.mjs",
     "build:mobile": "node scripts/mobile-build.mjs",
     "android:sync": "npm run build:mobile && npx cap sync android",
     "android:open": "npx cap open android",

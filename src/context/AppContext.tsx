@@ -98,6 +98,11 @@ interface AppContextType {
   setFertilidadeOverlay: (o: FertilidadeOverlay | null) => void;
   fertilidadeLabels: GeoJSON.FeatureCollection | null;
   setFertilidadeLabels: (fc: GeoJSON.FeatureCollection | null) => void;
+  // Linhas recebidas da PrecisionFarm (aba Linhas do talhão). Cada feição traz
+  // `kind` (guidance = linha guia, headland = bordadura) e `comparacao` (true =
+  // revisão antiga exibida para comparar com a vigente). Só leitura.
+  linhasPF: GeoJSON.FeatureCollection | null;
+  setLinhasPF: (fc: GeoJSON.FeatureCollection | null) => void;
   // Limites [oeste, sul, leste, norte] do que está VISÍVEL no mapa agora.
   // Publicado pelo MapView a cada movimento. Quem usa: o download em GeoTIFF da
   // aba NDVI, para baixar exatamente a janela que o usuário está vendo (e não só
@@ -145,6 +150,8 @@ const AppContext = createContext<AppContextType>({
   setFertilidadeOverlay: () => {},
   fertilidadeLabels: null,
   setFertilidadeLabels: () => {},
+  linhasPF: null,
+  setLinhasPF: () => {},
   boundsTela: null,
   setBoundsTela: () => {},
 });
@@ -382,6 +389,7 @@ export function AppProvider({ children, redirectProdutorParaPortal, modoCampo }:
   const [fertilidadeOverlay, setFertilidadeOverlay] = useState<FertilidadeOverlay | null>(null);
   const [boundsTela, setBoundsTela] = useState<[number, number, number, number] | null>(null);
   const [fertilidadeLabels, setFertilidadeLabels] = useState<GeoJSON.FeatureCollection | null>(null);
+  const [linhasPF, setLinhasPF] = useState<GeoJSON.FeatureCollection | null>(null);
   const [nav, setNavState] = useState<NavContext>({
     produtorId: null, produtor: '',
     fazendaId: null, fazenda: '',
@@ -436,6 +444,7 @@ export function AppProvider({ children, redirectProdutorParaPortal, modoCampo }:
       corteLinha, setCorteLinha,
       fertilidadeOverlay, setFertilidadeOverlay,
       fertilidadeLabels, setFertilidadeLabels,
+      linhasPF, setLinhasPF,
       boundsTela, setBoundsTela,
     }}>
       {authConfigurado && usuario === undefined ? (

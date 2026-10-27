@@ -49,8 +49,10 @@ import { APP_VERSION } from '@/constants/version';
 import IntegracaoPrecisionFarm from '@/components/talhao/IntegracaoPrecisionFarm';
 import {
   ChevronLeft, ChevronsLeft, ChevronsRight, X, Home, Leaf, Grid3x3, Layers, BarChart3, FileSpreadsheet,
-  Activity, Satellite, FolderOpen, FileText, Clock, Zap, Mountain, SlidersHorizontal, Lock, Salad,
+  Activity, Satellite, FolderOpen, FileText, Clock, Zap, Mountain, SlidersHorizontal, Lock, Salad, Waypoints,
 } from 'lucide-react';
+import { LinhasSection } from '@/components/talhao/LinhasSection';
+import { camadasVisiveisPF, estadoLinhasPF } from '@/lib/precisionfarm/cliente';
 
 const MapView = dynamic(
   () => import('@/components/map/MapView').then(m => ({ default: m.MapView })),
@@ -59,7 +61,7 @@ const MapView = dynamic(
 
 type TabId =
   | 'resumo' | 'altimetria' | 'fertilidade' | 'foliar' | 'amostragem' | 'zonas' | 'produtividade'
-  | 'recomendacoes' | 'prescricoes' | 'compactacao' | 'condutividade' | 'ndvi' | 'arquivos' | 'relatorios';
+  | 'recomendacoes' | 'prescricoes' | 'linhas' | 'compactacao' | 'condutividade' | 'ndvi' | 'arquivos' | 'relatorios';
 
 // Ordem de TRABALHO do talhão (não-`pronto` = "em breve", cai no placeholder EmBreve).
 // `curto` é o rótulo do TRILHO (64px de largura): nome inteiro só no cabeçalho
@@ -77,6 +79,9 @@ const TABS: Array<{ id: TabId; label: string; curto: string; icon: React.Element
   { id: 'foliar',        label: 'Foliar / Nutrição', curto: 'Foliar',     icon: Salad,           pronto: true },
   { id: 'recomendacoes', label: 'Recomendações',    curto: 'Recom.',      icon: FileSpreadsheet, pronto: true },
   { id: 'prescricoes',   label: 'Prescrições',      curto: 'Prescr.',     icon: SlidersHorizontal, pronto: true },
+  // Linhas guia/bordaduras recebidas da PrecisionFarm (somente leitura). Sem
+  // linha na matriz de permissões: para o produtor, segue só a existência.
+  { id: 'linhas',        label: 'Linhas (PrecisionFarm)', curto: 'Linhas', icon: Waypoints,       pronto: true },
   { id: 'arquivos',      label: 'Arquivos',         curto: 'Arquivos',    icon: FolderOpen,      pronto: true },
   { id: 'ndvi',          label: 'NDVI / Satélite',  curto: 'NDVI',        icon: Satellite,       pronto: true },
   { id: 'produtividade', label: 'Produtividade',    curto: 'Produtiv.',   icon: BarChart3,       pronto: true },
@@ -277,7 +282,19 @@ export function TalhaoPage({ id }: { id: string }) {
       .catch(() => { if (vivo) setNuvem({ mapasNuvem: {}, cenarios: {}, relatorios: {}, falhas: ['mapas', 'cenarios', 'relatorios'] }); });
     return () => { vivo = false; };
   }, [talhao, precisaExistencia]);
-  const abasExistentes = useMemo(() => new Set<string>(dadosLocais ? abasComDados(juntarNuvem(dadosLocais, nuvem)) : []), [dadosLocais, nuvem]);
+  // Linhas da PrecisionFarm vivem em tabelas do servidor (pf_*): a rota diz se
+  // há camadas com linhas. Falha/sem sessão = sem a aba (nada a mostrar).
+  const [linhasPF, setLinhasPF] = useState<unknown[]>([]);
+  useEffect(() => {
+    if (!talhao || !precisaExistencia) return;
+    let vivo = true;
+    void estadoLinhasPF(talhao.id).then(r => { if (vivo && r.ok) setLinhasPF(camadasVisiveisPF(r.camadas)); });
+    return () => { vivo = false; };
+  }, [talhao, precisaExistencia]);
+  const abasExistentes = useMemo(
+    () => new Set<string>(dadosLocais ? abasComDados({ ...juntarNuvem(dadosLocais, nuvem), linhasPF }) : []),
+    [dadosLocais, nuvem, linhasPF],
+  );
 
   function voltar() { router.push('/painel'); }
   // Produtor volta ao portal dele; no preview, ao portal do produtor que estava vendo.
@@ -489,9 +506,10 @@ export function TalhaoPage({ id }: { id: string }) {
             {tabAtivo === 'ndvi' && <NdviSection safraNome={safraSel} />}
             {tabAtivo === 'recomendacoes' && <RecomendacaoSection safraNome={safraSel} />}
             {tabAtivo === 'prescricoes' && <PrescricoesSection safraNome={safraSel} />}
+            {tabAtivo === 'linhas' && talhao && <LinhasSection talhao={talhao} />}
             {tabAtivo === 'arquivos' && <ArquivosSection safraNome={safraSel} />}
             {tabAtivo === 'relatorios' && <GeradorRelatorios safraNome={safraSel} />}
-            {!['resumo', 'fertilidade', 'foliar', 'amostragem', 'zonas', 'compactacao', 'condutividade', 'altimetria', 'produtividade', 'ndvi', 'recomendacoes', 'prescricoes', 'arquivos', 'relatorios'].includes(tabAtivo) && (
+            {!['resumo', 'fertilidade', 'foliar', 'amostragem', 'zonas', 'compactacao', 'condutividade', 'altimetria', 'produtividade', 'ndvi', 'recomendacoes', 'prescricoes', 'linhas', 'arquivos', 'relatorios'].includes(tabAtivo) && (
               <EmBreve label={TABS.find(t => t.id === tabAtivo)?.label ?? ''} />
             )}
           </div>

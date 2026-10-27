@@ -68,7 +68,7 @@ export function MapView({ mostrarVisaoGeral = false }: { mostrarVisaoGeral?: boo
           uploadedGeo, setUploadedGeo,
           uploadedBbox, setUploadedBbox,
           pontosSimulados, talhoesFazenda, zonasManejo, zonasFundo, zonasOpacidade,
-          fertilidadeOverlay, fertilidadeLabels,
+          fertilidadeOverlay, fertilidadeLabels, linhasPF,
           edicaoAtiva, edicaoModo, setPontoEvent, setZonaEvent,
           corteAtivo, corteLinha, setCorteLinha, setBoundsTela } = useApp();
 
@@ -213,6 +213,21 @@ export function MapView({ mostrarVisaoGeral = false }: { mostrarVisaoGeral?: boo
         filter: ['==', ['geometry-type'], 'Point'],
         layout: { 'text-field': ['get','txt'], 'text-size': 11, 'text-font': ['Open Sans Regular'], 'text-allow-overlap': true },
         paint:  { 'text-color': '#fff', 'text-halo-color': '#1e293b', 'text-halo-width': 2 } });
+
+      // LINHAS RECEBIDAS DA PRECISIONFARM (aba Linhas, só leitura). Três estilos:
+      // revisão antiga em comparação (cinza tracejado, por baixo), bordadura
+      // (headland, laranja grosso) e linha guia (guidance, ciano fino).
+      map.addSource('pf-linhas', { type: 'geojson', data: EMPTY_FC });
+      map.addLayer({ id: 'pf-linhas-comparacao', type: 'line', source: 'pf-linhas',
+        filter: ['==', ['get', 'comparacao'], true],
+        paint: { 'line-color': '#e2e8f0', 'line-width': 1.6, 'line-opacity': 0.85, 'line-dasharray': [2, 1.6] } });
+      map.addLayer({ id: 'pf-linhas-bordadura', type: 'line', source: 'pf-linhas',
+        filter: ['all', ['!=', ['get', 'comparacao'], true], ['==', ['get', 'kind'], 'headland']],
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: { 'line-color': '#fb923c', 'line-width': 2.6 } });
+      map.addLayer({ id: 'pf-linhas-guia', type: 'line', source: 'pf-linhas',
+        filter: ['all', ['!=', ['get', 'comparacao'], true], ['!=', ['get', 'kind'], 'headland']],
+        paint: { 'line-color': '#22d3ee', 'line-width': 1.4 } });
 
       // Traço do CORTE POR LINHA (editor manual de zonas). Adicionado por
       // ÚLTIMO de propósito: a linha que o agrônomo está desenhando tem que
@@ -684,6 +699,14 @@ export function MapView({ mostrarVisaoGeral = false }: { mostrarVisaoGeral?: boo
     const src = map.getSource('fert-labels') as maplibregl.GeoJSONSource | undefined;
     if (src) src.setData(fertilidadeLabels ?? EMPTY_FC);
   }, [fertilidadeLabels, mapReady]);
+
+  // ── 6e. Linhas recebidas da PrecisionFarm (setData) ──────────────────────
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    const src = map.getSource('pf-linhas') as maplibregl.GeoJSONSource | undefined;
+    if (src) src.setData(linhasPF ?? EMPTY_FC);
+  }, [linhasPF, mapReady]);
 
   // ── 7. Edição manual de pontos (arrastar / adicionar / remover) ───────────
   useEffect(() => {

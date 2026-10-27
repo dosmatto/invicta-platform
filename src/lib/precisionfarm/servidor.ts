@@ -12,6 +12,8 @@ import { gunzipSync } from 'node:zlib';
 import { chaveDoHeader, hashChave } from '../laudo/servidor.ts';
 import { padraoVigente } from '../meap/versoes.ts';
 import type { Envelope, Evento, GradeColheita, StatusVinculo, TipoRecurso } from './contrato.ts';
+import { ehPapelGestor, ehPapelSemEscopo, podeVerTalhao, type RegistroAcesso } from './acessoTalhao.ts';
+import type { FazendaEscopo } from '../iam/escopoFazendas.ts';
 
 export { servicoConfigurado, clienteServico } from '../laudo/servidor.ts';
 
@@ -86,6 +88,60 @@ export async function autenticarUsuario(sb: SupabaseClient, auth: string | null)
     return { ok: false, status: 403, erro: 'Só owner e admin usam a integração com a PrecisionFarm.' };
   }
   return { ok: true, email, papel };
+}
+
+// ── Autenticação de LEITURA (aba Linhas: todos com acesso ao talhão, Q4) ─────
+
+export type LeitorAutenticado =
+  | { ok: true; email: string; papel: string; gestor: boolean }
+  | { ok: false; status: 401 | 403 | 404; erro: string };
+
+/**
+ * Sessão + "este usuário vê este talhão?". Mesma regra do app (getTalhoes):
+ * papel e vínculos do registro em inv_papeis, status que entra, escopo de
+ * cliente/fazenda/talhão (acessoTalhao.ts → podeVerTalhao). Owner/admin/editor
+ * veem todos. Linha de papel PRODUTOR do e-mail vale primeiro (falha fechada,
+ * como inv_eh_produtor da RLS); entre as do mesmo papel, a canônica
+ * (item_id = e-mail) e depois a mais recente.
+ */
+export async function autenticarLeitor(sb: SupabaseClient, auth: string | null, talhaoId: string): Promise<LeitorAutenticado> {
+  const token = chaveDoHeader(auth);
+  if (!token) return { ok: false, status: 401, erro: 'Sessão ausente. Entre de novo na plataforma.' };
+  const { data, error } = await sb.auth.getUser(token);
+  const email = data?.user?.email?.trim().toLowerCase();
+  if (error || !email) return { ok: false, status: 401, erro: 'Sessão expirada ou inválida. Saia e entre de novo.' };
+  const { data: regs, error: e2 } = await sb
+    .from('app_kv').select('item_id, dados, atualizado_em')
+    .eq('colecao', COL_PAPEIS)
+    .ilike('dados->>email', email.replace(/[\\%_]/g, c => '\\' + c))
+    .limit(20);
+  if (e2) return { ok: false, status: 403, erro: 'Não foi possível conferir o seu acesso.' };
+  type Linha = { item_id: string; dados: RegistroAcesso & { email?: string }; atualizado_em: string | null };
+  const linhas = ((regs ?? []) as Linha[]).filter(r => String(r.dados?.email ?? '').trim().toLowerCase() === email);
+  const temProdutor = linhas.some(r => r.dados?.papel === 'produtor');
+  const candidatas = (temProdutor ? linhas.filter(r => r.dados?.papel === 'produtor') : linhas)
+    .sort((a, b) => Number(b.item_id === email) - Number(a.item_id === email) || String(b.atualizado_em ?? '').localeCompare(String(a.atualizado_em ?? '')));
+  const reg = candidatas[0]?.dados ?? null;
+  if (!reg?.papel) return { ok: false, status: 403, erro: 'Seu usuário não tem papel na plataforma.' };
+  const gestor = ehPapelGestor(reg.papel);
+  if (ehPapelSemEscopo(reg.papel)) {
+    return podeVerTalhao(reg, { id: talhaoId, fazendaId: null }, [])
+      ? { ok: true, email, papel: reg.papel, gestor }
+      : { ok: false, status: 403, erro: 'Seu acesso não está ativo.' };
+  }
+  const t = await carregarTalhao(sb, talhaoId);
+  if (!t) return { ok: false, status: 404, erro: 'Talhão não encontrado na nuvem.' };
+  const ids = [...new Set([t.fazendaId, ...(Array.isArray(reg.fazendasVinculadas) ? reg.fazendasVinculadas : [])].filter((x): x is string => typeof x === 'string' && !!x))];
+  let fazendas: FazendaEscopo[] = [];
+  if (ids.length) {
+    const { data: fz, error: e3 } = await sb.from('app_kv').select('item_id, clienteId:dados->>clienteId').eq('colecao', COL_FAZENDAS).in('item_id', ids);
+    if (e3) return { ok: false, status: 403, erro: 'Não foi possível conferir o seu acesso.' };
+    fazendas = ((fz ?? []) as { item_id: string; clienteId: string | null }[]).map(f => ({ id: String(f.item_id), clienteId: String(f.clienteId ?? '') }));
+  }
+  if (!podeVerTalhao(reg, { id: t.id, fazendaId: t.fazendaId }, fazendas)) {
+    return { ok: false, status: 403, erro: 'Você não tem acesso a este talhão.' };
+  }
+  return { ok: true, email, papel: reg.papel, gestor };
 }
 
 // ── Leitura do cadastro (nuvem) ──────────────────────────────────────────────

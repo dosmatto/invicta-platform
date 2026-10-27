@@ -1,4 +1,4 @@
-# Integração Invicta → PrecisionFarm (ponte 0.2.0) — fase 1
+# Integração Invicta ↔ PrecisionFarm (ponte 0.2.0) — fases 1 e 2
 
 Para quem desenvolve ou opera a ponte com a **PrecisionFarm**. Este documento é o
 lado da Invicta do contrato 0.2.0 (a referência deles está em
@@ -8,6 +8,13 @@ exemplos e `ASSINATURA_EXEMPLO.mjs`). Código: `src/lib/precisionfarm/`
 `src/app/api/integration/v1/` e `src/app/api/precisionfarm/`. SQL:
 `docs/integracao-precisionfarm.sql`. Testes: `npm run teste:precisionfarm`.
 
+**Fase 2 (receber as LINHAS da PF)** está na §6: código em
+`src/lib/precisionfarm/` (`linhas.ts` = núcleo puro, `recebimento.ts` =
+orquestração, `clientePF.ts` = HTTP para a PF, `repoLinhas.ts` = banco,
+`acessoTalhao.ts` = quem vê o talhão), SQL em
+`docs/integracao-precisionfarm-fase2.sql`, teste ponta a ponta com PF simulada
+em `npm run teste:precisionfarm-e2e`.
+
 ## O fluxo em uma linha
 
 O owner/admin **vincula** o talhão (UUIDs compartilhados + ID do talhão na PF) →
@@ -16,11 +23,12 @@ O owner/admin **vincula** o talhão (UUIDs compartilhados + ID do talhão na PF)
 chave dela em `/integration/v1/*` e só enxerga **o que foi publicado** dos
 **vínculos confirmados**.
 
-Fase 1 = só leitura pela PF (capabilities, catálogo, inventário, revisão). Ainda
-**não** existem `/changes`, `/notifications`, `/receipts` (respondem **501**
-`not_implemented` em JSON), HMAC, recebimento de linhas/limites da PF nem
-GeoTIFF — ficam para as próximas fases. `/capabilities` diz isso em `features`
-e `not_implemented`.
+Fase 1 = leitura pela PF (capabilities, catálogo, inventário, revisão). Fase 2 =
+a Invicta **recebe** avisos de linhas (`POST /notifications`, com HMAC) e busca
+as revisões na PF (§6). Ainda **não** existem o `/changes` e o `/receipts` DA
+INVICTA (respondem **501** `not_implemented` em JSON — a nossa fila de saída é
+da fase 3), recebimento de limites/zonas da PF nem GeoTIFF. `/capabilities` diz
+isso em `features` e `not_implemented`.
 
 ---
 
@@ -36,13 +44,15 @@ mesmo endereço, sem redirecionamento (o contrato não aceita redirect).
 | `GET /catalog?cursor=&limit=` | talhões com vínculo **confirmado** alcançados pela chave |
 | `GET /fields/{shared_field_id}/inventory?cursor=&limit=` | camadas publicadas do talhão, revisão vigente + `event` |
 | `GET /resources/{id}/revisions/{n}` | envelope completo da revisão `n` (snapshot imutável) |
-| `/changes`, `/notifications`, `/receipts` | **501** `{ "error": { "code": "not_implemented", … } }` (fase 1) |
+| `POST /notifications` | **202** — aviso de revisão de linhas (fase 2, §6) |
+| `/changes`, `/receipts` | **501** `{ "error": { "code": "not_implemented", … } }` (fase 3) |
 | qualquer outro caminho sob `/integration/v1` | 404 `not_found` em JSON |
 
 Chamar **sem** barra final (`/catalog/` leva um 308 do Next).
 
-Não há interruptor de desligamento: com chave válida, responde (decisão Q2). O
-503 "integração desabilitada" do contrato **nunca** sai daqui.
+Não há interruptor de desligamento da LEITURA: com chave válida, responde
+(decisão Q2). O 503 "integração desabilitada" só sai de `POST /notifications`
+enquanto as variáveis `PF_*` do recebimento não estiverem configuradas (§6).
 
 ### 1.1 Autenticação
 
@@ -74,7 +84,7 @@ Corpo: `{ "error": { "code": "...", "message": "..." } }`.
 | 404 | `not_found` | talhão/recurso/revisão fora do vínculo ou inexistente |
 | 422 | `invalid_request` | `cursor`/`limit` inválidos, id que não é UUID, `n` < 1 |
 | 500 | `server_misconfigured` / `internal_error` | erro nosso (service role ausente, falha de banco) |
-| 501 | `not_implemented` | `/changes`, `/notifications`, `/receipts` (fase 1) |
+| 501 | `not_implemented` | `/changes`, `/receipts` (fase 3) |
 
 (413 aparece só no lado Invicta, ao publicar — ver §3.)
 
@@ -106,9 +116,10 @@ curl -s -H "Authorization: Bearer $KEY" "$BASE/resources/<resource_id>/revisions
   "resource_types": ["management_zones", "harvest"],
   "formats": ["application/geo+json"],
   "limits": { "max_geojson_bytes": 10485760, "max_features": 100000, "max_vertices": 1000000, "max_page_size": 200, "default_page_size": 100 },
-  "endpoints": ["/capabilities", "/catalog", "/fields/{shared_field_id}/inventory", "/resources/{id}/revisions/{n}"],
-  "features": { "changes": false, "notifications": false, "receipts": false, "hmac": false, "assets": false },
-  "not_implemented": ["/changes", "/notifications", "/receipts"]
+  "endpoints": ["/capabilities", "/catalog", "/fields/{shared_field_id}/inventory", "/resources/{id}/revisions/{n}", "/notifications"],
+  "features": { "changes": false, "notifications": true, "receipts": false, "hmac": true, "assets": false },
+  "notification_resource_types": ["guidance"],
+  "not_implemented": ["/changes", "/receipts"]
 }
 ```
 
@@ -293,3 +304,185 @@ nunca reescreve um registro do navegador.
    publicar até a fase 4 (GeoTIFF/asset).
 4. `crop` não está no exemplo de colheita da PF; mandamos códigos em inglês.
 5. Corpo de erro `{ error: { code, message } }` — o contrato só fixa os status.
+6. (fase 2) **`properties.kind`** não está no contrato (só no exemplo). A
+   Invicta desenha `headland` como bordadura e **qualquer outro valor, ou
+   ausente, como linha guia** — a revisão é aceita e o histórico anota quantas
+   feições vieram sem `kind`. Confirmar com a PF os valores que usam.
+7. (fase 2) **Recibo só com o resultado final** (`applied` ou `rejected`); o
+   `202` do aviso já confirma o recebimento, então `received` não é enviado.
+8. (fase 2) Itens de `GET {PF}/changes` são lidos como o evento direto (formato
+   do inventário) **ou** `item.event` — o contrato só diz "mesmo formato".
+   Item fora do contrato (ou `event_id` reutilizado com outro conteúdo) é
+   gravado em `pf_entrada_descartes` antes de o cursor andar.
+9. (fase 2) **404 ao buscar uma revisão** é tratado como temporário (a
+   publicação pode estar propagando) por 10 tentativas — até o backoff chegar a
+   1 h, ~85 min somados — e só então vira recusa definitiva com recibo `rejected`.
+10. (fase 2) Aviso **recusado** que volta com o mesmo `event_id` e o mesmo
+   conteúdo (reaviso, `/changes` ou "Buscar linhas") é **reaberto** (202 com
+   `"reopened": true`) e processado de novo, gerando um recibo novo.
+11. (fase 2) `name` ausente: a camada usa `integration_name`; sem ele,
+   "Linhas <operation_category> <cropping_cycle>".
+
+---
+
+## 6. Fase 2 — receber as LINHAS da PrecisionFarm
+
+Linhas guia e bordaduras (`resource_type = "guidance"`) desenhadas e
+publicadas na PrecisionFarm chegam sozinhas na aba **Linhas** do talhão.
+Linhas são perenes (sem safra), com ciclo verão/inverno. **Somente leitura** na
+Invicta: nenhuma edição de linha, e nada é gravado em `app_kv`/`talhoes`.
+
+### 6.1 Fluxo
+
+```
+PF publica revisão ──► POST /integration/v1/notifications (Bearer + HMAC)
+                         │  valida, confere vínculo, grava na FILA ──► 202
+                         ▼
+          after() (logo depois do 202)  +  cron a cada 5 min (pg_cron)
+                         │
+                         ▼
+   GET {PF}/resources/{id}/revisions/{n}  (https, sem redirect, timeout 20 s)
+   confere contrato 0.2.0 + checksum canônico + vínculo + geometria + limites
+                         │
+          ┌──────────────┴───────────────┐
+          ▼                              ▼
+   válida: snapshot imutável,     inválida (permanente): vigente mantida,
+   vira VIGENTE se for maior      erro visível na tela, recibo rejected
+   (menor = só histórico)         falha temporária: nova tentativa 10 s … 1 h
+          │
+          ▼
+   POST {PF}/receipts {event_id, status, reason} (HMAC com PF_HMAC_SAIDA),
+   com reenvio em caso de falha
+```
+
+- **Aviso** (`POST /notifications`): corpo = envelope **sem** `payload` + `checksum`
+  (`exemplo-notificacao.json`), até **256 KB** (413). Ordem das conferências:
+  tamanho (413) → `X-PF-Timestamp`/`X-PF-Signature` (401) → Bearer (401) → JSON
+  e contrato (422) → `resource_type` ≠ `guidance` (422
+  `unsupported_resource_type`) → vínculo **confirmado** no escopo da chave (404)
+  e os três UUIDs batendo (409) → fila → **202**
+  `{ "status": "accepted", "event_id": … }`. Mesmo `event_id` com o mesmo
+  conteúdo → 202 com `"duplicate": true`, sem duplicar — salvo se ele tinha sido
+  RECUSADO: aí é reaberto (`"reopened": true`); conteúdo diferente → 409 (sem
+  criar camada). Sem as variáveis `PF_*` → **503** `not_configured`.
+- **Assinatura**: `HMAC-SHA256(PF_HMAC_ENTRADA como texto UTF-8, timestamp + "." +
+  bytes exatos do corpo)` em hex minúsculo, comparação em tempo constante,
+  tolerância de 300 s. O teste reproduz `ASSINATURA_EXEMPLO.mjs`.
+- **Revisão**: validada contra `envelope.schema.json`, com origem
+  `precisionfarm`, mesmos `event_id`/recurso/revisão/operação/UUIDs do aviso e
+  **checksum canônico** igual (mesmo algoritmo da fase 1). Geometria:
+  `FeatureCollection` de `LineString`/`MultiLineString` em WGS84
+  [longitude, latitude] (altitude opcional), sem reparo automático; até 10 MB
+  de GeoJSON, 100 mil feições e 1 milhão de vértices. `properties.kind =
+  headland` = bordadura; outro ou ausente = linha guia (anotado no histórico).
+  `name` ausente → `integration_name` → "Linhas <operação> <ciclo>".
+  `archive` não traz linhas.
+- **Ordem**: a maior revisão é a vigente; uma revisão menor que chega depois é
+  guardada no histórico e **não regride** (a condição é atômica no banco).
+  `archive` arquiva a camada (some da vista padrão; histórico e as últimas
+  linhas continuam consultáveis); um `upsert` maior depois desarquiva.
+- **Falhas**: permanente = contrato/checksum/geometria/vínculo inválidos ou
+  409/410/413/422 da PF → recibo `rejected` com o motivo. Temporária = rede,
+  timeout, 3xx (redirect recusado), 401/403, 429, 5xx, 503 → nova tentativa
+  com backoff 10 s, 20 s, 40 s … até 1 h, sem limite de tentativas. 404 =
+  temporário até a 10ª tentativa, depois recusa. Recusa de uma revisão MENOR
+  que a vigente não põe a camada em "Erro" (fica no histórico de recusadas).
+  Owner/admin têm **Tentar de novo** na camada com recusa: reabre os avisos
+  recusados dela (`POST /api/precisionfarm/reprocessar-linhas`).
+- **Data do arquivamento** = `occurred_at` do evento de `archive` (hora da PF).
+- **Recibos**: `POST {PF_BASE_URL}/receipts`, corpo `{event_id, status, reason}`
+  (`reason` só no `rejected`), `Authorization: Bearer PF_CHAVE` +
+  `X-PF-Timestamp`/`X-PF-Signature` com `PF_HMAC_SAIDA`. Falha de rede/5xx/429 →
+  reenvio com o mesmo backoff; outro 4xx → para de insistir e fica registrado.
+- **Recuperação** (cron): `GET {PF}/changes?cursor=…&limit=100` desde o cursor
+  salvo; só eventos `guidance` de vínculo confirmado entram na fila; o
+  `next_cursor` é gravado **depois** de a página inteira estar na fila.
+- **Carga inicial**: botão **Buscar linhas da PrecisionFarm** (owner/admin, vínculo
+  confirmado) → `GET {PF}/fields/{shared_field_id}/inventory` e enfileira o
+  `event` de cada camada de linhas — o `event_id` DELES, nada inventado. Camada
+  sem `event` no inventário é contada e não entra.
+- Na Vercel não há processo contínuo: o processamento roda logo depois do 202
+  (`after()` do Next, dentro do `maxDuration` de 60 s da rota) e o cron pega o
+  que sobrar (retentativas, recibos, recuperação).
+
+### 6.2 Variáveis da Vercel (Settings → Environment Variables → Production)
+
+| Variável | O que é | Quem fornece |
+|---|---|---|
+| `PF_BASE_URL` | base da API da PF, **obrigatoriamente** `https://…/integration/v1` (sem isso: "não configurada") | PrecisionFarm |
+| `PF_CHAVE` | Bearer que a PF emitiu para a Invicta (buscar revisões, inventário, changes, recibos) | PrecisionFarm |
+| `PF_HMAC_ENTRADA` | segredo HMAC PrecisionFarm → Invicta (confere os avisos) | acordado entre as equipes |
+| `PF_HMAC_SAIDA` | segredo HMAC Invicta → PrecisionFarm (assina os recibos) | acordado entre as equipes |
+| `PF_CRON_SEGREDO` | segredo próprio da rota do cron (o mesmo valor vai no Vault do Supabase) | gerado pela Invicta |
+
+Como cadastrar: Vercel → projeto `invicta-platform` → Settings → Environment
+Variables → Add, ambiente **Production** (e Preview, se for testar lá), marcar
+como **Sensitive**, salvar e **fazer um novo deploy** (variável nova só vale
+depois do redeploy). Gerar o `PF_CRON_SEGREDO` com, por exemplo,
+`openssl rand -hex 32`. Nunca colar segredos no repositório, em issue ou em log.
+
+A chave Bearer que a **PF** usa para chamar a Invicta continua sendo a da fase 1
+(`integracao_chaves`, sistema `precisionfarm`), também nos avisos.
+
+Sem alguma das quatro primeiras: nada quebra — `POST /notifications` responde
+503 `not_configured`, o cron responde 503 e a aba Linhas mostra "Integração de
+recebimento não configurada" (owner/admin veem quais nomes faltam).
+
+### 6.3 Agendamento (Supabase pg_cron + pg_net)
+
+`docs/integracao-precisionfarm-fase2.sql` cria as tabelas e o job
+`pf-recebimento-linhas` (`*/5 * * * *`), que faz `POST
+https://invicta-platform.vercel.app/api/precisionfarm/cron` com
+`Authorization: Bearer <segredo>`. O segredo fica no **Vault** do Supabase
+(`vault.create_secret(…, 'pf_cron_segredo')`, comando no próprio SQL) com o
+MESMO valor de `PF_CRON_SEGREDO`. A rota roda: fila → recibos → `/changes` →
+fila de novo, e devolve um resumo em JSON (sem segredos): **200** se rodou
+(mesmo com a PF fora do ar — o resumo traz o erro dela), **500** se o banco/fila
+falhou, 401 segredo errado, 503 sem configuração. Conferir as últimas
+chamadas em `net._http_response` (consulta no fim do SQL).
+
+### 6.4 Tela — aba Linhas do talhão
+
+Trilho do talhão → **Linhas**. Visível a todos com acesso ao talhão (Q4); no
+portal do produtor, a aba aparece quando o talhão tem ao menos uma camada com
+linhas e não arquivada (Q7, `abasComDados`). Uma camada por `resource_id`:
+nome / `integration_name`, ciclo (Verão/Inverno), operação
+(`operation_category`), espaçamento (`spacing_m`), origem PrecisionFarm,
+revisão vigente, última sincronização, situação (**Atualizado / Sincronizando /
+Erro** + motivo) e o **limite de origem** (`boundary_revision` da PF — a
+numeração deles, sem comparação automática com o limite da Invicta). No mapa,
+linha guia (ciano) e bordadura (laranja) com estilos distintos; liga/desliga por
+camada. **Histórico** (Q6): lista de revisões (nº, data, arquivamento) e
+"Comparar no mapa" exibe uma revisão antiga (cinza tracejado) junto da vigente.
+Arquivadas ficam ocultas; "Mostrar arquivadas" traz de volta.
+
+Rotas (sessão do usuário):
+
+| Rota | Quem | O quê |
+|---|---|---|
+| `GET /api/precisionfarm/linhas/{talhaoId}` | todos com acesso ao talhão | camadas, situação, histórico (sem geometria) |
+| `GET /api/precisionfarm/linhas/{talhaoId}/revisao?resource=&n=` | idem | linhas de uma revisão (gzip acima de 1 MB) |
+| `POST /api/precisionfarm/carga-linhas` | owner/admin | `{ talhaoId }` — carga inicial pelo inventário |
+| `POST /api/precisionfarm/reprocessar-linhas` | owner/admin | `{ talhaoId, resourceId }` — "Tentar de novo" |
+| `GET`/`POST /api/precisionfarm/cron` | pg_cron (`PF_CRON_SEGREDO`) | rotina periódica |
+
+**Acesso ao talhão** (`acessoTalhao.ts → podeVerTalhao`, conferido no servidor):
+a mesma conta do app (`getTalhoes`) — registro do e-mail em `inv_papeis`, status
+que entra (`ativo` ou vazio), owner/admin/editor veem tudo; demais papéis pelo
+escopo de cliente/fazenda/talhão (produtor: `clienteId` + `clientesVinculados`;
+fazenda marcada entra sempre; `talhoesVinculados` restringe).
+
+### 6.5 Banco (docs/integracao-precisionfarm-fase2.sql)
+
+| Tabela | O quê |
+|---|---|
+| `pf_entrada_eventos` | fila de avisos (`event_id` único + `conteudo_hash`), status `pendente/aplicado/rejeitado`, tentativas, próxima tentativa, trava do processador, e o recibo (status, motivo, enviado em, tentativas) |
+| `pf_linhas_camadas` | uma linha por `resource_id`: vínculo/talhão, revisão vigente, revisão desenhada, arquivada, metadados, último erro, última sincronização |
+| `pf_linhas_revisoes` | snapshots **imutáveis** (envelope completo), `unique(resource_id, revision)`; trigger recusa UPDATE/DELETE |
+| `pf_entrada_cursor` | cursor de `/changes` |
+| `pf_entrada_descartes` | eventos descartados pela recuperação/carga, com o motivo (gravado antes de o cursor andar) |
+
+A aba consulta de novo enquanto há aviso na fila, mas respeitando o próximo
+horário de tentativa (6 s → 60 s sem novidade; teto de 5 min).
+
+RLS ligada e nenhuma política, como na fase 1.

@@ -1,5 +1,12 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Integração com a PrecisionFarm — fase 2 (receber as linhas)
+  '2.211.0': [
+    'NOVA ABA "LINHAS" NO TALHÃO — LINHAS GUIA E BORDADURAS DA PRECISIONFARM: as linhas desenhadas e publicadas na PrecisionFarm chegam sozinhas, uma camada por linha publicada, com nome, ciclo (verão/inverno), operação, espaçamento, revisão vigente, data da última sincronização e situação (atualizado, sincronizando ou erro, com o motivo). No mapa, linha guia e bordadura têm estilos diferentes, e cada camada liga e desliga. Somente leitura: as linhas são editadas na PrecisionFarm.',
+    'REVISÃO NOVA SUBSTITUI SOZINHA, A ANTERIOR VAI PARA O HISTÓRICO: o histórico lista as revisões recebidas e "Comparar no mapa" mostra uma revisão antiga (tracejada) junto da vigente. Revisão com problema (geometria inválida, conferência que não bate) não substitui a vigente — o erro aparece na camada. Linha arquivada na PrecisionFarm some da vista padrão ("Mostrar arquivadas" traz de volta, com o histórico). Owner e admin têm "Tentar de novo" na camada com revisão recusada.',
+    'Todos com acesso ao talhão veem a aba; no portal do produtor ela aparece quando o talhão tem linhas. Owner e admin têm o botão "Buscar linhas da PrecisionFarm" para a primeira carga de um talhão com vínculo confirmado. O limite de origem mostrado é a numeração da PrecisionFarm, sem comparação automática com o limite daqui.',
+    'Para a PrecisionFarm: recebimento de avisos assinados (HMAC) em /integration/v1/notifications, busca da revisão, recibos e recuperação periódica. Enquanto as chaves da PrecisionFarm não forem configuradas, a aba informa "integração de recebimento não configurada". Detalhes em docs/integracao-precisionfarm.md §6.',
+  ],
   // [S/N] Integração com a PrecisionFarm — fase 1 (vínculo e publicação)
   '2.210.0': [
     'INTEGRAÇÃO COM A PRECISIONFARM — FASE 1: no talhão (painel lateral e aba Resumo), a seção "Integração PrecisionFarm" — só para owner e admin — gera os identificadores compartilhados do talhão (produtor e fazenda reaproveitados de outros talhões já vinculados), guarda o ID do talhão do lado da PrecisionFarm e confirma ou suspende o vínculo.',

@@ -369,15 +369,290 @@ t('sem vínculo anterior: produtor/fazenda DETERMINÍSTICOS (corrida de dois tal
   const semCad = idsParaNovoVinculo({ parceria: 'producao', clienteId: null, fazendaId: null }, [], novo);
   assert.equal(new Set(Object.values(semCad)).size, 3);
 });
-t('capabilities: versão, tipos, formato, limites e o que NÃO existe na fase 1', () => {
+t('capabilities: versão, tipos, formato, limites; fase 2 recebe avisos de linhas, /changes e /receipts da Invicta seguem 501', () => {
   const c = capabilities('production');
   assert.equal(c.contract_version, '0.2.0'); assert.equal(c.environment, 'production');
   assert.deepEqual(c.resource_types, ['management_zones', 'harvest']);
   assert.deepEqual(c.formats, ['application/geo+json']);
   assert.equal(c.limits.max_geojson_bytes, 10 * 1024 * 1024); assert.equal(c.limits.max_page_size, 200);
-  assert.equal(c.features.changes, false); assert.equal(c.features.notifications, false); assert.equal(c.features.receipts, false);
-  assert.deepEqual(c.not_implemented, ['/changes', '/notifications', '/receipts']);
+  assert.equal(c.features.changes, false); assert.equal(c.features.notifications, true); assert.equal(c.features.receipts, false);
+  assert.equal(c.features.hmac, true);
+  assert.deepEqual(c.notification_resource_types, ['guidance']);
+  assert.ok(c.endpoints.includes('/notifications'));
+  assert.deepEqual(c.not_implemented, ['/changes', '/receipts']);
   assert.equal(corpoNaoImplementado('/changes').error.code, 'not_implemented');
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// FASE 2 — receber linhas (src/lib/precisionfarm/linhas.ts, acessoTalhao.ts)
+// ═════════════════════════════════════════════════════════════════════════════
+
+const L = await import('../src/lib/precisionfarm/linhas.ts');
+const { podeVerTalhao } = await import('../src/lib/precisionfarm/acessoTalhao.ts');
+const { createHmac } = await import('node:crypto');
+const { execFileSync } = await import('node:child_process');
+const { fileURLToPath } = await import('node:url');
+
+console.log('Fase 2 — HMAC');
+t('reproduz ASSINATURA_EXEMPLO.mjs: a assinatura dele confere aqui e o corpo é um aviso válido', () => {
+  const script = fileURLToPath(new URL('ASSINATURA_EXEMPLO.mjs', PONTE));
+  const saida = JSON.parse(execFileSync(process.execPath, [script], { encoding: 'utf8' }));
+  const ts = saida.headers['X-PF-Timestamp'];
+  const corpo = new TextEncoder().encode(saida.body);
+  const v = L.verificarAssinatura({ segredo: '0'.repeat(64), timestamp: ts, assinatura: saida.headers['X-PF-Signature'], corpo, agoraS: Number(ts) });
+  assert.deepEqual(v, { ok: true });
+  assert.equal(L.assinarHmac('0'.repeat(64), ts, saida.body), saida.headers['X-PF-Signature']);
+  const ev = JSON.parse(saida.body);
+  assert.deepEqual(L.validarEvento(ev), []);
+  assert.equal(ev.checksum, lerJson('exemplo-notificacao.json').checksum);
+});
+t('segredo é TEXTO UTF-8 (não decodifica hex); assinatura = HMAC(ts + "." + corpo) em hex minúsculo', () => {
+  const s = 'ab'.repeat(32);
+  const esperado = createHmac('sha256', Buffer.from(s, 'utf8')).update('1700000000.{"a":1}').digest('hex');
+  assert.equal(L.assinarHmac(s, '1700000000', '{"a":1}'), esperado);
+  assert.notEqual(L.assinarHmac(s, '1700000000', '{"a":1}'), createHmac('sha256', Buffer.from(s, 'hex')).update('1700000000.{"a":1}').digest('hex'));
+});
+t('recusa corpo alterado, timestamp fora de 300 s, maiúsculas, ausente', () => {
+  const corpo = new TextEncoder().encode('{"x":1}');
+  const sig = L.assinarHmac('seg', '1000', corpo);
+  const base = { segredo: 'seg', timestamp: '1000', assinatura: sig, corpo, agoraS: 1000 };
+  assert.equal(L.verificarAssinatura(base).ok, true);
+  assert.equal(L.verificarAssinatura({ ...base, agoraS: 1300 }).ok, true, '300 s ainda vale');
+  assert.equal(L.verificarAssinatura({ ...base, agoraS: 1301 }).ok, false);
+  assert.equal(L.verificarAssinatura({ ...base, agoraS: 699 }).ok, false);
+  assert.equal(L.verificarAssinatura({ ...base, corpo: new TextEncoder().encode('{"x":2}') }).ok, false);
+  assert.equal(L.verificarAssinatura({ ...base, corpo: new TextEncoder().encode('{"x": 1}') }).ok, false, 'reformatar o JSON quebra a assinatura');
+  assert.equal(L.verificarAssinatura({ ...base, assinatura: sig.toUpperCase() }).ok, false);
+  assert.equal(L.verificarAssinatura({ ...base, assinatura: null }).ok, false);
+  assert.equal(L.verificarAssinatura({ ...base, timestamp: 'abc' }).ok, false);
+  assert.equal(L.verificarAssinatura({ ...base, segredo: 'outro' }).ok, false);
+  assert.equal(L.textosIguais('abc', 'abc'), true); assert.equal(L.textosIguais('abc', 'abd'), false);
+});
+
+console.log('Fase 2 — aviso e idempotência');
+const notif = () => lerJson('exemplo-notificacao.json');
+t('exemplo-notificacao passa; campo a mais, payload, origem invicta, checksum ruim e base_revision errada não', () => {
+  assert.deepEqual(L.validarEvento(notif()), []);
+  assert.ok(L.validarEvento({ ...notif(), extra: 1 }).length);
+  assert.ok(L.validarEvento({ ...notif(), payload: {} }).length);
+  assert.ok(L.validarEvento({ ...notif(), source_system: 'invicta' }).some(m => m.includes('source_system')));
+  assert.ok(L.validarEvento({ ...notif(), checksum: 'XYZ' }).some(m => m.includes('checksum')));
+  assert.ok(L.validarEvento({ ...notif(), base_revision: 5 }).some(m => m.includes('base_revision')));
+  const { checksum: _c, ...sem } = notif(); void _c;
+  assert.ok(L.validarEvento(sem).some(m => m.includes('checksum')));
+});
+t('mesmo event_id + mesmo conteúdo (outra formatação/caixa) = repetido; conteúdo diferente = conflito', () => {
+  const a = notif();
+  const b = JSON.parse(JSON.stringify(a, null, 2));
+  b.resource_id = b.resource_id.toUpperCase();
+  assert.equal(L.impressaoEvento(a), L.impressaoEvento(b));
+  assert.equal(L.decidirDuplicado(null, L.impressaoEvento(a)), 'novo');
+  assert.equal(L.decidirDuplicado(L.impressaoEvento(a), L.impressaoEvento(b)), 'repetido');
+  assert.equal(L.decidirDuplicado(L.impressaoEvento(a), L.impressaoEvento({ ...a, boundary_revision: 2 })), 'conflito');
+});
+t('item de /changes: evento direto ou em item.event', () => {
+  const e = notif();
+  assert.equal(L.eventoDoItem(e), e);
+  assert.equal(L.eventoDoItem({ resource_id: 'x', event: e }), e);
+});
+t('ids do vínculo: os três UUIDs precisam bater (sem diferenciar caixa)', () => {
+  const e = notif();
+  assert.ok(L.idsBatem(e, { shared_producer_id: e.shared_producer_id.toUpperCase(), shared_farm_id: e.shared_farm_id, shared_field_id: e.shared_field_id }));
+  assert.ok(!L.idsBatem(e, { ...e, shared_farm_id: '00000009-1111-4111-8111-000000000009' }));
+});
+
+console.log('Fase 2 — revisão e geometria');
+t('exemplo-linhas confere com exemplo-notificacao (checksum canônico da fase 1)', () => {
+  const r = L.conferirRevisao(lerJson('exemplo-linhas.json'), notif());
+  assert.ok(r.ok, r.erro);
+});
+t('revisão adulterada, de outra revisão ou de outra origem é recusada', () => {
+  const env = lerJson('exemplo-linhas.json');
+  env.payload.geometry.features[0].geometry.coordinates[1][0] = -49.998;
+  assert.match(L.conferirRevisao(env, notif()).erro, /Checksum não confere/);
+  assert.match(L.conferirRevisao({ ...lerJson('exemplo-linhas.json'), resource_revision: 2, base_revision: 1 }, notif()).erro, /resource_revision/);
+  assert.match(L.conferirRevisao({ ...lerJson('exemplo-linhas.json'), source_system: 'invicta' }, notif()).erro, /source_system/);
+  assert.match(L.conferirRevisao({ ...lerJson('exemplo-linhas.json'), extra: 1 }, notif()).erro, /fora do contrato/);
+});
+const linha = (kind, coords, tipo = 'LineString') => ({ type: 'Feature', properties: { kind }, geometry: { type: tipo, coordinates: coords } });
+const payloadL = (features, extra = {}) => ({ name: 'linhas', integration_name: 'linhas_verao', cropping_cycle: 'summer', operation_category: 'planting', spacing_m: 7.8, geometry: { type: 'FeatureCollection', features }, ...extra });
+t('payload do exemplo: válido, metadados lidos', () => {
+  const r = L.validarPayloadLinhas(lerJson('exemplo-linhas.json').payload);
+  assert.ok(r.ok, r.erro);
+  assert.deepEqual([r.meta.nome, r.meta.integrationName, r.meta.ciclo, r.meta.categoria, r.meta.espacamentoM, r.meta.nFeicoes, r.meta.nVertices],
+    ['linhas_verao', 'linhas_verao', 'summer', 'planting', 7.8, 1, 2]);
+});
+t('guia + bordadura, MultiLineString, altitude e ciclo nulo passam', () => {
+  const r = L.validarPayloadLinhas(payloadL([
+    linha('guidance', [[-50, -24], [-49.999, -23.999]]),
+    linha('headland', [[[-50, -24], [-50, -23.99], [-49.99, -23.99]], [[-50.1, -24, 800], [-50.2, -24, 801]]], 'MultiLineString'),
+  ], { cropping_cycle: null, spacing_m: null }));
+  assert.ok(r.ok, r.erro);
+  assert.equal(r.meta.nVertices, 7);
+});
+t('kind ausente ou desconhecido NÃO recusa: vira linha guia, contado e anotado para o histórico', () => {
+  const r = L.validarPayloadLinhas(payloadL([
+    linha('guidance', [[-50, -24], [-50, -23]]),
+    linha('bordadura', [[-50, -24], [-50, -23]]),
+    { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: [[-50, -24], [-50, -23]] } },
+    { type: 'Feature', properties: null, geometry: { type: 'LineString', coordinates: [[-50, -24], [-50, -23]] } },
+  ]));
+  assert.ok(r.ok, r.erro);
+  assert.equal(r.meta.nSemKind, 3);
+  assert.match(r.meta.observacao, /3 feição\(ões\) sem properties.kind.*bordadura.*linha guia/);
+  const limpo = L.validarPayloadLinhas(payloadL([linha('headland', [[-50, -24], [-50, -23]])]));
+  assert.equal(limpo.meta.nSemKind, 0); assert.equal(limpo.meta.observacao, null);
+});
+t('nome da camada: name → integration_name → "Linhas <operação> <ciclo>"', () => {
+  assert.equal(L.nomeDaCamada({ name: ' Talhão 3 verão ', integration_name: 'x' }), 'Talhão 3 verão');
+  assert.equal(L.nomeDaCamada({ name: '', integration_name: 'linhas_verao' }), 'linhas_verao');
+  assert.equal(L.nomeDaCamada({ operation_category: 'planting', cropping_cycle: 'summer' }), 'Linhas planting summer');
+  assert.equal(L.nomeDaCamada({}), 'Linhas');
+  const r = L.validarPayloadLinhas({ ...payloadL([linha('guidance', [[-50, -24], [-50, -23]])]), name: undefined, integration_name: null });
+  assert.ok(r.ok, r.erro); assert.equal(r.meta.nome, 'Linhas planting summer');
+  assert.equal(L.validarPayloadLinhas({ ...payloadL([]), name: 5 }).ok, false);
+});
+t('geometria inválida é recusada SEM reparo: polígono, 1 ponto, lat > 90, CRS', () => {
+  const casos = [
+    [payloadL([linha('guidance', [[[-50, -24], [-49, -24], [-49, -23], [-50, -24]]], 'Polygon')]), /Polygon/],
+    [payloadL([linha('guidance', [[-50, -24]])]), /LineString inválida/],
+    [payloadL([linha('guidance', [[-50, -24], [-50, 95]])]), /LineString inválida/],
+    [payloadL([linha('guidance', [[-50, -24], [-50, NaN]])]), /LineString inválida/],
+    [payloadL([linha('guidance', [], 'MultiLineString')]), /MultiLineString vazia/],
+    [{ ...payloadL([linha('guidance', [[-50, -24], [-50, -23]])]), geometry: { type: 'FeatureCollection', crs: { type: 'name', properties: { name: 'EPSG:31982' } }, features: [linha('guidance', [[-50, -24], [-50, -23]])] } }, /WGS84/],
+    [payloadL([]).geometry, /FeatureCollection/],
+    [payloadL([], { spacing_m: -1 }), /spacing_m/],
+    [payloadL([], { cropping_cycle: 'spring' }), /cropping_cycle/],
+    [{ ...payloadL([]), geometry: { type: 'Feature' } }, /FeatureCollection/],
+  ];
+  for (const [p, re] of casos) {
+    const r = L.validarPayloadLinhas(p);
+    assert.equal(r.ok, false, String(re));
+    assert.match(r.erro, re);
+  }
+});
+t('limites do contrato: 100 mil feições, 1 milhão de vértices, 10 MB', () => {
+  const f = linha('guidance', [[-50, -24], [-50, -23]]);
+  assert.match(L.validarPayloadLinhas(payloadL(new Array(100_001).fill(f))).erro, /100000/);
+  const longa = Array.from({ length: 1_000_001 }, (_, i) => [-50 + i * 1e-7, -24]);
+  assert.match(L.validarPayloadLinhas(payloadL([linha('guidance', longa)])).erro, /vértices/);
+  const gorda = { ...f, properties: { kind: 'guidance', nota: 'x'.repeat(10 * 1024 * 1024) } };
+  assert.match(L.validarPayloadLinhas(payloadL([gorda])).erro, /10 MB/);
+  assert.equal(L.validarPayloadLinhas(payloadL(new Array(1000).fill(f))).ok, true);
+});
+
+console.log('Fase 2 — ordem, archive, retentativas');
+t('revisão menor que a vigente não regride; maior promove', () => {
+  assert.equal(L.promove(null, 1), true);
+  assert.equal(L.promove(3, 4), true);
+  assert.equal(L.promove(3, 2), false);
+  assert.equal(L.promove(3, 3), false);
+});
+t('estado das revisões: vigente = maior; archive arquiva e mantém as linhas da última upsert', () => {
+  assert.deepEqual(L.estadoDasRevisoes([]), { vigente: null, arquivada: false, revisaoGeometria: null });
+  assert.deepEqual(L.estadoDasRevisoes([{ revision: 2, operation: 'upsert' }, { revision: 1, operation: 'upsert' }]), { vigente: 2, arquivada: false, revisaoGeometria: 2 });
+  assert.deepEqual(L.estadoDasRevisoes([{ revision: 1, operation: 'upsert' }, { revision: 3, operation: 'archive' }, { revision: 2, operation: 'upsert' }]), { vigente: 3, arquivada: true, revisaoGeometria: 2 });
+  assert.deepEqual(L.estadoDasRevisoes([{ revision: 3, operation: 'archive' }, { revision: 4, operation: 'upsert' }]), { vigente: 4, arquivada: false, revisaoGeometria: 4 });
+});
+t('backoff 10 s … 1 h', () => {
+  assert.deepEqual([1, 2, 3, 9, 10, 11, 60].map(L.atrasoTentativaS), [10, 20, 40, 2560, 3600, 3600, 3600]);
+});
+t('falha temporária × permanente; recibo repete só no que pode dar certo', () => {
+  for (const s of [409, 410, 413, 422]) assert.equal(L.classeDoStatus(s), 'permanente', String(s));
+  for (const s of [301, 401, 403, 404, 408, 429, 500, 502, 503]) assert.equal(L.classeDoStatus(s), 'temporaria', String(s));
+  for (const s of [408, 429, 500, 503, 401]) assert.equal(L.reciboDeveRepetir(s), true, String(s));
+  for (const s of [400, 404, 409, 422]) assert.equal(L.reciboDeveRepetir(s), false, String(s));
+});
+t('404 vira definitivo só quando o backoff chega ao teto (10ª tentativa); outros temporários nunca', () => {
+  assert.equal(L.TENTATIVAS_404, 10);
+  assert.equal(L.atrasoTentativaS(L.TENTATIVAS_404), 3600, 'é a tentativa em que o backoff bate 1 h');
+  assert.equal(L.falhaDefinitiva(404, 1), false);
+  assert.equal(L.falhaDefinitiva(404, 9), false);
+  assert.equal(L.falhaDefinitiva(404, 10), true);
+  assert.equal(L.falhaDefinitiva(503, 50), false);
+  assert.equal(L.falhaDefinitiva(null, 50), false);
+});
+t('reaviso: rejeitado + mesmo conteúdo reabre; aplicado/pendente = repetido; outro conteúdo = conflito', () => {
+  assert.equal(L.decidirReaviso({ conteudoHash: 'a', status: 'rejeitado' }, 'a'), 'reabrir');
+  assert.equal(L.decidirReaviso({ conteudoHash: 'a', status: 'aplicado' }, 'a'), 'repetido');
+  assert.equal(L.decidirReaviso({ conteudoHash: 'a', status: 'pendente' }, 'a'), 'repetido');
+  assert.equal(L.decidirReaviso({ conteudoHash: 'a', status: 'rejeitado' }, 'b'), 'conflito');
+});
+const C = await import('../src/lib/precisionfarm/consulta.ts');
+t('consulta da aba respeita o próximo horário de tentativa (mín. que cresce, teto 5 min)', () => {
+  const agora = Date.parse('2026-10-27T12:00:00Z');
+  assert.equal(C.intervaloConsultaMs(null, agora, 6000), 6000);
+  assert.equal(C.intervaloConsultaMs('2026-10-27T12:00:01Z', agora, 6000), 6000);
+  assert.equal(C.intervaloConsultaMs('2026-10-27T12:01:00Z', agora, 6000), 62_000);
+  assert.equal(C.intervaloConsultaMs('2026-10-27T13:00:00Z', agora, 6000), 300_000, 'backoff de 1 h → no máximo 5 min');
+  assert.deepEqual([6000, 12000, 24000, 48000, 60000].map(C.proximoMinimoMs), [12000, 24000, 48000, 60000, 60000]);
+});
+t('corpo do recibo segue exemplo-recibo.json; motivo só no rejected', () => {
+  assert.deepEqual(JSON.parse(L.corpoRecibo('00000001-1111-4111-8111-000000000001', 'applied', 'x')), lerJson('exemplo-recibo.json'));
+  assert.deepEqual(JSON.parse(L.corpoRecibo('e', 'rejected', 'geometria inválida')), { event_id: 'e', status: 'rejected', reason: 'geometria inválida' });
+  assert.equal(JSON.parse(L.corpoRecibo('e', 'rejected', 'x'.repeat(900))).reason.length, 500);
+});
+t('situação na tela: fila → sincronizando; recusa → erro; senão atualizado', () => {
+  assert.equal(L.situacaoCamada({ ultimoErro: 'x' }, 1), 'sincronizando');
+  assert.equal(L.situacaoCamada({ ultimoErro: 'x' }, 0), 'erro');
+  assert.equal(L.situacaoCamada({ ultimoErro: null }, 0), 'atualizado');
+});
+
+console.log('Fase 2 — configuração');
+t('sem variáveis: "não configurada" com os NOMES que faltam (nunca valores)', () => {
+  const r = L.lerConfigRecebimento({});
+  assert.equal(r.ok, false);
+  assert.deepEqual(r.faltando, ['PF_BASE_URL', 'PF_CHAVE', 'PF_HMAC_ENTRADA', 'PF_HMAC_SAIDA']);
+  assert.match(r.erro, /não configurada/);
+  const parcial = L.lerConfigRecebimento({ PF_BASE_URL: 'https://x/integration/v1', PF_CHAVE: 'segredo-123' });
+  assert.deepEqual(parcial.faltando, ['PF_HMAC_ENTRADA', 'PF_HMAC_SAIDA']);
+  assert.ok(!JSON.stringify(parcial).includes('segredo-123'));
+});
+t('PF_BASE_URL só https, sem credenciais; barra final sai', () => {
+  const env = { PF_CHAVE: 'k', PF_HMAC_ENTRADA: 'a', PF_HMAC_SAIDA: 'b' };
+  assert.equal(L.lerConfigRecebimento({ ...env, PF_BASE_URL: 'http://precisionfarm.com.br/integration/v1' }).ok, false);
+  assert.equal(L.lerConfigRecebimento({ ...env, PF_BASE_URL: 'https://u:p@precisionfarm.com.br/integration/v1' }).ok, false);
+  const ok = L.lerConfigRecebimento({ ...env, PF_BASE_URL: ' https://precisionfarm.com.br/integration/v1/ ' });
+  assert.equal(ok.ok, true);
+  assert.equal(ok.cfg.baseUrl, 'https://precisionfarm.com.br/integration/v1');
+});
+t('PF_BASE_URL tem de terminar em /integration/v1: só o domínio = "não configurada" (nunca 404 nos avisos)', () => {
+  const env = { PF_CHAVE: 'k', PF_HMAC_ENTRADA: 'a', PF_HMAC_SAIDA: 'b' };
+  for (const u of ['https://precisionfarm.com.br', 'https://precisionfarm.com.br/', 'https://precisionfarm.com.br/integration', 'https://precisionfarm.com.br/integration/v2']) {
+    const r = L.lerConfigRecebimento({ ...env, PF_BASE_URL: u });
+    assert.equal(r.ok, false, u);
+    assert.match(r.erro, /não configurada.*terminando em \/integration\/v1/);
+  }
+  assert.equal(L.lerConfigRecebimento({ ...env, PF_BASE_URL: 'https://homolog.precisionfarm.com.br/api/integration/v1' }).ok, true);
+});
+
+console.log('Fase 2 — acesso ao talhão (leitura da aba Linhas)');
+t('owner/admin veem tudo; status bloqueado/aguardando não vê nada', () => {
+  const T = { id: 't1', fazendaId: 'f1' };
+  assert.equal(podeVerTalhao({ papel: 'owner' }, T, []), true);
+  assert.equal(podeVerTalhao({ papel: 'admin', status: 'ativo' }, T, []), true);
+  assert.equal(podeVerTalhao({ papel: 'admin', status: 'bloqueado' }, T, []), false);
+  assert.equal(podeVerTalhao({ papel: 'agronomo', status: 'aguardando_aprovacao' }, T, []), false);
+  assert.equal(podeVerTalhao(null, T, []), false);
+  assert.equal(podeVerTalhao({ status: 'ativo' }, T, []), false);
+});
+t('produtor: só os talhões do(s) cliente(s) dele; fazenda marcada (condomínio) entra; talhões marcados restringem', () => {
+  const FZ = [{ id: 'f1', clienteId: 'c1' }, { id: 'f2', clienteId: 'c2' }];
+  const T1 = { id: 't1', fazendaId: 'f1' }; const T2 = { id: 't2', fazendaId: 'f2' };
+  const prod = { papel: 'produtor', clienteId: 'c1' };
+  assert.equal(podeVerTalhao(prod, T1, FZ), true);
+  assert.equal(podeVerTalhao(prod, T2, FZ), false);
+  assert.equal(podeVerTalhao({ papel: 'produtor', clientesVinculados: ['c2'] }, T2, FZ), true);
+  assert.equal(podeVerTalhao({ ...prod, fazendasVinculadas: ['f2'] }, T2, FZ), true, 'condomínio');
+  assert.equal(podeVerTalhao({ ...prod, talhoesVinculados: ['t9'] }, T1, FZ), false);
+  assert.equal(podeVerTalhao({ papel: 'produtor' }, T1, FZ), false, 'produtor sem vínculo não vê nada');
+  assert.equal(podeVerTalhao(prod, { id: 't3', fazendaId: null }, FZ), false);
+});
+t('agrônomo sem vínculo vê todos (retrocompatível); com clientes vinculados, só esses', () => {
+  const FZ = [{ id: 'f1', clienteId: 'c1' }, { id: 'f2', clienteId: 'c2' }];
+  assert.equal(podeVerTalhao({ papel: 'agronomo' }, { id: 't2', fazendaId: 'f2' }, FZ), true);
+  assert.equal(podeVerTalhao({ papel: 'agronomo', clientesVinculados: ['c1'] }, { id: 't2', fazendaId: 'f2' }, FZ), false);
+  assert.equal(podeVerTalhao({ papel: 'agronomo', clientesVinculados: ['c1'] }, { id: 't1', fazendaId: 'f1' }, FZ), true);
 });
 
 console.log(`\n${ok} ok, ${fail} falha(s)`);

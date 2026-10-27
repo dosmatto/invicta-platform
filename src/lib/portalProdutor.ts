@@ -111,6 +111,9 @@ export interface DadosTalhao {
   relatorios?: RelatorioIn[];
   /** Laudos FOLIARES do talhão (ledger 28). Forma mínima: só o que a aba precisa. */
   amostrasFoliares?: AmostraFoliarIn[];
+  /** Camadas de linhas recebidas da PrecisionFarm (com linhas, não arquivadas).
+   *  Vem da rota do servidor (tabelas pf_* não são lidas pelo navegador). */
+  linhasPF?: unknown[];
 }
 
 // ── Saídas ──────────────────────────────────────────────────────────────────
@@ -380,7 +383,7 @@ export function avaliarTalhao(d: DadosTalhao, safra: string): AvaliacaoTalhao {
 /** Ids das abas de /talhao/[id], na ordem do trilho. */
 export const ABAS_TALHAO = [
   'resumo', 'altimetria', 'condutividade', 'zonas', 'amostragem', 'fertilidade', 'foliar', 'recomendacoes',
-  'prescricoes', 'arquivos', 'ndvi', 'produtividade', 'compactacao', 'relatorios',
+  'prescricoes', 'linhas', 'arquivos', 'ndvi', 'produtividade', 'compactacao', 'relatorios',
 ] as const;
 export type AbaTalhao = typeof ABAS_TALHAO[number];
 
@@ -405,6 +408,9 @@ export function abasComDados(d: DadosTalhao): AbaTalhao[] {
     foliar: tem(d.amostrasFoliares),
     recomendacoes: tem(d.cenarios),
     prescricoes: tem(d.prescricoes),
+    // Linhas recebidas da PrecisionFarm (Q7): a aba entra quando há ao menos
+    // uma camada com linhas e não arquivada (contada no servidor).
+    linhas: tem(d.linhasPF),
     arquivos: tem(d.cenarios) || (d.prescricoes ?? []).some(p => (p.exportes?.length ?? 0) > 0),
     ndvi: tem(d.composicoes) || nuvem.some(s => s[1] === 'ndvi' || s[1] === 'ndvicbers'),
     produtividade: tem(d.colheitas) || nuvem.some(s => s[1] === 'prod'),

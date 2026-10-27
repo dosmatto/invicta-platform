@@ -9,10 +9,25 @@
 //     (access_token do Supabase) e papel owner/admin (autenticarUsuario).
 //     Cria/edita o vínculo e publica revisões.
 //
+// Fase 2 (receber LINHAS da PF) acrescenta:
+//   • POST /integration/v1/notifications → aviso da PF (Bearer + HMAC),
+//     enfileirado ANTES do 202 e processado logo depois (after()).
+//   • /api/precisionfarm/cron → rotina periódica (pg_cron, segredo próprio).
+//   • /api/precisionfarm/linhas/{talhaoId}[/revisao] → leitura da aba Linhas,
+//     para TODOS com acesso ao talhão (autenticarLeitor), só leitura.
+//   • /api/precisionfarm/carga-linhas → "Buscar linhas" (owner/admin).
+//
 // Corpo de erro do lado PF: { "error": { "code", "message" } } com os status do
 // contrato (401 · 404 · 413 · 422). Contrato: docs/integracao-precisionfarm.md.
 
 import { randomUUID } from 'node:crypto';
+import { gzipSync } from 'node:zlib';
+import { after } from 'next/server';
+import { chaveDoHeader } from '../laudo/servidor.ts';
+import { FalhaPF, criarClientePF } from './clientePF.ts';
+import { lerConfigRecebimento, situacaoCamada, textosIguais, MSG_NAO_CONFIGURADA, type ConfigRecebimento } from './linhas.ts';
+import { cargaInicial, processarFila, receberNotificacao, rotinaPeriodica, tentarDeNovo, type Ambiente } from './recebimento.ts';
+import { avisosDasCamadas, camadasDoTalhao, criarRepoLinhas, geometriaDaRevisao, revisoesDasCamadas } from './repoLinhas.ts';
 import {
   CHAVE_LOCAL_ZONAS, MAX_ENVELOPE_BYTES_INVICTA, PARCERIA_PADRAO, RE_UUID,
   bytesDoEnvelope, capabilities, chaveLocalColheita, checksumEnvelope, corpoNaoImplementado, dataContrato, eventoDoEnvelope, idsParaNovoVinculo,
@@ -21,7 +36,7 @@ import {
   type EscopoChave, type ResultadoPayload, type TipoRecurso,
 } from './contrato.ts';
 import {
-  ConflitoIntegracao, atualizarVinculo, autenticarPrecisionFarm, autenticarUsuario, carregarTalhao, carregarTalhoes, clienteDaFazenda,
+  ConflitoIntegracao, atualizarVinculo, autenticarLeitor, autenticarPrecisionFarm, autenticarUsuario, carregarTalhao, carregarTalhoes, clienteDaFazenda,
   clienteServico, envelopeDaRevisao, gradeProdutividade, inserirRevisao, inserirVinculo, mapaProdutividade,
   obterOuCriarRecurso, recursoPorId, servicoConfigurado, ultimaRevisao, vigentesDoVinculo, vinculoDoCampo,
   vinculoDoTalhao, vinculoPorId, vinculosConfirmados, vinculosParaReuso, zoneamentoPadrao,
@@ -377,5 +392,227 @@ export function tratarPublicacao(req: Request): Promise<Response> {
       ok: true, criada: true, resourceId: recurso.resource_id, revisao: envelope.resource_revision,
       checksum, tamanhoBytes, nFeicoes: res.nFeicoes, evento: eventoDoEnvelope(envelope, checksum),
     }, 201);
+  });
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Fase 2 — RECEBER as linhas da PrecisionFarm
+// ═════════════════════════════════════════════════════════════════════════════
+
+/** Escopo da Invicta ao CONSULTAR a PF (cron, carga inicial): os vínculos da
+ *  parceria em que a tela os cria. */
+const ESCOPO_INVICTA = { parceria: PARCERIA_PADRAO, empresaId: null };
+
+const configRecebimento = () => lerConfigRecebimento(process.env);
+
+function ambienteRecebimento(sb: Sb, cfg: ConfigRecebimento): Ambiente {
+  return { repo: criarRepoLinhas(sb), pf: criarClientePF(cfg) };
+}
+
+/** Sem processo contínuo na Vercel: processa logo DEPOIS de responder (o cron
+ *  pega o que sobrar). Só a mensagem do erro vai para o log — nunca cabeçalho. */
+function processarDepois(sb: Sb, cfg: ConfigRecebimento) {
+  after(async () => {
+    try { await processarFila(ambienteRecebimento(sb, cfg), { prazoMs: 45_000 }); }
+    catch (e) { console.error('[precisionfarm] processamento após o aviso falhou:', e instanceof Error ? e.message : e); }
+  });
+}
+
+/** POST /integration/v1/notifications — aviso de revisão da PF. */
+export async function tratarNotificacao(req: Request): Promise<Response> {
+  if (!servicoConfigurado()) return erroPF(500, 'server_misconfigured', 'Serviço de integração não configurado neste ambiente.');
+  const conf = configRecebimento();
+  // Sem as variáveis PF_*: 503 (o "integração desabilitada" do contrato).
+  if (!conf.ok) return erroPF(503, 'not_configured', conf.erro);
+  const sb = clienteServico();
+  try {
+    const r = await receberNotificacao(ambienteRecebimento(sb, conf.cfg), req, {
+      cfg: conf.cfg,
+      autenticar: async auth => {
+        const c = await autenticarPrecisionFarm(sb, auth);
+        return c ? { parceria: c.parceria, empresaId: c.empresaId } : null;
+      },
+    });
+    if (r.status === 202) processarDepois(sb, conf.cfg);
+    return json(r.corpo, r.status);
+  } catch (e) {
+    console.error('[precisionfarm] aviso:', e instanceof Error ? e.message : e);
+    return erroPF(500, 'internal_error', 'Falha interna ao receber o aviso.');
+  }
+}
+
+/** GET em /notifications: só POST existe. */
+export function tratarMetodoNaoPermitido(): Response {
+  return new Response(JSON.stringify({ error: { code: 'method_not_allowed', message: 'Use POST.' } }), { status: 405, headers: { ...CABECALHOS, allow: 'POST' } });
+}
+
+/**
+ * /api/precisionfarm/cron — chamado pelo pg_cron (pg_net) a cada 5 min com
+ * `Authorization: Bearer <PF_CRON_SEGREDO>`. Processa a fila, reenvia recibos e
+ * consulta /changes como recuperação.
+ */
+export async function tratarCron(req: Request): Promise<Response> {
+  const segredo = (process.env.PF_CRON_SEGREDO ?? '').trim();
+  if (!segredo) return json({ ok: false, configurado: false, erro: `${MSG_NAO_CONFIGURADA} Falta PF_CRON_SEGREDO.` }, 503);
+  const tok = chaveDoHeader(req.headers.get('authorization'));
+  if (!tok || !textosIguais(tok, segredo)) return json({ ok: false, erro: 'Não autorizado.' }, 401);
+  if (!servicoConfigurado()) return json({ ok: false, erro: 'Serviço de integração não configurado neste ambiente.' }, 500);
+  const conf = configRecebimento();
+  if (!conf.ok) return json({ ok: false, configurado: false, erro: conf.erro, faltando: conf.faltando }, 503);
+  try {
+    const r = await rotinaPeriodica(ambienteRecebimento(clienteServico(), conf.cfg), ESCOPO_INVICTA, 45_000);
+    // 200 só se a rotina RODOU; banco/fila fora do ar → 500 (aparece em
+    // net._http_response). Falha da PF (rede, 503) não é falha nossa: 200.
+    if (r.falhaInterna) console.error('[precisionfarm] cron: falha interna', JSON.stringify(r.etapas).slice(0, 500));
+    return json({ ok: !r.falhaInterna, ...r.etapas }, r.falhaInterna ? 500 : 200);
+  } catch (e) {
+    console.error('[precisionfarm] cron:', e instanceof Error ? e.message : e);
+    return json({ ok: false, erro: 'Falha interna na rotina.' }, 500);
+  }
+}
+
+// ── Aba Linhas (leitura) ─────────────────────────────────────────────────────
+
+type Leitor = { email: string; papel: string; gestor: boolean };
+
+async function comLeitor(req: Request, talhaoId: string, fn: (sb: Sb, u: Leitor) => Promise<Response>): Promise<Response> {
+  if (!servicoConfigurado()) return json({ ok: false, erro: 'Serviço de integração não configurado neste ambiente.' }, 500);
+  const sb = clienteServico();
+  try {
+    const u = await autenticarLeitor(sb, req.headers.get('authorization'), talhaoId);
+    if (!u.ok) return json({ ok: false, erro: u.erro }, u.status);
+    return await fn(sb, u);
+  } catch (e) {
+    console.error('[precisionfarm] linhas:', e instanceof Error ? e.message : e);
+    return json({ ok: false, erro: 'Falha interna ao ler as linhas.' }, 500);
+  }
+}
+
+/** GET /api/precisionfarm/linhas/{talhaoId} — camadas recebidas, situação e
+ *  histórico (sem geometria). */
+export function tratarLinhasTalhao(req: Request, talhaoId: string): Promise<Response> {
+  return comLeitor(req, talhaoId, async (sb, u) => {
+    const conf = configRecebimento();
+    const camadas = await camadasDoTalhao(sb, talhaoId);
+    const ids = camadas.map(c => c.resource_id);
+    const [revs, pend] = await Promise.all([revisoesDasCamadas(sb, ids), avisosDasCamadas(sb, ids)]);
+    const v = u.gestor ? await vinculoDoTalhao(sb, talhaoId, PARCERIA_PADRAO) : null;
+    return json({
+      ok: true,
+      recebimento: {
+        configurado: conf.ok,
+        mensagem: conf.ok ? null : conf.erro,
+        // Nomes das variáveis (nunca valores) — só para quem configura.
+        faltando: !conf.ok && u.gestor ? conf.faltando : [],
+      },
+      gestor: u.gestor,
+      vinculo: u.gestor && v ? { status: v.status } : null,
+      podeBuscar: u.gestor && conf.ok && v?.status === 'confirmado',
+      camadas: camadas.map(c => {
+        const daCamada = pend.filter(p => p.resource_id === c.resource_id);
+        const pendentes = daCamada.filter(p => p.status === 'pendente');
+        const situacao = situacaoCamada({ ultimoErro: c.ultimo_erro }, pendentes.length);
+        const errTemp = pendentes.find(p => p.ultimo_erro)?.ultimo_erro ?? null;
+        const proxima = pendentes.map(p => p.proxima_tentativa_em).sort()[0] ?? null;
+        return {
+          resourceId: c.resource_id,
+          nome: c.nome,
+          integrationName: c.integration_name,
+          ciclo: c.cropping_cycle,
+          categoria: c.operation_category,
+          espacamentoM: c.spacing_m,
+          origem: 'PrecisionFarm',
+          revisaoVigente: c.revisao_vigente,
+          revisaoGeometria: c.revisao_geometria,
+          boundaryRevision: c.boundary_revision,
+          arquivada: c.arquivada,
+          arquivadaEm: c.arquivada_em,
+          ultimaSincronizacao: c.ultima_sincronizacao_em,
+          situacao,
+          motivo: situacao === 'erro' ? c.ultimo_erro : situacao === 'sincronizando' && errTemp ? `Nova tentativa programada: ${errTemp}` : null,
+          proximaTentativaEm: proxima,
+          podeTentarDeNovo: u.gestor && conf.ok && daCamada.some(p => p.status === 'rejeitado'),
+          revisoes: revs.filter(r => r.resource_id === c.resource_id).map(r => ({
+            n: r.revision, operacao: r.operation, recebidoEm: r.recebido_em, checksum: r.checksum,
+            nFeicoes: r.n_feicoes, boundaryRevision: r.boundary_revision, observacao: r.observacao,
+          })),
+          // Avisos recusados (inclusive de revisões antigas, que não põem a
+          // camada em erro): ficam no histórico.
+          recusadas: daCamada.filter(p => p.status === 'rejeitado').slice(0, 20).map(p => ({
+            n: p.resource_revision, motivo: p.ultimo_erro, em: p.processado_em,
+          })),
+        };
+      }),
+    }, 200);
+  });
+}
+
+/** GET /api/precisionfarm/linhas/{talhaoId}/revisao?resource=&n= — linhas de
+ *  uma revisão (vigente ou antiga, para comparar). Grande = gzip. */
+export function tratarGeometriaLinhas(req: Request, talhaoId: string): Promise<Response> {
+  return comLeitor(req, talhaoId, async sb => {
+    const url = new URL(req.url);
+    const resource = (url.searchParams.get('resource') ?? '').toLowerCase();
+    const n = url.searchParams.get('n') ?? '';
+    if (!RE_UUID.test(resource) || !/^[1-9]\d{0,8}$/.test(n)) return json({ ok: false, erro: 'Informe resource (UUID) e n (>= 1).' }, 400);
+    const c = await criarRepoLinhas(sb).camada(resource);
+    if (!c || c.talhao_id !== talhaoId) return json({ ok: false, erro: 'Camada não encontrada neste talhão.' }, 404);
+    const g = await geometriaDaRevisao(sb, resource, Number(n));
+    if (!g) return json({ ok: false, erro: 'Revisão não encontrada.' }, 404);
+    if (g.operation !== 'upsert') return json({ ok: false, erro: 'Esta revisão é um arquivamento: não traz linhas.' }, 404);
+    const texto = JSON.stringify({ ok: true, geometria: g.geometria });
+    // A resposta de função da Vercel corta perto de 4,5 MB; linhas comprimem bem.
+    if (texto.length > 1024 * 1024 && /\bgzip\b/.test(req.headers.get('accept-encoding') ?? '')) {
+      return new Response(gzipSync(Buffer.from(texto, 'utf8')), { status: 200, headers: { ...CABECALHOS, 'content-encoding': 'gzip', vary: 'accept-encoding' } });
+    }
+    return new Response(texto, { status: 200, headers: CABECALHOS });
+  });
+}
+
+/** POST /api/precisionfarm/carga-linhas — { talhaoId }. "Buscar linhas da
+ *  PrecisionFarm": inventário do talhão → enfileira o `event` de cada camada
+ *  de linhas (owner/admin). */
+export function tratarCargaLinhas(req: Request): Promise<Response> {
+  return comUsuario(req, async sb => {
+    const corpo = await req.json().catch(() => null) as { talhaoId?: unknown } | null;
+    const talhaoId = typeof corpo?.talhaoId === 'string' ? corpo.talhaoId.trim() : '';
+    if (!talhaoId) return json({ ok: false, erro: 'Informe talhaoId.' }, 400);
+    const conf = configRecebimento();
+    if (!conf.ok) return json({ ok: false, erro: conf.erro }, 503);
+    const v = await vinculoDoTalhao(sb, talhaoId, PARCERIA_PADRAO);
+    if (!v || v.status !== 'confirmado') return json({ ok: false, erro: 'Este talhão não tem vínculo CONFIRMADO com a PrecisionFarm.' }, 409);
+    try {
+      const r = await cargaInicial(ambienteRecebimento(sb, conf.cfg), v.shared_field_id, ESCOPO_INVICTA);
+      if (r.novos || r.reabertos) processarDepois(sb, conf.cfg);
+      const partes = [`${r.novos} camada(s) na fila`];
+      if (r.repetidos) partes.push(`${r.repetidos} já recebida(s)`);
+      if (r.reabertos) partes.push(`${r.reabertos} recusada(s) antes, de volta à fila`);
+      if (r.semEvento) partes.push(`${r.semEvento} sem evento no inventário da PF`);
+      if (r.conflitos) partes.push(`${r.conflitos} em conflito`);
+      return json({ ok: true, ...r, mensagem: `Busca feita: ${partes.join(', ')}.` }, 200);
+    } catch (e) {
+      if (e instanceof FalhaPF) return json({ ok: false, erro: e.message }, 502);
+      throw e;
+    }
+  });
+}
+
+/** POST /api/precisionfarm/reprocessar-linhas — { talhaoId, resourceId }.
+ *  "Tentar de novo" na camada com erro: reabre os avisos recusados dela e
+ *  processa logo depois (owner/admin). */
+export function tratarReprocessarLinhas(req: Request): Promise<Response> {
+  return comUsuario(req, async sb => {
+    const corpo = await req.json().catch(() => null) as { talhaoId?: unknown; resourceId?: unknown } | null;
+    const talhaoId = typeof corpo?.talhaoId === 'string' ? corpo.talhaoId.trim() : '';
+    const resourceId = typeof corpo?.resourceId === 'string' ? corpo.resourceId.trim().toLowerCase() : '';
+    if (!talhaoId || !RE_UUID.test(resourceId)) return json({ ok: false, erro: 'Informe talhaoId e resourceId.' }, 400);
+    const conf = configRecebimento();
+    if (!conf.ok) return json({ ok: false, erro: conf.erro }, 503);
+    const amb = ambienteRecebimento(sb, conf.cfg);
+    const c = await amb.repo.camada(resourceId);
+    if (!c || c.talhao_id !== talhaoId) return json({ ok: false, erro: 'Camada não encontrada neste talhão.' }, 404);
+    const n = await tentarDeNovo(amb, resourceId);
+    if (n) processarDepois(sb, conf.cfg);
+    return json({ ok: true, reabertos: n, mensagem: n ? `${n} revisão(ões) de volta à fila.` : 'Nada recusado para tentar de novo.' }, 200);
   });
 }

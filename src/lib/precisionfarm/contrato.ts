@@ -627,11 +627,13 @@ export function capabilities(ambiente: string): Record<string, unknown> {
       max_page_size: LIMITE_PAGINA_MAX,
       default_page_size: LIMITE_PAGINA_PADRAO,
     },
-    endpoints: ['/capabilities', '/catalog', '/fields/{shared_field_id}/inventory', '/resources/{id}/revisions/{n}'],
-    // Fase 1 = só leitura. /changes, /notifications e /receipts respondem 501
-    // (not_implemented); a carga é por inventário + revisão.
-    features: { changes: false, notifications: false, receipts: false, hmac: false, assets: false },
-    not_implemented: ['/changes', '/notifications', '/receipts'],
+    endpoints: ['/capabilities', '/catalog', '/fields/{shared_field_id}/inventory', '/resources/{id}/revisions/{n}', '/notifications'],
+    // Fase 2: a Invicta RECEBE avisos (POST /notifications, assinado com HMAC)
+    // só de linhas (guidance). A NOSSA fila de saída — /changes e /receipts da
+    // Invicta — continua 501 até a fase 3; a carga é por inventário + revisão.
+    features: { changes: false, notifications: true, receipts: false, hmac: true, assets: false },
+    notification_resource_types: ['guidance'],
+    not_implemented: ['/changes', '/receipts'],
   };
 }
 
@@ -640,7 +642,7 @@ export function corpoNaoImplementado(rota: string): Record<string, unknown> {
   return {
     error: {
       code: 'not_implemented',
-      message: `${rota} ainda não existe na Invicta (fase 1: só leitura por /catalog, /fields/{id}/inventory e /resources/{id}/revisions/{n}).`,
+      message: `${rota} ainda não existe na Invicta (previsto para a fase 3). Hoje: /catalog, /fields/{id}/inventory, /resources/{id}/revisions/{n} e POST /notifications (linhas).`,
     },
   };
 }

@@ -67,3 +67,65 @@ export const publicarZonasPF = (talhaoId: string, zoneamentoId: string | null, g
 
 export const publicarColheitaPF = (talhaoId: string, mapaId: string, geoVersao: number) =>
   chamar<ResultadoPublicacao>('/api/precisionfarm/publicar', { method: 'POST', body: { talhaoId, tipo: 'colheita', mapaId, geoVersao } });
+
+// ── Fase 2: linhas RECEBIDAS da PrecisionFarm (aba Linhas) ──────────────────
+// Leitura para todos com acesso ao talhão; "Buscar" só owner/admin.
+
+export interface RevisaoLinhasPF {
+  n: number;
+  operacao: 'upsert' | 'archive';
+  recebidoEm: string;
+  checksum: string;
+  nFeicoes: number | null;
+  boundaryRevision: number;
+  /** Ex.: feições que vieram sem `kind` (desenhadas como linha guia). */
+  observacao: string | null;
+}
+
+export interface CamadaLinhasPF {
+  resourceId: string;
+  nome: string | null;
+  integrationName: string | null;
+  ciclo: string | null;
+  categoria: string | null;
+  espacamentoM: number | null;
+  origem: 'PrecisionFarm';
+  revisaoVigente: number | null;
+  revisaoGeometria: number | null;
+  boundaryRevision: number | null;
+  arquivada: boolean;
+  arquivadaEm: string | null;
+  ultimaSincronizacao: string | null;
+  situacao: 'atualizado' | 'sincronizando' | 'erro';
+  motivo: string | null;
+  /** Próximo horário de tentativa dos avisos na fila (a tela espera até lá). */
+  proximaTentativaEm: string | null;
+  /** Owner/admin, configurado e há aviso recusado: mostra "Tentar de novo". */
+  podeTentarDeNovo: boolean;
+  revisoes: RevisaoLinhasPF[];
+  recusadas: Array<{ n: number; motivo: string | null; em: string | null }>;
+}
+
+export interface EstadoLinhasPF {
+  recebimento: { configurado: boolean; mensagem: string | null; faltando: string[] };
+  gestor: boolean;
+  vinculo: { status: VinculoPF['status'] } | null;
+  podeBuscar: boolean;
+  camadas: CamadaLinhasPF[];
+}
+
+export const estadoLinhasPF = (talhaoId: string) =>
+  chamar<EstadoLinhasPF>(`/api/precisionfarm/linhas/${encodeURIComponent(talhaoId)}`);
+
+export const geometriaLinhasPF = (talhaoId: string, resourceId: string, n: number) =>
+  chamar<{ geometria: GeoJSON.FeatureCollection }>(
+    `/api/precisionfarm/linhas/${encodeURIComponent(talhaoId)}/revisao?resource=${encodeURIComponent(resourceId)}&n=${n}`);
+
+export const buscarLinhasPF = (talhaoId: string) =>
+  chamar<{ mensagem: string; novos: number }>('/api/precisionfarm/carga-linhas', { method: 'POST', body: { talhaoId } });
+
+export const tentarDeNovoLinhasPF = (talhaoId: string, resourceId: string) =>
+  chamar<{ mensagem: string; reabertos: number }>('/api/precisionfarm/reprocessar-linhas', { method: 'POST', body: { talhaoId, resourceId } });
+
+/** Camadas que contam como "o talhão tem linhas" (aba no portal do produtor). */
+export const camadasVisiveisPF = (c: CamadaLinhasPF[]) => c.filter(x => x.revisaoGeometria != null && !x.arquivada);
