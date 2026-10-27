@@ -1,5 +1,9 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] PrecisionFarm — formato de not_implemented no /capabilities
+  '2.211.1': [
+    'Para a PrecisionFarm: o /capabilities lista as funções ainda indisponíveis pelo nome, sem barra ("changes", "receipts"), no formato que o painel deles lê. Nada muda nas telas.',
+  ],
   // [S/N] Integração com a PrecisionFarm — fase 2 (receber as linhas)
   '2.211.0': [
     'NOVA ABA "LINHAS" NO TALHÃO — LINHAS GUIA E BORDADURAS DA PRECISIONFARM: as linhas desenhadas e publicadas na PrecisionFarm chegam sozinhas, uma camada por linha publicada, com nome, ciclo (verão/inverno), operação, espaçamento, revisão vigente, data da última sincronização e situação (atualizado, sincronizando ou erro, com o motivo). No mapa, linha guia e bordadura têm estilos diferentes, e cada camada liga e desliga. Somente leitura: as linhas são editadas na PrecisionFarm.',

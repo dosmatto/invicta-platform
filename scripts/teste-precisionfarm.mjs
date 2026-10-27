@@ -379,7 +379,7 @@ t('capabilities: versão, tipos, formato, limites; fase 2 recebe avisos de linha
   assert.equal(c.features.hmac, true);
   assert.deepEqual(c.notification_resource_types, ['guidance']);
   assert.ok(c.endpoints.includes('/notifications'));
-  assert.deepEqual(c.not_implemented, ['/changes', '/receipts']);
+  assert.deepEqual(c.not_implemented, ['changes', 'receipts']);
   assert.equal(corpoNaoImplementado('/changes').error.code, 'not_implemented');
 });
 

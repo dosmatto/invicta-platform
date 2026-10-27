@@ -633,7 +633,8 @@ export function capabilities(ambiente: string): Record<string, unknown> {
     // Invicta — continua 501 até a fase 3; a carga é por inventário + revisão.
     features: { changes: false, notifications: true, receipts: false, hmac: true, assets: false },
     notification_resource_types: ['guidance'],
-    not_implemented: ['/changes', '/receipts'],
+    // Nomes das funções, sem barra — formato que o preflight da PrecisionFarm lê.
+    not_implemented: ['changes', 'receipts'],
   };
 }
 

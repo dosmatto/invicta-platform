@@ -119,7 +119,7 @@ curl -s -H "Authorization: Bearer $KEY" "$BASE/resources/<resource_id>/revisions
   "endpoints": ["/capabilities", "/catalog", "/fields/{shared_field_id}/inventory", "/resources/{id}/revisions/{n}", "/notifications"],
   "features": { "changes": false, "notifications": true, "receipts": false, "hmac": true, "assets": false },
   "notification_resource_types": ["guidance"],
-  "not_implemented": ["/changes", "/receipts"]
+  "not_implemented": ["changes", "receipts"]
 }
 ```
 
