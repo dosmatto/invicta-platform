@@ -381,6 +381,12 @@ export interface ConteudoExportacao {
    *  é ela que impede converter duas vezes. Ausente = cadastro antigo, ainda
    *  em óxido. Ver lib/nutrienteBase.ts. */
   baseElemento?: boolean;
+  /** POTENCIAL PRODUTIVO esperado (kg/ha) por classe de zona de manejo — base
+   *  da prescrição por exportação (Prescrições → "Por exportação"): zona da
+   *  classe X repõe o que X kg/ha exportam. Chaves = as classes padrão de
+   *  lib/zonas.ts ('Alta', 'Média-alta', 'Média', 'Média-baixa', 'Baixa').
+   *  Ausente/vazio = não cadastrado (a prescrição pede o número na hora). */
+  potencialPorClasse?: Partial<Record<'Alta' | 'Média-alta' | 'Média' | 'Média-baixa' | 'Baixa', number>>;
   fonte?: string;
   observacoes?: string;
 }

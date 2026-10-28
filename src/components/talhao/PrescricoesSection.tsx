@@ -27,7 +27,7 @@ import {
 } from '@/lib/prescricao/condicao';
 import { anoDaSafra } from '@/lib/periodo';
 import { emailUsuario, podePrescricao } from '@/lib/empresa';
-import { listar as bibListar, type ItemBiblioteca, type ConteudoEquacao } from '@/lib/biblioteca';
+import { listar as bibListar, type ItemBiblioteca, type ConteudoEquacao, type ConteudoExportacao } from '@/lib/biblioteca';
 import {
   complementarNutriente, complementarPorZona, podeComplementar, NUTRIENTES, ROTULO_NUTRIENTE, SIMBOLO_NUTRIENTE, garantiaDe,
   precoNaUnidade,
@@ -37,6 +37,12 @@ import {
   redistribuirPorEstoque, distribuirProporcional, distribuirPorAjuste, resumoDoses, nutrientesPorZona, pesoDoRank, arredondarDose,
 } from '@/lib/prescricao/calculo';
 import { dosesPorEquacao, variaveisDaEquacao } from '@/lib/prescricao/equacao';
+import {
+  prescreverPorExportacao, coefElementoDoCadastro, potencialDasZonas, entregaDoFormulado, ROTULO_GUIA, lerNumeroBR, zoneamentoNoSemaforo,
+  type NutrienteGuia,
+} from '@/lib/prescricao/porExportacao';
+import { coeficientesDaCultura } from '@/lib/exportacaoBib';
+import { ELEMENTO_PARA_OXIDO } from '@/lib/nutrienteBase';
 import { areasDaBaseCondicao, baseTemAreasProprias, dosesDoComplemento, dosesDaBaseEmKgHa, erroUnidadeBase } from '@/lib/prescricao/complemento';
 import {
   estoqueTotalSementes, metricasSementes, doseCompensada, fatorCampo,
@@ -97,7 +103,23 @@ interface Rascunho {
 // 'condicao' não usa zoneamento: as áreas saem do mapa de fertilidade recortado
 // nos limiares ("P ≥ 40 → 100 kg; abaixo → 150 kg").
 // 'indice' é a mesma ideia sobre uma imagem NDVI/NDRE… já processada.
-const MODOS_VISIVEIS: ModoCalculo[] = ['manual', 'ajuste', 'equacao', 'complemento', 'condicao', 'indice'];
+// 'exportacao' repõe por zona o que a colheita leva (potencial da classe ×
+// coeficiente da cultura ÷ garantia do formulado) — lib/prescricao/porExportacao.ts.
+const MODOS_VISIVEIS: ModoCalculo[] = ['manual', 'ajuste', 'equacao', 'complemento', 'exportacao', 'condicao', 'indice'];
+
+// Assinatura do que ENTRA na conta por exportação (as doses ficam de fora:
+// editar uma zona à mão depois de calcular é permitido). Salvar exige que o
+// snapshot gravado em params.exportacao seja o destes parâmetros.
+const assinaturaExportacao = (params: ParamsCalculo, insumoId: string, zonas: ZonaDose[], unidade: UnidadeDose, tipo: TipoPrescricao) => {
+  const e = params.exportacao;
+  if (!e) return '';
+  return JSON.stringify([
+    e.culturaId, e.nutriente, e.cenario, e.potencialPorZona ?? {}, insumoId, unidade, tipo,
+    e.cenario === 'total' ? params.totalDisponivel ?? null : null,
+    params.doseMin ?? null, params.doseMax ?? null, params.incremento ?? null,
+    zonas.map(z => z.idZona),
+  ]);
+};
 
 // Assinatura do que DESENHA as faixas (a dose fica de fora: mudar a dose não
 // muda a geometria). Salvar exige que as faixas no mapa sejam as destes
@@ -216,6 +238,14 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
     window.addEventListener('inv:prescricoes', h);
     return () => window.removeEventListener('inv:prescricoes', h);
   }, []);
+  // Biblioteca editada com a aba aberta (potencial/coeficiente da cultura,
+  // garantia do insumo): relê o cadastro sem precisar remontar a tela.
+  const [bibTick, setBibTick] = useState(0);
+  useEffect(() => {
+    const h = () => setBibTick(t => t + 1);
+    window.addEventListener('inv:biblioteca', h);
+    return () => window.removeEventListener('inv:biblioteca', h);
+  }, []);
 
   const zoneamentos = useMemo(() => (talhaoId ? getZoneamentosMeap(talhaoId) : []), [talhaoId]);
   const prescricoes = useMemo(() => (talhaoId ? getPrescricoes(talhaoId) : []), [talhaoId, tick]);
@@ -301,6 +331,8 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
     setQuintisPara('');   // limiares salvos não podem ser trocados por quintis pendentes
     // Prescrição por condição salva: as faixas no fc SÃO as dos parâmetros.
     setCondCalculada(ehPorFaixas(p.modo) ? assinaturaCondicao(p.params.condicao) : '');
+    // Por exportação salva: o snapshot gravado É o destes parâmetros.
+    setExpCalculada(p.modo === 'exportacao' ? assinaturaExportacao(p.params, p.insumoId ?? '', p.zonas, p.unidade, p.tipo) : '');
     setAvisosCalc([]); setErro(''); setOkMsg('');
     setAba('nova');
   }
@@ -313,7 +345,7 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
   // O produto deixou de ser texto livre: sem garantia cadastrada não há como
   // saber quanto o adubo entrega de cada nutriente, e é disso que a
   // complementação vive. Cada tipo de prescrição enxerga a sua categoria.
-  const insumos = useMemo(() => bibListar<ConteudoInsumo>('insumos').filter(i => i.ativo), [tick]);
+  const insumos = useMemo(() => bibListar<ConteudoInsumo>('insumos').filter(i => i.ativo), [tick, bibTick]);   // eslint-disable-line react-hooks/exhaustive-deps
   const insumosDoTipo = useMemo(
     () => insumos.filter(i => CATEGORIA_DO_TIPO[r.tipo].includes(i.conteudo?.categoria)),
     [insumos, r.tipo],
@@ -590,6 +622,113 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
       : [`Doses calculadas pela equação "${eqSel.nome}".`]);
   }
 
+  // ── Modo EXPORTAÇÃO: repor o que a colheita leva, zona a zona ───────────
+  // Potencial (kg/ha, da classe da zona no cadastro de Exportação ou digitado
+  // aqui) × coeficiente da cultura (elemento) → óxido ÷ garantia do formulado.
+  // A conta é do módulo puro lib/prescricao/porExportacao.ts.
+  const [expCalculada, setExpCalculada] = useState('');
+  const exp = r.params.exportacao;
+  /** Culturas com cadastro de Exportação (o item do usuário vence o de sistema). */
+  const culturasExp = useMemo(() => {
+    const ids = [...new Set(
+      bibListar<ConteudoExportacao>('exportacao')
+        .filter(i => i.ativo !== false)
+        .map(i => (i.conteudo?.culturaId ?? '').trim().toLowerCase())
+        .filter(Boolean),
+    )];
+    return ids
+      .map(id => ({ id, item: coeficientesDaCultura(id) }))
+      .filter((x): x is { id: string; item: ItemBiblioteca<ConteudoExportacao> } => !!x.item)
+      .sort((a, b) => a.item.nome.localeCompare(b.item.nome, 'pt-BR'));
+  }, [tick, bibTick]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const itemExp = useMemo(
+    () => (exp ? culturasExp.find(c => c.id === exp.culturaId)?.item ?? null : null),
+    [exp, culturasExp],
+  );
+  const nutExp: NutrienteGuia = exp?.nutriente ?? 'p2o5';
+  const coefExp = useMemo(() => coefElementoDoCadastro(itemExp?.conteudo, nutExp), [itemExp, nutExp]);
+  const garantiaExp = insumoSel ? garantiaDe(insumoSel.conteudo, nutExp) : null;
+  const potenciaisExp = useMemo(
+    () => (exp ? potencialDasZonas(r.zonas.map(z => ({ id: z.idZona, classe: z.classe })), itemExp?.conteudo?.potencialPorClasse, exp.potencialPorZona) : {}),
+    [exp, r.zonas, itemExp],
+  );
+  /** Prévia ao vivo (o botão é que grava as doses e o snapshot). */
+  const resultadoExp = useMemo(() => (exp && r.zonas.length ? prescreverPorExportacao({
+    zonas: r.zonas.map(z => ({ id: z.idZona, nome: z.nomeZona, areaHa: z.areaHa, potencialKgHa: potenciaisExp[z.idZona]?.kgHa })),
+    nutriente: nutExp,
+    coefElementoKgT: coefExp?.coefElementoKgT,
+    garantiaPct: garantiaExp,
+    cenario: exp.cenario,
+    programadoKg: r.params.totalDisponivel,
+    doseMin: r.params.doseMin, doseMax: r.params.doseMax, incremento: r.params.incremento,
+  }) : null), [exp, r.zonas, potenciaisExp, nutExp, coefExp, garantiaExp, r.params.totalDisponivel, r.params.doseMin, r.params.doseMax, r.params.incremento]);
+
+  function patchExp(pe: Partial<NonNullable<ParamsCalculo['exportacao']>>) {
+    setR(x => ({
+      ...x,
+      params: {
+        ...x.params,
+        exportacao: { culturaId: culturasExp[0]?.id ?? 'soja', nutriente: 'p2o5', cenario: 'livre', ...(x.params.exportacao ?? {}), ...pe },
+      },
+    }));
+  }
+  /** Potencial digitado SÓ nesta prescrição; vazio volta ao do cadastro. */
+  function setPotencialZona(idZona: string, v: number | undefined) {
+    const atual = { ...(exp?.potencialPorZona ?? {}) };
+    if (v == null || !Number.isFinite(v) || v < 0) delete atual[idZona]; else atual[idZona] = v;
+    patchExp({ potencialPorZona: atual });
+  }
+
+  function calcularExportacao() {
+    setErro(''); setOkMsg('');
+    if (!exp) { setErro('Configure a prescrição por exportação primeiro.'); return; }
+    if (r.tipo !== 'fertilizante') { setErro('A prescrição por exportação é de fertilizante — troque o Tipo para “Fertilizante”.'); return; }
+    if (r.unidade !== 'kg/ha') { setErro('A prescrição por exportação sai em kg/ha — troque a Unidade.'); return; }
+    if (!itemExp) { setErro('Escolha uma cultura cadastrada em Biblioteca → Exportação de Nutrientes.'); return; }
+    if (!insumoSel) { setErro('Escolha o formulado (Biblioteca → Insumos).'); return; }
+    const res = resultadoExp;
+    if (!res || !res.ok) { setErro((res?.erros ?? ['Não foi possível calcular.']).join(' ')); return; }
+    const g = insumoSel.conteudo.garantias ?? {};
+    const garantiasFormulado = Object.fromEntries(
+      (['n', 'p2o5', 'k2o', 's', 'ca', 'mg'] as const)
+        .filter(n => typeof g[n] === 'number' && Number.isFinite(g[n]) && (g[n] as number) > 0)
+        .map(n => [n, g[n] as number]),
+    );
+    const total = exp.cenario === 'total';
+    setR(x => ({
+      ...x,
+      // As doses já saem na grade do ARQUIVO (passo da máquina + precisão do
+      // SHP), arredondadas para baixo: gravado == exportado, e arredondar de
+      // novo aqui poderia passar do ideal ou do programado.
+      zonas: x.zonas.map(z => ({ ...z, dose: res.porZona[z.idZona]?.doseKgHa ?? 0 })),
+      params: {
+        ...x.params,
+        // Na Modalidade 1 não há volume programado: um total esquecido de outro
+        // modo viraria "Restante" no resumo e no relatório.
+        totalDisponivel: total ? x.params.totalDisponivel : undefined,
+        exportacao: {
+          ...exp,
+          exportacaoItemId: itemExp.id,
+          exportacaoNome: itemExp.nome,
+          coefElementoKgT: coefExp!.coefElementoKgT,
+          coefDeOxido: coefExp!.deOxido || undefined,
+          garantiaPct: garantiaExp ?? undefined,
+          garantiasFormulado,
+          potencialPorClasse: { ...(itemExp.conteudo?.potencialPorClasse ?? {}) },
+          potencialUsado: Object.fromEntries(x.zonas.map(z => [z.idZona, potenciaisExp[z.idZona]?.kgHa ?? 0])),
+          doseIdeal: Object.fromEntries(x.zonas.map(z => [z.idZona, res.porZona[z.idZona]?.doseIdealKgHa ?? 0])),
+          necessidadeKg: res.necessidadeKg,
+          limitadasMax: total && res.limitadasMax.length ? res.limitadasMax : undefined,
+          faixaFracao: total && res.faixaFracao ? res.faixaFracao : undefined,
+        },
+      },
+    }));
+    setExpCalculada(assinaturaExportacao(
+      { ...r.params, totalDisponivel: total ? r.params.totalDisponivel : undefined }, r.insumoId, r.zonas, r.unidade, r.tipo,
+    ));
+    setAvisosCalc(res.avisos);
+  }
+
   // sementes: estado próprio do estoque (como o usuário informa)
   const [estSem, setEstSem] = useState<{ modo: keyof EstoqueSementes; valor: string }>({ modo: 'populacaoMediaHa', valor: '' });
 
@@ -698,6 +837,11 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
     if (id === 'condicao' && (!r.params.condicao || r.params.condicao.imagem || r.modo === 'indice')) patchParams({ condicao: CONDICAO_VAZIA() });
     if (id === 'indice' && !r.params.condicao?.imagem) patchParams({ condicao: INDICE_VAZIO() });
     setAvisosCalc([]); setErro('');
+    if (id === 'exportacao') {
+      // É reposição de P/K por fertilizante mineral: kg/ha do formulado.
+      patch({ tipo: 'fertilizante', unidade: 'kg/ha' });
+      if (!r.params.exportacao) patchExp({});
+    }
     if (id === 'complemento') {
       const it = insumos.find(x => x.id === r.insumoId);
       const nut = r.params.complemento?.nutriente ?? 'n';
@@ -885,6 +1029,17 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
   const resumo = useMemo(() => resumoDoses(r.zonas, custoNum, fatorBase ?? 1), [r.zonas, custoNum, fatorBase]);
   // Condição com volume travado: doses digitadas (pesos) × aplicadas + avisos.
   const volCond = useMemo(() => volumeCondicao(r), [r]);
+  /** Colunas da prescrição por exportação na tabela (potencial, ideal, entrega). */
+  const colExp = r.modo === 'exportacao' && !!r.params.exportacao;
+  /** O snapshot gravado é o destes parâmetros (recém-calculado ou prescrição
+   *  salva reaberta)? Então a tabela mostra ele — não o cadastro atual. */
+  const expEmDia = colExp && exp?.coefElementoKgT != null
+    && expCalculada === assinaturaExportacao(r.params, r.insumoId, r.zonas, r.unidade, r.tipo);
+  /** Potencial do snapshot diferente do que o cadastro daria hoje. */
+  const potDifCadastro = !!exp?.potencialUsado && r.zonas.some(z => {
+    const s = exp.potencialUsado![z.idZona], v = potenciaisExp[z.idZona]?.kgHa;
+    return s != null && v != null && Math.abs(s - v) > 1e-9;
+  });
   const condTravado = !!volCond?.travado;
   const totalArquivo = useMemo(
     () => (compensa ? r.zonas.reduce((s, z) => s + doseCompensada(z.dose, r.params.sementes, true) * z.areaHa * (fatorBase ?? 1), 0) : null),
@@ -983,6 +1138,19 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
         setErro('Informe a dose de todas as faixas (0 = não aplica) antes de salvar ou exportar.'); return null;
       }
     } else if (!r.fc || !r.zonas.length) { setErro('Escolha um zoneamento (Zonas de Manejo) primeiro.'); return null; }
+    if (r.modo === 'exportacao') {
+      // O snapshot (coeficiente, garantia, potenciais) é o que torna a
+      // prescrição reproduzível — sem ele, ou com parâmetros mexidos depois do
+      // cálculo, a dose salva não bateria com o que o documento diz.
+      const e = r.params.exportacao;
+      if (r.tipo !== 'fertilizante' || r.unidade !== 'kg/ha') {
+        setErro('A prescrição por exportação é de fertilizante em kg/ha — volte o Tipo e a Unidade e calcule de novo.'); return null;
+      }
+      if (!e || e.coefElementoKgT == null || e.garantiaPct == null) { setErro('Clique em "Calcular doses por exportação" antes de salvar.'); return null; }
+      if (expCalculada !== assinaturaExportacao(r.params, r.insumoId, r.zonas, r.unidade, r.tipo)) {
+        setErro('Cultura, nutriente, formulado, potencial, volume programado ou limites mudaram depois do cálculo — clique em "Calcular doses por exportação" de novo.'); return null;
+      }
+    }
     if (!r.nome.trim()) { setErro('Dê um nome à prescrição (ex.: "Calcário 2026").'); return null; }
     if (!r.produto.trim()) { setErro('Informe o produto.'); return null; }
     if (r.unidade === 'sementes/m' && fatorBase == null) {
@@ -1676,6 +1844,225 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
                   </div>
                 )}
 
+                {/* ── Modo EXPORTAÇÃO: repõe o que a colheita leva ──
+                    potencial da zona (kg/ha) × coeficiente da cultura (P/K
+                    elemento) → óxido ÷ garantia do formulado = dose ideal.
+                    Modalidade 1 = ideal (total é o que comprar); Modalidade 2 =
+                    reparte um volume programado (mesma fração do ideal). */}
+                {r.modo === 'exportacao' && exp && (() => {
+                  const g = ROTULO_GUIA[nutExp];
+                  const cen = exp.cenario;
+                  const res = resultadoExp;
+                  const garantias = insumoSel?.conteudo?.garantias ?? {};
+                  const outras = (['n', 'p2o5', 'k2o', 's'] as const).filter(n => n !== nutExp && (garantias[n] ?? 0) > 0);
+                  const entregaMedia = res?.ok ? entregaDoFormulado(res.doseMedia, garantias) : {};
+                  // O cadastro mudou depois do cálculo salvo? (coeficiente, garantia ou potencial)
+                  const snapDif = exp.coefElementoKgT != null && (
+                    (coefExp && Math.abs(coefExp.coefElementoKgT - exp.coefElementoKgT) > 1e-9)
+                    || (garantiaExp != null && exp.garantiaPct != null && Math.abs(garantiaExp - exp.garantiaPct) > 1e-9)
+                    || potDifCadastro);
+                  const desatualizado = exp.coefElementoKgT != null && expCalculada !== assinaturaExportacao(r.params, r.insumoId, r.zonas, r.unidade, r.tipo);
+                  const conta = (pot: number) => {
+                    const el = (pot / 1000) * (coefExp?.coefElementoKgT ?? 0);
+                    const ox = el * ELEMENTO_PARA_OXIDO[nutExp];
+                    return { el, ox, dose: garantiaExp ? ox / (garantiaExp / 100) : null };
+                  };
+                  // A conta escrita por extenso para UMA zona (a primeira com potencial).
+                  const potExemplo = r.zonas.map(z => potenciaisExp[z.idZona]?.kgHa).find((x): x is number => x != null) ?? null;
+                  return (
+                    <div className="p-2.5 rounded-lg space-y-2" style={{ background: '#061525', border: '1px solid #1a3a6b' }}>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {([['livre', 'Modalidade 1 — dose ideal (total é o que comprar)'], ['total', 'Modalidade 2 — reparte um volume programado']] as const).map(([id, rot]) => (
+                          <button key={id} onClick={() => patchExp({ cenario: id })}
+                            className="px-2 py-1 rounded text-[10px] font-semibold"
+                            style={{ background: cen === id ? 'var(--invicta-blue-mid)' : '#0f2240', color: cen === id ? '#fff' : '#93c5fd' }}>
+                            {rot}
+                          </button>
+                        ))}
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <Campo rotulo="Cultura (Biblioteca → Exportação de Nutrientes) *">
+                          <select value={exp.culturaId} onChange={e => patchExp({ culturaId: e.target.value })}
+                            className="w-full rounded px-2 py-1.5 text-xs outline-none" style={inputStyle}>
+                            {!culturasExp.some(c => c.id === exp.culturaId) && <option value={exp.culturaId}>{exp.exportacaoNome ?? exp.culturaId} (sem cadastro)</option>}
+                            {culturasExp.map(c => <option key={c.id} value={c.id}>{c.item.nome}</option>)}
+                          </select>
+                          {itemExp ? (
+                            <p className="text-[9px] mt-0.5" style={{ color: coefExp ? '#86efac' : '#fbbf24' }}>
+                              {coefExp
+                                ? <>Exporta {fmt(coefExp.coefElementoKgT, 2)} kg {g.elemento}/t colhida{coefExp.deOxido ? ' (cadastro antigo em óxido — convertido para elemento)' : ''}{itemExp.conteudo?.fonte ? ` · ${itemExp.conteudo.fonte}` : ''}</>
+                                : <>Sem coeficiente de {g.elemento} declarado nesta cultura — cadastre em Biblioteca → Exportação de Nutrientes.</>}
+                            </p>
+                          ) : (
+                            <p className="text-[9px] mt-0.5" style={{ color: '#fbbf24' }}>
+                              {culturasExp.length ? 'Escolha a cultura.' : 'Nenhuma cultura cadastrada em Biblioteca → Exportação de Nutrientes.'}
+                            </p>
+                          )}
+                        </Campo>
+                        <Campo rotulo="Nutriente-guia (a dose sai dele)">
+                          <div className="flex gap-1">
+                            {(['p2o5', 'k2o'] as const).map(n => (
+                              <button key={n} onClick={() => patchExp({ nutriente: n })}
+                                className="flex-1 px-2 py-1.5 rounded text-[10px] font-semibold"
+                                style={{ background: nutExp === n ? 'var(--invicta-blue-mid)' : '#0f2240', color: nutExp === n ? '#fff' : '#93c5fd' }}>
+                                {ROTULO_GUIA[n].oxido} (repõe {ROTULO_GUIA[n].elemento})
+                              </button>
+                            ))}
+                          </div>
+                        </Campo>
+                      </div>
+
+                      {/* O formulado É o produto desta prescrição: escolher aqui
+                          troca o "Produto" no topo, e a garantia vem do cadastro. */}
+                      <Campo rotulo={`Formulado * — garantia de ${g.oxido} lida da Biblioteca → Insumos`}>
+                        <select value={r.insumoId} onChange={e => { if (e.target.value) escolherInsumo(e.target.value); }}
+                          className="w-full rounded px-2 py-1.5 text-xs outline-none" style={inputStyle}>
+                          <option value="">Selecione o formulado…</option>
+                          {insumosDoTipo.map(i => {
+                            const gp = garantiaDe(i.conteudo, nutExp);
+                            return <option key={i.id} value={i.id} disabled={gp <= 0}>{i.nome}{gp > 0 ? ` · ${fmt(gp, 1)}% ${g.oxido}` : ` (sem ${g.oxido} — não serve)`}</option>;
+                          })}
+                        </select>
+                        {insumoSel && (garantiaExp ?? 0) <= 0 && (
+                          <p className="text-[9px] mt-0.5" style={{ color: '#fbbf24' }}>
+                            <AlertTriangle size={10} className="inline mr-1" />
+                            <strong>{insumoSel.nome}</strong> não declara {g.oxido} — não serve para repor {g.elemento}. Escolha outro formulado.
+                          </p>
+                        )}
+                        {insumoSel && (garantiaExp ?? 0) > 0 && (
+                          <p className="text-[9px] mt-0.5" style={{ color: '#86efac' }}>
+                            {fmt(garantiaExp!, 1)}% de {g.oxido} no cadastro de {insumoSel.nome}
+                            {outras.length > 0 && <> · também traz {outras.map(n => `${SIMBOLO_NUTRIENTE[n]} ${fmt(garantias[n]!, 1)}%`).join(', ')}</>}
+                          </p>
+                        )}
+                      </Campo>
+
+                      {/* Potencial por zona: zonas de classe padrão puxam do
+                          cadastro; as demais (6–12 classes, nomes livres) pedem
+                          o número; qualquer uma pode ser trocada SÓ aqui. */}
+                      <div>
+                        <p className="text-[9px] mb-1" style={{ color: '#64748b' }}>
+                          Potencial produtivo por zona (kg/ha) — em branco usa o do cadastro da classe; digitar vale só nesta prescrição.
+                        </p>
+                        {/* Só o semáforo de 5 classes puxa do cadastro: em 6–12
+                            classes "Alto" não é a classe de maior potencial. */}
+                        {!zoneamentoNoSemaforo(r.zonas.map(z => z.classe)) && (
+                          <p className="text-[9px] mb-1 leading-relaxed" style={{ color: '#fbbf24' }}>
+                            <AlertTriangle size={10} className="inline mr-1" />
+                            Este zoneamento não está nas 5 classes padrão (Alta, Média-alta, Média, Média-baixa, Baixa) — informe o potencial de cada zona.
+                          </p>
+                        )}
+                        <div className="flex flex-wrap gap-1.5">
+                          {r.zonas.map(z => {
+                            const pz = potenciaisExp[z.idZona];
+                            const cad = pz?.classe ? itemExp?.conteudo?.potencialPorClasse?.[pz.classe] : undefined;
+                            const falta = pz?.origem === 'falta';
+                            return (
+                              <div key={z.idZona} className="flex items-center gap-1 px-1.5 py-1 rounded"
+                                style={{ background: '#0f2240', border: `1px solid ${falta ? '#b45309' : '#0f2240'}` }}>
+                                <span className="inline-block w-2 h-2 rounded-full" style={{ background: z.cor }} />
+                                <span className="text-[9px]" style={{ color: '#cbd5e1' }} title={`classe: ${z.classe}`}>{z.nomeZona}</span>
+                                <div className="w-20">
+                                  <InputNum valor={exp.potencialPorZona?.[z.idZona]} onMudou={v => setPotencialZona(z.idZona, v)} ler={lerNumeroBR}
+                                    placeholder={cad != null ? String(cad) : 'informe'} />
+                                </div>
+                                <span className="text-[8px]" style={{ color: falta ? '#fbbf24' : pz?.origem === 'override' ? '#c4b5fd' : '#64748b' }}>
+                                  {falta ? (pz?.classe ? `${pz.classe} sem cadastro` : 'classe livre') : pz?.origem === 'override' ? 'só aqui' : pz?.classe}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-4 gap-2">
+                        {cen === 'total' && (
+                          <CampoTotalDisponivel rotulo="Programado" unidadeTotal="kg"
+                            porHa={!!r.params.totalPorHa} totalAbs={r.params.totalDisponivel}
+                            areaHa={resumo.areaHa} semente={false}
+                            onMudou={patchParams} />
+                        )}
+                        <Campo rotulo="Dose mín (kg/ha)">
+                          <InputNum valor={r.params.doseMin} onMudou={v => patchParams({ doseMin: v })} />
+                        </Campo>
+                        <Campo rotulo="Dose máx (kg/ha)">
+                          <InputNum valor={r.params.doseMax} onMudou={v => patchParams({ doseMax: v })} />
+                        </Campo>
+                        <Campo rotulo="Incremento (kg/ha)">
+                          <InputNum valor={r.params.incremento} onMudou={v => patchParams({ incremento: v })} />
+                        </Campo>
+                      </div>
+
+                      {/* A conta inteira, à vista */}
+                      <div className="p-2 rounded space-y-0.5" style={{ background: '#0b1f3a', border: '1px solid #1e3a8a' }}>
+                        <p className="text-[10px] font-bold" style={{ color: '#93c5fd' }}>Resumo do cálculo</p>
+                        {potExemplo != null && coefExp && (() => {
+                          const c = conta(potExemplo);
+                          return (
+                            <p className="text-[10px]" style={{ color: '#cbd5e1' }}>
+                              Ex.: {fmt0(potExemplo)} kg/ha × {fmt(coefExp.coefElementoKgT, 2)} kg {g.elemento}/t = {fmt(c.el, 2)} kg {g.elemento} →
+                              × {fmt(ELEMENTO_PARA_OXIDO[nutExp], 4)} = {fmt(c.ox, 2)} kg {g.oxido}
+                              {c.dose != null && <> → ÷ {fmt(garantiaExp!, 1)}% = <strong>{fmt(c.dose, 1)} kg/ha</strong></>}
+                            </p>
+                          );
+                        })()}
+                        {res?.ok ? (
+                          <>
+                            <p className="text-[10px]" style={{ color: '#cbd5e1' }}>
+                              Necessidade (repor a exportação): <strong>{fmt0(res.necessidadeKg)} kg</strong> ({fmt(res.necessidadeKg / 1000, 2)} t) ·
+                              média ideal {fmt(res.doseMediaIdeal, 1)} kg/ha em {fmtHa(res.areaHa)} ha
+                            </p>
+                            {cen === 'total' && res.programadoKg != null && res.fracao != null && (
+                              <p className="text-[10px]" style={{ color: '#cbd5e1' }}>
+                                Programado {fmt0(res.programadoKg)} kg = <strong>{fmt(res.fracao * 100, 1)}%</strong> da necessidade ·
+                                usado {fmt0(res.usadoKg)} kg · sobra <strong>{fmt0(res.sobraKg ?? 0)} kg</strong>
+                              </p>
+                            )}
+                            <p className="text-[11px]" style={{ color: '#86efac' }}>
+                              {cen === 'livre'
+                                ? <>Volume para compra: <strong>{fmt0(res.usadoKg)} kg ({fmt(res.usadoKg / 1000, 2)} t)</strong> · dose média {fmt(res.doseMedia, 1)} kg/ha</>
+                                : <>Dose média aplicada: <strong>{fmt(res.doseMedia, 1)} kg/ha</strong></>}
+                            </p>
+                            {Object.keys(entregaMedia).length > 0 && (
+                              <p className="text-[10px]" style={{ color: '#94a3b8' }}>
+                                O formulado entrega, na média: {(Object.entries(entregaMedia) as Array<[Nutriente, number]>).map(([n, v]) => `${SIMBOLO_NUTRIENTE[n]} ${fmt(v, 1)}`).join(' · ')} kg/ha
+                              </p>
+                            )}
+                          </>
+                        ) : (
+                          (res?.erros ?? []).map((m, i) => (
+                            <p key={i} className="text-[9px] leading-relaxed" style={{ color: '#fbbf24' }}>{m}</p>
+                          ))
+                        )}
+                        {snapDif && (
+                          <p className="text-[9px] leading-relaxed" style={{ color: '#fbbf24' }}>
+                            O cadastro mudou desde o cálculo salvo ({[
+                              coefExp && Math.abs(coefExp.coefElementoKgT - exp.coefElementoKgT!) > 1e-9 ? 'coeficiente' : null,
+                              garantiaExp != null && exp.garantiaPct != null && Math.abs(garantiaExp - exp.garantiaPct) > 1e-9 ? 'garantia' : null,
+                              potDifCadastro ? 'potencial das zonas' : null,
+                            ].filter(Boolean).join(', ')}) — a prescrição guarda {fmt(exp.coefElementoKgT!, 2)} kg {g.elemento}/t, {fmt(exp.garantiaPct ?? 0, 1)}% e os potenciais da tabela. Recalcule para usar os números atuais.
+                          </p>
+                        )}
+                        {desatualizado && !snapDif && (
+                          <p className="text-[9px] leading-relaxed" style={{ color: '#fbbf24' }}>
+                            Parâmetros mudaram depois do último cálculo — clique em calcular de novo antes de salvar.
+                          </p>
+                        )}
+                      </div>
+
+                      <button onClick={calcularExportacao} className="px-3 py-1.5 rounded text-[10px] font-bold text-white flex items-center gap-1.5" style={{ background: 'var(--invicta-green-dark)' }}>
+                        <RefreshCw size={11} /> Calcular doses por exportação
+                      </button>
+                      <p className="text-[9px]" style={{ color: '#64748b' }}>
+                        {cen === 'livre'
+                          ? 'Cada zona recebe o ideal para repor o que o potencial dela exporta; o total é o volume a comprar.'
+                          : 'Programado menor que a necessidade: todas as zonas recebem a mesma fração do ideal, sem passar do programado. Maior: cada zona fica no ideal e o excedente sobra.'}
+                      </p>
+                    </div>
+                  );
+                })()}
+
                 {/* Semente sempre mostra os parâmetros: a compensação de germinação
                     vale para qualquer modo, inclusive dose manual — era ali que ela
                     mais faltava. O estoque só aparece onde existe Total disponível. */}
@@ -2001,6 +2388,11 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
                         {compensa && <th className="text-right px-2 py-1.5" style={{ color: '#86efac' }}>No arquivo ({r.unidade})</th>}
                         <th className="text-right px-2 py-1.5">Total ({UNIDADE_TOTAL[r.unidade]})</th>
                         {nutri && <th className="text-right px-2 py-1.5">N·P·K (kg/ha)</th>}
+                        {colExp && (<>
+                          <th className="text-right px-2 py-1.5">Potencial (kg/ha)</th>
+                          <th className="text-right px-2 py-1.5">Ideal (kg/ha)</th>
+                          <th className="text-right px-2 py-1.5" title="O que o formulado entrega na dose da zona">Entrega N·P₂O₅·K₂O (kg/ha)</th>
+                        </>)}
                       </tr>
                     </thead>
                     <tbody>
@@ -2066,6 +2458,23 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
                               {fmt(nutri[z.idZona].n, 0)}·{fmt(nutri[z.idZona].p2o5, 0)}·{fmt(nutri[z.idZona].k2o, 0)}
                             </td>
                           )}
+                          {colExp && (() => {
+                            // Snapshot gravado quando ele é o destes parâmetros (é o
+                            // que deu a dose ao lado); senão, a prévia ao vivo.
+                            const pot = expEmDia
+                              ? exp?.potencialUsado?.[z.idZona] ?? potenciaisExp[z.idZona]?.kgHa
+                              : potenciaisExp[z.idZona]?.kgHa ?? exp?.potencialUsado?.[z.idZona];
+                            const ideal = expEmDia
+                              ? exp?.doseIdeal?.[z.idZona]
+                              : resultadoExp?.ok ? resultadoExp.porZona[z.idZona]?.doseIdealKgHa : exp?.doseIdeal?.[z.idZona];
+                            const ent = entregaDoFormulado(z.dose, exp?.garantiasFormulado ?? insumoSel?.conteudo?.garantias);
+                            const n1 = (v: number | undefined) => (v != null && Number.isFinite(v) ? fmt(v, 1) : '—');
+                            return (<>
+                              <td className="px-2 py-1 text-right">{pot != null && Number.isFinite(pot) ? fmt0(pot) : '—'}</td>
+                              <td className="px-2 py-1 text-right" style={{ color: '#94a3b8' }}>{n1(ideal)}</td>
+                              <td className="px-2 py-1 text-right" style={{ color: '#94a3b8' }}>{n1(ent.n ?? 0)}·{n1(ent.p2o5 ?? 0)}·{n1(ent.k2o ?? 0)}</td>
+                            </>);
+                          })()}
                         </tr>
                         );
                       })}
@@ -2559,7 +2968,12 @@ const ehVazio = (v: number | undefined) => v == null || Number.isNaN(v);
 const mesmoValor = (a: number | undefined, b: number | undefined) =>
   (ehVazio(a) && ehVazio(b)) || a === b;
 const textoDoValor = (v: number | undefined) => (ehVazio(v) ? '' : String(v));
-function InputNum({ valor, onMudou }: { valor: number | undefined; onMudou: (v: number | undefined) => void }) {
+function InputNum({ valor, onMudou, placeholder, ler }: {
+  valor: number | undefined; onMudou: (v: number | undefined) => void; placeholder?: string;
+  /** Leitor do texto. Padrão: vírgula = decimal. O potencial (kg/ha) usa
+   *  lerNumeroBR, que lê "3.500" como três mil e quinhentos. */
+  ler?: (txt: string) => number | undefined;
+}) {
   const [txt, setTxt] = useState(textoDoValor(valor));
   const [visto, setVisto] = useState(valor);
   if (!mesmoValor(valor, visto)) {
@@ -2571,10 +2985,12 @@ function InputNum({ valor, onMudou }: { valor: number | undefined; onMudou: (v: 
       onChange={e => {
         setTxt(e.target.value);
         const n = Number(e.target.value.replace(',', '.'));
-        const v = e.target.value.trim() === '' ? undefined : Number.isFinite(n) ? n : undefined;
+        const v = ler ? ler(e.target.value)
+          : e.target.value.trim() === '' ? undefined : Number.isFinite(n) ? n : undefined;
         setVisto(v);          // veio da digitação: o eco do pai não reescreve o texto
         onMudou(v);
       }}
+      placeholder={placeholder}
       className="w-full rounded px-2 py-1.5 text-xs outline-none" style={inputStyle} />
   );
 }

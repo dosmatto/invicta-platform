@@ -11,6 +11,8 @@ import { reguasEquivalentes, converterDose, ROTULO_CURTO } from './unidade.ts';
 import { UNIDADE_TOTAL, ehUnidadeSemente, comSobra, type Prescricao, type UnidadeDose } from './tipos.ts';
 import { complementarNutriente, SIMBOLO_NUTRIENTE } from '../insumos.ts';
 import { fmtHa } from '../formato.ts';
+import { ELEMENTO_PARA_OXIDO } from '../nutrienteBase.ts';
+import { entregaDoFormulado, ROTULO_GUIA, textoModalidade2 } from './porExportacao.ts';
 
 // Símbolo do nutriente em ASCII para o PDF: os subscritos de P₂O₅ e K₂O estão
 // fora do WinAnsi da helvetica e são descartados na hora de desenhar — sairia
@@ -261,6 +263,24 @@ export function montarResumoPdf(
     }
   }
 
+  // Prescrição por EXPORTAÇÃO: de onde saiu a dose — cultura, coeficiente,
+  // garantia, potencial — para quem confere o PDF refazer a conta.
+  const ex = contaExportacao(p);
+  if (ex) {
+    const guia = SIMBOLO_PDF[ex.nutriente];
+    linhas.push(
+      { txt: `Prescrição por exportação - cultura ${ex.cultura}, nutriente-guia ${guia}`, destaque: true },
+      { txt: `Coeficiente de exportação: ${fmtRel(ex.coefElementoKgT)} kg ${ex.elemento}/t (elemento${ex.coefDeOxido ? ', convertido do cadastro antigo em óxido' : ''}) x ${fmtRel(ex.fatorOxido)} = ${fmtRel(ex.coefOxidoKgT)} kg ${guia}/t · garantia ${fmtRel(ex.garantiaPct)}% de ${guia} no formulado` },
+      { txt: `Potencial por zona: ${ex.faixa(ex.potenciais)} kg/ha · dose ideal (repõe a exportação): ${ex.faixa(ex.ideais)} kg/ha · necessidade total ${nTot(ex.necessidadeKg)} kg (${fmtRel(ex.necessidadeKg / 1000)} t)` },
+      ex.cenario === 'total'
+        ? { txt: `Modalidade 2 - volume programado ${nTot(ex.programadoKg ?? 0)} kg. ${ex.textoModalidade2 ?? ''}`, destaque: true }
+        : { txt: `Modalidade 1 - dose ideal por zona: volume a comprar ${nTot(r.usado)} kg (${fmtRel(r.usado / 1000)} t)`, destaque: true },
+      ...(ex.entregaMedia.length
+        ? [{ txt: `O formulado entrega, na média: ${ex.entregaMedia.map(([n, v]) => `${SIMBOLO_PDF[n] ?? n} ${fmtRel(v)}`).join(' · ')} kg/ha` }]
+        : []),
+    );
+  }
+
   if (p.params.totalDisponivel != null && comSobra(p)) {
     // Volume travado com sobra: o que não foi usado aqui pode ir para outro talhão.
     const usado = usadoNoVolume(p, r.usado, fator);
@@ -279,6 +299,49 @@ export function montarResumoPdf(
     : { txt: 'O arquivo de aplicação sai com a dose exatamente como está na tabela acima.' });
   return linhas;
 }
+
+/**
+ * A conta da prescrição POR EXPORTAÇÃO, lida só do SNAPSHOT salvo (nunca do
+ * cadastro atual — ele pode ter mudado). null = não é desse modo ou foi salva
+ * sem o cálculo. Usada no PDF e no Excel.
+ */
+export function contaExportacao(p: Prescricao) {
+  const e = p.params.exportacao;
+  if (p.modo !== 'exportacao' || !e || e.coefElementoKgT == null || e.garantiaPct == null) return null;
+  const fatorOxido = ELEMENTO_PARA_OXIDO[e.nutriente];
+  const valores = (m?: Record<string, number>) =>
+    p.zonas.map(z => m?.[z.idZona]).filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+  const areaHa = p.zonas.reduce((s, z) => s + (z.areaHa > 0 ? z.areaHa : 0), 0);
+  const doseMedia = areaHa > 0 ? p.zonas.reduce((s, z) => s + (Number.isFinite(z.dose) ? z.dose : 0) * Math.max(0, z.areaHa), 0) / areaHa : 0;
+  const entregaMedia = (Object.entries(entregaDoFormulado(doseMedia, e.garantiasFormulado)) as Array<[string, number]>)
+    .sort(([a], [b]) => ORDEM_ENTREGA.indexOf(a) - ORDEM_ENTREGA.indexOf(b));
+  const programadoKg = e.cenario === 'total' ? p.params.totalDisponivel ?? null : null;
+  const necessidadeKg = e.necessidadeKg ?? 0;
+  return {
+    cultura: e.exportacaoNome ?? e.culturaId,
+    nutriente: e.nutriente,
+    elemento: ROTULO_GUIA[e.nutriente].elemento,
+    cenario: e.cenario,
+    coefElementoKgT: e.coefElementoKgT,
+    coefDeOxido: !!e.coefDeOxido,
+    fatorOxido,
+    coefOxidoKgT: e.coefElementoKgT * fatorOxido,
+    garantiaPct: e.garantiaPct,
+    potenciais: valores(e.potencialUsado),
+    ideais: valores(e.doseIdeal),
+    necessidadeKg,
+    programadoKg,
+    fracao: programadoKg != null && necessidadeKg > 0 ? programadoKg / necessidadeKg : null,
+    /** O mesmo texto do aviso da tela, a partir do snapshot (limites inclusos). */
+    textoModalidade2: programadoKg != null && necessidadeKg > 0
+      ? textoModalidade2({ fracao: programadoKg / necessidadeKg, necessidadeKg, limitadasMax: e.limitadasMax, faixaFracao: e.faixaFracao })
+      : null,
+    entregaMedia,
+    faixa: (v: number[]) => (!v.length ? '—'
+      : Math.abs(Math.max(...v) - Math.min(...v)) < 0.005 ? fmtRel(v[0]) : `${fmtRel(Math.min(...v))} a ${fmtRel(Math.max(...v))}`),
+  };
+}
+const ORDEM_ENTREGA = ['n', 'p2o5', 'k2o', 's', 'ca', 'mg'];
 
 // Quanto de produto o arquivo consome de fato. Com compensação, o resumo conta
 // em POPULAÇÃO (a base do total disponível) e o depósito entrega SEMENTES — o

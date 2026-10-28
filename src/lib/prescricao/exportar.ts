@@ -16,7 +16,8 @@ import { capturarMapaZonas } from '../capturaMapa';
 import { imagemParaPdf, reduzirLogo } from '../pdfImagem';
 import { resumoDoses, nutrientesPorZona, fatorBaseDose } from './calculo.ts';
 import { doseCompensada } from './sementes.ts';
-import { usadoNoVolume, doseArquivo, temCompensacao, totalDoArquivo, kgDeSementes, montarResumoPdf, fmtRel, arredRel, corDaDose, reguasDoRelatorio, doseFinalEm } from './resumo.ts';
+import { usadoNoVolume, doseArquivo, temCompensacao, totalDoArquivo, kgDeSementes, montarResumoPdf, fmtRel, arredRel, corDaDose, reguasDoRelatorio, doseFinalEm, contaExportacao } from './resumo.ts';
+import { entregaDoFormulado } from './porExportacao.ts';
 import { ROTULO_CURTO } from './unidade.ts';
 // A rampa de cor mora no módulo puro (testável em node); segue exportada daqui
 // porque a tela de Prescrições já a importa deste arquivo.
@@ -40,6 +41,8 @@ const LINE: [number, number, number] = [210, 219, 232];
 const fmt = (v: number, d = 1) => v.toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d });
 const fmt0 = (v: number) => Math.round(v).toLocaleString('pt-BR');
 const san = (s: string | null | undefined): string => (s ?? '').replace(/[^\x00-\xFF]/g, '');
+// Célula numérica da planilha: ausente vira "—", nunca NaN.
+const numOuTraco = (v: number | undefined): number | string => (typeof v === 'number' && Number.isFinite(v) ? arredRel(v) : '—');
 
 // ── Validação pré-exportação ────────────────────────────────────────────────
 //
@@ -173,6 +176,7 @@ export async function exportarXlsxPrescricao(p: Prescricao, ident?: IdentArquivo
   const un = UNIDADE_TOTAL[p.unidade];
   const teores = p.tipo === 'organico' ? p.params.organico : undefined;
   const nutri = teores ? nutrientesPorZona(p.zonas.map(z => ({ id: z.idZona, areaHa: z.areaHa, dose: z.dose })), teores) : null;
+  const ex = contaExportacao(p);
   const linhas = p.zonas.map(z => ({
     Zona: z.nomeZona,
     Classe: z.classe,
@@ -190,6 +194,14 @@ export async function exportarXlsxPrescricao(p: Prescricao, ident?: IdentArquivo
       arredRel(doseFinalEm(p, z.dose, u)),
     ])),
     [`Total (${un})`]: arredRel(doseArquivo(p, z.dose) * z.areaHa * fator),
+    // Por exportação: o potencial e o ideal da zona (snapshot) e o que o
+    // formulado entrega de cada nutriente declarado, na dose aplicada.
+    ...(ex ? {
+      'Potencial (kg/ha)': numOuTraco(p.params.exportacao?.potencialUsado?.[z.idZona]),
+      'Dose ideal (kg/ha)': numOuTraco(p.params.exportacao?.doseIdeal?.[z.idZona]),
+      ...Object.fromEntries(Object.entries(entregaDoFormulado(z.dose, p.params.exportacao?.garantiasFormulado))
+        .map(([n, v]) => [`${SIMBOLO_NUTRIENTE[n as keyof typeof SIMBOLO_NUTRIENTE] ?? n} entregue (kg/ha)`, Number((v as number).toFixed(1))])),
+    } : {}),
     ...(nutri ? {
       'N (kg/ha)': Number(nutri[z.idZona].n.toFixed(1)),
       'P2O5 (kg/ha)': Number(nutri[z.idZona].p2o5.toFixed(1)),
@@ -293,6 +305,26 @@ export async function exportarXlsxPrescricao(p: Prescricao, ident?: IdentArquivo
         { Item: 'Produto complementar', Valor: c.compNome ?? p.produto },
         { Item: `Garantia do complementar (% ${sim})`, Valor: Number((c.compGarantiaPct ?? 0).toFixed(2)) },
         { Item: 'Dose calculada do complementar (kg/ha)', Valor: Number(res.doseCompKgHa.toFixed(2)) },
+      ];
+    })() : []),
+    // Por exportação: a conta inteira, a partir do snapshot salvo.
+    ...(ex ? (() => {
+      const guia = SIMBOLO_NUTRIENTE[ex.nutriente];
+      return [
+        { Item: 'Cálculo', Valor: 'Por exportação de nutrientes (potencial da zona)' },
+        { Item: 'Cultura (cadastro de Exportação)', Valor: ex.cultura },
+        { Item: 'Nutriente-guia', Valor: guia },
+        { Item: `Coeficiente (kg ${ex.elemento}/t, elemento)`, Valor: Number(ex.coefElementoKgT.toFixed(3)) },
+        ...(ex.coefDeOxido ? [{ Item: 'Observação do coeficiente', Valor: 'cadastro antigo em óxido — convertido para elemento uma vez' }] : []),
+        { Item: `Fator ${ex.elemento} → ${guia}`, Valor: Number(ex.fatorOxido.toFixed(6)) },
+        { Item: `Garantia de ${guia} no formulado (%)`, Valor: Number(ex.garantiaPct.toFixed(2)) },
+        { Item: 'Potencial por zona (kg/ha)', Valor: ex.faixa(ex.potenciais) },
+        { Item: 'Dose ideal por zona (kg/ha)', Valor: ex.faixa(ex.ideais) },
+        { Item: `Necessidade total (${un})`, Valor: arredRel(ex.necessidadeKg) },
+        ex.cenario === 'total'
+          ? { Item: 'Modalidade', Valor: `2 — volume programado. ${ex.textoModalidade2 ?? `${fmt((ex.fracao ?? 0) * 100, 1)}% da necessidade`}` }
+          : { Item: 'Modalidade', Valor: '1 — dose ideal por zona (total = volume a comprar)' },
+        ...ex.entregaMedia.map(([n, v]) => ({ Item: `${SIMBOLO_NUTRIENTE[n as keyof typeof SIMBOLO_NUTRIENTE] ?? n} entregue na média (kg/ha)`, Valor: Number(v.toFixed(1)) })),
       ];
     })() : []),
     { Item: 'Zonas', Valor: r.nZonas },

@@ -16,7 +16,7 @@ export const ROTULO_TIPO: Record<TipoPrescricao, string> = {
   personalizado: 'Produto personalizado',
 };
 
-export type ModoCalculo = 'manual' | 'estoque' | 'proporcional' | 'equacao' | 'ajuste' | 'complemento' | 'condicao' | 'indice';
+export type ModoCalculo = 'manual' | 'estoque' | 'proporcional' | 'equacao' | 'ajuste' | 'complemento' | 'condicao' | 'indice' | 'exportacao';
 
 export const ROTULO_MODO: Record<ModoCalculo, string> = {
   manual: 'Dose manual por zona',
@@ -27,6 +27,7 @@ export const ROTULO_MODO: Record<ModoCalculo, string> = {
   complemento: 'Complementação por nutriente',
   condicao: 'Por condição no mapa de fertilidade',
   indice: 'Por imagem de índice (NDVI, NDRE…)',
+  exportacao: 'Por exportação (potencial da zona)',
 };
 
 /** Modos cujas áreas de aplicação são FAIXAS de valor de um raster (ids
@@ -166,6 +167,11 @@ export interface ParamsCalculo {
   /** modos 'condicao' e 'indice': faixas de valor de um raster (mapa de
    *  fertilidade ou imagem de índice) → dose. */
   condicao?: ParamsCondicao;
+  /** modo 'exportacao': repor por zona o que a colheita exporta (potencial
+   *  da zona × coeficiente da cultura ÷ garantia do formulado). Ver
+   *  lib/prescricao/porExportacao.ts. Na Modalidade 2 o volume programado é o
+   *  `totalDisponivel` (kg, com `totalPorHa` dizendo se foi digitado por ha). */
+  exportacao?: ParamsExportacao;
   // fluxos específicos
   sementes?: ParamsSementes;
   organico?: AnaliseOrganico;
@@ -201,6 +207,49 @@ export interface ParamsComplemento {
   compInsumoId?: string;
   compNome?: string;
   compGarantiaPct?: number;
+}
+
+/**
+ * Modo 'exportacao'. Tudo o que entrou na conta fica aqui como SNAPSHOT — o
+ * cadastro da cultura (coeficiente, potencial por classe) e o do formulado
+ * (garantia) podem mudar depois, e o que foi para a máquina tem de continuar
+ * reproduzível só com a prescrição.
+ */
+export interface ParamsExportacao {
+  /** minúsculo, como em ConteudoExportacao.culturaId */
+  culturaId: string;
+  /** item do cadastro de Exportação usado (o do usuário vence o de sistema) */
+  exportacaoItemId?: string;
+  exportacaoNome?: string;
+  /** nutriente-guia: a dose sai dele */
+  nutriente: 'p2o5' | 'k2o';
+  /** 'livre' (Modalidade 1): ideal por zona, total = quanto comprar.
+   *  'total' (Modalidade 2): reparte o volume programado (totalDisponivel). */
+  cenario: 'livre' | 'total';
+  /** idZona → potencial (kg/ha) digitado SÓ nesta prescrição (vence o cadastro) */
+  potencialPorZona?: Record<string, number>;
+  // ── snapshot do cálculo ──
+  /** coeficiente USADO, em ELEMENTO (kg de P ou K por t colhida) */
+  coefElementoKgT?: number;
+  /** o cadastro estava em óxido (antigo, sem baseElemento) e foi convertido */
+  coefDeOxido?: boolean;
+  /** garantia USADA do nutriente-guia no formulado (% de óxido) */
+  garantiaPct?: number;
+  /** garantias do formulado (%), para mostrar o que ele entrega dos outros */
+  garantiasFormulado?: { n?: number; p2o5?: number; k2o?: number; s?: number; ca?: number; mg?: number };
+  /** potencial por classe do cadastro no momento do cálculo (kg/ha) */
+  potencialPorClasse?: Partial<Record<string, number>>;
+  /** idZona → potencial efetivamente usado (kg/ha) */
+  potencialUsado?: Record<string, number>;
+  /** idZona → dose ideal (kg/ha) antes da fração/limites */
+  doseIdeal?: Record<string, number>;
+  /** Σ ideal × área (kg) */
+  necessidadeKg?: number;
+  /** Modalidade 2: zonas cujo ideal passou da dose máxima (texto do relatório) */
+  limitadasMax?: string[];
+  /** Modalidade 2: [mín, máx] de dose ÷ ideal quando os limites quebraram a
+   *  fração única — o relatório diz isso em vez de "a mesma fração" */
+  faixaFracao?: [number, number];
 }
 
 export interface RegistroExporte {

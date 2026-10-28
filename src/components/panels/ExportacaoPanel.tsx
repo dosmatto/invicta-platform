@@ -22,6 +22,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { listar, criar, atualizar, excluir as excluirItem, type ItemBiblioteca, type ConteudoExportacao } from '@/lib/biblioteca';
 import { NUTRIENTES, type Nutriente } from '@/lib/insumos';
 import { SIMBOLO_ELEMENTO } from '@/lib/nutrienteBase';
+import { CLASSES_POTENCIAL, lerNumeroBR, type ClassePotencial } from '@/lib/prescricao/porExportacao';
 import { CULTURAS } from '@/lib/store';
 import { inputStyle } from '@/constants/ui';
 import { Plus, Save, Trash2, Pencil, X, Recycle } from 'lucide-react';
@@ -55,10 +56,10 @@ export function ExportacaoPanel() {
   );
 
   function abrirNovo() {
-    setNovo(true); setEditando(null); setNome(''); setC(vazio());
+    setNovo(true); setEditando(null); setNome(''); setC(vazio()); setTxtPot({});
   }
   function abrirEdicao(it: Item) {
-    setNovo(false); setEditando(it); setNome(it.nome); setC({ ...vazio(), ...it.conteudo });
+    setNovo(false); setEditando(it); setNome(it.nome); setC({ ...vazio(), ...it.conteudo }); setTxtPot({});
   }
   function fechar() { setNovo(false); setEditando(null); }
 
@@ -77,6 +78,11 @@ export function ExportacaoPanel() {
       coeficientesExtracao: Object.fromEntries(
         Object.entries(c.coeficientesExtracao ?? {}).filter(([, v]) => Number.isFinite(v)),
       ) as ConteudoExportacao['coeficientesExtracao'],
+      // Potencial vazio é AUSENTE: a prescrição pede o número na hora, em vez
+      // de prescrever zero para a classe.
+      potencialPorClasse: Object.fromEntries(
+        Object.entries(c.potencialPorClasse ?? {}).filter(([, v]) => Number.isFinite(v) && (v as number) >= 0),
+      ) as ConteudoExportacao['potencialPorClasse'],
     };
     if (editando) atualizar<ConteudoExportacao>('exportacao', editando.id, { nome, conteudo: limpo });
     else criar<ConteudoExportacao>('exportacao', { nome: nome || 'Sem nome', conteudo: limpo, escopo: 'empresa' });
@@ -93,6 +99,17 @@ export function ExportacaoPanel() {
     const v = txt.trim() === '' ? undefined : Number(txt.replace(',', '.'));
     setC(x => ({ ...x, [base]: { ...(x[base] ?? {}), [n]: Number.isFinite(v) ? v : undefined } }));
   };
+
+  // Potencial em kg/ha tem milhar por natureza: "3.500" é três mil e
+  // quinhentos (lerNumeroBR), não 3,5. O texto digitado fica em estado
+  // próprio — senão "3.50", no meio da digitação, viraria 3,5 na tela.
+  const [txtPot, setTxtPot] = useState<Partial<Record<ClassePotencial, string>>>({});
+  const setPotencial = (cl: ClassePotencial, txt: string) => {
+    setTxtPot(t => ({ ...t, [cl]: txt }));
+    const v = lerNumeroBR(txt);
+    setC(x => ({ ...x, potencialPorClasse: { ...(x.potencialPorClasse ?? {}), [cl]: v != null && v >= 0 ? v : undefined } }));
+  };
+  const potBaixo = CLASSES_POTENCIAL.filter(cl => { const v = c.potencialPorClasse?.[cl]; return v != null && v > 0 && v < 300; });
 
   const editorAberto = novo || !!editando;
 
@@ -176,6 +193,32 @@ export function ExportacaoPanel() {
             </p>
           </div>
 
+          <div>
+            <p className="text-[10px] font-semibold mb-1" style={{ color: '#64748b' }}>
+              POTENCIAL PRODUTIVO POR CLASSE DE ZONA — kg/ha esperados (base da prescrição por exportação)
+            </p>
+            <div className="grid grid-cols-5 gap-1.5">
+              {CLASSES_POTENCIAL.map(cl => (
+                <Campo key={cl} label={cl}>
+                  <input inputMode="decimal" placeholder="ex.: 3.500"
+                    value={txtPot[cl] ?? (c.potencialPorClasse?.[cl] != null ? String(c.potencialPorClasse[cl]) : '')}
+                    onChange={e => setPotencial(cl, e.target.value)}
+                    className="w-full rounded px-1.5 py-1 text-[11px] outline-none" style={inputStyle} />
+                </Campo>
+              ))}
+            </div>
+            {potBaixo.length > 0 && (
+              <p className="text-[9px] mt-1" style={{ color: '#fbbf24' }}>
+                {potBaixo.join(', ')}: menos de 300 kg/ha — o campo é em kg/ha, não t/ha (3.500 = três mil e quinhentos).
+              </p>
+            )}
+            <p className="text-[9px] mt-1" style={{ color: '#64748b' }}>
+              Em Prescrições → &quot;Por exportação&quot;, cada zona da classe repõe o que esse potencial exporta.
+              Em branco = a prescrição pede o número na hora. Só zoneamentos com estas 5 classes puxam daqui;
+              os de outras classes (6 a 12, nomes livres como &quot;Muito alto&quot;) pedem o potencial lá.
+            </p>
+          </div>
+
           <Campo label="Fonte">
             <input value={c.fonte ?? ''} onChange={e => setC(x => ({ ...x, fonte: e.target.value }))}
               placeholder="ex.: Boletim 100 (IAC)" className="w-full rounded px-2 py-1 text-[11px] outline-none" style={inputStyle} />
@@ -215,6 +258,7 @@ export function ExportacaoPanel() {
                     ? usados.map(n => `${SIMBOLO_ELEMENTO[n]} ${co[n]}`).join(' · ') + ' kg/t'
                     : 'sem coeficiente declarado'}
                   {NUTRIENTES.some(n => Number.isFinite(it.conteudo?.coeficientesExtracao?.[n])) && ' · com extração'}
+                  {CLASSES_POTENCIAL.some(cl => Number.isFinite(it.conteudo?.potencialPorClasse?.[cl])) && ' · com potencial por zona'}
                 </p>
                 {it.conteudo?.fonte && <p className="text-[9px] truncate" style={{ color: '#64748b' }}>{it.conteudo.fonte}</p>}
               </div>
