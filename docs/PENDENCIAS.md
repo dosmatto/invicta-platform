@@ -125,6 +125,7 @@ verdadeira (fusão de talhões) chegou depois; foi preciso renumerar.
 | S/N | Aba Camadas: empilhar mapas salvos com ordem e transparência | 2.212.0 | Talhão → trilho lateral → Camadas |
 | S/N | Aba Camadas: relatório PDF, todas as safras, produtor e linha na matriz | 2.214.0 | Talhão → Camadas → "Relatório (PDF)"; Central de Acessos → Permissões → linha "Camadas" |
 | 62 | Selos de anos com fertilidade e colheita na lista de talhões | 2.213.0 | Clientes → produtor → fazenda → aba Talhões → selos roxo (fertilidade) e amarelo (colheita) na linha do talhão → clicar no ano |
+| S/N | Aba Camadas mostra todas as cenas de NDVI salvas | 2.217.2 | Talhão → Camadas → grupo "NDVI e índices" |
 | S/N | Produtor registra o relatório de camadas na lista de Relatórios | 2.216.0 | Talhão (produtor) → Camadas → "Relatório (PDF)" → aparece em Relatórios; banco: docs/produtor-relatorios-camadas.sql |
 | S/N | Prescrição por zonas via exportação de nutrientes (potencial × coeficiente ÷ garantia) | 2.215.0 | Talhão → Prescrições → Nova → "Por exportação (potencial da zona)"; cadastro do potencial em Biblioteca → Exportação de Nutrientes |
 | S/N | Comparar e adotar o limite da PrecisionFarm | 2.217.0 | Talhão → aba Resumo / painel lateral → Integração PrecisionFarm → Limite da PrecisionFarm (owner/admin, vínculo confirmado) |

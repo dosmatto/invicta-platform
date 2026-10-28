@@ -216,7 +216,10 @@ async function grupoFertilidade(talhao: Talhao): Promise<GrupoCamadas> {
 
 // ── NDVI / índices ──────────────────────────────────────────────────────────
 async function grupoNdvi(talhao: Talhao): Promise<GrupoCamadas> {
-  const metas = (await listarNdviSalvos(talhao.id).catch(() => []))
+  // `true` = TODAS as cenas salvas, como a própria aba NDVI lista. Sem ele vale o
+  // filtro de "fontes de análise" das Zonas, que pode descartar todas (talhão
+  // com cenas salvas aparecia aqui como "nenhuma cena").
+  const metas = (await listarNdviSalvos(talhao.id, true).catch(() => []))
     .sort((a, b) => b.data.localeCompare(a.data) || a.indice.localeCompare(b.indice));
   const leg = legendaDesignada('ndvi', PREF_LEGENDA.ndvi);
   const itens: ItemCamada[] = metas.map(m => ({

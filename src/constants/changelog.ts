@@ -1,5 +1,9 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Aba Camadas mostra todas as cenas de NDVI salvas
+  '2.217.2': [
+    'PENDÊNCIA S/N — CAMADAS: O GRUPO "NDVI E ÍNDICES" DIZIA "NENHUMA CENA SALVA" EM TALHÃO COM CENAS: a aba Camadas aplicava o filtro de "fontes de análise" das Zonas e, em alguns talhões, ele descartava todas as cenas. Agora a lista é a mesma da aba NDVI — todas as cenas salvas (Sentinel-2 e CBERS, todos os índices).',
+  ],
   // [S/N] Comparar e adotar o limite da PrecisionFarm — mapa da comparação
   '2.217.1': [
     'MAPA DA COMPARAÇÃO COM O LIMITE DA PRECISIONFARM: o mapa pequeno abria sem nenhum contorno e enquadrado num canto do talhão. Agora desenha o limite da Invicta, o da PrecisionFarm (tracejado) e as sobras de cada lado, e enquadra o talhão inteiro.',
