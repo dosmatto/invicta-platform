@@ -9,6 +9,7 @@
 // Sem satélite (ou se os tiles falharem por CORS/rede) → fundo branco.
 
 import { posicionarRotulos } from './rotulosMapa.ts';
+import type { DesenhoCamada } from './camadasTalhao';
 
 export interface CapturaMapa {
   rasterPng: string;                                   // raster colorido (dataUrl)
@@ -345,11 +346,226 @@ export async function capturarMapaZonas(c: CapturaZonas): Promise<string> {
   return cv.toDataURL('image/png');
 }
 
+// ── Captura para o relatório da aba CAMADAS ─────────────────────────────────
+// Recompõe em canvas a PILHA que o usuário montou na aba (components/talhao/
+// CamadasSection → MapView, efeito 6e): satélite no fundo e as camadas de
+// baixo para cima, cada uma com a SUA transparência (ctx.globalAlpha). Os
+// estilos dos vetores são os do MapView, com as larguras multiplicadas por `k`
+// (o canvas do PDF tem ~2× a largura em px que o talhão ocupa na tela; sem a
+// escala, a linha de 1,4 px da guia sumia no papel).
+//
+// Enquadramento: o bbox do TALHÃO (não o das camadas) — um NDVI com a cena
+// inteira ou uma linha de bordadura que passa da divisa não podem afastar o
+// mapa do talhão. Quem chama manda `poligono` (o limite) e/ou `bounds`.
+export interface CapturaCamadas {
+  bounds: [number, number, number, number];            // [w,s,e,n] — usado quando não há `poligono`
+  /** Índice 0 = TOPO (mesma ordem da lista da aba). */
+  camadas: Array<{ desenho: DesenhoCamada; opacidade: number }>;
+  satelite: boolean;
+  larguraPx: number;
+  alturaPx: number;
+  /** Limite do talhão: quando vem, o enquadramento é o bbox dele. */
+  poligono?: GeoJSON.Polygon | GeoJSON.MultiPolygon | null;
+  /** Traça o limite (fino, branco) por cima de tudo — referência nas páginas
+   *  de camada isolada, onde o contorno não está na pilha. */
+  limiteReferencia?: boolean;
+}
+
+/** Caixa onde o bbox cabe no canvas (6% de respiro, aspecto real no chão) —
+ *  a MESMA conta de capturarMapaFertilidade/Zonas. Exportada para o PDF
+ *  calcular a escala gráfica com o tamanho real desenhado, não o do quadro. */
+export function enquadramento(bounds: [number, number, number, number], W: number, H: number) {
+  const [w, s, e, n] = bounds;
+  const latC = (s + n) / 2;
+  const aspect = ((e - w) * Math.cos((latC * Math.PI) / 180)) / (n - s || 1);
+  const pad = 0.06;
+  const availW = W * (1 - 2 * pad), availH = H * (1 - 2 * pad);
+  let drawW: number, drawH: number;
+  if (availW / availH > aspect) { drawH = availH; drawW = availH * aspect; }
+  else { drawW = availW; drawH = availW / aspect; }
+  return { ox: (W - drawW) / 2, oy: (H - drawH) / 2, drawW, drawH };
+}
+
+/** bbox [w,s,e,n] de qualquer geometria GeoJSON (null se vazia). */
+export function bboxGeo(g: GeoJSON.Geometry | GeoJSON.Feature | GeoJSON.FeatureCollection | null | undefined): [number, number, number, number] | null {
+  let w = Infinity, s = Infinity, e = -Infinity, n = -Infinity;
+  const pt = (p: GeoJSON.Position) => {
+    if (p[0] < w) w = p[0]; if (p[0] > e) e = p[0];
+    if (p[1] < s) s = p[1]; if (p[1] > n) n = p[1];
+  };
+  const visitar = (x: GeoJSON.Geometry | GeoJSON.Feature | GeoJSON.FeatureCollection | null | undefined): void => {
+    if (!x) return;
+    if (x.type === 'FeatureCollection') { x.features.forEach(visitar); return; }
+    if (x.type === 'Feature') { visitar(x.geometry); return; }
+    if (x.type === 'GeometryCollection') { x.geometries.forEach(visitar); return; }
+    if (x.type === 'Point') pt(x.coordinates);
+    else if (x.type === 'MultiPoint' || x.type === 'LineString') x.coordinates.forEach(pt);
+    else if (x.type === 'MultiLineString' || x.type === 'Polygon') x.coordinates.forEach(l => l.forEach(pt));
+    else if (x.type === 'MultiPolygon') x.coordinates.forEach(p => p.forEach(l => l.forEach(pt)));
+  };
+  visitar(g);
+  return isFinite(w) ? [w, s, e, n] : null;
+}
+
+// Traços (linhas e anéis) de uma geometria qualquer — é o que uma camada
+// `line` do MapLibre desenha: LineString/MultiLineString e as bordas dos polígonos.
+function tracosDe(g: GeoJSON.Geometry | null | undefined): GeoJSON.Position[][] {
+  if (!g) return [];
+  switch (g.type) {
+    case 'LineString': return [g.coordinates];
+    case 'MultiLineString': return g.coordinates;
+    case 'Polygon': return g.coordinates;
+    case 'MultiPolygon': return g.coordinates.flat();
+    case 'GeometryCollection': return g.geometries.flatMap(tracosDe);
+    default: return [];
+  }
+}
+
+function geometriasDe(x: GeoJSON.GeoJSON | null | undefined): GeoJSON.Geometry[] {
+  if (!x) return [];
+  if (x.type === 'FeatureCollection') return x.features.flatMap(f => (f.geometry ? [f.geometry] : []));
+  if (x.type === 'Feature') return x.geometry ? [x.geometry] : [];
+  return [x];
+}
+
+// Fundo de satélite por enquadramento. O modo "completo" desenha o MESMO
+// enquadramento N+1 vezes (composto + uma página por camada): sem este cache,
+// eram N+1 rodadas de download dos mesmos tiles. Guarda só o último.
+let fundoCache: { chave: string; cv: HTMLCanvasElement } | null = null;
+
+async function fundoSatelite(bounds: [number, number, number, number], W: number, H: number): Promise<HTMLCanvasElement> {
+  const chave = `${bounds.join(',')}|${W}x${H}`;
+  if (fundoCache?.chave === chave) return fundoCache.cv;
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const ctx = cv.getContext('2d')!;
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, H);
+  const { ox, oy, drawW, drawH } = enquadramento(bounds, W, H);
+  // Só guarda o fundo COMPLETO: tile que falha é pulado em silêncio (buscarTile
+  // devolve null), e um fundo branco ou pela metade preso no cache deixava as
+  // próximas gerações do mesmo talhão sem satélite até mudar o enquadramento.
+  try {
+    if (await desenharSatelite(ctx, bounds, ox, oy, drawW, drawH, W, H)) fundoCache = { chave, cv };
+  } catch { /* segue sem satélite nesta geração */ }
+  return cv;
+}
+
+export async function capturarMapaCamadas(c: CapturaCamadas): Promise<string> {
+  const W = c.larguraPx, H = c.alturaPx;
+  const bounds = (c.poligono && bboxGeo(c.poligono)) || c.bounds;
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const ctx = cv.getContext('2d')!;
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, H);
+  if (c.satelite) ctx.drawImage(await fundoSatelite(bounds, W, H), 0, 0);
+
+  const [w, s, e, n] = bounds;
+  const { ox, oy, drawW, drawH } = enquadramento(bounds, W, H);
+  const px = (lng: number) => ox + ((lng - w) / (e - w || 1)) * drawW;
+  const py = (lat: number) => oy + ((n - lat) / (n - s || 1)) * drawH;
+  // Fator px-de-tela → px-do-canvas. Na tela o talhão ocupa ~700–900 px; aqui,
+  // ~88% de W. W/800 deixa a espessura relativa ao talhão parecida com a da tela.
+  const k = Math.max(1, W / 800);
+
+  const tracarLinha = (ln: GeoJSON.Position[], fechar = false) => {
+    ln.forEach((pt, i) => { const x = px(pt[0]), y = py(pt[1]); if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); });
+    if (fechar) ctx.closePath();
+  };
+  const riscar = (geoms: Array<GeoJSON.Geometry | null>, cor: string, larg: number) => {
+    ctx.strokeStyle = cor; ctx.lineWidth = larg; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    for (const g of geoms) for (const ln of tracosDe(g)) { ctx.beginPath(); tracarLinha(ln); ctx.stroke(); }
+  };
+
+  // De baixo para cima: o último da lista é o fundo da pilha.
+  for (const { desenho: d, opacidade } of [...c.camadas].reverse()) {
+    const alpha = Math.max(0, Math.min(1, opacidade));
+    if (alpha <= 0) continue;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    try {
+      if (d.tipo === 'raster') {
+        // A imagem cobre exatamente a caixa das 4 quinas (coordsFromBounds).
+        const xs = d.coordinates.map(q => q[0]), ys = d.coordinates.map(q => q[1]);
+        const rw = Math.min(...xs), re = Math.max(...xs), rs = Math.min(...ys), rn = Math.max(...ys);
+        const img = await carregarImg(d.url);
+        // Sem suavização, como no relatório de Fertilidade: a grade é grossa e
+        // ampliada; suavizada, os blocos saíam borrados no papel.
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(img, px(rw), py(rn), px(re) - px(rw), py(rs) - py(rn));
+      } else if (d.estilo === 'linhas-pf') {
+        const ehBordadura = (f: GeoJSON.Feature) => (f.properties as { kind?: string } | null)?.kind === 'headland';
+        // Mesma ordem do MapView: bordadura primeiro, guia por cima.
+        riscar(d.geojson.features.filter(ehBordadura).map(f => f.geometry), '#fb923c', 2.6 * k);
+        riscar(d.geojson.features.filter(f => !ehBordadura(f)).map(f => f.geometry), '#22d3ee', 1.4 * k);
+      } else if (d.estilo === 'zonas') {
+        const polis = d.geojson.features.filter(f => f.geometry?.type === 'Polygon' || f.geometry?.type === 'MultiPolygon');
+        for (const f of polis) {
+          ctx.beginPath();
+          for (const anel of tracosDe(f.geometry)) tracarLinha(anel, true);
+          ctx.fillStyle = (f.properties as { cor?: string } | null)?.cor ?? '#64748b';
+          ctx.fill('evenodd');
+        }
+        riscar(d.geojson.features.map(f => f.geometry), '#ffffff', 1.5 * k);
+        // Rótulos: posicionador único dos mapas (lib/rotulosMapa) — fora da
+        // mancha com traço quando não cabe, como no relatório de Zonas.
+        const corpo = Math.round(11 * k * 1.15);
+        ctx.font = `bold ${corpo}px sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        const comRotulo = polis.filter(f => (f.properties as { rotulo?: unknown } | null)?.rotulo != null && String((f.properties as { rotulo?: unknown }).rotulo) !== '');
+        const postos = posicionarRotulos(
+          comRotulo.map(f => {
+            const texto = String((f.properties as { rotulo: unknown }).rotulo);
+            return {
+              texto,
+              aneis: aneisDoRotulo(f.geometry as GeoJSON.Polygon | GeoJSON.MultiPolygon).map(anel => anel.map(pt => [px(pt[0]), py(pt[1])] as [number, number])),
+              largura: ctx.measureText(texto).width,
+              altura: corpo,
+            };
+          }),
+          { largura: W, altura: H },
+          { folga: corpo * 0.35, margem: corpo * 0.6 },
+        );
+        for (const p of postos) {
+          if (!p.traco) continue;
+          ctx.strokeStyle = '#000000'; ctx.lineWidth = 1.4 * k;
+          ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.traco.x, p.traco.y); ctx.stroke();
+        }
+        ctx.lineWidth = 1.4 * k * 2; ctx.strokeStyle = '#000000'; ctx.fillStyle = '#ffffff'; ctx.lineJoin = 'round';
+        for (const p of postos) { ctx.strokeText(p.texto, p.x, p.y); ctx.fillText(p.texto, p.x, p.y); }
+      } else if (d.estilo === 'pontos') {
+        const r = 5 * k;
+        ctx.lineWidth = 1.5 * k; ctx.strokeStyle = '#0f172a';
+        for (const f of d.geojson.features) {
+          if (f.geometry?.type !== 'Point') continue;
+          const [lng, lat] = f.geometry.coordinates;
+          ctx.beginPath(); ctx.arc(px(lng), py(lat), r, 0, Math.PI * 2);
+          ctx.fillStyle = (f.properties as { cor?: string } | null)?.cor ?? '#facc15';
+          ctx.fill(); ctx.stroke();
+        }
+      } else {
+        // 'contorno'. O cadastro guarda o limite como FeatureCollection, Feature
+        // ou geometria solta (depende de quando o talhão foi importado) — o
+        // tipo diz FeatureCollection, o dado nem sempre.
+        riscar(geometriasDe(d.geojson as GeoJSON.GeoJSON), '#fde68a', 2.5 * k);
+      }
+    } catch (err) {
+      // Uma camada que falhou não derruba o mapa inteiro.
+      console.warn('[camadas/pdf] falha ao desenhar', d.id, err);
+    } finally {
+      ctx.restore();
+    }
+  }
+
+  if (c.limiteReferencia && c.poligono) {
+    ctx.globalAlpha = 1;
+    riscar([c.poligono], '#ffffff', 1.2 * k);
+  }
+
+  return cv.toDataURL('image/png');
+}
+
 // Baixa e desenha os tiles de satélite que cobrem TODO o canvas (frame).
 async function desenharSatelite(
   ctx: CanvasRenderingContext2D, bounds: [number, number, number, number],
   ox: number, oy: number, drawW: number, drawH: number, W: number, H: number,
-): Promise<void> {
+): Promise<boolean> {   // true = TODOS os tiles desenhados (os outros chamadores ignoram)
   const [w, s, e, n] = bounds;
   const px = (lng: number) => ox + ((lng - w) / (e - w || 1)) * drawW;
   const py = (lat: number) => oy + ((n - lat) / (n - s || 1)) * drawH;
@@ -363,12 +579,12 @@ async function desenharSatelite(
   z = Math.max(10, Math.min(19, z));
   const xMin = Math.floor(lon2tile(lonL, z)), xMax = Math.floor(lon2tile(lonR, z));
   const yMin = Math.floor(lat2tile(latT, z)), yMax = Math.floor(lat2tile(latB, z));
-  if ((xMax - xMin + 1) * (yMax - yMin + 1) > 90) return; // segurança
-  const jobs: Promise<void>[] = [];
+  if ((xMax - xMin + 1) * (yMax - yMin + 1) > 90) return false; // segurança
+  const jobs: Promise<boolean>[] = [];
   for (let x = xMin; x <= xMax; x++) {
     for (let y = yMin; y <= yMax; y++) {
       jobs.push(buscarTile(z, x, y).then(img => {
-        if (!img) return;
+        if (!img) return false;
         const x0 = px(tile2lon(x, z)), x1 = px(tile2lon(x + 1, z));
         const y0 = py(tile2lat(y, z)), y1 = py(tile2lat(y + 1, z));
         // Bordas ARREDONDADAS PARA FORA. Em coordenadas fracionárias, dois
@@ -379,8 +595,9 @@ async function desenharSatelite(
         const dx0 = Math.floor(x0), dy0 = Math.floor(y0);
         const dx1 = Math.ceil(x1), dy1 = Math.ceil(y1);
         ctx.drawImage(img, dx0, dy0, Math.max(1, dx1 - dx0), Math.max(1, dy1 - dy0));
+        return true;
       }));
     }
   }
-  await Promise.all(jobs);
+  return (await Promise.all(jobs)).every(Boolean);
 }

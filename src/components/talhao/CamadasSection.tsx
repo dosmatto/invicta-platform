@@ -13,10 +13,23 @@
 // guardada por talhão neste aparelho.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Layers, Loader2, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, FileDown, Layers, Loader2, X } from 'lucide-react';
 import { useApp, type CamadaMapa } from '@/context/AppContext';
 import type { Talhao } from '@/lib/store';
-import { listarFontesCamadas, type GrupoCamadas, type ItemCamada } from '@/lib/camadasTalhao';
+import { listarFontesCamadas, type DesenhoCamada, type GrupoCamadas, type ItemCamada } from '@/lib/camadasTalhao';
+import { contextoCadastro, gerarPdfCamadas, nomeArquivoCamadas, type CamadaRelatorio } from '@/lib/relatorioCamadas';
+import { salvarRelatorio, TIPO_REL_CAMADAS } from '@/lib/relatoriosArquivo';
+import { limparNomeArquivo } from '@/lib/abrirPdf';
+import { authConfigurado, emailUsuario } from '@/lib/auth';
+import { podeEm } from '@/lib/empresa';
+import { somenteLeitura } from '@/lib/somenteLeitura';
+
+type ModoRelatorio = 'composto' | 'completo';
+type EstadoRelatorio =
+  | { fase: 'escolher' }
+  | { fase: 'gerando'; modo: ModoRelatorio }
+  | { fase: 'pronto'; msg: string; aviso?: boolean }
+  | { fase: 'erro'; msg: string };
 
 type Escolha = { id: string; opacidade: number };
 const kEscolha = (talhaoId: string) => `invicta:camadas:${talhaoId}`;
@@ -32,19 +45,26 @@ function lerEscolha(talhaoId: string): Escolha[] {
   } catch { return []; }
 }
 
-export function CamadasSection({ talhao, safra }: { talhao: Talhao; safra: string }) {
-  // A safra entra na chave: laudos e grades mudam com ela, e camada da safra
-  // anterior não pode ficar presa no mapa (a pilha recomeça da escolha salva).
-  return <Camadas key={`${talhao.id}|${safra}`} talhao={talhao} safra={safra} />;
+export function CamadasSection({ talhao, safra, origemLiberada }: { talhao: Talhao; safra: string; origemLiberada?: (aba: string) => boolean }) {
+  // A lista traz TODAS as safras, então trocar o ano do cabeçalho não mexe na
+  // pilha; a safra só vai para o cabeçalho do relatório.
+  return <Camadas key={talhao.id} talhao={talhao} safra={safra} origemLiberada={origemLiberada} />;
 }
 
-function Camadas({ talhao, safra }: { talhao: Talhao; safra: string }) {
+function Camadas({ talhao, safra, origemLiberada }: { talhao: Talhao; safra: string; origemLiberada?: (aba: string) => boolean }) {
+  // A regra vem do TalhaoPage e é recriada a cada render: fica num ref para
+  // não relistar a nuvem toda vez que a página redesenha.
+  const liberadaRef = useRef(origemLiberada);
+  useEffect(() => { liberadaRef.current = origemLiberada; });
   const { setCamadasPilha } = useApp();
   const [grupos, setGrupos] = useState<GrupoCamadas[] | null>(null);
   const [abertos, setAbertos] = useState<Set<string>>(new Set());
   // Ordem da tela: índice 0 = topo do mapa.
   const [escolha, setEscolha] = useState<Escolha[]>([]);
-  const [prontas, setProntas] = useState<Map<string, CamadaMapa>>(new Map());
+  // Desenho pronto (com a legenda) de cada camada já carregada — o mapa recebe
+  // a cópia com a opacidade da pilha; o relatório PDF usa o desenho e a legenda.
+  const [prontas, setProntas] = useState<Map<string, DesenhoCamada>>(new Map());
+  const [relatorio, setRelatorio] = useState<EstadoRelatorio | null>(null);
   const [carregando, setCarregando] = useState<Set<string>>(new Set());
   const [falhas, setFalhas] = useState<Map<string, string>>(new Map());
   const emVoo = useRef(new Set<string>());
@@ -52,7 +72,7 @@ function Camadas({ talhao, safra }: { talhao: Talhao; safra: string }) {
 
   useEffect(() => {
     let vivo = true;
-    void listarFontesCamadas(talhao, safra).then(g => {
+    void listarFontesCamadas(talhao, a => liberadaRef.current?.(a) ?? true).then(g => {
       if (!vivo) return;
       setGrupos(g);
       // Restaura a escolha salva INTEIRA: camada que não está na lista agora
@@ -68,7 +88,7 @@ function Camadas({ talhao, safra }: { talhao: Talhao; safra: string }) {
       if (vivo) setGrupos([]);
     });
     return () => { vivo = false; };
-  }, [talhao, safra]);
+  }, [talhao]);
 
   useEffect(() => {
     if (!restaurou.current) return;
@@ -89,7 +109,7 @@ function Camadas({ talhao, safra }: { talhao: Talhao; safra: string }) {
       setCarregando(s => new Set(s).add(e.id));
       item.carregar()
         .then(c => {
-          if (c) setProntas(m => new Map(m).set(e.id, { ...c, opacidade: 1 } as CamadaMapa));
+          if (c) setProntas(m => new Map(m).set(e.id, c));
           else setFalhas(m => new Map(m).set(e.id, 'Sem dado salvo para desenhar.'));
         })
         .catch((err: unknown) => setFalhas(m => new Map(m).set(e.id, err instanceof Error ? err.message : 'Falha ao carregar.')))
@@ -106,7 +126,8 @@ function Camadas({ talhao, safra }: { talhao: Talhao; safra: string }) {
     const pilha: CamadaMapa[] = [];
     for (const e of visiveis) {
       const c = prontas.get(e.id);
-      if (c) pilha.push({ ...c, opacidade: e.opacidade });
+      // A `legenda` vai junto na cópia; o MapView não a lê.
+      if (c) pilha.push({ ...c, opacidade: e.opacidade } as CamadaMapa);
     }
     setCamadasPilha(pilha);
   }, [visiveis, prontas, setCamadasPilha]);
@@ -134,6 +155,53 @@ function Camadas({ talhao, safra }: { talhao: Talhao; safra: string }) {
   const opacidade = (id: string, v: number) => setEscolha(es => es.map(e => (e.id === id ? { ...e, opacidade: v } : e)));
   const alternarGrupo = (g: string) => setAbertos(s => { const n = new Set(s); if (n.has(g)) n.delete(g); else n.add(g); return n; });
 
+  // ── Relatório PDF ("Mapa de camadas") ──
+  // Entra no PDF exatamente o que está no mapa: as camadas VISÍVEIS já
+  // carregadas, na ordem da lista e com a opacidade de cada uma. Ligada ainda
+  // carregando (ou que falhou) fica de fora — o PDF não espera a nuvem.
+  const prontasNaPilha = visiveis.filter(e => prontas.has(e.id) && itens.has(e.id));
+  const gerarRelatorio = async (modo: ModoRelatorio) => {
+    setRelatorio({ fase: 'gerando', modo });
+    try {
+      const sel = prontasNaPilha.map(e => {
+        const item = itens.get(e.id)!;
+        const camada: CamadaRelatorio = {
+          nome: item.detalhe ? `${item.nome} (${item.detalhe})` : item.nome,
+          grupo: item.grupo, desenho: prontas.get(e.id)!, opacidade: e.opacidade,
+        };
+        return { id: e.id, camada };
+      });
+      if (!sel.length) throw new Error('Nenhuma camada pronta no mapa.');
+      const doc = await gerarPdfCamadas({ talhao, ...contextoCadastro(talhao), safra, camadas: sel.map(s => s.camada), modo });
+      doc.save(`${limparNomeArquivo(nomeArquivoCamadas(talhao, safra))}.pdf`);
+      // Grava na lista de Relatórios do talhão (só a configuração — o PDF é
+      // regerado ao abrir, ver GeradorRelatorios). Falha aqui não desfaz o
+      // download: vira aviso.
+      // Papel somente-leitura (produtor): o banco não aceita a gravação em
+      // inv_relatorios, então nem tenta — o PDF baixado é a entrega dele.
+      if ((!authConfigurado || podeEm('camadas', 'criar')) && !somenteLeitura()) {
+        try {
+          await salvarRelatorio({
+            talhaoId: talhao.id, safra, tipo: TIPO_REL_CAMADAS, titulo: 'Mapa de camadas',
+            nuts: [], elementos: sel.map(s => s.camada.nome),
+            satelite: true, valores: false, paginas: doc.getNumberOfPages(),
+            camadas: { ids: sel.map(s => s.id), opacidades: sel.map(s => s.camada.opacidade), modo },
+            geradoPor: emailUsuario() ?? '—',
+          });
+          setRelatorio({ fase: 'pronto', msg: 'PDF baixado e guardado na lista de Relatórios do talhão.' });
+        } catch (err) {
+          setRelatorio({ fase: 'pronto', aviso: true, msg: `PDF baixado, mas não foi guardado nos Relatórios. ${err instanceof Error ? err.message : ''}`.trim() });
+        }
+      } else {
+        setRelatorio({ fase: 'pronto', msg: 'PDF baixado.' });
+      }
+    } catch (err) {
+      console.warn('[camadas] falha ao gerar o relatório:', err);
+      setRelatorio({ fase: 'erro', msg: err instanceof Error ? err.message : 'Falha ao gerar o relatório.' });
+    }
+  };
+  const gerando = relatorio?.fase === 'gerando';
+
   return (
     <div className="flex flex-col gap-3 text-xs" style={{ color: '#cbd5e1' }}>
       <div className="flex gap-2 rounded border p-2.5" style={{ borderColor: '#1e3a5f', background: '#0b2238' }}>
@@ -146,7 +214,43 @@ function Camadas({ talhao, safra }: { talhao: Talhao; safra: string }) {
 
       {/* PILHA — ordem e transparência */}
       <section>
-        <h3 className="mb-1.5 text-[11px] font-bold uppercase tracking-wide" style={{ color: '#94a3b8' }}>No mapa (topo → fundo)</h3>
+        <div className="mb-1.5 flex items-center gap-2">
+          <h3 className="flex-1 text-[11px] font-bold uppercase tracking-wide" style={{ color: '#94a3b8' }}>No mapa (topo → fundo)</h3>
+          <button
+            onClick={() => setRelatorio(r => (r?.fase === 'escolher' ? null : { fase: 'escolher' }))}
+            disabled={!prontasNaPilha.length || gerando}
+            title={prontasNaPilha.length ? 'Gerar o PDF do mapa como está' : 'Ligue ao menos uma camada (e espere carregar)'}
+            className="flex items-center gap-1 rounded px-2 py-1 text-[11px] font-semibold disabled:opacity-40"
+            style={{ background: '#0c4a6e', color: '#e0f2fe' }}>
+            {gerando ? <Loader2 size={12} className="animate-spin" /> : <FileDown size={12} />} Relatório (PDF)
+          </button>
+        </div>
+        {/* Escolha na hora (pedido do usuário): só o composto, ou composto + uma
+            página por camada. Sem modal — dois botões logo abaixo. */}
+        {relatorio?.fase === 'escolher' && (
+          <div className="mb-2 flex flex-col gap-1.5 rounded border p-2" style={{ borderColor: '#1e3a5f', background: '#0b2238' }}>
+            <p style={{ color: '#94a3b8' }}>
+              {prontasNaPilha.length} camada{prontasNaPilha.length === 1 ? '' : 's'} no PDF, na ordem e transparência da lista.
+            </p>
+            <div className="flex gap-1.5">
+              <button onClick={() => void gerarRelatorio('composto')}
+                className="flex-1 rounded px-2 py-1.5 font-semibold hover:brightness-110" style={{ background: '#1a3a6b', color: '#e2e8f0' }}>
+                Só o mapa composto
+              </button>
+              <button onClick={() => void gerarRelatorio('completo')}
+                className="flex-1 rounded px-2 py-1.5 font-semibold hover:brightness-110" style={{ background: '#1a3a6b', color: '#e2e8f0' }}>
+                Composto + uma página por camada
+              </button>
+            </div>
+          </div>
+        )}
+        {relatorio?.fase === 'gerando' && (
+          <p className="mb-2 flex items-center gap-2" style={{ color: '#7dd3fc' }}>
+            <Loader2 size={12} className="animate-spin" /> Gerando o PDF{relatorio.modo === 'completo' ? ' (composto + páginas por camada)' : ''}…
+          </p>
+        )}
+        {relatorio?.fase === 'pronto' && <p className="mb-2" style={{ color: relatorio.aviso ? '#fbbf24' : '#4ade80' }}>{relatorio.msg}</p>}
+        {relatorio?.fase === 'erro' && <p className="mb-2" style={{ color: '#f87171' }}>{relatorio.msg}</p>}
         {visiveis.length === 0 && (
           <p className="rounded border border-dashed p-3 text-center" style={{ borderColor: '#1e3a5f', color: '#64748b' }}>
             Nenhuma camada ligada. Escolha nos grupos abaixo.
@@ -162,7 +266,7 @@ function Camadas({ talhao, safra }: { talhao: Talhao; safra: string }) {
                   <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: item?.cor ?? '#64748b' }} />
                   <span className="min-w-0 flex-1 truncate font-semibold" style={{ color: '#e2e8f0' }} title={item?.nome}>
                     {item?.nome ?? e.id}
-                    <span className="ml-1 font-normal" style={{ color: '#64748b' }}>· {item?.grupo}</span>
+                    <span className="ml-1 font-normal" style={{ color: '#64748b' }}>· {item?.grupo}{item?.detalhe ? ` · ${item.detalhe}` : ''}</span>
                   </span>
                   {carregando.has(e.id) && <Loader2 size={12} className="animate-spin" />}
                   <button aria-label="Subir camada" onClick={() => mover(i, -1)} disabled={i === 0}

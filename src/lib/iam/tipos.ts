@@ -51,7 +51,7 @@ export const PAPEIS: Array<{ id: PapelIam; nome: string; dica: string }> = [
 export type ModuloIam =
   | 'cadastro' | 'amostragem' | 'composta' | 'laboratorio' | 'fertilidade' | 'zonas'
   | 'altimetria' | 'condutividade' | 'satelite' | 'recomendacoes' | 'prescricao' | 'compactacao' | 'produtividade'
-  | 'relatorios' | 'biblioteca' | 'arquivos' | 'usuarios';
+  | 'relatorios' | 'camadas' | 'biblioteca' | 'arquivos' | 'usuarios';
 
 export const MODULOS: Array<{ id: ModuloIam; nome: string }> = [
   { id: 'cadastro',      nome: 'Cadastro (produtores/fazendas/talhões)' },
@@ -70,7 +70,10 @@ export const MODULOS: Array<{ id: ModuloIam; nome: string }> = [
   { id: 'compactacao',   nome: 'Compactação' },
   { id: 'produtividade', nome: 'Produtividade/colheita' },
   { id: 'relatorios',    nome: 'Relatórios' },
-  { id: 'biblioteca',    nome: 'Biblioteca (legendas/equações/perfis)' },
+  // Aba Camadas do talhão (só visualização + relatório). Cada grupo dentro dela
+  // ainda obedece a linha da aba de origem (Fertilidade, Satélite…).
+  { id: 'camadas',       nome: 'Camadas (visualização e relatório)' },
+  { id: 'biblioteca',   nome: 'Biblioteca (legendas/equações/perfis)' },
   { id: 'arquivos',      nome: 'Arquivos de aplicação' },
   { id: 'usuarios',      nome: 'Usuários e permissões' },
 ];

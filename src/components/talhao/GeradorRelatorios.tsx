@@ -19,8 +19,9 @@ import { periodoParaNome } from '@/lib/nomeExport';
 import { listarCenarios, descomprimirCenario, type Cenario } from '@/lib/recomendacao/cenarios';
 import { cenariosComPrecoAtual } from '@/lib/recomendacao/precoAtual';
 import { anoDaSafra } from '@/lib/periodo';
-import { salvarRelatorio, listarRelatorios, excluirRelatorio, TIPO_REL_COMPACTACAO, type RegistroRelatorio } from '@/lib/relatoriosArquivo';
+import { salvarRelatorio, listarRelatorios, excluirRelatorio, TIPO_REL_CAMADAS, TIPO_REL_COMPACTACAO, type RegistroRelatorio } from '@/lib/relatoriosArquivo';
 import { regenerarRelatorioCompactacao } from '@/lib/relatorioCompactacao';
+import { regenerarRelatorioCamadas } from '@/lib/relatorioCamadas';
 import { emailUsuario } from '@/lib/auth';
 import { pode, podeEm } from '@/lib/empresa';
 import { FileDown, Loader2, ChevronUp, ChevronDown, AlertTriangle, CheckSquare, Square, Satellite, Hash, History, Trash2, ExternalLink, Wand2, FlaskConical } from 'lucide-react';
@@ -42,7 +43,7 @@ function nomeBook(ctx: ContextoRelatorio | null, talhao: string, safra: string):
   return `${nome}${ano} recomendações completas`;
 }
 
-export function GeradorRelatorios({ safraNome }: { safraNome?: string } = {}) {
+export function GeradorRelatorios({ safraNome, origemLiberada }: { safraNome?: string; origemLiberada?: (aba: string) => boolean } = {}) {
   const { nav, uploadedGeo } = useApp();
   const safra = safraNome ?? '';
   // uploadedGeo num ref (fallback do polígono) — NÃO pode ser dependência do
@@ -191,6 +192,13 @@ export function GeradorRelatorios({ safraNome }: { safraNome?: string } = {}) {
     try {
       // Compactação: gerado na aba Compactação; regenera da importação + mapas da nuvem.
       if (reg.tipo === TIPO_REL_COMPACTACAO) { await regenerarRelatorioCompactacao(reg.talhaoId, reg.importacaoId); return; }
+      // Camadas: gerado na aba Camadas; relista as fontes e recarrega as camadas
+      // guardadas (ordem + opacidade). Camada que sumiu sai e vira aviso.
+      if (reg.tipo === TIPO_REL_CAMADAS) {
+        const { aviso: av } = await regenerarRelatorioCamadas(reg, origemLiberada);
+        setAviso(av ?? '');
+        return;
+      }
       const mesmoCtx = reg.talhaoId === nav.talhaoId && reg.safra === safra;
       // Fertilidade
       let paginasFert: ReturnType<typeof montarPaginas> = [];
@@ -368,6 +376,10 @@ export function GeradorRelatorios({ safraNome }: { safraNome?: string } = {}) {
           <span className="text-[11px] font-bold uppercase tracking-wide" style={{ color: '#94a3b8' }}>Relatórios gerados</span>
           {historico.length > 0 && <span className="text-[10px]" style={{ color: '#475569' }}>({historico.length})</span>}
         </div>
+        {/* Sem Fertilidade/Recomendação o bloco de cima não aparece — e com ele
+            sumiam o erro e o aviso de quem só reabre (ex.: mapa de camadas). */}
+        {!temFert && !temRec && erro && <p className="text-[10px] mb-1.5" style={{ color: '#f87171' }}>{erro}</p>}
+        {!temFert && !temRec && aviso && <p className="text-[10px] mb-1.5" style={{ color: '#fbbf24' }}>{aviso}</p>}
         {historico.length === 0 ? (
           <p className="text-[10px]" style={{ color: '#475569' }}>Nenhum relatório arquivado ainda para este talhão.</p>
         ) : (

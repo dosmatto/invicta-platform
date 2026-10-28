@@ -29,7 +29,7 @@ const TRABALHAR = ['visualizar', 'criar', 'editar', 'exportar'] as AcaoIam[];
 // Módulos "de análise" — o que um agrônomo opera no dia a dia.
 const ANALISE: ModuloIam[] = [
   'fertilidade', 'zonas', 'altimetria', 'condutividade', 'satelite', 'recomendacoes', 'prescricao',
-  'compactacao', 'produtividade', 'relatorios',
+  'compactacao', 'produtividade', 'relatorios', 'camadas',
 ];
 
 // ── Matriz PADRÃO por papel ─────────────────────────────────────────────────
@@ -81,6 +81,9 @@ export const MATRIZ_PADRAO: Record<PapelIam, MapaPermissoes> = {
     const m = conceder(nada(),
       ['cadastro', 'fertilidade', 'zonas', 'altimetria', 'condutividade', 'recomendacoes', 'prescricao', 'compactacao', 'produtividade', 'relatorios', 'arquivos'], VER_EXP);
     conceder(m, ['satelite'], TRABALHAR);
+    // Aba Camadas: vê e baixa o relatório. Sem "criar" (gravar na lista de
+    // Relatórios): o banco não aceita escrita do produtor em inv_relatorios.
+    conceder(m, ['camadas'], VER_EXP);
     conceder(m, ['compactacao'], ['visualizar', 'criar', 'editar', 'excluir', 'exportar']);
     // Decisão de 14/10/2026: PRESCRIÇÕES ele cria — ver, criar, editar e
     // exportar (SHP/Excel/PDF); excluir fica com o escritório.

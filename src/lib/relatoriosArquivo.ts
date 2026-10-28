@@ -11,7 +11,7 @@ export interface RegistroRelatorio {
   id: string;
   talhaoId: string;
   safra: string;
-  tipo: string;          // 'Fertilidade' | 'Recomendação' | 'Recomendação + Fertilidade' | 'Compactação'
+  tipo: string;          // 'Fertilidade' | 'Recomendação' | 'Recomendação + Fertilidade' | 'Compactação' | 'Camadas'
   titulo: string;        // ex.: "Relatório completo" / "Relatório (3 mapas)"
   nuts: string[];        // elementos (ids) da seção Fertilidade p/ regenerar, na ordem
   elementos: string[];   // símbolos (exibição)
@@ -26,10 +26,17 @@ export interface RegistroRelatorio {
   // Compactação (tipo 'Compactação'): a importação de penetrometria cujos mapas
   // (salvos na nuvem, prefixo compactacao__) regeneram o PDF.
   importacaoId?: string;
+  // Camadas (tipo 'Camadas'): a PILHA da aba Camadas no momento da geração —
+  // ids das camadas (lib/camadasTalhao, índice 0 = topo), a opacidade de cada
+  // uma (mesmo índice) e o modo. Reabrir relista as fontes do talhão/safra e
+  // recarrega esses ids; os nomes ficam em `elementos` para o histórico.
+  camadas?: { ids: string[]; opacidades: number[]; modo: 'composto' | 'completo' };
 }
 
 /** Tipo do registro gerado pela aba Compactação. */
 export const TIPO_REL_COMPACTACAO = 'Compactação';
+/** Tipo do registro gerado pela aba Camadas ("Mapa de camadas"). */
+export const TIPO_REL_CAMADAS = 'Camadas';
 
 const COL = 'inv_relatorios';
 type MetaEntrada = Omit<RegistroRelatorio, 'id' | 'geradoEm'>;
@@ -39,7 +46,10 @@ export async function salvarRelatorio(meta: MetaEntrada): Promise<RegistroRelato
   const id = `rel_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
   const reg: RegistroRelatorio = { ...meta, id, geradoEm: Date.now() };
   if (!usarDadosSupabase()) throw new Error('Nuvem indisponível para registrar o relatório.');
-  await salvarDocSupabase(COL, id, reg);
+  // `salvarDocSupabase` devolve false (sem lançar) quando a gravação é barrada
+  // — papel somente-leitura, RLS, rede. Antes isso passava como sucesso e a tela
+  // dizia "guardado" sem registro nenhum na nuvem.
+  if (!(await salvarDocSupabase(COL, id, reg))) throw new Error('A nuvem recusou o registro do relatório.');
   return reg;
 }
 

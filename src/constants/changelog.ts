@@ -1,5 +1,12 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Aba Camadas: relatório PDF, todas as safras, produtor e linha na matriz
+  '2.214.0': [
+    'PENDÊNCIA S/N — RELATÓRIO DA ABA CAMADAS: botão "Relatório (PDF)" na aba Camadas. Na hora você escolhe "Só o mapa composto" (uma página, o mapa como está na tela — ordem e transparência — sobre o satélite, com a legenda de cada camada) ou "Composto + uma página por camada" (depois do composto, cada camada sozinha com a legenda dela). O PDF baixa e, para a equipe, fica registrado na lista de Relatórios do talhão (o produtor vê esses relatórios no portal); ao reabrir, ele é refeito com as camadas guardadas (camada que não existe mais, ou que quem abre não pode ver, sai — com aviso).',
+    'OUTRAS SAFRAS: a aba Camadas passa a listar os mapas de fertilidade e as grades de amostragem de TODAS as safras do talhão (cada item mostra a safra), para comparar anos na mesma pilha. Trocar o ano no cabeçalho não desmonta mais a pilha.',
+    'PRODUTOR: a aba Camadas aparece no portal do produtor quando o talhão tem algum dado liberado para ele. Cada grupo segue a mesma regra da aba de origem (plano + permissões): fertilidade só com Fertilidade liberada, NDVI com Satélite, e assim por diante. Ao reabrir um relatório salvo, quem não pode ver uma camada não a recebe.',
+    'EQUIPE: nova linha "Camadas (visualização e relatório)" na Central de Acessos → Permissões. Vem ligada para owner, admin e agrônomo (ver, gerar, baixar e gravar na lista) e para o produtor (ver e baixar o PDF — gravar na lista fica com a equipe); leitor só vê; operador e prestador não veem por padrão. A coluna "Criar" é o que grava o relatório na lista.',
+  ],
   // [S/N] Botão "Mapa" do talhão volta ao menu da fazenda
   '2.213.1': [
     'BOTÃO "MAPA" DA PÁGINA DO TALHÃO: agora volta direto ao menu da fazenda daquele talhão (lista de talhões e áreas no mapa), em vez de cair no início do painel.',

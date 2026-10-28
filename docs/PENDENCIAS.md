@@ -123,6 +123,7 @@ verdadeira (fusão de talhões) chegou depois; foi preciso renumerar.
 | S/N | Arquivo exportado leva o nome do talhão como cadastrado | 2.208.0 | Todo export (PDF/SHP/KML/Excel) — nome do arquivo baixado |
 | S/N | Integração com a PrecisionFarm — fase 1 (vínculo e publicação) | 2.210.0 | Talhão → painel lateral / aba Resumo → Integração PrecisionFarm (owner/admin) |
 | S/N | Aba Camadas: empilhar mapas salvos com ordem e transparência | 2.212.0 | Talhão → trilho lateral → Camadas |
+| S/N | Aba Camadas: relatório PDF, todas as safras, produtor e linha na matriz | 2.214.0 | Talhão → Camadas → "Relatório (PDF)"; Central de Acessos → Permissões → linha "Camadas" |
 | 62 | Selos de anos com fertilidade e colheita na lista de talhões | 2.213.0 | Clientes → produtor → fazenda → aba Talhões → selos roxo (fertilidade) e amarelo (colheita) na linha do talhão → clicar no ano |
 
 > As pendências 1–17 foram entregues antes deste registro existir e não estão

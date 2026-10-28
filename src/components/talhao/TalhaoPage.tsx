@@ -107,7 +107,11 @@ const MODULO_DA_ABA: Partial<Record<TabId, string>> = {
   amostragem: 'amostragem', fertilidade: 'fertilidade', recomendacoes: 'recomendacoes',
   prescricoes: 'prescricao', arquivos: 'arquivos', ndvi: 'satelite',
   produtividade: 'produtividade', compactacao: 'compactacao', relatorios: 'relatorios',
+  camadas: 'camadas',
 };
+// Abas cujo dado a aba Camadas mostra: ela existe para o produtor quando ao
+// menos uma delas existe E está liberada para ele (plano + matriz).
+const ABAS_DE_ORIGEM_CAMADAS: TabId[] = ['fertilidade', 'ndvi', 'produtividade', 'zonas', 'linhas', 'amostragem'];
 // Linhas EXTRAS da matriz que também abrem a aba (14/10/2026: a ferramenta
 // Composta tem linha própria e vive dentro de Amostragem).
 const MODULOS_EXTRA_DA_ABA: Partial<Record<TabId, string[]>> = { amostragem: ['composta'] };
@@ -364,14 +368,30 @@ export function TalhaoPage({ id }: { id: string }) {
   // Consulta da nuvem que FALHOU não é "sem dado": a aba fica, e o módulo
   // dentro dela consulta de novo e mostra o próprio erro.
   const nuvemFalhou = new Set<FalhaNuvem>(nuvem?.falhas ?? []);
+  // A regra de liberação de uma aba para o produtor (matriz + plano), sem a
+  // parte de existência de dado.
+  const liberadaProdutor = (id: TabId): boolean =>
+    podeVerAba(id) && (id === 'resumo' || semPlano || !SECOES_PLANO.has(id) || secaoLiberada(plano, id));
   const abaDisponivel = (id: TabId): boolean => {
+    // Camadas não tem dado próprio: existe se alguma aba de origem existe e está liberada.
+    if (id === 'camadas') return ABAS_DE_ORIGEM_CAMADAS.some(o => abasExistentes.has(o) && liberadaProdutor(o));
     if (abasExistentes.has(id) || podeCriarAba(id)) return true;
     const consulta = CONSULTA_DA_ABA[id];
     return !!consulta && nuvemFalhou.has(consulta);
   };
+  // Equipe (agrônomo, operador…): o trilho mostra tudo, exceto a aba Camadas,
+  // que segue a linha própria da matriz (Central de Acessos → Permissões).
   const tabsVisiveis = modoProdutor
-    ? TABS.filter(t => abaDisponivel(t.id) && podeVerAba(t.id) && (t.id === 'resumo' || semPlano || !SECOES_PLANO.has(t.id) || secaoLiberada(plano, t.id)))
-    : TABS;
+    ? TABS.filter(t => abaDisponivel(t.id) && liberadaProdutor(t.id))
+    : TABS.filter(t => t.id !== 'camadas' || !authConfigurado || podeEm('camadas', 'visualizar'));
+  // Dentro da aba Camadas, cada grupo obedece a aba de onde o dado vem: o
+  // produtor pela mesma regra do trilho; a equipe pela coluna "Ver" do módulo.
+  const origemLiberada = (aba: string): boolean => {
+    const id = aba as TabId;
+    if (modoProdutor) return liberadaProdutor(id);
+    const modulo = MODULO_DA_ABA[id];
+    return !modulo || !authConfigurado || podeEm(modulo, 'visualizar');
+  };
   // Painel fechado é `null`; aba lembrada que o plano não libera cai na primeira.
   const tabAtivo: TabId | null = tab === null ? null
     : (tabsVisiveis.some(t => t.id === tab) ? tab : (tabsVisiveis[0]?.id ?? null));
@@ -514,9 +534,9 @@ export function TalhaoPage({ id }: { id: string }) {
             {tabAtivo === 'recomendacoes' && <RecomendacaoSection safraNome={safraSel} />}
             {tabAtivo === 'prescricoes' && <PrescricoesSection safraNome={safraSel} />}
             {tabAtivo === 'linhas' && talhao && <LinhasSection talhao={talhao} />}
-            {tabAtivo === 'camadas' && talhao && <CamadasSection talhao={talhao} safra={safraSel} />}
+            {tabAtivo === 'camadas' && talhao && <CamadasSection talhao={talhao} safra={safraSel} origemLiberada={origemLiberada} />}
             {tabAtivo === 'arquivos' && <ArquivosSection safraNome={safraSel} />}
-            {tabAtivo === 'relatorios' && <GeradorRelatorios safraNome={safraSel} />}
+            {tabAtivo === 'relatorios' && <GeradorRelatorios safraNome={safraSel} origemLiberada={origemLiberada} />}
             {!['resumo', 'fertilidade', 'foliar', 'amostragem', 'zonas', 'compactacao', 'condutividade', 'altimetria', 'produtividade', 'ndvi', 'recomendacoes', 'prescricoes', 'linhas', 'camadas', 'arquivos', 'relatorios'].includes(tabAtivo) && (
               <EmBreve label={TABS.find(t => t.id === tabAtivo)?.label ?? ''} />
             )}
