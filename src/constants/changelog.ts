@@ -1,5 +1,9 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Comparar e adotar o limite da PrecisionFarm — mapa da comparação
+  '2.217.1': [
+    'MAPA DA COMPARAÇÃO COM O LIMITE DA PRECISIONFARM: o mapa pequeno abria sem nenhum contorno e enquadrado num canto do talhão. Agora desenha o limite da Invicta, o da PrecisionFarm (tracejado) e as sobras de cada lado, e enquadra o talhão inteiro.',
+  ],
   // [S/N] Comparar e adotar o limite da PrecisionFarm
   '2.217.0': [
     'PENDÊNCIA S/N — COMPARAR COM O LIMITE DA PRECISIONFARM: no talhão com vínculo confirmado (aba Resumo ou painel lateral → Integração PrecisionFarm, só owner e admin), o botão "Comparar com o limite da PrecisionFarm" busca na hora o limite que a PrecisionFarm publicou e mostra um mapa com os dois contornos sobrepostos (Invicta em verde, PrecisionFarm em ciano tracejado) e as diferenças pintadas: em âmbar o que só a PrecisionFarm tem, em vermelho o que só a Invicta tem.',

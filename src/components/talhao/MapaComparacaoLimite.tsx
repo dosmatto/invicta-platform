@@ -53,10 +53,13 @@ export default function MapaComparacaoLimite({ pf, invicta, soPf, soInvicta }: {
   const mapRef = useRef<maplibregl.Map | null>(null);
   const dados = useRef({ pf, invicta, soPf, soInvicta });
 
-  // Lê só refs: pode ser chamada do 'load' do mapa e dos efeitos.
+  // Lê só refs: pode ser chamada do 'load' do mapa e dos efeitos. Sem checar
+  // isStyleLoaded(): logo depois do addSource ele volta false (fontes ainda
+  // carregando) e nada seria pintado — antes do 'load' as fontes não existem
+  // e os getSource abaixo simplesmente não fazem nada.
   const pintar = useCallback(() => {
     const map = mapRef.current;
-    if (!map || !map.isStyleLoaded()) return;
+    if (!map) return;
     const d = dados.current;
     (map.getSource('soPf') as maplibregl.GeoJSONSource | undefined)?.setData(fc(d.soPf, 'soPf'));
     (map.getSource('soInv') as maplibregl.GeoJSONSource | undefined)?.setData(fc(d.soInvicta, 'soInvicta'));
@@ -86,6 +89,10 @@ export default function MapaComparacaoLimite({ pf, invicta, soPf, soInvicta }: {
       map.addLayer({ id: 'inv-line', type: 'line', source: 'inv', paint: { 'line-color': CORES_COMPARACAO.invicta, 'line-width': 2.5 } });
       map.addLayer({ id: 'pf-line', type: 'line', source: 'pf', paint: { 'line-color': CORES_COMPARACAO.pf, 'line-width': 2, 'line-dasharray': [2, 1.5] } });
       pintar();
+      // O painel ainda pode estar abrindo quando o mapa nasce: o enquadramento
+      // do construtor sai com o tamanho errado. Reenquadra com o tamanho final.
+      map.resize();
+      if (cx) map.fitBounds(cx, { padding: 24, maxZoom: 17, duration: 0 });
     });
     return () => { map.remove(); mapRef.current = null; };
   }, [pintar]);
