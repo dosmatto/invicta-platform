@@ -1,5 +1,10 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [62] Selos de anos com fertilidade e colheita na lista de talhões
+  '2.213.0': [
+    'PENDÊNCIA 62 — SELOS DE FERTILIDADE E DE COLHEITA NA LISTA DE TALHÕES: na fazenda (aba Talhões), ao lado do selo das áreas separadas, aparecem dois selos novos — o roxo (tubo de ensaio) quando o talhão tem laudo de solo importado e o amarelo (trigo) quando tem mapa de produtividade. O selo mostra o ano mais recente e quantos outros existem ("2025 +1"); passar o mouse lista todos os anos.',
+    'CLIQUE NO ANO ABRE O TALHÃO NO LUGAR CERTO: clicar no selo abre a gaveta com os anos (fertilidade com o número de laudos; colheita com a cultura). Clicar num ano abre a página completa do talhão numa nova aba, já na aba Fertilidade ou Produtividade e com aquele Ano selecionado.',
+  ],
   // [S/N] Aba Camadas: empilhar mapas salvos com ordem e transparência
   '2.212.0': [
     'PENDÊNCIA S/N — NOVA ABA "CAMADAS" NO TALHÃO (SÓ VISUALIZAÇÃO): junta no mesmo mapa o que as outras abas já geraram, em grupos expansíveis: Fertilidade (por nutriente e profundidade), NDVI e índices (por cena), Produtividade (mapas de colheita), Linhas da PrecisionFarm, Zonas de manejo, Contorno e pontos de amostragem. Nada é reprocessado: o que ainda não foi gerado na aba de origem não aparece.',

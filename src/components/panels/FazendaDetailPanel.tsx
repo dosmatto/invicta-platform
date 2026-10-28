@@ -15,11 +15,14 @@ import { conflitosDe, talhaoParaAlvo, areaHaFC, bboxDeFeatures, type AlvoOverlap
 import { verificarTrocaPoligono } from '@/lib/trocaPoligono';
 import { baixarKMLTalhao, baixarSHPTalhao, poligonoDoTalhao } from '@/lib/exportTalhao';
 import { partesComArea, type ParteArea } from '@/lib/areaGeo';
-import { getClientes } from '@/lib/store';
-import { ChevronLeft, ChevronDown, Plus, Map, AlertTriangle, Save, X, ExternalLink, MapPin, Loader2, Upload, CheckCircle2, Pencil, Trash2, Download, Layers } from 'lucide-react';
+import { getClientes, getAnosLaudos, getMapasProdutividade, getSafras } from '@/lib/store';
+import { anoDaSafra } from '@/lib/periodo';
+import { ChevronLeft, ChevronDown, Plus, Map, AlertTriangle, Save, X, ExternalLink, MapPin, Loader2, Upload, CheckCircle2, Pencil, Trash2, Download, Layers, TestTube, Wheat } from 'lucide-react';
 import { PanelSection, PanelButton, StatusBadge } from './_shared';
 import { RelatoriosFazenda } from './RelatoriosFazenda';
 import { MonitorFazenda } from './MonitorFazenda';
+
+interface AnoComDado { ano: number; qtd: number; detalhes: string[] }
 
 const EditorGeometria = dynamic(
   () => import('@/components/geo/EditorGeometria').then(m => ({ default: m.EditorGeometria })),
@@ -40,7 +43,10 @@ export function FazendaDetailPanel() {
   const [renomeando, setRenomeando] = useState(false);
   const [nomeTemp, setNomeTemp] = useState('');
   const [baixarId, setBaixarId] = useState<string | null>(null);   // menu KML/SHP aberto nesta linha
-  const [partesAbertas, setPartesAbertas] = useState<string | null>(null);  // gaveta de áreas separadas aberta nesta linha
+  // Gaveta aberta sob UMA linha: áreas separadas, anos com fertilidade ou anos com colheita.
+  const [gaveta, setGaveta] = useState<{ talhaoId: string; tipo: 'areas' | 'fert' | 'prod' } | null>(null);
+  const alternarGaveta = (talhaoId: string, tipo: 'areas' | 'fert' | 'prod') =>
+    setGaveta(g => (g?.talhaoId === talhaoId && g.tipo === tipo ? null : { talhaoId, tipo }));
   const [baixando, setBaixando] = useState<string | null>(null);
   const [mostraExcluir, setMostraExcluir] = useState(false);
   const [txtConfirma, setTxtConfirma] = useState('');
@@ -200,6 +206,37 @@ export function FazendaDetailPanel() {
     }
     return out;
   }, [talhoes]);
+
+  // ANOS COM FERTILIDADE (laudo importado) E COM COLHEITA (mapa de produtividade)
+  // de cada talhão — uma leitura de cada lista para a fazenda inteira, agrupada
+  // por talhão. O ano segue a regra do store (`ano` gravado → safra legada), a
+  // mesma que filtra as abas, para o ano clicado abrir com os dados dentro.
+  const anosPorTalhao = useMemo(() => {
+    const ids = new Set(talhoes.map(t => t.id));
+    const fert: Record<string, AnoComDado[]> = {};
+    const prod: Record<string, AnoComDado[]> = {};
+    const juntar = (alvo: Record<string, AnoComDado[]>, talhaoId: string, ano: number | null, detalhe?: string) => {
+      if (ano == null || !ids.has(talhaoId)) return;
+      const lista = (alvo[talhaoId] ??= []);
+      let item = lista.find(a => a.ano === ano);
+      if (!item) { item = { ano, qtd: 0, detalhes: [] }; lista.push(item); }
+      item.qtd++;
+      if (detalhe && !item.detalhes.includes(detalhe)) item.detalhes.push(detalhe);
+    };
+    for (const l of getAnosLaudos()) juntar(fert, l.talhaoId, l.ano ?? anoDaSafra(l.safra));
+    for (const m of getMapasProdutividade()) juntar(prod, m.talhaoId, m.ano ?? anoDaSafra(m.safra), m.cultura || undefined);
+    for (const r of [fert, prod]) for (const k in r) r[k].sort((a, b) => b.ano - a.ano);
+    return { fert, prod };
+  }, [talhoes]);
+
+  // Abre a página do talhão (nova aba) já na aba e no ANO clicados. O seletor de
+  // Ano da página lista as safras cadastradas pelo nome — passa o nome da safra
+  // daquele ano; sem safra cadastrada, o próprio ano (os filtros leem o número).
+  function abrirNoAno(t: Talhao, aba: 'fertilidade' | 'produtividade', ano: number) {
+    const safra = getSafras().find(s => anoDaSafra(s.nome) === ano)?.nome ?? String(ano);
+    const q = new URLSearchParams({ aba, safra });
+    window.open(`/talhao/${t.id}?${q.toString()}`, '_blank');
+  }
 
   // Agrônomos = usuários da EQUIPE (categoria "Interno") e ATIVOS. É a lista da
   // qual o responsável pela fazenda é escolhido. tick recarrega ao mudar dados.
@@ -362,9 +399,35 @@ export function FazendaDetailPanel() {
                     // SOMA, e a gaveta abaixo abre a área de cada pedaço.
                     const partes = partesPorTalhao[t.id] ?? [];
                     const multi = partes.length > 1;
-                    const aberto = multi && partesAbertas === t.id;
+                    const gavetaDaLinha = gaveta?.talhaoId === t.id ? gaveta.tipo : null;
+                    const aberto = multi && gavetaDaLinha === 'areas';
                     const somaPartes = partes.reduce((s, p) => s + p.areaHa, 0);
                     const difereDoCadastro = t.areaHa > 0 && Math.abs(somaPartes - t.areaHa) > 0.02;
+                    const anosFert = anosPorTalhao.fert[t.id] ?? [];
+                    const anosProd = anosPorTalhao.prod[t.id] ?? [];
+                    // Selos de ANOS (fertilidade / colheita): mesmo desenho do selo
+                    // das áreas separadas; o número é o ano mais recente, e a gaveta
+                    // lista todos — clicar num ano abre o talhão naquele ano.
+                    const seloAnos = (tipo: 'fert' | 'prod', anos: AnoComDado[]) => {
+                      if (anos.length === 0) return null;
+                      const ab = gavetaDaLinha === tipo;
+                      const fert = tipo === 'fert';
+                      const Icone = fert ? TestTube : Wheat;
+                      const lista = anos.map(a => a.ano).join(', ');
+                      return (
+                        <button
+                          onClick={e => { e.stopPropagation(); alternarGaveta(t.id, tipo); }}
+                          title={fert ? `Fertilidade (laudo de solo) em: ${lista}` : `Mapa de produtividade em: ${lista}`}
+                          className="flex items-center gap-0.5 px-1 py-1 rounded flex-shrink-0"
+                          style={fert
+                            ? { background: ab ? '#4c1d95' : '#2e1065', color: '#c4b5fd' }
+                            : { background: ab ? '#713f12' : '#3f2a06', color: '#fde047' }}>
+                          <Icone size={11} />
+                          <span className="text-[9px] font-semibold">{anos[0].ano}{anos.length > 1 ? ` +${anos.length - 1}` : ''}</span>
+                          <ChevronDown size={10} style={{ transform: ab ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }} />
+                        </button>
+                      );
+                    };
                     return (
                     <div key={t.id} style={{ borderBottom: '1px solid #0f2240' }}>
                     <div role="button" tabIndex={0} onClick={() => abrirTalhao(t)}
@@ -389,7 +452,7 @@ export function FazendaDetailPanel() {
                         {/* GAVETA das áreas separadas — só em talhão multipolígono. */}
                         {multi && (
                           <button
-                            onClick={e => { e.stopPropagation(); setPartesAbertas(aberto ? null : t.id); }}
+                            onClick={e => { e.stopPropagation(); alternarGaveta(t.id, 'areas'); }}
                             title={`Talhão em ${partes.length} áreas separadas — ver a área de cada uma`}
                             className="flex items-center gap-0.5 px-1 py-1 rounded flex-shrink-0"
                             style={{ background: aberto ? '#78350f' : '#422006', color: '#fbbf24' }}>
@@ -398,6 +461,8 @@ export function FazendaDetailPanel() {
                             <ChevronDown size={10} style={{ transform: aberto ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }} />
                           </button>
                         )}
+                        {seloAnos('fert', anosFert)}
+                        {seloAnos('prod', anosProd)}
                         {/* O selo de status só aparece quando há o que resolver: o
                             quadradinho da esquerda já é verde para ativo e âmbar para
                             incompleto, e escrever "Ativo" em 18 linhas seguidas custava
@@ -469,6 +534,37 @@ export function FazendaDetailPanel() {
                         </p>
                       </div>
                     )}
+
+                    {(gavetaDaLinha === 'fert' || gavetaDaLinha === 'prod') && (() => {
+                      const fert = gavetaDaLinha === 'fert';
+                      const anos = fert ? anosFert : anosProd;
+                      return (
+                        <div className="px-3 pb-2.5 pt-1" style={{ background: '#08182c' }}>
+                          <p className="text-[9px] font-semibold uppercase tracking-wide mb-1.5" style={{ color: '#64748b' }}>
+                            {fert ? 'Fertilidade' : 'Mapas de produtividade'} · clique no ano para abrir o talhão
+                          </p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {anos.map(a => (
+                              <button key={a.ano}
+                                onClick={e => { e.stopPropagation(); abrirNoAno(t, fert ? 'fertilidade' : 'produtividade', a.ano); }}
+                                title={`Abrir ${t.nome} em ${fert ? 'Fertilidade' : 'Produtividade'}, ano ${a.ano} (nova aba)`}
+                                className="flex items-center gap-1 px-2 py-1 rounded text-[11px] font-semibold"
+                                style={fert
+                                  ? { background: '#2e1065', color: '#ddd6fe', border: '1px solid #4c1d95' }
+                                  : { background: '#3f2a06', color: '#fef08a', border: '1px solid #713f12' }}>
+                                {a.ano}
+                                <span className="text-[9px] font-normal" style={{ opacity: 0.75 }}>
+                                  {fert
+                                    ? `${a.qtd} laudo${a.qtd === 1 ? '' : 's'}`
+                                    : (a.detalhes.join(' / ') || `${a.qtd} mapa${a.qtd === 1 ? '' : 's'}`)}
+                                </span>
+                                <ExternalLink size={10} style={{ opacity: 0.7 }} />
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })()}
                     </div>
                     );
                   })

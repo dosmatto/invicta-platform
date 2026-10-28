@@ -2362,6 +2362,13 @@ export function getImportacoesLab(talhaoId?: string, safra?: string): Importacao
   return all.map(importacaoComDerivados).sort((a, b) => b.criadoEm.localeCompare(a.criadoEm));
 }
 
+/** Projeção LEVE dos laudos (talhão + ano/safra), sem calcular os derivados de
+ *  cada amostra — para quem só precisa saber EM QUE ANOS há laudo (selos da
+ *  lista de talhões), lendo os laudos da empresa inteira de uma vez. */
+export function getAnosLaudos(): Pick<ImportacaoLab, 'talhaoId' | 'ano' | 'safra'>[] {
+  return loadFiltrado<ImportacaoLab>('inv_lab').map(({ talhaoId, ano, safra }) => ({ talhaoId, ano, safra }));
+}
+
 // Avisa as telas (Fertilidade etc.) que a lista de importações de laudo mudou —
 // senão a aba Fertilidade só via a nova importação ao sair e voltar.
 function notificarLab() {
