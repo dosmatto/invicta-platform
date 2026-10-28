@@ -1,5 +1,9 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Botão "Mapa" do talhão volta ao menu da fazenda
+  '2.213.1': [
+    'BOTÃO "MAPA" DA PÁGINA DO TALHÃO: agora volta direto ao menu da fazenda daquele talhão (lista de talhões e áreas no mapa), em vez de cair no início do painel.',
+  ],
   // [62] Selos de anos com fertilidade e colheita na lista de talhões
   '2.213.0': [
     'PENDÊNCIA 62 — SELOS DE FERTILIDADE E DE COLHEITA NA LISTA DE TALHÕES: na fazenda (aba Talhões), ao lado do selo das áreas separadas, aparecem dois selos novos — o roxo (tubo de ensaio) quando o talhão tem laudo de solo importado e o amarelo (trigo) quando tem mapa de produtividade. O selo mostra o ano mais recente e quantos outros existem ("2025 +1"); passar o mouse lista todos os anos.',

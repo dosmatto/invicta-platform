@@ -437,6 +437,26 @@ export function AppProvider({ children, redirectProdutorParaPortal, modoCampo }:
     return () => clearTimeout(t);
   }, [dadosProntos]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Botão "Mapa" da página do talhão (28/10/2026): volta com ?fazenda=<id> e o
+  // painel abre direto no menu daquela fazenda, não no dashboard. A página do
+  // talhão tem AppProvider próprio, então a fazenda só atravessa pela URL.
+  useEffect(() => {
+    if (!dadosProntos || !redirectProdutorParaPortal) return;
+    let fazendaId: string | null = null;
+    try { fazendaId = new URLSearchParams(window.location.search).get('fazenda'); } catch { /* SSR */ }
+    if (!fazendaId) return;
+    router.replace('/painel');
+    const f = getFazendas().find(x => x.id === fazendaId);
+    if (!f) return;
+    const c = getClientes().find(x => x.id === f.clienteId);
+    // Um tick depois: o painel inicial já montou e o mapa recebe a camada pronta.
+    const t = setTimeout(() => {
+      setNav({ produtorId: c?.id ?? null, produtor: c?.nome ?? '', fazendaId: f.id, fazenda: f.nome, talhaoId: null, talhao: '', area: 0 });
+      setActivePanel(`fazenda-${f.id}`);
+    }, 0);
+    return () => clearTimeout(t);
+  }, [dadosProntos]); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <AppContext.Provider value={{
       activePanel, setActivePanel,

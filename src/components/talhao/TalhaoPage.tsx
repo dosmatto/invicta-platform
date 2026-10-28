@@ -302,12 +302,13 @@ export function TalhaoPage({ id }: { id: string }) {
     [dadosLocais, nuvem, linhasPF],
   );
 
-  function voltar() { router.push('/painel'); }
+  // Volta ao menu da FAZENDA do talhão (o painel lê ?fazenda= no boot).
+  function voltar() { router.push(talhao ? `/painel?fazenda=${encodeURIComponent(talhao.fazendaId)}` : '/painel'); }
   // Produtor volta ao portal dele; no preview, ao portal do produtor que estava vendo.
   // Produtor que veio do MAPA (modo ligado pelo botão "Mapa da fazenda") volta ao mapa.
   const voltaAoMapa = ehProdutor && modoProdutorMapaAtivo();
   function voltarPortal() {
-    if (voltaAoMapa) { router.push('/painel'); return; }
+    if (voltaAoMapa) { voltar(); return; }
     if (ehProdutor || !cliente) { router.push('/portal'); return; }
     const q = new URLSearchParams({ cliente: cliente.id });
     if (planoPreview) q.set('plano', planoPreview);
