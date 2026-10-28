@@ -16,6 +16,8 @@
 //   • /api/precisionfarm/linhas/{talhaoId}[/revisao] → leitura da aba Linhas,
 //     para TODOS com acesso ao talhão (autenticarLeitor), só leitura.
 //   • /api/precisionfarm/carga-linhas → "Buscar linhas" (owner/admin).
+//   • /api/precisionfarm/limite/{talhaoId} → limite publicado pela PF, para
+//     comparar e adotar (owner/admin, vínculo confirmado).
 //
 // Corpo de erro do lado PF: { "error": { "code", "message" } } com os status do
 // contrato (401 · 404 · 413 · 422). Contrato: docs/integracao-precisionfarm.md.
@@ -28,6 +30,7 @@ import { FalhaPF, criarClientePF } from './clientePF.ts';
 import { lerConfigRecebimento, situacaoCamada, textosIguais, MSG_NAO_CONFIGURADA, type ConfigRecebimento } from './linhas.ts';
 import { cargaInicial, processarFila, receberNotificacao, rotinaPeriodica, tentarDeNovo, type Ambiente } from './recebimento.ts';
 import { avisosDasCamadas, camadasDoTalhao, criarRepoLinhas, geometriaDaRevisao, revisoesDasCamadas } from './repoLinhas.ts';
+import { buscarLimitePF } from './limite.ts';
 import {
   CHAVE_LOCAL_ZONAS, MAX_ENVELOPE_BYTES_INVICTA, PARCERIA_PADRAO, RE_UUID,
   bytesDoEnvelope, capabilities, chaveLocalColheita, checksumEnvelope, corpoNaoImplementado, dataContrato, eventoDoEnvelope, idsParaNovoVinculo,
@@ -592,6 +595,36 @@ export function tratarCargaLinhas(req: Request): Promise<Response> {
       return json({ ok: true, ...r, mensagem: `Busca feita: ${partes.join(', ')}.` }, 200);
     } catch (e) {
       if (e instanceof FalhaPF) return json({ ok: false, erro: e.message }, 502);
+      throw e;
+    }
+  });
+}
+
+// ── Limite publicado pela PF (comparar / adotar) ─────────────────────────────
+
+/** GET /api/precisionfarm/limite/{talhaoId} — o limite VIGENTE que a PF
+ *  publicou para o talhão (inventário → revisão), para a tela comparar com o
+ *  limite daqui e, se o usuário quiser, adotar. Owner/admin, vínculo
+ *  CONFIRMADO. Só lê: nada é gravado no servidor (o app é local-first). */
+export function tratarLimitePF(req: Request, talhaoId: string): Promise<Response> {
+  return comUsuario(req, async sb => {
+    if (!talhaoId) return json({ ok: false, erro: 'Informe o talhão.' }, 400);
+    const v = await vinculoDoTalhao(sb, talhaoId, PARCERIA_PADRAO);
+    if (!v || v.status !== 'confirmado') {
+      return json({ ok: false, erro: 'Este talhão não tem vínculo CONFIRMADO com a PrecisionFarm — a comparação de limite só vale com o vínculo confirmado.' }, 409);
+    }
+    const conf = configRecebimento();
+    if (!conf.ok) return json({ ok: false, erro: conf.erro }, 503);
+    try {
+      const r = await buscarLimitePF(criarClientePF(conf.cfg), v);
+      // incompleto = inventário da PF cortado sem achar o limite: resposta
+      // incompleta do outro lado (502), não "não existe" (404).
+      if (!r.ok) return json({ ok: false, motivo: r.motivo, erro: r.erro }, r.motivo === 'invalido' ? 422 : r.motivo === 'incompleto' ? 502 : 404);
+      return json({ ok: true, limite: r.limite }, 200);
+    } catch (e) {
+      // PF fora/desligada (503 do contrato) passa adiante como 503; o resto
+      // (rede, 401, 404 da PF…) é falha do outro lado: 502, com a mensagem.
+      if (e instanceof FalhaPF) return json({ ok: false, erro: e.message }, e.status === 503 ? 503 : 502);
       throw e;
     }
   });

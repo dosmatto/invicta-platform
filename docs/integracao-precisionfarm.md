@@ -28,7 +28,9 @@ a Invicta **recebe** avisos de linhas (`POST /notifications`, com HMAC) e busca
 as revisões na PF (§6). Ainda **não** existem o `/changes` e o `/receipts` DA
 INVICTA (respondem **501** `not_implemented` em JSON — a nossa fila de saída é
 da fase 3), recebimento de limites/zonas da PF nem GeoTIFF. `/capabilities` diz
-isso em `features` e `not_implemented`.
+isso em `features` e `not_implemented`. O **limite** da PF não é recebido por
+aviso (continua **422**), mas pode ser **comparado e adotado sob demanda** na
+tela do talhão (§7).
 
 ---
 
@@ -322,6 +324,11 @@ nunca reescreve um registro do navegador.
    `"reopened": true`) e processado de novo, gerando um recibo novo.
 11. (fase 2) `name` ausente: a camada usa `integration_name`; sem ele,
    "Linhas <operation_category> <cropping_cycle>".
+12. (limite, §7) O 0.2.0 **não descreve o payload de `boundary`**. Lemos a
+   geometria em `payload.geometry` (padrão das linhas) e, por defesa, em
+   `payload.boundary`/`payload.geojson`/o próprio payload, como Polygon,
+   MultiPolygon, Feature ou FeatureCollection. Confirmar com a PF o formato e
+   se o inventário traz `event` (sem ele o checksum não é conferido).
 
 ---
 
@@ -486,3 +493,81 @@ A aba consulta de novo enquanto há aviso na fila, mas respeitando o próximo
 horário de tentativa (6 s → 60 s sem novidade; teto de 5 min).
 
 RLS ligada e nenhuma política, como na fase 1.
+
+---
+
+## 7. Limite da PrecisionFarm — comparar e adotar (sob demanda)
+
+O usuário considera os limites da PF mais precisos e quer sempre poder
+**comparar** e, se for o caso, **adotar** o limite da PF como novo limite do
+talhão. Sem tabela nova e sem fila: o aviso de limite (`POST /notifications`
+com `resource_type = "boundary"`) **continua recusado com 422** (não está em
+`TIPOS_RECEBIDOS` nem em `notification_resource_types`), e o cursor do
+`/changes` já passou do evento do IGEFI 03 — por isso a leitura é pelo
+**inventário**, quando o usuário pede.
+
+**Onde:** talhão → aba Resumo (ou painel lateral) → Integração PrecisionFarm →
+bloco **Limite da PrecisionFarm**. Só owner/admin e só com vínculo
+**CONFIRMADO**.
+
+**Fluxo:**
+
+1. **Comparar com o limite da PrecisionFarm** → `GET /api/precisionfarm/limite/{talhaoId}`
+   (sessão + owner/admin, `limite.ts → buscarLimitePF`): `GET {PF}/fields/{shared_field_id}/inventory`
+   (todas as páginas) → item `resource_type = "boundary"` (vários: vale o mais
+   recente por `updated_at`/`occurred_at`; a tela avisa) → `GET {PF}/resources/{id}/revisions/{n}`.
+   A revisão é conferida como na fase 2 quando o item traz `event`
+   (`conferirRevisao`: contrato, UUIDs, tipo, revisão e **checksum**); sem
+   `event`, schema + recurso + revisão + `checksum` do item (a tela marca
+   "checksum não conferido" se nem isso vier). `n` = `event.resource_revision`
+   → `resource_revision` → `revision`.
+2. **Leitura do payload** (`limiteGeometria.ts`, pura) — o 0.2.0 não descreve o
+   payload de `boundary`; aceitamos a geometria em `payload.geometry` (como nas
+   linhas), `payload.boundary`, `payload.geojson` ou o próprio payload, como
+   `Polygon`, `MultiPolygon`, `Feature`, `FeatureCollection` ou
+   `GeometryCollection` de polígonos (texto JSON também). Várias partes viram
+   **um** `MultiPolygon`, na ordem recebida; furos preservados; coordenadas
+   **sem arredondar**. **Recusa sem reparo**: anel aberto ou com < 4 posições,
+   sem área, fora de WGS84 (ou `crs` diferente), anel que não é simples
+   (auto-interseção, espícula/aresta que volta sobre si, figura 8 encostando
+   num ponto), furo fora do externo, cruzando a borda ou dentro de outro furo,
+   partes sobrepostas (encostar é válido), linha/ponto, coleção vazia, `asset`
+   sem GeoJSON, > 1 milhão de vértices. Vértice repetido em sequência é aceito.
+   Se o inventário passar de 20 páginas sem o limite aparecer, a resposta é
+   **502 "inventário incompleto"** — nunca "sem limite publicado".
+3. **Comparação** (`compararLimite.ts`, pura, roda no navegador contra o
+   limite LOCAL do talhão): área da PF e da Invicta na **métrica da plataforma**
+   (geodésica, `areaGeo.ts`) e em **UTM plana** no fuso do talhão (22S no
+   Paraná; Mercator Transversa WGS84), área **só PF**, **só Invicta**,
+   **diferença simétrica** (m² nas duas métricas e % da área atual da
+   Invicta), partes/furos/vértices de cada lado. Mapa pequeno (satélite) com os
+   dois contornos (Invicta verde, PF ciano tracejado) e as sobras pintadas (só
+   PF âmbar, só Invicta vermelho), tabela, revisão/`boundary_revision`/data da
+   PF. Sobreposição do limite da PF com outros talhões da fazenda aparece como
+   aviso (não bloqueia).
+4. **Adotar limite da PrecisionFarm** — a MESMA regra do upload/editor
+   (`trocaPoligono.ts`): com dados no ciclo ativo, mostra
+   `mensagemBloqueioTroca` e não grava (a comparação continua visível; o
+   bloqueio já aparece junto dela). Liberado: confirmação explícita e
+   `updateTalhao(geojson, bbox, areaHa, areaHaSemHoles, limiteOrigem)` — o
+   versionamento (`geoVersoes`/`geoVersao`) é o automático do store, e a nota
+   do ciclo verificado (`notaCicloVerificado`) aparece como no painel do
+   limite.
+5. **Rastreabilidade** — `Talhao.limiteOrigem` = `{ fonte: 'precisionfarm',
+   resourceId, revisao, boundaryRevision, dataPF, checksum, adotadoEm,
+   adotadoPor, geoVersao }`. Qualquer outra troca de `geojson` apaga o registro
+   (`comVersaoDeLimite`) e a versão arquivada em `geoVersoes` leva o dela. A
+   seção mostra "Limite atual (vN) = PrecisionFarm rev. R" ou, depois de
+   comparar, "Difere da PrecisionFarm rev. R: X m² (Y %)".
+
+Respostas da rota: **200** `{ ok, limite: { geometria, partes, furos, vertices,
+resourceId, revisao, boundaryRevision, data, nome, checksum, conferencia,
+itensNoInventario } }` · **409** sem vínculo confirmado · **503** sem as
+variáveis `PF_*` ou PF desligada (503 dela) · **404** sem limite publicado ou
+arquivado · **422** revisão que não confere ou geometria inválida (motivo na
+mensagem) · **502** inventário cortado sem o limite e outras falhas da PF
+(rede, 401, 404…).
+
+Testes: `npm run teste:precisionfarm` (seção "Limite da PF"; com
+`PF_LIMITE_REAL=<arquivo>` confere também um limite real — o do IGEFI 03 dá
+66,4658 ha em UTM 22S, o mesmo número da PF).

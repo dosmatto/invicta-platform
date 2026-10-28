@@ -99,6 +99,11 @@ export interface Talhao {
   geoVersao?: number;             // versão do limite atual (ausente = 1)
   geoVersoes?: VersaoPoligono[];  // versões anteriores arquivadas (histórico)
   fusoes?: FusaoRegistro[];       // talhões absorvidos por este (ver desmembrar/fundir)
+  /** De onde veio o limite ATUAL, quando foi adotado de um parceiro
+   *  (IntegracaoPrecisionFarm → "Adotar limite da PrecisionFarm"). Qualquer
+   *  outra troca de geojson apaga o registro (comVersaoDeLimite) e a versão
+   *  arquivada leva o dela. `geoVersao` = versão do limite que nasceu da adoção. */
+  limiteOrigem?: LimiteOrigem;
   /** Talhão criado/alimentado pelo Importador de migração. `safraLimite` = a
    *  safra cujo polígono é o limite atual — só um limite que veio da migração
    *  pode ser trocado por outra migração (ver lib/migracaoInceres). */
@@ -149,6 +154,20 @@ export interface VersaoPoligono {
   areaHaSemHoles?: number;
   arquivadoEm: string;   // ISO
   safras: string[];      // safras que tinham dados do talhão quando esta versão vigorava
+  limiteOrigem?: LimiteOrigem;  // esta versão tinha vindo de um parceiro
+}
+
+/** Rastreabilidade de um limite adotado de parceiro (hoje só a PrecisionFarm). */
+export interface LimiteOrigem {
+  fonte: 'precisionfarm';
+  resourceId: string;
+  revisao: number;               // resource_revision do limite na PF
+  boundaryRevision: number;      // numeração da PF (não é o geoVersao daqui)
+  dataPF: string | null;         // occurred_at da revisão na PF
+  checksum: string | null;
+  adotadoEm: string;             // ISO
+  adotadoPor: string | null;     // e-mail
+  geoVersao: number;             // versão do limite do talhão criada pela adoção
 }
 
 // ── Cultivo: I/O ─────────────────────────────────────────────────────────
@@ -1223,16 +1242,21 @@ function safrasComDadosDoTalhao(talhaoId: string): string[] {
 // avança — em QUALQUER caminho (upload, editor, importação em massa, medição de
 // campo). A regra de BLOQUEIO (só substituir com o ciclo atual sem dados) é do
 // chamador — ver lib/trocaPoligono.ts.
+// A ORIGEM do limite (limiteOrigem) acompanha a geometria: troca que não traz
+// origem nova apaga a antiga, e a versão arquivada leva a dela.
 function comVersaoDeLimite(atual: Talhao, data: Partial<Talhao>): Partial<Talhao> {
-  if (data.geojson === undefined || !atual.geojson || data.geojson === atual.geojson) return data;
+  if (data.geojson === undefined || data.geojson === atual.geojson) return data;
+  const origem = { limiteOrigem: 'limiteOrigem' in data ? data.limiteOrigem : undefined };
+  if (!atual.geojson) return { ...data, ...origem };
   const versao = atual.geoVersao ?? 1;
   const arquivada: VersaoPoligono = {
     versao, geojson: atual.geojson, bbox: atual.bbox,
     areaHa: atual.areaHa, areaHaSemHoles: atual.areaHaSemHoles,
     arquivadoEm: new Date().toISOString(),
     safras: safrasComDadosDoTalhao(atual.id),
+    ...(atual.limiteOrigem ? { limiteOrigem: atual.limiteOrigem } : {}),
   };
-  return { ...data, geoVersao: versao + 1, geoVersoes: [...(atual.geoVersoes ?? []), arquivada] };
+  return { ...data, ...origem, geoVersao: versao + 1, geoVersoes: [...(atual.geoVersoes ?? []), arquivada] };
 }
 
 export function updateTalhao(id: string, data: Partial<Talhao>) {

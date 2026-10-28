@@ -1,5 +1,11 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Comparar e adotar o limite da PrecisionFarm
+  '2.217.0': [
+    'PENDÊNCIA S/N — COMPARAR COM O LIMITE DA PRECISIONFARM: no talhão com vínculo confirmado (aba Resumo ou painel lateral → Integração PrecisionFarm, só owner e admin), o botão "Comparar com o limite da PrecisionFarm" busca na hora o limite que a PrecisionFarm publicou e mostra um mapa com os dois contornos sobrepostos (Invicta em verde, PrecisionFarm em ciano tracejado) e as diferenças pintadas: em âmbar o que só a PrecisionFarm tem, em vermelho o que só a Invicta tem.',
+    'NÚMEROS LADO A LADO: área de cada limite na medida da plataforma e em UTM plana do fuso do talhão (22S no Paraná, a conta que a PrecisionFarm usa), área só PrecisionFarm, só Invicta e a diferença total em m² e em %, além de partes, furos e vértices de cada lado, a revisão do limite na PrecisionFarm e a data da publicação. Limite da PrecisionFarm com defeito (anel aberto, auto-interseção, espícula, figura 8, furo fora ou dentro de outro furo, partes sobrepostas) é recusado com o motivo — nada é consertado em silêncio.',
+    'ADOTAR LIMITE DA PRECISIONFARM: grava o limite da PrecisionFarm como novo limite do talhão, com confirmação. Segue a mesma regra da troca por arquivo ou pelo editor: com dados no ciclo ativo, o botão fica bloqueado e a mensagem diz o que foi encontrado; liberado, o limite anterior fica arquivado no histórico do talhão. A seção passa a mostrar de onde veio o limite atual ("Limite atual = PrecisionFarm rev. N", com data e quem adotou) ou quanto ele difere do da PrecisionFarm.',
+  ],
   // [S/N] Produtor registra o relatório de camadas na lista de Relatórios
   '2.216.0': [
     'PENDÊNCIA S/N — O PRODUTOR TAMBÉM REGISTRA O RELATÓRIO DE CAMADAS: o PDF gerado por ele na aba Camadas passa a entrar na lista de Relatórios do talhão, como já acontecia com a equipe. Vale só para o "Mapa de camadas" e só nos talhões dele; os outros relatórios continuam sendo da equipe. Na Central de Acessos, a coluna "Criar" da linha Camadas vem ligada para o produtor.',

@@ -499,7 +499,7 @@ export function TalhaoPage({ id }: { id: string }) {
           <div className="flex-1 overflow-y-auto">
             {tabAtivo === 'resumo' && talhao && <ResumoTab talhao={talhao} fazenda={fazenda} safraNome={safraSel} cultura={cultura} somenteLeitura={modoProdutor} />}
             {/* Integração PrecisionFarm — só owner/admin (o componente some para os demais). */}
-            {tabAtivo === 'resumo' && talhao && !modoProdutor && <IntegracaoPrecisionFarm talhao={talhao} />}
+            {tabAtivo === 'resumo' && talhao && !modoProdutor && <IntegracaoPrecisionFarm talhao={talhao} onLimiteAdotado={t => { setTalhao(t); setNav({ area: t.areaHa }); }} />}
             {tabAtivo === 'fertilidade' && (
               <>
                 {!modoProdutor && (

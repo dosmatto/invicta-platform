@@ -14,6 +14,10 @@
 //     main/second/winter; época vazia recusa.
 //  6. PAGINAÇÃO e ESCOPO — cursor opaco em string, limite 200; só vínculos
 //     confirmados (e da empresa da chave).
+//  7. LIMITE DA PF — leitura defensiva do payload de 'boundary' (Polygon,
+//     MultiPolygon com furo, Feature, FeatureCollection; inválido recusado sem
+//     reparo), comparação (plataforma × UTM 22S, diferença simétrica) e busca
+//     sob demanda no inventário de uma PF simulada.
 
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -654,6 +658,281 @@ t('agrônomo sem vínculo vê todos (retrocompatível); com clientes vinculados,
   assert.equal(podeVerTalhao({ papel: 'agronomo', clientesVinculados: ['c1'] }, { id: 't2', fazendaId: 'f2' }, FZ), false);
   assert.equal(podeVerTalhao({ papel: 'agronomo', clientesVinculados: ['c1'] }, { id: 't1', fazendaId: 'f1' }, FZ), true);
 });
+
+// ═════════════════════════════════════════════════════════════════════════════
+// LIMITE publicado pela PF — leitura do payload, comparação e busca sob demanda
+// (src/lib/precisionfarm/limiteGeometria.ts, compararLimite.ts, limite.ts)
+// ═════════════════════════════════════════════════════════════════════════════
+const LG = await import('../src/lib/precisionfarm/limiteGeometria.ts');
+const CL = await import('../src/lib/precisionfarm/compararLimite.ts');
+const LM = await import('../src/lib/precisionfarm/limite.ts');
+const { existsSync } = await import('node:fs');
+
+const pendentes = [];
+/** Teste assíncrono: roda junto, contado antes do resumo. */
+function ta(nome, fn) {
+  pendentes.push(fn().then(() => { ok++; console.log('  ✓', nome); }, e => { fail++; console.error('  ✗', nome, '—', e.message); }));
+}
+
+// Talhão de teste perto do IGEFI03 (fuso 22S). d em graus (~0,001° ≈ 100 m).
+const LX = -50.3, LY = -24.9;
+const anel = (x0, y0, x1, y1) => [[LX + x0, LY + y0], [LX + x1, LY + y0], [LX + x1, LY + y1], [LX + x0, LY + y1], [LX + x0, LY + y0]];
+const furo = (x0, y0, x1, y1) => anel(x0, y0, x1, y1).reverse();
+const QUAD = { type: 'Polygon', coordinates: [anel(0, 0, 0.01, 0.01)] };
+// Duas partes; a primeira com furo.
+const MULTI_FURO = { type: 'MultiPolygon', coordinates: [
+  [anel(0, 0, 0.01, 0.01), furo(0.004, 0.004, 0.006, 0.006)],
+  [anel(0.02, 0, 0.03, 0.005)],
+] };
+const lerOk = (g) => { const r = LG.lerGeometriaLimite(g); if (!r.ok) throw new Error(r.erro); return r; };
+const lerErro = (g) => { const r = LG.lerGeometriaLimite(g); assert.equal(r.ok, false, 'deveria recusar'); return r.erro; };
+
+console.log('Limite da PF — leitura do payload');
+t('Polygon, MultiPolygon com furo, Feature e FeatureCollection são aceitos', () => {
+  assert.equal(lerOk(QUAD).geometria.type, 'Polygon');
+  const m = lerOk(MULTI_FURO);
+  assert.deepEqual([m.geometria.type, m.partes, m.furos, m.vertices], ['MultiPolygon', 2, 1, 12]);
+  assert.equal(lerOk({ type: 'Feature', properties: {}, geometry: MULTI_FURO }).partes, 2);
+  const fc = lerOk({ type: 'FeatureCollection', features: [
+    { type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: MULTI_FURO.coordinates[0] } },
+    { type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: MULTI_FURO.coordinates[1] } },
+  ] });
+  // Várias feições viram UM MultiPolygon, na ordem em que vieram.
+  assert.deepEqual(fc.geometria, MULTI_FURO);
+});
+t('coordenadas preservadas sem arredondar (mesmos números, inclusive 15+ casas)', () => {
+  const fino = { type: 'Polygon', coordinates: [[[-50.29892290977286, -24.897328650160897], [-50.29, -24.897328650160897], [-50.29, -24.89], [-50.29892290977286, -24.89], [-50.29892290977286, -24.897328650160897]]] };
+  const r = lerOk(fino);
+  assert.equal(JSON.stringify(r.geometria), JSON.stringify(fino));
+});
+t('onde está a geometria: payload.geometry, .boundary, .geojson, o próprio payload ou texto JSON', () => {
+  const fc = { type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry: QUAD }] };
+  for (const p of [{ name: 'limite', geometry: fc }, { boundary: QUAD }, { geojson: JSON.stringify(fc) }, fc, { type: 'Feature', properties: {}, geometry: QUAD }]) {
+    const r = LG.lerPayloadLimite(p);
+    assert.equal(r.ok, true, JSON.stringify(p).slice(0, 60) + (r.ok ? '' : ` — ${r.erro}`));
+    assert.equal(r.geometria.type, 'Polygon');
+  }
+});
+t('GeometryCollection de polígonos vira MultiPolygon', () => {
+  assert.equal(lerOk({ type: 'GeometryCollection', geometries: MULTI_FURO.coordinates.map(c => ({ type: 'Polygon', coordinates: c })) }).geometria.type, 'MultiPolygon');
+});
+t('partes que só ENCOSTAM (divisa comum) e furo que toca a borda num vértice são válidos', () => {
+  lerOk({ type: 'MultiPolygon', coordinates: [[anel(0, 0, 0.01, 0.01)], [anel(0.01, 0, 0.02, 0.01)]] });
+  lerOk({ type: 'Polygon', coordinates: [anel(0, 0, 0.01, 0.01), [[LX, LY], [LX + 0.004, LY + 0.006], [LX + 0.006, LY + 0.004], [LX, LY]]] });
+});
+t('inválidos são RECUSADOS com o motivo (sem reparo)', () => {
+  const aberto = anel(0, 0, 0.01, 0.01).slice(0, 4);
+  assert.match(lerErro({ type: 'Polygon', coordinates: [[...aberto, [LX + 0.001, LY]]] }), /não fecha/);
+  assert.match(lerErro({ type: 'Polygon', coordinates: [aberto.slice(0, 3)] }), /mínimo 4/);
+  // gravata-borboleta
+  assert.match(lerErro({ type: 'Polygon', coordinates: [[[LX, LY], [LX + 0.01, LY + 0.01], [LX + 0.01, LY], [LX, LY + 0.004], [LX, LY]]] }), /cruza a si mesmo/);
+  assert.match(lerErro({ type: 'Polygon', coordinates: [anel(0, 0, 0.01, 0.01), furo(0.02, 0.02, 0.03, 0.03)] }), /fora do anel externo/);
+  assert.match(lerErro({ type: 'Polygon', coordinates: [anel(0, 0, 0.01, 0.01), furo(0.005, 0.005, 0.015, 0.006)] }), /cruza/);
+  assert.match(lerErro({ type: 'MultiPolygon', coordinates: [[anel(0, 0, 0.01, 0.01)], [anel(0.005, 0.005, 0.015, 0.015)]] }), /se sobrepõem/);
+  assert.match(lerErro({ type: 'MultiPolygon', coordinates: [[anel(0, 0, 0.01, 0.01)], [anel(0.002, 0.002, 0.004, 0.004)]] }), /se sobrepõem/, 'parte dentro da outra');
+  assert.match(lerErro({ type: 'LineString', coordinates: [[LX, LY], [LX + 1, LY]] }), /só aceita Polygon/);
+  assert.match(lerErro({ type: 'FeatureCollection', features: [] }), /vazia/);
+  assert.match(lerErro({ type: 'Feature', properties: {}, geometry: null }), /sem geometria|não tem geometria/);
+  assert.match(lerErro({ type: 'Polygon', coordinates: [[[LX, 95], [LX + 1, 95], [LX + 1, 96], [LX, 95]]] }), /WGS84/);
+  assert.match(lerErro({ ...QUAD, crs: { type: 'name', properties: { name: 'EPSG:31982' } } }), /WGS84/);
+  assert.match(lerErro('{não é json'), /não é JSON/);
+  assert.match(LG.lerPayloadLimite({ name: 'limite' }).erro, /sem geometria/);
+  assert.match(LG.lerPayloadLimite({ asset: { url: 'https://x' } }).erro, /asset/);
+  assert.equal(LG.lerPayloadLimite(null).ok, false);
+});
+
+t('anel não simples e furo dentro de furo são RECUSADOS (área errada se passassem)', () => {
+  const P = (pts) => pts.map(([x, y]) => [LX + x, LY + y]);
+  // (a) furo dentro de outro furo: 100 − 36 − 16 em vez de 64.
+  assert.match(lerErro({ type: 'Polygon', coordinates: [anel(0, 0, 0.01, 0.01), furo(0.002, 0.002, 0.008, 0.008), furo(0.003, 0.003, 0.007, 0.007)] }), /furo 2 está dentro do furo 1/);
+  // furo repetido também desconta duas vezes
+  assert.match(lerErro({ type: 'Polygon', coordinates: [anel(0, 0, 0.01, 0.01), furo(0.002, 0.002, 0.008, 0.008), furo(0.002, 0.002, 0.008, 0.008)] }), /dentro do furo/);
+  // (b) volta sobre si numa aresta colinear (vai-e-volta na borda de cima).
+  assert.match(lerErro({ type: 'Polygon', coordinates: [P([[0, 0], [0.01, 0], [0.01, 0.01], [0.004, 0.01], [0.006, 0.01], [0, 0.01], [0, 0]])] }), /volta sobre si mesmo/);
+  // espícula que sai e volta pelo mesmo caminho até outro vértice
+  assert.match(lerErro({ type: 'Polygon', coordinates: [P([[0, 0], [0.01, 0], [0.01, 0.01], [0.005, 0.01], [0.005, 0.015], [0.005, 0.012], [0, 0.01], [0, 0]])] }), /volta sobre si mesmo|encosta em si/);
+  // (c) figura 8: o anel passa duas vezes pelo mesmo vértice.
+  assert.match(lerErro({ type: 'Polygon', coordinates: [P([[0, 0], [0.005, 0.005], [0.01, 0], [0.01, 0.01], [0.005, 0.005], [0, 0.01], [0, 0]])] }), /figura 8/);
+});
+t('vértice repetido em sequência e vértice no meio de uma aresta reta continuam válidos', () => {
+  const P = (pts) => pts.map(([x, y]) => [LX + x, LY + y]);
+  const r = lerOk({ type: 'Polygon', coordinates: [P([[0, 0], [0.005, 0], [0.005, 0], [0.01, 0], [0.01, 0.01], [0, 0.01], [0, 0]])] });
+  assert.equal(r.vertices, 6, 'nada é removido');
+});
+
+console.log('Limite da PF — comparação');
+t('UTM: no meridiano central de 45°N dá E=500000 e N=4982950,40 (referência WGS84)', () => {
+  const [e, n] = CL.paraUtm(-75, 45, { zona: 18, sul: false });
+  assert.ok(Math.abs(e - 500000) < 1e-6, String(e));
+  assert.ok(Math.abs(n - 4982950.4) < 0.01, String(n));
+  assert.deepEqual(CL.fusoUtm(-50.3, -24.9), { zona: 22, sul: true });
+});
+t('mesmo limite: diferença zero, idênticos; furo descontado nas duas métricas', () => {
+  const c = CL.compararLimites(MULTI_FURO, MULTI_FURO);
+  assert.equal(c.identicos, true);
+  assert.equal(c.difSimM2, 0);
+  assert.equal(c.fuso, '22S');
+  assert.deepEqual([c.pf.partes, c.pf.furos, c.pf.vertices], [2, 1, 12]);
+  const semFuro = CL.compararLimites({ type: 'MultiPolygon', coordinates: [[MULTI_FURO.coordinates[0][0]], MULTI_FURO.coordinates[1]] }, null);
+  const furoHa = semFuro.pf.areaHa - c.pf.areaHa;
+  assert.ok(furoHa > 4.4 && furoHa < 4.6, `furo de 0,002° ~4,5 ha, deu ${furoHa}`);
+  // UTM a ~0,7° do meridiano central: k² ≈ 0,9993 (a área plana é um pouco menor).
+  const r = c.pf.areaUtmHa / c.pf.areaHa;
+  assert.ok(r > 0.9990 && r < 0.9996, `razão UTM/plataforma ${r}`);
+});
+t('limite deslocado: só PF + só Invicta = diferença simétrica (as duas métricas) e o %', () => {
+  const inv = { type: 'Polygon', coordinates: [anel(0, 0, 0.01, 0.01)] };
+  const pf = { type: 'Polygon', coordinates: [anel(0.001, 0, 0.011, 0.01)] };   // 10% para leste
+  const c = CL.compararLimites(pf, inv);
+  assert.equal(c.identicos, false);
+  assert.ok(Math.abs(c.soPfM2 - c.soInvictaM2) / c.soPfM2 < 0.01, 'as duas faixas têm a mesma área');
+  assert.ok(Math.abs(c.difSimM2 - (c.soPfM2 + c.soInvictaM2)) < 1e-6);
+  assert.ok(Math.abs(c.difSimPct - 20) < 0.2, `~20%, deu ${c.difSimPct}`);
+  assert.ok(Math.abs(c.difSimUtmM2 / c.difSimM2 - c.pf.areaUtmHa / c.pf.areaHa) < 1e-3);
+  assert.equal(c.soPf.type, 'Polygon');
+  // Sem limite na Invicta: tudo é "só PF" e não há %.
+  const s = CL.compararLimites(pf, null);
+  assert.equal(s.invicta, null); assert.equal(s.difSimPct, null); assert.equal(s.soPf, pf);
+});
+t('limite do talhão (texto) vira uma geometria só; texto ruim → null', () => {
+  const g = CL.geometriaDoTalhao(JSON.stringify({ type: 'FeatureCollection', features: MULTI_FURO.coordinates.map(c => ({ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: c } })) }));
+  assert.deepEqual(g, MULTI_FURO);
+  assert.equal(CL.geometriaDoTalhao('xx'), null);
+  assert.equal(CL.geometriaDoTalhao(undefined), null);
+  assert.deepEqual(CL.caixaDoLimite(QUAD), [LX, LY, LX + 0.01, LY + 0.01]);
+});
+// Conferência com um limite REAL da PF (IGEFI 03) — o arquivo não vai para o
+// repositório; roda quando existe (PF_LIMITE_REAL=<caminho> ou o da sessão).
+const REAL = process.env.PF_LIMITE_REAL;
+if (REAL && existsSync(REAL)) {
+  t('IGEFI 03 real: lê sem recusar e a área UTM 22S bate com a da PF (66,4658 ha)', () => {
+    const r = lerOk(JSON.parse(readFileSync(REAL, 'utf8')));
+    const c = CL.compararLimites(r.geometria, r.geometria);
+    assert.equal(c.fuso, '22S');
+    assert.equal(Math.round(c.pf.areaUtmHa * 1e4) / 1e4, 66.4658);
+    assert.equal(c.difSimM2, 0);
+  });
+} else {
+  console.log('  – IGEFI 03 real: pulado (defina PF_LIMITE_REAL=<arquivo .geojson>)');
+}
+
+console.log('Limite da PF — busca no inventário (PF simulada)');
+const VINC = { ...IDS };
+const RES_LIM = '00000009-1111-4111-8111-000000000009';
+function envelopeLimite(extra = {}) {
+  return {
+    contract_version: '0.2.0', event_id: '0000000a-1111-4111-8111-00000000000a', source_system: 'precisionfarm',
+    ...IDS, resource_id: RES_LIM, resource_type: 'boundary', resource_revision: 2, base_revision: 1,
+    boundary_revision: 2, occurred_at: '2026-10-27T18:00:00Z', operation: 'upsert',
+    payload: { name: 'limite', geometry: { type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry: MULTI_FURO }] } },
+    ...extra,
+  };
+}
+function eventoDe(env) { const { payload: _p, ...ev } = env; return { ...ev, checksum: checksumEnvelope(env) }; }
+/** PF simulada: inventário em páginas + revisões por recurso. */
+function pfSimulada({ paginas, revisoes = {}, falha = null }) {
+  const chamadas = [];
+  return {
+    chamadas,
+    async inventario(field, cursor) {
+      chamadas.push(['inventario', field, cursor]);
+      if (falha) throw falha;
+      return paginas[Number(cursor)];
+    },
+    async revisao(id, n) { chamadas.push(['revisao', id, n]); return revisoes[`${id}/${n}`]; },
+    async changes() { throw new Error('não usado'); },
+    async enviarRecibo() { throw new Error('não usado'); },
+  };
+}
+const itemLim = (env, extra = {}) => ({ resource_id: env.resource_id, resource_type: 'boundary', resource_revision: env.resource_revision, boundary_revision: env.boundary_revision, status: 'published', name: 'limite', checksum: checksumEnvelope(env), event: eventoDe(env), ...extra });
+const itemLinhas = { resource_id: '00000005-1111-4111-8111-000000000005', resource_type: 'guidance', resource_revision: 1 };
+
+ta('acha o limite (2ª página do inventário), confere pelo checksum do evento e devolve a geometria', async () => {
+  const env = envelopeLimite();
+  const pf = pfSimulada({
+    paginas: [{ items: [itemLinhas], next_cursor: '1', has_more: true }, { items: [itemLim(env)], next_cursor: '2', has_more: false }],
+    revisoes: { [`${RES_LIM}/2`]: env },
+  });
+  const r = await LM.buscarLimitePF(pf, VINC);
+  assert.equal(r.ok, true, r.erro);
+  assert.deepEqual(r.limite.geometria, MULTI_FURO);
+  assert.equal(r.limite.revisao, 2); assert.equal(r.limite.boundaryRevision, 2);
+  assert.equal(r.limite.conferencia, 'checksum');
+  assert.equal(r.limite.data, '2026-10-27T18:00:00Z');
+  assert.deepEqual([r.limite.partes, r.limite.furos], [2, 1]);
+  assert.deepEqual(pf.chamadas.map(c => c[0]), ['inventario', 'inventario', 'revisao']);
+});
+ta('item sem `event` e com `revision` (complemento 28/10): conferência básica pelo checksum do item', async () => {
+  const env = envelopeLimite();
+  const { event: _e, resource_revision: _r, ...semEvento } = itemLim(env);
+  const pf = pfSimulada({ paginas: [{ items: [{ ...semEvento, revision: 2 }], next_cursor: '1', has_more: false }], revisoes: { [`${RES_LIM}/2`]: env } });
+  const r = await LM.buscarLimitePF(pf, VINC);
+  assert.equal(r.ok, true, r.erro);
+  assert.equal(r.limite.conferencia, 'basica');
+  // Checksum do item que não bate → recusa.
+  const pf2 = pfSimulada({ paginas: [{ items: [{ ...semEvento, revision: 2, checksum: 'f'.repeat(64) }], next_cursor: '1', has_more: false }], revisoes: { [`${RES_LIM}/2`]: env } });
+  const r2 = await LM.buscarLimitePF(pf2, VINC);
+  assert.equal(r2.motivo, 'invalido'); assert.match(r2.erro, /Checksum/);
+});
+ta('revisão adulterada (checksum do evento não bate) → inválido, sem geometria', async () => {
+  const env = envelopeLimite();
+  const adulterado = { ...env, payload: { ...env.payload, name: 'outro' } };
+  const pf = pfSimulada({ paginas: [{ items: [itemLim(env)], next_cursor: '1', has_more: false }], revisoes: { [`${RES_LIM}/2`]: adulterado } });
+  const r = await LM.buscarLimitePF(pf, VINC);
+  assert.equal(r.ok, false); assert.equal(r.motivo, 'invalido'); assert.match(r.erro, /Checksum não confere/);
+});
+ta('payload com geometria inválida → inválido com o motivo', async () => {
+  const env = envelopeLimite({ payload: { geometry: { type: 'Polygon', coordinates: [[[LX, LY], [LX + 0.01, LY + 0.01], [LX + 0.01, LY], [LX, LY + 0.004], [LX, LY]]] } } });
+  const pf = pfSimulada({ paginas: [{ items: [itemLim(env)], next_cursor: '1', has_more: false }], revisoes: { [`${RES_LIM}/2`]: env } });
+  const r = await LM.buscarLimitePF(pf, VINC);
+  assert.equal(r.motivo, 'invalido'); assert.match(r.erro, /cruza a si mesmo/);
+});
+ta('sem limite no inventário → sem_limite; limite arquivado → arquivado (sem baixar revisão)', async () => {
+  const r = await LM.buscarLimitePF(pfSimulada({ paginas: [{ items: [itemLinhas], next_cursor: '1', has_more: false }] }), VINC);
+  assert.equal(r.motivo, 'sem_limite');
+  const env = envelopeLimite({ operation: 'archive', payload: {} });
+  const pf = pfSimulada({ paginas: [{ items: [itemLim(env, { status: 'archived' })], next_cursor: '1', has_more: false }] });
+  const r2 = await LM.buscarLimitePF(pf, VINC);
+  assert.equal(r2.motivo, 'arquivado');
+  assert.equal(pf.chamadas.filter(c => c[0] === 'revisao').length, 0);
+});
+ta('UUIDs do limite diferentes do vínculo → inválido', async () => {
+  const env = envelopeLimite({ shared_farm_id: '0000000b-1111-4111-8111-00000000000b' });
+  const pf = pfSimulada({ paginas: [{ items: [itemLim(env)], next_cursor: '1', has_more: false }], revisoes: { [`${RES_LIM}/2`]: env } });
+  const r = await LM.buscarLimitePF(pf, VINC);
+  assert.equal(r.motivo, 'invalido'); assert.match(r.erro, /UUIDs/);
+});
+ta('vários limites no inventário: vale o mais recente, e a contagem vai para a tela', async () => {
+  const novo = envelopeLimite();
+  const velhoId = '0000000c-1111-4111-8111-00000000000c';
+  const velho = envelopeLimite({ resource_id: velhoId, resource_revision: 1, base_revision: 0, occurred_at: '2026-10-01T00:00:00Z' });
+  const pf = pfSimulada({
+    paginas: [{ items: [itemLim(velho, { updated_at: '2026-10-01T00:00:00Z' }), itemLim(novo, { updated_at: '2026-10-27T18:00:00Z' })], next_cursor: '1', has_more: false }],
+    revisoes: { [`${RES_LIM}/2`]: novo, [`${velhoId}/1`]: velho },
+  });
+  const r = await LM.buscarLimitePF(pf, VINC);
+  assert.equal(r.limite.resourceId, RES_LIM); assert.equal(r.limite.itensNoInventario, 2);
+});
+ta('inventário cortado no teto de páginas sem achar o limite → incompleto (não "sem limite")', async () => {
+  const paginas = Array.from({ length: 30 }, (_, k) => ({ items: [itemLinhas], next_cursor: String(k + 1), has_more: true }));
+  const pf = pfSimulada({ paginas });
+  const r = await LM.buscarLimitePF(pf, VINC);
+  assert.equal(r.ok, false); assert.equal(r.motivo, 'incompleto'); assert.match(r.erro, /não terminou/);
+  assert.equal(pf.chamadas.length, LM.MAX_PAGINAS_INVENTARIO);
+  // Cursor que não anda com has_more = também incompleto.
+  const r2 = await LM.buscarLimitePF(pfSimulada({ paginas: [{ items: [itemLinhas], next_cursor: '0', has_more: true }] }), VINC);
+  assert.equal(r2.motivo, 'incompleto');
+  // Limite achado antes do teto: segue normal mesmo com has_more.
+  const env = envelopeLimite();
+  const r3 = await LM.buscarLimitePF(pfSimulada({ paginas: [{ items: [itemLim(env)], next_cursor: '0', has_more: true }], revisoes: { [`${RES_LIM}/2`]: env } }), VINC);
+  assert.equal(r3.ok, true, r3.erro);
+});
+ta('PF fora (503) sobe como FalhaPF — a rota responde 503, não 500', async () => {
+  const pf = pfSimulada({ paginas: [], falha: new LM.FalhaPF('Integração desabilitada do lado da PrecisionFarm (503).', 'temporaria', 503) });
+  await assert.rejects(LM.buscarLimitePF(pf, VINC), e => e instanceof LM.FalhaPF && e.status === 503);
+});
+
+await Promise.all(pendentes);
 
 console.log(`\n${ok} ok, ${fail} falha(s)`);
 if (fail) process.exit(1);

@@ -127,6 +127,7 @@ verdadeira (fusão de talhões) chegou depois; foi preciso renumerar.
 | 62 | Selos de anos com fertilidade e colheita na lista de talhões | 2.213.0 | Clientes → produtor → fazenda → aba Talhões → selos roxo (fertilidade) e amarelo (colheita) na linha do talhão → clicar no ano |
 | S/N | Produtor registra o relatório de camadas na lista de Relatórios | 2.216.0 | Talhão (produtor) → Camadas → "Relatório (PDF)" → aparece em Relatórios; banco: docs/produtor-relatorios-camadas.sql |
 | S/N | Prescrição por zonas via exportação de nutrientes (potencial × coeficiente ÷ garantia) | 2.215.0 | Talhão → Prescrições → Nova → "Por exportação (potencial da zona)"; cadastro do potencial em Biblioteca → Exportação de Nutrientes |
+| S/N | Comparar e adotar o limite da PrecisionFarm | 2.217.0 | Talhão → aba Resumo / painel lateral → Integração PrecisionFarm → Limite da PrecisionFarm (owner/admin, vínculo confirmado) |
 
 > As pendências 1–17 foram entregues antes deste registro existir e não estão
 > catalogadas; procure pelo assunto no `changelog.ts`. Da 18 em diante, tudo

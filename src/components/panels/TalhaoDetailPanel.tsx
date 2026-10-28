@@ -694,7 +694,7 @@ export function TalhaoDetailPanel() {
         <ResumoSafra talhaoId={nav.talhaoId ?? ''} safra={safra} />
         <MapasDefinitivos talhao={talhao} safra={safra} />
         {/* Só owner/admin — o próprio componente some para os demais. */}
-        <IntegracaoPrecisionFarm talhao={talhao} />
+        <IntegracaoPrecisionFarm talhao={talhao} onLimiteAdotado={t => handleUploaded(t.areaHa)} />
       </div>
     </div>
   );

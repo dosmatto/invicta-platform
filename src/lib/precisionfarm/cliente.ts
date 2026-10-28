@@ -127,5 +127,25 @@ export const buscarLinhasPF = (talhaoId: string) =>
 export const tentarDeNovoLinhasPF = (talhaoId: string, resourceId: string) =>
   chamar<{ mensagem: string; reabertos: number }>('/api/precisionfarm/reprocessar-linhas', { method: 'POST', body: { talhaoId, resourceId } });
 
+// ── Limite publicado pela PrecisionFarm (comparar / adotar) ─────────────────
+// Owner/admin, vínculo confirmado. Mesmo formato de lib/precisionfarm/limite.ts
+// (LimitePF) — repetido aqui porque aquele módulo é só do servidor.
+
+export interface LimitePFTela {
+  geometria: GeoJSON.Polygon | GeoJSON.MultiPolygon;
+  partes: number; furos: number; vertices: number;
+  resourceId: string;
+  revisao: number;
+  boundaryRevision: number;
+  data: string | null;
+  nome: string | null;
+  checksum: string | null;
+  conferencia: 'checksum' | 'basica';
+  itensNoInventario: number;
+}
+
+export const limitePF = (talhaoId: string) =>
+  chamar<{ limite: LimitePFTela }>(`/api/precisionfarm/limite/${encodeURIComponent(talhaoId)}`);
+
 /** Camadas que contam como "o talhão tem linhas" (aba no portal do produtor). */
 export const camadasVisiveisPF = (c: CamadaLinhasPF[]) => c.filter(x => x.revisaoGeometria != null && !x.arquivada);

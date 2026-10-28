@@ -9,6 +9,8 @@
 //   • PUBLICAR: zoneamento padrão e colheita OFICIAL (por safra/época) viram
 //     revisões imutáveis. Só o publicado aparece para a PF; editar aqui não
 //     manda nada sozinho.
+//   • LIMITE DA PF (vínculo confirmado): comparar com o limite publicado pela
+//     PrecisionFarm e, se o ciclo ativo permitir, adotá-lo (LimitePrecisionFarm).
 // A rota do servidor confere a sessão e o papel de novo — esconder a seção é
 // só conforto.
 
@@ -19,6 +21,7 @@ import { ehAdmin } from '@/lib/empresa';
 import {
   acaoVinculoPF, estadoPF, publicarColheitaPF, publicarZonasPF, type PublicadoPF, type VinculoPF,
 } from '@/lib/precisionfarm/cliente';
+import LimitePrecisionFarm from './LimitePrecisionFarm';
 
 const ROTULO_EPOCA: Record<string, string> = { verao: 'Verão', safrinha: 'Safrinha', inverno: 'Inverno' };
 const ROTULO_PERIODO: Record<string, string> = { main: 'Verão (main)', second: 'Safrinha (second)', winter: 'Inverno (winter)' };
@@ -45,12 +48,14 @@ function LinhaId({ rotulo, valor }: { rotulo: string; valor: string }) {
 
 // `key` pelo talhão: trocar de talhão remonta a seção com o estado zerado (sem
 // ressincronizar estado dentro de efeito).
-export default function IntegracaoPrecisionFarm({ talhao }: { talhao: Talhao | null }) {
+// `onLimiteAdotado`: a tela que contém a seção relê o talhão depois que o
+// limite da PrecisionFarm foi adotado (área, versão do limite, mapa).
+export default function IntegracaoPrecisionFarm({ talhao, onLimiteAdotado }: { talhao: Talhao | null; onLimiteAdotado?: (t: Talhao) => void }) {
   if (!talhao || !ehAdmin()) return null;
-  return <SecaoPF key={talhao.id} talhao={talhao} />;
+  return <SecaoPF key={talhao.id} talhao={talhao} onLimiteAdotado={onLimiteAdotado} />;
 }
 
-function SecaoPF({ talhao }: { talhao: Talhao }) {
+function SecaoPF({ talhao, onLimiteAdotado }: { talhao: Talhao; onLimiteAdotado?: (t: Talhao) => void }) {
   const [aberto, setAberto] = useState(false);
   const [carregado, setCarregado] = useState(false);
   const [ocupado, setOcupado] = useState('');
@@ -176,6 +181,9 @@ function SecaoPF({ talhao }: { talhao: Talhao }) {
               </p>
             </div>
           )}
+
+          {/* ── Limite publicado pela PF (comparar / adotar) — só confirmado ── */}
+          {vinculo?.status === 'confirmado' && <LimitePrecisionFarm talhao={talhao} onLimiteAdotado={onLimiteAdotado} />}
 
           {/* ── Publicar ── */}
           {vinculo && (
