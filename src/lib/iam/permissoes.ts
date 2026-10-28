@@ -81,9 +81,10 @@ export const MATRIZ_PADRAO: Record<PapelIam, MapaPermissoes> = {
     const m = conceder(nada(),
       ['cadastro', 'fertilidade', 'zonas', 'altimetria', 'condutividade', 'recomendacoes', 'prescricao', 'compactacao', 'produtividade', 'relatorios', 'arquivos'], VER_EXP);
     conceder(m, ['satelite'], TRABALHAR);
-    // Aba Camadas: vê e baixa o relatório. Sem "criar" (gravar na lista de
-    // Relatórios): o banco não aceita escrita do produtor em inv_relatorios.
-    conceder(m, ['camadas'], VER_EXP);
+    // Aba Camadas: vê, baixa e registra o relatório na lista (v2.216.0). O banco
+    // aceita do produtor só o tipo 'Camadas' em inv_relatorios — ver
+    // docs/produtor-relatorios-camadas.sql e iam/escritaProdutor.ts.
+    conceder(m, ['camadas'], ['visualizar', 'criar', 'exportar']);
     conceder(m, ['compactacao'], ['visualizar', 'criar', 'editar', 'excluir', 'exportar']);
     // Decisão de 14/10/2026: PRESCRIÇÕES ele cria — ver, criar, editar e
     // exportar (SHP/Excel/PDF); excluir fica com o escritório.

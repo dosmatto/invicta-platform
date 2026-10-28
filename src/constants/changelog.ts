@@ -1,5 +1,9 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Produtor registra o relatório de camadas na lista de Relatórios
+  '2.216.0': [
+    'PENDÊNCIA S/N — O PRODUTOR TAMBÉM REGISTRA O RELATÓRIO DE CAMADAS: o PDF gerado por ele na aba Camadas passa a entrar na lista de Relatórios do talhão, como já acontecia com a equipe. Vale só para o "Mapa de camadas" e só nos talhões dele; os outros relatórios continuam sendo da equipe. Na Central de Acessos, a coluna "Criar" da linha Camadas vem ligada para o produtor.',
+  ],
   // [S/N] Prescrição por zonas via exportação de nutrientes
   '2.215.0': [
     'PENDÊNCIA S/N — NOVO MODO DE PRESCRIÇÃO "POR EXPORTAÇÃO (POTENCIAL DA ZONA)": a dose de cada zona de manejo repõe o que a colheita vai levar. Conta: potencial da zona (kg/ha) × coeficiente de exportação da cultura (kg de P ou K por tonelada) → convertido para P₂O₅ (×2,2913) ou K₂O (×1,2046) → dividido pela garantia do formulado. Ex.: 3.500 kg/ha × 4,5 kg P/t = 15,75 kg P = 36,09 kg P₂O₅ → com 05-32-04, 112,8 kg/ha.',

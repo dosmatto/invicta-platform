@@ -84,6 +84,16 @@ t('amostragem (v2.194.0): o produtor grava SÓ a grade composta do talhão dele'
   assert.equal(produtorPodeGravar('inv_grades', 'g2', { talhaoId: 'tA', metodo: 'zonas' }, MEUS), false);
 });
 
+t('relatórios (v2.216.0): o produtor registra SÓ o "Camadas" do talhão dele', () => {
+  assert.equal(colecaoGravavelProdutor('inv_relatorios'), true);
+  assert.equal(talhaoDoRegistro('inv_relatorios', 'r1', { tipo: 'Camadas', talhaoId: 'tA' }), 'tA');
+  assert.equal(produtorPodeGravar('inv_relatorios', 'r1', { tipo: 'Camadas', talhaoId: 'tA' }, MEUS), true);
+  assert.equal(produtorPodeGravar('inv_relatorios', 'r2', { tipo: 'Camadas', talhaoId: 'tX' }, MEUS), false, 'talhão alheio');
+  assert.equal(produtorPodeGravar('inv_relatorios', 'r3', { tipo: 'Fertilidade', talhaoId: 'tA' }, MEUS), false, 'outros tipos são da equipe');
+  assert.equal(produtorPodeGravar('inv_relatorios', 'r4', { tipo: 'Camadas' }, MEUS), false, 'sem talhaoId não passa');
+  assert.equal(produtorPodeGravar('inv_relatorios', 'r5', null, MEUS), false, 'exclusão sem dados não passa no cliente');
+});
+
 t('produtor sem talhão no escopo não grava nada por talhão', () => {
   assert.equal(produtorPodeGravar('inv_compactacao', 'i1', { talhaoId: 'tA' }, new Set()), false);
 });

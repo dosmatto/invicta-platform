@@ -121,13 +121,11 @@ t('composta (14/10/2026): o produtor gera e salva a amostragem composta, mas nã
   assert.ok(!MATRIZ_PADRAO.leitor['composta.criar'], 'leitor só vê');
 });
 
-t('camadas (v2.214.0): equipe vê e grava o relatório; produtor vê e baixa; operador não', () => {
+t('camadas (v2.216.0): equipe e produtor veem, baixam e registram o relatório; operador não', () => {
   assert.ok(MODULOS.some(m => m.id === 'camadas'), 'módulo camadas existe');
-  for (const p of ['owner', 'admin', 'agronomo']) {
+  for (const p of ['owner', 'admin', 'agronomo', 'produtor']) {
     for (const a of ['visualizar', 'criar', 'exportar']) assert.equal(MATRIZ_PADRAO[p][`camadas.${a}`], true, `${p} camadas.${a}`);
   }
-  for (const a of ['visualizar', 'exportar']) assert.equal(MATRIZ_PADRAO.produtor[`camadas.${a}`], true, `produtor camadas.${a}`);
-  assert.ok(!MATRIZ_PADRAO.produtor['camadas.criar'], 'produtor não grava (banco recusa inv_relatorios)');
   assert.ok(!MATRIZ_PADRAO.produtor['camadas.excluir'], 'produtor não exclui');
   for (const r of ['operador', 'prestador', 'custom']) assert.ok(!MATRIZ_PADRAO[r]['camadas.visualizar'], `${r} não vê camadas por padrão`);
   assert.equal(MATRIZ_PADRAO.leitor['camadas.visualizar'], true, 'leitor só vê');

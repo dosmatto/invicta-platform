@@ -9,6 +9,8 @@
 //
 // Regra (decisão de 29/09/2026): o produtor cria, altera e apaga SÓ na
 // compactação e no satélite, e SÓ nos talhões dele. Todo o resto é consulta.
+// Acréscimos depois: prescrições, amostragem composta e (v2.216.0) o relatório
+// "Camadas" — cada um com o ramo próprio em talhaoDoRegistro.
 // Mudou aqui? Mude a função SQL junto (e vice-versa) — npm run teste:escritaprodutor.
 //
 // Lógica pura (sem store/DOM): importável pelos testes via type-stripping.
@@ -19,6 +21,7 @@ export const COLECOES_POR_TALHAO = new Set([
   'inv_composicoes', 'inv_cenas_estado',       // satélite (04/09/2026)
   'inv_prescricoes',                           // prescrições (v2.193.0): o produtor cria as dos talhões dele
   'inv_grades',                                // amostragem (v2.194.0): SÓ grades com metodo 'composta' (ver talhaoDoRegistro)
+  'inv_relatorios',                            // relatórios (v2.216.0): SÓ o tipo 'Camadas' (ver talhaoDoRegistro)
 ]);
 
 /** Coleção dos rasters: o talhão vem do id do mapa. */
@@ -53,6 +56,9 @@ export function talhaoDoRegistro(colecao: string, id: string, dados?: unknown): 
   // Grades: o produtor só grava a amostragem COMPOSTA (Grid e Zona são do
   // escritório). O metodo vem no próprio documento; grade antiga sem metodo é grid.
   if (colecao === 'inv_grades' && (dados as { metodo?: unknown } | null | undefined)?.metodo !== 'composta') return null;
+  // Relatórios: o produtor só registra o "Mapa de camadas" da aba Camadas; os
+  // demais tipos (Fertilidade, Recomendação…) seguem sendo da equipe.
+  if (colecao === 'inv_relatorios' && (dados as { tipo?: unknown } | null | undefined)?.tipo !== 'Camadas') return null;
   return typeof t === 'string' && t ? t : null;
 }
 

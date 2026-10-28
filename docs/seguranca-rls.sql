@@ -651,6 +651,10 @@ as $$
     -- o produtor não transforma uma grade dele em grid nem o contrário).
     when p_colecao = 'inv_grades' and p_dados->>'metodo' = 'composta' then
       nullif(p_dados->>'talhaoId', '')
+    -- Relatórios: só o "Mapa de camadas" (v2.216.0, docs/produtor-relatorios-camadas.sql).
+    -- Mesma regra das duas pontas no UPDATE: não vira Camadas o que não era.
+    when p_colecao = 'inv_relatorios' and p_dados->>'tipo' = 'Camadas' then
+      nullif(p_dados->>'talhaoId', '')
   end
 $$;
 

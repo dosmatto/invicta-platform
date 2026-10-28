@@ -22,7 +22,6 @@ import { salvarRelatorio, TIPO_REL_CAMADAS } from '@/lib/relatoriosArquivo';
 import { limparNomeArquivo } from '@/lib/abrirPdf';
 import { authConfigurado, emailUsuario } from '@/lib/auth';
 import { podeEm } from '@/lib/empresa';
-import { somenteLeitura } from '@/lib/somenteLeitura';
 
 type ModoRelatorio = 'composto' | 'completo';
 type EstadoRelatorio =
@@ -177,9 +176,7 @@ function Camadas({ talhao, safra, origemLiberada }: { talhao: Talhao; safra: str
       // Grava na lista de Relatórios do talhão (só a configuração — o PDF é
       // regerado ao abrir, ver GeradorRelatorios). Falha aqui não desfaz o
       // download: vira aviso.
-      // Papel somente-leitura (produtor): o banco não aceita a gravação em
-      // inv_relatorios, então nem tenta — o PDF baixado é a entrega dele.
-      if ((!authConfigurado || podeEm('camadas', 'criar')) && !somenteLeitura()) {
+      if (!authConfigurado || podeEm('camadas', 'criar')) {
         try {
           await salvarRelatorio({
             talhaoId: talhao.id, safra, tipo: TIPO_REL_CAMADAS, titulo: 'Mapa de camadas',
