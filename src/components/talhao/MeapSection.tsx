@@ -37,7 +37,7 @@ import booleanIntersects from '@turf/boolean-intersects';
 import { colorirGrid, colorirGridComLegenda, colorirGridPorQuantis } from '@/lib/raster';
 import { rampaVisualStops } from '@/lib/legendas';
 import { classeZona, classeReconhecida, corZonaPorPosicao, ORDEM_CLASSES } from '@/lib/zonas';
-import { rotuloZona } from '@/lib/meap/rotuloZona';
+import { featuresParaMapa } from '@/lib/meap/zonasParaMapa';
 import { simboloElemento } from '@/lib/lab';
 import type { AmbienteProdutivo, Homogeneidade, MetricasZonaMeap } from '@/lib/meap/tipos';
 import { Layers, AlertTriangle, Wand2, Loader2, X, Check, ChevronUp, ChevronDown, Save, Star, Trash2, BarChart3, Sparkles, Combine, CheckSquare, Square, Pencil, Undo2, Redo2, FlaskConical, Spline } from 'lucide-react';
@@ -79,29 +79,6 @@ function rotulosPotencial(nn: number): string[] {
 function parseImportadas(zonasGeojson?: string): GeoJSON.FeatureCollection | null {
   if (!zonasGeojson) return null;
   try { const fc = JSON.parse(zonasGeojson) as GeoJSON.FeatureCollection; return fc.features?.length ? fc : null; } catch { return null; }
-}
-
-function featuresParaMapa(fc: GeoJSON.FeatureCollection): GeoJSON.FeatureCollection {
-  const feats = fc.features.filter(f => f.geometry && (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon'));
-  // nº de zonas oficiais distintas (p/ a rampa de cor por posição quando há >5 classes)
-  const total = new Set(feats.map(f => String((f.properties as { zona?: string | number; classe?: string })?.zona ?? (f.properties as { classe?: string })?.classe ?? ''))).size;
-  return {
-    type: 'FeatureCollection',
-    features: feats.map(f => {
-      const p = (f.properties ?? {}) as { id?: string; zona?: string | number; classe?: string; cor?: string };
-      const cz = classeZona(p.classe ?? '');
-      // 1) cor salva na feature; 2) rampa por nº da zona quando a classe não é
-      // reconhecida (Nível N); 3) cor do semáforo pela classe.
-      let cor = p.cor;
-      if (!cor) cor = (p.zona != null && !classeReconhecida(p.classe ?? '')) ? corZonaPorPosicao(Number(p.zona) - 1, total) : cz.cor;
-      // Rótulo: regra única em lib/meap/rotuloZona — id numérico puro É o
-      // número da zona (é o que a renumeração manual escreve); id sufixado
-      // ("01_2") é identidade interna e quem rotula é o `zona`. Antes daqui o
-      // mapa lia só `zona` e desfazia a renumeração feita no editor.
-      const rotulo = rotuloZona(p);
-      return { type: 'Feature' as const, properties: { cor, rotulo, classeLabel: cz.label, selecionada: false }, geometry: f.geometry! };
-    }),
-  };
 }
 
 // Gráfico FPI/NCE: dois índices por nº de potenciais (mínimo = nº ótimo).

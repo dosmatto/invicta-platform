@@ -49,9 +49,10 @@ import { APP_VERSION } from '@/constants/version';
 import IntegracaoPrecisionFarm from '@/components/talhao/IntegracaoPrecisionFarm';
 import {
   ChevronLeft, ChevronsLeft, ChevronsRight, X, Home, Leaf, Grid3x3, Layers, BarChart3, FileSpreadsheet,
-  Activity, Satellite, FolderOpen, FileText, Clock, Zap, Mountain, SlidersHorizontal, Lock, Salad, Waypoints,
+  Activity, Satellite, FolderOpen, FileText, Clock, Zap, Mountain, SlidersHorizontal, Lock, Salad, Waypoints, SquareStack,
 } from 'lucide-react';
 import { LinhasSection } from '@/components/talhao/LinhasSection';
+import { CamadasSection } from '@/components/talhao/CamadasSection';
 import { camadasVisiveisPF, estadoLinhasPF } from '@/lib/precisionfarm/cliente';
 
 const MapView = dynamic(
@@ -61,7 +62,8 @@ const MapView = dynamic(
 
 type TabId =
   | 'resumo' | 'altimetria' | 'fertilidade' | 'foliar' | 'amostragem' | 'zonas' | 'produtividade'
-  | 'recomendacoes' | 'prescricoes' | 'linhas' | 'compactacao' | 'condutividade' | 'ndvi' | 'arquivos' | 'relatorios';
+  | 'recomendacoes' | 'prescricoes' | 'linhas' | 'compactacao' | 'condutividade' | 'ndvi' | 'arquivos' | 'relatorios'
+  | 'camadas';
 
 // Ordem de TRABALHO do talhão (não-`pronto` = "em breve", cai no placeholder EmBreve).
 // `curto` é o rótulo do TRILHO (64px de largura): nome inteiro só no cabeçalho
@@ -69,6 +71,10 @@ type TabId =
 // trilho fica mais alto que a tela de 768px.
 const TABS: Array<{ id: TabId; label: string; curto: string; icon: React.ElementType; pronto: boolean }> = [
   { id: 'resumo',        label: 'Resumo',           curto: 'Resumo',      icon: Home,            pronto: true },
+  // Só visualização: empilha no mapa o que as outras abas já geraram, com
+  // ordem e transparência. Sem existência própria em `abasComDados`, então o
+  // trilho do produtor não a mostra (ainda não filtra por plano/permissão).
+  { id: 'camadas',       label: 'Camadas',          curto: 'Camadas',     icon: SquareStack,     pronto: true },
   { id: 'altimetria',    label: 'Altimetria (MDE)', curto: 'Altimetria',  icon: Mountain,        pronto: true },
   { id: 'condutividade', label: 'Condutividade',    curto: 'Condut.',     icon: Zap,             pronto: true },
   { id: 'zonas',         label: 'Zonas de Manejo',  curto: 'Zonas',       icon: Layers,          pronto: true },
@@ -507,9 +513,10 @@ export function TalhaoPage({ id }: { id: string }) {
             {tabAtivo === 'recomendacoes' && <RecomendacaoSection safraNome={safraSel} />}
             {tabAtivo === 'prescricoes' && <PrescricoesSection safraNome={safraSel} />}
             {tabAtivo === 'linhas' && talhao && <LinhasSection talhao={talhao} />}
+            {tabAtivo === 'camadas' && talhao && <CamadasSection talhao={talhao} safra={safraSel} />}
             {tabAtivo === 'arquivos' && <ArquivosSection safraNome={safraSel} />}
             {tabAtivo === 'relatorios' && <GeradorRelatorios safraNome={safraSel} />}
-            {!['resumo', 'fertilidade', 'foliar', 'amostragem', 'zonas', 'compactacao', 'condutividade', 'altimetria', 'produtividade', 'ndvi', 'recomendacoes', 'prescricoes', 'linhas', 'arquivos', 'relatorios'].includes(tabAtivo) && (
+            {!['resumo', 'fertilidade', 'foliar', 'amostragem', 'zonas', 'compactacao', 'condutividade', 'altimetria', 'produtividade', 'ndvi', 'recomendacoes', 'prescricoes', 'linhas', 'camadas', 'arquivos', 'relatorios'].includes(tabAtivo) && (
               <EmBreve label={TABS.find(t => t.id === tabAtivo)?.label ?? ''} />
             )}
           </div>

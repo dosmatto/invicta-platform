@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import maplibregl from 'maplibre-gl';
-import { useApp } from '@/context/AppContext';
+import { useApp, type CamadaMapa } from '@/context/AppContext';
 import { TALHAO_KML_URLS } from '@/constants/mocks';
 import { parseKML } from '@/lib/geo';
 import { ESCRITORIO_INVICTA } from '@/lib/seed';
@@ -68,7 +68,7 @@ export function MapView({ mostrarVisaoGeral = false }: { mostrarVisaoGeral?: boo
           uploadedGeo, setUploadedGeo,
           uploadedBbox, setUploadedBbox,
           pontosSimulados, talhoesFazenda, zonasManejo, zonasFundo, zonasOpacidade,
-          fertilidadeOverlay, fertilidadeLabels, linhasPF,
+          fertilidadeOverlay, fertilidadeLabels, linhasPF, camadasPilha,
           edicaoAtiva, edicaoModo, setPontoEvent, setZonaEvent,
           corteAtivo, corteLinha, setCorteLinha, setBoundsTela } = useApp();
 
@@ -691,6 +691,108 @@ export function MapView({ mostrarVisaoGeral = false }: { mostrarVisaoGeral?: boo
     if (!map || !mapReady) return;
     try { if (map.getLayer('zona-fill')) map.setPaintProperty('zona-fill', 'fill-opacity', zonasOpacidade); } catch {}
   }, [zonasOpacidade, zonasManejo, mapReady]);
+
+  // ── 6e. Pilha da aba CAMADAS ───────────────────────────────────────────────
+  // Cada camada vira uma fonte `camada-<id>` + as próprias camadas de desenho,
+  // todas inseridas logo abaixo do traço de corte (topo do mapa), da última da
+  // lista para a primeira — assim o índice 0 fica por cima. Só a transparência
+  // mudou? `setPaintProperty` e pronto: recriar a fonte de imagem a cada passo
+  // do slider piscava o raster.
+  const pilhaAnteriorRef = useRef<CamadaMapa[]>([]);
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    const pilha = camadasPilha ?? [];
+    const antes = pilhaAnteriorRef.current;
+    pilhaAnteriorRef.current = pilha;
+    const mesmaEstrutura = pilha.length === antes.length && pilha.every((c, i) => {
+      const a = antes[i];
+      if (a.id !== c.id || a.tipo !== c.tipo) return false;
+      return c.tipo === 'raster' ? (a as typeof c).url === c.url : (a as typeof c).geojson === c.geojson;
+    });
+
+    const camadasDe = (id: string) =>
+      (map.getStyle()?.layers ?? []).filter(l => l.id.startsWith(`camada-${id}::`));
+
+    if (mesmaEstrutura && pilha.length) {
+      for (const c of pilha) {
+        for (const l of camadasDe(c.id)) {
+          const meta = l.metadata as { prop: string; base: number } | undefined;
+          if (!meta) continue;
+          try { map.setPaintProperty(l.id, meta.prop, meta.base * c.opacidade); } catch {}
+        }
+      }
+      return;
+    }
+
+    // Recria tudo: remove as camadas e fontes da pilha anterior.
+    for (const l of map.getStyle()?.layers ?? []) {
+      if (l.id.startsWith('camada-')) { try { map.removeLayer(l.id); } catch {} }
+    }
+    for (const s of Object.keys(map.getStyle()?.sources ?? {})) {
+      if (s.startsWith('camada-')) { try { map.removeSource(s); } catch {} }
+    }
+
+    const topo = map.getLayer('corte-line') ? 'corte-line' : undefined;
+    // `spec` solto de propósito: a união LayerSpecification não aceita `filter`
+    // num Omit genérico; o tipo final é conferido no cast do addLayer.
+    const add = (c: CamadaMapa, sufixo: string, spec: { type: string; filter?: unknown; layout?: Record<string, unknown>; paint?: Record<string, unknown> }, prop: string, base: number) => {
+      const paint = { ...spec.paint, [prop]: base * c.opacidade };
+      map.addLayer({ ...spec, id: `camada-${c.id}::${sufixo}`, source: `camada-${c.id}`, paint, metadata: { prop, base } } as maplibregl.LayerSpecification, topo);
+    };
+    for (const c of [...pilha].reverse()) {
+      try {
+        if (c.tipo === 'raster') {
+          map.addSource(`camada-${c.id}`, { type: 'image', url: c.url, coordinates: c.coordinates });
+          // Sem 'nearest' — ver o comentário do efeito 6c (renderiza preto no Chrome 152).
+          add(c, 'raster', { type: 'raster', paint: { 'raster-fade-duration': 0 } }, 'raster-opacity', 1);
+          continue;
+        }
+        map.addSource(`camada-${c.id}`, { type: 'geojson', data: c.geojson });
+        if (c.estilo === 'linhas-pf') {
+          add(c, 'bordadura', { type: 'line', filter: ['==', ['get', 'kind'], 'headland'],
+            layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#fb923c', 'line-width': 2.6 } }, 'line-opacity', 1);
+          add(c, 'guia', { type: 'line', filter: ['!=', ['get', 'kind'], 'headland'],
+            paint: { 'line-color': '#22d3ee', 'line-width': 1.4 } }, 'line-opacity', 1);
+        } else if (c.estilo === 'zonas') {
+          add(c, 'fill', { type: 'fill', filter: ['in', ['geometry-type'], ['literal', ['Polygon', 'MultiPolygon']]],
+            paint: { 'fill-color': ['coalesce', ['get', 'cor'], '#64748b'] } }, 'fill-opacity', 1);
+          add(c, 'line', { type: 'line', paint: { 'line-color': '#ffffff', 'line-width': 1.5 } }, 'line-opacity', 1);
+          add(c, 'rotulo', { type: 'symbol',
+            layout: { 'text-field': ['coalesce', ['get', 'rotulo'], ''], 'text-size': 11, 'text-font': ['Open Sans Regular'] },
+            paint: { 'text-color': '#fff', 'text-halo-color': '#000', 'text-halo-width': 1.4 } }, 'text-opacity', 1);
+        } else if (c.estilo === 'pontos') {
+          add(c, 'circle', { type: 'circle', paint: {
+            'circle-radius': 5, 'circle-color': ['coalesce', ['get', 'cor'], '#facc15'] } }, 'circle-opacity', 1);
+          // A borda é uma camada à parte porque cada camada só regula UMA propriedade de opacidade.
+          add(c, 'borda', { type: 'circle', paint: {
+            'circle-radius': 5, 'circle-color': 'rgba(0,0,0,0)', 'circle-stroke-color': '#0f172a', 'circle-stroke-width': 1.5 } }, 'circle-stroke-opacity', 1);
+        } else {
+          add(c, 'line', { type: 'line', paint: { 'line-color': '#fde68a', 'line-width': 2.5 } }, 'line-opacity', 1);
+        }
+      } catch (e) { console.warn('[camadas] falha ao desenhar', c.id, e); }
+    }
+  }, [camadasPilha, mapReady]);
+
+  // Com a aba Camadas aberta, o contorno fixo, as zonas e as linhas publicadas
+  // pelas outras abas saem de cena: a pilha traz as próprias versões delas, com
+  // ordem e transparência. Ao fechar, o contorno volta pela regra das zonas (6b).
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    const ativa = camadasPilha !== null;
+    const temZonas = !!(zonasManejo && zonasManejo.features.length);
+    const fixas: [string, boolean][] = [
+      ['upload-fill', !temZonas], ['upload-line', !temZonas], ['upload-points', true],
+      ['zona-fill', true], ['zona-outline', true], ['zona-label', true],
+      ['pf-linhas-comparacao', true], ['pf-linhas-bordadura', true], ['pf-linhas-guia', true],
+      // Pontos que Amostragem/Importar grade deixaram publicados (não limpam ao sair).
+      ['pontos-circle', true], ['pontos-label', true],
+    ];
+    for (const [id, visivelFora] of fixas) {
+      try { if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', !ativa && visivelFora ? 'visible' : 'none'); } catch {}
+    }
+  }, [camadasPilha, zonasManejo, mapReady]);
 
   // ── 6d. Rótulos de valor da fertilidade (setData) ─────────────────────────
   useEffect(() => {

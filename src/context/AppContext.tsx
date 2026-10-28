@@ -36,6 +36,14 @@ export interface FertilidadeOverlay {
   opacity: number;
 }
 
+// Aba CAMADAS do talhão: pilha de camadas JÁ SALVAS desenhadas juntas, cada uma
+// com a própria transparência. A ordem do array é a da tela: índice 0 = topo.
+// Vetores usam um `estilo` fixo do MapView (as mesmas cores das abas de origem).
+export type EstiloCamadaVetor = 'linhas-pf' | 'zonas' | 'pontos' | 'contorno';
+export type CamadaMapa =
+  | { id: string; tipo: 'raster'; url: string; coordinates: FertilidadeOverlay['coordinates']; opacidade: number }
+  | { id: string; tipo: 'vetor'; estilo: EstiloCamadaVetor; geojson: GeoJSON.FeatureCollection; opacidade: number };
+
 interface NavContext {
   produtorId: string | null;
   produtor: string;
@@ -103,6 +111,9 @@ interface AppContextType {
   // revisão antiga exibida para comparar com a vigente). Só leitura.
   linhasPF: GeoJSON.FeatureCollection | null;
   setLinhasPF: (fc: GeoJSON.FeatureCollection | null) => void;
+  // Pilha da aba Camadas. `null` = aba fechada: o mapa segue as outras abas.
+  camadasPilha: CamadaMapa[] | null;
+  setCamadasPilha: (c: CamadaMapa[] | null) => void;
   // Limites [oeste, sul, leste, norte] do que está VISÍVEL no mapa agora.
   // Publicado pelo MapView a cada movimento. Quem usa: o download em GeoTIFF da
   // aba NDVI, para baixar exatamente a janela que o usuário está vendo (e não só
@@ -152,6 +163,8 @@ const AppContext = createContext<AppContextType>({
   setFertilidadeLabels: () => {},
   linhasPF: null,
   setLinhasPF: () => {},
+  camadasPilha: null,
+  setCamadasPilha: () => {},
   boundsTela: null,
   setBoundsTela: () => {},
 });
@@ -390,6 +403,7 @@ export function AppProvider({ children, redirectProdutorParaPortal, modoCampo }:
   const [boundsTela, setBoundsTela] = useState<[number, number, number, number] | null>(null);
   const [fertilidadeLabels, setFertilidadeLabels] = useState<GeoJSON.FeatureCollection | null>(null);
   const [linhasPF, setLinhasPF] = useState<GeoJSON.FeatureCollection | null>(null);
+  const [camadasPilha, setCamadasPilha] = useState<CamadaMapa[] | null>(null);
   const [nav, setNavState] = useState<NavContext>({
     produtorId: null, produtor: '',
     fazendaId: null, fazenda: '',
@@ -445,6 +459,7 @@ export function AppProvider({ children, redirectProdutorParaPortal, modoCampo }:
       fertilidadeOverlay, setFertilidadeOverlay,
       fertilidadeLabels, setFertilidadeLabels,
       linhasPF, setLinhasPF,
+      camadasPilha, setCamadasPilha,
       boundsTela, setBoundsTela,
     }}>
       {authConfigurado && usuario === undefined ? (

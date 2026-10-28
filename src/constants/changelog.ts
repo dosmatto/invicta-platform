@@ -1,5 +1,11 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Aba Camadas: empilhar mapas salvos com ordem e transparência
+  '2.212.0': [
+    'PENDÊNCIA S/N — NOVA ABA "CAMADAS" NO TALHÃO (SÓ VISUALIZAÇÃO): junta no mesmo mapa o que as outras abas já geraram, em grupos expansíveis: Fertilidade (por nutriente e profundidade), NDVI e índices (por cena), Produtividade (mapas de colheita), Linhas da PrecisionFarm, Zonas de manejo, Contorno e pontos de amostragem. Nada é reprocessado: o que ainda não foi gerado na aba de origem não aparece.',
+    'ORDEM E TRANSPARÊNCIA: cada camada ligada entra no topo da lista "No mapa", com setas para subir e descer (a de cima fica por cima no mapa) e uma régua de opacidade de 0 a 100%. A escolha fica guardada por talhão neste aparelho; na primeira vez, só o contorno vem ligado.',
+    'Vale só com a aba aberta: ao trocar de aba, o mapa volta a mostrar o que cada aba publica, como antes. Cores: NDVI e produtividade seguem a legenda escolhida em cada aba; fertilidade usa a legenda padrão de cada nutriente. No portal do produtor a aba ainda não aparece.',
+  ],
   // [S/N] PrecisionFarm — formato de not_implemented no /capabilities
   '2.211.1': [
     'Para a PrecisionFarm: o /capabilities lista as funções ainda indisponíveis pelo nome, sem barra ("changes", "receipts"), no formato que o painel deles lê. Nada muda nas telas.',
