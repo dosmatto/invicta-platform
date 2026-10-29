@@ -1,5 +1,11 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Trava de UTM no import de arquivos geográficos
+  '2.217.3': [
+    'CORRIGIDO: LIMITE EM UTM ERA GRAVADO COMO SE FOSSE GRAU. Um GeoJSON exportado em UTM (ou um shapefile sem o .prj) entrava com as coordenadas em metros tratadas como latitude/longitude — o talhão ia parar fora do mapa, com área de bilhões de hectares, e a fazenda inteira deixava de abrir. Aconteceu com o talhão 115 da NHAZINHA (FABIO FARAGO), já corrigido no banco.',
+    'AGORA TODO IMPORT DE ARQUIVO (limite do talhão, talhões em massa, zoneamento, grade, compactação, produtividade) confere as coordenadas: em graus, passa intacto; em UTM, é reprojetado para graus pelo fuso declarado no arquivo (EPSG SIRGAS 2000 ou WGS84). No limite do talhão e nos talhões em massa, se o arquivo não declara o fuso, vale o do próprio talhão/fazenda — e o resultado tem de cair perto dele; nos demais imports, UTM sem fuso declarado é recusado. O aviso "Arquivo estava em UTM 22S — reprojetado" aparece junto dos demais.',
+    'RECUSADO COM O MOTIVO, sem gravar nada: UTM sem fuso e sem talhão/fazenda de referência, SAD69 (datum antigo, desloca uns 60 m), arquivo que reprojetado cai longe da fazenda, e coordenadas que não são nem graus nem UTM.',
+  ],
   // [S/N] Aba Camadas mostra todas as cenas de NDVI salvas
   '2.217.2': [
     'PENDÊNCIA S/N — CAMADAS: O GRUPO "NDVI E ÍNDICES" DIZIA "NENHUMA CENA SALVA" EM TALHÃO COM CENAS: a aba Camadas aplicava o filtro de "fontes de análise" das Zonas e, em alguns talhões, ele descartava todas as cenas. Agora a lista é a mesma da aba NDVI — todas as cenas salvas (Sentinel-2 e CBERS, todos os índices).',

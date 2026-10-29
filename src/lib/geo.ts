@@ -3,6 +3,7 @@ import turfArea from '@turf/area';
 import { areaM2Geo } from './areaGeo';
 import { classeZona } from './zonas';
 import { candidatosClasse, mapearValoresParaClasses, type CandidatoClasse } from './zonasImport';
+import { garantirGraus } from './coordenadasProjetadas';
 
 export interface GeoUploadResult {
   geojson: GeoJSON.FeatureCollection;
@@ -12,6 +13,19 @@ export interface GeoUploadResult {
   areaHa: number;         // área total com holes descontados
   areaHaBruta: number;    // área somente dos outer rings (sem descontar holes)
   temHoles: boolean;
+  /** Preenchido quando o arquivo veio em UTM e foi reprojetado para graus. */
+  avisoCoordenadas?: string | null;
+}
+
+/** `referencia` = [lon, lat] de onde o arquivo deveria cair (talhão/fazenda
+ *  que recebe o import): escolhe o fuso de um arquivo em UTM que não declara
+ *  o seu, e confere que o resultado cai ali (coordenadasProjetadas.ts). */
+export interface OpcoesLeituraGeo { referencia?: [number, number] | null }
+
+// Todo arquivo lido passa pela trava de UTM antes de qualquer conta.
+function resultadoEmGraus(geojson: GeoJSON.FeatureCollection, opts?: OpcoesLeituraGeo): GeoUploadResult {
+  const { fc, aviso } = garantirGraus(geojson, opts?.referencia);
+  return { ...computeResult(fc), avisoCoordenadas: aviso };
 }
 
 // ── Leitura de arquivo ────────────────────────────────────────────────────
@@ -36,27 +50,29 @@ async function readAsArrayBuffer(file: File): Promise<ArrayBuffer> {
 
 // ── KML ───────────────────────────────────────────────────────────────────
 
-export async function parseKML(file: File): Promise<GeoUploadResult> {
+export async function parseKML(file: File, opts?: OpcoesLeituraGeo): Promise<GeoUploadResult> {
   let text = await readAsText(file, 'UTF-8');
   if (!text.trim().startsWith('<')) {
     text = await readAsText(file, 'UTF-16LE');
   }
   const doc = new DOMParser().parseFromString(text, 'text/xml');
   const geojson = kml(doc) as GeoJSON.FeatureCollection;
-  return computeResult(geojson);
+  return resultadoEmGraus(geojson, opts);
 }
 
 // ── GeoJSON ───────────────────────────────────────────────────────────────
 
-export async function parseGeoJSON(file: File): Promise<GeoUploadResult> {
+export async function parseGeoJSON(file: File, opts?: OpcoesLeituraGeo): Promise<GeoUploadResult> {
   const text = await readAsText(file);
   const geojson = JSON.parse(text) as GeoJSON.FeatureCollection;
-  return computeResult(geojson);
+  return resultadoEmGraus(geojson, opts);
 }
 
 // ── Shapefile (.zip) ──────────────────────────────────────────────────────
+// Com o .prj no zip o shpjs já devolve em graus; sem ele, vem cru (UTM) e a
+// trava de resultadoEmGraus decide.
 
-export async function parseShapefile(file: File): Promise<GeoUploadResult> {
+export async function parseShapefile(file: File, opts?: OpcoesLeituraGeo): Promise<GeoUploadResult> {
   // shpjs é carregado dinamicamente para não quebrar SSR
   const shpjs = await import('shpjs');
   const buffer = await readAsArrayBuffer(file);
@@ -72,16 +88,16 @@ export async function parseShapefile(file: File): Promise<GeoUploadResult> {
   } else {
     geojson = result as GeoJSON.FeatureCollection;
   }
-  return computeResult(geojson);
+  return resultadoEmGraus(geojson, opts);
 }
 
 // ── Dispatcher ───────────────────────────────────────────────────────────
 
-export async function parseGeoFile(file: File): Promise<GeoUploadResult> {
+export async function parseGeoFile(file: File, opts?: OpcoesLeituraGeo): Promise<GeoUploadResult> {
   const ext = file.name.split('.').pop()?.toLowerCase();
-  if (ext === 'kml')                    return parseKML(file);
-  if (ext === 'geojson' || ext === 'json') return parseGeoJSON(file);
-  if (ext === 'zip')                    return parseShapefile(file);
+  if (ext === 'kml')                    return parseKML(file, opts);
+  if (ext === 'geojson' || ext === 'json') return parseGeoJSON(file, opts);
+  if (ext === 'zip')                    return parseShapefile(file, opts);
   throw new Error(`Formato não suportado: .${ext}. Use KML, GeoJSON ou Shapefile (.zip).`);
 }
 
@@ -274,13 +290,14 @@ export function sanearLimites(entrada: GeoJSON.FeatureCollection): { fc: GeoJSON
 }
 
 // Import do LIMITE de um talhão (individual): parse + saneamento + medidas.
-export async function parseLimiteTalhao(file: File): Promise<GeoUploadResult & { avisos: string[] }> {
-  const bruto = await parseGeoFile(file);
+export async function parseLimiteTalhao(file: File, opts?: OpcoesLeituraGeo): Promise<GeoUploadResult & { avisos: string[] }> {
+  const bruto = await parseGeoFile(file, opts);
   const { fc, avisos } = sanearLimites(bruto.geojson);
   if (fc.features.length === 0) {
     throw new Error('Nenhum polígono aproveitável no arquivo — as feições não fecham um limite.');
   }
-  return { ...computeResult(fc), avisos };
+  if (bruto.avisoCoordenadas) avisos.unshift(bruto.avisoCoordenadas);
+  return { ...computeResult(fc), avisos, avisoCoordenadas: bruto.avisoCoordenadas };
 }
 
 // ── Cadastro de talhões em massa ────────────────────────────────────────────
@@ -309,13 +326,14 @@ function campoNomeTalhao(feats: GeoJSON.Feature[]): string | null {
   return null;
 }
 
-export async function prepararTalhoesEmMassa(files: File[]): Promise<{ candidatos: CandidatoTalhao[]; erros: string[] }> {
+export async function prepararTalhoesEmMassa(files: File[], opts?: OpcoesLeituraGeo): Promise<{ candidatos: CandidatoTalhao[]; erros: string[] }> {
   const candidatos: CandidatoTalhao[] = [];
   const erros: string[] = [];
 
   for (const file of files) {
     try {
-      const r = await parseGeoFile(file);
+      const r = await parseGeoFile(file, opts);
+      if (r.avisoCoordenadas) erros.push(`${file.name}: ${r.avisoCoordenadas}`);
       // saneia limites defeituosos (linha aberta → polígono, espículas, auto-interseção)
       const saneado = sanearLimites(r.geojson);
       saneado.avisos.forEach(a => erros.push(`${file.name}: ${a}`));

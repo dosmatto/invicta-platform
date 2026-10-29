@@ -11,6 +11,7 @@ import { somenteLeitura } from '@/lib/somenteLeitura';
 import { getUsuarios, statusDe, categoriaDe } from '@/lib/iam/usuarios';
 import { detectarMunicipiosFazenda } from '@/lib/geocode';
 import { prepararTalhoesEmMassa, CandidatoTalhao } from '@/lib/geo';
+import { referenciaDeBboxes } from '@/lib/coordenadasProjetadas';
 import { conflitosDe, talhaoParaAlvo, areaHaFC, bboxDeFeatures, type AlvoOverlap, type Conflito } from '@/lib/overlap';
 import { verificarTrocaPoligono } from '@/lib/trocaPoligono';
 import { baixarKMLTalhao, baixarSHPTalhao, poligonoDoTalhao } from '@/lib/exportTalhao';
@@ -767,7 +768,7 @@ function ImportadorTalhoes({ fazendaId, existentes, onFechar, onImportado }: {
   async function processar(files: File[]) {
     if (!files.length) return;
     setLendo(true); setResumo('');
-    const r = await prepararTalhoesEmMassa(files);
+    const r = await prepararTalhoesEmMassa(files, { referencia: referenciaDeBboxes(existentes.map(t => t.bbox)) });
     const novas = r.candidatos.map(c => ({ ...c, incluir: true, existenteId: casarExistente(c.nome) }));
     setLinhas(prev => [...prev, ...novas]);
     setErros(prev => [...prev, ...r.erros]);

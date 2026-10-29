@@ -21,6 +21,7 @@ import { somenteLeitura } from '@/lib/somenteLeitura';
 import { ordenarLegendasDoAtributo } from '@/lib/legendas';
 import type { Legenda } from '@/lib/legendas';
 import { parseLimiteTalhao } from '@/lib/geo';
+import { referenciaDeBboxes } from '@/lib/coordenadasProjetadas';
 import { paraFC, compartilharLinkCampo } from '@/lib/campoLink';
 import { extrairEditavel, paraFeature, areaHaDe, areaHaSemFuros } from '@/lib/geoEditor';
 import { conflitosDe, talhaoParaAlvo, bboxDeFeatures, type AlvoOverlap, type Conflito } from '@/lib/overlap';
@@ -137,7 +138,11 @@ function GeoSection({ talhao, onUploaded }: { talhao: Talhao | null; onUploaded:
         if (!verif.permitido) { setEstado('erro'); setErroMsg(mensagemBloqueioTroca(verif)); return; }
       }
       // saneia defeitos comuns (linha aberta → polígono, espículas, auto-interseção)
-      const result = await parseLimiteTalhao(file);
+      // referência p/ arquivo em UTM sem fuso declarado: o próprio talhão, senão a fazenda
+      const referencia = talhao
+        ? referenciaDeBboxes([talhao.bbox, ...getTalhoes(talhao.fazendaId).map(t => t.bbox)])
+        : null;
+      const result = await parseLimiteTalhao(file, { referencia });
       setUploadedGeo(result.geojson); setUploadedBbox(result.bbox);
       const cs = checarConflitos(result.geojson, result.bbox);
       if (cs.length) {

@@ -109,6 +109,7 @@
     "teste:relatoriocompactacao": "node scripts/teste-relatoriocompactacao.mjs",
     "teste:limpezazonas": "node scripts/teste-limpezazonas.mjs",
     "teste:ajustar-limite": "node scripts/teste-ajustar-limite.mjs",
+    "teste:utm": "node scripts/teste-coordenadas-utm.mjs",
     "teste:msr-regras": "PY=\"$HOME/.invicta-fert-backend/venv/bin/python\"; [ -x \"$PY\" ] || PY=python3; \"$PY\" scripts/teste-msr-regras.py"
   },
   "dependencies": {
