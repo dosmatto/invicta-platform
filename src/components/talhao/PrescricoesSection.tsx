@@ -39,6 +39,7 @@ import {
 import { dosesPorEquacao, variaveisDaEquacao } from '@/lib/prescricao/equacao';
 import {
   prescreverPorExportacao, coefElementoDoCadastro, potencialDasZonas, entregaDoFormulado, ROTULO_GUIA, lerNumeroBR, zoneamentoNoSemaforo,
+  classePotencialDe, classeDeEscalaFina,
   type NutrienteGuia,
 } from '@/lib/prescricao/porExportacao';
 import { coeficientesDaCultura } from '@/lib/exportacaoBib';
@@ -156,6 +157,12 @@ const RASCUNHO_VAZIO: Rascunho = {
 // mais comum). São só o VALOR INICIAL do campo — o agrônomo troca quando o lote
 // pede. Antes o padrão era 90% e o saco vinha vazio.
 const SEMENTE_PADRAO: ParamsSementes = { germinacaoPct: 98, sementesPorSaco: 60000 };
+
+// Rótulo da classe no chip do potencial: "Muito alto → Alta" quando a zona
+// puxa o potencial de outra classe (escala de 6–12), senão só a classe padrão.
+function rotuloClasse(original: string, padrao: string): string {
+  return classeDeEscalaFina(original) ? `${original} → ${padrao}` : padrao;
+}
 
 // Zonas a partir de um zoneamento salvo (1 feature = 1 zona no MEAP).
 //
@@ -1945,12 +1952,15 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
                         <p className="text-[9px] mb-1" style={{ color: '#64748b' }}>
                           Potencial produtivo por zona (kg/ha) — em branco usa o do cadastro da classe; digitar vale só nesta prescrição.
                         </p>
-                        {/* Só o semáforo de 5 classes puxa do cadastro: em 6–12
-                            classes "Alto" não é a classe de maior potencial. */}
+                        {/* Puxa do cadastro quando todo rótulo é reconhecido: as 5
+                            classes ou a escala de 6–12 ("Muito alto" → Alta,
+                            "Muito baixo" → Baixa). Um rótulo livre basta para pedir tudo. */}
                         {!zoneamentoNoSemaforo(r.zonas.map(z => z.classe)) && (
                           <p className="text-[9px] mb-1 leading-relaxed" style={{ color: '#fbbf24' }}>
                             <AlertTriangle size={10} className="inline mr-1" />
-                            Este zoneamento não está nas 5 classes padrão (Alta, Média-alta, Média, Média-baixa, Baixa) — informe o potencial de cada zona.
+                            Este zoneamento tem classe fora da escala de potencial (Muito alto, Alta, Média-alta, Média, Média-baixa, Baixa, Muito baixo
+                            {(() => { const livres = [...new Set(r.zonas.map(z => z.classe).filter(c => !classePotencialDe(c)))]; return livres.length ? ` — aqui: ${livres.slice(0, 4).join(', ')}${livres.length > 4 ? '…' : ''}` : ''; })()}
+                            ) — informe o potencial de cada zona.
                           </p>
                         )}
                         <div className="flex flex-wrap gap-1.5">
@@ -1968,7 +1978,9 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
                                     placeholder={cad != null ? String(cad) : 'informe'} />
                                 </div>
                                 <span className="text-[8px]" style={{ color: falta ? '#fbbf24' : pz?.origem === 'override' ? '#c4b5fd' : '#64748b' }}>
-                                  {falta ? (pz?.classe ? `${pz.classe} sem cadastro` : 'classe livre') : pz?.origem === 'override' ? 'só aqui' : pz?.classe}
+                                  {falta
+                                    ? (pz?.classe ? `${rotuloClasse(z.classe, pz.classe)} sem cadastro` : (z.classe && z.classe !== '—' ? z.classe : 'sem classe'))
+                                    : pz?.origem === 'override' ? 'só aqui' : pz?.classe ? rotuloClasse(z.classe, pz.classe) : ''}
                                 </span>
                               </div>
                             );

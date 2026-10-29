@@ -1,5 +1,11 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Prescrição por exportação reconhece a escala de 6–12 classes
+  '2.217.4': [
+    'CORRIGIDO: PRESCRIÇÃO POR EXPORTAÇÃO NÃO RECONHECIA AS CLASSES DO ZONEAMENTO. Zoneamento gerado com mais de 5 classes (ou ajustado à mão a partir dele) usa a escala "Muito alto, Alto, Médio-alto, Médio, Médio-baixo, Baixo, Muito baixo"; a prescrição só aceitava os 5 nomes padrão, chamava as zonas de "classe livre" e pedia o potencial de cada uma.',
+    'AGORA ESSA ESCALA PUXA O POTENCIAL DO CADASTRO DA CULTURA: Muito alto e Alto → Alta, Médio-alto → Média-alta, Médio → Média, Médio-baixo → Média-baixa, Baixo e Muito baixo → Baixa. Nos extremos o chip mostra o de→para ("Muito alto → Alta"), porque essas zonas recebem o mesmo potencial da classe vizinha. Qualquer zona continua podendo ter o potencial trocado só naquela prescrição.',
+    'Zoneamento com rótulo fora da escala (nomes livres, "Zona 1"…"Zona 9" de importação) continua pedindo o potencial de cada zona; o aviso agora diz quais rótulos não foram reconhecidos, e o chip mostra o nome da classe em vez de "classe livre".',
+  ],
   // [S/N] Trava de UTM no import de arquivos geográficos
   '2.217.3': [
     'CORRIGIDO: LIMITE EM UTM ERA GRAVADO COMO SE FOSSE GRAU. Um GeoJSON exportado em UTM (ou um shapefile sem o .prj) entrava com as coordenadas em metros tratadas como latitude/longitude — o talhão ia parar fora do mapa, com área de bilhões de hectares, e a fazenda inteira deixava de abrir. Aconteceu com o talhão 115 da NHAZINHA (FABIO FARAGO), já corrigido no banco.',

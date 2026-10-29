@@ -129,6 +129,7 @@ verdadeira (fusão de talhões) chegou depois; foi preciso renumerar.
 | S/N | Produtor registra o relatório de camadas na lista de Relatórios | 2.216.0 | Talhão (produtor) → Camadas → "Relatório (PDF)" → aparece em Relatórios; banco: docs/produtor-relatorios-camadas.sql |
 | S/N | Prescrição por zonas via exportação de nutrientes (potencial × coeficiente ÷ garantia) | 2.215.0 | Talhão → Prescrições → Nova → "Por exportação (potencial da zona)"; cadastro do potencial em Biblioteca → Exportação de Nutrientes |
 | S/N | Comparar e adotar o limite da PrecisionFarm | 2.217.0 | Talhão → aba Resumo / painel lateral → Integração PrecisionFarm → Limite da PrecisionFarm (owner/admin, vínculo confirmado) |
+| S/N | Prescrição por exportação reconhece a escala de 6–12 classes ("Muito alto" → Alta, "Muito baixo" → Baixa) | 2.217.4 | Talhão → Prescrições → "Por exportação (potencial da zona)" → Potencial produtivo por zona |
 
 > As pendências 1–17 foram entregues antes deste registro existir e não estão
 > catalogadas; procure pelo assunto no `changelog.ts`. Da 18 em diante, tudo

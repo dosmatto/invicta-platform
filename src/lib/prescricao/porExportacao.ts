@@ -65,11 +65,19 @@ export function coefElementoDoCadastro(
 }
 
 // Rótulo normalizado → classe padrão. EXATO, de propósito: o classeZona()
-// global casa por pedaço (/ALT|MEDI|BAIX/) e transformaria "Muito alto" em
-// Alta e "Baixada úmida" em Baixa — aqui isso daria à zona o potencial de
-// outra classe, calado. Só os 5 nomes do semáforo (com as variações de
-// gênero e de separador) puxam do cadastro; o resto pede o número.
+// global casa por pedaço (/ALT|MEDI|BAIX/) e transformaria "Baixada úmida" em
+// Baixa — aqui isso daria à zona o potencial de outra classe, calado. Só os 5
+// nomes do semáforo (com as variações de gênero e de separador) e os extremos
+// da escala de 6–12 classes puxam do cadastro; o resto pede o número.
+//
+// Escala de 6–12 classes (MeapSection → ESCALA_POT): decisão do usuário em
+// 2026-10-29 — "Muito alto" puxa o potencial de Alta e "Muito baixo" o de
+// Baixa; Alto, Médio-alto, Médio, Médio-baixo e Baixo seguem o nome. Assim
+// "Muito alto" e "Alto" recebem o MESMO potencial (a tela mostra "Muito alto
+// → Alta" para isso ficar à vista).
 const ROTULO_EXATO: Record<string, ClassePotencial> = {
+  'MUITO-ALTO': 'Alta', 'MUITO-ALTA': 'Alta',
+  'MUITO-BAIXO': 'Baixa', 'MUITO-BAIXA': 'Baixa',
   'ALTA': 'Alta', 'ALTO': 'Alta',
   'MEDIA-ALTA': 'Média-alta', 'MEDIO-ALTO': 'Média-alta', 'MEDIA-ALTO': 'Média-alta', 'MEDIO-ALTA': 'Média-alta',
   'MEDIA': 'Média', 'MEDIO': 'Média',
@@ -81,24 +89,29 @@ function normalizaRotulo(raw: string): string {
     .toUpperCase().trim().replace(/[\s_/]+/g, '-').replace(/-+/g, '-');
 }
 
-/** Classe padrão de UMA zona pelo rótulo exato ('Alto', 'Média-alta', 'MEDIO_BAIXO'…), ou null. */
+/** Classe padrão de UMA zona pelo rótulo exato ('Alto', 'Média-alta', 'MEDIO_BAIXO', 'Muito alto'…), ou null. */
 export function classePotencialDe(classe: string | undefined | null): ClassePotencial | null {
   if (!classe) return null;
   return ROTULO_EXATO[normalizaRotulo(classe)] ?? null;
 }
 
+/** true quando o rótulo é um extremo da escala fina ("Muito alto"/"Muito baixo") —
+ *  a zona puxa o potencial de outra classe e a tela mostra o de→para. */
+export function classeDeEscalaFina(classe: string | undefined | null): boolean {
+  return !!classe && normalizaRotulo(classe).startsWith('MUITO-') && classePotencialDe(classe) != null;
+}
+
 /**
- * O zoneamento está no semáforo das 5 classes? Exige: no máximo 5 rótulos
- * distintos, TODOS exatos, e cada um numa classe diferente. Um zoneamento de
- * 6–12 classes ("Muito alto", "Alto"… "Muito baixo") não está — ali "Alto" é a
- * 2ª classe, não a de maior potencial, e puxar o número de "Alta" mentiria.
+ * O zoneamento puxa o potencial do cadastro? Exige TODOS os rótulos
+ * reconhecidos (5 classes do semáforo ou a escala de 6–12 classes, que é
+ * mapeada nelas). Basta um rótulo livre ("Baixada úmida", "Zona 7") para o
+ * zoneamento inteiro pedir o número — misturar puxado e digitado esconderia a
+ * zona que ficou sem classe.
  */
 export function zoneamentoNoSemaforo(classes: Array<string | undefined | null>): boolean {
   const distintos = [...new Set(classes.map(c => (c ?? '').trim()))];
-  if (!distintos.length || distintos.length > 5) return false;
-  const mapeadas = distintos.map(classePotencialDe);
-  if (mapeadas.some(c => c == null)) return false;
-  return new Set(mapeadas).size === mapeadas.length;
+  if (!distintos.length) return false;
+  return distintos.every(c => classePotencialDe(c) != null);
 }
 
 /**
@@ -119,15 +132,15 @@ export interface PotencialZona {
   kgHa: number | null;
   /** de onde veio: override desta prescrição, cadastro pela classe, ou faltando */
   origem: 'override' | 'cadastro' | 'falta';
-  /** classe padrão — null quando o rótulo não é exato ou o zoneamento não
-   *  está no semáforo de 5 classes */
+  /** classe padrão — null quando o rótulo não é reconhecido ou o zoneamento
+   *  tem algum rótulo livre */
   classe: ClassePotencial | null;
 }
 
 /**
  * Potencial de cada zona. Ordem: override desta prescrição → cadastro pela
  * classe padrão → falta (zona de rótulo livre, zoneamento fora do semáforo de
- * 5 classes, ou classe sem número no cadastro: pede o potencial no formulário).
+ * 5 classes/escala fina, ou classe sem número no cadastro: pede o potencial no formulário).
  */
 export function potencialDasZonas(
   zonas: Array<{ id: string; classe?: string }>,

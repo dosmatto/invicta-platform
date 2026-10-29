@@ -10,7 +10,7 @@
 //   • garantia 0, coeficiente ausente, potencial ausente → erro com mensagem, nunca Infinity/NaN.
 import assert from 'node:assert/strict';
 import {
-  doseIdealDaZona, coefElementoDoCadastro, classePotencialDe, potencialDasZonas, zoneamentoNoSemaforo, lerNumeroBR,
+  doseIdealDaZona, coefElementoDoCadastro, classePotencialDe, classeDeEscalaFina, potencialDasZonas, zoneamentoNoSemaforo, lerNumeroBR,
   prescreverPorExportacao, entregaDoFormulado, CLASSES_POTENCIAL, LIMIAR_DOSE_INTEIRA,
 } from '../src/lib/prescricao/porExportacao.ts';
 import { ELEMENTO_PARA_OXIDO } from '../src/lib/nutrienteBase.ts';
@@ -97,19 +97,27 @@ t('rótulo EXATO das 5 classes (variações de gênero/separador/acento) → cla
   assert.equal(classePotencialDe('medio_baixo'), 'Média-baixa');
   assert.equal(classePotencialDe('Média'), 'Média');
   assert.equal(classePotencialDe(' baixo '), 'Baixa');
+  // Escala de 6–12 classes: os extremos caem nas pontas do semáforo.
+  assert.equal(classePotencialDe('Muito alto'), 'Alta');
+  assert.equal(classePotencialDe('MUITO_BAIXO'), 'Baixa');
+  assert.equal(classeDeEscalaFina('Muito alto'), true);
+  assert.equal(classeDeEscalaFina('Alto'), false);
   // A2: o classeZona() global casaria estes por pedaço — aqui não.
-  for (const livre of ['Muito alto', 'Muito baixo', 'Baixada úmida', 'Alto do morro', 'Zona 7', '—', 'Classe 3', '']) {
+  for (const livre of ['Muito', 'Muito médio', 'Baixada úmida', 'Alto do morro', 'Zona 7', '—', 'Classe 3', '']) {
     assert.equal(classePotencialDe(livre), null, livre);
   }
   assert.equal(CLASSES_POTENCIAL.length, 5);
 });
 
-t('zoneamento no semáforo: ≤5 rótulos distintos, todos exatos, cada um numa classe', () => {
+t('zoneamento puxa do cadastro: todos os rótulos reconhecidos (5 classes ou escala de 6–12)', () => {
   assert.equal(zoneamentoNoSemaforo(['Alta', 'Média-alta', 'Média', 'Média-baixa', 'Baixa']), true);
   assert.equal(zoneamentoNoSemaforo(['Alto', 'Médio', 'Baixo', 'Alto']), true, 'repetir a mesma classe em 2 polígonos vale');
-  assert.equal(zoneamentoNoSemaforo(['Muito alto', 'Alto', 'Médio-alto', 'Médio', 'Médio-baixo', 'Baixo', 'Muito baixo']), false, '7 classes do MEAP');
-  assert.equal(zoneamentoNoSemaforo(['Alta', 'Alto']), false, 'dois rótulos na mesma classe');
+  assert.equal(zoneamentoNoSemaforo(['Muito alto', 'Alto', 'Médio-alto', 'Médio', 'Médio-baixo', 'Baixo', 'Muito baixo']), true, '7 classes do MEAP');
+  assert.equal(zoneamentoNoSemaforo(['Muito alto', 'Baixo', 'Média', 'Médio-baixo', 'Médio-alto']), true, 'ajuste manual mistura escala fina e chip padrão');
+  assert.equal(zoneamentoNoSemaforo(['Alta', 'Alto']), true, 'dois rótulos na mesma classe');
   assert.equal(zoneamentoNoSemaforo(['Alta', 'Baixada úmida']), false);
+  assert.equal(zoneamentoNoSemaforo(['Zona 1', 'Zona 2']), false, 'zonas importadas com nome livre');
+  assert.equal(zoneamentoNoSemaforo([]), false);
 });
 
 t('override desta prescrição > cadastro pela classe > falta', () => {
@@ -123,12 +131,13 @@ t('override desta prescrição > cadastro pela classe > falta', () => {
   assert.deepEqual(p.d, { kgHa: null, origem: 'falta', classe: 'Média' }, 'classe sem número no cadastro também pede');
 });
 
-t('A2: zoneamento de 7 classes ("Muito alto"…"Muito baixo") NÃO puxa do cadastro — todas pedem o número', () => {
+t('zoneamento de 7 classes ("Muito alto"…"Muito baixo") puxa do cadastro: extremos nas pontas', () => {
   const rot = ['Muito alto', 'Alto', 'Médio-alto', 'Médio', 'Médio-baixo', 'Baixo', 'Muito baixo'];
+  const esperado = ['Alta', 'Alta', 'Média-alta', 'Média', 'Média-baixa', 'Baixa', 'Baixa'];
   const cad = { Alta: 7000, 'Média-alta': 6000, Média: 5000, 'Média-baixa': 4000, Baixa: 3500 };
   const p = potencialDasZonas(rot.map((c, i) => ({ id: `z${i}`, classe: c })), cad, { z0: 7500 });
-  assert.deepEqual(p.z0, { kgHa: 7500, origem: 'override', classe: null }, 'override continua valendo');
-  for (let i = 1; i < 7; i++) assert.deepEqual(p[`z${i}`], { kgHa: null, origem: 'falta', classe: null }, rot[i]);
+  assert.deepEqual(p.z0, { kgHa: 7500, origem: 'override', classe: 'Alta' }, 'override continua valendo');
+  for (let i = 1; i < 7; i++) assert.deepEqual(p[`z${i}`], { kgHa: cad[esperado[i]], origem: 'cadastro', classe: esperado[i] }, rot[i]);
 });
 
 t('A2: rótulo livre num zoneamento de 3 classes faz o zoneamento inteiro pedir o número', () => {
