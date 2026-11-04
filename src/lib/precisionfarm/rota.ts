@@ -18,6 +18,10 @@
 //   • /api/precisionfarm/carga-linhas → "Buscar linhas" (owner/admin).
 //   • /api/precisionfarm/limite/{talhaoId} → limite publicado pela PF, para
 //     comparar e adotar (owner/admin, vínculo confirmado).
+// Tela de lote (Biblioteca → PrecisionFarm, owner/admin):
+//   • /api/precisionfarm/lote → visão geral de todos os vínculos;
+//   • /api/precisionfarm/manifesto → cria pendentes com os UUIDs do manifesto
+//     da PF (casamento por geometria feito na tela, conferência aqui).
 //
 // Corpo de erro do lado PF: { "error": { "code", "message" } } com os status do
 // contrato (401 · 404 · 413 · 422). Contrato: docs/integracao-precisionfarm.md.
@@ -31,6 +35,8 @@ import { lerConfigRecebimento, situacaoCamada, textosIguais, MSG_NAO_CONFIGURADA
 import { cargaInicial, processarFila, receberNotificacao, rotinaPeriodica, tentarDeNovo, type Ambiente } from './recebimento.ts';
 import { avisosDasCamadas, camadasDoTalhao, criarRepoLinhas, geometriaDaRevisao, revisoesDasCamadas } from './repoLinhas.ts';
 import { buscarLimitePF } from './limite.ts';
+import { mapearComLimite } from './lote.ts';
+import { conferirCriacao, lerItensCriacao } from './manifestoPF.ts';
 import {
   CHAVE_LOCAL_ZONAS, MAX_ENVELOPE_BYTES_INVICTA, PARCERIA_PADRAO, RE_UUID,
   bytesDoEnvelope, capabilities, chaveLocalColheita, checksumEnvelope, corpoNaoImplementado, dataContrato, eventoDoEnvelope, idsParaNovoVinculo,
@@ -39,10 +45,10 @@ import {
   type EscopoChave, type ResultadoPayload, type TipoRecurso,
 } from './contrato.ts';
 import {
-  ConflitoIntegracao, atualizarVinculo, autenticarLeitor, autenticarPrecisionFarm, autenticarUsuario, carregarTalhao, carregarTalhoes, clienteDaFazenda,
-  clienteServico, envelopeDaRevisao, gradeProdutividade, inserirRevisao, inserirVinculo, mapaProdutividade,
-  obterOuCriarRecurso, recursoPorId, servicoConfigurado, ultimaRevisao, vigentesDoVinculo, vinculoDoCampo,
-  vinculoDoTalhao, vinculoPorId, vinculosConfirmados, vinculosParaReuso, zoneamentoPadrao,
+  ConflitoIntegracao, atualizarVinculo, autenticarLeitor, autenticarPrecisionFarm, autenticarUsuario, camadasLinhasDosTalhoes, carregarTalhao, carregarTalhoes,
+  clienteDaFazenda, clientesDasFazendas, clienteServico, envelopeDaRevisao, gradeProdutividade, inserirRevisao, inserirVinculo, mapaProdutividade,
+  obterOuCriarRecurso, recursoPorId, recursosDosVinculos, servicoConfigurado, ultimaRevisao, vigentesDoVinculo, vinculoDoCampo,
+  vinculoDoTalhao, vinculoPorId, vinculosConfirmados, vinculosDaParceria, vinculosParaReuso, zoneamentoPadrao,
   type VinculoRow,
 } from './servidor.ts';
 
@@ -395,6 +401,103 @@ export function tratarPublicacao(req: Request): Promise<Response> {
       ok: true, criada: true, resourceId: recurso.resource_id, revisao: envelope.resource_revision,
       checksum, tamanhoBytes, nFeicoes: res.nFeicoes, evento: eventoDoEnvelope(envelope, checksum),
     }, 201);
+  });
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Tela de LOTE (Biblioteca → PrecisionFarm) — visão geral e manifesto da PF
+// ═════════════════════════════════════════════════════════════════════════════
+// As ações em lote (confirmar/suspender, publicar, comparar limite) NÃO têm
+// rota própria: a tela chama as rotas de um talhão (/vinculo, /publicar,
+// /limite) talhão a talhão, com concorrência limitada (lote.ts) — mesmas travas,
+// mesma idempotência, nada duplicado aqui.
+
+/** GET /api/precisionfarm/lote — TODOS os vínculos da parceria (qualquer
+ *  status, todos os clientes), com o que já foi publicado e as linhas
+ *  recebidas. Talhão que não está na nuvem (apagado, id estranho) vem com
+ *  `naNuvem: null` — a tela mostra e segue. */
+export function tratarLote(req: Request): Promise<Response> {
+  return comUsuario(req, async sb => {
+    const vinculos = await vinculosDaParceria(sb, PARCERIA_PADRAO);
+    const talhaoIds = vinculos.map(v => v.talhao_id);
+    const [talhoes, recursos, camadas] = await Promise.all([
+      carregarTalhoes(sb, talhaoIds),
+      recursosDosVinculos(sb, vinculos.map(v => v.id)),
+      camadasLinhasDosTalhoes(sb, talhaoIds),
+    ]);
+    // Revisão vigente de cada recurso: uma consulta cada (ver vigentesDoVinculo),
+    // poucas de cada vez.
+    const ultimas = await mapearComLimite(recursos, r => ultimaRevisao(sb, r.resource_id), 8);
+    const pubPorVinculo = new Map<string, { tipo: TipoRecurso; season: string | null; seasonPeriod: string | null; revisao: number; publicadoEm: string }[]>();
+    recursos.forEach((r, k) => {
+      const u = ultimas[k];
+      if (!u) return;
+      const l = pubPorVinculo.get(r.vinculo_id) ?? [];
+      l.push({ tipo: r.resource_type, season: u.season, seasonPeriod: u.season_period, revisao: u.revision, publicadoEm: u.publicado_em });
+      pubPorVinculo.set(r.vinculo_id, l);
+    });
+    const linhasPorTalhao = new Map<string, number>();
+    for (const c of camadas) {
+      if (c.revisao_geometria == null || c.arquivada) continue;   // mesma regra de camadasVisiveisPF
+      linhasPorTalhao.set(c.talhao_id, (linhasPorTalhao.get(c.talhao_id) ?? 0) + 1);
+    }
+    return json({
+      ok: true,
+      vinculos: vinculos.map(v => {
+        const t = talhoes.get(v.talhao_id);
+        return {
+          talhaoId: v.talhao_id,
+          fazendaId: v.fazenda_id, clienteId: v.cliente_id,
+          ...vinculoParaTela(v)!,
+          naNuvem: t ? { nome: t.nome, geoVersao: t.geoVersao } : null,
+          publicados: (pubPorVinculo.get(v.id) ?? []).sort((a, b) => String(b.publicadoEm).localeCompare(String(a.publicadoEm))),
+          linhas: linhasPorTalhao.get(v.talhao_id) ?? 0,
+        };
+      }),
+    }, 200);
+  });
+}
+
+/**
+ * POST /api/precisionfarm/manifesto — { itens: [{ talhaoId, pfLocalId,
+ * sharedProducerId, sharedFarmId, sharedFieldId, nomePF }] }. Cria vínculos
+ * PENDENTES com os UUIDs propostos pela PF (o casamento por geometria é feito
+ * na tela; aqui vale a CONFERÊNCIA — manifestoPF.conferirCriacao). Item
+ * recusado não impede os outros. Nada é criado sem esse pedido explícito.
+ */
+export function tratarManifesto(req: Request): Promise<Response> {
+  return comUsuario(req, async (sb, u) => {
+    const lido = lerItensCriacao(await req.json().catch(() => null));
+    if (!lido.ok) return json({ ok: false, erro: lido.erro }, 400);
+    const [existentes, talhoes] = await Promise.all([
+      vinculosDaParceria(sb, PARCERIA_PADRAO),
+      carregarTalhoes(sb, lido.itens.map(i => i.talhaoId).filter(Boolean)),
+    ]);
+    const clientes = await clientesDasFazendas(sb, [...talhoes.values()].map(t => t.fazendaId ?? '').filter(Boolean));
+    const naNuvem = new Map([...talhoes].map(([id, t]) => [id, { fazendaId: t.fazendaId, clienteId: t.fazendaId ? clientes.get(t.fazendaId) ?? null : null, empresaId: t.empresaId }]));
+    const conferidos = conferirCriacao(lido.itens, naNuvem, existentes.map(v => ({
+      talhaoId: v.talhao_id, sharedProducerId: v.shared_producer_id, sharedFarmId: v.shared_farm_id, sharedFieldId: v.shared_field_id,
+      status: v.status, fazendaId: v.fazenda_id, clienteId: v.cliente_id,
+    })));
+    const resultados: { talhaoId: string; sharedFieldId: string; nomePF: string; ok: boolean; motivo?: string }[] = [];
+    // Um de cada vez: poucos itens, e a corrida (outra aba criando o mesmo)
+    // cai no unique e vira recusa daquele item.
+    for (const c of conferidos) {
+      const base = { talhaoId: c.item.talhaoId, sharedFieldId: c.item.sharedFieldId, nomePF: c.item.nomePF };
+      if (!c.ok) { resultados.push({ ...base, ok: false, motivo: c.motivo }); continue; }
+      try {
+        await inserirVinculo(sb, {
+          parceria: PARCERIA_PADRAO, empresa_id: c.empresaId, talhao_id: c.item.talhaoId, fazenda_id: c.fazendaId, cliente_id: c.clienteId,
+          shared_producer_id: c.item.sharedProducerId, shared_farm_id: c.item.sharedFarmId, shared_field_id: c.item.sharedFieldId,
+          pf_local_id: c.item.pfLocalId, status: 'pendente', criado_por: u.email,
+        });
+        resultados.push({ ...base, ok: true });
+      } catch (e) {
+        if (e instanceof ConflitoIntegracao) { resultados.push({ ...base, ok: false, motivo: 'Outro vínculo com este talhão ou shared_field_id foi criado ao mesmo tempo.' }); continue; }
+        resultados.push({ ...base, ok: false, motivo: e instanceof Error ? e.message : 'Falha ao criar o vínculo.' });
+      }
+    }
+    return json({ ok: true, criados: resultados.filter(r => r.ok).length, resultados }, 200);
   });
 }
 

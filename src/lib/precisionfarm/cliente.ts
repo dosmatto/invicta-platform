@@ -33,7 +33,9 @@ export interface PublicadoPF {
   tamanhoBytes: number | null;
 }
 
-export type Resp<T> = ({ ok: true } & T) | { ok: false; erro: string };
+/** `status` na falha: o HTTP da rota (ausente = sem conexão/sessão) — a tela
+ *  de lote separa "pulado" (409/422…) de "erro" (lote.ts → desfechoDaFalha). */
+export type Resp<T> = ({ ok: true } & T) | { ok: false; erro: string; status?: number };
 
 async function chamar<T>(caminho: string, init?: { method?: string; body?: unknown }): Promise<Resp<T>> {
   const sb = getSupabase();
@@ -46,8 +48,8 @@ async function chamar<T>(caminho: string, init?: { method?: string; body?: unkno
       body: init?.body ? JSON.stringify(init.body) : undefined,
     });
     const corpo = await r.json().catch(() => null) as ({ ok?: boolean; erro?: string } & T) | null;
-    if (!corpo) return { ok: false, erro: `Erro ${r.status} no servidor.` };
-    if (!r.ok || corpo.ok === false) return { ok: false, erro: corpo.erro ?? `Erro ${r.status} no servidor.` };
+    if (!corpo) return { ok: false, erro: `Erro ${r.status} no servidor.`, status: r.status };
+    if (!r.ok || corpo.ok === false) return { ok: false, erro: corpo.erro ?? `Erro ${r.status} no servidor.`, status: r.status };
     return { ...corpo, ok: true } as Resp<T>;
   } catch {
     return { ok: false, erro: 'Sem conexão com o servidor.' };
@@ -146,6 +148,34 @@ export interface LimitePFTela {
 
 export const limitePF = (talhaoId: string) =>
   chamar<{ limite: LimitePFTela }>(`/api/precisionfarm/limite/${encodeURIComponent(talhaoId)}`);
+
+// ── Tela de lote (Biblioteca → PrecisionFarm) ───────────────────────────────
+
+export interface PublicadoLote {
+  tipo: PublicadoPF['tipo'];
+  season: string | null;
+  seasonPeriod: string | null;
+  revisao: number;
+  publicadoEm: string;
+}
+
+export interface VinculoLote extends VinculoPF {
+  talhaoId: string;
+  fazendaId: string | null;
+  clienteId: string | null;
+  /** Talhão na nuvem; null = não está lá (apagado, id estranho). */
+  naNuvem: { nome: string; geoVersao: number } | null;
+  publicados: PublicadoLote[];
+  /** Camadas de linhas visíveis (com geometria, não arquivadas). */
+  linhas: number;
+}
+
+export const loteGeralPF = () => chamar<{ vinculos: VinculoLote[] }>('/api/precisionfarm/lote');
+
+export interface ResultadoManifesto { talhaoId: string; sharedFieldId: string; nomePF: string; ok: boolean; motivo?: string }
+
+export const criarVinculosManifestoPF = (itens: Array<{ talhaoId: string; pfLocalId: string; sharedProducerId: string; sharedFarmId: string; sharedFieldId: string; nomePF: string }>) =>
+  chamar<{ criados: number; resultados: ResultadoManifesto[] }>('/api/precisionfarm/manifesto', { method: 'POST', body: { itens } });
 
 /** Camadas que contam como "o talhão tem linhas" (aba no portal do produtor). */
 export const camadasVisiveisPF = (c: CamadaLinhasPF[]) => c.filter(x => x.revisaoGeometria != null && !x.arquivada);

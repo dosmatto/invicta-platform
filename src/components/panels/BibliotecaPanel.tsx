@@ -6,7 +6,7 @@ import {
   type CategoriaBiblioteca, type EscopoBiblioteca, type DefCategoria,
   type ItemBiblioteca, type ConteudoLaboratorio, type ConteudoLabAnalise, type ConteudoPerfil,
 } from '@/lib/biblioteca';
-import { Search, Plus, Download, Upload, ChevronRight, ChevronUp, ChevronDown, Edit3, Trash2, Save, X, Power, Shield } from 'lucide-react';
+import { Search, Plus, Download, Upload, ChevronRight, ChevronUp, ChevronDown, Edit3, Trash2, Save, X, Power, Shield, Link2 } from 'lucide-react';
 import { LegendasPanel } from './LegendasPanel';
 import { EquacoesPanel } from './EquacoesPanel';
 import { InsumosPanel } from './InsumosPanel';
@@ -15,10 +15,12 @@ import { RecomendacoesPanel } from './RecomendacoesPanel';
 import { SafrasPanel } from './SafrasPanel';
 import { ConteudoAnalisesFoliares } from './ConteudoAnalisesFoliares';
 import { CentralAcessos } from './acessos/CentralAcessos';
+import PrecisionFarmLote from './PrecisionFarmLote';
 import { ehAdmin } from '@/lib/empresa';
 
-// Slug interno: as categorias da Biblioteca + a aba especial "Usuários".
-type SlugBiblioteca = CategoriaBiblioteca | 'usuarios';
+// Slug interno: as categorias da Biblioteca + as abas especiais de admin:
+// "Usuários" (Acessos) e "PrecisionFarm" (tela de lote da integração).
+type SlugBiblioteca = CategoriaBiblioteca | 'usuarios' | 'precisionfarm';
 import { EtiquetaLayoutPicker } from '../talhao/EtiquetaLayoutPicker';
 import { LegendaEditor, type SementeLegenda } from './LegendasPanel';
 import { PERFIS_BUILTIN, norm as normSinonimo } from '@/lib/lab';
@@ -71,6 +73,7 @@ function CategoriasNav({ slug, setSlug }: { slug: SlugBiblioteca; setSlug: (s: S
         <>
           <div className="my-1 mx-2" style={{ height: 1, background: '#1a3a6b' }} />
           {item('usuarios', 'Acessos', Shield)}
+          {item('precisionfarm', 'PrecisionFarm', Link2)}
         </>
       )}
     </nav>
@@ -81,6 +84,8 @@ function CategoriasNav({ slug, setSlug }: { slug: SlugBiblioteca; setSlug: (s: S
 
 function CategoriaConteudo({ slug }: { slug: SlugBiblioteca }) {
   if (slug === 'usuarios') return <section className="flex-1 min-h-0"><CentralAcessos /></section>;
+  // Só owner/admin chega aqui (a entrada só aparece para eles; a rota confere de novo).
+  if (slug === 'precisionfarm') return ehAdmin() ? <PrecisionFarmLote /> : null;
   // Categorias com adaptador próprio têm UI customizada (já implementadas).
   if (slug === 'legendas') return <ConteudoLegendas />;
   if (slug === 'insumos') return <ConteudoInsumos />;

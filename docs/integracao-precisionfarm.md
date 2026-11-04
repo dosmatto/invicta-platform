@@ -1,4 +1,4 @@
-# Integração Invicta ↔ PrecisionFarm (ponte 0.2.0) — fases 1 e 2
+# Integração Invicta ↔ PrecisionFarm (ponte 0.2.0) — fases 1 e 2 + tela de lote
 
 Para quem desenvolve ou opera a ponte com a **PrecisionFarm**. Este documento é o
 lado da Invicta do contrato 0.2.0 (a referência deles está em
@@ -571,3 +571,100 @@ mensagem) · **502** inventário cortado sem o limite e outras falhas da PF
 Testes: `npm run teste:precisionfarm` (seção "Limite da PF"; com
 `PF_LIMITE_REAL=<arquivo>` confere também um limite real — o do IGEFI 03 dá
 66,4658 ha em UTM 22S, o mesmo número da PF).
+
+---
+
+## 8. Tela de lote — Biblioteca → PrecisionFarm
+
+Confirmar e publicar talhão a talhão na seção do talhão é trabalhoso; a tela de
+lote faz o mesmo para vários de uma vez. **Onde:** Biblioteca → **PrecisionFarm**
+(abaixo de Acessos; só aparece para **owner/admin** — as rotas conferem de novo).
+
+**Visão geral** — `GET /api/precisionfarm/lote` (sessão + owner/admin, só lê):
+**todos** os vínculos da parceria `producao` (qualquer status, todos os
+clientes), com o talhão na nuvem (`naNuvem: null` quando o talhão não existe lá —
+a linha aparece como "não encontrado" e as ações a pulam), a revisão vigente de
+cada recurso publicado e o número de camadas de linhas visíveis. A tabela mostra
+talhão, fazenda, cliente (nomes do aparelho), ID PF, status, zonas (rev.),
+colheitas (safra · época · rev.), linhas e a diferença de limite. Filtros por
+cliente e fazenda; caixa por linha + "marcar todos" (os visíveis). A ação vale
+para o que está marcado **e** visível.
+
+**Ações em lote** — sem rota própria: a tela chama as rotas de UM talhão
+(§3/§7), no máximo **3 talhões em andamento** (`lote.ts → executarEmLote`,
+`CONCORRENCIA_LOTE`), com progresso; a falha de um não para os outros, e cada
+linha fica com **ok**, **pulado** (motivo — recusa de regra: HTTP 404/409/413/422)
+ou **erro** (rede, sessão, 5xx). Resumo final "N ok · N pulados · N erros".
+
+| Ação | O que faz | Pula quando |
+|---|---|---|
+| Confirmar | `POST /vinculo acao=confirmar` (mesmas travas: exige ID PF; confirmado não troca ID) | já confirmado; sem ID PF |
+| Suspender | `POST /vinculo acao=suspender` (pede confirmação do lote) | já suspenso |
+| Publicar zoneamento | `POST /publicar tipo=zonas` com o zoneamento **padrão** e o `geoVersao` locais | vínculo não confirmado; talhão fora do aparelho; sem padrão; padrão/limite fora de sincronia (409 da rota) |
+| Publicar colheita | `POST /publicar tipo=colheita` para **cada** mapa oficial do talhão (em sequência) | idem; sem colheita oficial; mapa sem época; safra fora do formato (422); grade fora da nuvem (409) |
+| Comparar limites | `GET /limite/{id}` + `compararLimites` contra o limite **local** → coluna "Dif. limite" (m² e %) | vínculo não confirmado; talhão fora do aparelho |
+
+A escolha do que se publica é **a mesma** do botão da seção do talhão
+(`escolhaPublicacao.ts`: zoneamento padrão, colheitas oficiais, época,
+`geoVersao`). Idempotente como lá: conteúdo igual não cria revisão ("sem
+mudança, rev. N"). **Adotar limite** e trocar o ID PF continuam talhão a talhão.
+
+**De onde a publicação lê os dados:** da **nuvem**, na rota — `zoneamentoPadrao`
+(app_kv `inv_meap_zoneamentos`), `mapaProdutividade` + `gradeProdutividade`
+(app_kv `inv_produtividade` e a grade em `inv_mapas_fert`). O navegador só manda
+os ids e o `geoVersao` que conhece, como conferência de sincronização. Na
+plataforma, `inv_meap_zoneamentos` e `inv_produtividade` (metadados) descem
+inteiros no boot (só o app de campo os pula), então a escolha funciona também
+para talhões que o usuário não abriu; a grade pesada da colheita nunca precisa
+estar no navegador. Se a nuvem ainda não terminou de carregar, a tela avisa
+(talhões podem sair pulados — nada é publicado errado: a rota confere).
+
+### 8.1 Importar o manifesto de vínculos da PF
+
+A PF manda um pacote (ex.: `PRECISIONFARM_INVICTA_COMPLEMENTO_20261028.zip`) com
+o manifesto (`FIGUEIRA_VINCULOS_PROPOSTOS.json`: `fields[]` com
+`local_field_id`, `name`, `shared_producer_id`, `shared_farm_id`,
+`shared_field_id`, `boundary_file`, `boundary_sha256`) e os limites em GeoJSON.
+
+**Entrada:** o **.zip inteiro**, como veio — o manifesto aponta os limites por
+caminho dentro do zip e traz o SHA-256 de cada um; não é preciso descompactar.
+Também vale o `.json` + os `.geojson` soltos (seleção múltipla), casados pelo
+nome do arquivo. O manifesto é o `.json` com `fields` (vários → o de nome
+`*VINCULOS*`). Geometria no próprio item (`geometry`/`boundary`/`geojson`)
+também é aceita. Até 50 MB e 500 talhões.
+
+**Prévia** (`manifestoPF.ts`, pura; nada é gravado):
+
+1. cada limite é lido com a mesma leitura **estrita** do limite da PF
+   (`lerGeometriaLimite`: inválido é recusado com o motivo) e o SHA-256 do
+   arquivo é conferido com o do manifesto;
+2. para cada talhão da PF, o **nosso de maior sobreposição** entre todos os
+   talhões do aparelho (pré-filtro pela caixa) e a **diferença simétrica**
+   (`compararLimites`, % da área do nosso);
+3. situação: **Par 1:1** (≤ 5 %, vem **marcado**) · **Diferença > 5 %** (pode
+   marcar, não vem marcado) · **Ambíguo** (cobre dois ou mais dos nossos com
+   sobreposição relevante — ≥ 25 % do nosso **e** ≥ 5 % do talhão da PF —, ou
+   dois talhões da PF caem no mesmo nosso) · **Sem par** · **Já vinculado**
+   (`shared_field_id` já está num vínculo — "mesmos IDs" quando é o mesmo
+   talhão — ou o nosso talhão já tem vínculo com outros UUIDs) · **Conflito de
+   IDs** (a fazenda/cliente do nosso talhão já tem outro `shared_farm_id`/
+   `shared_producer_id` — a mesma regra de reuso do "Gerar identificadores") ·
+   **Inválido**. Só Par e Diferença podem ser marcados.
+
+**Criar** (clique + confirmação) → `POST /api/precisionfarm/manifesto`
+`{ itens: [{ talhaoId, pfLocalId, sharedProducerId, sharedFarmId, sharedFieldId, nomePF }] }`
+(sessão + owner/admin). O servidor **confere de novo** (`conferirCriacao`):
+talhão na nuvem, talhão sem vínculo, `shared_field_id` livre, sem repetição no
+pedido, mesma identidade de produtor/fazenda; e cria cada um **pendente** com os
+UUIDs da PF e `pf_local_id = local_field_id`. Item recusado não impede os
+outros; corrida com outra aba cai no `unique` e vira recusa daquele item.
+Resposta `{ ok, criados, resultados: [{ talhaoId, sharedFieldId, ok, motivo? }] }`.
+
+Com o manifesto da Figueira de 28/10: 14 pares 1:1 (PEQHOL → nosso IGEFI 13),
+IGEFI11 da PF ambíguo (cobre nossos IGEFI 10 e 11) e IGEFI03 já vinculado. Os 14
+pendentes já foram criados no banco por script (28/10) com esses mesmos UUIDs —
+reimportar o manifesto mostra todos como "Já vinculado (mesmos IDs)".
+
+Testes: `npm run teste:precisionfarm` (seções "Lote"; com
+`PF_MANIFESTO_REAL=<pasta do complemento descompactado>` confere os 16 limites
+reais e a regra de ambíguo).

@@ -16,20 +16,13 @@
 
 import { useCallback, useState } from 'react';
 import { ChevronDown, ChevronRight, Copy, Link2, Loader2, Send, ShieldCheck, PauseCircle } from 'lucide-react';
-import { getMapasProdutividade, getZoneamentosMeap, type Talhao } from '@/lib/store';
+import type { Talhao } from '@/lib/store';
 import { ehAdmin } from '@/lib/empresa';
 import {
   acaoVinculoPF, estadoPF, publicarColheitaPF, publicarZonasPF, type PublicadoPF, type VinculoPF,
 } from '@/lib/precisionfarm/cliente';
+import { ROTULO_EPOCA, ROTULO_PERIODO, ROTULO_STATUS, colheitaSemEpoca, colheitasParaPublicar, geoVersaoDoTalhao, zoneamentoParaPublicar } from '@/lib/precisionfarm/escolhaPublicacao';
 import LimitePrecisionFarm from './LimitePrecisionFarm';
-
-const ROTULO_EPOCA: Record<string, string> = { verao: 'Verão', safrinha: 'Safrinha', inverno: 'Inverno' };
-const ROTULO_PERIODO: Record<string, string> = { main: 'Verão (main)', second: 'Safrinha (second)', winter: 'Inverno (winter)' };
-const ROTULO_STATUS: Record<VinculoPF['status'], { txt: string; cor: string }> = {
-  pendente: { txt: 'Pendente', cor: '#fbbf24' },
-  confirmado: { txt: 'Confirmado', cor: '#4ade80' },
-  suspenso: { txt: 'Suspenso', cor: '#f87171' },
-};
 
 const dataCurta = (iso: string | null | undefined) =>
   iso ? new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
@@ -104,10 +97,11 @@ function SecaoPF({ talhao, onLimiteAdotado }: { talhao: Talhao; onLimiteAdotado?
   }
 
   // Só com a seção aberta: getZoneamentosMeap pode reparar "dois padrões" e
-  // gravar — não precisa rodar a cada render do painel fechado.
-  const zonPadrao = aberto ? (getZoneamentosMeap(talhao.id).find(z => z.padrao) ?? null) : null;
-  const oficiais = aberto ? getMapasProdutividade(talhao.id).filter(m => m.oficial) : [];
-  const geoVersao = talhao.geoVersao ?? 1;
+  // gravar — não precisa rodar a cada render do painel fechado. A escolha é a
+  // mesma da tela de lote (escolhaPublicacao).
+  const zonPadrao = aberto ? zoneamentoParaPublicar(talhao.id) : null;
+  const oficiais = aberto ? colheitasParaPublicar(talhao.id) : [];
+  const geoVersao = geoVersaoDoTalhao(talhao);
   const podePublicar = !!vinculo && vinculo.status !== 'suspenso';
   const st = vinculo ? ROTULO_STATUS[vinculo.status] : null;
   const btn = (cor: string) => ({ background: cor, color: '#fff' });
@@ -202,7 +196,7 @@ function SecaoPF({ talhao, onLimiteAdotado }: { talhao: Talhao; onLimiteAdotado?
               </div>
               {oficiais.length === 0 && <div className="text-[10px]" style={{ color: '#64748b' }}>Nenhum mapa de colheita oficial neste talhão.</div>}
               {oficiais.map(m => {
-                const semEpoca = !ROTULO_EPOCA[m.epoca];
+                const semEpoca = colheitaSemEpoca(m);
                 const chave = `colheita:${m.id}`;
                 return (
                   <div key={m.id} className="flex items-center gap-2">

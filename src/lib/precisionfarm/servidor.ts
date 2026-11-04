@@ -166,13 +166,20 @@ export async function carregarTalhao(sb: SupabaseClient, id: string): Promise<Ta
 export async function carregarTalhoes(sb: SupabaseClient, ids: string[]): Promise<Map<string, TalhaoNuvem>> {
   const m = new Map<string, TalhaoNuvem>();
   if (!ids.length) return m;
-  const { data, error } = await sb.from('talhoes').select('id, nome, empresa_id, dados').in('id', ids);
-  if (error) throw new Error(`Falha ao ler os talhões: ${error.message}`);
-  for (const r of (data ?? []) as { id: string; nome: string | null; empresa_id: string | null; dados: { nome?: string; fazendaId?: string; empresaId?: string; geoVersao?: number } | null }[]) {
-    m.set(String(r.id), {
-      id: String(r.id), nome: String(r.nome ?? r.dados?.nome ?? ''), empresaId: r.empresa_id ?? r.dados?.empresaId ?? null,
-      fazendaId: r.dados?.fazendaId ?? null, geoVersao: Number(r.dados?.geoVersao ?? 1) || 1,
-    });
+  // Em fatias (tela de lote: todos os talhões vinculados) — e só os campos do
+  // cabeçalho: o `dados` inteiro traz o geojson, pesado.
+  const unicos = [...new Set(ids)];
+  for (let k = 0; k < unicos.length; k += 150) {
+    const { data, error } = await sb.from('talhoes')
+      .select('id, nome, empresa_id, dnome:dados->>nome, fazendaId:dados->>fazendaId, dempresa:dados->>empresaId, geoVersao:dados->>geoVersao')
+      .in('id', unicos.slice(k, k + 150));
+    if (error) throw new Error(`Falha ao ler os talhões: ${error.message}`);
+    for (const r of (data ?? []) as { id: string; nome: string | null; empresa_id: string | null; dnome: string | null; fazendaId: string | null; dempresa: string | null; geoVersao: string | null }[]) {
+      m.set(String(r.id), {
+        id: String(r.id), nome: String(r.nome ?? r.dnome ?? ''), empresaId: r.empresa_id ?? r.dempresa ?? null,
+        fazendaId: r.fazendaId ?? null, geoVersao: Number(r.geoVersao ?? 1) || 1,
+      });
+    }
   }
   return m;
 }
@@ -250,6 +257,58 @@ export async function vinculosConfirmados(sb: SupabaseClient, parceria: string):
     .eq('status', 'confirmado').eq('parceria', parceria).order('shared_field_id');
   if (error) throw new Error(`Falha ao ler os vínculos: ${error.message}`);
   return (data ?? []) as VinculoRow[];
+}
+
+/** TODOS os vínculos da parceria (qualquer status) — tela de lote e conferência
+ *  do manifesto. Paginado: o max_rows do PostgREST (1000) cortaria a lista em
+ *  silêncio, e uma lista cortada esconderia uma duplicata. */
+export async function vinculosDaParceria(sb: SupabaseClient, parceria: string): Promise<VinculoRow[]> {
+  const todos: VinculoRow[] = [];
+  for (let de = 0; ; de += 1000) {
+    const { data, error } = await sb.from('pf_vinculos').select(COLS_VINCULO)
+      .eq('parceria', parceria).order('criado_em', { ascending: true }).order('id', { ascending: true }).range(de, de + 999);
+    if (error) throw new Error(`Falha ao ler os vínculos: ${error.message}`);
+    todos.push(...((data ?? []) as VinculoRow[]));
+    if ((data ?? []).length < 1000) return todos;
+  }
+}
+
+/** Fatias de N para filtros `in` (a URL do PostgREST tem limite de tamanho). */
+const fatias = <T>(xs: readonly T[], n = 150): T[][] => Array.from({ length: Math.ceil(xs.length / n) }, (_, k) => xs.slice(k * n, k * n + n));
+
+/** fazendaId → clienteId (app_kv inv_fazendas), para várias fazendas de uma vez. */
+export async function clientesDasFazendas(sb: SupabaseClient, fazendaIds: string[]): Promise<Map<string, string | null>> {
+  const m = new Map<string, string | null>();
+  for (const ids of fatias([...new Set(fazendaIds.filter(Boolean))])) {
+    const { data, error } = await sb.from('app_kv').select('item_id, clienteId:dados->>clienteId').eq('colecao', COL_FAZENDAS).in('item_id', ids);
+    if (error) throw new Error(`Falha ao ler as fazendas: ${error.message}`);
+    for (const r of (data ?? []) as { item_id: string; clienteId: string | null }[]) m.set(String(r.item_id), r.clienteId ?? null);
+  }
+  return m;
+}
+
+/** Recursos de VÁRIOS vínculos (tela de lote). A revisão vigente de cada um vem
+ *  de `ultimaRevisao` (uma consulta por recurso — ver vigentesDoVinculo). */
+export async function recursosDosVinculos(sb: SupabaseClient, vinculoIds: string[]): Promise<RecursoRow[]> {
+  const todos: RecursoRow[] = [];
+  for (const ids of fatias(vinculoIds)) {
+    const { data, error } = await sb.from('pf_recursos')
+      .select('resource_id, vinculo_id, talhao_id, resource_type, chave_local, criado_em').in('vinculo_id', ids);
+    if (error) throw new Error(`Falha ao ler os recursos: ${error.message}`);
+    todos.push(...((data ?? []) as RecursoRow[]));
+  }
+  return todos;
+}
+
+/** Camadas de LINHAS recebidas da PF por talhão (só o que a contagem precisa). */
+export async function camadasLinhasDosTalhoes(sb: SupabaseClient, talhaoIds: string[]): Promise<{ talhao_id: string; revisao_geometria: number | null; arquivada: boolean }[]> {
+  const todas: { talhao_id: string; revisao_geometria: number | null; arquivada: boolean }[] = [];
+  for (const ids of fatias(talhaoIds)) {
+    const { data, error } = await sb.from('pf_linhas_camadas').select('talhao_id, revisao_geometria, arquivada').in('talhao_id', ids);
+    if (error) throw new Error(`Falha ao ler as camadas de linhas: ${error.message}`);
+    todas.push(...((data ?? []) as { talhao_id: string; revisao_geometria: number | null; arquivada: boolean }[]));
+  }
+  return todas;
 }
 
 export async function inserirVinculo(sb: SupabaseClient, row: Omit<VinculoRow, 'id' | 'criado_em' | 'atualizado_em' | 'confirmado_por' | 'confirmado_em' | 'suspenso_por' | 'suspenso_em'>): Promise<VinculoRow> {

@@ -18,6 +18,12 @@
 //     MultiPolygon com furo, Feature, FeatureCollection; inválido recusado sem
 //     reparo), comparação (plataforma × UTM 22S, diferença simétrica) e busca
 //     sob demanda no inventário de uma PF simulada.
+//  8. TELA DE LOTE — manifesto da PF (formato da Figueira, SHA-256, defeito
+//     por item), casamento por geometria (1:1 ≤ 5 % pré-marcado, > 5 % sem
+//     marcar, ambíguo, sem par, dois da PF no mesmo nosso, duplicatas, conflito
+//     de identidade), a conferência do servidor antes de criar e a execução em
+//     lote (concorrência, ordem, falha isolada, pulado × erro). Com
+//     PF_MANIFESTO_REAL=<pasta> confere também o manifesto real da Figueira.
 
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -930,6 +936,225 @@ ta('inventário cortado no teto de páginas sem achar o limite → incompleto (n
 ta('PF fora (503) sobe como FalhaPF — a rota responde 503, não 500', async () => {
   const pf = pfSimulada({ paginas: [], falha: new LM.FalhaPF('Integração desabilitada do lado da PrecisionFarm (503).', 'temporaria', 503) });
   await assert.rejects(LM.buscarLimitePF(pf, VINC), e => e instanceof LM.FalhaPF && e.status === 503);
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// TELA DE LOTE — manifesto da PF (leitura, casamento por geometria, conferência
+// do servidor) e execução em lote (src/lib/precisionfarm/manifestoPF.ts, lote.ts)
+// ═════════════════════════════════════════════════════════════════════════════
+const MF = await import('../src/lib/precisionfarm/manifestoPF.ts');
+const LT = await import('../src/lib/precisionfarm/lote.ts');
+
+const uuidN = n => `00000${String(n).padStart(3, '0')}-2222-4222-8222-${String(n).padStart(12, '0')}`;
+const PROD = uuidN(900), FARM = uuidN(901);
+/** Item do manifesto no formato da PF (local_field_id NÚMERO, como no da Figueira). */
+const itemPF = (n, nome, geometria, extra = {}) => ({
+  local_field_id: n, name: nome, shared_producer_id: PROD, shared_farm_id: FARM, shared_field_id: uuidN(n),
+  identity_status: 'proposed_pending_remote_match', geometry: geometria, ...extra,
+});
+const poli = (x0, y0, x1, y1) => ({ type: 'Polygon', coordinates: [anel(x0, y0, x1, y1)] });
+const nosso = (id, g, extra = {}) => ({ id, nome: `nosso ${id}`, fazendaId: 'fz', clienteId: 'cl', geojson: JSON.stringify({ type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry: g }] }), ...extra });
+const casar = (fields, talhoes, vinculos = []) => {
+  const m = MF.lerManifestoPF({ fields });
+  if (!m.ok) throw new Error(m.erro);
+  return MF.casarManifesto(m.campos, m.campos.map(c => MF.limiteDoCampo(c, null, null)), talhoes, vinculos);
+};
+const vinc = (talhaoId, sharedFieldId, extra = {}) => ({ talhaoId, sharedFieldId, sharedProducerId: PROD, sharedFarmId: FARM, status: 'pendente', fazendaId: 'fz', clienteId: 'cl', ...extra });
+
+console.log('Lote — manifesto da PF');
+t('lê o formato da Figueira: local_field_id número → texto, UUIDs em minúsculas, boundary_file e sha256', () => {
+  const m = MF.lerManifestoPF(JSON.stringify({ fields: [{
+    local_field_id: 16, name: 'IGEFI01', shared_producer_id: PROD.toUpperCase(), shared_farm_id: FARM, shared_field_id: uuidN(16),
+    boundary_file: 'limites_figueira/IGEFI01.geojson', boundary_sha256: 'ABC', identity_status: 'proposed_pending_remote_match',
+  }] }));
+  assert.equal(m.ok, true);
+  const c = m.campos[0];
+  assert.deepEqual([c.pfLocalId, c.nome, c.sharedProducerId, c.arquivoLimite, c.sha256, c.problema], ['16', 'IGEFI01', PROD, 'limites_figueira/IGEFI01.geojson', 'abc', null]);
+});
+t('manifesto sem fields / vazio / não-JSON é recusado inteiro', () => {
+  assert.equal(MF.lerManifestoPF({}).ok, false);
+  assert.equal(MF.lerManifestoPF({ fields: [] }).ok, false);
+  assert.match(MF.lerManifestoPF('{').erro, /JSON/);
+});
+t('defeito de UM item marca só ele: UUID inválido, sem ID PF, sem limite, repetidos', () => {
+  const m = MF.lerManifestoPF({ fields: [
+    itemPF(1, 'a', QUAD, { shared_farm_id: 'x' }),
+    itemPF(2, 'b', QUAD, { local_field_id: '' }),
+    itemPF(3, 'c', null),
+    itemPF(4, 'd', QUAD), itemPF(5, 'e', QUAD, { shared_field_id: uuidN(4) }),
+    itemPF(6, 'f', QUAD),
+  ] });
+  assert.match(m.campos[0].problema, /shared_farm_id/);
+  assert.match(m.campos[1].problema, /local_field_id/);
+  assert.match(m.campos[2].problema, /Sem limite/);
+  assert.match(m.campos[3].problema, /shared_field_id repetido/);
+  assert.match(m.campos[4].problema, /shared_field_id repetido/);
+  assert.equal(m.campos[5].problema, null);
+});
+t('arquivo do limite: caminho exato do zip ou só o nome (soltos); nome repetido em pastas = não acha', () => {
+  const arqs = new Map([['limites_figueira/IGEFI01.geojson', 1], ['IGEFI02.geojson', 2], ['a/X.geojson', 3], ['b/X.geojson', 4]]);
+  assert.equal(MF.acharArquivo(arqs, 'limites_figueira/IGEFI01.geojson'), 1);
+  assert.equal(MF.acharArquivo(arqs, 'limites_figueira/IGEFI02.geojson'), 2);
+  assert.equal(MF.acharArquivo(arqs, 'c/X.geojson'), null);
+});
+t('limite: SHA-256 diferente do manifesto, arquivo ausente e geometria inválida são recusados', () => {
+  const [c] = MF.lerManifestoPF({ fields: [itemPF(1, 'a', null, { boundary_file: 'a.geojson', boundary_sha256: 'aa' })] }).campos;
+  assert.match(MF.limiteDoCampo(c, JSON.stringify(QUAD), 'bb').erro, /SHA-256/);
+  assert.equal(MF.limiteDoCampo(c, JSON.stringify(QUAD), 'aa').ok, true);
+  assert.match(MF.limiteDoCampo(c, null, null).erro, /não encontrado/);
+  const aberto = { type: 'Polygon', coordinates: [anel(0, 0, 0.01, 0.01).slice(0, 4)] };
+  assert.match(MF.limiteDoCampo(c, JSON.stringify(aberto), null).erro, /inválido/);
+});
+
+console.log('Lote — casamento por geometria');
+// Nossos: A e B lado a lado; C+D (a PF junta os dois); E; H (a PF parte em dois).
+const GA = poli(0, 0, 0.01, 0.01), GB = poli(0.01, 0, 0.02, 0.01);
+const GC = poli(0, 0.02, 0.005, 0.03), GD = poli(0.005, 0.02, 0.01, 0.03);
+const GE = poli(0.03, 0, 0.04, 0.01), GH = poli(0.05, 0, 0.06, 0.01);
+const NOSSOS = [nosso('A', GA), nosso('B', GB), nosso('C', GC), nosso('D', GD), nosso('E', GE), nosso('H', GH)];
+t('1:1 com diferença ≤ 5% é PRÉ-MARCADO; a borda que invade o vizinho não o torna ambíguo', () => {
+  // A deslocado 1% para a direita: sobra fina sobre B, diferença ≈ 2%.
+  const [r] = casar([itemPF(1, 'pA', poli(0.0001, 0, 0.0101, 0.01))], NOSSOS);
+  assert.equal(r.situacao, 'par'); assert.equal(r.preMarcado, true); assert.equal(r.podeCriar, true);
+  assert.equal(r.melhor.talhaoId, 'A'); assert.ok(r.melhor.difSimPct > 1.5 && r.melhor.difSimPct < 2.5, String(r.melhor.difSimPct));
+  assert.equal(r.outrosRelevantes.length, 0);
+});
+t('idêntico: diferença 0 e pré-marcado', () => {
+  const [r] = casar([itemPF(1, 'pB', GB)], NOSSOS);
+  assert.equal(r.situacao, 'par'); assert.equal(r.melhor.talhaoId, 'B'); assert.equal(r.melhor.difSimPct, 0);
+});
+t('talhão da PF que cobre dois dos nossos é AMBÍGUO e não pode ser criado (IGEFI11 da PF = nossos 10 + 11)', () => {
+  const [r] = casar([itemPF(1, 'pCD', poli(0, 0.02, 0.01, 0.03))], NOSSOS);
+  assert.equal(r.situacao, 'ambiguo'); assert.equal(r.podeCriar, false); assert.equal(r.preMarcado, false);
+  assert.match(r.motivo, /nosso C.*nosso D|nosso D.*nosso C/);
+});
+t('diferença > 5%: pode marcar, mas NÃO vem marcado', () => {
+  const [r] = casar([itemPF(1, 'pE', poli(0.03, 0, 0.0411, 0.01))], NOSSOS);
+  assert.equal(r.situacao, 'diferente'); assert.equal(r.podeCriar, true); assert.equal(r.preMarcado, false);
+  assert.ok(r.melhor.difSimPct > 5);
+});
+t('sem sobreposição: sem par', () => {
+  const [r] = casar([itemPF(1, 'pX', poli(0.2, 0.2, 0.21, 0.21))], NOSSOS);
+  assert.equal(r.situacao, 'sem-par'); assert.equal(r.podeCriar, false);
+});
+t('dois talhões da PF no MESMO nosso: nenhum dos dois entra (não é 1:1)', () => {
+  const rs = casar([itemPF(1, 'pH1', poli(0.05, 0, 0.0549, 0.01)), itemPF(2, 'pH2', poli(0.0551, 0, 0.06, 0.01))], NOSSOS);
+  for (const r of rs) { assert.equal(r.situacao, 'ambiguo'); assert.equal(r.podeCriar, false); }
+  assert.match(rs[0].motivo, /pH2/);
+});
+t('DUPLICATA: shared_field_id já vinculado (mesmo talhão = "mesmos IDs"; outro talhão = recusa)', () => {
+  const [r1] = casar([itemPF(1, 'pA', GA)], NOSSOS, [vinc('A', uuidN(1), { status: 'confirmado' })]);
+  assert.equal(r1.situacao, 'ja-vinculado'); assert.equal(r1.podeCriar, false); assert.match(r1.motivo, /mesmos IDs \(confirmado\)/);
+  const [r2] = casar([itemPF(1, 'pA', GA)], NOSSOS, [vinc('B', uuidN(1))]);
+  assert.equal(r2.situacao, 'ja-vinculado'); assert.match(r2.motivo, /talhão nosso B/);
+});
+t('DUPLICATA: nosso talhão já tem vínculo com OUTROS UUIDs', () => {
+  const [r] = casar([itemPF(1, 'pA', GA)], NOSSOS, [vinc('A', uuidN(77))]);
+  assert.equal(r.situacao, 'ja-vinculado'); assert.equal(r.podeCriar, false); assert.match(r.motivo, /outros UUIDs/);
+});
+t('conflito de identidade: a fazenda já tem outro shared_farm_id (mesma regra do "Gerar identificadores")', () => {
+  const [r] = casar([itemPF(1, 'pB', GB)], NOSSOS, [vinc('A', uuidN(50), { sharedFarmId: uuidN(51) })]);
+  assert.equal(r.situacao, 'conflito'); assert.equal(r.podeCriar, false); assert.match(r.motivo, /shared_farm_id/);
+});
+t('item com defeito / limite inválido sai como inválido, sem derrubar os outros', () => {
+  const rs = casar([itemPF(1, 'ruim', poli(0, 0, 0.01, 0.01), { shared_field_id: 'x' }), itemPF(2, 'pB', GB)], NOSSOS);
+  assert.deepEqual(rs.map(r => r.situacao), ['invalido', 'par']);
+});
+
+console.log('Lote — conferência do servidor antes de criar');
+const NUVEM = new Map([['A', { fazendaId: 'fz', clienteId: 'cl', empresaId: 'emp' }], ['B', { fazendaId: 'fz', clienteId: 'cl', empresaId: 'emp' }], ['E', { fazendaId: 'fz', clienteId: 'cl', empresaId: null }]]);
+const itemC = (talhaoId, n, extra = {}) => ({ talhaoId, pfLocalId: String(n), sharedProducerId: PROD, sharedFarmId: FARM, sharedFieldId: uuidN(n), nomePF: `p${n}`, ...extra });
+t('cria o que passa; recusa talhão fora da nuvem, já vinculado, shared_field_id usado e repetidos no pedido', () => {
+  const r = MF.conferirCriacao([
+    itemC('A', 1),
+    itemC('Z', 2),                    // não está na nuvem (o "115")
+    itemC('B', 3),                    // B já tem vínculo
+    itemC('E', 9),                    // shared_field_id 9 já é de outro talhão
+    itemC('A', 4),                    // talhão repetido no pedido
+  ], NUVEM, [vinc('B', uuidN(70)), vinc('Q', uuidN(9))]);
+  assert.equal(r[0].ok, true); assert.deepEqual([r[0].fazendaId, r[0].clienteId, r[0].empresaId], ['fz', 'cl', 'emp']);
+  assert.match(r[1].motivo, /não está na nuvem/);
+  assert.match(r[2].motivo, /já tem vínculo/);
+  assert.match(r[3].motivo, /shared_field_id já está/);
+  assert.match(r[4].motivo, /repetido/);
+});
+t('identidade: fazenda com outro shared_farm_id (existente ou de item anterior do pedido) é recusada', () => {
+  const r = MF.conferirCriacao([itemC('A', 1), itemC('B', 2, { sharedFarmId: uuidN(99) })], NUVEM, []);
+  assert.equal(r[0].ok, true); assert.match(r[1].motivo, /shared_farm_id/);
+  const r2 = MF.conferirCriacao([itemC('A', 1)], NUVEM, [vinc('Q', uuidN(60), { sharedProducerId: uuidN(61), fazendaId: 'outra' })]);
+  assert.match(r2[0].motivo, /shared_producer_id/);
+});
+t('formato: UUID inválido e sem ID PF recusados; corpo vazio/grande demais recusado inteiro', () => {
+  const r = MF.conferirCriacao([itemC('A', 1, { sharedFieldId: 'x' }), itemC('A', 2, { pfLocalId: '' })], NUVEM, []);
+  assert.match(r[0].motivo, /UUID/); assert.match(r[1].motivo, /ID do talhão na PrecisionFarm/);
+  assert.equal(MF.lerItensCriacao({ itens: [] }).ok, false);
+  assert.equal(MF.lerItensCriacao({ itens: Array.from({ length: MF.MAX_CAMPOS_MANIFESTO + 1 }, () => ({})) }).ok, false);
+  assert.equal(MF.lerItensCriacao({ itens: [{ talhaoId: ' A ', sharedFieldId: uuidN(1).toUpperCase() }] }).itens[0].sharedFieldId, uuidN(1));
+});
+
+// Manifesto REAL da PF (fora do repositório; dado da Figueira): roda quando
+// existe a pasta descompactada do complemento (PF_MANIFESTO_REAL=<pasta>).
+// Os "nossos" são simulados com os próprios limites da PF e o IGEFI11 partido
+// ao meio — prova a leitura dos 16 arquivos (SHA-256) e a regra de ambíguo.
+const MREAL = process.env.PF_MANIFESTO_REAL;
+if (MREAL && existsSync(MREAL)) {
+  const { createHash } = await import('node:crypto');
+  const { join } = await import('node:path');
+  const { readdirSync } = await import('node:fs');
+  const { default: turfIntersect } = await import('@turf/intersect');
+  const TH = await import('@turf/helpers');
+  t('Figueira real: 16 limites lidos e conferidos; 14 pares 1:1, IGEFI11 ambíguo, IGEFI03 já vinculado', () => {
+    const man = MF.lerManifestoPF(readFileSync(join(MREAL, 'FIGUEIRA_VINCULOS_PROPOSTOS.json'), 'utf8'));
+    const pasta = join(MREAL, 'limites_figueira');
+    const arqs = new Map(readdirSync(pasta).map(f => [`limites_figueira/${f}`, readFileSync(join(pasta, f))]));
+    const lims = man.campos.map(c => { const b = MF.acharArquivo(arqs, c.arquivoLimite); return MF.limiteDoCampo(c, b.toString('utf8'), createHash('sha256').update(b).digest('hex')); });
+    assert.equal(lims.filter(l => l.ok).length, 16, lims.filter(l => !l.ok).map(l => l.erro).join('; '));
+    const talhoes = [];
+    man.campos.forEach((c, k) => {
+      const g = lims[k].geometria;
+      if (c.nome !== 'IGEFI11') { talhoes.push(nosso(c.nome, g)); return; }
+      const cx = CL.caixaDoLimite(g), xm = (cx[0] + cx[2]) / 2;
+      const meia = (a, b) => TH.polygon([[[a, cx[1] - 1e-3], [b, cx[1] - 1e-3], [b, cx[3] + 1e-3], [a, cx[3] + 1e-3], [a, cx[1] - 1e-3]]]);
+      talhoes.push(nosso('IGEFI 10', turfIntersect(TH.featureCollection([TH.feature(g), meia(cx[0] - 1e-3, xm)])).geometry));
+      talhoes.push(nosso('IGEFI 11', turfIntersect(TH.featureCollection([TH.feature(g), meia(xm, cx[2] + 1e-3)])).geometry));
+    });
+    const i03 = man.campos.find(c => c.nome === 'IGEFI03');
+    const rs = MF.casarManifesto(man.campos, lims, talhoes, [vinc('IGEFI03', i03.sharedFieldId, { status: 'confirmado', sharedFarmId: i03.sharedFarmId, sharedProducerId: i03.sharedProducerId })]);
+    const por = s => rs.filter(r => r.situacao === s).map(r => r.campo.nome);
+    assert.equal(por('par').length, 14, JSON.stringify(rs.map(r => [r.campo.nome, r.situacao, r.motivo])));
+    assert.deepEqual(por('ambiguo'), ['IGEFI11']);
+    assert.deepEqual(por('ja-vinculado'), ['IGEFI03']);
+    assert.equal(rs.find(r => r.campo.nome === 'PEQHOL').campo.pfLocalId, '31');
+  });
+} else {
+  console.log('  – Figueira real: pulado (defina PF_MANIFESTO_REAL=<pasta do complemento descompactado>)');
+}
+
+console.log('Lote — execução');
+ta('concorrência limitada, ordem preservada, exceção de um vira "erro" e o lote segue', async () => {
+  let ativos = 0, pico = 0;
+  const progresso = [];
+  const rs = await LT.executarEmLote([1, 2, 3, 4, 5, 6, 7], async n => {
+    ativos++; pico = Math.max(pico, ativos);
+    await new Promise(r => setTimeout(r, 5 + (n % 3) * 3));
+    ativos--;
+    if (n === 3) throw new Error('falhou o 3');
+    return n % 2 ? LT.ok(`ok ${n}`) : LT.pulado(`pulado ${n}`);
+  }, { concorrencia: 2, aoProgredir: p => progresso.push(p.feitos) });
+  assert.equal(pico, 2);
+  assert.deepEqual(rs.map(r => r.texto), ['ok 1', 'pulado 2', 'falhou o 3', 'pulado 4', 'ok 5', 'pulado 6', 'ok 7']);
+  assert.equal(rs[2].desfecho, 'erro');
+  assert.deepEqual(progresso, [1, 2, 3, 4, 5, 6, 7]);
+  assert.equal(LT.resumoDoLote(rs).texto, '3 ok · 3 pulados · 1 erro');
+});
+t('falha da rota → desfecho: 404/409/413/422 = pulado; rede, 400, 401/403 e 5xx = erro', () => {
+  for (const s of [404, 409, 413, 422]) assert.equal(LT.desfechoDaFalha(s), 'pulado');
+  for (const s of [undefined, 400, 401, 403, 500, 502, 503]) assert.equal(LT.desfechoDaFalha(s), 'erro');
+});
+t('várias colheitas do mesmo talhão viram UM resultado (erro > ok > pulado)', () => {
+  assert.equal(LT.juntarResultados([LT.pulado('a'), LT.ok('b')]).desfecho, 'ok');
+  assert.equal(LT.juntarResultados([LT.ok('a'), LT.erro('b')]).desfecho, 'erro');
+  assert.equal(LT.juntarResultados([LT.pulado('a'), LT.pulado('b')]).texto, 'a · b');
 });
 
 await Promise.all(pendentes);
