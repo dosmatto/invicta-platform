@@ -32,6 +32,7 @@ import { ChatTalhaoCard } from '@/components/talhao/ChatTalhaoCard';
 import { RecomendacaoSection } from '@/components/talhao/RecomendacaoSection';
 import { PrescricoesSection } from '@/components/talhao/PrescricoesSection';
 import { SeloLiberacaoLavra } from '@/components/talhao/SeloLiberacaoLavra';
+import { SeletorAno } from '@/components/talhao/SeletorAno';
 import { ArquivosSection } from '@/components/talhao/ArquivosSection';
 import { LabImportSection } from '@/components/talhao/LabImportSection';
 import { ImportarGradeSection } from '@/components/talhao/ImportarGradeSection';
@@ -428,12 +429,8 @@ export function TalhaoPage({ id }: { id: string }) {
               direita, onde ninguém achava. */}
           <span className="flex items-center gap-1 flex-shrink-0">
             <span style={{ color: '#64748b' }}>Ano:</span>
-            <select value={safraSel} onChange={e => setSafraSel(e.target.value)}
-              title="Ano dos trabalhos exibidos neste talhão"
-              className="rounded px-1.5 py-0.5 text-xs outline-none" style={inputStyle}>
-              {safras.length === 0 && <option value="">— sem ano —</option>}
-              {safras.map(s => <option key={s.id} value={s.nome}>{rotuloAno(s.nome)}</option>)}
-            </select>
+            <SeletorAno talhaoId={id} aba={tabAtivo} safras={safras} valor={safraSel}
+              onChange={setSafraSel} estilo={inputStyle} />
           </span>
           <Sep />
           <span className="flex items-center gap-1 flex-shrink-0">

@@ -1,5 +1,10 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Lista de talhões sem espremer o nome + Ano destacado por aba
+  '2.220.0': [
+    'PENDÊNCIA S/N — LISTA DE TALHÕES SEM ESPREMER O NOME: na fazenda, os selos (áreas separadas, fertilidade, colheita, linhas) saíram da linha do nome e foram para uma linha própria logo abaixo da área. O nome volta a aparecer inteiro ("JCASA 01" em vez de "JCA / SA / 01") e a área não é mais cortada ("52,…"). Os botões de baixar e abrir o talhão continuam à direita.',
+    'ANO DESTACADO CONFORME A ABA: no cabeçalho do talhão, o seletor de Ano marca em verde (fundo verde e bolinha) os anos que têm dado na aba aberta — Fertilidade (laudos), Produtividade (mapas de colheita), Amostragem (grades), Zonas (ano em que o zoneamento foi gerado), Compactação, NDVI (cenas de satélite) e Recomendações. O topo do menu diz de qual aba é o destaque; quando o ano escolhido tem dado, o próprio botão fica verde. Trocar de aba troca o destaque.',
+  ],
   // [S/N] Selo de projeto de linhas na lista de talhões da fazenda
   '2.219.0': [
     'PENDÊNCIA S/N — SELO DE LINHAS NA LISTA DE TALHÕES: na fazenda, o talhão que tem projeto de linhas da PrecisionFarm (camada vigente, não arquivada) ganha um selo com o ícone de linhas, ao lado dos selos de fertilidade e de colheita. As linhas não têm ano, então o selo é só o ícone; clicar abre o talhão na aba Linhas (nova aba).',

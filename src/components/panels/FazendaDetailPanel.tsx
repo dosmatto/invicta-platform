@@ -463,8 +463,11 @@ export function FazendaDetailPanel() {
                         <p className="text-[10px] truncate mt-0.5" style={{ color: '#64748b' }}>
                           {t.areaHa > 0 ? `${t.areaHa.toLocaleString('pt-BR')} ha` : 'Área não definida'}
                         </p>
-                      </div>
-                      <div className="flex items-center gap-1 relative flex-shrink-0">
+                        {/* SELOS numa linha PRÓPRIA abaixo do nome: na mesma linha eles
+                            espremiam o nome para 3 letras por linha ("JCA / SA / 01")
+                            e cortavam a área ("52,…"). Quebram em mais linhas se faltar espaço. */}
+                        {(multi || anosFert.length > 0 || anosProd.length > 0 || comLinhas.has(t.id) || t.status !== 'ativo') && (
+                        <div className="flex flex-wrap items-center gap-1 mt-1">
                         {/* GAVETA das áreas separadas — só em talhão multipolígono. */}
                         {multi && (
                           <button
@@ -495,6 +498,10 @@ export function FazendaDetailPanel() {
                             incompleto, e escrever "Ativo" em 18 linhas seguidas custava
                             ~50 px do nome sem dizer nada. */}
                         {t.status !== 'ativo' && <StatusBadge status={t.status} />}
+                        </div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1 relative flex-shrink-0">
                         {/* Baixar a GEOMETRIA do talhão (KML / SHP). Só aparece com
                             contorno salvo — sem ele não há o que exportar. */}
                         {partes.length > 0 && (
