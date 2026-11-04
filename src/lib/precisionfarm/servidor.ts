@@ -105,6 +105,63 @@ export type LeitorAutenticado =
  * (item_id = e-mail) e depois a mais recente.
  */
 export async function autenticarLeitor(sb: SupabaseClient, auth: string | null, talhaoId: string): Promise<LeitorAutenticado> {
+  const r = await registroDoLeitor(sb, auth);
+  if (!r.ok) return r;
+  const { email, reg } = r;
+  const gestor = ehPapelGestor(reg.papel);
+  if (ehPapelSemEscopo(reg.papel)) {
+    return podeVerTalhao(reg, { id: talhaoId, fazendaId: null }, [])
+      ? { ok: true, email, papel: reg.papel, gestor }
+      : { ok: false, status: 403, erro: 'Seu acesso não está ativo.' };
+  }
+  const t = await carregarTalhao(sb, talhaoId);
+  if (!t) return { ok: false, status: 404, erro: 'Talhão não encontrado na nuvem.' };
+  const fazendas = await fazendasDoEscopo(sb, reg, [t.fazendaId]);
+  if (!fazendas) return { ok: false, status: 403, erro: 'Não foi possível conferir o seu acesso.' };
+  if (!podeVerTalhao(reg, { id: t.id, fazendaId: t.fazendaId }, fazendas)) {
+    return { ok: false, status: 403, erro: 'Você não tem acesso a este talhão.' };
+  }
+  return { ok: true, email, papel: reg.papel, gestor };
+}
+
+/**
+ * Mesma regra de autenticarLeitor, para VÁRIOS talhões de uma vez (selo de
+ * linhas na lista da fazenda): a sessão e o registro são conferidos uma vez e
+ * cada talhão passa por podeVerTalhao. Devolve só os ids que o usuário vê e
+ * que existem na nuvem — os outros somem calados (a lista não revela nada).
+ */
+export async function talhoesVisiveisAoLeitor(
+  sb: SupabaseClient, auth: string | null, talhaoIds: string[],
+): Promise<{ ok: true; ids: string[] } | { ok: false; status: 401 | 403; erro: string }> {
+  const r = await registroDoLeitor(sb, auth);
+  if (!r.ok) return r;
+  const { reg } = r;
+  const tals = await carregarTalhoes(sb, talhaoIds);
+  if (ehPapelSemEscopo(reg.papel)) {
+    return podeVerTalhao(reg, { id: '', fazendaId: null }, [])
+      ? { ok: true, ids: [...tals.keys()] }
+      : { ok: false, status: 403, erro: 'Seu acesso não está ativo.' };
+  }
+  const fazendas = await fazendasDoEscopo(sb, reg, [...tals.values()].map(t => t.fazendaId));
+  if (!fazendas) return { ok: false, status: 403, erro: 'Não foi possível conferir o seu acesso.' };
+  return { ok: true, ids: [...tals.values()].filter(t => podeVerTalhao(reg, { id: t.id, fazendaId: t.fazendaId }, fazendas)).map(t => t.id) };
+}
+
+/** Fazendas (id + cliente) que entram na conta do escopo: as dos talhões
+ *  pedidos + as vinculadas ao registro. null = falha ao ler (nega). */
+async function fazendasDoEscopo(sb: SupabaseClient, reg: RegistroAcesso, dosTalhoes: (string | null)[]): Promise<FazendaEscopo[] | null> {
+  const ids = [...new Set([...dosTalhoes, ...(Array.isArray(reg.fazendasVinculadas) ? reg.fazendasVinculadas : [])].filter((x): x is string => typeof x === 'string' && !!x))];
+  if (!ids.length) return [];
+  const { data: fz, error } = await sb.from('app_kv').select('item_id, clienteId:dados->>clienteId').eq('colecao', COL_FAZENDAS).in('item_id', ids);
+  if (error) return null;
+  return ((fz ?? []) as { item_id: string; clienteId: string | null }[]).map(f => ({ id: String(f.item_id), clienteId: String(f.clienteId ?? '') }));
+}
+
+/** Sessão → registro de papel (inv_papeis) do e-mail, pela regra descrita em
+ *  autenticarLeitor. */
+async function registroDoLeitor(sb: SupabaseClient, auth: string | null): Promise<
+  { ok: true; email: string; reg: RegistroAcesso & { papel: string } } | { ok: false; status: 401 | 403; erro: string }
+> {
   const token = chaveDoHeader(auth);
   if (!token) return { ok: false, status: 401, erro: 'Sessão ausente. Entre de novo na plataforma.' };
   const { data, error } = await sb.auth.getUser(token);
@@ -123,25 +180,7 @@ export async function autenticarLeitor(sb: SupabaseClient, auth: string | null, 
     .sort((a, b) => Number(b.item_id === email) - Number(a.item_id === email) || String(b.atualizado_em ?? '').localeCompare(String(a.atualizado_em ?? '')));
   const reg = candidatas[0]?.dados ?? null;
   if (!reg?.papel) return { ok: false, status: 403, erro: 'Seu usuário não tem papel na plataforma.' };
-  const gestor = ehPapelGestor(reg.papel);
-  if (ehPapelSemEscopo(reg.papel)) {
-    return podeVerTalhao(reg, { id: talhaoId, fazendaId: null }, [])
-      ? { ok: true, email, papel: reg.papel, gestor }
-      : { ok: false, status: 403, erro: 'Seu acesso não está ativo.' };
-  }
-  const t = await carregarTalhao(sb, talhaoId);
-  if (!t) return { ok: false, status: 404, erro: 'Talhão não encontrado na nuvem.' };
-  const ids = [...new Set([t.fazendaId, ...(Array.isArray(reg.fazendasVinculadas) ? reg.fazendasVinculadas : [])].filter((x): x is string => typeof x === 'string' && !!x))];
-  let fazendas: FazendaEscopo[] = [];
-  if (ids.length) {
-    const { data: fz, error: e3 } = await sb.from('app_kv').select('item_id, clienteId:dados->>clienteId').eq('colecao', COL_FAZENDAS).in('item_id', ids);
-    if (e3) return { ok: false, status: 403, erro: 'Não foi possível conferir o seu acesso.' };
-    fazendas = ((fz ?? []) as { item_id: string; clienteId: string | null }[]).map(f => ({ id: String(f.item_id), clienteId: String(f.clienteId ?? '') }));
-  }
-  if (!podeVerTalhao(reg, { id: t.id, fazendaId: t.fazendaId }, fazendas)) {
-    return { ok: false, status: 403, erro: 'Você não tem acesso a este talhão.' };
-  }
-  return { ok: true, email, papel: reg.papel, gestor };
+  return { ok: true, email, reg: reg as RegistroAcesso & { papel: string } };
 }
 
 // ── Leitura do cadastro (nuvem) ──────────────────────────────────────────────

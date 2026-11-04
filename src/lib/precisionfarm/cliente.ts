@@ -123,6 +123,10 @@ export const geometriaLinhasPF = (talhaoId: string, resourceId: string, n: numbe
   chamar<{ geometria: GeoJSON.FeatureCollection }>(
     `/api/precisionfarm/linhas/${encodeURIComponent(talhaoId)}/revisao?resource=${encodeURIComponent(resourceId)}&n=${n}`);
 
+/** Quais destes talhões têm linhas vigentes (selo na lista da fazenda). */
+export const resumoLinhasPF = (talhaoIds: string[]) =>
+  chamar<{ comLinhas: string[] }>('/api/precisionfarm/linhas-resumo', { method: 'POST', body: { talhaoIds } });
+
 export const buscarLinhasPF = (talhaoId: string) =>
   chamar<{ mensagem: string; novos: number }>('/api/precisionfarm/carga-linhas', { method: 'POST', body: { talhaoId } });
 

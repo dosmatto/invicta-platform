@@ -1,5 +1,10 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Selo de projeto de linhas na lista de talhões da fazenda
+  '2.219.0': [
+    'PENDÊNCIA S/N — SELO DE LINHAS NA LISTA DE TALHÕES: na fazenda, o talhão que tem projeto de linhas da PrecisionFarm (camada vigente, não arquivada) ganha um selo com o ícone de linhas, ao lado dos selos de fertilidade e de colheita. As linhas não têm ano, então o selo é só o ícone; clicar abre o talhão na aba Linhas (nova aba).',
+    'A lista inteira é conferida num pedido só ao servidor, com a mesma regra de acesso da aba Linhas, talhão a talhão. Sem sessão ou com a integração fora do ar, o selo simplesmente não aparece.',
+  ],
   // [S/N] Tela de lote da PrecisionFarm na Biblioteca
   '2.218.0': [
     'PENDÊNCIA S/N — TELA DE LOTE DA PRECISIONFARM: nova entrada "PrecisionFarm" na Biblioteca (abaixo de Acessos, só owner e admin) com todos os talhões vinculados à PrecisionFarm, de todos os clientes: talhão, fazenda, cliente, ID PF, status do vínculo, o que já foi publicado (zonas e colheitas, com a revisão), linhas recebidas e a diferença de limite. Filtros por cliente e fazenda, caixa por linha e "marcar todos".',

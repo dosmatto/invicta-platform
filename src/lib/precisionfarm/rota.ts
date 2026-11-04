@@ -48,7 +48,7 @@ import {
   ConflitoIntegracao, atualizarVinculo, autenticarLeitor, autenticarPrecisionFarm, autenticarUsuario, camadasLinhasDosTalhoes, carregarTalhao, carregarTalhoes,
   clienteDaFazenda, clientesDasFazendas, clienteServico, envelopeDaRevisao, gradeProdutividade, inserirRevisao, inserirVinculo, inserirVinculos, mapaProdutividade,
   obterOuCriarRecurso, recursoPorId, recursosDosVinculos, servicoConfigurado, ultimaRevisao, vigentesDoVinculo, vinculoDoCampo,
-  vinculoDoTalhao, vinculoPorId, vinculosConfirmados, vinculosDaParceria, vinculosParaReuso, zoneamentoPadrao,
+  talhoesVisiveisAoLeitor, vinculoDoTalhao, vinculoPorId, vinculosConfirmados, vinculosDaParceria, vinculosParaReuso, zoneamentoPadrao,
   type VinculoRow,
 } from './servidor.ts';
 
@@ -649,6 +649,31 @@ export function tratarLinhasTalhao(req: Request, talhaoId: string): Promise<Resp
       }),
     }, 200);
   });
+}
+
+/** POST /api/precisionfarm/linhas-resumo { talhaoIds } — quais talhões da
+ *  lista têm camada de linhas VIGENTE (com geometria, não arquivada). Serve ao
+ *  selo da lista da fazenda: um pedido só, em vez de um por talhão. Mesma regra
+ *  de acesso da aba Linhas, talhão a talhão; o que o usuário não vê não entra. */
+export async function tratarResumoLinhas(req: Request): Promise<Response> {
+  if (!servicoConfigurado()) return json({ ok: false, erro: 'Serviço de integração não configurado neste ambiente.' }, 500);
+  let corpo: unknown;
+  try { corpo = await req.json(); } catch { return json({ ok: false, erro: 'Corpo inválido.' }, 400); }
+  const brutos = (corpo as { talhaoIds?: unknown })?.talhaoIds;
+  if (!Array.isArray(brutos) || brutos.length > 500) return json({ ok: false, erro: 'Lista de talhões inválida (até 500).' }, 400);
+  const pedidos = [...new Set(brutos.filter((x): x is string => typeof x === 'string' && x.length > 0 && x.length <= 128))];
+  if (!pedidos.length) return json({ ok: true, comLinhas: [] }, 200);
+  const sb = clienteServico();
+  try {
+    const v = await talhoesVisiveisAoLeitor(sb, req.headers.get('authorization'), pedidos);
+    if (!v.ok) return json({ ok: false, erro: v.erro }, v.status);
+    const camadas = await camadasLinhasDosTalhoes(sb, v.ids);
+    const comLinhas = [...new Set(camadas.filter(c => c.revisao_geometria != null && !c.arquivada).map(c => c.talhao_id))];
+    return json({ ok: true, comLinhas }, 200);
+  } catch (e) {
+    console.error('[precisionfarm] resumo de linhas:', e instanceof Error ? e.message : e);
+    return json({ ok: false, erro: 'Falha interna ao ler as linhas.' }, 500);
+  }
 }
 
 /** GET /api/precisionfarm/linhas/{talhaoId}/revisao?resource=&n= — linhas de

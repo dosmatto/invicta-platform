@@ -18,7 +18,8 @@ import { baixarKMLTalhao, baixarSHPTalhao, poligonoDoTalhao } from '@/lib/export
 import { partesComArea, type ParteArea } from '@/lib/areaGeo';
 import { getClientes, getAnosLaudos, getMapasProdutividade, getSafras } from '@/lib/store';
 import { anoDaSafra } from '@/lib/periodo';
-import { ChevronLeft, ChevronDown, Plus, Map, AlertTriangle, Save, X, ExternalLink, MapPin, Loader2, Upload, CheckCircle2, Pencil, Trash2, Download, Layers, TestTube, Wheat } from 'lucide-react';
+import { ChevronLeft, ChevronDown, Plus, Map, AlertTriangle, Save, X, ExternalLink, MapPin, Loader2, Upload, CheckCircle2, Pencil, Trash2, Download, Layers, TestTube, Wheat, Waypoints } from 'lucide-react';
+import { resumoLinhasPF } from '@/lib/precisionfarm/cliente';
 import { PanelSection, PanelButton, StatusBadge } from './_shared';
 import { RelatoriosFazenda } from './RelatoriosFazenda';
 import { MonitorFazenda } from './MonitorFazenda';
@@ -229,6 +230,20 @@ export function FazendaDetailPanel() {
     for (const r of [fert, prod]) for (const k in r) r[k].sort((a, b) => b.ano - a.ano);
     return { fert, prod };
   }, [talhoes]);
+
+  // TALHÕES COM PROJETO DE LINHAS (PrecisionFarm). As linhas moram no servidor,
+  // não no aparelho: UM pedido para a lista inteira (rota linhas-resumo). Sem
+  // sessão, sem serviço ou falha = sem selo (nada a mostrar, nada a avisar).
+  const [comLinhas, setComLinhas] = useState<Set<string>>(new Set());
+  const chaveTalhoes = useMemo(() => talhoes.map(t => t.id).sort().join(','), [talhoes]);
+  useEffect(() => {
+    if (!chaveTalhoes) return;
+    let vivo = true;
+    void resumoLinhasPF(chaveTalhoes.split(',')).then(r => {
+      if (vivo) setComLinhas(new Set(r.ok ? r.comLinhas : []));
+    });
+    return () => { vivo = false; };
+  }, [chaveTalhoes]);
 
   // Abre a página do talhão (nova aba) já na aba e no ANO clicados. O seletor de
   // Ano da página lista as safras cadastradas pelo nome — passa o nome da safra
@@ -464,6 +479,17 @@ export function FazendaDetailPanel() {
                         )}
                         {seloAnos('fert', anosFert)}
                         {seloAnos('prod', anosProd)}
+                        {/* Selo de LINHAS (PrecisionFarm): só o ícone — as linhas
+                            não têm ano. Clicar abre o talhão na aba Linhas. */}
+                        {comLinhas.has(t.id) && (
+                          <button
+                            onClick={e => { e.stopPropagation(); window.open(`/talhao/${t.id}?aba=linhas`, '_blank'); }}
+                            title="Projeto de linhas da PrecisionFarm — abrir o talhão na aba Linhas (nova aba)"
+                            className="flex items-center px-1 py-1 rounded flex-shrink-0"
+                            style={{ background: '#083344', color: '#67e8f9' }}>
+                            <Waypoints size={12} />
+                          </button>
+                        )}
                         {/* O selo de status só aparece quando há o que resolver: o
                             quadradinho da esquerda já é verde para ativo e âmbar para
                             incompleto, e escrever "Ativo" em 18 linhas seguidas custava
