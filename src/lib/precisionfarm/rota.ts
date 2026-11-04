@@ -46,7 +46,7 @@ import {
 } from './contrato.ts';
 import {
   ConflitoIntegracao, atualizarVinculo, autenticarLeitor, autenticarPrecisionFarm, autenticarUsuario, camadasLinhasDosTalhoes, carregarTalhao, carregarTalhoes,
-  clienteDaFazenda, clientesDasFazendas, clienteServico, envelopeDaRevisao, gradeProdutividade, inserirRevisao, inserirVinculo, mapaProdutividade,
+  clienteDaFazenda, clientesDasFazendas, clienteServico, envelopeDaRevisao, gradeProdutividade, inserirRevisao, inserirVinculo, inserirVinculos, mapaProdutividade,
   obterOuCriarRecurso, recursoPorId, recursosDosVinculos, servicoConfigurado, ultimaRevisao, vigentesDoVinculo, vinculoDoCampo,
   vinculoDoTalhao, vinculoPorId, vinculosConfirmados, vinculosDaParceria, vinculosParaReuso, zoneamentoPadrao,
   type VinculoRow,
@@ -479,24 +479,22 @@ export function tratarManifesto(req: Request): Promise<Response> {
       talhaoId: v.talhao_id, sharedProducerId: v.shared_producer_id, sharedFarmId: v.shared_farm_id, sharedFieldId: v.shared_field_id,
       status: v.status, fazendaId: v.fazenda_id, clienteId: v.cliente_id,
     })));
-    const resultados: { talhaoId: string; sharedFieldId: string; nomePF: string; ok: boolean; motivo?: string }[] = [];
-    // Um de cada vez: poucos itens, e a corrida (outra aba criando o mesmo)
-    // cai no unique e vira recusa daquele item.
-    for (const c of conferidos) {
+    // Os aprovados entram EM LOTE (inserirVinculos: fatias de vários registros;
+    // a fatia que o unique recusar — corrida com outra aba — é refeita um a um
+    // para dizer QUAL item caiu). A resposta continua por item, na ordem pedida.
+    const aprovados = conferidos.filter((c): c is Extract<typeof c, { ok: true }> => c.ok);
+    const gravados = await inserirVinculos(sb, aprovados.map(c => ({
+      parceria: PARCERIA_PADRAO, empresa_id: c.empresaId, talhao_id: c.item.talhaoId, fazenda_id: c.fazendaId, cliente_id: c.clienteId,
+      shared_producer_id: c.item.sharedProducerId, shared_farm_id: c.item.sharedFarmId, shared_field_id: c.item.sharedFieldId,
+      pf_local_id: c.item.pfLocalId, status: 'pendente' as const, criado_por: u.email,
+    })));
+    const porAprovado = new Map(aprovados.map((c, k) => [c, gravados[k]]));
+    const resultados = conferidos.map(c => {
       const base = { talhaoId: c.item.talhaoId, sharedFieldId: c.item.sharedFieldId, nomePF: c.item.nomePF };
-      if (!c.ok) { resultados.push({ ...base, ok: false, motivo: c.motivo }); continue; }
-      try {
-        await inserirVinculo(sb, {
-          parceria: PARCERIA_PADRAO, empresa_id: c.empresaId, talhao_id: c.item.talhaoId, fazenda_id: c.fazendaId, cliente_id: c.clienteId,
-          shared_producer_id: c.item.sharedProducerId, shared_farm_id: c.item.sharedFarmId, shared_field_id: c.item.sharedFieldId,
-          pf_local_id: c.item.pfLocalId, status: 'pendente', criado_por: u.email,
-        });
-        resultados.push({ ...base, ok: true });
-      } catch (e) {
-        if (e instanceof ConflitoIntegracao) { resultados.push({ ...base, ok: false, motivo: 'Outro vínculo com este talhão ou shared_field_id foi criado ao mesmo tempo.' }); continue; }
-        resultados.push({ ...base, ok: false, motivo: e instanceof Error ? e.message : 'Falha ao criar o vínculo.' });
-      }
-    }
+      if (!c.ok) return { ...base, ok: false, motivo: c.motivo };
+      const g = porAprovado.get(c)!;
+      return g.ok ? { ...base, ok: true } : { ...base, ok: false, motivo: g.motivo };
+    });
     return json({ ok: true, criados: resultados.filter(r => r.ok).length, resultados }, 200);
   });
 }

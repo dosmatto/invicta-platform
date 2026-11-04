@@ -318,6 +318,33 @@ export async function inserirVinculo(sb: SupabaseClient, row: Omit<VinculoRow, '
   return data as VinculoRow;
 }
 
+export type ResultadoInsercao = { ok: true } | { ok: false; motivo: string };
+
+/**
+ * Vários vínculos de uma vez (manifesto da PF): um INSERT por fatia de 50. O
+ * insert de várias linhas é atômico — se o unique recusar a fatia (outra aba
+ * criou o mesmo talhão/shared_field_id no meio), ela é refeita registro a
+ * registro, e só o(s) que bater(em) no unique saem recusados. Resultado na
+ * ordem de `rows`.
+ */
+export async function inserirVinculos(sb: SupabaseClient, rows: Parameters<typeof inserirVinculo>[1][]): Promise<ResultadoInsercao[]> {
+  const saida: ResultadoInsercao[] = [];
+  const msg = (e: unknown) => (e instanceof ConflitoIntegracao
+    ? 'Outro vínculo com este talhão ou shared_field_id foi criado ao mesmo tempo.'
+    : e instanceof Error ? e.message : 'Falha ao criar o vínculo.');
+  for (let k = 0; k < rows.length; k += 50) {
+    const fatia = rows.slice(k, k + 50);
+    const { error } = await sb.from('pf_vinculos').insert(fatia);
+    if (!error) { saida.push(...fatia.map((): ResultadoInsercao => ({ ok: true }))); continue; }
+    if (error.code !== '23505') { saida.push(...fatia.map((): ResultadoInsercao => ({ ok: false, motivo: `Falha ao criar o vínculo: ${error.message}` }))); continue; }
+    for (const r of fatia) {
+      try { await inserirVinculo(sb, r); saida.push({ ok: true }); }
+      catch (e) { saida.push({ ok: false, motivo: msg(e) }); }
+    }
+  }
+  return saida;
+}
+
 export async function atualizarVinculo(sb: SupabaseClient, id: string, patch: Partial<VinculoRow>): Promise<VinculoRow> {
   const { data, error } = await sb.from('pf_vinculos').update({ ...patch, atualizado_em: new Date().toISOString() }).eq('id', id).select(COLS_VINCULO).single();
   if (error) throw new Error(`Falha ao atualizar o vínculo: ${error.message}`);

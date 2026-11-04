@@ -45,19 +45,94 @@ async function sha256Hex(bytes: Uint8Array): Promise<string | null> {
   } catch { return null; }   // sem WebCrypto (http sem TLS): segue sem conferir
 }
 
+// Tetos do que entra na memória do navegador. O de cima vale para o que o
+// usuário escolheu (o zip COMPRIMIDO); os dois de baixo para o DESCOMPRIMIDO —
+// um zip de poucos KB pode declarar (ou esconder) gigabytes ("zip bomb"). Um
+// limite de talhão real tem 0,01–0,2 MB; o manifesto, dezenas de KB.
+const MAX_BYTES_POR_ARQUIVO = 20 * 1024 * 1024;
+const MAX_BYTES_DESCOMPRIMIDO = 200 * 1024 * 1024;
+const mb = (n: number) => `${fmtDec(n / 1048576, 1)} MB`;
+
+/** Pedaço do JSZip que usamos e que a tipagem pública não expõe: o tamanho
+ *  declarado no diretório central e o fluxo de descompressão. */
+type EntradaZip = {
+  _data?: { uncompressedSize?: number };
+  internalStream: (t: 'uint8array') => {
+    on(ev: 'data', fn: (chunk: Uint8Array) => void): ReturnType<EntradaZip['internalStream']>;
+    on(ev: 'error', fn: (e: Error) => void): ReturnType<EntradaZip['internalStream']>;
+    on(ev: 'end', fn: () => void): ReturnType<EntradaZip['internalStream']>;
+    resume(): void;
+    pause(): void;
+  };
+};
+
+/** Descomprime UMA entrada contando os bytes: passou do teto, para na hora
+ *  (não confia só no tamanho declarado, que um zip forjado pode mentir). */
+function descomprimirComTeto(e: EntradaZip, caminho: string, teto: number, motivoTeto: string): Promise<Uint8Array> {
+  return new Promise((resolve, reject) => {
+    const pedacos: Uint8Array[] = [];
+    let n = 0, parou = false;
+    const s = e.internalStream('uint8array');
+    s.on('data', chunk => {
+      if (parou) return;
+      n += chunk.length;
+      if (n > teto) { parou = true; s.pause(); reject(new Error(`${caminho}: ${motivoTeto}`)); return; }
+      pedacos.push(chunk);
+    })
+      .on('error', err => { if (!parou) { parou = true; reject(err); } })
+      .on('end', () => {
+        if (parou) return;
+        const out = new Uint8Array(n);
+        let k = 0;
+        for (const p of pedacos) { out.set(p, k); k += p.length; }
+        resolve(out);
+      });
+    s.resume();
+  });
+}
+
 /** Arquivos escolhidos → { caminho → bytes } (o zip é aberto aqui). */
 async function lerArquivos(files: File[]): Promise<Map<string, Uint8Array>> {
   const total = files.reduce((s, f) => s + f.size, 0);
-  if (total > MAX_BYTES_ARQUIVOS) throw new Error(`Arquivos grandes demais (${fmtDec(total / 1048576, 1)} MB; até 50 MB).`);
+  if (total > MAX_BYTES_ARQUIVOS) throw new Error(`Arquivos grandes demais (${mb(total)}; até ${mb(MAX_BYTES_ARQUIVOS)}).`);
   const saida = new Map<string, Uint8Array>();
+  let descomprimido = 0;
+  const somar = (n: number) => {
+    descomprimido += n;
+    if (descomprimido > MAX_BYTES_DESCOMPRIMIDO) throw new Error(`O conteúdo descomprimido passa de ${mb(MAX_BYTES_DESCOMPRIMIDO)} — não é um pacote de limites; recusado.`);
+  };
   for (const f of files) {
     if (/\.zip$/i.test(f.name)) {
       const { default: JSZip } = await import('jszip');
       const zip = await JSZip.loadAsync(await f.arrayBuffer());
-      for (const [caminho, e] of Object.entries(zip.files)) {
-        if (!e.dir && /\.(geo)?json$/i.test(caminho) && !caminho.startsWith('__MACOSX/')) saida.set(caminho, await e.async('uint8array'));
+      const entradas = Object.entries(zip.files)
+        .filter(([caminho, e]) => !e.dir && /\.(geo)?json$/i.test(caminho) && !caminho.startsWith('__MACOSX/'));
+      // 1) Pelo tamanho DECLARADO no diretório do zip, antes de descomprimir nada.
+      let declarado = 0;
+      for (const [caminho, e] of entradas) {
+        const d = (e as unknown as EntradaZip)._data?.uncompressedSize;
+        if (typeof d === 'number' && Number.isFinite(d)) {
+          if (d > MAX_BYTES_POR_ARQUIVO) throw new Error(`${caminho} tem ${mb(d)} descomprimido (até ${mb(MAX_BYTES_POR_ARQUIVO)} por arquivo) — recusado.`);
+          declarado += d;
+        }
+      }
+      if (descomprimido + declarado > MAX_BYTES_DESCOMPRIMIDO) {
+        throw new Error(`O zip declara ${mb(declarado)} descomprimidos (até ${mb(MAX_BYTES_DESCOMPRIMIDO)} no total) — recusado.`);
+      }
+      // 2) Descomprimindo, conferindo de novo byte a byte (o declarado pode mentir).
+      for (const [caminho, e] of entradas) {
+        const resta = MAX_BYTES_DESCOMPRIMIDO - descomprimido;
+        const teto = Math.min(MAX_BYTES_POR_ARQUIVO, resta);
+        const motivo = teto < MAX_BYTES_POR_ARQUIVO
+          ? `o conteúdo descomprimido passa de ${mb(MAX_BYTES_DESCOMPRIMIDO)} no total — recusado.`
+          : `passa de ${mb(MAX_BYTES_POR_ARQUIVO)} descomprimido (o tamanho declarado no zip não confere) — recusado.`;
+        const bytes = await descomprimirComTeto(e as unknown as EntradaZip, caminho, teto, motivo);
+        somar(bytes.length);
+        saida.set(caminho, bytes);
       }
     } else {
+      if (f.size > MAX_BYTES_POR_ARQUIVO) throw new Error(`${f.name} tem ${mb(f.size)} (até ${mb(MAX_BYTES_POR_ARQUIVO)} por arquivo) — recusado.`);
+      somar(f.size);
       saida.set(f.name, new Uint8Array(await f.arrayBuffer()));
     }
   }

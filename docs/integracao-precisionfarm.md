@@ -631,7 +631,7 @@ caminho dentro do zip e traz o SHA-256 de cada um; não é preciso descompactar.
 Também vale o `.json` + os `.geojson` soltos (seleção múltipla), casados pelo
 nome do arquivo. O manifesto é o `.json` com `fields` (vários → o de nome
 `*VINCULOS*`). Geometria no próprio item (`geometry`/`boundary`/`geojson`)
-também é aceita. Até 50 MB e 500 talhões.
+também é aceita. Até 50 MB escolhidos e 500 talhões; DESCOMPRIMIDO, até 20 MB por arquivo e 200 MB no total — conferido pelo tamanho declarado no diretório do zip antes de abrir e de novo, byte a byte, durante a descompressão (zip forjado que mente o tamanho para no teto).
 
 **Prévia** (`manifestoPF.ts`, pura; nada é gravado):
 
@@ -656,7 +656,7 @@ também é aceita. Até 50 MB e 500 talhões.
 (sessão + owner/admin). O servidor **confere de novo** (`conferirCriacao`):
 talhão na nuvem, talhão sem vínculo, `shared_field_id` livre, sem repetição no
 pedido, mesma identidade de produtor/fazenda; e cria cada um **pendente** com os
-UUIDs da PF e `pf_local_id = local_field_id`. Item recusado não impede os
+UUIDs da PF e `pf_local_id = local_field_id`, EM LOTE (`inserirVinculos`: um insert por fatia de 50; fatia recusada pelo `unique` é refeita um a um). Item recusado não impede os
 outros; corrida com outra aba cai no `unique` e vira recusa daquele item.
 Resposta `{ ok, criados, resultados: [{ talhaoId, sharedFieldId, ok, motivo? }] }`.
 
