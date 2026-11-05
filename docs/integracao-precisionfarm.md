@@ -602,12 +602,22 @@ ou **erro** (rede, sessão, 5xx). Resumo final "N ok · N pulados · N erros".
 | Suspender | `POST /vinculo acao=suspender` (pede confirmação do lote) | já suspenso |
 | Publicar zoneamento | `POST /publicar tipo=zonas` com o zoneamento **padrão** e o `geoVersao` locais | vínculo não confirmado; talhão fora do aparelho; sem padrão; padrão/limite fora de sincronia (409 da rota) |
 | Publicar colheita | `POST /publicar tipo=colheita` para **cada** mapa oficial do talhão (em sequência) | idem; sem colheita oficial; mapa sem época; safra fora do formato (422); grade fora da nuvem (409) |
+| Publicar prescrições | `POST /prescricoes {talhaoId}` (extensão 0.3, §9.2): pendentes publicam, desmarcadas arquivam | vínculo não confirmado; nenhuma estrela; pendência com motivo |
 | Comparar limites | `GET /limite/{id}` + `compararLimites` contra o limite **local** → coluna "Dif. limite" (m² e %) | vínculo não confirmado; talhão fora do aparelho |
 
 A escolha do que se publica é **a mesma** do botão da seção do talhão
 (`escolhaPublicacao.ts`: zoneamento padrão, colheitas oficiais, época,
 `geoVersao`). Idempotente como lá: conteúdo igual não cria revisão ("sem
-mudança, rev. N"). **Adotar limite** e trocar o ID PF continuam talhão a talhão.
+mudança, rev. N"). Trocar o ID PF continua talhão a talhão.
+
+**Janela de comparação de limite (2.223.0):** clicar na célula "Dif. limite"
+abre um pop-up (`LimiteLotePopup`) com o **mesmo** bloco da seção do talhão
+(`LimitePrecisionFarm` → `MapaComparacaoLimite`, números, **Adotar** com
+`verificarTrocaPoligono` + confirmação). Reaproveita o limite já lido pela
+ação "Comparar limites" (só confere a trava do ciclo ao abrir) ou busca na
+hora; setas/← → andam pelos talhões da lista filtrada com vínculo confirmado
+e presentes no aparelho; Esc fecha; depois de adotar, a linha recalcula a
+diferença com o limite novo (e o mapa principal não é mexido).
 
 **De onde a publicação lê os dados:** da **nuvem**, na rota — `zoneamentoPadrao`
 (app_kv `inv_meap_zoneamentos`), `mapaProdutividade` + `gradeProdutividade`

@@ -1,5 +1,11 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Comparação de limite em janela na tela de lote da PrecisionFarm
+  '2.223.0': [
+    'PENDÊNCIA S/N — COMPARAR E ADOTAR O LIMITE PELA TELA DE LOTE: em Biblioteca → PrecisionFarm, clicar na célula "Dif. limite" (ou em "comparar", quando ainda não foi comparado) abre uma janela com o mesmo mapa e os mesmos números da seção do talhão — os dois contornos, o que sobra de cada lado, áreas, vértices e a diferença em m² e %.',
+    'O BOTÃO "ADOTAR LIMITE DA PRECISIONFARM" vem junto, com a mesma trava da seção do talhão: se o ciclo ativo já tem dados no talhão, aparece o bloqueio e nada é gravado; liberado, pede confirmação. Depois de adotar, a linha da tabela se atualiza.',
+    'SETAS (ou as teclas ← →) passam para o talhão anterior/seguinte da lista filtrada (só os com vínculo confirmado que estão neste aparelho); Esc ou o X fecham. A comparação já feita pela ação "Comparar limites" é reaproveitada; sem ela, a janela busca na hora.',
+  ],
   // [S/N] PrecisionFarm 0.3: prescrições com estrela e curvas de nível
   '2.222.0': [
     'PENDÊNCIA S/N — PRESCRIÇÕES PARA A PRECISIONFARM: cada prescrição salva (aba Prescrições, na versão mais recente) ganha a estrela "Enviar à PrecisionFarm" (só owner/admin). Marcar já publica; salvar uma versão nova de uma marcada publica a versão nova sozinho (inclusive as que a Lavra manda); tirar a estrela arquiva lá, sem apagar nada aqui. Embaixo do cartão aparece a situação: "publicada · rev. N" ou "ainda não publicada — motivo".',

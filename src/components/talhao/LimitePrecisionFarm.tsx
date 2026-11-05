@@ -14,7 +14,7 @@
 //     automático do store). O talhão guarda de onde veio (limiteOrigem).
 // A comparação aparece mesmo quando o Adotar está bloqueado.
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Download, GitCompare, Loader2 } from 'lucide-react';
 import { getTalhoes, updateTalhao, type LimiteOrigem, type Talhao } from '@/lib/store';
 import { useApp } from '@/context/AppContext';
@@ -48,9 +48,19 @@ function Legenda({ cor, txt, tracejado }: { cor: string; txt: string; tracejado?
   );
 }
 
-export default function LimitePrecisionFarm({ talhao, onLimiteAdotado }: {
+// Também usado no POP-UP da tela de lote (PrecisionFarmLote → "Dif. limite",
+// Q9 do ledger pf-contrato-03): `limiteInicial` reaproveita a comparação já
+// buscada pelo lote (só confere a trava do ciclo ao abrir), `autoComparar`
+// busca na hora, `onLimiteLido` devolve o limite lido para o lote guardar e
+// `publicarNoMapa=false` não mexe no mapa principal ao adotar (a tela de lote
+// não é a do talhão). Mesma comparação, mesmo Adotar, mesma trava.
+export default function LimitePrecisionFarm({ talhao, onLimiteAdotado, limiteInicial = null, autoComparar = false, onLimiteLido, publicarNoMapa = true }: {
   talhao: Talhao;
   onLimiteAdotado?: (t: Talhao) => void;
+  limiteInicial?: LimitePFTela | null;
+  autoComparar?: boolean;
+  onLimiteLido?: (l: LimitePFTela) => void;
+  publicarNoMapa?: boolean;
 }) {
   const { setUploadedGeo, setUploadedBbox } = useApp();
   // Depois de adotar, a seção passa a usar o talhão relido do store (o pai
@@ -58,9 +68,23 @@ export default function LimitePrecisionFarm({ talhao, onLimiteAdotado }: {
   const [relido, setRelido] = useState<Talhao | null>(null);
   const t = relido ?? talhao;
   const [ocupado, setOcupado] = useState<'' | 'comparar' | 'adotar'>('');
-  const [limite, setLimite] = useState<LimitePFTela | null>(null);
+  const [limite, setLimite] = useState<LimitePFTela | null>(limiteInicial);
   const [verif, setVerif] = useState<VerificacaoTroca | null>(null);
   const [msg, setMsg] = useState<{ txt: string; erro: boolean } | null>(null);
+
+  // Pop-up do lote: ao abrir, ou confere a trava do ciclo sobre a comparação
+  // que veio pronta, ou compara na hora. Uma vez por montagem (o pop-up remonta
+  // por talhão); adiado para fora do corpo do efeito.
+  const iniciou = useRef(false);
+  useEffect(() => {
+    if (iniciou.current) return;
+    iniciou.current = true;
+    if (limiteInicial) {
+      if (talhao.geojson) void verificarTrocaPoligono(talhao.id).then(setVerif);
+    } else if (autoComparar) {
+      void Promise.resolve().then(comparar);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const origem = origemVigente(t);
 
@@ -89,6 +113,7 @@ export default function LimitePrecisionFarm({ talhao, onLimiteAdotado }: {
     // A regra do bloqueio já aparece junto da comparação (o Adotar confere de novo no clique).
     const v = t.geojson ? await verificarTrocaPoligono(t.id) : null;
     setOcupado(''); setLimite(r.limite); setVerif(v);
+    onLimiteLido?.(r.limite);
   }
 
   async function adotar() {
@@ -129,7 +154,7 @@ export default function LimitePrecisionFarm({ talhao, onLimiteAdotado }: {
     setOcupado('');
     if (!novo) return;
     setRelido(novo);
-    setUploadedGeo(fc); setUploadedBbox(bbox);
+    if (publicarNoMapa) { setUploadedGeo(fc); setUploadedBbox(bbox); }
     setMsg({
       txt: v ? notaCicloVerificado(v, versaoNova) : `Limite da PrecisionFarm adotado (versão ${versaoNova}).`,
       erro: false,

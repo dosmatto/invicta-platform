@@ -134,6 +134,7 @@ verdadeira (fusão de talhões) chegou depois; foi preciso renumerar.
 | S/N | Lista de talhões sem espremer o nome (selos numa linha própria) + Ano destacado conforme a aba | 2.220.0 | Fazenda → lista de talhões; Talhão → cabeçalho → Ano (Fertilidade, Produtividade, Amostragem, Zonas, Compactação, NDVI, Recomendações) |
 | S/N | Manifesto novo da PrecisionFarm (ativação geral: VINCULOS.json + LIMITES.geojson) com fazendas divididas, substituição do pendente sem ID PF e "Exportar retorno" | 2.221.0 | Biblioteca → PrecisionFarm → Importar manifesto da PF |
 | S/N | PrecisionFarm 0.3: prescrições com estrela "Enviar à PrecisionFarm" e curvas de nível da PF | 2.222.0 | Talhão → Prescrições (estrela no cartão); Biblioteca → PrecisionFarm → "Publicar prescrições"; Talhão → Altimetria → Curvas PrecisionFarm (e aba Camadas); banco: docs/integracao-precisionfarm-0.3.sql |
+| S/N | Comparação de limite em janela na tela de lote (mapa, números, Adotar com a trava do ciclo, setas anterior/seguinte) | 2.223.0 | Biblioteca → PrecisionFarm → célula "Dif. limite" |
 
 > As pendências 1–17 foram entregues antes deste registro existir e não estão
 > catalogadas; procure pelo assunto no `changelog.ts`. Da 18 em diante, tudo

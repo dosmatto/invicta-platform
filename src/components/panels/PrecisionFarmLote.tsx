@@ -27,7 +27,7 @@ import { getClientes, getFazendas, getTalhoes, type Talhao } from '@/lib/store';
 import { cloudAindaNaoHidratou } from '@/lib/cloud';
 import { fmtDec } from '@/lib/formato';
 import {
-  acaoVinculoPF, limitePF, loteGeralPF, publicarColheitaPF, publicarZonasPF, sincronizarPrescricoesPF, type Resp, type VinculoLote,
+  acaoVinculoPF, limitePF, loteGeralPF, publicarColheitaPF, publicarZonasPF, sincronizarPrescricoesPF, type LimitePFTela, type Resp, type VinculoLote,
 } from '@/lib/precisionfarm/cliente';
 import {
   ROTULO_EPOCA, ROTULO_STATUS, colheitaSemEpoca, colheitasParaPublicar, geoVersaoDoTalhao, zoneamentoParaPublicar,
@@ -38,6 +38,7 @@ import {
   type ProgressoLote, type ResultadoLote,
 } from '@/lib/precisionfarm/lote';
 import ManifestoPrecisionFarm from './ManifestoPrecisionFarm';
+import LimiteLotePopup from './LimiteLotePopup';
 
 type Acao = 'confirmar' | 'suspender' | 'zonas' | 'colheita' | 'prescricoes' | 'limite';
 const NOME_ACAO: Record<Acao, string> = {
@@ -47,6 +48,15 @@ const COR_DESFECHO = { ok: '#86efac', pulado: '#fbbf24', erro: '#fca5a5' } as co
 
 /** Diferença de limite de uma linha (preenchida pela ação Comparar). */
 type DifLimite = { revisao: number; difSimM2: number; difSimPct: number | null; identicos: boolean; semLimiteAqui: boolean };
+
+/** Diferença entre o limite da PF e o limite LOCAL do talhão (mesma conta da
+ *  seção do talhão: compararLimites). */
+function difDoLimite(limite: LimitePFTela, local: Talhao): DifLimite {
+  const geo = geometriaDoTalhao(local.geojson);
+  if (!geo) return { revisao: limite.revisao, difSimM2: 0, difSimPct: null, identicos: false, semLimiteAqui: true };
+  const c = compararLimites(limite.geometria, geo);
+  return { revisao: limite.revisao, difSimM2: c.difSimM2, difSimPct: c.difSimPct, identicos: c.identicos, semLimiteAqui: false };
+}
 
 /** Linha da tabela: vínculo + o que o aparelho sabe do talhão. */
 interface Linha {
@@ -83,6 +93,11 @@ export default function PrecisionFarmLote() {
   const [progresso, setProgresso] = useState<(ProgressoLote & { acao: Acao }) | null>(null);
   const [resumo, setResumo] = useState<string | null>(null);
   const [manifesto, setManifesto] = useState(false);
+  // Limite lido da PF por talhão (ação Comparar ou pop-up) e o pop-up aberto.
+  const [limites, setLimites] = useState<Record<string, LimitePFTela>>({});
+  const [popup, setPopup] = useState<string | null>(null);
+  // Sobe depois de adotar um limite no pop-up: relê os talhões do aparelho.
+  const [tickLocal, setTickLocal] = useState(0);
 
   // Migração 0.3 pendente no banco: a coluna de prescrições fica "—" com o aviso.
   const [migracao03, setMigracao03] = useState<string | null>(null);
@@ -103,6 +118,7 @@ export default function PrecisionFarmLote() {
   // Nomes do aparelho (local-first). Talhão que não está aqui usa o nome da
   // nuvem; nem lá (vínculo com talhão apagado/estranho) → o id, marcado.
   const linhas = useMemo((): Linha[] => {
+    void tickLocal;   // limite adotado no pop-up: a linha precisa do talhão relido
     const talhoes = new Map(getTalhoes().map(t => [t.id, t]));
     const fazendas = new Map(getFazendas().map(f => [f.id, f]));
     const clientes = new Map(getClientes().map(c => [c.id, c]));
@@ -118,7 +134,7 @@ export default function PrecisionFarmLote() {
         clienteId, cliente: clientes.get(clienteId)?.nome ?? (clienteId ? `cliente ${clienteId}` : '—'),
       };
     }).sort((a, b) => a.cliente.localeCompare(b.cliente, 'pt-BR') || a.fazenda.localeCompare(b.fazenda, 'pt-BR') || a.nome.localeCompare(b.nome, 'pt-BR', { numeric: true }));
-  }, [vinculos]);
+  }, [vinculos, tickLocal]);
 
   const opcoesCliente = useMemo(() => [...new Map(linhas.map(l => [l.clienteId, l.cliente]))].sort((a, b) => a[1].localeCompare(b[1], 'pt-BR')), [linhas]);
   const opcoesFazenda = useMemo(() => [...new Map(linhas.filter(l => !filtroCliente || l.clienteId === filtroCliente).map(l => [l.fazendaId, l.fazenda]))]
@@ -201,20 +217,30 @@ export default function PrecisionFarmLote() {
     return pend ? pulado(r.resumo) : ok(r.resumo);
   }
 
+  /** Guarda o limite lido da PF (o pop-up reaproveita) e a diferença da linha. */
+  function registrarLimite(talhaoId: string, limite: LimitePFTela, local: Talhao): DifLimite {
+    setLimites(m => ({ ...m, [talhaoId]: limite }));
+    const d = difDoLimite(limite, local);
+    setDifs(x => ({ ...x, [talhaoId]: d }));
+    return d;
+  }
+
   async function compararLimite(l: Linha): Promise<ResultadoLote> {
     if (l.v.status !== 'confirmado') return pulado('Só com vínculo confirmado.');
     if (!l.local) return pulado('Talhão não está neste aparelho.');
     const r = await limitePF(l.v.talhaoId);
     if (!r.ok) return daFalha(r);
-    const geo = geometriaDoTalhao(l.local.geojson);
-    if (!geo) {
-      setDifs(d => ({ ...d, [l.v.talhaoId]: { revisao: r.limite.revisao, difSimM2: 0, difSimPct: null, identicos: false, semLimiteAqui: true } }));
-      return ok('O talhão não tem limite aqui — compare/adote na seção do talhão.');
-    }
-    const c = compararLimites(r.limite.geometria, geo);
-    setDifs(d => ({ ...d, [l.v.talhaoId]: { revisao: r.limite.revisao, difSimM2: c.difSimM2, difSimPct: c.difSimPct, identicos: c.identicos, semLimiteAqui: false } }));
-    return ok(c.identicos ? `Igual à PF rev. ${r.limite.revisao}.` : `Difere da PF rev. ${r.limite.revisao}.`);
+    const d = registrarLimite(l.v.talhaoId, r.limite, l.local);
+    if (d.semLimiteAqui) return ok('O talhão não tem limite aqui — clique em "sem limite aqui" para comparar e adotar.');
+    return ok(d.identicos ? `Igual à PF rev. ${r.limite.revisao}.` : `Difere da PF rev. ${r.limite.revisao}.`);
   }
+
+  // ── Pop-up da comparação de limite (Q9): clique na célula "Dif. limite" ──
+  // Anda pelos talhões da lista FILTRADA que podem comparar (vínculo
+  // confirmado + talhão neste aparelho).
+  const comparaveis = useMemo(() => visiveis.filter(l => l.v.status === 'confirmado' && !!l.local), [visiveis]);
+  const itensPopup = useMemo(() => comparaveis.map(l => ({ talhaoId: l.v.talhaoId, nome: l.nome, fazenda: l.fazenda, cliente: l.cliente, local: l.local! })), [comparaveis]);
+  const indicePopup = popup ? itensPopup.findIndex(i => i.talhaoId === popup) : -1;
 
   const PASSO: Record<Acao, (l: Linha) => Promise<ResultadoLote>> = {
     confirmar, suspender, zonas: publicarZonas, colheita: publicarColheita, prescricoes: publicarPrescricoes, limite: compararLimite,
@@ -379,13 +405,22 @@ export default function PrecisionFarmLote() {
                         : <span style={{ color: v.prescricoes.pendentes ? '#fbbf24' : '#86efac' }}>{v.prescricoes.publicadas}/{v.prescricoes.marcadas}</span>}
                     </td>
                     <td className="px-2 py-1 text-right">{v.linhas || <span style={{ color: '#64748b' }}>—</span>}</td>
-                    <td className="px-2 py-1 text-right" title={d ? `PrecisionFarm rev. ${d.revisao}` : 'Use "Comparar limites"'}>
-                      {!d ? <span style={{ color: '#64748b' }}>—</span>
-                        : d.semLimiteAqui ? <span style={{ color: '#fbbf24' }}>sem limite aqui</span>
-                          : d.identicos ? <span style={{ color: '#4ade80' }}>igual</span>
-                            : <span style={{ color: (d.difSimPct ?? 0) > 5 ? '#fca5a5' : '#fbbf24' }}>
-                              {fmtDec(d.difSimM2, 0)} m²{d.difSimPct != null ? ` (${fmtDec(d.difSimPct, 2)}%)` : ''}
-                            </span>}
+                    <td className="px-2 py-1 text-right">
+                      {(() => {
+                        const conteudo = !d ? <span style={{ color: '#64748b' }}>{v.status === 'confirmado' && l.local ? 'comparar' : '—'}</span>
+                          : d.semLimiteAqui ? <span style={{ color: '#fbbf24' }}>sem limite aqui</span>
+                            : d.identicos ? <span style={{ color: '#4ade80' }}>igual</span>
+                              : <span style={{ color: (d.difSimPct ?? 0) > 5 ? '#fca5a5' : '#fbbf24' }}>
+                                {fmtDec(d.difSimM2, 0)} m²{d.difSimPct != null ? ` (${fmtDec(d.difSimPct, 2)}%)` : ''}
+                              </span>;
+                        // Clique abre o pop-up com o mapa, os números e o Adotar.
+                        return v.status === 'confirmado' && l.local
+                          ? <button onClick={() => setPopup(v.talhaoId)} className="underline decoration-dotted underline-offset-2"
+                              title={d ? `PrecisionFarm rev. ${d.revisao} — abrir a comparação (mapa, números, Adotar)` : 'Abrir a comparação com o limite da PrecisionFarm'}>
+                              {conteudo}
+                            </button>
+                          : <span title={v.status !== 'confirmado' ? 'Só com vínculo confirmado.' : 'Talhão não está neste aparelho.'}>{conteudo}</span>;
+                      })()}
                     </td>
                     <td className="px-2 py-1" style={{ maxWidth: 320 }}>
                       {res && <span style={{ color: COR_DESFECHO[res.desfecho] }} title={NOME_ACAO[res.acao]}>
@@ -399,6 +434,20 @@ export default function PrecisionFarmLote() {
           </table>
         )}
       </div>
+
+      {popup && indicePopup >= 0 && (
+        <LimiteLotePopup itens={itensPopup} indice={indicePopup} limites={limites}
+          onNavegar={i => setPopup(itensPopup[i]?.talhaoId ?? null)}
+          onFechar={() => setPopup(null)}
+          onLimiteLido={(id, lim) => { const loc = itensPopup.find(i => i.talhaoId === id)?.local; if (loc) registrarLimite(id, lim, loc); }}
+          onAdotado={(id, t) => {
+            // A linha passa a comparar com o limite NOVO daqui (mesmo limite da PF).
+            const lim = limites[id];
+            if (lim) setDifs(x => ({ ...x, [id]: difDoLimite(lim, t) }));
+            setResultados(prev => ({ ...prev, [id]: { ...ok(`Limite da PrecisionFarm rev. ${lim?.revisao ?? '?'} adotado (v${t.geoVersao ?? 1}).`), acao: 'limite' } }));
+            setTickLocal(n => n + 1);
+          }} />
+      )}
     </section>
   );
 }
