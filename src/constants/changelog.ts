@@ -1,5 +1,10 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Adotar limite da PrecisionFarm mantém os descontos do talhão
+  '2.226.0': [
+    'PENDÊNCIA S/N — ADOTAR O LIMITE DA PRECISIONFARM MANTÉM OS DESCONTOS: quando o limite da PF não traz descontos (furos: mata, açude, sede, estrada interna) e o limite atual traz, adotar troca só o limite EXTERNO e continua descontando os furos daqui. Furo que ficaria todo fora do limite novo é deixado de lado; o que fica em parte é recortado. Se a PF já manda furos, valem os dela.',
+    'A COMPARAÇÃO MOSTRA O QUE SERÁ GRAVADO: na seção do talhão, na janela da tela de lote e na coluna "Dif. limite", a diferença passa a ser a dos limites externos (os descontos mantidos não contam mais como "só na PrecisionFarm"). Aparece o aviso "mantém N desconto(s) do limite atual (X ha)", que também vai na confirmação de adotar.',
+  ],
   // [S/N] Portal do Produtor novo: menu por tema, Visão geral e comparativo Invicta
   '2.225.0': [
     'PENDÊNCIA S/N — PORTAL DO PRODUTOR NOVO: o /portal foi refeito no padrão de painel de agricultura de precisão, com a marca Invicta. Tem menu lateral por tema (Visão geral, Talhões, Fertilidade, Nutrientes, Zonas de manejo, Condutividade elétrica, Altimetria/Relevo, NDVI/NDRE, Produtividade, Prescrições (VR), Linhas de plantio, Compactação, Relatórios e Comparativo Invicta), cabeçalho com os filtros Safra · Cultura · Fazenda · Talhão e o botão "Acessar a plataforma" em destaque.',

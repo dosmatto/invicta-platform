@@ -32,7 +32,7 @@ import {
 import {
   ROTULO_EPOCA, ROTULO_STATUS, colheitaSemEpoca, colheitasParaPublicar, geoVersaoDoTalhao, zoneamentoParaPublicar,
 } from '@/lib/precisionfarm/escolhaPublicacao';
-import { compararLimites, geometriaDoTalhao } from '@/lib/precisionfarm/compararLimite';
+import { compararLimites, geometriaDoTalhao, limiteComDescontos } from '@/lib/precisionfarm/compararLimite';
 import {
   desfechoDaFalha, executarEmLote, juntarResultados, ok, pulado, erro, resumoDoLote,
   type ProgressoLote, type ResultadoLote,
@@ -54,7 +54,11 @@ type DifLimite = { revisao: number; difSimM2: number; difSimPct: number | null; 
 function difDoLimite(limite: LimitePFTela, local: Talhao): DifLimite {
   const geo = geometriaDoTalhao(local.geojson);
   if (!geo) return { revisao: limite.revisao, difSimM2: 0, difSimPct: null, identicos: false, semLimiteAqui: true };
-  const c = compararLimites(limite.geometria, geo);
+  // Mesma conta da seção do talhão: o que seria adotado (com os descontos daqui
+  // quando a PF não manda os dela) × o limite atual.
+  let alvo = limite.geometria;
+  try { alvo = limiteComDescontos(limite.geometria, geo).geometria; } catch { /* compara a geometria pura */ }
+  const c = compararLimites(alvo, geo);
   return { revisao: limite.revisao, difSimM2: c.difSimM2, difSimPct: c.difSimPct, identicos: c.identicos, semLimiteAqui: false };
 }
 

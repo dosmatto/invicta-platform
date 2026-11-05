@@ -807,6 +807,30 @@ t('limite deslocado: só PF + só Invicta = diferença simétrica (as duas métr
   const s = CL.compararLimites(pf, null);
   assert.equal(s.invicta, null); assert.equal(s.difSimPct, null); assert.equal(s.soPf, pf);
 });
+t('adotar limite da PF sem descontos mantém os furos daqui (só troca o externo)', () => {
+  const furoDentro = anel(0.004, 0.004, 0.006, 0.006).slice().reverse();
+  const furoFora = anel(0.02, 0.02, 0.021, 0.021).slice().reverse();
+  const inv = { type: 'Polygon', coordinates: [anel(0, 0, 0.01, 0.01), furoDentro] };
+  const pf = { type: 'Polygon', coordinates: [anel(0.0005, 0, 0.0105, 0.01)] };   // externo deslocado, sem furo
+  const p = CL.limiteComDescontos(pf, inv);
+  assert.equal(p.descontosMantidos, 1);
+  assert.equal(p.pfTemDescontos, false);
+  assert.equal(p.geometria.coordinates.length, 2, 'externo da PF + o furo daqui');
+  const furoM2 = CL.compararLimites({ type: 'Polygon', coordinates: [anel(0.004, 0.004, 0.006, 0.006)] }, null).pf.areaHa * 10_000;
+  assert.ok(Math.abs(p.descontoM2 - furoM2) / furoM2 < 1e-6, `${p.descontoM2} × ${furoM2}`);
+  // A diferença comparada passa a ser só a do externo (o furo não conta como "só na PF").
+  const c = CL.compararLimites(p.geometria, inv), cPura = CL.compararLimites(pf, inv);
+  assert.ok(Math.abs(cPura.soPfM2 - c.soPfM2 - furoM2) / furoM2 < 1e-3);
+  // Furo todo fora do limite novo não entra.
+  const fora = CL.limiteComDescontos(pf, { type: 'Polygon', coordinates: [anel(0, 0, 0.03, 0.03), furoFora] });
+  assert.equal(fora.descontosMantidos, 0); assert.equal(fora.geometria, pf);
+  // A PF já traz furos → valem os dela; sem furos aqui → a da PF pura.
+  const pfComFuro = { type: 'Polygon', coordinates: [anel(0, 0, 0.01, 0.01), anel(0.001, 0.001, 0.002, 0.002).slice().reverse()] };
+  const dela = CL.limiteComDescontos(pfComFuro, inv);
+  assert.equal(dela.pfTemDescontos, true); assert.equal(dela.geometria, pfComFuro);
+  assert.equal(CL.limiteComDescontos(pf, { type: 'Polygon', coordinates: [anel(0, 0, 0.01, 0.01)] }).geometria, pf);
+  assert.equal(CL.limiteComDescontos(pf, null).geometria, pf);
+});
 t('limite do talhão (texto) vira uma geometria só; texto ruim → null', () => {
   const g = CL.geometriaDoTalhao(JSON.stringify({ type: 'FeatureCollection', features: MULTI_FURO.coordinates.map(c => ({ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: c } })) }));
   assert.deepEqual(g, MULTI_FURO);

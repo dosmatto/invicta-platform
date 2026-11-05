@@ -23,7 +23,7 @@ import { areaHaGeo, areaHaGeoBruta } from '@/lib/areaGeo';
 import { conflitosDe, talhaoParaAlvo, type Conflito } from '@/lib/overlap';
 import { fmtDec } from '@/lib/formato';
 import { verificarTrocaPoligono, mensagemBloqueioTroca, notaCicloVerificado, type VerificacaoTroca } from '@/lib/trocaPoligono';
-import { caixaDoLimite, compararLimites, geometriaDoTalhao, type ComparacaoLimites } from '@/lib/precisionfarm/compararLimite';
+import { caixaDoLimite, compararLimites, geometriaDoTalhao, limiteComDescontos, type ComparacaoLimites, type LimiteProposto } from '@/lib/precisionfarm/compararLimite';
 import { limitePF, type LimitePFTela } from '@/lib/precisionfarm/cliente';
 import MapaComparacaoLimite, { CORES_COMPARACAO } from './MapaComparacaoLimite';
 
@@ -32,6 +32,8 @@ const dataCurta = (iso: string | null | undefined) =>
 
 const ha4 = (v: number) => fmtDec(v, 4);
 const m2 = (v: number) => fmtDec(v, v < 100 ? 1 : 0);
+const textoDescontos = (p: LimiteProposto) =>
+  `A PrecisionFarm não manda descontos: troca só o limite externo e mantém ${p.descontosMantidos} desconto(s) do limite atual (${ha4(p.descontoM2 / 10_000)} ha), que continuam fora da área.`;
 
 /** Origem do limite atual ainda vale? (a versão gravada pela adoção é a vigente). */
 export function origemVigente(t: Talhao): LimiteOrigem | null {
@@ -90,12 +92,21 @@ export default function LimitePrecisionFarm({ talhao, onLimiteAdotado, limiteIni
 
   const geoInvicta = useMemo(() => geometriaDoTalhao(t.geojson), [t.geojson]);
 
+  // O que seria gravado: o limite da PF e, se ela não manda descontos, os
+  // furos (descontos) do limite atual mantidos dentro dele. É ISSO que se
+  // compara e se adota — a diferença mostrada é só a dos limites externos.
+  const proposto = useMemo((): LimiteProposto | null => {
+    if (!limite) return null;
+    try { return limiteComDescontos(limite.geometria, geoInvicta); }
+    catch { return { geometria: limite.geometria, descontosMantidos: 0, descontoM2: 0, pfTemDescontos: false }; }
+  }, [limite, geoInvicta]);
+
   // Comparação: pura e síncrona (talhão ~ milhares de vértices: milissegundos).
   const cmp = useMemo((): { ok: true; c: ComparacaoLimites } | { ok: false; erro: string } | null => {
-    if (!limite) return null;
-    try { return { ok: true, c: compararLimites(limite.geometria, geoInvicta) }; }
+    if (!proposto) return null;
+    try { return { ok: true, c: compararLimites(proposto.geometria, geoInvicta) }; }
     catch (e) { return { ok: false, erro: e instanceof Error ? e.message : 'Falha ao comparar os limites.' }; }
-  }, [limite, geoInvicta]);
+  }, [proposto, geoInvicta]);
 
   // Sobreposição do limite da PF com os VIZINHOS da fazenda: só aviso (a PF
   // pode ter acertado a divisa e o vizinho é que está errado).
@@ -117,7 +128,7 @@ export default function LimitePrecisionFarm({ talhao, onLimiteAdotado, limiteIni
   }
 
   async function adotar() {
-    if (!limite) return;
+    if (!limite || !proposto) return;
     setOcupado('adotar'); setMsg(null);
     const atual = getTalhoes().find(x => x.id === t.id) ?? null;
     if (!atual) { setOcupado(''); setMsg({ txt: 'Talhão não encontrado neste aparelho.', erro: true }); return; }
@@ -131,15 +142,17 @@ export default function LimitePrecisionFarm({ talhao, onLimiteAdotado, limiteIni
     // possível — é justamente o caso de trocar um limite ruim.
     const c = cmp?.ok ? cmp.c : null;
     const aviso = vizinhos.length ? `\n\nAtenção: o limite da PrecisionFarm sobrepõe ${vizinhos.map(x => `${x.nome} (${fmtDec(x.haSobrep * 10_000, 0)} m²)`).join(', ')}.` : '';
-    const texto = `Adotar o limite da PrecisionFarm (rev. ${limite.revisao}, ${ha4(c?.pf.areaHa ?? areaHaGeo(limite.geometria))} ha) como novo limite de ${atual.nome}?\n\n`
+    const texto = `Adotar o limite da PrecisionFarm (rev. ${limite.revisao}, ${ha4(c?.pf.areaHa ?? areaHaGeo(proposto.geometria))} ha) como novo limite de ${atual.nome}?\n\n`
       + (atual.geojson
         ? `O limite atual (v${atual.geoVersao ?? 1}, ${ha4(c?.invicta?.areaHa ?? atual.areaHa)} ha) fica arquivado no histórico do talhão.${c ? ` Diferença: ${m2(c.difSimM2)} m².` : ''}`
-        : 'O talhão ainda não tem limite.') + aviso;
+        : 'O talhão ainda não tem limite.')
+      + (proposto.descontosMantidos ? `\n\n${textoDescontos(proposto)}` : '') + aviso;
     if (!confirm(texto)) { setOcupado(''); return; }
 
-    const fc: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [{ type: 'Feature', properties: { nome: atual.nome }, geometry: limite.geometria }] };
+    const geometria = proposto.geometria;
+    const fc: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [{ type: 'Feature', properties: { nome: atual.nome }, geometry: geometria }] };
     const geojson = JSON.stringify(fc);
-    const bbox = caixaDoLimite(limite.geometria);
+    const bbox = caixaDoLimite(geometria);
     // A mesma conta de comVersaoDeLimite (store): geojson diferente sobre um
     // limite existente = versão nova.
     const versaoNova = atual.geojson && atual.geojson !== geojson ? (atual.geoVersao ?? 1) + 1 : (atual.geoVersao ?? 1);
@@ -213,7 +226,13 @@ export default function LimitePrecisionFarm({ talhao, onLimiteAdotado, limiteIni
             </div>
           )}
 
-          <MapaComparacaoLimite pf={limite.geometria} invicta={geoInvicta} soPf={c?.soPf ?? null} soInvicta={c?.soInvicta ?? null} />
+          {proposto && (proposto.descontosMantidos > 0 || proposto.pfTemDescontos) && (
+            <div className="text-[10px]" style={{ color: '#7dd3fc' }}>
+              {proposto.descontosMantidos > 0 ? textoDescontos(proposto) : 'O limite da PrecisionFarm já traz descontos próprios (furos): valem os dela.'}
+            </div>
+          )}
+
+          <MapaComparacaoLimite pf={proposto?.geometria ?? limite.geometria} invicta={geoInvicta} soPf={c?.soPf ?? null} soInvicta={c?.soInvicta ?? null} />
           <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[9px]" style={{ color: '#94a3b8' }}>
             <Legenda cor={CORES_COMPARACAO.invicta} txt="Invicta (atual)" />
             <Legenda cor={CORES_COMPARACAO.pf} txt="PrecisionFarm" tracejado />

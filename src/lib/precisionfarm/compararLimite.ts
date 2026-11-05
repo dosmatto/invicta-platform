@@ -197,6 +197,44 @@ export function compararLimites(pf: GeometriaLimite, invicta: GeometriaLimite | 
   };
 }
 
+// ── Descontos (furos) ao adotar ──────────────────────────────────────────────
+
+export interface LimiteProposto {
+  /** O que seria gravado no talhão ao adotar. */
+  geometria: GeometriaLimite;
+  /** Quantos descontos (furos) do limite atual foram mantidos. 0 = geometria da PF pura. */
+  descontosMantidos: number;
+  /** Área descontada por eles (m², métrica da plataforma). */
+  descontoM2: number;
+  /** A PF já mandou descontos próprios (então valem os dela). */
+  pfTemDescontos: boolean;
+}
+
+/** Regra do usuário (05/11): se o limite da PF NÃO traz descontos (furos: mata,
+ *  açude, sede, estrada interna) e o limite atual traz, adotar troca só os
+ *  limites EXTERNOS e continua descontando os furos daqui. Furo que fica todo
+ *  fora do limite novo some; o que fica em parte é recortado. Se a PF já traz
+ *  furos, valem os dela (a geometria vai como veio). */
+export function limiteComDescontos(pf: GeometriaLimite, invicta: GeometriaLimite | null): LimiteProposto {
+  const pura: LimiteProposto = { geometria: pf, descontosMantidos: 0, descontoM2: 0, pfTemDescontos: false };
+  if (contarLimite(pf).furos > 0) return { ...pura, pfTemDescontos: true };
+  if (!invicta) return pura;
+  const furos = poligonos(invicta).flatMap(p => p.slice(1)).filter(a => a.length >= 4);
+  if (!furos.length) return pura;
+  const areaPf = areaM2Geo(pf);
+  let geo: GeometriaLimite = pf;
+  let mantidos = 0;
+  for (const anel of furos) {
+    const furo: GeoJSON.Polygon = { type: 'Polygon', coordinates: [anel] };
+    const antes = areaM2Geo(geo);
+    const r = menos(geo, furo);
+    if (!r) throw new Error('O desconto do limite atual cobre todo o limite da PrecisionFarm.');
+    if (antes - areaM2Geo(r) >= SOBRA_DESPREZIVEL_M2) { geo = r; mantidos++; }
+  }
+  if (!mantidos) return pura;
+  return { geometria: geo, descontosMantidos: mantidos, descontoM2: areaPf - areaM2Geo(geo), pfTemDescontos: false };
+}
+
 /** Caixa [oeste, sul, leste, norte] de uma geometria (para gravar no talhão). */
 export function caixaDoLimite(g: GeometriaLimite): [number, number, number, number] {
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
