@@ -853,6 +853,28 @@ for (const [ponto, metodo, n] of [['depois de ler a última revisão', 'ultimaRe
   });
 }
 
+await t('D3b: re-marcada sobre um archive e desmarcada entre a releitura e o insert → o upsert gravado é arquivado em seguida', async () => {
+  const { R, s, ultima } = await cenarioCorrida();
+  await R.repo.gravarEstrela('TAL-1', 'C1', false, 'g', 'x');
+  await s();
+  assert.equal(ultima().envelope.operation, 'archive');
+  await R.repo.gravarEstrela('TAL-1', 'C1', true, 'g', 'x');
+  // Antes do insert do upsert (a releitura já passou): outro cliente desmarca
+  // e a sincronização dele vê o archive como última → decide "nada".
+  let decidiuNada = false;
+  R.z.gancho = { metodo: 'inserirRevisao', n: 1, fn: async () => {
+    await R.repo.gravarEstrela('TAL-1', 'C1', false, 'g', 'x');
+    decidiuNada = sitDe(await s(), 'C1').situacao === 'arquivada' && ultima().envelope.operation === 'archive';
+  } };
+  const ss = await s();
+  assert.equal(R.z.gancho, null, 'o gancho rodou');
+  assert.ok(decidiuNada, 'a sincronização do desmarcar não tinha o que arquivar');
+  const ops = R.z.revisoes.map(r => r.envelope.operation);
+  assert.deepEqual(ops, ['upsert', 'archive', 'upsert', 'archive'], 'o upsert gravado no meio foi arquivado logo depois');
+  assert.equal(sitDe(ss, 'C1').situacao, 'arquivada');
+  assert.equal(sitDe(ss, 'C1').marcada, false);
+});
+
 await t('banco sem a migração 0.3 → MigracaoPendente (a rota responde 503 com o arquivo a aplicar)', async () => {
   RP.z.migracao = false;
   await assert.rejects(sinc(), e => e instanceof MigracaoPendente && /integracao-precisionfarm-0\.3\.sql/.test(e.message));

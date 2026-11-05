@@ -180,6 +180,11 @@ async function revisao(repo: RepoPrescricoesPF, a: {
     origem: a.origem, publicadoPor: a.opts.por,
   });
   if (!ins.ok) return ins.conflito ? { ok: 'refazer' } : { ok: false, erro: ins.erro };
+  // Releitura DEPOIS do insert: se outro cliente mudou a estrela/versão entre
+  // a releitura de cima e este insert, a sincronização DELE pode ter decidido
+  // "nada" olhando a revisão anterior (ex.: re-marcada sobre um archive e
+  // desmarcada no meio). Refazer corrige: archive ou revisão nova por cima.
+  if (!(await a.aindaVale())) return { ok: 'refazer' };
   return { ok: true, criada: true, revisao: envelope.resource_revision, resourceId: recurso.resource_id };
 }
 

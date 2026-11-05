@@ -823,8 +823,10 @@ uma linhagem que sumiu da nuvem também é aceito (sem 409).
 
 Concorrência (tela × Lavra × outra aba), sem trava por talhão: cada
 linhagem é decidida com estado relido; antes do insert, estrela e versão são
-relidas **depois** de ler a última revisão; no 23505 ou se a decisão ficou
-velha, relê tudo e refaz uma vez. Assim um upsert lido antes nunca fica por
+relidas **depois** de ler a última revisão e de novo **depois** de um insert
+bem-sucedido (outro cliente pode ter desmarcado no meio e decidido "nada");
+no 23505 ou se a decisão ficou velha, relê tudo e refaz uma vez (archive ou
+revisão nova por cima). Assim um upsert lido antes nunca fica por
 cima de um archive ou de uma versão posterior (testado no e2e com ganchos
 de corrida).
 
