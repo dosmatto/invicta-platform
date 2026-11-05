@@ -1327,6 +1327,17 @@ t('retorno: remote_*, identity_status, fazenda dividida, situações e o origina
   assert.ok(csv.startsWith('﻿local_field_id;talhao_pf;cliente_pf;situacao;motivo'));
   assert.equal(csv.trim().split('\r\n').length, 7);
 });
+t('CSV: texto que começa com = + - @ tab ou CR vai com apóstrofo (injeção de fórmula); número negativo e escape seguem', () => {
+  const base = { localFieldId: '1', clientePF: '', sharedFieldId: uuidN(1), sharedFarmId: FARM, situacao: 'erro', motivo: 'm', talhaoId: null, talhao: null, fazenda: null, cliente: null, statusVinculo: null, difLimitePct: null, areaPfHa: null };
+  const nomes = ['=HYPERLINK("http://x")', '+1', '-2+3', '@SOMA(A1)', '\tX', '\rY', 'normal; com "aspas"'];
+  const csv = RT.relatorioCsv([...nomes.map(nomePF => ({ ...base, nomePF })), { ...base, nomePF: 'n', difLimitePct: -1.5 }]);
+  const cols = csv.split('\r\n').slice(1, -1).map(l => l.split(';')[1]);
+  assert.deepEqual(cols.slice(0, 4), ['"\'=HYPERLINK(""http://x"")"', "'+1", "'-2+3", "'@SOMA(A1)"]);
+  assert.equal(cols[4], "'\tX");
+  assert.ok(csv.includes('"\'\rY"'));
+  assert.ok(csv.includes('"normal; com ""aspas"""'));
+  assert.ok(csv.includes(';-1,5;'), 'número negativo sem apóstrofo');
+});
 
 // Pacote REAL de 04/11 (fora do repositório; dado da PF): roda quando existem
 // PF_ATIVACAO_REAL=<pasta com VINCULOS.json + LIMITES.geojson> e

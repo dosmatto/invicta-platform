@@ -261,7 +261,10 @@ const COLUNAS: [keyof LinhaRetorno, string][] = [
 /** Relatório por talhão em CSV (`;`, UTF-8 com BOM — abre direto no Excel pt-BR). */
 export function relatorioCsv(linhas: readonly LinhaRetorno[]): string {
   const cel = (v: unknown) => {
-    const s = v == null ? '' : typeof v === 'number' ? v.toLocaleString('pt-BR', { maximumFractionDigits: 2, useGrouping: false }) : String(v);
+    let s = v == null ? '' : typeof v === 'number' ? v.toLocaleString('pt-BR', { maximumFractionDigits: 2, useGrouping: false }) : String(v);
+    // Injeção de fórmula: texto (nome de talhão vindo da PF, motivo…) que
+    // comece com = + - @ tab ou CR viraria fórmula no Excel — vai com apóstrofo.
+    if (typeof v === 'string' && /^[=+\-@\t\r]/.test(s)) s = `'${s}`;
     return /[;"\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
   const corpo = [COLUNAS.map(c => c[1]).join(';'), ...linhas.map(l => COLUNAS.map(([k]) => cel(l[k])).join(';'))];

@@ -26,7 +26,7 @@ import { useMemo, useRef, useState } from 'react';
 import { Download, FileUp, Link2, Loader2, X } from 'lucide-react';
 import { getClientes, getFazendas, getTalhoes } from '@/lib/store';
 import { fmtDec } from '@/lib/formato';
-import { criarVinculosManifestoPF, type ResultadoManifesto, type VinculoLote } from '@/lib/precisionfarm/cliente';
+import { criarVinculosManifestoPF, loteGeralPF, type ResultadoManifesto, type VinculoLote } from '@/lib/precisionfarm/cliente';
 import {
   LIMIAR_PAR_PCT, acharArquivo, casarManifestoAos, lerLimitesGeojson, lerManifestoPF, limiteDoCampo, resumoFazendas,
   type Casamento, type FeicoesPorCampo, type FormatoManifesto, type PapelFazenda, type SituacaoCasamento,
@@ -304,10 +304,15 @@ export default function ManifestoPrecisionFarm({ vinculos, onFechar, onCriados }
     if (!casamentos || original.current == null) return;
     setOcupado('exportando'); setErro(null);
     try {
+      // Lista FRESCA do servidor: a prop `vinculos` pode ainda ser a de antes
+      // do "Criar" (o pai recarrega em paralelo) — o retorno sai do banco.
+      const fresca = await loteGeralPF();
+      if (!fresca.ok) throw new Error(`Não foi possível recarregar os vínculos: ${fresca.erro}`);
+      const atuais = fresca.vinculos;
       const talhoesLocais = new Map(getTalhoes().map(t => [t.id, t.nome]));
-      const nomeTalhao = new Map(vinculos.map(v => [v.talhaoId, talhoesLocais.get(v.talhaoId) ?? v.naNuvem?.nome ?? v.talhaoId]));
+      const nomeTalhao = new Map(atuais.map(v => [v.talhaoId, talhoesLocais.get(v.talhaoId) ?? v.naNuvem?.nome ?? v.talhaoId]));
       for (const c of casamentos) if (c.melhor && !nomeTalhao.has(c.melhor.talhaoId)) nomeTalhao.set(c.melhor.talhaoId, c.melhor.nome);
-      const ret = montarRetornoPF(original.current, casamentos, vinculos.map(v => ({
+      const ret = montarRetornoPF(original.current, casamentos, atuais.map(v => ({
         talhaoId: v.talhaoId, fazendaId: v.fazendaId, clienteId: v.clienteId, sharedProducerId: v.sharedProducerId,
         sharedFarmId: v.sharedFarmId, sharedFieldId: v.sharedFieldId, status: v.status, publicados: v.publicados.length,
       })), { talhao: nomeTalhao, fazenda: nomeFazenda, cliente: nomeCliente });
