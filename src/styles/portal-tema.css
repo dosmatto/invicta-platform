@@ -1,0 +1,70 @@
+/* Portal do Produtor v2 — tema claro/escuro SÓ do portal.
+ *
+ * O tema da plataforma (invicta-theme.css) é só claro. O portal é a vitrine do
+ * produtor e segue o sistema dele (ou a escolha no cabeçalho): a raiz do
+ * portal ganha data-tema="claro|escuro" e aqui os MESMOS tokens são
+ * redefinidos dentro dela — qualquer componente que use var(--bg-surface),
+ * var(--text-primary)… muda junto, sem saber do tema.
+ *
+ * Tokens próprios do portal (prefixo --p-): sombra dos cartões, faixa do
+ * cabeçalho, verde para TEXTO (o --invicta-green-dark é fundo de botão e some
+ * no escuro), fundo do mini-mapa e a cor de "sem dado".
+ */
+
+.portal-raiz {
+  --p-hero-a: #0f2240;
+  --p-hero-b: #1a3a6b;
+  --p-hero-c: #24603a;
+  --p-sombra: 0 1px 2px rgba(15, 34, 64, 0.05), 0 6px 20px -8px rgba(15, 34, 64, 0.12);
+  --p-sombra-forte: 0 10px 30px -12px rgba(15, 34, 64, 0.35);
+  --p-verde-texto: #2d7a2d;
+  --p-azul-texto: #2e5fa3;
+  --p-mapa-fundo: #eef3f1;
+  --p-sem-dado: #cbd5e1;
+  --p-contorno: #ffffff;
+  color-scheme: light;
+}
+
+.portal-raiz[data-tema='escuro'] {
+  --bg-app: #08111f;
+  --bg-surface: #0f1c31;
+  --bg-surface-hover: #16263f;
+  --border-color: #22365a;
+  --text-primary: #e8eff8;
+  --text-secondary: #a7b7cc;
+  --text-muted: #6b7f9e;
+  --status-active: #4ade80;
+  --status-active-bg: #12301c;
+  --status-warning: #f59e0b;
+  --status-warning-bg: #3a2a0a;
+  --status-error: #f87171;
+  --status-error-bg: #3b1515;
+  --status-info: #8ab4f0;
+  --status-info-bg: #12284a;
+  --invicta-blue-mid: #4f86d0;
+  --p-hero-a: #050d1a;
+  --p-hero-b: #0f2240;
+  --p-hero-c: #173f28;
+  --p-sombra: 0 1px 2px rgba(0, 0, 0, 0.35), 0 6px 20px -8px rgba(0, 0, 0, 0.5);
+  --p-sombra-forte: 0 10px 30px -12px rgba(0, 0, 0, 0.7);
+  --p-verde-texto: #6fcf6f;
+  --p-azul-texto: #8ab4f0;
+  --p-mapa-fundo: #0b1829;
+  --p-sem-dado: #2e4060;
+  --p-contorno: #0f1c31;
+  color-scheme: dark;
+}
+
+/* Esqueleto (carregando): brilho que corre da esquerda para a direita. */
+@keyframes portal-brilho {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.portal-esqueleto {
+  background: linear-gradient(90deg, var(--bg-surface-hover) 25%, var(--border-color) 50%, var(--bg-surface-hover) 75%);
+  background-size: 200% 100%;
+  animation: portal-brilho 1.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .portal-esqueleto { animation: none; }
+}

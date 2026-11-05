@@ -2,6 +2,7 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "../styles/invicta-theme.css";
+@import "../styles/portal-tema.css";
 
 @custom-variant dark (&:is(.dark *));
 

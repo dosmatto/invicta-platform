@@ -632,12 +632,14 @@ export function idadeColeta(ano: number | null, anoAtual: number): 0 | 1 | 2 | 3
   return d <= 0 ? 0 : d === 1 ? 1 : d === 2 ? 2 : 3;
 }
 
-/** Nutrientes que o produtor acompanha no gráfico de evolução (ids do laudo). */
+/** Nutrientes que o produtor acompanha no gráfico de evolução (ids do laudo).
+ *  Unidade = a canônica da plataforma (lib/unidades UNIDADE_CANONICA: o laudo
+ *  é convertido nela na importação) — K em mmolc/dm³ e MO em g/dm³. */
 export const NUTRIENTES_EVOLUCAO: Array<{ id: string; rotulo: string; unidade: string }> = [
   { id: 'ph', rotulo: 'pH', unidade: '' },
   { id: 'p',  rotulo: 'P',  unidade: 'mg/dm³' },
-  { id: 'k',  rotulo: 'K',  unidade: 'cmolc/dm³' },
-  { id: 'mo', rotulo: 'MO', unidade: '%' },
+  { id: 'k',  rotulo: 'K',  unidade: 'mmolc/dm³' },
+  { id: 'mo', rotulo: 'MO', unidade: 'g/dm³' },
   { id: 'v',  rotulo: 'V%', unidade: '%' },
 ];
 

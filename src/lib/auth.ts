@@ -131,11 +131,17 @@ export async function loginEmailSenha(email: string, senha: string): Promise<voi
   if (data.session?.user) void salvarVerificadorOffline(e, senha, data.session.user.id);
 }
 
+/** Evento disparado na `window` ao sair: caches de memória com dado de QUEM
+ *  estava logado (ex.: o benchmark do Portal, components/portal/useBenchmark)
+ *  se limpam — o logout não recarrega a aba. */
+export const EVENTO_LOGOUT = 'invicta:logout';
+
 export async function logout(): Promise<void> {
   // Sair também apaga o modo "mapa do produtor" (lib/modoProdutorMapa.ts): a
   // chave fica na sessionStorage da aba, e outro produtor que entrasse na mesma
   // aba cairia no mapa em vez do portal. Sem importar o módulo (evita ciclo).
   try { sessionStorage.removeItem('inv_produtor_mapa'); } catch { /* aba sem storage */ }
+  try { window.dispatchEvent(new Event(EVENTO_LOGOUT)); } catch { /* fora do navegador */ }
   if (usuarioOffline) {
     usuarioOffline = null;
     notificarObs?.(null);

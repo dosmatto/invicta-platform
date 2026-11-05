@@ -159,7 +159,7 @@ async function fazendasDoEscopo(sb: SupabaseClient, reg: RegistroAcesso, dosTalh
 
 /** Sessão → registro de papel (inv_papeis) do e-mail, pela regra descrita em
  *  autenticarLeitor. */
-async function registroDoLeitor(sb: SupabaseClient, auth: string | null): Promise<
+export async function registroDoLeitor(sb: SupabaseClient, auth: string | null): Promise<
   { ok: true; email: string; reg: RegistroAcesso & { papel: string } } | { ok: false; status: 401 | 403; erro: string }
 > {
   const token = chaveDoHeader(auth);
