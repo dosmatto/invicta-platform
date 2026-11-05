@@ -27,7 +27,7 @@ import {
   kpisPainel, produtividadePorTalhao, classesEmSacas, distribuirEmClasses, serieIndices, relevoPorTalhao,
   resumoRelevo, coresRelativas, resumoZonas, fertilidadePorTalhao, mediasPonderadasAtributos, alertasPropriedade,
   correlacoes, evolucaoAtributo, historicoProdutividade, colheitaDoAno, ultimoLaudo, interpretarR, rotuloP,
-  talhoesSemColheita, MIN_TALHOES_CORRELACAO, rotuloCicloMeses, type DadosPainel,
+  talhoesSemColheita, MIN_TALHOES_CORRELACAO, rotuloCicloMeses, culturaPredominanteDoAno, tituloCulturaPredominante, type DadosPainel,
 } from '@/lib/portalPainel';
 import { grausParaPct, profundidadePadraoCe, ceNaProfundidade, distribuirPontosEmClasses, resumoCe, type CeProf } from '@/lib/portalPainelSensores';
 import { usePortal } from '../PortalContext';
@@ -87,7 +87,10 @@ export function VisaoGeral() {
   const libProd = p.liberada('produtividade'), libFert = p.liberada('fertilidade'), libNdvi = p.liberada('ndvi'), libRec = p.liberada('recomendacoes');
 
   // ── Números ──
-  const kpis = useMemo(() => kpisPainel(dados, ano, cultura), [dados, ano, cultura]);
+  // No painel de um talhão a cultura predominante vem da propriedade (dadosEscopo):
+  // o talhão aparece com a mesma cultura da visão de todos (regra em lib/portalPainel).
+  const kpis = useMemo(() => kpisPainel(dados, ano, cultura, p.dadosEscopo), [dados, ano, cultura, p.dadosEscopo]);
+  const predEscopo = useMemo(() => culturaPredominanteDoAno(p.dadosEscopo, ano), [p.dadosEscopo, ano]);
   const culturaKpi = kpis.produtividade?.cultura ?? cultura;
   const legProd = useMemo(() => (culturaKpi ? legendaDaCultura(culturaKpi) ?? null : null), [culturaKpi]);
   const classesProd = useMemo(() => (legProd ? classesEmSacas(legProd.classes) : []), [legProd]);
@@ -168,7 +171,7 @@ export function VisaoGeral() {
         valor={kp ? fmtNum(kp.media, 1) : null} unidade="sc/ha"
         delta={kp?.deltaPct != null ? { valor: kp.deltaPct, rotulo: 'vs. safra anterior' } : null}
         sub={kp ? [kp.outrasCulturas ? 'cultura predominante' : '', kp.deltaPct == null ? `${talhoesTxt(kp.n)} · sem ${(ano ?? 0) - 1} para comparar` : ''].filter(Boolean).join(' · ') : undefined}
-        titulo={kp?.outrasCulturas ? `Cultura de maior área colhida em ${anoTxt}. Também colhido: ${kp.outras.join(', ')} — escolha a cultura no filtro para ver.` : undefined}
+        titulo={kp?.outrasCulturas ? tituloCulturaPredominante({ cultura: kp.cultura, outras: kp.outras, anoTxt, um, predominanteEscopo: predEscopo }) : undefined}
         vazio={`sem mapa de colheita em ${anoTxt}`} />,
       <Kpi key="amp" icone={ArrowLeftRight} tom="ambar" rotulo="Amplitude produtiva"
         valor={kp?.min != null && kp.max != null ? `${fmtNum(kp.min, 0)} – ${fmtNum(kp.max, 0)}` : null} unidade="sc/ha"
@@ -405,7 +408,7 @@ export function VisaoGeral() {
         {/* Benchmark */}
         {libProd && (
           <CartaoBenchmark className="md:col-span-3 xl:col-span-6 2xl:col-span-3" estado={bench} recarregar={recarregarBench} cultura={culturaKpi} safraRotulo={anoTxt}
-            predominante={!!kp?.outrasCulturas}
+            predominante={!!kp?.outrasCulturas} filtroFazenda={!!p.fazendaId && !um}
             voce={um ? (prods[0]?.mediaScHa ?? null) : (kp?.media ?? null)} rotuloVoce={um ? 'Este talhão' : undefined}
             semColheita={!kp} acao={{ rotulo: 'Comparativo', href: p.hrefPortal('/portal/comparativo') }} />
         )}

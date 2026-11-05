@@ -10,11 +10,12 @@
 //
 // Estados da consulta (distintos, cada um com o seu texto):
 //   carregando · indisponivel (bancada local / servidor sem o recurso) ·
-//   sem-sessao (401) · proibido (403) · erro (falha agora; "tentar de novo") · ok.
+//   sem-sessao (401) · proibido (403) · limite (429: consultas demais em 1 min;
+//   "tentar de novo") · erro (falha agora; "tentar de novo") · ok.
 // "Insuficiente" (< 5 produtores) é da CULTURA, dentro do ok: `benchDaCultura`.
 //
 // Cache: uma resposta por (USUÁRIO, safra, cliente) na sessão da página. Ficam
-// em cache ok, indisponível e proibido; erro e sem-sessão não (a próxima
+// em cache ok, indisponível e proibido; erro, limite e sem-sessão não (a próxima
 // abertura — ou "tentar de novo" — refaz o pedido). A resposta tem o "você" (a
 // média, o Top N%, a cidade, P/K/V%) de QUEM pediu: o logout não recarrega a
 // aba, então o cache é por usuário (o id entra na chave) e é limpo no logout
@@ -27,7 +28,7 @@ import { itemDaCulturaBench } from '@/lib/portal/benchmarkCalc';
 
 export type { RespostaBenchmark, ItemProdutividade, FertilidadeBenchmark } from '@/lib/portal/benchmarkCliente';
 
-export type FalhaBenchmarkPortal = 'indisponivel' | 'sem-sessao' | 'proibido' | 'erro';
+export type FalhaBenchmarkPortal = 'indisponivel' | 'sem-sessao' | 'proibido' | 'limite' | 'erro';
 
 export type EstadoBenchmark =
   | { estado: 'carregando' }
@@ -46,6 +47,10 @@ export const TEXTO_FALHA_BENCHMARK: Record<FalhaBenchmarkPortal, { titulo: strin
   proibido: {
     titulo: 'Comparativo fora do seu acesso',
     motivo: 'O seu acesso não inclui o comparativo entre produtores.',
+  },
+  limite: {
+    titulo: 'Muitas consultas seguidas',
+    motivo: 'O comparativo foi consultado muitas vezes em pouco tempo. Aguarde um minuto e tente de novo.',
   },
   erro: {
     titulo: 'Não foi possível consultar o comparativo',
@@ -89,7 +94,7 @@ export function useBenchmark(safra: string, clienteId?: string): { estado: Estad
     if (!p) {
       p = consultar(safra, clienteId);
       cache.set(chave, p);
-      void p.then(v => { if (v.estado === 'erro' || v.estado === 'sem-sessao') cache.delete(chave); });
+      void p.then(v => { if (v.estado === 'erro' || v.estado === 'sem-sessao' || v.estado === 'limite') cache.delete(chave); });
     }
     void p.then(v => { if (vivo) setRes({ chave, tentativa, v }); });
     return () => { vivo = false; };

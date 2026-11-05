@@ -1,5 +1,12 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Ajustes do Portal do Produtor
+  '2.226.1': [
+    'PENDÊNCIA S/N — PAINEL DE UM TALHÃO COM A CULTURA CERTA: com soja e milho safrinha no mesmo talhão (áreas iguais ou quase), o painel do talhão podia virar "Milho safrinha" enquanto a visão de todos mostrava o mesmo talhão como Soja. Agora o talhão herda a cultura predominante da propriedade quando também a colheu — KPI, histórico do talhão por ano e a página Produtividade ficam na mesma cultura da visão geral. O tooltip diz por que é aquela.',
+    'COMPARATIVO PROTEGIDO: o servidor do comparativo aceita até 10 consultas por minuto por usuário; passando disso, o portal mostra "Muitas consultas seguidas" com o botão "Tentar de novo". O cache guarda todos os anos aceitos (2000 até o próximo), então alternar entre safras não refaz a leitura de todos os laudos a cada vez.',
+    'KPIs SEM TEXTO CORTADO: o rótulo e a linha de apoio dos indicadores quebram em até duas linhas, e o tooltip mostra tudo — a classe ("Baixo") na Fertilidade, Nutrientes e Compactação, e "antes: …" e o nome da cultura na Produtividade, junto com a explicação do cartão.',
+    'BENCHMARK NA VISÃO GERAL COM FILTRO DE FAZENDA: o cartão avisa que o "Você" e a posição são da propriedade inteira, com todas as fazendas (como a página Comparativo já fazia). LISTA DE TALHÕES: talhão sem colheita no ano fica em cinza (sem dado), não mais em verde.',
+  ],
   // [S/N] Adotar limite da PrecisionFarm mantém os descontos do talhão
   '2.226.0': [
     'PENDÊNCIA S/N — ADOTAR O LIMITE DA PRECISIONFARM MANTÉM OS DESCONTOS: quando o limite da PF não traz descontos (furos: mata, açude, sede, estrada interna) e o limite atual traz, adotar troca só o limite EXTERNO e continua descontando os furos daqui. Furo que ficaria todo fora do limite novo é deixado de lado; o que fica em parte é recortado. Se a PF já manda furos, valem os dela.',

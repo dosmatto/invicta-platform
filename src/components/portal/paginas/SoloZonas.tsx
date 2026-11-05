@@ -28,7 +28,7 @@ export function PaginaZonas() {
   const libRec = p.liberada('recomendacoes');
 
   const z = useMemo(() => zonasPorTalhao(dados, ano), [dados, ano]);
-  const kpis = useMemo(() => kpisPainel(dados, ano, p.cultura), [dados, ano, p.cultura]);
+  const kpis = useMemo(() => kpisPainel(dados, ano, p.cultura, p.dadosEscopo), [dados, ano, p.cultura, p.dadosEscopo]);
   const comZonas = z.talhoes.filter(t => t.nZonas > 0);
   const semZonas = z.talhoes.filter(t => t.nZonas === 0);
   const areaTotal = kpis.areaTotal;

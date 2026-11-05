@@ -268,10 +268,11 @@ export interface ResumoProd {
  *  na cultura pedida. Com a cultura em branco, só vale a PREDOMINANTE — a de
  *  maior área colhida, com a colheita escolhida por talhão E por cultura
  *  (lib/portalPainel culturaEfetiva): somar saca de soja com saca de milho não
- *  diz nada. `outras` = as demais culturas colhidas no ano. */
-export function linhasProdutividade(dados: DadosPainel[], ano: number | null, cultura: string): { linhas: LinhaProd[]; cultura: string; outrasCulturas: boolean; outras: string[] } {
+ *  diz nada. `outras` = as demais culturas colhidas no ano. `escopo`: no painel
+ *  de um talhão, a predominante da propriedade vence se o talhão a tem. */
+export function linhasProdutividade(dados: DadosPainel[], ano: number | null, cultura: string, escopo?: DadosPainel[]): { linhas: LinhaProd[]; cultura: string; outrasCulturas: boolean; outras: string[] } {
   if (ano == null) return { linhas: [], cultura: '', outrasCulturas: false, outras: [] };
-  const alvo = culturaEfetiva(dados, ano, cultura);
+  const alvo = culturaEfetiva(dados, ano, cultura, escopo);
   const outras = cultura ? [] : areaColhidaPorCultura(dados, ano).map(c => c.cultura).filter(c => normCultura(c) !== normCultura(alvo));
   const escolhidos: Array<{ d: DadosPainel; c: NonNullable<ReturnType<typeof colheitaDoAno>> }> = [];
   if (alvo) for (const d of dados) { const c = colheitaDoAno(d, ano, alvo); if (c) escolhidos.push({ d, c }); }

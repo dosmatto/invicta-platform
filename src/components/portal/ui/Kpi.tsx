@@ -26,12 +26,15 @@ export interface DeltaKpi {
   bomQuandoSobe?: boolean;
 }
 
-export function Kpi({ icone: Icone, rotulo, valor, unidade, sub, delta, tom = 'verde', vazio, carregando, onClick, titulo }: {
+export function Kpi({ icone: Icone, rotulo, valor, unidade, sub, subTexto, delta, tom = 'verde', vazio, carregando, onClick, titulo }: {
   icone: LucideIcon;
   rotulo: string;
   valor: ReactNode | null;
   unidade?: string;
   sub?: ReactNode;
+  /** O `sub` em texto, quando ele não é string (ex.: pílula da classe) — vai
+   *  para o tooltip. */
+  subTexto?: string;
   delta?: DeltaKpi | null;
   tom?: TomKpi;
   /** Texto quando não há valor (ex.: "sem mapa de colheita no ano"). */
@@ -50,10 +53,14 @@ export function Kpi({ icone: Icone, rotulo, valor, unidade, sub, delta, tom = 'v
   // de baixo quando não cabe ao lado (flex-wrap) — o cartão nunca estoura.
   const nChars = typeof valor === 'string' || typeof valor === 'number' ? String(valor).length : 0;
   const fonteValor = nChars >= 12 ? 'text-lg sm:text-xl' : nChars >= 9 ? 'text-xl sm:text-2xl' : 'text-2xl sm:text-[28px]';
-  // Textos que podem ser cortados (truncate) mostram o texto inteiro no tooltip.
-  const subTxt = semValor && !carregando ? (vazio ?? (typeof sub === 'string' ? sub : undefined))
-    : [delta ? `${delta.valor > 0 ? '▲ +' : delta.valor < 0 ? '▼ ' : '= '}${fmtNum(delta.valor, 1)}${delta.sufixo ?? '%'}` : '', delta?.rotulo ?? '', typeof sub === 'string' ? sub : '']
+  // Rótulo e linha de apoio quebram em até 2 linhas; o que ainda for cortado
+  // aparece INTEIRO no tooltip — junto com o `titulo` (explicação do cartão),
+  // nunca no lugar dele: o tooltip mais interno é o que o navegador mostra.
+  const subStr = typeof sub === 'string' ? sub : subTexto;
+  const subTxt = semValor && !carregando ? (vazio ?? subStr)
+    : [delta ? `${delta.valor > 0 ? '▲ +' : delta.valor < 0 ? '▼ ' : '= '}${fmtNum(delta.valor, 1)}${delta.sufixo ?? '%'}` : '', delta?.rotulo ?? '', subStr ?? '']
       .filter(Boolean).join(' · ') || undefined;
+  const comTitulo = (t: string | undefined) => [t, titulo].filter(Boolean).join(' — ') || undefined;
   return (
     <Tag type={onClick ? 'button' : undefined} onClick={onClick} title={titulo}
       className={`rounded-2xl p-3.5 sm:p-4 flex items-center gap-3 sm:gap-4 min-w-0 text-left ${onClick ? 'transition-transform hover:-translate-y-0.5' : ''}`}
@@ -62,7 +69,7 @@ export function Kpi({ icone: Icone, rotulo, valor, unidade, sub, delta, tom = 'v
         <Icone size={26} strokeWidth={1.8} />
       </span>
       <div className="min-w-0 flex-1">
-        <p className="text-xs sm:text-[13px] font-semibold leading-tight truncate" style={{ color: COR.texto2 }} title={titulo ? undefined : rotulo}>{rotulo}</p>
+        <p className="text-xs sm:text-[13px] font-semibold leading-tight line-clamp-2 break-words" style={{ color: COR.texto2 }} title={comTitulo(rotulo)}>{rotulo}</p>
         {carregando ? (
           <span className="portal-esqueleto block h-7 w-24 rounded-md mt-1.5" />
         ) : (
@@ -72,7 +79,7 @@ export function Kpi({ icone: Icone, rotulo, valor, unidade, sub, delta, tom = 'v
             {!semValor && unidade && <span className="text-sm sm:text-base font-bold whitespace-nowrap max-w-full truncate" style={{ color: COR.texto2 }} title={unidade}>{unidade}</span>}
           </p>
         )}
-        <p className="text-[11px] sm:text-xs mt-1.5 leading-tight truncate" style={{ color: COR.texto2 }} title={titulo ? undefined : subTxt}>
+        <p className="text-[11px] sm:text-xs mt-1.5 leading-tight line-clamp-2 break-words" style={{ color: COR.texto2 }} title={comTitulo(subTxt)}>
           {semValor && !carregando ? (vazio ?? sub) : (
             <>
               {delta && (

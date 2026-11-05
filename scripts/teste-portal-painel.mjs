@@ -16,7 +16,7 @@ import {
   pearson, betaIncompleta, interpretarR, rotuloP, correlacoes, alertasPropriedade, resumoPorTalhao,
   projetarMapa, caminhoGeo, caixaDosBounds, MIN_TALHOES_CORRELACAO,
   cicloDeData, rotuloCiclo, MESES_DO_CICLO, ordemNoCiclo, naJanela,
-  areaColhidaPorCultura, culturaPredominanteDoAno, culturaEfetiva, talhoesSemColheita, rotuloCicloMeses,
+  areaColhidaPorCultura, culturaPredominanteDoAno, culturaEfetiva, talhoesSemColheita, rotuloCicloMeses, tituloCulturaPredominante,
 } from '../src/lib/portalPainel.ts';
 import { ITENS_MENU, itemDaRota, itemLiberado } from '../src/components/portal/shell/menu.ts';
 
@@ -395,6 +395,35 @@ t('caso da verificação: T1 100 ha soja+milho, T2 60 ha soja, T3 40 ha soja →
   assert.equal(culturaEfetiva([T1, T2, T3], 2026, 'milho'), 'Milho');
   // A correlação e os alertas usam a mesma cultura (só talhões de soja entram).
   assert.ok(correlacoes([T1, T2, T3], 2026).every(c => c.n <= 3));
+});
+t('painel de UM talhão herda a predominante do escopo (empate soja × safrinha não vira alfabético)', () => {
+  // Mesma área de soja e de milho safrinha no talhão: sem escopo o empate cairia
+  // na ordem alfabética ("Milho safrinha" < "Soja"); com o escopo vale a Soja.
+  const T1 = tal('E1', 100, () => ({ colheitas: [colEm('Soja', 3600, 100, '2026-03-10'), colEm('Milho safrinha', 9000, 100, '2026-07-20')] }));
+  const T2 = tal('E2', 80, () => ({ colheitas: [colEm('Soja', 3000, 80, '2026-03-12')] }));
+  const escopo = [T1, T2];
+  assert.equal(culturaPredominanteDoAno(escopo, 2026), 'Soja');
+  assert.equal(culturaEfetiva([T1], 2026, ''), 'Milho safrinha');           // o empate sozinho
+  assert.equal(culturaEfetiva([T1], 2026, '', escopo), 'Soja');             // herdada
+  const k = kpiProdutividade([T1], 2026, '', escopo);
+  assert.equal(k.cultura, 'Soja');
+  assert.equal(k.media, 60);
+  assert.deepEqual(k.outras, ['Milho safrinha']);
+  assert.equal(kpisPainel([T1], 2026, '', escopo).produtividade.cultura, 'Soja');
+  // Mesmo com o milho MAIOR no talhão, a cultura da propriedade vence se ele a tem.
+  const T3 = tal('E3', 100, () => ({ colheitas: [colEm('Soja', 3600, 90, '2026-03-10'), colEm('Milho safrinha', 9000, 100, '2026-07-20')] }));
+  assert.equal(culturaEfetiva([T3], 2026, '', [T3, T2]), 'Soja');
+  // Talhão sem a predominante do escopo: vale a dele.
+  const T4 = tal('E4', 50, () => ({ colheitas: [colEm('Milho', 9000, 50, '2026-03-10')] }));
+  assert.equal(culturaEfetiva([T4], 2026, '', [T1, T2, T4]), 'Milho');
+  // Filtro de cultura escolhido continua mandando.
+  assert.equal(culturaEfetiva([T1], 2026, 'Milho safrinha', escopo), 'Milho safrinha');
+  // Histórico do talhão na cultura herdada: só a soja.
+  assert.deepEqual(historicoProdutividade(T1, k.cultura).map(h => h.cultura), ['Soja']);
+  // Tooltip diz por que é a soja.
+  assert.match(tituloCulturaPredominante({ cultura: 'Soja', outras: ['Milho safrinha'], anoTxt: '2026', um: true, predominanteEscopo: 'Soja' }), /^Mesma cultura da visão de todos os talhões/);
+  assert.match(tituloCulturaPredominante({ cultura: 'Milho', outras: ['Trigo'], anoTxt: '2026', um: true, predominanteEscopo: 'Soja' }), /^Cultura de maior área colhida no talhão em 2026/);
+  assert.match(tituloCulturaPredominante({ cultura: 'Soja', outras: ['Milho'], anoTxt: '2026', um: false, predominanteEscopo: 'Soja' }), /^Cultura de maior área colhida em 2026\. Também colhido: Milho/);
 });
 t('"sem colheita de X" não conta quem colheu outra cultura nem quem tem outra no cadastro', () => {
   const S = tal('Q1', 50, () => ({ colheitas: [colEm('Soja', 3600, 50, '2026-03-01')] }));

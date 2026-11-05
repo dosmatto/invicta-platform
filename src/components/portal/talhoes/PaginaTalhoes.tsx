@@ -103,7 +103,9 @@ export function PaginaTalhoes() {
             return (
               <li key={r.talhaoId} className="rounded-2xl p-3.5 flex flex-col gap-3" style={{ background: COR.superficie, border: `1px solid ${COR.borda}`, boxShadow: COR.sombra }}>
                 <div className="flex items-start gap-3">
-                  <Silhueta geojson={t?.geojson} cor={cProd ? corCheiaDaClasse(cProd) : 'var(--invicta-green)'} />
+                  {/* Cor da classe de produtividade; sem colheita (ou sem legenda) fica no cinza
+                      "sem dado" — verde ao lado das classes leria como "bom". */}
+                  <Silhueta geojson={t?.geojson} cor={cProd ? corCheiaDaClasse(cProd) : COR.semDado} />
                   <div className="min-w-0 flex-1">
                     <p className="text-base font-extrabold leading-tight truncate">{r.nome}</p>
                     <p className="text-xs mt-0.5 truncate" style={{ color: COR.texto2 }}>

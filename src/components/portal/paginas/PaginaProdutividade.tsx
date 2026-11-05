@@ -17,7 +17,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { BarChart3, Wheat, Scale, Trophy, Map as MapaIcone, PieChart, History, ListOrdered, Ruler } from 'lucide-react';
 import { legendaDaCultura } from '@/lib/produtividade';
 import { rotuloAno } from '@/lib/periodo';
-import { colheitaDoAno, classesEmSacas, distribuirEmClasses, normCultura, talhoesSemColheita } from '@/lib/portalPainel';
+import { colheitaDoAno, classesEmSacas, distribuirEmClasses, normCultura, talhoesSemColheita, culturaPredominanteDoAno, tituloCulturaPredominante } from '@/lib/portalPainel';
 import { linhasProdutividade, resumoProdutividade, historicoPorSafra, type LinhaProd } from '@/lib/portalPainelSensores';
 import { usePortal } from '../PortalContext';
 import { Cartao, Kpi, LegendaClasses, BarrasAno, Seletor, Vazio, MiniMapa, camadaProdutividade, COR, fmtNum, fmtInt, fmtHaCurto, suave, talhoesTxt } from '../ui';
@@ -41,7 +41,9 @@ function ConteudoProdutividade() {
   const um = !!p.talhao;
   const anoTxt = rotuloAno(p.safra);
 
-  const base = useMemo(() => linhasProdutividade(dados, ano, cultura), [dados, ano, cultura]);
+  // Um talhão herda a cultura predominante da propriedade (dadosEscopo) — regra em lib/portalPainel.
+  const base = useMemo(() => linhasProdutividade(dados, ano, cultura, p.dadosEscopo), [dados, ano, cultura, p.dadosEscopo]);
+  const predEscopo = useMemo(() => culturaPredominanteDoAno(p.dadosEscopo, ano), [p.dadosEscopo, ano]);
   const { linhas } = base;
   const culturaKpi = base.cultura;
   const anterior = useMemo(() => (ano != null && culturaKpi ? linhasProdutividade(dados, ano - 1, culturaKpi).linhas : []), [dados, ano, culturaKpi]);
@@ -97,9 +99,10 @@ function ConteudoProdutividade() {
   const semAnterior = resumo.anteriorScHa == null;
   const kpis = [
     <Kpi key="media" icone={BarChart3} tom="verde" rotulo={`Produtividade média · ${culturaKpi}`} valor={fmtNum(resumo.mediaScHa, 1)} unidade="sc/ha"
-      delta={resumo.deltaPct != null ? { valor: resumo.deltaPct, rotulo: 'vs. safra anterior' } : null}
-      sub={[base.outrasCulturas ? 'cultura predominante' : '', semAnterior ? `${um ? 'sem' : `${talhoesTxt(resumo.nTalhoes)} · sem`} ${(ano ?? 0) - 1} para comparar` : `antes: ${fmtNum(resumo.anteriorScHa ?? 0, 1)} sc/ha`].filter(Boolean).join(' · ')}
-      titulo={base.outrasCulturas ? `Cultura de maior área colhida em ${anoTxt}. Também colhido: ${base.outras.join(', ')} — escolha a cultura no filtro para ver.` : undefined} />,
+      // Curto para caber em 2 linhas: "▲ +9,0% vs. 2025 · antes: 61,0 sc/ha · predominante" (o tooltip explica).
+      delta={resumo.deltaPct != null ? { valor: resumo.deltaPct, rotulo: `vs. ${(ano ?? 0) - 1}` } : null}
+      sub={[semAnterior ? `${um ? 'sem' : `${talhoesTxt(resumo.nTalhoes)} · sem`} ${(ano ?? 0) - 1} para comparar` : `antes: ${fmtNum(resumo.anteriorScHa ?? 0, 1)} sc/ha`, base.outrasCulturas ? 'predominante' : ''].filter(Boolean).join(' · ')}
+      titulo={base.outrasCulturas ? tituloCulturaPredominante({ cultura: culturaKpi, outras: base.outras, anoTxt, um, predominanteEscopo: predEscopo }) : undefined} />,
     <Kpi key="prod" icone={Wheat} tom="ambar" rotulo="Produção total" valor={fmtInt(resumo.producaoTotalT)} unidade="t"
       sub={`${fmtInt(resumo.producaoTotalSc)} sacas · ${fmtHaCurto(resumo.areaHa)} ha colhidos`} />,
     um || resumo.cvEntreTalhoes == null

@@ -18,11 +18,12 @@ export type {
 
 /** indisponivel = sem Supabase/sem service role no ambiente (ou rota 404); sem-sessao = 401;
  *  proibido = 403 (papel que não usa o portal, acesso inativo ou sem vínculo);
- *  invalido = 400; erro = falha do servidor ou sem conexão. */
-export type MotivoFalhaBenchmark = 'indisponivel' | 'sem-sessao' | 'proibido' | 'invalido' | 'erro';
+ *  invalido = 400; limite = 429 (pedidos demais do mesmo usuário em 1 min);
+ *  erro = falha do servidor ou sem conexão. */
+export type MotivoFalhaBenchmark = 'indisponivel' | 'sem-sessao' | 'proibido' | 'invalido' | 'limite' | 'erro';
 export interface FalhaBenchmark { ok: false; motivo: MotivoFalhaBenchmark; erro?: string }
 
-const MOTIVOS = new Set<MotivoFalhaBenchmark>(['indisponivel', 'sem-sessao', 'proibido', 'invalido', 'erro']);
+const MOTIVOS = new Set<MotivoFalhaBenchmark>(['indisponivel', 'sem-sessao', 'proibido', 'invalido', 'limite', 'erro']);
 
 export async function buscarBenchmark(safra: string, clienteId?: string | null): Promise<RespostaBenchmark | FalhaBenchmark> {
   if (!supabaseConfigurado) return { ok: false, motivo: 'indisponivel' };
@@ -39,7 +40,7 @@ export async function buscarBenchmark(safra: string, clienteId?: string | null):
     const corpo = await r.json().catch(() => null) as (Partial<RespostaBenchmark> & { ok?: boolean; motivo?: string; erro?: string }) | null;
     if (corpo?.ok === true && r.ok) return corpo as RespostaBenchmark;
     const motivo = MOTIVOS.has(corpo?.motivo as MotivoFalhaBenchmark) ? corpo!.motivo as MotivoFalhaBenchmark
-      : r.status === 401 ? 'sem-sessao' : r.status === 403 ? 'proibido'
+      : r.status === 401 ? 'sem-sessao' : r.status === 403 ? 'proibido' : r.status === 429 ? 'limite'
         // 404 = a rota não existe neste servidor (deploy anterior ao recurso).
         : r.status === 404 ? 'indisponivel' : 'erro';
     return { ok: false, motivo, erro: corpo?.erro ?? `Erro ${r.status} no servidor.` };

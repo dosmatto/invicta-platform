@@ -98,7 +98,7 @@ function Conteudo() {
           sub={`de ${dados.length}${anos.length ? ` · ${anos.length === 1 ? anos[0] : `${anos[0]}–${anos[anos.length - 1]}`}` : ''}`} vazio="sem análise de solo importada" />
         <Kpi icone={FlaskConical} tom="verde" rotulo={`${def.rotulo} · ${um ? 'última análise' : 'média ponderada'}`} valor={r.media != null ? fmtNum(r.media, casas) : null} unidade={unid}
           delta={r.deltaMedia?.pct != null ? { valor: r.deltaMedia.pct, rotulo: 'vs. análise anterior' } : null}
-          sub={r.classeMedia ? <PilulaClasse nome={r.classeMedia.nome} cor={r.classeMedia.cor} /> : undefined} vazio="sem valor" />
+          sub={r.classeMedia ? <PilulaClasse nome={r.classeMedia.nome} cor={r.classeMedia.cor} /> : undefined} subTexto={r.classeMedia?.nome ?? undefined} vazio="sem valor" />
         <Kpi icone={ArrowUpRight} tom="verde" rotulo={um ? 'Primeira × última análise' : 'Talhões que subiram'}
           valor={um ? (umaLinha && tendencias.get(umaLinha.talhaoId)?.variacao != null ? `${tendencias.get(umaLinha.talhaoId)!.variacao! > 0 ? '+' : ''}${fmtNum(tendencias.get(umaLinha.talhaoId)!.variacao, casas)}` : null) : (comDuas ? String(contagem.subiu) : null)}
           unidade={um ? unid : undefined}

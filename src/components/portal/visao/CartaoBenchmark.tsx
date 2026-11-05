@@ -10,14 +10,14 @@
 // recurso), sessão expirada, fora do acesso, erro (com "tentar de novo"),
 // insuficiente (< 5 produtores na cultura+safra), sem colheita sua no ano.
 
-import { Trophy, RefreshCw, LogIn, ShieldOff, ServerOff, AlertTriangle, type LucideIcon } from 'lucide-react';
+import { Trophy, RefreshCw, LogIn, ShieldOff, ServerOff, AlertTriangle, Clock, type LucideIcon } from 'lucide-react';
 import { Cartao, type AcaoCartao } from '../ui/Cartao';
 import { Vazio } from '../ui/Vazio';
 import { Esqueleto } from '../ui/Esqueleto';
 import { COR, fmtNum } from '../ui/formato';
 import { benchDaCultura, TEXTO_FALHA_BENCHMARK, type EstadoBenchmark, type FalhaBenchmarkPortal, type ItemProdutividade } from '../useBenchmark';
 
-const ICONE_FALHA: Record<FalhaBenchmarkPortal, LucideIcon> = { indisponivel: ServerOff, 'sem-sessao': LogIn, proibido: ShieldOff, erro: AlertTriangle };
+const ICONE_FALHA: Record<FalhaBenchmarkPortal, LucideIcon> = { indisponivel: ServerOff, 'sem-sessao': LogIn, proibido: ShieldOff, limite: Clock, erro: AlertTriangle };
 
 /** Aviso de consulta que não deu certo — o mesmo no cartão (compacto) e na página. */
 export function AvisoBenchmark({ e, recarregar, compacto }: {
@@ -27,7 +27,7 @@ export function AvisoBenchmark({ e, recarregar, compacto }: {
 }) {
   return (
     <Vazio compacto={compacto} icone={ICONE_FALHA[e.estado]} titulo={TEXTO_FALHA_BENCHMARK[e.estado].titulo} texto={e.motivo}
-      acao={e.estado === 'erro' && recarregar ? (
+      acao={(e.estado === 'erro' || e.estado === 'limite') && recarregar ? (
         <button type="button" onClick={recarregar} className="mt-2 inline-flex items-center gap-1.5 h-9 px-3 rounded-lg text-xs font-bold" style={{ background: COR.verdeEscuro, color: '#fff' }}>
           <RefreshCw size={13} /> Tentar de novo
         </button>
@@ -110,7 +110,7 @@ export function CurvaBenchmark({ b, voce, rotuloVoce = 'Você' }: { b: ItemProdu
   );
 }
 
-export function CartaoBenchmark({ estado, recarregar, cultura, safraRotulo, voce, rotuloVoce, acao, className, semColheita, predominante }: {
+export function CartaoBenchmark({ estado, recarregar, cultura, safraRotulo, voce, rotuloVoce, acao, className, semColheita, predominante, filtroFazenda }: {
   estado: EstadoBenchmark;
   recarregar?: () => void;
   /** Cultura do seu KPI (a predominante, se o filtro está em "Todas"). */
@@ -124,6 +124,9 @@ export function CartaoBenchmark({ estado, recarregar, cultura, safraRotulo, voce
   semColheita?: boolean;
   /** Filtro em "Todas" com mais de uma cultura no ano: `cultura` é a predominante. */
   predominante?: boolean;
+  /** Há filtro de fazenda: o "Você" (e a posição) do servidor é do produtor
+   *  inteiro, não da fazenda filtrada — o cartão avisa, como a página Comparativo. */
+  filtroFazenda?: boolean;
 }) {
   const titulo = 'Benchmark Invicta';
   const sub = `Produtividade${cultura ? ` (${cultura}${predominante ? ', predominante' : ''})` : ''} · anônimo e agregado: nenhum dado de outro produtor sai do servidor.`;
@@ -156,6 +159,11 @@ export function CartaoBenchmark({ estado, recarregar, cultura, safraRotulo, voce
                 <span style={{ color: COR.texto2 }}>Sua posição:</span><strong>Top {top}%</strong></li>
             )}
           </ul>
+          {filtroFazenda && rotuloVoce == null && b.voce && (
+            <p className="text-[11px] leading-snug sm:col-span-2 xl:col-span-1 2xl:col-span-2" style={{ color: COR.mudo }}>
+              &ldquo;Você&rdquo; e a posição são da propriedade inteira, com todas as suas fazendas — o filtro de fazenda não os altera.
+            </p>
+          )}
         </div>
       );
     }

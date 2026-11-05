@@ -22,9 +22,10 @@ import { anoDoRegistro } from '../portalProdutor.ts';
 import type { RegistroAcesso } from '../precisionfarm/acessoTalhao.ts';
 import type { FazendaEscopo } from '../iam/escopoFazendas.ts';
 import {
-  JANELA_ANOS_FERTILIDADE, montarBase, montarResposta, anoBenchmarkValido, talhoesDoEscopo,
+  JANELA_ANOS_FERTILIDADE, montarBase, montarResposta, anoBenchmarkValido, talhoesDoEscopo, totalAnosBenchmark,
   type BaseBenchmark, type LaudoIn, type LocalCliente, type MapaColheitaIn, type TalhaoIn, type VoceBenchmark,
 } from './benchmarkCalc.ts';
+import { criarCacheLru, criarLimitador } from './memoriaServidor.ts';
 
 const COL_PRODUTIVIDADE = 'inv_produtividade';
 const COL_LAB = 'inv_lab';
@@ -35,12 +36,15 @@ const COL_CLIENTES = 'inv_clientes';
  *  abre várias vezes e ler os laudos de todos é caro. Também atenua o ataque
  *  por diferença no tempo (ver o topo de benchmarkCalc.ts). Nunca sai daqui. */
 const TTL_MS = 10 * 60 * 1000;
-/** Teto do cache (LRU): cada base é grande; poucos anos são pedidos de fato. */
-const MAX_ANOS_CACHE = 4;
-/** Base PRONTA por ano, na ordem de uso (Map = ordem de inserção; o fim é o mais recente). */
-const cache = new Map<number, { em: number; base: BaseBenchmark }>();
-/** Carga EM ANDAMENTO por ano: pedidos simultâneos do mesmo ano esperam a mesma. */
-const carregando = new Map<number, Promise<BaseBenchmark>>();
+/** Teto do cache (LRU): TODOS os anos aceitos ([2000, atual + 1]) mais um de
+ *  folga para a virada do ano — a base é agregada por cliente e pequena, e com
+ *  teto menor alternar entre anos recarregava tudo a cada pedido. Pedidos
+ *  simultâneos do mesmo ano esperam a MESMA carga (memoriaServidor). */
+const cacheBases = criarCacheLru<number, BaseBenchmark>({ max: totalAnosBenchmark(anoDeData(hojeSaoPauloISO()) ?? new Date().getFullYear()) + 1, ttlMs: TTL_MS });
+/** Limite por usuário (e-mail da sessão), nesta instância: 10 pedidos por
+ *  minuto — a página faz um por safra; mais que isso é repetição ou abuso. */
+export const LIMITE_PEDIDOS_MINUTO = 10;
+const limitador = criarLimitador({ max: LIMITE_PEDIDOS_MINUTO, janelaMs: 60 * 1000 });
 
 const json = (corpo: unknown, status = 200) =>
   new Response(JSON.stringify(corpo), { status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
@@ -48,8 +52,9 @@ const json = (corpo: unknown, status = 200) =>
 // ── Autorização ─────────────────────────────────────────────────────────────
 
 export type Autorizacao =
-  /** `reg` só para o produtor: o "você" dele é o ESCOPO (talhoesDoEscopo). */
-  | { ok: true; clienteId: string | null; reg?: RegistroAcesso }
+  /** `reg` só para o produtor: o "você" dele é o ESCOPO (talhoesDoEscopo).
+   *  `usuario` = e-mail da sessão (chave do limite de pedidos). */
+  | { ok: true; usuario: string; clienteId: string | null; reg?: RegistroAcesso }
   | { ok: false; status: 401 | 403; motivo: 'sem-sessao' | 'proibido'; erro: string };
 
 /** Quem é o "você" do benchmark (ver regras no topo). */
@@ -61,11 +66,11 @@ export async function autorizarBenchmark(sb: SupabaseClient, auth: string | null
   if (reg.papel === 'produtor') {
     const id = clienteIdDoProdutor(reg);
     if (!id) return { ok: false, status: 403, motivo: 'proibido', erro: 'Acesso ainda não vinculado a um produtor.' };
-    return { ok: true, clienteId: id, reg };
+    return { ok: true, usuario: r.email, clienteId: id, reg };
   }
   if (reg.papel === 'owner' || reg.papel === 'admin') {
     const id = typeof clienteIdPedido === 'string' && clienteIdPedido.length > 0 && clienteIdPedido.length <= 128 ? clienteIdPedido : null;
-    return { ok: true, clienteId: id };
+    return { ok: true, usuario: r.email, clienteId: id };
   }
   return { ok: false, status: 403, motivo: 'proibido', erro: 'O comparativo é do Portal do Produtor.' };
 }
@@ -190,29 +195,8 @@ async function lerBase(sb: SupabaseClient, ano: number, clienteExtra: string | n
 
 /** Base do ano, do cache quando fresca. O cliente que pede pode não ter dado
  *  nenhum (e então não estaria nos `locais`): a localização dele é lida à parte. */
-async function baseCacheada(sb: SupabaseClient, ano: number): Promise<BaseBenchmark> {
-  const c = cache.get(ano);
-  if (c && Date.now() - c.em <= TTL_MS) {
-    cache.delete(ano); cache.set(ano, c);   // LRU: vai para o fim (mais recente)
-    return c.base;
-  }
-  let p = carregando.get(ano);
-  if (!p) {
-    p = lerBase(sb, ano, null)
-      .then(base => {
-        cache.delete(ano);
-        cache.set(ano, { em: Date.now(), base });
-        while (cache.size > MAX_ANOS_CACHE) cache.delete(cache.keys().next().value as number);
-        return base;
-      })
-      .finally(() => carregando.delete(ano));   // falha não fica presa: o próximo pedido tenta de novo
-    carregando.set(ano, p);
-  }
-  return p;
-}
-
 async function baseDoAno(sb: SupabaseClient, ano: number, clienteId: string | null): Promise<BaseBenchmark> {
-  const base = await baseCacheada(sb, ano);
+  const base = await cacheBases.obter(ano, () => lerBase(sb, ano, null));
   if (!clienteId || base.locais.has(clienteId)) return base;
   const extra = await locaisDosClientes(sb, [clienteId], new Map());
   return extra.size ? { ...base, locais: new Map([...base.locais, ...extra]) } : base;
@@ -251,6 +235,13 @@ export async function tratarBenchmark(req: Request): Promise<Response> {
   try {
     const a = await autorizarBenchmark(sb, req.headers.get('authorization'), clienteId);
     if (!a.ok) return json({ ok: false, motivo: a.motivo, erro: a.erro }, a.status);
+    // Limite por usuário ANTES de qualquer leitura da base (cada ano novo é uma varredura).
+    const lim = limitador.permitir(a.usuario, Date.now());
+    if (!lim.ok) {
+      const r = json({ ok: false, motivo: 'limite', erro: 'Muitos pedidos seguidos. Aguarde um minuto e tente de novo.' }, 429);
+      r.headers.set('Retry-After', String(Math.ceil(lim.esperarMs / 1000)));
+      return r;
+    }
     const base = await baseDoAno(sb, ano, a.clienteId);
     const voce: VoceBenchmark = a.reg
       ? { clienteId: a.clienteId, talhoes: talhoesDoEscopo(a.reg, base, await fazendasMarcadas(sb, a.reg, base)) }

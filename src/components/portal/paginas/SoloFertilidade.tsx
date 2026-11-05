@@ -91,7 +91,7 @@ function Conteudo() {
       sub={linhaUm ? `camada ${linhaUm.profundidade ?? '—'} cm · ${plural(linhaUm.nAmostras, 'amostra', 'amostras')}${linhaUm.antiga ? ' · análise antiga' : ''}` : undefined}
       vazio={`sem análise de solo até ${anoTxt}`} />,
     <Kpi key="b" icone={Activity} tom="verde" rotulo={`${def.rotulo} do talhão`} valor={r.media != null ? fmtNum(r.media, def.casas) : null} unidade={unid}
-      sub={r.classeMedia ? <PilulaClasse nome={r.classeMedia.nome} cor={r.classeMedia.cor} /> : leg ? undefined : `sem legenda de ${def.rotulo} na Biblioteca`} vazio="sem valor" />,
+      sub={r.classeMedia ? <PilulaClasse nome={r.classeMedia.nome} cor={r.classeMedia.cor} /> : leg ? undefined : `sem legenda de ${def.rotulo} na Biblioteca`} subTexto={r.classeMedia?.nome ?? undefined} vazio="sem valor" />,
     <Kpi key="c" icone={AlertTriangle} tom={pctAmostrasCriticas ? 'ambar' : 'verde'} rotulo="Amostras abaixo do crítico"
       valor={pctAmostrasCriticas != null && amostras && amostras.n > 0 ? fmtNum(pctAmostrasCriticas, 0) : null} unidade="%"
       sub={amostras ? `${amostras.n} amostras do laudo` : undefined} vazio={critSet ? 'sem amostras' : 'sem régua de classes na Biblioteca'} />,
@@ -103,7 +103,7 @@ function Conteudo() {
       sub={`${talhoesTxt(r.nComValor)} de ${dados.length}${kpiSub(r) ? ` · ${kpiSub(r)}` : ''}`} vazio={`sem análise de solo até ${anoTxt}`} />,
     <Kpi key="b" icone={Activity} tom="verde" rotulo={`${def.rotulo} · média ponderada`} valor={r.media != null ? fmtNum(r.media, def.casas) : null} unidade={unid}
       delta={r.deltaMedia?.pct != null ? { valor: r.deltaMedia.pct, rotulo: 'vs. análise anterior' } : null}
-      sub={r.classeMedia ? <PilulaClasse nome={r.classeMedia.nome} cor={r.classeMedia.cor} /> : leg ? undefined : `sem legenda de ${def.rotulo} na Biblioteca`} vazio="sem valor" />,
+      sub={r.classeMedia ? <PilulaClasse nome={r.classeMedia.nome} cor={r.classeMedia.cor} /> : leg ? undefined : `sem legenda de ${def.rotulo} na Biblioteca`} subTexto={r.classeMedia?.nome ?? undefined} vazio="sem valor" />,
     <Kpi key="c" icone={AlertTriangle} tom={r.areaCritica > 0 ? 'ambar' : 'verde'} rotulo={`${def.rotulo} abaixo do crítico`} valor={r.limite != null && r.nComValor ? fmtHaCurto(r.areaCritica) : null} unidade="ha"
       sub={`${fmtPct(r.pctCritica)} da área · ${talhoesTxt(r.nCriticos)}`} vazio={r.nComValor ? 'sem régua de classes na Biblioteca' : `sem análise de solo até ${anoTxt}`} />,
     <Kpi key="d" icone={ClipboardList} tom="roxo" rotulo="Sem análise recente" valor={dados.length ? fmtHaCurto(r.areaAntigos) : null} unidade="ha"

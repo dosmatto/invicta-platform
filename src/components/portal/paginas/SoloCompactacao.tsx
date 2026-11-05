@@ -104,7 +104,7 @@ function Conteudo() {
         <Kpi icone={Layers} tom="azul" rotulo={um ? 'Pontos medidos' : 'Talhões medidos'} valor={um ? String(medUm?.nPontos ?? 0) : fmtHaCurto(areaMedida)} unidade={um ? 'pontos' : 'ha'}
           sub={um ? `${medUm?.levantamento || 'penetrometria'} · ${medUm?.ano ?? '—'}` : `${talhoesTxt(medicoes.length)} de ${dados.length}${anosMed.length ? ` · medições de ${Math.min(...anosMed) === Math.max(...anosMed) ? anosMed[0] : `${Math.min(...anosMed)}–${Math.max(...anosMed)}`}` : ''}`} />
         <Kpi icone={Gauge} tom="verde" rotulo={`Resistência média · ${camada} cm`} valor={perfilSel ? fmtNum(perfilSel.media, 2) : null} unidade={unid}
-          sub={perfilSel ? <PilulaClasse nome={perfilSel.classe} cor={perfilSel.cor} /> : undefined} vazio="sem medição nesta camada" />
+          sub={perfilSel ? <PilulaClasse nome={perfilSel.classe} cor={perfilSel.cor} /> : undefined} subTexto={perfilSel?.classe ?? undefined} vazio="sem medição nesta camada" />
         <Kpi icone={ArrowDownToLine} tom="ambar" rotulo="Camada mais dura" valor={pior ? `${pior.prof}` : null} unidade="cm"
           sub={pior ? `${fmtNum(pior.media, 2)} ${unid} · ${fmtNum(pior.pctCritico, 0)}% dos pontos acima de ${limite != null ? fmtNum(limite, 1) : '—'}` : undefined} vazio="sem medição" />
         <Kpi icone={AlertTriangle} tom={criticos.length ? 'ambar' : 'verde'} rotulo={um ? 'Camada crítica' : 'Talhões com camada crítica'}

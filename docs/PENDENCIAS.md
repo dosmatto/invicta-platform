@@ -139,6 +139,7 @@ verdadeira (fusão de talhões) chegou depois; foi preciso renumerar.
 | S/N | Limite do talhão não volta mais ao antigo: envio por registro (só o que o aparelho editou) + trava de versão do limite no banco | 2.224.0 | Sincronismo (src/lib/supabaseData.ts, src/lib/edicoesSync.ts, `npm run teste:edicoes`); banco: supabase/migrations/20261105180000_talhoes_trava_versao_limite.sql |
 | S/N | Portal do Produtor novo: menu por tema, Visão geral e comparativo Invicta (14 páginas por tema, filtros Safra/Cultura/Fazenda/Talhão, mapas leve × reais, benchmark anônimo no servidor) | 2.225.0 | /portal (Portal do Produtor) |
 | S/N | Adotar limite da PrecisionFarm mantém os descontos (furos) do talhão quando a PF não manda os dela; comparação só do limite externo | 2.226.0 | Talhão → Integração PrecisionFarm → Limite da PrecisionFarm; Biblioteca → PrecisionFarm → "Dif. limite" |
+| S/N | Ajustes do Portal do Produtor: painel de um talhão herda a cultura da propriedade, limite de 10 consultas/min e cache de todos os anos no comparativo, KPIs sem texto cortado, nota do "Você" com filtro de fazenda, talhão sem colheita em cinza | 2.226.1 | /portal (Portal do Produtor); testes: `node scripts/teste-portal-painel.mjs`, `node scripts/teste-portal-benchmark.mjs` |
 
 > As pendências 1–17 foram entregues antes deste registro existir e não estão
 > catalogadas; procure pelo assunto no `changelog.ts`. Da 18 em diante, tudo

@@ -181,6 +181,12 @@ export function anoBenchmarkValido(ano: number | null | undefined, anoAtual: num
   return typeof ano === 'number' && Number.isInteger(ano) && ano >= ANO_MIN_BENCHMARK && ano <= anoAtual + 1;
 }
 
+/** Quantos anos o servidor aceita ([2000, ano atual + 1]) — o teto do cache de
+ *  bases, para que alternar entre anos válidos nunca force uma nova varredura. */
+export function totalAnosBenchmark(anoAtual: number): number {
+  return Math.max(1, anoAtual + 1 - ANO_MIN_BENCHMARK + 1);
+}
+
 // ── Normalizações ───────────────────────────────────────────────────────────
 
 const semAcento = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '');

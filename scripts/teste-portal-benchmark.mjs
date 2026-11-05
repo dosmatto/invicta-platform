@@ -9,8 +9,9 @@
 import assert from 'node:assert/strict';
 import {
   montarBase, montarResposta, normalizarCultura, normalizarCamada, quantil, percentil, desvio,
-  laudosDaJanela, talhoesDoEscopo, anoBenchmarkValido, itemDaCulturaBench, chaveCulturaBench, MINIMO_PRODUTORES, MINIMO_QUANTIS, CAMADA_PADRAO, ROTULO_GERAL,
+  laudosDaJanela, talhoesDoEscopo, anoBenchmarkValido, totalAnosBenchmark, itemDaCulturaBench, chaveCulturaBench, MINIMO_PRODUTORES, MINIMO_QUANTIS, CAMADA_PADRAO, ROTULO_GERAL,
 } from '../src/lib/portal/benchmarkCalc.ts';
+import { criarLimitador, criarCacheLru } from '../src/lib/portal/memoriaServidor.ts';
 
 let ok = 0, fail = 0;
 const t = (n, f) => { try { f(); ok++; console.log('  ✓', n); } catch (e) { fail++; console.error('  ✗', n, '—', e.message); } };
@@ -238,6 +239,71 @@ t('estatística: quantil tipo 7 e percentil por rank médio', () => {
   assert.equal(percentil([1, 2, 3, 4, 5], 3), 50);
   assert.equal(percentil([1, 1, 1, 1, 1], 1), 50);
 });
+
+// ── Limite de pedidos e cache de bases (lib/portal/memoriaServidor) ─────────
+t('limite: 10 pedidos por minuto por usuário; o 11º é recusado com o tempo de espera', () => {
+  const lim = criarLimitador({ max: 10, janelaMs: 60_000 });
+  for (let i = 0; i < 10; i++) assert.equal(lim.permitir('a@x', 1000 + i).ok, true);
+  const r = lim.permitir('a@x', 1010);
+  assert.equal(r.ok, false);
+  assert.equal(r.esperarMs, 60_000 - 10);          // o 1º (t=1000) sai da janela em t=61000
+  assert.equal(lim.permitir('b@x', 1010).ok, true); // outro usuário não é afetado
+  // Recusado não conta: assim que o 1º sai da janela, volta a passar.
+  assert.equal(lim.permitir('a@x', 60_999).ok, false);
+  assert.equal(lim.permitir('a@x', 61_000).ok, true);
+});
+t('limite: o número de usuários guardados tem teto (sai o usado há mais tempo)', () => {
+  const lim = criarLimitador({ max: 1, janelaMs: 60_000, maxChaves: 3 });
+  for (const u of ['u1', 'u2', 'u3', 'u4']) lim.permitir(u, 0);
+  assert.equal(lim.tamanho(), 3);
+  assert.equal(lim.permitir('u1', 1).ok, true);     // u1 foi esquecido
+  assert.equal(lim.permitir('u4', 1).ok, false);    // u4 continua contado
+});
+t('cache: o teto cobre todos os anos válidos [2000, atual + 1]', () => {
+  assert.equal(totalAnosBenchmark(2026), 28);
+  let n = 0;
+  for (let a = 1990; a <= 2030; a++) if (anoBenchmarkValido(a, 2026)) n++;
+  assert.equal(n, totalAnosBenchmark(2026));
+});
+
+const tAsync = [];
+const ta = (n, f) => tAsync.push(f().then(() => { ok++; console.log('  ✓', n); }, e => { fail++; console.error('  ✗', n, '—', e.message); }));
+ta('cache: alternar entre TODOS os anos válidos lê cada ano uma vez só', async () => {
+  const c = criarCacheLru({ max: totalAnosBenchmark(2026) + 1, ttlMs: 600_000, agora: () => 0 });
+  let leituras = 0;
+  const carregar = ano => () => { leituras++; return Promise.resolve({ ano }); };
+  for (let volta = 0; volta < 3; volta++) for (let a = 2000; a <= 2027; a++) assert.equal((await c.obter(a, carregar(a))).ano, a);
+  assert.equal(leituras, 28);
+});
+ta('cache: pedidos simultâneos do mesmo ano esperam a MESMA carga (dedupe)', async () => {
+  const c = criarCacheLru({ max: 4, ttlMs: 600_000, agora: () => 0 });
+  let leituras = 0, soltar;
+  const carga = () => { leituras++; return new Promise(r => { soltar = r; }); };
+  const ps = Array.from({ length: 6 }, () => c.obter(2026, carga));
+  await Promise.resolve(); await Promise.resolve();
+  soltar('base');
+  assert.deepEqual(await Promise.all(ps), Array(6).fill('base'));
+  assert.equal(leituras, 1);
+});
+ta('cache: LRU — hit não relê e o usado há mais tempo é o que sai', async () => {
+  const c = criarCacheLru({ max: 2, ttlMs: 600_000, agora: () => 0 });
+  const lidos = [];
+  const carregar = a => () => { lidos.push(a); return Promise.resolve(a); };
+  await c.obter(1, carregar(1)); await c.obter(2, carregar(2));
+  await c.obter(1, carregar(1));                    // hit: 1 vira o mais recente
+  await c.obter(3, carregar(3));                    // sai o 2
+  assert.deepEqual(c.chaves(), [1, 3]);
+  assert.deepEqual(lidos, [1, 2, 3]);
+});
+ta('cache: falha não fica presa e a base vence pelo TTL', async () => {
+  let agora = 0;
+  const c = criarCacheLru({ max: 4, ttlMs: 1000, agora: () => agora });
+  await assert.rejects(c.obter(2026, () => Promise.reject(new Error('SEGREDO_INTERNO'))));
+  assert.equal(await c.obter(2026, () => Promise.resolve('v1')), 'v1');
+  agora = 1000; assert.equal(await c.obter(2026, () => Promise.resolve('v2')), 'v1');
+  agora = 1001; assert.equal(await c.obter(2026, () => Promise.resolve('v2')), 'v2');
+});
+await Promise.all(tAsync);
 
 console.log(`\n${ok} ok, ${fail} falha(s)`);
 if (fail) process.exit(1);

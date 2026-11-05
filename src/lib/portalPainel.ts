@@ -152,6 +152,11 @@ export function talhaoDaCultura(d: DadosPainel, ano: number | null, cultura: str
 // talhões (área do mapa; sem ela, a do talhão). KPI, mapa, Top 5, correlação,
 // alertas e benchmark usam ela e dizem qual é; nunca se mistura cultura numa
 // média (saca de soja + saca de milho não diz nada).
+// No painel de UM talhão a predominante é HERDADA do escopo (fazenda/produtor,
+// sem o filtro de talhão): se o talhão também colheu a predominante do escopo no
+// ano, é ela — a mesma cultura com que ele aparece na visão de todos. Só quando
+// ele não a tem vale a de maior área dele. Assim um empate (ou quase empate) de
+// área entre a soja e o milho safrinha do mesmo talhão não decide nada.
 
 /** Área colhida por cultura no ano, da maior para a menor (cada talhão entra
  *  uma vez por cultura). */
@@ -180,9 +185,29 @@ export function culturaPredominanteDoAno(dados: DadosPainel[], ano: number | nul
   return areaColhidaPorCultura(dados, ano)[0]?.cultura ?? '';
 }
 
-/** A cultura que os números usam: a do filtro; em "Todas", a predominante. */
-export function culturaEfetiva(dados: DadosPainel[], ano: number | null, cultura = ''): string {
-  return cultura ? rotuloCultura(cultura) : culturaPredominanteDoAno(dados, ano);
+/** A cultura que os números usam: a do filtro; em "Todas", a predominante.
+ *  `escopo` = os talhões da fazenda/produtor sem o filtro de talhão: com ele, a
+ *  predominante do escopo vence se `dados` também a colheu no ano (regra acima). */
+export function culturaEfetiva(dados: DadosPainel[], ano: number | null, cultura = '', escopo?: DadosPainel[]): string {
+  if (cultura) return rotuloCultura(cultura);
+  const proprias = areaColhidaPorCultura(dados, ano);
+  if (escopo && proprias.length > 1) {
+    const doEscopo = normCultura(culturaPredominanteDoAno(escopo, ano));
+    const herdada = proprias.find(c => normCultura(c.cultura) === doEscopo);
+    if (herdada) return herdada.cultura;
+  }
+  return proprias[0]?.cultura ?? '';
+}
+
+/** Tooltip do KPI de produtividade quando o ano teve mais de uma cultura: diz
+ *  POR QUE é aquela (herdada da propriedade no painel de um talhão, ou a de
+ *  maior área) e quais ficaram de fora. */
+export function tituloCulturaPredominante(o: { cultura: string; outras: string[]; anoTxt: string; um: boolean; predominanteEscopo: string }): string {
+  const fim = `${o.outras.join(', ')} — escolha a cultura no filtro para ver.`;
+  if (o.um && normCultura(o.cultura) === normCultura(o.predominanteEscopo)) {
+    return `Mesma cultura da visão de todos os talhões (a de maior área colhida na propriedade em ${o.anoTxt}). Também colhido neste talhão: ${fim}`;
+  }
+  return `Cultura de maior área colhida ${o.um ? 'no talhão ' : ''}em ${o.anoTxt}. Também colhido: ${fim}`;
 }
 
 /** Talhões SEM colheita da cultura no ano — sem contar quem colheu OUTRA
@@ -251,10 +276,11 @@ export interface KpiProdutividade {
 
 /** Produtividade média ponderada do ano + variação contra o ano anterior (mesma
  *  cultura, mesmos talhões). Sem cultura no filtro, vale a predominante (regra
- *  acima): somar saca de soja com saca de milho não diz nada. */
-export function kpiProdutividade(dados: DadosPainel[], ano: number | null, cultura = ''): KpiProdutividade | null {
+ *  acima): somar saca de soja com saca de milho não diz nada. `escopo`: ver
+ *  culturaEfetiva (painel de um talhão herda a predominante da propriedade). */
+export function kpiProdutividade(dados: DadosPainel[], ano: number | null, cultura = '', escopo?: DadosPainel[]): KpiProdutividade | null {
   if (ano == null) return null;
-  const alvo = culturaEfetiva(dados, ano, cultura);
+  const alvo = culturaEfetiva(dados, ano, cultura, escopo);
   const prods = produtividadePorTalhao(dados, ano, alvo);
   if (!prods.length) return null;
   const outras = cultura ? [] : areaColhidaPorCultura(dados, ano).map(c => c.cultura).filter(c => normCultura(c) !== normCultura(alvo));
@@ -317,7 +343,7 @@ export function temRecomendacaoNoAno(d: DadosPainel, ano: number | null): boolea
   return (d.cenarios ?? []).some(c => (ano == null || anoDoRegistro(c) === ano) && (c.oficial === true || c.oficial === 'true'));
 }
 
-export function kpisPainel(dados: DadosPainel[], ano: number | null, cultura = ''): KpisPainel {
+export function kpisPainel(dados: DadosPainel[], ano: number | null, cultura = '', escopo?: DadosPainel[]): KpisPainel {
   const areaTotal = dados.reduce((s, d) => s + areaDe(d), 0);
   const mapeados = dados.filter(temCamadaEspacial);
   const comZonas = dados.filter(d => (d.zonasFc?.length ?? 0) > 0);
@@ -329,7 +355,7 @@ export function kpisPainel(dados: DadosPainel[], ano: number | null, cultura = '
     areaMapeada: r2(soma(mapeados)), nMapeados: mapeados.length,
     areaZonas: r2(soma(comZonas)), nZonas: comZonas.length, pctZonas: pct(soma(comZonas), areaTotal),
     areaRecomendacao: r2(soma(comRec)), nRecomendacao: comRec.length, pctRecomendacao: pct(soma(comRec), areaTotal),
-    produtividade: kpiProdutividade(dados, ano, cultura),
+    produtividade: kpiProdutividade(dados, ano, cultura, escopo),
   };
 }
 

@@ -154,6 +154,12 @@ t('página Produtividade: 200 ha de soja + 100 ha de milho safrinha no mesmo tal
   assert.deepEqual(r.outras, ['Milho safrinha']);
   assert.equal(resumoProdutividade(r.linhas, r.cultura).mediaScHa, 55);
   assert.deepEqual(linhasProdutividade([S1, S2], 2026, 'Milho safrinha').linhas.map(l => l.nome), ['S1']);
+  // Um talhão só, empate de área soja × safrinha: herda a Soja do escopo (não o alfabético).
+  assert.equal(linhasProdutividade([S1], 2026, '').cultura, 'Milho safrinha');
+  const um = linhasProdutividade([S1], 2026, '', [S1, S2]);
+  assert.equal(um.cultura, 'Soja');
+  assert.deepEqual(um.linhas.map(l => [l.nome, l.mediaScHa]), [['S1', 60]]);
+  assert.deepEqual(um.outras, ['Milho safrinha']);
 });
 t('NDVI no CICLO: cena de out/2025 conta em 2026; a de nov/2026 é do ciclo 2027', () => {
   const C = tal('C', 10, id => ({ mapasNuvem: [cena(id, 'NDVI', '2025-10-20', 0.4), cena(id, 'NDVI', '2026-01-15', 0.82), cena(id, 'NDVI', '2026-11-10', 0.9)] }));
