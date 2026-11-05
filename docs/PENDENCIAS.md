@@ -136,6 +136,7 @@ verdadeira (fusão de talhões) chegou depois; foi preciso renumerar.
 | S/N | PrecisionFarm 0.3: prescrições com estrela "Enviar à PrecisionFarm" e curvas de nível da PF | 2.222.0 | Talhão → Prescrições (estrela no cartão); Biblioteca → PrecisionFarm → "Publicar prescrições"; Talhão → Altimetria → Curvas PrecisionFarm (e aba Camadas); banco: docs/integracao-precisionfarm-0.3.sql |
 | S/N | Comparação de limite em janela na tela de lote (mapa, números, Adotar com a trava do ciclo, setas anterior/seguinte) | 2.223.0 | Biblioteca → PrecisionFarm → célula "Dif. limite" |
 | S/N | Tela de lote da PrecisionFarm volta a rolar com o manifesto aberto | 2.223.1 | Biblioteca → PrecisionFarm → Importar manifesto da PF |
+| S/N | Limite do talhão não volta mais ao antigo: envio por registro (só o que o aparelho editou) + trava de versão do limite no banco | 2.224.0 | Sincronismo (src/lib/supabaseData.ts, src/lib/edicoesSync.ts, `npm run teste:edicoes`); banco: supabase/migrations/20261105180000_talhoes_trava_versao_limite.sql |
 
 > As pendências 1–17 foram entregues antes deste registro existir e não estão
 > catalogadas; procure pelo assunto no `changelog.ts`. Da 18 em diante, tudo

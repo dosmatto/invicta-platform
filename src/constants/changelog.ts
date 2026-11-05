@@ -1,5 +1,12 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Limite do talhão não volta mais ao antigo (cópia velha de outro navegador)
+  '2.224.0': [
+    'PENDÊNCIA S/N — O LIMITE NÃO VOLTA MAIS AO ANTIGO: a troca de limite de um talhão podia ser desfeita depois, sem ninguém mexer nele. O caso do MCABV 08 (BOA VISTA): em 31/10 às 13:26 um navegador com uma cópia local de dias antes abriu a plataforma, a carga passou de 12 s, e a primeira gravação de talhão daquela sessão mandou para a nuvem a lista INTEIRA que ele tinha — 1102 dos 1131 talhões, com os limites velhos.',
+    'COMO FICOU: cada aparelho agora anota QUAIS talhões (e registros das outras coleções) ele mesmo alterou, e só esses sobem. Uma cópia velha nunca mais vai inteira por cima do que outra pessoa gravou — nem na abertura lenta, nem quando a conexão cai e o envio fica pendente. Ao reabrir com envio pendente, a nuvem vale para tudo e o aparelho só mantém o que ele mesmo editou.',
+    'TRAVA NO BANCO (aplicar no Supabase: supabase/migrations/20261105180000_talhoes_trava_versao_limite.sql): uma gravação que chega com uma versão de limite MAIS ANTIGA que a gravada mantém o limite atual — protege também das abas abertas com a versão anterior da plataforma. O resto do registro (nome, zonas, vínculos) é aceito normalmente.',
+    'ATENÇÃO: limites trocados ANTES de 31/10 13:26 podem ter voltado ao antigo naquele envio. Confira os que você alterou nesse período; se algum voltou, é preciso refazer a troca (ou recuperar do backup do Supabase).',
+  ],
   // [S/N] Tela de lote da PrecisionFarm volta a rolar com o manifesto aberto
   '2.223.1': [
     'PENDÊNCIA S/N — A TELA DE LOTE DA PRECISIONFARM ROLA DE NOVO: com o manifesto grande aberto (ex.: os 162 talhões), a lista passava da altura da tela e o resto ficava cortado, sem barra de rolagem — não dava para chegar ao botão Criar. Agora o manifesto e a tabela de vínculos rolam juntos.',

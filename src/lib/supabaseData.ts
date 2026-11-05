@@ -17,6 +17,7 @@ import { escritaBloqueada, registroBloqueado, somenteLeitura } from './somenteLe
 import { getSupabase, supabaseConfigurado } from './supabase';
 import { marcarGravacaoLocal, editadaDuranteBoot, chavesEditadasDuranteBoot, mesclarGravacoes, type RegistroGravacoes } from './janelaBoot';
 import { lerRawLocal, gravarRawLocal, lerListaLocal } from './localComprimido';
+import { mapaPorId, calcularEdicoes, mesclarComEdicoes, idsDoEnvio, idsParaJuncao, confirmarEnvio, podarIguaisANuvem, type IdsEditados } from './edicoesSync';
 
 const TABELA_TALHOES_KEY = 'inv_talhoes';
 const ITEM_OBJ = '__obj__';  // item_id usado p/ guardar uma config (objeto único) no app_kv
@@ -56,33 +57,102 @@ function marcarSujo(key: string) {
  * fim de `bootSupabaseData`). Marcada, ela cai no ramo `mesclarPorId`, onde o
  * local vence, e sobe no re-push do fim do boot.
  *
+ * Marca também os ids no modo `todos`: aqui a lista local INTEIRA é o que tem
+ * de subir (a nuvem não tem nada da chave) — sem isso o envio por registro não
+ * acharia nenhum id editado e não subiria nada.
+ *
  * Exportado com nome próprio em vez de `marcarSujo` cru: "sujo" descreve o
  * mecanismo, não o motivo, e este é o único motivo legítimo de fora daqui.
  */
-export function marcarPendenteSupabase(key: string) { marcarSujo(key); }
+export function marcarPendenteSupabase(key: string) {
+  gravarIdsEditados(key, { up: [], del: [], todos: true });
+  marcarSujo(key);
+}
 
 function limparSujo(key: string) {
   if (typeof window === 'undefined') return;
   try { const s = lerSujos(); if (s[key]) { delete s[key]; localStorage.setItem(SUJO_KEY, JSON.stringify(s)); } } catch {}
 }
 
-// União por id: registros da nuvem + registros locais (local VENCE no conflito,
-// pois carrega edições ainda não sincronizadas). Locais sem correspondente na
-// nuvem (lançamentos offline) são PRESERVADOS. Efeito colateral aceito: uma
-// exclusão feita offline pode "ressuscitar" no merge — ressuscitar é reversível,
-// perder lançamento não é.
-function mesclarPorId(nuvem: unknown[], local: unknown[]): unknown[] {
-  const mapa = new Map<string, unknown>();
-  const extras: unknown[] = [];
-  for (const r of nuvem) {
-    const id = (r as Rec)?.id;
-    if (id != null) mapa.set(String(id), r); else extras.push(r);
+// ── QUAIS registros este aparelho editou (e ainda não confirmou na nuvem) ─────
+//
+// O BUG (31/10/2026, 1102 talhões regravados num envio só): a pendência "suja"
+// era por CHAVE, não por registro. Saber só que "inv_talhoes mudou" obrigava a
+// tratar a lista local INTEIRA como verdade em dois lugares:
+//   · 1º envio da sessão sem espelho (boot que estourou os 12s do AppContext,
+//     ou que falhou): subia TODOS os registros locais;
+//   · boot com pendência: a junção dava vitória ao local em TODOS os ids.
+// Se a cópia local era anterior à edição de outra pessoa/aparelho, aquela
+// edição era desfeita na nuvem — e o limite antigo do talhão "voltava".
+//
+// Agora cada gravação compara a lista nova com a última lista conhecida deste
+// aparelho (`baseLocal`) e anota os ids que de fato mudaram. Envio e junção do
+// boot só dão vitória ao local NESSES ids. Persistido para sobreviver a
+// recarga/fechamento da aba, como a pendência por chave.
+//
+// `baseLocal` nasce no INÍCIO do boot (as chaves pesadas já estão hidratadas —
+// ver AppContext) e passa a ser a lista final que o boot gravou; depois, a
+// última lista enviada. Sem base (envio antes de qualquer boot), o registro
+// vira `todos` — o comportamento antigo, só para não perder uma gravação.
+const IDS_KEY = 'inv_sync_ids';
+
+const baseLocal: Record<string, Map<string, string>> = {};
+
+function lerTodosIds(): Record<string, IdsEditados> {
+  try { return JSON.parse(localStorage.getItem(IDS_KEY) || '{}'); } catch { return {}; }
+}
+/** Ids editados desta chave; `null` = sem registro (pendência antiga, de antes desta versão). */
+function lerIdsEditados(key: string): IdsEditados | null {
+  if (typeof window === 'undefined') return null;
+  return lerTodosIds()[key] ?? null;
+}
+function gravarIdsEditados(key: string, v: IdsEditados): void {
+  try {
+    const t = lerTodosIds();
+    t[key] = v;
+    localStorage.setItem(IDS_KEY, JSON.stringify(t));
+  } catch { /* cota cheia: a chave fica sem registro e cai no ramo antigo */ }
+}
+function limparIdsEditados(key: string): void {
+  if (typeof window === 'undefined') return;
+  try { const t = lerTodosIds(); if (t[key]) { delete t[key]; localStorage.setItem(IDS_KEY, JSON.stringify(t)); } } catch {}
+}
+
+/**
+ * Boot completo, uma lista: grava no local o resultado da junção com a nuvem.
+ * Sem pendência, a nuvem manda (e ids antigos do registro deixam de valer).
+ * Com pendência, o local só vence nos ids de idsParaJuncao — que passam a ser
+ * o registro, para o re-envio do fim do boot subir exatamente esses.
+ */
+function juntarNoBoot(key: string, nuvem: unknown[], sujo: boolean): void {
+  let final = nuvem;
+  if (sujo) {
+    const local = lerLocalLista(key);
+    const ids = idsParaJuncao(lerIdsEditados(key), baseLocal[key], local, nuvem);
+    final = mesclarComEdicoes(nuvem, local, ids);
+    if (!ids.todos) {
+      // Só fica no registro o que de fato difere do retrato da nuvem.
+      const fin = mapaPorId(final), nv = mapaPorId(nuvem);
+      const resto = podarIguaisANuvem(ids, id => fin.get(id), id => nv.get(id));
+      if (resto) gravarIdsEditados(key, resto); else limparIdsEditados(key);
+    }
+  } else {
+    limparIdsEditados(key);
   }
-  for (const r of local) {
-    const id = (r as Rec)?.id;
-    if (id != null) mapa.set(String(id), r); else extras.push(r);
-  }
-  return [...mapa.values(), ...extras];
+  gravarSeMudou(key, JSON.stringify(final));
+  seedEspelho(key, nuvem);   // espelho = estado da NUVEM (diffs certeiros)
+  baseLocal[key] = mapaPorId(final);
+}
+
+/** Anota os ids que mudaram entre a base deste aparelho e `lista`; a base vira `lista`. */
+function registrarEdicoes(key: string, lista: unknown[]): void {
+  if (typeof window === 'undefined') return;
+  const nova = mapaPorId(lista);
+  const base = baseLocal[key];
+  baseLocal[key] = nova;
+  if (!base) console.warn(`[sync] ${key}: gravação sem base conhecida — envio cai no modo antigo (lista inteira).`);
+  const r = calcularEdicoes(base, nova, lerIdsEditados(key));
+  if (r) gravarIdsEditados(key, r);
 }
 
 // ── D3 — AUTO-CARGA: na 1ª vez (Postgres vazio), semeia a partir dos dados ────
@@ -106,7 +176,8 @@ async function seedSeVazio(keysLista: string[], keysObj: string[]): Promise<void
   console.log('[supabase] Postgres vazio — semeando a partir dos dados locais (1ª vez)…');
   for (const key of keysLista) {
     const arr = lerLocalLista(key);
-    if (arr.length) await pushListaSupabase(key, arr);
+    // Postgres vazio: aqui a lista inteira É o que tem de subir (modo `todos`).
+    if (arr.length) { gravarIdsEditados(key, { up: [], del: [], todos: true }); await pushListaSupabase(key, arr); }
   }
   for (const key of keysObj) {
     const v = lerRawLocal(key);
@@ -162,12 +233,7 @@ function gravarSeMudou(key: string, json: string): void {
 // nunca roda em operação normal.
 function seedEspelho(key: string, recs: unknown[]): void {
   chavesHidratadas.add(key);
-  const m = new Map<string, string>();
-  for (const r of recs) {
-    const id = (r as Rec)?.id;
-    if (id != null) m.set(String(id), JSON.stringify(r));
-  }
-  espelhoSb[key] = m;
+  espelhoSb[key] = mapaPorId(recs);
 }
 
 // ── BOOT INCREMENTAL ─────────────────────────────────────────────────────────
@@ -221,30 +287,32 @@ async function bootIncremental(
   let novaMarca: string | null = marca;
 
   // Chave editada localmente DEPOIS que este boot começou: o delta em mãos é
-  // anterior à edição, então aplicá-lo apagaria o que o usuário acabou de fazer.
-  // Nesses casos o local vence, a marca d'água NÃO avança (o próximo boot volta
-  // a trazer o delta, aí já com o valor novo que o push subiu) e a chave é
-  // re-enviada no fim. Ver lib/janelaBoot.ts.
+  // anterior à edição. Antes, o local vencia e a lista INTEIRA era reenviada —
+  // e, sem espelho, isso subia todos os registros locais, inclusive os velhos,
+  // por cima do que outros aparelhos tinham gravado (31/10/2026: 1102 talhões).
+  // Agora o incremental desiste e o boot COMPLETO assume: ele baixa tudo e junta
+  // por registro (mesclarComEdicoes), dando vitória ao local só nos ids editados.
+  // Conferido aqui, depois do último await — daqui até o fim não há espera.
   const editadaAgora = (key: string) => editadaDuranteBoot(gravacoes(), key, inicioBoot);
-  const preservadas: string[] = [];
+  const editadas = [...keysLista, ...keysObj].filter(editadaAgora);
+  if (editadas.length) {
+    console.info(`[boot] incremental descartado — edições durante o boot em: ${editadas.join(', ')}`);
+    return false;
+  }
 
   // aplica delta dos talhões por id
-  if (editadaAgora(TABELA_TALHOES_KEY)) {
-    // Sem seedEspelho (o próximo push sobe tudo) e SEM marcar como hidratada: o
-    // estado local desta chave sabidamente NÃO corresponde ao da nuvem — o delta
-    // foi descartado. Espelho ausente + hidratada = `primeira && bootCompleto &&
-    // chavesHidratadas.has(key)` na poda do syncLista, que apagaria da nuvem tudo
-    // que este aparelho ainda não baixou. Ver a poda em syncLista.
-    preservadas.push(TABELA_TALHOES_KEY);
-  } else if (mudTal.length) {
+  if (mudTal.length) {
     const lista = lerLocalLista(TABELA_TALHOES_KEY);
     const porId = new Map(lista.map(r => [String((r as Rec).id), r]));
     for (const row of mudTal) { porId.set(String((row.dados as Rec).id), row.dados); novaMarca = maxIso(novaMarca, row.atualizado_em); }
     const final = [...porId.values()];
     gravarSeMudou(TABELA_TALHOES_KEY, JSON.stringify(final));
     seedEspelho(TABELA_TALHOES_KEY, final);
+    baseLocal[TABELA_TALHOES_KEY] = mapaPorId(final);
   } else {
-    seedEspelho(TABELA_TALHOES_KEY, lerLocalLista(TABELA_TALHOES_KEY));
+    const lista = lerLocalLista(TABELA_TALHOES_KEY);
+    seedEspelho(TABELA_TALHOES_KEY, lista);
+    baseLocal[TABELA_TALHOES_KEY] = mapaPorId(lista);
   }
 
   // aplica delta do app_kv por coleção
@@ -256,7 +324,6 @@ async function bootIncremental(
   }
   for (const key of keysLista) {
     if (key === TABELA_TALHOES_KEY) continue;
-    if (editadaAgora(key)) { preservadas.push(key); continue; }   // sem hidratar: ver o ramo dos talhões acima
     const mudancas = porColecao.get(key);
     if (mudancas?.length) {
       const lista = lerLocalLista(key);
@@ -265,25 +332,22 @@ async function bootIncremental(
       const final = [...porId.values()];
       gravarSeMudou(key, JSON.stringify(final));
       seedEspelho(key, final);
+      baseLocal[key] = mapaPorId(final);
     } else {
-      seedEspelho(key, lerLocalLista(key));
+      const lista = lerLocalLista(key);
+      seedEspelho(key, lista);
+      baseLocal[key] = mapaPorId(lista);
     }
   }
   for (const key of keysObj) {
-    if (editadaAgora(key)) { preservadas.push(key); continue; }
     const o = porColecao.get(key)?.find(m => m.item_id === ITEM_OBJ)?.dados as { valor?: string } | undefined;
     if (o?.valor != null) gravarSeMudou(key, o.valor);
   }
 
-  // Só avança a marca d'água se TUDO do delta foi aplicado — o que ficou de fora
-  // precisa voltar no próximo boot para reconciliar.
-  if (novaMarca && preservadas.length === 0) localStorage.setItem(MARCA_KEY, novaMarca);
-  for (const key of preservadas) {
-    if (keysObj.includes(key)) { const v = lerRawLocal(key); if (v != null) void pushObjSupabase(key, v); }
-    else void pushListaSupabase(key, lerLocalLista(key));
-  }
-  console.info(`[boot] INCREMENTAL: ${mudTal.length + mudKv.length} mudança(s) em ${Math.round(performance.now() - t0)}ms`
-    + (preservadas.length ? ` · edições locais preservadas: ${preservadas.join(', ')}` : ''));
+  if (novaMarca) localStorage.setItem(MARCA_KEY, novaMarca);
+  // Incremental só roda sem pendência e sem edição na janela: local = nuvem.
+  for (const key of keysLista) limparIdsEditados(key);
+  console.info(`[boot] INCREMENTAL: ${mudTal.length + mudKv.length} mudança(s) em ${Math.round(performance.now() - t0)}ms`);
   return true;
 }
 
@@ -318,6 +382,11 @@ export async function bootSupabaseData(keysLista: string[], keysObj: string[]): 
   const t0 = performance.now();
   const inicioBoot = Date.now();   // marco da janela: nada gravado depois disto é sobrescrito
 
+  // Base de comparação das gravações desta sessão (ver registrarEdicoes): o
+  // retrato local de ANTES de qualquer edição. O AppContext hidrata as chaves
+  // pesadas antes de chamar o boot, então inv_talhoes já está inteiro aqui.
+  for (const key of keysLista) if (!baseLocal[key]) baseLocal[key] = mapaPorId(lerLocalLista(key));
+
   // Caminho INCREMENTAL: marca presente, sem pendências locais e boot completo
   // recente (<24h). Qualquer divergência cai no caminho completo abaixo.
   const marca = typeof window !== 'undefined' ? localStorage.getItem(MARCA_KEY) : null;
@@ -338,7 +407,8 @@ export async function bootSupabaseData(keysLista: string[], keysObj: string[]): 
 
   // Chaves com pendência local não confirmada (lançamentos que a queda de
   // conexão impediu de subir): o boot NÃO pode sobrescrevê-las com a nuvem —
-  // mescla por id (local vence) e re-envia depois da hidratação.
+  // mescla por id (local vence SÓ nos ids editados aqui — mesclarComEdicoes) e
+  // re-envia depois da hidratação.
   // IMPORTANTE: as flags são lidas NA HORA de gravar cada chave (não no início)
   // — um boot lento que termina em 2º plano precisa respeitar edições feitas
   // pelo usuário ENQUANTO ele rodava.
@@ -360,10 +430,7 @@ export async function bootSupabaseData(keysLista: string[], keysObj: string[]): 
   const tRede1 = performance.now();
   {
     for (const r of talhoes) novaMarca = maxIso(novaMarca, r.atualizado_em);
-    const nuvem = talhoes.map(r => r.dados);
-    const final = ehSujo(TABELA_TALHOES_KEY) ? mesclarPorId(nuvem, lerLocalLista(TABELA_TALHOES_KEY)) : nuvem;
-    gravarSeMudou(TABELA_TALHOES_KEY, JSON.stringify(final));
-    seedEspelho(TABELA_TALHOES_KEY, nuvem);   // espelho = estado da NUVEM (diffs certeiros)
+    juntarNoBoot(TABELA_TALHOES_KEY, talhoes.map(r => r.dados), ehSujo(TABELA_TALHOES_KEY));
   }
   for (const r of kv) novaMarca = maxIso(novaMarca, r.atualizado_em);
   const tRede2 = performance.now();
@@ -375,10 +442,7 @@ export async function bootSupabaseData(keysLista: string[], keysObj: string[]): 
   }
   for (const key of keysLista) {
     if (key === TABELA_TALHOES_KEY) continue;
-    const nuvem = porColecao[key] ?? [];
-    const final = ehSujo(key) ? mesclarPorId(nuvem, lerLocalLista(key)) : nuvem;
-    gravarSeMudou(key, JSON.stringify(final));
-    seedEspelho(key, nuvem);
+    juntarNoBoot(key, porColecao[key] ?? [], ehSujo(key));
   }
   for (const key of keysObj) {
     if (ehSujo(key)) continue;   // config local pendente vence — sobe no re-push abaixo
@@ -522,6 +586,7 @@ function enfileirar(
   const agoraMs = Date.now();
   marcarGravacaoLocal(gravadoLocalEm, key, agoraMs);   // janela do boot (ver janelaBoot.ts)
   persistirGravacao(key, agoraMs);                     // …visível para as outras abas
+  if (!carga.obj) registrarEdicoes(key, carga.lista);   // QUAIS ids mudaram (antes de marcar a chave)
   marcarSujo(key);           // pendência persistente: só limpa com sucesso confirmado
   pendenteSb[key] = carga;   // coalescing: a última carga pendente vence
   const anterior = filaSb[key] ?? Promise.resolve();
@@ -552,6 +617,7 @@ async function drenar(
     delete errosSb[key];
     // Limpa a pendência persistente SÓ se não chegou carga mais nova enquanto
     // este push rodava (a mais nova re-marcou e ainda vai drenar).
+    // (Os ids editados saem um a um dentro do syncLista — confirmarEnvio.)
     if (!pendenteSb[key]) limparSujo(key);
     emitirSync(key, 'ok');
   } else { errosSb[key] = carga; emitirSync(key, 'erro'); }
@@ -598,16 +664,21 @@ async function syncLista(sb: NonNullable<ReturnType<typeof getSupabase>>, key: s
   // (npm run teste:autocadastro), passo B.
   let podePodar = primeira && bootCompleto && chavesHidratadas.has(key);
 
-  // Ids a fazer upsert (novos/alterados) e a deletar (saíram).
-  let idsUpsert: string[];
-  let idsDelete: string[];
-  if (primeira) {
-    idsUpsert = [...next.keys()];                 // tudo
-    idsDelete = [];                                // no 1º push, poda via not-in
-  } else {
-    idsUpsert = [...next.keys()].filter(id => prev.get(id) !== next.get(id));
-    idsDelete = [...prev.keys()].filter(id => !next.has(id));
-    if (!idsUpsert.length && !idsDelete.length) return true;   // nada mudou
+  // POR REGISTRO (o normal): só sobem os ids que este aparelho editou
+  // (registrarEdicoes). Uma lista local velha nunca mais vai inteira para a
+  // nuvem — nem no 1º envio sem espelho (boot que estourou os 12s), nem num
+  // diff contra um espelho que ficou para trás. `todos` = modo antigo (envio
+  // antes de qualquer boot, seed do Postgres vazio).
+  // Ids a fazer upsert (novos/alterados) e a deletar (saíram) — ver idsDoEnvio.
+  const envio = idsDoEnvio(next, prev, lerIdsEditados(key));
+  const porRegistro = envio.porRegistro;
+  let idsUpsert = envio.upsert;
+  let idsDelete = envio.del;
+  if (porRegistro) podePodar = false;              // poda por not-in só existe no modo antigo
+  // Nada a enviar. (No 1º envio do modo antigo não sai daqui: a poda ainda roda.)
+  if (!(primeira && !porRegistro) && !idsUpsert.length && !idsDelete.length) {
+    podarRegistroIgualANuvem(key);
+    return true;
   }
 
   const recPorId = new Map<string, Rec>();
@@ -644,7 +715,7 @@ async function syncLista(sb: NonNullable<ReturnType<typeof getSupabase>>, key: s
       if (ids.length) del = del.not('id', 'in', `(${ids.join(',')})`);
       const d = await del;
       if (d.error) { console.warn('[supabase] delete talhoes:', d.error.message); return false; }
-    } else if (!primeira && idsDelete.length) {
+    } else if ((!primeira || porRegistro) && idsDelete.length) {   // apagar por id explícito é seguro mesmo sem espelho
       const d = await sb.from('talhoes').delete().in('id', idsDelete);
       if (d.error) { console.warn('[supabase] delete talhoes:', d.error.message); return false; }
     }
@@ -664,14 +735,55 @@ async function syncLista(sb: NonNullable<ReturnType<typeof getSupabase>>, key: s
       if (ids.length) del = del.not('item_id', 'in', `(${ids.join(',')})`);
       const d = await del;
       if (d.error) { console.warn(`[supabase] delete ${key}:`, d.error.message); return false; }
-    } else if (!primeira && idsDelete.length) {
+    } else if ((!primeira || porRegistro) && idsDelete.length) {   // apagar por id explícito é seguro mesmo sem espelho
       const d = await sb.from('app_kv').delete().eq('colecao', key).in('item_id', idsDelete);
       if (d.error) { console.warn(`[supabase] delete ${key}:`, d.error.message); return false; }
     }
   }
 
-  espelhoSb[key] = next;   // só atualiza o espelho no sucesso
+  // Só atualiza o espelho no sucesso. Por registro, o espelho recebe APENAS o
+  // que subiu: o resto da lista local não foi enviado e não vira "a nuvem tem".
+  // Sem espelho ainda (boot rodando), continua sem — o boot o semeia da nuvem.
+  if (porRegistro) {
+    const esp = espelhoSb[key];
+    if (esp) {
+      for (const id of idsUpsert) esp.set(id, next.get(id)!);
+      for (const id of idsDelete) esp.delete(id);
+    }
+  } else {
+    espelhoSb[key] = next;
+  }
+
+  // Tira do registro os ids que esta carga confirmou — só os que não mudaram
+  // de novo desde então (o local é compartilhado entre as abas; uma edição mais
+  // nova, desta ou de outra aba, mantém o id). Só DEPOIS do boot: se ele ainda
+  // roda, o retrato da nuvem que tem em mãos pode ser anterior a este envio, e
+  // a junção dele precisa saber que estes ids são do local; o re-envio do fim
+  // do boot confirma de novo e aí limpa.
+  const reg = lerIdsEditados(key);
+  if (bootCompleto && reg) {
+    const atualPorId = new Map(lerLocalLista(key).map(r => [String((r as Rec).id), r]));
+    const atual = (id: string) => { const r = atualPorId.get(id); return r === undefined ? undefined : JSON.stringify(r); };
+    const resto = confirmarEnvio(reg, idsUpsert, idsDelete, next, atual);
+    if (resto) gravarIdsEditados(key, resto); else limparIdsEditados(key);
+  }
+  podarRegistroIgualANuvem(key);
   return true;
+}
+
+// Depois do boot: tira do registro todo id cujo local ATUAL já é igual ao
+// espelho (= a nuvem). Ver podarIguaisANuvem. Compara com o local de agora (não
+// com a lista desta carga, que pode estar atrás de uma edição mais nova) e não
+// roda com carga pendente — a edição dela tem de continuar no registro.
+function podarRegistroIgualANuvem(key: string): void {
+  const esp = espelhoSb[key];
+  const reg = lerIdsEditados(key);
+  if (!bootCompleto || !esp || !reg || reg.todos || pendenteSb[key]) return;
+  const atualPorId = new Map(lerLocalLista(key).map(r => [String((r as Rec).id), r]));
+  const local = (id: string) => { const r = atualPorId.get(id); return r === undefined ? undefined : JSON.stringify(r); };
+  const resto = podarIguaisANuvem(reg, local, id => esp.get(id));
+  if (!resto) limparIdsEditados(key);
+  else if (resto.up.length !== reg.up.length || resto.del.length !== reg.del.length) gravarIdsEditados(key, resto);
 }
 
 // Grava o obj único (1 linha). Retorna true se ok.
@@ -734,6 +846,9 @@ export async function incorporarNovosDaNuvem(key: string, campo: string, valor: 
     .filter(x => !ids.has(x.item_id) && !esp.has(x.item_id) && String((x.dados as Rec)?.id) === x.item_id);
   if (!novos.length) return 0;
   gravarRawLocal(key, JSON.stringify([...local, ...novos.map(x => x.dados)]));
+  // Vieram da nuvem, não são edição deste aparelho: entram na base também.
+  const base = baseLocal[key];
+  if (base) for (const x of novos) base.set(x.item_id, JSON.stringify(x.dados));
   // Espelho = "a nuvem já tem": o próximo diff não reenvia nem apaga estes.
   for (const x of novos) esp.set(x.item_id, JSON.stringify(x.dados));
   return novos.length;
