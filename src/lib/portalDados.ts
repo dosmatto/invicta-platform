@@ -9,9 +9,10 @@
 import {
   getGrades, getImportacoesLab, getZoneamentosMeap, getPrescricoes, getMapasProdutividade,
   getComposicoes, getMdes, getCondutividade, getImportacoesCompactacao, getPlantio,
-  getAmostrasFoliares,
+  getAmostrasFoliares, lerZoneamentosMeap,
   type Talhao,
 } from './store';
+import { padraoVigente } from './meap/versoes';
 import { cloudListarMapasMeta } from './cloud';
 import { usarDadosSupabase, projetarDocsPorCampoSupabase } from './supabaseData';
 import type { DadosTalhao, CenarioIn, RelatorioIn } from './portalProdutor';
@@ -39,10 +40,34 @@ export function dadosLocaisDoTalhao(t: Talhao, safra: string): DadosTalhao {
  *  props classe/areaHa/zona/cor). Nunca getZoneamentosMeap: ele grava (repara
  *  padrões duplicados e atualiza o talhão) — chamá-lo para cada talhão do
  *  portal seria escrita em laço numa tela somente leitura. */
-export function zonasDoCadastro(t: Talhao): ZonaFeicaoPainel[] {
-  if (!t.zonasGeojson) return [];
+/** As zonas do talhão pela MESMA cascata do resto da plataforma
+ *  (lib/zonasDoTalhao): zoneamento PADRÃO vigente > o mais recente > o espelho
+ *  do cadastro. Só o espelho falhava: ele só é gravado em "Tornar padrão", e
+ *  talhão com zoneamento salvo sem padrão aparecia "sem zoneamento" no portal.
+ *  Usa lerZoneamentosMeap (só leitura) — seguro em laço. Devolve o GeoJSON
+ *  serializado (formato do espelho) ou null. */
+export function zonasGeojsonDoTalhao(t: Talhao): string | null {
+  const zs = lerZoneamentosMeap(t.id);
+  const salvo = padraoVigente(zs) ?? zs[zs.length - 1] ?? null;
+  if (salvo?.fc?.features?.length) return JSON.stringify(salvo.fc);
+  if (!t.zonasGeojson) return null;
   try {
-    const fc = JSON.parse(t.zonasGeojson) as { features?: Array<{ geometry?: { type?: string } | null; properties?: Record<string, unknown> | null }> };
+    const fc = JSON.parse(t.zonasGeojson) as { features?: unknown[] } | null;
+    return fc?.features?.length ? t.zonasGeojson : null;
+  } catch { return null; }
+}
+
+/** zonasGeojsonDoTalhao a partir do id (mapas "reais" de zonas do portal). */
+export function zonasDoTalhaoPorId(talhoes: readonly Talhao[], id: string): string | null {
+  const t = talhoes.find(x => x.id === id);
+  return t ? zonasGeojsonDoTalhao(t) : null;
+}
+
+export function zonasDoCadastro(t: Talhao): ZonaFeicaoPainel[] {
+  const geo = zonasGeojsonDoTalhao(t);
+  if (!geo) return [];
+  try {
+    const fc = JSON.parse(geo) as { features?: Array<{ geometry?: { type?: string } | null; properties?: Record<string, unknown> | null }> };
     return (fc.features ?? [])
       .filter(f => f.geometry && (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon'))
       .map(f => {

@@ -33,8 +33,12 @@ export function Seletor({ valor, opcoes, onChange, rotulo, icone: Icone, variant
       </span>
       <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ opacity: 0.75 }} />
       <select value={valor} onChange={e => onChange(e.target.value)} aria-label={rotulo} disabled={desabilitado}
-        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-default">
-        {opcoes.map(o => <option key={o.valor} value={o.valor}>{o.rotulo}</option>)}
+        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-default"
+        // A lista que abre é do sistema e herda a cor do <label>: no cabeçalho
+        // (texto branco) o Windows desenhava opções brancas sobre fundo branco.
+        // Cor e fundo explícitos, do tema do portal, no select E em cada opção.
+        style={{ color: COR.texto, background: COR.superficie }}>
+        {opcoes.map(o => <option key={o.valor} value={o.valor} style={{ color: COR.texto, background: COR.superficie }}>{o.rotulo}</option>)}
       </select>
     </label>
   );

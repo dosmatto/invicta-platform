@@ -2755,6 +2755,15 @@ export interface SuavizacaoMeta {
   observacoes?: string;
 }
 
+/** Zoneamentos do talhão SÓ PARA LEITURA (ordem de criação). Diferente de
+ *  getZoneamentosMeap, não repara padrões duplicados nem atualiza o talhão —
+ *  pode ser chamado em laço por telas somente leitura (Portal do Produtor). */
+export function lerZoneamentosMeap(talhaoId: string): ZoneamentoMeap[] {
+  return loadFiltrado<ZoneamentoMeap>('inv_meap_zoneamentos')
+    .filter(z => z.talhaoId === talhaoId)
+    .sort((a, b) => a.criadoEm.localeCompare(b.criadoEm));
+}
+
 export function getZoneamentosMeap(talhaoId: string): ZoneamentoMeap[] {
   const zs = loadFiltrado<ZoneamentoMeap>('inv_meap_zoneamentos')
     .filter(z => z.talhaoId === talhaoId)

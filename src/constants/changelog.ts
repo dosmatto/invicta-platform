@@ -1,5 +1,10 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Portal: zonas de todos os talhões e filtros legíveis no Windows
+  '2.226.2': [
+    'PENDÊNCIA S/N — ZONAS DE TODOS OS TALHÕES NO PORTAL: o Portal do Produtor só mostrava as zonas de manejo dos talhões em que alguém tinha apertado "Tornar padrão"; talhão com zoneamento salvo sem padrão aparecia como "sem zoneamento" (na Visão geral, na página Zonas e no KPI "Talhões com zonas"). Agora o portal usa a mesma regra do resto da plataforma: o zoneamento padrão; sem padrão, o mais recente; sem nenhum salvo, a cópia do talhão. Continua somente leitura.',
+    'FILTROS LEGÍVEIS NO WINDOWS: a lista que abre nos filtros do cabeçalho (Safra, Cultura, Fazenda, Talhão) mostrava as opções em branco sobre branco no Windows, e só a opção marcada aparecia. As opções agora têm cor e fundo do tema do portal.',
+  ],
   // [S/N] Ajustes do Portal do Produtor
   '2.226.1': [
     'PENDÊNCIA S/N — PAINEL DE UM TALHÃO COM A CULTURA CERTA: com soja e milho safrinha no mesmo talhão (áreas iguais ou quase), o painel do talhão podia virar "Milho safrinha" enquanto a visão de todos mostrava o mesmo talhão como Soja. Agora o talhão herda a cultura predominante da propriedade quando também a colheu — KPI, histórico do talhão por ano e a página Produtividade ficam na mesma cultura da visão geral. O tooltip diz por que é aquela.',

@@ -4,8 +4,9 @@
 //
 // A pergunta do produtor: como meu talhão se divide em ambientes de produção,
 // quanto de cada um e o que já foi prescrito em cima disso. O mapa é VETORIAL
-// (as zonas do padrão vigente no cadastro — talhao.zonasGeojson): aparece
-// sempre, sem nuvem e sem baixar raster. Sem getZoneamentosMeap (ele grava).
+// (zoneamento padrão vigente > o mais recente > espelho talhao.zonasGeojson,
+// via lib/portalDados zonasGeojsonDoTalhao): aparece sempre, sem nuvem e sem
+// baixar raster. Sem getZoneamentosMeap (ele grava).
 //
 // Contas: lib/portalPainelSolo (zonasPorTalhao, prescricoesVigentes) e
 // lib/portalPainel (resumoZonas, kpisPainel).
@@ -19,6 +20,7 @@ import { zonasPorTalhao, potencialDaZona, prescricoesVigentes, resumirPrescricao
 import { usePortal } from '../PortalContext';
 import { Cartao, Kpi, LegendaClasses, Vazio, MiniMapa, camadaZonas, COR, fmtNum, fmtHaCurto, fmtPct, talhoesTxt, plural } from '../ui';
 import { BarraEmpilhada, NomeTalhao, TabelaTalhoes, acaoAbrirTalhao } from './SoloPecas';
+import { zonasDoTalhaoPorId } from '@/lib/portalDados';
 
 export function PaginaZonas() {
   const p = usePortal();
@@ -49,7 +51,7 @@ export function PaginaZonas() {
   // ── Mapa ──
   const talhoesMapa = useMemo(() => dados.map(d => ({ id: d.talhao.id, nome: d.talhao.nome, geojson: d.talhao.geojson })), [dados]);
   const domDe = useMemo(() => new Map(z.talhoes.map(t => [t.talhaoId, t.dominante])), [z]);
-  const real = useCallback((id: string) => camadaZonas(id, p.talhoes.find(t => t.id === id)?.zonasGeojson), [p.talhoes]);
+  const real = useCallback((id: string) => camadaZonas(id, zonasDoTalhaoPorId(p.talhoes, id)), [p.talhoes]);
   const clicar = useCallback((id: string) => (um ? p.abrirTalhao(id, 'zonas') : p.setFiltro({ talhao: id })), [um, p]);
 
   const kpiCards = [

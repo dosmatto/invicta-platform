@@ -140,6 +140,7 @@ verdadeira (fusão de talhões) chegou depois; foi preciso renumerar.
 | S/N | Portal do Produtor novo: menu por tema, Visão geral e comparativo Invicta (14 páginas por tema, filtros Safra/Cultura/Fazenda/Talhão, mapas leve × reais, benchmark anônimo no servidor) | 2.225.0 | /portal (Portal do Produtor) |
 | S/N | Adotar limite da PrecisionFarm mantém os descontos (furos) do talhão quando a PF não manda os dela; comparação só do limite externo | 2.226.0 | Talhão → Integração PrecisionFarm → Limite da PrecisionFarm; Biblioteca → PrecisionFarm → "Dif. limite" |
 | S/N | Ajustes do Portal do Produtor: painel de um talhão herda a cultura da propriedade, limite de 10 consultas/min e cache de todos os anos no comparativo, KPIs sem texto cortado, nota do "Você" com filtro de fazenda, talhão sem colheita em cinza | 2.226.1 | /portal (Portal do Produtor); testes: `node scripts/teste-portal-painel.mjs`, `node scripts/teste-portal-benchmark.mjs` |
+| S/N | Portal: zonas de todos os talhões e filtros legíveis no Windows (zoneamento salvo sem "Tornar padrão" aparecia como sem zoneamento; opções brancas nos filtros) | 2.226.2 | /portal → Zonas de manejo e filtros do cabeçalho |
 
 > As pendências 1–17 foram entregues antes deste registro existir e não estão
 > catalogadas; procure pelo assunto no `changelog.ts`. Da 18 em diante, tudo

@@ -38,6 +38,7 @@ import {
   COR, fmtNum, fmtHaCurto, fmtPct, talhoesTxt, plural, MESES_CURTOS, RAMPA_RELEVO,
 } from '../ui';
 import { CartaoBenchmark } from './CartaoBenchmark';
+import { zonasDoTalhaoPorId } from '@/lib/portalDados';
 
 const ATRIBUTOS = ['p', 'k', 'ph', 'ca', 'mg', 'v', 'mo'] as const;
 // Unidade de reserva (a da legenda vale primeiro): a canônica da plataforma
@@ -148,7 +149,7 @@ export function VisaoGeral() {
   const realProd = useCallback((id: string) => { const d = porId.get(id); return d ? camadaProdutividade(id, colheitaDoAno(d, ano, culturaKpi), d.mapasNuvem) : null; }, [porId, ano, culturaKpi]);
   const realCe = useCallback((id: string) => { const it = ces.get(id); return it?.levId ? camadaCondutividade(id, { id: it.levId, profundidadeOficial: it.profundidade, profundidades: [it.profundidade] }) : null; }, [ces]);
   const realRelevo = useCallback((id: string) => { const d = porId.get(id); const ms = d?.mdes ?? []; return d ? camadaRelevo(id, ms.find(m => m.oficial) ?? ms[0] ?? null) : null; }, [porId]);
-  const realZonas = useCallback((id: string) => camadaZonas(id, p.talhoes.find(t => t.id === id)?.zonasGeojson), [p.talhoes]);
+  const realZonas = useCallback((id: string) => camadaZonas(id, zonasDoTalhaoPorId(p.talhoes, id)), [p.talhoes]);
   const realFert = useCallback((id: string) => { const d = porId.get(id); return d ? camadaFertilidade(id, ultimoLaudo(d.laudos, ano), atFert, d.mapasNuvem) : null; }, [porId, ano, atFert]);
 
   const nuvemVazia = (titulo: string) => !p.comNuvem
