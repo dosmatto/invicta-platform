@@ -25,6 +25,7 @@ import { parseArquivoPontos, type ArquivoPontos } from '@/lib/compactacao';
 import { ordenarLegendasDoAtributo } from '@/lib/legendas';
 import type { Legenda } from '@/lib/legendas';
 import { CruzamentoRelevo } from '@/components/talhao/CruzamentoRelevo';
+import { CurvasPrecisionFarm } from '@/components/talhao/CurvasPrecisionFarm';
 import { Mountain, Loader2, Search, CheckCircle2, AlertTriangle, Trash2, Download, Star, Layers, Play, Waves, FileText, Upload } from 'lucide-react';
 import { podeAltimetria } from '@/lib/empresa';
 
@@ -387,6 +388,10 @@ export function AltimetriaSection() {
 
   return (
     <div className="px-4 py-3 space-y-3">
+      {/* Curvas de nível recebidas da PrecisionFarm (topografia 0.3) — só
+          visualização, independente do MDE daqui. */}
+      {nav.talhaoId && <CurvasPrecisionFarm talhaoId={nav.talhaoId} />}
+
       {/* Base oficial (quando existe e não há prévia em andamento) */}
       {oficial && !previa && (
         <div className="rounded-lg p-2.5 space-y-1" style={{ background: '#0f2a1a', border: '1px solid #2a5a3a' }}>

@@ -20,12 +20,14 @@ export interface VinculoPF {
 
 export interface PublicadoPF {
   resourceId: string;
-  tipo: 'management_zones' | 'harvest';
+  tipo: 'management_zones' | 'harvest' | 'prescription';
   chaveLocal: string;
   revisao: number;
   nome: string | null;
   season: string | null;
   seasonPeriod: string | null;
+  /** 'archive' = prescrição sem estrela (arquivada na PF). */
+  operacao?: 'upsert' | 'archive';
   checksum: string;
   boundaryRevision: number;
   publicadoEm: string;
@@ -59,8 +61,10 @@ async function chamar<T>(caminho: string, init?: { method?: string; body?: unkno
 export const estadoPF = (talhaoId: string) =>
   chamar<{ vinculo: VinculoPF | null; publicados: PublicadoPF[] }>(`/api/precisionfarm/talhao/${encodeURIComponent(talhaoId)}`);
 
+/** `prescricoes`: na confirmação, o resumo das prescrições com estrela que
+ *  publicaram junto (texto vazio = nenhuma). */
 export const acaoVinculoPF = (talhaoId: string, acao: 'criar' | 'salvar' | 'confirmar' | 'suspender', pfLocalId?: string) =>
-  chamar<{ vinculo: VinculoPF }>('/api/precisionfarm/vinculo', { method: 'POST', body: { talhaoId, acao, pfLocalId } });
+  chamar<{ vinculo: VinculoPF; prescricoes?: string }>('/api/precisionfarm/vinculo', { method: 'POST', body: { talhaoId, acao, pfLocalId } });
 
 export interface ResultadoPublicacao { criada: boolean; revisao: number; checksum: string; mensagem?: string; tamanhoBytes?: number; nFeicoes?: number }
 
@@ -95,6 +99,8 @@ export interface CamadaLinhasPF {
   revisaoVigente: number | null;
   revisaoGeometria: number | null;
   boundaryRevision: number | null;
+  /** Topografia: { interval_m, index_interval_m, smoothed, cota_min, cota_max, n_mestras }. */
+  meta?: Record<string, unknown> | null;
   arquivada: boolean;
   arquivadaEm: string | null;
   ultimaSincronizacao: string | null;
@@ -118,6 +124,42 @@ export interface EstadoLinhasPF {
 
 export const estadoLinhasPF = (talhaoId: string) =>
   chamar<EstadoLinhasPF>(`/api/precisionfarm/linhas/${encodeURIComponent(talhaoId)}`);
+
+/** Curvas de nível (topografia 0.3) recebidas da PF — mesmo formato das linhas. */
+export const estadoTopografiaPF = (talhaoId: string) =>
+  chamar<EstadoLinhasPF>(`/api/precisionfarm/linhas/${encodeURIComponent(talhaoId)}?tipo=topography`);
+
+export const buscarTopografiaPF = (talhaoId: string) =>
+  chamar<{ mensagem: string; novos: number }>('/api/precisionfarm/carga-linhas', { method: 'POST', body: { talhaoId, tipo: 'topography' } });
+
+// ── Prescrições com estrela "Enviar à PrecisionFarm" (extensão 0.3) ──────────
+
+export interface SituacaoPrescricaoPF {
+  linhagemId: string;
+  versaoId: string | null;
+  versao: number | null;
+  nome: string | null;
+  marcada: boolean;
+  situacao: 'publicada' | 'pendente' | 'arquivada' | 'nao_publicada';
+  motivo: string | null;
+  revisao: number | null;
+  resourceId: string | null;
+  criada: boolean;
+}
+
+type RespPrescricoes = { situacoes: SituacaoPrescricaoPF[]; resumo: string };
+
+/** Situação calculada (nada gravado). Owner/admin. `status` 503 = migração 0.3 pendente. */
+export const estadoPrescricoesPF = (talhaoId: string) =>
+  chamar<RespPrescricoes>(`/api/precisionfarm/prescricoes/${encodeURIComponent(talhaoId)}`);
+
+/** Marca/desmarca a estrela da linhagem e publica/arquiva na hora. Owner/admin. */
+export const marcarPrescricaoPF = (talhaoId: string, linhagemId: string, marcada: boolean) =>
+  chamar<RespPrescricoes>('/api/precisionfarm/prescricoes', { method: 'POST', body: { talhaoId, linhagemId, marcada } });
+
+/** Só sincroniza (versão nova salva, exclusão, lote). Quem tem acesso ao talhão. */
+export const sincronizarPrescricoesPF = (talhaoId: string) =>
+  chamar<RespPrescricoes>('/api/precisionfarm/prescricoes', { method: 'POST', body: { talhaoId } });
 
 export const geometriaLinhasPF = (talhaoId: string, resourceId: string, n: number) =>
   chamar<{ geometria: GeoJSON.FeatureCollection }>(
@@ -172,9 +214,11 @@ export interface VinculoLote extends VinculoPF {
   publicados: PublicadoLote[];
   /** Camadas de linhas visíveis (com geometria, não arquivadas). */
   linhas: number;
+  /** Prescrições com estrela (última situação registrada); null = migração 0.3 pendente. */
+  prescricoes: { marcadas: number; publicadas: number; pendentes: number } | null;
 }
 
-export const loteGeralPF = () => chamar<{ vinculos: VinculoLote[] }>('/api/precisionfarm/lote');
+export const loteGeralPF = () => chamar<{ vinculos: VinculoLote[]; migracao03: string | null }>('/api/precisionfarm/lote');
 
 export interface ResultadoManifesto { talhaoId: string; sharedFieldId: string; nomePF: string; ok: boolean; motivo?: string; substituido?: boolean }
 

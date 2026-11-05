@@ -1,0 +1,285 @@
+{
+  "note": "Identificadores e geometrias fictícios; apenas referência para implementação e testes.",
+  "examples": [
+    {
+      "envelope": {
+        "contract_version": "0.3.0",
+        "shared_producer_id": "00000000-0000-4000-8000-000000000001",
+        "shared_farm_id": "00000000-0000-4000-8000-000000000002",
+        "shared_field_id": "00000000-0000-4000-8000-000000000003",
+        "resource_revision": 1,
+        "base_revision": 0,
+        "boundary_revision": 1,
+        "occurred_at": "2026-11-04T18:00:00.000Z",
+        "operation": "upsert",
+        "event_id": "00000000-0000-4000-8000-000000000004",
+        "resource_id": "00000000-0000-4000-8000-000000000005",
+        "source_system": "invicta",
+        "resource_type": "prescription",
+        "payload": {
+          "name": "Soja · população",
+          "status": "available",
+          "is_favorite": true,
+          "product": "Soja",
+          "input_type": "seed",
+          "operation_category": "planting",
+          "quantity": "seed_population",
+          "rate_unit": "seeds/m",
+          "geometry": {
+            "type": "FeatureCollection",
+            "features": [
+              {
+                "type": "Feature",
+                "properties": {
+                  "zone_id": "1",
+                  "rate": 15.6
+                },
+                "geometry": {
+                  "type": "Polygon",
+                  "coordinates": [
+                    [
+                      [
+                        -50.01,
+                        -25.01
+                      ],
+                      [
+                        -50,
+                        -25.01
+                      ],
+                      [
+                        -50,
+                        -25
+                      ],
+                      [
+                        -50.01,
+                        -25
+                      ],
+                      [
+                        -50.01,
+                        -25.01
+                      ]
+                    ]
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      },
+      "inventory_item": {
+        "resource_id": "00000000-0000-4000-8000-000000000005",
+        "resource_type": "prescription",
+        "resource_revision": 1,
+        "boundary_revision": 1,
+        "status": "published",
+        "name": "Soja · população",
+        "event": {
+          "contract_version": "0.3.0",
+          "shared_producer_id": "00000000-0000-4000-8000-000000000001",
+          "shared_farm_id": "00000000-0000-4000-8000-000000000002",
+          "shared_field_id": "00000000-0000-4000-8000-000000000003",
+          "resource_revision": 1,
+          "base_revision": 0,
+          "boundary_revision": 1,
+          "occurred_at": "2026-11-04T18:00:00.000Z",
+          "operation": "upsert",
+          "event_id": "00000000-0000-4000-8000-000000000004",
+          "resource_id": "00000000-0000-4000-8000-000000000005",
+          "source_system": "invicta",
+          "resource_type": "prescription",
+          "checksum": "e5cacafb5a3833b58b37b8a8ca527966451abcdd1abf32ee1a2a8b014c9f9e88"
+        }
+      }
+    },
+    {
+      "envelope": {
+        "contract_version": "0.3.0",
+        "shared_producer_id": "00000000-0000-4000-8000-000000000001",
+        "shared_farm_id": "00000000-0000-4000-8000-000000000002",
+        "shared_field_id": "00000000-0000-4000-8000-000000000003",
+        "resource_revision": 1,
+        "base_revision": 0,
+        "boundary_revision": 1,
+        "occurred_at": "2026-11-04T18:00:00.000Z",
+        "operation": "upsert",
+        "event_id": "00000000-0000-4000-8000-000000000008",
+        "resource_id": "00000000-0000-4000-8000-000000000009",
+        "source_system": "invicta",
+        "resource_type": "prescription",
+        "payload": {
+          "name": "Adubação",
+          "status": "available",
+          "is_favorite": true,
+          "product": "Adubo",
+          "input_type": "fertilizer",
+          "operation_category": "fertilizing",
+          "quantity": "application_rate",
+          "rate_unit": "kg/ha",
+          "geometry": {
+            "type": "FeatureCollection",
+            "features": [
+              {
+                "type": "Feature",
+                "properties": {
+                  "zone_id": "1",
+                  "rate": 165
+                },
+                "geometry": {
+                  "type": "Polygon",
+                  "coordinates": [
+                    [
+                      [
+                        -50.01,
+                        -25.01
+                      ],
+                      [
+                        -50,
+                        -25.01
+                      ],
+                      [
+                        -50,
+                        -25
+                      ],
+                      [
+                        -50.01,
+                        -25
+                      ],
+                      [
+                        -50.01,
+                        -25.01
+                      ]
+                    ]
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      },
+      "inventory_item": {
+        "resource_id": "00000000-0000-4000-8000-000000000009",
+        "resource_type": "prescription",
+        "resource_revision": 1,
+        "boundary_revision": 1,
+        "status": "published",
+        "name": "Adubação",
+        "event": {
+          "contract_version": "0.3.0",
+          "shared_producer_id": "00000000-0000-4000-8000-000000000001",
+          "shared_farm_id": "00000000-0000-4000-8000-000000000002",
+          "shared_field_id": "00000000-0000-4000-8000-000000000003",
+          "resource_revision": 1,
+          "base_revision": 0,
+          "boundary_revision": 1,
+          "occurred_at": "2026-11-04T18:00:00.000Z",
+          "operation": "upsert",
+          "event_id": "00000000-0000-4000-8000-000000000008",
+          "resource_id": "00000000-0000-4000-8000-000000000009",
+          "source_system": "invicta",
+          "resource_type": "prescription",
+          "checksum": "61801f5a9455cb1095a3d1d8a3c4e312205e37011f19335a054eb0837095927d"
+        }
+      }
+    },
+    {
+      "envelope": {
+        "contract_version": "0.3.0",
+        "shared_producer_id": "00000000-0000-4000-8000-000000000001",
+        "shared_farm_id": "00000000-0000-4000-8000-000000000002",
+        "shared_field_id": "00000000-0000-4000-8000-000000000003",
+        "resource_revision": 1,
+        "base_revision": 0,
+        "boundary_revision": 1,
+        "occurred_at": "2026-11-04T18:00:00.000Z",
+        "operation": "upsert",
+        "event_id": "00000000-0000-4000-8000-000000000006",
+        "resource_id": "00000000-0000-4000-8000-000000000007",
+        "source_system": "precisionfarm",
+        "resource_type": "topography",
+        "payload": {
+          "name": "altimetria",
+          "status": "available",
+          "value_unit": "m",
+          "interval_m": 4,
+          "index_interval_m": 8,
+          "smoothed": true,
+          "geometry": {
+            "type": "FeatureCollection",
+            "features": [
+              {
+                "type": "Feature",
+                "id": "1",
+                "properties": {
+                  "elevation_m": 804,
+                  "contour_interval_m": 4,
+                  "is_index": false,
+                  "color": "#466e9b"
+                },
+                "geometry": {
+                  "type": "LineString",
+                  "coordinates": [
+                    [
+                      -50.01,
+                      -25.005
+                    ],
+                    [
+                      -50,
+                      -25.005
+                    ]
+                  ]
+                }
+              },
+              {
+                "type": "Feature",
+                "id": "2",
+                "properties": {
+                  "elevation_m": 808,
+                  "contour_interval_m": 4,
+                  "is_index": true,
+                  "color": "#e5a33b"
+                },
+                "geometry": {
+                  "type": "LineString",
+                  "coordinates": [
+                    [
+                      -50.01,
+                      -25.003999999999998
+                    ],
+                    [
+                      -50,
+                      -25.003999999999998
+                    ]
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      },
+      "inventory_item": {
+        "resource_id": "00000000-0000-4000-8000-000000000007",
+        "resource_type": "topography",
+        "resource_revision": 1,
+        "boundary_revision": 1,
+        "status": "published",
+        "name": "altimetria",
+        "event": {
+          "contract_version": "0.3.0",
+          "shared_producer_id": "00000000-0000-4000-8000-000000000001",
+          "shared_farm_id": "00000000-0000-4000-8000-000000000002",
+          "shared_field_id": "00000000-0000-4000-8000-000000000003",
+          "resource_revision": 1,
+          "base_revision": 0,
+          "boundary_revision": 1,
+          "occurred_at": "2026-11-04T18:00:00.000Z",
+          "operation": "upsert",
+          "event_id": "00000000-0000-4000-8000-000000000006",
+          "resource_id": "00000000-0000-4000-8000-000000000007",
+          "source_system": "precisionfarm",
+          "resource_type": "topography",
+          "checksum": "6ea5d28ebcb3e426b111a54c1559bc40e512c2b58bf3df09cc037b2aca3f7082"
+        }
+      }
+    }
+  ]
+}

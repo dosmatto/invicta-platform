@@ -62,8 +62,13 @@ import {
 import {
   Plus, Save, Trash2, FileDown, FileSpreadsheet, FileText, Loader2, AlertTriangle,
   CheckCircle2, History, FolderOpen, Scale, Sprout, Pencil, RefreshCw,
-  ChevronDown, ChevronRight,
+  ChevronDown, ChevronRight, Star,
 } from 'lucide-react';
+import { cloudAguardarEnvio } from '@/lib/cloud';
+import { ehAdmin } from '@/lib/empresa';
+import {
+  estadoPrescricoesPF, marcarPrescricaoPF, sincronizarPrescricoesPF, type SituacaoPrescricaoPF,
+} from '@/lib/precisionfarm/cliente';
 import { inputStyle } from '@/constants/ui';
 import { resumoInsumo } from '@/components/panels/InsumosPanel';
 import { rotuloZona } from '@/lib/meap/rotuloZona';
@@ -274,6 +279,59 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
   // não as traria até recarregar a página. Só acrescenta (ver
   // atualizarPrescricoesDaNuvem); o evento 'inv:prescricoes' redesenha a lista.
   useEffect(() => { if (talhaoId) void atualizarPrescricoesDaNuvem(talhaoId); }, [talhaoId]);
+
+  // ── Estrela "Enviar à PrecisionFarm" (extensão 0.3 — ledger pf-contrato-03) ─
+  // A estrela mora no SERVIDOR (pf_prescricoes_estrela, por linhagem) e só a
+  // gestão (owner/admin) marca. Marcar já publica; tirar arquiva na PF; salvar
+  // versão nova de uma marcada publica sozinho. A situação (publicada rev N /
+  // pendente: motivo) vem do servidor, calculada a partir da NUVEM.
+  const pfGestao = ehAdmin();
+  const [pfSituacoes, setPfSituacoes] = useState<Map<string, SituacaoPrescricaoPF> | null>(null);
+  const [pfErroGeral, setPfErroGeral] = useState<string | null>(null);
+  const [pfOcupado, setPfOcupado] = useState<string | null>(null);
+  const [pfMsgs, setPfMsgs] = useState<Record<string, string>>({});
+  const aplicarPF = (r: Awaited<ReturnType<typeof estadoPrescricoesPF>>) => {
+    if (!r.ok) { setPfErroGeral(r.erro); return; }
+    setPfErroGeral(null);
+    setPfSituacoes(new Map(r.situacoes.map(s => [s.linhagemId, s])));
+  };
+  useEffect(() => {
+    if (!pfGestao || !talhaoId) return;
+    let vivo = true;
+    void estadoPrescricoesPF(talhaoId).then(r => {
+      if (!vivo) return;
+      if (!r.ok) { setPfErroGeral(r.erro); return; }
+      setPfErroGeral(null);
+      setPfSituacoes(new Map(r.situacoes.map(s => [s.linhagemId, s])));
+    });
+    return () => { vivo = false; };
+  }, [pfGestao, talhaoId]);
+
+  async function estrelaPF(linhagemId: string, marcar: boolean) {
+    setPfOcupado(linhagemId);
+    setPfMsgs(m => { const n = { ...m }; delete n[linhagemId]; return n; });
+    // A versão recém-salva precisa estar na nuvem: o servidor lê de lá.
+    await cloudAguardarEnvio(['inv_prescricoes']);
+    const r = await marcarPrescricaoPF(talhaoId, linhagemId, marcar);
+    setPfOcupado(null);
+    if (!r.ok) { setPfMsgs(m => ({ ...m, [linhagemId]: r.erro })); return; }
+    aplicarPF(r);
+  }
+
+  /** Versão nova salva (ou exclusão): se a linhagem tem estrela, o servidor
+   *  publica/arquiva sozinho. Depois do envio à nuvem; nunca trava a tela. */
+  function sincronizarPFDepois() {
+    if (!talhaoId) return;
+    void (async () => {
+      await cloudAguardarEnvio(['inv_prescricoes']);
+      const r = await sincronizarPrescricoesPF(talhaoId);
+      if (pfGestao && r.ok) aplicarPF(r);
+    })();
+  }
+  const propsPF: PropsPF | undefined = pfGestao
+    ? { situacoes: pfSituacoes, ocupado: pfOcupado, msgs: pfMsgs, erroGeral: pfErroGeral, onEstrela: (l, m) => { void estrelaPF(l, m); } }
+    : undefined;
+  const excluirPrescricao = (id: string) => { deletePrescricao(id); setTick(t => t + 1); sincronizarPFDepois(); };
 
   const [r, setR] = useState<Rascunho>(RASCUNHO_VAZIO);
   const editandoLavra = useMemo(
@@ -1190,6 +1248,8 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
       if (!nova) { setErro('Versão anterior não encontrada.'); return; }
       patch({ editandoId: nova.id });
       setOkMsg(`Versão ${nova.versao} salva — a v${nova.versao - 1} continua na lista, com os arquivos dela.`);
+      // Linhagem com estrela "Enviar à PrecisionFarm": publica a versão nova (Q4).
+      sincronizarPFDepois();
     } else {
       const nova = savePrescricao(base);
       patch({ editandoId: nova.id });
@@ -2604,7 +2664,7 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
                 </div>
                 <SalvasAgrupadas linhagens={linhagens} anoAtual={safraNome} exportando={exportando}
                   onAbrir={abrirSalva} onExportar={exportar}
-                  onExcluir={id => { deletePrescricao(id); setTick(t => t + 1); }} />
+                  onExcluir={excluirPrescricao} pf={propsPF} />
               </div>
             )}
           </>
@@ -2616,7 +2676,7 @@ export function PrescricoesSection({ safraNome }: { safraNome?: string } = {}) {
             : <SalvasAgrupadas linhagens={linhagens} anoAtual={safraNome} exportando={exportando}
                 podeExportar={podeExportar} podeExcluir={podeExcluir}
                 onAbrir={abrirSalva} onExportar={exportar}
-                onExcluir={id => { deletePrescricao(id); setTick(t => t + 1); }} />
+                onExcluir={excluirPrescricao} pf={propsPF} />
         )}
 
         {aba === 'arquivos' && (() => {
@@ -2733,7 +2793,37 @@ type PropsLista = {
   podeExportar?: boolean;
   podeExcluir?: boolean;
   somenteLeitura?: boolean;
+  /** Estrela "Enviar à PrecisionFarm" — só para a gestão (owner/admin). */
+  pf?: PropsPF;
 };
+
+/** Estado da estrela "Enviar à PrecisionFarm" por linhagem (origemId ?? id). */
+type PropsPF = {
+  /** null = ainda carregando. */
+  situacoes: Map<string, SituacaoPrescricaoPF> | null;
+  ocupado: string | null;
+  msgs: Record<string, string>;
+  /** Ex.: migração 0.3 pendente no banco — a estrela não funciona ainda. */
+  erroGeral: string | null;
+  onEstrela: (linhagemId: string, marcar: boolean) => void;
+};
+
+const COR_SITUACAO_PF: Record<SituacaoPrescricaoPF['situacao'], { cor: string; fundo: string }> = {
+  publicada: { cor: '#86efac', fundo: '#052e16' },
+  pendente: { cor: '#fcd34d', fundo: '#422006' },
+  arquivada: { cor: '#94a3b8', fundo: '#0f172a' },
+  nao_publicada: { cor: '#94a3b8', fundo: '#0f172a' },
+};
+
+/** Texto da situação na PF (publicada rev N / pendente: motivo / arquivada). */
+function textoSituacaoPF(s: SituacaoPrescricaoPF): string {
+  switch (s.situacao) {
+    case 'publicada': return `PrecisionFarm: publicada · rev. ${s.revisao}${s.criada ? ' (agora)' : ''}`;
+    case 'pendente': return `PrecisionFarm: ainda não publicada — ${s.motivo ?? 'pendente'}`;
+    case 'arquivada': return `PrecisionFarm: arquivada${s.revisao ? ` (rev. ${s.revisao})` : ''}${s.motivo ? ` — ${s.motivo}` : ''}`;
+    default: return `PrecisionFarm: não publicada${s.motivo ? ` — ${s.motivo}` : ''}`;
+  }
+}
 
 // Prescrições salvas — o MESMO bloco na aba "Salvas", no rodapé da aba "Nova"
 // (salvar e ver o resultado logo embaixo do botão) e na visão do produtor.
@@ -2777,6 +2867,11 @@ function SalvasAgrupadas({ linhagens, anoAtual, ...props }: PropsLista & {
 
   return (
     <div className="space-y-1.5">
+      {props.pf?.erroGeral && (
+        <p className="text-[10px] px-1.5 py-1 rounded" style={{ background: '#422006', color: '#fcd34d' }}>
+          Estrela “Enviar à PrecisionFarm” indisponível: {props.pf.erroGeral}
+        </p>
+      )}
       {anos.map(g => {
         const chaveAno = `ano:${g.ano}`;
         const anoAbertoAqui = aberto(chaveAno, g.ano === anoAberto);
@@ -2829,12 +2924,13 @@ function CabecalhoGrupo({ aberto, onClick, rotulo, n, destaque }: {
 // Uma prescrição e as suas versões: a mais nova à vista; as anteriores ficam
 // atrás de "+N versões anteriores" — continuam salvas, cada uma com os
 // arquivos que gerou, só não ocupam a lista.
-function ListaVersoes({ versoes, ...props }: PropsLista & { versoes: Prescricao[] }) {
+function ListaVersoes({ versoes, pf, ...props }: PropsLista & { versoes: Prescricao[] }) {
   const [verAntigas, setVerAntigas] = useState(false);
   const [atual, ...antigas] = versoes;
   return (
     <div className="space-y-1">
-      <CartaoSalva p={atual} {...props} />
+      {/* A estrela vale para a LINHAGEM: aparece só na versão mais recente. */}
+      <CartaoSalva p={atual} pf={pf} {...props} />
       {antigas.length > 0 && (
         <button onClick={() => setVerAntigas(v => !v)} className="text-[10px] font-semibold flex items-center gap-1 pl-2"
           style={{ color: '#64748b' }}>
@@ -2857,11 +2953,15 @@ function ListaVersoes({ versoes, ...props }: PropsLista & { versoes: Prescricao[
 // faixa de dose e o custo completos ficam no balão (title) do resumo. Os três
 // formatos de arquivo abrem numa linha embaixo ao clicar em "Exportar" — um
 // menu flutuante seria cortado pela rolagem do painel.
-function CartaoSalva({ p, anterior, exportando, onAbrir, onExportar, onExcluir, somenteLeitura, podeExportar = true, podeExcluir = true }: PropsLista & {
+function CartaoSalva({ p, anterior, exportando, onAbrir, onExportar, onExcluir, somenteLeitura, podeExportar = true, podeExcluir = true, pf }: PropsLista & {
   p: Prescricao;
   anterior?: boolean;          // versão antiga (fica discreta na lista)
 }) {
   const [exportAberto, setExportAberto] = useState(false);
+  const linhagemId = p.origemId ?? p.id;
+  const sitPF = !anterior ? pf?.situacoes?.get(linhagemId) ?? null : null;
+  const marcadaPF = !!sitPF?.marcada;
+  const ocupadoPF = pf?.ocupado === linhagemId;
   const rs = resumoDoses(p.zonas, p.custoUnit);
   const total = `${p.unidade === 'sementes/ha' ? fmt0(rs.usado) : fmt(rs.usado, 1)} ${UNIDADE_TOTAL[p.unidade]}`;
   // Dose e total primeiro: no painel estreito a linha trunca, e é isso que se
@@ -2890,6 +2990,17 @@ function CartaoSalva({ p, anterior, exportando, onAbrir, onExportar, onExcluir, 
             <FileDown size={10} /> Exportar {exportAberto ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
           </button>
         )}
+        {pf && !anterior && (
+          <button onClick={() => pf.onEstrela(linhagemId, !marcadaPF)}
+            disabled={ocupadoPF || pf.situacoes === null || !!pf.erroGeral}
+            title={pf.erroGeral ?? (marcadaPF
+              ? 'Marcada para a PrecisionFarm — clique para tirar (arquiva lá, sem apagar aqui)'
+              : 'Enviar à PrecisionFarm (publica esta prescrição — e as próximas versões dela)')}
+            aria-label="Enviar à PrecisionFarm" aria-pressed={marcadaPF}
+            className="p-1.5 rounded shrink-0" style={{ background: marcadaPF ? '#422006' : '#1a3a6b', color: marcadaPF ? '#fbbf24' : '#93c5fd', opacity: pf.erroGeral ? 0.5 : 1 }}>
+            {ocupadoPF ? <Loader2 size={11} className="animate-spin" /> : <Star size={11} fill={marcadaPF ? '#fbbf24' : 'none'} />}
+          </button>
+        )}
         {!somenteLeitura && (
           <button onClick={() => onAbrir(p)} title="Abrir no editor" aria-label="Abrir no editor"
             className="p-1.5 rounded shrink-0" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
@@ -2911,6 +3022,15 @@ function CartaoSalva({ p, anterior, exportando, onAbrir, onExportar, onExcluir, 
         </div>
       )}
       {p.origemLavra && <SeloLavra p={p} />}
+      {sitPF && (sitPF.marcada || sitPF.situacao !== 'nao_publicada') && (
+        <p className="text-[10px] mt-1 px-1.5 py-1 rounded leading-snug"
+          style={{ background: COR_SITUACAO_PF[sitPF.situacao].fundo, color: COR_SITUACAO_PF[sitPF.situacao].cor }}>
+          {textoSituacaoPF(sitPF)}
+        </p>
+      )}
+      {pf && !anterior && pf.msgs[linhagemId] && (
+        <p className="text-[10px] mt-1 px-1.5 py-1 rounded" style={{ background: '#450a0a', color: '#fca5a5' }}>{pf.msgs[linhagemId]}</p>
+      )}
     </div>
   );
 }

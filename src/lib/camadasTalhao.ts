@@ -24,7 +24,7 @@ import { legendaPadraoDe } from '@/lib/processarFertilidade';
 import { ehAuxiliar20mPerdido } from '@/lib/recomendacao/escolhaMapa';
 import { faixaDoLaudo, limitarRespAFaixa } from '@/lib/faixaAmostras';
 import { carregarGridNdvi, listarNdviSalvos } from '@/lib/meap/gerar';
-import { camadasVisiveisPF, estadoLinhasPF, geometriaLinhasPF } from '@/lib/precisionfarm/cliente';
+import { camadasVisiveisPF, estadoLinhasPF, estadoTopografiaPF, geometriaLinhasPF } from '@/lib/precisionfarm/cliente';
 import { featuresParaMapa } from '@/lib/meap/zonasParaMapa';
 
 /** Legenda de UMA camada, já resolvida no `carregar` — é o que o relatório PDF
@@ -287,6 +287,37 @@ async function grupoLinhas(talhao: Talhao): Promise<GrupoCamadas> {
   return { id: 'linhas', nome: 'Linhas (PrecisionFarm)', vazio: r && !r.ok ? 'Não foi possível consultar as linhas agora.' : 'Nenhuma linha recebida da PrecisionFarm.', itens };
 }
 
+// ── Curvas de nível PrecisionFarm (topografia 0.3) ──────────────────────────
+// Mesmas cores da PF (mestras #e5a33b, demais #466e9b) e da aba Altimetria.
+function legendaDeCurvas(fc: GeoJSON.FeatureCollection): LegendaCamada {
+  const cores = new Map<string, boolean>();
+  for (const f of fc.features) {
+    const p = (f.properties ?? {}) as { color?: string; is_index?: boolean };
+    if (p.color && !cores.has(p.color)) cores.set(p.color, !!p.is_index);
+  }
+  const itens = [...cores].sort((a, b) => Number(b[1]) - Number(a[1]))
+    .map(([cor, mestra]) => ({ cor, rotulo: mestra ? 'Curva mestra' : 'Curva intermediária', forma: 'linha' as const }));
+  return { tipo: 'classes', itens, unidade: 'm' };
+}
+
+async function grupoCurvas(talhao: Talhao): Promise<GrupoCamadas> {
+  const r = await estadoTopografiaPF(talhao.id).catch(() => null);
+  const camadas = r?.ok ? camadasVisiveisPF(r.camadas) : [];
+  const itens: ItemCamada[] = camadas.map(c => ({
+    id: `pfcurvas:${c.resourceId}`,
+    grupo: 'Curvas', origem: 'altimetria',
+    nome: 'Curvas PrecisionFarm',
+    detalhe: `rev. ${c.revisaoGeometria}`,
+    cor: '#e5a33b',
+    carregar: async () => {
+      const g = await geometriaLinhasPF(talhao.id, c.resourceId, c.revisaoGeometria!);
+      if (!g.ok) throw new Error(g.erro);
+      return { id: `pfcurvas:${c.resourceId}`, tipo: 'vetor', estilo: 'curvas-pf', geojson: g.geometria, legenda: legendaDeCurvas(g.geometria) };
+    },
+  }));
+  return { id: 'curvas', nome: 'Curvas de nível (PrecisionFarm)', vazio: r && !r.ok ? 'Não foi possível consultar as curvas agora.' : 'Nenhuma curva de nível recebida da PrecisionFarm.', itens };
+}
+
 // ── Zonas, pontos e contorno (store local) ──────────────────────────────────
 const vetor = (id: string, estilo: EstiloCamadaVetor, geojson: GeoJSON.FeatureCollection, legenda?: LegendaCamada): DesenhoCamada =>
   ({ id, tipo: 'vetor', estilo, geojson, legenda });
@@ -367,6 +398,7 @@ export async function listarFontesCamadas(
     seguro('ndvi', () => grupoNdvi(talhao), 'ndvi', 'NDVI e índices', 'Não foi possível consultar as cenas.'),
     seguro('produtividade', () => grupoProdutividade(talhao), 'produtividade', 'Produtividade (colheita)', 'Não foi possível ler os mapas de colheita.'),
     seguro('linhas', () => grupoLinhas(talhao), 'linhas', 'Linhas (PrecisionFarm)', 'Não foi possível consultar as linhas.'),
+    seguro('altimetria', () => grupoCurvas(talhao), 'curvas', 'Curvas de nível (PrecisionFarm)', 'Não foi possível consultar as curvas.'),
     seguro('zonas', () => grupoZonas(talhao), 'zonas', 'Zonas de manejo', 'Não foi possível ler os zoneamentos.'),
     // Contorno sempre; os pontos dentro dele seguem a Amostragem (filtro por item).
     seguro('', () => grupoPontosEContorno(talhao), 'base', 'Contorno e pontos de amostragem', 'Sem contorno.'),

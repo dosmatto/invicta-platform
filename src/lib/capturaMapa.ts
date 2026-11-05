@@ -495,6 +495,12 @@ export async function capturarMapaCamadas(c: CapturaCamadas): Promise<string> {
         // Mesma ordem do MapView: bordadura primeiro, guia por cima.
         riscar(d.geojson.features.filter(ehBordadura).map(f => f.geometry), '#fb923c', 2.6 * k);
         riscar(d.geojson.features.filter(f => !ehBordadura(f)).map(f => f.geometry), '#22d3ee', 1.4 * k);
+      } else if (d.estilo === 'curvas-pf') {
+        // Curvas da PrecisionFarm: cor da própria feição; mestras mais grossas.
+        for (const f of d.geojson.features) {
+          const pr = (f.properties ?? {}) as { color?: string; is_index?: boolean };
+          riscar([f.geometry], pr.color ?? '#466e9b', (pr.is_index ? 2 : 1.1) * k);
+        }
       } else if (d.estilo === 'zonas') {
         const polis = d.geojson.features.filter(f => f.geometry?.type === 'Polygon' || f.geometry?.type === 'MultiPolygon');
         for (const f of polis) {

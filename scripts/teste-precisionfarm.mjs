@@ -1488,6 +1488,207 @@ t('várias colheitas do mesmo talhão viram UM resultado (erro > ok > pulado)', 
   assert.equal(LT.juntarResultados([LT.pulado('a'), LT.pulado('b')]).texto, 'a · b');
 });
 
+// ═════════════════════════════════════════════════════════════════════════════
+// EXTENSÃO 0.3.0 — prescrição (Invicta → PF) e topografia (PF → Invicta)
+// (ledger pf-contrato-03; docs/integracao-precisionfarm/ponte-0.3/)
+// ═════════════════════════════════════════════════════════════════════════════
+
+const P03 = new URL('../docs/integracao-precisionfarm/ponte-0.3/', import.meta.url);
+const EX03 = JSON.parse(readFileSync(new URL('EXEMPLOS_0_3.json', P03), 'utf8')).examples;
+const exSeed = EX03.find(e => e.envelope.payload.input_type === 'seed');
+const exFert = EX03.find(e => e.envelope.payload.input_type === 'fertilizer');
+const exTopo = EX03.find(e => e.envelope.resource_type === 'topography');
+const CT = await import('../src/lib/precisionfarm/contrato.ts');
+const PP = await import('../src/lib/precisionfarm/prescricaoPF.ts');
+
+/** Prescrição da aba Prescrições (mesmo polígono dos exemplos da PF). */
+const POLI_EX = exSeed.envelope.payload.geometry.features[0].geometry;
+const presc = (extra = {}) => ({
+  id: 'p1', talhaoId: 'T1', nome: 'Soja · população', tipo: 'sementes', produto: 'Soja', unidade: 'sementes/m', versao: 1,
+  params: { sementes: { germinacaoPct: 90, espacamentoM: 0.45 } },
+  zonas: [{ idZona: '1', nomeZona: 'Zona 1', classe: 'Alta', cor: '#0f0', areaHa: 1, dose: 15.6 }],
+  fc: { type: 'FeatureCollection', features: [{ type: 'Feature', properties: { id: '1', zona: '1' }, geometry: POLI_EX }] },
+  ...extra,
+});
+
+console.log('0.3 — negociação');
+t('capabilities: principal 0.2.0; anuncia 0.2.0 + 0.3.0 e a extensão (publica prescription, recebe topography)', () => {
+  const c = capabilities('production');
+  assert.equal(c.contract_version, '0.2.0');
+  assert.deepEqual(c.supported_contract_versions, ['0.2.0', '0.3.0']);
+  assert.deepEqual(c.extensions, { contract_version: '0.3.0', publishes: ['prescription'], receives: ['topography'] });
+  assert.deepEqual(c.resource_types, ['management_zones', 'harvest'], 'visão 0.2 intacta');
+});
+t('envelope: prescription sai em 0.3.0; zonas/colheita continuam 0.2.0; os dois passam no validador', () => {
+  const pz = montarPayloadZonas({ nome: 'Z', fc: { type: 'FeatureCollection', features: [{ type: 'Feature', properties: { id: '1', zona: '1', classe: 'Alta' }, geometry: quad(-50, -24) }] } });
+  const ez = montarEnvelope({ ids: IDS, resourceId: RES, tipo: 'management_zones', revisao: 1, boundaryRevision: 1, eventId: EV, quando: QUANDO, payload: pz.payload });
+  assert.equal(ez.contract_version, '0.2.0'); assert.deepEqual(validarEnvelope(ez), []);
+  const ep = montarEnvelope({ ids: IDS, resourceId: RES, tipo: 'prescription', revisao: 1, boundaryRevision: 1, eventId: EV, quando: QUANDO, payload: PP.montarPayloadPrescricao(presc()).payload });
+  assert.equal(ep.contract_version, '0.3.0'); assert.deepEqual(validarEnvelope(ep), []);
+  assert.equal(ep.operation, 'upsert');
+  const arq = montarEnvelope({ ids: IDS, resourceId: RES, tipo: 'prescription', revisao: 2, boundaryRevision: 1, eventId: EV, quando: QUANDO, payload: ep.payload, operacao: 'archive' });
+  assert.equal(arq.operation, 'archive'); assert.equal(arq.base_revision, 1); assert.deepEqual(validarEnvelope(arq), []);
+});
+t('0.2.0 recusa tipo 0.3 com mensagem explícita (envelope e aviso); 0.3.0 desconhecida/inventada não passa', () => {
+  const e = { ...exTopo.envelope, contract_version: '0.2.0' };
+  assert.match(validarEnvelope(e)[0], /topography.*só existe no contrato 0\.3\.0/);
+  assert.match(validarEnvelope({ ...exSeed.envelope, contract_version: '0.2.0' })[0], /prescription.*0\.3\.0/);
+  assert.ok(validarEnvelope({ ...exSeed.envelope, contract_version: '0.4.0' }).length);
+  assert.ok(validarEnvelope({ ...exSeed.envelope, resource_type: 'invented' }).length);
+});
+
+console.log('0.3 — exemplos da PF (EXEMPLOS_0_3.json)');
+t('reproduz os 3 checksums do inventário com o checksum canônico', () => {
+  for (const x of EX03) assert.equal(checksumEnvelope(x.envelope), x.inventory_item.event.checksum, x.envelope.resource_type);
+});
+t('os 3 envelopes passam no validador 0.3; inventory_item.event = envelope sem payload + checksum', () => {
+  for (const x of EX03) {
+    assert.deepEqual(validarEnvelope(x.envelope), [], x.envelope.event_id);
+    const { payload: _p, ...ev } = x.envelope; void _p;
+    assert.deepEqual(x.inventory_item.event, { ...ev, checksum: x.inventory_item.event.checksum });
+  }
+});
+t('itemInventario reproduz o formato do exemplo (published) e marca archived na revisão de arquivamento', () => {
+  const x = exSeed;
+  const { payload: _p, ...evento } = x.envelope; void _p;
+  const it = itemInventario({ resource_id: x.envelope.resource_id, resource_type: 'prescription', resource_revision: 1, boundary_revision: 1, name: x.envelope.payload.name, checksum: x.inventory_item.event.checksum, evento });
+  for (const k of ['resource_id', 'resource_type', 'resource_revision', 'boundary_revision', 'status', 'name', 'event']) assert.deepEqual(it[k], x.inventory_item[k], k);
+  const arq = itemInventario({ resource_id: x.envelope.resource_id, resource_type: 'prescription', resource_revision: 2, boundary_revision: 1, name: 'x', checksum: 'c', evento: { ...evento, operation: 'archive' } });
+  assert.equal(arq.status, 'archived');
+});
+
+console.log('0.3 — payload de prescrição');
+t('sementes/m (seed) reproduz o payload do exemplo da PF', () => {
+  const r = PP.montarPayloadPrescricao(presc());
+  assert.ok(r.ok, r.erro);
+  assert.deepEqual(r.payload, exSeed.envelope.payload);
+});
+t('fertilizante kg/ha reproduz o payload do exemplo da PF', () => {
+  const r = PP.montarPayloadPrescricao(presc({ nome: 'Adubação', tipo: 'fertilizante', produto: 'Adubo', unidade: 'kg/ha', params: {},
+    zonas: [{ idZona: '1', nomeZona: 'Zona 1', classe: 'Alta', cor: '#0f0', areaHa: 1, dose: 165 }] }));
+  assert.ok(r.ok, r.erro);
+  assert.deepEqual(r.payload, exFert.envelope.payload);
+});
+t('mapeamento tipo/unidade: explícito, sem conversão; fora do contrato recusa com motivo', () => {
+  const m = (tipo, u) => PP.mapearTipoUnidade(tipo, u);
+  assert.deepEqual(m('sementes', 'sementes/ha'), { ok: true, input_type: 'seed', operation_category: 'planting', quantity: 'seed_population', rate_unit: 'seeds/ha' });
+  assert.deepEqual(m('corretivo', 't/ha'), { ok: true, input_type: 'lime', operation_category: 'liming', quantity: 'application_rate', rate_unit: 't/ha' });
+  assert.deepEqual(m('organico', 'L/ha'), { ok: true, input_type: 'other', operation_category: 'fertilizing', quantity: 'application_rate', rate_unit: 'L/ha' });
+  assert.deepEqual(m('personalizado', 'kg/ha'), { ok: true, input_type: 'other', operation_category: 'other', quantity: 'application_rate', rate_unit: 'kg/ha' });
+  assert.match(m('sementes', 'sementes/m2').erro, /sementes\/m2 não é aceita.*sementes\/m ou sementes\/ha.*não converte/);
+  assert.match(m('sementes', 'kg/ha').erro, /não é aceita/);
+  assert.match(m('fertilizante', 'L/ha').erro, /não é aceita.*kg\/ha ou t\/ha/);
+  assert.match(m('corretivo', 'sementes/ha').erro, /não é aceita/);
+  assert.equal(m('xyz', 'kg/ha').ok, false);
+  assert.match(PP.montarPayloadPrescricao(presc({ unidade: 'sementes/m2' })).erro, /não é aceita/);
+});
+t('dose zero é publicada como 0; zona sem dose NÃO vira zero (recusa); dose negativa recusa', () => {
+  const duas = (d1, d2) => presc({
+    zonas: [{ idZona: '1', nomeZona: 'Z1', classe: 'Alta', cor: '#0', areaHa: 1, dose: d1 }, { idZona: '2', nomeZona: 'Z2', classe: 'Baixa', cor: '#0', areaHa: 1, dose: d2 }],
+    fc: { type: 'FeatureCollection', features: [
+      { type: 'Feature', properties: { id: '1' }, geometry: quad(-50, -24) }, { type: 'Feature', properties: { id: '2' }, geometry: quad(-50.01, -24) }] },
+  });
+  const r = PP.montarPayloadPrescricao(duas(14, 0));
+  assert.ok(r.ok, r.erro);
+  assert.deepEqual(r.payload.geometry.features.map(f => [f.properties.zone_id, f.properties.rate]), [['1', 14], ['2', 0]]);
+  assert.match(PP.montarPayloadPrescricao(duas(14, NaN)).erro, /Z2.*não é publicada como zero/);
+  assert.match(PP.montarPayloadPrescricao(duas(14, undefined)).erro, /sem dose/);
+  assert.match(PP.montarPayloadPrescricao(duas(14, -1)).erro, /negativa/);
+});
+t('dose do ARQUIVO de máquina: população compensada pela germinação, mesmo arredondamento do SHP', () => {
+  const r = PP.montarPayloadPrescricao(presc({ unidade: 'sementes/ha', params: { doseEhPopulacao: true, sementes: { germinacaoPct: 80 } },
+    zonas: [{ idZona: '1', nomeZona: 'Z1', classe: 'Alta', cor: '#0', areaHa: 1, dose: 80000 }] }));
+  assert.ok(r.ok, r.erro);
+  assert.equal(r.payload.geometry.features[0].properties.rate, 100000);
+  assert.equal(r.payload.rate_unit, 'seeds/ha');
+});
+t('polígono sem zona, geometria que não é área e produto vazio recusam', () => {
+  assert.match(PP.montarPayloadPrescricao(presc({ fc: { type: 'FeatureCollection', features: [{ type: 'Feature', properties: { id: '9' }, geometry: POLI_EX }] } })).erro, /não casam/);
+  assert.match(PP.montarPayloadPrescricao(presc({ fc: { type: 'FeatureCollection', features: [{ type: 'Feature', properties: { id: '1' }, geometry: { type: 'LineString', coordinates: [[-50, -24], [-49, -24]] } }] } })).erro, /não é uma área válida/);
+  assert.match(PP.montarPayloadPrescricao(presc({ produto: '  ' })).erro, /produto/);
+});
+t('safra/época como metadados só quando existem: "26/27" → season; safrinha da Lavra → second; sem época, nada', () => {
+  const a = PP.montarPayloadPrescricao(presc({ ano: '26/27' })).payload;
+  assert.equal(a.season, '2026/2027'); assert.equal('season_period' in a, false);
+  const b = PP.montarPayloadPrescricao(presc({ origemLavra: { anoSafra: '2026/2027', tempo: 'SAFRINHA' } })).payload;
+  assert.equal(b.season, '2026/2027'); assert.equal(b.season_period, 'second');
+  const c = PP.montarPayloadPrescricao(presc({ ano: 'Safra nova' })).payload;
+  assert.equal('season' in c, false, 'ano fora do formato não vira safra adivinhada');
+});
+t('linhagem: versão mais recente; decisão publicar/arquivar/nada', () => {
+  const cabs = [
+    { id: 'a', origemId: null, versao: 1, atualizadoEm: '1', nome: 'A', removida: false },
+    { id: 'a2', origemId: 'a', versao: 2, atualizadoEm: '2', nome: 'A', removida: false },
+    { id: 'b', origemId: null, versao: 1, atualizadoEm: '1', nome: 'B', removida: false },
+  ];
+  const u = PP.ultimasDasLinhagens(cabs);
+  assert.equal(u.get('a').id, 'a2'); assert.equal(u.get('b').id, 'b');
+  assert.equal(PP.chaveLocalPrescricao('a'), 'prescription|a'); assert.equal(PP.linhagemDaChave('prescription|a'), 'a');
+  assert.equal(PP.linhagemDaChave('management_zones'), null);
+  const d = PP.decidirLinhagem;
+  assert.deepEqual(d({ marcada: true, ultima: u.get('a'), ultimaOperacao: null }), { acao: 'publicar', versaoId: 'a2' });
+  assert.equal(d({ marcada: false, ultima: u.get('a'), ultimaOperacao: 'upsert' }).acao, 'arquivar');
+  assert.equal(d({ marcada: true, ultima: null, ultimaOperacao: 'upsert' }).acao, 'arquivar', 'excluída');
+  assert.equal(d({ marcada: true, ultima: { ...u.get('a'), removida: true }, ultimaOperacao: 'upsert' }).acao, 'arquivar', 'retirada pela Lavra');
+  assert.equal(d({ marcada: false, ultima: u.get('a'), ultimaOperacao: 'archive' }).acao, 'nada');
+  assert.equal(d({ marcada: false, ultima: u.get('a'), ultimaOperacao: null }).acao, 'nada');
+});
+
+console.log('0.3 — topografia recebida');
+const topo = (feats, extra = {}) => ({ ...exTopo.envelope.payload, ...extra, geometry: { type: 'FeatureCollection', features: feats } });
+const curva = (z, extra = {}) => ({ type: 'Feature', properties: { elevation_m: z, contour_interval_m: 4, is_index: z % 8 === 0, color: z % 8 === 0 ? '#e5a33b' : '#466e9b', ...extra },
+  geometry: { type: 'LineString', coordinates: [[-50.01, -25.005], [-50, -25.005]] } });
+t('exemplo da PF: válido, duas cores, metadados (intervalo, destaque, cotas)', () => {
+  const r = L.validarPayloadTopografia(exTopo.envelope.payload);
+  assert.ok(r.ok, r.erro);
+  assert.equal(r.meta.nome, 'altimetria'); assert.equal(r.meta.nFeicoes, 2); assert.equal(r.meta.nVertices, 4);
+  assert.deepEqual(r.meta.extra, { interval_m: 4, index_interval_m: 8, smoothed: true, value_unit: 'm', cota_min: 804, cota_max: 808, n_mestras: 1 });
+  const cores = new Set(exTopo.envelope.payload.geometry.features.map(f => f.properties.color));
+  assert.deepEqual([...cores].sort(), [L.COR_CURVA_NORMAL, L.COR_CURVA_MESTRA].sort());
+});
+t('aviso de topografia: 0.3.0 passa; 0.2.0 é recusado com motivo; o de linhas 0.2.0 continua passando', () => {
+  const { payload: _p, ...ev } = exTopo.envelope; void _p;
+  const aviso = { ...ev, checksum: exTopo.inventory_item.event.checksum };
+  assert.deepEqual(L.validarEvento(aviso), []);
+  assert.match(L.validarEvento({ ...aviso, contract_version: '0.2.0' })[0], /topography.*0\.3\.0/);
+  assert.deepEqual(L.validarEvento(notif()), []);
+  assert.ok(L.conferirRevisao(exTopo.envelope, aviso).ok);
+  assert.match(L.conferirRevisao({ ...exTopo.envelope, contract_version: '0.2.0' }, aviso).erro, /0\.3\.0/);
+  assert.deepEqual(L.TIPOS_RECEBIDOS, ['guidance', 'topography']);
+});
+t('topografia fora do contrato é recusada SEM reparo (cota, is_index, intervalo, cor, geometria, cabeçalho)', () => {
+  const casos = [
+    [topo([curva(805)]), /não é múltipla do intervalo de 4 m/],
+    [topo([curva(808, { is_index: false })]), /is_index false; deveria ser true/],
+    [topo([curva(804, { is_index: true })]), /deveria ser false/],
+    [topo([curva(804, { contour_interval_m: 2 })]), /contour_interval_m 2/],
+    [topo([curva(804, { color: 'azul' })]), /color/],
+    [topo([curva(804, { elevation_m: 'x' })]), /elevation_m numérico/],
+    [topo([{ ...curva(804), geometry: POLI_EX }]), /Polygon/],
+    [topo([curva(804)], { value_unit: 'ft' }), /value_unit/],
+    [topo([curva(804)], { status: 'draft' }), /status/],
+    [topo([curva(804)], { index_interval_m: 6 }), /index_interval_m/],
+    [topo([curva(804)], { smoothed: 'sim' }), /smoothed/],
+    [topo([]), /nenhuma curva/],
+  ];
+  for (const [p, re] of casos) {
+    const r = L.validarPayloadTopografia(p);
+    assert.equal(r.ok, false, String(re));
+    assert.match(r.erro, re);
+  }
+  // MultiLineString e Z opcional passam; 100 mil feições é o teto.
+  assert.ok(L.validarPayloadTopografia(topo([{ ...curva(812), geometry: { type: 'MultiLineString', coordinates: [[[-50, -25, 812], [-49.99, -25, 812]], [[-50, -25.1], [-49.9, -25.1]]] } }])).ok);
+  assert.match(L.validarPayloadTopografia(topo(new Array(100_001).fill(curva(804)))).erro, /100000/);
+  // O despachante usa o validador do tipo.
+  assert.ok(L.validarPayloadRecebido('topography', exTopo.envelope.payload).ok);
+  assert.equal(L.validarPayloadRecebido('guidance', exTopo.envelope.payload).ok, true, 'linhas aceitam LineString sem kind (anotado)');
+});
+t('erro de migração do banco é reconhecido (coluna/tabela/check ausentes)', () => {
+  for (const code of ['42703', '42P01', 'PGRST204', 'PGRST205', '23514']) assert.equal(CT.ehErroDeMigracao({ code }), true, code);
+  assert.equal(CT.ehErroDeMigracao({ code: '23505' }), false);
+  assert.match(new CT.MigracaoPendente('x').message, /integracao-precisionfarm-0\.3\.sql/);
+});
+
 await Promise.all(pendentes);
 
 console.log(`\n${ok} ok, ${fail} falha(s)`);

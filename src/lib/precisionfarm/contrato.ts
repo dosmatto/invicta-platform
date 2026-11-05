@@ -18,12 +18,45 @@ import { classeReconhecida, classeZona, ORDEM_CLASSES } from '../zonas.ts';
 
 // ── Constantes do contrato ───────────────────────────────────────────────────
 
+/** Versão PRINCIPAL do contrato (continua 0.2.0 — ledger pf-contrato-03, Q8). */
 export const CONTRACT_VERSION = '0.2.0';
+/** Extensão compatível (FORMATO_0_3.md): só os tipos novos usam 0.3.0. */
+export const CONTRACT_VERSION_03 = '0.3.0';
+export const VERSOES_SUPORTADAS = [CONTRACT_VERSION, CONTRACT_VERSION_03] as const;
 export const SOURCE_SYSTEM = 'invicta';
 
-/** Tipos que a Invicta publica na fase 1. */
+/** Tipos que a Invicta publica no contrato 0.2.0 (fase 1). */
 export const TIPOS_PUBLICADOS = ['management_zones', 'harvest'] as const;
-export type TipoRecurso = typeof TIPOS_PUBLICADOS[number];
+/** Tipos da extensão 0.3.0: a Invicta publica `prescription` e recebe
+ *  `topography`. Envelope desses tipos SÓ com contract_version 0.3.0. */
+export const TIPOS_PUBLICADOS_03 = ['prescription'] as const;
+export const TIPOS_RECEBIDOS_03 = ['topography'] as const;
+export const TIPOS_SO_03: readonly string[] = [...TIPOS_PUBLICADOS_03, ...TIPOS_RECEBIDOS_03];
+export type TipoRecurso = typeof TIPOS_PUBLICADOS[number] | typeof TIPOS_PUBLICADOS_03[number];
+
+/** Arquivo de migração do banco da extensão 0.3 (o usuário aplica no Supabase). */
+export const SQL_03 = 'docs/integracao-precisionfarm-0.3.sql';
+export const MSG_MIGRACAO_03 = `O banco ainda não tem a parte 0.3 da integração PrecisionFarm (prescrições e topografia). Aplique ${SQL_03} no SQL Editor do Supabase.`;
+
+/** Coluna/tabela/check da migração 0.3 ainda não existe no banco. Quem chama
+ *  responde com MSG_MIGRACAO_03 (e as funções 0.2 seguem funcionando). */
+export class MigracaoPendente extends Error {
+  constructor(detalhe?: string) { super(detalhe ? `${MSG_MIGRACAO_03} (${detalhe})` : MSG_MIGRACAO_03); this.name = 'MigracaoPendente'; }
+}
+
+/** Erro do PostgREST/Postgres que indica a migração 0.3 não aplicada:
+ *  coluna inexistente (42703, PGRST204), tabela inexistente (42P01, PGRST205)
+ *  ou o check antigo de pf_recursos.resource_type (23514). */
+export function ehErroDeMigracao(e: { code?: string | null; message?: string | null } | null | undefined): boolean {
+  if (!e) return false;
+  return ['42703', '42P01', 'PGRST204', 'PGRST205', '23514'].includes(String(e.code ?? ''));
+}
+
+/** contract_version do envelope de um tipo: 0.3.0 para os tipos novos, 0.2.0
+ *  para os de sempre (um consumidor 0.2 continua lendo zonas/colheita). */
+export function versaoDoTipo(tipo: string): string {
+  return TIPOS_SO_03.includes(tipo) ? CONTRACT_VERSION_03 : CONTRACT_VERSION;
+}
 
 export const FORMATOS = ['application/geo+json'] as const;
 
@@ -125,9 +158,11 @@ export function montarEnvelope(a: {
   eventId: string;
   quando: Date;
   payload: Record<string, unknown>;
+  /** 'archive' só nas prescrições (estrela tirada): snapshot completo, operação archive. */
+  operacao?: 'upsert' | 'archive';
 }): Envelope {
   return {
-    contract_version: CONTRACT_VERSION,
+    contract_version: versaoDoTipo(a.tipo),
     event_id: a.eventId,
     source_system: SOURCE_SYSTEM,
     shared_producer_id: a.ids.shared_producer_id,
@@ -140,7 +175,7 @@ export function montarEnvelope(a: {
     // boundary_revision >= 1 no schema; talhão sem geoVersao = versão 1.
     boundary_revision: Math.max(1, Math.trunc(a.boundaryRevision || 1)),
     occurred_at: dataContrato(a.quando),
-    operation: 'upsert',
+    operation: a.operacao ?? 'upsert',
     payload: a.payload,
   };
 }
@@ -233,8 +268,44 @@ export function validarContraSchema(schema: Esquema, valor: unknown, caminho = '
   return erros;
 }
 
+/**
+ * Envelope da extensão 0.3.0 (FORMATO_0_3.md): o mesmo envelope, com
+ * contract_version "0.3.0" e os tipos novos (prescription, topography) somados
+ * aos de sempre. Derivado do 0.2.0 — não há arquivo de schema 0.3 da PF.
+ */
+export const SCHEMA_ENVELOPE_03 = {
+  ...SCHEMA_ENVELOPE,
+  $id: 'urn:precisionfarm:integration:0.3.0:envelope',
+  title: 'Envelope 0.3.0',
+  properties: {
+    ...SCHEMA_ENVELOPE.properties,
+    contract_version: { const: CONTRACT_VERSION_03 },
+    resource_type: { enum: [...SCHEMA_ENVELOPE.properties.resource_type.enum, 'prescription', 'topography'] },
+  },
+} as const;
+
+/** Schema pelo contract_version do próprio objeto (0.3.0 → extensão; o resto
+ *  → 0.2.0, que recusa versão desconhecida no `const`). */
+export function schemaDaVersao(v: unknown): Esquema {
+  const versao = v && typeof v === 'object' ? (v as { contract_version?: unknown }).contract_version : undefined;
+  return (versao === CONTRACT_VERSION_03 ? SCHEMA_ENVELOPE_03 : SCHEMA_ENVELOPE) as unknown as Esquema;
+}
+
+/** Tipo 0.3 num envelope/evento 0.2.0 — a mensagem explícita de "bloqueado"
+ *  (FORMATO_0_3.md: sem 0.3 confirmado, os tipos novos ficam bloqueados). */
+export function erroTipoSo03(v: unknown): string | null {
+  if (!v || typeof v !== 'object') return null;
+  const o = v as { contract_version?: unknown; resource_type?: unknown };
+  if (typeof o.resource_type === 'string' && TIPOS_SO_03.includes(o.resource_type) && o.contract_version !== CONTRACT_VERSION_03) {
+    return `$.resource_type: "${o.resource_type}" só existe no contrato ${CONTRACT_VERSION_03} (veio contract_version ${JSON.stringify(o.contract_version ?? null)})`;
+  }
+  return null;
+}
+
 export function validarEnvelope(envelope: unknown): string[] {
-  return validarContraSchema(SCHEMA_ENVELOPE as unknown as Esquema, envelope);
+  const so03 = erroTipoSo03(envelope);
+  if (so03) return [so03];
+  return validarContraSchema(schemaDaVersao(envelope), envelope);
 }
 
 // ── Safra e época de cultivo → contrato ──────────────────────────────────────
@@ -592,7 +663,9 @@ export function itemInventario(r: RevisaoResumo): Record<string, unknown> {
     resource_type: r.resource_type,
     resource_revision: r.resource_revision,
     boundary_revision: r.boundary_revision,
-    status: 'published',
+    // Vigente = arquivamento (prescrição sem estrela): o item continua no
+    // inventário, marcado — a PF tira do menu sem perder o histórico.
+    status: r.evento.operation === 'archive' ? 'archived' : 'published',
     name: r.name,
     ...(r.resource_type === 'harvest' ? { season: r.season ?? null, season_period: r.season_period ?? null } : {}),
     checksum: r.checksum,
@@ -616,6 +689,15 @@ export function vigentes<T extends { resource_id: string; resource_revision: num
 export function capabilities(ambiente: string): Record<string, unknown> {
   return {
     contract_version: CONTRACT_VERSION,
+    // Extensão 0.3.0 (ledger pf-contrato-03, Q8): a principal segue 0.2.0; os
+    // tipos novos vão em envelopes 0.3.0. Visto do lado da Invicta: publica
+    // prescrição, recebe topografia (o espelho do que a PF anuncia).
+    supported_contract_versions: [...VERSOES_SUPORTADAS],
+    extensions: {
+      contract_version: CONTRACT_VERSION_03,
+      publishes: [...TIPOS_PUBLICADOS_03],
+      receives: [...TIPOS_RECEBIDOS_03],
+    },
     source_system: SOURCE_SYSTEM,
     environment: ambiente,
     resource_types: [...TIPOS_PUBLICADOS],
@@ -632,6 +714,8 @@ export function capabilities(ambiente: string): Record<string, unknown> {
     // só de linhas (guidance). A NOSSA fila de saída — /changes e /receipts da
     // Invicta — continua 501 até a fase 3; a carga é por inventário + revisão.
     features: { changes: false, notifications: true, receipts: false, hmac: true, assets: false },
+    // Visão 0.2.0, intacta (um consumidor 0.2 não muda nada). Os avisos de
+    // topografia entram pela extensão (`extensions.receives`), só em 0.3.0.
     notification_resource_types: ['guidance'],
     // Nomes das funções, sem barra — formato que o preflight da PrecisionFarm lê.
     not_implemented: ['changes', 'receipts'],

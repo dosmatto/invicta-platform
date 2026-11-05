@@ -1,5 +1,13 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] PrecisionFarm 0.3: prescrições com estrela e curvas de nível
+  '2.222.0': [
+    'PENDÊNCIA S/N — PRESCRIÇÕES PARA A PRECISIONFARM: cada prescrição salva (aba Prescrições, na versão mais recente) ganha a estrela "Enviar à PrecisionFarm" (só owner/admin). Marcar já publica; salvar uma versão nova de uma marcada publica a versão nova sozinho (inclusive as que a Lavra manda); tirar a estrela arquiva lá, sem apagar nada aqui. Embaixo do cartão aparece a situação: "publicada · rev. N" ou "ainda não publicada — motivo".',
+    'SEM VÍNCULO CONFIRMADO A ESTRELA ESPERA: fica salva com o aviso e publica sozinha quando o vínculo for confirmado (no talhão ou em lote). Na Biblioteca → PrecisionFarm, nova ação "Publicar prescrições" (reenvia as pendentes) e a coluna "Prescr." (publicadas/marcadas).',
+    'NADA É ADIVINHADO: sementes vão em sementes/m ou sementes/ha; fertilizante e corretivo em kg/ha ou t/ha; orgânico e personalizado também em L/ha. Unidade fora disso (ex.: sementes/m²), zona sem dose ou polígono sem zona não publica — o motivo aparece no cartão. Dose zero vai como zero. A dose é a mesma do arquivo de máquina (SHP), com a compensação de germinação quando a prescrição foi feita em população.',
+    'CURVAS DE NÍVEL DA PRECISIONFARM: na aba Altimetria, o bloco "Curvas PrecisionFarm" mostra a topografia validada que a PrecisionFarm publicou (curvas de 4 m, mestras de 8 m em laranja), com "mostrar no mapa", transparência, revisão e data; clicar numa curva mostra a cota. Também dá para empilhar na aba Camadas. É só visualização: não muda o limite nem o MDE daqui. Owner/admin têm "Buscar curvas".',
+    'ATENÇÃO, BANCO: aplicar docs/integracao-precisionfarm-0.3.sql no Supabase (SQL Editor). Sem ele, zonas, colheita e linhas continuam iguais; a estrela avisa que falta o SQL e a topografia fica recusada até a aplicação.',
+  ],
   // [S/N] Manifesto novo da PrecisionFarm (ativação geral) + retorno para a PF
   '2.221.0': [
     'PENDÊNCIA S/N — MANIFESTO NOVO DA PRECISIONFARM: "Importar manifesto da PF" (Biblioteca → PrecisionFarm) aceita o pacote da ativação geral — o .zip com VINCULOS.json e LIMITES.geojson (ou os dois arquivos soltos). Cada limite é lido com a mesma conferência rigorosa de antes e comparado com TODOS os nossos talhões; o cliente nosso sai da geometria, nunca do nome (o "Tiago Boogaart" da PrecisionFarm é o nosso GILBERTO VAN DEN BOOGAARD). A prévia agrupa por cliente da PrecisionFarm → cliente nosso e mostra a fazenda de cada par. O manifesto antigo continua aceito.',

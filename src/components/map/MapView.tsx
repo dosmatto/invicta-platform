@@ -68,7 +68,7 @@ export function MapView({ mostrarVisaoGeral = false }: { mostrarVisaoGeral?: boo
           uploadedGeo, setUploadedGeo,
           uploadedBbox, setUploadedBbox,
           pontosSimulados, talhoesFazenda, zonasManejo, zonasFundo, zonasOpacidade,
-          fertilidadeOverlay, fertilidadeLabels, linhasPF, camadasPilha,
+          fertilidadeOverlay, fertilidadeLabels, linhasPF, curvasPF, camadasPilha,
           edicaoAtiva, edicaoModo, setPontoEvent, setZonaEvent,
           corteAtivo, corteLinha, setCorteLinha, setBoundsTela } = useApp();
 
@@ -228,6 +228,30 @@ export function MapView({ mostrarVisaoGeral = false }: { mostrarVisaoGeral?: boo
       map.addLayer({ id: 'pf-linhas-guia', type: 'line', source: 'pf-linhas',
         filter: ['all', ['!=', ['get', 'comparacao'], true], ['!=', ['get', 'kind'], 'headland']],
         paint: { 'line-color': '#22d3ee', 'line-width': 1.4 } });
+
+      // CURVAS DE NÍVEL DA PRECISIONFARM (topografia 0.3, aba Altimetria). A
+      // cor vem da feição (mestras #e5a33b, demais #466e9b — FORMATO_0_3.md);
+      // a mestra é mais grossa. Rótulo = elevation_m (mestras sempre; as
+      // demais só de perto). Clique mostra a cota. Só visualização.
+      map.addSource('pf-curvas', { type: 'geojson', data: EMPTY_FC });
+      map.addLayer({ id: 'pf-curvas-linha', type: 'line', source: 'pf-curvas',
+        layout: { 'line-join': 'round', 'line-cap': 'round' },
+        paint: {
+          'line-color': ['coalesce', ['get', 'color'], '#466e9b'],
+          'line-width': ['case', ['==', ['get', 'is_index'], true], 2, 1.1],
+          'line-opacity': ['coalesce', ['get', 'opacidade'], 1],
+        } });
+      map.addLayer({ id: 'pf-curvas-rotulo', type: 'symbol', source: 'pf-curvas',
+        filter: ['any', ['==', ['get', 'is_index'], true], ['>=', ['zoom'], 16]],
+        layout: {
+          'symbol-placement': 'line', 'symbol-spacing': 280,
+          'text-field': ['concat', ['to-string', ['get', 'elevation_m']], ' m'],
+          'text-size': 10, 'text-font': ['Open Sans Regular'],
+        },
+        paint: {
+          'text-color': ['coalesce', ['get', 'color'], '#466e9b'], 'text-halo-color': '#0b1220', 'text-halo-width': 1.4,
+          'text-opacity': ['coalesce', ['get', 'opacidade'], 1],
+        } });
 
       // Traço do CORTE POR LINHA (editor manual de zonas). Adicionado por
       // ÚLTIMO de propósito: a linha que o agrônomo está desenhando tem que
@@ -754,6 +778,13 @@ export function MapView({ mostrarVisaoGeral = false }: { mostrarVisaoGeral?: boo
             layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#fb923c', 'line-width': 2.6 } }, 'line-opacity', 1);
           add(c, 'guia', { type: 'line', filter: ['!=', ['get', 'kind'], 'headland'],
             paint: { 'line-color': '#22d3ee', 'line-width': 1.4 } }, 'line-opacity', 1);
+        } else if (c.estilo === 'curvas-pf') {
+          // Mesmo desenho da aba Altimetria: cor da PF, mestra mais grossa, cota como rótulo.
+          add(c, 'curva', { type: 'line', layout: { 'line-join': 'round', 'line-cap': 'round' },
+            paint: { 'line-color': ['coalesce', ['get', 'color'], '#466e9b'], 'line-width': ['case', ['==', ['get', 'is_index'], true], 2, 1.1] } }, 'line-opacity', 1);
+          add(c, 'cota', { type: 'symbol', filter: ['any', ['==', ['get', 'is_index'], true], ['>=', ['zoom'], 16]],
+            layout: { 'symbol-placement': 'line', 'symbol-spacing': 280, 'text-field': ['concat', ['to-string', ['get', 'elevation_m']], ' m'], 'text-size': 10, 'text-font': ['Open Sans Regular'] },
+            paint: { 'text-color': ['coalesce', ['get', 'color'], '#466e9b'], 'text-halo-color': '#0b1220', 'text-halo-width': 1.4 } }, 'text-opacity', 1);
         } else if (c.estilo === 'zonas') {
           add(c, 'fill', { type: 'fill', filter: ['in', ['geometry-type'], ['literal', ['Polygon', 'MultiPolygon']]],
             paint: { 'fill-color': ['coalesce', ['get', 'cor'], '#64748b'] } }, 'fill-opacity', 1);
@@ -786,6 +817,7 @@ export function MapView({ mostrarVisaoGeral = false }: { mostrarVisaoGeral?: boo
       ['upload-fill', !temZonas], ['upload-line', !temZonas], ['upload-points', true],
       ['zona-fill', true], ['zona-outline', true], ['zona-label', true],
       ['pf-linhas-comparacao', true], ['pf-linhas-bordadura', true], ['pf-linhas-guia', true],
+      ['pf-curvas-linha', true], ['pf-curvas-rotulo', true],
       // Pontos que Amostragem/Importar grade deixaram publicados (não limpam ao sair).
       ['pontos-circle', true], ['pontos-label', true],
     ];
@@ -809,6 +841,42 @@ export function MapView({ mostrarVisaoGeral = false }: { mostrarVisaoGeral?: boo
     const src = map.getSource('pf-linhas') as maplibregl.GeoJSONSource | undefined;
     if (src) src.setData(linhasPF ?? EMPTY_FC);
   }, [linhasPF, mapReady]);
+
+  // ── 6f. Curvas de nível da PrecisionFarm (setData + cota ao clicar) ───────
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    const src = map.getSource('pf-curvas') as maplibregl.GeoJSONSource | undefined;
+    if (!src) return;
+    if (!curvasPF) { src.setData(EMPTY_FC); return; }
+    // A transparência vai na feição (as duas camadas leem `opacidade`).
+    src.setData({ type: 'FeatureCollection', features: curvasPF.fc.features.map(f => ({ ...f, properties: { ...(f.properties ?? {}), opacidade: curvasPF.opacidade } })) });
+  }, [curvasPF, mapReady]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    let popup: maplibregl.Popup | null = null;
+    const onClick = (e: maplibregl.MapLayerMouseEvent) => {
+      if (corteAtivoRef.current) return;
+      const z = e.features?.[0]?.properties?.elevation_m;
+      if (z == null) return;
+      popup?.remove();
+      popup = new maplibregl.Popup({ closeButton: true, closeOnClick: true, className: 'popup-cota' })
+        .setLngLat(e.lngLat).setText(`Cota ${Number(z).toLocaleString('pt-BR')} m (PrecisionFarm)`).addTo(map);
+    };
+    const enter = () => { if (!corteAtivoRef.current) map.getCanvas().style.cursor = 'pointer'; };
+    const leave = () => { if (!corteAtivoRef.current) map.getCanvas().style.cursor = ''; };
+    map.on('click', 'pf-curvas-linha', onClick);
+    map.on('mouseenter', 'pf-curvas-linha', enter);
+    map.on('mouseleave', 'pf-curvas-linha', leave);
+    return () => {
+      popup?.remove();
+      map.off('click', 'pf-curvas-linha', onClick);
+      map.off('mouseenter', 'pf-curvas-linha', enter);
+      map.off('mouseleave', 'pf-curvas-linha', leave);
+    };
+  }, [mapReady]);
 
   // ── 7. Edição manual de pontos (arrastar / adicionar / remover) ───────────
   useEffect(() => {

@@ -39,7 +39,10 @@ export interface FertilidadeOverlay {
 // Aba CAMADAS do talhão: pilha de camadas JÁ SALVAS desenhadas juntas, cada uma
 // com a própria transparência. A ordem do array é a da tela: índice 0 = topo.
 // Vetores usam um `estilo` fixo do MapView (as mesmas cores das abas de origem).
-export type EstiloCamadaVetor = 'linhas-pf' | 'zonas' | 'pontos' | 'contorno';
+export type EstiloCamadaVetor = 'linhas-pf' | 'curvas-pf' | 'zonas' | 'pontos' | 'contorno';
+/** Curvas de nível recebidas da PrecisionFarm (topografia 0.3, aba Altimetria):
+ *  cada feição traz elevation_m, is_index e color (cor da PF). Só visualização. */
+export interface CurvasPF { fc: GeoJSON.FeatureCollection; opacidade: number }
 export type CamadaMapa =
   | { id: string; tipo: 'raster'; url: string; coordinates: FertilidadeOverlay['coordinates']; opacidade: number }
   | { id: string; tipo: 'vetor'; estilo: EstiloCamadaVetor; geojson: GeoJSON.FeatureCollection; opacidade: number };
@@ -111,6 +114,9 @@ interface AppContextType {
   // revisão antiga exibida para comparar com a vigente). Só leitura.
   linhasPF: GeoJSON.FeatureCollection | null;
   setLinhasPF: (fc: GeoJSON.FeatureCollection | null) => void;
+  // Curvas de nível da PrecisionFarm (aba Altimetria). null = fora do mapa.
+  curvasPF: CurvasPF | null;
+  setCurvasPF: (c: CurvasPF | null) => void;
   // Pilha da aba Camadas. `null` = aba fechada: o mapa segue as outras abas.
   camadasPilha: CamadaMapa[] | null;
   setCamadasPilha: (c: CamadaMapa[] | null) => void;
@@ -163,6 +169,8 @@ const AppContext = createContext<AppContextType>({
   setFertilidadeLabels: () => {},
   linhasPF: null,
   setLinhasPF: () => {},
+  curvasPF: null,
+  setCurvasPF: () => {},
   camadasPilha: null,
   setCamadasPilha: () => {},
   boundsTela: null,
@@ -403,6 +411,7 @@ export function AppProvider({ children, redirectProdutorParaPortal, modoCampo }:
   const [boundsTela, setBoundsTela] = useState<[number, number, number, number] | null>(null);
   const [fertilidadeLabels, setFertilidadeLabels] = useState<GeoJSON.FeatureCollection | null>(null);
   const [linhasPF, setLinhasPF] = useState<GeoJSON.FeatureCollection | null>(null);
+  const [curvasPF, setCurvasPF] = useState<CurvasPF | null>(null);
   const [camadasPilha, setCamadasPilha] = useState<CamadaMapa[] | null>(null);
   const [nav, setNavState] = useState<NavContext>({
     produtorId: null, produtor: '',
@@ -479,6 +488,7 @@ export function AppProvider({ children, redirectProdutorParaPortal, modoCampo }:
       fertilidadeOverlay, setFertilidadeOverlay,
       fertilidadeLabels, setFertilidadeLabels,
       linhasPF, setLinhasPF,
+      curvasPF, setCurvasPF,
       camadasPilha, setCamadasPilha,
       boundsTela, setBoundsTela,
     }}>

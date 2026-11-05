@@ -12,13 +12,13 @@
 // (o que é válido, o que é temporário, o que promove) são de linhas.ts.
 // Nada aqui escreve em app_kv/talhoes: o app é local-first.
 
-import { vinculosNoEscopo, type EscopoChave, type StatusVinculo } from './contrato.ts';
+import { MigracaoPendente, vinculosNoEscopo, type EscopoChave, type StatusVinculo } from './contrato.ts';
 import { FalhaPF, type ClientePF } from './clientePF.ts';
 import {
   MAX_NOTIFICACAO_BYTES, TENTATIVAS_404, TIPOS_RECEBIDOS, atrasoTentativaS, conferirRevisao, decidirReaviso,
   eventoDoItem, falhaDefinitiva, idsBatem, impressaoEvento, normalizarEvento, reciboDeveRepetir, validarEvento,
-  validarPayloadLinhas, verificarAssinatura,
-  type ConfigRecebimento, type EventoRecebido, type MetaLinhas,
+  validarPayloadRecebido, verificarAssinatura,
+  type ConfigRecebimento, type EventoRecebido, type MetaLinhas, type TipoRecebido,
 } from './linhas.ts';
 
 /** Metadados de uma revisão que a camada guarda quando ela vira a vigente. */
@@ -75,6 +75,11 @@ export interface CamadaLinhas {
   resource_id: string;
   vinculo_id: string;
   talhao_id: string;
+  /** 'guidance' (linhas) ou 'topography' (curvas de nível, 0.3). Ausente =
+   *  banco sem a migração 0.3 → só pode ser linha. */
+  resource_type?: TipoRecebido;
+  /** Metadados próprios da topografia (intervalos, cotas). */
+  meta?: Record<string, unknown> | null;
   revisao_vigente: number | null;
   revisao_geometria: number | null;
   arquivada: boolean;
@@ -98,7 +103,7 @@ export interface RevisaoGuardada {
 }
 
 export interface NovaRevisaoLinhas {
-  resource_id: string; revision: number; event_id: string; checksum: string;
+  resource_id: string; resource_type: TipoRecebido; revision: number; event_id: string; checksum: string;
   operation: 'upsert' | 'archive'; boundary_revision: number; envelope: object;
   meta: MetaLinhas | null;
 }
@@ -120,8 +125,9 @@ export interface Descarte { origem: OrigemEvento; event_id: string | null; motiv
 export interface RepoRecebimento {
   vinculoDoCampo(sharedFieldId: string): Promise<VinculoRecebimento | null>;
   camada(resourceId: string): Promise<CamadaLinhas | null>;
-  /** Cria a camada se não existe (corrida: o segundo só ignora). */
-  criarCamada(a: { resource_id: string; vinculo_id: string; talhao_id: string }): Promise<void>;
+  /** Cria a camada se não existe (corrida: o segundo só ignora). Topografia
+   *  sem a migração 0.3 no banco → MigracaoPendente (nada é criado). */
+  criarCamada(a: { resource_id: string; vinculo_id: string; talhao_id: string; resource_type: TipoRecebido }): Promise<void>;
   /** Aviso já na fila com este event_id (id, impressão e status), ou null. */
   eventoExistente(eventId: string): Promise<EventoExistente | null>;
   /** Insere o aviso na fila. Corrida (event_id entrou agora) → devolve o existente. */
@@ -165,19 +171,25 @@ const TRAVA_S = 120;
 
 export type ResultadoEnfileirar =
   | { resultado: 'novo' | 'repetido' | 'reaberto'; eventId: string }
-  | { resultado: 'tipo_nao_suportado' | 'fora_do_vinculo' | 'conflito'; mensagem: string };
+  | { resultado: 'tipo_nao_suportado' | 'fora_do_vinculo' | 'conflito' | 'indisponivel'; mensagem: string };
+
+/** Tipo da camada já gravada (sem a migração 0.3 não há coluna: é linha). */
+const tipoDaCamada = (c: CamadaLinhas): TipoRecebido => c.resource_type ?? 'guidance';
 
 /**
- * Põe um aviso VÁLIDO (validarEvento já passou) na fila. Confere o tipo
- * (só guidance nesta fase), o vínculo CONFIRMADO no escopo da chave e os três
- * UUIDs, e a idempotência por event_id. A camada nasce aqui (a tela já mostra
- * "sincronizando" para uma camada nova).
+ * Põe um aviso VÁLIDO (validarEvento já passou — inclusive a regra "topografia
+ * só em 0.3.0") na fila. Confere o tipo (guidance e topography), o vínculo
+ * CONFIRMADO no escopo da chave e os três UUIDs, e a idempotência por
+ * event_id. A camada nasce aqui (a tela já mostra "sincronizando" para uma
+ * camada nova). Topografia com o banco sem a migração 0.3 → 'indisponivel'
+ * (503 no aviso: a PF tenta de novo; nada é gravado como linha).
  */
 export async function enfileirar(amb: Ambiente, bruto: EventoRecebido, origem: OrigemEvento, escopo: EscopoChave): Promise<ResultadoEnfileirar> {
   const ev = normalizarEvento(bruto);
   if (!(TIPOS_RECEBIDOS as readonly string[]).includes(ev.resource_type)) {
-    return { resultado: 'tipo_nao_suportado', mensagem: `resource_type "${ev.resource_type}" ainda não é recebido pela Invicta (só guidance nesta fase).` };
+    return { resultado: 'tipo_nao_suportado', mensagem: `resource_type "${ev.resource_type}" não é recebido pela Invicta (recebe ${TIPOS_RECEBIDOS.join(' e ')}).` };
   }
+  const tipo = ev.resource_type as TipoRecebido;
   const v = await amb.repo.vinculoDoCampo(ev.shared_field_id);
   if (!v || !vinculosNoEscopo([v], escopo).length) {
     return { resultado: 'fora_do_vinculo', mensagem: 'Talhão fora do vínculo confirmado ou inexistente.' };
@@ -203,7 +215,17 @@ export async function enfileirar(amb: Ambiente, bruto: EventoRecebido, origem: O
   if (c && c.vinculo_id !== v.id) {
     return { resultado: 'conflito', mensagem: 'Este resource_id já pertence a outro talhão.' };
   }
-  if (!c) await amb.repo.criarCamada({ resource_id: ev.resource_id, vinculo_id: v.id, talhao_id: v.talhao_id });
+  if (c && tipoDaCamada(c) !== tipo) {
+    return { resultado: 'conflito', mensagem: `Este resource_id já é uma camada de ${tipoDaCamada(c)}; não pode virar ${tipo}.` };
+  }
+  if (!c) {
+    try {
+      await amb.repo.criarCamada({ resource_id: ev.resource_id, vinculo_id: v.id, talhao_id: v.talhao_id, resource_type: tipo });
+    } catch (e) {
+      if (e instanceof MigracaoPendente) return { resultado: 'indisponivel', mensagem: e.message };
+      throw e;
+    }
+  }
   const ins = await amb.repo.inserirEvento({
     event_id: ev.event_id, conteudo_hash: hash, evento: ev, vinculo_id: v.id, talhao_id: v.talhao_id,
     resource_id: ev.resource_id, resource_revision: ev.resource_revision, origem,
@@ -273,7 +295,7 @@ export async function receberNotificacao(
   try { json = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(corpo)); }
   catch { return erro(422, 'invalid_request', 'Corpo não é JSON UTF-8 válido.'); }
   const erros = validarEvento(json);
-  if (erros.length) return erro(422, 'invalid_contract', `Aviso fora do contrato 0.2.0: ${erros.slice(0, 5).join('; ')}`);
+  if (erros.length) return erro(422, 'invalid_contract', `Aviso fora do contrato: ${erros.slice(0, 5).join('; ')}`);
 
   const r = await enfileirar(amb, json as EventoRecebido, 'notificacao', escopo);
   switch (r.resultado) {
@@ -283,6 +305,7 @@ export async function receberNotificacao(
     case 'tipo_nao_suportado': return erro(422, 'unsupported_resource_type', r.mensagem);
     case 'fora_do_vinculo': return erro(404, 'not_found', r.mensagem);
     case 'conflito': return erro(409, 'conflict', r.mensagem);
+    case 'indisponivel': return erro(503, 'not_ready', r.mensagem);
   }
 }
 
@@ -311,12 +334,12 @@ async function processarEvento(amb: Ambiente, ev: EventoFila): Promise<'aplicado
       if (!conf.ok) throw new Permanente(conf.erro);
       let meta: MetaLinhas | null = null;
       if (conf.envelope.operation === 'upsert') {
-        const val = validarPayloadLinhas(conf.envelope.payload);
+        const val = validarPayloadRecebido(e.resource_type, conf.envelope.payload);
         if (!val.ok) throw new Permanente(val.erro);
         meta = val.meta;
       }
       const g = await repo.guardarRevisao({
-        resource_id: e.resource_id, revision: n, event_id: e.event_id, checksum: e.checksum,
+        resource_id: e.resource_id, resource_type: e.resource_type as TipoRecebido, revision: n, event_id: e.event_id, checksum: e.checksum,
         operation: e.operation, boundary_revision: e.boundary_revision, envelope: conf.envelope, meta,
       });
       if (g === 'existe') {
@@ -472,10 +495,12 @@ async function enfileirarLote(amb: Ambiente, itens: readonly unknown[], origem: 
     if (x.resultado === 'novo') r.novos++;
     else if (x.resultado === 'repetido') r.repetidos++;
     else if (x.resultado === 'reaberto') r.reabertos++;
-    else if (x.resultado === 'conflito') {
-      console.warn('[precisionfarm] evento em conflito descartado:', origem, eventIdDe(ev), x.mensagem);
+    else if (x.resultado === 'conflito' || x.resultado === 'indisponivel') {
+      // 'indisponivel' = topografia com o banco sem a migração 0.3: registrada
+      // (não some calada) e volta pela carga do inventário depois da migração.
+      console.warn('[precisionfarm] evento descartado:', origem, eventIdDe(ev), x.mensagem);
       await amb.repo.registrarDescarte({ origem, event_id: eventIdDe(ev), motivo: x.mensagem, item: itemParaRegistro(item) }, iso(agoraDe(amb)));
-      r.conflitos++;
+      if (x.resultado === 'conflito') r.conflitos++; else r.ignorados++;
     } else r.ignorados++;
   }
 }
@@ -502,9 +527,10 @@ export async function recuperarPorChanges(amb: Ambiente, escopo: EscopoChave, op
 }
 
 /** Carga inicial de um talhão: GET {PF}/fields/{id}/inventory e enfileira o
- *  `event` de cada camada de linhas (o event_id DELES — nada inventado).
- *  Camada sem `event` no inventário é contada e não entra. */
-export async function cargaInicial(amb: Ambiente, sharedFieldId: string, escopo: EscopoChave): Promise<ResumoEnfileiramento & { semEvento: number }> {
+ *  `event` de cada camada de linhas e de topografia (o event_id DELES — nada
+ *  inventado). Camada sem `event` no inventário é contada e não entra.
+ *  `tipos` restringe (o botão "Buscar curvas" da Altimetria pede só topografia). */
+export async function cargaInicial(amb: Ambiente, sharedFieldId: string, escopo: EscopoChave, tipos: readonly TipoRecebido[] = TIPOS_RECEBIDOS): Promise<ResumoEnfileiramento & { semEvento: number }> {
   const r = resumoVazio();
   let semEvento = 0;
   let cursor = '0';
@@ -513,7 +539,7 @@ export async function cargaInicial(amb: Ambiente, sharedFieldId: string, escopo:
     const eventos: unknown[] = [];
     for (const it of p.items) {
       const o = it as { resource_type?: unknown; event?: unknown };
-      if (o?.resource_type !== 'guidance') { r.ignorados++; continue; }
+      if (!(tipos as readonly unknown[]).includes(o?.resource_type)) { r.ignorados++; continue; }
       if (!o.event || typeof o.event !== 'object') { semEvento++; continue; }
       eventos.push(o.event);
     }

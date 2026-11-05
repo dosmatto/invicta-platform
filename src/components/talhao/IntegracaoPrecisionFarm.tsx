@@ -84,7 +84,8 @@ function SecaoPF({ talhao, onLimiteAdotado }: { talhao: Talhao; onLimiteAdotado?
     if (!r.ok) { setMsg({ txt: r.erro, erro: true }); return; }
     setVinculo(r.vinculo);
     setPfId(r.vinculo.pfLocalId ?? '');
-    setMsg({ txt: acao === 'criar' ? 'Identificadores gerados. Envie-os à PrecisionFarm e confirme quando eles cadastrarem.' : 'Vínculo atualizado.', erro: false });
+    setMsg({ txt: acao === 'criar' ? 'Identificadores gerados. Envie-os à PrecisionFarm e confirme quando eles cadastrarem.' : `Vínculo atualizado.${r.prescricoes ? ` ${r.prescricoes}` : ''}`, erro: false });
+    if (acao === 'confirmar') void recarregar();
   }
 
   async function publicar(chave: string, fn: () => ReturnType<typeof publicarZonasPF>) {
@@ -225,9 +226,12 @@ function SecaoPF({ talhao, onLimiteAdotado }: { talhao: Talhao; onLimiteAdotado?
               {publicados.map(p => (
                 <div key={p.resourceId} className="rounded px-2 py-1 text-[10px]" style={{ background: '#061525', border: '1px solid #0f2240' }}>
                   <div className="flex items-center gap-2">
-                    <span className="font-bold" style={{ color: '#e2e8f0' }}>
-                      {p.tipo === 'management_zones' ? 'Zonas de manejo' : `Colheita ${p.season ?? ''} · ${ROTULO_PERIODO[p.seasonPeriod ?? ''] ?? p.seasonPeriod ?? ''}`}
+                    <span className="font-bold truncate" style={{ color: '#e2e8f0' }} title={p.nome ?? undefined}>
+                      {p.tipo === 'management_zones' ? 'Zonas de manejo'
+                        : p.tipo === 'prescription' ? `Prescrição · ${p.nome ?? ''}`
+                          : `Colheita ${p.season ?? ''} · ${ROTULO_PERIODO[p.seasonPeriod ?? ''] ?? p.seasonPeriod ?? ''}`}
                     </span>
+                    {p.operacao === 'archive' && <span className="text-[9px]" style={{ color: '#94a3b8' }}>arquivada</span>}
                     <span className="ml-auto" style={{ color: '#7dd3fc' }}>rev. {p.revisao}</span>
                   </div>
                   <div style={{ color: '#64748b' }}>

@@ -13,6 +13,9 @@
 //   • Publicar zoneamento / colheita → POST /publicar com a escolha de
 //     escolhaPublicacao (zoneamento padrão; colheitas oficiais) — o conteúdo é
 //     lido NA NUVEM pela rota; o que vai daqui é a conferência de sincronização.
+//   • Publicar prescrições → POST /prescricoes { talhaoId } (extensão 0.3):
+//     reenvia as prescrições com estrela (pendentes publicam, desmarcadas
+//     arquivam, iguais não criam revisão). A confirmação também publica.
 //   • Comparar limites → GET /limite e compararLimites contra o limite LOCAL;
 //     só mostra a diferença — a adoção continua talhão a talhão.
 //   • Importar manifesto da PF → ManifestoPrecisionFarm (cria pendentes).
@@ -24,7 +27,7 @@ import { getClientes, getFazendas, getTalhoes, type Talhao } from '@/lib/store';
 import { cloudAindaNaoHidratou } from '@/lib/cloud';
 import { fmtDec } from '@/lib/formato';
 import {
-  acaoVinculoPF, limitePF, loteGeralPF, publicarColheitaPF, publicarZonasPF, type Resp, type VinculoLote,
+  acaoVinculoPF, limitePF, loteGeralPF, publicarColheitaPF, publicarZonasPF, sincronizarPrescricoesPF, type Resp, type VinculoLote,
 } from '@/lib/precisionfarm/cliente';
 import {
   ROTULO_EPOCA, ROTULO_STATUS, colheitaSemEpoca, colheitasParaPublicar, geoVersaoDoTalhao, zoneamentoParaPublicar,
@@ -36,9 +39,9 @@ import {
 } from '@/lib/precisionfarm/lote';
 import ManifestoPrecisionFarm from './ManifestoPrecisionFarm';
 
-type Acao = 'confirmar' | 'suspender' | 'zonas' | 'colheita' | 'limite';
+type Acao = 'confirmar' | 'suspender' | 'zonas' | 'colheita' | 'prescricoes' | 'limite';
 const NOME_ACAO: Record<Acao, string> = {
-  confirmar: 'Confirmar', suspender: 'Suspender', zonas: 'Publicar zoneamento', colheita: 'Publicar colheita', limite: 'Comparar limites',
+  confirmar: 'Confirmar', suspender: 'Suspender', zonas: 'Publicar zoneamento', colheita: 'Publicar colheita', prescricoes: 'Publicar prescrições', limite: 'Comparar limites',
 };
 const COR_DESFECHO = { ok: '#86efac', pulado: '#fbbf24', erro: '#fca5a5' } as const;
 
@@ -81,9 +84,12 @@ export default function PrecisionFarmLote() {
   const [resumo, setResumo] = useState<string | null>(null);
   const [manifesto, setManifesto] = useState(false);
 
+  // Migração 0.3 pendente no banco: a coluna de prescrições fica "—" com o aviso.
+  const [migracao03, setMigracao03] = useState<string | null>(null);
   const aplicar = useCallback((r: Awaited<ReturnType<typeof loteGeralPF>>) => {
     if (!r.ok) { setCarga({ erro: r.erro }); return; }
     setVinculos(r.vinculos);
+    setMigracao03(r.migracao03 ?? null);
     setCarga('ok');
   }, []);
   const carregar = useCallback(async () => aplicar(await loteGeralPF()), [aplicar]);
@@ -140,7 +146,8 @@ export default function PrecisionFarmLote() {
     if (l.v.status === 'confirmado') return pulado('Já confirmado.');
     if (!l.v.pfLocalId) return pulado('Sem o ID do talhão na PrecisionFarm — informe na seção do talhão (ou pelo manifesto).');
     const r = await acaoVinculoPF(l.v.talhaoId, 'confirmar');
-    return r.ok ? ok('Confirmado.') : daFalha(r);
+    // A rota publica junto as prescrições com estrela que esperavam o vínculo (Q5).
+    return r.ok ? ok(`Confirmado.${r.prescricoes ? ` ${r.prescricoes}` : ''}`) : daFalha(r);
   }
 
   async function suspender(l: Linha): Promise<ResultadoLote> {
@@ -182,6 +189,18 @@ export default function PrecisionFarmLote() {
     return juntarResultados(rs);
   }
 
+  /** Reenvia as prescrições com estrela do talhão (pendentes publicam;
+   *  desmarcadas arquivam; iguais não criam revisão). O conteúdo é lido na
+   *  NUVEM pelo servidor — nada daqui vai junto. */
+  async function publicarPrescricoes(l: Linha): Promise<ResultadoLote> {
+    if (l.v.status !== 'confirmado') return pulado(`Vínculo ${ROTULO_STATUS[l.v.status].txt.toLowerCase()} — as prescrições com estrela publicam sozinhas na confirmação.`);
+    if (l.v.prescricoes && l.v.prescricoes.marcadas === 0) return pulado('Nenhuma prescrição com estrela.');
+    const r = await sincronizarPrescricoesPF(l.v.talhaoId);
+    if (!r.ok) return daFalha(r);
+    const pend = r.situacoes.filter(s => s.situacao === 'pendente').length;
+    return pend ? pulado(r.resumo) : ok(r.resumo);
+  }
+
   async function compararLimite(l: Linha): Promise<ResultadoLote> {
     if (l.v.status !== 'confirmado') return pulado('Só com vínculo confirmado.');
     if (!l.local) return pulado('Talhão não está neste aparelho.');
@@ -198,7 +217,7 @@ export default function PrecisionFarmLote() {
   }
 
   const PASSO: Record<Acao, (l: Linha) => Promise<ResultadoLote>> = {
-    confirmar, suspender, zonas: publicarZonas, colheita: publicarColheita, limite: compararLimite,
+    confirmar, suspender, zonas: publicarZonas, colheita: publicarColheita, prescricoes: publicarPrescricoes, limite: compararLimite,
   };
 
   async function rodar(acao: Acao) {
@@ -270,6 +289,11 @@ export default function PrecisionFarmLote() {
         <button onClick={() => rodar('colheita')} disabled={!podeAgir} className="px-2 py-1 rounded font-bold flex items-center gap-1" style={btn('var(--invicta-blue-mid)', podeAgir)}>
           <Send size={11} /> Publicar colheita
         </button>
+        <button onClick={() => rodar('prescricoes')} disabled={!podeAgir}
+          title="Reenvia as prescrições marcadas com a estrela “Enviar à PrecisionFarm” (as pendentes publicam; as desmarcadas arquivam)"
+          className="px-2 py-1 rounded font-bold flex items-center gap-1" style={btn('var(--invicta-blue-mid)', podeAgir)}>
+          <Send size={11} /> Publicar prescrições
+        </button>
         <button onClick={() => rodar('limite')} disabled={!podeAgir} className="px-2 py-1 rounded font-bold flex items-center gap-1" style={btn('#1e3a5f', podeAgir)}>
           <GitCompare size={11} /> Comparar limites
         </button>
@@ -289,6 +313,10 @@ export default function PrecisionFarmLote() {
         <div className="px-4 py-1.5 text-[10px]" style={{ background: '#422006', color: '#fbbf24' }}>
           A nuvem ainda está carregando: zoneamentos e colheitas deste aparelho podem estar incompletos — talhões podem sair como “pulados”.
         </div>
+      )}
+
+      {migracao03 && (
+        <div className="px-4 py-1.5 text-[10px]" style={{ background: '#422006', color: '#fbbf24' }}>{migracao03}</div>
       )}
 
       {manifesto && carga === 'ok' && (
@@ -311,6 +339,7 @@ export default function PrecisionFarmLote() {
                 <th className="px-2 py-1.5 text-left font-semibold">Vínculo</th>
                 <th className="px-2 py-1.5 text-left font-semibold">Zonas</th>
                 <th className="px-2 py-1.5 text-left font-semibold">Colheita</th>
+                <th className="px-2 py-1.5 text-left font-semibold" title="Prescrições com estrela “Enviar à PrecisionFarm”: publicadas / marcadas">Prescr.</th>
                 <th className="px-2 py-1.5 text-right font-semibold">Linhas</th>
                 <th className="px-2 py-1.5 text-right font-semibold">Dif. limite</th>
                 <th className="px-2 py-1.5 text-left font-semibold">Resultado</th>
@@ -344,6 +373,10 @@ export default function PrecisionFarmLote() {
                       {colheitas.length
                         ? colheitas.map(c => `${safraCurta(c.season)} ${PERIODO_CURTO[c.seasonPeriod ?? ''] ?? c.seasonPeriod ?? ''} r${c.revisao}`).join(' · ')
                         : <span style={{ color: '#64748b' }}>—</span>}
+                    </td>
+                    <td className="px-2 py-1" title={v.prescricoes ? `${v.prescricoes.publicadas} publicada(s), ${v.prescricoes.pendentes} pendente(s) de ${v.prescricoes.marcadas} com estrela` : migracao03 ?? undefined}>
+                      {!v.prescricoes || !v.prescricoes.marcadas ? <span style={{ color: '#64748b' }}>—</span>
+                        : <span style={{ color: v.prescricoes.pendentes ? '#fbbf24' : '#86efac' }}>{v.prescricoes.publicadas}/{v.prescricoes.marcadas}</span>}
                     </td>
                     <td className="px-2 py-1 text-right">{v.linhas || <span style={{ color: '#64748b' }}>—</span>}</td>
                     <td className="px-2 py-1 text-right" title={d ? `PrecisionFarm rev. ${d.revisao}` : 'Use "Comparar limites"'}>

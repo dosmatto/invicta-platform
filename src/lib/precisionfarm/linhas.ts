@@ -16,8 +16,8 @@
 
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import {
-  MAX_FEICOES, MAX_GEOJSON_BYTES, MAX_VERTICES, SCHEMA_ENVELOPE,
-  canonico, checksumEnvelope, validarContraSchema,
+  CONTRACT_VERSION_03, MAX_FEICOES, MAX_GEOJSON_BYTES, MAX_VERTICES, SCHEMA_ENVELOPE, SCHEMA_ENVELOPE_03,
+  canonico, checksumEnvelope, erroTipoSo03, schemaDaVersao, validarContraSchema,
 } from './contrato.ts';
 
 // ── Constantes ───────────────────────────────────────────────────────────────
@@ -26,8 +26,10 @@ import {
 export const MAX_NOTIFICACAO_BYTES = 256 * 1024;
 /** Tolerância do X-PF-Timestamp (contrato §3: 300 s). */
 export const TOLERANCIA_ASSINATURA_S = 300;
-/** Tipos que a Invicta RECEBE nesta fase. Limite, zonas etc. → 422. */
-export const TIPOS_RECEBIDOS = ['guidance'] as const;
+/** Tipos que a Invicta RECEBE. Limite, zonas etc. → 422. `topography` só em
+ *  envelopes 0.3.0 (extensão; ledger pf-contrato-03, Q7). */
+export const TIPOS_RECEBIDOS = ['guidance', 'topography'] as const;
+export type TipoRecebido = typeof TIPOS_RECEBIDOS[number];
 /** Tipos de feição de uma camada de linhas: linha guia e bordadura. */
 export const KINDS_LINHA = ['guidance', 'headland'] as const;
 export type KindLinha = typeof KINDS_LINHA[number];
@@ -149,6 +151,10 @@ export const SCHEMA_EVENTO = {
   properties: { ...PROPS_SEM_PAYLOAD, checksum: { type: 'string' } },
   additionalProperties: false,
 } as const;
+/** O mesmo evento na extensão 0.3.0 (contract_version e tipos de lá). */
+const { payload: _payload03, ...PROPS_SEM_PAYLOAD_03 } = SCHEMA_ENVELOPE_03.properties;
+void _payload03;
+export const SCHEMA_EVENTO_03 = { ...SCHEMA_EVENTO, properties: { ...PROPS_SEM_PAYLOAD_03, checksum: { type: 'string' } } } as const;
 
 export interface EventoRecebido {
   contract_version: string;
@@ -172,7 +178,12 @@ type EsquemaGenerico = Parameters<typeof validarContraSchema>[0];
 /** Erros do aviso contra o contrato (vazio = válido). Exige origem
  *  'precisionfarm' e checksum SHA-256 em hex. */
 export function validarEvento(v: unknown): string[] {
-  const erros = validarContraSchema(SCHEMA_EVENTO as unknown as EsquemaGenerico, v);
+  // Tipo 0.3 (topografia) num aviso 0.2.0: recusa explícita — as linhas 0.2.0
+  // continuam passando normalmente.
+  const so03 = erroTipoSo03(v);
+  if (so03) return [so03];
+  const v03 = !!v && typeof v === 'object' && (v as { contract_version?: unknown }).contract_version === CONTRACT_VERSION_03;
+  const erros = validarContraSchema((v03 ? SCHEMA_EVENTO_03 : SCHEMA_EVENTO) as unknown as EsquemaGenerico, v);
   if (erros.length) return erros;
   const e = v as EventoRecebido;
   if (e.source_system !== 'precisionfarm') erros.push('$.source_system: esperado "precisionfarm"');
@@ -240,8 +251,11 @@ export type ConferenciaRevisao = { ok: true; envelope: EnvelopeRecebido } | { ok
  * (o MESMO cálculo da fase 1, sem asset.url/expires_at) igual ao do aviso.
  */
 export function conferirRevisao(bruto: unknown, ev: EventoRecebido): ConferenciaRevisao {
-  const erros = validarContraSchema(SCHEMA_ENVELOPE as unknown as EsquemaGenerico, bruto);
-  if (erros.length) return { ok: false, erro: `Revisão fora do contrato 0.2.0: ${erros.slice(0, 5).join('; ')}` };
+  const so03 = erroTipoSo03(bruto);
+  if (so03) return { ok: false, erro: `Revisão fora do contrato: ${so03}` };
+  const erros = validarContraSchema(schemaDaVersao(bruto), bruto);
+  const versao = (bruto as { contract_version?: unknown } | null)?.contract_version === CONTRACT_VERSION_03 ? CONTRACT_VERSION_03 : '0.2.0';
+  if (erros.length) return { ok: false, erro: `Revisão fora do contrato ${versao}: ${erros.slice(0, 5).join('; ')}` };
   const e = bruto as EnvelopeRecebido;
   if (e.source_system !== 'precisionfarm') return { ok: false, erro: 'Revisão com source_system diferente de "precisionfarm".' };
   const campos = ['event_id', 'shared_producer_id', 'shared_farm_id', 'shared_field_id', 'resource_id'] as const;
@@ -272,6 +286,9 @@ export interface MetaLinhas {
   nSemKind: number;
   /** Nota para o histórico da revisão (null = nada a registrar). */
   observacao: string | null;
+  /** Metadados próprios do tipo (topografia: intervalos, cotas mín/máx). Só
+   *  gravado com a migração 0.3 aplicada (coluna `meta`). */
+  extra?: Record<string, unknown> | null;
 }
 
 export type ResultadoLinhas = { ok: true; meta: MetaLinhas } | { ok: false; erro: string };
@@ -390,6 +407,112 @@ export function validarPayloadLinhas(payload: unknown): ResultadoLinhas {
       bytes,
     },
   };
+}
+
+// ── Topografia (extensão 0.3.0, PF → Invicta) ────────────────────────────────
+
+/** Cores do contrato (FORMATO_0_3.md): mestras (cota múltipla do intervalo de
+ *  destaque) e as demais. A tela desenha com a cor que VEM na feição. */
+export const COR_CURVA_MESTRA = '#e5a33b';
+export const COR_CURVA_NORMAL = '#466e9b';
+const RE_COR = /^#[0-9a-f]{6}$/i;
+
+/** `a` é múltiplo de `b` (tolerância de ponto flutuante: 804 / 4 com ruído). */
+function multiplo(a: number, b: number): boolean {
+  const q = a / b;
+  return Math.abs(q - Math.round(q)) < 1e-6;
+}
+
+/**
+ * Payload de uma revisão 'topography' (upsert). Recusa — sem reparar — o que
+ * não for o do contrato:
+ *   name texto; status "available"; value_unit "m"; interval_m > 0;
+ *   index_interval_m múltiplo de interval_m; smoothed booleano;
+ *   geometry FeatureCollection de LineString/MultiLineString em WGS84
+ *   (Z opcional — a cota é atributo); cada feição com elevation_m finito e
+ *   múltiplo de interval_m, contour_interval_m = interval_m, is_index
+ *   coerente (true ⇔ cota múltipla de index_interval_m) e color "#rrggbb".
+ * Tetos: 100 mil feições, 1 milhão de vértices, 10 MB de GeoJSON.
+ */
+export function validarPayloadTopografia(payload: unknown): ResultadoLinhas {
+  if (!ehObjeto(payload)) return { ok: false, erro: 'payload ausente ou não é um objeto.' };
+  const p = payload;
+  if (!textoOuNulo(p.name)) return { ok: false, erro: 'payload.name deve ser texto.' };
+  if (p.status !== 'available') return { ok: false, erro: `payload.status "${String(p.status)}" — a topografia publicada vem como "available".` };
+  if (p.value_unit !== 'm') return { ok: false, erro: `payload.value_unit "${String(p.value_unit)}" — a cota das curvas é em metros ("m").` };
+  const passo = p.interval_m;
+  if (!(typeof passo === 'number' && Number.isFinite(passo) && passo > 0)) return { ok: false, erro: 'payload.interval_m deve ser um número maior que zero (metros).' };
+  const mestra = p.index_interval_m;
+  if (!(typeof mestra === 'number' && Number.isFinite(mestra) && mestra > 0 && multiplo(mestra, passo))) {
+    return { ok: false, erro: `payload.index_interval_m deve ser múltiplo de interval_m (${passo} m).` };
+  }
+  if (typeof p.smoothed !== 'boolean') return { ok: false, erro: 'payload.smoothed deve ser verdadeiro ou falso.' };
+
+  const g = p.geometry;
+  if (!ehObjeto(g) || g.type !== 'FeatureCollection' || !Array.isArray(g.features)) {
+    return { ok: false, erro: 'payload.geometry deve ser uma FeatureCollection.' };
+  }
+  const crs = ehObjeto(g.crs) && ehObjeto(g.crs.properties) ? String(g.crs.properties.name ?? '') : '';
+  if (g.crs != null && !CRS_WGS84.has(crs)) return { ok: false, erro: `Sistema de coordenadas "${crs || 'desconhecido'}" — o contrato exige WGS84 [longitude, latitude].` };
+  const feats = g.features as unknown[];
+  if (!feats.length) return { ok: false, erro: 'A topografia não tem nenhuma curva.' };
+  if (feats.length > MAX_FEICOES) return { ok: false, erro: `A camada tem ${feats.length} feições; o contrato aceita até ${MAX_FEICOES}.` };
+
+  let nVertices = 0;
+  let nMestras = 0;
+  let cotaMin = Infinity, cotaMax = -Infinity;
+  for (let i = 0; i < feats.length; i++) {
+    const f = feats[i];
+    const n = i + 1;
+    if (!ehObjeto(f) || f.type !== 'Feature') return { ok: false, erro: `A feição ${n} não é uma Feature GeoJSON.` };
+    const pr = ehObjeto(f.properties) ? f.properties : null;
+    if (!pr) return { ok: false, erro: `A curva ${n} não tem properties (elevation_m, is_index, color).` };
+    const z = pr.elevation_m;
+    if (!(typeof z === 'number' && Number.isFinite(z))) return { ok: false, erro: `A curva ${n} não tem elevation_m numérico.` };
+    if (!multiplo(z, passo)) return { ok: false, erro: `A curva ${n} tem cota ${z} m, que não é múltipla do intervalo de ${passo} m.` };
+    if (pr.contour_interval_m !== passo) return { ok: false, erro: `A curva ${n} tem contour_interval_m ${String(pr.contour_interval_m)}; o payload diz interval_m ${passo}.` };
+    const deveSerMestra = multiplo(z, mestra);
+    if (typeof pr.is_index !== 'boolean' || pr.is_index !== deveSerMestra) {
+      return { ok: false, erro: `A curva ${n} (cota ${z} m) tem is_index ${String(pr.is_index)}; deveria ser ${deveSerMestra} (destaque a cada ${mestra} m).` };
+    }
+    if (typeof pr.color !== 'string' || !RE_COR.test(pr.color)) return { ok: false, erro: `A curva ${n} não tem color no formato "#rrggbb".` };
+    if (deveSerMestra) nMestras++;
+    cotaMin = Math.min(cotaMin, z); cotaMax = Math.max(cotaMax, z);
+    const geom = f.geometry;
+    if (!ehObjeto(geom)) return { ok: false, erro: `A curva ${n} não tem geometria.` };
+    if (geom.type === 'LineString') {
+      const v = verticesDaLinha(geom.coordinates);
+      if (v < 0) return { ok: false, erro: `A curva ${n} tem LineString inválida (mínimo 2 posições [longitude, latitude] em WGS84).` };
+      nVertices += v;
+    } else if (geom.type === 'MultiLineString') {
+      const ls = geom.coordinates;
+      if (!Array.isArray(ls) || !ls.length) return { ok: false, erro: `A curva ${n} tem MultiLineString vazia.` };
+      for (const l of ls) {
+        const v = verticesDaLinha(l);
+        if (v < 0) return { ok: false, erro: `A curva ${n} tem MultiLineString com parte inválida (mínimo 2 posições [longitude, latitude] em WGS84).` };
+        nVertices += v;
+      }
+    } else {
+      return { ok: false, erro: `A curva ${n} é ${String(geom.type)}; topografia só aceita LineString ou MultiLineString.` };
+    }
+    if (nVertices > MAX_VERTICES) return { ok: false, erro: `A camada passa de ${MAX_VERTICES.toLocaleString('pt-BR')} vértices (limite do contrato).` };
+  }
+  const bytes = bytesUtf8(JSON.stringify(g)).length;
+  if (bytes > MAX_GEOJSON_BYTES) return { ok: false, erro: `A geometria tem ${(bytes / 1024 / 1024).toFixed(1)} MB; o contrato aceita até 10 MB.` };
+  return {
+    ok: true,
+    meta: {
+      nome: typeof p.name === 'string' && p.name.trim() ? p.name.trim() : 'altimetria',
+      integrationName: null, ciclo: null, categoria: null, espacamentoM: null,
+      nFeicoes: feats.length, nVertices, bytes, nSemKind: 0, observacao: null,
+      extra: { interval_m: passo, index_interval_m: mestra, smoothed: p.smoothed, value_unit: 'm', cota_min: cotaMin, cota_max: cotaMax, n_mestras: nMestras },
+    },
+  };
+}
+
+/** Validador do payload de upsert pelo tipo recebido. */
+export function validarPayloadRecebido(tipo: string, payload: unknown): ResultadoLinhas {
+  return tipo === 'topography' ? validarPayloadTopografia(payload) : validarPayloadLinhas(payload);
 }
 
 // ── Ordem das revisões e arquivamento ────────────────────────────────────────

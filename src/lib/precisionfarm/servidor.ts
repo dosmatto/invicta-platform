@@ -11,7 +11,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { gunzipSync } from 'node:zlib';
 import { chaveDoHeader, hashChave } from '../laudo/servidor.ts';
 import { padraoVigente } from '../meap/versoes.ts';
-import type { Envelope, Evento, GradeColheita, StatusVinculo, TipoRecurso } from './contrato.ts';
+import { ehErroDeMigracao, type Envelope, type Evento, type GradeColheita, type StatusVinculo, type TipoRecurso } from './contrato.ts';
 import { ehPapelGestor, ehPapelSemEscopo, podeVerTalhao, type RegistroAcesso } from './acessoTalhao.ts';
 import type { FazendaEscopo } from '../iam/escopoFazendas.ts';
 
@@ -339,13 +339,18 @@ export async function recursosDosVinculos(sb: SupabaseClient, vinculoIds: string
   return todos;
 }
 
-/** Camadas de LINHAS recebidas da PF por talhão (só o que a contagem precisa). */
+/** Camadas de LINHAS recebidas da PF por talhão (só o que a contagem precisa).
+ *  Com a migração 0.3, a mesma tabela guarda a topografia — que fica de fora
+ *  (resource_type = 'guidance'); sem ela, toda camada é linha. */
 export async function camadasLinhasDosTalhoes(sb: SupabaseClient, talhaoIds: string[]): Promise<{ talhao_id: string; revisao_geometria: number | null; arquivada: boolean }[]> {
-  const todas: { talhao_id: string; revisao_geometria: number | null; arquivada: boolean }[] = [];
+  type Linha = { talhao_id: string; revisao_geometria: number | null; arquivada: boolean };
+  const todas: Linha[] = [];
   for (const ids of fatias(talhaoIds)) {
-    const { data, error } = await sb.from('pf_linhas_camadas').select('talhao_id, revisao_geometria, arquivada').in('talhao_id', ids);
+    const base = () => sb.from('pf_linhas_camadas').select('talhao_id, revisao_geometria, arquivada').in('talhao_id', ids);
+    let { data, error } = await base().eq('resource_type', 'guidance');
+    if (error && ehErroDeMigracao(error)) ({ data, error } = await base());
     if (error) throw new Error(`Falha ao ler as camadas de linhas: ${error.message}`);
-    todas.push(...((data ?? []) as { talhao_id: string; revisao_geometria: number | null; arquivada: boolean }[]));
+    todas.push(...((data ?? []) as Linha[]));
   }
   return todas;
 }

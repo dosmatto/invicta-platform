@@ -38,8 +38,11 @@ import { avisosDasCamadas, camadasDoTalhao, criarRepoLinhas, geometriaDaRevisao,
 import { buscarLimitePF } from './limite.ts';
 import { mapearComLimite } from './lote.ts';
 import { conferirCriacao, lerItensCriacao } from './manifestoPF.ts';
+import { resumoSincronizacao, sincronizarPrescricoes, type SituacaoLinhagem } from './publicacaoPrescricoes.ts';
+import { criarRepoPrescricoes, resumoEstrelasDosTalhoes } from './repoPrescricoes.ts';
+import { TIPOS_RECEBIDOS, type TipoRecebido } from './linhas.ts';
 import {
-  CHAVE_LOCAL_ZONAS, MAX_ENVELOPE_BYTES_INVICTA, PARCERIA_PADRAO, RE_UUID,
+  CHAVE_LOCAL_ZONAS, MAX_ENVELOPE_BYTES_INVICTA, MSG_MIGRACAO_03, MigracaoPendente, PARCERIA_PADRAO, RE_UUID,
   bytesDoEnvelope, capabilities, chaveLocalColheita, checksumEnvelope, corpoNaoImplementado, dataContrato, eventoDoEnvelope, idsParaNovoVinculo,
   impressaoConteudo, itemInventario, lerPaginacao, mensagemTamanho, montarEnvelope, montarPayloadColheita,
   montarPayloadZonas, paginar, periodoDoContrato, seasonDoContrato, validarEnvelope, vigentes, vinculosNoEscopo,
@@ -222,6 +225,7 @@ export function tratarEstado(req: Request, talhaoId: string): Promise<Response> 
           revisao: r.revision,
           nome: r.name,
           season: r.season, seasonPeriod: r.season_period,
+          operacao: r.evento?.operation ?? 'upsert',
           checksum: r.checksum,
           boundaryRevision: r.boundary_revision,
           publicadoEm: r.publicado_em,
@@ -290,7 +294,13 @@ export function tratarVinculo(req: Request): Promise<Response> {
       const idPf = pfLocalId || atual.pf_local_id || '';
       if (!idPf) return json({ ok: false, erro: 'Informe o ID do talhão na PrecisionFarm antes de confirmar.' }, 422);
       const v = await atualizarVinculo(sb, atual.id, { pf_local_id: idPf, status: 'confirmado', confirmado_por: u.email, confirmado_em: agora });
-      return json({ ok: true, vinculo: vinculoParaTela(v) }, 200);
+      // Q5 (pf-contrato-03): as prescrições com estrela esperando o vínculo
+      // publicam AGORA — vale também para a confirmação em lote, que chama
+      // esta mesma rota talhão a talhão. Falha aqui não desfaz a confirmação:
+      // a situação fica registrada na estrela e a ação "Publicar prescrições"
+      // reenvia.
+      const prescricoes = await sincronizarComResumo(sb, talhaoId, u.email);
+      return json({ ok: true, vinculo: vinculoParaTela(v), prescricoes }, 200);
     }
     // suspender
     const v = await atualizarVinculo(sb, atual.id, { status: 'suspenso', suspenso_por: u.email, suspenso_em: agora });
@@ -421,10 +431,12 @@ export function tratarLote(req: Request): Promise<Response> {
   return comUsuario(req, async sb => {
     const vinculos = await vinculosDaParceria(sb, PARCERIA_PADRAO);
     const talhaoIds = vinculos.map(v => v.talhao_id);
-    const [talhoes, recursos, camadas] = await Promise.all([
+    const [talhoes, recursos, camadas, estrelas] = await Promise.all([
       carregarTalhoes(sb, talhaoIds),
       recursosDosVinculos(sb, vinculos.map(v => v.id)),
       camadasLinhasDosTalhoes(sb, talhaoIds),
+      // null = migração 0.3 pendente (a coluna de prescrições fica "—").
+      resumoEstrelasDosTalhoes(sb, talhaoIds),
     ]);
     // Revisão vigente de cada recurso: uma consulta cada (ver vigentesDoVinculo),
     // poucas de cada vez.
@@ -453,8 +465,10 @@ export function tratarLote(req: Request): Promise<Response> {
           naNuvem: t ? { nome: t.nome, geoVersao: t.geoVersao } : null,
           publicados: (pubPorVinculo.get(v.id) ?? []).sort((a, b) => String(b.publicadoEm).localeCompare(String(a.publicadoEm))),
           linhas: linhasPorTalhao.get(v.talhao_id) ?? 0,
+          prescricoes: estrelas ? (estrelas.get(v.talhao_id) ?? { marcadas: 0, publicadas: 0, pendentes: 0 }) : null,
         };
       }),
+      migracao03: estrelas ? null : MSG_MIGRACAO_03,
     }, 200);
   });
 }
@@ -617,12 +631,20 @@ async function comLeitor(req: Request, talhaoId: string, fn: (sb: Sb, u: Leitor)
   }
 }
 
-/** GET /api/precisionfarm/linhas/{talhaoId} — camadas recebidas, situação e
- *  histórico (sem geometria). */
+/** `?tipo=topography` (aba Altimetria) ou nada/guidance (aba Linhas). */
+function tipoRecebidoDe(v: unknown): TipoRecebido | null {
+  if (v == null || v === '') return 'guidance';
+  return (TIPOS_RECEBIDOS as readonly unknown[]).includes(v) ? v as TipoRecebido : null;
+}
+
+/** GET /api/precisionfarm/linhas/{talhaoId}[?tipo=topography] — camadas
+ *  recebidas (linhas ou curvas de nível), situação e histórico (sem geometria). */
 export function tratarLinhasTalhao(req: Request, talhaoId: string): Promise<Response> {
   return comLeitor(req, talhaoId, async (sb, u) => {
+    const tipo = tipoRecebidoDe(new URL(req.url).searchParams.get('tipo'));
+    if (!tipo) return json({ ok: false, erro: `tipo deve ser ${TIPOS_RECEBIDOS.join(' ou ')}.` }, 400);
     const conf = configRecebimento();
-    const camadas = await camadasDoTalhao(sb, talhaoId);
+    const camadas = await camadasDoTalhao(sb, talhaoId, tipo);
     const ids = camadas.map(c => c.resource_id);
     const [revs, pend] = await Promise.all([revisoesDasCamadas(sb, ids), avisosDasCamadas(sb, ids)]);
     const v = u.gestor ? await vinculoDoTalhao(sb, talhaoId, PARCERIA_PADRAO) : null;
@@ -654,6 +676,8 @@ export function tratarLinhasTalhao(req: Request, talhaoId: string): Promise<Resp
           revisaoVigente: c.revisao_vigente,
           revisaoGeometria: c.revisao_geometria,
           boundaryRevision: c.boundary_revision,
+          // Topografia: intervalo, destaque e cotas mín/máx da vigente.
+          meta: c.meta ?? null,
           arquivada: c.arquivada,
           arquivadaEm: c.arquivada_em,
           ultimaSincronizacao: c.ultima_sincronizacao_em,
@@ -728,15 +752,18 @@ export function tratarGeometriaLinhas(req: Request, talhaoId: string): Promise<R
  *  de linhas (owner/admin). */
 export function tratarCargaLinhas(req: Request): Promise<Response> {
   return comUsuario(req, async sb => {
-    const corpo = await req.json().catch(() => null) as { talhaoId?: unknown } | null;
+    const corpo = await req.json().catch(() => null) as { talhaoId?: unknown; tipo?: unknown } | null;
     const talhaoId = typeof corpo?.talhaoId === 'string' ? corpo.talhaoId.trim() : '';
     if (!talhaoId) return json({ ok: false, erro: 'Informe talhaoId.' }, 400);
+    // Sem tipo: linhas (o botão da aba Linhas). "topography": o "Buscar curvas" da Altimetria.
+    const tipo = tipoRecebidoDe(corpo?.tipo);
+    if (!tipo) return json({ ok: false, erro: `tipo deve ser ${TIPOS_RECEBIDOS.join(' ou ')}.` }, 400);
     const conf = configRecebimento();
     if (!conf.ok) return json({ ok: false, erro: conf.erro }, 503);
     const v = await vinculoDoTalhao(sb, talhaoId, PARCERIA_PADRAO);
     if (!v || v.status !== 'confirmado') return json({ ok: false, erro: 'Este talhão não tem vínculo CONFIRMADO com a PrecisionFarm.' }, 409);
     try {
-      const r = await cargaInicial(ambienteRecebimento(sb, conf.cfg), v.shared_field_id, ESCOPO_INVICTA);
+      const r = await cargaInicial(ambienteRecebimento(sb, conf.cfg), v.shared_field_id, ESCOPO_INVICTA, [tipo]);
       if (r.novos || r.reabertos) processarDepois(sb, conf.cfg);
       const partes = [`${r.novos} camada(s) na fila`];
       if (r.repetidos) partes.push(`${r.repetidos} já recebida(s)`);
@@ -799,4 +826,86 @@ export function tratarReprocessarLinhas(req: Request): Promise<Response> {
     if (n) processarDepois(sb, conf.cfg);
     return json({ ok: true, reabertos: n, mensagem: n ? `${n} revisão(ões) de volta à fila.` : 'Nada recusado para tentar de novo.' }, 200);
   });
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Extensão 0.3.0 — PRESCRIÇÕES com estrela "Enviar à PrecisionFarm"
+// ═════════════════════════════════════════════════════════════════════════════
+
+const opcoesSinc = (gravar: boolean, por: string) => ({ gravar, por, novoUuid: randomUUID });
+
+/** Sincroniza as prescrições do talhão e devolve um texto curto. Nunca lança
+ *  (a confirmação do vínculo não pode cair por causa disto). */
+async function sincronizarComResumo(sb: Sb, talhaoId: string, por: string): Promise<string> {
+  try {
+    const ss = await sincronizarPrescricoes(criarRepoPrescricoes(sb), talhaoId, opcoesSinc(true, por));
+    return ss.length ? `Prescrições: ${resumoSincronizacao(ss).texto}` : '';
+  } catch (e) {
+    if (e instanceof MigracaoPendente) return '';
+    console.error('[precisionfarm] prescrições na confirmação:', e instanceof Error ? e.message : e);
+    return 'As prescrições com estrela não foram publicadas agora (use "Publicar prescrições").';
+  }
+}
+
+/** Depois que a Lavra grava versões novas (POST /api/v1/programacao): as
+ *  linhagens com estrela publicam a versão nova (Q4). Best-effort, nunca lança. */
+export async function sincronizarPrescricoesAposLavra(talhaoId: string): Promise<void> {
+  if (!servicoConfigurado()) return;
+  await sincronizarComResumo(clienteServico(), talhaoId, 'lavra (programação)');
+}
+
+const respostaSituacoes = (ss: SituacaoLinhagem[]) => json({ ok: true, situacoes: ss, resumo: resumoSincronizacao(ss).texto }, 200);
+
+/** GET /api/precisionfarm/prescricoes/{talhaoId} — situação de cada linhagem
+ *  (estrela, publicada rev N / pendente: motivo / arquivada). Só CALCULA: nada
+ *  é gravado. Owner/admin (a estrela é da integração). */
+export function tratarPrescricoesTalhao(req: Request, talhaoId: string): Promise<Response> {
+  return comUsuario(req, async (sb, u) => {
+    try {
+      return respostaSituacoes(await sincronizarPrescricoes(criarRepoPrescricoes(sb), talhaoId, opcoesSinc(false, u.email)));
+    } catch (e) {
+      if (e instanceof MigracaoPendente) return json({ ok: false, erro: e.message, migracao: true }, 503);
+      throw e;
+    }
+  });
+}
+
+/**
+ * POST /api/precisionfarm/prescricoes
+ *   { talhaoId, linhagemId, marcada }  → grava a estrela (owner/admin) e sincroniza;
+ *   { talhaoId }                       → só sincroniza (nova versão salva,
+ *                                        exclusão, "Publicar prescrições" do lote).
+ * A sincronização só publica o que tem estrela — por isso o segundo formato
+ * vale para quem tem acesso ao talhão (o produtor que salva uma versão nova de
+ * uma prescrição marcada também a publica, Q4); marcar/desmarcar é da gestão.
+ */
+export async function tratarPrescricoes(req: Request): Promise<Response> {
+  const corpo = await req.json().catch(() => null) as { talhaoId?: unknown; linhagemId?: unknown; marcada?: unknown } | null;
+  const talhaoId = typeof corpo?.talhaoId === 'string' ? corpo.talhaoId.trim() : '';
+  if (!talhaoId) return json({ ok: false, erro: 'Informe talhaoId.' }, 400);
+  const marcar = corpo?.linhagemId !== undefined || corpo?.marcada !== undefined;
+  const linhagemId = typeof corpo?.linhagemId === 'string' ? corpo.linhagemId.trim().slice(0, 200) : '';
+  if (marcar && (!linhagemId || typeof corpo?.marcada !== 'boolean')) {
+    return json({ ok: false, erro: 'Para marcar/desmarcar, informe linhagemId e marcada (true/false).' }, 400);
+  }
+  const executar = async (sb: Sb, email: string) => {
+    const repo = criarRepoPrescricoes(sb);
+    try {
+      if (marcar) {
+        // A linhagem precisa ser deste talhão (na nuvem): nada de estrela solta.
+        const cabs = await repo.cabecalhos(talhaoId);
+        if (!cabs.some(c => (c.origemId || c.id) === linhagemId)) {
+          return json({ ok: false, erro: 'Esta prescrição ainda não chegou à nuvem (ou é de outro talhão). Aguarde a sincronização e tente de novo.' }, 409);
+        }
+        // A estrela é gravada ANTES de publicar: falha na publicação não a perde (Q5).
+        await repo.gravarEstrela(talhaoId, linhagemId, corpo!.marcada as boolean, email, new Date().toISOString());
+      }
+      return respostaSituacoes(await sincronizarPrescricoes(repo, talhaoId, opcoesSinc(true, email)));
+    } catch (e) {
+      if (e instanceof MigracaoPendente) return json({ ok: false, erro: e.message, migracao: true }, 503);
+      throw e;
+    }
+  };
+  if (marcar) return comUsuario(req, (sb, u) => executar(sb, u.email));
+  return comLeitor(req, talhaoId, (sb, u) => executar(sb, u.email));
 }

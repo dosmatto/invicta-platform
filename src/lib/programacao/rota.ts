@@ -20,7 +20,10 @@ import {
   gravarPrescricoes, servicoConfigurado,
 } from './servidor.ts';
 
-interface Opcoes { gravar: boolean }
+/** `aposGravar`: chamado (sem esperar) quando versões novas foram gravadas —
+ *  a rota da API liga aqui a publicação das prescrições com estrela na
+ *  PrecisionFarm (extensão 0.3, ledger pf-contrato-03 Q4). */
+interface Opcoes { gravar: boolean; aposGravar?: (talhaoId: string) => void }
 
 const json = (corpo: unknown, status: number) =>
   new Response(JSON.stringify(corpo, null, 2), {
@@ -34,7 +37,7 @@ const MSG_LIBERACAO = {
   'outro-talhao': 'O zoneamento liberado não foi encontrado para este talhão. Peça ao agrônomo da AP para liberar a versão de novo.',
 } as const;
 
-export async function tratarProgramacao(req: Request, { gravar }: Opcoes): Promise<Response> {
+export async function tratarProgramacao(req: Request, { gravar, aposGravar }: Opcoes): Promise<Response> {
   if (!servicoConfigurado()) {
     return json({ ok: false, erro: 'Serviço de integração não configurado neste ambiente.' }, 503);
   }
@@ -97,5 +100,6 @@ export async function tratarProgramacao(req: Request, { gravar }: Opcoes): Promi
   } catch (e) {
     return json({ ok: false, erro: e instanceof Error ? e.message : 'Falha ao gravar as prescrições.' }, 500);
   }
+  if (plano.gravar.length) aposGravar?.(talhao.id);
   return json({ ok: true, modo: 'gravacao', gravado: plano.gravar.length > 0, ...corpo }, 200);
 }

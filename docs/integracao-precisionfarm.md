@@ -759,3 +759,116 @@ Christian, Ricardo Volter, Adriano) → 10 fazendas a mais no retorno.
 Testes: `npm run teste:precisionfarm` (seções "Manifesto v2"); com
 `PF_ATIVACAO_REAL=<pasta do pacote>` e `PF_CASAMENTO_REF=<casamento-162.json>`
 roda o pacote real.
+
+## 9. Extensão 0.3.0 — prescrição (Invicta → PF) e topografia (PF → Invicta)
+
+Formato da PF: `docs/integracao-precisionfarm/ponte-0.3/FORMATO_0_3.md` e
+`EXEMPLOS_0_3.json` (identidades fictícias). Decisões: ledger pf-contrato-03
+(Q1–Q8). Banco: **`docs/integracao-precisionfarm-0.3.sql`** (o usuário aplica;
+sem ele tudo do 0.2 segue igual e o 0.3 responde "aplique o SQL").
+
+### 9.1 Negociação
+
+`/capabilities` mantém `contract_version: "0.2.0"` (e `resource_types`,
+`notification_resource_types` da visão 0.2, intactos) e acrescenta
+`supported_contract_versions: ["0.2.0", "0.3.0"]` e
+`extensions: { contract_version: "0.3.0", publishes: ["prescription"],
+receives: ["topography"] }`. Só os tipos novos usam envelope `0.3.0`
+(`versaoDoTipo`); zonas e colheita continuam `0.2.0`. O validador escolhe o
+schema pela versão do próprio envelope (`SCHEMA_ENVELOPE_03` = o 0.2 com
+`const 0.3.0` e o `enum` de tipos somado de `prescription`/`topography`) e
+recusa **tipo 0.3 em envelope/aviso 0.2.0** com mensagem explícita
+(`erroTipoSo03`) — as linhas 0.2.0 seguem entrando.
+
+### 9.2 Prescrição publicada — `prescription` (um recurso por LINHAGEM)
+
+Fonte: a aba Prescrições (tipo `Prescricao`), nunca os cenários de
+Recomendações. **Estrela "Enviar à PrecisionFarm"** no cartão da versão mais
+recente (só owner/admin). A estrela mora no servidor
+(`pf_prescricoes_estrela`, por talhão + linhagem = id da V1): vale para a
+versão mais recente da linhagem, sobrevive a versões novas (inclusive as da
+Lavra) e não pode ser forjada pelo registro local.
+
+Gatilhos (`publicacaoPrescricoes.sincronizarPrescricoes`, idempotente — mesma
+impressão de conteúdo não cria revisão):
+- **marcar** → publica (upsert); **desmarcar** → revisão `archive` (snapshot
+  completo da última publicada; inventário `status: "archived"`); a
+  prescrição continua na Invicta;
+- **salvar versão nova** de uma marcada (na tela: depois do envio à nuvem;
+  pela Lavra: `after()` da `/api/v1/programacao`) → nova revisão;
+- **excluir** a linhagem ou a Lavra **retirar** o item → `archive`;
+- **confirmar o vínculo** (talhão ou lote) → publica as pendentes;
+- tela de lote → **"Publicar prescrições"** reenvia (pendentes publicam).
+
+Sem vínculo confirmado a estrela fica salva e a situação diz "pendente:
+<motivo>". O conteúdo é lido **na nuvem** (`app_kv inv_prescricoes`), como
+zonas e colheita. Situações: publicada rev N · pendente: motivo · arquivada ·
+não publicada; a última fica na tabela da estrela (coluna "Prescr." do lote).
+
+Payload (`prescricaoPF.montarPayloadPrescricao`): `name`, `status:
+"available"`, `is_favorite: true`, `product`, `input_type`,
+`operation_category`, `quantity`, `rate_unit`, `geometry` (FeatureCollection
+de Polygon/MultiPolygon, `properties.zone_id` texto + `properties.rate` ≥ 0).
+A dose é a **do arquivo de máquina** (casamento polígono↔zona de
+`casarZonas`, compensação de germinação de `doseArquivo`, arredondamento
+`arredRel`). Dose 0 vai como 0; zona sem dose, dose negativa, polígono sem
+zona ou geometria inválida → não publica, com o motivo. `season` quando o
+Ano da prescrição (ou a safra da Lavra) está no formato do contrato;
+`season_period: "second"` só para a safrinha da Lavra (sem época na
+prescrição, nada é inventado).
+
+Mapeamento (único lugar: `TIPO_PARA_CONTRATO` / `UNIDADE_PARA_CONTRATO`):
+
+| Invicta | input_type | operation_category | quantity | unidades aceitas |
+|---|---|---|---|---|
+| sementes | seed | planting | seed_population | sementes/m → seeds/m, sementes/ha → seeds/ha |
+| fertilizante | fertilizer | fertilizing | application_rate | kg/ha, t/ha |
+| corretivo | lime | liming | application_rate | kg/ha, t/ha |
+| organico | other | fertilizing | application_rate | kg/ha, t/ha, L/ha |
+| personalizado | other | other | application_rate | kg/ha, t/ha, L/ha |
+
+`sementes/m2` e qualquer unidade fora da tabela → recusa ("a Invicta não
+converte unidades sozinha"). Recurso: `pf_recursos` com `chave_local =
+'prescription|<linhagem>'`; revisões em `pf_revisoes` (envelope 0.3.0,
+`event` + `checksum` no inventário, mesmo esquema de zonas/colheita).
+
+Rotas (sessão): `GET /api/precisionfarm/prescricoes/{talhaoId}` (só calcula;
+owner/admin) e `POST /api/precisionfarm/prescricoes` (`{talhaoId, linhagemId,
+marcada}` grava a estrela — owner/admin; `{talhaoId}` só sincroniza — quem
+tem acesso ao talhão, pois só publica o que já tem estrela).
+
+### 9.3 Topografia recebida — `topography`
+
+Mesmo pipeline das linhas (§6): aviso/`/changes`/inventário → fila →
+revisão buscada na PF → conferência (schema 0.3, checksum, vínculo) →
+snapshot imutável → vigente sem regressão → recibo applied/rejected. A
+camada fica em `pf_linhas_camadas`/`pf_linhas_revisoes` com
+`resource_type = 'topography'` e `meta` (intervalo, destaque, cotas mín/máx,
+nº de mestras). Um `resource_id` de linhas nunca vira topografia (409).
+
+Validação (`validarPayloadTopografia`, sem reparo): `status "available"`,
+`value_unit "m"`, `interval_m > 0`, `index_interval_m` múltiplo dele,
+`smoothed` booleano; cada feição LineString/MultiLineString WGS84 (Z
+opcional) com `elevation_m` múltiplo de `interval_m`, `contour_interval_m =
+interval_m`, `is_index` coerente (cota múltipla de `index_interval_m`) e
+`color` `#rrggbb`. Tetos de 100 mil feições, 1 milhão de vértices e 10 MB.
+Sem a migração 0.3: aviso de topografia → **503** (`not_ready`; a PF tenta
+de novo) e nada é gravado como linha.
+
+Tela: aba **Altimetria** → bloco "Curvas PrecisionFarm" (mostrar no mapa,
+transparência, revisão/data, cotas, legenda das duas cores; clique na curva
+mostra a cota; "Buscar curvas" para owner/admin = carga do inventário só de
+topografia). Cor da PF, mestras mais grossas, rótulo `elevation_m`. Também
+empilhável na aba **Camadas** (grupo "Curvas de nível (PrecisionFarm)",
+origem Altimetria; sai no PDF). Só visualização: nunca altera limite nem MDE.
+
+Rotas: as das linhas com `?tipo=topography` (`GET /api/precisionfarm/linhas/{talhaoId}`)
+e `{tipo: "topography"}` no `POST /api/precisionfarm/carga-linhas`.
+
+Testes: `npm run teste:precisionfarm` (seções "0.3 —": exemplos da PF com os
+3 checksums, payloads seed seeds/m e fertilizer kg/ha iguais aos do exemplo,
+dose zero, unidade inválida, 0.2 recusando tipo 0.3, topografia com duas
+cores e as recusas) e `npm run teste:precisionfarm-e2e` (PF simulada servindo
+topografia 0.3 + publicação de prescrições com repositório em memória:
+estrela pendente → confirmação → rev 1 → repetição sem duplicar → versão
+nova → archive → reativação → exclusão; migração ausente).
