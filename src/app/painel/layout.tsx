@@ -5,6 +5,7 @@ import { AppProvider } from '@/context/AppContext';
 import { TopBar } from '@/components/layout/TopBar';
 import { IconSidebar } from '@/components/layout/IconSidebar';
 import { SlidePanel } from '@/components/layout/SlidePanel';
+import { FaixaApresentacao } from '@/components/shared/FaixaApresentacao';
 
 const MapView = dynamic(
   () => import('@/components/map/MapView').then(m => ({ default: m.MapView })),
@@ -15,6 +16,8 @@ export default function PainelLayout({ children }: { children: React.ReactNode }
   return (
     <AppProvider redirectProdutorParaPortal>
       <div className="flex flex-col h-screen overflow-hidden">
+        {/* Modo apresentação (owner/admin vendo como o produtor): faixa com Sair. */}
+        <FaixaApresentacao />
         <TopBar />
         <div className="flex flex-1 overflow-hidden relative">
           <IconSidebar />

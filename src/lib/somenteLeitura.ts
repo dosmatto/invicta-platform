@@ -21,12 +21,18 @@
 // app_kv_produtor_* em docs/seguranca-rls.sql). A regra por registro mora em
 // iam/escritaProdutor.ts, espelho da função SQL inv_talhao_do_registro.
 
-import { papelDoUsuario } from './empresa';
+//
+// MODO APRESENTAÇÃO (owner/admin vendo como o produtor — lib/modoApresentacao.ts):
+// também é somente leitura, e mais estrita — a porta recusa TODA gravação, sem
+// as exceções acima. O modo nunca grava nada no banco.
+
+import { apresentacaoAtiva, papelDoUsuario } from './empresa';
 import { authConfigurado } from './auth';
 import { getTalhoes } from './store';
 import { colecaoGravavelProdutor, produtorPodeGravar } from './iam/escritaProdutor';
 
 export function somenteLeitura(): boolean {
+  if (apresentacaoAtiva()) return true;
   return authConfigurado && papelDoUsuario() === 'produtor';
 }
 
@@ -54,6 +60,7 @@ function avisar(chave: string, motivo: string): true {
  *  máximo uma vez por minuto). Coleção com exceção passa — quem chama decide
  *  registro a registro com `registroBloqueado`. */
 export function escritaBloqueada(chave: string): boolean {
+  if (apresentacaoAtiva()) return avisar(chave, 'modo apresentação (só tela).');
   if (!somenteLeitura() || colecaoGravavelProdutor(chave)) return false;
   return avisar(chave, 'o produtor só visualiza.');
 }
@@ -61,6 +68,7 @@ export function escritaBloqueada(chave: string): boolean {
 /** Porta do REGISTRO: true = este registro (ou prefixo de mapa) não é de um
  *  talhão do produtor. `dados` é o documento (para achar o `talhaoId`). */
 export function registroBloqueado(chave: string, id: string, dados?: unknown): boolean {
+  if (apresentacaoAtiva()) return avisar(chave, 'modo apresentação (só tela).');
   if (!somenteLeitura()) return false;
   if (produtorPodeGravar(chave, id, dados, talhoesDoEscopo())) return false;
   return avisar(chave, 'o produtor só grava compactação e satélite dos talhões dele.');

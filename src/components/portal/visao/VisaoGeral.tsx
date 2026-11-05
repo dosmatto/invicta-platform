@@ -140,7 +140,7 @@ export function VisaoGeral() {
   const serie = useMemo(() => serieIndices(dados, ano, undefined, 'ciclo'), [dados, ano]);
   const cicloTxt = ano != null ? `ciclo ${rotuloCicloMeses(ano)}` : anoTxt;
   // O MESMO hook (e cache) da página Comparativo: as duas mostram o mesmo estado.
-  const { estado: bench, recarregar: recarregarBench } = useBenchmark(libProd ? p.safra : '', p.preview ? p.cliente.id : undefined);
+  const { estado: bench, recarregar: recarregarBench } = useBenchmark(libProd ? p.safra : '', p.clienteServidor);
 
   // ── Mini-mapas ──
   const talhoesMapa = useMemo(() => dados.map(d => ({ id: d.talhao.id, nome: d.talhao.nome, geojson: d.talhao.geojson })), [dados]);

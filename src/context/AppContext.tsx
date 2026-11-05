@@ -4,7 +4,7 @@ import { createContext, useContext, useState, useEffect, useCallback, ReactNode,
 import { useRouter } from 'next/navigation';
 import { seedIfEmpty } from '@/lib/seed';
 import { bootCloud, bootCloudCampo, cloudExcluirMapasPorPrefixo, cloudExcluirPorPrefixo } from '@/lib/cloud';
-import { empresaIfEmpty, adotarEmpresasLocais, garantirEmpresaInvicta, uidUsuario, ehOwner, seedPapeis, seedPermissoes, seedPlanos, papelDoEmail, papelDoUsuario, emailUsuario, precisaTrocarSenha, meuRegistro, loginExpirado, confirmarPapelNaNuvem, confirmarAcessoNaNuvem } from '@/lib/empresa';
+import { empresaIfEmpty, adotarEmpresasLocais, garantirEmpresaInvicta, uidUsuario, ehOwner, seedPapeis, seedPermissoes, seedPlanos, papelDoEmail, papelDoUsuario, emailUsuario, precisaTrocarSenha, meuRegistro, loginExpirado, confirmarPapelNaNuvem, confirmarAcessoNaNuvem, apresentacaoAtiva } from '@/lib/empresa';
 import { migrarIamV1, marcarUltimoAcesso } from '@/lib/iam/usuarios';
 import { podeEntrar, precisaConfirmarNaNuvem, statusEfetivo } from '@/lib/iam/acessoEfetivo';
 import { registrarLogin } from '@/lib/iam/auditoria';
@@ -16,6 +16,7 @@ import { LEGENDAS_OFICIAIS } from '@/constants/legendasSeedOficial';
 import { authConfigurado, observarAuth, logout, type User } from '@/lib/auth';
 import { hidratarCachePesado } from '@/lib/localComprimido';
 import { modoProdutorMapaAtivo, consumirProdutorParaAbrir } from '@/lib/modoProdutorMapa';
+import { consumirVoltaApresentacao } from '@/lib/modoApresentacao';
 import { featuresDosTalhoes } from '@/lib/talhoesParaMapa';
 import { getClientes, getFazendas, getTalhoes } from '@/lib/store';
 import { LoginScreen } from '@/components/auth/LoginScreen';
@@ -430,9 +431,12 @@ export function AppProvider({ children, redirectProdutorParaPortal, modoCampo }:
   // "Acessar a plataforma" do portal (15/10/2026): o produtor cai DIRETO no
   // cadastro dele, com todas as áreas no mapa — não na lista de clientes.
   // O id vem do sessionStorage (lib/modoProdutorMapa.ts) e é consumido uma vez.
+  // O mesmo caminho reabre a ficha do cliente quando o admin SAI do modo
+  // apresentação (lib/modoApresentacao.ts) — volta ao ponto de onde ligou.
   useEffect(() => {
-    if (!dadosProntos || !modoProdutorMapaAtivo()) return;
-    const id = consumirProdutorParaAbrir();
+    if (!dadosProntos) return;
+    const id = modoProdutorMapaAtivo() ? consumirProdutorParaAbrir()
+      : (redirectProdutorParaPortal && !apresentacaoAtiva() ? consumirVoltaApresentacao() : null);
     if (!id) return;
     const c = getClientes().find(x => x.id === id);
     if (!c) return;

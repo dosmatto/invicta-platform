@@ -22,7 +22,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { getFazendas, getTalhoes, getSafras, type Cliente, type Fazenda, type Talhao, type Safra } from '@/lib/store';
-import { secaoLiberada, type PlanoAssinatura, type PapelMembro } from '@/lib/empresa';
+import { secaoLiberada, apresentacaoAtiva, type PlanoAssinatura, type PapelMembro } from '@/lib/empresa';
 import { anoDaSafra, anoDeData, hojeSaoPauloISO } from '@/lib/periodo';
 import { usarDadosSupabase } from '@/lib/supabaseData';
 import { ligarModoProdutorMapa, desligarModoProdutorMapa } from '@/lib/modoProdutorMapa';
@@ -41,6 +41,10 @@ export interface PortalCtx {
   papel: PapelMembro | null;
   preview: boolean;
   qsPreview: string;
+  /** Owner/admin no modo apresentação (lib/modoApresentacao.ts): portal do produtor, login do admin. */
+  apresentacao: boolean;
+  /** Cliente a mandar ao servidor (benchmark): o do preview/apresentação; undefined = o próprio vínculo. */
+  clienteServidor: string | undefined;
 
   safras: Safra[];
   /** Nome da safra do filtro ("26/27"); sem safra cadastrada, o ano corrente ("2026"). */
@@ -206,8 +210,9 @@ export function PortalProvider({ cliente, plano, papel, preview, qsPreview, chil
   // Estar no portal = fora do modo mapa (quem chegou por URL digitada com o
   // modo ligado voltaria do talhão ao mapa).
   useEffect(() => { desligarModoProdutorMapa(); }, []);
-  // ligarModoProdutorMapa() só vale para o produtor logado; no preview não faz
-  // nada e o /painel abre normal, com o papel de quem está vendo.
+  // ligarModoProdutorMapa() só vale em somente leitura: o produtor logado e o
+  // owner/admin no modo apresentação (o preview ?cliente= já ligou o modo, ver
+  // useClientePortal) — o /painel abre no cadastro do produtor, como ele vê.
   const abrirPlataforma = useCallback(() => {
     ligarModoProdutorMapa(cliente.id);
     router.push('/painel');
@@ -224,15 +229,19 @@ export function PortalProvider({ cliente, plano, papel, preview, qsPreview, chil
     setModos(x => (um ? { ...x, um: m } : { ...x, todos: m }));
   }, [talhaoId]);
 
+  // Modo apresentação: o portal é o do produtor (preview = false), mas quem
+  // está logado é owner/admin — o servidor (benchmark) precisa do cliente.
+  const apresentacao = apresentacaoAtiva();
+  const clienteServidor = preview || apresentacao ? cliente.id : undefined;
   const valor = useMemo<PortalCtx>(() => ({
-    cliente, plano, papel, preview, qsPreview,
+    cliente, plano, papel, preview, qsPreview, apresentacao, clienteServidor,
     safras, safra, ano, opcoesSafra,
     fazendas, fazendaId, culturas, cultura,
     talhoesEscopo, talhaoId, talhao, talhoes,
     dadosEscopo, dados, sincronizando, falhasNuvem: nuvemAtual?.falhas ?? [], comNuvem,
     setFiltro, hrefPortal, abrirTalhao, abrirPlataforma, liberada,
     modoMapa, setModoMapa,
-  }), [cliente, plano, papel, preview, qsPreview, safras, safra, ano, opcoesSafra, fazendas, fazendaId, culturas, cultura,
+  }), [cliente, plano, papel, preview, qsPreview, apresentacao, clienteServidor, safras, safra, ano, opcoesSafra, fazendas, fazendaId, culturas, cultura,
     talhoesEscopo, talhaoId, talhao, talhoes, dadosEscopo, dados, sincronizando, nuvemAtual, comNuvem,
     setFiltro, hrefPortal, abrirTalhao, abrirPlataforma, liberada, modoMapa, setModoMapa]);
 

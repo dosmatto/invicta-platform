@@ -10,13 +10,17 @@ import { rotuloAno } from '@/lib/periodo';
 import { EmpresaSwitcher } from './EmpresaSwitcher';
 import { logout, emailUsuario, authConfigurado } from '@/lib/auth';
 import { modoProdutorMapaAtivo, desligarModoProdutorMapa } from '@/lib/modoProdutorMapa';
+import { useApresentacao } from '@/components/shared/FaixaApresentacao';
 
 export function TopBar() {
   const { nav: context } = useApp();
   const router = useRouter();
   // Produtor no mapa (botão "Mapa da fazenda" do portal): selo de somente
   // leitura + botão de volta ao portal. Demais papéis: topo como sempre.
+  // No modo apresentação (owner/admin como o produtor) é o mesmo topo: o
+  // "Portal" leva ao portal DENTRO do modo — a faixa acima tem o Sair.
   const modoProdutor = modoProdutorMapaAtivo();
+  const apresentando = !!useApresentacao();
   function voltarPortal() {
     desligarModoProdutorMapa();
     router.push('/portal');
@@ -97,7 +101,8 @@ export function TopBar() {
         {!modoProdutor && <EmpresaSwitcher />}
         <Wifi size={16} style={{ color: '#86efac' }} />
         <div className="flex items-center gap-2 pl-3 border-l border-white/20">
-          {authConfigurado && emailUsuario() && (
+          {/* Apresentando ao produtor: o e-mail do admin não aparece na tela dele. */}
+          {authConfigurado && emailUsuario() && !apresentando && (
             <span className="text-[11px] truncate max-w-[150px] hidden sm:inline" style={{ color: '#cbd5e1' }}>{emailUsuario()}</span>
           )}
           <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold"

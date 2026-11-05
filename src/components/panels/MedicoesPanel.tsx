@@ -19,7 +19,8 @@ import { extrairEditavel } from '@/lib/geoEditor';
 import { fcDeMedicao, compartilharLinkCampo } from '@/lib/campoLink';
 import { getClientes, getFazendas, getTalhoes } from '@/lib/store';
 import { verificarTrocaPoligono, mensagemBloqueioTroca } from '@/lib/trocaPoligono';
-import { escopoClienteIds, emailUsuario } from '@/lib/empresa';
+import { escopoClienteIds, emailUsuario, apresentacaoAtiva } from '@/lib/empresa';
+import { somenteLeitura } from '@/lib/somenteLeitura';
 import {
   RefreshCw, Loader2, Ruler, MapPin, Eye, Download, Plus, Repeat, Trash2, X, CheckCircle2, CloudUpload, Pencil, Link2,
 } from 'lucide-react';
@@ -40,6 +41,10 @@ export function MedicoesPanel() {
   const [acao, setAcao] = useState<{ m: MedicaoCampo; tipo: 'criar' | 'substituir' } | null>(null);
   const [editando, setEditando] = useState<MedicaoCampo | null>(null);
   const [msg, setMsg] = useState('');
+  // Produtor (e owner/admin no modo apresentação): vê e baixa, não edita,
+  // não cria talhão, não troca limite, não exclui. A trava de verdade é na
+  // nuvem (lib/somenteLeitura.ts); aqui é a tela.
+  const leitura = somenteLeitura();
 
   const recarregar = useCallback(async () => {
     setCarregando(true);
@@ -50,7 +55,9 @@ export function MedicoesPanel() {
     if (!esc) { setMeds(todas); }
     else {
       const meusTalhoes = new Set(getTalhoes().map(t => t.id));
-      const meu = emailUsuario();
+      // Modo apresentação: o e-mail é do ADMIN — as medições dele não são do
+      // produtor apresentado. Vale só o escopo do cliente (os talhões dele).
+      const meu = apresentacaoAtiva() ? null : emailUsuario();
       setMeds(todas.filter(m =>
         (m.talhaoId && meusTalhoes.has(m.talhaoId)) || (!!meu && m.operador === meu),
       ));
@@ -188,18 +195,20 @@ export function MedicoesPanel() {
                           onClick={() => { if (fcLink) void compartilharLinkCampo(m.nome, fcLink); }} />
                       );
                     })()}
-                    <BotaoAcao icon={<Pencil size={12} />} label="Editar traçado" cor="#5b21b6" onClick={() => setEditando(m)} />
+                    {!leitura && <BotaoAcao icon={<Pencil size={12} />} label="Editar traçado" cor="#5b21b6" onClick={() => setEditando(m)} />}
                     <BotaoAcao icon={<Download size={12} />} label="Baixar SHP" onClick={() => void baixarShp(m).catch(() => setMsg('Falha ao gerar SHP.'))} />
                     <BotaoAcao icon={<Download size={12} />} label="Baixar KML" onClick={() => baixarKML(m)} />
                     <BotaoAcao icon={<Download size={12} />} label="GeoJSON" onClick={() => baixarGeoJSON(m)} />
-                    {poli && <BotaoAcao icon={<Plus size={12} />} label="Criar talhão" cor="#166534" onClick={() => setAcao({ m, tipo: 'criar' })} />}
-                    {poli && <BotaoAcao icon={<Repeat size={12} />} label="Substituir limite" cor="#78350f" onClick={() => setAcao({ m, tipo: 'substituir' })} />}
+                    {poli && !leitura && <BotaoAcao icon={<Plus size={12} />} label="Criar talhão" cor="#166534" onClick={() => setAcao({ m, tipo: 'criar' })} />}
+                    {poli && !leitura && <BotaoAcao icon={<Repeat size={12} />} label="Substituir limite" cor="#78350f" onClick={() => setAcao({ m, tipo: 'substituir' })} />}
                   </div>
-                  <button onClick={() => void excluir(m)}
-                    className="flex items-center justify-center gap-1.5 w-full py-1.5 rounded-lg text-[11px] font-bold"
-                    style={{ background: '#7f1d1d', color: '#fca5a5' }}>
-                    <Trash2 size={12} /> Excluir medição
-                  </button>
+                  {!leitura && (
+                    <button onClick={() => void excluir(m)}
+                      className="flex items-center justify-center gap-1.5 w-full py-1.5 rounded-lg text-[11px] font-bold"
+                      style={{ background: '#7f1d1d', color: '#fca5a5' }}>
+                      <Trash2 size={12} /> Excluir medição
+                    </button>
+                  )}
                 </div>
               )}
             </div>

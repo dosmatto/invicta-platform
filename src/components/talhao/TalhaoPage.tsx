@@ -40,7 +40,8 @@ import { GeradorRelatorios } from '@/components/talhao/GeradorRelatorios';
 import { MeapSection } from '@/components/talhao/MeapSection';
 import { NdviSection } from '@/components/talhao/NdviSection';
 import { ProdutividadeSection } from '@/components/talhao/ProdutividadeSection';
-import { papelDoUsuario, meuRegistro, planoPorId, ehAdmin, SECOES_PORTAL, secaoLiberada, podeEm, matrizDoPapel } from '@/lib/empresa';
+import { papelDoUsuario, meuRegistro, planoPorId, ehAdmin, SECOES_PORTAL, secaoLiberada, podeEm, matrizDoPapel, apresentacaoAtiva } from '@/lib/empresa';
+import { FaixaApresentacao } from '@/components/shared/FaixaApresentacao';
 import { authConfigurado } from '@/lib/auth';
 import { modoProdutorMapaAtivo } from '@/lib/modoProdutorMapa';
 import { abasComDados } from '@/lib/portalProdutor';
@@ -349,21 +350,27 @@ export function TalhaoPage({ id }: { id: string }) {
   // (exceção do próprio usuário > ajuste do papel > padrão). Preview do
   // owner/admin: a matriz do papel Produtor, exatamente o que a tela mostra.
   // Foliar não tem linha na matriz e segue só a existência de laudo foliar.
+  // Bancada sem login libera tudo — menos no modo apresentação, que segue a
+  // matriz do produtor (lib/modoApresentacao.ts).
+  const semAuthLivre = !authConfigurado && !apresentacaoAtiva();
   const modulosDaAba = (id: TabId): string[] => {
     const modulo = MODULO_DA_ABA[id];
     return modulo ? [modulo, ...(MODULOS_EXTRA_DA_ABA[id] ?? [])] : [];
   };
   const podeNaAba = (id: TabId, acao: 'visualizar' | 'criar'): boolean =>
-    modulosDaAba(id).some(m => (ehProdutor ? podeEm(m, acao) : matrizDoPapel('produtor')[`${m}.${acao}`] === true));
+    // comoProdutor: no modo apresentação o trilho lista as abas IGUAL ao
+    // produtor (a de trabalho entra mesmo sem dado); os botões de gravar
+    // dentro dela continuam fora (podeEm sem o terceiro argumento).
+    modulosDaAba(id).some(m => (ehProdutor ? podeEm(m, acao, true) : matrizDoPapel('produtor')[`${m}.${acao}`] === true));
   const podeVerAba = (id: TabId): boolean => {
-    if (!MODULO_DA_ABA[id] || !authConfigurado) return true;
+    if (!MODULO_DA_ABA[id] || semAuthLivre) return true;
     return podeNaAba(id, 'visualizar');
   };
   // 14/10/2026: aba em que o produtor TRABALHA (coluna "Criar": compactação,
   // satélite, prescrições) entra no trilho mesmo sem dado — senão ele nunca
   // importava a primeira penetrometria nem criava a primeira prescrição.
   const podeCriarAba = (id: TabId): boolean => {
-    if (!MODULO_DA_ABA[id] || !authConfigurado) return false;
+    if (!MODULO_DA_ABA[id] || semAuthLivre) return false;
     return podeNaAba(id, 'criar');
   };
   // Consulta da nuvem que FALHOU não é "sem dado": a aba fica, e o módulo
@@ -400,6 +407,7 @@ export function TalhaoPage({ id }: { id: string }) {
 
   return (
     <div className="flex flex-col h-screen overflow-hidden" style={{ background: '#061525' }}>
+      <FaixaApresentacao />
       {/* Barra de contexto fixa */}
       <header className="flex-shrink-0 flex items-center gap-3 px-4 py-2.5" style={{ background: 'var(--invicta-blue-dark)', borderBottom: '1px solid #1a3a6b' }}>
         <button onClick={modoProdutor ? voltarPortal : voltar} title={modoProdutor && !voltaAoMapa ? 'Voltar ao portal' : 'Voltar ao mapa da fazenda'}

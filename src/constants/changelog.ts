@@ -1,5 +1,13 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Apresentar a plataforma como o produtor
+  '3.1.0': [
+    'PENDÊNCIA S/N — APRESENTAR COMO O PRODUTOR: na ficha do cliente (Clientes → abrir o cliente) há o botão "Apresentar como produtor", só para owner e admin. Ele abre a plataforma exatamente como aquele produtor vê, com o seu próprio login — sem precisar da senha dele: só as fazendas e talhões dele (inclusive a fazenda de condomínio marcada no acesso dele), as abas que o plano e as permissões dele liberam, e somente leitura.',
+    'FAIXA NO TOPO: enquanto o modo vale, uma faixa "Apresentando como <produtor> · Sair" fica no mapa (/painel), na página do talhão e no portal. Sair volta ao seu painel normal, na ficha do mesmo cliente. O modo vive só naquela aba do navegador: fechar a aba ou sair do login também encerra.',
+    'PORTAL: o "Ver como o produtor vê" do portal (escolher um produtor) entra no mesmo modo, e o "Acessar a plataforma" leva ao mapa dentro dele. Plano: o do acesso do produtor; cliente sem login de produtor abre com todas as seções, como no preview do portal.',
+    'SEGURANÇA: o modo só restringe a tela. Nenhum botão de gravar aparece — nem os que o próprio produtor tem (prescrição, satélite, compactação) — e nada é gravado no banco enquanto ele vale. Não liga para nenhum outro papel. Ficam de fora no modo: "Buscar linhas/topografia" e "Tentar de novo" da PrecisionFarm e "Gerar diagnóstico com IA" (o diagnóstico já salvo continua visível).',
+    'TAMBÉM PARA O PRODUTOR: em Medições, quem está em somente leitura não vê mais "Editar traçado", "Criar talhão", "Substituir limite" e "Excluir medição" (só ver e baixar), e a lista mostra só as medições dos talhões dele. No Foliar, só a visão geral, com as amostras dos talhões dele.',
+  ],
   // [S/N] Plataforma 3.0 — o novo Portal do Produtor
   '3.0.0': [
     'PENDÊNCIA S/N — PLATAFORMA 3.0: com o Portal do Produtor remodelado (menu por tema, Visão geral, painel por talhão, mapas leve e reais e o Comparativo Invicta, entregues da 2.225.0 à 2.226.2), a plataforma passa a contar a partir da versão 3.0.0. As próximas entregas seguem 3.0.1, 3.1.0 e assim por diante.',

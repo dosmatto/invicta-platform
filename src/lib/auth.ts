@@ -141,6 +141,8 @@ export async function logout(): Promise<void> {
   // chave fica na sessionStorage da aba, e outro produtor que entrasse na mesma
   // aba cairia no mapa em vez do portal. Sem importar o módulo (evita ciclo).
   try { sessionStorage.removeItem('inv_produtor_mapa'); } catch { /* aba sem storage */ }
+  // Idem o modo apresentação (lib/modoApresentacao.ts): morre com o login.
+  try { sessionStorage.removeItem('inv_apresentacao'); sessionStorage.removeItem('inv_apresentacao_volta'); } catch { /* aba sem storage */ }
   try { window.dispatchEvent(new Event(EVENTO_LOGOUT)); } catch { /* fora do navegador */ }
   if (usuarioOffline) {
     usuarioOffline = null;

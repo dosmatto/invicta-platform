@@ -6,6 +6,7 @@
 // servidor.ts → autenticarUsuario). Esconder a seção não é a proteção — isto é.
 
 import { getSupabase } from '../supabase';
+import { apresentacaoAtiva } from '../empresa';
 
 export interface VinculoPF {
   status: 'pendente' | 'confirmado' | 'suspenso';
@@ -39,7 +40,16 @@ export interface PublicadoPF {
  *  de lote separa "pulado" (409/422…) de "erro" (lote.ts → desfechoDaFalha). */
 export type Resp<T> = ({ ok: true } & T) | { ok: false; erro: string; status?: number };
 
+// POSTs que só LEEM (a lista de ids não cabe na URL). Os demais POSTs gravam.
+const POST_SO_LEITURA = new Set(['/api/precisionfarm/linhas-resumo']);
+
 async function chamar<T>(caminho: string, init?: { method?: string; body?: unknown }): Promise<Resp<T>> {
+  // Modo apresentação (lib/modoApresentacao.ts): a sessão é a do admin e o
+  // servidor decide "gestor" pelo papel REAL — então a trava é aqui, antes de
+  // sair: nenhuma rota que grava é chamada enquanto o modo vale.
+  if ((init?.method ?? 'GET') !== 'GET' && !POST_SO_LEITURA.has(caminho) && apresentacaoAtiva()) {
+    return { ok: false, erro: 'Modo apresentação: nada é gravado.', status: 403 };
+  }
   const sb = getSupabase();
   const token = sb ? (await sb.auth.getSession()).data.session?.access_token : null;
   if (!token) return { ok: false, erro: 'Sessão ausente — entre na plataforma com a nuvem ligada.' };
@@ -122,12 +132,23 @@ export interface EstadoLinhasPF {
   camadas: CamadaLinhasPF[];
 }
 
+/** Modo apresentação: a resposta vem com o papel REAL (owner/admin = gestor);
+ *  a tela tem de ver o que o produtor veria — sem Buscar / Tentar de novo. */
+function comoProdutorNoModo(r: Resp<EstadoLinhasPF>): Resp<EstadoLinhasPF> {
+  if (!r.ok || !apresentacaoAtiva()) return r;
+  return {
+    ...r, gestor: false, vinculo: null, podeBuscar: false,
+    recebimento: { ...r.recebimento, faltando: [] },
+    camadas: r.camadas.map(c => ({ ...c, podeTentarDeNovo: false })),
+  };
+}
+
 export const estadoLinhasPF = (talhaoId: string) =>
-  chamar<EstadoLinhasPF>(`/api/precisionfarm/linhas/${encodeURIComponent(talhaoId)}`);
+  chamar<EstadoLinhasPF>(`/api/precisionfarm/linhas/${encodeURIComponent(talhaoId)}`).then(comoProdutorNoModo);
 
 /** Curvas de nível (topografia 0.3) recebidas da PF — mesmo formato das linhas. */
 export const estadoTopografiaPF = (talhaoId: string) =>
-  chamar<EstadoLinhasPF>(`/api/precisionfarm/linhas/${encodeURIComponent(talhaoId)}?tipo=topography`);
+  chamar<EstadoLinhasPF>(`/api/precisionfarm/linhas/${encodeURIComponent(talhaoId)}?tipo=topography`).then(comoProdutorNoModo);
 
 export const buscarTopografiaPF = (talhaoId: string) =>
   chamar<{ mensagem: string; novos: number }>('/api/precisionfarm/carga-linhas', { method: 'POST', body: { talhaoId, tipo: 'topography' } });

@@ -24,6 +24,7 @@ import { MenuLateral, GavetaMenu } from './MenuLateral';
 import { Cabecalho, FaixaPreview } from './Cabecalho';
 import { TemaPortal } from './tema';
 import { GuardaPlano } from './GuardaPlano';
+import { FaixaApresentacao } from '@/components/shared/FaixaApresentacao';
 
 export function PortalShell({ children }: { children: ReactNode }) {
   return (
@@ -77,6 +78,7 @@ function Moldura({ children }: { children: ReactNode }) {
       <MenuLateral />
       <GavetaMenu aberta={menuAberto} onFechar={() => setMenuAberto(false)} />
       <div className="lg:pl-[248px] min-h-screen flex flex-col">
+        <FaixaApresentacao variante="portal" />
         <FaixaPreview />
         <Cabecalho onAbrirMenu={() => setMenuAberto(true)} />
         <main className="flex-1 w-full max-w-[1520px] mx-auto px-3 sm:px-5 lg:px-8 py-4 sm:py-6">

@@ -7,8 +7,9 @@
 // `inv_produtor_mapa`) para sobreviver à navegação interna — ir à página do
 // talhão e voltar, recarregar a página — e morrer junto com a aba.
 //
-// Só vale para quem está em SOMENTE LEITURA (produtor logado). Owner/admin no
-// preview do portal vão ao /painel normal, com o papel deles: o modo nunca liga.
+// Só vale para quem está em SOMENTE LEITURA: o produtor logado e — desde a
+// v3.1.0 — owner/admin no MODO APRESENTAÇÃO (lib/modoApresentacao.ts), que
+// valem como produtor. Fora disso o modo nunca liga.
 
 import { somenteLeitura } from './somenteLeitura';
 

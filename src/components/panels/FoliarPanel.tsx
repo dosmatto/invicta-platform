@@ -28,6 +28,7 @@ import {
 } from '@/lib/store';
 import { diagnosticar, ROTULO_ORGAO, COR_ESTADO, type DiagnoseFoliar, type NutrienteId, type Orgao } from '@/lib/foliar';
 import { inputStyle } from '@/constants/ui';
+import { somenteLeitura } from '@/lib/somenteLeitura';
 import { FoliarImportacao } from './FoliarImportacao';
 import { FoliarGeradorNormas } from './FoliarGeradorNormas';
 
@@ -41,11 +42,15 @@ const ABAS: { id: AbaFoliar; label: string; icone: React.ComponentType<{ size?: 
 
 export function FoliarPanel() {
   const [aba, setAba] = useState<AbaFoliar>('geral');
+  // Somente leitura (produtor, ou owner/admin no modo apresentação): só a
+  // visão geral — importar e gerar norma gravam.
+  const leitura = somenteLeitura();
+  const abas = leitura ? ABAS.filter(a => a.id === 'geral') : ABAS;
 
   return (
     <section className="flex flex-col h-full overflow-hidden">
       <div className="flex gap-1 px-3 pt-2 flex-shrink-0">
-        {ABAS.map(a => {
+        {abas.map(a => {
           const Icon = a.icone;
           const ativo = a.id === aba;
           return (
@@ -59,8 +64,8 @@ export function FoliarPanel() {
       </div>
       <div className="flex-1 min-h-0 overflow-hidden">
         {aba === 'geral' && <VisaoGeral />}
-        {aba === 'importar' && <FoliarImportacao />}
-        {aba === 'normas' && <FoliarGeradorNormas />}
+        {aba === 'importar' && !leitura && <FoliarImportacao />}
+        {aba === 'normas' && !leitura && <FoliarGeradorNormas />}
       </div>
     </section>
   );
@@ -127,7 +132,11 @@ function VisaoGeral() {
       return normas.get(k) ?? null;
     };
 
-    return getAmostrasFoliares().map(a => {
+    // Somente leitura (produtor ou modo apresentação): só as amostras dos
+    // talhões do escopo — getTalhoes já vem recortado; amostra de talhão fora
+    // dele (outro cliente) não aparece.
+    const recortar = somenteLeitura();
+    return getAmostrasFoliares().filter(a => !recortar || talhoes.has(a.talhaoId)).map(a => {
       const t = talhoes.get(a.talhaoId);
       const f = t ? fazendas.get(t.fazendaId) : undefined;
       const c = f ? clientes.get(f.clienteId) : undefined;

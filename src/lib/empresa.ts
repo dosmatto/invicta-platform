@@ -13,6 +13,10 @@ import { lerListaLocal } from './localComprimido';
 import { CAP_PARA_PERM, MATRIZ_PADRAO } from './iam/permissoes';
 import { ACOES, MODULOS } from './iam/tipos';
 import { clientesDoProdutor } from './iam/vinculoProdutor';
+import {
+  acaoDeEscrita, apagarEstado, apresentacaoValida, estadoGravado, gravarEstado, montarEstado, papelEfetivo,
+  podeApresentar, registroEfetivo, type EstadoApresentacao,
+} from './modoApresentacao';
 
 // 'leitor' (somente leitura) e 'custom' (permissões definidas uma a uma) vieram
 // com o IAM; 'editor'/'viewer' são legado mantido para registros antigos.
@@ -172,10 +176,58 @@ export function definirPapelEmail(
 }
 
 // Registro de papel do usuário logado (produtor: traz clienteId/planoId).
+// No MODO APRESENTAÇÃO (lib/modoApresentacao.ts) é o registro do produtor
+// apresentado — identidade/status do admin, vínculos/plano/ajustes do produtor.
 export function meuRegistro(): RegistroPapel | null {
+  const est = apresentacaoAtual();
   const email = emailUsuario();
-  if (!email) return null;
-  return getPapeis().find(p => p.email === email) ?? null;
+  const real = email ? getPapeis().find(p => p.email === email) ?? null : null;
+  return est ? registroEfetivo(real, est, getPapeis()) : real;
+}
+
+// ── Modo apresentação (owner/admin vendo como o produtor) ───────────────────
+// Só RESTRINGE a interface: a sessão e a RLS continuam as do admin. Ver o
+// topo de lib/modoApresentacao.ts.
+
+/** Papel de verdade do login, ignorando o modo apresentação. */
+export function papelReal(): PapelMembro | null {
+  return papelDoEmail(emailUsuario());
+}
+
+/** Estado do modo, se ele vale para quem está logado (owner/admin). */
+export function apresentacaoAtual(): EstadoApresentacao | null {
+  const est = estadoGravado();
+  if (!est) return null;
+  return apresentacaoValida(est, papelReal(), authConfigurado) ? est : null;
+}
+
+export function apresentacaoAtiva(): boolean {
+  return apresentacaoAtual() !== null;
+}
+
+/** Quem está logado pode ligar o modo (owner/admin; bancada sem login). */
+export function podeApresentarComoProdutor(): boolean {
+  return podeApresentar(papelReal(), authConfigurado);
+}
+
+/** Liga o modo para o cliente. `planoEscolhido` = ?plano= do preview do
+ *  portal (null = sem plano); omitido = o plano do registro do produtor.
+ *  Devolve false (e não grava nada) para quem não é owner/admin. */
+export function ligarApresentacao(cliente: { id: string; nome: string }, planoEscolhido?: string | null): boolean {
+  if (!podeApresentarComoProdutor()) return false;
+  gravarEstado(montarEstado(cliente, getPapeis(), planoEscolhido));
+  return true;
+}
+
+/** Desliga o modo; `voltarPara` = cliente que o /painel reabre. */
+export function desligarApresentacao(voltarPara?: string | null): void {
+  apagarEstado(voltarPara);
+}
+
+// Sem login (bancada) tudo é liberado — exceto no modo apresentação, que
+// precisa da matriz do produtor para mostrar o que ele veria.
+function semAuthLibera(): boolean {
+  return !authConfigurado && !apresentacaoAtiva();
 }
 
 // 1º acesso: o usuário convidado precisa trocar a senha provisória.
@@ -462,7 +514,9 @@ export function restaurarMatrizPapel(papel: string) {
 // O usuário logado tem a capacidade? Owner sempre sim; sem papel (bloqueado) = não.
 // Modo LOCAL (sem auth configurado, ex.: demo) não tem papéis — libera tudo.
 export function pode(cap: Capacidade, papel: PapelMembro | null = papelDoUsuario()): boolean {
-  if (!authConfigurado) return true;
+  if (semAuthLibera()) return true;
+  // Modo apresentação: nenhuma capacidade que grava (ver modoApresentacao.ts).
+  if (apresentacaoAtiva() && acaoDeEscrita(CAP_PARA_PERM[cap]?.split('.')[1])) return false;
   if (!papel) return false;
   // IAM: usuário BLOQUEADO/inativo não faz nada, qualquer que seja o papel.
   const reg = meuRegistro() as (RegistroPapel & { status?: string; permissoes?: Record<string, boolean> }) | null;
@@ -489,8 +543,12 @@ export function pode(cap: Capacidade, papel: PapelMembro | null = papelDoUsuario
 }
 
 // Checagem granular (módulo × ação) — a forma nova, para telas novas.
-export function podeEm(modulo: string, acao: string): boolean {
-  if (!authConfigurado) return true;
+// `comoProdutor` = a resposta do produtor apresentado SEM a trava de escrita do
+// modo apresentação — só para decidir o que a tela LISTA igual a ele (ex.: a
+// aba em que o produtor trabalha entra no trilho da página do talhão).
+export function podeEm(modulo: string, acao: string, comoProdutor = false): boolean {
+  if (semAuthLibera()) return true;
+  if (!comoProdutor && apresentacaoAtiva() && acaoDeEscrita(acao)) return false;
   const papel = papelDoUsuario();
   if (!papel) return false;
   const reg = meuRegistro() as (RegistroPapel & { status?: string; permissoes?: Record<string, boolean> }) | null;
@@ -513,7 +571,8 @@ export function podeEm(modulo: string, acao: string): boolean {
 type AcaoAba = 'visualizar' | 'criar' | 'editar' | 'excluir' | 'exportar';
 
 function podeAbaDerivada(modulo: string, acao: AcaoAba, antiga: () => boolean, antigaVer: () => boolean): boolean {
-  if (!authConfigurado) return true;
+  if (semAuthLibera()) return true;
+  if (apresentacaoAtiva() && acaoDeEscrita(acao)) return false;   // modo apresentação: só ver/baixar
   const papel = papelDoUsuario();
   if (!papel) return false;
   const reg = meuRegistro() as (RegistroPapel & { status?: string; permissoes?: Record<string, boolean> }) | null;
@@ -710,8 +769,11 @@ export function setEmpresaAtivaId(id: string | null) {
 // pela membros[uid] da empresa. O parâmetro Empresa é ignorado (mantido só p/
 // compatibilidade com os call sites existentes). Dados são single-tenant
 // (loadFiltrado desligado), então papel e visibilidade são independentes.
+// Modo apresentação: owner/admin passam a valer como 'produtor' (escopo, abas,
+// somente leitura) — ver lib/modoApresentacao.ts. O acesso ao app em si
+// (AppContext) continua lendo o papel de verdade (papelDoEmail/papelReal).
 export function papelDoUsuario(_e?: Empresa | null): PapelMembro | null {
-  return papelDoEmail(emailUsuario());
+  return papelEfetivo(papelReal(), estadoGravado(), authConfigurado);
 }
 export function ehOwner(_e?: Empresa | null): boolean {
   return papelDoUsuario() === 'owner';

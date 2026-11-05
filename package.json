@@ -101,6 +101,7 @@
     "teste:portal-sensores": "node scripts/teste-portal-sensores.mjs",
     "teste:portal-extras": "node scripts/teste-portal-extras.mjs",
     "teste:portal-benchmark": "node scripts/teste-portal-benchmark.mjs",
+    "teste:modo-apresentacao": "node scripts/teste-modo-apresentacao.mjs",
     "teste:laudo-zonas": "node scripts/teste-laudo-zonas.mjs",
     "teste:prod-zonas": "node scripts/teste-prod-zonas.mjs",
     "teste:sessao": "node scripts/teste-sessao-storage.mjs",

@@ -14,9 +14,13 @@
 // cliente ficaria preso ao da primeira URL. Quem chama precisa estar dentro de
 // um <Suspense> (o layout do portal já está).
 
-import { useMemo, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useSyncExternalStore } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { meuRegistro, papelDoUsuario, planoPorId, ehAdmin, type PlanoAssinatura, type PapelMembro } from '@/lib/empresa';
+import {
+  meuRegistro, papelDoUsuario, planoPorId, ehAdmin, apresentacaoAtual, desligarApresentacao, ligarApresentacao,
+  podeApresentarComoProdutor, type PlanoAssinatura, type PapelMembro,
+} from '@/lib/empresa';
+import { assinarApresentacao, estadoBruto } from '@/lib/modoApresentacao';
 import { clienteIdDoProdutor } from '@/lib/iam/vinculoProdutor';
 import { getClientes, type Cliente } from '@/lib/store';
 import { authConfigurado } from '@/lib/auth';
@@ -46,10 +50,28 @@ export function useClientePortal(): ClientePortal {
   const clienteParam = pronto ? sp.get('cliente') : null;
   const planoParam = pronto ? sp.get('plano') : null;
 
-  const reg = useMemo(() => (pronto ? meuRegistro() : null), [pronto]);
+  // Modo apresentação (lib/modoApresentacao.ts): o registro passa a ser o do
+  // produtor apresentado — o portal abre como ele, sem ?cliente=.
+  const bruto = useSyncExternalStore(assinarApresentacao, estadoBruto, () => '');
+  const reg = useMemo(() => (pronto ? meuRegistro() : null), [pronto, bruto]); // eslint-disable-line react-hooks/exhaustive-deps
   const papel = papelDoUsuario();
   const podePrever = !authConfigurado || ehAdmin();
   const preview = papel !== 'produtor' && podePrever && !!clienteParam;
+
+  // O preview ?cliente= de owner/admin ENTRA no modo apresentação: a partir
+  // daí o /painel, o /talhao e o portal seguem como o produtor até o Sair da
+  // faixa. Só grava a aba (sessionStorage), uma vez por cliente.
+  const ligarPreview = pronto && !!clienteParam && podeApresentarComoProdutor();
+  useEffect(() => {
+    if (!ligarPreview || !clienteParam) return;
+    const atual = apresentacaoAtual();
+    // Mesmo cliente E mesmo plano: nada a fazer. Plano diferente no ?plano=
+    // (ou sem ?plano= = todas as seções) religa com o plano pedido.
+    if (atual?.clienteId === clienteParam && atual.planoId === (planoParam ?? null)) return;
+    if (atual) desligarApresentacao();        // o cadastro volta a ser o do admin para achar o cliente
+    const c = getClientes().find(x => x.id === clienteParam);
+    if (c) ligarApresentacao({ id: c.id, nome: c.nome }, planoParam ?? null);
+  }, [ligarPreview, clienteParam, planoParam]);
 
   const cliente = useMemo(() => {
     if (!pronto) return null;

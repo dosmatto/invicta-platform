@@ -260,6 +260,6 @@ export function ComparativoConteudo({ estado, recarregar }: { estado: EstadoBenc
 export function ComparativoPagina() {
   const p = usePortal();
   // O MESMO hook (e cache) do cartão da Visão geral: as duas telas mostram o mesmo estado.
-  const { estado, recarregar } = useBenchmark(p.safra, p.preview ? p.cliente.id : undefined);
+  const { estado, recarregar } = useBenchmark(p.safra, p.clienteServidor);
   return <ComparativoConteudo estado={estado} recarregar={recarregar} />;
 }

@@ -5,7 +5,9 @@ import { useApp } from '@/context/AppContext';
 import { CustosProdutorEditor } from './CustosProdutorEditor';
 import { getClientes, getFazendas, getTalhoes, saveFazenda, updateCliente, deleteCliente, Cliente, Fazenda } from '@/lib/store';
 import { getUsuarios, statusDe, categoriaDe } from '@/lib/iam/usuarios';
-import { ChevronLeft, Plus, Building2, Phone, Mail, Edit2, Save, X, Trash2, Pencil, UserCog } from 'lucide-react';
+import { ChevronLeft, Plus, Building2, Phone, Mail, Edit2, Save, X, Trash2, Pencil, UserCog, Eye } from 'lucide-react';
+import { ligarApresentacao, podeApresentarComoProdutor } from '@/lib/empresa';
+import { ligarModoProdutorMapa } from '@/lib/modoProdutorMapa';
 import { PanelSection, PanelButton, MockIndicator } from './_shared';
 import { ResumoGeralRecomendacoes } from './ResumoGeralRecomendacoes';
 import { somenteLeitura } from '@/lib/somenteLeitura';
@@ -28,6 +30,15 @@ export function ProdutorDetailPanel() {
   // Produtor no mapa (somente leitura): nenhum botão de criar/editar/apagar.
   // A trava de verdade é na nuvem (lib/somenteLeitura.ts); aqui é só a tela.
   const leitura = somenteLeitura();
+  // "Apresentar como produtor" (lib/modoApresentacao.ts): owner/admin abrem a
+  // plataforma como este cliente vê. Recarrega o /painel: o escopo do produtor
+  // tem de valer desde o boot, não só nos painéis que montarem depois.
+  const podeApresentar = !leitura && podeApresentarComoProdutor();
+  function apresentar() {
+    if (!cliente || !ligarApresentacao({ id: cliente.id, nome: cliente.nome })) return;
+    ligarModoProdutorMapa(cliente.id);   // fica no /painel, aberto no cadastro dele
+    window.location.assign('/painel');
+  }
   const [tab, setTab] = useState<'fazendas' | 'relatorios' | 'dados'>('fazendas');
   const [cliente, setCliente] = useState<Cliente | null>(null);
   const [fazendas, setFazendas] = useState<Fazenda[]>([]);
@@ -152,6 +163,15 @@ export function ProdutorDetailPanel() {
             <p className="text-xs" style={{ color: '#64748b' }}>{cliente.cidade} · {cliente.estado}</p>
           </div>
         </div>
+        {/* Modo apresentação: só owner/admin, e nunca de dentro do próprio modo. */}
+        {podeApresentar && (
+          <button type="button" onClick={apresentar}
+            title="Abrir a plataforma exatamente como este produtor vê (somente leitura), com o seu login"
+            className="mt-3 w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded text-xs font-bold"
+            style={{ background: '#0b3a1f', color: '#bbf7d0', border: '1px solid #166534' }}>
+            <Eye size={13} /> Apresentar como produtor
+          </button>
+        )}
         <div className="flex gap-4 mt-2">
           {cliente.telefone && (
             <div className="flex items-center gap-1.5 text-xs" style={{ color: '#64748b' }}>

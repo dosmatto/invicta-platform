@@ -7,6 +7,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { gerarDiagnostico, carregarHistoricoDiagnosticos, avaliarRegrasTalhao, type DiagnosticoIa } from '@/lib/ia';
 import type { AvaliacaoRegras, TipoSinal } from '@/lib/iaRegras';
+import { apresentacaoAtiva } from '@/lib/empresa';
 import { Sparkles, Loader2, AlertTriangle, RefreshCw, ChevronDown, ChevronUp, History, Clock, Gauge } from 'lucide-react';
 
 const usd = (v?: number) => (v == null ? '—' : `US$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 4 })}`);
@@ -29,6 +30,10 @@ export function DiagnosticoIaCard({ talhaoId, safraNome }: { talhaoId: string; s
   const [tecAberto, setTecAberto] = useState(false);
   const [histAberto, setHistAberto] = useState(false);
   const [regras, setRegras] = useState<AvaliacaoRegras | null>(null);
+  // Modo apresentação (owner/admin como o produtor): gerar grava o diagnóstico
+  // e gasta IA com o login do admin — mostra o que já existe, sem gerar.
+  // O produtor de verdade continua podendo gerar, como antes.
+  const apresentando = apresentacaoAtiva();
 
   useEffect(() => {
     let vivo = true;
@@ -63,7 +68,7 @@ export function DiagnosticoIaCard({ talhaoId, safraNome }: { talhaoId: string; s
       <div className="flex items-center gap-2">
         <Sparkles size={14} style={{ color: '#c084fc' }} />
         <p className="text-[11px] font-bold uppercase tracking-wider flex-1" style={{ color: '#cbd5e1' }}>Diagnóstico com IA</p>
-        {diag && (
+        {diag && !apresentando && (
           <button onClick={() => void gerar()} disabled={gerando} title="Atualizar (nova análise)" className="flex items-center gap-1 text-[9px] px-2 py-1 rounded disabled:opacity-50" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
             {gerando ? <Loader2 size={10} className="animate-spin" /> : <RefreshCw size={10} />} Atualizar
           </button>
@@ -96,11 +101,13 @@ export function DiagnosticoIaCard({ talhaoId, safraNome }: { talhaoId: string; s
           <p className="text-[10px] leading-relaxed" style={{ color: '#94a3b8' }}>
             A IA agronômica analisa os dados que o talhão já tem (fertilidade, produtividade, satélite, EC, relevo, zonas) e gera um diagnóstico técnico — sem inventar nada e informando o nível de confiança.
           </p>
-          <button onClick={() => void gerar()} disabled={gerando}
-            className="w-full py-2 rounded text-xs font-bold text-white flex items-center justify-center gap-1.5 disabled:opacity-60"
-            style={{ background: '#7c3aed' }}>
-            {gerando ? <><Loader2 size={13} className="animate-spin" /> Analisando (~15–30 s)…</> : <><Sparkles size={13} /> Gerar diagnóstico com IA</>}
-          </button>
+          {!apresentando && (
+            <button onClick={() => void gerar()} disabled={gerando}
+              className="w-full py-2 rounded text-xs font-bold text-white flex items-center justify-center gap-1.5 disabled:opacity-60"
+              style={{ background: '#7c3aed' }}>
+              {gerando ? <><Loader2 size={13} className="animate-spin" /> Analisando (~15–30 s)…</> : <><Sparkles size={13} /> Gerar diagnóstico com IA</>}
+            </button>
+          )}
         </>
       ) : r ? (
         <div className="space-y-2">

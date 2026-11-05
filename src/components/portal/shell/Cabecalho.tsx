@@ -134,11 +134,14 @@ export function Cabecalho({ onAbrirMenu }: { onAbrirMenu: () => void }) {
               <div className="flex items-center gap-2 pl-1">
                 <div className="text-right hidden xl:block leading-tight">
                   <p className="text-[13px] font-bold capitalize">{nomeLegivel(p.cliente.nome)}</p>
-                  <p className="text-[11px]" style={{ color: 'rgba(232,239,248,0.7)' }}>{emailUsuario()}{p.papel ? ` · ${ROTULO_PAPEL[p.papel]}` : ''}{p.plano ? ` · ${p.plano.nome}` : ''}</p>
+                  {/* Modo apresentação: o e-mail é do admin — não vai para a tela do produtor. */}
+                  <p className="text-[11px]" style={{ color: 'rgba(232,239,248,0.7)' }}>{p.apresentacao ? '' : emailUsuario()}{p.papel ? `${p.apresentacao ? '' : ' · '}${ROTULO_PAPEL[p.papel]}` : ''}{p.plano ? ` · ${p.plano.nome}` : ''}</p>
                 </div>
-                <button type="button" onClick={() => logout()} title="Sair" aria-label="Sair" className="h-10 w-10 rounded-xl inline-flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)' }}>
-                  <LogOut size={16} />
-                </button>
+                {!p.apresentacao && (
+                  <button type="button" onClick={() => logout()} title="Sair" aria-label="Sair" className="h-10 w-10 rounded-xl inline-flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)' }}>
+                    <LogOut size={16} />
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -153,7 +156,7 @@ export function Cabecalho({ onAbrirMenu }: { onAbrirMenu: () => void }) {
           </button>
           {p.preview
             ? <button type="button" onClick={() => router.push('/painel')} aria-label="Voltar ao painel" className="h-10 w-10 rounded-xl inline-flex items-center justify-center" style={{ background: '#fff', color: 'var(--invicta-blue)' }}><ArrowLeft size={16} /></button>
-            : <button type="button" onClick={() => logout()} aria-label="Sair" className="h-10 w-10 rounded-xl inline-flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)' }}><LogOut size={16} /></button>}
+            : p.apresentacao ? null : <button type="button" onClick={() => logout()} aria-label="Sair" className="h-10 w-10 rounded-xl inline-flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)' }}><LogOut size={16} /></button>}
         </div>
 
         {/* Filtros */}
