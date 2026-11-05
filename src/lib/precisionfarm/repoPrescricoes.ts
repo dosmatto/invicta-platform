@@ -14,7 +14,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { MigracaoPendente, PARCERIA_PADRAO, ehErroDeMigracao } from './contrato.ts';
-import type { CabecalhoPrescricao, PrescricaoParaPF } from './prescricaoPF.ts';
+import { contarEstrelas, type CabecalhoPrescricao, type LinhaEstrela, type PrescricaoParaPF, type ResumoEstrelasTalhao } from './prescricaoPF.ts';
 import type { EstrelaPrescricao, RepoPrescricoesPF, RevisaoPublicada } from './publicacaoPrescricoes.ts';
 import { carregarTalhao, inserirRevisao, ultimaRevisao, vinculoDoTalhao } from './servidor.ts';
 
@@ -127,25 +127,23 @@ export function criarRepoPrescricoes(sb: SupabaseClient): RepoPrescricoesPF {
 
 // ── Leituras da tela de lote ─────────────────────────────────────────────────
 
-export interface ResumoEstrelasTalhao { marcadas: number; publicadas: number; pendentes: number }
+export type { ResumoEstrelasTalhao } from './prescricaoPF.ts';
 
-/** Estrelas de vários talhões (tela de lote). null = migração 0.3 pendente
- *  (a coluna aparece vazia, sem quebrar a tela). */
+/** Estrelas de vários talhões (tela de lote), contadas por
+ *  `contarEstrelas` (inclui os ARQUIVAMENTOS pendentes). null = migração 0.3
+ *  pendente (a coluna aparece vazia, sem quebrar a tela). */
 export async function resumoEstrelasDosTalhoes(sb: SupabaseClient, talhaoIds: string[]): Promise<Map<string, ResumoEstrelasTalhao> | null> {
-  const m = new Map<string, ResumoEstrelasTalhao>();
+  const porTalhao = new Map<string, LinhaEstrela[]>();
   const unicos = [...new Set(talhaoIds)];
   for (let k = 0; k < unicos.length; k += 150) {
     const { data, error } = await sb.from(T_ESTRELA).select('talhao_id, marcada, situacao').in('talhao_id', unicos.slice(k, k + 150));
     if (error && ehErroDeMigracao(error)) return null;
     if (error) throw new Error(`Falha ao ler as estrelas: ${error.message}`);
-    for (const r of (data ?? []) as { talhao_id: string; marcada: boolean; situacao: string | null }[]) {
-      if (!r.marcada) continue;
-      const x = m.get(r.talhao_id) ?? { marcadas: 0, publicadas: 0, pendentes: 0 };
-      x.marcadas++;
-      if (r.situacao === 'publicada') x.publicadas++;
-      else x.pendentes++;
-      m.set(r.talhao_id, x);
+    for (const r of (data ?? []) as Array<LinhaEstrela & { talhao_id: string }>) {
+      const l = porTalhao.get(r.talhao_id) ?? [];
+      l.push(r);
+      porTalhao.set(r.talhao_id, l);
     }
   }
-  return m;
+  return new Map([...porTalhao].map(([t, ls]) => [t, contarEstrelas(ls)]));
 }

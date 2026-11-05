@@ -42,7 +42,7 @@ import { resumoSincronizacao, sincronizarPrescricoes, type SituacaoLinhagem } fr
 import { criarRepoPrescricoes, resumoEstrelasDosTalhoes } from './repoPrescricoes.ts';
 import { TIPOS_RECEBIDOS, type TipoRecebido } from './linhas.ts';
 import {
-  CHAVE_LOCAL_ZONAS, MAX_ENVELOPE_BYTES_INVICTA, MSG_MIGRACAO_03, MigracaoPendente, PARCERIA_PADRAO, RE_UUID,
+  CHAVE_LOCAL_ZONAS, MAX_ENVELOPE_BYTES_INVICTA, MSG_MIGRACAO_03, MigracaoPendente, PARCERIA_PADRAO, RE_UUID, SQL_03,
   bytesDoEnvelope, capabilities, chaveLocalColheita, checksumEnvelope, corpoNaoImplementado, dataContrato, eventoDoEnvelope, idsParaNovoVinculo,
   impressaoConteudo, itemInventario, lerPaginacao, mensagemTamanho, montarEnvelope, montarPayloadColheita,
   montarPayloadZonas, paginar, periodoDoContrato, seasonDoContrato, validarEnvelope, vigentes, vinculosNoEscopo,
@@ -465,7 +465,7 @@ export function tratarLote(req: Request): Promise<Response> {
           naNuvem: t ? { nome: t.nome, geoVersao: t.geoVersao } : null,
           publicados: (pubPorVinculo.get(v.id) ?? []).sort((a, b) => String(b.publicadoEm).localeCompare(String(a.publicadoEm))),
           linhas: linhasPorTalhao.get(v.talhao_id) ?? 0,
-          prescricoes: estrelas ? (estrelas.get(v.talhao_id) ?? { marcadas: 0, publicadas: 0, pendentes: 0 }) : null,
+          prescricoes: estrelas ? (estrelas.get(v.talhao_id) ?? { ativas: 0, publicadas: 0, pendentes: 0 }) : null,
         };
       }),
       migracao03: estrelas ? null : MSG_MIGRACAO_03,
@@ -765,11 +765,14 @@ export function tratarCargaLinhas(req: Request): Promise<Response> {
     try {
       const r = await cargaInicial(ambienteRecebimento(sb, conf.cfg), v.shared_field_id, ESCOPO_INVICTA, [tipo]);
       if (r.novos || r.reabertos) processarDepois(sb, conf.cfg);
+      // Topografia sem a migração 0.3 no banco: dizer isso, não "0 camada(s) na fila".
+      if (r.indisponiveis && !r.novos && !r.reabertos) return json({ ok: false, erro: `${r.indisponiveis} topografia(s) publicada(s) na PrecisionFarm, mas ${MSG_MIGRACAO_03}`, migracao: true }, 503);
       const partes = [`${r.novos} camada(s) na fila`];
       if (r.repetidos) partes.push(`${r.repetidos} já recebida(s)`);
       if (r.reabertos) partes.push(`${r.reabertos} recusada(s) antes, de volta à fila`);
       if (r.semEvento) partes.push(`${r.semEvento} sem evento no inventário da PF`);
       if (r.conflitos) partes.push(`${r.conflitos} em conflito`);
+      if (r.indisponiveis) partes.push(`${r.indisponiveis} topografia(s) esperando o banco (aplique ${SQL_03})`);
       return json({ ok: true, ...r, mensagem: `Busca feita: ${partes.join(', ')}.` }, 200);
     } catch (e) {
       if (e instanceof FalhaPF) return json({ ok: false, erro: e.message }, 502);
@@ -892,13 +895,17 @@ export async function tratarPrescricoes(req: Request): Promise<Response> {
     const repo = criarRepoPrescricoes(sb);
     try {
       if (marcar) {
-        // A linhagem precisa ser deste talhão (na nuvem): nada de estrela solta.
-        const cabs = await repo.cabecalhos(talhaoId);
-        if (!cabs.some(c => (c.origemId || c.id) === linhagemId)) {
+        // MARCAR exige a linhagem deste talhão na nuvem (nada de estrela solta).
+        // DESMARCAR vale também para uma linhagem que já sumiu (excluída), desde
+        // que a estrela exista — senão uma prescrição excluída ficaria presa.
+        const marcada = corpo!.marcada as boolean;
+        const naNuvem = (await repo.cabecalhos(talhaoId)).some(c => (c.origemId || c.id) === linhagemId);
+        const temEstrela = !naNuvem && !marcada && (await repo.estrelas(talhaoId)).some(e => e.linhagem_id === linhagemId);
+        if (!naNuvem && !temEstrela) {
           return json({ ok: false, erro: 'Esta prescrição ainda não chegou à nuvem (ou é de outro talhão). Aguarde a sincronização e tente de novo.' }, 409);
         }
         // A estrela é gravada ANTES de publicar: falha na publicação não a perde (Q5).
-        await repo.gravarEstrela(talhaoId, linhagemId, corpo!.marcada as boolean, email, new Date().toISOString());
+        await repo.gravarEstrela(talhaoId, linhagemId, marcada, email, new Date().toISOString());
       }
       return respostaSituacoes(await sincronizarPrescricoes(repo, talhaoId, opcoesSinc(true, email)));
     } catch (e) {

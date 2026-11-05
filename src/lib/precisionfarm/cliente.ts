@@ -215,7 +215,7 @@ export interface VinculoLote extends VinculoPF {
   /** Camadas de linhas visíveis (com geometria, não arquivadas). */
   linhas: number;
   /** Prescrições com estrela (última situação registrada); null = migração 0.3 pendente. */
-  prescricoes: { marcadas: number; publicadas: number; pendentes: number } | null;
+  prescricoes: { ativas: number; publicadas: number; pendentes: number } | null;
 }
 
 export const loteGeralPF = () => chamar<{ vinculos: VinculoLote[]; migracao03: string | null }>('/api/precisionfarm/lote');

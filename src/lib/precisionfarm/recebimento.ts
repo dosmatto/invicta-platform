@@ -462,9 +462,10 @@ export async function reenviarRecibos(amb: Ambiente, limite = 50): Promise<{ env
 
 // ── Recuperação por /changes e carga inicial por /inventory ──────────────────
 
-export interface ResumoEnfileiramento { novos: number; repetidos: number; reabertos: number; ignorados: number; conflitos: number; invalidos: number }
+/** `indisponiveis`: topografia recusada porque o banco ainda não tem a migração 0.3. */
+export interface ResumoEnfileiramento { novos: number; repetidos: number; reabertos: number; ignorados: number; conflitos: number; invalidos: number; indisponiveis: number }
 
-const resumoVazio = (): ResumoEnfileiramento => ({ novos: 0, repetidos: 0, reabertos: 0, ignorados: 0, conflitos: 0, invalidos: 0 });
+const resumoVazio = (): ResumoEnfileiramento => ({ novos: 0, repetidos: 0, reabertos: 0, ignorados: 0, conflitos: 0, invalidos: 0, indisponiveis: 0 });
 
 /** Guarda só itens pequenos no registro de descartes (o motivo basta para o
  *  resto). */
@@ -500,7 +501,7 @@ async function enfileirarLote(amb: Ambiente, itens: readonly unknown[], origem: 
       // (não some calada) e volta pela carga do inventário depois da migração.
       console.warn('[precisionfarm] evento descartado:', origem, eventIdDe(ev), x.mensagem);
       await amb.repo.registrarDescarte({ origem, event_id: eventIdDe(ev), motivo: x.mensagem, item: itemParaRegistro(item) }, iso(agoraDe(amb)));
-      if (x.resultado === 'conflito') r.conflitos++; else r.ignorados++;
+      if (x.resultado === 'conflito') r.conflitos++; else r.indisponiveis++;
     } else r.ignorados++;
   }
 }

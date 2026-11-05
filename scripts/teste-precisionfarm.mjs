@@ -1634,6 +1634,18 @@ t('linhagem: versão mais recente; decisão publicar/arquivar/nada', () => {
   assert.equal(d({ marcada: false, ultima: u.get('a'), ultimaOperacao: null }).acao, 'nada');
 });
 
+t('contagem da tela de lote: arquivamento pendente conta; estado final (arquivada/excluída) sai', () => {
+  const c = PP.contarEstrelas;
+  assert.deepEqual(c([]), { ativas: 0, publicadas: 0, pendentes: 0 });
+  assert.deepEqual(c([{ marcada: true, situacao: 'publicada' }]), { ativas: 1, publicadas: 1, pendentes: 0 });
+  assert.deepEqual(c([{ marcada: true, situacao: 'pendente' }]), { ativas: 1, publicadas: 0, pendentes: 1 });
+  assert.deepEqual(c([{ marcada: true, situacao: null }]), { ativas: 1, publicadas: 0, pendentes: 1 }, 'marcada e nunca sincronizada');
+  assert.deepEqual(c([{ marcada: false, situacao: 'pendente' }]), { ativas: 0, publicadas: 0, pendentes: 1 }, 'arquivamento pendente');
+  assert.deepEqual(c([{ marcada: false, situacao: 'publicada' }]), { ativas: 0, publicadas: 0, pendentes: 1 }, 'desmarcada que ainda está publicada lá');
+  assert.deepEqual(c([{ marcada: true, situacao: 'arquivada' }, { marcada: true, situacao: 'nao_publicada' }, { marcada: false, situacao: 'arquivada' }]),
+    { ativas: 0, publicadas: 0, pendentes: 0 }, 'estado final não conta para sempre');
+});
+
 console.log('0.3 — topografia recebida');
 const topo = (feats, extra = {}) => ({ ...exTopo.envelope.payload, ...extra, geometry: { type: 'FeatureCollection', features: feats } });
 const curva = (z, extra = {}) => ({ type: 'Feature', properties: { elevation_m: z, contour_interval_m: 4, is_index: z % 8 === 0, color: z % 8 === 0 ? '#e5a33b' : '#466e9b', ...extra },
@@ -1668,6 +1680,12 @@ t('topografia fora do contrato é recusada SEM reparo (cota, is_index, intervalo
     [topo([curva(804)], { value_unit: 'ft' }), /value_unit/],
     [topo([curva(804)], { status: 'draft' }), /status/],
     [topo([curva(804)], { index_interval_m: 6 }), /index_interval_m/],
+    // D4: intervalos e cores EXATOS do contrato (4 m / 8 m; #e5a33b / #466e9b).
+    [topo([curva(804, { contour_interval_m: 2 })], { interval_m: 2 }), /interval_m 2 — o contrato publica curvas de 4 m/],
+    [topo([curva(816)], { index_interval_m: 16 }), /index_interval_m 16 — o contrato destaca as curvas a cada 8 m/],
+    [topo([curva(808, { color: '#466e9b' })]), /cota 808 m\) tem color "#466e9b"; o contrato usa #e5a33b nas mestras de 8 m/],
+    [topo([curva(804, { color: '#e5a33b' })]), /o contrato usa #466e9b nas demais curvas/],
+    [topo([curva(804, { color: '#123456' })]), /color/],
     [topo([curva(804)], { smoothed: 'sim' }), /smoothed/],
     [topo([]), /nenhuma curva/],
   ];
@@ -1676,6 +1694,8 @@ t('topografia fora do contrato é recusada SEM reparo (cota, is_index, intervalo
     assert.equal(r.ok, false, String(re));
     assert.match(r.erro, re);
   }
+  // Cor em maiúsculas é a mesma cor do contrato.
+  assert.ok(L.validarPayloadTopografia(topo([curva(808, { color: '#E5A33B' })])).ok);
   // MultiLineString e Z opcional passam; 100 mil feições é o teto.
   assert.ok(L.validarPayloadTopografia(topo([{ ...curva(812), geometry: { type: 'MultiLineString', coordinates: [[[-50, -25, 812], [-49.99, -25, 812]], [[-50, -25.1], [-49.9, -25.1]]] } }])).ok);
   assert.match(L.validarPayloadTopografia(topo(new Array(100_001).fill(curva(804)))).erro, /100000/);

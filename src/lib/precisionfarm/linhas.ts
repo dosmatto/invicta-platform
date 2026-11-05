@@ -415,7 +415,9 @@ export function validarPayloadLinhas(payload: unknown): ResultadoLinhas {
  *  destaque) e as demais. A tela desenha com a cor que VEM na feição. */
 export const COR_CURVA_MESTRA = '#e5a33b';
 export const COR_CURVA_NORMAL = '#466e9b';
-const RE_COR = /^#[0-9a-f]{6}$/i;
+/** Intervalos do contrato (FORMATO_0_3.md): curvas de 4 m, mestras de 8 m. */
+export const INTERVALO_CURVAS_M = 4;
+export const INTERVALO_MESTRAS_M = 8;
 
 /** `a` é múltiplo de `b` (tolerância de ponto flutuante: 804 / 4 com ruído). */
 function multiplo(a: number, b: number): boolean {
@@ -425,13 +427,14 @@ function multiplo(a: number, b: number): boolean {
 
 /**
  * Payload de uma revisão 'topography' (upsert). Recusa — sem reparar — o que
- * não for o do contrato:
- *   name texto; status "available"; value_unit "m"; interval_m > 0;
- *   index_interval_m múltiplo de interval_m; smoothed booleano;
+ * não for EXATAMENTE o do contrato (FORMATO_0_3.md):
+ *   name texto; status "available"; value_unit "m"; interval_m 4;
+ *   index_interval_m 8; smoothed booleano;
  *   geometry FeatureCollection de LineString/MultiLineString em WGS84
  *   (Z opcional — a cota é atributo); cada feição com elevation_m finito e
- *   múltiplo de interval_m, contour_interval_m = interval_m, is_index
- *   coerente (true ⇔ cota múltipla de index_interval_m) e color "#rrggbb".
+ *   múltiplo de 4, contour_interval_m 4, is_index coerente (true ⇔ cota
+ *   múltipla de 8) e color do contrato: #e5a33b nas mestras de 8 m, #466e9b
+ *   nas demais (sem diferenciar maiúsculas).
  * Tetos: 100 mil feições, 1 milhão de vértices, 10 MB de GeoJSON.
  */
 export function validarPayloadTopografia(payload: unknown): ResultadoLinhas {
@@ -440,12 +443,14 @@ export function validarPayloadTopografia(payload: unknown): ResultadoLinhas {
   if (!textoOuNulo(p.name)) return { ok: false, erro: 'payload.name deve ser texto.' };
   if (p.status !== 'available') return { ok: false, erro: `payload.status "${String(p.status)}" — a topografia publicada vem como "available".` };
   if (p.value_unit !== 'm') return { ok: false, erro: `payload.value_unit "${String(p.value_unit)}" — a cota das curvas é em metros ("m").` };
-  const passo = p.interval_m;
-  if (!(typeof passo === 'number' && Number.isFinite(passo) && passo > 0)) return { ok: false, erro: 'payload.interval_m deve ser um número maior que zero (metros).' };
-  const mestra = p.index_interval_m;
-  if (!(typeof mestra === 'number' && Number.isFinite(mestra) && mestra > 0 && multiplo(mestra, passo))) {
-    return { ok: false, erro: `payload.index_interval_m deve ser múltiplo de interval_m (${passo} m).` };
+  if (p.interval_m !== INTERVALO_CURVAS_M) {
+    return { ok: false, erro: `payload.interval_m ${String(p.interval_m)} — o contrato publica curvas de ${INTERVALO_CURVAS_M} m.` };
   }
+  if (p.index_interval_m !== INTERVALO_MESTRAS_M) {
+    return { ok: false, erro: `payload.index_interval_m ${String(p.index_interval_m)} — o contrato destaca as curvas a cada ${INTERVALO_MESTRAS_M} m.` };
+  }
+  const passo = INTERVALO_CURVAS_M;
+  const mestra = INTERVALO_MESTRAS_M;
   if (typeof p.smoothed !== 'boolean') return { ok: false, erro: 'payload.smoothed deve ser verdadeiro ou falso.' };
 
   const g = p.geometry;
@@ -475,7 +480,10 @@ export function validarPayloadTopografia(payload: unknown): ResultadoLinhas {
     if (typeof pr.is_index !== 'boolean' || pr.is_index !== deveSerMestra) {
       return { ok: false, erro: `A curva ${n} (cota ${z} m) tem is_index ${String(pr.is_index)}; deveria ser ${deveSerMestra} (destaque a cada ${mestra} m).` };
     }
-    if (typeof pr.color !== 'string' || !RE_COR.test(pr.color)) return { ok: false, erro: `A curva ${n} não tem color no formato "#rrggbb".` };
+    const corEsperada = deveSerMestra ? COR_CURVA_MESTRA : COR_CURVA_NORMAL;
+    if (typeof pr.color !== 'string' || pr.color.toLowerCase() !== corEsperada) {
+      return { ok: false, erro: `A curva ${n} (cota ${z} m) tem color ${JSON.stringify(pr.color ?? null)}; o contrato usa ${corEsperada} nas ${deveSerMestra ? `mestras de ${mestra} m` : 'demais curvas'}.` };
+    }
     if (deveSerMestra) nMestras++;
     cotaMin = Math.min(cotaMin, z); cotaMax = Math.max(cotaMax, z);
     const geom = f.geometry;

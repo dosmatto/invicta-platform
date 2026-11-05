@@ -210,7 +210,9 @@ export default function PrecisionFarmLote() {
    *  NUVEM pelo servidor — nada daqui vai junto. */
   async function publicarPrescricoes(l: Linha): Promise<ResultadoLote> {
     if (l.v.status !== 'confirmado') return pulado(`Vínculo ${ROTULO_STATUS[l.v.status].txt.toLowerCase()} — as prescrições com estrela publicam sozinhas na confirmação.`);
-    if (l.v.prescricoes && l.v.prescricoes.marcadas === 0) return pulado('Nenhuma prescrição com estrela.');
+    // Pula só quando não há estrela valendo NEM nada pendente lá (um
+    // arquivamento que falhou também é reenviado aqui).
+    if (l.v.prescricoes && l.v.prescricoes.ativas === 0 && l.v.prescricoes.pendentes === 0) return pulado('Nenhuma prescrição com estrela nem arquivamento pendente.');
     const r = await sincronizarPrescricoesPF(l.v.talhaoId);
     if (!r.ok) return daFalha(r);
     const pend = r.situacoes.filter(s => s.situacao === 'pendente').length;
@@ -365,7 +367,7 @@ export default function PrecisionFarmLote() {
                 <th className="px-2 py-1.5 text-left font-semibold">Vínculo</th>
                 <th className="px-2 py-1.5 text-left font-semibold">Zonas</th>
                 <th className="px-2 py-1.5 text-left font-semibold">Colheita</th>
-                <th className="px-2 py-1.5 text-left font-semibold" title="Prescrições com estrela “Enviar à PrecisionFarm”: publicadas / marcadas">Prescr.</th>
+                <th className="px-2 py-1.5 text-left font-semibold" title="Prescrições com estrela “Enviar à PrecisionFarm”: publicadas / com estrela · pendências (publicação ou arquivamento)">Prescr.</th>
                 <th className="px-2 py-1.5 text-right font-semibold">Linhas</th>
                 <th className="px-2 py-1.5 text-right font-semibold">Dif. limite</th>
                 <th className="px-2 py-1.5 text-left font-semibold">Resultado</th>
@@ -400,9 +402,11 @@ export default function PrecisionFarmLote() {
                         ? colheitas.map(c => `${safraCurta(c.season)} ${PERIODO_CURTO[c.seasonPeriod ?? ''] ?? c.seasonPeriod ?? ''} r${c.revisao}`).join(' · ')
                         : <span style={{ color: '#64748b' }}>—</span>}
                     </td>
-                    <td className="px-2 py-1" title={v.prescricoes ? `${v.prescricoes.publicadas} publicada(s), ${v.prescricoes.pendentes} pendente(s) de ${v.prescricoes.marcadas} com estrela` : migracao03 ?? undefined}>
-                      {!v.prescricoes || !v.prescricoes.marcadas ? <span style={{ color: '#64748b' }}>—</span>
-                        : <span style={{ color: v.prescricoes.pendentes ? '#fbbf24' : '#86efac' }}>{v.prescricoes.publicadas}/{v.prescricoes.marcadas}</span>}
+                    <td className="px-2 py-1" title={v.prescricoes ? `${v.prescricoes.publicadas} publicada(s) de ${v.prescricoes.ativas} com estrela; ${v.prescricoes.pendentes} pendência(s) lá (publicação ou arquivamento)` : migracao03 ?? undefined}>
+                      {!v.prescricoes || (!v.prescricoes.ativas && !v.prescricoes.pendentes) ? <span style={{ color: '#64748b' }}>—</span>
+                        : <span style={{ color: v.prescricoes.pendentes ? '#fbbf24' : '#86efac' }}>
+                          {v.prescricoes.publicadas}/{v.prescricoes.ativas}{v.prescricoes.pendentes ? ` · ${v.prescricoes.pendentes} pend.` : ''}
+                        </span>}
                     </td>
                     <td className="px-2 py-1 text-right">{v.linhas || <span style={{ color: '#64748b' }}>—</span>}</td>
                     <td className="px-2 py-1 text-right">

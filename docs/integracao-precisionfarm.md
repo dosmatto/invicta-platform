@@ -811,9 +811,22 @@ impressão de conteúdo não cria revisão):
 - tela de lote → **"Publicar prescrições"** reenvia (pendentes publicam).
 
 Sem vínculo confirmado a estrela fica salva e a situação diz "pendente:
-<motivo>". O conteúdo é lido **na nuvem** (`app_kv inv_prescricoes`), como
+<motivo>" (desmarcada/excluída com vínculo suspenso: "arquivamento
+pendente"). O conteúdo é lido **na nuvem** (`app_kv inv_prescricoes`), como
 zonas e colheita. Situações: publicada rev N · pendente: motivo · arquivada ·
-não publicada; a última fica na tabela da estrela (coluna "Prescr." do lote).
+não publicada; a última fica na tabela da estrela. Coluna "Prescr." do lote
+(`contarEstrelas`): publicadas / com estrela valendo · pendências (publicação
+**ou arquivamento** pendente) — "Publicar prescrições" roda enquanto houver
+uma das duas. Estado final sai da conta: prescrição **excluída** que já foi
+arquivada (ou nunca publicada) tem a estrela desmarcada sozinha; desmarcar
+uma linhagem que sumiu da nuvem também é aceito (sem 409).
+
+Concorrência (tela × Lavra × outra aba), sem trava por talhão: cada
+linhagem é decidida com estado relido; antes do insert, estrela e versão são
+relidas **depois** de ler a última revisão; no 23505 ou se a decisão ficou
+velha, relê tudo e refaz uma vez. Assim um upsert lido antes nunca fica por
+cima de um archive ou de uma versão posterior (testado no e2e com ganchos
+de corrida).
 
 Payload (`prescricaoPF.montarPayloadPrescricao`): `name`, `status:
 "available"`, `is_favorite: true`, `product`, `input_type`,
@@ -856,14 +869,17 @@ camada fica em `pf_linhas_camadas`/`pf_linhas_revisoes` com
 `resource_type = 'topography'` e `meta` (intervalo, destaque, cotas mín/máx,
 nº de mestras). Um `resource_id` de linhas nunca vira topografia (409).
 
-Validação (`validarPayloadTopografia`, sem reparo): `status "available"`,
-`value_unit "m"`, `interval_m > 0`, `index_interval_m` múltiplo dele,
-`smoothed` booleano; cada feição LineString/MultiLineString WGS84 (Z
-opcional) com `elevation_m` múltiplo de `interval_m`, `contour_interval_m =
-interval_m`, `is_index` coerente (cota múltipla de `index_interval_m`) e
-`color` `#rrggbb`. Tetos de 100 mil feições, 1 milhão de vértices e 10 MB.
-Sem a migração 0.3: aviso de topografia → **503** (`not_ready`; a PF tenta
-de novo) e nada é gravado como linha.
+Validação (`validarPayloadTopografia`, sem reparo, valores EXATOS do
+FORMATO_0_3.md): `status "available"`, `value_unit "m"`, `interval_m 4`,
+`index_interval_m 8`, `smoothed` booleano; cada feição
+LineString/MultiLineString WGS84 (Z opcional) com `elevation_m` múltiplo de
+4, `contour_interval_m 4`, `is_index` coerente (cota múltipla de 8) e a cor
+do contrato — `#e5a33b` nas mestras de 8 m, `#466e9b` nas demais (sem
+diferenciar maiúsculas). Fora disso → recibo `rejected` com o motivo. Tetos
+de 100 mil feições, 1 milhão de vértices e 10 MB. Sem a migração 0.3: aviso
+de topografia → **503** (`not_ready`; a PF tenta de novo), nada é gravado
+como linha, e o "Buscar curvas" responde "aplique o SQL" (contagem
+`indisponiveis` da carga).
 
 Tela: aba **Altimetria** → bloco "Curvas PrecisionFarm" (mostrar no mapa,
 transparência, revisão/data, cotas, legenda das duas cores; clique na curva

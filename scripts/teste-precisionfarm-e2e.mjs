@@ -23,6 +23,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { MigracaoPendente, checksumEnvelope, itemInventario, validarEnvelope, vigentes } from '../src/lib/precisionfarm/contrato.ts';
 import { sincronizarPrescricoes } from '../src/lib/precisionfarm/publicacaoPrescricoes.ts';
+import { contarEstrelas } from '../src/lib/precisionfarm/prescricaoPF.ts';
 import { criarClientePF } from '../src/lib/precisionfarm/clientePF.ts';
 import { assinarHmac, estadoDasRevisoes, situacaoCamada, verificarAssinatura } from '../src/lib/precisionfarm/linhas.ts';
 import {
@@ -631,6 +632,15 @@ await t('banco sem a migração 0.3: aviso de topografia → 503 (a PF tenta de 
   assert.equal((await enviar(publicar(RES2, 7))).status, 202);
   s.semMigracao03 = false;
 });
+await t('D5: "Buscar curvas" sem a migração 0.3 conta a topografia como indisponível (a rota diz para aplicar o SQL)', async () => {
+  s.semMigracao03 = true;
+  const eT = topoEv(RES_T4, 1, [804], 1400);
+  pf.inventario = [{ resource_id: RES_T4, resource_type: 'topography', resource_revision: 1, event: eT }];
+  const r = await cargaInicial(amb, IDS.shared_field_id, ESCOPO, ['topography']);
+  assert.equal(r.novos, 0); assert.equal(r.indisponiveis, 1); assert.equal(r.ignorados, 0);
+  assert.equal(camada(RES_T4), undefined);
+  s.semMigracao03 = false;
+});
 
 // ── Prescrições com estrela (Invicta → PF), repositório em memória ──────────
 let seqUuid = 0;
@@ -640,8 +650,16 @@ function criarRepoPresc() {
     migracao: true, talhao: { id: 'TAL-1', nome: 'Talhão 1', geoVersao: 1 },
     vinculo: { id: 'v1', status: 'pendente', ...IDS },
     estrelas: new Map(), prescs: new Map(), recursos: [], revisoes: [],
+    // Gancho de corrida: roda `fn` uma vez, antes da n-ésima chamada de `metodo`.
+    gancho: null,
   };
   const exigir = () => { if (!z.migracao) throw new MigracaoPendente('simulado'); };
+  const disparar = async metodo => {
+    const g = z.gancho;
+    if (!g || g.metodo !== metodo) return;
+    g.cont = (g.cont ?? 0) + 1;
+    if (g.cont === g.n) { z.gancho = null; await g.fn(); }
+  };
   const repo = {
     async talhao() { return z.talhao; },
     async vinculoDoTalhao() { return structuredClone(z.vinculo); },
@@ -660,11 +678,13 @@ function criarRepoPresc() {
       return { resource_id: r.resource_id };
     },
     async ultimaRevisao(rid) {
+      await disparar('ultimaRevisao');
       const r = z.revisoes.filter(x => x.envelope.resource_id === rid).sort((a, b) => b.envelope.resource_revision - a.envelope.resource_revision)[0];
       return r ? { resource_id: rid, revision: r.envelope.resource_revision, conteudo_hash: r.conteudoHash, checksum: r.checksum, operation: r.envelope.operation, publicado_em: 'x' } : null;
     },
     async payloadDaRevisao(rid, n) { return structuredClone(z.revisoes.find(x => x.envelope.resource_id === rid && x.envelope.resource_revision === n)?.envelope.payload ?? null); },
     async inserirRevisao(a) {
+      await disparar('inserirRevisao');
       if (z.revisoes.some(x => x.envelope.resource_id === a.envelope.resource_id && x.envelope.resource_revision === a.envelope.resource_revision)) return { ok: false, conflito: true, erro: 'conflito' };
       z.revisoes.push(Object.freeze(structuredClone(a)));
       return { ok: true };
@@ -769,6 +789,70 @@ await t('linhagem excluída na Invicta (com estrela) → arquivada na PF; dry-ru
   assert.equal(sitDe(ss, 'F1').situacao, 'arquivada');
   assert.equal(RP.z.revisoes.length, antes + 1);
 });
+await t('D2: a excluída sai da conta — estrela desmarcada sozinha depois do archive; desmarcar sem cartão não trava', async () => {
+  assert.equal(RP.z.estrelas.get('F1').marcada, false, 'desmarcada automaticamente (sem cartão para tirá-la)');
+  assert.equal(RP.z.estrelas.get('F1').situacao, 'arquivada');
+  const c = contarEstrelas([...RP.z.estrelas.values()]);
+  assert.deepEqual(c, { ativas: 2, publicadas: 1, pendentes: 1 }, 'S1 publicada + M1 pendente (sementes/m2); F1 fora');
+  // Uma segunda passada não muda nada e não cria revisão.
+  const antes = RP.z.revisoes.length;
+  await sinc();
+  assert.equal(RP.z.revisoes.length, antes);
+});
+await t('D1/UX: desmarcar com vínculo SUSPENSO → "arquivamento pendente" contado como pendência; reconfirmado, arquiva e sai da conta', async () => {
+  RP.z.vinculo.status = 'suspenso';
+  await RP.repo.gravarEstrela('TAL-1', 'S1', false, 'g', 'x');
+  let ss = await sinc();
+  const s1 = sitDe(ss, 'S1');
+  assert.equal(s1.situacao, 'pendente'); assert.match(s1.motivo, /Arquivamento pendente.*suspenso.*arquiva sozinho/);
+  assert.equal(RP.z.estrelas.get('S1').situacao, 'pendente');
+  assert.equal(contarEstrelas([RP.z.estrelas.get('S1')]).pendentes, 1, 'o lote vê o arquivamento pendente e "Publicar prescrições" o reenvia');
+  RP.z.vinculo.status = 'confirmado';
+  ss = await sinc();
+  assert.equal(sitDe(ss, 'S1').situacao, 'arquivada');
+  assert.deepEqual(contarEstrelas([RP.z.estrelas.get('S1')]), { ativas: 0, publicadas: 0, pendentes: 0 });
+  await RP.repo.gravarEstrela('TAL-1', 'S1', true, 'g', 'x');
+  await sinc();
+});
+
+// ── D3: corridas (tela × Lavra × desmarcar no meio) ─────────────────────────
+/** Repositório novo com a linhagem C1 publicada (rev 1) e vínculo confirmado. */
+async function cenarioCorrida() {
+  const R = criarRepoPresc();
+  R.z.vinculo.status = 'confirmado';
+  R.z.prescs.set('C1', prescricao('C1'));
+  await R.repo.gravarEstrela('TAL-1', 'C1', true, 'g', 'x');
+  const s = () => sincronizarPrescricoes(R.repo, 'TAL-1', { gravar: true, por: 'g', novoUuid: uuid });
+  await s();
+  assert.equal(R.z.revisoes.length, 1);
+  const versao = (id, n, dose) => prescricao(id, { origemId: 'C1', versao: n, atualizadoEm: `2026-11-05T1${n}:00:00Z`, zonas: [
+    { idZona: '1', nomeZona: 'Z1', classe: 'Alta', cor: '#0', areaHa: 1, dose }, { idZona: '2', nomeZona: 'Z2', classe: 'Baixa', cor: '#0', areaHa: 1, dose: 14 }] });
+  const ultima = () => R.z.revisoes.reduce((a, b) => (b.envelope.resource_revision > a.envelope.resource_revision ? b : a));
+  return { R, s, versao, ultima };
+}
+for (const [ponto, metodo, n] of [['depois de ler a última revisão', 'ultimaRevisao', 2], ['no insert (23505)', 'inserirRevisao', 1]]) {
+  await t(`D3: V2 da tela × V3 da Lavra (${ponto}) → a V3 fica por cima, sem revisão velha depois`, async () => {
+    const { R, s, versao, ultima } = await cenarioCorrida();
+    R.z.prescs.set('C1v2', versao('C1v2', 2, 16));
+    R.z.gancho = { metodo, n, fn: async () => { R.z.prescs.set('C1v3', versao('C1v3', 3, 17)); await s(); } };
+    const ss = await s();
+    assert.equal(R.z.gancho, null, 'o gancho rodou');
+    const u = ultima();
+    assert.deepEqual(u.envelope.payload.geometry.features.map(f => f.properties.rate), [17, 14], 'a última revisão é a V3');
+    assert.equal(u.envelope.resource_revision, 2, 'uma revisão só (V3); a V2 lida antes não foi gravada por cima');
+    assert.equal(sitDe(ss, 'C1').situacao, 'publicada'); assert.equal(sitDe(ss, 'C1').versaoId, 'C1v3');
+  });
+  await t(`D3: desmarcar durante a sincronização (${ponto}) → o archive posterior fica por cima`, async () => {
+    const { R, s, versao, ultima } = await cenarioCorrida();
+    R.z.prescs.set('C1v2', versao('C1v2', 2, 16));
+    R.z.gancho = { metodo, n, fn: async () => { await R.repo.gravarEstrela('TAL-1', 'C1', false, 'g', 'x'); await s(); } };
+    const ss = await s();
+    assert.equal(R.z.gancho, null, 'o gancho rodou');
+    assert.equal(ultima().envelope.operation, 'archive', 'nenhum upsert lido antes vence o archive');
+    assert.equal(sitDe(ss, 'C1').situacao, 'arquivada');
+  });
+}
+
 await t('banco sem a migração 0.3 → MigracaoPendente (a rota responde 503 com o arquivo a aplicar)', async () => {
   RP.z.migracao = false;
   await assert.rejects(sinc(), e => e instanceof MigracaoPendente && /integracao-precisionfarm-0\.3\.sql/.test(e.message));

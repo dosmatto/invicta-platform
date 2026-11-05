@@ -182,6 +182,27 @@ export interface CabecalhoPrescricao {
   removida: boolean;
 }
 
+/** Linha da tabela das estrelas que a tela de lote lê. */
+export interface LinhaEstrela { marcada: boolean; situacao: string | null }
+/** Contagem da coluna "Prescr." e da ação "Publicar prescrições":
+ *   ativas      — estrela valendo (marcada e publicada ou pendente; estado
+ *                 final — arquivada/excluída/retirada — sai da conta);
+ *   publicadas  — marcadas que estão publicadas;
+ *   pendentes   — o que falta fazer lá: publicação pendente, ARQUIVAMENTO
+ *                 pendente (desmarcada/excluída com vínculo fora ou falha),
+ *                 marcada ainda sem situação, desmarcada ainda "publicada". */
+export interface ResumoEstrelasTalhao { ativas: number; publicadas: number; pendentes: number }
+
+export function contarEstrelas(ls: readonly LinhaEstrela[]): ResumoEstrelasTalhao {
+  const r: ResumoEstrelasTalhao = { ativas: 0, publicadas: 0, pendentes: 0 };
+  for (const e of ls) {
+    if (e.marcada && (e.situacao === 'publicada' || e.situacao === 'pendente' || e.situacao == null)) r.ativas++;
+    if (e.marcada && e.situacao === 'publicada') r.publicadas++;
+    if (e.situacao === 'pendente' || (e.marcada && e.situacao == null) || (!e.marcada && e.situacao === 'publicada')) r.pendentes++;
+  }
+  return r;
+}
+
 /** Linhagem = id da V1 (origemId das versões seguintes). */
 export const linhagemDe = (c: { id: string; origemId?: string | null }) => c.origemId || c.id;
 
