@@ -7,7 +7,6 @@ import { getClientes, getFazendas, getTalhoes, saveFazenda, updateCliente, delet
 import { getUsuarios, statusDe, categoriaDe } from '@/lib/iam/usuarios';
 import { ChevronLeft, Plus, Building2, Phone, Mail, Edit2, Save, X, Trash2, Pencil, UserCog, Eye } from 'lucide-react';
 import { ligarApresentacao, podeApresentarComoProdutor } from '@/lib/empresa';
-import { ligarModoProdutorMapa } from '@/lib/modoProdutorMapa';
 import { PanelSection, PanelButton, MockIndicator } from './_shared';
 import { ResumoGeralRecomendacoes } from './ResumoGeralRecomendacoes';
 import { somenteLeitura } from '@/lib/somenteLeitura';
@@ -31,13 +30,15 @@ export function ProdutorDetailPanel() {
   // A trava de verdade é na nuvem (lib/somenteLeitura.ts); aqui é só a tela.
   const leitura = somenteLeitura();
   // "Apresentar como produtor" (lib/modoApresentacao.ts): owner/admin abrem a
-  // plataforma como este cliente vê. Recarrega o /painel: o escopo do produtor
-  // tem de valer desde o boot, não só nos painéis que montarem depois.
+  // plataforma como este cliente vê. Abre DIRETO o Portal do Produtor (Visão
+  // geral) — a tela que o produtor vê ao entrar; de lá, "Acessar a plataforma"
+  // leva ao mapa. Carga completa da página: o escopo do produtor tem de valer
+  // desde o boot. Sem ?cliente= de propósito: o plano vem do registro do
+  // produtor (o ?cliente= do preview religaria o modo sem plano).
   const podeApresentar = !leitura && podeApresentarComoProdutor();
   function apresentar() {
     if (!cliente || !ligarApresentacao({ id: cliente.id, nome: cliente.nome })) return;
-    ligarModoProdutorMapa(cliente.id);   // fica no /painel, aberto no cadastro dele
-    window.location.assign('/painel');
+    window.location.assign('/portal');
   }
   const [tab, setTab] = useState<'fazendas' | 'relatorios' | 'dados'>('fazendas');
   const [cliente, setCliente] = useState<Cliente | null>(null);

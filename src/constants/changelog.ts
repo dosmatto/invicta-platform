@@ -1,5 +1,9 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Apresentar como produtor abre direto o Portal do Produtor
+  '3.1.1': [
+    'PENDÊNCIA S/N — APRESENTAR ABRE DIRETO O PORTAL: o botão "Apresentar como produtor", na ficha do cliente, agora abre direto o Portal do Produtor (Visão geral), já no modo apresentação — a mesma tela que o produtor vê ao entrar. De lá, "Acessar a plataforma" leva ao mapa dele; "Sair" volta ao painel da equipe.',
+  ],
   // [S/N] Apresentar a plataforma como o produtor
   '3.1.0': [
     'PENDÊNCIA S/N — APRESENTAR COMO O PRODUTOR: na ficha do cliente (Clientes → abrir o cliente) há o botão "Apresentar como produtor", só para owner e admin. Ele abre a plataforma exatamente como aquele produtor vê, com o seu próprio login — sem precisar da senha dele: só as fazendas e talhões dele (inclusive a fazenda de condomínio marcada no acesso dele), as abas que o plano e as permissões dele liberam, e somente leitura.',
