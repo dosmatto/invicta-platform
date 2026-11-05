@@ -1,5 +1,10 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Mapas do portal legíveis com fazendas distantes
+  '3.1.2': [
+    'PENDÊNCIA S/N — MAPAS DO PORTAL COM FAZENDAS DISTANTES: com fazendas a dezenas de km umas das outras, os mapas do Portal do Produtor (produtividade, fertilidade, zonas, CE, relevo…) enquadravam a região inteira e cada talhão virava um ponto de poucos pixels — o mapa parecia vazio, tanto na visão leve quanto em "Mapas reais". Agora os talhões próximos (até ~3 km) formam um grupo, cada grupo ganha o seu quadro (moldura tracejada) e todos usam a mesma escala, então os tamanhos continuam comparáveis. Produtor com uma área só vê o mapa como antes.',
+    'Corrigido também: ao trocar o filtro, as zonas do modo "Mapas reais" podiam continuar desenhadas na posição do filtro anterior.',
+  ],
   // [S/N] Apresentar como produtor abre direto o Portal do Produtor
   '3.1.1': [
     'PENDÊNCIA S/N — APRESENTAR ABRE DIRETO O PORTAL: o botão "Apresentar como produtor", na ficha do cliente, agora abre direto o Portal do Produtor (Visão geral), já no modo apresentação — a mesma tela que o produtor vê ao entrar. De lá, "Acessar a plataforma" leva ao mapa dele; "Sair" volta ao painel da equipe.',

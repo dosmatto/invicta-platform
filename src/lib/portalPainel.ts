@@ -952,47 +952,113 @@ const lerGeo = (g: unknown): unknown => {
   try { return JSON.parse(g); } catch { return null; }
 };
 
-export interface FormaMapa { id: string; d: string; cx: number; cy: number; w: number; h: number }
+export interface FormaMapa { id: string; d: string; cx: number; cy: number; w: number; h: number; grupo: number }
 export interface ProjecaoMapa {
   viewBox: string; largura: number; altura: number;
   formas: FormaMapa[];
-  /** lng/lat → coordenada do quadro (null sem nenhum talhão válido). */
+  /** lng/lat → coordenada do quadro, do PRIMEIRO grupo (null sem talhão válido).
+   *  Com um grupo só (o caso comum) vale para o mapa inteiro. */
   ponto: ((lng: number, lat: number) => [number, number]) | null;
+  /** lng/lat → coordenada, na projeção do grupo deste talhão — use para pôr
+   *  raster (bounds) e zonas de um talhão no lugar certo. */
+  pontoDe: (id: string) => ((lng: number, lat: number) => [number, number]) | null;
+  /** Retângulo de cada grupo no quadro (só desenhado quando há mais de um). */
+  grupos: Array<{ x: number; y: number; w: number; h: number }>;
+  /** Identidade da projeção (cache de caminhos: o mesmo viewBox não basta). */
+  chave: string;
 }
 
+/** Distância (graus, já com a longitude corrigida) acima da qual dois talhões
+ *  ficam em GRUPOS separados: ~3 km. */
+const SEPARACAO_GRUPO = 0.03;
+
 /** Projeta os talhões numa caixa `largura × altura` mantendo a proporção real
- *  (longitude × cos da latitude média) — mesma conta de projetarTalhoes, com a
- *  função `ponto` exposta para pôr rasters (bounds) e zonas no mesmo quadro. */
+ *  (longitude × cos da latitude média), com a função `ponto` exposta para pôr
+ *  rasters (bounds) e zonas no mesmo quadro.
+ *
+ *  GRUPOS (05/11/2026): produtor com fazendas a dezenas de km umas das outras
+ *  via cada talhão virar um ponto de 8 px — o quadro enquadrava a região toda.
+ *  Agora os talhões próximos (< ~3 km) formam um grupo; cada grupo ganha um
+ *  quadro numa grade e todos usam a MESMA escala (os tamanhos continuam
+ *  comparáveis entre grupos). Com um grupo só, é o mapa geográfico de sempre. */
 export function projetarMapa(itens: Array<{ id: string; geojson?: unknown }>, largura = 600, altura = 360, margem = 10): ProjecaoMapa {
-  const porTalhao: Array<{ id: string; aneis: Anel[] }> = [];
+  const porTalhao: Array<{ id: string; aneis: Anel[]; cx: number; cy: number; x0: number; x1: number; y0: number; y1: number }> = [];
+  const viewBox = `0 0 ${largura} ${altura}`;
+  const vazio: ProjecaoMapa = { viewBox, largura, altura, formas: [], ponto: null, pontoDe: () => null, grupos: [], chave: viewBox };
   for (const it of itens) {
     const aneis = aneisDe(lerGeo(it.geojson));
-    if (aneis.length) porTalhao.push({ id: it.id, aneis });
+    if (aneis.length) porTalhao.push({ id: it.id, aneis, cx: 0, cy: 0, x0: 0, x1: 0, y0: 0, y1: 0 });
   }
-  const viewBox = `0 0 ${largura} ${altura}`;
-  if (!porTalhao.length) return { viewBox, largura, altura, formas: [], ponto: null };
-  let minLng = Infinity, maxLng = -Infinity, minLat = Infinity, maxLat = -Infinity;
-  for (const t of porTalhao) for (const r of t.aneis) for (const [lng, lat] of r) {
-    if (lng < minLng) minLng = lng; if (lng > maxLng) maxLng = lng;
-    if (lat < minLat) minLat = lat; if (lat > maxLat) maxLat = lat;
+  if (!porTalhao.length) return vazio;
+  let latMin = Infinity, latMax = -Infinity;
+  for (const t of porTalhao) for (const r of t.aneis) for (const [, lat] of r) { if (lat < latMin) latMin = lat; if (lat > latMax) latMax = lat; }
+  const k = Math.cos(((latMin + latMax) / 2) * Math.PI / 180) || 1;
+  // Caixa de cada talhão em graus "planos" (x = lng·k, y = lat).
+  for (const t of porTalhao) {
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+    for (const r of t.aneis) for (const [lng, lat] of r) { const x = lng * k; if (x < x0) x0 = x; if (x > x1) x1 = x; if (lat < y0) y0 = lat; if (lat > y1) y1 = lat; }
+    Object.assign(t, { x0, x1, y0, y1, cx: (x0 + x1) / 2, cy: (y0 + y1) / 2 });
   }
-  const k = Math.cos(((minLat + maxLat) / 2) * Math.PI / 180) || 1;
-  const dx = (maxLng - minLng) * k || 1e-9;
-  const dy = (maxLat - minLat) || 1e-9;
-  const escala = Math.min((largura - 2 * margem) / dx, (altura - 2 * margem) / dy);
-  const offX = margem + ((largura - 2 * margem) - dx * escala) / 2;
-  const offY = margem + ((altura - 2 * margem) - dy * escala) / 2;
-  const ponto = (lng: number, lat: number): [number, number] => [
-    Math.round((offX + (lng - minLng) * k * escala) * 10) / 10,
-    Math.round((offY + (maxLat - lat) * escala) * 10) / 10,
-  ];
+  // Agrupa por proximidade das caixas (ligação simples; união-busca).
+  const pai = porTalhao.map((_, i) => i);
+  const raiz = (i: number): number => (pai[i] === i ? i : (pai[i] = raiz(pai[i])));
+  for (let i = 0; i < porTalhao.length; i++) for (let j = i + 1; j < porTalhao.length; j++) {
+    const a = porTalhao[i], b = porTalhao[j];
+    const gx = Math.max(0, Math.max(a.x0, b.x0) - Math.min(a.x1, b.x1));
+    const gy = Math.max(0, Math.max(a.y0, b.y0) - Math.min(a.y1, b.y1));
+    if (Math.hypot(gx, gy) <= SEPARACAO_GRUPO) pai[raiz(i)] = raiz(j);
+  }
+  const porRaiz = new Map<number, number[]>();
+  porTalhao.forEach((_, i) => { const r = raiz(i); porRaiz.set(r, [...(porRaiz.get(r) ?? []), i]); });
+  const grupos = [...porRaiz.values()].map(ix => {
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+    for (const i of ix) { const t = porTalhao[i]; x0 = Math.min(x0, t.x0); x1 = Math.max(x1, t.x1); y0 = Math.min(y0, t.y0); y1 = Math.max(y1, t.y1); }
+    return { ix, x0, x1, y0, y1, dx: (x1 - x0) || 1e-9, dy: (y1 - y0) || 1e-9 };
+  });
+  // Ordem de leitura: norte → sul, oeste → leste (aproximadamente geográfica).
+  grupos.sort((a, b) => (b.y1 - a.y1) || (a.x0 - b.x0));
+  const n = grupos.length;
+  // Grade: escolhe o nº de colunas que dá a MAIOR escala comum.
+  const folga = n > 1 ? 8 : 0;
+  let melhor = { cols: 1, rows: n, escala: 0 };
+  for (let cols = 1; cols <= n; cols++) {
+    const rows = Math.ceil(n / cols);
+    const cw = (largura - 2 * margem) / cols, ch = (altura - 2 * margem) / rows;
+    const escala = Math.min(...grupos.map(g => Math.min((cw - 2 * folga) / g.dx, (ch - 2 * folga) / g.dy)));
+    if (escala > melhor.escala) melhor = { cols, rows, escala };
+  }
+  const { cols, rows, escala } = melhor;
+  const cw = (largura - 2 * margem) / cols, ch = (altura - 2 * margem) / rows;
+  const pontos: Array<(lng: number, lat: number) => [number, number]> = [];
+  const caixas: ProjecaoMapa['grupos'] = [];
+  grupos.forEach((g, gi) => {
+    const col = gi % cols, row = Math.floor(gi / cols);
+    const cx0 = margem + col * cw, cy0 = margem + row * ch;
+    const offX = cx0 + (cw - g.dx * escala) / 2;
+    const offY = cy0 + (ch - g.dy * escala) / 2;
+    pontos.push((lng: number, lat: number): [number, number] => [
+      Math.round((offX + (lng * k - g.x0) * escala) * 10) / 10,
+      Math.round((offY + (g.y1 - lat) * escala) * 10) / 10,
+    ]);
+    caixas.push({ x: r1(cx0 + 2), y: r1(cy0 + 2), w: r1(cw - 4), h: r1(ch - 4) });
+  });
+  const grupoDe = new Map<string, number>();
+  grupos.forEach((g, gi) => g.ix.forEach(i => grupoDe.set(porTalhao[i].id, gi)));
   const formas = porTalhao.map(t => {
+    const grupo = grupoDe.get(t.id) ?? 0;
+    const ponto = pontos[grupo];
     const d = caminhoDosAneis(t.aneis, ponto);
     let a = Infinity, b = -Infinity, c = Infinity, e = -Infinity;
     for (const r of t.aneis) for (const [lng, lat] of r) { const [x, y] = ponto(lng, lat); if (x < a) a = x; if (x > b) b = x; if (y < c) c = y; if (y > e) e = y; }
-    return { id: t.id, d, cx: r1((a + b) / 2), cy: r1((c + e) / 2), w: r1(b - a), h: r1(e - c) };
+    return { id: t.id, d, cx: r1((a + b) / 2), cy: r1((c + e) / 2), w: r1(b - a), h: r1(e - c), grupo };
   });
-  return { viewBox, largura, altura, formas, ponto };
+  const chave = `${viewBox}|${grupos.map(g => `${g.x0.toFixed(5)},${g.y1.toFixed(5)}`).join(';')}|${escala.toFixed(3)}`;
+  return {
+    viewBox, largura, altura, formas, ponto: pontos[0],
+    pontoDe: (id: string) => { const g = grupoDe.get(id); return g == null ? null : pontos[g]; },
+    grupos: n > 1 ? caixas : [],
+    chave,
+  };
 }
 
 function caminhoDosAneis(aneis: Anel[], ponto: (lng: number, lat: number) => [number, number]): string {

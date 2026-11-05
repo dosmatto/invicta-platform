@@ -359,6 +359,27 @@ t('projeção: talhões no quadro, ponto e bounds no MESMO quadro', () => {
   assert.equal(projetarMapa([], 100, 100).ponto, null);
 });
 
+t('projetarMapa: fazendas distantes viram grupos e o talhão não vira um ponto', () => {
+  // Três talhões perto (fazenda A) e dois a ~80 km (fazenda B).
+  const itens = [
+    { id: 'a1', geojson: quad(-50, -25, 0.01, 0.01) }, { id: 'a2', geojson: quad(-49.988, -25, 0.01, 0.01) }, { id: 'a3', geojson: quad(-50, -24.988, 0.01, 0.01) },
+    { id: 'b1', geojson: quad(-49.2, -24.5, 0.012, 0.008) }, { id: 'b2', geojson: quad(-49.186, -24.5, 0.01, 0.01) },
+  ];
+  const p = projetarMapa(itens, 600, 360, 10);
+  assert.equal(p.grupos.length, 2);
+  assert.deepEqual(new Set(p.formas.map(f => f.grupo)).size, 2);
+  const a1 = p.formas.find(f => f.id === 'a1');
+  assert.ok(a1.w > 60, `talhão largo o bastante (${a1.w} px)`);
+  // Cada talhão usa a projeção do seu grupo: o canto do b1 cai dentro da forma dele.
+  const b1 = p.formas.find(f => f.id === 'b1');
+  const [x, y] = p.pontoDe('b1')(-49.194, -24.496);
+  assert.ok(Math.abs(x - b1.cx) < b1.w && Math.abs(y - b1.cy) < b1.h);
+  // Sem grupos extras, nada muda: um grupo só e sem molduras.
+  const um = projetarMapa(itens.slice(0, 3), 600, 360, 10);
+  assert.equal(um.grupos.length, 0);
+  assert.notEqual(um.chave, p.chave);
+});
+
 // ── Cultura predominante: colheita por talhão E por cultura ─────────────────
 // Soja de mar + milho safrinha de jul no MESMO talhão e ano (comum no PR): a
 // soja não pode sumir porque o milho é o mapa mais recente.

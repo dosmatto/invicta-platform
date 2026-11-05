@@ -144,6 +144,7 @@ verdadeira (fusão de talhões) chegou depois; foi preciso renumerar.
 | S/N | Plataforma 3.0 — o novo Portal do Produtor (a plataforma passa a contar a partir da 3.0.0) | 3.0.0 | Configurações → versão |
 | S/N | Apresentar a plataforma como o produtor (owner/admin abrem /painel, talhão e portal como o produtor vê, somente leitura, com faixa e Sair) | 3.1.0 | Clientes → ficha do cliente → "Apresentar como produtor" |
 | S/N | "Apresentar como produtor" abre direto o Portal do Produtor | 3.1.1 | /painel → ficha do cliente → Apresentar como produtor |
+| S/N | Mapas do portal legíveis com fazendas distantes (talhões viravam pontos; agora um quadro por grupo de talhões próximos) | 3.1.2 | /portal → todos os mapas |
 
 > As pendências 1–17 foram entregues antes deste registro existir e não estão
 > catalogadas; procure pelo assunto no `changelog.ts`. Da 18 em diante, tudo

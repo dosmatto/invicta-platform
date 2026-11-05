@@ -157,7 +157,7 @@ export function MiniMapa({ talhoes, corDe, rotulo, modo, camadaReal, onClicar, a
       </div>
     );
   }
-  const ponto = proj.ponto;
+  const pontoDe = (id: string) => proj.pontoDe(id) ?? proj.ponto!;
   const ativo = sobre ?? destaque ?? null;
   const txtAtivo = ativo ? [nomeDe.get(ativo), rotulo?.(ativo)].filter(Boolean).join(' · ') : '';
 
@@ -172,6 +172,7 @@ export function MiniMapa({ talhoes, corDe, rotulo, modo, camadaReal, onClicar, a
           {proj.formas.map((f, i) => <clipPath key={f.id} id={`${uid}-c${i}`}><path d={f.d} clipRule="evenodd" /></clipPath>)}
         </defs>
         <rect x="0" y="0" width={proj.largura} height={proj.altura} fill={`url(#${uid}-grade)`} />
+        {proj.grupos.map((g, i) => <rect key={`g${i}`} x={g.x} y={g.y} width={g.w} height={g.h} rx={8} fill="none" stroke="var(--p-contorno)" strokeOpacity={0.35} strokeDasharray="4 4" />)}
         {proj.formas.map((f, i) => {
           const p = pedidos.find(x => x.id === f.id);
           const des = p?.camada ? resolvidos.get(p.camada.chave) : undefined;
@@ -181,12 +182,12 @@ export function MiniMapa({ talhoes, corDe, rotulo, modo, camadaReal, onClicar, a
             <g key={f.id}>
               <path d={f.d} fill={cor ?? 'var(--p-sem-dado)'} fillOpacity={des ? 0.3 : cor ? 0.92 : 0.7} fillRule="evenodd" />
               {des?.tipo === 'raster' && (() => {
-                const b = caixaDosBounds(des.bounds, ponto);
+                const b = caixaDosBounds(des.bounds, pontoDe(f.id));
                 return <image href={des.url} x={b.x} y={b.y} width={b.w} height={b.h} preserveAspectRatio="none" clipPath={`url(#${uid}-c${i})`} style={{ imageRendering: 'pixelated' }} />;
               })()}
               {des?.tipo === 'vetor' && (
                 <g clipPath={`url(#${uid}-c${i})`}>
-                  {caminhosDe(des, proj.viewBox, ponto).map((z, k) => <path key={k} d={z.d} fill={z.cor} fillOpacity={0.9} stroke="var(--p-contorno)" strokeWidth={0.8} fillRule="evenodd" />)}
+                  {caminhosDe(des, `${proj.chave}|${f.grupo}`, pontoDe(f.id)).map((z, k) => <path key={k} d={z.d} fill={z.cor} fillOpacity={0.9} stroke="var(--p-contorno)" strokeWidth={0.8} fillRule="evenodd" />)}
                 </g>
               )}
               <path d={f.d} fill="transparent" fillRule="evenodd" stroke={realce ? 'var(--text-primary)' : 'var(--p-contorno)'} strokeWidth={realce ? 2.6 : 1.4} strokeLinejoin="round"
