@@ -1,5 +1,10 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Plataforma 3.0 — o novo Portal do Produtor
+  '3.0.0': [
+    'PENDÊNCIA S/N — PLATAFORMA 3.0: com o Portal do Produtor remodelado (menu por tema, Visão geral, painel por talhão, mapas leve e reais e o Comparativo Invicta, entregues da 2.225.0 à 2.226.2), a plataforma passa a contar a partir da versão 3.0.0. As próximas entregas seguem 3.0.1, 3.1.0 e assim por diante.',
+    'Nada muda no uso: esta versão só marca a nova numeração. O app de campo (INVICTA Coleta) tem numeração própria e não muda com ela.',
+  ],
   // [S/N] Portal: zonas de todos os talhões e filtros legíveis no Windows
   '2.226.2': [
     'PENDÊNCIA S/N — ZONAS DE TODOS OS TALHÕES NO PORTAL: o Portal do Produtor só mostrava as zonas de manejo dos talhões em que alguém tinha apertado "Tornar padrão"; talhão com zoneamento salvo sem padrão aparecia como "sem zoneamento" (na Visão geral, na página Zonas e no KPI "Talhões com zonas"). Agora o portal usa a mesma regra do resto da plataforma: o zoneamento padrão; sem padrão, o mais recente; sem nenhum salvo, a cópia do talhão. Continua somente leitura.',
