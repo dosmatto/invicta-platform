@@ -176,9 +176,10 @@ export interface VinculoLote extends VinculoPF {
 
 export const loteGeralPF = () => chamar<{ vinculos: VinculoLote[] }>('/api/precisionfarm/lote');
 
-export interface ResultadoManifesto { talhaoId: string; sharedFieldId: string; nomePF: string; ok: boolean; motivo?: string }
+export interface ResultadoManifesto { talhaoId: string; sharedFieldId: string; nomePF: string; ok: boolean; motivo?: string; substituido?: boolean }
 
-export const criarVinculosManifestoPF = (itens: Array<{ talhaoId: string; pfLocalId: string; sharedProducerId: string; sharedFarmId: string; sharedFieldId: string; nomePF: string }>) =>
+/** `substituir`: troca o vínculo PENDENTE sem ID PF do talhão (Q5 do manifesto v2). */
+export const criarVinculosManifestoPF = (itens: Array<{ talhaoId: string; pfLocalId: string; sharedProducerId: string; sharedFarmId: string; sharedFieldId: string; nomePF: string; substituir?: boolean }>) =>
   chamar<{ criados: number; resultados: ResultadoManifesto[] }>('/api/precisionfarm/manifesto', { method: 'POST', body: { itens } });
 
 /** Camadas que contam como "o talhão tem linhas" (aba no portal do produtor). */

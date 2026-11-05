@@ -668,3 +668,94 @@ reimportar o manifesto mostra todos como "Já vinculado (mesmos IDs)".
 Testes: `npm run teste:precisionfarm` (seções "Lote"; com
 `PF_MANIFESTO_REAL=<pasta do complemento descompactado>` confere os 16 limites
 reais e a regra de ambíguo).
+
+### 8.2 Manifesto v2 — ativação geral (04/11) e o retorno para a PF
+
+Pacote `PARA_INVICTA_ATIVAR_SINCRONIZACAO_20261104.zip`: `VINCULOS.json`
+(`clients[]`, `farm_groups[]`, `fields[]` — 13 clientes, 162 talhões, 15
+confirmados da Figueira) + `LIMITES.geojson` (FeatureCollection, ~12 MB, uma
+feição por talhão ligada por `properties.shared_field_id`). Decisões do usuário:
+ledger `pf-manifesto-v2` (Q1–Q6; o contrato 0.3 — Q7 — fica para outra fase).
+
+**Leitura** (mesma tela, mesmos tetos de tamanho — o LIMITES.geojson cabe nos 20
+MB por arquivo): o formato é detectado pela presença de `clients`/`farm_groups`
+(`lerManifestoPF → formato 'v2'`). O item do v2 não tem `boundary_file`: o
+limite é a feição do `.geojson` com o mesmo `shared_field_id`
+(`lerLimitesGeojson` indexa; `limiteDoCampo` lê com a mesma leitura estrita).
+Sem feição, duas feições com o mesmo ID, `local_field_id` da feição diferente
+do VINCULOS.json ou geometria inválida = item inválido, com o motivo.
+
+**Casamento** contra TODOS os talhões do aparelho, como no v1, com duas
+diferenças: o par > 5 % também vem **marcado** (Q3) e a prévia agrupa por
+cliente da PF → cliente nosso (o cliente sai da geometria do talhão casado,
+nunca do nome). Desempenho: pré-filtro pela caixa e, entre os vizinhos, o
+recorte (turf) só roda se o **teto** da interseção (área da sobreposição das
+caixas) ainda puder fazer o vizinho ser o melhor ou relevante
+(`tetoIntersecaoM2`); a tela usa `casarManifestoAos` (fatias de 8 talhões,
+com progresso). Pacote real: ~430 recortes, ~11 s em Node.
+
+**Fazendas (Q2)** — `planejarIds`, sobre todos os pares criáveis (marcados ou
+não; o plano não muda quando o usuário desmarca):
+
+- grupo = `shared_farm_id` proposto pela PF; a fazenda nossa que já usa esse
+  UUID é a principal; senão, a que recebe mais pares (empate: maior área);
+- a principal fica com o UUID da PF; se ela já tem OUTRO `shared_farm_id`,
+  os pares dela viram **conflito** e não são criados;
+- as demais fazendas usam o `shared_farm_id` que já têm, ou um **UUID novo**;
+- produtor: o `shared_producer_id` da PF; cliente nosso que já tem outro (ou
+  recebeu outro antes no mesmo manifesto) = conflito.
+- Na prévia, cada par mostra "UUID da PF" / "UUID novo" / "UUID da fazenda" e
+  um quadro lista os grupos divididos. A mesma regra vale para o v1.
+
+**Substituição (Q5)**: talhão com vínculo **pendente**, **sem `pf_local_id`** e
+**sem publicação** (`pf_recursos` — as revisões são imutáveis e levam os UUIDs
+no envelope) pode ter os IDs trocados pelos do manifesto ("substitui
+pendente"). O vínculo substituído sai da base da regra de reuso. Confirmado,
+suspenso, pendente com ID PF ou com publicação: "Já vinculado", nunca troca.
+
+**Servidor** (`POST /api/precisionfarm/manifesto`, `conferirCriacao`): os
+itens chegam com o `sharedFarmId` do plano e `substituir: true` quando for o
+caso. Além das conferências do §8.1: um `shared_farm_id` serve a UMA fazenda
+(novo uso em outra fazenda é recusado; a fazenda que já o usa — legado —
+continua); a substituição só vale com o pedido explícito e o vínculo nas
+condições acima (publicação lida na hora, de `pf_recursos`); se um item de
+substituição cai por outro motivo, o vínculo antigo volta à base e o pedido é
+conferido de novo. A troca é um UPDATE na própria linha
+(`substituirVinculosPendentes`), condicional a `status = 'pendente' and
+pf_local_id is null` — corrida com outra aba sai recusada por item.
+
+**Exportar retorno** (`retornoPF.ts`, botão na mesma tela): `.zip` com
+
+- `VINCULOS.json` — o da PF, com tudo preservado, mais: por talhão
+  `remote_field_id` (nosso talhão), `remote_field_name`, `identity_status`
+  (`confirmed` · `remote_matched_pending_confirmation` · `remote_link_suspended` ·
+  `remote_match_not_found` · `remote_match_ambiguous` · `remote_match_rejected`;
+  par não criado mantém o status da PF) e `boundary_difference_pct`; quando o
+  `shared_farm_id` do vínculo não é o proposto, ele vai em `shared_farm_id` e o
+  da PF em `proposed_shared_farm_id`. `clients[]`: `remote_producer_id`
+  (cliente com mais vínculos do produtor) e `identity_status` pela cobertura
+  (`confirmed`/`partially_confirmed`/pendente). `farm_groups[]`: o grupo fica
+  com a fazenda principal (`remote_farm_id`, `remote_farm_name`) e cada fazenda
+  a mais vira entrada nova com o UUID novo e `split_from_shared_farm_id`.
+  Resumo em `invicta_return`.
+- `SITUACAO_POR_TALHAO.csv` (`;`, UTF-8 com BOM) — por talhão da PF:
+  **ativo** (confirmado, com publicação, ≤ 5 %), **limite divergente**
+  (confirmado, > 5 %), **sem dados** (confirmado, nada publicado pela Invicta),
+  **pendente de confirmação** (vínculo criado, ainda não confirmado — a PF não
+  o vê; sexta situação, além das cinco pedidas), **sem correspondência** (sem
+  par, ambíguo ou par não criado) e **erro** (conflito, inválido, talhão com
+  outro vínculo, suspenso), com o motivo.
+
+A fonte do retorno são os **vínculos que existem** (lista da tela de lote,
+recarregada depois de criar/confirmar), não a prévia — exporte depois de
+confirmar.
+
+Com o pacote real (nossos simulados a partir dos limites da PF nas fazendas
+reais do casamento de referência): 83 pares ≤ 5 % (inclui o 115, substituído),
+38 > 5 %, 21 ambíguos, 5 sem par (4 do Leonardo Geus, que não existe aqui, e o
+PV do Jacob), 15 já vinculados; 5 grupos divididos (Jacob, José Ricardo,
+Christian, Ricardo Volter, Adriano) → 10 fazendas a mais no retorno.
+
+Testes: `npm run teste:precisionfarm` (seções "Manifesto v2"); com
+`PF_ATIVACAO_REAL=<pasta do pacote>` e `PF_CASAMENTO_REF=<casamento-162.json>`
+roda o pacote real.

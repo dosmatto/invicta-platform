@@ -132,6 +132,7 @@ verdadeira (fusão de talhões) chegou depois; foi preciso renumerar.
 | S/N | Prescrição por exportação reconhece a escala de 6–12 classes ("Muito alto" → Alta, "Muito baixo" → Baixa) | 2.217.4 | Talhão → Prescrições → "Por exportação (potencial da zona)" → Potencial produtivo por zona |
 | S/N | Tela de lote da PrecisionFarm (confirmar/suspender, publicar, comparar limites e importar o manifesto da PF) | 2.218.0 | Biblioteca → PrecisionFarm (owner/admin) |
 | S/N | Lista de talhões sem espremer o nome (selos numa linha própria) + Ano destacado conforme a aba | 2.220.0 | Fazenda → lista de talhões; Talhão → cabeçalho → Ano (Fertilidade, Produtividade, Amostragem, Zonas, Compactação, NDVI, Recomendações) |
+| S/N | Manifesto novo da PrecisionFarm (ativação geral: VINCULOS.json + LIMITES.geojson) com fazendas divididas, substituição do pendente sem ID PF e "Exportar retorno" | 2.221.0 | Biblioteca → PrecisionFarm → Importar manifesto da PF |
 
 > As pendências 1–17 foram entregues antes deste registro existir e não estão
 > catalogadas; procure pelo assunto no `changelog.ts`. Da 18 em diante, tudo

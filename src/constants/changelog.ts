@@ -1,5 +1,13 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Manifesto novo da PrecisionFarm (ativação geral) + retorno para a PF
+  '2.221.0': [
+    'PENDÊNCIA S/N — MANIFESTO NOVO DA PRECISIONFARM: "Importar manifesto da PF" (Biblioteca → PrecisionFarm) aceita o pacote da ativação geral — o .zip com VINCULOS.json e LIMITES.geojson (ou os dois arquivos soltos). Cada limite é lido com a mesma conferência rigorosa de antes e comparado com TODOS os nossos talhões; o cliente nosso sai da geometria, nunca do nome (o "Tiago Boogaart" da PrecisionFarm é o nosso GILBERTO VAN DEN BOOGAARD). A prévia agrupa por cliente da PrecisionFarm → cliente nosso e mostra a fazenda de cada par. O manifesto antigo continua aceito.',
+    'PARES MARCADOS: neste pacote, os pares 1:1 vêm marcados tanto até 5% de diferença quanto acima (os limites da PrecisionFarm são mais precisos — compare e adote depois, talhão a talhão). Ambíguo e sem par ficam de fora, com o motivo.',
+    'FAZENDAS: a PrecisionFarm agrupou cada produtor numa fazenda só; aqui um cliente tem várias. A fazenda nossa que recebe mais talhões do grupo fica com o identificador da PrecisionFarm e as outras recebem um identificador novo (a prévia mostra "UUID da PF" ou "UUID novo" em cada par, e um quadro com os grupos divididos). Fazenda ou cliente que já têm vínculo usam o identificador que já têm; se divergir do manifesto, o par aparece como conflito e não é criado.',
+    'TALHÃO COM VÍNCULO PENDENTE SEM ID PF (como o 115 da NHAZINHA): o importador troca os identificadores dele pelos do manifesto ("substitui pendente"). Vínculo confirmado, suspenso, pendente com ID PF ou que já publicou alguma coisa nunca é trocado.',
+    'EXPORTAR RETORNO: baixa um .zip com o VINCULOS.json da PrecisionFarm preenchido com os nossos IDs (cliente, fazenda e talhão), a situação de cada vínculo e os grupos de fazenda divididos, mais a planilha SITUACAO_POR_TALHAO.csv com a situação de cada talhão (ativo, pendente de confirmação, limite divergente, sem dados, sem correspondência, erro) e o motivo. O retorno sai dos vínculos que existem na hora — confirme os pendentes antes de mandar.',
+  ],
   // [S/N] Lista de talhões sem espremer o nome + Ano destacado por aba
   '2.220.0': [
     'PENDÊNCIA S/N — LISTA DE TALHÕES SEM ESPREMER O NOME: na fazenda, os selos (áreas separadas, fertilidade, colheita, linhas) saíram da linha do nome e foram para uma linha própria logo abaixo da área. O nome volta a aparecer inteiro ("JCASA 01" em vez de "JCA / SA / 01") e a área não é mais cortada ("52,…"). Os botões de baixar e abrir o talhão continuam à direita.',

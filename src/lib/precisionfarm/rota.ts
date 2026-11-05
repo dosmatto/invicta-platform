@@ -21,7 +21,8 @@
 // Tela de lote (Biblioteca → PrecisionFarm, owner/admin):
 //   • /api/precisionfarm/lote → visão geral de todos os vínculos;
 //   • /api/precisionfarm/manifesto → cria pendentes com os UUIDs do manifesto
-//     da PF (casamento por geometria feito na tela, conferência aqui).
+//     da PF (casamento por geometria e plano de fazendas feitos na tela,
+//     conferência aqui) e substitui o pendente sem ID PF (Q5).
 //
 // Corpo de erro do lado PF: { "error": { "code", "message" } } com os status do
 // contrato (401 · 404 · 413 · 422). Contrato: docs/integracao-precisionfarm.md.
@@ -47,7 +48,7 @@ import {
 import {
   ConflitoIntegracao, atualizarVinculo, autenticarLeitor, autenticarPrecisionFarm, autenticarUsuario, camadasLinhasDosTalhoes, carregarTalhao, carregarTalhoes,
   clienteDaFazenda, clientesDasFazendas, clienteServico, envelopeDaRevisao, gradeProdutividade, inserirRevisao, inserirVinculo, inserirVinculos, mapaProdutividade,
-  obterOuCriarRecurso, recursoPorId, recursosDosVinculos, servicoConfigurado, ultimaRevisao, vigentesDoVinculo, vinculoDoCampo,
+  obterOuCriarRecurso, recursoPorId, recursosDosVinculos, servicoConfigurado, substituirVinculosPendentes, ultimaRevisao, vigentesDoVinculo, vinculoDoCampo,
   talhoesVisiveisAoLeitor, vinculoDoTalhao, vinculoPorId, vinculosConfirmados, vinculosDaParceria, vinculosParaReuso, zoneamentoPadrao,
   type VinculoRow,
 } from './servidor.ts';
@@ -461,9 +462,11 @@ export function tratarLote(req: Request): Promise<Response> {
 /**
  * POST /api/precisionfarm/manifesto — { itens: [{ talhaoId, pfLocalId,
  * sharedProducerId, sharedFarmId, sharedFieldId, nomePF }] }. Cria vínculos
- * PENDENTES com os UUIDs propostos pela PF (o casamento por geometria é feito
- * na tela; aqui vale a CONFERÊNCIA — manifestoPF.conferirCriacao). Item
- * recusado não impede os outros. Nada é criado sem esse pedido explícito.
+ * PENDENTES com os UUIDs propostos pela PF (o casamento por geometria e o plano
+ * de fazendas — Q2 — são feitos na tela; aqui vale a CONFERÊNCIA —
+ * manifestoPF.conferirCriacao). Item com `substituir: true` troca os IDs do
+ * vínculo PENDENTE sem ID PF e sem publicação do talhão (Q5). Item recusado
+ * não impede os outros. Nada é criado sem esse pedido explícito.
  */
 export function tratarManifesto(req: Request): Promise<Response> {
   return comUsuario(req, async (sb, u) => {
@@ -473,27 +476,49 @@ export function tratarManifesto(req: Request): Promise<Response> {
       vinculosDaParceria(sb, PARCERIA_PADRAO),
       carregarTalhoes(sb, lido.itens.map(i => i.talhaoId).filter(Boolean)),
     ]);
-    const clientes = await clientesDasFazendas(sb, [...talhoes.values()].map(t => t.fazendaId ?? '').filter(Boolean));
+    // Publicação só importa para a substituição (Q5): lida só dos vínculos
+    // pendentes sem ID PF que algum item pede para substituir.
+    const pedeSubstituir = new Set(lido.itens.filter(i => i.substituir).map(i => i.talhaoId));
+    const candidatos = existentes.filter(v => pedeSubstituir.has(v.talhao_id) && v.status === 'pendente' && v.pf_local_id === null);
+    const [clientes, recursos] = await Promise.all([
+      clientesDasFazendas(sb, [...talhoes.values()].map(t => t.fazendaId ?? '').filter(Boolean)),
+      candidatos.length ? recursosDosVinculos(sb, candidatos.map(v => v.id)) : Promise.resolve([]),
+    ]);
+    const comPublicacao = new Set(recursos.map(r => r.vinculo_id));
+    const avaliados = new Set(candidatos.map(v => v.id));
     const naNuvem = new Map([...talhoes].map(([id, t]) => [id, { fazendaId: t.fazendaId, clienteId: t.fazendaId ? clientes.get(t.fazendaId) ?? null : null, empresaId: t.empresaId }]));
     const conferidos = conferirCriacao(lido.itens, naNuvem, existentes.map(v => ({
       talhaoId: v.talhao_id, sharedProducerId: v.shared_producer_id, sharedFarmId: v.shared_farm_id, sharedFieldId: v.shared_field_id,
-      status: v.status, fazendaId: v.fazenda_id, clienteId: v.cliente_id,
+      status: v.status, fazendaId: v.fazenda_id, clienteId: v.cliente_id, pfLocalId: v.pf_local_id,
+      // Fora dos candidatos não se sabe (undefined) → não substitui.
+      temPublicacao: avaliados.has(v.id) ? comPublicacao.has(v.id) : undefined,
     })));
-    // Os aprovados entram EM LOTE (inserirVinculos: fatias de vários registros;
+    const aprovados = conferidos.filter((c): c is Extract<typeof c, { ok: true }> => c.ok);
+    const vinculoDe = new Map(existentes.map(v => [v.talhao_id, v]));
+    // Q5 primeiro: UPDATE condicional na própria linha (substituirVinculosPendentes).
+    const trocas = aprovados.filter(c => c.substitui);
+    const trocados = await substituirVinculosPendentes(sb, trocas.map(c => ({
+      id: vinculoDe.get(c.item.talhaoId)!.id,
+      patch: {
+        shared_producer_id: c.item.sharedProducerId, shared_farm_id: c.item.sharedFarmId, shared_field_id: c.item.sharedFieldId,
+        pf_local_id: c.item.pfLocalId, fazenda_id: c.fazendaId, cliente_id: c.clienteId, empresa_id: c.empresaId,
+      },
+    })));
+    // Os novos entram EM LOTE (inserirVinculos: fatias de vários registros;
     // a fatia que o unique recusar — corrida com outra aba — é refeita um a um
     // para dizer QUAL item caiu). A resposta continua por item, na ordem pedida.
-    const aprovados = conferidos.filter((c): c is Extract<typeof c, { ok: true }> => c.ok);
-    const gravados = await inserirVinculos(sb, aprovados.map(c => ({
+    const novos = aprovados.filter(c => !c.substitui);
+    const gravados = await inserirVinculos(sb, novos.map(c => ({
       parceria: PARCERIA_PADRAO, empresa_id: c.empresaId, talhao_id: c.item.talhaoId, fazenda_id: c.fazendaId, cliente_id: c.clienteId,
       shared_producer_id: c.item.sharedProducerId, shared_farm_id: c.item.sharedFarmId, shared_field_id: c.item.sharedFieldId,
       pf_local_id: c.item.pfLocalId, status: 'pendente' as const, criado_por: u.email,
     })));
-    const porAprovado = new Map(aprovados.map((c, k) => [c, gravados[k]]));
+    const porAprovado = new Map([...trocas.map((c, k) => [c, trocados[k]] as const), ...novos.map((c, k) => [c, gravados[k]] as const)]);
     const resultados = conferidos.map(c => {
       const base = { talhaoId: c.item.talhaoId, sharedFieldId: c.item.sharedFieldId, nomePF: c.item.nomePF };
       if (!c.ok) return { ...base, ok: false, motivo: c.motivo };
       const g = porAprovado.get(c)!;
-      return g.ok ? { ...base, ok: true } : { ...base, ok: false, motivo: g.motivo };
+      return g.ok ? { ...base, ok: true, substituido: !!c.substitui } : { ...base, ok: false, motivo: g.motivo };
     });
     return json({ ok: true, criados: resultados.filter(r => r.ok).length, resultados }, 200);
   });

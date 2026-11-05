@@ -384,6 +384,32 @@ export async function inserirVinculos(sb: SupabaseClient, rows: Parameters<typeo
   return saida;
 }
 
+/**
+ * Q5 (manifesto da PF): troca os UUIDs + ID PF de vínculos PENDENTES SEM ID PF
+ * (gerados na tela com UUIDs aleatórios). UPDATE na mesma linha (o id do
+ * vínculo fica — pf_recursos aponta para ele) e CONDICIONAL: só pega a linha
+ * se ela ainda está pendente e sem pf_local_id; se outra aba confirmou ou
+ * preencheu o ID no meio, nada muda e o item sai recusado. Um por vez (são
+ * poucos). Resultado na ordem de `itens`.
+ */
+export async function substituirVinculosPendentes(
+  sb: SupabaseClient,
+  itens: { id: string; patch: Pick<VinculoRow, 'shared_producer_id' | 'shared_farm_id' | 'shared_field_id' | 'pf_local_id' | 'fazenda_id' | 'cliente_id' | 'empresa_id'> }[],
+): Promise<ResultadoInsercao[]> {
+  const saida: ResultadoInsercao[] = [];
+  for (const { id, patch } of itens) {
+    const { data, error } = await sb.from('pf_vinculos')
+      .update({ ...patch, atualizado_em: new Date().toISOString() })
+      .eq('id', id).eq('status', 'pendente').is('pf_local_id', null)
+      .select('id');
+    if (error?.code === '23505') saida.push({ ok: false, motivo: 'Outro vínculo com este shared_field_id foi criado ao mesmo tempo.' });
+    else if (error) saida.push({ ok: false, motivo: `Falha ao substituir o vínculo: ${error.message}` });
+    else if (!data?.length) saida.push({ ok: false, motivo: 'O vínculo do talhão mudou enquanto isso (confirmado ou com ID PF) — não foi substituído.' });
+    else saida.push({ ok: true });
+  }
+  return saida;
+}
+
 export async function atualizarVinculo(sb: SupabaseClient, id: string, patch: Partial<VinculoRow>): Promise<VinculoRow> {
   const { data, error } = await sb.from('pf_vinculos').update({ ...patch, atualizado_em: new Date().toISOString() }).eq('id', id).select(COLS_VINCULO).single();
   if (error) throw new Error(`Falha ao atualizar o vínculo: ${error.message}`);

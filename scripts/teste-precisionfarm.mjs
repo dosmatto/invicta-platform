@@ -24,6 +24,13 @@
 //     de identidade), a conferência do servidor antes de criar e a execução em
 //     lote (concorrência, ordem, falha isolada, pulado × erro). Com
 //     PF_MANIFESTO_REAL=<pasta> confere também o manifesto real da Figueira.
+//  9. MANIFESTO v2 (VINCULOS.json + LIMITES.geojson, 04/11) — leitura e
+//     validação estrita dos limites por shared_field_id, > 5 % marcado (Q3),
+//     fazenda dividida e conflito de reuso (Q2), substituição do pendente sem
+//     ID PF permitida e negada (Q5), a conferência do servidor (substituição,
+//     um shared_farm_id por fazenda) e o retorno (VINCULOS.json + relatório).
+//     Com PF_ATIVACAO_REAL=<pasta> e PF_CASAMENTO_REF=<casamento-162.json>
+//     roda o pacote real de 162 talhões.
 
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -1091,6 +1098,319 @@ t('formato: UUID inválido e sem ID PF recusados; corpo vazio/grande demais recu
   assert.equal(MF.lerItensCriacao({ itens: Array.from({ length: MF.MAX_CAMPOS_MANIFESTO + 1 }, () => ({})) }).ok, false);
   assert.equal(MF.lerItensCriacao({ itens: [{ talhaoId: ' A ', sharedFieldId: uuidN(1).toUpperCase() }] }).itens[0].sharedFieldId, uuidN(1));
 });
+
+
+// ── Manifesto v2 (VINCULOS.json + LIMITES.geojson, 04/11) — ledger pf-manifesto-v2 ──
+const RT = await import('../src/lib/precisionfarm/retornoPF.ts');
+/** UUIDs "novos" previsíveis no teste (fazenda dividida). */
+const sequencia = () => { let n = 0; return () => `00000000-9999-4999-8999-${String(++n).padStart(12, '0')}`; };
+const PROD2 = uuidN(910), FARM2 = uuidN(911);
+const v2 = (fields, extra = {}) => ({
+  source_system: 'precisionfarm', summary: { clients: 1, fields: fields.length },
+  clients: [
+    { local_producer_id: 1, name: 'Tiago PF', shared_producer_id: PROD, remote_producer_id: null, identity_status: 'proposed_pending_remote_match' },
+    { local_producer_id: 2, name: 'Outro PF', shared_producer_id: PROD2, remote_producer_id: null, identity_status: 'proposed_pending_remote_match' },
+  ],
+  farm_groups: [
+    { local_producer_id: 1, shared_producer_id: PROD, shared_farm_id: FARM, name: null, remote_farm_id: null, identity_status: 'proposed_group_requires_remote_farm_confirmation', note: 'provisório' },
+    { local_producer_id: 2, shared_producer_id: PROD2, shared_farm_id: FARM2, name: null, remote_farm_id: null, identity_status: 'proposed_group_requires_remote_farm_confirmation' },
+  ],
+  fields, ...extra,
+});
+const campoV2 = (n, nome, extra = {}) => ({
+  local_field_id: n, local_producer_id: 1, name: nome, shared_producer_id: PROD, shared_farm_id: FARM, shared_field_id: uuidN(n),
+  remote_field_id: null, identity_status: 'proposed_pending_remote_match', enabled: false, projects: [{ name: 'linhas_verao' }], ...extra,
+});
+const feicao = (n, g, props = {}) => ({ type: 'Feature', properties: { local_field_id: n, name: `f${n}`, shared_field_id: uuidN(n), ...props }, geometry: g });
+const limitesFC = feicoes => JSON.stringify({ type: 'FeatureCollection', features: feicoes });
+const casarV2 = (fields, feicoes, talhoes, vinculos = [], opc = {}) => {
+  const m = MF.lerManifestoPF(v2(fields));
+  if (!m.ok) throw new Error(m.erro);
+  const idx = MF.lerLimitesGeojson(limitesFC(feicoes));
+  if (!idx.ok) throw new Error(idx.erro);
+  return MF.casarManifesto(m.campos, m.campos.map(c => MF.limiteDoCampo(c, null, null, idx.feicoes)), talhoes, vinculos, { preMarcarDiferentes: true, novoUuid: sequencia(), ...opc });
+};
+// Nossos em fila: N0..N4 (fazenda f1: N0, N1, N2; fazenda f2: N3, N4), cliente c1.
+const GN = i => poli(0.1 + i * 0.01, 0.1, 0.11 + i * 0.01, 0.11);
+const nossoF = (i, fazendaId, clienteId = 'c1', extra = {}) => nosso(`N${i}`, GN(i), { fazendaId, clienteId, ...extra });
+const NOSSOS_V2 = [nossoF(0, 'f1'), nossoF(1, 'f1'), nossoF(2, 'f1'), nossoF(3, 'f2'), nossoF(4, 'f2')];
+const vincV2 = (talhaoId, sharedFieldId, extra = {}) => ({ talhaoId, sharedFieldId, sharedProducerId: PROD, sharedFarmId: FARM, status: 'pendente', fazendaId: 'f1', clienteId: 'c1', pfLocalId: null, temPublicacao: false, ...extra });
+
+console.log('Manifesto v2 — leitura (VINCULOS.json + LIMITES.geojson)');
+t('lê o v2: formato, clients/farm_groups, limite no LIMITES.geojson, nome do cliente da PF', () => {
+  const m = MF.lerManifestoPF(JSON.stringify(v2([campoV2(1, 'BOQUEIRAO'), campoV2(2, 'X', { local_producer_id: 2, shared_producer_id: PROD2.toUpperCase(), shared_farm_id: FARM2 })])));
+  assert.equal(m.ok, true); assert.equal(m.formato, 'v2');
+  assert.equal(m.clientes.length, 2); assert.equal(m.grupos[0].sharedFarmId, FARM);
+  const [a, b] = m.campos;
+  assert.deepEqual([a.pfLocalId, a.limiteNoGeojson, a.problema, a.nomeClientePF, a.localProducerId], ['1', true, null, 'Tiago PF', '1']);
+  assert.deepEqual([b.sharedProducerId, b.nomeClientePF], [PROD2, 'Outro PF']);
+  // v1 sem boundary continua com defeito (o formato antigo não muda).
+  assert.match(MF.lerManifestoPF({ fields: [itemPF(1, 'a', null)] }).campos[0].problema, /Sem limite/);
+  assert.equal(MF.lerManifestoPF({ fields: [itemPF(1, 'a', QUAD)] }).formato, 'v1');
+});
+t('LIMITES.geojson: indexa por shared_field_id; sem feição, feição repetida, local_field_id trocado e geometria inválida são recusados', () => {
+  const m = MF.lerManifestoPF(v2([campoV2(1, 'a'), campoV2(2, 'b'), campoV2(3, 'c'), campoV2(4, 'd'), campoV2(5, 'e')]));
+  const aberto = { type: 'Polygon', coordinates: [anel(0, 0, 0.01, 0.01).slice(0, 4)] };
+  const idx = MF.lerLimitesGeojson(limitesFC([
+    feicao(1, GA),
+    feicao(2, GB), feicao(2, GB),
+    feicao(3, GE, { local_field_id: 99 }),
+    feicao(4, aberto),
+    { type: 'Feature', properties: { name: 'sem id' }, geometry: GA },
+  ]));
+  assert.equal(idx.ok, true); assert.equal(idx.nFeicoes, 6); assert.equal(idx.nSemId, 1);
+  const l = m.campos.map(c => MF.limiteDoCampo(c, null, null, idx.feicoes));
+  assert.equal(l[0].ok, true);
+  assert.match(l[1].erro, /2 feições/);
+  assert.match(l[2].erro, /local_field_id 99/);
+  assert.match(l[3].erro, /inválido/);
+  assert.match(l[4].erro, /Sem limite no LIMITES\.geojson/);
+  assert.equal(MF.lerLimitesGeojson('{"type":"FeatureCollection","features":[{"type":"Feature","properties":{},"geometry":null}]}').ok, false);
+  assert.equal(MF.lerLimitesGeojson('[]').ok, false);
+});
+
+console.log('Manifesto v2 — casamento e fazendas (Q2/Q3)');
+t('Q3: par > 5% também vem MARCADO no v2; ≤ 5% marcado; cliente nosso sai da geometria', () => {
+  const rs = casarV2([campoV2(1, 'p0'), campoV2(2, 'p1')], [feicao(1, GN(0)), feicao(2, poli(0.11, 0.1, 0.1215, 0.11))], NOSSOS_V2);
+  assert.deepEqual(rs.map(r => [r.situacao, r.preMarcado, r.podeCriar]), [['par', true, true], ['diferente', true, true]]);
+  assert.equal(rs[0].melhor.clienteId, 'c1');
+});
+t('FAZENDA DIVIDIDA: a que recebe mais pares fica com o shared_farm_id da PF; as outras, UUID novo', () => {
+  const rs = casarV2([1, 2, 3, 4, 5].map(n => campoV2(n, `p${n}`)), [0, 1, 2, 3, 4].map(i => feicao(i + 1, GN(i))), NOSSOS_V2);
+  assert.ok(rs.every(r => r.situacao === 'par'));
+  assert.deepEqual(rs.map(r => [r.ids.sharedFarmId, r.ids.papelFazenda]), [
+    [FARM, 'principal'], [FARM, 'principal'], [FARM, 'principal'],
+    ['00000000-9999-4999-8999-000000000001', 'nova'], ['00000000-9999-4999-8999-000000000001', 'nova'],
+  ]);
+  assert.ok(rs.every(r => r.ids.sharedProducerId === PROD));
+  const [g] = MF.resumoFazendas(rs);
+  assert.equal(g.dividido, true);
+  assert.deepEqual(g.fazendas.map(f => [f.fazendaId, f.papel, f.pares]), [['f1', 'principal', 3], ['f2', 'nova', 2]]);
+});
+t('fazenda que JÁ usa o shared_farm_id da PF é a principal, mesmo com menos pares; outra fazenda com vínculo reusa o dela', () => {
+  const ja = [
+    vincV2('Z1', uuidN(80), { fazendaId: 'f2', status: 'confirmado', pfLocalId: '80' }),
+    vincV2('Z2', uuidN(81), { fazendaId: 'f1', sharedFarmId: uuidN(82), status: 'confirmado', pfLocalId: '81' }),
+  ];
+  const rs = casarV2([1, 2, 3, 4].map(n => campoV2(n, `p${n}`)), [0, 1, 2, 3].map(i => feicao(i + 1, GN(i))), NOSSOS_V2, ja);
+  assert.deepEqual(rs.map(r => [r.situacao, r.ids?.sharedFarmId, r.ids?.papelFazenda]), [
+    ['par', uuidN(82), 'reuso'], ['par', uuidN(82), 'reuso'], ['par', uuidN(82), 'reuso'], ['par', FARM, 'principal'],
+  ]);
+});
+t('CONFLITO DE REUSO: a principal já tem OUTRO shared_farm_id → conflito, não cria; a outra fazenda segue com UUID novo', () => {
+  const ja = [vincV2('Z1', uuidN(80), { fazendaId: 'f1', sharedFarmId: uuidN(82), status: 'confirmado', pfLocalId: '80' })];
+  // f1 só tem pares 1 e 2 — mas é a principal (mais pares que f2, com 1)… e já tem outro UUID.
+  const rs = casarV2([1, 2, 4].map(n => campoV2(n, `p${n}`)), [feicao(1, GN(0)), feicao(2, GN(1)), feicao(4, GN(3))], NOSSOS_V2, ja);
+  assert.deepEqual(rs.map(r => r.situacao), ['conflito', 'conflito', 'par']);
+  assert.match(rs[0].motivo, new RegExp(`outro shared_farm_id \\(${uuidN(82)}\\)`));
+  assert.equal(rs[0].podeCriar, false); assert.equal(rs[0].ids, null);
+  assert.deepEqual([rs[2].ids.papelFazenda, rs[2].ids.sharedFarmId], ['nova', '00000000-9999-4999-8999-000000000001']);
+});
+t('produtor: cliente nosso com outro shared_producer_id (existente ou de outro item) → conflito', () => {
+  const rs = casarV2([campoV2(1, 'p1'), campoV2(2, 'p2', { local_producer_id: 2, shared_producer_id: PROD2, shared_farm_id: FARM2 })],
+    [feicao(1, GN(0)), feicao(2, GN(3))], NOSSOS_V2);
+  assert.deepEqual(rs.map(r => r.situacao), ['par', 'conflito']);
+  assert.match(rs[1].motivo, /shared_producer_id.*outro item do manifesto/);
+  const [r] = casarV2([campoV2(1, 'p1')], [feicao(1, GN(0))], NOSSOS_V2, [vincV2('Z1', uuidN(80), { fazendaId: 'f9', sharedProducerId: uuidN(83), sharedFarmId: uuidN(84), status: 'confirmado', pfLocalId: '1' })]);
+  assert.equal(r.situacao, 'conflito'); assert.match(r.motivo, /shared_producer_id/);
+});
+t('Q5 PERMITIDA: pendente sem ID PF e sem publicação é substituído; o UUID antigo dele não vira conflito', () => {
+  const antigo = vincV2('N0', uuidN(70), { sharedProducerId: uuidN(71), sharedFarmId: uuidN(72) });
+  const rs = casarV2([campoV2(1, '115'), campoV2(2, 'p2')], [feicao(1, GN(0)), feicao(2, GN(1))], NOSSOS_V2, [antigo]);
+  assert.deepEqual(rs.map(r => [r.situacao, r.podeCriar, r.preMarcado]), [['par', true, true], ['par', true, true]]);
+  assert.equal(rs[0].substitui.sharedFieldId, uuidN(70));
+  assert.match(rs[0].motivo, /Substitui o vínculo PENDENTE/);
+  assert.deepEqual(rs.map(r => r.ids.sharedFarmId), [FARM, FARM]);
+});
+t('Q5 NEGADA: confirmado, suspenso, pendente com ID PF, com publicação ou sem saber → já vinculado', () => {
+  for (const [extra, re] of [
+    [{ status: 'confirmado', pfLocalId: '1' }, /está confirmado/],
+    [{ status: 'suspenso' }, /está suspenso/],
+    [{ pfLocalId: '115' }, /já tem o ID PF 115/],
+    [{ temPublicacao: true }, /já tem publicação/],
+    [{ temPublicacao: undefined }, /não se sabe se já publicou/],
+    [{ pfLocalId: undefined }, /não se sabe se tem ID PF/],
+  ]) {
+    const [r] = casarV2([campoV2(1, '115')], [feicao(1, GN(0))], NOSSOS_V2, [vincV2('N0', uuidN(70), extra)]);
+    assert.equal(r.situacao, 'ja-vinculado', JSON.stringify(extra)); assert.equal(r.podeCriar, false); assert.match(r.motivo, re);
+  }
+});
+t('desempenho: talhões longe (caixa não cruza) não são recortados — 5 000 distratores não pesam', () => {
+  const longe = Array.from({ length: 5000 }, (_, i) => nosso(`L${i}`, poli(5 + i * 0.01, 5, 5.005 + i * 0.01, 5.005)));
+  const t0 = performance.now();
+  const rs = casarV2([1, 2, 3, 4, 5].map(n => campoV2(n, `p${n}`)), [0, 1, 2, 3, 4].map(i => feicao(i + 1, GN(i))), [...longe, ...NOSSOS_V2]);
+  assert.ok(rs.every(r => r.situacao === 'par'));
+  assert.ok(performance.now() - t0 < 3000, `${Math.round(performance.now() - t0)} ms`);
+});
+ta('casarManifestoAos dá o mesmo resultado, com progresso', async () => {
+  const m = MF.lerManifestoPF(v2([1, 2, 3].map(n => campoV2(n, `p${n}`))));
+  const idx = MF.lerLimitesGeojson(limitesFC([0, 1, 3].map((i, k) => feicao(k + 1, GN(i)))));
+  const lims = m.campos.map(c => MF.limiteDoCampo(c, null, null, idx.feicoes));
+  const prog = [];
+  const a = await MF.casarManifestoAos(m.campos, lims, NOSSOS_V2, [], { novoUuid: sequencia() }, (f, tot) => prog.push(`${f}/${tot}`), 2);
+  const b = MF.casarManifesto(m.campos, lims, NOSSOS_V2, [], { novoUuid: sequencia() });
+  assert.deepEqual(a.map(r => [r.situacao, r.ids]), b.map(r => [r.situacao, r.ids]));
+  assert.deepEqual(prog, ['2/3', '3/3']);
+});
+
+console.log('Manifesto v2 — conferência do servidor (Q2/Q5)');
+const NUVEM2 = new Map([['N0', { fazendaId: 'f1', clienteId: 'c1', empresaId: null }], ['N1', { fazendaId: 'f1', clienteId: 'c1', empresaId: null }], ['N3', { fazendaId: 'f2', clienteId: 'c1', empresaId: null }]]);
+const itemS = (talhaoId, n, extra = {}) => ({ ...itemC(talhaoId, n), substituir: false, ...extra });
+t('Q5 no servidor: substitui só com o pedido explícito e só o pendente sem ID PF e sem publicação', () => {
+  const antigo = vincV2('N0', uuidN(70), { sharedProducerId: uuidN(71), sharedFarmId: uuidN(72) });
+  const ok1 = MF.conferirCriacao([itemS('N0', 1, { substituir: true }), itemS('N1', 2)], NUVEM2, [antigo]);
+  assert.equal(ok1[0].ok, true); assert.equal(ok1[0].substitui.sharedFieldId, uuidN(70));
+  assert.equal(ok1[1].ok, true, ok1[1].motivo);   // o UUID antigo da fazenda saiu da base
+  assert.match(MF.conferirCriacao([itemS('N0', 1)], NUVEM2, [antigo])[0].motivo, /já tem vínculo/);
+  for (const [extra, re] of [[{ status: 'confirmado' }, /confirmado/], [{ pfLocalId: '9' }, /ID PF 9/], [{ temPublicacao: true }, /publicação/]]) {
+    assert.match(MF.conferirCriacao([itemS('N0', 1, { substituir: true })], NUVEM2, [{ ...antigo, ...extra }])[0].motivo, re);
+  }
+  assert.match(MF.conferirCriacao([itemS('N1', 1, { substituir: true })], NUVEM2, [])[0].motivo, /não tem vínculo/);
+  assert.equal(MF.lerItensCriacao({ itens: [{ substituir: 'sim' }] }).itens[0].substituir, false);
+});
+t('substituição recusada por OUTRO motivo: o vínculo antigo volta à base e o resto é conferido de novo', () => {
+  const antigo = vincV2('N0', uuidN(70), { sharedProducerId: uuidN(71), sharedFarmId: uuidN(72), clienteId: 'c1' });
+  const outroCliente = vincV2('Q', uuidN(60), { fazendaId: 'f7', clienteId: 'c1', sharedProducerId: uuidN(71), sharedFarmId: uuidN(61), status: 'confirmado', pfLocalId: '60' });
+  // N0 pede substituição com PROD, mas o cliente c1 já tem uuidN(71) em outro vínculo → recusa;
+  // N1 (mesma fazenda f1) com FARM passava sem o antigo na base — com ele de volta, não passa.
+  const r = MF.conferirCriacao([itemS('N0', 1, { substituir: true }), itemS('N1', 2, { sharedProducerId: uuidN(71) })], NUVEM2, [antigo, outroCliente]);
+  assert.match(r[0].motivo, /shared_producer_id/);
+  assert.equal(r[1].ok, false); assert.match(r[1].motivo, /shared_farm_id \(.*72/);
+});
+t('um shared_farm_id serve a UMA fazenda (novo); a fazenda que já o usa continua usando (legado)', () => {
+  const daF1 = vincV2('Z1', uuidN(80), { status: 'confirmado', pfLocalId: '80' });
+  const r = MF.conferirCriacao([itemS('N3', 3)], NUVEM2, [daF1]);
+  assert.match(r[0].motivo, /já é de outra fazenda nossa \(f1\)/);
+  const legado = [daF1, vincV2('Z2', uuidN(81), { fazendaId: 'f2', status: 'confirmado', pfLocalId: '81' })];
+  assert.equal(MF.conferirCriacao([itemS('N3', 3)], NUVEM2, legado)[0].ok, true);
+  // No mesmo pedido: a 2ª fazenda com o mesmo UUID cai.
+  const r2 = MF.conferirCriacao([itemS('N0', 1), itemS('N3', 3)], NUVEM2, []);
+  assert.equal(r2[0].ok, true); assert.match(r2[1].motivo, /já é de outra fazenda nossa/);
+});
+
+console.log('Manifesto v2 — retorno (VINCULOS.json + relatório)');
+t('retorno: remote_*, identity_status, fazenda dividida, situações e o original intacto', () => {
+  const orig = v2([1, 2, 3, 4, 5, 6].map(n => campoV2(n, `p${n}`)));
+  const congelado = JSON.stringify(orig);
+  const rs = casarV2([1, 2, 3, 4, 5, 6].map(n => campoV2(n, `p${n}`)),
+    [feicao(1, GN(0)), feicao(2, GN(1)), feicao(3, poli(0.12, 0.1, 0.1315, 0.11)), feicao(4, GN(3)), feicao(5, poli(0.5, 0.5, 0.51, 0.51)), feicao(6, GN(4))], NOSSOS_V2);
+  const novo = rs[3].ids.sharedFarmId;
+  const vincs = [
+    { talhaoId: 'N0', fazendaId: 'f1', clienteId: 'c1', sharedProducerId: PROD, sharedFarmId: FARM, sharedFieldId: uuidN(1), status: 'confirmado', publicados: 2 },
+    { talhaoId: 'N1', fazendaId: 'f1', clienteId: 'c1', sharedProducerId: PROD, sharedFarmId: FARM, sharedFieldId: uuidN(2), status: 'confirmado', publicados: 0 },
+    { talhaoId: 'N2', fazendaId: 'f1', clienteId: 'c1', sharedProducerId: PROD, sharedFarmId: FARM, sharedFieldId: uuidN(3), status: 'confirmado', publicados: 1 },
+    { talhaoId: 'N3', fazendaId: 'f2', clienteId: 'c1', sharedProducerId: PROD, sharedFarmId: novo, sharedFieldId: uuidN(4), status: 'pendente', publicados: 0 },
+  ];
+  const nomes = { talhao: new Map(NOSSOS_V2.map(t => [t.id, t.nome])), fazenda: new Map([['f1', 'Fazenda Um'], ['f2', 'Fazenda Dois']]), cliente: new Map([['c1', 'CLIENTE NOSSO']]) };
+  const ret = RT.montarRetornoPF(orig, rs, vincs, nomes, new Date('2026-11-05T12:00:00Z'));
+  assert.equal(JSON.stringify(orig), congelado);
+  const j = ret.vinculosJson;
+  assert.deepEqual(j.fields.map(f => [f.remote_field_id, f.identity_status]), [
+    ['N0', 'confirmed'], ['N1', 'confirmed'], ['N2', 'confirmed'], ['N3', 'remote_matched_pending_confirmation'],
+    [null, 'remote_match_not_found'], [null, 'proposed_pending_remote_match'],
+  ]);
+  assert.deepEqual([j.fields[3].shared_farm_id, j.fields[3].proposed_shared_farm_id], [novo, FARM]);
+  assert.equal(j.fields[0].proposed_shared_farm_id, undefined);
+  assert.equal(j.fields[0].remote_field_name, 'nosso N0');
+  assert.equal(j.fields[0].projects[0].name, 'linhas_verao');   // campos da PF preservados
+  assert.deepEqual([j.clients[0].remote_producer_id, j.clients[0].remote_producer_name, j.clients[0].identity_status], ['c1', 'CLIENTE NOSSO', 'partially_confirmed']);
+  assert.equal(j.clients[1].remote_producer_id, null);
+  assert.equal(j.farm_groups.length, 3);
+  assert.deepEqual([j.farm_groups[0].shared_farm_id, j.farm_groups[0].remote_farm_id, j.farm_groups[0].identity_status, j.farm_groups[0].note], [FARM, 'f1', 'confirmed', 'provisório']);
+  assert.deepEqual([j.farm_groups[1].shared_farm_id, j.farm_groups[1].remote_farm_id, j.farm_groups[1].split_from_shared_farm_id, j.farm_groups[1].identity_status], [novo, 'f2', FARM, 'remote_matched_pending_confirmation']);
+  assert.equal(j.farm_groups[2].shared_farm_id, FARM2);
+  assert.deepEqual(ret.linhas.map(l => l.situacao), ['ativo', 'sem dados', 'limite divergente', 'pendente de confirmação', 'sem correspondência', 'sem correspondência']);
+  assert.match(ret.linhas[5].motivo, /Par encontrado \(nosso N4.*não foi criado/);
+  assert.deepEqual([ret.gruposDivididos, ret.fazendasNovas, ret.pendentes], [1, 1, 1]);
+  assert.equal(j.invicta_return.field_status.ativo, 1);
+  const csv = RT.relatorioCsv(ret.linhas);
+  assert.ok(csv.startsWith('﻿local_field_id;talhao_pf;cliente_pf;situacao;motivo'));
+  assert.equal(csv.trim().split('\r\n').length, 7);
+});
+
+// Pacote REAL de 04/11 (fora do repositório; dado da PF): roda quando existem
+// PF_ATIVACAO_REAL=<pasta com VINCULOS.json + LIMITES.geojson> e
+// PF_CASAMENTO_REF=<casamento-162.json — o casamento feito contra a base, com
+// o talhão/fazenda/cliente nosso de cada par>. Os "nossos" são SIMULADOS a
+// partir dos limites da PF (≤ 5 %: o mesmo limite; > 5 %: deslocado; ambíguo:
+// partido ao meio; o "115" com o vínculo pendente sem ID PF; a Figueira com os
+// 15 confirmados), nas fazendas/clientes REAIS da referência — prova a leitura
+// dos 162 limites, as contagens, a divisão de fazendas, a conferência do
+// servidor e o retorno.
+const AREAL = process.env.PF_ATIVACAO_REAL, AREF = process.env.PF_CASAMENTO_REF;
+if (AREAL && AREF && existsSync(AREAL) && existsSync(AREF)) {
+  const { join } = await import('node:path');
+  const { default: turfIntersect } = await import('@turf/intersect');
+  const TH = await import('@turf/helpers');
+  t('pacote real 04/11: 162 limites; 83 pares (com o 115), 38 > 5%, 21 ambíguos, 5 sem par, 15 já vinculados; 5 fazendas divididas; retorno', () => {
+    const vj = JSON.parse(readFileSync(join(AREAL, 'VINCULOS.json'), 'utf8'));
+    const man = MF.lerManifestoPF(vj);
+    assert.equal(man.formato, 'v2'); assert.equal(man.campos.length, 162); assert.equal(man.campos.filter(c => c.problema).length, 0);
+    const idx = MF.lerLimitesGeojson(readFileSync(join(AREAL, 'LIMITES.geojson'), 'utf8'));
+    assert.deepEqual([idx.nFeicoes, idx.nSemId], [162, 0]);
+    const lims = man.campos.map(c => MF.limiteDoCampo(c, null, null, idx.feicoes));
+    assert.equal(lims.filter(l => l.ok).length, 162, lims.filter(l => !l.ok).map(l => l.erro).join('; '));
+    const ref = new Map(JSON.parse(readFileSync(AREF, 'utf8')).map(x => [x.shared_field_id, x]));
+    const mover = (g, dx) => JSON.parse(JSON.stringify(g), (k, v) => (Array.isArray(v) && typeof v[0] === 'number' ? [v[0] + dx, ...v.slice(1)] : v));
+    const talhoes = [], vinculos = [];
+    const add = (id, nome, fazendaId, clienteId, g) => talhoes.push({ id, nome, fazendaId, clienteId, geojson: JSON.stringify({ type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry: g }] }) });
+    man.campos.forEach((c, k) => {
+      const r = ref.get(c.sharedFieldId), g = lims[k].geometria, m = r?.melhor;
+      if (!r) return;
+      if (r.situacao === 'par_ate_5') add(m.id, m.nome, m.fazendaId, m.clienteId, g);
+      else if (r.situacao === 'par_acima_5') { const cx = CL.caixaDoLimite(g); add(m.id, m.nome, m.fazendaId, m.clienteId, mover(g, (cx[2] - cx[0]) * 0.035)); }
+      else if (r.situacao === 'talhao_ja_vinculado') {
+        add(m.id, m.nome, m.fazendaId, m.clienteId, g);
+        vinculos.push({ talhaoId: m.id, sharedProducerId: uuidN(971), sharedFarmId: uuidN(972), sharedFieldId: uuidN(973), status: 'pendente', fazendaId: m.fazendaId, clienteId: m.clienteId, pfLocalId: null, temPublicacao: false });
+      } else if (r.situacao === 'ja_vinculado') {
+        const f = vj.fields.find(x => x.shared_field_id === c.sharedFieldId);
+        add(f.remote_field_id, c.nome, 'faz-figueira', 'cli-figueira', g);
+        vinculos.push({ talhaoId: f.remote_field_id, sharedProducerId: c.sharedProducerId, sharedFarmId: c.sharedFarmId, sharedFieldId: c.sharedFieldId, status: 'confirmado', fazendaId: 'faz-figueira', clienteId: 'cli-figueira', pfLocalId: c.pfLocalId, temPublicacao: true });
+      } else if (r.situacao === 'ambiguo') {
+        const cx = CL.caixaDoLimite(g), xm = (cx[0] + cx[2]) / 2;
+        const meia = (a, b) => TH.polygon([[[a, cx[1] - 1e-3], [b, cx[1] - 1e-3], [b, cx[3] + 1e-3], [a, cx[3] + 1e-3], [a, cx[1] - 1e-3]]]);
+        [[cx[0] - 1e-3, xm], [xm, cx[2] + 1e-3]].forEach(([a, b], i) => {
+          const p = turfIntersect(TH.featureCollection([TH.feature(g), meia(a, b)]));
+          add(`${m.id}-${k}-${i}`, `${m.nome} ${i}`, m.fazendaId, m.clienteId, p.geometry);
+        });
+      }
+    });
+    const t0 = performance.now();
+    const cas = MF.casarManifesto(man.campos, lims, talhoes, vinculos, { preMarcarDiferentes: true, novoUuid: sequencia() });
+    const ms = Math.round(performance.now() - t0);
+    const conta = s => cas.filter(r => r.situacao === s).length;
+    assert.deepEqual(['par', 'diferente', 'ambiguo', 'sem-par', 'ja-vinculado', 'conflito', 'invalido'].map(conta), [83, 38, 21, 5, 15, 0, 0]);
+    const q5 = cas.filter(r => r.substitui);
+    assert.deepEqual(q5.map(r => [r.campo.nome, r.situacao]), [['115', 'par']]);
+    assert.equal(cas.filter(r => r.preMarcado).length, 121);
+    assert.deepEqual(cas.filter(r => r.situacao === 'sem-par').map(r => r.campo.nomeClientePF).sort(), ['Jacob Cornelio Aardoom', 'Leonardo Geus', 'Leonardo Geus', 'Leonardo Geus', 'Leonardo Geus']);
+    const grupos = MF.resumoFazendas(cas);
+    const div = grupos.filter(g => g.dividido);
+    assert.deepEqual(div.map(g => g.nomeClientePF).sort(), ['Adriano Kiers', 'Christian Kliewer', 'Jacob Cornelio Aardoom', 'Jose Ricardo Arruda', 'Ricardo Volter']);
+    assert.equal(grupos.flatMap(g => g.fazendas).filter(f => f.papel === 'nova').length, 10);
+    // O servidor aceita o lote inteiro como a tela mandaria.
+    const itens = cas.filter(r => r.podeCriar).map(r => ({
+      talhaoId: r.melhor.talhaoId, pfLocalId: r.campo.pfLocalId, nomePF: r.campo.nome, sharedProducerId: r.ids.sharedProducerId,
+      sharedFarmId: r.ids.sharedFarmId, sharedFieldId: r.campo.sharedFieldId, substituir: !!r.substitui,
+    }));
+    const nuvem = new Map(talhoes.map(x => [x.id, { fazendaId: x.fazendaId, clienteId: x.clienteId, empresaId: null }]));
+    const conf = MF.conferirCriacao(itens, nuvem, vinculos);
+    assert.equal(conf.filter(c => c.ok).length, 121, conf.filter(c => !c.ok).map(c => c.motivo).join('; '));
+    // Retorno depois de criar (121 pendentes; o 115 substituído) + os 15 da Figueira.
+    const depois = [
+      ...vinculos.filter(v => v.status === 'confirmado').map(v => ({ ...v, publicados: 1 })),
+      ...conf.map(c => ({ talhaoId: c.item.talhaoId, fazendaId: c.fazendaId, clienteId: c.clienteId, sharedProducerId: c.item.sharedProducerId, sharedFarmId: c.item.sharedFarmId, sharedFieldId: c.item.sharedFieldId, status: 'pendente', publicados: 0 })),
+    ];
+    const ret = RT.montarRetornoPF(vj, cas, depois, { talhao: new Map(talhoes.map(x => [x.id, x.nome])), fazenda: new Map(), cliente: new Map() });
+    assert.equal(ret.vinculosJson.farm_groups.length, 13 + 10);
+    assert.equal(ret.vinculosJson.fields.filter(f => f.remote_field_id).length, 136);
+    assert.deepEqual([ret.gruposDivididos, ret.fazendasNovas, ret.pendentes], [5, 10, 121]);
+    assert.equal(ret.linhas.length, 162);
+    console.log(`    (casamento ${ms} ms, ${talhoes.length} talhões; retorno: ${RT.SITUACOES_RETORNO.map(s => `${ret.contagem[s]} ${s}`).join(' · ')})`);
+  });
+} else {
+  console.log('  – pacote real 04/11: pulado (defina PF_ATIVACAO_REAL=<pasta> e PF_CASAMENTO_REF=<casamento-162.json>)');
+}
 
 // Manifesto REAL da PF (fora do repositório; dado da Figueira): roda quando
 // existe a pasta descompactada do complemento (PF_MANIFESTO_REAL=<pasta>).
