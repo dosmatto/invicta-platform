@@ -272,7 +272,7 @@ export default function PrecisionFarmLote() {
   const sel_ = { background: '#1a3a6b', color: '#e2e8f0', border: '1px solid #2e5fa3' };
 
   return (
-    <section className="flex-1 flex flex-col overflow-hidden">
+    <section className="flex-1 min-h-0 flex flex-col overflow-hidden">
       <div className="px-4 py-3 flex-shrink-0" style={{ borderBottom: '1px solid #1a3a6b' }}>
         <div className="flex items-center gap-2 mb-1">
           <Link2 size={14} style={{ color: '#93c5fd' }} />
@@ -347,11 +347,13 @@ export default function PrecisionFarmLote() {
         <div className="px-4 py-1.5 text-[10px]" style={{ background: '#422006', color: '#fbbf24' }}>{migracao03}</div>
       )}
 
-      {manifesto && carga === 'ok' && (
-        <ManifestoPrecisionFarm vinculos={vinculos} onFechar={() => setManifesto(false)} onCriados={() => void carregar()} />
-      )}
-
-      <div className="flex-1 overflow-auto">
+      {/* min-h-0: sem isso o filho flex não encolhe e a rolagem nunca aparece.
+          O manifesto fica DENTRO da área que rola — com 162 linhas ele passa da
+          altura da tela e, fora daqui, cortava o resto sem barra de rolagem. */}
+      <div className="flex-1 min-h-0 overflow-auto">
+        {manifesto && carga === 'ok' && (
+          <ManifestoPrecisionFarm vinculos={vinculos} onFechar={() => setManifesto(false)} onCriados={() => void carregar()} />
+        )}
         {carga === 'carregando' && <div className="px-4 py-3 flex items-center gap-1.5 text-[10px]" style={{ color: '#64748b' }}><Loader2 size={11} className="animate-spin" /> Carregando…</div>}
         {typeof carga === 'object' && <div className="m-4 rounded px-2 py-1.5 text-[10px]" style={{ background: '#450a0a', color: '#fca5a5' }}>{carga.erro}</div>}
         {carga === 'ok' && !vinculos.length && <div className="px-4 py-3 text-[10px]" style={{ color: '#64748b' }}>Nenhum talhão vinculado ainda. Gere os identificadores na seção do talhão ou importe o manifesto da PrecisionFarm.</div>}

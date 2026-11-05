@@ -1,5 +1,9 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Tela de lote da PrecisionFarm volta a rolar com o manifesto aberto
+  '2.223.1': [
+    'PENDÊNCIA S/N — A TELA DE LOTE DA PRECISIONFARM ROLA DE NOVO: com o manifesto grande aberto (ex.: os 162 talhões), a lista passava da altura da tela e o resto ficava cortado, sem barra de rolagem — não dava para chegar ao botão Criar. Agora o manifesto e a tabela de vínculos rolam juntos.',
+  ],
   // [S/N] Comparação de limite em janela na tela de lote da PrecisionFarm
   '2.223.0': [
     'PENDÊNCIA S/N — COMPARAR E ADOTAR O LIMITE PELA TELA DE LOTE: em Biblioteca → PrecisionFarm, clicar na célula "Dif. limite" (ou em "comparar", quando ainda não foi comparado) abre uma janela com o mesmo mapa e os mesmos números da seção do talhão — os dois contornos, o que sobra de cada lado, áreas, vértices e a diferença em m² e %.',
