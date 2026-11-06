@@ -10,7 +10,8 @@
 // Extensão .ts explícita nos imports: o teste roda em node (type-stripping).
 
 import { anoDeData } from './periodo.ts';
-import { kgParaSc, anoDoRegistro } from './portalProdutor.ts';
+import { anoDoRegistro } from './portalProdutor.ts';
+import { kgParaScCheio } from './portalUnidade.ts';
 import { classeDoValor, corCheiaDaClasse, type ClasseLegenda } from './legendas.ts';
 import {
   mediaPonderada, variacaoPct, colheitaDoAno, normCultura, rotuloCultura, naJanela, cicloDeData, culturaEfetiva, areaColhidaPorCultura,
@@ -281,20 +282,22 @@ export function linhasProdutividade(dados: DadosPainel[], ano: number | null, cu
     const s = c.stats;
     const peso = finito(s.areaHa) && s.areaHa > 0 ? s.areaHa : areaDe(d);
     const kg = finito(s.producaoTotalKg) ? s.producaoTotalKg : (finito(s.mediaKgha) ? s.mediaKgha * peso : null);
-    return { d, s, peso, mediaScHa: kgParaSc(s.mediaKgha), producaoSc: kg == null ? null : kg / 60 };
+    // sc/ha com precisão cheia: só a tela arredonda (lib/portalUnidade) — senão
+    // 3.500 kg/ha voltava como "3.498" no padrão kg/ha.
+    return { d, s, peso, mediaScHa: kgParaScCheio(s.mediaKgha), producaoSc: kg == null ? null : kg / 60 };
   });
   const mediaGeral = mediaPonderada(base.map(b => ({ valor: b.mediaScHa, peso: b.peso })));
   const linhas: LinhaProd[] = base.map(b => {
     const ant = colheitaDoAno(b.d, ano - 1, alvo);
-    const antSc = ant ? kgParaSc(ant.stats.mediaKgha) : null;
+    const antSc = ant ? kgParaScCheio(ant.stats.mediaKgha) : null;
     return {
       talhaoId: b.d.talhao.id, fazendaId: b.d.talhao.fazendaId, nome: b.d.talhao.nome, areaHa: areaDe(b.d), cultura: alvo, peso: b.peso,
-      mediaScHa: r1(b.mediaScHa),
-      minScHa: finito(b.s.minKgha) ? r1(kgParaSc(b.s.minKgha)) : null, maxScHa: finito(b.s.maxKgha) ? r1(kgParaSc(b.s.maxKgha)) : null,
+      mediaScHa: b.mediaScHa,
+      minScHa: finito(b.s.minKgha) ? kgParaScCheio(b.s.minKgha) : null, maxScHa: finito(b.s.maxKgha) ? kgParaScCheio(b.s.maxKgha) : null,
       cv: finito(b.s.cv) ? b.s.cv : null,
       producaoSc: b.producaoSc == null ? null : Math.round(b.producaoSc),
-      anteriorScHa: antSc == null ? null : r1(antSc),
-      deltaPct: variacaoPct(r1(b.mediaScHa), antSc == null ? null : r1(antSc)),
+      anteriorScHa: antSc,
+      deltaPct: variacaoPct(b.mediaScHa, antSc),
       pctDaMedia: mediaGeral && mediaGeral > 0 ? Math.round((b.mediaScHa / mediaGeral) * 100) : null,
     };
   }).sort((a, b) => b.mediaScHa - a.mediaScHa);
@@ -306,7 +309,7 @@ export function resumoProdutividade(linhas: LinhaProd[], cultura: string, dadosA
   const mp = mediaPonderada(linhas.map(l => ({ valor: l.mediaScHa, peso: l.peso })));
   if (mp == null) return null;
   const ant = mediaPonderada(dadosAnterior.map(l => ({ valor: l.mediaScHa, peso: l.peso })));
-  const m = r1(mp), a = ant == null ? null : r1(ant);
+  const m = mp, a = ant;
   const sc = linhas.reduce((s, l) => s + (l.producaoSc ?? 0), 0);
   const medias = linhas.map(l => l.mediaScHa);
   const mm = media(medias)!;
@@ -344,7 +347,7 @@ export function historicoPorSafra(dados: DadosPainel[], culturaFiltro = ''): His
       if (!l.length) continue;
       doAno.push({
         ano, cultura: rotulo,
-        mediaScHa: r1(mediaPonderada(l.map(x => ({ valor: x.mediaScHa, peso: x.peso })))!),
+        mediaScHa: mediaPonderada(l.map(x => ({ valor: x.mediaScHa, peso: x.peso })))!,
         nTalhoes: l.length, areaHa: r1(l.reduce((s, x) => s + x.peso, 0)), producaoSc: Math.round(l.reduce((s, x) => s + (x.producaoSc ?? 0), 0)),
       });
     }

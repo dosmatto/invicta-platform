@@ -15,6 +15,7 @@ import { legendaPadraoDe } from '@/lib/processarFertilidade';
 import { legendaDaCultura } from '@/lib/produtividade';
 import { rotuloAno } from '@/lib/periodo';
 import { resumoPorTalhao, projetarMapa, classesEmSacas, type ResumoTalhao } from '@/lib/portalPainel';
+import { fmtScHa } from '@/lib/portalUnidade';
 import { usePortal } from '../PortalContext';
 import { Kpi, Seletor, Vazio, COR, fmtNum, fmtHaCurto, fmtPct, nomeLegivel, suave, talhoesTxt } from '../ui';
 import { MatrizTalhaoAno } from './MatrizTalhaoAno';
@@ -126,7 +127,7 @@ export function PaginaTalhoes() {
                       <dt className="text-[10.5px] font-semibold" style={{ color: COR.texto2 }}>Produtividade</dt>
                       <dd className="text-sm font-extrabold tabular-nums mt-0.5 flex items-center gap-1.5">
                         {cProd && <span className="w-2 h-2 rounded-full" style={{ background: corCheiaDaClasse(cProd) }} />}
-                        {r.prodScHa != null ? <>{fmtNum(r.prodScHa, 1)}<span className="text-[10px] font-semibold" style={{ color: COR.texto2 }}>sc/ha</span></> : <span style={{ color: COR.mudo }}>—</span>}
+                        {r.prodScHa != null ? <>{fmtScHa(r.prodScHa, p.unidade, false)}<span className="text-[10px] font-semibold" style={{ color: COR.texto2 }}>{p.unidade}</span></> : <span style={{ color: COR.mudo }}>—</span>}
                       </dd>
                     </div>
                   )}

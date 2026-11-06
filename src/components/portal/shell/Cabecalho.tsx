@@ -9,8 +9,9 @@
 import { usePathname, useRouter } from 'next/navigation';
 import {
   Menu, CalendarRange, Wheat, Warehouse, Grid3x3, Map as MapaIcone, Layers, Image as ImagemIcone,
-  Sun, Moon, MonitorSmartphone, LogOut, ArrowLeft, Eye, Loader2, ExternalLink, X, Users,
+  Sun, Moon, MonitorSmartphone, LogOut, ArrowLeft, Eye, Loader2, ExternalLink, X, Users, Scale,
 } from 'lucide-react';
+import { UNIDADES_PROD, normalizarUnidadeProd } from '@/lib/portalUnidade';
 import { logout, emailUsuario } from '@/lib/auth';
 import { ROTULO_PAPEL } from '@/lib/empresa';
 import { fmtHa } from '@/lib/formato';
@@ -169,6 +170,11 @@ export function Cabecalho({ onAbrirMenu }: { onAbrirMenu: () => void }) {
             desabilitado={p.fazendas.length <= 1} />
           <Seletor variante="hero" rotulo="Talhão" icone={Grid3x3} valor={p.talhaoId} onChange={v => p.setFiltro({ talhao: v })} largura={280}
             opcoes={[{ valor: '', rotulo: `Todos os talhões (${p.talhoesEscopo.length})` }, ...p.talhoesEscopo.map(t => ({ valor: t.id, rotulo: t.nome }))]} />
+          {/* Unidade da produtividade (padrão kg/ha; a escolha fica neste navegador, por produtor). */}
+          {p.liberada('produtividade') && (
+            <Seletor variante="hero" rotulo="Unidade" icone={Scale} valor={p.unidade} onChange={v => p.setUnidade(normalizarUnidadeProd(v))} largura={150}
+              opcoes={UNIDADES_PROD.map(u => ({ valor: u, rotulo: u }))} />
+          )}
           {p.talhao && (
             <span className="col-span-2 sm:col-auto inline-flex items-center gap-2">
               <button type="button" onClick={() => p.abrirTalhao(p.talhao!.id, abaTalhao)} className="h-11 px-3 rounded-xl inline-flex items-center gap-1.5 text-[13px] font-bold whitespace-nowrap"

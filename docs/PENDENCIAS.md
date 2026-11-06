@@ -145,6 +145,7 @@ verdadeira (fusão de talhões) chegou depois; foi preciso renumerar.
 | S/N | Apresentar a plataforma como o produtor (owner/admin abrem /painel, talhão e portal como o produtor vê, somente leitura, com faixa e Sair) | 3.1.0 | Clientes → ficha do cliente → "Apresentar como produtor" |
 | S/N | "Apresentar como produtor" abre direto o Portal do Produtor | 3.1.1 | /painel → ficha do cliente → Apresentar como produtor |
 | S/N | Mapas do portal legíveis com fazendas distantes (talhões viravam pontos; agora um quadro por grupo de talhões próximos) | 3.1.2 | /portal → todos os mapas |
+| S/N | Unidade de produtividade no portal (kg/ha · sc/ha · sc/alq, padrão kg/ha, escolha guardada por produtor no navegador) | 3.2.0 | /portal → cabeçalho → Unidade |
 
 > As pendências 1–17 foram entregues antes deste registro existir e não estão
 > catalogadas; procure pelo assunto no `changelog.ts`. Da 18 em diante, tudo

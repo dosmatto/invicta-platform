@@ -28,6 +28,7 @@ import { usePortal } from '../PortalContext';
 import { AvisoBenchmark, CurvaBenchmark, notaCurva } from '../visao/CartaoBenchmark';
 import { Cartao, Kpi, Vazio, Esqueleto, COR, fmtNum, fmtInt, suave } from '../ui';
 import { useBenchmark, type EstadoBenchmark } from '../useBenchmark';
+import { casasDaUnidade, deScHa, fmtScHa, type UnidadeProd } from '@/lib/portalUnidade';
 
 const NUTRI: Record<'p' | 'k' | 'v', { rotulo: string; nome: string; unidade: string; casas: number }> = {
   p: { rotulo: 'P', nome: 'Fósforo', unidade: 'mg/dm³', casas: 1 },
@@ -47,7 +48,7 @@ const sinal = (v: number, casas = 1) => `${v > 0 ? '+' : v < 0 ? '−' : ''}${fm
 
 // ── Produtividade ───────────────────────────────────────────────────────────
 
-function CartaoCultura({ b, safraRotulo, destaque }: { b: ItemProdutividade; safraRotulo: string; destaque: boolean }) {
+function CartaoCultura({ b, safraRotulo, destaque, u }: { b: ItemProdutividade; safraRotulo: string; destaque: boolean; u: UnidadeProd }) {
   const voce = b.voce?.mediaScHa ?? null;
   const top = topoPct(b.voce?.percentil);
   const dif = diferenca(voce, b.mediaScHa);
@@ -61,30 +62,30 @@ function CartaoCultura({ b, safraRotulo, destaque }: { b: ItemProdutividade; saf
     corpo = (
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)] gap-4 items-center">
         <div>
-          <CurvaBenchmark b={b} voce={voce} />
+          <CurvaBenchmark b={b} voce={voce} unidade={u} />
           <p className="text-[10.5px] text-center mt-0.5" style={{ color: COR.mudo }}>
-            Produtividade (sc/ha) · {notaCurva(b)}
+            Produtividade ({u}) · {notaCurva(b)}
           </p>
         </div>
         <div className="space-y-2.5 min-w-0">
           <ul className="space-y-1.5 text-xs rounded-xl p-3" style={{ background: COR.superficie2 }}>
             <li className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: 'var(--invicta-green-dark)' }} />
               <span style={{ color: COR.texto2 }}>Você</span>
-              <strong className="ml-auto tabular-nums">{voce != null ? `${fmtNum(voce, 1)} sc/ha` : '—'}</strong></li>
+              <strong className="ml-auto tabular-nums">{fmtScHa(voce, u)}</strong></li>
             <li className="flex items-center gap-2"><span className="w-3 border-t-2 border-dashed flex-shrink-0" style={{ borderColor: COR.texto2 }} />
               <span style={{ color: COR.texto2 }}>Média Invicta</span>
-              <strong className="ml-auto tabular-nums">{fmtNum(b.mediaScHa, 1)} sc/ha</strong></li>
+              <strong className="ml-auto tabular-nums">{fmtScHa(b.mediaScHa, u)}</strong></li>
             {dif && (
               <li className="flex items-center gap-2"><TrendingUp size={13} className="flex-shrink-0" style={{ color: COR.texto2 }} />
                 <span style={{ color: COR.texto2 }}>Diferença</span>
                 <strong className="ml-auto tabular-nums" style={{ color: dif.abs >= 0 ? 'var(--p-verde-texto)' : COR.vermelho }}>
-                  {sinal(dif.abs)} sc/ha{dif.pct != null ? ` (${sinal(dif.pct)}%)` : ''}
+                  {sinal(deScHa(dif.abs, u), casasDaUnidade(u))} {u}{dif.pct != null ? ` (${sinal(dif.pct)}%)` : ''}
                 </strong></li>
             )}
             {b.desvioScHa != null && (
               <li className="flex items-center gap-2"><span className="w-3 flex-shrink-0" />
                 <span style={{ color: COR.texto2 }}>Desvio entre produtores</span>
-                <strong className="ml-auto tabular-nums">± {fmtNum(b.desvioScHa, 1)} sc/ha</strong></li>
+                <strong className="ml-auto tabular-nums">± {fmtScHa(b.desvioScHa, u)}</strong></li>
             )}
           </ul>
           {top != null ? (
@@ -104,8 +105,8 @@ function CartaoCultura({ b, safraRotulo, destaque }: { b: ItemProdutividade; saf
           )}
           {q && (
             <p className="text-[11px] leading-snug" style={{ color: COR.texto2 }}>
-              Metade dos produtores fica entre <strong className="tabular-nums" style={{ color: COR.texto }}>{fmtNum(q.p25, 0)}</strong> e <strong className="tabular-nums" style={{ color: COR.texto }}>{fmtNum(q.p75, 0)}</strong> sc/ha;
-              {' '}80% entre <strong className="tabular-nums" style={{ color: COR.texto }}>{fmtNum(q.p10, 0)}</strong> e <strong className="tabular-nums" style={{ color: COR.texto }}>{fmtNum(q.p90, 0)}</strong>; a mediana é {fmtNum(q.p50, 0)}.
+              Metade dos produtores fica entre <strong className="tabular-nums" style={{ color: COR.texto }}>{fmtScHa(q.p25, u, false)}</strong> e <strong className="tabular-nums" style={{ color: COR.texto }}>{fmtScHa(q.p75, u, false)}</strong> {u};
+              {' '}80% entre <strong className="tabular-nums" style={{ color: COR.texto }}>{fmtScHa(q.p10, u, false)}</strong> e <strong className="tabular-nums" style={{ color: COR.texto }}>{fmtScHa(q.p90, u, false)}</strong>; a mediana é {fmtScHa(q.p50, u, false)}.
             </p>
           )}
         </div>
@@ -214,10 +215,10 @@ export function ComparativoConteudo({ estado, recarregar }: { estado: EstadoBenc
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
           <Kpi icone={Trophy} tom="ambar" rotulo="Sua posição" valor={topFoco != null ? `Top ${topFoco}%` : null}
             sub={foco ? `${foco.cultura} · safra ${anoTxt}` : undefined} vazio={foco ? `sem mapa de colheita seu de ${foco.cultura} em ${anoTxt}` : `sem comparativo de produtividade em ${anoTxt}`} />
-          <Kpi icone={BarChart3} tom="verde" rotulo="Sua produtividade" valor={foco?.voce ? fmtNum(foco.voce.mediaScHa, 1) : null} unidade="sc/ha"
+          <Kpi icone={BarChart3} tom="verde" rotulo="Sua produtividade" valor={foco?.voce ? fmtScHa(foco.voce.mediaScHa, p.unidade, false) : null} unidade={p.unidade}
             delta={difFoco?.pct != null ? { valor: difFoco.pct, rotulo: 'vs. média Invicta' } : null}
             sub={foco ? foco.cultura : undefined} vazio="sem mapa de colheita seu no ano" />
-          <Kpi icone={Users} tom="azul" rotulo="Média Invicta" valor={foco?.mediaScHa != null ? fmtNum(foco.mediaScHa, 1) : null} unidade="sc/ha"
+          <Kpi icone={Users} tom="azul" rotulo="Média Invicta" valor={foco?.mediaScHa != null ? fmtScHa(foco.mediaScHa, p.unidade, false) : null} unidade={p.unidade}
             sub={foco ? `${foco.cultura} · ${fmtInt(foco.nProdutores)} produtores` : undefined} vazio="produtores insuficientes (mín. 5)" />
           {libFert ? (
             <Kpi icone={FlaskConical} tom="roxo" rotulo="Fertilidade comparada com" valor={fert.insuficiente ? null : fert.rotulo}
@@ -237,7 +238,7 @@ export function ComparativoConteudo({ estado, recarregar }: { estado: EstadoBenc
             <Vazio icone={BarChart3} titulo={`Sem comparativo de produtividade em ${anoTxt}`} texto="Nenhuma cultura tem produtores suficientes (mín. 5) nesta safra, nem mapa de colheita seu." />
           ) : (
             <div className="grid grid-cols-1 gap-4">
-              {culturas.map(b => <CartaoCultura key={b.cultura} b={b} safraRotulo={anoTxt} destaque={!!p.cultura && chaveCulturaBench(p.cultura) === chaveCulturaBench(b.cultura)} />)}
+              {culturas.map(b => <CartaoCultura key={b.cultura} b={b} safraRotulo={anoTxt} destaque={!!p.cultura && chaveCulturaBench(p.cultura) === chaveCulturaBench(b.cultura)} u={p.unidade} />)}
             </div>
           )}
         </section>

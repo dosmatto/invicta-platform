@@ -16,10 +16,11 @@
 
 import { anoDeData } from './periodo.ts';
 import {
-  anoDoRegistro, kgParaSc, evolucaoNutrientes,
+  anoDoRegistro, evolucaoNutrientes,
   type DadosTalhao, type ColheitaIn, type MdeIn, type CondutividadeIn, type PrescricaoIn, type MapaNuvemIn, type LaudoIn,
 } from './portalProdutor.ts';
 import { classeDoValor, corCheiaDaClasse, type ClasseLegenda } from './legendas.ts';
+import { fmtKgHa, kgParaScCheio, type UnidadeProd } from './portalUnidade.ts';
 import { classeZona, classeReconhecida, corZonaPorPosicao, ORDEM_CLASSES } from './zonas.ts';
 
 // ── Entradas mais ricas que as do portalProdutor (mesmos registros do store) ─
@@ -247,9 +248,10 @@ export function produtividadePorTalhao(dados: DadosPainel[], ano: number | null,
     out.push({
       talhaoId: d.talhao.id, fazendaId: d.talhao.fazendaId, nome: d.talhao.nome, areaHa: areaDe(d),
       cultura: rotuloCultura(c.cultura),
-      mediaScHa: kgParaSc(s.mediaKgha),
-      minScHa: finito(s.minKgha) ? kgParaSc(s.minKgha) : null,
-      maxScHa: finito(s.maxKgha) ? kgParaSc(s.maxKgha) : null,
+      // Precisão cheia: arredonda só a tela (lib/portalUnidade).
+      mediaScHa: kgParaScCheio(s.mediaKgha),
+      minScHa: finito(s.minKgha) ? kgParaScCheio(s.minKgha) : null,
+      maxScHa: finito(s.maxKgha) ? kgParaScCheio(s.maxKgha) : null,
       cv: finito(s.cv) ? s.cv : null,
       peso: finito(s.areaHa) && s.areaHa > 0 ? s.areaHa : areaDe(d),
     });
@@ -291,11 +293,12 @@ export function kpiProdutividade(dados: DadosPainel[], ano: number | null, cultu
   const um = dados.length === 1 && prods.length === 1;
   const min = um ? prods[0].minScHa : Math.min(...prods.map(p => p.mediaScHa));
   const max = um ? prods[0].maxScHa : Math.max(...prods.map(p => p.mediaScHa));
+  // Sem arredondar: a tela formata na unidade escolhida (3.500 kg/ha não vira 3.498).
   return {
-    cultura: alvo, media: r1(media), n: prods.length,
-    anterior: anterior == null ? null : r1(anterior),
-    deltaPct: variacaoPct(r1(media), anterior == null ? null : r1(anterior)),
-    min: finito(min) ? r1(min) : null, max: finito(max) ? r1(max) : null,
+    cultura: alvo, media, n: prods.length,
+    anterior,
+    deltaPct: variacaoPct(media, anterior),
+    min: finito(min) ? min : null, max: finito(max) ? max : null,
     dentroDoTalhao: um, outrasCulturas: outras.length > 0, outras,
   };
 }
@@ -308,7 +311,7 @@ export function historicoProdutividade(d: DadosPainel, cultura = ''): Array<{ an
   for (const ano of [...anos].sort((a, b) => a - b)) {
     // Sem cultura: em cada ano, a de maior área colhida no talhão (cada barra diz qual).
     const c = colheitaDoAno(d, ano, cultura || culturaPredominanteDoAno([d], ano));
-    if (c) out.push({ ano, mediaScHa: kgParaSc(c.stats.mediaKgha), cultura: rotuloCultura(c.cultura) });
+    if (c) out.push({ ano, mediaScHa: kgParaScCheio(c.stats.mediaKgha), cultura: rotuloCultura(c.cultura) });
   }
   return out;
 }
@@ -377,9 +380,11 @@ export interface Distribuicao {
   classePorId: Record<string, string>;
 }
 
-/** Converte as faixas de uma legenda em kg/ha para sc/ha (÷ 60). */
+/** Converte as faixas de uma legenda em kg/ha para sc/ha (÷ 60), SEM arredondar:
+ *  os valores também chegam com precisão cheia, então 3.500 kg/ha cai em
+ *  (…, 3.500] como na legenda original (arredondar só um dos lados trocava a classe). */
 export function classesEmSacas(classes: ClasseLegenda[]): ClasseLegenda[] {
-  const sc = (v: number | null) => (v == null ? null : r1(v / 60));
+  const sc = (v: number | null) => (v == null ? null : kgParaScCheio(v));
   return classes.map(c => ({ ...c, valorMin: sc(c.valorMin), valorMax: sc(c.valorMax) }));
 }
 
@@ -839,6 +844,8 @@ export function alertasPropriedade(entrada: {
   legendas: Partial<Record<'p' | 'k' | 'v', LegendaAlerta>>;
   legendaProdutividade?: { classes: ClasseLegenda[] } | null;
   liberado?: (secao: 'fertilidade' | 'produtividade' | 'recomendacoes') => boolean;
+  /** Unidade do texto "< 3.600 kg/ha" (a régua é sempre a mesma). Padrão sc/ha. */
+  unidade?: UnidadeProd;
 }): AlertaPainel[] {
   const { dados, ano } = entrada;
   const lib = entrada.liberado ?? (() => true);
@@ -878,9 +885,11 @@ export function alertasPropriedade(entrada: {
       const prods = produtividadePorTalhao(dados, ano, kpi.cultura);
       const baixos = prods.filter(p => abaixoDoCritico(p.mediaScHa, classes));
       const ha = baixos.reduce((s, p) => s + p.areaHa, 0);
-      const corte = [...classes].sort((a, b) => a.ordem - b.ordem).filter(c => classesCriticas(classes)?.has(c.nome)).pop()?.valorMax;
+      // O corte sai da legenda ORIGINAL (kg/ha) na unidade escolhida: "< 3.600 kg/ha".
+      const ultimaCritica = [...classes].sort((a, b) => a.ordem - b.ordem).filter(c => classesCriticas(classes)?.has(c.nome)).pop()?.nome;
+      const corteKg = entrada.legendaProdutividade.classes.find(c => c.nome === ultimaCritica)?.valorMax;
       out.push(ha > 0
-        ? { id: 'prod-baixa', tipo: 'atencao', destaque: haPct(ha, total), texto: `com produtividade${corte != null ? ` < ${corte.toLocaleString('pt-BR')} sc/ha` : ' baixa'} (${kpi.cultura})` }
+        ? { id: 'prod-baixa', tipo: 'atencao', destaque: haPct(ha, total), texto: `com produtividade${corteKg != null ? ` < ${fmtKgHa(corteKg, entrada.unidade ?? 'sc/ha')}` : ' baixa'} (${kpi.cultura})` }
         : um
           ? { id: 'prod-baixa', tipo: 'ok', destaque: 'Este talhão', texto: `não tem produtividade baixa (${kpi.cultura})` }
           : { id: 'prod-baixa', tipo: 'ok', destaque: 'Nenhum talhão', texto: `com produtividade baixa (${kpi.cultura})` });
@@ -918,7 +927,7 @@ export function resumoPorTalhao(dados: DadosPainel[], ano: number | null, cultur
     return {
       talhaoId: d.talhao.id, fazendaId: d.talhao.fazendaId, nome: d.talhao.nome, areaHa: areaDe(d),
       cultura: rotuloCultura(col?.cultura || d.cultura || ''),
-      prodScHa: col ? kgParaSc(col.stats.mediaKgha) : null,
+      prodScHa: col ? kgParaScCheio(col.stats.mediaKgha) : null,
       p: m?.valores.p ?? null, v: m?.valores.v ?? null, anoAnalise: l ? anoDoRegistro(l) : null,
       nZonas: zonas.size,
       ce: !!cePorTalhao(d), relevo: !!relevoPorTalhao(d),

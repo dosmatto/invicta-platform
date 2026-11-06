@@ -271,7 +271,13 @@ t('alertas: P crítico em ha/%, análise antiga, produtividade baixa, zonas e VR
   assert.equal(por['analise-antiga'].destaque, '245 ha (89,1%)');
   // Produtividade: Baixa = (45, 60] → A (50) e B (60) = 30 ha
   assert.equal(por['prod-baixa'].destaque, '30 ha (10,9%)');
-  assert.match(por['prod-baixa'].texto, /< 60 sc\/ha \(Soja\)/);
+  assert.match(por['prod-baixa'].texto, /< 60,0 sc\/ha \(Soja\)/);
+  // Na unidade escolhida (a régua é a mesma: mesma área, só o texto muda).
+  const emKg = alertasPropriedade({ dados: TODOS, ano: 2026, legendas: {}, legendaProdutividade: { classes: LEG_PROD_SOJA }, unidade: 'kg/ha' }).find(a => a.id === 'prod-baixa');
+  assert.equal(emKg.destaque, '30 ha (10,9%)');
+  assert.match(emKg.texto, /< 3\.600 kg\/ha \(Soja\)/);
+  const emAlq = alertasPropriedade({ dados: TODOS, ano: 2026, legendas: {}, legendaProdutividade: { classes: LEG_PROD_SOJA }, unidade: 'sc/alq' }).find(a => a.id === 'prod-baixa');
+  assert.match(emAlq.texto, /< 145,2 sc\/alq \(Soja\)/);
   assert.equal(por.zonas.tipo, 'info');
   assert.equal(por.vr.destaque, '40 ha (14,5%)');
   const semFert = alertasPropriedade({ dados: TODOS, ano: 2026, legendas: { p: { classes: LEG_P, simbolo: 'P' } }, liberado: s => s !== 'fertilidade' });

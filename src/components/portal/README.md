@@ -11,6 +11,7 @@ Somente leitura, para o produtor (e para owner/admin em "ver como o produtor vê
 | Kit visual | `ui/*` (importe de `../ui` ou `@/components/portal/ui`) |
 | Mini-mapa leve/real + camadas reais prontas | `ui/MiniMapa.tsx`, `ui/camadasReais.ts` |
 | Contas puras (KPIs, classes, alertas, Pearson, projeção) | `lib/portalPainel.ts` — teste `node scripts/teste-portal-painel.mjs` |
+| Unidade da produtividade (kg/ha · sc/ha · sc/alq; `p.unidade`, padrão kg/ha) — números chegam em sc/ha, converta só na tela | `lib/portalUnidade.ts` (`fmtScHa`, `deScHa`, `classesNaUnidade`) — teste `node scripts/teste-portal-unidade.mjs`; preferência em `ui/unidadeProd.ts` |
 | Coleta dos dados (aparelho + nuvem leve) | `lib/portalDados.ts` (`dadosLocaisPortal`, `dadosNuvemDosTalhoes`) |
 | Benchmark (POST /api/portal/benchmark) — um hook só para o cartão e a página | `useBenchmark.ts` (`useBenchmark`, `benchDaCultura`), cartão e `AvisoBenchmark` em `visao/CartaoBenchmark.tsx` |
 | Visão geral | `visao/VisaoGeral.tsx` |

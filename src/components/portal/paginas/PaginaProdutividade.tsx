@@ -4,7 +4,7 @@
 //
 // O que o produtor quer saber aqui: "quanto colhi, em relação ao ano passado,
 // e onde foi bem e onde foi mal?". A página mostra a média ponderada pela área
-// (sc/ha) com a variação contra a safra anterior, a produção total, o quanto os
+// (na unidade do cabeçalho: kg/ha, sc/ha ou sc/alq) com a variação contra a safra anterior, a produção total, o quanto os
 // talhões variam entre si (CV), o mapa em classes, o ranking com a variação de
 // cada talhão e o histórico por safra e cultura.
 //
@@ -22,6 +22,7 @@ import { linhasProdutividade, resumoProdutividade, historicoPorSafra, type Linha
 import { usePortal } from '../PortalContext';
 import { Cartao, Kpi, LegendaClasses, BarrasAno, Seletor, Vazio, MiniMapa, camadaProdutividade, COR, fmtNum, fmtInt, fmtHaCurto, suave, talhoesTxt } from '../ui';
 import { BotaoAbrirTalhao, GradeKpis, TabelaTalhoes, rotuloFaixa, type ColunaTabela } from './SensoresComuns';
+import { casasDaUnidade, classesNaUnidade, deScHa, fmtScHa } from '@/lib/portalUnidade';
 
 /** ▲ +x% / ▼ −x% colorido (subir é bom). */
 function Delta({ v }: { v: number | null }) {
@@ -51,6 +52,12 @@ function ConteudoProdutividade() {
 
   const legProd = useMemo(() => (culturaKpi ? legendaDaCultura(culturaKpi) ?? null : null), [culturaKpi]);
   const classes = useMemo(() => (legProd ? classesEmSacas(legProd.classes) : []), [legProd]);
+  // Unidade da tela: a régua (classes) e os números seguem em sc/ha; só os textos
+  // mudam — os limites da legenda vêm da original em kg/ha (lib/portalUnidade).
+  const u = p.unidade;
+  const casasU = casasDaUnidade(u);
+  const faixaU = useMemo(() => new Map(classesNaUnidade(legProd?.classes ?? [], u).map(c => [c.nome, c])), [legProd, u]);
+  const faixaDe = (c: { nome: string; valorMin: number | null; valorMax: number | null }) => rotuloFaixa(faixaU.get(c.nome) ?? c, casasU);
   const valorPorId = useMemo(() => new Map(linhas.map(l => [l.talhaoId, l.mediaScHa])), [linhas]);
   const dist = useMemo(() => distribuirEmClasses(dados.map(d => ({ id: d.talhao.id, valor: valorPorId.get(d.talhao.id) ?? null, areaHa: d.talhao.areaHa })), classes), [dados, valorPorId, classes]);
   // "Sem colheita" = sem colheita DA cultura; quem colheu outra cultura não conta.
@@ -98,10 +105,10 @@ function ConteudoProdutividade() {
   const l0 = linhas[0];
   const semAnterior = resumo.anteriorScHa == null;
   const kpis = [
-    <Kpi key="media" icone={BarChart3} tom="verde" rotulo={`Produtividade média · ${culturaKpi}`} valor={fmtNum(resumo.mediaScHa, 1)} unidade="sc/ha"
-      // Curto para caber em 2 linhas: "▲ +9,0% vs. 2025 · antes: 61,0 sc/ha · predominante" (o tooltip explica).
+    <Kpi key="media" icone={BarChart3} tom="verde" rotulo={`Produtividade média · ${culturaKpi}`} valor={fmtScHa(resumo.mediaScHa, u, false)} unidade={u}
+      // Curto para caber em 2 linhas: "▲ +9,0% vs. 2025 · antes: 3.660 kg/ha · predominante" (o tooltip explica).
       delta={resumo.deltaPct != null ? { valor: resumo.deltaPct, rotulo: `vs. ${(ano ?? 0) - 1}` } : null}
-      sub={[semAnterior ? `${um ? 'sem' : `${talhoesTxt(resumo.nTalhoes)} · sem`} ${(ano ?? 0) - 1} para comparar` : `antes: ${fmtNum(resumo.anteriorScHa ?? 0, 1)} sc/ha`, base.outrasCulturas ? 'predominante' : ''].filter(Boolean).join(' · ')}
+      sub={[semAnterior ? `${um ? 'sem' : `${talhoesTxt(resumo.nTalhoes)} · sem`} ${(ano ?? 0) - 1} para comparar` : `antes: ${fmtScHa(resumo.anteriorScHa ?? 0, u)}`, base.outrasCulturas ? 'predominante' : ''].filter(Boolean).join(' · ')}
       titulo={base.outrasCulturas ? tituloCulturaPredominante({ cultura: culturaKpi, outras: base.outras, anoTxt, um, predominanteEscopo: predEscopo }) : undefined} />,
     <Kpi key="prod" icone={Wheat} tom="ambar" rotulo="Produção total" valor={fmtInt(resumo.producaoTotalT)} unidade="t"
       sub={`${fmtInt(resumo.producaoTotalSc)} sacas · ${fmtHaCurto(resumo.areaHa)} ha colhidos`} />,
@@ -111,10 +118,10 @@ function ConteudoProdutividade() {
       : <Kpi key="cv" icone={Scale} tom="roxo" rotulo="Variação entre talhões" valor={fmtNum(resumo.cvEntreTalhoes, 1)} unidade="% (CV)"
           sub={resumo.cvDentro != null ? `dentro de cada mapa: ${fmtNum(resumo.cvDentro, 1)}%` : 'coeficiente de variação das médias'} />,
     um
-      ? <Kpi key="faixa" icone={Ruler} tom="azul" rotulo="Faixa dentro do talhão" valor={l0.minScHa != null && l0.maxScHa != null ? `${fmtNum(l0.minScHa, 0)} – ${fmtNum(l0.maxScHa, 0)}` : null} unidade="sc/ha"
+      ? <Kpi key="faixa" icone={Ruler} tom="azul" rotulo="Faixa dentro do talhão" valor={l0.minScHa != null && l0.maxScHa != null ? `${fmtScHa(l0.minScHa, u, false)} – ${fmtScHa(l0.maxScHa, u, false)}` : null} unidade={u}
           sub="mínimo e máximo do mapa de colheita" vazio="mapa sem mínimo/máximo" />
-      : <Kpi key="melhor" icone={Trophy} tom="azul" rotulo="Maior produtividade" valor={resumo.melhor ? fmtNum(resumo.melhor.mediaScHa, 1) : null} unidade="sc/ha"
-          sub={resumo.melhor ? `${resumo.melhor.nome}${resumo.pior ? ` · menor: ${resumo.pior.nome} (${fmtNum(resumo.pior.mediaScHa, 1)})` : ''}` : undefined} />,
+      : <Kpi key="melhor" icone={Trophy} tom="azul" rotulo="Maior produtividade" valor={resumo.melhor ? fmtScHa(resumo.melhor.mediaScHa, u, false) : null} unidade={u}
+          sub={resumo.melhor ? `${resumo.melhor.nome}${resumo.pior ? ` · menor: ${resumo.pior.nome} (${fmtScHa(resumo.pior.mediaScHa, u, false)})` : ''}` : undefined} />,
   ];
 
   // ── Tabelas ──
@@ -122,11 +129,11 @@ function ConteudoProdutividade() {
   const colunas: Array<ColunaTabela<LinhaProd>> = [
     { id: 'nome', rotulo: 'Talhão', valor: r => r.nome },
     { id: 'area', rotulo: 'Área (ha)', align: 'right', soDesktop: true, valor: r => r.peso, render: r => fmtHaCurto(r.peso) },
-    { id: 'sc', rotulo: 'sc/ha', align: 'right', valor: r => r.mediaScHa, titulo: 'Produtividade média do mapa de colheita',
+    { id: 'sc', rotulo: u, align: 'right', valor: r => r.mediaScHa, titulo: 'Produtividade média do mapa de colheita',
       render: r => (
         <span className="inline-flex items-center gap-2 justify-end w-full">
           <span className="hidden sm:inline-block h-2.5 rounded-full" style={{ width: `${Math.max(8, (r.mediaScHa / maxSc) * 64)}px`, background: dist.corPorId[r.talhaoId] ?? 'var(--invicta-green)' }} />
-          <strong className="text-sm">{fmtNum(r.mediaScHa, 1)}</strong>
+          <strong className="text-sm">{fmtScHa(r.mediaScHa, u, false)}</strong>
         </span>
       ) },
     { id: 'media', rotulo: '% da média', align: 'right', soDesktop: true, valor: r => r.pctDaMedia, titulo: '100% = igual à média ponderada do conjunto',
@@ -137,12 +144,12 @@ function ConteudoProdutividade() {
   ];
 
   const detalhes: Array<[string, string]> = [
-    ['Média do mapa', `${fmtNum(l0.mediaScHa, 1)} sc/ha`],
-    ['Mínimo – máximo', l0.minScHa != null && l0.maxScHa != null ? `${fmtNum(l0.minScHa, 0)} – ${fmtNum(l0.maxScHa, 0)} sc/ha` : '—'],
+    ['Média do mapa', fmtScHa(l0.mediaScHa, u)],
+    ['Mínimo – máximo', l0.minScHa != null && l0.maxScHa != null ? `${fmtScHa(l0.minScHa, u, false)} – ${fmtScHa(l0.maxScHa, u)}` : '—'],
     ['Variação (CV)', l0.cv != null ? `${fmtNum(l0.cv, 1)}%` : '—'],
     ['Área colhida', `${fmtHaCurto(l0.peso)} ha`],
     ['Produção', l0.producaoSc != null ? `${fmtInt(l0.producaoSc)} sacas` : '—'],
-    [`Em ${(ano ?? 0) - 1}`, l0.anteriorScHa != null ? `${fmtNum(l0.anteriorScHa, 1)} sc/ha` : 'sem mapa'],
+    [`Em ${(ano ?? 0) - 1}`, l0.anteriorScHa != null ? fmtScHa(l0.anteriorScHa, u) : 'sem mapa'],
   ];
 
   return (
@@ -152,15 +159,16 @@ function ConteudoProdutividade() {
       <div className="grid grid-cols-1 md:grid-cols-6 xl:grid-cols-12 gap-4">
         <Cartao className="md:col-span-6 xl:col-span-7" icone={MapaIcone} titulo={`Mapa de produtividade (${culturaKpi})`}
           sub={(um ? `Mapa de colheita ${anoTxt}` : `Média de cada talhão no mapa de colheita ${anoTxt}`) + (base.outrasCulturas ? ` · cultura predominante (também: ${base.outras.join(', ')})` : '')}>
-          <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_200px] gap-4 items-start">
+          {/* 228px: a faixa em kg/ha ("3.600 – 4.500") cabe sem cortar ao lado de % e ha. */}
+          <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_228px] gap-4 items-start">
             <MiniMapa talhoes={talhoesMapa} corDe={id => dist.corPorId[id] ?? null} altura={um ? 320 : 280} nomes={!um}
-              rotulo={id => (valorPorId.has(id) ? `${fmtNum(valorPorId.get(id)!, 1)} sc/ha` : semColheita.outraCultura.includes(id) ? `outra cultura (fora do mapa de ${culturaKpi})` : `sem colheita de ${culturaKpi}`)}
+              rotulo={id => (valorPorId.has(id) ? fmtScHa(valorPorId.get(id)!, u) : semColheita.outraCultura.includes(id) ? `outra cultura (fora do mapa de ${culturaKpi})` : `sem colheita de ${culturaKpi}`)}
               camadaReal={realProd} onClicar={clicar} aria="Mapa de produtividade" />
             {classes.length ? (
-              <LegendaClasses titulo="Produtividade (sc/ha)"
-                itens={[...dist.classes].reverse().map(c => ({ cor: c.cor, rotulo: rotuloFaixa(c), pct: um ? null : c.pct, ha: um ? null : c.ha, sub: c.nome, apagado: !um && c.n === 0 }))}
+              <LegendaClasses titulo={`Produtividade (${u})`}
+                itens={[...dist.classes].reverse().map(c => ({ cor: c.cor, rotulo: faixaDe(c), pct: um ? null : c.pct, ha: um ? null : c.ha, sub: c.nome, apagado: !um && c.n === 0 }))}
                 rodape={um
-                  ? `Média do talhão: ${fmtNum(l0.mediaScHa, 1)} sc/ha (${dist.classePorId[l0.talhaoId] ?? '—'}). Classes da legenda ${legProd?.nome ?? ''}.`
+                  ? `Média do talhão: ${fmtScHa(l0.mediaScHa, u)} (${dist.classePorId[l0.talhaoId] ?? '—'}). Classes da legenda ${legProd?.nome ?? ''}.`
                   : `Cor = classe da média de cada talhão (legenda ${legProd?.nome ?? '—'}).${semColheita.n ? ` ${talhoesTxt(semColheita.n)} sem colheita de ${culturaKpi}.` : ''}`} />
             ) : <Vazio compacto titulo="Sem legenda de produtividade" texto="Cadastre a legenda da cultura na Biblioteca." />}
           </div>
@@ -179,7 +187,7 @@ function ConteudoProdutividade() {
                     <div className="flex items-center justify-between gap-2 text-xs">
                       <span className="inline-flex items-center gap-1.5 min-w-0 font-semibold">
                         <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: c.cor }} />
-                        <span className="truncate">{c.nome} <span style={{ color: COR.texto2 }} className="font-normal">({rotuloFaixa(c)})</span></span>
+                        <span className="truncate">{c.nome} <span style={{ color: COR.texto2 }} className="font-normal">({faixaDe(c)} {u})</span></span>
                         {doTalhao && <strong className="flex-shrink-0">◀ este talhão</strong>}
                       </span>
                       {!um && <span className="tabular-nums whitespace-nowrap"><strong>{fmtNum(c.pct, 0)}%</strong> <span style={{ color: COR.texto2 }}>· {fmtHaCurto(c.ha)} ha</span></span>}
@@ -222,18 +230,18 @@ function ConteudoProdutividade() {
         )}
 
         <Cartao className={um ? 'md:col-span-3 xl:col-span-7' : 'md:col-span-6 xl:col-span-12'} icone={History} titulo={um ? 'Produtividade do talhão por safra' : 'Histórico por safra e cultura'}
-          sub={`${um ? 'Média do mapa' : 'Média ponderada pela área colhida'} · sc/ha`}
+          sub={`${um ? 'Média do mapa' : 'Média ponderada pela área colhida'} · ${u}`}
           extra={culturasHist.length > 1 ? <Seletor valor={culHist} onChange={setCulHistSel} opcoes={culturasHist.map(c => ({ valor: c, rotulo: c }))} rotulo="Cultura" /> : null}>
           {histCultura.length === 0 ? <Vazio compacto icone={History} titulo="Sem histórico de colheita" /> : (
             <div className={`grid grid-cols-1 ${um ? '' : 'lg:grid-cols-2'} gap-5 items-start`}>
-              <BarrasAno itens={histCultura.slice(-8).map(h => ({ rotulo: String(h.ano), valor: h.mediaScHa, destaque: h.ano === ano,
-                titulo: `${h.ano} · ${h.cultura}: ${fmtNum(h.mediaScHa, 1)} sc/ha · ${talhoesTxt(h.nTalhoes)} · ${fmtHaCurto(h.areaHa)} ha` }))} unidade="sc/ha" />
+              <BarrasAno itens={histCultura.slice(-8).map(h => ({ rotulo: String(h.ano), valor: deScHa(h.mediaScHa, u), destaque: h.ano === ano,
+                titulo: `${h.ano} · ${h.cultura}: ${fmtScHa(h.mediaScHa, u)} · ${talhoesTxt(h.nTalhoes)} · ${fmtHaCurto(h.areaHa)} ha` }))} unidade={u} casas={casasU} />
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead><tr style={{ color: COR.texto2 }}>
                     <th className="text-left font-semibold pb-1.5">Safra</th>
                     <th className="text-left font-semibold pb-1.5 pl-3">Cultura</th>
-                    <th className="text-right font-semibold pb-1.5 pl-3">sc/ha</th>
+                    <th className="text-right font-semibold pb-1.5 pl-3">{u}</th>
                     <th className="text-right font-semibold pb-1.5 pl-3">Área (ha)</th>
                     <th className="text-right font-semibold pb-1.5 pl-3">Produção (t)</th>
                   </tr></thead>
@@ -242,7 +250,7 @@ function ConteudoProdutividade() {
                       <tr key={`${h.ano}-${h.cultura}`} style={{ borderTop: `1px solid ${COR.borda}`, background: h.ano === ano ? suave('var(--invicta-green)', 8) : undefined }}>
                         <td className="py-1.5 font-bold tabular-nums">{h.ano}</td>
                         <td className="py-1.5 pl-3">{h.cultura}</td>
-                        <td className="py-1.5 pl-3 text-right tabular-nums font-bold">{fmtNum(h.mediaScHa, 1)}</td>
+                        <td className="py-1.5 pl-3 text-right tabular-nums font-bold">{fmtScHa(h.mediaScHa, u, false)}</td>
                         <td className="py-1.5 pl-3 text-right tabular-nums">{fmtHaCurto(h.areaHa)}</td>
                         <td className="py-1.5 pl-3 text-right tabular-nums">{fmtNum((h.producaoSc * 60) / 1000, 0)}</td>
                       </tr>

@@ -29,6 +29,7 @@ import {
   correlacoes, evolucaoAtributo, historicoProdutividade, colheitaDoAno, ultimoLaudo, interpretarR, rotuloP,
   talhoesSemColheita, MIN_TALHOES_CORRELACAO, rotuloCicloMeses, culturaPredominanteDoAno, tituloCulturaPredominante, type DadosPainel,
 } from '@/lib/portalPainel';
+import { fmtScHa, deScHa, classesNaUnidade, casasDaUnidade } from '@/lib/portalUnidade';
 import { grausParaPct, profundidadePadraoCe, ceNaProfundidade, distribuirPontosEmClasses, resumoCe, type CeProf } from '@/lib/portalPainelSensores';
 import { usePortal } from '../PortalContext';
 import { useBenchmark } from '../useBenchmark';
@@ -95,6 +96,10 @@ export function VisaoGeral() {
   const culturaKpi = kpis.produtividade?.cultura ?? cultura;
   const legProd = useMemo(() => (culturaKpi ? legendaDaCultura(culturaKpi) ?? null : null), [culturaKpi]);
   const classesProd = useMemo(() => (legProd ? classesEmSacas(legProd.classes) : []), [legProd]);
+  // Unidade da tela (cabeçalho): os números seguem em sc/ha e a régua das classes
+  // também (classesProd); só os TEXTOS mudam — limites da legenda vêm da original em kg/ha.
+  const u = p.unidade;
+  const faixaProd = useMemo(() => new Map(classesNaUnidade(legProd?.classes ?? [], u).map(c => [c.nome, c])), [legProd, u]);
   const prods = useMemo(() => produtividadePorTalhao(dados, ano, culturaKpi), [dados, ano, culturaKpi]);
   const valorProd = useMemo(() => new Map(prods.map(x => [x.talhaoId, x.mediaScHa])), [prods]);
   const distProd = useMemo(() => distribuirEmClasses(dados.map(d => ({ id: d.talhao.id, valor: valorProd.get(d.talhao.id) ?? null, areaHa: d.talhao.areaHa })), classesProd), [dados, valorProd, classesProd]);
@@ -130,7 +135,8 @@ export function VisaoGeral() {
     legendas: Object.fromEntries((['p', 'k', 'v'] as const).flatMap(a => { const l = leg.porAt[a]; return l ? [[a, { classes: l.classes, invertida: l.invertida, simbolo: l.simbolo }]] : []; })),
     legendaProdutividade: legProd ? { classes: legProd.classes } : null,
     liberado: s => p.liberada(s),
-  }), [dados, ano, culturaKpi, leg, legProd, p]);
+    unidade: u,
+  }), [dados, ano, culturaKpi, leg, legProd, p, u]);
 
   // Sem a seção NDVI no plano, a linha "NDVI (pico) × Produtividade" também sai.
   const corr = useMemo(() => correlacoes(dados, ano, culturaKpi).filter(c => libNdvi || c.id !== 'ndvi'), [dados, ano, culturaKpi, libNdvi]);
@@ -169,14 +175,14 @@ export function VisaoGeral() {
       sub={um ? `${fmtHaCurto(zonas.areaTotal)} ha zoneados` : `${fmtPct(kpis.pctZonas, 0)} da área · ${talhoesTxt(kpis.nZonas)}`} vazio="sem zoneamento" />,
     ...(libProd ? [
       <Kpi key="prod" icone={BarChart3} tom="verde" rotulo={`Produtividade média${kp ? ` · ${kp.cultura}` : ''}`}
-        valor={kp ? fmtNum(kp.media, 1) : null} unidade="sc/ha"
+        valor={kp ? fmtScHa(kp.media, u, false) : null} unidade={u}
         delta={kp?.deltaPct != null ? { valor: kp.deltaPct, rotulo: 'vs. safra anterior' } : null}
         sub={kp ? [kp.outrasCulturas ? 'cultura predominante' : '', kp.deltaPct == null ? `${talhoesTxt(kp.n)} · sem ${(ano ?? 0) - 1} para comparar` : ''].filter(Boolean).join(' · ') : undefined}
         titulo={kp?.outrasCulturas ? tituloCulturaPredominante({ cultura: kp.cultura, outras: kp.outras, anoTxt, um, predominanteEscopo: predEscopo }) : undefined}
         vazio={`sem mapa de colheita em ${anoTxt}`} />,
       <Kpi key="amp" icone={ArrowLeftRight} tom="ambar" rotulo="Amplitude produtiva"
-        valor={kp?.min != null && kp.max != null ? `${fmtNum(kp.min, 0)} – ${fmtNum(kp.max, 0)}` : null} unidade="sc/ha"
-        sub={kp?.min != null && kp.max != null ? `${fmtNum(kp.max - kp.min, 1)} sc/ha ${kp.dentroDoTalhao ? 'dentro do talhão' : 'entre talhões'}` : undefined}
+        valor={kp?.min != null && kp.max != null ? `${fmtScHa(kp.min, u, false)} – ${fmtScHa(kp.max, u, false)}` : null} unidade={u}
+        sub={kp?.min != null && kp.max != null ? `${fmtScHa(kp.max - kp.min, u)} ${kp.dentroDoTalhao ? 'dentro do talhão' : 'entre talhões'}` : undefined}
         vazio={kp && kp.n < 2 && !kp.dentroDoTalhao ? 'precisa de 2 talhões colhidos' : `sem mapa de colheita em ${anoTxt}`} />,
     ] : []),
     ...(libRec ? [
@@ -205,14 +211,15 @@ export function VisaoGeral() {
             {prods.length === 0 ? (
               <Vazio icone={BarChart3} titulo={`Sem mapa de colheita em ${anoTxt}`} texto={culturaKpi ? `Nenhum talhão de ${culturaKpi} tem colheita processada no ano.` : 'Quando a colheita for processada, o mapa aparece aqui.'} />
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_200px] gap-4 items-start">
+              // 228px: a faixa em kg/ha ("3.600 – 4.500") cabe sem cortar ao lado de % e ha.
+              <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_228px] gap-4 items-start">
                 <MiniMapa talhoes={talhoesMapa} corDe={id => distProd.corPorId[id] ?? null} altura={um ? 280 : 250} nomes={!um}
-                  rotulo={id => (valorProd.has(id) ? `${fmtNum(valorProd.get(id)!, 1)} sc/ha` : semColheita.outraCultura.includes(id) ? `outra cultura (fora do mapa de ${culturaKpi})` : `sem colheita de ${culturaKpi}`)}
+                  rotulo={id => (valorProd.has(id) ? fmtScHa(valorProd.get(id)!, u) : semColheita.outraCultura.includes(id) ? `outra cultura (fora do mapa de ${culturaKpi})` : `sem colheita de ${culturaKpi}`)}
                   camadaReal={realProd} onClicar={clicar('produtividade')} aria="Mapa de produtividade" />
-                <LegendaClasses titulo="Produtividade (sc/ha)"
-                  itens={[...distProd.classes].reverse().map(c => ({ cor: c.cor, rotulo: rotuloFaixa(c), pct: um ? null : c.pct, ha: um ? null : c.ha, sub: c.nome, apagado: !um && c.n === 0 }))}
+                <LegendaClasses titulo={`Produtividade (${u})`}
+                  itens={[...distProd.classes].reverse().map(c => ({ cor: c.cor, rotulo: rotuloFaixa(faixaProd.get(c.nome) ?? c, casasDaUnidade(u)), pct: um ? null : c.pct, ha: um ? null : c.ha, sub: c.nome, apagado: !um && c.n === 0 }))}
                   rodape={um
-                    ? `Média do talhão: ${fmtNum(prods[0]?.mediaScHa, 1)} sc/ha (${distProd.classePorId[dados[0].talhao.id] ?? '—'}). Classes da legenda ${legProd?.nome ?? ''}.`
+                    ? `Média do talhão: ${fmtScHa(prods[0]?.mediaScHa, u)} (${distProd.classePorId[dados[0].talhao.id] ?? '—'}). Classes da legenda ${legProd?.nome ?? ''}.`
                     : `Cor = classe da média de cada talhão (legenda ${legProd?.nome ?? '—'}).${semColheita.n ? ` ${talhoesTxt(semColheita.n)} sem colheita de ${culturaKpi}.` : ''}`} />
               </div>
             )}
@@ -360,13 +367,13 @@ export function VisaoGeral() {
         {/* Top talhões / histórico */}
         {libProd && (
           <Cartao className="md:col-span-3 xl:col-span-6 2xl:col-span-3" icone={TrendingUp} titulo={um ? 'Produtividade do talhão por ano' : 'Produtividade por talhão (Top 5)'}
-            sub={culturaKpi ? `${culturaKpi}${!um && kp?.outrasCulturas ? ' (predominante)' : ''} · sc/ha` : 'sc/ha'}>
+            sub={culturaKpi ? `${culturaKpi}${!um && kp?.outrasCulturas ? ' (predominante)' : ''} · ${u}` : u}>
             {um ? (
               historico.length === 0 ? <Vazio compacto icone={BarChart3} titulo="Sem mapa de colheita" texto="Nenhuma colheita processada neste talhão." /> :
-                <BarrasAno itens={historico.slice(-6).map(h => ({ rotulo: String(h.ano), valor: h.mediaScHa, destaque: h.ano === ano }))} unidade="sc/ha" />
+                <BarrasAno itens={historico.slice(-6).map(h => ({ rotulo: String(h.ano), valor: deScHa(h.mediaScHa, u), destaque: h.ano === ano }))} unidade={u} casas={casasDaUnidade(u)} />
             ) : prods.length === 0 ? <Vazio compacto icone={BarChart3} titulo={`Sem mapa de colheita em ${anoTxt}`} /> : (
-              <BarraTop itens={prods.slice(0, 5).map(x => ({ id: x.talhaoId, rotulo: x.nome, valor: x.mediaScHa, cor: distProd.corPorId[x.talhaoId] }))}
-                extra={{ titulo: 'Área (ha)', valor: it => fmtHaCurto(porId.get(it.id)?.talhao.areaHa ?? null) }} unidade="Produtividade (sc/ha)"
+              <BarraTop itens={prods.slice(0, 5).map(x => ({ id: x.talhaoId, rotulo: x.nome, valor: deScHa(x.mediaScHa, u), cor: distProd.corPorId[x.talhaoId] }))}
+                extra={{ titulo: 'Área (ha)', valor: it => fmtHaCurto(porId.get(it.id)?.talhao.areaHa ?? null) }} unidade={`Produtividade (${u})`} casas={casasDaUnidade(u)}
                 onClicar={id => p.setFiltro({ talhao: id })} />
             )}
           </Cartao>
@@ -411,7 +418,7 @@ export function VisaoGeral() {
           <CartaoBenchmark className="md:col-span-3 xl:col-span-6 2xl:col-span-3" estado={bench} recarregar={recarregarBench} cultura={culturaKpi} safraRotulo={anoTxt}
             predominante={!!kp?.outrasCulturas} filtroFazenda={!!p.fazendaId && !um}
             voce={um ? (prods[0]?.mediaScHa ?? null) : (kp?.media ?? null)} rotuloVoce={um ? 'Este talhão' : undefined}
-            semColheita={!kp} acao={{ rotulo: 'Comparativo', href: p.hrefPortal('/portal/comparativo') }} />
+            semColheita={!kp} unidade={u} acao={{ rotulo: 'Comparativo', href: p.hrefPortal('/portal/comparativo') }} />
         )}
 
         {/* Evolução do P */}

@@ -1,5 +1,11 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Unidade de produtividade no portal
+  '3.2.0': [
+    'PENDÊNCIA S/N — UNIDADE DE PRODUTIVIDADE NO PORTAL: o cabeçalho do Portal do Produtor ganhou o filtro "Unidade", ao lado de Talhão, com kg/ha, sc/ha e sc/alq. O padrão é kg/ha; a escolha do produtor fica guardada neste navegador (uma por produtor) e volta igual ao recarregar.',
+    'Toda produtividade do portal segue a unidade: KPIs (média, amplitude, maior/menor), mapa e legenda de classes, Top 5, histórico por ano, distribuição por classe, ranking dos talhões, página Talhões, painel de um talhão, "Minha propriedade em números" (ex.: "< 3.600 kg/ha") e o Comparativo/Benchmark Invicta (curva, média, diferença, desvio e faixas dos produtores).',
+    'Conversão: saca de 60 kg; alqueire paulista = 2,42 ha. kg/ha aparece inteiro ("5.784 kg/ha"), sacas com 1 casa ("96,4 sc/ha", "233,3 sc/alq"); as contas guardam o valor do mapa sem arredondar e só a tela arredonda, então um mapa de 3.500 kg/ha aparece "3.500 kg/ha". A régua das classes não muda: só os limites mostrados acompanham a unidade, então nenhum talhão troca de classe. A produção total (t e sacas), o CV e as variações em % continuam como estavam. Nada muda fora do portal.',
+  ],
   // [S/N] Mapas do portal legíveis com fazendas distantes
   '3.1.2': [
     'PENDÊNCIA S/N — MAPAS DO PORTAL COM FAZENDAS DISTANTES: com fazendas a dezenas de km umas das outras, os mapas do Portal do Produtor (produtividade, fertilidade, zonas, CE, relevo…) enquadravam a região inteira e cada talhão virava um ponto de poucos pixels — o mapa parecia vazio, tanto na visão leve quanto em "Mapas reais". Agora os talhões próximos (até ~3 km) formam um grupo, cada grupo ganha o seu quadro (moldura tracejada) e todos usam a mesma escala, então os tamanhos continuam comparáveis. Produtor com uma área só vê o mapa como antes.',

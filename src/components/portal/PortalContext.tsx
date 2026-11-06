@@ -29,6 +29,8 @@ import { ligarModoProdutorMapa, desligarModoProdutorMapa } from '@/lib/modoProdu
 import { dadosLocaisPortal, dadosNuvemDosTalhoes, juntarNuvem, type DadosNuvem, type FalhaNuvem } from '@/lib/portalDados';
 import { culturasDoAno, talhaoDaCultura, normCultura, type DadosPainel } from '@/lib/portalPainel';
 import { lerModoSalvo, salvarModo, type ModoMapa } from './ui/modoMapa';
+import { lerUnidadeSalva, salvarUnidade } from './ui/unidadeProd';
+import type { UnidadeProd } from '@/lib/portalUnidade';
 
 export interface FiltrosPortal { safra: string; fazenda: string; talhao: string; cultura: string }
 
@@ -79,6 +81,12 @@ export interface PortalCtx {
 
   modoMapa: ModoMapa;
   setModoMapa: (m: ModoMapa) => void;
+
+  /** Unidade da produtividade na tela (padrão kg/ha; escolha do produtor,
+   *  guardada no navegador). Os números chegam em sc/ha: converta com
+   *  lib/portalUnidade (fmtScHa, deScHa, classesNaUnidade). */
+  unidade: UnidadeProd;
+  setUnidade: (u: UnidadeProd) => void;
 }
 
 const Ctx = createContext<PortalCtx | null>(null);
@@ -229,6 +237,15 @@ export function PortalProvider({ cliente, plano, papel, preview, qsPreview, chil
     setModos(x => (um ? { ...x, um: m } : { ...x, todos: m }));
   }, [talhaoId]);
 
+  // ── Unidade da produtividade (por produtor, no navegador; padrão kg/ha) ──
+  const unidadeSalva = useMemo(() => lerUnidadeSalva(cliente.id), [cliente.id]);
+  const [unidadeEscolhida, setUnidadeEscolhida] = useState<{ cliente: string; u: UnidadeProd } | null>(null);
+  const unidade = unidadeEscolhida?.cliente === cliente.id ? unidadeEscolhida.u : unidadeSalva;
+  const setUnidade = useCallback((u: UnidadeProd) => {
+    salvarUnidade(cliente.id, u);
+    setUnidadeEscolhida({ cliente: cliente.id, u });
+  }, [cliente.id]);
+
   // Modo apresentação: o portal é o do produtor (preview = false), mas quem
   // está logado é owner/admin — o servidor (benchmark) precisa do cliente.
   const apresentacao = apresentacaoAtiva();
@@ -240,10 +257,10 @@ export function PortalProvider({ cliente, plano, papel, preview, qsPreview, chil
     talhoesEscopo, talhaoId, talhao, talhoes,
     dadosEscopo, dados, sincronizando, falhasNuvem: nuvemAtual?.falhas ?? [], comNuvem,
     setFiltro, hrefPortal, abrirTalhao, abrirPlataforma, liberada,
-    modoMapa, setModoMapa,
+    modoMapa, setModoMapa, unidade, setUnidade,
   }), [cliente, plano, papel, preview, qsPreview, apresentacao, clienteServidor, safras, safra, ano, opcoesSafra, fazendas, fazendaId, culturas, cultura,
     talhoesEscopo, talhaoId, talhao, talhoes, dadosEscopo, dados, sincronizando, nuvemAtual, comNuvem,
-    setFiltro, hrefPortal, abrirTalhao, abrirPlataforma, liberada, modoMapa, setModoMapa]);
+    setFiltro, hrefPortal, abrirTalhao, abrirPlataforma, liberada, modoMapa, setModoMapa, unidade, setUnidade]);
 
   return <Ctx.Provider value={valor}>{children}</Ctx.Provider>;
 }
