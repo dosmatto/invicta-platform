@@ -699,8 +699,12 @@ export function FertilidadeSection({ safraNome: safraProp }: { safraNome?: strin
     });
     const labels = fcLabels(pts, nut);
     const interpoladoEm = new Date().toISOString();
-    // Sessão guarda o PNG do backend como fallback (~10-30 KB). Quem economiza é a nuvem.
-    setCache(c => ({ ...c, [ck(nut, prof)]: { resp, labels, interpoladoEm } }));
+    // Memória (v3.3.1): com grid utilizável o PNG do backend NÃO vai para o
+    // estado (o overlay é colorido local a partir do grid; ~10-30 KB por mapa,
+    // ×45 num "processar todos"). Sem grid (backend antigo), o PNG fica como
+    // fallback, como antes. O `resp` original segue intacto para a gravação abaixo.
+    const respEstado = temGrid(resp) ? { ...resp, png: '' } : resp;
+    setCache(c => ({ ...c, [ck(nut, prof)]: { resp: respEstado, labels, interpoladoEm } }));
     if (nav.talhaoId && importacaoId) {
       // Com grid: descarta o PNG (colorimos local a partir do grid, gzipado p/
       // caber no limite de tamanho por registro da nuvem). SEM grid (backend antigo que

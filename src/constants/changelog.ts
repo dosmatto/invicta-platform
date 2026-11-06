@@ -1,5 +1,11 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Menos memória com várias abas abertas
+  '3.3.1': [
+    'PENDÊNCIA S/N — MENOS MEMÓRIA COM VÁRIAS ABAS ABERTAS: com 5 abas da plataforma abertas, o Chrome derrubava as abas por falta de memória ("Ah, não!"), sobretudo na Fertilidade. As páginas de talhão abertas a partir do painel (ficha do talhão e da fazenda, inclusive o atalho da Fertilidade) passam a abrir em processo próprio do navegador: cada aba tem a sua memória e, se uma cair, as outras continuam.',
+    'CADA ABA GUARDA MENOS: a cópia de sincronismo da base (o retrato "o que a nuvem tem" e o retrato "o que este aparelho conhecia") passa a compartilhar o mesmo texto de cada registro em vez de guardá-lo duas vezes — cerca de um quarto a menos da base em memória por aba, sem mudar como as edições são detectadas e enviadas.',
+    'FERTILIDADE E MAPAS: a ficha do talhão no painel conta os mapas pela listagem leve e carrega só o mapa de argila (antes carregava todos os mapas do laudo a cada clique); a aba Camadas guarda no máximo 3 laudos de fertilidade (antes guardava todos os vistos até fechar a aba); colorir um mapa usa um único quadro de desenho, liberado logo depois; e o processamento não guarda a imagem do servidor quando já tem a grade numérica. Os mapas aparecem iguais.',
+  ],
   // [S/N] Aviso de cultura implausível no mapa de colheita
   '3.3.0': [
     'PENDÊNCIA S/N — AVISO DE CULTURA IMPLAUSÍVEL NO MAPA DE COLHEITA: um mapa de milho (~14.160 kg/ha) tinha ficado gravado como "Soja", porque o seletor de cultura da aba Produtividade começa em soja e herda a cultura principal da safra — e o milho safrinha processado sem trocar o seletor saía como soja. Agora a média do mapa é conferida contra a faixa da cultura (soja 600–7.200 kg/ha, milho 1.500–16.000, trigo 500–7.500, feijão 300–5.000, aveia e cevada 500–7.000; outras culturas não geram aviso).',

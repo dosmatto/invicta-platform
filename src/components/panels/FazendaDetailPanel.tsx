@@ -251,7 +251,7 @@ export function FazendaDetailPanel() {
   function abrirNoAno(t: Talhao, aba: 'fertilidade' | 'produtividade', ano: number) {
     const safra = getSafras().find(s => anoDaSafra(s.nome) === ano)?.nome ?? String(ano);
     const q = new URLSearchParams({ aba, safra });
-    window.open(`/talhao/${t.id}?${q.toString()}`, '_blank');
+    window.open(`/talhao/${t.id}?${q.toString()}`, '_blank', 'noopener');   // noopener: cada aba de talhão em processo próprio (memória, v3.3.1)
   }
 
   // Agrônomos = usuários da EQUIPE (categoria "Interno") e ATIVOS. É a lista da
@@ -486,7 +486,7 @@ export function FazendaDetailPanel() {
                             não têm ano. Clicar abre o talhão na aba Linhas. */}
                         {comLinhas.has(t.id) && (
                           <button
-                            onClick={e => { e.stopPropagation(); window.open(`/talhao/${t.id}?aba=linhas`, '_blank'); }}
+                            onClick={e => { e.stopPropagation(); window.open(`/talhao/${t.id}?aba=linhas`, '_blank', 'noopener'); }}
                             title="Projeto de linhas da PrecisionFarm — abrir o talhão na aba Linhas (nova aba)"
                             className="flex items-center px-1 py-1 rounded flex-shrink-0"
                             style={{ background: '#083344', color: '#67e8f9' }}>
@@ -535,7 +535,7 @@ export function FazendaDetailPanel() {
                           </>
                         )}
                         {/* Abrir a PÁGINA COMPLETA do talhão (nova aba) — sempre visível (antes só no hover) */}
-                        <button onClick={e => { e.stopPropagation(); window.open(`/talhao/${t.id}`, '_blank'); }}
+                        <button onClick={e => { e.stopPropagation(); window.open(`/talhao/${t.id}`, '_blank', 'noopener'); }}
                           title="Abrir página completa do talhão (nova aba)"
                           className="flex items-center px-1 py-1 rounded flex-shrink-0" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
                           <ExternalLink size={12} />

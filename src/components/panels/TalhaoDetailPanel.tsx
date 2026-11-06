@@ -29,7 +29,7 @@ import { verificarTrocaPoligono, mensagemBloqueioTroca, notaCicloVerificado, typ
 import { partesDoTalhaoGeo } from '@/lib/desmembrarTalhao';
 import { carregarEcOficial, rotuloEc, type EcCamada } from '@/lib/meap/gerar';
 import { classeZona } from '@/lib/zonas';
-import { cloudCarregarMapasPorPrefixo } from '@/lib/cloud';
+import { cloudListarMapasMeta, cloudCarregarMapa } from '@/lib/cloud';
 import { lerChaveMapa } from '@/lib/recomendacao/escolhaMapa';
 import { descomprimirGrid, coordsFromBounds, type RespInterp } from '@/lib/fertilidade';
 import { colorirGridComLegenda, temGrid } from '@/lib/raster';
@@ -278,7 +278,9 @@ function ResumoSafra({ talhaoId, safra }: { talhaoId: string; safra: string }) {
     if (!imp) { setFert(0); return; }
     (async () => {
       const prefixo = `${talhaoId}__${imp.id}__`;
-      const carregados = await cloudCarregarMapasPorPrefixo(prefixo);
+      // Memória (v3.3.1): só os METADADOS (sem o grid) — antes carregava e
+      // parseava todos os rasters do laudo só para contar.
+      const carregados = await cloudListarMapasMeta(prefixo);
       // Conta VARIÁVEIS interpoladas (nut+profundidade), não documentos: o mesmo
       // atributo pode estar salvo mais de uma vez, com configs diferentes de
       // interpolação, e "2 mapas" para uma variável só confunde.
@@ -292,7 +294,7 @@ function ResumoSafra({ talhaoId, safra }: { talhaoId: string; safra: string }) {
     return () => { cancel = true; };
   }, [talhaoId, safra]);
 
-  const abrir = () => window.open(`/talhao/${talhaoId}`, '_blank');
+  const abrir = () => window.open(`/talhao/${talhaoId}`, '_blank', 'noopener');   // noopener: aba em processo próprio (memória, v3.3.1)
   const linhas: { icon: React.ElementType; label: string; valor: string; cor: string }[] = [
     { icon: Grid3x3, label: 'Amostragem', valor: `${grades} grade${grades === 1 ? '' : 's'}`, cor: '#60a5fa' },
     { icon: TestTube, label: 'Laboratório', valor: `${labs} importaç${labs === 1 ? 'ão' : 'ões'}`, cor: '#a78bfa' },
@@ -343,14 +345,18 @@ function MapasDefinitivos({ talhao, safra }: { talhao: Talhao | null; safra: str
     setArgilaLoad(true);
     (async () => {
       const prefixo = `${talhao.id}__${imp.id}__`;
-      const carregados = await cloudCarregarMapasPorPrefixo<MapaNuvem>(prefixo);
+      // Memória (v3.3.1): lista só os metadados e carrega UM raster — o de
+      // argila (o mais recente, se houver mais de um) — em vez de todos do laudo.
+      const metas = await cloudListarMapasMeta(prefixo);
+      const daArgila = metas
+        .filter(m => { const partes = m.id.slice(prefixo.length).split('__'); return partes[partes.length - 2] === 'argila'; })
+        .sort((a, b) => (b.atualizadoEm ?? '').localeCompare(a.atualizadoEm ?? ''))[0];
       let achado: RespInterp | null = null;
-      for (const c of carregados) {
-        const partes = c.id.slice(prefixo.length).split('__');
-        if (partes[partes.length - 2] !== 'argila') continue;
+      const c = daArgila ? await cloudCarregarMapa<MapaNuvem>(daArgila.id, daArgila.atualizadoEm) : null;
+      if (c) {
         const d = c.dados;
         if (d.resp?.grid?.comp === 'gz') { try { d.resp.grid = await descomprimirGrid(d.resp.grid); } catch {} }
-        achado = d.resp; break;
+        achado = d.resp ?? null;
       }
       if (!cancel) { setArgila(achado ? { resp: achado, legenda: leg } : null); setArgilaLoad(false); }
     })();
@@ -592,7 +598,7 @@ export function TalhaoDetailPanel() {
             </span>
           </div>
 
-          <button onClick={() => nav.talhaoId && window.open(`/talhao/${nav.talhaoId}`, '_blank')}
+          <button onClick={() => nav.talhaoId && window.open(`/talhao/${nav.talhaoId}`, '_blank', 'noopener')}
             className="mt-3 w-full flex items-center justify-center gap-1.5 py-2 rounded text-xs font-bold text-white transition-opacity hover:opacity-90"
             style={{ background: 'var(--invicta-blue-mid)' }}>
             <ExternalLink size={13} /> Abrir página completa do talhão

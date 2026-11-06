@@ -186,26 +186,41 @@ export function colorirDose(
 // ── Helpers de canvas (compartilhados pelas duas colorizações) ────────────
 type Canvas2D = OffscreenCanvas | HTMLCanvasElement;
 
+// Memória (v3.3.1): com DOM, UM HTMLCanvasElement reaproveitado entre as
+// chamadas (todas síncronas, não se sobrepõem). Antes eram dois canvas por
+// colorização — um OffscreenCanvas + um temporário só para o toDataURL — e
+// nenhum era zerado: a memória deles é externa ao heap de JS e o GC demora a
+// devolvê-la. O OffscreenCanvas fica só para o caminho sem `document`.
+let canvasReuso: HTMLCanvasElement | null = null;
+
 function novoCanvas(cols: number, rows: number): { canvas: Canvas2D; ctx: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D } {
-  const canvas: Canvas2D = typeof OffscreenCanvas !== 'undefined'
-    ? new OffscreenCanvas(cols, rows)
-    : document.createElement('canvas');
-  if (!(canvas instanceof OffscreenCanvas)) { canvas.width = cols; canvas.height = rows; }
+  let canvas: Canvas2D;
+  if (typeof document !== 'undefined') {
+    canvas = canvasReuso ??= document.createElement('canvas');
+    canvas.width = cols; canvas.height = rows;   // redimensionar também limpa o conteúdo anterior
+  } else {
+    canvas = new OffscreenCanvas(cols, rows);
+  }
   const ctx = canvas.getContext('2d') as OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D | null;
   if (!ctx) throw new Error('Canvas 2D indisponível');
   return { canvas, ctx };
 }
 
 function finalizarCanvas(canvas: Canvas2D, cols: number, rows: number): PngColorido {
-  if (canvas instanceof OffscreenCanvas) {
+  if (typeof OffscreenCanvas !== 'undefined' && canvas instanceof OffscreenCanvas) {
     // OffscreenCanvas → não dá toDataURL direto; volta para HTMLCanvas
     const tmp = document.createElement('canvas');
     tmp.width = cols; tmp.height = rows;
     const tctx = tmp.getContext('2d')!;
     tctx.drawImage(canvas as unknown as CanvasImageSource, 0, 0);
-    return { dataUrl: tmp.toDataURL('image/png'), largura: cols, altura: rows };
+    const dataUrl = tmp.toDataURL('image/png');
+    tmp.width = 0; tmp.height = 0;
+    return { dataUrl, largura: cols, altura: rows };
   }
-  return { dataUrl: canvas.toDataURL('image/png'), largura: cols, altura: rows };
+  const dataUrl = (canvas as HTMLCanvasElement).toDataURL('image/png');
+  // Zera o backing store na hora (o canvas reaproveitado não segura o último mapa).
+  canvas.width = 0; canvas.height = 0;
+  return { dataUrl, largura: cols, altura: rows };
 }
 
 // interp linear por canal (mesma semântica do np.interp).

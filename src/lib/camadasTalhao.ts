@@ -138,11 +138,19 @@ function legendaDeLinhas(fc: GeoJSON.FeatureCollection): LegendaCamada {
 // recente, auxiliar de 20 m perdido é ignorado e o valor é limitado à faixa do laudo.
 type MapaFert = { resp: RespInterp; interpoladoEm?: string };
 const fertPorLaudo = new Map<string, Promise<Record<string, MapaFert>>>();
+// Memória (v3.3.1): LRU de poucos laudos. Cada entrada guarda TODOS os rasters
+// descomprimidos do laudo; sem teto, ligar camadas de várias safras prendia
+// dezenas de MB até fechar a aba. Laudo que saiu do cache é relido do IndexedDB.
+const FERT_LAUDOS_MAX = 3;
 
 function mapasDoLaudo(talhaoId: string, imp: ReturnType<typeof getImportacoesLab>[number]): Promise<Record<string, MapaFert>> {
   const prefixo = `${talhaoId}__${imp.id}__`;
   let p = fertPorLaudo.get(prefixo);
-  if (!p) {
+  if (p) {
+    // usado agora → vai para o fim (o mais recente); o 1º do Map é o mais antigo
+    fertPorLaudo.delete(prefixo);
+    fertPorLaudo.set(prefixo, p);
+  } else {
     p = (async () => {
       const out: Record<string, MapaFert> = {};
       for (const c of await cloudCarregarMapasPorPrefixo<MapaFert>(prefixo)) {
@@ -162,8 +170,15 @@ function mapasDoLaudo(talhaoId: string, imp: ReturnType<typeof getImportacoesLab
       return out;
     })();
     // Falha não fica em cache: a próxima tentativa consulta de novo.
-    p.catch(() => fertPorLaudo.delete(prefixo));
+    // (só apaga se ainda for ESTA promessa — com o LRU, outra pode ter entrado no lugar)
+    const esta = p;
+    p.catch(() => { if (fertPorLaudo.get(prefixo) === esta) fertPorLaudo.delete(prefixo); });
     fertPorLaudo.set(prefixo, p);
+    while (fertPorLaudo.size > FERT_LAUDOS_MAX) {
+      const maisAntigo = fertPorLaudo.keys().next().value;
+      if (maisAntigo === undefined) break;
+      fertPorLaudo.delete(maisAntigo);
+    }
   }
   return p;
 }

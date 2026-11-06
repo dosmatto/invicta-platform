@@ -126,22 +126,29 @@ function limparIdsEditados(key: string): void {
  */
 function juntarNoBoot(key: string, nuvem: unknown[], sujo: boolean): void {
   let final = nuvem;
+  // Memória (v3.3.1): os mapas id → JSON já calculados aqui são reaproveitados
+  // pelo espelho e pela base, em vez de serializar a coleção de novo.
+  let fin: Map<string, string> | undefined, nv: Map<string, string> | undefined;
   if (sujo) {
     const local = lerLocalLista(key);
     const ids = idsParaJuncao(lerIdsEditados(key), baseLocal[key], local, nuvem);
     final = mesclarComEdicoes(nuvem, local, ids);
     if (!ids.todos) {
       // Só fica no registro o que de fato difere do retrato da nuvem.
-      const fin = mapaPorId(final), nv = mapaPorId(nuvem);
-      const resto = podarIguaisANuvem(ids, id => fin.get(id), id => nv.get(id));
+      const f = mapaPorId(final), n = mapaPorId(nuvem);
+      fin = f; nv = n;
+      const resto = podarIguaisANuvem(ids, id => f.get(id), id => n.get(id));
       if (resto) gravarIdsEditados(key, resto); else limparIdsEditados(key);
     }
   } else {
     limparIdsEditados(key);
   }
   gravarSeMudou(key, JSON.stringify(final));
-  seedEspelho(key, nuvem);   // espelho = estado da NUVEM (diffs certeiros)
-  baseLocal[key] = mapaPorId(final);
+  const esp = seedEspelho(key, nuvem, nv);   // espelho = estado da NUVEM (diffs certeiros)
+  // Sem pendência, final === nuvem: a base é uma CÓPIA do Map do espelho (os
+  // dois são mutados in-place em separado), mas as strings de valor são as
+  // mesmas — strings são imutáveis, então compartilhar não muda a comparação.
+  baseLocal[key] = final === nuvem ? new Map(esp) : (fin ?? mapaPorId(final));
 }
 
 /** Anota os ids que mudaram entre a base deste aparelho e `lista`; a base vira `lista`. */
@@ -231,9 +238,14 @@ function gravarSeMudou(key: string, json: string): void {
 // enviar só o que realmente mudou (antes re-enviava a coleção INTEIRA — 916
 // talhões ≈ MBs — e disparava a poda not-in). Com o espelho semeado, a poda
 // nunca roda em operação normal.
-function seedEspelho(key: string, recs: unknown[]): void {
+// Devolve o Map semeado para quem chama montar a `baseLocal` a partir dele
+// (new Map(esp)): dois Map independentes, strings de valor compartilhadas —
+// antes eram duas serializações inteiras da coleção, uma cópia da base a mais
+// em memória por aba (v3.3.1). `m` = mapa já calculado de `recs`, se houver.
+function seedEspelho(key: string, recs: unknown[], m: Map<string, string> = mapaPorId(recs)): Map<string, string> {
   chavesHidratadas.add(key);
-  espelhoSb[key] = mapaPorId(recs);
+  espelhoSb[key] = m;
+  return m;
 }
 
 // ── BOOT INCREMENTAL ─────────────────────────────────────────────────────────
@@ -307,12 +319,11 @@ async function bootIncremental(
     for (const row of mudTal) { porId.set(String((row.dados as Rec).id), row.dados); novaMarca = maxIso(novaMarca, row.atualizado_em); }
     const final = [...porId.values()];
     gravarSeMudou(TABELA_TALHOES_KEY, JSON.stringify(final));
-    seedEspelho(TABELA_TALHOES_KEY, final);
-    baseLocal[TABELA_TALHOES_KEY] = mapaPorId(final);
+    // espelho e base: mesmas strings, Maps separados (ver seedEspelho)
+    baseLocal[TABELA_TALHOES_KEY] = new Map(seedEspelho(TABELA_TALHOES_KEY, final));
   } else {
     const lista = lerLocalLista(TABELA_TALHOES_KEY);
-    seedEspelho(TABELA_TALHOES_KEY, lista);
-    baseLocal[TABELA_TALHOES_KEY] = mapaPorId(lista);
+    baseLocal[TABELA_TALHOES_KEY] = new Map(seedEspelho(TABELA_TALHOES_KEY, lista));
   }
 
   // aplica delta do app_kv por coleção
@@ -331,12 +342,10 @@ async function bootIncremental(
       for (const m of mudancas) porId.set(m.item_id, m.dados);
       const final = [...porId.values()];
       gravarSeMudou(key, JSON.stringify(final));
-      seedEspelho(key, final);
-      baseLocal[key] = mapaPorId(final);
+      baseLocal[key] = new Map(seedEspelho(key, final));   // mesmas strings do espelho
     } else {
       const lista = lerLocalLista(key);
-      seedEspelho(key, lista);
-      baseLocal[key] = mapaPorId(lista);
+      baseLocal[key] = new Map(seedEspelho(key, lista));
     }
   }
   for (const key of keysObj) {
