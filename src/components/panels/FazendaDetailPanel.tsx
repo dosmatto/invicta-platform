@@ -23,6 +23,7 @@ import { resumoLinhasPF } from '@/lib/precisionfarm/cliente';
 import { PanelSection, PanelButton, StatusBadge } from './_shared';
 import { RelatoriosFazenda } from './RelatoriosFazenda';
 import { MonitorFazenda } from './MonitorFazenda';
+import { abrirTalhaoNovaAba } from '@/lib/abrirTalhaoNovaAba';
 
 interface AnoComDado { ano: number; qtd: number; detalhes: string[] }
 
@@ -251,7 +252,7 @@ export function FazendaDetailPanel() {
   function abrirNoAno(t: Talhao, aba: 'fertilidade' | 'produtividade', ano: number) {
     const safra = getSafras().find(s => anoDaSafra(s.nome) === ano)?.nome ?? String(ano);
     const q = new URLSearchParams({ aba, safra });
-    window.open(`/talhao/${t.id}?${q.toString()}`, '_blank', 'noopener');   // noopener: cada aba de talhão em processo próprio (memória, v3.3.1)
+    abrirTalhaoNovaAba(`/talhao/${t.id}?${q.toString()}`);   // processo próprio quando dá (memória, v3.3.1) — ver lib/abrirTalhaoNovaAba
   }
 
   // Agrônomos = usuários da EQUIPE (categoria "Interno") e ATIVOS. É a lista da
@@ -486,7 +487,7 @@ export function FazendaDetailPanel() {
                             não têm ano. Clicar abre o talhão na aba Linhas. */}
                         {comLinhas.has(t.id) && (
                           <button
-                            onClick={e => { e.stopPropagation(); window.open(`/talhao/${t.id}?aba=linhas`, '_blank', 'noopener'); }}
+                            onClick={e => { e.stopPropagation(); abrirTalhaoNovaAba(`/talhao/${t.id}?aba=linhas`); }}
                             title="Projeto de linhas da PrecisionFarm — abrir o talhão na aba Linhas (nova aba)"
                             className="flex items-center px-1 py-1 rounded flex-shrink-0"
                             style={{ background: '#083344', color: '#67e8f9' }}>
@@ -535,7 +536,7 @@ export function FazendaDetailPanel() {
                           </>
                         )}
                         {/* Abrir a PÁGINA COMPLETA do talhão (nova aba) — sempre visível (antes só no hover) */}
-                        <button onClick={e => { e.stopPropagation(); window.open(`/talhao/${t.id}`, '_blank', 'noopener'); }}
+                        <button onClick={e => { e.stopPropagation(); abrirTalhaoNovaAba(`/talhao/${t.id}`); }}
                           title="Abrir página completa do talhão (nova aba)"
                           className="flex items-center px-1 py-1 rounded flex-shrink-0" style={{ background: '#1a3a6b', color: '#93c5fd' }}>
                           <ExternalLink size={12} />

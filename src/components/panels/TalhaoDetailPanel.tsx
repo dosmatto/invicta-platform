@@ -30,7 +30,8 @@ import { partesDoTalhaoGeo } from '@/lib/desmembrarTalhao';
 import { carregarEcOficial, rotuloEc, type EcCamada } from '@/lib/meap/gerar';
 import { classeZona } from '@/lib/zonas';
 import { cloudListarMapasMeta, cloudCarregarMapa } from '@/lib/cloud';
-import { lerChaveMapa } from '@/lib/recomendacao/escolhaMapa';
+import { lerChaveMapa, ehAuxiliar20mPerdido } from '@/lib/recomendacao/escolhaMapa';
+import { abrirTalhaoNovaAba } from '@/lib/abrirTalhaoNovaAba';
 import { descomprimirGrid, coordsFromBounds, type RespInterp } from '@/lib/fertilidade';
 import { colorirGridComLegenda, temGrid } from '@/lib/raster';
 import IntegracaoPrecisionFarm from '@/components/talhao/IntegracaoPrecisionFarm';
@@ -40,6 +41,16 @@ import {
 } from 'lucide-react';
 
 type MapaNuvem = { resp: RespInterp; labels: GeoJSON.FeatureCollection; interpoladoEm?: string };
+
+// Preferência de profundidade para o mapa de Argila do painel: 0 = "0-20" (ou
+// "00-20"), 1 = outra que começa em 0 ("0-10"), 2 = as demais/ilegíveis.
+function ordemProfArgila(prof: string): number {
+  const m = /^\s*(\d+)\s*[-–_a]\s*(\d+)/.exec(prof);
+  if (!m) return 2;
+  const [ini, fim] = [Number(m[1]), Number(m[2])];
+  if (ini === 0 && fim === 20) return 0;
+  return ini === 0 ? 1 : 2;
+}
 
 const EditorGeometria = dynamic(
   () => import('@/components/geo/EditorGeometria').then(m => ({ default: m.EditorGeometria })),
@@ -294,7 +305,7 @@ function ResumoSafra({ talhaoId, safra }: { talhaoId: string; safra: string }) {
     return () => { cancel = true; };
   }, [talhaoId, safra]);
 
-  const abrir = () => window.open(`/talhao/${talhaoId}`, '_blank', 'noopener');   // noopener: aba em processo próprio (memória, v3.3.1)
+  const abrir = () => abrirTalhaoNovaAba(`/talhao/${talhaoId}`);   // processo próprio quando dá (memória, v3.3.1) — ver lib/abrirTalhaoNovaAba
   const linhas: { icon: React.ElementType; label: string; valor: string; cor: string }[] = [
     { icon: Grid3x3, label: 'Amostragem', valor: `${grades} grade${grades === 1 ? '' : 's'}`, cor: '#60a5fa' },
     { icon: TestTube, label: 'Laboratório', valor: `${labs} importaç${labs === 1 ? 'ão' : 'ões'}`, cor: '#a78bfa' },
@@ -346,17 +357,30 @@ function MapasDefinitivos({ talhao, safra }: { talhao: Talhao | null; safra: str
     (async () => {
       const prefixo = `${talhao.id}__${imp.id}__`;
       // Memória (v3.3.1): lista só os metadados e carrega UM raster — o de
-      // argila (o mais recente, se houver mais de um) — em vez de todos do laudo.
+      // argila — em vez de todos do laudo. Ordem de preferência entre os
+      // candidatos: profundidade 0-20 (a textura é da camada superficial),
+      // depois outra que comece em 0, depois as demais; empate → o mais recente.
       const metas = await cloudListarMapasMeta(prefixo);
-      const daArgila = metas
-        .filter(m => { const partes = m.id.slice(prefixo.length).split('__'); return partes[partes.length - 2] === 'argila'; })
-        .sort((a, b) => (b.atualizadoEm ?? '').localeCompare(a.atualizadoEm ?? ''))[0];
+      const candidatos = metas
+        .map(m => {
+          const partes = m.id.slice(prefixo.length).split('__');
+          return { m, nut: partes[partes.length - 2], ordem: ordemProfArgila(partes[partes.length - 1] ?? '') };
+        })
+        .filter(x => x.nut === 'argila')
+        .sort((a, b) => a.ordem - b.ordem || (b.m.atualizadoEm ?? '').localeCompare(a.m.atualizadoEm ?? ''));
       let achado: RespInterp | null = null;
-      const c = daArgila ? await cloudCarregarMapa<MapaNuvem>(daArgila.id, daArgila.atualizadoEm) : null;
-      if (c) {
+      // Um por vez, parando no 1º que serve. O auxiliar de 20 m que a v2.37.0
+      // gravou por engano neste prefixo é sempre o mais recente — só dá para
+      // reconhecê-lo pelo documento (sem rótulos e sem PNG), como fazem os
+      // outros leitores (ehAuxiliar20mPerdido). Normalmente é 1 carga só.
+      for (const { m } of candidatos) {
+        if (cancel) break;
+        const c = await cloudCarregarMapa<MapaNuvem>(m.id, m.atualizadoEm);
+        if (!c?.dados?.resp || ehAuxiliar20mPerdido(c.id, prefixo, c.dados)) continue;
         const d = c.dados;
-        if (d.resp?.grid?.comp === 'gz') { try { d.resp.grid = await descomprimirGrid(d.resp.grid); } catch {} }
-        achado = d.resp ?? null;
+        if (d.resp.grid?.comp === 'gz') { try { d.resp.grid = await descomprimirGrid(d.resp.grid); } catch {} }
+        achado = d.resp;
+        break;
       }
       if (!cancel) { setArgila(achado ? { resp: achado, legenda: leg } : null); setArgilaLoad(false); }
     })();
@@ -598,7 +622,7 @@ export function TalhaoDetailPanel() {
             </span>
           </div>
 
-          <button onClick={() => nav.talhaoId && window.open(`/talhao/${nav.talhaoId}`, '_blank', 'noopener')}
+          <button onClick={() => nav.talhaoId && abrirTalhaoNovaAba(`/talhao/${nav.talhaoId}`)}
             className="mt-3 w-full flex items-center justify-center gap-1.5 py-2 rounded text-xs font-bold text-white transition-opacity hover:opacity-90"
             style={{ background: 'var(--invicta-blue-mid)' }}>
             <ExternalLink size={13} /> Abrir página completa do talhão
