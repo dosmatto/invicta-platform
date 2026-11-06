@@ -26,6 +26,7 @@ import { secaoLiberada, apresentacaoAtiva, type PlanoAssinatura, type PapelMembr
 import { anoDaSafra, anoDeData, hojeSaoPauloISO } from '@/lib/periodo';
 import { usarDadosSupabase } from '@/lib/supabaseData';
 import { ligarModoProdutorMapa, desligarModoProdutorMapa } from '@/lib/modoProdutorMapa';
+import { abrirTalhaoNovaAba } from '@/lib/abrirTalhaoNovaAba';
 import { dadosLocaisPortal, dadosNuvemDosTalhoes, juntarNuvem, type DadosNuvem, type FalhaNuvem } from '@/lib/portalDados';
 import { culturasDoAno, talhaoDaCultura, normCultura, type DadosPainel } from '@/lib/portalPainel';
 import { lerModoSalvo, salvarModo, type ModoMapa } from './ui/modoMapa';
@@ -211,7 +212,9 @@ export function PortalProvider({ cliente, plano, papel, preview, qsPreview, chil
     // Preview (owner/admin): a página do talhão também abre "como o produtor vê".
     if (preview) { q.set('preview', '1'); if (plano) q.set('plano', plano.id); }
     const url = `/talhao/${id}?${q.toString()}`;
-    if (opcoes?.novaAba) window.open(url, '_blank', 'noopener,noreferrer');
+    // Aba nova pelo helper: no modo apresentação a aba precisa herdar o
+    // sessionStorage (senão abre como owner, com gravação liberada).
+    if (opcoes?.novaAba) abrirTalhaoNovaAba(url);
     else router.push(url);
   }, [router, safra, safraDoAno, preview, plano]);
 
