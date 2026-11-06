@@ -1,5 +1,11 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Aviso de cultura implausível no mapa de colheita
+  '3.3.0': [
+    'PENDÊNCIA S/N — AVISO DE CULTURA IMPLAUSÍVEL NO MAPA DE COLHEITA: um mapa de milho (~14.160 kg/ha) tinha ficado gravado como "Soja", porque o seletor de cultura da aba Produtividade começa em soja e herda a cultura principal da safra — e o milho safrinha processado sem trocar o seletor saía como soja. Agora a média do mapa é conferida contra a faixa da cultura (soja 600–7.200 kg/ha, milho 1.500–16.000, trigo 500–7.500, feijão 300–5.000, aveia e cevada 500–7.000; outras culturas não geram aviso).',
+    'AO PROCESSAR: antes de salvar, um aviso âmbar diz, por exemplo, "Média de 14.160 kg/ha não combina com Soja (600–7.200). É Milho?", com o botão "Trocar para Milho" (acerta o seletor e a legenda do mapa). O aviso acompanha o seletor e some quando a cultura passa a combinar. Salvar continua permitido.',
+    'NOS MAPAS SALVOS: a lista "Mapas salvos" mostra o mesmo texto num selo âmbar com "Corrigir", que abre o "Editar mapa de colheita" (o lápis, que já trocava a cultura; ele repete o aviso e o tira ao escolher a cultura certa). O selo só aparece para quem pode editar a Produtividade. Nada muda para quem só lê nem no Portal do Produtor.',
+  ],
   // [S/N] Unidade de produtividade no portal
   '3.2.0': [
     'PENDÊNCIA S/N — UNIDADE DE PRODUTIVIDADE NO PORTAL: o cabeçalho do Portal do Produtor ganhou o filtro "Unidade", ao lado de Talhão, com kg/ha, sc/ha e sc/alq. O padrão é kg/ha; a escolha do produtor fica guardada neste navegador (uma por produtor) e volta igual ao recarregar.',

@@ -50,6 +50,7 @@ import { respeitarPadraoHomonima, rampaVisualStops, corCheiaDaClasse } from '@/l
 import type { Legenda } from '@/lib/legendas';
 import { Upload, Loader2, AlertTriangle, Save, Star, Trash2, Eye, Wand2, FileSpreadsheet, Plus, Layers, ChevronDown, ChevronUp, FileDown, Pencil } from 'lucide-react';
 import { podeProdutividade } from '@/lib/empresa';
+import { avaliarCultura, textoAvisoCultura, rotuloDaCultura } from '@/lib/culturaPlausivel';
 
 // Quem NÃO processa colheita (produtor, leitor) só vê os mapas salvos, compara
 // com NDVI e gera relatórios — sem importar, unificar, limpar, interpolar,
@@ -201,6 +202,14 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
   const quantis: ClassificacaoQuantis | null = useMemo(
     () => (res?.grid && legenda ? quantisDaProdutividade(res, legenda, 5) : null),
     [res, legenda],
+  );
+
+  // Cultura × média: o seletor começa em soja e herda a cultura PRINCIPAL da
+  // safra, então um milho safrinha processado sem trocá-lo sai como soja. O
+  // aviso reage ao seletor, e some assim que a cultura passa a combinar.
+  const avisoCultura = useMemo(
+    () => (fresco && stats ? avaliarCultura(cultura, stats.mediaKgha) : null),
+    [fresco, stats, cultura],
   );
 
   const [versoes, setVersoes] = useState<MapaProdutividade[]>([]);
@@ -844,6 +853,29 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
               ? `Cortes calculados deste mapa · cada faixa ≈ ${quantis ? (100 / quantis.faixas.length).toFixed(0) : '20'}% da área`
               : legenda.nome} · pixel {res.stats?.pixel_m ?? pixelM} m
           </p>
+          {podeProcessar() && avisoCultura && (
+            <div className="flex items-start gap-2 p-2 rounded-lg" role="alert" style={{ background: '#2d1a00', border: '1px solid #92400e' }}>
+              <AlertTriangle size={13} style={{ color: '#fbbf24' }} className="flex-shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0 space-y-1.5">
+                <p className="text-[10px]" style={{ color: '#fbbf24' }}>{textoAvisoCultura(avisoCultura)}</p>
+                {avisoCultura.sugestao && CULTURAS.includes(avisoCultura.sugestao) && (
+                  <button type="button"
+                    onClick={() => {
+                      const nova = avisoCultura.sugestao!;
+                      setCultura(nova);
+                      // O mapa fresco foi pintado com a legenda da cultura antiga: troca junto.
+                      const l = legendaInicial(nova);
+                      if (l) setLegenda(l);
+                    }}
+                    className="px-2 py-1 rounded text-[10px] font-bold"
+                    style={{ background: '#78350f', color: '#fde68a' }}>
+                    Trocar para {rotuloDaCultura(avisoCultura.sugestao)}
+                  </button>
+                )}
+                <p className="text-[9px]" style={{ color: '#a16207' }}>Você ainda pode salvar assim.</p>
+              </div>
+            </div>
+          )}
           {podeProcessar() && fresco && (
             cloudPodeGravar()
               ? <button onClick={salvar} className="w-full py-2 rounded text-xs font-bold text-white flex items-center justify-center gap-1.5" style={{ background: 'var(--invicta-blue-mid)' }}><Save size={13} /> Salvar como Mapa Oficial</button>
@@ -929,6 +961,7 @@ export function ProdutividadeSection({ safraNome: safraProp }: { safraNome?: str
                   <p className="text-[9px]" style={{ color: '#64748b' }}>
                     {fmt(emUnidade(v.stats.mediaKgha, v.unidade), v.unidade === 'kg/ha' ? 0 : 1)} {v.unidade} méd · {fmtHa(v.stats.areaHa)} ha · {fmt(v.stats.producaoTotalKg / 1000, 1)} t · CV {fmt(v.stats.cv, 1)}%
                   </p>
+                  <SeloCultura mapa={v} onCorrigir={() => setEditando(v)} />
                 </div>
                 <button onClick={() => verVersao(v)} title="Ver no mapa" style={{ color: '#93c5fd' }}><Eye size={14} /></button>
                 {podeEditar() && <button onClick={() => setEditando(v)} title="Editar identificação" style={{ color: '#cbd5e1' }}><Pencil size={13} /></button>}
@@ -983,6 +1016,9 @@ function EditarMapa({ mapa, onFechar, onSalvo }: { mapa: MapaProdutividade; onFe
   const [arrTxt, setArrTxt] = useState(mapa.economia?.arrendamentoScAlq ? String(mapa.economia.arrendamentoScAlq) : '');
   const [alqHa, setAlqHa] = useState(mapa.economia?.alqueireHa ?? ALQUEIRE_HA_PADRAO);
   const [unidade, setUnidade] = useState<Unidade>(mapa.unidade);
+
+  // O mesmo aviso do selo, reagindo à cultura escolhida aqui: some ao acertar.
+  const avisoCulturaEdicao = avaliarCultura(cultura, mapa.stats.mediaKgha);
 
   const per = periodoDeData(dataRef);
   const ciclo = dataPlantio && dataRef
@@ -1039,6 +1075,10 @@ function EditarMapa({ mapa, onFechar, onSalvo }: { mapa: MapaProdutividade; onFe
             </select>
           </Campo>
         </div>
+
+        {avisoCulturaEdicao && (
+          <p className="text-[9px] leading-snug" style={{ color: '#fbbf24' }}>{textoAvisoCultura(avisoCulturaEdicao)}</p>
+        )}
 
         <div className="grid grid-cols-2 gap-2">
           <Campo label="Data da colheita">
@@ -1268,6 +1308,23 @@ function CoberturaResumo({ cob, nPontos, recortado }: { cob: Cobertura; nPontos?
         </p>
       )}
     </div>
+  );
+}
+
+// Selo nos mapas JÁ salvos: a média não combina com a cultura gravada. Só para
+// quem edita — e leva ao "Editar identificação" (o lápis), que já troca a
+// cultura. Aqui não existe fluxo novo de escrita.
+function SeloCultura({ mapa, onCorrigir }: { mapa: MapaProdutividade; onCorrigir: () => void }) {
+  if (!podeEditar()) return null;
+  const a = avaliarCultura(mapa.cultura, mapa.stats.mediaKgha);
+  if (!a) return null;
+  return (
+    <button type="button" onClick={onCorrigir} title="Corrigir a cultura deste mapa" data-selo-cultura
+      className="mt-1 flex items-start gap-1 text-left rounded px-1.5 py-1"
+      style={{ background: '#2d1a00', border: '1px solid #92400e', color: '#fbbf24' }}>
+      <AlertTriangle size={10} className="flex-shrink-0 mt-px" />
+      <span className="text-[9px] leading-snug">{textoAvisoCultura(a)} <u>Corrigir</u></span>
+    </button>
   );
 }
 
