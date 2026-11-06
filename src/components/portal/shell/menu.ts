@@ -21,6 +21,9 @@ export interface ItemMenu {
   secoes?: SecaoPortalPlano[];
   /** Aba da página do talhão equivalente (botão "Abrir na página do talhão"). */
   aba?: string;
+  /** Página ainda fechada: o menu mostra o selo "Em breve" e o cabeçalho não
+   *  oferece o atalho para a página do talhão. */
+  emBreve?: boolean;
 }
 
 export const ITENS_MENU: ItemMenu[] = [
@@ -36,7 +39,7 @@ export const ITENS_MENU: ItemMenu[] = [
   { rota: '/portal/prescricoes', rotulo: 'Prescrições (VR)', icone: Tractor, titulo: 'Prescrições em taxa variável', subtitulo: 'Doses por zona e arquivos de aplicação gerados.', secoes: ['recomendacoes'], aba: 'prescricoes' },
   { rota: '/portal/linhas', rotulo: 'Linhas de plantio', icone: Rows3, titulo: 'Linhas de plantio', subtitulo: 'Projetos de linhas recebidos da PrecisionFarm.', aba: 'linhas' },
   { rota: '/portal/compactacao', rotulo: 'Compactação', icone: Gauge, titulo: 'Compactação do solo', subtitulo: 'Penetrometria por profundidade.', secoes: ['compactacao'], aba: 'compactacao' },
-  { rota: '/portal/relatorios', rotulo: 'Relatórios', icone: FileText, titulo: 'Relatórios e recomendações', subtitulo: 'Relatórios em PDF e cenários de recomendação.', secoes: ['relatorios', 'recomendacoes'], aba: 'relatorios' },
+  { rota: '/portal/relatorios', rotulo: 'Relatórios', icone: FileText, titulo: 'Relatórios', subtitulo: 'Em breve.', secoes: ['relatorios', 'recomendacoes'], emBreve: true },
   { rota: '/portal/comparativo', rotulo: 'Comparativo Invicta', icone: Trophy, titulo: 'Comparativo Invicta', subtitulo: 'Sua produtividade e fertilidade frente aos produtores Invicta — anônimo e agregado.', secoes: ['produtividade', 'fertilidade'] },
 ];
 

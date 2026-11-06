@@ -177,10 +177,12 @@ export function Cabecalho({ onAbrirMenu }: { onAbrirMenu: () => void }) {
           )}
           {p.talhao && (
             <span className="col-span-2 sm:col-auto inline-flex items-center gap-2">
-              <button type="button" onClick={() => p.abrirTalhao(p.talhao!.id, abaTalhao)} className="h-11 px-3 rounded-xl inline-flex items-center gap-1.5 text-[13px] font-bold whitespace-nowrap"
-                style={{ background: '#fff', color: 'var(--invicta-blue)' }} title="Abrir a página completa deste talhão">
-                <ExternalLink size={14} /> Abrir na página do talhão
-              </button>
+              {!item.emBreve && (
+                <button type="button" onClick={() => p.abrirTalhao(p.talhao!.id, abaTalhao)} className="h-11 px-3 rounded-xl inline-flex items-center gap-1.5 text-[13px] font-bold whitespace-nowrap"
+                  style={{ background: '#fff', color: 'var(--invicta-blue)' }} title="Abrir a página completa deste talhão">
+                  <ExternalLink size={14} /> Abrir na página do talhão
+                </button>
+              )}
               <button type="button" onClick={() => p.setFiltro({ talhao: '' })} className="h-11 px-3 rounded-xl inline-flex items-center gap-1 text-[13px] font-semibold" style={{ color: 'rgba(255,255,255,0.85)' }} title="Voltar para todos os talhões">
                 <X size={14} /> Todos
               </button>

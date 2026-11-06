@@ -1,5 +1,9 @@
 // Histórico de versões do app. Toda nova versão: adicione a entrada AQUI e atualize APP_VERSION em version.ts.
 export const CHANGELOG: Record<string, string[]> = {
+  // [S/N] Portal: Relatórios fechado ("Em breve")
+  '3.3.2': [
+    'PENDÊNCIA S/N — PORTAL: RELATÓRIOS FECHADO ("EM BREVE"): a página Relatórios do Portal do Produtor passa a mostrar só o aviso "Em breve" até a Invicta escolher quais relatórios o produtor vai ver. O menu lateral ganha o selo "Em breve" no item, a página não lista mais relatórios nem recomendações e, com um talhão filtrado, o botão "Abrir na página do talhão" some do cabeçalho dessa página. As demais páginas do portal não mudam.',
+  ],
   // [S/N] Menos memória com várias abas abertas
   '3.3.1': [
     'PENDÊNCIA S/N — MENOS MEMÓRIA COM VÁRIAS ABAS ABERTAS: com 5 abas da plataforma abertas, o Chrome derrubava as abas por falta de memória ("Ah, não!"), sobretudo na Fertilidade. As páginas de talhão abertas a partir do painel (ficha do talhão e da fazenda, inclusive o atalho da Fertilidade) passam a abrir em processo próprio do navegador: cada aba tem a sua memória e, se uma cair, as outras continuam. A exceção é o modo apresentação e o mapa do produtor: neles a aba do talhão continua abrindo como antes, porque precisa levar junto o modo (faixa "Apresentando como…", somente leitura e o "voltar ao mapa"). De quebra, corrige uma falha antiga: no Portal em modo apresentação, abrir o talhão em aba nova fazia a aba nascer como owner/admin, sem a trava de gravação; agora ela abre como o produtor vê.',

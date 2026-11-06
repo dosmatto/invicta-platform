@@ -35,6 +35,12 @@ function ListaMenu({ onNavegar }: { onNavegar?: () => void }) {
                 onMouseLeave={e => { if (!on) e.currentTarget.style.background = 'transparent'; }}>
                 <Icone size={18} strokeWidth={on ? 2.2 : 1.8} className="flex-shrink-0" />
                 <span className="truncate">{i.rotulo}</span>
+                {i.emBreve && (
+                  <span className="ml-auto flex-shrink-0 text-[9.5px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-md"
+                    style={{ background: on ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.1)', color: on ? '#fff' : 'var(--sidebar-text)' }}>
+                    Em breve
+                  </span>
+                )}
               </Link>
             </li>
           );

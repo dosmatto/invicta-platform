@@ -148,6 +148,7 @@ verdadeira (fusão de talhões) chegou depois; foi preciso renumerar.
 | S/N | Unidade de produtividade no portal (kg/ha · sc/ha · sc/alq, padrão kg/ha, escolha guardada por produtor no navegador) | 3.2.0 | /portal → cabeçalho → Unidade |
 | S/N | Aviso de cultura implausível no mapa de colheita (média fora da faixa da cultura: aviso âmbar com "Trocar para…" ao processar e selo "Corrigir" nos mapas salvos, só para quem edita) | 3.3.0 | Talhão → Produtividade |
 | S/N | Menos memória com várias abas abertas (abas de talhão em processo próprio do navegador, base de sync sem cópia duplicada, menos rasters carregados no painel, nas Camadas e na Fertilidade) | 3.3.1 | /painel → abrir página do talhão; Talhão → Fertilidade |
+| S/N | Portal: Relatórios fechado ("Em breve") | 3.3.2 | Portal do Produtor → Relatórios |
 
 > As pendências 1–17 foram entregues antes deste registro existir e não estão
 > catalogadas; procure pelo assunto no `changelog.ts`. Da 18 em diante, tudo
